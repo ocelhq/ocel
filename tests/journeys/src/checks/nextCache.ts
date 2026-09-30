@@ -34,12 +34,12 @@ const ALLOWED_WIDTH = 640;
 const ALLOWED_QUALITY = 75;
 const DEPLOYMENT_NOTE = "next-cache:deployment";
 
-function tierIs(res: Response, allowed: Tier[], what: string) {
+function assertTier(res: Response, allowed: Tier[], what: string) {
   const tier = tierOf(res);
   assert.ok(allowed.includes(tier), `${what} was stamped ${CACHE_HEADER}: ${tier}`);
 }
 
-function servedFromNextCache(res: Response, what: string) {
+function assertServedFromNextCache(res: Response, what: string) {
   const tier = nextServerTierOf(res);
   assert.ok(
     tier !== undefined && NEXT_SERVER_CACHED.includes(tier),
@@ -47,16 +47,16 @@ function servedFromNextCache(res: Response, what: string) {
   );
 }
 
-function renderedOutsideNextCache(res: Response, what: string) {
+function assertRenderedOutsideNextCache(res: Response, what: string) {
   const tier = nextServerTierOf(res);
   assert.equal(tier, undefined, `${what} was stamped ${NEXT_CACHE_HEADER}: ${tier}`);
 }
 
-function heldAt(cacheLayer: CacheLayer, checks: Check[]): Check[] {
+function holdAt(cacheLayer: CacheLayer, checks: Check[]): Check[] {
   return checks.map((one) => ({ ...one, cacheLayer }));
 }
 
-function cacheControlIs(res: Response, expected: string, what: string) {
+function assertCacheControl(res: Response, expected: string, what: string) {
   const cacheControl = res.headers.get("cache-control");
   assert.ok(
     sameDirectives(cacheControl, expected),
@@ -64,22 +64,26 @@ function cacheControlIs(res: Response, expected: string, what: string) {
   );
 }
 
-async function cachedHalf(ctx: CheckContext, path: string, scope: string): Promise<string> {
+async function readCachedHalf(ctx: CheckContext, path: string, scope: string): Promise<string> {
   return marker((await page(ctx, path)).html, `${scope}:cached`);
 }
 
-async function steadyCachedHalf(ctx: CheckContext, path: string, scope: string): Promise<string> {
-  return steady(() => cachedHalf(ctx, path, scope), path, STEADY_READS, STEADY_ATTEMPTS);
+async function readSteadyCachedHalf(
+  ctx: CheckContext,
+  path: string,
+  scope: string,
+): Promise<string> {
+  return steady(() => readCachedHalf(ctx, path, scope), path, STEADY_READS, STEADY_ATTEMPTS);
 }
 
-async function movedOn(
+async function waitForNewCachedHalf(
   ctx: CheckContext,
   path: string,
   scope: string,
   from: string,
 ): Promise<string> {
   return until(REVALIDATION_TIMEOUT_MS, `${path} never moved off ${from}`, async () => {
-    const now = await cachedHalf(ctx, path, scope);
+    const now = await readCachedHalf(ctx, path, scope);
     return now === from ? undefined : now;
   });
 }
@@ -90,47 +94,47 @@ async function revalidate(ctx: CheckContext, query: string): Promise<void> {
   await res.arrayBuffer();
 }
 
-function imageUrl(ctx: CheckContext, url: string, width: number, quality: number): string {
+function buildImageUrl(ctx: CheckContext, url: string, width: number, quality: number): string {
   return `${ctx.baseUrl}/_next/image?url=${encodeURIComponent(url)}&w=${width}&q=${quality}`;
 }
 
-async function staticPageFrozen(ctx: CheckContext, html: string): Promise<void> {
+async function assertStaticPageFrozen(ctx: CheckContext, html: string): Promise<void> {
   assert.equal(
     markerOrNone(html, "static:live"),
     undefined,
     "the static page rendered a live half, so freezing it proves nothing",
   );
   const frozen = marker(html, "static:cached");
-  assert.equal(await steadyCachedHalf(ctx, "/cache/static", "static"), frozen);
+  assert.equal(await readSteadyCachedHalf(ctx, "/cache/static", "static"), frozen);
 
   const asset = await ctx.fetch(`${ctx.baseUrl}${assetPath(html)}`);
   assert.equal(asset.status, 200);
-  cacheControlIs(asset, IMMUTABLE_CACHE_CONTROL, "the hashed asset");
+  assertCacheControl(asset, IMMUTABLE_CACHE_CONTROL, "the hashed asset");
   await asset.arrayBuffer();
 }
 
-async function isrPageMoves(ctx: CheckContext): Promise<void> {
-  const before = await steadyCachedHalf(ctx, "/cache/isr", "isr");
-  await movedOn(ctx, "/cache/isr", "isr", before);
+async function assertIsrPageMoves(ctx: CheckContext): Promise<void> {
+  const before = await readSteadyCachedHalf(ctx, "/cache/isr", "isr");
+  await waitForNewCachedHalf(ctx, "/cache/isr", "isr", before);
 }
 
-async function pathRevalidationMovesOnlyThatPage(ctx: CheckContext): Promise<void> {
-  const before = await steadyCachedHalf(ctx, "/cache/path", "path");
-  const untouched = await cachedHalf(ctx, "/cache/static", "static");
+async function assertPathRevalidationMovesOnlyThatPage(ctx: CheckContext): Promise<void> {
+  const before = await readSteadyCachedHalf(ctx, "/cache/path", "path");
+  const untouched = await readCachedHalf(ctx, "/cache/static", "static");
   await revalidate(ctx, `path=${encodeURIComponent("/cache/path")}`);
-  await movedOn(ctx, "/cache/path", "path", before);
+  await waitForNewCachedHalf(ctx, "/cache/path", "path", before);
   assert.equal(
-    await cachedHalf(ctx, "/cache/static", "static"),
+    await readCachedHalf(ctx, "/cache/static", "static"),
     untouched,
     "revalidating one path moved a page it does not name",
   );
 }
 
-async function dynamicPageMoves(
+async function assertDynamicPageMoves(
   ctx: CheckContext,
   first: { res: Response; html: string },
 ): Promise<void> {
-  cacheControlIs(first.res, DYNAMIC_CACHE_CONTROL, "the dynamic page");
+  assertCacheControl(first.res, DYNAMIC_CACHE_CONTROL, "the dynamic page");
   const second = await page(ctx, "/cache/dynamic");
   assert.notEqual(
     stamp(first.html, "dynamic").live,
@@ -139,21 +143,21 @@ async function dynamicPageMoves(
   );
 }
 
-async function rscAnswer(ctx: CheckContext): Promise<void> {
+async function assertRscAnswer(ctx: CheckContext): Promise<void> {
   const rsc = await ctx.fetch(`${ctx.baseUrl}/cache/deployment`, { headers: { RSC: "1" } });
   assert.equal(rsc.status, 200);
   assert.match(rsc.headers.get("content-type") ?? "", /^text\/x-component/);
   const vary = rsc.headers.get("vary");
   assert.ok(variesOn(vary, ROUTER_VARY), `the RSC response varied on ${vary}`);
-  cacheControlIs(rsc, DYNAMIC_CACHE_CONTROL, "the RSC response");
+  assertCacheControl(rsc, DYNAMIC_CACHE_CONTROL, "the RSC response");
   await rsc.arrayBuffer();
 }
 
-async function prefetchMatchesFlight(ctx: CheckContext, cacheControl: string): Promise<void> {
+async function assertPrefetchMatchesFlight(ctx: CheckContext, cacheControl: string): Promise<void> {
   const read = async (headers: Record<string, string>) => {
     const res = await ctx.fetch(`${ctx.baseUrl}/cache/static`, { headers });
     assert.equal(res.status, 200);
-    cacheControlIs(res, cacheControl, "the flight response");
+    assertCacheControl(res, cacheControl, "the flight response");
     return Buffer.from(await res.arrayBuffer());
   };
   const prefetched = await read({ RSC: "1", "Next-Router-Prefetch": "1" });
@@ -161,22 +165,22 @@ async function prefetchMatchesFlight(ctx: CheckContext, cacheControl: string): P
   assert.ok(prefetched.equals(plain), "the prefetch and the plain flight response differ");
 }
 
-async function imageOptimizerServes(ctx: CheckContext, urls: string[]): Promise<void> {
+async function assertImageOptimizerServes(ctx: CheckContext, urls: string[]): Promise<void> {
   for (const url of urls) {
-    const res = await ctx.fetch(imageUrl(ctx, url, ALLOWED_WIDTH, ALLOWED_QUALITY));
+    const res = await ctx.fetch(buildImageUrl(ctx, url, ALLOWED_WIDTH, ALLOWED_QUALITY));
     assert.equal(res.status, 200, `${url} answered ${res.status}`);
     assert.match(res.headers.get("content-type") ?? "", /^image\//);
-    cacheControlIs(res, imageCacheControl(IMAGE_TTL_SECONDS), `the optimized ${url}`);
+    assertCacheControl(res, imageCacheControl(IMAGE_TTL_SECONDS), `the optimized ${url}`);
     await res.arrayBuffer();
   }
 
   const refused: Array<[string, string]> = [
     [
       "a disallowed host",
-      imageUrl(ctx, "https://images.invalid/ocel.png", ALLOWED_WIDTH, ALLOWED_QUALITY),
+      buildImageUrl(ctx, "https://images.invalid/ocel.png", ALLOWED_WIDTH, ALLOWED_QUALITY),
     ],
-    ["a disallowed width", imageUrl(ctx, LOCAL_IMAGE, 999, ALLOWED_QUALITY)],
-    ["a disallowed quality", imageUrl(ctx, LOCAL_IMAGE, ALLOWED_WIDTH, 50)],
+    ["a disallowed width", buildImageUrl(ctx, LOCAL_IMAGE, 999, ALLOWED_QUALITY)],
+    ["a disallowed quality", buildImageUrl(ctx, LOCAL_IMAGE, ALLOWED_WIDTH, 50)],
   ];
   for (const [what, url] of refused) {
     const res = await ctx.fetch(url);
@@ -185,7 +189,7 @@ async function imageOptimizerServes(ctx: CheckContext, urls: string[]): Promise<
   }
 }
 
-async function draftModeBypasses(
+async function assertDraftModeBypasses(
   ctx: CheckContext,
   prerendered: (res: Response) => void,
   drafted: (res: Response) => void,
@@ -204,12 +208,12 @@ async function draftModeBypasses(
 
   const withCookie = await page(ctx, "/draft", { headers: { cookie } });
   drafted(withCookie.res);
-  cacheControlIs(withCookie.res, DYNAMIC_CACHE_CONTROL, "the drafted page");
+  assertCacheControl(withCookie.res, DYNAMIC_CACHE_CONTROL, "the drafted page");
   assert.equal(marker(withCookie.html, "draft"), "enabled");
 }
 
-async function tagCachesUpstream(ctx: CheckContext, html: string): Promise<void> {
-  const cachedCount = await steadyCachedHalf(ctx, "/cache/data", "data");
+async function assertTagCachesUpstream(ctx: CheckContext, html: string): Promise<void> {
+  const cachedCount = await readSteadyCachedHalf(ctx, "/cache/data", "data");
   const again = stamp((await page(ctx, "/cache/data")).html, "data");
   assert.equal(again.cached, cachedCount, "the tag released the upstream call it was caching");
   assert.notEqual(
@@ -227,47 +231,47 @@ async function tagCachesUpstream(ctx: CheckContext, html: string): Promise<void>
   );
 
   await revalidate(ctx, `tag=${encodeURIComponent(RESUME_TAG)}`);
-  const after = await movedOn(ctx, "/cache/data", "data", cachedCount);
+  const after = await waitForNewCachedHalf(ctx, "/cache/data", "data", cachedCount);
   assert.ok(
     Number(after) > Number(cachedCount),
     `the upstream count went from ${cachedCount} to ${after}`,
   );
 }
 
-export const nextCacheChecks: Check[] = heldAt("edge", [
+export const nextCacheChecks: Check[] = holdAt("edge", [
   {
     title: "a static page is prerendered, frozen, and links assets immutable for a year",
     run: async (ctx) => {
       const { res, html } = await page(ctx, "/cache/static");
-      tierIs(res, CACHED, "the static page");
-      cacheControlIs(res, cacheControlFor(false), "the static page");
-      await staticPageFrozen(ctx, html);
+      assertTier(res, CACHED, "the static page");
+      assertCacheControl(res, cacheControlFor(false), "the static page");
+      await assertStaticPageFrozen(ctx, html);
     },
   },
   {
     title: "an ISR page is frozen inside its revalidate window and moves once it passes",
     run: async (ctx) => {
       const { res } = await page(ctx, "/cache/isr");
-      tierIs(res, CACHED, "the ISR page");
-      cacheControlIs(res, cacheControlFor(ISR_SECONDS), "the ISR page");
-      await isrPageMoves(ctx);
+      assertTier(res, CACHED, "the ISR page");
+      assertCacheControl(res, cacheControlFor(ISR_SECONDS), "the ISR page");
+      await assertIsrPageMoves(ctx);
     },
   },
   {
     title: "revalidating a path moves the page it names and nothing else",
     run: async (ctx) => {
       const { res } = await page(ctx, "/cache/path");
-      tierIs(res, CACHED, "the path page");
-      cacheControlIs(res, cacheControlFor(PATH_SECONDS), "the path page");
-      await pathRevalidationMovesOnlyThatPage(ctx);
+      assertTier(res, CACHED, "the path page");
+      assertCacheControl(res, cacheControlFor(PATH_SECONDS), "the path page");
+      await assertPathRevalidationMovesOnlyThatPage(ctx);
     },
   },
   {
     title: "a dynamic page moves on every request and is never stored",
     run: async (ctx) => {
       const first = await page(ctx, "/cache/dynamic");
-      tierIs(first.res, UNCACHED, "the dynamic page");
-      await dynamicPageMoves(ctx, first);
+      assertTier(first.res, UNCACHED, "the dynamic page");
+      await assertDynamicPageMoves(ctx, first);
     },
   },
   {
@@ -277,7 +281,7 @@ export const nextCacheChecks: Check[] = heldAt("edge", [
       const { html } = await page(ctx, "/cache/deployment");
       const id = marker(html, "deployment");
       assert.ok(id.length > 0, "the page rendered no deployment id");
-      await rscAnswer(ctx);
+      await assertRscAnswer(ctx);
 
       const before = ctx.notes.get(DEPLOYMENT_NOTE);
       if (ctx.phase === "redeploy" && before) {
@@ -288,45 +292,45 @@ export const nextCacheChecks: Check[] = heldAt("edge", [
   },
   {
     title: "a prefetch answers byte-identically to the request that is not one",
-    run: (ctx) => prefetchMatchesFlight(ctx, cacheControlFor(false)),
+    run: (ctx) => assertPrefetchMatchesFlight(ctx, cacheControlFor(false)),
   },
   {
     title:
       "the image optimizer serves a local and a self-hosted image and refuses a bad host, width or quality",
-    run: (ctx) => imageOptimizerServes(ctx, [LOCAL_IMAGE, `${ctx.baseUrl}${LOCAL_IMAGE}`]),
+    run: (ctx) => assertImageOptimizerServes(ctx, [LOCAL_IMAGE, `${ctx.baseUrl}${LOCAL_IMAGE}`]),
   },
   {
     title: "draft mode bypasses the cache with a cookie that survives the redirect",
     run: (ctx) =>
-      draftModeBypasses(
+      assertDraftModeBypasses(
         ctx,
-        (res) => tierIs(res, CACHED, "the draft page without the cookie"),
+        (res) => assertTier(res, CACHED, "the draft page without the cookie"),
         (res) => assert.equal(tierOf(res), "BYPASS"),
       ),
   },
 ]);
 
-export const nextDataCacheChecks: Check[] = heldAt("edge", [
+export const nextDataCacheChecks: Check[] = holdAt("edge", [
   {
     title: "a non-ASCII tag caches one upstream call and releases it when the tag is revalidated",
     run: async (ctx) => {
       const { res, html } = await page(ctx, "/cache/data");
-      tierIs(res, UNCACHED, "the data-cache page");
-      cacheControlIs(res, DYNAMIC_CACHE_CONTROL, "the data-cache page");
-      await tagCachesUpstream(ctx, html);
+      assertTier(res, UNCACHED, "the data-cache page");
+      assertCacheControl(res, DYNAMIC_CACHE_CONTROL, "the data-cache page");
+      await assertTagCachesUpstream(ctx, html);
     },
   },
 ]);
 
-export const nextOriginCacheChecks: Check[] = heldAt("origin", [
+export const nextOriginCacheChecks: Check[] = holdAt("origin", [
   {
     title:
       "the Next server serves a static page from its cache, frozen, with assets immutable for a year",
     run: async (ctx) => {
       const { res, html } = await page(ctx, "/cache/static");
-      servedFromNextCache(res, "the static page");
-      cacheControlIs(res, nextServerCacheControlFor(false), "the static page");
-      await staticPageFrozen(ctx, html);
+      assertServedFromNextCache(res, "the static page");
+      assertCacheControl(res, nextServerCacheControlFor(false), "the static page");
+      await assertStaticPageFrozen(ctx, html);
     },
   },
   {
@@ -334,63 +338,63 @@ export const nextOriginCacheChecks: Check[] = heldAt("origin", [
       "the Next server keeps an ISR page frozen inside its revalidate window and moves it after",
     run: async (ctx) => {
       const { res } = await page(ctx, "/cache/isr");
-      servedFromNextCache(res, "the ISR page");
-      cacheControlIs(res, nextServerCacheControlFor(ISR_SECONDS), "the ISR page");
-      await isrPageMoves(ctx);
+      assertServedFromNextCache(res, "the ISR page");
+      assertCacheControl(res, nextServerCacheControlFor(ISR_SECONDS), "the ISR page");
+      await assertIsrPageMoves(ctx);
     },
   },
   {
     title: "revalidating a path makes the Next server move the page it names and nothing else",
     run: async (ctx) => {
       const { res } = await page(ctx, "/cache/path");
-      servedFromNextCache(res, "the path page");
-      cacheControlIs(res, nextServerCacheControlFor(PATH_SECONDS), "the path page");
-      await pathRevalidationMovesOnlyThatPage(ctx);
+      assertServedFromNextCache(res, "the path page");
+      assertCacheControl(res, nextServerCacheControlFor(PATH_SECONDS), "the path page");
+      await assertPathRevalidationMovesOnlyThatPage(ctx);
     },
   },
   {
     title: "the Next server renders a dynamic page on every request and keeps none of it",
     run: async (ctx) => {
       const first = await page(ctx, "/cache/dynamic");
-      renderedOutsideNextCache(first.res, "the dynamic page");
-      await dynamicPageMoves(ctx, first);
+      assertRenderedOutsideNextCache(first.res, "the dynamic page");
+      await assertDynamicPageMoves(ctx, first);
     },
   },
   {
     title:
       "the Next server answers an RSC request as text/x-component that varies on the router headers",
-    run: rscAnswer,
+    run: assertRscAnswer,
   },
   {
     title: "the Next server answers a prefetch byte-identically to the request that is not one",
-    run: (ctx) => prefetchMatchesFlight(ctx, nextServerCacheControlFor(false)),
+    run: (ctx) => assertPrefetchMatchesFlight(ctx, nextServerCacheControlFor(false)),
   },
   {
     title:
       "the Next server's image optimizer serves a local image and refuses a bad host, width or quality",
-    run: (ctx) => imageOptimizerServes(ctx, [LOCAL_IMAGE]),
+    run: (ctx) => assertImageOptimizerServes(ctx, [LOCAL_IMAGE]),
   },
   {
     title:
       "draft mode makes the Next server bypass its cache with a cookie that survives the redirect",
     run: (ctx) =>
-      draftModeBypasses(
+      assertDraftModeBypasses(
         ctx,
-        (res) => servedFromNextCache(res, "the draft page without the cookie"),
+        (res) => assertServedFromNextCache(res, "the draft page without the cookie"),
         () => undefined,
       ),
   },
 ]);
 
-export const nextOriginDataCacheChecks: Check[] = heldAt("origin", [
+export const nextOriginDataCacheChecks: Check[] = holdAt("origin", [
   {
     title:
       "the Next server caches one upstream call under a non-ASCII tag and releases it when the tag is revalidated",
     run: async (ctx) => {
       const { res, html } = await page(ctx, "/cache/data");
-      renderedOutsideNextCache(res, "the data-cache page");
-      cacheControlIs(res, DYNAMIC_CACHE_CONTROL, "the data-cache page");
-      await tagCachesUpstream(ctx, html);
+      assertRenderedOutsideNextCache(res, "the data-cache page");
+      assertCacheControl(res, DYNAMIC_CACHE_CONTROL, "the data-cache page");
+      await assertTagCachesUpstream(ctx, html);
     },
   },
 ]);
