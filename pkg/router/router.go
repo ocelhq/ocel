@@ -68,6 +68,7 @@ type Claim struct {
 	Certificate        string
 	ClientCertificates []string
 	OriginCertificate  edge.OriginCertificate
+	Tunnel             edge.Kind
 }
 
 type Stack interface {

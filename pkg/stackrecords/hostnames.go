@@ -48,6 +48,7 @@ type HostnameState struct {
 	ClientCertificateDigests   []string  `json:"clientCertificateDigests,omitempty"`
 	OriginCertificateID        string    `json:"originCertificateId,omitempty"`
 	OriginCertificateExpiresAt time.Time `json:"originCertificateExpiresAt,omitzero"`
+	Tunneled                   bool      `json:"tunneled,omitempty"`
 }
 
 func (s *HostnameState) Supersede(cert provider.Certificate) {

@@ -55,6 +55,7 @@ type edgeSession struct {
 	store    edgeStateStore
 	state    stackrecords.EdgeState
 	cutover  dnsCutover
+	tunnel   edge.Kind
 }
 
 func (h *handlers) edgeFor(p provider.Provider, sel *contractv1.EdgeSelection) (edge.Edge, error) {
@@ -62,7 +63,26 @@ func (h *handlers) edgeFor(p provider.Provider, sel *contractv1.EdgeSelection) (
 	if kind == "" {
 		kind = p.Facts().DefaultEdge
 	}
-	return p.Edges().Open(kind)
+	front, err := p.Edges().Open(kind)
+	if err != nil || !sel.GetTunnel() {
+		return front, err
+	}
+	if !p.Facts().RunsTunnels {
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"%s reaches no origin of this provider through a tunnel: remove `tunnel` from the edge's options, and it forwards to the origin's address", describeFront(kind))
+	}
+	if front.Hooks().Tunnels == nil {
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"%s opens no tunnel to an origin: remove `tunnel` from the edge's options", describeFront(kind))
+	}
+	return front, nil
+}
+
+func tunnelThrough(front edge.Edge, sel *contractv1.EdgeSelection) edge.Kind {
+	if !sel.GetTunnel() {
+		return edge.None
+	}
+	return front.Kind()
 }
 
 func (h *handlers) removalEdge(p provider.Provider, state stackrecords.EdgeState, sel *contractv1.EdgeSelection) (edge.Edge, error) {
@@ -120,7 +140,7 @@ func (h *handlers) openEdgeSession(ctx context.Context, tier environment.Tier, s
 		return nil, err
 	}
 	shared.setEdgeStack(stack)
-	session := &edgeSession{sharedStack: shared, provider: vendor, store: store, state: state}
+	session := &edgeSession{sharedStack: shared, provider: vendor, store: store, state: state, tunnel: tunnelThrough(front, sel)}
 	session.installDNSCutover(writer, sel.GetDns().GetZone())
 	return session, nil
 }

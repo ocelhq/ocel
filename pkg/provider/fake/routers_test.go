@@ -18,6 +18,7 @@ func TestEveryFakeRouterBehavesAsEveryRouterMust(t *testing.T) {
 				New:         func(t *testing.T) routerconformance.Fixture { return fakeFixture(t, kind, routedBy) },
 				Hostname:    "shop.example.com",
 				PreviewBase: "preview.example.com",
+				Tunnel:      kind,
 			})
 		})
 	}

@@ -37,6 +37,7 @@ type Facts struct {
 	DNSKinds          []DNSKind
 	RendersTransforms bool
 	StoresArtifacts   bool
+	RunsTunnels       bool
 
 	RetainsContainerReleases bool
 }

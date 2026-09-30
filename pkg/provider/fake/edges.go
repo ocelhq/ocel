@@ -128,6 +128,8 @@ type Edge struct {
 
 	proxies    bool
 	issues     bool
+	tunnels    bool
+	opened     []string
 	originLife time.Duration
 	issued     int
 	held       map[string]string
@@ -340,6 +342,9 @@ func (e *Edge) DisclaimedPreviewEntries() []string {
 }
 
 func (e *Edge) holdOriginCertificate(claim router.Claim) edge.Origin {
+	if claim.Tunnel != edge.None {
+		return edge.Origin{Address: TunnelAddress(claim.Tunnel), Certified: true, Tunneled: true}
+	}
 	if claim.OriginCertificate.ID != "" {
 		if e.held == nil {
 			e.held = map[string]string{}
@@ -526,6 +531,9 @@ func (e *Edge) Hooks() edge.Hooks {
 	if e.proxies {
 		hooks.ClientCertificates = &edge.ClientCertificateHooks{Ensure: e.ensureClientCertificates, Present: e.presentClientCertificate}
 		hooks.PurgeHostnames = e.purge
+	}
+	if e.tunnels {
+		hooks.Tunnels = &edge.TunnelHooks{Ensure: e.ensureTunnel, Configure: e.configureTunnel, ReadToken: e.readTunnelToken, Delete: e.deleteTunnel}
 	}
 	if e.issues {
 		hooks.OriginCertificates = &edge.OriginCertificateHooks{Issue: e.issueOriginCertificate, Revoke: e.revokeOriginCertificate}
@@ -745,3 +753,43 @@ var (
 	_ edge.EdgeStack  = (*Stack)(nil)
 	_ edge.DNSRecords = (*DNSRecords)(nil)
 )
+
+func TunnelAddress(kind edge.Kind) string { return "tunnel." + string(kind) + ".fake.invalid" }
+
+func (e *Edge) Tunnels() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.tunnels = true
+}
+
+func (e *Edge) TunnelEvents() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.opened)
+}
+
+func (e *Edge) recordTunnelEvent(event string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.opened = append(e.opened, event)
+}
+
+func (e *Edge) ensureTunnel(_ context.Context, name string) (edge.Tunnel, error) {
+	e.recordTunnelEvent("ensure " + name)
+	return edge.Tunnel{ID: "tunnel-" + name, Address: TunnelAddress(e.kind)}, nil
+}
+
+func (e *Edge) configureTunnel(_ context.Context, id, service string) error {
+	e.recordTunnelEvent("configure " + id + " " + service)
+	return nil
+}
+
+func (e *Edge) readTunnelToken(_ context.Context, id string) (string, error) {
+	e.recordTunnelEvent("token " + id)
+	return "token-" + id, nil
+}
+
+func (e *Edge) deleteTunnel(_ context.Context, id string) error {
+	e.recordTunnelEvent("delete " + id)
+	return nil
+}

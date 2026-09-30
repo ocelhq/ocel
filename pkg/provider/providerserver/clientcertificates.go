@@ -25,7 +25,16 @@ type originClaim struct {
 	issued  edge.OriginCertificate
 }
 
+func (c originClaim) isTunneled() bool { return c.origin != nil && c.origin.Tunneled }
+
 func (c originClaim) recordOn(hostState *stackrecords.HostnameState) (superseded string) {
+	hostState.Tunneled = c.isTunneled()
+	if hostState.Tunneled {
+		superseded = hostState.OriginCertificateID
+		hostState.ClientCertificateDigests = nil
+		hostState.OriginCertificateID, hostState.OriginCertificateExpiresAt = "", time.Time{}
+		return superseded
+	}
 	hostState.ClientCertificateDigests = digestClientCertificates(c.trusted)
 	if c.issued.ID == "" {
 		return ""
@@ -39,6 +48,9 @@ func (c originClaim) recordOn(hostState *stackrecords.HostnameState) (superseded
 }
 
 func claimOrigin(ctx context.Context, front edge.Edge, claim router.Claim, take originTake, reserve originReservation) (originClaim, error) {
+	if claim.Tunnel != edge.None {
+		return claimTunneled(ctx, claim, take)
+	}
 	var claimed originClaim
 	origin, trusted, err := claimTrusting(ctx, front, claim.Hostname, func(ctx context.Context, clientCertificates []string) (edge.Origin, error) {
 		claim.ClientCertificates = clientCertificates
@@ -54,6 +66,40 @@ func claimOrigin(ctx context.Context, front edge.Edge, claim router.Claim, take 
 	}
 	claimed.origin = &origin
 	return claimed, nil
+}
+
+func claimTunneled(ctx context.Context, claim router.Claim, take originTake) (originClaim, error) {
+	origin, err := take(ctx, claim)
+	if err != nil {
+		return originClaim{}, err
+	}
+	if !origin.Tunneled {
+		return originClaim{}, fmt.Errorf("%s was claimed through the %s edge's tunnel, and the router answered with %q, which is no tunnel", claim.Hostname, claim.Tunnel, origin.Address)
+	}
+	return originClaim{origin: &origin}, nil
+}
+
+func isOriginClaimStale(ctx context.Context, front edge.Edge, hostname string, tunnel edge.Kind, hostState *stackrecords.HostnameState, now time.Time) (stale bool, why string, err error) {
+	wanted := tunnel != edge.None
+	switch {
+	case wanted && !hostState.Tunneled:
+		return true, "it is reached through a tunnel now", nil
+	case !wanted && hostState.Tunneled:
+		return true, "it is no longer reached through a tunnel", nil
+	case wanted:
+		return false, "", nil
+	}
+	changed, err := clientCertificatesChanged(ctx, front, hostname, hostState.ClientCertificateDigests)
+	if err != nil {
+		return false, "", err
+	}
+	if isOriginCertificateDue(hostState, now) {
+		return true, "the certificate its origin answers it with is due for renewal", nil
+	}
+	if changed {
+		return true, fmt.Sprintf("the client certificates %s presents to its origin changed", describeFront(front.Kind())), nil
+	}
+	return false, "", nil
 }
 
 func claimTrusting(ctx context.Context, front edge.Edge, hostname string, claim func(context.Context, []string) (edge.Origin, error)) (edge.Origin, []string, error) {

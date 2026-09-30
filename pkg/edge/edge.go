@@ -118,6 +118,7 @@ type EdgeStack interface {
 type Origin struct {
 	Address   string
 	Certified bool
+	Tunneled  bool
 }
 
 type OriginCertificate struct {

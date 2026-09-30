@@ -250,6 +250,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 			sharedStack: shared,
 			provider:    p,
 			store:       edgeStateStore{keyValues: p.KeyValues(), name: stackrecords.EdgeStackKey(spec.Tier, spec.Slug)},
+			tunnel:      tunnelThrough(front, req.GetEdge()),
 		},
 		gate:           gate,
 		features:       features,
@@ -504,7 +505,7 @@ func (r *deployRun) forwardPreviews(ctx context.Context, progress progress.Log) 
 	}
 	switch r.hostingMode() {
 	case hostingGlobalPreview:
-		shared := &wildcards{provider: r.provider, keyValues: r.provider.KeyValues(), recorded: r.wildcard}
+		shared := &wildcards{provider: r.provider, keyValues: r.provider.KeyValues(), recorded: r.wildcard, sel: r.selection}
 		return shared.refreshEntryClaim(ctx, r.front, progress)
 	case hostingProjectPreview:
 		if r.previewOn == "" || len(r.spec.Apps) == 0 {

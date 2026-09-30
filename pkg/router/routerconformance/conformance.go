@@ -40,6 +40,7 @@ type Suite struct {
 	Hostname    string
 	PreviewBase string
 	Record      func(app, build string) router.DeploymentRecord
+	Tunnel      edge.Kind
 }
 
 var errDisplaced = errors.New("conformance: another promotion displaced this one while it moved")
@@ -263,6 +264,34 @@ func runOrigin(t *testing.T, suite Suite) {
 		requirePlan(t, "PlanProjectRemoval", origin.PlanProjectRemoval(edge.ProjectScope{
 			Slug: fixture.Spec.Slug, Tier: fixture.Spec.Tier, Hostnames: []string{suite.Hostname},
 		}))
+		for range 2 {
+			if err := stack.Disclaim(ctx, suite.Hostname); err != nil {
+				t.Fatalf("Disclaim(%q): %v", suite.Hostname, err)
+			}
+		}
+	})
+
+	t.Run("a router an edge reaches through a tunnel answers a claim through it with the tunnel, and gives it back", func(t *testing.T) {
+		if suite.Tunnel == edge.None {
+			t.Skip("no edge reaches this router through a tunnel")
+		}
+		ctx := context.Background()
+		stack := reconciled(t, suite.New(t))
+		claim := router.Claim{Hostname: suite.Hostname, App: App, Certificate: conformanceCertificate, Tunnel: suite.Tunnel}
+		first, err := stack.Claim(ctx, claim)
+		if err != nil {
+			t.Fatalf("Claim(%q) through a tunnel: %v", suite.Hostname, err)
+		}
+		if first.Address == "" || !first.Tunneled || !first.Certified {
+			t.Errorf("Claim(%q) through a tunnel names origin %+v, want the tunnel's address, tunneled: the edge reaches the origin through nothing else, and checks no certificate it issued", suite.Hostname, first)
+		}
+		again, err := stack.Claim(ctx, claim)
+		if err != nil {
+			t.Fatalf("Claim(%q) through a tunnel again: %v", suite.Hostname, err)
+		}
+		if again != first {
+			t.Errorf("Claim(%q) through a tunnel again names %+v, want the %+v it named: one tunnel reaches the origin across deploys", suite.Hostname, again, first)
+		}
 		for range 2 {
 			if err := stack.Disclaim(ctx, suite.Hostname); err != nil {
 				t.Fatalf("Disclaim(%q): %v", suite.Hostname, err)

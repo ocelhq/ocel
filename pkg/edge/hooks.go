@@ -18,6 +18,7 @@ type Hooks struct {
 	ClientCertificates            *ClientCertificateHooks
 	OriginCertificates            *OriginCertificateHooks
 	PurgeHostnames                func(ctx context.Context, hostnames []string) error
+	Tunnels                       *TunnelHooks
 }
 
 type ClientCertificateHooks struct {
@@ -28,4 +29,16 @@ type ClientCertificateHooks struct {
 type OriginCertificateHooks struct {
 	Issue  func(ctx context.Context, hostname string) (OriginCertificate, error)
 	Revoke func(ctx context.Context, id string) error
+}
+
+type Tunnel struct {
+	ID      string
+	Address string
+}
+
+type TunnelHooks struct {
+	Ensure    func(ctx context.Context, name string) (Tunnel, error)
+	Configure func(ctx context.Context, id, service string) error
+	ReadToken func(ctx context.Context, id string) (string, error)
+	Delete    func(ctx context.Context, id string) error
 }
