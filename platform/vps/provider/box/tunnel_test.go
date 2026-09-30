@@ -82,6 +82,19 @@ func TestATunnelOpenedUnderANameAnotherRunReleasedIsDeleted(t *testing.T) {
 	}
 }
 
+func TestATunnelIsKeptWhenRunningItIsRefusedForAnythingButItsRelease(t *testing.T) {
+	m, routed := routedOn(t)
+	m.refuseOn("RunTunnel", refusal.Refuse(refusal.CodeBusy, "the routing table changed during this deploy"))
+
+	if _, err := routed.Claim(context.Background(), tunneledClaim("shop.example.com")); err == nil {
+		t.Fatal("Claim with the run refused succeeded")
+	}
+
+	if slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
+		t.Errorf("the edge saw %v, want the tunnel kept: the box still reserves its name, and another run may be carrying traffic through it", m.tunnelEvents.opened)
+	}
+}
+
 func (m *machine) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
 	if kind != tunnelEdge {
 		return nil, refusal.Refuse(refusal.CodeInvalid, "the %s edge opens no tunnel", kind)
@@ -138,8 +151,11 @@ func (m *machine) ReserveTunnel(_ context.Context, front edge.Kind) (host.Tunnel
 }
 
 func (m *machine) RunTunnel(ctx context.Context, tunnel host.Tunnel, token func(context.Context) (string, error)) error {
+	if err := m.refuse("RunTunnel"); err != nil {
+		return err
+	}
 	if m.tunnel == nil || m.tunnel.Name != tunnel.Name {
-		return refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnel.Name)
+		return errors.Join(refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnel.Name), host.ErrTunnelReleased)
 	}
 	m.tunnel = &tunnel
 	if m.tunnelRunning == tunnel.ID {
