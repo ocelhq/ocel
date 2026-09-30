@@ -360,6 +360,31 @@ func controlAnswers(control string, within time.Duration) bool {
 	return false
 }
 
+func TestServeAnswersItsControlSocketOnlyOnceEveryListenerTakesConnections(t *testing.T) {
+	https := freeAddress(t)
+	running := serving{data: freeAddress(t), front: frontAt(t), admit: admitAt(t), control: controlAt(t), done: make(chan int, 1), errs: &strings.Builder{}}
+	ctx, stop := context.WithCancel(t.Context())
+	argv := []string{"serve", "--listen", running.data, "--front", running.front, "--admit", running.admit, "--table", tableFile(t, nil), "--https-listen", https}
+	go func() { running.done <- run(ctx, argv, strings.NewReader(""), io.Discard, running.errs) }()
+	t.Cleanup(func() {
+		stop()
+		<-running.done
+	})
+
+	if !controlAnswers(running.control, 5*time.Second) {
+		t.Fatalf("serve never answered on %s: %s", running.control, running.errs)
+	}
+	for _, listener := range [][2]string{{"tcp", running.data}, {"unix", running.front}, {"unix", running.admit}, {"tcp", https}} {
+		network, address := listener[0], listener[1]
+		conn, err := net.Dial(network, address)
+		if err != nil {
+			t.Errorf("%s refused a connection once the control socket answered: %v; whoever waits on the control socket is told the switchboard is up", address, err)
+			continue
+		}
+		_ = conn.Close()
+	}
+}
+
 func TestServeReplacesASocketNothingAnswersOn(t *testing.T) {
 	control := controlAt(t)
 	stale, err := net.Listen("unix", control)

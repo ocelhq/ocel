@@ -184,12 +184,12 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 		return refuse(errs, fmt.Errorf("%s: %w", *path, err))
 	}
 	board := switchboard.New(table, relayed...)
-	controlling, lock, err := controlListener(control)
+	lock, err := lockControl(control)
 	if err != nil {
 		return refuse(errs, err)
 	}
 	defer lock.Close()
-	opened := []net.Listener{controlling}
+	var opened []net.Listener
 	unwind := func(err error) int {
 		for _, listener := range opened {
 			_ = listener.Close()
@@ -228,6 +228,11 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 		opened = append(opened, listener)
 		tunnels = append(tunnels, listener)
 	}
+	controlling, err := socketListener(control)
+	if err != nil {
+		return unwind(err)
+	}
+	opened = append(opened, controlling)
 	controller := &http.Server{Handler: board.Control(), ReadHeaderTimeout: switchboard.ReadHeaderTimeout}
 	failed := make(chan error, len(opened))
 	go func() {
@@ -279,27 +284,22 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	return code
 }
 
-func controlListener(path string) (net.Listener, io.Closer, error) {
+func lockControl(path string) (io.Closer, error) {
 	if err := os.MkdirAll(filepath.Dir(path), controlDirMode); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	lock, err := os.OpenFile(path+lockSuffix, os.O_RDWR|os.O_CREATE, lockMode)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		_ = lock.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, nil, fmt.Errorf("another switchboard already has %s locked", path)
+			return nil, fmt.Errorf("another switchboard already has %s locked", path)
 		}
-		return nil, nil, err
+		return nil, err
 	}
-	listener, err := socketListener(path)
-	if err != nil {
-		_ = lock.Close()
-		return nil, nil, err
-	}
-	return listener, lock, nil
+	return lock, nil
 }
 
 func socketListener(path string) (net.Listener, error) {
