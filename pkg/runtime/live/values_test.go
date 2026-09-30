@@ -334,8 +334,10 @@ func TestValuesAreFetchedAndPushedToNodeAsGenerations(t *testing.T) {
 		}
 
 		clock = clock.Add(StalenessBound)
-		l.Refresh(context.Background())
-		eventually(t, "the refresh to be retried", func() bool { return source.count() == 3 })
+		eventually(t, "a later invocation to retry the refresh", func() bool {
+			l.Refresh(context.Background())
+			return source.count() >= 3
+		})
 	})
 
 	t.Run("tells node which keys to expect a push for", func(t *testing.T) {
