@@ -58,10 +58,19 @@ describe("a tunneled hostname asked of the box directly", () => {
     ).toThrow(/answered 200/);
   });
 
+  it("passes when the box accepts the connection and hangs up with nothing said", () => {
+    expect(() =>
+      assertNotServed({ kind: "closed", reason: "closed with nothing said" }, "the box"),
+    ).not.toThrow();
+  });
+
   it("fails when the box connected and then said nothing that settles it", () => {
     expect(() =>
-      assertNotServed({ kind: "undecided", reason: "closed with nothing said" }, "the box"),
-    ).toThrow(/closed with nothing said/);
+      assertNotServed(
+        { kind: "undecided", reason: "nothing decided within 10000ms after connecting" },
+        "the box",
+      ),
+    ).toThrow(/nothing decided/);
   });
 
   it("fails when the box answered with no status line", () => {
