@@ -67,6 +67,7 @@ type fakeAWS struct {
 
 	objects map[string][]byte
 	etags   map[string]int
+	failPut error
 
 	services map[string]string
 	builds   map[string]string
@@ -351,6 +352,10 @@ func (f *fakeAWS) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(
 func (f *fakeAWS) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if failure := f.failPut; failure != nil {
+		f.failPut = nil
+		return nil, failure
+	}
 	key := aws.ToString(in.Key)
 	_, found := f.objects[key]
 	switch {
