@@ -23,7 +23,7 @@ type EdgeState struct {
 	Hosts   map[string]HostnameState          `json:"hosts,omitempty"`
 }
 
-func (s *EdgeState) Pair(kind router.Kind, state router.StackState, apps map[string]router.Kind) {
+func (s *EdgeState) Pair(kind router.Kind, state router.StackState, apps []string) {
 	if len(apps) == 0 {
 		return
 	}
@@ -34,7 +34,9 @@ func (s *EdgeState) Pair(kind router.Kind, state router.StackState, apps map[str
 	if s.Apps == nil {
 		s.Apps = map[string]router.Kind{}
 	}
-	maps.Copy(s.Apps, apps)
+	for _, app := range apps {
+		s.Apps[app] = kind
+	}
 }
 
 type HostnameState struct {
@@ -47,7 +49,7 @@ type HostnameState struct {
 	Manual      []edge.Record          `json:"owed,omitempty"`
 	Probe       ServeProbe             `json:"probe,omitzero"`
 
-	ClientCertificateDigests   []string  `json:"clientCertificateDigests,omitempty"`
+	ClientCADigests            []string  `json:"clientCADigests,omitempty"`
 	OriginCertificateID        string    `json:"originCertificateId,omitempty"`
 	OriginCertificateExpiresAt time.Time `json:"originCertificateExpiresAt,omitzero"`
 	Tunneled                   bool      `json:"tunneled,omitempty"`

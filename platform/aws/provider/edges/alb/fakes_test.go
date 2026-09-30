@@ -3,13 +3,21 @@ package alb
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
-	"maps"
+	"math/big"
 	"slices"
 	"strconv"
 	"sync"
+	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
@@ -44,11 +52,17 @@ type fakeAWS struct {
 	certificates []string
 	failModify   error
 
-	trustStore    string
-	trustStatus   elbv2types.TrustStoreStatus
-	trustModified int
-	listenerMode  string
-	listenerTrust string
+	trustStore       string
+	trustStatus      elbv2types.TrustStoreStatus
+	trustModified    int
+	trustBundle      string
+	trustTags        map[string]string
+	failTrustModify  error
+	failTrustCreate  error
+	certificateLimit int
+	ruleLimit        int
+	listenerMode     string
+	listenerTrust    string
 
 	objects map[string][]byte
 	etags   map[string]int
@@ -67,6 +81,7 @@ func newFakeAWS() *fakeAWS {
 		builds:       map[string]string{},
 		calls:        map[string]int{},
 		listenerMode: "off",
+		trustTags:    map[string]string{},
 	}
 }
 
@@ -147,6 +162,9 @@ func (f *fakeAWS) CreateRule(_ context.Context, in *elbv2.CreateRuleInput, _ ...
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.count("CreateRule")
+	if f.ruleLimit > 0 && len(f.rules) >= f.ruleLimit {
+		return nil, &elbv2types.TooManyRulesException{Message: aws.String("You've reached the limit on the number of rules per load balancer")}
+	}
 	for _, rule := range f.rules {
 		if rule.priority == aws.ToInt32(in.Priority) {
 			return nil, &elbv2types.PriorityInUseException{Message: aws.String("taken")}
@@ -190,6 +208,9 @@ func (f *fakeAWS) AddListenerCertificates(_ context.Context, in *elbv2.AddListen
 	defer f.mu.Unlock()
 	for _, certificate := range in.Certificates {
 		if arn := aws.ToString(certificate.CertificateArn); !slices.Contains(f.certificates, arn) {
+			if f.certificateLimit > 0 && len(f.certificates) >= f.certificateLimit {
+				return nil, &elbv2types.TooManyCertificatesException{Message: aws.String("You've reached the limit on the number of certificates per load balancer")}
+			}
 			f.certificates = append(f.certificates, arn)
 		}
 	}
@@ -219,19 +240,65 @@ func (f *fakeAWS) DescribeTrustStores(_ context.Context, in *elbv2.DescribeTrust
 func (f *fakeAWS) CreateTrustStore(_ context.Context, in *elbv2.CreateTrustStoreInput, _ ...func(*elbv2.Options)) (*elbv2.CreateTrustStoreOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if _, held := f.objects[aws.ToString(in.CaCertificatesBundleS3Key)]; !held || aws.ToString(in.CaCertificatesBundleS3Bucket) != testBucket {
+	if failure := f.failTrustCreate; failure != nil {
+		f.failTrustCreate = nil
+		return nil, failure
+	}
+	bundle, held := f.objects[aws.ToString(in.CaCertificatesBundleS3Key)]
+	if !held || aws.ToString(in.CaCertificatesBundleS3Bucket) != testBucket {
 		return nil, errors.New("the bundle is not in the bucket")
+	}
+	f.trustBundle = string(bundle)
+	for _, tag := range in.Tags {
+		f.trustTags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 	}
 	f.trustStore = "arn:aws:elasticloadbalancing:us-east-1:111122223333:truststore/" + aws.ToString(in.Name) + "/1"
 	f.trustStatus = elbv2types.TrustStoreStatusCreating
 	return &elbv2.CreateTrustStoreOutput{TrustStores: []elbv2types.TrustStore{{TrustStoreArn: aws.String(f.trustStore), Status: elbv2types.TrustStoreStatusCreating}}}, nil
 }
 
-func (f *fakeAWS) ModifyTrustStore(context.Context, *elbv2.ModifyTrustStoreInput, ...func(*elbv2.Options)) (*elbv2.ModifyTrustStoreOutput, error) {
+func (f *fakeAWS) ModifyTrustStore(_ context.Context, in *elbv2.ModifyTrustStoreInput, _ ...func(*elbv2.Options)) (*elbv2.ModifyTrustStoreOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if failure := f.failTrustModify; failure != nil {
+		f.failTrustModify = nil
+		return nil, failure
+	}
+	bundle, held := f.objects[aws.ToString(in.CaCertificatesBundleS3Key)]
+	if !held {
+		return nil, &elbv2types.CaCertificatesBundleNotFoundException{Message: in.CaCertificatesBundleS3Key}
+	}
 	f.trustModified++
+	f.trustBundle = string(bundle)
 	return &elbv2.ModifyTrustStoreOutput{}, nil
+}
+
+func (f *fakeAWS) DescribeTags(_ context.Context, in *elbv2.DescribeTagsInput, _ ...func(*elbv2.Options)) (*elbv2.DescribeTagsOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var described []elbv2types.TagDescription
+	for _, arn := range in.ResourceArns {
+		if arn != f.trustStore {
+			continue
+		}
+		var tags []elbv2types.Tag
+		for key, value := range f.trustTags {
+			tags = append(tags, elbv2types.Tag{Key: aws.String(key), Value: aws.String(value)})
+		}
+		described = append(described, elbv2types.TagDescription{ResourceArn: aws.String(arn), Tags: tags})
+	}
+	return &elbv2.DescribeTagsOutput{TagDescriptions: described}, nil
+}
+
+func (f *fakeAWS) AddTags(_ context.Context, in *elbv2.AddTagsInput, _ ...func(*elbv2.Options)) (*elbv2.AddTagsOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if slices.Contains(in.ResourceArns, f.trustStore) {
+		for _, tag := range in.Tags {
+			f.trustTags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+		}
+	}
+	return &elbv2.AddTagsOutput{}, nil
 }
 
 func (f *fakeAWS) ModifyListener(_ context.Context, in *elbv2.ModifyListenerInput, _ ...func(*elbv2.Options)) (*elbv2.ModifyListenerOutput, error) {
@@ -313,11 +380,44 @@ func (f *fakeAWS) ruleHosts() []string {
 	return hosts
 }
 
-func (f *fakeAWS) bundle() string {
+func (f *fakeAWS) trusted() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	for _, key := range slices.Sorted(maps.Keys(f.objects)) {
-		return string(f.objects[key])
+	return f.trustBundle
+}
+
+func mintCA(t *testing.T, name string) string {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return ""
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: name},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+}
+
+func mintLeaf(t *testing.T) string {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "your own"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
 }

@@ -26,7 +26,7 @@ func TestTheSharedPreviewWildcardAnEdgeProxiesIsForwardedToThePreviewEntryItsRou
 	}
 
 	entries := relay.PreviewEntryClaims()
-	if len(entries) != 2 || entries[0].Hostname != "*.preview.acme.com" || !slices.Equal(entries[0].ClientCertificates, []string{fake.ClientCertificate(fake.KindDirect)}) {
+	if len(entries) != 2 || entries[0].Hostname != "*.preview.acme.com" || !slices.Equal(entries[0].ClientCAs, []string{fake.ClientCA(fake.KindDirect)}) {
 		t.Fatalf("the router took preview entry claims %+v, want *.preview.acme.com claimed trusting the client certificate the edge presents", entries)
 	}
 	if entries[1].OriginCertificate.ID != "origin-certificate-1" {

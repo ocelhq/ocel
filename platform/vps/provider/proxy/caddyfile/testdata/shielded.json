@@ -104,9 +104,12 @@
           ]
         },
         "client_authentication": {
-          "trusted_leaf_certs": [
-            "MIIBIDCBx6ADAgECAgEBMAoGCCqGSM49BAMCMAAwHhcNMjYwOTI5MTYzNTQyWhcNMjYwOTI5MTgzNTQyWjAAMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp4A96DZrXqYNtwhCcKvDbRU3PAfpar3IIt2rGZ4o3nG6zZXBZ792pMQbnK5QFQ3E7Mt5OHUWZ9m5++3UHTfMR6MyMDAwEwYDVR0lBAwwCgYIKwYBBQUHAwIwGQYDVR0RAQH/BA8wDYILZXhhbXBsZS5jb20wCgYIKoZIzj0EAwIDSAAwRQIgUOMcFEYvBopqSX4pgv1pyKfw5UBCCIk13FdSM+xOzLICIQCE46JHo02pP6hHmVBeDvz3dcvuRN8zpVigCuQG1VX/7g=="
-          ],
+          "ca": {
+            "provider": "inline",
+            "trusted_ca_certs": [
+              "MIIBIDCBx6ADAgECAgEBMAoGCCqGSM49BAMCMAAwHhcNMjYwOTI5MTYzNTQyWhcNMjYwOTI5MTgzNTQyWjAAMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp4A96DZrXqYNtwhCcKvDbRU3PAfpar3IIt2rGZ4o3nG6zZXBZ792pMQbnK5QFQ3E7Mt5OHUWZ9m5++3UHTfMR6MyMDAwEwYDVR0lBAwwCgYIKwYBBQUHAwIwGQYDVR0RAQH/BA8wDYILZXhhbXBsZS5jb20wCgYIKoZIzj0EAwIDSAAwRQIgUOMcFEYvBopqSX4pgv1pyKfw5UBCCIk13FdSM+xOzLICIQCE46JHo02pP6hHmVBeDvz3dcvuRN8zpVigCuQG1VX/7g=="
+            ]
+          },
           "mode": "require"
         }
       },
@@ -122,9 +125,12 @@
           ]
         },
         "client_authentication": {
-          "trusted_leaf_certs": [
-            "MIIBIDCBx6ADAgECAgEBMAoGCCqGSM49BAMCMAAwHhcNMjYwOTI5MTYzNTQyWhcNMjYwOTI5MTgzNTQyWjAAMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp4A96DZrXqYNtwhCcKvDbRU3PAfpar3IIt2rGZ4o3nG6zZXBZ792pMQbnK5QFQ3E7Mt5OHUWZ9m5++3UHTfMR6MyMDAwEwYDVR0lBAwwCgYIKwYBBQUHAwIwGQYDVR0RAQH/BA8wDYILZXhhbXBsZS5jb20wCgYIKoZIzj0EAwIDSAAwRQIgUOMcFEYvBopqSX4pgv1pyKfw5UBCCIk13FdSM+xOzLICIQCE46JHo02pP6hHmVBeDvz3dcvuRN8zpVigCuQG1VX/7g=="
-          ],
+          "ca": {
+            "provider": "inline",
+            "trusted_ca_certs": [
+              "MIIBIDCBx6ADAgECAgEBMAoGCCqGSM49BAMCMAAwHhcNMjYwOTI5MTYzNTQyWhcNMjYwOTI5MTgzNTQyWjAAMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEp4A96DZrXqYNtwhCcKvDbRU3PAfpar3IIt2rGZ4o3nG6zZXBZ792pMQbnK5QFQ3E7Mt5OHUWZ9m5++3UHTfMR6MyMDAwEwYDVR0lBAwwCgYIKwYBBQUHAwIwGQYDVR0RAQH/BA8wDYILZXhhbXBsZS5jb20wCgYIKoZIzj0EAwIDSAAwRQIgUOMcFEYvBopqSX4pgv1pyKfw5UBCCIk13FdSM+xOzLICIQCE46JHo02pP6hHmVBeDvz3dcvuRN8zpVigCuQG1VX/7g=="
+            ]
+          },
           "mode": "require"
         }
       },

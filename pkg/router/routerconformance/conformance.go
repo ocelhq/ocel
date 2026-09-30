@@ -233,7 +233,7 @@ func Run(t *testing.T, suite Suite) {
 const conformanceCertificate = "conformance-certificate"
 
 func runOrigin(t *testing.T, suite Suite) {
-	t.Run("a router an edge forwards to answers a claim trusting the edge's client certificate with the certificate the edge issued", func(t *testing.T) {
+	t.Run("a router an edge forwards to answers a claim trusting the CA of the edge's client certificate with the certificate the edge issued", func(t *testing.T) {
 		ctx := context.Background()
 		fixture := suite.New(t)
 		origin := fixture.Router.Hooks().Origin
@@ -243,12 +243,12 @@ func runOrigin(t *testing.T, suite Suite) {
 		stack := reconciled(t, fixture)
 		claim := router.Claim{
 			Hostname: suite.Hostname, App: App, Certificate: conformanceCertificate,
-			ClientCertificates: []string{mintClientCertificate(t)},
-			OriginCertificate:  mintOriginCertificate(t, suite.Hostname),
+			ClientCAs:         []string{mintClientCA(t)},
+			OriginCertificate: mintOriginCertificate(t, suite.Hostname),
 		}
 		first, err := stack.Claim(ctx, claim)
 		if err != nil {
-			t.Fatalf("Claim(%q) trusting a client certificate: %v", suite.Hostname, err)
+			t.Fatalf("Claim(%q) trusting a client CA: %v", suite.Hostname, err)
 		}
 		if first.Address == "" || !first.Certified {
 			t.Errorf("Claim(%q) with an origin certificate names origin %+v, want an address that answers with a certificate covering it", suite.Hostname, first)
@@ -315,8 +315,8 @@ func runOrigin(t *testing.T, suite Suite) {
 		}
 		claim := router.Claim{
 			Hostname: wildcard, Certificate: conformanceCertificate,
-			ClientCertificates: []string{mintClientCertificate(t)},
-			OriginCertificate:  mintOriginCertificate(t, wildcard),
+			ClientCAs:         []string{mintClientCA(t)},
+			OriginCertificate: mintOriginCertificate(t, wildcard),
 		}
 		first, err := origin.ClaimPreviewEntry(ctx, claim)
 		if err != nil {
@@ -358,10 +358,26 @@ func requirePlan(t *testing.T, named string, groups []edge.PlanGroup) {
 	}
 }
 
-func mintClientCertificate(t *testing.T) string {
+func mintClientCA(t *testing.T) string {
 	t.Helper()
-	certificate, _ := mintCertificate(t, "conformance.invalid", x509.ExtKeyUsageClientAuth)
-	return certificate
+	private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "conformance client CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign,
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &private.PublicKey, private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
 }
 
 func mintOriginCertificate(t *testing.T, hostname string) edge.OriginCertificate {

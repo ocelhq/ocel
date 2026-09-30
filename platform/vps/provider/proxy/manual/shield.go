@@ -40,5 +40,5 @@ func (m Manual) checkShield(ctx context.Context, hostname string) (provider.Host
 }
 
 func describeClientCertificateFix(hostname string) string {
-	return fmt.Sprintf("in your proxy, require a client certificate for %s and trust only the ones listed for it under \"shields\" in %s", hostname, live.RoutingTable)
+	return fmt.Sprintf("in your proxy, require a client certificate for %s that chains to one of the CAs listed for it under \"shields\" in %s", hostname, live.RoutingTable)
 }

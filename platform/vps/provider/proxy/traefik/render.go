@@ -157,17 +157,17 @@ func (t Traefik) shieldsOf(spec proxy.Spec) (*tlsConfig, error) {
 }
 
 func trustedCertificates(hostname string, shield proxy.Shield) ([]string, error) {
-	if len(shield.ClientCertificates) == 0 {
-		return nil, fmt.Errorf("%s is shielded by no client certificate", hostname)
+	if len(shield.ClientCAs) == 0 {
+		return nil, fmt.Errorf("%s is shielded by no client CA", hostname)
 	}
-	trusted := make([]string, 0, len(shield.ClientCertificates))
-	for _, certificate := range shield.ClientCertificates {
+	trusted := make([]string, 0, len(shield.ClientCAs))
+	for _, certificate := range shield.ClientCAs {
 		block, _ := pem.Decode([]byte(certificate))
 		if block == nil || block.Type != "CERTIFICATE" {
-			return nil, fmt.Errorf("a client certificate %s is shielded by is no PEM certificate", hostname)
+			return nil, fmt.Errorf("a client CA %s is shielded by is no PEM certificate", hostname)
 		}
 		if _, err := x509.ParseCertificate(block.Bytes); err != nil {
-			return nil, fmt.Errorf("a client certificate %s is shielded by: %w", hostname, err)
+			return nil, fmt.Errorf("a client CA %s is shielded by: %w", hostname, err)
 		}
 		trusted = append(trusted, string(pem.EncodeToMemory(block)))
 	}

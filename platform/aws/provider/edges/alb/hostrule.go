@@ -28,13 +28,15 @@ const (
 	unservedStatus      = "503"
 	unservedContentType = "text/plain"
 	unservedBody        = "no release of this app is promoted here yet"
+
+	ruleQuota = "Rules per Application Load Balancer (L-7EED9B64)"
 )
 
-func forwardTo(group string) []elbv2types.Action {
+func buildForwardActions(group string) []elbv2types.Action {
 	return []elbv2types.Action{{Type: elbv2types.ActionTypeEnumForward, TargetGroupArn: aws.String(group)}}
 }
 
-func unserved() []elbv2types.Action {
+func buildUnservedActions() []elbv2types.Action {
 	return []elbv2types.Action{{
 		Type: elbv2types.ActionTypeEnumFixedResponse,
 		FixedResponseConfig: &elbv2types.FixedResponseActionConfig{
@@ -45,7 +47,7 @@ func unserved() []elbv2types.Action {
 	}}
 }
 
-func rulePriority(hostname string, attempt int) int32 {
+func computeRulePriority(hostname string, attempt int) int32 {
 	sum := fnv.New32a()
 	_, _ = sum.Write([]byte(hostname))
 	return int32(hostRuleFloor + (int(sum.Sum32()%hostRulePriorities)+attempt)%hostRulePriorities)
@@ -55,7 +57,7 @@ func (s *stack) placeRule(ctx context.Context, c Clients, listener, hostname str
 	for attempt := range rulePlacements {
 		created, err := c.Balancers.CreateRule(ctx, &elbv2.CreateRuleInput{
 			ListenerArn: aws.String(listener),
-			Priority:    aws.Int32(rulePriority(hostname, attempt)),
+			Priority:    aws.Int32(computeRulePriority(hostname, attempt)),
 			Conditions: []elbv2types.RuleCondition{{
 				Field:            aws.String("host-header"),
 				HostHeaderConfig: &elbv2types.HostHeaderConditionConfig{Values: []string{hostname}},
@@ -70,6 +72,12 @@ func (s *stack) placeRule(ctx context.Context, c Clients, listener, hostname str
 		if errors.As(err, &taken) {
 			continue
 		}
+		var full *elbv2types.TooManyRulesException
+		if errors.As(err, &full) {
+			return "", refusal.Refuse(refusal.CodeInvalid,
+				"the load balancer every container app behind Cloudflare in this tier shares holds as many rules as its quota allows, so %s cannot be routed: raise the quota %s in Service Quotas (Elastic Load Balancing), or remove a hostname or preview behind it, and deploy again",
+				hostname, ruleQuota)
+		}
 		if err != nil {
 			return "", fmt.Errorf("route %s on the load balancer: %w", hostname, err)
 		}
@@ -82,7 +90,7 @@ func (s *stack) placeRule(ctx context.Context, c Clients, listener, hostname str
 		"every priority %s could take on the load balancer was held by another hostname, %d times over: remove a hostname behind it, or run this again", hostname, rulePlacements)
 }
 
-func (s *stack) ruleExists(ctx context.Context, c Clients, rule string) bool {
+func (s *stack) hasRule(ctx context.Context, c Clients, rule string) bool {
 	if rule == "" {
 		return false
 	}
@@ -101,7 +109,7 @@ func readActions(ctx context.Context, c Clients, rule string) ([]elbv2types.Acti
 	return read.Rules[0].Actions, nil
 }
 
-func forwardedGroup(actions []elbv2types.Action) string {
+func readForwardedGroup(actions []elbv2types.Action) string {
 	for _, action := range actions {
 		if action.Type == elbv2types.ActionTypeEnumForward {
 			return aws.ToString(action.TargetGroupArn)
@@ -110,7 +118,7 @@ func forwardedGroup(actions []elbv2types.Action) string {
 	return ""
 }
 
-func (s *stack) flipRule(ctx context.Context, c Clients, rule, group string, refuseInactive router.StillActive) error {
+func (s *stack) forwardRuleTo(ctx context.Context, c Clients, rule, group string, refuseInactive router.StillActive) error {
 	if err := refuseInactive(ctx); err != nil {
 		return err
 	}
@@ -118,7 +126,7 @@ func (s *stack) flipRule(ctx context.Context, c Clients, rule, group string, ref
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
-	if _, err := c.Balancers.ModifyRule(ctx, &elbv2.ModifyRuleInput{RuleArn: aws.String(rule), Actions: forwardTo(group)}); err != nil {
+	if _, err := c.Balancers.ModifyRule(ctx, &elbv2.ModifyRuleInput{RuleArn: aws.String(rule), Actions: buildForwardActions(group)}); err != nil {
 		return router.Unserved{Err: fmt.Errorf("forward the rule %s to %s: %w", rule, group, err)}
 	}
 	inactive := refuseInactive(ctx)
@@ -126,7 +134,7 @@ func (s *stack) flipRule(ctx context.Context, c Clients, rule, group string, ref
 		return nil
 	}
 	current, err := readActions(ctx, c, rule)
-	if err != nil || forwardedGroup(current) != group {
+	if err != nil || readForwardedGroup(current) != group {
 		return errors.Join(inactive, err)
 	}
 	if _, err := c.Balancers.ModifyRule(ctx, &elbv2.ModifyRuleInput{RuleArn: aws.String(rule), Actions: prior}); err != nil {

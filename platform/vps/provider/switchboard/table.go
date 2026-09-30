@@ -65,10 +65,10 @@ type claim struct {
 }
 
 type shield struct {
-	Hostname           string   `json:"hostname"`
-	Owner              string   `json:"owner"`
-	ClientCertificates []string `json:"clientCertificates,omitempty"`
-	OriginCertificate  struct {
+	Hostname          string   `json:"hostname"`
+	Owner             string   `json:"owner"`
+	ClientCAs         []string `json:"clientCAs,omitempty"`
+	OriginCertificate struct {
 		Certificate string `json:"certificate"`
 		Key         string `json:"key"`
 	} `json:"originCertificate"`
@@ -156,9 +156,9 @@ func Read(document []byte) (*Table, error) {
 		claimed[key] = append(claimed[key], hostClaim.Hostname)
 	}
 	for _, held := range read.Shields {
-		if held.Hostname == "" || held.Owner == "" || len(held.ClientCertificates) == 0 {
+		if held.Hostname == "" || held.Owner == "" || len(held.ClientCAs) == 0 {
 			return nil, fmt.Errorf("a shield is incomplete: host %q, surface %q, %d client certificates",
-				held.Hostname, held.Owner, len(held.ClientCertificates))
+				held.Hostname, held.Owner, len(held.ClientCAs))
 		}
 	}
 	routes := slices.SortedFunc(slices.Values(read.Routes), byIdentity)

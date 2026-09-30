@@ -556,7 +556,7 @@ func TestRunDoctorPrintsTheHostCheckFindingsAndTheCertificatesAndRefusesNothing(
 	recordPreviewWildcard(t, p, "preview.example.com")
 	p.ReportCertificateFor("*.preview.example.com", provider.CertificateHealth{Renewal: "you placed it on this box and you renew it", ExpiresAt: 4102444800})
 	edgeState := stackrecords.EdgeState{Kind: fake.KindRelay, Edge: edge.StackState{Slug: "my-shop", Tier: environment.TierProduction}}
-	edgeState.SetHost("shop.example.com", stackrecords.HostnameState{Edge: fake.KindRelay, Certificate: provider.Certificate{ID: "proxy:shop.example.com"}})
+	edgeState.SetHost("shop.example.com", stackrecords.HostnameState{Edge: fake.KindRelay, Router: fake.RouterRelay, Certificate: provider.Certificate{ID: "proxy:shop.example.com"}})
 	record(t, p, stackrecords.EdgeStackKey(environment.TierProduction, "my-shop"), edgeState)
 	p.ReportCertificateFor("shop.example.com", provider.CertificateHealth{Renewal: "SUCCESS", ExpiresAt: 4102444800})
 

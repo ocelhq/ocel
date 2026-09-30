@@ -350,7 +350,15 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 		}
 		r.replaces = replaces
 	}
-	r.appRouters = pairApps(r.provider.Facts(), r.front.Kind(), r.spec.Apps)
+	appRouters, err := pairApps(r.provider.Facts(), r.front.Kind(), r.spec.Apps)
+	if err != nil {
+		return err
+	}
+	r.appRouters = appRouters
+	if r.state.Apps == nil {
+		r.state.Apps = map[string]router.Kind{}
+	}
+	maps.Copy(r.state.Apps, appRouters)
 	if err := r.checkNeeds(ctx); err != nil {
 		return err
 	}
@@ -387,7 +395,7 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 				"declare a project-level domains.preview wildcard, or run `ocel domain use '*.preview.example.com' --preview` to serve every project's previews on one wildcard")
 	}
 	if len(hosts) == 0 {
-		if r.router.Facts().AddressesItself {
+		if r.edgeRouter().Facts().AddressesItself {
 			return nil
 		}
 		return refusal.Refuse(refusal.CodeNotReady,
@@ -497,7 +505,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 }
 
 func (r *deployRun) forwardPreviews(ctx context.Context, progress progress.Log) error {
-	if r.routerOrigin(r.router.Kind()) == nil || r.front.Facts().RunsCode {
+	if routerOriginBehind(r.front, r.edgeRouter()) == nil || r.front.Facts().RunsCode {
 		return nil
 	}
 	switch r.hostingMode() {
@@ -535,7 +543,7 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 				missed = append(missed, host)
 			}
 			for _, host := range r.configured {
-				if r.state.Ready(host.Hostname, r.front.Kind(), r.readAppRouter(host.App)) {
+				if r.state.Ready(host.Hostname, r.front.Kind(), r.readConfiguredRouter(host.App)) {
 					hostState := r.state.Host(host.Hostname)
 					if _, err := attaching.refreshOriginClaim(ctx, host, &hostState, progress); err != nil {
 						return err
@@ -669,11 +677,10 @@ func (r *deployRun) previewSite() edge.PreviewSite {
 }
 
 func (r *deployRun) previewLabel(slot int) string {
-	app := edge.AppAt(r.appNames(), slot)
-	if r.hostingMode() != hostingGlobalPreview || !r.routerOf(r.readAppRouter(app)).Facts().RoutesPreviewsByLabel {
+	if r.hostingMode() != hostingGlobalPreview || !r.readPairedRouter(r.spec.Apps[slot].App).Facts().RoutesPreviewsByLabel {
 		return ""
 	}
-	return r.previewSite().Label(r.spec.Pointer, app)
+	return r.previewSite().Label(r.spec.Pointer, edge.AppAt(r.appNames(), slot))
 }
 
 func (r *deployRun) servedHostnames() [][]string {
@@ -708,7 +715,7 @@ func (r *deployRun) checkpoint(ctx context.Context) error {
 func (r *deployRun) checkNeeds(ctx context.Context) error {
 	check := EdgeNeedCheck{
 		Edge:          r.front,
-		Router:        func(app string) router.Router { return r.routerOf(r.appRouters[app]) },
+		Router:        r.readPairedRouter,
 		Root:          r.artifactRoot,
 		AllowDegraded: r.allowDegraded,
 		Degraded: func(app string, need edge.Need, detail string) {
@@ -934,7 +941,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					Entry:           entryLogicalName(entry.Manifest, facts.Entry),
 					Deployment:      entry.Build.DeploymentID(),
 					Compute:         entry.Compute(),
-					Router:          r.readAppRouter(entry.App),
+					Router:          r.appRouters[entry.App],
 					Functions:       r.functionSpecs(entry),
 					Image:           imageToRun(images, entry),
 					HealthCheckPath: entry.HealthCheckPath,
@@ -1024,7 +1031,7 @@ func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
 		Stack:             entry.Stack,
 		Coordinate:        appCoordinate(r.spec, entry.App, entry.Build.Release()),
 		EdgeRunsCode:      r.front.Facts().RunsCode,
-		EdgeSignsForwards: r.routerOf(r.readAppRouter(entry.App)).Facts().SignsOriginForwards,
+		EdgeSignsForwards: r.readPairedRouter(entry.App).Facts().SignsOriginForwards,
 	})
 }
 
@@ -1329,7 +1336,10 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		r.sender.send(planEvent(r.dryRunPlanProto()))
 		return okResult(), nil
 	}
-	propagation := r.propagation(slices.Collect(maps.Values(r.appRouters)))
+	propagation, err := r.readSlowestPropagation(slices.Collect(maps.Values(r.appRouters)))
+	if err != nil {
+		return nil, err
+	}
 	promotion := router.Promotion{
 		PromotionID: r.spec.PromotionID,
 		Ts:          time.Now().Unix(),
@@ -1379,7 +1389,7 @@ func (r *deployRun) result(promotion router.Promotion, propagation router.Propag
 	r.reportApps(result)
 	for slot, hosts := range r.servedHostnames() {
 		for _, host := range hosts {
-			if r.hostingMode() == hostingProduction && !r.state.Ready(host, r.front.Kind(), r.readAppRouter(r.spec.Apps[slot].App)) {
+			if r.hostingMode() == hostingProduction && !r.state.Ready(host, r.front.Kind(), r.readConfiguredRouter(r.spec.Apps[slot].App)) {
 				continue
 			}
 			r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, "https://"+host)
@@ -1590,4 +1600,15 @@ func unseen(hosts []string, seen map[string]bool) []string {
 
 func frameworkOf(fn *contractv1.ManifestFunction) buildoutput.Framework {
 	return buildoutput.Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()}
+}
+
+func (r *deployRun) readPairedRouter(app string) router.Router {
+	return r.routers[r.appRouters[app]]
+}
+
+func (r *deployRun) readConfiguredRouter(app string) router.Kind {
+	if app == "" {
+		return r.edgeKind
+	}
+	return r.appRouters[app]
 }

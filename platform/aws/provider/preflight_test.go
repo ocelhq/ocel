@@ -11,38 +11,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
-
-func TestAnAppIsRefusedBehindAnEdgeThatPairsNoRouterWithItsCompute(t *testing.T) {
-	t.Parallel()
-
-	apps := []provider.AppEntry{
-		{App: "web", Manifest: &contractv1.ManifestApp{Name: "web", Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}},
-		{App: "api", Manifest: &contractv1.ManifestApp{Name: "api", Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}}},
-	}
-	facts := (&Provider{}).Facts()
-	err := refuseUnpairedApps(facts, provider.DeployPreflight{Edge: apigateway.Kind, Deploy: provider.DeploySpec{Apps: apps}})
-	if err == nil || !strings.Contains(err.Error(), "web") || !strings.Contains(err.Error(), string(apigateway.Kind)) || !strings.Contains(err.Error(), string(cloudfront.Kind)) {
-		t.Fatalf("preflight behind %s = %v, want the container app refused by name, pointing at an edge that reaches containers: that edge invokes a function and would fail at promote otherwise", apigateway.Kind, err)
-	}
-	for _, front := range []edge.Kind{cloudfront.Kind, cloudflare.Kind} {
-		if err := refuseUnpairedApps(facts, provider.DeployPreflight{Edge: front, Deploy: provider.DeploySpec{Apps: apps}}); err != nil {
-			t.Errorf("preflight of a project mixing serverless and container apps behind %s = %v, want it to pass", front, err)
-		}
-	}
-	if err := refuseUnpairedApps(facts, provider.DeployPreflight{Edge: apigateway.Kind, Deploy: provider.DeploySpec{Apps: apps[1:]}}); err != nil {
-		t.Fatalf("preflight of serverless apps behind %s = %v, want it to pass", apigateway.Kind, err)
-	}
-}
 
 func TestAPublicBucketIsRefusedOnAws(t *testing.T) {
 	t.Parallel()

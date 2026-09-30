@@ -97,11 +97,11 @@ func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview 
 		Preview: preview,
 	}
 	if e.deps.Shielded {
-		trusted, err := e.ensureAllowlist(ctx, tier)
+		trusted, err := e.ensureTrusted(ctx, tier)
 		if err != nil {
 			return LoadBalancer{}, err
 		}
-		spec.ClientCertificates = trusted
+		spec.ClientCAs = trusted
 	}
 	outputs, err := e.deps.Stacks.Up(ctx, e.loadBalancerTarget(tier), loadBalancerProgram(spec), progress)
 	if err != nil {

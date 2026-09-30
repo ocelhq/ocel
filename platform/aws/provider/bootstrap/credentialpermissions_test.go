@@ -661,6 +661,7 @@ func TestTheDeployCredentialAnswersAndShieldsThePublicFrontOnlyOnWhatItTagged(t 
 		{action: "elasticloadbalancing:RemoveListenerCertificates", resource: containerListenerARN, condition: conditionJSON(t, taggedByOcel())},
 		{action: "elasticloadbalancing:CreateTrustStore", resource: containerTrustStoreARN, condition: conditionJSON(t, taggedOnCreate())},
 		{action: "elasticloadbalancing:ModifyTrustStore", resource: containerTrustStoreARN, condition: conditionJSON(t, taggedByOcel())},
+		{action: "elasticloadbalancing:AddTags", resource: containerTrustStoreARN, condition: conditionJSON(t, taggedByOcel())},
 	}
 	for _, wanted := range want {
 		if !grants[wanted] {

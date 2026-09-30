@@ -3,11 +3,14 @@ package providerserver_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -131,41 +134,146 @@ func (p pairedForContainersOnly) Facts() provider.Facts {
 	return facts
 }
 
-func TestAnAppWhoseComputeNoRouterIsPairedForDeploysThroughItsEdgeAsBefore(t *testing.T) {
+func TestAnAppWhoseComputeNoRouterOfItsEdgePairsWithIsRefusedBeforeAnythingIsDeployed(t *testing.T) {
 	builtProject(t)
 	p := fake.NewProvider(fake.Options{})
 	client := servedBy(t, pairedForContainersOnly{p})
 	bootstrappedOverRPC(t, client)
 
-	result, _ := deploy(t, client, deployRequest())
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() of a serverless app on a provider that pairs its edge for containers only = %q, want it to deploy and move the pointer through the edge's stack as it did before pairings were declared", result.GetError())
+	result, _, err := deployStream(t, client, deployRequest())
+	message := result.GetError()
+	if err != nil {
+		message = err.Error()
 	}
-	routed := p.Routers().(*fake.Routers).DataPlane(fake.RouterRelay).Builds("shop", environment.TierProduction, router.DefaultPointer)
-	if routed["web"] == "" {
-		t.Errorf("the relay edge routes %v on %s after the deploy, want web's build", routed, router.DefaultPointer)
+	if result.GetSuccess() || !strings.Contains(message, "app web runs as serverless") {
+		t.Fatalf("Deploy() of a serverless app on a provider that pairs its edge for containers only = %q, want it refused naming web: no router of the edge moves its pointer", message)
 	}
-	if kind, paired := readStack(t, p, environment.TierProduction, "shop").Apps["web"]; paired {
-		t.Errorf("the edge state pairs web with %q, and this provider pairs no router for serverless apps", kind)
+	if routed := p.Routers().(*fake.Routers).DataPlane(fake.RouterRelay).Builds("shop", environment.TierProduction, router.DefaultPointer); len(routed) != 0 {
+		t.Errorf("the relay edge routes %v after the refused deploy, want nothing", routed)
 	}
 }
 
-func TestAHostnameOfAnAppWhoseComputeNoRouterIsPairedForIsServedThroughTheRouterItsEdgeOpened(t *testing.T) {
+const adminHost = "admin.shop.example"
+
+type pairedByCompute struct{ *fake.Provider }
+
+func (p pairedByCompute) Facts() provider.Facts {
+	facts := p.Provider.Facts()
+	facts.Pairings = []provider.Pairing{
+		{Edge: fake.KindRelay, Router: fake.RouterRelay, Computes: []provider.Compute{provider.ComputeServerless}},
+		{Edge: fake.KindRelay, Router: fake.RouterDirect, Computes: []provider.Compute{provider.ComputeContainer}, Forwarded: true},
+		{Edge: fake.KindDirect, Router: fake.RouterDirect, Computes: provider.Computes()},
+	}
+	return facts
+}
+
+func mixedServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider) {
+	t.Helper()
+	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
 	p := fake.NewProvider(fake.Options{})
-	client := servedBy(t, pairedForContainersOnly{p})
-	bootstrappedOverRPC(t, client)
+	p.Edges().(*fake.Edges).Edge(fake.KindRelay).ProxiesRecords()
+	client := servedBy(t, pairedByCompute{p})
+	return client, p
+}
 
-	req := deployRequest()
-	req.Edge = writtenBy("shop.example")
-	result, _ := deploy(t, client, req)
-	if !result.GetSuccess() {
+func withContainerAdmin(req *contractv1.DeployRequest, deploymentID string) *contractv1.DeployRequest {
+	req = namingARegistry(req)
+	admin := &contractv1.ManifestApp{
+		Name:         "admin",
+		Framework:    &contractv1.Framework{Name: "next"},
+		DeploymentId: deploymentID,
+		Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
+			Image:           containerTestImage,
+			HealthCheckPath: "/",
+		}},
+	}
+	if req.GetEnvironment().GetTier() == environmentv1.Tier_TIER_PRODUCTION {
+		admin.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: []string{adminHost}}}
+	}
+	req.Manifest.Apps = append(req.Manifest.Apps, admin)
+	return req
+}
+
+func mixedRequest() *contractv1.DeployRequest {
+	return withContainerAdmin(deployRequest(), adminDeploymentID)
+}
+
+func TestAProjectMixingServerlessAndContainerAppsPromotesEachThroughTheRouterItsComputePairsWith(t *testing.T) {
+	client, p := mixedServed(t)
+
+	first, _ := deploy(t, client, mixedRequest())
+	if first == nil || !first.GetSuccess() {
+		t.Fatalf("Deploy() of a project mixing serverless and container apps = %q, want it served through one edge", first.GetError())
+	}
+	planes := p.Routers().(*fake.Routers)
+	relayed := planes.DataPlane(fake.RouterRelay).Builds("shop", environment.TierProduction, router.DefaultPointer)
+	direct := planes.DataPlane(fake.RouterDirect).Builds("shop", environment.TierProduction, router.DefaultPointer)
+	if relayed["web"] == "" || relayed["admin"] != "" {
+		t.Errorf("the %s router serves %v, want web alone: admin runs as a container, which its edge pairs with %s", fake.RouterRelay, relayed, fake.RouterDirect)
+	}
+	if direct["admin"] == "" || direct["web"] != "" {
+		t.Errorf("the %s router serves %v, want admin alone", fake.RouterDirect, direct)
+	}
+
+	state := readStack(t, p, environment.TierProduction, "shop")
+	if state.Apps["web"] != fake.RouterRelay || state.Apps["admin"] != fake.RouterDirect {
+		t.Errorf("the edge state pairs %v, want web with %s and admin with %s", state.Apps, fake.RouterRelay, fake.RouterDirect)
+	}
+	if own := state.Routers[fake.RouterDirect]; own.Slug != "shop" || own.Tier != environment.TierProduction {
+		t.Errorf("the edge state records the %s router as %+v, want its own stack of shop in production: it keeps no state inside the edge's", fake.RouterDirect, own)
+	}
+
+	second, _ := deploy(t, client, withContainerAdmin(deployRequest(), "abcdefabcdefabcdefabcdefabcdefab"))
+	if second == nil || !second.GetSuccess() {
+		t.Fatalf("the second Deploy() = %q", second.GetError())
+	}
+	moved := planes.DataPlane(fake.RouterDirect).Builds("shop", environment.TierProduction, router.DefaultPointer)
+	if moved["admin"] == direct["admin"] {
+		t.Errorf("the %s router still serves admin's build %q after a promote of a new one: a promote flips every router its apps pair with", fake.RouterDirect, moved["admin"])
+	}
+	if planes.DataPlane(fake.RouterRelay).Builds("shop", environment.TierProduction, router.DefaultPointer)["web"] == "" {
+		t.Errorf("the %s router serves no build of web after the second promote", fake.RouterRelay)
+	}
+}
+
+func TestAContainerAppsHostnameIsClaimedOnItsOwnRouterAndForwardedByTheEdgeToItsOrigin(t *testing.T) {
+	client, p := mixedServed(t)
+
+	result, _ := deploy(t, client, mixedRequest())
+	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) {
-		t.Errorf("the deploy served %v, want shop.example: web promotes through %s, the router its edge opened, so that router answering the hostname serves it", servedURLs(result), fake.RouterRelay)
+
+	direct := p.Edges().(*fake.Edges).Edge(fake.KindDirect)
+	if !slices.ContainsFunc(direct.Claims(), func(claim router.Claim) bool { return claim.Hostname == adminHost && claim.App == "admin" }) {
+		t.Errorf("the %s router took claims %+v, want %s for admin", fake.RouterDirect, direct.Claims(), adminHost)
 	}
-	if host := readStack(t, p, environment.TierProduction, "shop").Host("shop.example"); !host.Probe.OK || host.Probe.Router != fake.RouterRelay {
-		t.Errorf("shop.example is recorded %+v, want it answered by %s", host, fake.RouterRelay)
+	relay := p.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	bound := slices.IndexFunc(relay.Bindings(), func(binding edge.DomainBinding) bool { return binding.Hostname == adminHost })
+	if bound < 0 || relay.Bindings()[bound].Origin == nil || *relay.Bindings()[bound].Origin != fake.Origin(fake.RouterDirect) {
+		t.Errorf("the edge was bound with %+v, want %s forwarded to %+v, the origin its router answers on", relay.Bindings(), adminHost, fake.Origin(fake.RouterDirect))
+	}
+	stacks := relay.Stacks()
+	if domains := stacks[len(stacks)-1].Domains; slices.Contains(domains, adminHost) || !slices.Contains(domains, "shop.example") {
+		t.Errorf("the edge reconciled domains %v, want shop.example and not %s: the edge runs its code on the hostnames its own router answers, and forwards the rest", domains, adminHost)
+	}
+	if host := readStack(t, p, environment.TierProduction, "shop").Host(adminHost); !host.Probe.OK || host.Probe.Router != fake.RouterDirect {
+		t.Errorf("%s is recorded %+v, want it answered by %s", adminHost, host, fake.RouterDirect)
+	}
+	if !slices.Contains(servedURLs(result), "https://"+adminHost) {
+		t.Errorf("the deploy served %v, want https://%s among them", servedURLs(result), adminHost)
+	}
+}
+
+func TestAContainerAppsNeedsAreCheckedAgainstTheRouterItPromotesThrough(t *testing.T) {
+	client, p := mixedServed(t)
+	p.Edges().(*fake.Edges).Edge(fake.KindDirect).RouterServes([]edge.Need{edge.NeedStreaming})
+	declaresNeed(t, "web", edge.NeedEdgeMiddleware)
+	declaresNeed(t, "admin", edge.NeedEdgeMiddleware)
+
+	result, _ := deploy(t, client, mixedRequest())
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "app admin needs "+string(edge.NeedEdgeMiddleware)) {
+		t.Fatalf("Deploy() = %q, want admin refused for %s: its router forwards to the container and runs none of the edge's code, while web's router does", result.GetError(), edge.NeedEdgeMiddleware)
 	}
 }

@@ -187,7 +187,7 @@ func (s *stack) claimHostname(ctx context.Context, claim router.Claim) (edge.Ori
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	shielded := len(claim.ClientCertificates) > 0
+	shielded := len(claim.ClientCAs) > 0
 	certified := true
 	if shielded {
 		if certified, err = s.e.putShield(ctx, claim, s.surface()); err != nil {
@@ -242,7 +242,7 @@ func (s *stack) claimServed(ctx context.Context, claim router.Claim) error {
 
 func (e *Edge) putShield(ctx context.Context, claim router.Claim, owner string) (certified bool, err error) {
 	held, err := e.machine.PutShield(ctx, host.Shield{
-		Hostname: claim.Hostname, Owner: owner, ClientCertificates: claim.ClientCertificates,
+		Hostname: claim.Hostname, Owner: owner, ClientCAs: claim.ClientCAs,
 		OriginCertificate: proxy.CertificatePair{Certificate: claim.OriginCertificate.Certificate, Key: claim.OriginCertificate.Key},
 	})
 	if err != nil {

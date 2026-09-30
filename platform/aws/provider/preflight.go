@@ -2,25 +2,18 @@ package aws
 
 import (
 	"context"
-	"fmt"
 	"maps"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
-	if err := refuseUnpairedApps(p.Facts(), pre); err != nil {
-		return err
-	}
 	if err := refusePublicBuckets(pre); err != nil {
 		return err
 	}
@@ -101,38 +94,6 @@ func (p *Provider) publishRuntimeLayers(ctx context.Context, pre provider.Deploy
 		p.deployed.forget()
 	}
 	return nil
-}
-
-func refuseUnpairedApps(facts provider.Facts, pre provider.DeployPreflight) error {
-	for _, app := range pre.Deploy.Apps {
-		compute := app.Compute()
-		if _, paired := facts.PairedRouter(pre.Edge, compute); paired {
-			continue
-		}
-		return refusal.Refuse(refusal.CodeInvalid,
-			"app %s runs as %s, and the %q edge reaches no %s app on this provider: front this project with %s, or change %s's compute",
-			app.App, compute, pre.Edge, compute, describeEdges(listPairedEdges(facts, compute)), app.App)
-	}
-	return nil
-}
-
-func listPairedEdges(facts provider.Facts, compute provider.Compute) []edge.Kind {
-	var kinds []edge.Kind
-	for _, pairing := range facts.Pairings {
-		if slices.Contains(pairing.Computes, compute) && !slices.Contains(kinds, pairing.Edge) {
-			kinds = append(kinds, pairing.Edge)
-		}
-	}
-	slices.Sort(kinds)
-	return kinds
-}
-
-func describeEdges(kinds []edge.Kind) string {
-	quoted := make([]string, 0, len(kinds))
-	for _, kind := range kinds {
-		quoted = append(quoted, fmt.Sprintf("%q", kind))
-	}
-	return strings.Join(quoted, " or ")
 }
 
 func refusePublicBuckets(pre provider.DeployPreflight) error {

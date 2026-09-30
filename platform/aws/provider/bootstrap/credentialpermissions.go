@@ -487,7 +487,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Condition: taggedByOcel(),
 		},
 		{
-			Actions:   []string{"elasticloadbalancing:ModifyTrustStore", "elasticloadbalancing:DeleteTrustStore"},
+			Actions:   []string{"elasticloadbalancing:AddTags", "elasticloadbalancing:ModifyTrustStore", "elasticloadbalancing:DeleteTrustStore"},
 			Resources: []string{containerTrustStoreARN},
 			Condition: taggedByOcel(),
 		},

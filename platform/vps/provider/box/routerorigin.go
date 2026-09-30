@@ -34,7 +34,7 @@ func (r Router) claimPreviewEntry(ctx context.Context, claim router.Claim) (edge
 		return edge.Origin{}, err
 	}
 	certified := true
-	shielded := len(claim.ClientCertificates) > 0
+	shielded := len(claim.ClientCAs) > 0
 	if shielded {
 		if certified, err = r.e.putShield(ctx, claim, edge.PreviewEntryOwner); err != nil {
 			return edge.Origin{}, err

@@ -26,11 +26,15 @@ func RecordEdgeStack(t *testing.T, project FakeProject, tier environment.Tier, k
 	if err != nil {
 		t.Fatalf("read %s: %v", name, err)
 	}
+	paired, found := project.Provider.Facts().FindEdgeRouter(kind)
+	if !found {
+		t.Fatalf("the fake provider pairs no router with the %s edge", kind)
+	}
 	state := stackrecords.EdgeState{Kind: kind, Edge: edge.StackState{
 		Slug:     FixtureSlug,
 		Tier:     tier,
 		Endpoint: "https://" + FixtureSlug + ".fake.invalid",
-	}}
+	}, Apps: map[string]router.Kind{"web": paired, "admin": paired}}
 	if recorded.Value, err = json.Marshal(state); err != nil {
 		t.Fatalf("encode %s: %v", name, err)
 	}

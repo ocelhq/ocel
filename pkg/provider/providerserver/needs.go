@@ -149,7 +149,7 @@ func (c EdgeNeedCheck) forApp(
 		}
 		detail := desc.Needs[need]
 		waived := slices.Contains(c.AllowDegraded, string(need))
-		serves := edge.Supports(c.Edge, need) && c.routes(name, need)
+		serves := edge.Supports(c.Edge, need) && c.isRouted(name, need)
 
 		if serves && entitles && slices.Contains(edge.CodeNeeds(), need) {
 			granted, err := entitlement()
@@ -181,10 +181,7 @@ func (c EdgeNeedCheck) forApp(
 	return record, nil
 }
 
-func (c EdgeNeedCheck) routes(app string, need edge.Need) bool {
-	if c.Router == nil {
-		return true
-	}
+func (c EdgeNeedCheck) isRouted(app string, need edge.Need) bool {
 	return router.Supports(c.Router(app), need)
 }
 

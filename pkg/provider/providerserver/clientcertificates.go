@@ -31,11 +31,11 @@ func (c originClaim) recordOn(hostState *stackrecords.HostnameState) (superseded
 	hostState.Tunneled = c.isTunneled()
 	if hostState.Tunneled {
 		superseded = hostState.OriginCertificateID
-		hostState.ClientCertificateDigests = nil
+		hostState.ClientCADigests = nil
 		hostState.OriginCertificateID, hostState.OriginCertificateExpiresAt = "", time.Time{}
 		return superseded
 	}
-	hostState.ClientCertificateDigests = digestClientCertificates(c.trusted)
+	hostState.ClientCADigests = digestClientCAs(c.trusted)
 	if c.issued.ID == "" {
 		return ""
 	}
@@ -53,7 +53,7 @@ func claimOrigin(ctx context.Context, front edge.Edge, claim router.Claim, take 
 	}
 	var claimed originClaim
 	origin, trusted, err := claimTrusting(ctx, front, claim.Hostname, func(ctx context.Context, clientCertificates []string) (edge.Origin, error) {
-		claim.ClientCertificates = clientCertificates
+		claim.ClientCAs = clientCertificates
 		origin, issued, err := claimCertified(ctx, front, claim, take, reserve)
 		if issued.ID != "" {
 			claimed.issued = issued
@@ -89,7 +89,7 @@ func readOriginClaimStaleness(ctx context.Context, front edge.Edge, hostname str
 	case wanted:
 		return "", nil
 	}
-	changed, err := clientCertificatesChanged(ctx, front, hostname, hostState.ClientCertificateDigests)
+	changed, err := hasClientCAsChanged(ctx, front, hostname, hostState.ClientCADigests)
 	if err != nil {
 		return "", err
 	}
@@ -160,7 +160,7 @@ func revokeUnused(ctx context.Context, certificates *edge.OriginCertificateHooks
 	return nil
 }
 
-func clientCertificatesChanged(ctx context.Context, front edge.Edge, hostname string, trusted []string) (bool, error) {
+func hasClientCAsChanged(ctx context.Context, front edge.Edge, hostname string, trusted []string) (bool, error) {
 	certificates := front.Hooks().ClientCertificates
 	if certificates == nil {
 		return false, nil
@@ -169,10 +169,10 @@ func clientCertificatesChanged(ctx context.Context, front edge.Edge, hostname st
 	if err != nil {
 		return false, err
 	}
-	return !slices.Equal(digestClientCertificates(held), trusted), nil
+	return !slices.Equal(digestClientCAs(held), trusted), nil
 }
 
-func digestClientCertificates(certificates []string) []string {
+func digestClientCAs(certificates []string) []string {
 	digests := make([]string, 0, len(certificates))
 	for _, certificate := range certificates {
 		sum := sha256.Sum256([]byte(certificate))

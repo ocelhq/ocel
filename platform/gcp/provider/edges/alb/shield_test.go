@@ -2,24 +2,55 @@ package alb
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-const (
-	shieldedAddress = "34.117.0.8"
-	zonePull        = "-----BEGIN CERTIFICATE-----\nzone one\n-----END CERTIFICATE-----\n"
-	otherZonePull   = "-----BEGIN CERTIFICATE-----\nzone two\n-----END CERTIFICATE-----\n"
+const shieldedAddress = "34.117.0.8"
+
+var (
+	zonePull      = mintTestCertificate("zone one", true)
+	otherZonePull = mintTestCertificate("zone two", true)
+	selfSigned    = mintTestCertificate("your own", false)
 )
+
+func mintTestCertificate(name string, authority bool) string {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: name}, DNSNames: []string{"example.com"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24 * time.Hour),
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	if authority {
+		template.IsCA, template.BasicConstraintsValid, template.KeyUsage = true, true, x509.KeyUsageCertSign
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		panic(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+}
 
 func shieldedLoadBalancer() map[string]string {
 	return map[string]string{
@@ -52,18 +83,47 @@ func trustedBy(t *testing.T, w *world) []string {
 	if !declared {
 		t.Fatal("the shielded balancer declares no trust config, so nothing checks the client certificate a request arrives with")
 	}
-	var pems []string
-	for _, entry := range trust.Args["allowlistedCertificates"].([]any) {
-		pems = append(pems, entry.(map[string]any)["pemCertificate"].(string))
+	anchors, allowlisted := readTrustConfig(trust)
+	return slices.Sorted(slices.Values(slices.Concat(anchors, allowlisted)))
+}
+
+func readTrustConfig(trust declaration) (anchors, allowlisted []string) {
+	for _, store := range asList(trust.Args["trustStores"]) {
+		for _, anchor := range asList(store.(map[string]any)["trustAnchors"]) {
+			anchors = append(anchors, anchor.(map[string]any)["pemCertificate"].(string))
+		}
 	}
-	slices.Sort(pems)
-	return pems
+	for _, entry := range asList(trust.Args["allowlistedCertificates"]) {
+		allowlisted = append(allowlisted, entry.(map[string]any)["pemCertificate"].(string))
+	}
+	return anchors, allowlisted
+}
+
+func asList(value any) []any {
+	listed, _ := value.([]any)
+	return listed
+}
+
+func TestTheShieldedLoadBalancerTrustsAClientCAAsATrustAnchorAndASelfSignedCertificateByAllowlistingIt(t *testing.T) {
+	t.Parallel()
+
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, true), ClientCAs: []string{zonePull, selfSigned}}))
+	if err != nil {
+		t.Fatalf("the shielded balancer program = %v", err)
+	}
+	anchors, allowlisted := readTrustConfig(seen["ocel-alb-shielded-production-trust"])
+	if !slices.Equal(anchors, []string{zonePull}) {
+		t.Errorf("the trust config anchors %d certificates, want the client CA alone: a certificate chaining to it verifies only against a trust anchor", len(anchors))
+	}
+	if !slices.Equal(allowlisted, []string{selfSigned}) {
+		t.Errorf("the trust config allowlists %d certificates, want the self-signed one alone: a load balancer refuses a self-signed client certificate unless it is allowlisted", len(allowlisted))
+	}
 }
 
 func TestTheShieldedLoadBalancerRefusesEveryConnectionThatPresentsNoCertificateItTrusts(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, true), ClientCertificates: []string{zonePull}}))
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, true), ClientCAs: []string{zonePull}}))
 	if err != nil {
 		t.Fatalf("the shielded balancer program = %v", err)
 	}
@@ -102,7 +162,7 @@ func TestAClaimWithAClientCertificateAnswersTheHostnameOnTheShieldedLoadBalancer
 	balancer, w := shielding(t)
 	routed := unreconciledRouter(t, balancer)
 
-	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/shop", ClientCertificates: []string{zonePull}})
+	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/shop", ClientCAs: []string{zonePull}})
 	if err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
@@ -131,7 +191,7 @@ func TestTheShieldedLoadBalancerIsRaisedAgainOnlyForACertificateItDoesNotYetTrus
 	routed := unreconciledRouter(t, balancer)
 	ctx := context.Background()
 	for _, hostname := range []string{"shop.example.com", "www.example.com"} {
-		if _, err := routed.Claim(ctx, router.Claim{Hostname: hostname, App: "web", Certificate: "certs/" + hostname, ClientCertificates: []string{zonePull}}); err != nil {
+		if _, err := routed.Claim(ctx, router.Claim{Hostname: hostname, App: "web", Certificate: "certs/" + hostname, ClientCAs: []string{zonePull}}); err != nil {
 			t.Fatalf("Claim(%s): %v", hostname, err)
 		}
 	}
@@ -148,13 +208,13 @@ func TestTheShieldedLoadBalancerIsRaisedAgainOnlyForACertificateItDoesNotYetTrus
 		t.Errorf("the shielded balancer was raised %d times for two hostnames in one zone, want once", got)
 	}
 
-	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.org", App: "web", Certificate: "certs/org", ClientCertificates: []string{otherZonePull}}); err != nil {
+	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.org", App: "web", Certificate: "certs/org", ClientCAs: []string{otherZonePull}}); err != nil {
 		t.Fatalf("Claim in another zone: %v", err)
 	}
 	if got := raised(); got != 2 {
 		t.Errorf("the shielded balancer was raised %d times, want again for another zone's certificate", got)
 	}
-	if got, want := trustedBy(t, w), []string{zonePull, otherZonePull}; !slices.Equal(got, want) {
+	if got, want := trustedBy(t, w), slices.Sorted(slices.Values([]string{zonePull, otherZonePull})); !slices.Equal(got, want) {
 		t.Errorf("the shielded balancer trusts %v, want both zones' certificates: every project forwarded through it keeps answering", got)
 	}
 }
@@ -168,11 +228,11 @@ func TestTheShieldedLoadBalancerTrustsExactlyWhatTheHostnamesClaimedOnItCarry(t 
 	ctx := context.Background()
 	claim := func(hostname string, certificates ...string) {
 		t.Helper()
-		if _, err := routed.Claim(ctx, router.Claim{Hostname: hostname, App: "web", Certificate: "certs/" + hostname, ClientCertificates: certificates}); err != nil {
+		if _, err := routed.Claim(ctx, router.Claim{Hostname: hostname, App: "web", Certificate: "certs/" + hostname, ClientCAs: certificates}); err != nil {
 			t.Fatalf("Claim(%s): %v", hostname, err)
 		}
 	}
-	const uploaded = "-----BEGIN CERTIFICATE-----\nzone one, uploaded beside it\n-----END CERTIFICATE-----\n"
+	uploaded := mintTestCertificate("zone one, uploaded beside it", true)
 	claim("shop.example.com", zonePull)
 	claim("www.example.com", zonePull)
 	claim("shop.example.org", otherZonePull)
@@ -181,15 +241,15 @@ func TestTheShieldedLoadBalancerTrustsExactlyWhatTheHostnamesClaimedOnItCarry(t 
 	}
 
 	claim("shop.example.com", zonePull, uploaded)
-	if got, want := trustedBy(t, w), []string{zonePull, uploaded, otherZonePull}; !slices.Equal(got, want) {
+	if got, want := trustedBy(t, w), slices.Sorted(slices.Values([]string{zonePull, uploaded, otherZonePull})); !slices.Equal(got, want) {
 		t.Errorf("the shielded balancer trusts %v once you uploaded a second certificate to the zone, want %v", got, want)
 	}
 	_, preview, err := balancer.Shielded().readTrust(ctx, environment.TierPreview)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(preview.allowlist(), uploaded) {
-		t.Errorf("the preview tier's shielded balancer trusts %v, want the uploaded certificate too: the zone presents the certificate uploaded last to every origin it forwards to", preview.allowlist())
+	if !slices.Contains(preview.listTrusted(), uploaded) {
+		t.Errorf("the preview tier's shielded balancer trusts %v, want the uploaded certificate too: the zone presents the certificate uploaded last to every origin it forwards to", preview.listTrusted())
 	}
 
 	claim("shop.example.com", uploaded)
@@ -197,7 +257,7 @@ func TestTheShieldedLoadBalancerTrustsExactlyWhatTheHostnamesClaimedOnItCarry(t 
 		t.Errorf("the shielded balancer trusts %v once shop.example.com dropped the zone's first certificate, want it kept until www.example.com, whose own claim carried it, is claimed again: another zone may still present it", got)
 	}
 	claim("www.example.com", uploaded)
-	if got, want := trustedBy(t, w), []string{uploaded, otherZonePull}; !slices.Equal(got, want) {
+	if got, want := trustedBy(t, w), slices.Sorted(slices.Values([]string{uploaded, otherZonePull})); !slices.Equal(got, want) {
 		t.Errorf("the shielded balancer trusts %v once every hostname that carried the zone's first certificate was claimed without it, want %v: a deleted certificate's key opens nothing", got, want)
 	}
 
@@ -226,7 +286,7 @@ func TestTheShieldedLoadBalancerComesUpAtBootstrapTrustingNothingAClientCouldPre
 	}
 
 	routed := unreconciledRouter(t, balancer)
-	if _, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/shop", ClientCertificates: []string{zonePull}}); err != nil {
+	if _, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/shop", ClientCAs: []string{zonePull}}); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
 	if got := trustedBy(t, w); !slices.Equal(got, []string{zonePull}) {
@@ -271,7 +331,7 @@ func TestDestroyingTheALBRouterTakesDownWhatItsClaimsBound(t *testing.T) {
 
 	balancer, w := shielding(t)
 	routed := unreconciledRouter(t, balancer)
-	if _, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/shop", ClientCertificates: []string{zonePull}}); err != nil {
+	if _, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/shop", ClientCAs: []string{zonePull}}); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
 	if err := routed.Destroy(context.Background()); err != nil {
@@ -320,7 +380,7 @@ func TestThePreviewEntryAnEdgeForwardsIsServedByTheShieldedLoadBalancerAlone(t *
 	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewLoadBalancer()
 	ctx := context.Background()
 
-	origin, err := NewRouter(balancer).Hooks().Origin.ClaimPreviewEntry(ctx, router.Claim{Hostname: "*.preview.example.com", Certificate: "certs/preview", ClientCertificates: []string{zonePull}})
+	origin, err := NewRouter(balancer).Hooks().Origin.ClaimPreviewEntry(ctx, router.Claim{Hostname: "*.preview.example.com", Certificate: "certs/preview", ClientCAs: []string{zonePull}})
 	if err != nil {
 		t.Fatalf("ClaimPreviewEntry: %v", err)
 	}
@@ -355,14 +415,14 @@ func TestAClaimInOneZoneKeepsEveryCertificateAnotherZonesHostnamesCarry(t *testi
 	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewLoadBalancer()
 	routed := unreconciledRouter(t, balancer)
 	ctx := context.Background()
-	const uploaded = "-----BEGIN CERTIFICATE-----\nuploaded to both zones\n-----END CERTIFICATE-----\n"
+	uploaded := mintTestCertificate("uploaded to both zones", true)
 	if _, err := balancer.Shielded().trustClaim(ctx, environment.TierPreview, "*.preview.example.org", []string{uploaded, otherZonePull}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.org", App: "web", Certificate: "certs/org", ClientCertificates: []string{uploaded, otherZonePull}}); err != nil {
+	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.org", App: "web", Certificate: "certs/org", ClientCAs: []string{uploaded, otherZonePull}}); err != nil {
 		t.Fatalf("Claim in example.org: %v", err)
 	}
-	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/com", ClientCertificates: []string{uploaded}}); err != nil {
+	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/com", ClientCAs: []string{uploaded}}); err != nil {
 		t.Fatalf("Claim in example.com: %v", err)
 	}
 
@@ -386,7 +446,7 @@ func TestAClaimTheAllowlistHasNoRoomForLeavesNoTrace(t *testing.T) {
 	ctx := context.Background()
 	full := make([]string, maxAllowlisted)
 	for i := range full {
-		full[i] = fmt.Sprintf("-----BEGIN CERTIFICATE-----\nheld %03d\n-----END CERTIFICATE-----\n", i)
+		full[i] = mintTestCertificate(fmt.Sprintf("held %03d", i), false)
 	}
 	if _, err := shielded.trustClaim(ctx, environment.TierProduction, "shop.example.com", full); err != nil {
 		t.Fatalf("a claim that fills the allowlist: %v", err)
@@ -396,7 +456,7 @@ func TestAClaimTheAllowlistHasNoRoomForLeavesNoTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := shielded.trustClaim(ctx, environment.TierProduction, "shop.example.org", []string{otherZonePull}); err == nil {
+	if _, err := shielded.trustClaim(ctx, environment.TierProduction, "shop.example.org", []string{selfSigned}); err == nil {
 		t.Fatal("a claim past the allowlist's limit was taken, want it refused")
 	}
 	_, after, err := shielded.readTrust(ctx, environment.TierProduction)
@@ -415,14 +475,14 @@ func TestAClaimWhoseRaiseOverlapsAnotherLeavesTheLoadBalancerTrustingBoth(t *tes
 	routed := unreconciledRouter(t, balancer)
 	ctx := context.Background()
 	w.beforeNextUp(func() {
-		if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.org", App: "web", Certificate: "certs/org", ClientCertificates: []string{otherZonePull}}); err != nil {
+		if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.org", App: "web", Certificate: "certs/org", ClientCAs: []string{otherZonePull}}); err != nil {
 			t.Errorf("the overlapping Claim: %v", err)
 		}
 	})
-	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/com", ClientCertificates: []string{zonePull}}); err != nil {
+	if _, err := routed.Claim(ctx, router.Claim{Hostname: "shop.example.com", App: "web", Certificate: "certs/com", ClientCAs: []string{zonePull}}); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
-	if got, want := trustedBy(t, w), []string{zonePull, otherZonePull}; !slices.Equal(got, want) {
+	if got, want := trustedBy(t, w), slices.Sorted(slices.Values([]string{zonePull, otherZonePull})); !slices.Equal(got, want) {
 		t.Errorf("the shielded load balancer trusts %v after two claims raised it at once, want %v: the raise that finished last must not leave out what the other recorded", got, want)
 	}
 }
@@ -430,7 +490,7 @@ func TestAClaimWhoseRaiseOverlapsAnotherLeavesTheLoadBalancerTrustingBoth(t *tes
 func TestTheShieldedLoadBalancerRedirectsPlainHTTPToHTTPSAndForwardsItNowhere(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, true), ClientCertificates: []string{zonePull}}))
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, true), ClientCAs: []string{zonePull}}))
 	if err != nil {
 		t.Fatalf("the shielded balancer program = %v", err)
 	}
@@ -460,5 +520,25 @@ func TestTheShieldedLoadBalancerRedirectsPlainHTTPToHTTPSAndForwardsItNowhere(t 
 		if strings.HasSuffix(name, "-redirect") || strings.HasSuffix(name, "-forward-http") {
 			t.Errorf("the balancer no edge proxies declares %s, want no plain http listener: nothing forwards http to it", name)
 		}
+	}
+}
+
+func TestAClaimPastTheTrustAnchorLimitIsRefusedNamingIt(t *testing.T) {
+	t.Parallel()
+
+	balancer, _ := shielding(t)
+	shielded := balancer.Shielded()
+	ctx := context.Background()
+	full := make([]string, maxTrustAnchors)
+	for i := range full {
+		full[i] = mintTestCertificate(fmt.Sprintf("CA %03d", i), true)
+	}
+	if _, err := shielded.trustClaim(ctx, environment.TierProduction, "shop.example.com", full); err != nil {
+		t.Fatalf("a claim that fills the trust anchors: %v", err)
+	}
+	_, err := shielded.trustClaim(ctx, environment.TierProduction, "shop.example.org", []string{otherZonePull})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "trust anchors") {
+		t.Errorf("a claim past the trust anchor limit = %v, want it refused naming the limit", err)
 	}
 }

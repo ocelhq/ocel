@@ -67,13 +67,14 @@ type OriginHooks struct {
 }
 
 type Claim struct {
-	Hostname           string
-	App                string
-	Pointer            string
-	Certificate        string
-	ClientCertificates []string
-	OriginCertificate  edge.OriginCertificate
-	Tunnel             edge.Kind
+	Hostname             string
+	App                  string
+	Pointer              string
+	Certificate          string
+	CertificateRequested bool
+	ClientCAs            []string
+	OriginCertificate    edge.OriginCertificate
+	Tunnel               edge.Kind
 }
 
 type Stack interface {

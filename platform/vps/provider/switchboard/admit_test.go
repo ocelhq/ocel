@@ -96,8 +96,8 @@ func TestTheTableRefusesEveryNameAnOriginCertificateTheEdgeIssuedCovers(t *testi
 			{"owner":"ocel--shop--production","hostname":"shop.example.com","pointer":"@production"},
 			{"owner":"ocel--blog--production","hostname":"blog.example.com","pointer":"@production"}],
 		"shields":[
-			{"hostname":"shop.example.com","owner":"ocel--shop--production","clientCertificates":["zone"],"originCertificate":{"certificate":"ORIGIN","key":"KEY"}},
-			{"hostname":"blog.example.com","owner":"ocel--blog--production","clientCertificates":["zone"]}]}`)
+			{"hostname":"shop.example.com","owner":"ocel--shop--production","clientCAs":["zone"],"originCertificate":{"certificate":"ORIGIN","key":"KEY"}},
+			{"hostname":"blog.example.com","owner":"ocel--blog--production","clientCAs":["zone"]}]}`)
 
 	if table.Admits("shop.example.com") {
 		t.Error("shop.example.com is admitted: the edge in front issued the certificate the proxy answers it with, and one ordered through it would be refused on the way")

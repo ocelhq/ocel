@@ -2,6 +2,7 @@ package providerserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -12,52 +13,72 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-func (r *deployRun) listOriginPreviews() []ConfiguredHost {
+func (r *deployRun) listOriginPreviews() ([]ConfiguredHost, error) {
 	if r.spec.Tier != environment.TierPreview || r.previewOn == "" {
-		return nil
+		return nil, nil
 	}
 	var hosts []ConfiguredHost
 	site, names := r.previewSite(), r.appNames()
 	for slot, entry := range r.spec.Apps {
-		kind := r.readAppRouter(entry.App)
-		if r.routerOf(kind).Kind() == r.router.Kind() || r.routerOrigin(kind) == nil {
+		kind := r.appRouters[entry.App]
+		if kind == r.edgeKind {
+			continue
+		}
+		origin, err := r.findRouterOrigin(kind)
+		if err != nil {
+			return nil, err
+		}
+		if origin == nil {
 			continue
 		}
 		if host := site.Host(r.spec.Pointer, edge.AppAt(names, slot)); host != "" {
 			hosts = append(hosts, ConfiguredHost{Hostname: host, App: entry.App, Pointer: router.ResolvePointer(r.spec.Pointer)})
 		}
 	}
-	return hosts
+	return hosts, nil
 }
 
 func (r *deployRun) forwardAppPreviews(ctx context.Context, progress progress.Log) error {
-	hosts := r.listOriginPreviews()
-	if len(hosts) == 0 {
-		return nil
+	hosts, err := r.listOriginPreviews()
+	if err != nil || len(hosts) == 0 {
+		return err
 	}
 	if err := r.installPreviewCutover(); err != nil {
 		return err
 	}
 	forwarding := &hostnames{edgeSession: r.edgeSession}
+	certified := map[router.Kind]hostCertificates{}
 	for _, target := range hosts {
-		certificate, err := r.certifyPreviewWildcard(ctx, forwarding, r.readAppRouter(target.App), progress)
-		if err != nil {
-			return err
-		}
-		hostState := r.state.Host(target.Hostname)
-		hostState.Certificate = provider.Certificate{ID: certificate.ID}
-		if slices.Contains(r.edgeStack().State().Bound, target.Hostname) {
-			if _, err := forwarding.refreshOriginClaim(ctx, target, &hostState, progress); err != nil {
+		kind := r.appRouters[target.App]
+		certifying, done := certified[kind]
+		if !done {
+			if certifying, err = r.certifyPreviewWildcard(ctx, forwarding, kind, progress); err != nil {
 				return err
 			}
-			continue
+			certified[kind] = certifying
 		}
-		progress.Say(fmt.Sprintf("Forwarding %s to the origin that answers %s", target.Hostname, target.App))
-		if err := forwarding.bindOrigin(ctx, target, &hostState, progress); err != nil {
+		if err := r.forwardAppPreview(ctx, forwarding, target, certifying.hostState.Certificate, progress); err != nil {
 			return err
 		}
 	}
-	return nil
+	var errs []error
+	for _, certifying := range certified {
+		errs = append(errs, certifying.discardSuperseded(ctx, progress))
+	}
+	return errors.Join(errs...)
+}
+
+func (r *deployRun) forwardAppPreview(ctx context.Context, forwarding *hostnames, target ConfiguredHost, wildcard provider.Certificate, progress progress.Log) error {
+	hostState := r.state.Host(target.Hostname)
+	rotated := hostState.Certificate.ID != wildcard.ID
+	hostState.Certificate = provider.Certificate{ID: wildcard.ID, Requested: wildcard.Requested && r.hostingMode() != hostingGlobalPreview}
+	hostState.Router = r.appRouters[target.App]
+	if slices.Contains(r.edgeStack().State().Bound, target.Hostname) && !rotated {
+		_, err := forwarding.refreshOriginClaim(ctx, target, &hostState, progress)
+		return err
+	}
+	progress.Say(fmt.Sprintf("Forwarding %s to the origin that answers %s", target.Hostname, target.App))
+	return forwarding.bindOrigin(ctx, target, &hostState, progress)
 }
 
 func (r *deployRun) installPreviewCutover() error {
@@ -70,15 +91,13 @@ func (r *deployRun) installPreviewCutover() error {
 	return nil
 }
 
-func (r *deployRun) certifyPreviewWildcard(ctx context.Context, forwarding *hostnames, answering router.Kind, progress progress.Log) (provider.Certificate, error) {
+func (r *deployRun) certifyPreviewWildcard(ctx context.Context, forwarding *hostnames, answering router.Kind, progress progress.Log) (hostCertificates, error) {
 	wildcard := edge.PreviewWildcard(r.previewOn)
 	wildcardState := r.state.Host(wildcard)
+	wildcardState.Router = answering
 	certifying := forwarding.hostCertificates(wildcard, &wildcardState, answering)
 	if err := certifying.certify(ctx, wildcard, progress); err != nil {
-		return provider.Certificate{}, err
+		return hostCertificates{}, err
 	}
-	if err := certifying.discardSuperseded(ctx, progress); err != nil {
-		return provider.Certificate{}, err
-	}
-	return wildcardState.Certificate, nil
+	return certifying, nil
 }

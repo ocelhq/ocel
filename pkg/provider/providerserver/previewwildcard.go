@@ -341,7 +341,11 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	health, err := w.provider.Certificates().Inspect(ctx, w.recorded.Edge, readEdgeRouter(w.provider, w.recorded.Edge), w.recorded.Hostname(), w.recorded.Host.Certificate)
+	answering, err := findEdgeRouter(w.provider, w.recorded.Edge)
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	health, err := w.provider.Certificates().Inspect(ctx, w.recorded.Edge, answering, w.recorded.Hostname(), w.recorded.Host.Certificate)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -364,7 +368,11 @@ func recordedPreviewWildcard(ctx context.Context, p provider.Provider) (*contrac
 	}
 	w := &wildcards{provider: p, keyValues: p.KeyValues(), recorded: recorded}
 	wildcard := w.proto(ctx)
-	health, err := p.Certificates().Inspect(ctx, recorded.Edge, readEdgeRouter(p, recorded.Edge), recorded.Hostname(), recorded.Host.Certificate)
+	answering, err := findEdgeRouter(p, recorded.Edge)
+	if err != nil {
+		return nil, err
+	}
+	health, err := p.Certificates().Inspect(ctx, recorded.Edge, answering, recorded.Hostname(), recorded.Host.Certificate)
 	if err != nil {
 		return nil, err
 	}

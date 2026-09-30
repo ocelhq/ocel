@@ -115,7 +115,11 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 	host := target.Hostname
 	hostState := d.state.Host(host)
 	previous, served := hostState.ServedEdge()
-	answering := d.readAppRouter(target.App)
+	answering, err := d.readTargetRouter(target)
+	if err != nil {
+		return false, err
+	}
+	hostState.Router = answering
 	priorCertID := hostState.Certificate.ID
 	certifying := d.hostCertificates(host, &hostState, answering)
 
@@ -178,7 +182,10 @@ func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostS
 	if err != nil {
 		return errors.Join(err, d.settleUnboundClaim(ctx, target, claimed, hostState, progress))
 	}
-	hostState.Edge, hostState.Router = d.front.Kind(), d.readAppRouter(target.App)
+	hostState.Edge = d.front.Kind()
+	if hostState.Router, err = d.readTargetRouter(target); err != nil {
+		return err
+	}
 	if target.Pointer != "" {
 		hostState.Pointer = router.ResolvePointer(target.Pointer)
 	}
@@ -204,7 +211,11 @@ func (d *hostnames) settleUnboundClaim(ctx context.Context, target ConfiguredHos
 		revokeOriginCertificate(ctx, d.front, superseded, progress)
 		return nil
 	}
-	if err := d.disclaim(ctx, target.Hostname, d.readAppRouter(target.App)); err != nil {
+	kind, err := d.readTargetRouter(target)
+	if err != nil {
+		return err
+	}
+	if err := d.disclaim(ctx, target.Hostname, kind); err != nil {
 		return err
 	}
 	revokeOriginCertificate(ctx, d.front, claimed.issued.ID, progress)
@@ -213,8 +224,13 @@ func (d *hostnames) settleUnboundClaim(ctx context.Context, target ConfiguredHos
 }
 
 func (d *hostnames) refreshOriginClaim(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Log) (bool, error) {
-	if d.routerOrigin(d.readAppRouter(target.App)) == nil {
-		return false, nil
+	kind, err := d.readTargetRouter(target)
+	if err != nil {
+		return false, err
+	}
+	origin, err := d.findRouterOrigin(kind)
+	if err != nil || origin == nil {
+		return false, err
 	}
 	why, err := readOriginClaimStaleness(ctx, d.front, target.Hostname, d.tunnel, hostState, time.Now())
 	if err != nil || why == "" {
@@ -225,15 +241,23 @@ func (d *hostnames) refreshOriginClaim(ctx context.Context, target ConfiguredHos
 }
 
 func (d *hostnames) claimRouterOrigin(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState) (originClaim, error) {
-	kind := d.readAppRouter(target.App)
-	if d.routerOrigin(kind) == nil {
-		return originClaim{}, nil
+	kind, err := d.readTargetRouter(target)
+	if err != nil {
+		return originClaim{}, err
+	}
+	origin, err := d.findRouterOrigin(kind)
+	if err != nil || origin == nil {
+		return originClaim{}, err
 	}
 	routed, err := d.openRouterStack(kind)
 	if err != nil {
 		return originClaim{}, err
 	}
-	claim := router.Claim{Hostname: target.Hostname, App: target.App, Pointer: target.Pointer, Certificate: hostState.Certificate.ID, Tunnel: d.tunnel}
+	claim := router.Claim{
+		Hostname: target.Hostname, App: target.App, Pointer: target.Pointer,
+		Certificate: hostState.Certificate.ID, CertificateRequested: hostState.Certificate.Requested,
+		Tunnel: d.tunnel,
+	}
 	claimed, err := claimOrigin(ctx, d.front, claim, routed.Claim, d.reserveOriginCertificate(target.Hostname, *hostState))
 	return claimed, errors.Join(err, d.adopt(kind, routed))
 }
@@ -255,8 +279,9 @@ func (d *hostnames) reserveOriginCertificate(host string, prior stackrecords.Hos
 }
 
 func (d *hostnames) disclaim(ctx context.Context, hostname string, kind router.Kind) error {
-	if d.routerOrigin(kind) == nil {
-		return nil
+	origin, err := d.findRouterOrigin(kind)
+	if err != nil || origin == nil {
+		return err
 	}
 	routed, err := d.openRouterStack(kind)
 	if err != nil {
@@ -265,11 +290,12 @@ func (d *hostnames) disclaim(ctx context.Context, hostname string, kind router.K
 	return errors.Join(routed.Disclaim(ctx, hostname), d.adopt(kind, routed))
 }
 
-func (s *edgeSession) readHostRouter(hostname string) router.Kind {
-	if kind := s.state.Host(hostname).Router; kind != "" {
-		return kind
+func (s *edgeSession) readHostRouter(hostname string) (router.Kind, error) {
+	kind := s.state.Host(hostname).Router
+	if kind == "" {
+		return "", fmt.Errorf("the edge state records no router answering %s", hostname)
 	}
-	return s.router.Kind()
+	return kind, nil
 }
 
 func (d *hostnames) hostCertificates(host string, hostState *stackrecords.HostnameState, answering router.Kind) hostCertificates {
@@ -333,7 +359,11 @@ func (d *hostnames) remove(ctx context.Context, runProgress progress.Log) error 
 		if err := progress.ReportWarning(runProgress, d.edgeStack().UnbindDomain(ctx, host)); err != nil {
 			return err
 		}
-		if err := d.disclaim(ctx, host, d.readHostRouter(host)); err != nil {
+		kind, err := d.readHostRouter(host)
+		if err != nil {
+			return err
+		}
+		if err := d.disclaim(ctx, host, kind); err != nil {
 			return err
 		}
 		hostState := d.state.Host(host)
@@ -437,11 +467,15 @@ func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.Prod
 		manual = edge.Unwritten(wanted, hostState.Written)
 	}
 
+	answering, err := d.readStatusRouter(host)
+	if err != nil {
+		return nil, err
+	}
 	probe := hostState.Probe
 	if bound && d.live {
-		probe = d.probe(ctx, host, d.readAppRouter(d.findApp(host)))
+		probe = d.probe(ctx, host, answering)
 	}
-	health, err := d.provider.Certificates().Inspect(ctx, d.cutover.kind, d.readHostRouter(host), host, hostState.Certificate)
+	health, err := d.provider.Certificates().Inspect(ctx, d.cutover.kind, answering, host, hostState.Certificate)
 	if err != nil {
 		return nil, err
 	}
@@ -459,13 +493,16 @@ func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.Prod
 	return row, nil
 }
 
-func (d *hostnames) findApp(host string) string {
+func (d *hostnames) readStatusRouter(host string) (router.Kind, error) {
+	if _, recorded := d.state.Hosts[host]; recorded {
+		return d.readHostRouter(host)
+	}
 	for _, configured := range d.configured {
 		if configured.Hostname == host {
-			return configured.App
+			return d.readTargetRouter(configured)
 		}
 	}
-	return ""
+	return d.readHostRouter(host)
 }
 
 func (d *hostnames) probe(ctx context.Context, host string, answering router.Kind) stackrecords.ServeProbe {
