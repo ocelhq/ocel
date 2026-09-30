@@ -95,7 +95,7 @@ func (w *world) Up(_ context.Context, target Target, program Program, _ progress
 		if w.outputs[stack] == nil {
 			w.outputs[stack] = map[string]string{}
 		}
-		w.outputs[stack][outputAllowlist] = fingerprintAllowlist(trust)
+		w.outputs[stack][outputTrusted] = fingerprintTrusted(trust)
 	}
 	if outputs, up := w.outputs[stack]; up {
 		return maps.Clone(outputs), nil
@@ -109,11 +109,8 @@ func trustConfigOf(seen map[string]declaration) ([]string, bool) {
 		if declared.Token != "gcp:certificatemanager/trustConfig:TrustConfig" {
 			continue
 		}
-		var pems []string
-		for _, entry := range declared.Args["allowlistedCertificates"].([]any) {
-			pems = append(pems, entry.(map[string]any)["pemCertificate"].(string))
-		}
-		return pems, true
+		anchors, allowlisted := readTrustConfig(declared)
+		return slices.Concat(anchors, allowlisted), true
 	}
 	return nil, false
 }

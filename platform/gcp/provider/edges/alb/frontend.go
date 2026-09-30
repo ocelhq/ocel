@@ -1,6 +1,10 @@
 package alb
 
 import (
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/certificatemanager"
@@ -64,10 +68,10 @@ func loadBalancerNames(tier environment.Tier, shielded bool) names {
 }
 
 type loadBalancerSpec struct {
-	Region             string
-	Names              names
-	Preview            previewEntry
-	ClientCertificates []string
+	Region    string
+	Names     names
+	Preview   previewEntry
+	ClientCAs []string
 }
 
 const notFoundStatus = 404
@@ -156,18 +160,51 @@ const (
 	globalLocation       = "global"
 )
 
-func clientValidation(ctx *pulumi.Context, spec loadBalancerSpec, project string) (pulumi.Resource, error) {
-	allowed := certificatemanager.TrustConfigAllowlistedCertificateArray{}
-	for _, pem := range spec.ClientCertificates {
-		allowed = append(allowed, &certificatemanager.TrustConfigAllowlistedCertificateArgs{PemCertificate: pulumi.String(pem)})
+func splitTrusted(trusted []string) (authorities, selfSigned []string, err error) {
+	for _, certificate := range trusted {
+		block, _ := pem.Decode([]byte(certificate))
+		if block == nil || block.Type != "CERTIFICATE" {
+			return nil, nil, errors.New("a client CA the edge names is no PEM certificate")
+		}
+		parsed, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read a client CA the edge names: %w", err)
+		}
+		if parsed.IsCA {
+			authorities = append(authorities, certificate)
+			continue
+		}
+		selfSigned = append(selfSigned, certificate)
 	}
-	trust, err := certificatemanager.NewTrustConfig(ctx, spec.Names.Trust, &certificatemanager.TrustConfigArgs{
-		Name:                    pulumi.String(spec.Names.Trust),
-		Project:                 pulumi.String(project),
-		Location:                pulumi.String(globalLocation),
-		AllowlistedCertificates: allowed,
-		Description:             pulumi.String("the client certificates the edge in front of this load balancer presents, and nothing else"),
-	})
+	return authorities, selfSigned, nil
+}
+
+func clientValidation(ctx *pulumi.Context, spec loadBalancerSpec, project string) (pulumi.Resource, error) {
+	authorities, selfSigned, err := splitTrusted(spec.ClientCAs)
+	if err != nil {
+		return nil, err
+	}
+	args := &certificatemanager.TrustConfigArgs{
+		Name:        pulumi.String(spec.Names.Trust),
+		Project:     pulumi.String(project),
+		Location:    pulumi.String(globalLocation),
+		Description: pulumi.String("the CAs of the client certificates the edge in front of this load balancer presents, and nothing else"),
+	}
+	if len(authorities) > 0 {
+		anchors := certificatemanager.TrustConfigTrustStoreTrustAnchorArray{}
+		for _, authority := range authorities {
+			anchors = append(anchors, &certificatemanager.TrustConfigTrustStoreTrustAnchorArgs{PemCertificate: pulumi.String(authority)})
+		}
+		args.TrustStores = certificatemanager.TrustConfigTrustStoreArray{&certificatemanager.TrustConfigTrustStoreArgs{TrustAnchors: anchors}}
+	}
+	if len(selfSigned) > 0 {
+		allowed := certificatemanager.TrustConfigAllowlistedCertificateArray{}
+		for _, certificate := range selfSigned {
+			allowed = append(allowed, &certificatemanager.TrustConfigAllowlistedCertificateArgs{PemCertificate: pulumi.String(certificate)})
+		}
+		args.AllowlistedCertificates = allowed
+	}
+	trust, err := certificatemanager.NewTrustConfig(ctx, spec.Names.Trust, args)
 	if err != nil {
 		return nil, err
 	}
@@ -267,14 +304,14 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 			CertificateMap: pulumi.Sprintf(certificateHost, project, spec.Names.CertificateMap),
 		}
 		var validating []pulumi.ResourceOption
-		if len(spec.ClientCertificates) > 0 {
+		if len(spec.ClientCAs) > 0 {
 			policy, err := clientValidation(ctx, spec, project)
 			if err != nil {
 				return err
 			}
 			proxyArgs.ServerTlsPolicy = pulumi.Sprintf(serverPolicyPath, project, spec.Names.Policy)
 			validating = append(validating, pulumi.DependsOn([]pulumi.Resource{policy}))
-			ctx.Export(outputAllowlist, pulumi.String(fingerprintAllowlist(spec.ClientCertificates)))
+			ctx.Export(outputTrusted, pulumi.String(fingerprintTrusted(spec.ClientCAs)))
 		}
 		proxy, err := compute.NewTargetHttpsProxy(ctx, spec.Names.Proxy, proxyArgs, validating...)
 		if err != nil {
@@ -291,7 +328,7 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 		}); err != nil {
 			return err
 		}
-		if len(spec.ClientCertificates) > 0 {
+		if len(spec.ClientCAs) > 0 {
 			if err := redirectToHTTPS(ctx, spec, project, address.Address); err != nil {
 				return err
 			}

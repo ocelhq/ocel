@@ -109,21 +109,21 @@ func split(spec proxy.Spec) ([]string, []shieldedSite) {
 }
 
 func clientAuthentication(site shieldedSite) (string, error) {
-	if len(site.shield.ClientCertificates) == 0 {
-		return "", fmt.Errorf("%s is shielded by no client certificate", site.hostname)
+	if len(site.shield.ClientCAs) == 0 {
+		return "", fmt.Errorf("%s is shielded by no client CA", site.hostname)
 	}
-	requiring := "\t\tclient_auth {\n\t\t\tmode require\n"
-	for _, certificate := range site.shield.ClientCertificates {
-		leaf, err := encodeLeafDER(certificate)
+	requiring := "\t\tclient_auth {\n\t\t\tmode require\n\t\t\ttrust_pool inline {\n"
+	for _, authority := range site.shield.ClientCAs {
+		der, err := encodeCertificateDER(authority)
 		if err != nil {
-			return "", fmt.Errorf("a client certificate %s is shielded by: %w", site.hostname, err)
+			return "", fmt.Errorf("a client CA %s is shielded by: %w", site.hostname, err)
 		}
-		requiring += "\t\t\ttrusted_leaf_cert " + leaf + "\n"
+		requiring += "\t\t\t\ttrust_der " + der + "\n"
 	}
-	return requiring + "\t\t}\n", nil
+	return requiring + "\t\t\t}\n\t\t}\n", nil
 }
 
-func encodeLeafDER(certificate string) (string, error) {
+func encodeCertificateDER(certificate string) (string, error) {
 	block, _ := pem.Decode([]byte(certificate))
 	if block == nil || block.Type != "CERTIFICATE" {
 		return "", errors.New("it is no PEM certificate")

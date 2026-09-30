@@ -244,7 +244,7 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
-	t.Run("an edge presents only a client certificate its origins were told to trust", func(t *testing.T) {
+	t.Run("an edge presents only a client certificate whose CA its origins were told to trust", func(t *testing.T) {
 		e, _ := suite.New(t)
 		certificates := e.Hooks().ClientCertificates
 		if certificates == nil {
@@ -256,10 +256,10 @@ func Run(t *testing.T, suite Suite) {
 			t.Fatalf("Ensure(%q): %v", suite.Hostname, err)
 		}
 		if len(trusted) == 0 {
-			t.Fatalf("Ensure(%q) names no certificate, and an origin that trusts none refuses every request the edge forwards", suite.Hostname)
+			t.Fatalf("Ensure(%q) names no CA, and an origin that trusts none refuses every request the edge forwards", suite.Hostname)
 		}
-		for _, certificate := range trusted {
-			requireClientCertificate(t, certificate)
+		for _, authority := range trusted {
+			requireClientCA(t, authority)
 		}
 		if err := certificates.Present(ctx, suite.Hostname); err != nil {
 			t.Fatalf("Present(%q): %v", suite.Hostname, err)
@@ -641,17 +641,17 @@ func runPreviews(t *testing.T, suite Suite) {
 	})
 }
 
-func requireClientCertificate(t *testing.T, certificate string) {
+func requireClientCA(t *testing.T, authority string) {
 	t.Helper()
-	block, _ := pem.Decode([]byte(certificate))
+	block, _ := pem.Decode([]byte(authority))
 	if block == nil || block.Type != "CERTIFICATE" {
-		t.Fatalf("staged %q, want a PEM certificate", certificate)
+		t.Fatalf("Ensure named %q, want a PEM certificate", authority)
 	}
-	leaf, err := x509.ParseCertificate(block.Bytes)
+	ca, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		t.Fatalf("parse the client certificate: %v", err)
+		t.Fatalf("parse the client CA: %v", err)
 	}
-	if !slices.Contains(leaf.ExtKeyUsage, x509.ExtKeyUsageClientAuth) {
-		t.Errorf("the client certificate is good for %v, want client authentication among them", leaf.ExtKeyUsage)
+	if !ca.BasicConstraintsValid || !ca.IsCA || ca.KeyUsage&x509.KeyUsageCertSign == 0 {
+		t.Errorf("Ensure named %q, which is no CA that signs certificates, and an origin that verifies a chain, as a load balancer's trust store does, refuses to trust it", ca.Subject)
 	}
 }

@@ -65,8 +65,8 @@ func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin
 	var balancer LoadBalancer
 	var err error
 	switch {
-	case len(claim.ClientCertificates) > 0:
-		balancer, err = balancing.trustClaim(ctx, s.state.Tier, claim.Hostname, claim.ClientCertificates)
+	case len(claim.ClientCAs) > 0:
+		balancer, err = balancing.trustClaim(ctx, s.state.Tier, claim.Hostname, claim.ClientCAs)
 	case !s.recorded.LoadBalancer.provisioned():
 		balancer, err = balancing.readProvisionedLoadBalancer(ctx, s.state.Tier)
 	default:

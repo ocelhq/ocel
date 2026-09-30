@@ -56,7 +56,10 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		return nil, provider.RefusalError(err)
 	}
 
-	propagation := session.propagation(slices.Collect(maps.Values(session.state.Apps)))
+	propagation, err := session.readSlowestPropagation(slices.Collect(maps.Values(session.state.Apps)))
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
 	promoted := router.Promotion{
 		PromotionID: promotionID,
 		Ts:          time.Now().Unix(),

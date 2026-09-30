@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-func (s *stack) forwardingOwner() string {
+func (s *stack) formatOwner() string {
 	return formatForwardingOwner(s.p.namespace, s.state.Slug, s.state.Tier)
 }
 
@@ -38,7 +38,7 @@ func (s *stack) bindForwarded(ctx context.Context, binding edge.DomainBinding) e
 	if err != nil {
 		return err
 	}
-	return s.p.bindOrigin(ctx, &s.state, s.forwardingOwner(), binding)
+	return s.p.bindOrigin(ctx, &s.state, s.formatOwner(), binding)
 }
 
 func (s *stack) unbindForwarded(ctx context.Context, hostname string) error {
@@ -53,7 +53,7 @@ func (s *stack) unbindForwarded(ctx context.Context, hostname string) error {
 	if err := s.p.detachRoute(ctx, zoneID, routePattern(hostname), []string{""}); err != nil {
 		return err
 	}
-	return s.p.unbindOrigin(ctx, &s.state, s.forwardingOwner(), hostname)
+	return s.p.unbindOrigin(ctx, &s.state, s.formatOwner(), hostname)
 }
 
 func (p *cloudflare) ensureRouteWithoutWorker(ctx context.Context, zoneID, pattern string) error {

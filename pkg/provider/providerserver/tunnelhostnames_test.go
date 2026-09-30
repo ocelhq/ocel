@@ -86,7 +86,7 @@ func TestAHostnameThroughATunnelIsClaimedWithoutTrustingOrCertifyingTheOrigin(t 
 	addWebHostname(t, client, "app.acme.com", tunneled())
 
 	claims := relay.Claims()
-	if len(claims) != 1 || claims[0].Tunnel != fake.KindRelay || len(claims[0].ClientCertificates) != 0 || claims[0].OriginCertificate.ID != "" {
+	if len(claims) != 1 || claims[0].Tunnel != fake.KindRelay || len(claims[0].ClientCAs) != 0 || claims[0].OriginCertificate.ID != "" {
 		t.Fatalf("the router took claims %+v, want one claim through the %s edge's tunnel, trusting no client certificate and carrying no origin certificate", claims, fake.KindRelay)
 	}
 	if events := relay.ClientCertificateEvents(); slices.Contains(events, "ensure") || slices.Contains(events, "present") {
@@ -97,7 +97,7 @@ func TestAHostnameThroughATunnelIsClaimedWithoutTrustingOrCertifyingTheOrigin(t 
 		t.Fatalf("the edge was bound with %+v, want app.acme.com forwarded to the tunnel the claim named", bindings)
 	}
 	hostState := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com")
-	if hostState.OriginCertificateID != "" || len(hostState.ClientCertificateDigests) != 0 || !hostState.Tunneled {
+	if hostState.OriginCertificateID != "" || len(hostState.ClientCADigests) != 0 || !hostState.Tunneled {
 		t.Errorf("the hostname records %+v, want it recorded as tunneled, with no origin or client certificate", hostState)
 	}
 }
@@ -156,7 +156,7 @@ func TestTheSharedPreviewWildcardThroughATunnelIsClaimedOnTheTunnelWithNoCertifi
 	}
 
 	entries := relay.PreviewEntryClaims()
-	if len(entries) != 1 || entries[0].Tunnel != fake.KindDirect || len(entries[0].ClientCertificates) != 0 || entries[0].OriginCertificate.ID != "" {
+	if len(entries) != 1 || entries[0].Tunnel != fake.KindDirect || len(entries[0].ClientCAs) != 0 || entries[0].OriginCertificate.ID != "" {
 		t.Fatalf("the router took preview entry claims %+v, want *.preview.acme.com claimed once through the tunnel, with no certificate", entries)
 	}
 	specs := relay.Specs()

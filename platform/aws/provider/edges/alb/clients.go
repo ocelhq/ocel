@@ -25,6 +25,8 @@ type Balancers interface {
 	DescribeTrustStores(ctx context.Context, in *elbv2.DescribeTrustStoresInput, opts ...func(*elbv2.Options)) (*elbv2.DescribeTrustStoresOutput, error)
 	CreateTrustStore(ctx context.Context, in *elbv2.CreateTrustStoreInput, opts ...func(*elbv2.Options)) (*elbv2.CreateTrustStoreOutput, error)
 	ModifyTrustStore(ctx context.Context, in *elbv2.ModifyTrustStoreInput, opts ...func(*elbv2.Options)) (*elbv2.ModifyTrustStoreOutput, error)
+	DescribeTags(ctx context.Context, in *elbv2.DescribeTagsInput, opts ...func(*elbv2.Options)) (*elbv2.DescribeTagsOutput, error)
+	AddTags(ctx context.Context, in *elbv2.AddTagsInput, opts ...func(*elbv2.Options)) (*elbv2.AddTagsOutput, error)
 }
 
 type Services interface {
@@ -54,7 +56,7 @@ func FromConfig(
 		}
 		bucket, err := artifactBucket(ctx, tier)
 		if err != nil {
-			return Clients{}, fmt.Errorf("read the bucket the %s tier keeps the trusted client certificates in: %w", tier, err)
+			return Clients{}, fmt.Errorf("read the bucket the %s tier keeps the trusted client CAs in: %w", tier, err)
 		}
 		return Clients{
 			Balancers: elbv2.NewFromConfig(cfg),

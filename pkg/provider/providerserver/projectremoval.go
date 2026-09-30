@@ -143,9 +143,16 @@ func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 	}
 	groups := r.front.ProjectRemovals(scope)
 	for _, kind := range r.listRouterKinds() {
-		if origin := r.routerOrigin(kind); origin != nil {
-			groups = append(groups, origin.PlanProjectRemoval(scope)...)
+		origin, err := r.findRouterOrigin(kind)
+		if err != nil {
+			return nil, err
 		}
+		if origin == nil {
+			continue
+		}
+		routed := scope
+		routed.Hostnames = slices.DeleteFunc(slices.Clone(scope.Hostnames), func(hostname string) bool { return r.state.Host(hostname).Router != kind })
+		groups = append(groups, origin.PlanProjectRemoval(routed)...)
 	}
 	for _, group := range groups {
 		converted, err := edgeGroupProto(group)

@@ -15,6 +15,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 func servedDescriptor(t *testing.T, app string, desc edge.ServeDescriptor) string {
@@ -60,7 +61,7 @@ func TestNeedCheckRecordsWhatTheEdgeServes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	records, err := providerserver.EdgeNeedCheck{Edge: front, Root: root}.Run(context.Background(), oneApp())
+	records, err := providerserver.EdgeNeedCheck{Edge: front, Router: routedWithEveryNeed, Root: root}.Run(context.Background(), oneApp())
 	if err != nil {
 		t.Fatalf("Run() over an edge that serves every need = %v", err)
 	}
@@ -83,7 +84,7 @@ func TestNeedCheckRefusesANeedTheEdgeDoesNotServe(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = providerserver.EdgeNeedCheck{Edge: narrowEdge{Edge: front}, Root: root}.Run(context.Background(), oneApp())
+	_, err = providerserver.EdgeNeedCheck{Edge: narrowEdge{Edge: front}, Router: routedWithEveryNeed, Root: root}.Run(context.Background(), oneApp())
 	var unsupported *providerserver.UnsupportedNeedError
 	if !errors.As(err, &unsupported) {
 		t.Fatalf("Run() against an edge serving nothing = %v, want an UnsupportedNeedError", err)
@@ -107,6 +108,7 @@ func TestNeedCheckDegradesAWaivedNeedRatherThanRefusing(t *testing.T) {
 	var degraded []edge.Need
 	records, err := providerserver.EdgeNeedCheck{
 		Edge:          narrowEdge{Edge: front},
+		Router:        routedWithEveryNeed,
 		Root:          root,
 		AllowDegraded: []string{string(edge.NeedStreaming)},
 		Degraded:      func(_ string, need edge.Need, _ string) { degraded = append(degraded, need) },
@@ -133,7 +135,7 @@ func TestNeedCheckRefusesANeedNoEdgeKnows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = providerserver.EdgeNeedCheck{Edge: front, Root: root}.Run(context.Background(), oneApp())
+	_, err = providerserver.EdgeNeedCheck{Edge: front, Router: routedWithEveryNeed, Root: root}.Run(context.Background(), oneApp())
 	var unknown *providerserver.UnknownNeedError
 	if !errors.As(err, &unknown) {
 		t.Fatalf("Run() over a need no edge knows = %v, want an UnknownNeedError", err)
@@ -148,7 +150,7 @@ func TestNeedCheckPassesAnAppThatShipsNoDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	records, err := providerserver.EdgeNeedCheck{Edge: front, Root: t.TempDir()}.Run(context.Background(), oneApp())
+	records, err := providerserver.EdgeNeedCheck{Edge: front, Router: routedWithEveryNeed, Root: t.TempDir()}.Run(context.Background(), oneApp())
 	if err != nil {
 		t.Fatalf("Run() over an app with no serve descriptor = %v, want it to pass", err)
 	}
@@ -184,7 +186,7 @@ func TestNeedCheckServesACodeNeedWithoutAskingAnEdgeThatChecksNoEntitlement(t *t
 		t.Fatal("the reference edge checks an entitlement, so it cannot represent one that checks none")
 	}
 
-	records, err := providerserver.EdgeNeedCheck{Edge: front, Root: root}.Run(context.Background(), oneApp())
+	records, err := providerserver.EdgeNeedCheck{Edge: front, Router: routedWithEveryNeed, Root: root}.Run(context.Background(), oneApp())
 	if err != nil {
 		t.Fatalf("Run() over an edge that checks no entitlement = %v, want the code need served", err)
 	}
@@ -208,6 +210,7 @@ func TestNeedCheckRefusesACodeNeedThePlanWithholdsAndAsksOnce(t *testing.T) {
 
 	records, err := providerserver.EdgeNeedCheck{
 		Edge:          withheld,
+		Router:        routedWithEveryNeed,
 		Root:          root,
 		AllowDegraded: []string{string(edge.NeedEdgeMiddleware), string(edge.NeedEdgeRuntime)},
 	}.Run(context.Background(), oneApp())
@@ -222,7 +225,7 @@ func TestNeedCheckRefusesACodeNeedThePlanWithholdsAndAsksOnce(t *testing.T) {
 	}
 
 	var refused *providerserver.EdgeEntitlementError
-	_, err = providerserver.EdgeNeedCheck{Edge: withheld, Root: root}.Run(context.Background(), oneApp())
+	_, err = providerserver.EdgeNeedCheck{Edge: withheld, Router: routedWithEveryNeed, Root: root}.Run(context.Background(), oneApp())
 	if !errors.As(err, &refused) || refused.BillingPlan != "Workers Free" {
 		t.Errorf("Run() with nothing waived = %v, want the plan named in an entitlement refusal", err)
 	}
@@ -247,9 +250,10 @@ func TestNeedCheckWarnsOnceNamingTheEdgeWhenItCannotTellWhetherThePlanRunsCode(t
 	type warning struct{ subject, message string }
 	var warned []warning
 	records, err := providerserver.EdgeNeedCheck{
-		Edge: unknown,
-		Root: root,
-		Warn: func(subject, message string) { warned = append(warned, warning{subject, message}) },
+		Edge:   unknown,
+		Router: routedWithEveryNeed,
+		Root:   root,
+		Warn:   func(subject, message string) { warned = append(warned, warning{subject, message}) },
 	}.Run(context.Background(), oneApp())
 	if err != nil {
 		t.Fatalf("Run() when the entitlement is unknown = %v, want the deploy to proceed", err)
@@ -267,3 +271,9 @@ func TestNeedCheckWarnsOnceNamingTheEdgeWhenItCannotTellWhetherThePlanRunsCode(t
 		t.Errorf("the warning reads %q, want it to carry the edge's reason", warned[0].message)
 	}
 }
+
+type everyNeedRouter struct{ router.Router }
+
+func (everyNeedRouter) Facts() router.Facts { return router.Facts{Supported: edge.AllNeeds()} }
+
+func routedWithEveryNeed(string) router.Router { return everyNeedRouter{} }

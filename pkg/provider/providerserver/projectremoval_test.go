@@ -226,6 +226,7 @@ func cutOverProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 		},
 		Hosts: map[string]stackrecords.HostnameState{
 			"app.acme.com": {
+				Router:      fake.RouterRelay,
 				Certificate: provider.Certificate{ID: "cert-for-app"},
 				Written:     []edge.Record{{Name: "app.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
 				Manual:      []edge.Record{{Name: "manual.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
@@ -314,10 +315,11 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 		},
 		Hosts: map[string]stackrecords.HostnameState{
 			"app.acme.com": {
+				Router:      fake.RouterRelay,
 				Certificate: provider.Certificate{ID: "ocels-cert", Requested: true, Written: []edge.Record{validation}},
 				Superseded:  []provider.Certificate{{ID: "stalled-cert", Requested: true, Written: []edge.Record{stale}}},
 			},
-			"old.acme.com": {Certificate: provider.Certificate{ID: "pinned-cert"}},
+			"old.acme.com": {Router: fake.RouterRelay, Certificate: provider.Certificate{ID: "pinned-cert"}},
 		},
 	})
 	writer, err := p.DNS().Open(fake.KindZone, "acme.com", "")

@@ -45,7 +45,7 @@ func TestAHostnameAnEdgeProxiesIsClaimedOnTheRouterAndForwardedToTheOriginTheCla
 	addWebHostname(t, client, "app.acme.com", nil)
 
 	claims := relay.Claims()
-	want := router.Claim{Hostname: "app.acme.com", App: "web", Certificate: "pinned-app-certificate", ClientCertificates: []string{fake.ClientCertificate(fake.KindRelay)}}
+	want := router.Claim{Hostname: "app.acme.com", App: "web", Certificate: "pinned-app-certificate", ClientCAs: []string{fake.ClientCA(fake.KindRelay)}}
 	if len(claims) != 1 || !reflect.DeepEqual(claims[0], want) {
 		t.Fatalf("the router took claims %+v, want the one %+v: an edge that proxies records forwards to an origin, and the router is what answers there", claims, want)
 	}
@@ -157,11 +157,11 @@ func TestAServedHostnameIsClaimedAgainWhenTheCertificatesItsEdgePresentsChange(t
 		t.Fatalf("the router took %d claims, want the one: nothing the origin trusts changed", len(claims))
 	}
 
-	rotated := []string{fake.ClientCertificate(fake.KindRelay), "the certificate you uploaded beside it"}
-	relay.HoldsClientCertificates(rotated...)
+	rotated := []string{fake.ClientCA(fake.KindRelay), "the certificate you uploaded beside it"}
+	relay.HoldsClientCAs(rotated...)
 	addWebHostname(t, client, "app.acme.com", nil)
 	claims := relay.Claims()
-	if len(claims) != 2 || !slices.Equal(claims[1].ClientCertificates, rotated) {
+	if len(claims) != 2 || !slices.Equal(claims[1].ClientCAs, rotated) {
 		t.Fatalf("the router took claims %+v, want app.acme.com claimed again trusting %v: the edge presents the certificate uploaded last, and the origin refuses it until it is told to trust it", claims, rotated)
 	}
 }

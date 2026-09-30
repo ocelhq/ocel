@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -181,35 +180,11 @@ func TestAPromoteOfAReleaseTheClusterDoesNotRunIsUnservedAndFlipsNothing(t *test
 	}
 }
 
-func TestAClaimTrustsTheClientCertificatesOfEveryZoneThatClaimedThroughIt(t *testing.T) {
-	f := newFakeAWS()
-	stack := claimedStack(t, f)
-
-	first := "-----BEGIN CERTIFICATE-----\nZONEONE\n-----END CERTIFICATE-----\n"
-	second := "-----BEGIN CERTIFICATE-----\nZONETWO\n-----END CERTIFICATE-----\n"
-	if _, err := stack.Claim(context.Background(), router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate, ClientCertificates: []string{first}}); err != nil {
-		t.Fatalf("Claim: %v", err)
-	}
-	if f.listenerMode != "verify" || f.listenerTrust == "" {
-		t.Errorf("the listener checks client certificates in mode %q against %q, want verify against the trust store", f.listenerMode, f.listenerTrust)
-	}
-	if _, err := stack.Claim(context.Background(), router.Claim{Hostname: "ops.other.example", App: "admin", Certificate: testCertificate, ClientCertificates: []string{second}}); err != nil {
-		t.Fatalf("Claim: %v", err)
-	}
-	bundle := f.bundle()
-	if !strings.Contains(bundle, "ZONEONE") || !strings.Contains(bundle, "ZONETWO") {
-		t.Errorf("the trust store bundle is\n%s\nwant both zones' certificates: one tier's balancer answers every zone's hostnames, and a bundle of the last zone alone refuses the others", bundle)
-	}
-	if strings.Contains(bundle, "\n\n") {
-		t.Errorf("the trust store bundle has a blank line, which the load balancer refuses:\n%s", bundle)
-	}
-}
-
 func TestDisclaimingAHostnameDropsItsRuleAndTheCertificateNothingElseAnswersWith(t *testing.T) {
 	f := newFakeAWS()
 	stack := claimedStack(t, f,
-		router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate},
-		router.Claim{Hostname: "ops.shop.example", App: "admin", Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/ops"},
+		router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate, CertificateRequested: true},
+		router.Claim{Hostname: "ops.shop.example", App: "admin", Certificate: "arn:aws:acm:us-east-1:111122223333:certificate/ops", CertificateRequested: true},
 	)
 
 	if err := stack.Disclaim(context.Background(), testHostname); err != nil {

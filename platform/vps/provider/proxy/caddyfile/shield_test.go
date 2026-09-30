@@ -63,7 +63,7 @@ func TestAShieldedHostnameIsASiteOfItsOwnThatRequiresTheZonesClientCertificateAn
 	front := caddyfile.Caddyfile{Container: "caddy", Directory: "/etc/caddy/ocel.d", Network: "web"}
 	spec := proxy.Spec{
 		Hostnames: []string{"blog.example.com", "shop.example.com", "box.example.com"},
-		Shields:   []proxy.Shield{{Hostname: "Shop.Example.com", ClientCertificates: []string{client, successor}, OriginCertificate: origin}},
+		Shields:   []proxy.Shield{{Hostname: "Shop.Example.com", ClientCAs: []string{client, successor}, OriginCertificate: origin}},
 	}
 	rendered, err := front.Render(spec)
 	if err != nil {
@@ -75,7 +75,7 @@ func TestAShieldedHostnameIsASiteOfItsOwnThatRequiresTheZonesClientCertificateAn
 		"}\n" +
 		"https://shop.example.com {\n" +
 		"\ttls " + bundle + " " + bundle + " {\n" +
-		"\t\tclient_auth {\n\t\t\tmode require\n\t\t\ttrusted_leaf_cert " + trusted + "\n\t\t\ttrusted_leaf_cert " + trustedNext + "\n\t\t}\n" +
+		"\t\tclient_auth {\n\t\t\tmode require\n\t\t\ttrust_pool inline {\n\t\t\t\ttrust_der " + trusted + "\n\t\t\t\ttrust_der " + trustedNext + "\n\t\t\t}\n\t\t}\n" +
 		"\t}\n" +
 		"\treverse_proxy ocel-switchboard:8443 {\n\t\tlb_try_duration 10s\n\t\tlb_try_interval 250ms\n\t\tstream_close_delay 30s\n\t}\n" +
 		"}\n" +
@@ -92,13 +92,13 @@ func TestAShieldedHostnameWithNoOriginCertificateRequiresTheClientCertificateOnT
 
 	client, trusted := clientCertificate(t)
 	front := caddyfile.Caddyfile{Directory: "/etc/caddy/ocel.d", Port: 8480}
-	spec := proxy.Spec{Hostnames: []string{"shop.example.com"}, Shields: []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{client}}}}
+	spec := proxy.Spec{Hostnames: []string{"shop.example.com"}, Shields: []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{client}}}}
 	rendered, err := front.Render(spec)
 	if err != nil {
 		t.Fatalf("Render() = %v", err)
 	}
 	want := "https://shop.example.com {\n" +
-		"\ttls {\n\t\tclient_auth {\n\t\t\tmode require\n\t\t\ttrusted_leaf_cert " + trusted + "\n\t\t}\n\t}\n" +
+		"\ttls {\n\t\tclient_auth {\n\t\t\tmode require\n\t\t\ttrust_pool inline {\n\t\t\t\ttrust_der " + trusted + "\n\t\t\t}\n\t\t}\n\t}\n" +
 		"\treverse_proxy 127.0.0.1:8480 {\n\t\tlb_try_duration 10s\n\t\tlb_try_interval 250ms\n\t}\n" +
 		"}\n" +
 		"http://shop.example.com {\n\tredir https://{host}{uri} 308\n}\n"
@@ -117,7 +117,7 @@ func TestAPreviewHostnameIsShieldedByTheWildcardShieldOverItsPreviewBase(t *test
 	front := caddyfile.Caddyfile{Directory: "/etc/caddy/ocel.d", Port: 8480}
 	spec := proxy.Spec{
 		Hostnames: []string{"pr-12--web.preview.example.com", "deep.pr-12--web.preview.example.com"},
-		Shields:   []proxy.Shield{{Hostname: "*.preview.example.com", ClientCertificates: []string{client}, OriginCertificate: origin}},
+		Shields:   []proxy.Shield{{Hostname: "*.preview.example.com", ClientCAs: []string{client}, OriginCertificate: origin}},
 	}
 	rendered, err := front.Render(spec)
 	if err != nil {
@@ -138,7 +138,7 @@ func TestTheOriginCertificateIsPlacedBesideOcelCaddyAsOneBundleNamedForItsHostna
 	front := caddyfile.Caddyfile{Directory: "/etc/caddy/ocel.d", Port: 8480}
 	spec := proxy.Spec{
 		Hostnames: []string{"pr-12--web.preview.example.com"},
-		Shields:   []proxy.Shield{{Hostname: "*.preview.example.com", ClientCertificates: []string{client}, OriginCertificate: origin}},
+		Shields:   []proxy.Shield{{Hostname: "*.preview.example.com", ClientCAs: []string{client}, OriginCertificate: origin}},
 	}
 	placed := originFile(t, front, spec)
 	if filepath.Dir(placed.Path) != "/etc/caddy/ocel.d" || !strings.HasPrefix(filepath.Base(placed.Path), switchboard.OriginPrefix+"_.preview.example.com-") ||
@@ -150,7 +150,7 @@ func TestTheOriginCertificateIsPlacedBesideOcelCaddyAsOneBundleNamedForItsHostna
 	}
 
 	renewed := spec
-	renewed.Shields = []proxy.Shield{{Hostname: "*.preview.example.com", ClientCertificates: []string{client},
+	renewed.Shields = []proxy.Shield{{Hostname: "*.preview.example.com", ClientCAs: []string{client},
 		OriginCertificate: proxy.CertificatePair{Certificate: "-----BEGIN CERTIFICATE-----\nRENEWED\n-----END CERTIFICATE-----", Key: origin.Key}}}
 	next := originFile(t, front, renewed)
 	if next.Path == placed.Path {
@@ -168,7 +168,7 @@ func TestOcelCaddyNamesTheOriginCertificateWhereTheContainerYourCaddyRunsInMount
 	front := caddyfile.Caddyfile{Directory: "/data/coolify/proxy/caddy/dynamic", ContainerDirectory: "/dynamic", Container: "coolify-proxy", Network: "coolify"}
 	spec := proxy.Spec{
 		Hostnames: []string{"shop.example.com"},
-		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{client}, OriginCertificate: origin}},
+		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{client}, OriginCertificate: origin}},
 	}
 	placed := originFile(t, front, spec)
 	if filepath.Dir(placed.Path) != "/data/coolify/proxy/caddy/dynamic" {
@@ -189,7 +189,7 @@ func TestAShieldOverNoHostnameTheBoxServesPlacesNothing(t *testing.T) {
 
 	client, _ := clientCertificate(t)
 	front := caddyfile.Caddyfile{Directory: "/etc/caddy/ocel.d", Port: 8480}
-	spec := proxy.Spec{Hostnames: []string{"blog.example.com"}, Shields: []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{client}, OriginCertificate: origin}}}
+	spec := proxy.Spec{Hostnames: []string{"blog.example.com"}, Shields: []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{client}, OriginCertificate: origin}}}
 	if files, err := front.OriginFiles(spec); err != nil || len(files) != 0 {
 		t.Errorf("OriginFiles() = %+v, %v; want nothing placed for a hostname ocel.caddy never names", files, err)
 	}
@@ -198,7 +198,7 @@ func TestAShieldOverNoHostnameTheBoxServesPlacesNothing(t *testing.T) {
 func TestAClientCertificateThatIsNoCertificateIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 
-	spec := proxy.Spec{Hostnames: []string{"shop.example.com"}, Shields: []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{"not a certificate"}}}}
+	spec := proxy.Spec{Hostnames: []string{"shop.example.com"}, Shields: []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{"not a certificate"}}}}
 	if _, err := (caddyfile.Caddyfile{Port: 8480}).Render(spec); err == nil {
 		t.Error("Render() = nil, want the unreadable client certificate refused: a site that trusts nothing it can read shields nothing")
 	}
@@ -220,8 +220,8 @@ func shieldedBox(t *testing.T) (*box, caddyfile.Caddyfile) {
 		said:    map[string]string{caddyfile.AdminServers: golden(t, "shielded.json")},
 		claimed: []string{"blog.example.com", "shop.example.com", "box.example.com", "pr-1--web.preview.example.com"},
 		shields: []proxy.Shield{
-			{Hostname: "shop.example.com", ClientCertificates: []string{client}, OriginCertificate: origin},
-			{Hostname: "*.preview.example.com", ClientCertificates: []string{client}},
+			{Hostname: "shop.example.com", ClientCAs: []string{client}, OriginCertificate: origin},
+			{Hostname: "*.preview.example.com", ClientCAs: []string{client}},
 		},
 	}
 	return machine, caddyfile.Caddyfile{Box: machine, Container: "caddy", Directory: "/d", Network: "web"}

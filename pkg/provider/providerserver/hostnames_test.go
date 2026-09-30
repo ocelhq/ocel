@@ -35,6 +35,7 @@ func edgeProvisioned(t *testing.T, vendor *fake.Provider, tier environment.Tier,
 	t.Helper()
 	seedStack(t, vendor, tier, slug, stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: slug, Tier: tier, Endpoint: "https://" + slug + ".fake.invalid"},
+		Apps: map[string]router.Kind{"web": fake.RouterRelay, "api": fake.RouterRelay},
 	})
 }
 
@@ -519,7 +520,7 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 	seedStack(t, p, environment.TierProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "shop", Tier: environment.TierProduction, Endpoint: "https://shop.fake.invalid"},
 		Hosts: map[string]stackrecords.HostnameState{
-			"app.acme.com": {Certificate: provider.Certificate{ID: "superseded", Requested: true, Written: []edge.Record{stale}}},
+			"app.acme.com": {Router: fake.RouterRelay, Certificate: provider.Certificate{ID: "superseded", Requested: true, Written: []edge.Record{stale}}},
 		},
 	})
 	promoted(t, p, environment.TierProduction, "shop")
@@ -652,6 +653,7 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 			"app.acme.com": {
 				Certificate: provider.Certificate{ID: "cert-of-yesterday"},
 				Edge:        fake.KindRelay,
+				Router:      fake.RouterRelay,
 				Probe:       stackrecords.ServeProbe{OK: true, Router: fake.RouterRelay},
 			},
 		},
@@ -692,6 +694,7 @@ func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) 
 			"app.acme.com": {
 				Certificate: provider.Certificate{ID: "pending-cert", Requested: true},
 				Edge:        fake.KindRelay,
+				Router:      fake.RouterRelay,
 				Probe:       stackrecords.ServeProbe{OK: true, Router: fake.RouterRelay},
 			},
 		},
@@ -738,7 +741,7 @@ func TestGetHostnameStatusReadsTheRecordedProbeUnlessAskedToCheckLive(t *testing
 			Addresses: map[string]string{"app.acme.com": "shop.relay.fake.invalid"},
 		},
 		Hosts: map[string]stackrecords.HostnameState{
-			"app.acme.com": {Edge: fake.KindRelay, Probe: stackrecords.ServeProbe{At: 1755500000, OK: true, Router: fake.RouterRelay}},
+			"app.acme.com": {Edge: fake.KindRelay, Router: fake.RouterRelay, Probe: stackrecords.ServeProbe{At: 1755500000, OK: true, Router: fake.RouterRelay}},
 		},
 	})
 

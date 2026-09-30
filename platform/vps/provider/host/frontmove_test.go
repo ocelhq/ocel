@@ -236,7 +236,7 @@ func boxRecordedWithCertificatesFor(t *testing.T, tier environment.Tier, recorde
 	state.PreviewBase = "preview.example.com"
 	state.Pins = []Pin{{Hostname: "pinned.example.com", Path: caddy.PinsDir + "/pinned"}}
 	state.Shields = []Shield{{
-		Hostname: "origin.example.com", Owner: surface, ClientCertificates: []string{certificate},
+		Hostname: "origin.example.com", Owner: surface, ClientCAs: []string{certificate},
 		OriginCertificate: proxy.CertificatePair{Certificate: certificate, Key: "KEY"},
 	}}
 	table := string(mustWrite(t, state))

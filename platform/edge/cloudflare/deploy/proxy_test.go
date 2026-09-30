@@ -325,8 +325,8 @@ func TestTheCloudflareProxyMintsAClientCertificateOnlyForAZoneThatHoldsNone(t *t
 	if err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
-	if len(trusted) != 1 || len(m.clientCertificates) != 1 || m.clientCertificates[0]["certificate"] != trusted[0] {
-		t.Fatalf("Ensure = %d certificates with %v uploaded, want the one it minted and uploaded", len(trusted), m.clientCertificates)
+	if len(trusted) != 1 || len(m.clientCertificates) != 1 {
+		t.Fatalf("Ensure = %d CAs with %v uploaded, want the CA of the one certificate it minted and uploaded", len(trusted), m.clientCertificates)
 	}
 	if len(m.originPullWrites) != 0 {
 		t.Fatalf("zone-level authenticated origin pulls were set %v before any origin trusted the certificate, want them left off until Present", m.originPullWrites)
@@ -334,12 +334,9 @@ func TestTheCloudflareProxyMintsAClientCertificateOnlyForAZoneThatHoldsNone(t *t
 	if !strings.Contains(m.uploadedKeys[0], "PRIVATE KEY") {
 		t.Errorf("uploaded key %q, want the certificate's private key in PEM", m.uploadedKeys[0])
 	}
-	leaf := parsedLeaf(t, trusted[0])
-	if leaf.IsCA {
-		t.Error("the minted certificate is a CA, and Cloudflare refuses anything but a leaf for zone-level authenticated origin pulls")
-	}
+	leaf := parsedLeaf(t, m.clientCertificates[0]["certificate"].(string))
 	if len(leaf.DNSNames) == 0 {
-		t.Error("the minted certificate names no SAN, and a trust config allowlists only certificates whose SAN it can check")
+		t.Error("the minted certificate names no SAN, and a trust config checks the SAN of the certificate it verifies")
 	}
 	if lifetime := leaf.NotAfter.Sub(leaf.NotBefore); lifetime < 9*365*24*time.Hour {
 		t.Errorf("the minted certificate is good for %s, want years: ocel never replaces it, and an origin that checks expiry refuses it once it lapses", lifetime)
@@ -367,18 +364,21 @@ func TestTheCloudflareProxyMintsAClientCertificateOnlyForAZoneThatHoldsNone(t *t
 func TestTheCloudflareProxyTrustsEveryCertificateAZoneHolds(t *testing.T) {
 	m := proxyZoneMock()
 	m.originPulls = true
+	older, olderCA := mintHeldClientCertificate(t, time.Now())
+	newer, newerCA := mintHeldClientCertificate(t, time.Now())
+	gone, _ := mintHeldClientCertificate(t, time.Now())
 	m.clientCertificates = []map[string]any{
-		{"id": "old", "certificate": "OLD", "status": "active", "uploaded_on": "2026-01-01T00:00:00Z"},
-		{"id": "new", "certificate": "NEW", "status": "active", "uploaded_on": "2026-06-01T00:00:00Z"},
-		{"id": "gone", "certificate": "GONE", "status": "pending_deletion", "uploaded_on": "2026-09-01T00:00:00Z"},
+		{"id": "old", "certificate": older, "status": "active", "uploaded_on": "2026-01-01T00:00:00Z"},
+		{"id": "new", "certificate": newer, "status": "active", "uploaded_on": "2026-06-01T00:00:00Z"},
+		{"id": "gone", "certificate": gone, "status": "pending_deletion", "uploaded_on": "2026-09-01T00:00:00Z"},
 	}
 
 	trusted, err := m.proxy(t).Hooks().ClientCertificates.Ensure(context.Background(), "shop.app.com")
 	if err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
-	if !slices.Equal(trusted, []string{"NEW", "OLD"}) {
-		t.Errorf("Ensure = %v, want NEW and OLD: the zone presents the latest it deployed, and during a rotation you started every origin must accept both", trusted)
+	if want := slices.Sorted(slices.Values([]string{olderCA, newerCA})); !slices.Equal(trusted, want) {
+		t.Errorf("Ensure = %v, want the CAs of the old and the new certificate: the zone presents the latest it deployed, and during a rotation you started every origin must accept both", trusted)
 	}
 	if len(m.uploadedKeys) != 0 || len(m.deletedClientCertificates) != 0 {
 		t.Errorf("uploaded %d and deleted %v, want nothing changed: the zone already holds certificates", len(m.uploadedKeys), m.deletedClientCertificates)
@@ -388,10 +388,7 @@ func TestTheCloudflareProxyTrustsEveryCertificateAZoneHolds(t *testing.T) {
 func TestTheCloudflareProxyNeverReplacesOrDeletesAZonesClientCertificate(t *testing.T) {
 	m := proxyZoneMock()
 	m.originPulls = true
-	lapsed, _, err := mintClientCertificate("app.com", time.Now().Add(-clientCertificateLifetime-24*time.Hour))
-	if err != nil {
-		t.Fatal(err)
-	}
+	lapsed, lapsedCA := mintHeldClientCertificate(t, time.Now().Add(-clientCertificateLifetime-24*time.Hour))
 	m.clientCertificates = []map[string]any{{"id": "lapsed", "certificate": lapsed, "status": "active", "uploaded_on": "2016-01-01T00:00:00Z"}}
 	hooks := m.proxy(t).Hooks().ClientCertificates
 	ctx := context.Background()
@@ -403,7 +400,7 @@ func TestTheCloudflareProxyNeverReplacesOrDeletesAZonesClientCertificate(t *test
 	if err := hooks.Present(ctx, "shop.app.com"); err != nil {
 		t.Fatalf("Present: %v", err)
 	}
-	if !slices.Equal(trusted, []string{lapsed}) || len(m.uploadedKeys) != 0 || len(m.deletedClientCertificates) != 0 {
+	if !slices.Equal(trusted, []string{lapsedCA}) || len(m.uploadedKeys) != 0 || len(m.deletedClientCertificates) != 0 {
 		t.Errorf("Ensure = %d certificates, uploaded %d, deleted %v, want the one the zone holds and nothing changed: the zone certificate is shared by every origin it forwards to, and one project replacing it refuses the others until they deploy again", len(trusted), len(m.uploadedKeys), m.deletedClientCertificates)
 	}
 }
@@ -438,8 +435,9 @@ func TestTheCloudflareProxyRefusesAZoneThatPresentsCloudflaresSharedCertificate(
 
 func TestTheCloudflareProxyTakesAZoneAnotherRunJustTurnedZoneLevelPullsOnFor(t *testing.T) {
 	m := proxyZoneMock()
+	otherRun, _ := mintHeldClientCertificate(t, time.Now())
 	m.afterListing = func(m *cfMock) {
-		m.clientCertificates = append(m.clientCertificates, map[string]any{"id": "other-run", "certificate": "OTHER RUN", "status": "active", "uploaded_on": "2026-09-29T09:00:00Z"})
+		m.clientCertificates = append(m.clientCertificates, map[string]any{"id": "other-run", "certificate": otherRun, "status": "active", "uploaded_on": "2026-09-29T09:00:00Z"})
 		m.originPulls = true
 	}
 
@@ -450,15 +448,16 @@ func TestTheCloudflareProxyTakesAZoneAnotherRunJustTurnedZoneLevelPullsOnFor(t *
 
 func TestTheCloudflareProxyDeletesTheCertificateItUploadedWhenAnotherRunUploadedOneFirst(t *testing.T) {
 	m := proxyZoneMock()
+	otherRun, otherRunCA := mintHeldClientCertificate(t, time.Now())
 	m.afterListing = func(m *cfMock) {
-		m.clientCertificates = append(m.clientCertificates, map[string]any{"id": "other-run", "certificate": "OTHER RUN", "status": "pending_deployment", "uploaded_on": "2026-09-29T09:00:00Z"})
+		m.clientCertificates = append(m.clientCertificates, map[string]any{"id": "other-run", "certificate": otherRun, "status": "pending_deployment", "uploaded_on": "2026-09-29T09:00:00Z"})
 	}
 
 	trusted, err := m.proxy(t).Hooks().ClientCertificates.Ensure(context.Background(), "shop.app.com")
 	if err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
-	if !slices.Equal(trusted, []string{"OTHER RUN"}) {
+	if !slices.Equal(trusted, []string{otherRunCA}) {
 		t.Errorf("Ensure = %v, want only the certificate the other run uploaded first: the zone keeps one, and every origin trusts that one", trusted)
 	}
 	if len(m.clientCertificates) != 1 || m.clientCertificates[0]["id"] != "other-run" {
@@ -468,8 +467,9 @@ func TestTheCloudflareProxyDeletesTheCertificateItUploadedWhenAnotherRunUploaded
 
 func TestTheCloudflareProxyKeepsTheCertificateItUploadedFirstWhenAnotherRunUploadedOneAfter(t *testing.T) {
 	m := proxyZoneMock()
+	otherRun, otherRunCA := mintHeldClientCertificate(t, time.Now())
 	m.afterListing = func(m *cfMock) {
-		m.clientCertificates = append(m.clientCertificates, map[string]any{"id": "other-run", "certificate": "OTHER RUN", "status": "pending_deployment", "uploaded_on": "2026-09-29T11:00:00Z"})
+		m.clientCertificates = append(m.clientCertificates, map[string]any{"id": "other-run", "certificate": otherRun, "status": "pending_deployment", "uploaded_on": "2026-09-29T11:00:00Z"})
 	}
 
 	trusted, err := m.proxy(t).Hooks().ClientCertificates.Ensure(context.Background(), "shop.app.com")
@@ -479,7 +479,7 @@ func TestTheCloudflareProxyKeepsTheCertificateItUploadedFirstWhenAnotherRunUploa
 	if len(m.deletedClientCertificates) != 0 {
 		t.Errorf("deleted %v, want the certificate uploaded first kept: the run that uploaded after it deletes its own", m.deletedClientCertificates)
 	}
-	if len(trusted) != 2 || !slices.Contains(trusted, "OTHER RUN") {
+	if len(trusted) != 2 || !slices.Contains(trusted, otherRunCA) {
 		t.Errorf("Ensure = %v, want both certificates trusted until the other run deletes its own", trusted)
 	}
 }

@@ -38,14 +38,14 @@ type AppRoute struct {
 type HostClaim live.Claimed
 
 type Shield struct {
-	Hostname           string                `json:"hostname"`
-	Owner              string                `json:"owner"`
-	ClientCertificates []string              `json:"clientCertificates,omitempty"`
-	OriginCertificate  proxy.CertificatePair `json:"originCertificate,omitzero"`
+	Hostname          string                `json:"hostname"`
+	Owner             string                `json:"owner"`
+	ClientCAs         []string              `json:"clientCAs,omitempty"`
+	OriginCertificate proxy.CertificatePair `json:"originCertificate,omitzero"`
 }
 
 func MergeShield(shields []Shield, merged Shield) []Shield {
-	merged.ClientCertificates = slices.Compact(slices.Sorted(slices.Values(merged.ClientCertificates)))
+	merged.ClientCAs = slices.Compact(slices.Sorted(slices.Values(merged.ClientCAs)))
 	kept := make([]Shield, 0, len(shields)+1)
 	for _, shield := range shields {
 		if shield.Hostname == merged.Hostname {
@@ -54,8 +54,8 @@ func MergeShield(shields []Shield, merged Shield) []Shield {
 			}
 			continue
 		}
-		if slices.ContainsFunc(shield.ClientCertificates, func(certificate string) bool { return slices.Contains(merged.ClientCertificates, certificate) }) {
-			shield.ClientCertificates = slices.Compact(slices.Sorted(slices.Values(slices.Concat(shield.ClientCertificates, merged.ClientCertificates))))
+		if slices.ContainsFunc(shield.ClientCAs, func(certificate string) bool { return slices.Contains(merged.ClientCAs, certificate) }) {
+			shield.ClientCAs = slices.Compact(slices.Sorted(slices.Values(slices.Concat(shield.ClientCAs, merged.ClientCAs))))
 		}
 		kept = append(kept, shield)
 	}
@@ -147,7 +147,7 @@ func proxySpec(state RoutingTable) proxy.Spec {
 	shields := make([]proxy.Shield, 0, len(state.Shields))
 	for _, shield := range state.Shields {
 		shields = append(shields, proxy.Shield{
-			Hostname: shield.Hostname, ClientCertificates: shield.ClientCertificates, OriginCertificate: shield.OriginCertificate,
+			Hostname: shield.Hostname, ClientCAs: shield.ClientCAs, OriginCertificate: shield.OriginCertificate,
 		})
 	}
 	return proxy.Spec{

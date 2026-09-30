@@ -327,7 +327,7 @@ func TestAHostnameClaimedAgainWithoutTheTunnelStopsGoingThroughIt(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCertificates: []string{pulled}})
+	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCAs: []string{pulled}})
 	if err != nil {
 		t.Fatalf("Claim without the tunnel: %v", err)
 	}

@@ -121,9 +121,16 @@ type connectionPolicy struct {
 }
 
 type clientAuthentication struct {
-	TrustedLeafCerts []string `json:"trusted_leaf_certs"`
-	Mode             string   `json:"mode"`
+	CA   caPool `json:"ca"`
+	Mode string `json:"mode"`
 }
+
+type caPool struct {
+	Provider       string   `json:"provider"`
+	TrustedCACerts []string `json:"trusted_ca_certs"`
+}
+
+const inlineCAPool = "inline"
 
 const requireClientCertificate = "require"
 
@@ -296,18 +303,18 @@ func shieldPolicies(selecting []connectionPolicy, shields []proxy.Shield) ([]con
 		if hostname == "" {
 			return nil, errors.New("a client certificate the proxy requires names no hostname it shields")
 		}
-		if len(shield.ClientCertificates) == 0 {
-			return nil, fmt.Errorf("%s is shielded by no client certificate", hostname)
+		if len(shield.ClientCAs) == 0 {
+			return nil, fmt.Errorf("%s is shielded by no client CA", hostname)
 		}
-		trusted := make([]string, 0, len(shield.ClientCertificates))
-		for _, certificate := range shield.ClientCertificates {
-			leaf, err := encodeLeafDER(certificate)
+		trusted := make([]string, 0, len(shield.ClientCAs))
+		for _, authority := range shield.ClientCAs {
+			der, err := encodeCertificateDER(authority)
 			if err != nil {
-				return nil, fmt.Errorf("a client certificate %s is shielded by: %w", hostname, err)
+				return nil, fmt.Errorf("a client CA %s is shielded by: %w", hostname, err)
 			}
-			trusted = append(trusted, leaf)
+			trusted = append(trusted, der)
 		}
-		client := &clientAuthentication{TrustedLeafCerts: trusted, Mode: requireClientCertificate}
+		client := &clientAuthentication{CA: caPool{Provider: inlineCAPool, TrustedCACerts: trusted}, Mode: requireClientCertificate}
 		var chosen *selection
 		if shield.OriginCertificate.Certificate != "" {
 			chosen = &selection{AnyTag: []string{shieldTag + hostname}}
@@ -366,7 +373,7 @@ func byHostname(a, b proxy.Shield) int {
 	)
 }
 
-func encodeLeafDER(certificate string) (string, error) {
+func encodeCertificateDER(certificate string) (string, error) {
 	block, _ := pem.Decode([]byte(certificate))
 	if block == nil || block.Type != "CERTIFICATE" {
 		return "", errors.New("it is no PEM certificate")

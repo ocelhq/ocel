@@ -43,8 +43,11 @@ type shieldingPolicy struct {
 	Match     map[string][]string `json:"match"`
 	Selection map[string][]string `json:"certificate_selection"`
 	Client    *struct {
-		TrustedLeafCerts []string `json:"trusted_leaf_certs"`
-		Mode             string   `json:"mode"`
+		CA *struct {
+			Provider       string   `json:"provider"`
+			TrustedCACerts []string `json:"trusted_ca_certs"`
+		} `json:"ca"`
+		Mode string `json:"mode"`
 	} `json:"client_authentication"`
 }
 
@@ -73,7 +76,7 @@ func TestAHostnameShieldedByAClientCertificateIsHandedOnlyToAClientPresentingIt(
 	certificate, der := clientCertificate(t)
 	successor, successorDER := clientCertificate(t)
 	spec := specified(pinned("www.example.com", "www"))
-	spec.Shields = []proxy.Shield{{Hostname: "Shop.Example.com", ClientCertificates: []string{certificate, successor}}}
+	spec.Shields = []proxy.Shield{{Hostname: "Shop.Example.com", ClientCAs: []string{certificate, successor}}}
 	written, _ := render(t, spec)
 	policies, strict := shieldingPolicies(t, written)
 
@@ -87,8 +90,8 @@ func TestAHostnameShieldedByAClientCertificateIsHandedOnlyToAClientPresentingIt(
 		t.Fatalf("connection policies %+v, want one for shop.example.com that authenticates the client, ahead of the catch-all", policies)
 	}
 	want := []string{base64.StdEncoding.EncodeToString(der), base64.StdEncoding.EncodeToString(successorDER)}
-	if !slices.Equal(shielding.Client.TrustedLeafCerts, want) {
-		t.Errorf("shop.example.com trusts client certificates %v, want the one the edge presents and the successor it presents next", shielding.Client.TrustedLeafCerts)
+	if ca := shielding.Client.CA; ca == nil || ca.Provider != "inline" || !slices.Equal(ca.TrustedCACerts, want) {
+		t.Errorf("shop.example.com trusts client CAs %+v, want inline the CA of the certificate the edge presents and of the successor it presents next", ca)
 	}
 	if shielding.Client.Mode != "require" {
 		t.Errorf("shop.example.com authenticates clients in mode %q, want require: a handshake with no certificate is refused", shielding.Client.Mode)
@@ -106,7 +109,7 @@ func TestAPinnedHostnameShieldedByAClientCertificateKeepsItsPin(t *testing.T) {
 
 	certificate, _ := clientCertificate(t)
 	spec := specified(pinned("shop.example.com", "shop"))
-	spec.Shields = []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{certificate}}}
+	spec.Shields = []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{certificate}}}
 	written, _ := render(t, spec)
 	policies, _ := shieldingPolicies(t, written)
 
@@ -132,7 +135,7 @@ func TestAClientCertificateThatIsNoCertificateIsRefusedRatherThanRendered(t *tes
 	t.Parallel()
 
 	spec := specified()
-	spec.Shields = []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{"not a certificate"}}}
+	spec.Shields = []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{"not a certificate"}}}
 	if _, err := (caddy.Builtin{}).Render(spec); err == nil {
 		t.Error("Render() = nil, want the unreadable client certificate refused: a proxy that trusts nothing it can read shields nothing")
 	}
@@ -144,7 +147,7 @@ func TestAShieldedHostnameIsAnsweredWithTheOriginCertificateTheEdgeIssuedForIt(t
 	client, _ := clientCertificate(t)
 	spec := specified(pinned("shop.example.com", "shop"))
 	spec.Shields = []proxy.Shield{{
-		Hostname: "shop.example.com", ClientCertificates: []string{client},
+		Hostname: "shop.example.com", ClientCAs: []string{client},
 		OriginCertificate: proxy.CertificatePair{Certificate: "ORIGIN CERTIFICATE", Key: "ORIGIN KEY"},
 	}}
 	written, _ := render(t, spec)
@@ -181,8 +184,8 @@ func TestAShieldedPreviewWildcardIsMatchedAfterEveryHostnameShieldedByName(t *te
 	client, _ := clientCertificate(t)
 	spec := specified()
 	spec.Shields = []proxy.Shield{
-		{Hostname: "*.preview.example.com", ClientCertificates: []string{client}},
-		{Hostname: "shop.preview.example.com", ClientCertificates: []string{client}},
+		{Hostname: "*.preview.example.com", ClientCAs: []string{client}},
+		{Hostname: "shop.preview.example.com", ClientCAs: []string{client}},
 	}
 	written, _ := render(t, spec)
 	policies, _ := shieldingPolicies(t, written)
@@ -198,8 +201,8 @@ func TestAShieldedHostnameOverPlainHTTPIsRedirectedToHTTPSAndNeverForwarded(t *t
 	client, _ := clientCertificate(t)
 	spec := specified()
 	spec.Shields = []proxy.Shield{
-		{Hostname: "Shop.Example.com", ClientCertificates: []string{client}},
-		{Hostname: "*.preview.example.com", ClientCertificates: []string{client}},
+		{Hostname: "Shop.Example.com", ClientCAs: []string{client}},
+		{Hostname: "*.preview.example.com", ClientCAs: []string{client}},
 	}
 	_, read := render(t, spec)
 	routes := read.front().Routes

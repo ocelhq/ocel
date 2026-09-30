@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -174,11 +176,30 @@ func (s *edgeSession) promoted(ctx context.Context) (bool, error) {
 	return active != "", err
 }
 
-func (s *edgeSession) readAppRouter(app string) router.Kind {
-	if kind, paired := s.state.Apps[app]; paired {
-		return kind
+func (s *edgeSession) readAppRouter(app string) (router.Kind, error) {
+	kind, paired := s.state.Apps[app]
+	if !paired {
+		return "", fmt.Errorf("the edge state pairs app %s with no router", app)
 	}
-	return s.router.Kind()
+	return kind, nil
+}
+
+func (s *edgeSession) readTargetRouter(target ConfiguredHost) (router.Kind, error) {
+	if target.App == "" {
+		return s.edgeKind, nil
+	}
+	return s.readAppRouter(target.App)
+}
+
+func (s *edgeSession) recordRouterStates(into *stackrecords.EdgeState) {
+	for _, kind := range slices.Sorted(maps.Keys(into.Routers)) {
+		paired, found := s.routers[kind]
+		if !found {
+			delete(into.Routers, kind)
+			continue
+		}
+		into.Routers[kind] = paired.record()
+	}
 }
 
 func (s *edgeSession) on(kind edge.Kind) (edge.EdgeStack, error) {

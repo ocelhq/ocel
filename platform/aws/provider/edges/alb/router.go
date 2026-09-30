@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-const Kind router.Kind = "alb"
+const Kind router.Kind = "elb"
 
 type Router struct {
 	open func(context.Context, environment.Tier) (Clients, error)

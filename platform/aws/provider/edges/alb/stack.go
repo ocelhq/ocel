@@ -19,16 +19,21 @@ import (
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
+const certificateQuota = "Certificates per Application Load Balancer (L-9365A611)"
+
 type hostRule struct {
-	App         string `json:"app"`
-	Pointer     string `json:"pointer"`
-	Rule        string `json:"rule"`
-	Certificate string `json:"certificate,omitempty"`
+	App                  string `json:"app"`
+	Pointer              string `json:"pointer"`
+	Rule                 string `json:"rule"`
+	Certificate          string `json:"certificate,omitempty"`
+	CertificateRequested bool   `json:"certificateRequested,omitempty"`
 }
 
+type servedGroups map[string]map[string]string
+
 type recorded struct {
-	Hosts  map[string]hostRule          `json:"hosts,omitempty"`
-	Served map[string]map[string]string `json:"served,omitempty"`
+	Hosts  map[string]hostRule `json:"hosts,omitempty"`
+	Served servedGroups        `json:"served,omitempty"`
 }
 
 type stack struct {
@@ -37,10 +42,10 @@ type stack struct {
 	recorded recorded
 }
 
-type front struct {
-	address  string
-	listener string
-	mutual   *elbv2types.MutualAuthenticationAttributes
+type publicListener struct {
+	address string
+	arn     string
+	mutual  *elbv2types.MutualAuthenticationAttributes
 }
 
 func (s *stack) State() router.StackState {
@@ -49,74 +54,93 @@ func (s *stack) State() router.StackState {
 	return router.NewStackState(current)
 }
 
-func (s *stack) clients(ctx context.Context) (Clients, error) {
+func (s *stack) openClients(ctx context.Context) (Clients, error) {
 	return s.open(ctx, s.state.Tier)
 }
 
-func (s *stack) readFront(ctx context.Context, c Clients) (front, error) {
+func (s *stack) readPublicListener(ctx context.Context, c Clients) (publicListener, error) {
 	name := awsports.PublicBalancerName(s.state.Tier)
 	balancers, err := c.Balancers.DescribeLoadBalancers(ctx, &elbv2.DescribeLoadBalancersInput{Names: []string{name}})
 	var absent *elbv2types.LoadBalancerNotFoundException
 	switch {
 	case errors.As(err, &absent) || (err == nil && len(balancers.LoadBalancers) == 0):
-		return front{}, refusal.Refuse(refusal.CodeNotReady,
+		return publicListener{}, refusal.Refuse(refusal.CodeNotReady,
 			"no container app behind Cloudflare has deployed to the %s tier yet, so no load balancer answers its hostnames: deploy one and its hostnames attach", s.state.Tier)
 	case err != nil:
-		return front{}, fmt.Errorf("read the load balancer %s: %w", name, err)
+		return publicListener{}, fmt.Errorf("read the load balancer %s: %w", name, err)
 	}
 	balancer := balancers.LoadBalancers[0]
 	listeners, err := c.Balancers.DescribeListeners(ctx, &elbv2.DescribeListenersInput{LoadBalancerArn: balancer.LoadBalancerArn})
 	if err != nil {
-		return front{}, fmt.Errorf("read the listeners of %s: %w", name, err)
+		return publicListener{}, fmt.Errorf("read the listeners of %s: %w", name, err)
 	}
 	for _, listener := range listeners.Listeners {
 		if aws.ToInt32(listener.Port) == awsports.PublicListenerPort {
-			return front{address: aws.ToString(balancer.DNSName), listener: aws.ToString(listener.ListenerArn), mutual: listener.MutualAuthentication}, nil
+			return publicListener{address: aws.ToString(balancer.DNSName), arn: aws.ToString(listener.ListenerArn), mutual: listener.MutualAuthentication}, nil
 		}
 	}
-	return front{}, fmt.Errorf("the load balancer %s has no listener on port %d", name, awsports.PublicListenerPort)
+	return publicListener{}, fmt.Errorf("the load balancer %s has no listener on port %d", name, awsports.PublicListenerPort)
 }
 
 func (s *stack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, error) {
-	c, err := s.clients(ctx)
+	c, err := s.openClients(ctx)
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	answering, err := s.readFront(ctx, c)
+	listener, err := s.readPublicListener(ctx, c)
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	if len(claim.ClientCertificates) > 0 {
-		if err := s.trustClientCertificates(ctx, c, answering, claim.ClientCertificates); err != nil {
+	if len(claim.ClientCAs) > 0 {
+		if err := s.trustClientCAs(ctx, c, listener, claim.Hostname, claim.ClientCAs); err != nil {
 			return edge.Origin{}, err
 		}
 	}
 	if claim.Certificate != "" {
-		if _, err := c.Balancers.AddListenerCertificates(ctx, &elbv2.AddListenerCertificatesInput{
-			ListenerArn:  aws.String(answering.listener),
-			Certificates: []elbv2types.Certificate{{CertificateArn: aws.String(claim.Certificate)}},
-		}); err != nil {
-			return edge.Origin{}, fmt.Errorf("answer %s with certificate %s: %w", claim.Hostname, claim.Certificate, err)
+		if err := attachCertificate(ctx, c, listener.arn, claim.Hostname, claim.Certificate); err != nil {
+			return edge.Origin{}, err
 		}
 	}
 	pointer := router.ResolvePointer(claim.Pointer)
 	held, found := s.recorded.Hosts[claim.Hostname]
-	if !found || !s.ruleExists(ctx, c, held.Rule) {
-		rule, err := s.placeRule(ctx, c, answering.listener, claim.Hostname, s.actionFor(pointer, claim.App))
+	switch {
+	case !found || !s.hasRule(ctx, c, held.Rule):
+		rule, err := s.placeRule(ctx, c, listener.arn, claim.Hostname, s.readServedActions(pointer, claim.App))
 		if err != nil {
 			return edge.Origin{}, err
 		}
 		held.Rule = rule
+	case held.App != claim.App || held.Pointer != pointer:
+		if _, err := c.Balancers.ModifyRule(ctx, &elbv2.ModifyRuleInput{RuleArn: aws.String(held.Rule), Actions: s.readServedActions(pointer, claim.App)}); err != nil {
+			return edge.Origin{}, fmt.Errorf("forward %s to what %s serves on %s: %w", claim.Hostname, claim.App, pointer, err)
+		}
 	}
-	superseded := held.Certificate
-	held.App, held.Pointer, held.Certificate = claim.App, pointer, claim.Certificate
+	superseded := held
+	held.App, held.Pointer, held.Certificate, held.CertificateRequested = claim.App, pointer, claim.Certificate, claim.CertificateRequested
 	s.recordHost(claim.Hostname, held)
-	if superseded != "" && superseded != claim.Certificate {
-		if err := s.releaseCertificate(ctx, c, answering.listener, superseded); err != nil {
+	if superseded.Certificate != "" && superseded.Certificate != claim.Certificate {
+		if err := s.releaseCertificate(ctx, c, listener.arn, superseded); err != nil {
 			return edge.Origin{}, err
 		}
 	}
-	return edge.Origin{Address: answering.address, Certified: true}, nil
+	return edge.Origin{Address: listener.address, Certified: true}, nil
+}
+
+func attachCertificate(ctx context.Context, c Clients, listener, hostname, certificate string) error {
+	_, err := c.Balancers.AddListenerCertificates(ctx, &elbv2.AddListenerCertificatesInput{
+		ListenerArn:  aws.String(listener),
+		Certificates: []elbv2types.Certificate{{CertificateArn: aws.String(certificate)}},
+	})
+	var full *elbv2types.TooManyCertificatesException
+	if errors.As(err, &full) {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"the load balancer every container app behind Cloudflare in this tier shares holds as many certificates as its quota allows, so %s cannot be answered with %s: raise the quota %s in Service Quotas (Elastic Load Balancing), or remove a hostname or preview behind it, and deploy again",
+			hostname, certificate, certificateQuota)
+	}
+	if err != nil {
+		return fmt.Errorf("answer %s with certificate %s: %w", hostname, certificate, err)
+	}
+	return nil
 }
 
 func (s *stack) recordHost(hostname string, held hostRule) {
@@ -126,11 +150,11 @@ func (s *stack) recordHost(hostname string, held hostRule) {
 	s.recorded.Hosts[hostname] = held
 }
 
-func (s *stack) actionFor(pointer, app string) []elbv2types.Action {
+func (s *stack) readServedActions(pointer, app string) []elbv2types.Action {
 	if group := s.recorded.Served[pointer][app]; group != "" {
-		return forwardTo(group)
+		return buildForwardActions(group)
 	}
-	return unserved()
+	return buildUnservedActions()
 }
 
 func (s *stack) Disclaim(ctx context.Context, hostname string) error {
@@ -138,7 +162,7 @@ func (s *stack) Disclaim(ctx context.Context, hostname string) error {
 	if !found {
 		return nil
 	}
-	c, err := s.clients(ctx)
+	c, err := s.openClients(ctx)
 	if err != nil {
 		return err
 	}
@@ -150,10 +174,13 @@ func (s *stack) dropHost(ctx context.Context, c Clients, hostname string, held h
 		return err
 	}
 	delete(s.recorded.Hosts, hostname)
+	if err := s.untrustHostname(ctx, c, hostname); err != nil {
+		return err
+	}
 	if held.Certificate == "" {
 		return nil
 	}
-	answering, err := s.readFront(ctx, c)
+	listener, err := s.readPublicListener(ctx, c)
 	var refused refusal.Refusal
 	if errors.As(err, &refused) && refused.Code == refusal.CodeNotReady {
 		return nil
@@ -161,26 +188,29 @@ func (s *stack) dropHost(ctx context.Context, c Clients, hostname string, held h
 	if err != nil {
 		return err
 	}
-	return s.releaseCertificate(ctx, c, answering.listener, held.Certificate)
+	return s.releaseCertificate(ctx, c, listener.arn, held)
 }
 
-func (s *stack) releaseCertificate(ctx context.Context, c Clients, listener, certificate string) error {
+func (s *stack) releaseCertificate(ctx context.Context, c Clients, listener string, released hostRule) error {
+	if !released.CertificateRequested {
+		return nil
+	}
 	for _, held := range s.recorded.Hosts {
-		if held.Certificate == certificate {
+		if held.Certificate == released.Certificate {
 			return nil
 		}
 	}
 	if _, err := c.Balancers.RemoveListenerCertificates(ctx, &elbv2.RemoveListenerCertificatesInput{
 		ListenerArn:  aws.String(listener),
-		Certificates: []elbv2types.Certificate{{CertificateArn: aws.String(certificate)}},
+		Certificates: []elbv2types.Certificate{{CertificateArn: aws.String(released.Certificate)}},
 	}); err != nil {
-		return fmt.Errorf("stop answering with certificate %s: %w", certificate, err)
+		return fmt.Errorf("stop answering with certificate %s: %w", released.Certificate, err)
 	}
 	return nil
 }
 
 func (s *stack) MovePointer(ctx context.Context, move router.PointerMove, _ progress.Log) error {
-	c, err := s.clients(ctx)
+	c, err := s.openClients(ctx)
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
@@ -194,19 +224,24 @@ func (s *stack) MovePointer(ctx context.Context, move router.PointerMove, _ prog
 	pointer := router.ResolvePointer(move.Pointer)
 	for _, app := range slices.Sorted(maps.Keys(groups)) {
 		for _, hostname := range s.listHosts(pointer, app) {
-			if err := s.flipRule(ctx, c, s.recorded.Hosts[hostname].Rule, groups[app], move.RefuseInactive); err != nil {
+			if err := s.forwardRuleTo(ctx, c, s.recorded.Hosts[hostname].Rule, groups[app], move.RefuseInactive); err != nil {
 				return err
 			}
 		}
 	}
-	if s.recorded.Served == nil {
-		s.recorded.Served = map[string]map[string]string{}
-	}
-	if s.recorded.Served[pointer] == nil {
-		s.recorded.Served[pointer] = map[string]string{}
-	}
-	maps.Copy(s.recorded.Served[pointer], groups)
+	s.recorded.Served = s.recorded.Served.withPointer(pointer, groups)
 	return nil
+}
+
+func (g servedGroups) withPointer(pointer string, groups map[string]string) servedGroups {
+	if g == nil {
+		g = servedGroups{}
+	}
+	if g[pointer] == nil {
+		g[pointer] = map[string]string{}
+	}
+	maps.Copy(g[pointer], groups)
+	return g
 }
 
 func (s *stack) listHosts(pointer, app string) []string {
@@ -227,7 +262,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Lo
 	if len(hosts) == 0 {
 		return nil
 	}
-	c, err := s.clients(ctx)
+	c, err := s.openClients(ctx)
 	if err != nil {
 		return err
 	}

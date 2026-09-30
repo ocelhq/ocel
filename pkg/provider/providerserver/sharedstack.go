@@ -20,17 +20,12 @@ import (
 )
 
 func findEdgeRouter(p provider.Provider, front edge.Kind) (router.Kind, error) {
-	kinds := p.Facts().ListPairedRouters(front)
-	if len(kinds) == 0 {
+	kind, found := p.Facts().FindEdgeRouter(front)
+	if !found {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this provider serves no project through %s", describeFront(front))
 	}
-	return kinds[0], nil
-}
-
-func readEdgeRouter(p provider.Provider, front edge.Kind) router.Kind {
-	kind, _ := findEdgeRouter(p, front)
-	return kind
+	return kind, nil
 }
 
 func openEdgeRouter(p provider.Provider, front edge.Kind) (router.Router, error) {
@@ -48,36 +43,86 @@ func routerOriginBehind(front edge.Edge, paired router.Router) *router.OriginHoo
 	return paired.Hooks().Origin
 }
 
+type pairedRouter struct {
+	router.Router
+	read   func() router.StackState
+	adopt  func(router.StackState) error
+	record func() router.StackState
+}
+
 func openSharedStack(p provider.Provider, front edge.Edge, tier environment.Tier, slug string) (*sharedStack, error) {
-	opened := map[router.Kind]router.Router{}
-	for _, kind := range p.Facts().ListPairedRouters(front.Kind()) {
-		paired, err := p.Routers().Open(kind)
-		if err != nil {
-			return nil, err
-		}
-		opened[kind] = paired
-	}
-	edgeRouter, err := openEdgeRouter(p, front.Kind())
+	edgeKind, err := findEdgeRouter(p, front.Kind())
 	if err != nil {
 		return nil, err
 	}
-	return &sharedStack{
-		front:   front,
-		router:  edgeRouter,
-		routers: opened,
-		states:  map[router.Kind]router.StackState{},
-		ledger:  openProjectLedger(p, tier, slug),
-	}, nil
+	s := &sharedStack{
+		front:    front,
+		edgeKind: edgeKind,
+		routers:  map[router.Kind]pairedRouter{},
+		states:   map[router.Kind]router.StackState{},
+		ledger:   openProjectLedger(p, tier, slug),
+	}
+	for _, kind := range p.Facts().ListPairedRouters(front.Kind()) {
+		opened, err := p.Routers().Open(kind)
+		if err != nil {
+			return nil, err
+		}
+		if p.Facts().IsForwarded(front.Kind(), kind) {
+			s.routers[kind] = s.pairForwarded(kind, opened)
+			continue
+		}
+		s.routers[kind] = s.pairOwn(opened)
+	}
+	return s, nil
+}
+
+func (s *sharedStack) pairOwn(opened router.Router) pairedRouter {
+	return pairedRouter{
+		Router: opened,
+		read:   func() router.StackState { return router.NewStackState(s.edgeStack().State()) },
+		adopt: func(state router.StackState) error {
+			reopened, err := s.front.Open(state.Edge)
+			if err != nil {
+				return err
+			}
+			s.setEdgeStack(reopened)
+			return nil
+		},
+		record: func() router.StackState {
+			shared := s.edgeStack().State()
+			return router.StackState{Slug: shared.Slug, Tier: shared.Tier}
+		},
+	}
+}
+
+func (s *sharedStack) pairForwarded(kind router.Kind, opened router.Router) pairedRouter {
+	own := func() router.StackState {
+		shared := s.edgeStack().State()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.states[kind].WithSpec(router.StackSpec{Tier: shared.Tier, Slug: shared.Slug})
+	}
+	return pairedRouter{
+		Router: opened,
+		read:   own,
+		adopt: func(state router.StackState) error {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			s.states[kind] = state
+			return nil
+		},
+		record: own,
+	}
 }
 
 type sharedStack struct {
-	front   edge.Edge
-	router  router.Router
-	routers map[router.Kind]router.Router
-	ledger  projectLedger
-	mu      sync.Mutex
-	current edge.EdgeStack
-	states  map[router.Kind]router.StackState
+	front    edge.Edge
+	edgeKind router.Kind
+	routers  map[router.Kind]pairedRouter
+	ledger   projectLedger
+	mu       sync.Mutex
+	current  edge.EdgeStack
+	states   map[router.Kind]router.StackState
 }
 
 func (s *sharedStack) edgeStack() edge.EdgeStack {
@@ -92,48 +137,36 @@ func (s *sharedStack) setEdgeStack(stack edge.EdgeStack) {
 	s.current = stack
 }
 
-func (s *sharedStack) routerOf(kind router.Kind) router.Router {
-	if paired, found := s.routers[kind]; found {
-		return paired
+func (s *sharedStack) edgeRouter() router.Router { return s.routers[s.edgeKind] }
+
+func (s *sharedStack) findRouter(kind router.Kind) (pairedRouter, error) {
+	paired, found := s.routers[kind]
+	if !found {
+		return pairedRouter{}, fmt.Errorf("no router of kind %q pairs with %s", kind, describeFront(s.front.Kind()))
 	}
-	return s.router
+	return paired, nil
 }
 
-func (s *sharedStack) routerOrigin(kind router.Kind) *router.OriginHooks {
-	return routerOriginBehind(s.front, s.routerOf(kind))
-}
-
-func (s *sharedStack) keepsEdgeState(kind router.Kind) bool {
-	return s.routerOf(kind).Kind() == s.router.Kind()
+func (s *sharedStack) findRouterOrigin(kind router.Kind) (*router.OriginHooks, error) {
+	paired, err := s.findRouter(kind)
+	if err != nil {
+		return nil, err
+	}
+	return routerOriginBehind(s.front, paired), nil
 }
 
 func (s *sharedStack) restoreRouterStates(recorded stackrecords.EdgeState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for kind, state := range recorded.Routers {
-		if kind != s.router.Kind() {
-			s.states[kind] = state
-		}
-	}
-}
-
-func (s *sharedStack) recordRouterStates(into *stackrecords.EdgeState) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for kind, state := range s.states {
-		if into.Routers == nil {
-			into.Routers = map[router.Kind]router.StackState{}
-		}
-		into.Routers[kind] = state
-	}
+	maps.Copy(s.states, recorded.Routers)
 }
 
 func (s *sharedStack) listRouterKinds() []router.Kind {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	kinds := []router.Kind{s.router.Kind()}
+	kinds := []router.Kind{s.edgeKind}
 	for _, kind := range slices.Sorted(maps.Keys(s.states)) {
-		if !slices.Contains(kinds, kind) {
+		if _, paired := s.routers[kind]; paired && !slices.Contains(kinds, kind) {
 			kinds = append(kinds, kind)
 		}
 	}
@@ -141,45 +174,42 @@ func (s *sharedStack) listRouterKinds() []router.Kind {
 }
 
 func (s *sharedStack) openRouterStack(kind router.Kind) (router.Stack, error) {
-	shared := s.edgeStack().State()
-	if s.keepsEdgeState(kind) {
-		return s.router.Open(router.NewStackState(shared))
+	paired, err := s.findRouter(kind)
+	if err != nil {
+		return nil, err
 	}
-	s.mu.Lock()
-	own := s.states[kind]
-	s.mu.Unlock()
-	return s.routerOf(kind).Open(own.WithSpec(router.StackSpec{Tier: shared.Tier, Slug: shared.Slug}))
+	return paired.Open(paired.read())
 }
 
 func (s *sharedStack) adopt(kind router.Kind, routed router.Stack) error {
-	if !s.keepsEdgeState(kind) {
-		s.mu.Lock()
-		s.states[kind] = routed.State()
-		s.mu.Unlock()
-		return nil
-	}
-	reopened, err := s.front.Open(routed.State().Edge)
+	paired, err := s.findRouter(kind)
 	if err != nil {
 		return err
 	}
-	s.setEdgeStack(reopened)
-	return nil
+	return paired.adopt(routed.State())
 }
 
-func (s *sharedStack) propagation(kinds []router.Kind) router.Propagation {
-	slowest := s.router.Facts().Propagation
+func (s *sharedStack) readSlowestPropagation(kinds []router.Kind) (router.Propagation, error) {
+	slowest := s.edgeRouter().Facts().Propagation
 	for _, kind := range kinds {
-		if propagation := s.routerOf(kind).Facts().Propagation; propagation.Typical > slowest.Typical {
+		paired, err := s.findRouter(kind)
+		if err != nil {
+			return router.Propagation{}, err
+		}
+		if propagation := paired.Facts().Propagation; propagation.Typical > slowest.Typical {
 			slowest = propagation
 		}
 	}
-	return slowest
+	return slowest, nil
 }
 
-func (s *sharedStack) promoteApps(ctx context.Context, req promoteRequest, routedBy func(app string) router.Kind, progress progress.Log) ([]ledger.RecordedPromotion, error) {
+func (s *sharedStack) promoteApps(ctx context.Context, req promoteRequest, routedBy func(app string) (router.Kind, error), progress progress.Log) ([]ledger.RecordedPromotion, error) {
 	byRouter := map[router.Kind][]string{}
 	for _, app := range slices.Sorted(maps.Keys(req.promotion.Builds)) {
-		kind := s.routerOf(routedBy(app)).Kind()
+		kind, err := routedBy(app)
+		if err != nil {
+			return nil, err
+		}
 		byRouter[kind] = append(byRouter[kind], app)
 	}
 	routers := make([]appRouter, 0, len(byRouter))
@@ -241,14 +271,4 @@ func (s *sharedStack) destroy(ctx context.Context) error {
 		return err
 	}
 	return s.ledger.Destroy(ctx)
-}
-
-func (s *sharedStack) routerState(kind router.Kind) router.StackState {
-	if !s.keepsEdgeState(kind) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		return s.states[kind]
-	}
-	state := s.edgeStack().State()
-	return router.StackState{Slug: state.Slug, Tier: state.Tier}
 }

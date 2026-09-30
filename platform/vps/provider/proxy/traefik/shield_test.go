@@ -135,7 +135,7 @@ func TestAShieldedHostnameRequiresTheZonesClientCertificatesAndServesItsOriginCe
 	front := coolifyTraefik()
 	spec := proxy.Spec{
 		Hostnames: []string{"blog.example.com", "shop.example.com"},
-		Shields:   []proxy.Shield{{Hostname: "Shop.Example.com", ClientCertificates: []string{client, successor}, OriginCertificate: origin}},
+		Shields:   []proxy.Shield{{Hostname: "Shop.Example.com", ClientCAs: []string{client, successor}, OriginCertificate: origin}},
 	}
 	read := rendered(t, front, spec)
 
@@ -172,7 +172,7 @@ func TestAShieldedHostnameIsRedirectedFromHTTPAndForwardedNowhere(t *testing.T) 
 
 	spec := proxy.Spec{
 		Hostnames: []string{"shop.example.com"},
-		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{clientCertificate(t)}, OriginCertificate: origin}},
+		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{clientCertificate(t)}, OriginCertificate: origin}},
 	}
 	plain := routerFor(t, rendered(t, coolifyTraefik(), spec), "shop.example.com", "http")
 	if plain.Service != "noop@internal" || len(plain.Middlewares) != 1 {
@@ -185,7 +185,7 @@ func TestAShieldedHostnameWithNoOriginCertificateRequiresTheClientCertificateOnT
 
 	spec := proxy.Spec{
 		Hostnames: []string{"shop.example.com"},
-		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{clientCertificate(t)}}},
+		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{clientCertificate(t)}}},
 	}
 	read := rendered(t, coolifyTraefik(), spec)
 	shielded := routerFor(t, read, "shop.example.com", "https")
@@ -203,7 +203,7 @@ func TestAPreviewHostnameIsShieldedByTheWildcardShieldOverItsPreviewBase(t *test
 	spec := proxy.Spec{
 		Hostnames:   []string{"pr-1--web.preview.example.com", "shop.example.com"},
 		PreviewBase: "preview.example.com",
-		Shields:     []proxy.Shield{{Hostname: "*.preview.example.com", ClientCertificates: []string{clientCertificate(t)}, OriginCertificate: origin}},
+		Shields:     []proxy.Shield{{Hostname: "*.preview.example.com", ClientCAs: []string{clientCertificate(t)}, OriginCertificate: origin}},
 	}
 	read := rendered(t, coolifyTraefik(), spec)
 	if previewed := routerFor(t, read, "pr-1--web.preview.example.com", "https"); previewed.TLS == nil || previewed.TLS.Options == "" {
@@ -220,7 +220,7 @@ func TestWithoutAContainerDirectoryTheOriginCertificateIsNamedWhereItIsPlaced(t 
 	front := traefik.Traefik{Directory: "/etc/traefik/dynamic", Resolver: "letsencrypt", HTTP: "web", HTTPS: "websecure", Port: 8480}
 	spec := proxy.Spec{
 		Hostnames: []string{"shop.example.com"},
-		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{clientCertificate(t)}, OriginCertificate: origin}},
+		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{clientCertificate(t)}, OriginCertificate: origin}},
 	}
 	read := rendered(t, front, spec)
 	if bundle := originFile(t, front, spec); len(read.TLS.Certificates) != 1 || read.TLS.Certificates[0].CertFile != bundle.Path {
@@ -245,7 +245,7 @@ func TestAClientCertificateThatIsNoCertificateIsRefusedRatherThanRendered(t *tes
 
 	spec := proxy.Spec{
 		Hostnames: []string{"shop.example.com"},
-		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{"not a certificate"}}},
+		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{"not a certificate"}}},
 	}
 	if _, err := coolifyTraefik().Render(spec); err == nil {
 		t.Error("Render() = nil, want the client certificate refused: your Traefik would trust nothing it names and refuse every request")
@@ -266,7 +266,7 @@ func TestInspectPassesAShieldedHostnameYourTraefikRefusesToAClientWithNoCertific
 	front := coolifyTraefik()
 	spec := proxy.Spec{
 		Hostnames: []string{"shop.example.com", "blog.example.com"},
-		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{clientCertificate(t)}, OriginCertificate: origin}},
+		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{clientCertificate(t)}, OriginCertificate: origin}},
 	}
 	for _, tc := range []struct {
 		name    string
@@ -305,7 +305,7 @@ func TestReloadTakesAShieldedHostnameAsRoutedOnceYourTraefikRefusesItToAClientWi
 	front := coolifyTraefik()
 	spec := proxy.Spec{
 		Hostnames: []string{"shop.example.com"},
-		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{clientCertificate(t)}, OriginCertificate: origin}},
+		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{clientCertificate(t)}, OriginCertificate: origin}},
 	}
 	b := &box{spec: spec,
 		routes:   map[string][]string{"shop.example.com": {string(switchboard.RouterKind), string(switchboard.RouterKind), ""}},
@@ -325,7 +325,7 @@ func TestAShieldedHostnameAnswersWithTheOriginCertificateOcelRenews(t *testing.T
 	front := coolifyTraefik()
 	front.Box = &box{spec: proxy.Spec{
 		Hostnames: []string{"shop.example.com"},
-		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCertificates: []string{clientCertificate(t)}, OriginCertificate: origin}},
+		Shields:   []proxy.Shield{{Hostname: "shop.example.com", ClientCAs: []string{clientCertificate(t)}, OriginCertificate: origin}},
 	}}
 	current, err := front.Certificate(context.Background(), "shop.example.com")
 	if err != nil {

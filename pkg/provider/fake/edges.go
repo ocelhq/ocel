@@ -223,7 +223,7 @@ func (e *Edge) ProxiesRecords() {
 	e.proxies = true
 }
 
-func ClientCertificate(kind edge.Kind) string {
+func ClientCA(kind edge.Kind) string {
 	return "client certificate the " + string(kind) + " edge presents"
 }
 
@@ -283,7 +283,7 @@ func (e *Edge) revokeOriginCertificate(_ context.Context, id string) error {
 	return nil
 }
 
-func (e *Edge) HoldsClientCertificates(certificates ...string) {
+func (e *Edge) HoldsClientCAs(certificates ...string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.presenting = certificates
@@ -300,7 +300,7 @@ func (e *Edge) ensureClientCertificates(context.Context, string) ([]string, erro
 	defer e.mu.Unlock()
 	e.events = append(e.events, "ensure")
 	if e.presenting == nil {
-		return []string{ClientCertificate(e.kind)}, nil
+		return []string{ClientCA(e.kind)}, nil
 	}
 	return slices.Clone(e.presenting), nil
 }

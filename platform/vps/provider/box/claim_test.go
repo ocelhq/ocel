@@ -37,7 +37,7 @@ func routedOn(t *testing.T) (*machine, router.Stack) {
 func TestAClaimOnTheBoxShieldsTheHostnameBeforeItTakesItAndNamesTheBoxAsItsOrigin(t *testing.T) {
 	m, routed := routedOn(t)
 
-	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCertificates: []string{pulled}})
+	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCAs: []string{pulled}})
 	if err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestAClaimOnTheBoxShieldsTheHostnameBeforeItTakesItAndNamesTheBoxAsItsOrigi
 		t.Errorf("Claim named origin %+v, want the box at %s: the edge in front forwards the hostname there", origin, address)
 	}
 	surface := box.Surface(slug, environment.TierProduction)
-	want := host.Shield{Hostname: "shop.example.com", Owner: surface, ClientCertificates: []string{pulled}}
+	want := host.Shield{Hostname: "shop.example.com", Owner: surface, ClientCAs: []string{pulled}}
 	if len(m.shields) != 1 || !reflect.DeepEqual(m.shields[0], want) {
 		t.Errorf("the box shields %+v, want %+v: the proxy answers the hostname only to a client presenting that certificate", m.shields, want)
 	}
@@ -62,7 +62,7 @@ func TestAClaimOnTheBoxShieldsTheHostnameBeforeItTakesItAndNamesTheBoxAsItsOrigi
 
 func TestDisclaimingOnTheBoxGivesTheHostnameAndItsShieldBack(t *testing.T) {
 	m, routed := routedOn(t)
-	if _, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCertificates: []string{pulled}}); err != nil {
+	if _, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCAs: []string{pulled}}); err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
 
@@ -146,7 +146,7 @@ func originCertificate(t *testing.T, hostname string, life time.Duration) edge.O
 func TestTheBoxSaysItHoldsNoCertificateForAShieldedHostnameUntilTheEdgeIssuesOne(t *testing.T) {
 	m, routed := routedOn(t)
 	ctx := context.Background()
-	claim := router.Claim{Hostname: "shop.example.com", App: "web", ClientCertificates: []string{pulled}}
+	claim := router.Claim{Hostname: "shop.example.com", App: "web", ClientCAs: []string{pulled}}
 
 	origin, err := routed.Claim(ctx, claim)
 	if err != nil {
@@ -173,7 +173,7 @@ func TestTheBoxSaysItHoldsNoCertificateForAShieldedHostnameUntilTheEdgeIssuesOne
 func TestTheBoxSaysACertificateDueForRenewalCertifiesNothing(t *testing.T) {
 	_, routed := routedOn(t)
 	claim := router.Claim{
-		Hostname: "shop.example.com", App: "web", ClientCertificates: []string{pulled},
+		Hostname: "shop.example.com", App: "web", ClientCAs: []string{pulled},
 		OriginCertificate: originCertificate(t, "shop.example.com", 24*time.Hour),
 	}
 
@@ -190,7 +190,7 @@ func TestTheBoxRefusesAShieldedClaimItsProxyAnswersToAClientWithNoCertificate(t 
 	m, routed := routedOn(t)
 	m.refuseOn("RefuseUnshielded", refusal.Refuse(refusal.CodeNotReady, "your proxy answers shop.example.com to a client that presents no certificate"))
 
-	_, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCertificates: []string{pulled}})
+	_, err := routed.Claim(context.Background(), router.Claim{Hostname: "shop.example.com", App: "web", ClientCAs: []string{pulled}})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Claim = %v, want refused not ready: the edge would forward a hostname the box answers to anyone", err)
@@ -206,7 +206,7 @@ func TestThePreviewEntryAnEdgeForwardsIsInstalledOnTheBoxShieldedByTheClientCert
 	ctx := context.Background()
 
 	origin, err := previews.Hooks().Origin.ClaimPreviewEntry(ctx, router.Claim{
-		Hostname: "*.preview.example.com", ClientCertificates: []string{pulled},
+		Hostname: "*.preview.example.com", ClientCAs: []string{pulled},
 		OriginCertificate: originCertificate(t, "*.preview.example.com", 365*24*time.Hour),
 	})
 	if err != nil {
@@ -233,7 +233,7 @@ func TestThePreviewEntryAnEdgeForwardsIsInstalledOnTheBoxShieldedByTheClientCert
 func TestAProjectsOwnPreviewWildcardAnEdgeForwardsIsShieldedOnTheBoxAndClaimsNoHostname(t *testing.T) {
 	m, routed := routedOn(t)
 
-	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "*.preview.example.com", ClientCertificates: []string{pulled}})
+	origin, err := routed.Claim(context.Background(), router.Claim{Hostname: "*.preview.example.com", ClientCAs: []string{pulled}})
 	if err != nil {
 		t.Fatalf("Claim(*.preview.example.com): %v", err)
 	}
