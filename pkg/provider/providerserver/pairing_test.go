@@ -266,6 +266,36 @@ func TestAContainerAppsHostnameIsClaimedOnItsOwnRouterAndForwardedByTheEdgeToIts
 	}
 }
 
+func TestADeployThatMovesAContainerAppsHostnameToAnotherContainerAppClaimsItForThatApp(t *testing.T) {
+	client, p := mixedServed(t)
+
+	first, _ := deploy(t, client, mixedRequest())
+	if first == nil || !first.GetSuccess() {
+		t.Fatalf("Deploy() = %q", first.GetError())
+	}
+
+	moved := mixedRequest()
+	admin := moved.Manifest.Apps[len(moved.Manifest.Apps)-1]
+	moved.Manifest.Apps = append(moved.Manifest.Apps, &contractv1.ManifestApp{
+		Name:         "ops",
+		Framework:    admin.Framework,
+		DeploymentId: "0123456789abcdef0123456789abcdef",
+		Artifact:     admin.Artifact,
+		Domains:      admin.Domains,
+	})
+	admin.Domains = nil
+	second, _ := deploy(t, client, moved)
+	if second == nil || !second.GetSuccess() {
+		t.Fatalf("the second Deploy() = %q", second.GetError())
+	}
+
+	direct := p.Edges().(*fake.Edges).Edge(fake.KindDirect)
+	last := lastClaimOf(direct.Claims(), adminHost)
+	if last.App != "ops" {
+		t.Errorf("the %s router last took %+v for %s, want it claimed for ops: the router forwards a hostname to the app its claim names, so it serves admin until it is told otherwise", fake.RouterDirect, last, adminHost)
+	}
+}
+
 func TestAContainerAppsNeedsAreCheckedAgainstTheRouterItPromotesThrough(t *testing.T) {
 	client, p := mixedServed(t)
 	p.Edges().(*fake.Edges).Edge(fake.KindDirect).RouterServes([]edge.Need{edge.NeedStreaming})

@@ -182,7 +182,7 @@ func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostS
 	if err != nil {
 		return errors.Join(err, d.settleUnboundClaim(ctx, target, claimed, hostState, progress))
 	}
-	hostState.Edge = d.front.Kind()
+	hostState.Edge, hostState.App = d.front.Kind(), target.App
 	if hostState.Router, err = d.readTargetRouter(target); err != nil {
 		return err
 	}
@@ -233,8 +233,14 @@ func (d *hostnames) refreshOriginClaim(ctx context.Context, target ConfiguredHos
 		return false, err
 	}
 	why, err := readOriginClaimStaleness(ctx, d.front, target.Hostname, d.tunnel, hostState, time.Now())
-	if err != nil || why == "" {
+	if err != nil {
 		return false, err
+	}
+	if hostState.App != target.App {
+		why = fmt.Sprintf("it moved from app %s to app %s", hostState.App, target.App)
+	}
+	if why == "" {
+		return false, nil
 	}
 	progress.Say(fmt.Sprintf("Claiming %s again: %s", target.Hostname, why))
 	return true, d.bindOrigin(ctx, target, hostState, progress)

@@ -166,6 +166,31 @@ func TestAServedHostnameIsClaimedAgainWhenTheCertificatesItsEdgePresentsChange(t
 	}
 }
 
+func TestAServedHostnameMovedToAnotherAppOnTheSameRouterIsClaimedAgainForThatApp(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	deployed(t, vendor, environment.TierProduction, "shop")
+	addWebHostname(t, client, "app.acme.com", nil)
+
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []*contractv1.ConfiguredHostname{{Hostname: "app.acme.com", App: "api"}},
+	})
+	if err != nil {
+		t.Fatalf("AddHostname() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %q, %v", result.GetError(), err)
+	}
+
+	claims := relay.Claims()
+	if len(claims) != 2 || claims[1].Hostname != "app.acme.com" || claims[1].App != "api" {
+		t.Fatalf("the router took claims %+v, want app.acme.com claimed again for api: the router forwards a hostname to the app its claim names, so it serves web until it is told otherwise", claims)
+	}
+}
+
 func TestAnOriginThatHoldsNoCertificateForAForwardedHostnameIsIssuedOneByTheEdge(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
