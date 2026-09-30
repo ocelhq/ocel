@@ -20,7 +20,7 @@ func NewRouter(e *Edge) Router { return Router{e: e} }
 func (r Router) Kind() router.Kind { return RouterKind }
 
 func (r Router) Facts() router.Facts {
-	return router.Facts{AddressesItself: true, ReachesFunctions: true, ReachesContainers: true}
+	return router.Facts{Supported: edge.AllNeeds(), AddressesItself: true, ReachesFunctions: true, ReachesContainers: true}
 }
 
 func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {

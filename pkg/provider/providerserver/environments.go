@@ -89,6 +89,9 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err != nil {
 			return err
 		}
+		if err := session.releasePointerHostnames(ctx, pointer, progress); err != nil {
+			return err
+		}
 		if err := session.checkpoint(ctx); err != nil {
 			return err
 		}

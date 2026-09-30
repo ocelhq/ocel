@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	connect "connectrpc.com/connect"
@@ -54,14 +56,14 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		return nil, provider.RefusalError(err)
 	}
 
-	propagation := session.router.Facts().Propagation
+	propagation := session.propagation(slices.Collect(maps.Values(session.state.Apps)))
 	promoted := router.Promotion{
 		PromotionID: promotionID,
 		Ts:          time.Now().Unix(),
 		Builds:      target.Builds,
 		Propagation: &propagation,
 	}
-	dropped, err := session.promote(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, progress.Discard())
+	dropped, err := session.promoteApps(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, session.readAppRouter, progress.Discard())
 	if err != nil {
 		return nil, provider.RefusalError(errors.Join(err, session.reclaimDropped(ctx, "", dropped, progress.Discard())))
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -34,6 +35,7 @@ func discardCertificateAndRecords(ctx context.Context, p provider.Provider, cuto
 type hostCertificates struct {
 	provider  provider.Provider
 	cutover   dnsCutover
+	router    router.Kind
 	hostState *stackrecords.HostnameState
 	persist   func(context.Context) error
 	uses      func(string) bool
@@ -43,6 +45,7 @@ type hostCertificates struct {
 func (c hostCertificates) certify(ctx context.Context, hostname string, progress progress.Log) error {
 	cert, err := c.provider.Certificates().Issue(ctx, provider.CertificateRequest{
 		Kind:     c.cutover.kind,
+		Router:   c.router,
 		Hostname: hostname,
 		Current:  c.hostState.Certificate,
 		Progress: progress,

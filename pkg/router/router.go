@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -19,6 +20,8 @@ func ResolvePointer(pointer string) string {
 
 func IsDefaultPointer(pointer string) bool { return ResolvePointer(pointer) == DefaultPointer }
 
+func Supports(r Router, need edge.Need) bool { return slices.Contains(r.Facts().Supported, need) }
+
 type Kind string
 
 type Propagation struct {
@@ -28,6 +31,7 @@ type Propagation struct {
 
 type Facts struct {
 	Propagation                 Propagation
+	Supported                   []edge.Need
 	CachesRecords               bool
 	RoutesPreviewsByLabel       bool
 	AddressesItself             bool
@@ -65,6 +69,7 @@ type OriginHooks struct {
 type Claim struct {
 	Hostname           string
 	App                string
+	Pointer            string
 	Certificate        string
 	ClientCertificates []string
 	OriginCertificate  edge.OriginCertificate

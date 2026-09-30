@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const configFileName = "ocel.json"
@@ -101,6 +102,7 @@ type AppNeedVerdicts map[string]AppNeedVerdict
 
 type EdgeNeedCheck struct {
 	Edge          edge.Edge
+	Router        func(app string) router.Router
 	Root          string
 	AllowDegraded []string
 	Degraded      func(app string, need edge.Need, detail string)
@@ -147,7 +149,7 @@ func (c EdgeNeedCheck) forApp(
 		}
 		detail := desc.Needs[need]
 		waived := slices.Contains(c.AllowDegraded, string(need))
-		serves := edge.Supports(c.Edge, need)
+		serves := edge.Supports(c.Edge, need) && c.routes(name, need)
 
 		if serves && entitles && slices.Contains(edge.CodeNeeds(), need) {
 			granted, err := entitlement()
@@ -177,6 +179,13 @@ func (c EdgeNeedCheck) forApp(
 		}
 	}
 	return record, nil
+}
+
+func (c EdgeNeedCheck) routes(app string, need edge.Need) bool {
+	if c.Router == nil {
+		return true
+	}
+	return router.Supports(c.Router(app), need)
 }
 
 func declaredNeeds(desc edge.ServeDescriptor) []edge.Need {

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/router"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -106,7 +108,7 @@ func waiting(err error) error {
 	return provider.Resumable(refusal.Refuse(refusal.CodeNotReady, "%s", err))
 }
 
-func (p certificates) Inspect(ctx context.Context, kind edge.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {
+func (p certificates) Inspect(ctx context.Context, kind edge.Kind, answering router.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {
 	registry := p.edges()
 	front, err := registry.Open(kind)
 	if err != nil {

@@ -21,6 +21,7 @@ func (r Router) Kind() router.Kind { return router.Kind(Kind) }
 
 func (r Router) Facts() router.Facts {
 	return router.Facts{
+		Supported:                   edge.AllNeeds(),
 		Propagation:                 router.Propagation{Typical: propagationBound},
 		ReachesFunctions:            true,
 		ReachesContainers:           true,

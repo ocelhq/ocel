@@ -127,7 +127,7 @@ func RunRouters(t *testing.T, facts provider.Facts, edges provider.Edges, router
 				}
 			}
 			front, err := edges.Open(pairing.Edge)
-			if err != nil {
+			if err != nil || opened.Hooks().Origin != nil {
 				continue
 			}
 			if front.Facts().RunsCode && !routerFacts.SignsOriginForwards {

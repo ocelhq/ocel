@@ -20,7 +20,7 @@ func NewRouter(e *Edge) Router { return Router{e: e} }
 func (r Router) Kind() router.Kind { return switchboard.RouterKind }
 
 func (r Router) Facts() router.Facts {
-	return router.Facts{ReachesContainers: true, AnswersHostnames: true, StopsServingRemovedPointers: true}
+	return router.Facts{Supported: edge.AllNeeds(), ReachesContainers: true, AnswersHostnames: true, StopsServingRemovedPointers: true}
 }
 
 func (r Router) Hooks() router.Hooks {

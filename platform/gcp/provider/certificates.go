@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/router"
+
 	certmanager "google.golang.org/api/certificatemanager/v1"
 	"google.golang.org/api/googleapi"
 
@@ -211,6 +213,7 @@ func provisioningIssue(cert *certmanager.Certificate) string {
 func (p certificates) Inspect(
 	ctx context.Context,
 	_ edge.Kind,
+	_ router.Kind,
 	hostname string,
 	cert provider.Certificate,
 ) (provider.CertificateHealth, error) {
