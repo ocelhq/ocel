@@ -714,13 +714,19 @@ func TestEveryManagedByConditionAdmitsTheTagOcelWrites(t *testing.T) {
 
 func TestEveryCredentialImportsAndReclaimsOnlyTheCertificatesItTagged(t *testing.T) {
 	want := map[grant]bool{
-		{action: "acm:ImportCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedOnCreate())}:       true,
-		{action: "acm:AddTagsToCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedOnCreate())}:    true,
+		{action: "acm:ImportCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedOnCreate())}: true,
+		{action: "acm:AddTagsToCertificate", resource: appCertificateARN, condition: conditionJSON(t, map[string]any{
+			"StringEquals":         map[string]any{"aws:RequestTag/ocel:managed-by": "ocel"},
+			"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"},
+		})}: true,
 		{action: "acm:DescribeCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:       true,
 		{action: "acm:ListTagsForCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:    true,
 		{action: "acm:AddTagsToCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:      true,
 		{action: "acm:RemoveTagsFromCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}: true,
-		{action: "acm:DeleteCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:         true,
+		{action: "acm:DeleteCertificate", resource: appCertificateARN, condition: conditionJSON(t, map[string]any{
+			"StringEquals":         map[string]any{"aws:ResourceTag/ocel:managed-by": "ocel"},
+			"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"},
+		})}: true,
 	}
 	for purpose, document := range bothCredentials(t) {
 		granted := map[grant]bool{}
