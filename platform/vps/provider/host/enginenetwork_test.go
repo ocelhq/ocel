@@ -24,6 +24,8 @@ func freePort(t *testing.T) int {
 	return listener.Addr().(*net.TCPAddr).Port
 }
 
+const networkFlag = "'--network' "
+
 type yourNetwork struct {
 	binary []byte
 	yours  string
@@ -71,6 +73,8 @@ func onYourNetwork(t *testing.T) yourNetwork {
 		ConnectorRun, filepath.Join(dir, "connector"),
 		live.RoutingDir, routing,
 		routingLock, dir,
+		networkFlag+quoted(ProxyNetwork), networkFlag+quoted("name="+boxNetwork+",alias="+switchboard.Name),
+		networkFlag+quoted(yours), networkFlag+quoted("name="+yours+",alias="+switchboard.Name),
 		quoted(ProxyNetwork), quoted(boxNetwork),
 		quoted(SwitchboardContainer), quoted(board),
 		`"`+ProxyNetwork+`"`, `"`+boxNetwork+`"`,
