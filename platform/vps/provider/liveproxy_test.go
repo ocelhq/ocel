@@ -311,11 +311,13 @@ func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
 		t.Fatalf("the running proxy already reports %s before it was restarted, so the restart is not what this test measures", written)
 	}
 	vm.ssh(t, "sudo docker restart "+caddy.Container)
-	for at := 0; at < 20 && !vm.running(t, caddy.Container); at++ {
+	served := vm.frontGrace(t)
+	for at := 0; at < 40 && served != moved; at++ {
 		time.Sleep(500 * time.Millisecond)
+		served = vm.frontGrace(t)
 	}
 
-	if served := vm.frontGrace(t); served != moved {
+	if served != moved {
 		t.Errorf("the file on the box declares %q and the running proxy serves %s: caddy's --resume uses the last autosaved configuration, overriding --config, so a box recreated after a changed config would keep serving the old one while every digest ocel records says it does not",
 			moved, served)
 	}
