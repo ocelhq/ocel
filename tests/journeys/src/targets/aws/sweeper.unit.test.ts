@@ -10,6 +10,7 @@ import {
   cellsBySlugPart,
   despite,
   destroyOnCurrentBootstrap,
+  forEachAtMost,
   sweepPlan,
   sweepPoliciesThenNamespaces,
   sweepStacks,
@@ -53,6 +54,36 @@ describe("despite", () => {
     expect(complaints).toEqual([
       "j-1799-half-deleted sweep: Error: the bootstrap stack is stuck in DELETE_FAILED",
     ]);
+  });
+});
+
+describe("forEachAtMost", () => {
+  it("works every item once and never more than the limit at a time", async () => {
+    const items = ["a", "b", "c", "d", "e", "f", "g"];
+    const done: string[] = [];
+    let running = 0;
+    let most = 0;
+
+    await forEachAtMost(3, items, async (item) => {
+      running += 1;
+      most = Math.max(most, running);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      running -= 1;
+      done.push(item);
+    });
+
+    expect([...done].sort()).toEqual(items);
+    expect(most).toBe(3);
+  });
+
+  it("does nothing for no items", async () => {
+    let calls = 0;
+
+    await forEachAtMost(4, [], async () => {
+      calls += 1;
+    });
+
+    expect(calls).toBe(0);
   });
 });
 
