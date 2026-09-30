@@ -33,8 +33,10 @@ func TestAProductionHostnameBoundWithAnOriginIsForwardedThroughAProxiedRecordAnd
 	if written["type"] != "CNAME" || written["content"] != albAddress || written["proxied"] != true {
 		t.Errorf("wrote %v, want a proxied CNAME to %s", written, albAddress)
 	}
-	if len(m.createdRoutes) != 0 {
-		t.Errorf("created routes = %v, want none: Cloudflare forwards the hostname to its origin, and a worker route would run the entry worker in front of it", m.createdRoutes)
+	for _, route := range m.createdRoutes {
+		if script, named := route["script"]; named && script != "" {
+			t.Errorf("created route %v runs %v, want no worker: Cloudflare forwards the hostname to its origin, and a worker route would run the entry worker in front of it", route, script)
+		}
 	}
 	if got := s.State().Bound; len(got) != 1 || got[0] != "api.app.com" {
 		t.Errorf("bound domains = %v, want [api.app.com]", got)
@@ -53,6 +55,43 @@ func TestAHostnameMovedOntoAnOriginDropsTheWorkerRouteThatServedIt(t *testing.T)
 		t.Fatalf("BindDomain: %v", err)
 	}
 	assertSet(t, "deleted routes", m.deletedRoutes, []string{"served"})
+}
+
+func TestAProductionHostnameBoundWithAnOriginUnderAWildcardWorkerRouteGetsAnExactRouteThatRunsNoWorker(t *testing.T) {
+	m := zoneMock()
+	m.existingRoutes = []map[string]any{{"id": "wildcard", "pattern": "*.app.com/*", "script": "user-wildcard"}}
+	s := originStack(t, m, environment.TierProduction)
+
+	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "api.app.com", Origin: &edge.Origin{Address: albAddress, Certified: true}}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+
+	if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "api.app.com/*" {
+		t.Fatalf("created routes = %v, want api.app.com/*, which beats the wildcard route that would otherwise run its worker in front of the origin", m.createdRoutes)
+	}
+	if script, named := m.createdRoutes[0]["script"]; named && script != "" {
+		t.Errorf("created route %v runs %v, want no worker", m.createdRoutes[0], script)
+	}
+	if len(m.deletedRoutes) != 0 {
+		t.Errorf("deleted routes = %v, want the wildcard route left serving every other host", m.deletedRoutes)
+	}
+}
+
+func TestUnbindingAProductionHostnameForwardedToAnOriginRemovesItsRouteThatRunsNoWorker(t *testing.T) {
+	m := zoneMock()
+	m.existingRoutes = []map[string]any{{"id": "wildcard", "pattern": "*.app.com/*", "script": "user-wildcard"}}
+	s := originStack(t, m, environment.TierProduction)
+	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "api.app.com", Origin: &edge.Origin{Address: albAddress, Certified: true}}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+
+	if err := s.UnbindDomain(t.Context(), "api.app.com"); err != nil {
+		t.Fatalf("UnbindDomain: %v", err)
+	}
+
+	if len(m.existingRoutes) != 1 || m.existingRoutes[0]["id"] != "wildcard" {
+		t.Errorf("the zone holds routes %v, want only the wildcard route", m.existingRoutes)
+	}
 }
 
 func TestAPreviewHostBoundWithAnOriginGetsAnExactRecordAndARouteThatRunsNoWorker(t *testing.T) {
