@@ -418,14 +418,24 @@ func (s boxContainer) composeArgv(leading, sysctls []string) []string {
 }
 
 func (s boxContainer) writing(attempts int) string {
-	written := "set -e\n" +
+	return s.prepared() + s.replaced() + s.rising(attempts)
+}
+
+func (s boxContainer) writingUnderRoutingLock(attempts int) string {
+	return s.prepared() + routingLocked("-x") + s.replaced() + "flock -u 9\n" + s.rising(attempts)
+}
+
+func (s boxContainer) prepared() string {
+	return "set -e\n" +
 		s.networksPresent() +
 		bindsPresent(s.files) +
-		imagePulled(s.image, containerPulls) +
-		"docker stop " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
+		imagePulled(s.image, containerPulls)
+}
+
+func (s boxContainer) replaced() string {
+	return "docker stop " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
 		"docker rm --force " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
 		s.started()
-	return written + s.rising(attempts)
 }
 
 func (s boxContainer) started() string {

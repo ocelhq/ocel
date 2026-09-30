@@ -20,7 +20,6 @@ const (
 	TunnelNetwork         = "ocel-tunnel-network"
 	TunnelDir             = live.StateRoot + "/tunnel"
 	tunnelMount           = "/etc/ocel-tunnel"
-	tunnelTokenMounted    = tunnelMount + "/token"
 	TunnelService         = "http://" + SwitchboardContainer + ":" + switchboard.TunnelListenPort
 	tunnelStartAttempts   = 30
 	tunnelNameSuffixBytes = 4
@@ -83,7 +82,7 @@ func tunnelBox(tunnel Tunnel, connector tunnelConnector) boxContainer {
 		network: TunnelNetwork,
 		command: connector.command,
 		config:  tunnel.ID,
-		env:     []string{connector.tokenFileEnv + "=" + tunnelTokenMounted},
+		env:     []string{connector.tokenFileEnv + "=" + tunnelTokenMounted(tunnel.Name)},
 		binds:   []string{TunnelDir + ":" + tunnelMount + ":ro"},
 		user:    rootUser,
 		ready:   connector.ready,
@@ -182,26 +181,37 @@ func (h *Host) RunTunnel(ctx context.Context, tunnel Tunnel, token func(context.
 		return err
 	}
 	if _, err := h.ran(ctx, "write the token "+TunnelContainer+" runs with",
-		words(renderTunnelTokenArgv("place-secret")), strings.NewReader(read), elevation); err != nil {
+		words(renderTunnelTokenArgv("place-secret", tunnel.Name)), strings.NewReader(read), elevation); err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "run "+TunnelContainer, networkEnsured(TunnelNetwork)+"\n"+tunnelBox(tunnel, connector).writing(tunnelStartAttempts), nil, elevation)
+	_, err = h.ran(ctx, "run "+TunnelContainer, networkEnsured(TunnelNetwork)+"\n"+tunnelBox(tunnel, connector).writingUnderRoutingLock(tunnelStartAttempts), nil, elevation)
 	return err
 }
 
-func renderTunnelTokenArgv(subcommand string) []string {
+func tunnelTokenMounted(name string) string { return tunnelMount + "/" + name }
+
+func renderTunnelTokenArgv(subcommand, name string) []string {
 	argv := []string{"docker", "run", "--rm", "--interactive", "--network", "none", "--user", rootUser,
 		"--env", switchboard.PlaceEnv + "=" + tunnelMount,
 		"--volume", SwitchboardDir + ":" + switchboardMount + ":ro",
 		"--volume", TunnelDir + ":" + tunnelMount}
 	argv = append(argv, confined(nil, false)...)
-	return append(argv, SwitchboardImage, SwitchboardMounted, subcommand, tunnelTokenMounted)
+	return append(argv, SwitchboardImage, SwitchboardMounted, subcommand, tunnelTokenMounted(name))
 }
 
 func renderTunnelInspect() string {
 	return "docker inspect --type container --format " +
 		quoted(fmt.Sprintf(`{{.State.Running}} {{index .Config.Labels %q}}`, configLabel)) + " " +
 		quoted(TunnelContainer) + " 2>/dev/null || true"
+}
+
+func renderTunnelRemoval(retired Tunnel) string {
+	return routingLocked("-x") +
+		"if [ \"$(docker inspect --type container --format " + quoted(fmt.Sprintf(`{{index .Config.Labels %q}}`, configLabel)) + " " +
+		quoted(TunnelContainer) + " 2>/dev/null)\" = " + quoted(retired.ID) + " ]; then\n" +
+		"docker rm --force " + quoted(TunnelContainer) + " >/dev/null 2>&1 || true\n" +
+		"fi\n" +
+		words(renderTunnelTokenArgv("unplace", retired.Name))
 }
 
 func (h *Host) TunnelHost(ctx context.Context, tunneled TunneledHost, tunnelName string) error {
@@ -241,11 +251,13 @@ func (h *Host) IsTunneled(ctx context.Context, hostname string) (bool, error) {
 
 func (h *Host) ReleaseTunnel(ctx context.Context) ([]Tunnel, error) {
 	var retired []Tunnel
+	var stopped Tunnel
 	stopping := false
 	if err := h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
 		stopping = state.Tunnel != nil && len(state.Tunneled) == 0
 		if stopping {
-			state.Retired = append(state.Retired, *state.Tunnel)
+			stopped = *state.Tunnel
+			state.Retired = append(state.Retired, stopped)
 			state.Tunnel = nil
 		}
 		retired = slices.Clone(state.Retired)
@@ -257,8 +269,7 @@ func (h *Host) ReleaseTunnel(ctx context.Context) ([]Tunnel, error) {
 	if err != nil {
 		return retired, err
 	}
-	_, err = h.ran(ctx, "remove "+TunnelContainer,
-		"docker rm --force "+quoted(TunnelContainer)+" >/dev/null 2>&1 || true\n"+words(renderTunnelTokenArgv("unplace")), nil, elevation)
+	_, err = h.ran(ctx, "remove "+TunnelContainer, renderTunnelRemoval(stopped), nil, elevation)
 	return retired, err
 }
 
