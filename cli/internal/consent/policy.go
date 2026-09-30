@@ -57,6 +57,15 @@ func (p Policy) Confirm(ctx context.Context, span *run.Span, question string) (b
 	})
 }
 
+func (p Policy) Offer(ctx context.Context, span *run.Span, question string) (bool, error) {
+	if p.Yes {
+		return true, nil
+	}
+	return span.Confirm(func() (bool, error) {
+		return terminal.NewPrompt(p.Out, p.In).Confirm(ctx, question)
+	})
+}
+
 func (p Policy) ConfirmPlan(ctx context.Context, span *run.Span, shown *planv1.ChangePlan, question string) (bool, error) {
 	return p.confirmPlan(span, shown, func(prompt terminal.Prompt) (bool, error) {
 		return prompt.Confirm(ctx, question)

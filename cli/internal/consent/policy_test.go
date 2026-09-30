@@ -308,3 +308,46 @@ func TestYesTakesTheCommandOutOfTheAskingBusinessAltogether(t *testing.T) {
 		})
 	}
 }
+
+const setUp = "Set up production now?"
+
+func TestAnOfferIsPutEvenToADryRun(t *testing.T) {
+	term := &terminal{}
+	g := askingPolicy(term, "n\n")
+	g.DryRun = true
+
+	granted, err := g.Offer(context.Background(), spanOn(t, term), setUp)
+	if err != nil || granted {
+		t.Errorf("Offer() = %v, %v, want the no a dry run answered to withhold it", granted, err)
+	}
+	if !strings.Contains(term.written(), setUp) {
+		t.Errorf("written = %q, want the offer put to the terminal", term.written())
+	}
+}
+
+func TestADeclinedOfferLeavesTheCallerToSayWhatHappensNext(t *testing.T) {
+	term := &terminal{}
+
+	if _, err := askingPolicy(term, "n\n").Offer(context.Background(), spanOn(t, term), setUp); err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range term.received() {
+		if strings.HasPrefix(ev.GetOperation().GetMessage(), "Not confirmed") {
+			t.Errorf("stream = %q, want no line of its own after a declined offer", shape(term.received()))
+		}
+	}
+}
+
+func TestAnOfferIsTakenInAdvanceByYes(t *testing.T) {
+	term := &terminal{}
+	g := askingPolicy(term, "n\n")
+	g.Yes = true
+
+	granted, err := g.Offer(context.Background(), spanOn(t, term), setUp)
+	if err != nil || !granted {
+		t.Errorf("Offer() = %v, %v, want --yes to take it in advance", granted, err)
+	}
+	if strings.Contains(term.written(), setUp) {
+		t.Errorf("written = %q, want --yes to leave the offer unasked", term.written())
+	}
+}
