@@ -72,7 +72,8 @@ func servingOne(t *testing.T, vm machine, proxy *vps.Proxy, hostname string) (*v
 	if err != nil {
 		t.Fatal(err)
 	}
-	stack, err := opened.Reconcile(ctx, edge.StackSpec{Version: "test", Tier: environment.TierProduction, Slug: frontedSlug}, edge.StackState{})
+	spec := edge.StackSpec{Version: "test", Tier: environment.TierProduction, Slug: frontedSlug}
+	stack, err := opened.Reconcile(ctx, spec, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -82,7 +83,15 @@ func servingOne(t *testing.T, vm machine, proxy *vps.Proxy, hostname string) (*v
 		t.Fatalf("AddHostname(%s) = %s", hostname, refused)
 	}
 	t.Cleanup(func() {
-		if err := stack.Destroy(context.Background()); err != nil {
+		fronted, err := vm.deployingBehind(t, proxy).Edges().Open(edge.None)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reopened, err := fronted.Reconcile(context.Background(), spec, stack.State())
+		if err != nil {
+			t.Fatalf("Reconcile() behind the proxy the box ends behind = %v", err)
+		}
+		if err := reopened.Destroy(context.Background()); err != nil {
 			t.Errorf("Destroy() = %v", err)
 		}
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
@@ -191,6 +200,7 @@ func TestLiveABoxMovesOcelsFileToAnotherDirectoryYourTraefikWatchesWithoutDroppi
 		t.Fatalf("Apply() moving ocel's file to %s = %v", to, err)
 	}
 	finished := vm.clock(t)
+	proxy.Traefik = moved.Traefik
 	vm.awaitAnswers(t, "of one after the move", counting("one", finished))
 	heard := vm.stopsLoad(t)
 	var during int
