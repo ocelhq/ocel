@@ -55,6 +55,7 @@ const (
 	containerBalancerARN   = "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/ocel-*/*"
 	containerListenerARN   = "arn:aws:elasticloadbalancing:*:*:listener/app/ocel-*/*/*"
 	containerRuleARN       = "arn:aws:elasticloadbalancing:*:*:listener-rule/app/ocel-*/*/*/*"
+	containerTrustStoreARN = "arn:aws:elasticloadbalancing:*:*:truststore/ocel-*/*"
 	containerVPCOriginARN  = "arn:aws:cloudfront::*:vpcorigin/*"
 	vpcOriginLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/vpcorigin.cloudfront.amazonaws.com/*"
 	ecsLinkedRoleARN       = "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*"
@@ -467,13 +468,28 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"elasticloadbalancing:DescribeTargetGroupAttributes",
 				"elasticloadbalancing:DescribeTargetGroups",
 				"elasticloadbalancing:DescribeTargetHealth",
+				"elasticloadbalancing:DescribeListenerCertificates",
+				"elasticloadbalancing:DescribeTrustStores",
 			},
 			Resources: []string{UnscopedResource},
 		},
 		{
-			Actions:   []string{"elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:CreateTargetGroup"},
-			Resources: []string{containerBalancerARN, appTargetGroupARN},
+			Actions:   []string{"elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:CreateTargetGroup", "elasticloadbalancing:CreateTrustStore"},
+			Resources: []string{containerBalancerARN, appTargetGroupARN, containerTrustStoreARN},
 			Condition: taggedOnCreate(),
+		},
+		{
+			Actions: []string{
+				"elasticloadbalancing:AddListenerCertificates",
+				"elasticloadbalancing:RemoveListenerCertificates",
+			},
+			Resources: []string{containerListenerARN},
+			Condition: taggedByOcel(),
+		},
+		{
+			Actions:   []string{"elasticloadbalancing:ModifyTrustStore", "elasticloadbalancing:DeleteTrustStore"},
+			Resources: []string{containerTrustStoreARN},
+			Condition: taggedByOcel(),
 		},
 		{
 			Actions: []string{
@@ -499,7 +515,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:AddTags"},
-			Resources: []string{containerBalancerARN, containerListenerARN, containerRuleARN, appTargetGroupARN},
+			Resources: []string{containerBalancerARN, containerListenerARN, containerRuleARN, appTargetGroupARN, containerTrustStoreARN},
 			Condition: taggedOnCreate(),
 		},
 		{

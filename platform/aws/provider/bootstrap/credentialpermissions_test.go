@@ -653,3 +653,18 @@ func TestEveryCredentialPublishesAndReclaimsOnlyTheRuntimeLayers(t *testing.T) {
 		}
 	}
 }
+
+func TestTheDeployCredentialAnswersAndShieldsThePublicFrontOnlyOnWhatItTagged(t *testing.T) {
+	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
+	want := []grant{
+		{action: "elasticloadbalancing:AddListenerCertificates", resource: containerListenerARN, condition: conditionJSON(t, taggedByOcel())},
+		{action: "elasticloadbalancing:RemoveListenerCertificates", resource: containerListenerARN, condition: conditionJSON(t, taggedByOcel())},
+		{action: "elasticloadbalancing:CreateTrustStore", resource: containerTrustStoreARN, condition: conditionJSON(t, taggedOnCreate())},
+		{action: "elasticloadbalancing:ModifyTrustStore", resource: containerTrustStoreARN, condition: conditionJSON(t, taggedByOcel())},
+	}
+	for _, wanted := range want {
+		if !grants[wanted] {
+			t.Errorf("the deploy credential does not grant %s on %s under %s: a hostname forwarded to the public load balancer needs its certificate attached and the edge's client certificate trusted", wanted.action, wanted.resource, wanted.condition)
+		}
+	}
+}
