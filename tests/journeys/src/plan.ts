@@ -1,3 +1,4 @@
+import type { Check } from "./checks/context";
 import {
   type Cell,
   type Concern,
@@ -216,6 +217,18 @@ function checkMatrix(fixtures: Fixture[]) {
       if (foreign) {
         throw new Error(
           `${one.name} asks ${target} for the ${foreign.name} variant, which only ${foreign.offeredOn.join(", ")} offers`,
+        );
+      }
+      const isLayered = (check: Check) => check.cacheLayer !== undefined;
+      const mixed = variants.find(
+        (variant) =>
+          variant.config.computes !== undefined &&
+          variant.config.edge === undefined &&
+          [...one.checks, ...(variant.checks ?? [])].some(isLayered),
+      );
+      if (mixed) {
+        throw new Error(
+          `${one.name} asks ${target} for the ${mixed.name} variant, which mixes computes behind no edge, so no one cache layer holds its checks`,
         );
       }
     }
