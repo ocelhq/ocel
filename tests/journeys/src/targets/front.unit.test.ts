@@ -118,3 +118,10 @@ describe("stepCommand", () => {
     expect(stepCommand(["it's"])).toBe(`sudo sh -s -- 'it'\\''s'`);
   });
 });
+
+describe("coveredNames", () => {
+  it("covers the box's zone and the run's zone once each", () => {
+    expect(coveredNames("localhost", "j.example")).toEqual(["*.localhost", "*.j.example"]);
+    expect(coveredNames("localhost", "localhost")).toEqual(["*.localhost"]);
+  });
+});
