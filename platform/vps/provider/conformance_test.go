@@ -195,3 +195,10 @@ func buildProvider(t *testing.T) string {
 	}
 	return binary
 }
+
+func TestTopicsTasksAndWorkersAreRefusedAtPreflightAsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	conformance.RunWorkers(t, p.Facts())
+}

@@ -10,6 +10,7 @@ const (
 	CodeDenied        Code = "denied"
 	CodeBusy          Code = "busy"
 	CodeUnknownOption Code = "unknown-option"
+	CodeUnsupported   Code = "unsupported"
 )
 
 type Refusal struct {

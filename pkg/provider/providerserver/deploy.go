@@ -834,6 +834,9 @@ func (r *deployRun) checkNeeds(ctx context.Context) error {
 }
 
 func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error {
+	if err := RefuseUnsupportedTopicsTasksAndWorkers(r.provider.Facts(), r.manifest); err != nil {
+		return err
+	}
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err

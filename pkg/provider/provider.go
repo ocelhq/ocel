@@ -38,6 +38,7 @@ type Facts struct {
 	RendersTransforms bool
 	StoresArtifacts   bool
 	RunsTunnels       bool
+	WorkerCeilings    []WorkerCeiling
 
 	RetainsContainerReleases bool
 }
