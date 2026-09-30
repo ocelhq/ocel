@@ -38,7 +38,7 @@ func (r *deployRun) isEdgeRouted(app string) bool {
 	return r.routerOf(r.appRouters[app]).Kind() == r.router.Kind()
 }
 
-func (r *deployRun) edgeRoutedDomains() ([]string, map[string]string) {
+func (r *deployRun) listEdgeRoutedDomains() ([]string, map[string]string) {
 	owners := r.domainApps()
 	var domains []string
 	for _, host := range r.hostnames() {

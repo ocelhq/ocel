@@ -87,7 +87,7 @@ func (s *stack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, err
 		return edge.Origin{}, err
 	}
 	if len(claim.ClientCertificates) > 0 {
-		if err := s.trust(ctx, c, answering, claim.ClientCertificates); err != nil {
+		if err := s.trustClientCertificates(ctx, c, answering, claim.ClientCertificates); err != nil {
 			return edge.Origin{}, err
 		}
 	}
@@ -110,7 +110,7 @@ func (s *stack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, err
 	}
 	superseded := held.Certificate
 	held.App, held.Pointer, held.Certificate = claim.App, pointer, claim.Certificate
-	s.hold(claim.Hostname, held)
+	s.recordHost(claim.Hostname, held)
 	if superseded != "" && superseded != claim.Certificate {
 		if err := s.releaseCertificate(ctx, c, answering.listener, superseded); err != nil {
 			return edge.Origin{}, err
@@ -119,7 +119,7 @@ func (s *stack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, err
 	return edge.Origin{Address: answering.address, Certified: true}, nil
 }
 
-func (s *stack) hold(hostname string, held hostRule) {
+func (s *stack) recordHost(hostname string, held hostRule) {
 	if s.recorded.Hosts == nil {
 		s.recorded.Hosts = map[string]hostRule{}
 	}
@@ -142,10 +142,10 @@ func (s *stack) Disclaim(ctx context.Context, hostname string) error {
 	if err != nil {
 		return err
 	}
-	return s.drop(ctx, c, hostname, held)
+	return s.dropHost(ctx, c, hostname, held)
 }
 
-func (s *stack) drop(ctx context.Context, c Clients, hostname string, held hostRule) error {
+func (s *stack) dropHost(ctx context.Context, c Clients, hostname string, held hostRule) error {
 	if err := s.deleteRule(ctx, c, held.Rule); err != nil {
 		return err
 	}
@@ -194,7 +194,7 @@ func (s *stack) MovePointer(ctx context.Context, move router.PointerMove, _ prog
 	pointer := router.ResolvePointer(move.Pointer)
 	for _, app := range slices.Sorted(maps.Keys(groups)) {
 		for _, hostname := range s.listHosts(pointer, app) {
-			if err := s.flip(ctx, c, s.recorded.Hosts[hostname].Rule, groups[app], move.RefuseInactive); err != nil {
+			if err := s.flipRule(ctx, c, s.recorded.Hosts[hostname].Rule, groups[app], move.RefuseInactive); err != nil {
 				return err
 			}
 		}
@@ -233,7 +233,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Lo
 	}
 	var errs []error
 	for _, hostname := range hosts {
-		if err := s.drop(ctx, c, hostname, s.recorded.Hosts[hostname]); err != nil {
+		if err := s.dropHost(ctx, c, hostname, s.recorded.Hosts[hostname]); err != nil {
 			errs = append(errs, fmt.Errorf("stop routing %s: %w", hostname, err))
 		}
 	}

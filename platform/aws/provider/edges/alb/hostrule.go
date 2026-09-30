@@ -110,7 +110,7 @@ func forwardedGroup(actions []elbv2types.Action) string {
 	return ""
 }
 
-func (s *stack) flip(ctx context.Context, c Clients, rule, group string, refuseInactive router.StillActive) error {
+func (s *stack) flipRule(ctx context.Context, c Clients, rule, group string, refuseInactive router.StillActive) error {
 	if err := refuseInactive(ctx); err != nil {
 		return err
 	}

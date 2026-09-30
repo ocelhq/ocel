@@ -265,7 +265,7 @@ func (d *hostnames) disclaim(ctx context.Context, hostname string, kind router.K
 	return errors.Join(routed.Disclaim(ctx, hostname), d.adopt(kind, routed))
 }
 
-func (s *edgeSession) hostRouter(hostname string) router.Kind {
+func (s *edgeSession) readHostRouter(hostname string) router.Kind {
 	if kind := s.state.Host(hostname).Router; kind != "" {
 		return kind
 	}
@@ -333,7 +333,7 @@ func (d *hostnames) remove(ctx context.Context, runProgress progress.Log) error 
 		if err := progress.ReportWarning(runProgress, d.edgeStack().UnbindDomain(ctx, host)); err != nil {
 			return err
 		}
-		if err := d.disclaim(ctx, host, d.hostRouter(host)); err != nil {
+		if err := d.disclaim(ctx, host, d.readHostRouter(host)); err != nil {
 			return err
 		}
 		hostState := d.state.Host(host)
@@ -441,7 +441,7 @@ func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.Prod
 	if bound && d.live {
 		probe = d.probe(ctx, host, d.readAppRouter(d.findApp(host)))
 	}
-	health, err := d.provider.Certificates().Inspect(ctx, d.cutover.kind, d.hostRouter(host), host, hostState.Certificate)
+	health, err := d.provider.Certificates().Inspect(ctx, d.cutover.kind, d.readHostRouter(host), host, hostState.Certificate)
 	if err != nil {
 		return nil, err
 	}
