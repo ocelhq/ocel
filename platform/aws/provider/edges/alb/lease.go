@@ -46,6 +46,10 @@ func formatTrustLeaseKey(tier environment.Tier) string {
 	return "ocel/trust/" + string(tier) + "/client-cas.lease"
 }
 
+func formatPointerLeaseKey(tier environment.Tier, slug, pointer string) string {
+	return "ocel/routes/" + string(tier) + "/" + slug + "/" + pointer + ".lease"
+}
+
 func (s *stack) newLease(c Clients, key, activity string) lease {
 	return lease{c: c, key: key, activity: activity, pause: s.pause}
 }
