@@ -30,12 +30,12 @@ func (s *stack) bindForwarded(ctx context.Context, binding edge.DomainBinding) e
 		return err
 	}
 	pattern := routePattern(binding.Hostname)
-	if s.state.Tier == environment.TierPreview {
-		err = s.p.ensureRouteWithoutWorker(ctx, zoneID, pattern)
-	} else {
-		err = s.p.detachRoute(ctx, zoneID, pattern, s.own.EntryWorkers)
+	if s.state.Tier != environment.TierPreview {
+		if err := s.p.detachRoute(ctx, zoneID, pattern, s.own.EntryWorkers); err != nil {
+			return err
+		}
 	}
-	if err != nil {
+	if err := s.p.ensureRouteWithoutWorker(ctx, zoneID, pattern); err != nil {
 		return err
 	}
 	return s.p.bindOrigin(ctx, &s.state, s.formatOwner(), binding)
