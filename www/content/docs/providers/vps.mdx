@@ -536,6 +536,21 @@ a proxy doesn't read yet. Running bootstrap again with the same `proxy` finishes
 another `proxy` it moves the box there instead, and removes what the stopped move left of the
 proxy it started from.
 
+## Caching
+
+Nothing ocel runs on a box caches your app's responses. Its proxy and the switchboard forward
+every request to the app's container and keep no copy, so a box has no edge cache.
+
+A Next app on a box runs as a plain Next server, such as `next start`, with no ocel router in
+front of it, and Next's own server cache inside the container is the only cache. It serves prerendered and ISR pages and
+honours `revalidatePath`, `revalidateTag` and draft mode, and its responses carry Next's own
+`Cache-Control` and `x-nextjs-cache` headers. The cache lives in the container, so whenever a
+deploy replaces the container it starts over from what the build prerendered.
+
+[Behind Cloudflare](#behind-cloudflare) changes none of this. Cloudflare forwards each
+hostname to the box with no worker and no cache rule, so it never caches a page: it caches only
+what it caches for any site by default, such as static files by their extension.
+
 ## Postgres
 
 `postgres("main")` runs as one container on the box, on your project's own network. It
