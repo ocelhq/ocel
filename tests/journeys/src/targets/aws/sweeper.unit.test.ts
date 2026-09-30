@@ -5,7 +5,14 @@ import { type Cell, fixture as fixtureNamed } from "../../matrix/types";
 import { defaults } from "../../matrix/variants";
 import { cellsOn, fixturesOn } from "../../plan";
 import type { ExternalStack } from "../../stacks";
-import { bootstrapBlockedBy, cellsBySlugPart, despite, sweepPlan, sweepStacks } from "./sweeper";
+import {
+  bootstrapBlockedBy,
+  cellsBySlugPart,
+  despite,
+  destroyOnCurrentBootstrap,
+  sweepPlan,
+  sweepStacks,
+} from "./sweeper";
 
 const fixture = deploy.node;
 
@@ -45,6 +52,66 @@ describe("despite", () => {
     expect(complaints).toEqual([
       "j-1799-half-deleted sweep: Error: the bootstrap stack is stuck in DELETE_FAILED",
     ]);
+  });
+});
+
+describe("destroyOnCurrentBootstrap", () => {
+  it("destroys once and leaves the bootstrap alone when the destroy succeeds", async () => {
+    const ran: string[] = [];
+
+    await destroyOnCurrentBootstrap(
+      async () => ran.push("destroy"),
+      async () => ran.push("refresh"),
+    );
+
+    expect(ran).toEqual(["destroy"]);
+  });
+
+  it("refreshes a bootstrap an older binary laid down and destroys again", async () => {
+    const ran: string[] = [];
+    let refreshed = false;
+
+    await destroyOnCurrentBootstrap(
+      async () => {
+        ran.push("destroy");
+        if (!refreshed) {
+          throw new Error("deployments store GET /apps: status 404: Not Found");
+        }
+      },
+      async () => {
+        ran.push("refresh");
+        refreshed = true;
+      },
+    );
+
+    expect(ran).toEqual(["destroy", "refresh", "destroy"]);
+  });
+
+  it("says why both the destroy and the refresh failed", async () => {
+    const attempt = destroyOnCurrentBootstrap(
+      async () => {
+        throw new Error("deployments store GET /apps: status 404: Not Found");
+      },
+      async () => {
+        throw new Error("Account's Cache Policies limit reached");
+      },
+    );
+
+    await expect(attempt).rejects.toThrow(/status 404[\s\S]*Cache Policies limit reached/);
+  });
+
+  it("fails with the second destroy's error when the refreshed bootstrap still cannot destroy", async () => {
+    let tries = 0;
+
+    const attempt = destroyOnCurrentBootstrap(
+      async () => {
+        tries += 1;
+        throw new Error(`destroy ${tries} failed`);
+      },
+      async () => {},
+    );
+
+    await expect(attempt).rejects.toThrow("destroy 2 failed");
   });
 });
 
