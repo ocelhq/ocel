@@ -325,13 +325,13 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 }
 
 func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
+	if err := r.refuseOtherLifecycle(ctx); err != nil {
+		return err
+	}
 	if err := r.checkInlineBindings(ctx, progress); err != nil {
 		return err
 	}
 	if err := r.ensureBootstrap(ctx, progress); err != nil {
-		return err
-	}
-	if err := r.refuseOtherLifecycle(ctx); err != nil {
 		return err
 	}
 	if err := r.resolveServingDomains(ctx); err != nil {
@@ -365,7 +365,10 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 	if err := r.checkNeeds(ctx); err != nil {
 		return err
 	}
-	return r.preflight(ctx, progress)
+	if err := r.preflight(ctx, progress); err != nil {
+		return err
+	}
+	return r.ensureLifecycle(ctx)
 }
 
 func (r *deployRun) refuseOtherLifecycle(ctx context.Context) error {
@@ -377,6 +380,13 @@ func (r *deployRun) refuseOtherLifecycle(ctx context.Context) error {
 		return err
 	}
 	return meta.RefuseOtherLifecycle(r.spec.Env, previewLifecycle(r.spec))
+}
+
+func (r *deployRun) ensureLifecycle(ctx context.Context) error {
+	if r.spec.Tier != environment.TierPreview || r.dry {
+		return nil
+	}
+	return stackrecords.EnsureLifecycle(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Env, previewLifecycle(r.spec))
 }
 
 func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Log) error {
