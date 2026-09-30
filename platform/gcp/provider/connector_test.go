@@ -21,14 +21,14 @@ func TestTheConnectorServiceRunsOnOneInstanceAtMostAndIsReachableWithoutIAM(t *t
 	t.Parallel()
 
 	service, err := serviceOf(serving{
-		service: "ocel-connector",
-		image:   "example.com/ocel-connector:sha256-abc",
-		account: "ocel-connector@project.iam.gserviceaccount.com",
-		compute: provider.ComputeServerless,
-		public:  true,
-		memory:  connectorMemory,
-		most:    connectorInstances,
-		ingress: ingressEverywhere,
+		service:   "ocel-connector",
+		image:     "example.com/ocel-connector:sha256-abc",
+		account:   "ocel-connector@project.iam.gserviceaccount.com",
+		compute:   provider.ComputeServerless,
+		public:    true,
+		memory:    connectorMemory,
+		instances: provider.Instances{Max: connectorInstances},
+		ingress:   ingressEverywhere,
 	})
 	if err != nil {
 		t.Fatalf("serviceOf: %v", err)

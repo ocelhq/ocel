@@ -162,16 +162,15 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		return nil, err
 	}
 	ran, err := p.deployService(ctx, serving{
-		service: service,
-		image:   app.Image,
-		env:     values,
-		account: names.WorkloadAccountEmail(spec.Ref.Tier),
-		compute: provider.ComputeContainer,
-		health:  app.HealthCheckPath,
-		least:   app.Instances.Min,
-		most:    app.Instances.Max,
-		public:  true,
-		ingress: ingressFor(factsOf(spec.Edge)),
+		service:   service,
+		image:     app.Image,
+		env:       values,
+		account:   names.WorkloadAccountEmail(spec.Ref.Tier),
+		compute:   provider.ComputeContainer,
+		health:    app.HealthCheckPath,
+		instances: app.Instances,
+		public:    true,
+		ingress:   ingressFor(factsOf(spec.Edge)),
 	}, progress)
 	if err != nil {
 		return nil, err

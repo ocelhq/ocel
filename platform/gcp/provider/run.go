@@ -49,8 +49,7 @@ type serving struct {
 	memory      int
 	concurrency int
 	generation  string
-	least       int
-	most        int
+	instances   provider.Instances
 	timeout     time.Duration
 	ingress     string
 	mounts      []secretMount
@@ -118,9 +117,9 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 			ForceSendFields: []string{"CpuIdle"},
 		},
 	}
-	scaling := &run.GoogleCloudRunV2RevisionScaling{MinInstanceCount: int64(s.least), ForceSendFields: []string{"MinInstanceCount"}}
-	if s.most > 0 {
-		scaling.MaxInstanceCount = int64(s.most)
+	scaling := &run.GoogleCloudRunV2RevisionScaling{MinInstanceCount: int64(s.instances.Min), ForceSendFields: []string{"MinInstanceCount"}}
+	if s.instances.Max > 0 {
+		scaling.MaxInstanceCount = int64(s.instances.Max)
 	}
 	if s.compute == provider.ComputeContainer {
 		container.StartupProbe = &run.GoogleCloudRunV2Probe{

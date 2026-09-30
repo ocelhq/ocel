@@ -128,7 +128,7 @@ func (b bootstrap) syncServing(tier environment.Tier) serving {
 		memory:      syncMemoryMiB,
 		concurrency: syncConcurrency,
 		generation:  syncGeneration,
-		most:        syncInstances,
+		instances:   provider.Instances{Max: syncInstances},
 		timeout:     syncTimeout,
 		ingress:     ingressInternal,
 		env: map[string]string{

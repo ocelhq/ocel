@@ -58,11 +58,11 @@ func TestAServerlessRevisionScalesToNothingAndIsBilledPerRequest(t *testing.T) {
 
 func TestAContainerRevisionKeepsAnInstanceUpAndIsProbedOnItsOwnPath(t *testing.T) {
 	desired := desiredOf(t, serving{
-		service: "ocel-shop-prod-api",
-		image:   "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc",
-		compute: provider.ComputeContainer,
-		health:  "/healthz",
-		least:   1,
+		service:   "ocel-shop-prod-api",
+		image:     "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc",
+		compute:   provider.ComputeContainer,
+		health:    "/healthz",
+		instances: provider.Instances{Min: 1, Max: 1},
 	})
 
 	template := desired.Template
