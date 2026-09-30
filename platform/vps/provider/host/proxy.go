@@ -274,6 +274,8 @@ type boxContainer struct {
 	migrates bool
 	restored bool
 	networks []userNetwork
+
+	user string
 }
 
 func frontProxy() boxContainer {
@@ -390,6 +392,9 @@ func (s boxContainer) composeArgv(leading, sysctls []string) []string {
 	}
 	if s.restored {
 		argv = append(argv, "--label", restoredLabel+"="+restoredBy)
+	}
+	if s.user != "" {
+		argv = append(argv, "--user", s.user)
 	}
 	for _, env := range s.env {
 		argv = append(argv, "--env", env)

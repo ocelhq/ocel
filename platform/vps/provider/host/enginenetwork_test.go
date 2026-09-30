@@ -73,6 +73,7 @@ func onYourNetwork(t *testing.T) yourNetwork {
 		ConnectorRun, filepath.Join(dir, "connector"),
 		live.RoutingDir, routing,
 		routingLock, dir,
+		quoted(ProxyNetwork+":"+switchboard.TunnelListenPort), quoted("127.0.0.1:"+switchboard.TunnelListenPort),
 		networkFlag+quoted(ProxyNetwork), networkFlag+quoted("name="+boxNetwork+",alias="+switchboard.Name),
 		networkFlag+quoted(yours), networkFlag+quoted("name="+yours+",alias="+switchboard.Name),
 		quoted(ProxyNetwork), quoted(boxNetwork),

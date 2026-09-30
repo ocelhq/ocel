@@ -9,6 +9,6 @@ func (p *Provider) onHost(dial host.Dial) *Provider {
 	p.keyValues = host.NewKeyValues(p.host)
 	p.cipher = host.NewCipher(p.host)
 	p.Loopback = p.servedOnTheBox
-	p.LoopbackOnly = !p.host.FrontProxy().Guarantees().OwnsPorts
+	p.IsLoopbackOnly = p.isAnsweredOnlyOnTheBox
 	return p
 }

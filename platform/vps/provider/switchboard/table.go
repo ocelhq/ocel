@@ -91,21 +91,28 @@ type pin struct {
 }
 
 type writtenTable struct {
-	Grace       string   `json:"grace"`
-	Claims      []claim  `json:"claims,omitempty"`
-	Routes      []route  `json:"routes,omitempty"`
-	Pins        []pin    `json:"pins,omitempty"`
-	Shields     []shield `json:"shields,omitempty"`
-	PreviewBase string   `json:"preview,omitempty"`
-	Connector   string   `json:"connector,omitempty"`
-	Tunneled    []string `json:"tunneled,omitempty"`
-	Tunnel      *tunnel  `json:"tunnel,omitempty"`
+	Grace       string     `json:"grace"`
+	Claims      []claim    `json:"claims,omitempty"`
+	Routes      []route    `json:"routes,omitempty"`
+	Pins        []pin      `json:"pins,omitempty"`
+	Shields     []shield   `json:"shields,omitempty"`
+	PreviewBase string     `json:"preview,omitempty"`
+	Connector   string     `json:"connector,omitempty"`
+	Tunneled    []tunneled `json:"tunneled,omitempty"`
+	Tunnel      *tunnel    `json:"tunnel,omitempty"`
+	Retired     []tunnel   `json:"retired,omitempty"`
+}
+
+type tunneled struct {
+	Hostname string `json:"hostname"`
+	Owner    string `json:"owner"`
 }
 
 type tunnel struct {
 	Edge    string `json:"edge"`
-	ID      string `json:"id"`
-	Address string `json:"address"`
+	Name    string `json:"name"`
+	ID      string `json:"id,omitempty"`
+	Address string `json:"address,omitempty"`
 }
 
 type claimKey struct{ owner, pointer, app string }
@@ -173,8 +180,8 @@ func Read(document []byte) (*Table, error) {
 		admitted:  map[string]bool{},
 		tunneled:  map[string]bool{},
 	}
-	for _, hostname := range read.Tunneled {
-		table.tunneled[hostname] = true
+	for _, held := range read.Tunneled {
+		table.tunneled[held.Hostname] = true
 	}
 	for _, hostClaim := range read.Claims {
 		table.admitted[hostClaim.Hostname] = true
@@ -227,7 +234,7 @@ func lowered(read *writtenTable) {
 		read.Pins[at].Hostname = strings.ToLower(read.Pins[at].Hostname)
 	}
 	for at := range read.Tunneled {
-		read.Tunneled[at] = strings.ToLower(read.Tunneled[at])
+		read.Tunneled[at].Hostname = strings.ToLower(read.Tunneled[at].Hostname)
 	}
 	read.PreviewBase = strings.ToLower(read.PreviewBase)
 	read.Connector = strings.ToLower(read.Connector)

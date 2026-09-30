@@ -97,6 +97,8 @@ func run(ctx context.Context, argv []string, in io.Reader, out, errs io.Writer) 
 		return digest(rest, out, errs)
 	case "beside":
 		return beside(rest, out, errs)
+	case "place-secret":
+		return placeSecret(rest, in, errs)
 	case "place-origin":
 		return placeOrigin(rest, in, errs)
 	case "unplace-origins":
@@ -123,6 +125,7 @@ func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "       unplace <path> |")
 	fmt.Fprintln(errs, "       placed <path> |")
 	fmt.Fprintln(errs, "       beside <path> |")
+	fmt.Fprintln(errs, "       place-secret <path> < <secret> |")
 	fmt.Fprintln(errs, "       place-origin <path> < <bundle> |")
 	fmt.Fprintln(errs, "       unplace-origins [<kept path>...]")
 	return exitRefused

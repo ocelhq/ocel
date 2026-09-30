@@ -48,6 +48,13 @@ type machine struct {
 	releasing   func(host.Release) error
 	byHand      int
 	tables      int
+
+	tunnel          *host.Tunnel
+	retired         []host.Tunnel
+	tunneled        []host.TunneledHost
+	tunnelRunning   string
+	tunnelsReserved int
+	tunnelEvents    tunnelEvents
 }
 
 func aMachine() *machine {
@@ -213,6 +220,7 @@ func (m *machine) DisclaimHost(_ context.Context, hostname, owner string) error 
 	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool {
 		return claim.Hostname == hostname && claim.Owner == owner
 	})
+	m.tunneled = slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held.Hostname == hostname && held.Owner == owner })
 	return nil
 }
 
@@ -223,6 +231,7 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	}
 	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool { return claim.Owner == owner })
 	m.shields = host.DropShields(m.shields, func(shield host.Shield) bool { return shield.Owner == owner })
+	m.tunneled = slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held.Owner == owner })
 	return nil
 }
 
@@ -254,7 +263,7 @@ type boxEdge struct {
 }
 
 func edgeOver(m *machine, store keyvalue.Store) boxEdge {
-	return boxEdge{Edge: box.New(m, m.ApplyOrigins, sshScope), keyValues: store}
+	return boxEdge{Edge: box.New(m, m.ApplyOrigins, sshScope, m.openTunnels), keyValues: store}
 }
 
 type boxStack struct {
@@ -338,6 +347,7 @@ func TestTheBoxRouterBehavesAsEveryRouterMust(t *testing.T) {
 	routerconformance.Run(t, routerconformance.Suite{
 		Hostname:    "shop.example.com",
 		PreviewBase: "preview.example.com",
+		Tunnel:      tunnelEdge,
 		New: func(t *testing.T) routerconformance.Fixture {
 			m, front, stack := reconciled(t)
 			return boxFixture(m, front, stack)

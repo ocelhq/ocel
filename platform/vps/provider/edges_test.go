@@ -12,6 +12,23 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
+func TestABoxRunsTheTunnelTheCloudflareProxyReachesItThrough(t *testing.T) {
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) {
+			return nil, errors.New("no box is reached to read what it runs")
+		},
+	)
+	front, err := p.Edges().Open(cloudflare.Kind)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !p.Facts().RunsTunnels || front.Hooks().Tunnels == nil {
+		t.Errorf("Facts().RunsTunnels = %v with the Cloudflare proxy's tunnels %v, want a box reachable through the tunnel the proxy opens", p.Facts().RunsTunnels, front.Hooks().Tunnels)
+	}
+}
+
 func TestTheCloudflareProxyInFrontOfABoxOwnsWhatItForwardsInOcelsNamespace(t *testing.T) {
 	t.Setenv(provider.NamespaceEnvVar, "staging")
 	p := vps.ProviderOver(

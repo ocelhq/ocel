@@ -42,6 +42,12 @@ type Machine interface {
 	PreviewEntry(ctx context.Context) (string, error)
 	InstallPreviewEntry(ctx context.Context, base string) error
 	RemovePreviewEntry(ctx context.Context, base string) error
+	ReserveTunnel(ctx context.Context, front edge.Kind) (host.Tunnel, error)
+	RunTunnel(ctx context.Context, tunnel host.Tunnel, token func(context.Context) (string, error)) error
+	TunnelHost(ctx context.Context, hostname, owner, name string) error
+	UntunnelHost(ctx context.Context, hostname, owner string) error
+	ReleaseTunnel(ctx context.Context) ([]host.Tunnel, error)
+	ForgetTunnel(ctx context.Context, id string) error
 }
 
 type Origins func(ctx context.Context, project string, tier environment.Tier) error
@@ -50,12 +56,13 @@ type Edge struct {
 	machine Machine
 	origins Origins
 	scope   string
+	tunnels Tunnels
 }
 
 var _ edge.Edge = (*Edge)(nil)
 
-func New(machine Machine, origins Origins, scope string) *Edge {
-	return &Edge{machine: machine, origins: origins, scope: scope}
+func New(machine Machine, origins Origins, scope string, tunnels Tunnels) *Edge {
+	return &Edge{machine: machine, origins: origins, scope: scope, tunnels: tunnels}
 }
 
 func (e *Edge) Kind() edge.Kind { return edge.None }

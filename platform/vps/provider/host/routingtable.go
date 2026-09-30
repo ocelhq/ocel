@@ -18,16 +18,22 @@ type RoutingTable struct {
 	Shields     []Shield
 	PreviewBase string
 	Connector   string
+	Tunneled    []TunneledHost
+	Tunnel      *Tunnel
+	Retired     []Tunnel
 }
 
 type tableRows struct {
-	Grace       string      `json:"grace"`
-	Claims      []HostClaim `json:"claims,omitempty"`
-	Routes      []AppRoute  `json:"routes,omitempty"`
-	Pins        []Pin       `json:"pins,omitempty"`
-	Shields     []Shield    `json:"shields,omitempty"`
-	PreviewBase string      `json:"preview,omitempty"`
-	Connector   string      `json:"connector,omitempty"`
+	Grace       string         `json:"grace"`
+	Claims      []HostClaim    `json:"claims,omitempty"`
+	Routes      []AppRoute     `json:"routes,omitempty"`
+	Pins        []Pin          `json:"pins,omitempty"`
+	Shields     []Shield       `json:"shields,omitempty"`
+	PreviewBase string         `json:"preview,omitempty"`
+	Connector   string         `json:"connector,omitempty"`
+	Tunneled    []TunneledHost `json:"tunneled,omitempty"`
+	Tunnel      *Tunnel        `json:"tunnel,omitempty"`
+	Retired     []Tunnel       `json:"retired,omitempty"`
 }
 
 func WriteRoutingTable(table RoutingTable) ([]byte, error) {
@@ -39,6 +45,9 @@ func WriteRoutingTable(table RoutingTable) ([]byte, error) {
 		Shields:     slices.SortedFunc(slices.Values(table.Shields), byShielded),
 		PreviewBase: table.PreviewBase,
 		Connector:   table.Connector,
+		Tunneled:    slices.SortedFunc(slices.Values(table.Tunneled), byTunneled),
+		Tunnel:      table.Tunnel,
+		Retired:     table.Retired,
 	})
 }
 
@@ -61,6 +70,9 @@ func ReadRoutingTable(document []byte) (RoutingTable, error) {
 		Shields:     rows.Shields,
 		PreviewBase: rows.PreviewBase,
 		Connector:   rows.Connector,
+		Tunneled:    rows.Tunneled,
+		Tunnel:      rows.Tunnel,
+		Retired:     rows.Retired,
 	}
 	if err := validTable(table); err != nil {
 		return RoutingTable{}, unrenderable(err)

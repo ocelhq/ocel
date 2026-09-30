@@ -75,6 +75,31 @@ func TestAPlacedFileIsWhatWasFedAndNothingElseIsLeftBeside(t *testing.T) {
 	}
 }
 
+func TestASecretIsPlacedReadableByItsOwnerAloneInADirectoryOnlyItsOwnerEnters(t *testing.T) {
+	dir := placing(t)
+	at := filepath.Join(dir, "token")
+
+	if code, _, errs := fed(t, strings.NewReader("the-tunnel-token"), "place-secret", at); code != 0 {
+		t.Fatalf("place-secret = %d: %s", code, errs)
+	}
+
+	if got := contents(t, at); got != "the-tunnel-token" {
+		t.Errorf("%s reads %q, want what place-secret was fed", at, got)
+	}
+	if got := entries(t, dir); !slices.Equal(got, []string{"token"}) {
+		t.Errorf("the directory contains %q, want the secret alone", got)
+	}
+	for path, want := range map[string]os.FileMode{at: 0o400, dir: 0o700} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mode := info.Mode().Perm(); mode != want {
+			t.Errorf("%s is mode %v, want %v: only the owner reads a secret", path, mode, want)
+		}
+	}
+}
+
 func TestAReaderOfAFileBeingPlacedSeesTheOldOneWholeUntilTheNewOneIsWhole(t *testing.T) {
 	dir := placing(t)
 	at := filepath.Join(dir, "ocel.caddy")

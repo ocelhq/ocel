@@ -41,6 +41,7 @@ func switchboardBox(binary []byte, front Front) boxContainer {
 			"--front", switchboard.FrontSocket,
 			"--admit", switchboard.AdmitSocket,
 			"--table", live.RoutingTable,
+			"--tunnel-listen", ProxyNetwork + ":" + switchboard.TunnelListenPort,
 		}, front.listening()...),
 		ports:    front.published(),
 		networks: front.joined(),

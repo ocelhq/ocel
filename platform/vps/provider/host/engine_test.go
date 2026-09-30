@@ -104,6 +104,7 @@ func aLiveProxy(t *testing.T) liveProxy {
 		routingLock, dir,
 		quoted(caddy.Container), quoted(name),
 		quoted(SwitchboardContainer), quoted(board),
+		quoted(ProxyNetwork+":"+switchboard.TunnelListenPort), quoted("127.0.0.1:"+switchboard.TunnelListenPort),
 		quoted(ProxyNetwork), quoted(network),
 		`"`+ProxyNetwork+`"`, `"`+network+`"`,
 		unprivileged, "",

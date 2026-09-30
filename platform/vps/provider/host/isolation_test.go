@@ -23,6 +23,8 @@ const (
 	proxyContainer    = "the proxy container a bootstrap runs"
 	boardContainer    = "the switchboard container a bootstrap runs"
 	resourceContainer = "the resource container a deploy runs"
+	tunnelContainer   = "the tunnel container a claim through a tunnel runs"
+	tokenPlacer       = "the container that places the tunnel's token"
 )
 
 func resourced() ResourceContainer {
@@ -41,6 +43,8 @@ func running() map[string]string {
 		proxyContainer:    words(frontProxy().run()),
 		boardContainer:    words(switchboardBox(nil, Front{}).run()),
 		resourceContainer: words(resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Tier, resourced().Name))),
+		tunnelContainer:   words(tunnelBox(Tunnel{ID: "5a6b7c8d-1"}).run()),
+		tokenPlacer:       words(tunnelTokenPlacing("place-secret")),
 	}
 }
 
@@ -50,6 +54,8 @@ func entitledPaths() map[string][]string {
 		proxyContainer:    {proxyRoot, caddy.PinsDir, ProxyData},
 		boardContainer:    {live.RoutingDir, live.RoutingTable},
 		resourceContainer: {EnvFile(resourced().Tier, resourced().Name)},
+		tunnelContainer:   {TunnelDir},
+		tokenPlacer:       {TunnelDir},
 	}
 }
 
@@ -161,7 +167,7 @@ func TestNothingAContainerIsEntitledToIsTheKeyTheRecordsOrTheTierStateItself(t *
 func TestEveryContainerThisPackageRunsIsBoundByTheIsolationRules(t *testing.T) {
 	t.Parallel()
 
-	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "placementRun", "resourceRun", "run"},
+	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "placementRun", "resourceRun", "run", "tunnelTokenPlacing"},
 		"a container run built somewhere this bench does not read is bound by none of the rules in this file")
 }
 
