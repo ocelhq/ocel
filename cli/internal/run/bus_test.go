@@ -284,3 +284,32 @@ func secretBearingFields(root protoreflect.MessageDescriptor) []string {
 	walk(root)
 	return found
 }
+
+func TestAPreambleSaysAndAsksBeforeAnyRunBeginsAndSummarisesNothing(t *testing.T) {
+	bus := run.NewBus(time.Now)
+	seen := &recording{}
+	bus.Attach(seen)
+
+	preamble := bus.Preamble()
+	preamble.Say("No ocel.json here.")
+	if _, err := preamble.Confirm(func() (bool, error) { return true, nil }); err != nil {
+		t.Fatal(err)
+	}
+
+	events := seen.received()
+	if len(events) != 3 {
+		t.Fatalf("events = %v, want the message, the hold and the resume", events)
+	}
+	said := events[0].GetOperation()
+	if said.GetMessage() != "No ocel.json here." || len(said.GetSpanId()) != 0 || said.GetPhase() != progressv1.Phase_PHASE_UNSPECIFIED {
+		t.Errorf("said %v, want the message with no scope", said)
+	}
+	if events[1].GetWaiting() == nil || events[2].GetResumed() == nil {
+		t.Errorf("events = %v, want the question held and resumed", events)
+	}
+	for _, ev := range events {
+		if ev.GetSummary() != nil {
+			t.Errorf("a preamble summarised %v, want it to leave the summary to the run that follows", ev.GetSummary())
+		}
+	}
+}

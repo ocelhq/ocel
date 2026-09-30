@@ -52,6 +52,11 @@ func (b *Bus) Begin(ctx context.Context, command, projectDir string) (context.Co
 	return ctx, r, nil
 }
 
+func (b *Bus) Preamble() *Span {
+	r := &Run{bus: b, ctx: context.Background(), start: b.now(), phases: map[progressv1.Phase]*Span{}}
+	return &Span{run: r, start: r.start, level: progressv1.Level_LEVEL_INFO}
+}
+
 func (b *Bus) Interrupt() {
 	b.mu.Lock()
 	runs := slices.Clone(b.runs)

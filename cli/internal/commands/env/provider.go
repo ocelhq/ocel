@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
@@ -43,25 +44,14 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 	if err != nil {
 		return err
 	}
-	return dependencies.WithProvider(ctx, cfg, command, commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure}, func(ctx context.Context, p commands.ProviderRun) error {
+	open := commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure}
+	if keyOffer != nil {
+		open.Feature = providercontract.FeatureVariablesKey
+		open.Policy = consent.NewPolicy(command, false, dependencies.StdinIsTerminal(keyOffer.stdin), stderr, keyOffer.stdin)
+	}
+	return dependencies.WithProvider(ctx, cfg, command, open, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider, status := p.Run, p.Check, p.Provider, p.Preflight
-		if keyOffer != nil {
-			if err := offerVariablesKey(ctx, dependencies, check, provider, cfg, opts, status.Response.GetBootstrap(), keyOffer.stdin, stderr); err != nil {
-				return err
-			}
-		}
 		check.End(nil)
 		return drive(ctx, run, provider, cfg, status.Response)
 	})
-}
-
-func offerVariablesKey(ctx context.Context, dependencies Dependencies, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
-	edge := cfg.EdgeSelection()
-	offered, err := readiness.HasOffer(ctx, provider, opts.tier(), edge, providercontract.FeatureVariablesKey)
-	if err != nil || !offered {
-		return err
-	}
-	gap := readiness.NewFeatureGap(status, providercontract.FeatureVariablesKey)
-	return readiness.OfferRepair(ctx, check, provider, gap, opts.tier(), edge,
-		dependencies.StdinIsTerminal(stdin), stderr, stdin)
 }

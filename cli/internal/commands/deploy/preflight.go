@@ -27,13 +27,14 @@ type preflightFacts struct {
 	urls           map[string]string
 }
 
-func previewOpenOptions(dry bool, cfg *project.Project) commands.OpenOptions {
+func previewOpenOptions(policy consent.Policy, cfg *project.Project) commands.OpenOptions {
 	return commands.OpenOptions{
-		Pinning: executables.ChoosePinning(dry),
-		Tier:    environmentv1.Tier_TIER_PREVIEW,
-		Require: readiness.Infrastructure,
-		Slug:    cfg.Slug,
-		Domains: cfg.HostnameNames(environmentv1.Tier_TIER_PREVIEW),
+		Pinning:       executables.ChoosePinning(policy.DryRun),
+		Tier:          environmentv1.Tier_TIER_PREVIEW,
+		Require:       readiness.Features,
+		Slug:          cfg.Slug,
+		ClaimsDomains: true,
+		Policy:        policy,
 	}
 }
 
@@ -46,7 +47,7 @@ func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy c
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), check.Warn); err != nil {
 		return preflightFacts{}, err
 	}
-	if err := ensureBootstrap(ctx, policy, check, provider, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, out, in); err != nil {
+	if err := refuseStaleBootstrap(policy, check, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW); err != nil {
 		return preflightFacts{}, err
 	}
 	site, err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, check)
@@ -67,14 +68,15 @@ func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy c
 	}, nil
 }
 
-func productionOpenOptions(dry, interactive bool, cfg *project.Project) commands.OpenOptions {
-	domains := cfg.HostnameNames(environmentv1.Tier_TIER_PRODUCTION)
+func productionOpenOptions(policy consent.Policy, cfg *project.Project) commands.OpenOptions {
 	return commands.OpenOptions{
-		Pinning: executables.ChoosePinning(dry),
-		Tier:    environmentv1.Tier_TIER_PRODUCTION,
-		Require: readiness.Infrastructure,
-		Slug:    slugToScopeBy(interactive, domains, cfg),
-		Domains: domains,
+		Pinning:         executables.ChoosePinning(policy.DryRun),
+		Tier:            environmentv1.Tier_TIER_PRODUCTION,
+		Require:         readiness.Features,
+		Slug:            slugToScopeBy(policy.Interactive, cfg.HostnameNames(environmentv1.Tier_TIER_PRODUCTION), cfg),
+		ClaimsDomains:   true,
+		RequireHostname: true,
+		Policy:          policy,
 	}
 }
 
@@ -87,7 +89,7 @@ func preflightDeploy(ctx context.Context, dependencies Dependencies, policy cons
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), check.Warn); err != nil {
 		return preflightFacts{}, err
 	}
-	if err := ensureBootstrap(ctx, policy, check, provider, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, out, in); err != nil {
+	if err := refuseStaleBootstrap(policy, check, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION); err != nil {
 		return preflightFacts{}, err
 	}
 	proceed, err := guardNewProject(ctx, policy, check, cfg, resp.GetKnownSlugs())
@@ -111,11 +113,13 @@ func resolveContainers(ctx context.Context, dependencies Dependencies, check *ru
 	return resolved, archs, nil
 }
 
-func ensureBootstrap(ctx context.Context, policy consent.Policy, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
+func refuseStaleBootstrap(policy consent.Policy, check *run.Span, status *contractv1.BootstrapStatus, tier environmentv1.Tier) error {
+	gap := readiness.NewGap(status)
 	if policy.DryRun {
-		return readiness.NewGap(status).RefuseIncomplete(tier)
+		return gap.RefuseIncomplete(tier)
 	}
-	return readiness.OfferRepair(ctx, check, provider, readiness.NewGap(status), tier, cfg.EdgeSelection(), policy.Interactive, out, in)
+	gap.WarnStale(tier, check)
+	return nil
 }
 
 func slugToScopeBy(interactive bool, domains []string, cfg *project.Project) string {

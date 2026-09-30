@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
+	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -85,7 +86,16 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 }
 
 func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := dependencies.LoadProject(ctx, cwd)
+	policy := consent.NewPolicy("ocel deploy", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
+	policy.DryRun = opts.dry
+	if err := policy.Refuse(); err != nil {
+		return err
+	}
+
+	cfg, err := dependencies.EnsureProject(ctx, cwd, policy)
+	if prerequisite.IsDeclined(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -96,14 +106,9 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 		}
 	}
 
-	policy := consent.NewPolicy("ocel deploy", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
-	policy.DryRun = opts.dry
-	if err := policy.Refuse(); err != nil {
-		return err
-	}
-
-	return dependencies.WithProvider(ctx, cfg, "ocel deploy", productionOpenOptions(opts.dry, policy.Interactive, cfg), func(ctx context.Context, p commands.ProviderRun) error {
+	return dependencies.WithProvider(ctx, cfg, "ocel deploy", productionOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider, read := p.Run, p.Check, p.Provider, p.Preflight
+		cfg := p.Project
 		facts, err := preflightDeploy(ctx, dependencies, policy, check, provider, cfg, read, opts.prebuilt, stdout, stdin)
 		check.End(err)
 		if err != nil {

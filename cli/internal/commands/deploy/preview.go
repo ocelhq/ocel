@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
+	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -174,7 +175,16 @@ func previewUpRunE(dependencies Dependencies, upOpts *previewUpOptions) func(cmd
 }
 
 func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := dependencies.LoadProject(ctx, cwd)
+	policy := consent.NewPolicy("ocel preview up", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
+	policy.DryRun = opts.dry
+	if err := policy.Refuse(); err != nil {
+		return err
+	}
+
+	cfg, err := dependencies.EnsureProject(ctx, cwd, policy)
+	if prerequisite.IsDeclined(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -190,14 +200,9 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		}
 	}
 
-	policy := consent.NewPolicy("ocel preview up", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
-	policy.DryRun = opts.dry
-	if err := policy.Refuse(); err != nil {
-		return err
-	}
-
-	return dependencies.WithProvider(ctx, cfg, "ocel preview up", previewOpenOptions(opts.dry, cfg), func(ctx context.Context, p commands.ProviderRun) error {
+	return dependencies.WithProvider(ctx, cfg, "ocel preview up", previewOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider, read := p.Run, p.Check, p.Provider, p.Preflight
+		cfg := p.Project
 		facts, err := preflightPreviewUp(ctx, dependencies, policy, check, provider, cfg, read, opts.prebuilt, env.GetIdentity(), stdout, stdin)
 		check.End(err)
 		if err != nil {
