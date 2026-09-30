@@ -1,6 +1,7 @@
 package host
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -72,9 +73,11 @@ func probedBox(t *testing.T, state RoutingTable, rendered []byte, joined ...stri
 	}
 }
 
+var probeRun = rand.Text()
+
 func probeName(t *testing.T) string {
 	readable := strings.ToLower(strings.NewReplacer("/", "-", " ", "-").Replace(t.Name()))
-	sum := sha256.Sum256([]byte(t.Name()))
+	sum := sha256.Sum256([]byte(probeRun + t.Name()))
 	return "ocel-probe-" + readable[:min(len(readable), 28)] + "-" + hex.EncodeToString(sum[:4])
 }
 
