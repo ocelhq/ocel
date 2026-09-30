@@ -1,0 +1,70 @@
+import { describe, expect, it } from "bun:test";
+import { assertNotServed, assertRedirectedOffPlainHTTP, assertTunnelAddress } from "./tunnel";
+
+describe("the origin a tunneled hostname's proxied record names", () => {
+  it("passes when it is a Cloudflare Tunnel", () => {
+    expect(() =>
+      assertTunnelAddress(
+        "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b.cfargotunnel.com",
+        "web.j.example.com",
+      ),
+    ).not.toThrow();
+  });
+
+  it("fails when it is the box's own address", () => {
+    expect(() => assertTunnelAddress("198.51.100.4", "web.j.example.com")).toThrow(
+      /198\.51\.100\.4/,
+    );
+  });
+});
+
+describe("a tunneled hostname asked of the box directly", () => {
+  it("passes when the box refuses it or answers something other than success", () => {
+    expect(() =>
+      assertNotServed({ kind: "refused", reason: "handshake failure" }, "the box"),
+    ).not.toThrow();
+    expect(() =>
+      assertNotServed({ kind: "unreachable", reason: "ECONNREFUSED" }, "the box"),
+    ).not.toThrow();
+    expect(() =>
+      assertNotServed(
+        {
+          kind: "answered",
+          status: 421,
+          location: undefined,
+          said: "HTTP/1.1 421 Misdirected Request",
+        },
+        "the box",
+      ),
+    ).not.toThrow();
+  });
+
+  it("fails when the box serves it", () => {
+    expect(() =>
+      assertNotServed(
+        {
+          kind: "answered",
+          status: 200,
+          location: undefined,
+          said: "HTTP/1.1 200 OK\r\n\r\njourney-hello",
+        },
+        "the box",
+      ),
+    ).toThrow(/answered 200/);
+  });
+});
+
+describe("a tunneled hostname asked over plain http through Cloudflare", () => {
+  it("passes on a redirect to the same hostname over https", () => {
+    expect(() =>
+      assertRedirectedOffPlainHTTP(308, "https://web.j.example.com/", "web.j.example.com"),
+    ).not.toThrow();
+    expect(() =>
+      assertRedirectedOffPlainHTTP(301, "https://web.j.example.com/", "web.j.example.com"),
+    ).not.toThrow();
+  });
+
+  it("fails when it is served over plain http", () => {
+    expect(() => assertRedirectedOffPlainHTTP(200, null, "web.j.example.com")).toThrow(/200/);
+  });
+});

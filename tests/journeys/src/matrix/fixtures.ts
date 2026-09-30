@@ -22,6 +22,7 @@ import {
   cloudflare,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
+  cloudflareTunnel,
   container,
   defaults,
   registry,
@@ -49,7 +50,7 @@ export const deploy = {
     on: {
       dev: [defaults],
       aws: [container, apiGateway],
-      vps: [defaults, registry, cloudflareOnABox],
+      vps: [defaults, registry, cloudflareOnABox, cloudflareTunnel],
       gcp: [defaults, container, cloudflareOnGoogleCloud],
     },
     sample: { group: "node-http" },

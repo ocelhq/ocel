@@ -23,6 +23,7 @@ import {
   cloudflare,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
+  cloudflareTunnel,
   container,
   defaults,
   registry,
@@ -191,6 +192,19 @@ describe("overlayFor", () => {
       hostnames: { web: "web-j-1-deploy-node.j.example" },
       edge: "cloudflare",
       dns: "cloudflare",
+    });
+  });
+
+  it("reaches a vps cloudflare-tunnel cell through the cloudflare edge's tunnel", () => {
+    const overlay = overlayFor(cell(deploy.node, cloudflareTunnel), "vps", {
+      OCEL_JOURNEY_ZONE: "j.example",
+    });
+    expect(overlay).toMatchObject({ edge: "cloudflare", tunnel: true, dns: "cloudflare" });
+    expect(renderConfig({ ...overlay, base: TS_BASE })).toContain(
+      "  edge: cloudflare({ tunnel: true }),",
+    );
+    expect(JSON.parse(renderJsonConfig("{}", overlay)).edge).toEqual({
+      cloudflare: { tunnel: true },
     });
   });
 

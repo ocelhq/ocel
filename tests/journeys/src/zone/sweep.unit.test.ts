@@ -159,6 +159,7 @@ describe("sweepStaleFromZone", () => {
     const listings = asked.filter((one) => one.url.pathname.endsWith("/dns_records"));
     expect(listings.map((one) => one.url.searchParams.get("name.endswith"))).toEqual([
       "-deploy-node-cloudflare.j.example",
+      "-deploy-node-cloudflare-tunnel.j.example",
       "-lifecycle-next-cloudflare.j.example",
     ]);
     for (const one of listings) {
@@ -219,6 +220,7 @@ describe("sweepRunFromZone", () => {
     const listings = asked.filter((one) => one.url.pathname.endsWith("/dns_records"));
     expect(listings.map((one) => one.url.searchParams.get("name.exact"))).toEqual([
       "web-j-111-deploy-node-cloudflare.j.example",
+      "web-j-111-deploy-node-cloudflare-tunnel.j.example",
       "web-j-111-lifecycle-next-cloudflare.j.example",
     ]);
     expect(deleted(asked)).toEqual([

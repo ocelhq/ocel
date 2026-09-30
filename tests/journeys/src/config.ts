@@ -27,6 +27,7 @@ export type Overlay = {
   slug: string;
   compute?: Compute;
   edge?: Edge;
+  tunnel?: boolean;
   dns?: "cloudflare";
   hostnames?: Record<string, string>;
   variablesKey?: string;
@@ -106,7 +107,7 @@ export function overlayFor(
     }
     case "vps": {
       const front = frontNamed(env);
-      const edge = cell.variant.config.edge;
+      const { edge, tunnel } = cell.variant.config;
       return {
         base: VPS_BASE,
         slug: cell.slug,
@@ -114,6 +115,7 @@ export function overlayFor(
         ...registryOf(cell, env),
         ...(front ? { proxy: front.proxy } : {}),
         ...(edge ? { edge } : {}),
+        ...(tunnel ? { tunnel } : {}),
         ...(edge === "cloudflare" ? { dns: "cloudflare" as const } : {}),
       };
     }
@@ -162,7 +164,8 @@ export function renderConfig(overlay: Overlay): string {
     );
   }
   if (overlay.edge) {
-    fields.push(`  edge: ${EDGE_IMPORTS[overlay.edge].name}(),`);
+    const options = overlay.tunnel ? "{ tunnel: true }" : "";
+    fields.push(`  edge: ${EDGE_IMPORTS[overlay.edge].name}(${options}),`);
   }
   if (overlay.dns) {
     fields.push(`  dns: cloudflareDns(),`);
@@ -219,7 +222,7 @@ export function renderJsonConfig(base: string, overlay: Overlay): string {
     written.provider = { vps: { ...options, proxy: overlay.proxy } };
   }
   if (overlay.edge) {
-    written.edge = overlay.edge;
+    written.edge = overlay.tunnel ? { [overlay.edge]: { tunnel: true } } : overlay.edge;
   }
   if (overlay.dns) {
     written.dns = overlay.dns;

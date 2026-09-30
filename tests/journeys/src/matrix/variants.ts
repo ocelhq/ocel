@@ -1,4 +1,5 @@
 import { SHIELDED_ORIGIN_CHECKS } from "../checks/originShield";
+import { TUNNELED_ORIGIN_CHECKS } from "../checks/tunnel";
 import { JOURNEY_REGISTRY, REGISTRY_TOKEN_ENV } from "../registry/settings";
 import { DEFAULT_VARIANT, TARGETS, type Variant, variant } from "./types";
 
@@ -23,6 +24,12 @@ export const cloudflareOnABox = variant("cloudflare", {
   offeredOn: ["vps"],
   config: { edge: "cloudflare" },
   checks: SHIELDED_ORIGIN_CHECKS,
+});
+
+export const cloudflareTunnel = variant("cloudflare-tunnel", {
+  offeredOn: ["vps"],
+  config: { edge: "cloudflare", tunnel: true },
+  checks: TUNNELED_ORIGIN_CHECKS,
 });
 
 export const cloudflareOnGoogleCloud = variant("cloudflare", {
