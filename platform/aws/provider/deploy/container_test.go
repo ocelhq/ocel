@@ -625,3 +625,28 @@ func TestAContainerAppScalesOnRequestsBetweenItsFloorAndCeiling(t *testing.T) {
 		t.Errorf("targetValue = %v, want a request count per task to hold", tracking["targetValue"])
 	}
 }
+
+func TestAContainerAppThatStopsScalingIsHeldAtItsFloorAgainAndScalesNothing(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerStackSpec(t)
+	spec.App.Instances = provider.Instances{Min: 2, Max: 6}
+	scaling := runContainerProgram(t, cfg, spec)
+	if ignored := scaling.ignoredOf("aws:ecs/service:Service"); !slices.Contains(ignored, "desiredCount") {
+		t.Fatalf("a scaling service ignores %v, want desiredCount left to the autoscaler", ignored)
+	}
+
+	spec.App.Instances = provider.Instances{Min: 2, Max: 2}
+	fixed := runContainerProgram(t, cfg, spec)
+	if ignored := fixed.ignoredOf("aws:ecs/service:Service"); slices.Contains(ignored, "desiredCount") {
+		t.Errorf("a service that stopped scaling ignores %v, want desiredCount set back to its floor", ignored)
+	}
+	if got := recordedOf(t, fixed, "aws:ecs/service:Service")["desiredCount"].NumberValue(); got != 2 {
+		t.Errorf("desiredCount = %v, want the floor of 2 the app now runs at", got)
+	}
+	for _, typeToken := range []string{"aws:appautoscaling/target:Target", "aws:appautoscaling/policy:Policy"} {
+		if names := fixed.registered(typeToken); len(names) != 0 {
+			t.Errorf("a service that stopped scaling still declares %s %v, which would keep scaling it", typeToken, names)
+		}
+	}
+}
