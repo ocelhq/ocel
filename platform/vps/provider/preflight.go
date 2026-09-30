@@ -13,6 +13,9 @@ import (
 )
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
+	if err := refuseScaledContainers(pre.Deploy); err != nil {
+		return err
+	}
 	if err := p.host.CheckEngine(ctx); err != nil {
 		return err
 	}
@@ -29,6 +32,20 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 		p.host.CheckProxy(ctx),
 		p.host.ProxyOwnsServingPorts(ctx),
 	})
+}
+
+var oneInstance = provider.Instances{Min: 1, Max: 1}
+
+func refuseScaledContainers(spec provider.DeploySpec) error {
+	for _, app := range spec.Apps {
+		if app.Compute() != provider.ComputeContainer || app.Instances == oneInstance {
+			continue
+		}
+		return refusal.Refuse(refusal.CodeInvalid,
+			"app %s asks for minInstances %d and maxInstances %d, and a box runs one container per app behind its proxy: set both to 1, or leave them off",
+			app.App, app.Instances.Min, app.Instances.Max)
+	}
+	return nil
 }
 
 func repositories(spec provider.DeploySpec) []string {

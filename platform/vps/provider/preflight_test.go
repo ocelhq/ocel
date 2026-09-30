@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -146,6 +147,55 @@ func preflighting(machine *scripted) error {
 			Apps: []provider.AppEntry{{App: "web", Stack: stack, Image: deployedRef}},
 		},
 	})
+}
+
+func preflightingInstances(machine *scripted, instances provider.Instances) error {
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
+	if err != nil {
+		return err
+	}
+	return p.PreflightDeploy(context.Background(), provider.DeployPreflight{
+		Deploy: provider.DeploySpec{
+			Slug: "shop",
+			Tier: environment.TierProduction,
+			Apps: []provider.AppEntry{{
+				App: "web", Stack: stack, Image: deployedRef, Instances: instances,
+				Manifest: &contractv1.ManifestApp{Name: "web", Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}},
+			}},
+		},
+	})
+}
+
+func TestAContainerAppRunningOneInstanceIsLetThrough(t *testing.T) {
+	t.Parallel()
+
+	if err := preflightingInstances(boxSaying(nil), provider.Instances{Min: 1, Max: 1}); err != nil {
+		t.Fatalf("PreflightDeploy() = %v, want one instance let through", err)
+	}
+}
+
+func TestAContainerAppAskingForOtherThanOneInstanceIsRefusedBeforeTheBoxIsAsked(t *testing.T) {
+	t.Parallel()
+
+	for _, instances := range []provider.Instances{{Min: 1, Max: 3}, {Min: 0, Max: 1}} {
+		machine := boxSaying(nil)
+		err := preflightingInstances(machine, instances)
+		if err == nil {
+			t.Fatalf("PreflightDeploy() let %+v instances onto a box that runs one container per app", instances)
+		}
+		for _, want := range []string{`web`, "minInstances", "maxInstances", "1"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("PreflightDeploy(%+v) = %q, want it to name %s", instances, err, want)
+			}
+		}
+		if len(machine.ran) != 0 {
+			t.Errorf("PreflightDeploy(%+v) ran %v on the box before refusing what the config asks for", instances, machine.ran)
+		}
+	}
 }
 
 func TestABoxThatIsReadyRefusesNothingBeforeADeploy(t *testing.T) {
