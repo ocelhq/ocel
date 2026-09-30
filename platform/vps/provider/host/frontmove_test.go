@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -79,7 +81,7 @@ func wantChange(t *testing.T, group provider.ChangeGroup, name string, action pr
 	return change
 }
 
-func TestMovingABoxFromOcelsOwnProxyToYoursPlansTakingOcelsProxyAwayAndTheOutageUntilYoursServes(t *testing.T) {
+func TestMovingABoxFromOcelsOwnProxyToYourProxyPlansTakingOcelsProxyAwayAndTheOutageUntilYourProxyServes(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
@@ -135,6 +137,37 @@ func TestMovingABoxWithinYourOwnProxyPlansTheNewFileBeforeTheOldAndNoOutage(t *t
 		if change.Kind == KindCertificates {
 			t.Errorf("the move lists %q, want no certificate ordered again: the same Traefik keeps the ones its resolver holds", change.Name)
 		}
+	}
+}
+
+func TestMovingABoxWithinYourOwnProxyToWhereItForwardsElsewherePlansTheOutageUntilItForwardsThere(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	ported := *traefikOnTheHost().Traefik
+	ported.Port = 9001
+	for name, tc := range map[string]struct {
+		from, to Front
+		want     string
+	}{
+		"your Traefik onto another port": {
+			from: traefikOnTheHost(), to: Front{Traefik: &ported},
+			want: "outage from ocel's switchboard restarting until your Traefik forwards to 127.0.0.1:9001",
+		},
+		"a proxy you route yourself onto another port": {
+			from: routedByHand(), to: Front{Manual: &ManualFront{Port: 8481}},
+			want: "outage from ocel's switchboard restarting until a proxy you route yourself forwards to 127.0.0.1:8481",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			box := boxRecordedFor(t, tier, tc.from)
+			portsOwnedOn(box, nil, socketOwner{80, "traefik"}, socketOwner{443, "traefik"})
+			if move := movePlanned(t, box, tier, tc.to); move.Reason != tc.want {
+				t.Errorf("the move gives its outage as %q, want %q: the switchboard restarts where your proxy does not yet forward", move.Reason, tc.want)
+			}
+		})
 	}
 }
 
@@ -266,6 +299,7 @@ func TestMovingABoxOffYourProxyIsRefusedWhileAnythingHoldsTheServingPortsNamingW
 
 func probedHostname(command string) (string, bool) {
 	_, probed, found := strings.Cut(command, quoted("probe")+" ")
+	probed = strings.TrimPrefix(probed, quoted("--any-certificate")+" ")
 	return strings.Trim(probed, "'"), found
 }
 
@@ -306,7 +340,7 @@ func wantBefore(t *testing.T, box *bench, first, then string) {
 
 const switchboardRun = "'--name' 'ocel-switchboard'"
 
-func TestMovingABoxFromOcelsOwnProxyToYoursTakesOcelsProxyAwayStandsYoursAndWaitsUntilItServesEveryHostname(t *testing.T) {
+func TestMovingABoxFromOcelsOwnProxyToYourProxyTakesOcelsProxyAwayStartsTheSwitchboardForItAndWaitsUntilItServesEveryHostname(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
@@ -334,7 +368,7 @@ func TestMovingABoxFromOcelsOwnProxyToYoursTakesOcelsProxyAwayStandsYoursAndWait
 	}
 }
 
-func TestMovingABoxFromYourProxyToOcelsOwnTakesOcelsFileOutUnreloadedBeforeTheSwitchboardLeavesAndStandsOcelsProxy(t *testing.T) {
+func TestMovingABoxFromYourProxyToOcelsOwnTakesOcelsFileOutUnreloadedBeforeTheSwitchboardLeavesAndStartsOcelsProxy(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
@@ -365,7 +399,7 @@ func TestMovingABoxFromYourProxyToOcelsOwnTakesOcelsFileOutUnreloadedBeforeTheSw
 	}
 }
 
-func TestMovingABoxWithinYourOwnProxyPlacesTheNewFileWaitsUntilItServesAndOnlyThenTakesTheOldOut(t *testing.T) {
+func TestMovingABoxWithinYourOwnTraefikPlacesTheNewFileWaitsUntilYourTraefikReadsItAndOnlyThenTakesTheOldOut(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
@@ -375,18 +409,51 @@ func TestMovingABoxWithinYourOwnProxyPlacesTheNewFileWaitsUntilItServesAndOnlyTh
 	if err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	wantBefore(t, box, switchboardRun, quoted("place")+" "+quoted("/etc/traefik/dynamic/ocel/ocel.yml"))
-	wantBefore(t, box, quoted("place")+" "+quoted("/etc/traefik/dynamic/ocel/ocel.yml"), quoted("probe")+" "+quoted(claimed))
-	wantBefore(t, box, quoted("probe")+" "+quoted(claimed), "rm -f "+quoted("/etc/traefik/dynamic/ocel.yml"))
+	placed := quoted("place") + " " + quoted("/etc/traefik/dynamic/ocel/ocel.yml")
+	read := quoted("--any-certificate") + " " + quoted(traefik.DerivePlacementHostname("/etc/traefik/dynamic/ocel/ocel.yml"))
+	taken := "rm -f " + quoted("/etc/traefik/dynamic/ocel.yml")
+	touched := "touch -c " + quoted("/etc/traefik/dynamic/ocel.yml")
+	wantBefore(t, box, switchboardRun, placed)
+	wantBefore(t, box, placed, touched)
+	wantBefore(t, box, touched, read)
+	wantBefore(t, box, read, taken)
+	wantBefore(t, box, taken, quoted("probe")+" "+quoted(claimed))
 	if at := box.at(quoted("unplace") + " " + quoted("/etc/traefik/dynamic/ocel.yml")); at >= 0 {
 		t.Errorf("the move asked the switchboard to take out a file in a directory it no longer mounts: %s", box.commands()[at])
+	}
+	if at := box.at(taken); at >= 0 && !strings.Contains(box.commands()[at], "rm -f "+quoted("/etc/traefik/dynamic")+"/"+switchboard.OriginPrefix+"*.pem") {
+		t.Errorf("the old file was taken out as\n%s\nwant the origin certificates beside it taken with it, by path", box.commands()[at])
 	}
 	if slices.Contains(said, "Start your proxy on 80 and 443 now") {
 		t.Errorf("the move said %q, want nothing asked of a Traefik that serves throughout", said)
 	}
 }
 
-func TestMovingABoxWithinYourOwnCaddyReloadsItOnceTheOldFileIsOut(t *testing.T) {
+func TestMovingABoxWithinYourOwnTraefikThatNeverReadsTheNewFileIsRefusedAndKeepsTheOldOne(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	box := boxRecordedFor(t, tier, traefikOnTheHost())
+	placement := traefik.DerivePlacementHostname("/etc/traefik/dynamic/ocel/ocel.yml")
+	servedFrom(box, func(hostname string) session.Result {
+		if hostname == placement {
+			return session.Result{Code: proxyNotServingYet, Stderr: placement + " answered at 127.0.0.1:443 as \"\", and ocel-switchboard never did"}
+		}
+		return throughTheSwitchboard(hostname)
+	})
+	_, err := movedTo(t, box, tier, traefikIn("/etc/traefik/dynamic/ocel"))
+	refused := refusalOf(t, err, refusal.CodeNotReady)
+	for _, wanted := range []string{"your Traefik did not read ocel's file at /etc/traefik/dynamic/ocel/ocel.yml", "/etc/traefik/dynamic/ocel.yml still routes", "ocel bootstrap production"} {
+		if !strings.Contains(refused.Message, wanted) {
+			t.Errorf("the refusal says %q, want %q in it", refused.Message, wanted)
+		}
+	}
+	if at := box.at("rm -f " + quoted("/etc/traefik/dynamic/ocel.yml")); at >= 0 {
+		t.Errorf("the move took the old file out though your Traefik never read the new one, and your hostnames lost their routes: %s", box.commands()[at])
+	}
+}
+
+func TestMovingABoxWithinYourOwnCaddyTakesTheOldFileOutUnreloadedAndReloadsOntoTheNewOneInOneStep(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
@@ -404,16 +471,35 @@ func TestMovingABoxWithinYourOwnCaddyReloadsItOnceTheOldFileIsOut(t *testing.T) 
 	if _, err := movedTo(t, box, tier, moving); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	taken := box.at("rm -f " + quoted("/etc/caddy/ocel.d/ocel.caddy"))
-	if taken < 0 {
-		t.Fatalf("the move never took the old file out:\n%s", strings.Join(box.commands(), "\n"))
-	}
-	if command := box.commands()[taken]; !strings.Contains(command, "systemctl") || strings.Contains(command, quoted("unplace-origins")) {
-		t.Errorf("the old file was taken out as\n%s\nwant your Caddy reloaded after, and its origin files taken by path: the switchboard now mounts the new directory", command)
+	unplaced := quoted("unplace") + " " + quoted("/etc/caddy/ocel.d/ocel.caddy")
+	placed := quoted("place") + " " + quoted("/etc/caddy/sites/ocel.caddy")
+	reloaded := words(caddyfile.ServiceReload())
+	wantBefore(t, box, unplaced, switchboardRun)
+	wantBefore(t, box, switchboardRun, placed)
+	wantBefore(t, box, placed, reloaded)
+	wantBefore(t, box, unplaced, reloaded)
+	if at := box.at(unplaced); at >= 0 && strings.Contains(box.commands()[at], "systemctl") {
+		t.Errorf("the old file was taken out as\n%s\nwant no reload until the new file is placed: your Caddy refuses a config with two sites for one hostname, and one with neither serves them nothing", box.commands()[at])
 	}
 }
 
-func TestMovingABoxBetweenTwoOfYourProxiesTakesTheOldFileOutBeforeStandingTheNew(t *testing.T) {
+func TestMovingABoxWithinAProxyYouRouteYourselfToAnotherPortAsksYouToForwardThereAndWaitsUntilYouDo(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	box := boxRecordedFor(t, tier, routedByHand())
+	servedFrom(box, throughTheSwitchboard)
+	said, err := movedTo(t, box, tier, Front{Manual: &ManualFront{Port: 8481}})
+	if err != nil {
+		t.Fatalf("Apply() = %v", err)
+	}
+	if !slices.Contains(said, "Forward your proxy to 127.0.0.1:8481 now") {
+		t.Errorf("the move said %q, want it to tell you where ocel's switchboard now listens", said)
+	}
+	wantBefore(t, box, switchboardRun, quoted("probe")+" "+quoted(claimed))
+}
+
+func TestMovingABoxBetweenTwoOfYourProxiesTakesTheOldFileOutBeforeStartingTheSwitchboardForTheNew(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction

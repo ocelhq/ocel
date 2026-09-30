@@ -220,9 +220,9 @@ func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) 
 	case existing != nil && option.same(existing.front()):
 		record = *existing
 	case existing != nil:
-		read.move = &frontMove{from: existing.front(), to: option}
+		read.move = &frontMove{host: b.host, from: existing.front(), to: option}
 	case read.observed(KindContainer, caddy.Container) && option.adopted():
-		read.move = &frontMove{to: option}
+		read.move = &frontMove{host: b.host, to: option}
 	}
 	if read.move != nil {
 		if read.move.table, err = b.host.readMovedTable(ctx); err != nil {

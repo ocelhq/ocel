@@ -457,29 +457,23 @@ func (h *Host) refuseTraefikUnreachable(ctx context.Context, read Reading) error
 		named, proxy.HTTPSPort, loopbackAddr, fronting.Port, named, named)
 }
 
-func (h *Host) servingFree(ctx context.Context, read Reading) error {
-	switch move := read.move; {
-	case move == nil:
-	case move.sameProcess():
-		return h.yoursReachable(ctx, read)
-	case !move.from.adopted():
+func (h *Host) refuseServingPortsHeld(ctx context.Context, read Reading) error {
+	move := read.move
+	switch {
+	case move == nil && h.proxyOption.adopted(), move != nil && move.isSameProcess():
+		return h.refuseProxyUnreachable(ctx, read)
+	case move != nil && !move.from.adopted():
 		return nil
-	default:
-		owners, err := h.servingOwners(ctx, read)
-		if err != nil || len(owners) == 0 {
-			return err
-		}
+	}
+	owners, err := h.readServingOwners(ctx, read)
+	if err != nil || len(owners) == 0 {
+		return err
+	}
+	if move != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s, which %s takes over from %s\n"+
 				"Ocel never stops a proxy it does not run: %s, then run `%s` again",
 			owners.uses(), move.to.named(), move.from.named(), owners.freed("docker stop"), provider.BootstrapCommand(read.Tier))
-	}
-	if h.proxyOption.adopted() {
-		return h.yoursReachable(ctx, read)
-	}
-	owners, err := h.servingOwners(ctx, read)
-	if err != nil || len(owners) == 0 {
-		return err
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s, where ocel's own proxy serves\n"+
@@ -488,7 +482,7 @@ func (h *Host) servingFree(ctx context.Context, read Reading) error {
 		owners.uses(), owners.names(), owners.freed("docker rm -f"), provider.BootstrapCommand(read.Tier), behindYourOwnProxyDocs)
 }
 
-func (h *Host) yoursReachable(ctx context.Context, read Reading) error {
+func (h *Host) refuseProxyUnreachable(ctx context.Context, read Reading) error {
 	switch {
 	case h.proxyOption.Caddy != nil:
 		return h.proxyOption.caddyfile(frontBox{h}).RefuseUnreachable(ctx)
@@ -499,7 +493,7 @@ func (h *Host) yoursReachable(ctx context.Context, read Reading) error {
 	}
 }
 
-func (h *Host) servingOwners(ctx context.Context, read Reading) (portOwners, error) {
+func (h *Host) readServingOwners(ctx context.Context, read Reading) (portOwners, error) {
 	elevation, err := h.elevate(ctx)
 	if err != nil {
 		return nil, err
