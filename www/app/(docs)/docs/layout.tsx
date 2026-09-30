@@ -1,28 +1,40 @@
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import type { Metadata } from "next";
-import { Archivo, IBM_Plex_Mono, IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
+import localFont from "next/font/local";
 import type { CSSProperties, ReactNode } from "react";
 import { baseOptions } from "@/lib/layout.shared";
 import { layoutTree, tabColors } from "@/lib/source";
 import "./globals.css";
 
-const grotesk = Space_Grotesk({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+const grotesk = localFont({
+  src: "../../../../ui/theme/fonts/space-grotesk/space-grotesk-latin-300-700.woff2",
+  weight: "400 600",
   variable: "--font-grotesk",
 });
-const plexSans = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+const plexSans = localFont({
+  src: "../../../../ui/theme/fonts/ibm-plex-sans/ibm-plex-sans-latin-100-700.woff2",
+  weight: "400 600",
   variable: "--font-plex-sans",
 });
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
+const plexMono = localFont({
+  src: [
+    {
+      path: "../../../../ui/theme/fonts/ibm-plex-mono/ibm-plex-mono-latin-400.woff2",
+      weight: "400",
+    },
+    {
+      path: "../../../../ui/theme/fonts/ibm-plex-mono/ibm-plex-mono-latin-500.woff2",
+      weight: "500",
+    },
+  ],
   variable: "--font-plex-mono",
 });
-const archivo = Archivo({ subsets: ["latin"], weight: ["800"], variable: "--font-archivo" });
+const archivo = localFont({
+  src: "../../../../ui/theme/fonts/archivo/archivo-latin-800.woff2",
+  weight: "800",
+  variable: "--font-archivo",
+});
 
 export const metadata: Metadata = {
   title: { default: "Ocel Docs", template: "%s - Ocel Docs" },

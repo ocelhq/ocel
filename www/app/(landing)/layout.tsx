@@ -1,20 +1,24 @@
 import type { Metadata } from "next";
-import { Archivo, IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
+const spaceGrotesk = localFont({
+  src: "../../../ui/theme/fonts/space-grotesk/space-grotesk-latin-300-700.woff2",
+  weight: "300 700",
   variable: "--font-sans",
 });
-const ibmPlexMono = IBM_Plex_Mono({
-  weight: ["400", "500", "600"],
-  subsets: ["latin"],
+const ibmPlexMono = localFont({
+  src: [
+    { path: "../../../ui/theme/fonts/ibm-plex-mono/ibm-plex-mono-latin-400.woff2", weight: "400" },
+    { path: "../../../ui/theme/fonts/ibm-plex-mono/ibm-plex-mono-latin-500.woff2", weight: "500" },
+    { path: "../../../ui/theme/fonts/ibm-plex-mono/ibm-plex-mono-latin-600.woff2", weight: "600" },
+  ],
   variable: "--font-mono",
 });
-const archivo = Archivo({
-  weight: ["800"],
-  subsets: ["latin"],
+const archivo = localFont({
+  src: "../../../ui/theme/fonts/archivo/archivo-latin-800.woff2",
+  weight: "800",
   variable: "--font-display",
 });
 
