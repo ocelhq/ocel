@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 type Bindings map[string]map[string]Binding
@@ -127,10 +128,18 @@ var inlineForms = map[string]inlineForm{
 	},
 }
 
+// TODO(#1463): ocel.json binds a topic or task once a provider publishes a record of one.
+var unboundInConfig = map[resourcesv1.ResourceType]bool{
+	resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC: true,
+	resourcesv1.ResourceType_RESOURCE_TYPE_TASK:  true,
+}
+
 func BindableTypes() []string {
 	out := make([]string, 0, 4)
 	for _, typ := range naming.BindableResourceTypes() {
-		out = append(out, naming.ResourceTypeName(typ))
+		if !unboundInConfig[typ] {
+			out = append(out, naming.ResourceTypeName(typ))
+		}
 	}
 	slices.Sort(out)
 	return out

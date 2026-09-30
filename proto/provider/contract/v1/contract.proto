@@ -5,11 +5,13 @@ option go_package = "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1;contr
 
 import "app/resources/v1/resources.proto";
 import "app/resources/v1/variables.proto";
+import "app/topic/v1/topic.proto";
 import "buf/validate/validate.proto";
 import "common/bindings/v1/bindings.proto";
 import "common/environment/v1/environment.proto";
 import "common/plan/v1/plan.proto";
 import "common/progress/v1/progress.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
 import "provider/cost/v1/cost.proto";
 
@@ -189,6 +191,20 @@ message Manifest {
   repeated ManifestApp apps = 6;
 
   repeated ManifestUsage usages = 7;
+
+  repeated ManifestWorker workers = 8;
+}
+
+message ManifestWorker {
+  string name = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  int32 concurrency = 2 [(buf.validate.field).int32.gte = 0];
+
+  string app = 3 [(buf.validate.field).string.min_len = 1];
+
+  string path = 4;
+
+  string compute = 5 [(buf.validate.field).string.min_len = 1];
 }
 
 message ServerlessArtifact {
@@ -271,9 +287,42 @@ message ManifestResource {
   oneof config {
     app.resources.v1.PostgresConfig postgres = 3;
     app.resources.v1.BucketConfig bucket = 4;
+    ManifestTopic topic = 6;
   }
 
   string binding = 5;
+}
+
+message ManifestTopic {
+  string schema = 1;
+
+  bool ordered = 2;
+
+  app.resources.v1.RetryPolicy retry = 3;
+
+  repeated ManifestConsumer consumers = 4;
+
+  google.protobuf.Duration ttl = 5;
+
+  string cron = 6;
+}
+
+message ManifestConsumer {
+  string name = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  string worker = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  bool exclusive = 3;
+
+  app.resources.v1.RetryPolicy retry = 4;
+
+  int32 concurrency = 5;
+
+  google.protobuf.Duration max_duration = 6;
+
+  repeated app.topic.v1.Lane lanes = 7;
+
+  app.resources.v1.BatchPolicy batch = 8;
 }
 
 message DeployRequest {
@@ -568,6 +617,14 @@ message PreflightResponse {
   map<string, string> container_archs = 12 [(buf.validate.field).map.values.string = {in: ["amd64", "arm64"]}];
 
   bool hostname_required = 13;
+
+  repeated WorkerCeiling worker_ceilings = 14;
+}
+
+message WorkerCeiling {
+  string compute = 1 [(buf.validate.field).string.min_len = 1];
+
+  google.protobuf.Duration max_duration = 2;
 }
 
 
@@ -725,6 +782,8 @@ enum RefusalCode {
   REFUSAL_CODE_BUSY = 4;
 
   REFUSAL_CODE_UNKNOWN_OPTION = 5;
+
+  REFUSAL_CODE_UNSUPPORTED = 6;
 }
 
 message DescribeConnectorTargetRequest {}

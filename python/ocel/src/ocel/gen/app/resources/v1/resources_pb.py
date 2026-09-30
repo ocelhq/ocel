@@ -10,11 +10,16 @@ from typing import Literal, NoReturn, TYPE_CHECKING, TypeAlias
 
 from protobuf import Enum, Message
 from protobuf._codegen import file_desc
+from protobuf.wkt import duration_pb
 
 from . import variables_pb
+from ...topic.v1 import topic_pb
 
 if TYPE_CHECKING:
     from protobuf import DescFile, Oneof
+    from protobuf.wkt import Duration
+
+    from ...topic.v1.topic_pb import Lane
 
 
 _ResourceIdentifierFields: TypeAlias = Literal["type", "name"]
@@ -69,7 +74,7 @@ class DeclareResponse(Message[_DeclareResponseFields]):
         ) -> None:
             pass
 
-_DeclareRequestFields: TypeAlias = Literal["resource", "postgres", "bucket", "source"]
+_DeclareRequestFields: TypeAlias = Literal["resource", "postgres", "bucket", "topic", "task", "worker", "consumer", "source"]
 
 class DeclareRequest(Message[_DeclareRequestFields]):
     """
@@ -100,13 +105,13 @@ class DeclareRequest(Message[_DeclareRequestFields]):
             self,
             *,
             resource: ResourceIdentifier | None = None,
-            config: Oneof[Literal["postgres"], PostgresConfig] | Oneof[Literal["bucket"], BucketConfig] | None = None,
+            config: Oneof[Literal["postgres"], PostgresConfig] | Oneof[Literal["bucket"], BucketConfig] | Oneof[Literal["topic"], TopicConfig] | Oneof[Literal["task"], TaskConfig] | Oneof[Literal["worker"], WorkerConfig] | Oneof[Literal["consumer"], ConsumerConfig] | None = None,
             source: str = "",
         ) -> None:
             pass
 
         resource: ResourceIdentifier | None
-        config: Oneof[Literal["postgres"], PostgresConfig] | Oneof[Literal["bucket"], BucketConfig] | None
+        config: Oneof[Literal["postgres"], PostgresConfig] | Oneof[Literal["bucket"], BucketConfig] | Oneof[Literal["topic"], TopicConfig] | Oneof[Literal["task"], TaskConfig] | Oneof[Literal["worker"], WorkerConfig] | Oneof[Literal["consumer"], ConsumerConfig] | None
         source: str
 
 _PostgresConfigFields: TypeAlias = Literal["version"]
@@ -171,6 +176,288 @@ class BucketConfig(Message[_BucketConfigFields]):
         allowed_origins: list[str]
         public: bool
 
+_RetryPolicyFields: TypeAlias = Literal["max_attempts", "min_delay", "max_delay"]
+
+class RetryPolicy(Message[_RetryPolicyFields]):
+    """
+    ```proto
+    message app.resources.v1.RetryPolicy
+    ```
+
+    Attributes:
+        max_attempts:
+            ```proto
+            int32 max_attempts = 1;
+            ```
+        min_delay:
+            ```proto
+            optional google.protobuf.Duration min_delay = 2;
+            ```
+        max_delay:
+            ```proto
+            optional google.protobuf.Duration max_delay = 3;
+            ```
+    """
+
+    __slots__ = ("max_attempts", "min_delay", "max_delay")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            max_attempts: int = 0,
+            min_delay: Duration | None = None,
+            max_delay: Duration | None = None,
+        ) -> None:
+            pass
+
+        max_attempts: int
+        min_delay: Duration | None
+        max_delay: Duration | None
+
+_BatchPolicyFields: TypeAlias = Literal["size", "timeout"]
+
+class BatchPolicy(Message[_BatchPolicyFields]):
+    """
+    ```proto
+    message app.resources.v1.BatchPolicy
+    ```
+
+    Attributes:
+        size:
+            ```proto
+            int32 size = 1;
+            ```
+        timeout:
+            ```proto
+            optional google.protobuf.Duration timeout = 2;
+            ```
+    """
+
+    __slots__ = ("size", "timeout")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            size: int = 0,
+            timeout: Duration | None = None,
+        ) -> None:
+            pass
+
+        size: int
+        timeout: Duration | None
+
+_TopicConfigFields: TypeAlias = Literal["schema", "ordered", "retry"]
+
+class TopicConfig(Message[_TopicConfigFields]):
+    """
+    ```proto
+    message app.resources.v1.TopicConfig
+    ```
+
+    Attributes:
+        schema:
+            ```proto
+            string schema = 1;
+            ```
+        ordered:
+            ```proto
+            bool ordered = 2;
+            ```
+        retry:
+            ```proto
+            optional app.resources.v1.RetryPolicy retry = 3;
+            ```
+    """
+
+    __slots__ = ("schema", "ordered", "retry")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            schema: str = "",
+            ordered: bool = False,
+            retry: RetryPolicy | None = None,
+        ) -> None:
+            pass
+
+        schema: str
+        ordered: bool
+        retry: RetryPolicy | None
+
+_ConsumerConfigFields: TypeAlias = Literal["topic", "worker", "retry", "concurrency", "max_duration", "lanes", "batch"]
+
+class ConsumerConfig(Message[_ConsumerConfigFields]):
+    """
+    ```proto
+    message app.resources.v1.ConsumerConfig
+    ```
+
+    Attributes:
+        topic:
+            ```proto
+            string topic = 1;
+            ```
+        worker:
+            ```proto
+            string worker = 2;
+            ```
+        retry:
+            ```proto
+            optional app.resources.v1.RetryPolicy retry = 3;
+            ```
+        concurrency:
+            ```proto
+            int32 concurrency = 4;
+            ```
+        max_duration:
+            ```proto
+            optional google.protobuf.Duration max_duration = 5;
+            ```
+        lanes:
+            ```proto
+            repeated app.topic.v1.Lane lanes = 6 [packed = true];
+            ```
+        batch:
+            ```proto
+            optional app.resources.v1.BatchPolicy batch = 7;
+            ```
+    """
+
+    __slots__ = ("topic", "worker", "retry", "concurrency", "max_duration", "lanes", "batch")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            topic: str = "",
+            worker: str = "",
+            retry: RetryPolicy | None = None,
+            concurrency: int = 0,
+            max_duration: Duration | None = None,
+            lanes: list[Lane] | None = None,
+            batch: BatchPolicy | None = None,
+        ) -> None:
+            pass
+
+        topic: str
+        worker: str
+        retry: RetryPolicy | None
+        concurrency: int
+        max_duration: Duration | None
+        lanes: list[Lane]
+        batch: BatchPolicy | None
+
+_TaskConfigFields: TypeAlias = Literal["schema", "ordered", "retry", "concurrency", "max_duration", "ttl", "batch", "worker", "cron"]
+
+class TaskConfig(Message[_TaskConfigFields]):
+    """
+    ```proto
+    message app.resources.v1.TaskConfig
+    ```
+
+    Attributes:
+        schema:
+            ```proto
+            string schema = 1;
+            ```
+        ordered:
+            ```proto
+            bool ordered = 2;
+            ```
+        retry:
+            ```proto
+            optional app.resources.v1.RetryPolicy retry = 3;
+            ```
+        concurrency:
+            ```proto
+            int32 concurrency = 4;
+            ```
+        max_duration:
+            ```proto
+            optional google.protobuf.Duration max_duration = 5;
+            ```
+        ttl:
+            ```proto
+            optional google.protobuf.Duration ttl = 6;
+            ```
+        batch:
+            ```proto
+            optional app.resources.v1.BatchPolicy batch = 7;
+            ```
+        worker:
+            ```proto
+            string worker = 8;
+            ```
+        cron:
+            ```proto
+            string cron = 9;
+            ```
+    """
+
+    __slots__ = ("schema", "ordered", "retry", "concurrency", "max_duration", "ttl", "batch", "worker", "cron")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            schema: str = "",
+            ordered: bool = False,
+            retry: RetryPolicy | None = None,
+            concurrency: int = 0,
+            max_duration: Duration | None = None,
+            ttl: Duration | None = None,
+            batch: BatchPolicy | None = None,
+            worker: str = "",
+            cron: str = "",
+        ) -> None:
+            pass
+
+        schema: str
+        ordered: bool
+        retry: RetryPolicy | None
+        concurrency: int
+        max_duration: Duration | None
+        ttl: Duration | None
+        batch: BatchPolicy | None
+        worker: str
+        cron: str
+
+_WorkerConfigFields: TypeAlias = Literal["concurrency"]
+
+class WorkerConfig(Message[_WorkerConfigFields]):
+    """
+    ```proto
+    message app.resources.v1.WorkerConfig
+    ```
+
+    Attributes:
+        concurrency:
+            ```proto
+            int32 concurrency = 1;
+            ```
+    """
+
+    __slots__ = ("concurrency",)
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            concurrency: int = 0,
+        ) -> None:
+            pass
+
+        concurrency: int
+
 class ResourceType(Enum):
     """
     ```proto
@@ -190,22 +477,39 @@ class ResourceType(Enum):
             ```proto
             RESOURCE_TYPE_BUCKET = 2
             ```
-        CONTAINER:
+        TOPIC:
             ```proto
-            RESOURCE_TYPE_CONTAINER = 3
+            RESOURCE_TYPE_TOPIC = 4
+            ```
+        TASK:
+            ```proto
+            RESOURCE_TYPE_TASK = 5
+            ```
+        WORKER:
+            ```proto
+            RESOURCE_TYPE_WORKER = 6
+            ```
+        CONSUMER:
+            ```proto
+            RESOURCE_TYPE_CONSUMER = 7
             ```
     """
 
     UNSPECIFIED = 0
     POSTGRES = 1
     BUCKET = 2
-    CONTAINER = 3
+    TOPIC = 4
+    TASK = 5
+    WORKER = 6
+    CONSUMER = 7
 
 
 _DESC = file_desc(
-    b'\n app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto"\\\n\x12ResourceIdentifier\x122\n\x04type\x18\x01 \x01(\x0e2\x1e.app.resources.v1.ResourceTypeR\x04type\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name"\x11\n\x0fDeclareResponse"\xee\x01\n\x0eDeclareRequest\x12@\n\x08resource\x18\x01 \x01(\x0b2$.app.resources.v1.ResourceIdentifierR\x08resource\x12>\n\x08postgres\x18\x02 \x01(\x0b2 .app.resources.v1.PostgresConfigH\x00R\x08postgres\x128\n\x06bucket\x18\x03 \x01(\x0b2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x12\x16\n\x06source\x18\x04 \x01(\tR\x06sourceB\x08\n\x06config"*\n\x0ePostgresConfig\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version"O\n\x0cBucketConfig\x12\'\n\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins\x12\x16\n\x06public\x18\x02 \x01(\x08R\x06public*\x80\x01\n\x0cResourceType\x12\x1d\n\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x1b\n\x17RESOURCE_TYPE_CONTAINER\x10\x032\xa8\x02\n\x0fResourceService\x12N\n\x07Declare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n\nDeclareEnv\x12#.app.resources.v1.DeclareEnvRequest\x1a$.app.resources.v1.DeclareEnvResponse\x12l\n\x11ReportEnvProblems\x12*.app.resources.v1.ReportEnvProblemsRequest\x1a+.app.resources.v1.ReportEnvProblemsResponseB?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
+    b'\n app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\x1a\x18app/topic/v1/topic.proto\x1a\x1egoogle/protobuf/duration.proto"\\\n\x12ResourceIdentifier\x122\n\x04type\x18\x01 \x01(\x0e2\x1e.app.resources.v1.ResourceTypeR\x04type\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name"\x11\n\x0fDeclareResponse"\xd3\x03\n\x0eDeclareRequest\x12@\n\x08resource\x18\x01 \x01(\x0b2$.app.resources.v1.ResourceIdentifierR\x08resource\x12>\n\x08postgres\x18\x02 \x01(\x0b2 .app.resources.v1.PostgresConfigH\x00R\x08postgres\x128\n\x06bucket\x18\x03 \x01(\x0b2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x125\n\x05topic\x18\x05 \x01(\x0b2\x1d.app.resources.v1.TopicConfigH\x00R\x05topic\x122\n\x04task\x18\x06 \x01(\x0b2\x1c.app.resources.v1.TaskConfigH\x00R\x04task\x128\n\x06worker\x18\x07 \x01(\x0b2\x1e.app.resources.v1.WorkerConfigH\x00R\x06worker\x12>\n\x08consumer\x18\x08 \x01(\x0b2 .app.resources.v1.ConsumerConfigH\x00R\x08consumer\x12\x16\n\x06source\x18\x04 \x01(\tR\x06sourceB\x08\n\x06config"*\n\x0ePostgresConfig\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version"O\n\x0cBucketConfig\x12\'\n\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins\x12\x16\n\x06public\x18\x02 \x01(\x08R\x06public"\xa0\x01\n\x0bRetryPolicy\x12!\n\x0cmax_attempts\x18\x01 \x01(\x05R\x0bmaxAttempts\x126\n\tmin_delay\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x08minDelay\x126\n\tmax_delay\x18\x03 \x01(\x0b2\x19.google.protobuf.DurationR\x08maxDelay"V\n\x0bBatchPolicy\x12\x12\n\x04size\x18\x01 \x01(\x05R\x04size\x123\n\x07timeout\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x07timeout"t\n\x0bTopicConfig\x12\x16\n\x06schema\x18\x01 \x01(\tR\x06schema\x12\x18\n\x07ordered\x18\x02 \x01(\x08R\x07ordered\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry"\xb2\x02\n\x0eConsumerConfig\x12\x14\n\x05topic\x18\x01 \x01(\tR\x05topic\x12\x16\n\x06worker\x18\x02 \x01(\tR\x06worker\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry\x12 \n\x0bconcurrency\x18\x04 \x01(\x05R\x0bconcurrency\x12<\n\x0cmax_duration\x18\x05 \x01(\x0b2\x19.google.protobuf.DurationR\x0bmaxDuration\x12(\n\x05lanes\x18\x06 \x03(\x0e2\x12.app.topic.v1.LaneR\x05lanes\x123\n\x05batch\x18\x07 \x01(\x0b2\x1d.app.resources.v1.BatchPolicyR\x05batch"\xe1\x02\n\nTaskConfig\x12\x16\n\x06schema\x18\x01 \x01(\tR\x06schema\x12\x18\n\x07ordered\x18\x02 \x01(\x08R\x07ordered\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry\x12 \n\x0bconcurrency\x18\x04 \x01(\x05R\x0bconcurrency\x12<\n\x0cmax_duration\x18\x05 \x01(\x0b2\x19.google.protobuf.DurationR\x0bmaxDuration\x12+\n\x03ttl\x18\x06 \x01(\x0b2\x19.google.protobuf.DurationR\x03ttl\x123\n\x05batch\x18\x07 \x01(\x0b2\x1d.app.resources.v1.BatchPolicyR\x05batch\x12\x16\n\x06worker\x18\x08 \x01(\tR\x06worker\x12\x12\n\x04cron\x18\t \x01(\tR\x04cron"0\n\x0cWorkerConfig\x12 \n\x0bconcurrency\x18\x01 \x01(\x05R\x0bconcurrency*\xe9\x01\n\x0cResourceType\x12\x1d\n\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x17\n\x13RESOURCE_TYPE_TOPIC\x10\x04\x12\x16\n\x12RESOURCE_TYPE_TASK\x10\x05\x12\x18\n\x14RESOURCE_TYPE_WORKER\x10\x06\x12\x1a\n\x16RESOURCE_TYPE_CONSUMER\x10\x07"\x04\x08\x03\x10\x03*\x17RESOURCE_TYPE_CONTAINER2\xa8\x02\n\x0fResourceService\x12N\n\x07Declare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n\nDeclareEnv\x12#.app.resources.v1.DeclareEnvRequest\x1a$.app.resources.v1.DeclareEnvResponse\x12l\n\x11ReportEnvProblems\x12*.app.resources.v1.ReportEnvProblemsRequest\x1a+.app.resources.v1.ReportEnvProblemsResponseB?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
     [
         variables_pb.desc(),
+        topic_pb.desc(),
+        duration_pb.desc(),
     ],
     {
         "ResourceIdentifier": ResourceIdentifier,
@@ -213,6 +517,12 @@ _DESC = file_desc(
         "DeclareRequest": DeclareRequest,
         "PostgresConfig": PostgresConfig,
         "BucketConfig": BucketConfig,
+        "RetryPolicy": RetryPolicy,
+        "BatchPolicy": BatchPolicy,
+        "TopicConfig": TopicConfig,
+        "ConsumerConfig": ConsumerConfig,
+        "TaskConfig": TaskConfig,
+        "WorkerConfig": WorkerConfig,
         "ResourceType": ResourceType,
     },
 )

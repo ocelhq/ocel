@@ -13,6 +13,8 @@ import (
 var bindable = map[resourcesv1.ResourceType]bindingsv1.BindingType{
 	resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES: bindingsv1.BindingType_BINDING_TYPE_POSTGRES,
 	resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:   bindingsv1.BindingType_BINDING_TYPE_BUCKET,
+	resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC:    bindingsv1.BindingType_BINDING_TYPE_TOPIC,
+	resourcesv1.ResourceType_RESOURCE_TYPE_TASK:     bindingsv1.BindingType_BINDING_TYPE_TASK,
 }
 
 func BindableAs(t resourcesv1.ResourceType) (bindingsv1.BindingType, bool) {

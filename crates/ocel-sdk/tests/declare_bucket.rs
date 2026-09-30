@@ -39,6 +39,9 @@ fn a_struct_declares_its_buckets_beside_its_databases() {
                     "bucket public={} origins={:?}",
                     config.public, config.allowed_origins
                 ),
+                other => panic!(
+                    "the crate declared a {other:?}, and it declares only postgres and buckets"
+                ),
             };
             format!("{:?} {} {kind}", sent.resource.r#type, sent.resource.name)
         })

@@ -7,10 +7,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
-func workerOutputName(app string) string {
-	return naming.Join(naming.WordSeparator, app, string(naming.KindWorker))
-}
-
 const appsDirName = "apps"
 
 func appArtifactRoot(artifactRoot, app string) string {

@@ -20,6 +20,20 @@ pub mod app {
             include!("proto/app.resources.v1.mod.rs");
         }
     }
+
+    pub mod task {
+        pub mod v1 {
+            include!("proto/app.task.v1.rs");
+            include!("proto/app.task.v1.mod.rs");
+        }
+    }
+
+    pub mod topic {
+        pub mod v1 {
+            include!("proto/app.topic.v1.rs");
+            include!("proto/app.topic.v1.mod.rs");
+        }
+    }
 }
 
 pub mod common {

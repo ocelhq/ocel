@@ -5,8 +5,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func bindingsSchema(t *testing.T) map[string]any {
@@ -49,13 +47,7 @@ func TestBindingsSchemaKeysAreExactlyTheBindableTypes(t *testing.T) {
 	}
 	slices.Sort(got)
 
-	want := make([]string, 0, len(properties))
-	for _, typ := range naming.BindableResourceTypes() {
-		want = append(want, naming.ResourceTypeName(typ))
-	}
-	slices.Sort(want)
-
-	if !slices.Equal(got, want) {
+	if want := BindableTypes(); !slices.Equal(got, want) {
 		t.Errorf("bindings keys = %v, want %v — the schema must not contain a second list of bindable types", got, want)
 	}
 }
@@ -102,10 +94,26 @@ func TestCheckRefusesAnUnbindableTypeKey(t *testing.T) {
 
 func TestCheckAdmitsABindingUnderEachBindableType(t *testing.T) {
 	bindings := map[string]any{}
-	for _, typ := range naming.BindableResourceTypes() {
-		bindings[naming.ResourceTypeName(typ)] = map[string]any{"orders": "@sst-orders"}
+	for _, typ := range BindableTypes() {
+		bindings[typ] = map[string]any{"orders": "@sst-orders"}
 	}
 	if err := Check("", Document{}, map[string]any{"slug": "shop", "bindings": bindings}); err != nil {
 		t.Fatalf("Check = %v, want every bindable type admitted", err)
+	}
+}
+
+func TestATopicOrTaskIsNotBoundInConfig(t *testing.T) {
+	properties := bindingsSchema(t)["properties"].(map[string]any)
+	for _, typ := range []string{"topic", "task"} {
+		if _, keyed := properties[typ]; keyed {
+			t.Errorf("the bindings schema has a %s key, want none: nothing publishes a %s record to bind", typ, typ)
+		}
+		err := Check("", Document{}, map[string]any{
+			"slug":     "shop",
+			"bindings": map[string]any{typ: map[string]any{"orders": "@shared-orders"}},
+		})
+		if err == nil {
+			t.Errorf("Check = nil, want bindings.%s refused", typ)
+		}
 	}
 }

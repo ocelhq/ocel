@@ -15,7 +15,10 @@ func TestBindableAs(t *testing.T) {
 	}{
 		{resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, bindingsv1.BindingType_BINDING_TYPE_POSTGRES, true},
 		{resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, bindingsv1.BindingType_BINDING_TYPE_BUCKET, true},
-		{resourcesv1.ResourceType_RESOURCE_TYPE_CONTAINER, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED, false},
+		{resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC, bindingsv1.BindingType_BINDING_TYPE_TOPIC, true},
+		{resourcesv1.ResourceType_RESOURCE_TYPE_TASK, bindingsv1.BindingType_BINDING_TYPE_TASK, true},
+		{resourcesv1.ResourceType_RESOURCE_TYPE_WORKER, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED, false},
+		{resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED, false},
 		{resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED, false},
 	} {
 		got, bindable := BindableAs(tc.declared)

@@ -7,8 +7,10 @@
 package resourcesv1
 
 import (
+	v1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -27,7 +29,10 @@ const (
 	ResourceType_RESOURCE_TYPE_UNSPECIFIED ResourceType = 0
 	ResourceType_RESOURCE_TYPE_POSTGRES    ResourceType = 1
 	ResourceType_RESOURCE_TYPE_BUCKET      ResourceType = 2
-	ResourceType_RESOURCE_TYPE_CONTAINER   ResourceType = 3
+	ResourceType_RESOURCE_TYPE_TOPIC       ResourceType = 4
+	ResourceType_RESOURCE_TYPE_TASK        ResourceType = 5
+	ResourceType_RESOURCE_TYPE_WORKER      ResourceType = 6
+	ResourceType_RESOURCE_TYPE_CONSUMER    ResourceType = 7
 )
 
 // Enum value maps for ResourceType.
@@ -36,13 +41,19 @@ var (
 		0: "RESOURCE_TYPE_UNSPECIFIED",
 		1: "RESOURCE_TYPE_POSTGRES",
 		2: "RESOURCE_TYPE_BUCKET",
-		3: "RESOURCE_TYPE_CONTAINER",
+		4: "RESOURCE_TYPE_TOPIC",
+		5: "RESOURCE_TYPE_TASK",
+		6: "RESOURCE_TYPE_WORKER",
+		7: "RESOURCE_TYPE_CONSUMER",
 	}
 	ResourceType_value = map[string]int32{
 		"RESOURCE_TYPE_UNSPECIFIED": 0,
 		"RESOURCE_TYPE_POSTGRES":    1,
 		"RESOURCE_TYPE_BUCKET":      2,
-		"RESOURCE_TYPE_CONTAINER":   3,
+		"RESOURCE_TYPE_TOPIC":       4,
+		"RESOURCE_TYPE_TASK":        5,
+		"RESOURCE_TYPE_WORKER":      6,
+		"RESOURCE_TYPE_CONSUMER":    7,
 	}
 )
 
@@ -168,6 +179,10 @@ type DeclareRequest struct {
 	//
 	//	*DeclareRequest_Postgres
 	//	*DeclareRequest_Bucket
+	//	*DeclareRequest_Topic
+	//	*DeclareRequest_Task
+	//	*DeclareRequest_Worker
+	//	*DeclareRequest_Consumer
 	Config        isDeclareRequest_Config `protobuf_oneof:"config"`
 	Source        string                  `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -236,6 +251,42 @@ func (x *DeclareRequest) GetBucket() *BucketConfig {
 	return nil
 }
 
+func (x *DeclareRequest) GetTopic() *TopicConfig {
+	if x != nil {
+		if x, ok := x.Config.(*DeclareRequest_Topic); ok {
+			return x.Topic
+		}
+	}
+	return nil
+}
+
+func (x *DeclareRequest) GetTask() *TaskConfig {
+	if x != nil {
+		if x, ok := x.Config.(*DeclareRequest_Task); ok {
+			return x.Task
+		}
+	}
+	return nil
+}
+
+func (x *DeclareRequest) GetWorker() *WorkerConfig {
+	if x != nil {
+		if x, ok := x.Config.(*DeclareRequest_Worker); ok {
+			return x.Worker
+		}
+	}
+	return nil
+}
+
+func (x *DeclareRequest) GetConsumer() *ConsumerConfig {
+	if x != nil {
+		if x, ok := x.Config.(*DeclareRequest_Consumer); ok {
+			return x.Consumer
+		}
+	}
+	return nil
+}
+
 func (x *DeclareRequest) GetSource() string {
 	if x != nil {
 		return x.Source
@@ -255,9 +306,33 @@ type DeclareRequest_Bucket struct {
 	Bucket *BucketConfig `protobuf:"bytes,3,opt,name=bucket,proto3,oneof"`
 }
 
+type DeclareRequest_Topic struct {
+	Topic *TopicConfig `protobuf:"bytes,5,opt,name=topic,proto3,oneof"`
+}
+
+type DeclareRequest_Task struct {
+	Task *TaskConfig `protobuf:"bytes,6,opt,name=task,proto3,oneof"`
+}
+
+type DeclareRequest_Worker struct {
+	Worker *WorkerConfig `protobuf:"bytes,7,opt,name=worker,proto3,oneof"`
+}
+
+type DeclareRequest_Consumer struct {
+	Consumer *ConsumerConfig `protobuf:"bytes,8,opt,name=consumer,proto3,oneof"`
+}
+
 func (*DeclareRequest_Postgres) isDeclareRequest_Config() {}
 
 func (*DeclareRequest_Bucket) isDeclareRequest_Config() {}
+
+func (*DeclareRequest_Topic) isDeclareRequest_Config() {}
+
+func (*DeclareRequest_Task) isDeclareRequest_Config() {}
+
+func (*DeclareRequest_Worker) isDeclareRequest_Config() {}
+
+func (*DeclareRequest_Consumer) isDeclareRequest_Config() {}
 
 type PostgresConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -355,31 +430,486 @@ func (x *BucketConfig) GetPublic() bool {
 	return false
 }
 
+type RetryPolicy struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MaxAttempts   int32                  `protobuf:"varint,1,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
+	MinDelay      *durationpb.Duration   `protobuf:"bytes,2,opt,name=min_delay,json=minDelay,proto3" json:"min_delay,omitempty"`
+	MaxDelay      *durationpb.Duration   `protobuf:"bytes,3,opt,name=max_delay,json=maxDelay,proto3" json:"max_delay,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RetryPolicy) Reset() {
+	*x = RetryPolicy{}
+	mi := &file_app_resources_v1_resources_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RetryPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RetryPolicy) ProtoMessage() {}
+
+func (x *RetryPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_resources_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RetryPolicy.ProtoReflect.Descriptor instead.
+func (*RetryPolicy) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *RetryPolicy) GetMaxAttempts() int32 {
+	if x != nil {
+		return x.MaxAttempts
+	}
+	return 0
+}
+
+func (x *RetryPolicy) GetMinDelay() *durationpb.Duration {
+	if x != nil {
+		return x.MinDelay
+	}
+	return nil
+}
+
+func (x *RetryPolicy) GetMaxDelay() *durationpb.Duration {
+	if x != nil {
+		return x.MaxDelay
+	}
+	return nil
+}
+
+type BatchPolicy struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Size          int32                  `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
+	Timeout       *durationpb.Duration   `protobuf:"bytes,2,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchPolicy) Reset() {
+	*x = BatchPolicy{}
+	mi := &file_app_resources_v1_resources_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchPolicy) ProtoMessage() {}
+
+func (x *BatchPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_resources_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchPolicy.ProtoReflect.Descriptor instead.
+func (*BatchPolicy) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *BatchPolicy) GetSize() int32 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *BatchPolicy) GetTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.Timeout
+	}
+	return nil
+}
+
+type TopicConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Schema        string                 `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
+	Ordered       bool                   `protobuf:"varint,2,opt,name=ordered,proto3" json:"ordered,omitempty"`
+	Retry         *RetryPolicy           `protobuf:"bytes,3,opt,name=retry,proto3" json:"retry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TopicConfig) Reset() {
+	*x = TopicConfig{}
+	mi := &file_app_resources_v1_resources_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TopicConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TopicConfig) ProtoMessage() {}
+
+func (x *TopicConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_resources_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TopicConfig.ProtoReflect.Descriptor instead.
+func (*TopicConfig) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *TopicConfig) GetSchema() string {
+	if x != nil {
+		return x.Schema
+	}
+	return ""
+}
+
+func (x *TopicConfig) GetOrdered() bool {
+	if x != nil {
+		return x.Ordered
+	}
+	return false
+}
+
+func (x *TopicConfig) GetRetry() *RetryPolicy {
+	if x != nil {
+		return x.Retry
+	}
+	return nil
+}
+
+type ConsumerConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	Worker        string                 `protobuf:"bytes,2,opt,name=worker,proto3" json:"worker,omitempty"`
+	Retry         *RetryPolicy           `protobuf:"bytes,3,opt,name=retry,proto3" json:"retry,omitempty"`
+	Concurrency   int32                  `protobuf:"varint,4,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
+	MaxDuration   *durationpb.Duration   `protobuf:"bytes,5,opt,name=max_duration,json=maxDuration,proto3" json:"max_duration,omitempty"`
+	Lanes         []v1.Lane              `protobuf:"varint,6,rep,packed,name=lanes,proto3,enum=app.topic.v1.Lane" json:"lanes,omitempty"`
+	Batch         *BatchPolicy           `protobuf:"bytes,7,opt,name=batch,proto3" json:"batch,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConsumerConfig) Reset() {
+	*x = ConsumerConfig{}
+	mi := &file_app_resources_v1_resources_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsumerConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsumerConfig) ProtoMessage() {}
+
+func (x *ConsumerConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_resources_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsumerConfig.ProtoReflect.Descriptor instead.
+func (*ConsumerConfig) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ConsumerConfig) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *ConsumerConfig) GetWorker() string {
+	if x != nil {
+		return x.Worker
+	}
+	return ""
+}
+
+func (x *ConsumerConfig) GetRetry() *RetryPolicy {
+	if x != nil {
+		return x.Retry
+	}
+	return nil
+}
+
+func (x *ConsumerConfig) GetConcurrency() int32 {
+	if x != nil {
+		return x.Concurrency
+	}
+	return 0
+}
+
+func (x *ConsumerConfig) GetMaxDuration() *durationpb.Duration {
+	if x != nil {
+		return x.MaxDuration
+	}
+	return nil
+}
+
+func (x *ConsumerConfig) GetLanes() []v1.Lane {
+	if x != nil {
+		return x.Lanes
+	}
+	return nil
+}
+
+func (x *ConsumerConfig) GetBatch() *BatchPolicy {
+	if x != nil {
+		return x.Batch
+	}
+	return nil
+}
+
+type TaskConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Schema        string                 `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
+	Ordered       bool                   `protobuf:"varint,2,opt,name=ordered,proto3" json:"ordered,omitempty"`
+	Retry         *RetryPolicy           `protobuf:"bytes,3,opt,name=retry,proto3" json:"retry,omitempty"`
+	Concurrency   int32                  `protobuf:"varint,4,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
+	MaxDuration   *durationpb.Duration   `protobuf:"bytes,5,opt,name=max_duration,json=maxDuration,proto3" json:"max_duration,omitempty"`
+	Ttl           *durationpb.Duration   `protobuf:"bytes,6,opt,name=ttl,proto3" json:"ttl,omitempty"`
+	Batch         *BatchPolicy           `protobuf:"bytes,7,opt,name=batch,proto3" json:"batch,omitempty"`
+	Worker        string                 `protobuf:"bytes,8,opt,name=worker,proto3" json:"worker,omitempty"`
+	Cron          string                 `protobuf:"bytes,9,opt,name=cron,proto3" json:"cron,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TaskConfig) Reset() {
+	*x = TaskConfig{}
+	mi := &file_app_resources_v1_resources_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TaskConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TaskConfig) ProtoMessage() {}
+
+func (x *TaskConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_resources_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TaskConfig.ProtoReflect.Descriptor instead.
+func (*TaskConfig) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *TaskConfig) GetSchema() string {
+	if x != nil {
+		return x.Schema
+	}
+	return ""
+}
+
+func (x *TaskConfig) GetOrdered() bool {
+	if x != nil {
+		return x.Ordered
+	}
+	return false
+}
+
+func (x *TaskConfig) GetRetry() *RetryPolicy {
+	if x != nil {
+		return x.Retry
+	}
+	return nil
+}
+
+func (x *TaskConfig) GetConcurrency() int32 {
+	if x != nil {
+		return x.Concurrency
+	}
+	return 0
+}
+
+func (x *TaskConfig) GetMaxDuration() *durationpb.Duration {
+	if x != nil {
+		return x.MaxDuration
+	}
+	return nil
+}
+
+func (x *TaskConfig) GetTtl() *durationpb.Duration {
+	if x != nil {
+		return x.Ttl
+	}
+	return nil
+}
+
+func (x *TaskConfig) GetBatch() *BatchPolicy {
+	if x != nil {
+		return x.Batch
+	}
+	return nil
+}
+
+func (x *TaskConfig) GetWorker() string {
+	if x != nil {
+		return x.Worker
+	}
+	return ""
+}
+
+func (x *TaskConfig) GetCron() string {
+	if x != nil {
+		return x.Cron
+	}
+	return ""
+}
+
+type WorkerConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Concurrency   int32                  `protobuf:"varint,1,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerConfig) Reset() {
+	*x = WorkerConfig{}
+	mi := &file_app_resources_v1_resources_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerConfig) ProtoMessage() {}
+
+func (x *WorkerConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_resources_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerConfig.ProtoReflect.Descriptor instead.
+func (*WorkerConfig) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *WorkerConfig) GetConcurrency() int32 {
+	if x != nil {
+		return x.Concurrency
+	}
+	return 0
+}
+
 var File_app_resources_v1_resources_proto protoreflect.FileDescriptor
 
 const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\n" +
-	" app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\"\\\n" +
+	" app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\x1a\x18app/topic/v1/topic.proto\x1a\x1egoogle/protobuf/duration.proto\"\\\n" +
 	"\x12ResourceIdentifier\x122\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x1e.app.resources.v1.ResourceTypeR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x11\n" +
-	"\x0fDeclareResponse\"\xee\x01\n" +
+	"\x0fDeclareResponse\"\xd3\x03\n" +
 	"\x0eDeclareRequest\x12@\n" +
 	"\bresource\x18\x01 \x01(\v2$.app.resources.v1.ResourceIdentifierR\bresource\x12>\n" +
 	"\bpostgres\x18\x02 \x01(\v2 .app.resources.v1.PostgresConfigH\x00R\bpostgres\x128\n" +
-	"\x06bucket\x18\x03 \x01(\v2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x12\x16\n" +
+	"\x06bucket\x18\x03 \x01(\v2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x125\n" +
+	"\x05topic\x18\x05 \x01(\v2\x1d.app.resources.v1.TopicConfigH\x00R\x05topic\x122\n" +
+	"\x04task\x18\x06 \x01(\v2\x1c.app.resources.v1.TaskConfigH\x00R\x04task\x128\n" +
+	"\x06worker\x18\a \x01(\v2\x1e.app.resources.v1.WorkerConfigH\x00R\x06worker\x12>\n" +
+	"\bconsumer\x18\b \x01(\v2 .app.resources.v1.ConsumerConfigH\x00R\bconsumer\x12\x16\n" +
 	"\x06source\x18\x04 \x01(\tR\x06sourceB\b\n" +
 	"\x06config\"*\n" +
 	"\x0ePostgresConfig\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\"O\n" +
 	"\fBucketConfig\x12'\n" +
 	"\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins\x12\x16\n" +
-	"\x06public\x18\x02 \x01(\bR\x06public*\x80\x01\n" +
+	"\x06public\x18\x02 \x01(\bR\x06public\"\xa0\x01\n" +
+	"\vRetryPolicy\x12!\n" +
+	"\fmax_attempts\x18\x01 \x01(\x05R\vmaxAttempts\x126\n" +
+	"\tmin_delay\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\bminDelay\x126\n" +
+	"\tmax_delay\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\bmaxDelay\"V\n" +
+	"\vBatchPolicy\x12\x12\n" +
+	"\x04size\x18\x01 \x01(\x05R\x04size\x123\n" +
+	"\atimeout\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"t\n" +
+	"\vTopicConfig\x12\x16\n" +
+	"\x06schema\x18\x01 \x01(\tR\x06schema\x12\x18\n" +
+	"\aordered\x18\x02 \x01(\bR\aordered\x123\n" +
+	"\x05retry\x18\x03 \x01(\v2\x1d.app.resources.v1.RetryPolicyR\x05retry\"\xb2\x02\n" +
+	"\x0eConsumerConfig\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x16\n" +
+	"\x06worker\x18\x02 \x01(\tR\x06worker\x123\n" +
+	"\x05retry\x18\x03 \x01(\v2\x1d.app.resources.v1.RetryPolicyR\x05retry\x12 \n" +
+	"\vconcurrency\x18\x04 \x01(\x05R\vconcurrency\x12<\n" +
+	"\fmax_duration\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\vmaxDuration\x12(\n" +
+	"\x05lanes\x18\x06 \x03(\x0e2\x12.app.topic.v1.LaneR\x05lanes\x123\n" +
+	"\x05batch\x18\a \x01(\v2\x1d.app.resources.v1.BatchPolicyR\x05batch\"\xe1\x02\n" +
+	"\n" +
+	"TaskConfig\x12\x16\n" +
+	"\x06schema\x18\x01 \x01(\tR\x06schema\x12\x18\n" +
+	"\aordered\x18\x02 \x01(\bR\aordered\x123\n" +
+	"\x05retry\x18\x03 \x01(\v2\x1d.app.resources.v1.RetryPolicyR\x05retry\x12 \n" +
+	"\vconcurrency\x18\x04 \x01(\x05R\vconcurrency\x12<\n" +
+	"\fmax_duration\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\vmaxDuration\x12+\n" +
+	"\x03ttl\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\x123\n" +
+	"\x05batch\x18\a \x01(\v2\x1d.app.resources.v1.BatchPolicyR\x05batch\x12\x16\n" +
+	"\x06worker\x18\b \x01(\tR\x06worker\x12\x12\n" +
+	"\x04cron\x18\t \x01(\tR\x04cron\"0\n" +
+	"\fWorkerConfig\x12 \n" +
+	"\vconcurrency\x18\x01 \x01(\x05R\vconcurrency*\xe9\x01\n" +
 	"\fResourceType\x12\x1d\n" +
 	"\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n" +
-	"\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x1b\n" +
-	"\x17RESOURCE_TYPE_CONTAINER\x10\x032\xa8\x02\n" +
+	"\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x17\n" +
+	"\x13RESOURCE_TYPE_TOPIC\x10\x04\x12\x16\n" +
+	"\x12RESOURCE_TYPE_TASK\x10\x05\x12\x18\n" +
+	"\x14RESOURCE_TYPE_WORKER\x10\x06\x12\x1a\n" +
+	"\x16RESOURCE_TYPE_CONSUMER\x10\a\"\x04\b\x03\x10\x03*\x17RESOURCE_TYPE_CONTAINER2\xa8\x02\n" +
 	"\x0fResourceService\x12N\n" +
 	"\aDeclare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n" +
 	"\n" +
@@ -399,7 +929,7 @@ func file_app_resources_v1_resources_proto_rawDescGZIP() []byte {
 }
 
 var file_app_resources_v1_resources_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_app_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_app_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_app_resources_v1_resources_proto_goTypes = []any{
 	(ResourceType)(0),                 // 0: app.resources.v1.ResourceType
 	(*ResourceIdentifier)(nil),        // 1: app.resources.v1.ResourceIdentifier
@@ -407,27 +937,51 @@ var file_app_resources_v1_resources_proto_goTypes = []any{
 	(*DeclareRequest)(nil),            // 3: app.resources.v1.DeclareRequest
 	(*PostgresConfig)(nil),            // 4: app.resources.v1.PostgresConfig
 	(*BucketConfig)(nil),              // 5: app.resources.v1.BucketConfig
-	(*DeclareEnvRequest)(nil),         // 6: app.resources.v1.DeclareEnvRequest
-	(*ReportEnvProblemsRequest)(nil),  // 7: app.resources.v1.ReportEnvProblemsRequest
-	(*DeclareEnvResponse)(nil),        // 8: app.resources.v1.DeclareEnvResponse
-	(*ReportEnvProblemsResponse)(nil), // 9: app.resources.v1.ReportEnvProblemsResponse
+	(*RetryPolicy)(nil),               // 6: app.resources.v1.RetryPolicy
+	(*BatchPolicy)(nil),               // 7: app.resources.v1.BatchPolicy
+	(*TopicConfig)(nil),               // 8: app.resources.v1.TopicConfig
+	(*ConsumerConfig)(nil),            // 9: app.resources.v1.ConsumerConfig
+	(*TaskConfig)(nil),                // 10: app.resources.v1.TaskConfig
+	(*WorkerConfig)(nil),              // 11: app.resources.v1.WorkerConfig
+	(*durationpb.Duration)(nil),       // 12: google.protobuf.Duration
+	(v1.Lane)(0),                      // 13: app.topic.v1.Lane
+	(*DeclareEnvRequest)(nil),         // 14: app.resources.v1.DeclareEnvRequest
+	(*ReportEnvProblemsRequest)(nil),  // 15: app.resources.v1.ReportEnvProblemsRequest
+	(*DeclareEnvResponse)(nil),        // 16: app.resources.v1.DeclareEnvResponse
+	(*ReportEnvProblemsResponse)(nil), // 17: app.resources.v1.ReportEnvProblemsResponse
 }
 var file_app_resources_v1_resources_proto_depIdxs = []int32{
-	0, // 0: app.resources.v1.ResourceIdentifier.type:type_name -> app.resources.v1.ResourceType
-	1, // 1: app.resources.v1.DeclareRequest.resource:type_name -> app.resources.v1.ResourceIdentifier
-	4, // 2: app.resources.v1.DeclareRequest.postgres:type_name -> app.resources.v1.PostgresConfig
-	5, // 3: app.resources.v1.DeclareRequest.bucket:type_name -> app.resources.v1.BucketConfig
-	3, // 4: app.resources.v1.ResourceService.Declare:input_type -> app.resources.v1.DeclareRequest
-	6, // 5: app.resources.v1.ResourceService.DeclareEnv:input_type -> app.resources.v1.DeclareEnvRequest
-	7, // 6: app.resources.v1.ResourceService.ReportEnvProblems:input_type -> app.resources.v1.ReportEnvProblemsRequest
-	2, // 7: app.resources.v1.ResourceService.Declare:output_type -> app.resources.v1.DeclareResponse
-	8, // 8: app.resources.v1.ResourceService.DeclareEnv:output_type -> app.resources.v1.DeclareEnvResponse
-	9, // 9: app.resources.v1.ResourceService.ReportEnvProblems:output_type -> app.resources.v1.ReportEnvProblemsResponse
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	0,  // 0: app.resources.v1.ResourceIdentifier.type:type_name -> app.resources.v1.ResourceType
+	1,  // 1: app.resources.v1.DeclareRequest.resource:type_name -> app.resources.v1.ResourceIdentifier
+	4,  // 2: app.resources.v1.DeclareRequest.postgres:type_name -> app.resources.v1.PostgresConfig
+	5,  // 3: app.resources.v1.DeclareRequest.bucket:type_name -> app.resources.v1.BucketConfig
+	8,  // 4: app.resources.v1.DeclareRequest.topic:type_name -> app.resources.v1.TopicConfig
+	10, // 5: app.resources.v1.DeclareRequest.task:type_name -> app.resources.v1.TaskConfig
+	11, // 6: app.resources.v1.DeclareRequest.worker:type_name -> app.resources.v1.WorkerConfig
+	9,  // 7: app.resources.v1.DeclareRequest.consumer:type_name -> app.resources.v1.ConsumerConfig
+	12, // 8: app.resources.v1.RetryPolicy.min_delay:type_name -> google.protobuf.Duration
+	12, // 9: app.resources.v1.RetryPolicy.max_delay:type_name -> google.protobuf.Duration
+	12, // 10: app.resources.v1.BatchPolicy.timeout:type_name -> google.protobuf.Duration
+	6,  // 11: app.resources.v1.TopicConfig.retry:type_name -> app.resources.v1.RetryPolicy
+	6,  // 12: app.resources.v1.ConsumerConfig.retry:type_name -> app.resources.v1.RetryPolicy
+	12, // 13: app.resources.v1.ConsumerConfig.max_duration:type_name -> google.protobuf.Duration
+	13, // 14: app.resources.v1.ConsumerConfig.lanes:type_name -> app.topic.v1.Lane
+	7,  // 15: app.resources.v1.ConsumerConfig.batch:type_name -> app.resources.v1.BatchPolicy
+	6,  // 16: app.resources.v1.TaskConfig.retry:type_name -> app.resources.v1.RetryPolicy
+	12, // 17: app.resources.v1.TaskConfig.max_duration:type_name -> google.protobuf.Duration
+	12, // 18: app.resources.v1.TaskConfig.ttl:type_name -> google.protobuf.Duration
+	7,  // 19: app.resources.v1.TaskConfig.batch:type_name -> app.resources.v1.BatchPolicy
+	3,  // 20: app.resources.v1.ResourceService.Declare:input_type -> app.resources.v1.DeclareRequest
+	14, // 21: app.resources.v1.ResourceService.DeclareEnv:input_type -> app.resources.v1.DeclareEnvRequest
+	15, // 22: app.resources.v1.ResourceService.ReportEnvProblems:input_type -> app.resources.v1.ReportEnvProblemsRequest
+	2,  // 23: app.resources.v1.ResourceService.Declare:output_type -> app.resources.v1.DeclareResponse
+	16, // 24: app.resources.v1.ResourceService.DeclareEnv:output_type -> app.resources.v1.DeclareEnvResponse
+	17, // 25: app.resources.v1.ResourceService.ReportEnvProblems:output_type -> app.resources.v1.ReportEnvProblemsResponse
+	23, // [23:26] is the sub-list for method output_type
+	20, // [20:23] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_app_resources_v1_resources_proto_init() }
@@ -439,6 +993,10 @@ func file_app_resources_v1_resources_proto_init() {
 	file_app_resources_v1_resources_proto_msgTypes[2].OneofWrappers = []any{
 		(*DeclareRequest_Postgres)(nil),
 		(*DeclareRequest_Bucket)(nil),
+		(*DeclareRequest_Topic)(nil),
+		(*DeclareRequest_Task)(nil),
+		(*DeclareRequest_Worker)(nil),
+		(*DeclareRequest_Consumer)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -446,7 +1004,7 @@ func file_app_resources_v1_resources_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_resources_v1_resources_proto_rawDesc), len(file_app_resources_v1_resources_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   5,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

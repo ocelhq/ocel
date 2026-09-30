@@ -1,0 +1,6 @@
+{
+  "name": "topic--orders",
+  "topic": {
+    "topic": "shop-prod-orders-q1w2e3r4"
+  }
+}

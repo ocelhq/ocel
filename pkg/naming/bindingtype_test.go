@@ -64,6 +64,8 @@ func TestResourceEnvName(t *testing.T) {
 	}{
 		{bindingsv1.BindingType_BINDING_TYPE_POSTGRES, "OCEL_RESOURCE_POSTGRES_orders"},
 		{bindingsv1.BindingType_BINDING_TYPE_BUCKET, "OCEL_RESOURCE_BUCKET_orders"},
+		{bindingsv1.BindingType_BINDING_TYPE_TOPIC, "OCEL_RESOURCE_TOPIC_orders"},
+		{bindingsv1.BindingType_BINDING_TYPE_TASK, "OCEL_RESOURCE_TASK_orders"},
 	} {
 		if got := ResourceEnvName(tc.typ, "orders"); got != tc.want {
 			t.Errorf("ResourceEnvName(%v) = %q, want %q — the env contract does not move with the enum name", tc.typ, got, tc.want)
@@ -94,6 +96,8 @@ func TestBindingTypeOf(t *testing.T) {
 		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{}}}, bindingsv1.BindingType_BINDING_TYPE_POSTGRES},
 		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{}}}, bindingsv1.BindingType_BINDING_TYPE_BUCKET},
 		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Custom{Custom: &structpb.Struct{}}}, bindingsv1.BindingType_BINDING_TYPE_CUSTOM},
+		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Topic{Topic: &bindingsv1.TopicProperties{}}}, bindingsv1.BindingType_BINDING_TYPE_TOPIC},
+		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Task{Task: &bindingsv1.TaskProperties{}}}, bindingsv1.BindingType_BINDING_TYPE_TASK},
 		{&bindingsv1.Binding{}, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED},
 		{nil, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED},
 	} {
@@ -152,5 +156,13 @@ func TestCustomBindingProperties(t *testing.T) {
 	}
 	if _, ok := BindingProperty(binding, "host"); ok {
 		t.Error("BindingProperty(host) found on a record that has no such key")
+	}
+}
+
+func TestATaskSharesItsNamespaceWithTopics(t *testing.T) {
+	topic, _ := KindOf(bindingsv1.BindingType_BINDING_TYPE_TOPIC)
+	task, _ := KindOf(bindingsv1.BindingType_BINDING_TYPE_TASK)
+	if topic != KindTopic || task != KindTopic {
+		t.Errorf("KindOf(topic) = %q, KindOf(task) = %q, want both %q: a task is a topic with one consumer, and the two names share one namespace", topic, task, KindTopic)
 	}
 }

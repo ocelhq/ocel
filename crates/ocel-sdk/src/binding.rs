@@ -42,6 +42,8 @@ fn kind_of(properties: &Option<Properties>) -> String {
         Some(Properties::Postgres(_)) => "POSTGRES",
         Some(Properties::Bucket(_)) => "BUCKET",
         Some(Properties::Custom(_)) => "CUSTOM",
+        Some(Properties::Topic(_)) => "TOPIC",
+        Some(Properties::Task(_)) => "TASK",
         None => "UNSPECIFIED",
     }
     .to_string()

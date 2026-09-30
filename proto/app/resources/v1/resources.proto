@@ -4,6 +4,8 @@ package app.resources.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1";
 
 import "app/resources/v1/variables.proto";
+import "app/topic/v1/topic.proto";
+import "google/protobuf/duration.proto";
 
 service ResourceService {
     rpc Declare(DeclareRequest) returns (DeclareResponse);
@@ -17,7 +19,12 @@ enum ResourceType {
   RESOURCE_TYPE_UNSPECIFIED = 0;
   RESOURCE_TYPE_POSTGRES = 1;
   RESOURCE_TYPE_BUCKET = 2;
-  RESOURCE_TYPE_CONTAINER = 3;
+  reserved 3;
+  reserved "RESOURCE_TYPE_CONTAINER";
+  RESOURCE_TYPE_TOPIC = 4;
+  RESOURCE_TYPE_TASK = 5;
+  RESOURCE_TYPE_WORKER = 6;
+  RESOURCE_TYPE_CONSUMER = 7;
 }
 
 message ResourceIdentifier {
@@ -34,6 +41,10 @@ message DeclareRequest {
   oneof config {
     PostgresConfig postgres = 2;
     BucketConfig bucket = 3;
+    TopicConfig topic = 5;
+    TaskConfig task = 6;
+    WorkerConfig worker = 7;
+    ConsumerConfig consumer = 8;
   }
 
   string source = 4;
@@ -47,4 +58,66 @@ message BucketConfig {
   repeated string allowed_origins = 1;
 
   bool public = 2;
+}
+
+message RetryPolicy {
+  int32 max_attempts = 1;
+
+  google.protobuf.Duration min_delay = 2;
+
+  google.protobuf.Duration max_delay = 3;
+}
+
+message BatchPolicy {
+  int32 size = 1;
+
+  google.protobuf.Duration timeout = 2;
+}
+
+message TopicConfig {
+  string schema = 1;
+
+  bool ordered = 2;
+
+  RetryPolicy retry = 3;
+}
+
+message ConsumerConfig {
+  string topic = 1;
+
+  string worker = 2;
+
+  RetryPolicy retry = 3;
+
+  int32 concurrency = 4;
+
+  google.protobuf.Duration max_duration = 5;
+
+  repeated app.topic.v1.Lane lanes = 6;
+
+  BatchPolicy batch = 7;
+}
+
+message TaskConfig {
+  string schema = 1;
+
+  bool ordered = 2;
+
+  RetryPolicy retry = 3;
+
+  int32 concurrency = 4;
+
+  google.protobuf.Duration max_duration = 5;
+
+  google.protobuf.Duration ttl = 6;
+
+  BatchPolicy batch = 7;
+
+  string worker = 8;
+
+  string cron = 9;
+}
+
+message WorkerConfig {
+  int32 concurrency = 1;
 }

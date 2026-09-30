@@ -18,18 +18,18 @@ const (
 	KindDatabase        Kind = "db"
 	KindBucket          Kind = "bucket"
 	KindRole            Kind = "role"
-	KindQueue           Kind = "queue"
+	KindTopic           Kind = "topic"
 	KindUploadCompleter Kind = "upload-completer"
 	KindService         Kind = "svc"
 )
 
 var components = map[Kind]string{
 	KindFunction:        "function",
-	KindWorker:          "edge-worker",
+	KindWorker:          "worker",
 	KindDatabase:        "database",
 	KindBucket:          "bucket",
 	KindRole:            "role",
-	KindQueue:           "queue",
+	KindTopic:           "topic",
 	KindUploadCompleter: "upload-completer",
 	KindService:         "service",
 }
