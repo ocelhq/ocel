@@ -10,6 +10,7 @@ import {
   askOverTLS,
   assertRedirectedToHTTPS,
   assertRefused,
+  handshakeAlerted,
   type Outcome,
   readOriginAddress,
   statusOf,
@@ -173,6 +174,22 @@ describe("asking an origin over TLS with no client certificate", () => {
     expect(() => assertRefused(outcome, "the origin")).toThrow(/never reached/);
   });
 
+  it("reads an origin that accepts the connection and hangs up with nothing said as closed, and the check fails", async () => {
+    const port = await listening(net.createServer((socket) => socket.destroy()));
+    const outcome = await askOverTLS(origin(port));
+    expect(outcome.kind).toBe("closed");
+    expect(() => assertRefused(outcome, "the origin")).toThrow(/connected and then/);
+  });
+
+  it("reads a handshake the origin ends with an alert as refused only when the asker counts an alert as refusal", async () => {
+    const port = await listening(
+      tls.createServer({ cert: certificate, key, minVersion: "TLSv1.3" }),
+    );
+    expect((await askOverTLS(origin(port))).kind).toBe("undecided");
+    const outcome = await askOverTLS(origin(port), handshakeAlerted);
+    expect(outcome.kind).toBe("refused");
+  });
+
   it("fails the check when the origin connects and never speaks", async () => {
     const port = await listening(net.createServer(() => {}));
     const outcome = await askOverTLS(origin(port));
@@ -217,6 +234,17 @@ describe("asking an origin over plain HTTP", () => {
       expect(() => assertRedirectedToHTTPS(outcome, "the origin", HOSTNAME)).toThrow(/want 308/);
     });
   }
+
+  it("reads an origin that hangs up on the request with nothing said as closed, and the check fails", async () => {
+    const port = await listening(
+      net.createServer((socket) => {
+        socket.once("data", () => socket.end());
+      }),
+    );
+    const outcome = await askOverPlainHTTP(origin(port));
+    expect(outcome.kind).toBe("closed");
+    expect(() => assertRedirectedToHTTPS(outcome, "the origin", HOSTNAME)).toThrow(/want 308/);
+  });
 
   it("fails when nothing listens on port 80", async () => {
     const closed = await listening(net.createServer());

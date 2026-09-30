@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import type { Phase } from "../matrix/types";
 import type { Check } from "./context";
-import { askOverPlainHTTP, askOverTLS, type Outcome, readOriginAddress } from "./originShield";
+import {
+  askOverPlainHTTP,
+  askOverTLS,
+  handshakeAlerted,
+  type Outcome,
+  readOriginAddress,
+} from "./originShield";
 
 const TUNNEL_DOMAIN = ".cfargotunnel.com";
 const REDIRECTS = [301, 302, 307, 308];
@@ -14,7 +20,9 @@ export function assertTunnelAddress(address: string, hostname: string): void {
 }
 
 export function assertNotServed(outcome: Outcome, where: string): void {
-  if (outcome.kind === "refused" || outcome.kind === "unreachable") return;
+  if (outcome.kind === "refused" || outcome.kind === "closed" || outcome.kind === "unreachable") {
+    return;
+  }
   if (outcome.kind === "answered" && outcome.status !== undefined && outcome.status >= 400) return;
   const said =
     outcome.kind === "answered"
@@ -79,7 +87,7 @@ const refusedAroundTheTunnel: Check = {
     const hostname = new URL(ctx.baseUrl).hostname;
     const address = box();
     assertNotServed(
-      await askOverTLS({ address, port: 443, hostname }),
+      await askOverTLS({ address, port: 443, hostname }, handshakeAlerted),
       `${address}:443 for ${hostname}`,
     );
     assertNotServed(

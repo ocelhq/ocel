@@ -9,6 +9,7 @@ const ORIGIN_RECORD_TYPES = ["A", "AAAA", "CNAME"];
 const MAX_TLS_VERSION = "TLSv1.2";
 const CLIENT_CERTIFICATE_REFUSALS =
   /certificate[ _]required|handshake[ _]failure|bad[ _]certificate|access[ _]denied/i;
+const HUNG_UP = ["ECONNRESET", "EPIPE"];
 
 type Listed<T> = { success: boolean; result: T[] };
 
@@ -45,6 +46,7 @@ export type Origin = { address: string; port: number; hostname: string; timeoutM
 export type Outcome =
   | { kind: "unreachable"; reason: string }
   | { kind: "refused"; reason: string }
+  | { kind: "closed"; reason: string }
   | { kind: "answered"; status: number | undefined; location: string | undefined; said: string }
   | { kind: "undecided"; reason: string };
 
@@ -112,16 +114,18 @@ function ask(
       spoken.on("error", (error: Error & { code?: string }) => {
         if (said !== "") settle(answered(said));
         else if (refusal(error)) settle({ kind: "refused", reason: reasonOf(error) });
+        else if (HUNG_UP.includes(error.code ?? ""))
+          settle({ kind: "closed", reason: reasonOf(error) });
         else settle({ kind: "undecided", reason: reasonOf(error) });
       });
       spoken.on("end", () =>
         settle(
-          said === "" ? { kind: "undecided", reason: "closed with nothing said" } : answered(said),
+          said === "" ? { kind: "closed", reason: "closed with nothing said" } : answered(said),
         ),
       );
       spoken.on("close", () =>
         settle(
-          said === "" ? { kind: "undecided", reason: "closed with nothing said" } : answered(said),
+          said === "" ? { kind: "closed", reason: "closed with nothing said" } : answered(said),
         ),
       );
     });
@@ -132,7 +136,18 @@ function request(hostname: string): string {
   return `GET / HTTP/1.1\r\nHost: ${hostname}\r\nConnection: close\r\n\r\n`;
 }
 
-export function askOverTLS(origin: Origin): Promise<Outcome> {
+export function clientCertificateRefused(error: Error & { code?: string }): boolean {
+  return CLIENT_CERTIFICATE_REFUSALS.test(reasonOf(error));
+}
+
+export function handshakeAlerted(error: Error & { code?: string }): boolean {
+  return (error.code ?? "").startsWith("ERR_SSL_") && /alert/i.test(reasonOf(error));
+}
+
+export function askOverTLS(
+  origin: Origin,
+  refusal: (error: Error & { code?: string }) => boolean = clientCertificateRefused,
+): Promise<Outcome> {
   return ask(
     origin,
     (socket) => {
@@ -145,7 +160,7 @@ export function askOverTLS(origin: Origin): Promise<Outcome> {
       spoken.once("secureConnect", () => spoken.write(request(origin.hostname)));
       return spoken;
     },
-    (error) => CLIENT_CERTIFICATE_REFUSALS.test(reasonOf(error)),
+    refusal,
   );
 }
 
