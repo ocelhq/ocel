@@ -46,6 +46,7 @@ var mockARNs = map[string]string{
 type inputRecorder struct {
 	mu       sync.Mutex
 	recorded map[string]resource.PropertyMap
+	ignored  map[string][]string
 	attached []string
 }
 
@@ -61,6 +62,17 @@ func (r *inputRecorder) registered(typeToken string) []string {
 	return names
 }
 
+func (r *inputRecorder) ignoredOf(typeToken string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for key, ignored := range r.ignored {
+		if strings.HasPrefix(key, typeToken+"::") {
+			return ignored
+		}
+	}
+	return nil
+}
+
 func (r *inputRecorder) NewResource(args pulumi.MockResourceArgs) (string, resource.PropertyMap, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -68,6 +80,10 @@ func (r *inputRecorder) NewResource(args pulumi.MockResourceArgs) (string, resou
 		r.recorded = map[string]resource.PropertyMap{}
 	}
 	r.recorded[args.TypeToken+"::"+args.Name] = args.Inputs
+	if r.ignored == nil {
+		r.ignored = map[string][]string{}
+	}
+	r.ignored[args.TypeToken+"::"+args.Name] = args.RegisterRPC.GetIgnoreChanges()
 	if args.TypeToken == "aws:lambda/functionUrl:FunctionUrl" {
 		state := args.Inputs.Copy()
 		state["functionUrl"] = resource.NewStringProperty("https://" + args.Name + ".lambda-url.us-east-1.on.aws/")
