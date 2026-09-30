@@ -148,6 +148,7 @@ func TestTheFirstContainerRoutedByTheLoadBalancerRaisesThePublicFrontOnceAndHang
 		if runs++; runs == 2 {
 			outputs[outputKeyPublicListener] = auto.OutputValue{Value: fixturePublicListener}
 			outputs[outputKeyPublicHost] = auto.OutputValue{Value: fixturePublicHost}
+			outputs[outputKeyPublicRanges] = auto.OutputValue{Value: strings.Join(fixtureRanges, ",")}
 		}
 		return nil
 	}}
@@ -170,6 +171,60 @@ func TestTheFirstContainerRoutedByTheLoadBalancerRaisesThePublicFrontOnceAndHang
 	if runs != 2 {
 		t.Errorf("the container infrastructure ran %d times over %v, want twice: raised once, and raised again with the public front the first app behind it asked for", runs, engine.stacks())
 	}
+}
+
+func TestThePublicFrontAdmitsTheEdgesCurrentRangesOnceTheyChange(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerStackSpec(t)
+	cfg.KeyValues = fake.NewKeyValues()
+	cfg.BackendURL = "s3://ocel-state/conformance"
+	cfg.PulumiProject = "ocel-conformance"
+	cfg.Passphrase = "a-passphrase"
+	outputs := containerInfraOutputs()
+	outputs["web"] = auto.OutputValue{Value: map[string]any{
+		outputKeyContainerURL:      "http://" + fixtureOrigin,
+		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
+	}}
+	infra := containerInfraRef(environment.TierProduction).Name.String()
+	runs := 0
+	engine := &mockedEngine{outputs: outputs, upErr: func(stack string) error {
+		if stack != infra {
+			return nil
+		}
+		runs++
+		outputs[outputKeyPublicListener] = auto.OutputValue{Value: fixturePublicListener}
+		outputs[outputKeyPublicHost] = auto.OutputValue{Value: fixturePublicHost}
+		outputs[outputKeyPublicRanges] = auto.OutputValue{Value: strings.Join(fixtureRanges, ",")}
+		return nil
+	}}
+	stacks := stacksWith(cfg, engine)
+	behindCloudflare := spec
+	app := *spec.App
+	behindCloudflare.App = &app
+	behindCloudflare.App.Router = alb.Kind
+	behindCloudflare.Edge = rangedEdge{}
+	ctx := context.Background()
+	for range 2 {
+		if _, err := stacks.Provision(ctx, behindCloudflare, progress.Discard()); err != nil {
+			t.Fatalf("Provision(behind the public front) = %v", err)
+		}
+	}
+	behindCloudflare.Edge = widenedEdge{}
+	if _, err := stacks.Provision(ctx, behindCloudflare, progress.Discard()); err != nil {
+		t.Fatalf("Provision(behind an edge that forwards from a new range) = %v", err)
+	}
+	if runs != 2 {
+		t.Errorf("the container infrastructure ran %d times, want twice: once to raise the public front, and once more when the edge forwards from a range the security group does not admit", runs)
+	}
+}
+
+type widenedEdge struct{ edge.Edge }
+
+func (widenedEdge) Kind() edge.Kind { return "cloudflare" }
+
+func (widenedEdge) Facts() edge.Facts {
+	return edge.Facts{OriginFacingRanges: append(slices.Clone(fixtureRanges), "192.0.2.0/24")}
 }
 
 func TestAContainerRoutedByTheLoadBalancerIsReachedThroughThePublicFrontAlone(t *testing.T) {
