@@ -10,6 +10,7 @@ import (
 	"github.com/tailscale/hujson"
 
 	"github.com/ocelhq/ocel/cli/internal/english"
+	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 )
 
 const (
@@ -41,7 +42,7 @@ func IsYAML(path string) bool {
 	return ok && (f.suffix == yamlSuffix || f.suffix == ymlSuffix)
 }
 
-const initHint = "run `ocel init` to create one"
+const initCommand = "ocel init"
 
 type NoConfigError struct {
 	Names    []string
@@ -49,8 +50,16 @@ type NoConfigError struct {
 }
 
 func (e NoConfigError) Error() string {
-	return fmt.Sprintf("no %s found in %s or any parent directory — %s", english.Or(e.Names), e.StartDir, initHint)
+	return fmt.Sprintf("no %s found in %s or any parent directory.\nRun `%s` and try again", english.Or(e.Names), e.StartDir, initCommand)
 }
+
+func (NoConfigError) Missing() prerequisite.Kind { return prerequisite.Project }
+
+func (e NoConfigError) Finding() string {
+	return fmt.Sprintf("No %s in %s or any parent.", english.Or(e.Names), e.StartDir)
+}
+
+func (NoConfigError) Remedy() string { return "`" + initCommand + "`" }
 
 type form struct {
 	suffix string

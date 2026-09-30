@@ -71,7 +71,7 @@ func (p *Project) RequireProvider() (*Provider, error) {
 
 func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	if doc.Slug == "" {
-		return nil, fmt.Errorf("%s is missing required \"slug\" — %s", configPath, initHint)
+		return nil, fmt.Errorf("%s is missing required \"slug\" — run `%s` to create one", configPath, initCommand)
 	}
 	if err := ValidateSlug(doc.Slug); err != nil {
 		return nil, fmt.Errorf("%s has an invalid \"slug\": %w", configPath, err)
