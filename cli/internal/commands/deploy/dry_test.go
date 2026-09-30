@@ -90,7 +90,7 @@ func TestADryPreviewUpShowsThePlanAndWritesNothing(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-	err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging", dry: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging", persistent: true, dry: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -127,7 +127,7 @@ func TestADryRunRefusesOnAnUnbootstrappedAccount(t *testing.T) {
 			name: "preview up",
 			run: func(dependencies Dependencies, root string, stdout, stderr *bytes.Buffer) error {
 				clitest.AttachTerminalSink(dependencies.Invocation, stdout)
-				return runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging", dry: true}, stdout, stderr, strings.NewReader(""))
+				return runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging", persistent: true, dry: true}, stdout, stderr, strings.NewReader(""))
 			},
 			remedy: "ocel bootstrap preview",
 		},
@@ -198,7 +198,7 @@ func TestADryRunNeverOpensTheVariableEditor(t *testing.T) {
 			preview: true,
 			run: func(dependencies Dependencies, root string, stdout, stderr *bytes.Buffer) error {
 				clitest.AttachTerminalSink(dependencies.Invocation, stdout)
-				return runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging", dry: true}, stdout, stderr, strings.NewReader(""))
+				return runPreviewUp(context.Background(), dependencies, root, previewUpOptions{name: "staging", persistent: true, dry: true}, stdout, stderr, strings.NewReader(""))
 			},
 		},
 	} {

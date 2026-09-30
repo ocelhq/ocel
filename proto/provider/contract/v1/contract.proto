@@ -36,6 +36,8 @@ service ProviderService {
 
     rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse);
 
+    rpc GetEnvironment(GetEnvironmentRequest) returns (GetEnvironmentResponse);
+
     rpc Preflight(PreflightRequest) returns (PreflightResponse);
 
     rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
@@ -459,6 +461,16 @@ message ListEnvironmentsRequest {
 
 message ListEnvironmentsResponse {
   repeated PreviewEnvironment environments = 1;
+}
+
+message GetEnvironmentRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Environment environment = 2;
+}
+
+message GetEnvironmentResponse {
+  PreviewEnvironment environment = 1;
 }
 
 message PreviewEnvironment {

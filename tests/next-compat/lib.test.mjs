@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -36,11 +37,12 @@ import {
   NAMESPACE_ENV,
   NEXT_COMPAT_NAMESPACE,
   namespaceProblem,
+  ocelBinary,
   PLAN_APPLY_HINT,
   PREVIEW_ROOT_STACK_PARAM_PREFIX,
   planProblems,
-  previewRef,
-  previewRefForApp,
+  previewName,
+  previewNameForApp,
   projectSlug,
   projectSlugForRun,
   renderOcelConfig,
@@ -92,6 +94,12 @@ describe("requireNamespace", () => {
     expect(() => requireNamespace({})).toThrow(NAMESPACE_ENV);
     expect(() => requireNamespace({ [NAMESPACE_ENV]: DEFAULT_NAMESPACE })).toThrow(NAMESPACE_ENV);
     expect(() => requireNamespace({ [NAMESPACE_ENV]: NEXT_COMPAT_NAMESPACE })).not.toThrow();
+  });
+});
+
+describe("ocelBinary", () => {
+  it("names the ocel command this checkout builds", () => {
+    expect(existsSync(ocelBinary(join(import.meta.dirname, "..", "..")))).toBe(true);
   });
 });
 
@@ -158,60 +166,70 @@ describe("projectSlug", () => {
   });
 });
 
-describe("previewRef", () => {
+describe("previewName", () => {
   it("keeps the temp directory's name, so a stranded pointer names the suite that left it", () => {
-    expect(previewRef({ dir: "/tmp/next-e2e-abc" })).toMatch(/^next-e2e-abc-[0-9a-f]{8}$/);
+    expect(previewName({ dir: "/tmp/next-e2e-abc" })).toMatch(/^next-e2e-abc-[0-9a-f]{8}$/);
   });
 
   it("gives two temp apps in one run their own pointer", () => {
-    expect(previewRef({ dir: "/tmp/a" })).not.toBe(previewRef({ dir: "/tmp/b" }));
+    expect(previewName({ dir: "/tmp/a" })).not.toBe(previewName({ dir: "/tmp/b" }));
   });
 
   it("separates two temp apps whose names collide once truncated", () => {
     const install = `next-install-${"a".repeat(64)}`;
-    expect(previewRef({ dir: `/tmp/${install}` })).not.toBe(
-      previewRef({ dir: `/tmp/${install}x` }),
+    expect(previewName({ dir: `/tmp/${install}` })).not.toBe(
+      previewName({ dir: `/tmp/${install}x` }),
     );
   });
 
-  it("leaves the preview label room for the project slug the shared wildcard prefixes it with", () => {
-    const previewidSuffix = "-".length + 8;
-    const slug = projectSlug({ runId: "31599563227" });
-    const pointer =
-      previewRef({ dir: `/tmp/next-install-${"a".repeat(64)}` }).length + previewidSuffix;
-    expect(slug.length + 2 + pointer + 2 + APP_NAME.length).toBeLessThanOrEqual(63);
-  });
+  it.each([`/tmp/next-install-${"a".repeat(64)}`, `/tmp/1${"a".repeat(64)}`])(
+    "leaves the preview label of %s room for the project slug the shared wildcard prefixes it with",
+    (dir) => {
+      const slug = projectSlug({ runId: "31599563227" });
+      const pointer = previewName({ dir }).length;
+      expect(slug.length + 2 + pointer + 2 + APP_NAME.length).toBeLessThanOrEqual(63);
+    },
+  );
+
+  it.each(["/tmp/next-e2e-abc", "/tmp/123-app", "/tmp/---", "/tmp/a--b"])(
+    "names %s with a DNS label the CLI takes as a preview name",
+    (dir) => {
+      const name = previewName({ dir });
+      expect(name).toMatch(/^[a-z]([a-z0-9-]*[a-z0-9])?$/);
+      expect(name).not.toContain("--");
+    },
+  );
 
   it("resolves two spellings of one directory to one pointer", () => {
-    expect(previewRef({ dir: "/tmp/a/" })).toBe(previewRef({ dir: "/tmp/a" }));
-    expect(previewRef({ dir: " /tmp/a " })).toBe(previewRef({ dir: "/tmp/a" }));
+    expect(previewName({ dir: "/tmp/a/" })).toBe(previewName({ dir: "/tmp/a" }));
+    expect(previewName({ dir: " /tmp/a " })).toBe(previewName({ dir: "/tmp/a" }));
   });
 
   it("refuses a missing directory rather than inventing a pointer", () => {
-    expect(() => previewRef({ dir: "" })).toThrow(/needs a directory/);
-    expect(() => previewRef({})).toThrow(/needs a directory/);
+    expect(() => previewName({ dir: "" })).toThrow(/needs a directory/);
+    expect(() => previewName({})).toThrow(/needs a directory/);
   });
 });
 
-describe("projectSlugForRun and previewRefForApp", () => {
+describe("projectSlugForRun and previewNameForApp", () => {
   it("prefers NEXT_TEST_DIR over the app directory, so deploy and cleanup agree", () => {
     vi.stubEnv("GITHUB_RUN_ID", "42");
     vi.stubEnv("NEXT_TEST_DIR", "/tmp/harness-app");
     expect(projectSlugForRun()).toBe(projectSlug({ runId: "42" }));
-    expect(previewRefForApp("/somewhere/else")).toBe(previewRef({ dir: "/tmp/harness-app" }));
+    expect(previewNameForApp("/somewhere/else")).toBe(previewName({ dir: "/tmp/harness-app" }));
   });
 
   it("falls back to the app directory when the harness sets no NEXT_TEST_DIR", () => {
     vi.stubEnv("GITHUB_RUN_ID", "42");
     vi.stubEnv("NEXT_TEST_DIR", "");
-    expect(previewRefForApp("/tmp/app")).toBe(previewRef({ dir: "/tmp/app" }));
+    expect(previewNameForApp("/tmp/app")).toBe(previewName({ dir: "/tmp/app" }));
   });
 
   it("derives the same pair twice, so cleanup can recover it without the state file", () => {
     vi.stubEnv("GITHUB_RUN_ID", "42");
     vi.stubEnv("NEXT_TEST_DIR", "/tmp/harness-app");
     expect(projectSlugForRun()).toBe(projectSlugForRun());
-    expect(previewRefForApp("/tmp/harness-app")).toBe(previewRefForApp("/tmp/harness-app"));
+    expect(previewNameForApp("/tmp/harness-app")).toBe(previewNameForApp("/tmp/harness-app"));
   });
 });
 
@@ -1127,7 +1145,7 @@ function buildZip(entries, comment = "") {
 }
 
 describe("planProblems", () => {
-  const untouched = { resultWritten: false, listed: "No previews.\n", ref: "smoke-abc123" };
+  const untouched = { resultWritten: false, listed: "No previews.\n", name: "smoke-abc123" };
 
   it("passes a plan that says how to apply it, wrote no result and deployed no preview", () => {
     expect(planProblems(`+ e2e-x--infra\n\n${PLAN_APPLY_HINT}\n`, untouched)).toEqual([]);

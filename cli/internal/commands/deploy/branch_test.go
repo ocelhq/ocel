@@ -72,7 +72,7 @@ func TestADetachedCheckoutWithoutGitHubHeadRefIsRefusedAndAsksForAName(t *testin
 	if err == nil {
 		t.Fatalf("ReadGitBranch() = %q, want an error", branch)
 	}
-	if !strings.Contains(err.Error(), "--name") {
-		t.Errorf("error %q does not ask for a name with --name", err)
+	if !strings.Contains(err.Error(), "ocel preview up <name>") {
+		t.Errorf("error %q does not ask for a name as `ocel preview up <name>`", err)
 	}
 }

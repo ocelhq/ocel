@@ -83,6 +83,16 @@ func TestADeployOfTheOtherLifecycleToAPreviewIsRefusedBeforeItProvisionsAnything
 			if !strings.Contains(said, "pr-7") || !strings.Contains(said, "created") {
 				t.Errorf("Deploy() said %q, want it to name pr-7 and the lifecycle it was created with", said)
 			}
+			if !strings.Contains(said, "`ocel preview rm pr-7`") {
+				t.Errorf("Deploy() said %q, want it to name the command that removes pr-7 and no other preview", said)
+			}
+			redeploy := map[environmentv1.Lifecycle]string{
+				environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL:  "deploy it without --persistent",
+				environmentv1.Lifecycle_LIFECYCLE_PERSISTENT: "deploy it with --persistent",
+			}[created]
+			if !strings.Contains(said, redeploy) {
+				t.Errorf("Deploy() said %q, want it to say %q", said, redeploy)
+			}
 			if got := len(vendor.FakeStacks().Provisioned()); got != provisioned {
 				t.Errorf("the refused deploy provisioned %d stacks, want none", got-provisioned)
 			}
@@ -118,7 +128,7 @@ func TestAnEphemeralDeployOfAResourceNoBindingCoversIsRefused(t *testing.T) {
 
 	said := expectDeployRefused(t, client, newEphemeralRequestWithOrders())
 
-	for _, want := range []string{"orders", "`ocel preview --name <name>`", "`ocel bindings set --preview --environment pr-7`", "`ocel bindings set --preview`"} {
+	for _, want := range []string{"orders", "--persistent", "`ocel bindings set --preview --environment pr-7`", "`ocel bindings set --preview`"} {
 		if !strings.Contains(said, want) {
 			t.Errorf("Deploy() said %q, want it to contain %q", said, want)
 		}

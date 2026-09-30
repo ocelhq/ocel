@@ -40,10 +40,14 @@ func (m EnvironmentMeta) RefuseOtherLifecycle(env string, lifecycle Lifecycle) e
 	if m.Lifecycle == "" || m.Lifecycle == lifecycle {
 		return nil
 	}
+	redeploy := "deploy it without --persistent"
+	if m.Lifecycle == LifecyclePersistent {
+		redeploy = "deploy it with --persistent"
+	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"preview %s was created %s, and this deploy is %s. A preview keeps the lifecycle it was created with: "+
-			"remove it with `ocel preview rm` first, or deploy this one under another name",
-		env, m.Lifecycle, lifecycle)
+			"%s, remove it with `ocel preview rm %s` first, or deploy this one under another name",
+		env, m.Lifecycle, lifecycle, redeploy, env)
 }
 
 func ReadEnvironmentMeta(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env string) (EnvironmentMeta, error) {

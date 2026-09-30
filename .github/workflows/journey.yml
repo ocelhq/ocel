@@ -1161,10 +1161,11 @@ jobs:
           cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
           variables-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
 
-      - name: Tear the preview down
-        env:
-          REF: ${{ github.event.pull_request.head.ref }}
-        run: ocel preview rm --ref "$REF" --yes
+      - name: Tear down the preview the head branch names, deployed or failed
+        run: |
+          set -euo pipefail
+          git checkout --detach
+          GITHUB_HEAD_REF="$REF" ocel preview rm --yes
 
       - name: Tell the app the preview is gone
         continue-on-error: true

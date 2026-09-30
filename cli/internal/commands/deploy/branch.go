@@ -25,5 +25,5 @@ func ReadGitBranch(dir string) (string, error) {
 	if headRef := os.Getenv("GITHUB_HEAD_REF"); headRef != "" {
 		return headRef, nil
 	}
-	return "", errors.New("HEAD is detached and GITHUB_HEAD_REF is unset, so no branch names this preview: pass --name <name>, or --ref <branch>")
+	return "", errors.New("HEAD is detached and GITHUB_HEAD_REF is unset, so no branch names this preview: name it, as in `ocel preview up <name>`")
 }

@@ -1,0 +1,55 @@
+---
+title: ocel preview
+description: Deploy, list and tear down previews beside production.
+---
+
+```bash
+ocel preview
+ocel preview pr-12
+ocel preview staging --persistent
+ocel preview ls
+ocel preview rm pr-12
+```
+
+A preview is a full deployment beside production, on its own hostname, that you tear down
+without touching anything else. It needs the preview bootstrap (`ocel bootstrap preview`) and a
+preview domain.
+
+| Command | What it does |
+| --- | --- |
+| `[name]` | The same as `up`. |
+| `up [name]` | Deploy or refresh a preview. `--persistent` creates a persistent one, `--prebuilt` deploys the existing `.ocel/output` from `ocel build`, and `--dry` prints every change it would make and stops. |
+| `rm [name]` | Tear down a preview. Asks first for a persistent preview; `--yes` skips that, and without a terminal to ask on it stops unless you pass `--yes`. |
+| `prune [name]` | Delete a preview's old deployments. Keeps the newest `--keep` (3 by default) and whatever is live. |
+| `ls` | List this project's previews: name, lifecycle, label and when it was created. |
+
+## Naming a preview
+
+Without a name, a command addresses the current branch's preview. In CI, a pull request
+checks out a detached HEAD, so the branch comes from `GITHUB_HEAD_REF`; with neither a branch
+nor that variable, the command stops and asks for a name.
+
+A name addresses one preview from any branch or machine. It is a DNS label (lowercase letters,
+digits and hyphens, starting with a letter) with no `--`, and it cannot be `up`, `rm`, `ls` or
+`prune`. `ocel preview ls` lists every preview by the name the other commands take.
+
+```yaml title=".github/workflows/preview.yml"
+- run: ocel preview up pr-${{ github.event.number }}
+- run: ocel preview prune pr-${{ github.event.number }}
+```
+
+## Ephemeral and persistent
+
+A preview is ephemeral unless you pass `--persistent` when it is created.
+
+| | Ephemeral | Persistent |
+| --- | --- | --- |
+| Infrastructure | None of its own, only what [bindings](/docs/cli/bindings) share | Its own database, bucket and the rest |
+| Teardown | `rm` tears it down straight away | `rm` asks first, and needs `--yes` in CI |
+
+An ephemeral preview deploys fast and costs little. If the app declares a resource that no
+binding covers, the deploy stops and names the two ways out: `--persistent`, or a binding
+for previews with `ocel bindings set --preview`.
+
+A preview keeps the lifecycle it was created with. Deploying the other one to the same name is
+refused; remove the preview first or deploy under another name.

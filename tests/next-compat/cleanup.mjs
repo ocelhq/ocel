@@ -5,7 +5,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  previewRefForApp,
+  ocelBinary,
+  previewNameForApp,
   projectSlugForRun,
   renderOcelConfig,
   requireNamespace,
@@ -24,35 +25,31 @@ if (!adapterDir) {
   process.exit(1);
 }
 
-const { slug, ref } = resolveIdentity();
+const { slug, name } = resolveIdentity();
 ensureConfig(slug);
-console.error(`[ocel-e2e] removing preview ${ref} from project ${slug}`);
+console.error(`[ocel-e2e] removing preview ${name} from project ${slug}`);
 
-const res = spawnSync(
-  process.execPath,
-  [join(adapterDir, "packages", "ocel", "bin", "run.js"), "preview", "rm", "--ref", ref, "--yes"],
-  {
-    cwd: appDir,
-    stdio: ["ignore", "inherit", "inherit"],
-    timeout: TEARDOWN_TIMEOUT_MS,
-    env: { ...process.env, ...SKIP_DRIFT_CHECK_ENV },
-  },
-);
+const res = spawnSync(process.execPath, [ocelBinary(adapterDir), "preview", "rm", name, "--yes"], {
+  cwd: appDir,
+  stdio: ["ignore", "inherit", "inherit"],
+  timeout: TEARDOWN_TIMEOUT_MS,
+  env: { ...process.env, ...SKIP_DRIFT_CHECK_ENV },
+});
 
 if (res.error || res.signal || res.status !== 0) {
   const why =
     res.error?.message ?? (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`);
   console.error(
-    `[ocel-e2e] TEARDOWN FAILED for preview ${ref} of project ${slug}: ${why}\n` +
+    `[ocel-e2e] TEARDOWN FAILED for preview ${name} of project ${slug}: ${why}\n` +
       `[ocel-e2e] its Lambdas and stacks are still live; remove them by running ` +
-      `\`ocel preview rm --ref ${ref} --yes\` from a directory whose ocel.config.ts ` +
+      `\`ocel preview rm ${name} --yes\` from a directory whose ocel.config.ts ` +
       `declares slug: "${slug}", or take the whole project with ` +
       `\`node tests/next-compat/project-teardown.mjs ${slug}\``,
   );
   process.exit(1);
 }
 
-console.error(`[ocel-e2e] preview ${ref} removed`);
+console.error(`[ocel-e2e] preview ${name} removed`);
 
 function resolveIdentity() {
   let state = {};
@@ -60,12 +57,12 @@ function resolveIdentity() {
     state = JSON.parse(readFileSync(join(appDir, STATE_FILE), "utf8")) ?? {};
   } catch {
     console.error(
-      `[ocel-e2e] no readable ${STATE_FILE}; re-deriving the project slug and preview ref`,
+      `[ocel-e2e] no readable ${STATE_FILE}; re-deriving the project slug and preview name`,
     );
   }
   return {
     slug: state.slug || projectSlugForRun(),
-    ref: state.ref || previewRefForApp(appDir),
+    name: state.name || previewNameForApp(appDir),
   };
 }
 

@@ -12,7 +12,7 @@ Writes to $OUT_DIR/<suite name>/:
   run.log       everything jest and the deploy scripts printed
   jest.json     jest --json result
   fragment.json this suite's entry in baseline-manifest.json shape, unfiltered
-  deploy.txt    every ref/slug/dir line deploy.mjs printed
+  deploy.txt    every name/slug/dir line deploy.mjs printed
   dirs.txt      every app dir this suite deployed
   status        jest's exit code
   staged.txt    STAGE=1 only: each preview left live, and how to reach it
@@ -40,25 +40,25 @@ mkdir -p "$WORK"
 : >"$LOG"
 
 finish() {
-  local code=$? dir ref
+  local code=$? dir name
   sed -n 's|^.*\[ocel-e2e\] preview .* in \(/.*\)$|\1|p' "$LOG" | sort -u >"$WORK/dirs.txt"
   grep '\[ocel-e2e\] preview ' "$LOG" | sort -u >"$WORK/deploy.txt" 2>/dev/null
   : >"$WORK/staged.txt"
 
   while read -r dir; do
     [ -n "$dir" ] && [ -f "$dir/.ocel-e2e.json" ] || continue
-    ref=$(node -p "require('$dir/.ocel-e2e.json').ref")
+    name=$(node -p "require('$dir/.ocel-e2e.json').name")
     if [ "${STAGE:-}" = 1 ]; then
       {
-        printf 'dir=%s\nref=%s\n' "$dir" "$ref"
+        printf 'dir=%s\nname=%s\n' "$dir" "$name"
         node -p "require('$dir/.ocel-e2e.json').slug" | sed 's/^/slug=/'
         node -p "JSON.parse(require('fs').readFileSync('$dir/.ocel/deploy-result.json')).apps.flatMap((a) => a.urls ?? [])[0]" 2>/dev/null |
           sed 's/^/url=/'
-        printf 'teardown=cd %s && node %s/packages/cli/bin/ocel.js preview rm --ref %s --yes\n' \
-          "$dir" "$ADAPTER_DIR" "$ref"
+        printf 'teardown=cd %s && node %s/packages/cli/bin/ocel.js preview rm %s --yes\n' \
+          "$dir" "$ADAPTER_DIR" "$name"
       } >>"$WORK/staged.txt"
     else
-      (cd "$dir" && node "$ADAPTER_DIR/packages/cli/bin/ocel.js" preview rm --ref "$ref" --yes) >>"$LOG" 2>&1
+      (cd "$dir" && node "$ADAPTER_DIR/packages/cli/bin/ocel.js" preview rm "$name" --yes) >>"$LOG" 2>&1
     fi
   done <"$WORK/dirs.txt"
   [ -s "$WORK/staged.txt" ] || rm -f "$WORK/staged.txt"

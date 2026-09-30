@@ -19,15 +19,15 @@ If the Next.js repo is not in your context, stop and tell the user to run
 
 **One project per run id, one preview per app.** `projectSlugForRun()` is
 `e2e-<GITHUB_RUN_ID>` (`e2e-local` when unset), and each temp app is a preview
-**ref** inside it. The ref is *derived from* the app directory but is **not** the
-directory path: `previewRef` (`lib.mjs`) hashes `NEXT_TEST_DIR || appDir` into
+**name** inside it. The name is *derived from* the app directory but is **not** the
+directory path: `previewName` (`lib.mjs`) hashes `NEXT_TEST_DIR || appDir` into
 `<basename hint>-<sha256 prefix>`, e.g. `/tmp/next-test-1786560435077-458` becomes
 `next-test-17-b775867b`. Consequences:
 
-- **Pass the recorded ref, never the directory.** `--ref` is taken literally, so
-  `--ref <appDir>` names a ref that does not exist. `preview rm` then reports
-  success having removed nothing, and the deployment stays live. Read the ref
-  from the app's `.ocel-e2e.json`, or from `deploy.mjs`'s stderr line.
+- **Pass the recorded name, never a name you derive by hand.** Any other valid
+  name addresses a preview that does not exist, so `preview rm` then removes
+  nothing and the deployment stays live. Read the name from the app's
+  `.ocel-e2e.json`, or from `deploy.mjs`'s stderr line.
 - Both `ocel preview up` and `ocel preview rm` resolve the project through the
   `ocel.config.ts` **in their working directory**, so both must run from the
   app's own directory.
@@ -146,7 +146,7 @@ signal rather than polling — returning before it finishes has done nothing.
 - `OCEL_ACCESS_TOKEN` / `OCEL_CONSOLE_URL` are inert — `ocel preview up` makes no
   control-plane call. They are kept to match CI.
 
-`deploy.mjs` prints `[ocel-e2e] preview <ref> of project <slug> in <dir>` to
+`deploy.mjs` prints `[ocel-e2e] preview <name> of project <slug> in <dir>` to
 stderr and persists both in the app dir's `.ocel-e2e.json`. Record them.
 
 ## Stage a live preview to debug against
@@ -170,14 +170,14 @@ Same command with three changes — this leaves the deployment up:
 Take the app URL from `.ocel/deploy-result.json` (the first `urls` entry under `apps`). One preview per
 suite, shared by everything debugging it.
 
-**Nothing tears this down automatically.** When finished, take the ref and slug
+**Nothing tears this down automatically.** When finished, take the name and slug
 from the app's `.ocel-e2e.json` — **not** the directory path, see the isolation
 model above — and run from the app's own directory:
 
 ```bash
-ref=$(node -p "require('$appDir/.ocel-e2e.json').ref")
+name=$(node -p "require('$appDir/.ocel-e2e.json').name")
 cd <appDir> && node /home/vndaba/Dev/ocelhq/packages/cli/bin/ocel.js \
-  preview rm --ref "$ref" --yes
+  preview rm "$name" --yes
 ```
 
 **`preview rm`'s exit code proves nothing.** It has been observed reporting
@@ -202,7 +202,7 @@ ADAPTER_DIR=… OCEL_E2E_SIDECAR_DIR=… \
 including the project's `/ocel/rootstack-preview/<slug>` SSM parameter, which
 `preview rm` leaves behind even when it does delete the compute.
 
-If teardown fails, **leave the app directory in place** and report the ref and
+If teardown fails, **leave the app directory in place** and report the name and
 slug — its Lambdas, worker scripts and DNS label are still live, and deleting
 the directory first makes the preview unreclaimable from anywhere.
 
