@@ -40,11 +40,15 @@ func envName(env *environmentv1.Environment) (string, error) {
 	return identity, nil
 }
 
-func lifecycleOf(persisted bool) environmentv1.Lifecycle {
-	if persisted {
+func encodeLifecycle(lifecycle stackrecords.Lifecycle) environmentv1.Lifecycle {
+	switch lifecycle {
+	case stackrecords.LifecycleEphemeral:
+		return environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL
+	case stackrecords.LifecyclePersistent:
 		return environmentv1.Lifecycle_LIFECYCLE_PERSISTENT
+	default:
+		return environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED
 	}
-	return environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL
 }
 
 func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnvironmentsRequest) (*contractv1.ListEnvironmentsResponse, error) {
@@ -60,7 +64,7 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 	for _, environment := range environments {
 		resp.Environments = append(resp.Environments, &contractv1.PreviewEnvironment{
 			Identity:  environment.Identity,
-			Lifecycle: lifecycleOf(environment.Persisted),
+			Lifecycle: encodeLifecycle(environment.Lifecycle),
 			Label:     environment.Label,
 			CreatedAt: environment.CreatedAt,
 		})
