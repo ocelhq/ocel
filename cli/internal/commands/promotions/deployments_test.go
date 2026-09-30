@@ -320,7 +320,7 @@ func TestTheDeploymentsListMarksAPromotionTakenBack(t *testing.T) {
 
 func TestACommandThatReadsTheBootstrapNamesTheFeatureItLacks(t *testing.T) {
 	project := promotedTwice(t)
-	project.Provider.FakeBootstrap().DescribeAbsent(fake.FeatureCache, fake.FeatureImages)
+	clitest.Bootstrap(t, project.Provider, environment.TierProduction)
 	invocation := clitest.NewInvocation()
 
 	var stdout, stderr bytes.Buffer

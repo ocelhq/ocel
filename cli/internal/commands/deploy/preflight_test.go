@@ -543,7 +543,7 @@ func TestDeploysEventsAreInTheCheckPhaseThenBuildThenTheProvidersDeployPhases(t 
 func setUpProjectLackingFeatures(t *testing.T) clitest.FakeProject {
 	t.Helper()
 	fixture := clitest.SetUpProject(t)
-	fixture.Provider.FakeBootstrap().DescribeAbsent(fake.FeatureCache, fake.FeatureImages)
+	clitest.Bootstrap(t, fixture.Provider, environment.TierProduction)
 	writeUsageMonorepo(t, fixture.Root, "")
 	return fixture
 }

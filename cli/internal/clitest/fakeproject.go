@@ -20,7 +20,7 @@ func SetUpProject(t *testing.T) FakeProject {
 
 	root := writeProject(t)
 	p := fake.NewForProject(fake.Options{}, root)
-	Bootstrap(t, p, environment.TierProduction)
+	Bootstrap(t, p, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
 	return FakeProject{Root: root, Provider: p, Requests: ServeFake(t, p)}
 }
 
