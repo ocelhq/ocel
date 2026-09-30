@@ -184,8 +184,41 @@ func (h *Host) RunTunnel(ctx context.Context, tunnel Tunnel, token func(context.
 		words(renderTunnelTokenArgv("place-secret", tunnel.Name)), strings.NewReader(read), elevation); err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "run "+TunnelContainer, networkEnsured(TunnelNetwork)+"\n"+tunnelBox(tunnel, connector).writingUnderRoutingLock(tunnelStartAttempts), nil, elevation)
-	return err
+	if err := h.startTunnel(ctx, tunnel, connector, elevation); err != nil {
+		if errors.Is(err, ErrTunnelReleased) {
+			return errors.Join(err, h.StopTunnel(ctx, tunnel))
+		}
+		return err
+	}
+	return nil
+}
+
+func (h *Host) startTunnel(ctx context.Context, tunnel Tunnel, connector tunnelConnector, elevation string) error {
+	for rewrites := 1; ; rewrites++ {
+		pair, err := h.currentTable(ctx)
+		if err != nil {
+			return err
+		}
+		table, err := ReadRoutingTable(pair.table)
+		if err != nil {
+			return err
+		}
+		if err := refuseUnreserved(table, tunnel.Name, h.named()); err != nil {
+			return err
+		}
+		started := networkEnsured(TunnelNetwork) + "\n" + tunnelBox(tunnel, connector).writingUnderRoutingLock(tunnelStartAttempts, comparedUnder(pair.digest()))
+		result, err := h.stream(ctx, started, nil, elevation)
+		switch {
+		case err != nil:
+			return err
+		case result.Code == 0:
+			return nil
+		case result.Code != routingMoved:
+			return h.refuse("run "+TunnelContainer, result, elevation)
+		case rewrites >= routingRewrites:
+			return h.movedUnder(pair.digest(), result)
+		}
+	}
 }
 
 func tunnelTokenMounted(name string) string { return tunnelMount + "/" + name }
