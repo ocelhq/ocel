@@ -107,6 +107,7 @@ describe("the Next cache a cell is held to", () => {
   const ORIGIN_TITLES = [...nextOriginCacheChecks, ...nextOriginDataCacheChecks].map(
     (one) => one.title,
   );
+  const DATA_CACHE_TITLES = nextOriginDataCacheChecks.map((one) => one.title);
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
   const ZONED = {
     OCEL_JOURNEY_ZONE: "journeys.example.com",
@@ -118,15 +119,21 @@ describe("the Next cache a cell is held to", () => {
   const cacheTitlesIn = (titles: string[], of: string[]) =>
     titles.filter((title) => of.some((cache) => title.endsWith(cache)));
 
-  it("holds a Next app on a box with no edge to the Next server's own cache, expecting it green", () => {
+  it("holds a Next app on a box with no edge to the Next server's own cache, green but for the data cache on an incus VM", () => {
     for (const lane of ["vps", "vps.incus"] as const) {
       const planned = planOn(lane, {}, EVERY_CELL);
       for (const cell of ["deploy/next", "sdk/next", "lifecycle/next"]) {
         const titles = titlesOf(planned, cell);
         expect(cacheTitlesIn(titles, EDGE_TITLES)).toEqual([]);
         expect(cacheTitlesIn(titles, ORIGIN_TITLES)).not.toEqual([]);
-        const listed = Object.keys(planned.expectedFailures[`${cell}/web`] ?? {});
-        expect(cacheTitlesIn(listed, ORIGIN_TITLES)).toEqual([]);
+        const listed = planned.expectedFailures[`${cell}/web`] ?? {};
+        const red = lane === "vps.incus" ? DATA_CACHE_TITLES : [];
+        expect(cacheTitlesIn(Object.keys(listed), ORIGIN_TITLES)).toEqual(
+          cacheTitlesIn(titles, red),
+        );
+        for (const title of cacheTitlesIn(titles, red)) {
+          expect(listed[title]?.map((gap) => gap.issue)).toEqual([1458]);
+        }
       }
     }
   });
