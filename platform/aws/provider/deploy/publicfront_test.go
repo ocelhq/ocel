@@ -62,10 +62,11 @@ func TestThePublicFrontAnswersTLSOnlyFromTheRangesItsEdgeForwardsFrom(t *testing
 	}
 	group := recordedNamed(t, rec, "aws:ec2/securityGroup:SecurityGroup", "public-security-group")
 	ingress := group["ingress"].ArrayValue()
-	if len(ingress) != 1 {
-		t.Fatalf("the public front admits %v, want one rule", ingress)
+	tlsRule := slices.IndexFunc(ingress, func(rule resource.PropertyValue) bool { return rule.ObjectValue()["fromPort"].NumberValue() == 443 })
+	if tlsRule < 0 {
+		t.Fatalf("the public front admits %v, want a rule for 443", ingress)
 	}
-	rule := ingress[0].ObjectValue()
+	rule := ingress[tlsRule].ObjectValue()
 	var ranges []string
 	for _, block := range rule["cidrBlocks"].ArrayValue() {
 		ranges = append(ranges, block.StringValue())
@@ -85,6 +86,29 @@ func TestThePublicFrontAnswersTLSOnlyFromTheRangesItsEdgeForwardsFrom(t *testing
 	function := recordedNamed(t, rec, "aws:lambda/function:Function", "public-liveness")
 	if function["role"].StringValue() == "" {
 		t.Errorf("the liveness function = %v, want a role", function)
+	}
+}
+
+func TestThePublicFrontRedirectsPlainHTTPToHTTPSForwardingNothing(t *testing.T) {
+	t.Parallel()
+
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return publicInfraWork().run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
+		t.Fatalf("run the container infrastructure program: %v", err)
+	}
+
+	listener := recordedNamed(t, rec, "aws:lb/listener:Listener", "public-redirect")
+	action := listener["defaultActions"].ArrayValue()[0].ObjectValue()
+	redirect := action["redirect"].ObjectValue()
+	if listener["port"].NumberValue() != 80 || action["type"].StringValue() != "redirect" || redirect["protocol"].StringValue() != "HTTPS" || redirect["port"].StringValue() != "443" {
+		t.Errorf("the plain-http listener = %v, want :80 answering every request with a redirect to https: Cloudflare reaches the origin over plain http when the visitor did", listener)
+	}
+	var ports []float64
+	for _, rule := range recordedNamed(t, rec, "aws:ec2/securityGroup:SecurityGroup", "public-security-group")["ingress"].ArrayValue() {
+		ports = append(ports, rule.ObjectValue()["fromPort"].NumberValue())
+	}
+	if !slices.Contains(ports, 80) || !slices.Contains(ports, 443) {
+		t.Errorf("the public front admits ports %v, want 80 and 443 from the edge's ranges", ports)
 	}
 }
 
