@@ -196,6 +196,16 @@ func TestMovingABoxBetweenTwoOfYourProxiesPlansTheOutageFromTheOldStoppingUntilT
 	wantChange(t, move, "3 hostnames get new certificates from Coolify's Traefik", provider.ActionCreate)
 }
 
+func TestMovingABoxFromYourTraefikToAToolsTraefikPlansTheOutageFromTheOldStoppingUntilTheNewServes(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	move := movePlanned(t, boxRecordedFor(t, tier, traefikOnTheHost()), tier, coolifysTraefik())
+	if want := "outage from your Traefik stopping until Coolify's Traefik serves"; move.Reason != want {
+		t.Errorf("the move gives its outage as %q, want %q: Coolify runs a Traefik of its own, which cannot take 443 until yours lets it go", move.Reason, want)
+	}
+}
+
 func TestMovingABoxOntoOneHostnameCountsItAsOneCertificate(t *testing.T) {
 	t.Parallel()
 
@@ -296,6 +306,12 @@ func TestMovingABoxToAnotherProxyIsRefusedWhileAnythingButOcelsOwnProxyHoldsTheS
 			},
 			want: "apache2 listens on :80 and :443, which your Traefik takes over from ocel's own proxy\n" +
 				"Ocel never stops a proxy it does not run: stop apache2, then run `ocel bootstrap production` again",
+		},
+		"your Traefik to Coolify's Traefik": {
+			from: traefikOnTheHost(), to: coolifysTraefik(),
+			held: func(box *bench) { portsOwnedOn(box, nil, socketOwner{80, "traefik"}, socketOwner{443, "traefik"}) },
+			want: "traefik listens on :80 and :443, which Coolify's Traefik takes over from your Traefik\n" +
+				"Ocel never stops a proxy it does not run: stop traefik, then run `ocel bootstrap production` again",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

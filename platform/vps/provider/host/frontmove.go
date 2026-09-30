@@ -49,7 +49,7 @@ func (f Front) identifyProcess() string {
 	case f.Manual != nil:
 		return "manual"
 	case f.Traefik != nil:
-		return "traefik"
+		return "traefik " + f.Traefik.Preset
 	case f.Caddy != nil:
 		return "caddy " + f.Caddy.Container
 	default:
