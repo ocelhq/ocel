@@ -33,6 +33,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -96,6 +97,7 @@ func newCommand() *command {
 	rootCmd := c.root
 	set := &flags{}
 	invocation := newInvocation(c.bus, set)
+	invocation.Setups = prerequisite.Setups{}
 
 	rootCmd.PersistentFlags().BoolVarP(&set.verbose, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
 	rootCmd.PersistentFlags().StringVarP(&set.config, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
@@ -115,7 +117,11 @@ func newCommand() *command {
 	}
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(runCmd)
-	rootCmd.AddCommand(projectinit.NewCommand(projectinit.Dependencies{Invocation: invocation, RunPackageManager: projectinit.RunPackageManager}))
+	initDependencies := projectinit.Dependencies{Invocation: invocation, RunPackageManager: projectinit.RunPackageManager}
+	invocation.Setups[prerequisite.Project] = projectinit.NewSetup(initDependencies)
+	invocation.Setups[prerequisite.Bootstrap] = bootstrap.NewSetup()
+	invocation.Setups[prerequisite.Domain] = domain.NewSetup()
+	rootCmd.AddCommand(projectinit.NewCommand(initDependencies))
 	rootCmd.AddCommand(generate.NewCommand(generate.Dependencies{Invocation: invocation, CollectDeclarations: declaration.Collect}))
 	rootCmd.AddCommand(buildcommand.NewCommand(buildcommand.Dependencies{Invocation: invocation, BuildApps: build.Apps}))
 	rootCmd.AddCommand(lock.NewCommand(invocation))
