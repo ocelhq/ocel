@@ -34,8 +34,19 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err := s.p.requireTLSCover(ctx, zoneID, zoneName, binding.Hostname); err != nil {
 		return err
 	}
-	if err := s.p.ensureRoute(ctx, s.p.routeSnapshot(), zoneID, routePattern(binding.Hostname), script, routeSpec{owns: projectOwnsScript(s.p.namespace, s.state.Slug)}); err != nil {
+	forwarded := s.isForwarded(binding.Hostname)
+	owns := projectOwnsScript(s.p.namespace, s.state.Slug)
+	if forwarded {
+		ownsProjectScript := owns
+		owns = func(script string) bool { return script == "" || ownsProjectScript(script) }
+	}
+	if err := s.p.ensureRoute(ctx, s.p.routeSnapshot(), zoneID, routePattern(binding.Hostname), script, routeSpec{owns: owns}); err != nil {
 		return err
+	}
+	if forwarded {
+		if err := s.stopForwarding(ctx, zoneID, binding.Hostname); err != nil {
+			return err
+		}
 	}
 	if err := s.p.refuseGreyCloud(ctx, zoneID, binding.Hostname); err != nil {
 		return err
