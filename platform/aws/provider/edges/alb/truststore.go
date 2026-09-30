@@ -48,12 +48,12 @@ func joinCertificates(certificates []string) string {
 	return strings.Join(certificates, "\n") + "\n"
 }
 
-func (s *stack) trust(ctx context.Context, c Clients, answering front, certificates []string) error {
+func (s *stack) trustClientCertificates(ctx context.Context, c Clients, answering front, certificates []string) error {
 	trusted, err := s.writeBundle(ctx, c, certificates)
 	if err != nil {
 		return err
 	}
-	store, err := s.ensureTrustStore(ctx, c, trusted)
+	store, err := s.reconcileTrustStore(ctx, c, trusted)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func readBundle(ctx context.Context, c Clients, key string) ([]string, string, e
 	return splitCertificates(string(body)), aws.ToString(read.ETag), nil
 }
 
-func (s *stack) ensureTrustStore(ctx context.Context, c Clients, changed bool) (string, error) {
+func (s *stack) reconcileTrustStore(ctx context.Context, c Clients, changed bool) (string, error) {
 	name := awsports.PublicBalancerName(s.state.Tier)
 	for attempt := range trustStoreReads {
 		read, err := c.Balancers.DescribeTrustStores(ctx, &elbv2.DescribeTrustStoresInput{Names: []string{name}})
@@ -160,14 +160,14 @@ func (s *stack) ensureTrustStore(ctx context.Context, c Clients, changed bool) (
 			}
 			return store, nil
 		}
-		if err := pause(ctx, attempt); err != nil {
+		if err := pauseBeforeRead(ctx, attempt); err != nil {
 			return "", err
 		}
 	}
 	return "", fmt.Errorf("the trust store %s was not active after %d reads", name, trustStoreReads)
 }
 
-func pause(ctx context.Context, attempt int) error {
+func pauseBeforeRead(ctx context.Context, attempt int) error {
 	if attempt == 0 {
 		return nil
 	}

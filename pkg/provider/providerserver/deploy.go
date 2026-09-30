@@ -463,7 +463,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 	var base string
 	switch r.hostingMode() {
 	case hostingProduction:
-		spec.Domains, spec.DomainApps = r.edgeRoutedDomains()
+		spec.Domains, spec.DomainApps = r.listEdgeRoutedDomains()
 	case hostingGlobalPreview:
 		spec.PruneOnly = true
 	default:

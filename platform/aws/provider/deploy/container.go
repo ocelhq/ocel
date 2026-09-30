@@ -98,7 +98,7 @@ func (w *containerWork) url() string {
 	return "http://" + w.infra.OriginHost
 }
 
-func routedPublicly(spec provider.StackSpec) bool {
+func isRoutedPublicly(spec provider.StackSpec) bool {
 	return spec.App != nil && spec.App.Router == alb.Kind
 }
 
@@ -174,7 +174,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		return nil, err
 	}
 	guard, previousGuard := r.cfg.OriginSecret, r.cfg.PreviousOriginSecret
-	if routedPublicly(spec) {
+	if isRoutedPublicly(spec) {
 		guard, previousGuard = "", ""
 	}
 	env, err := containerEnv(app.App, app.Values, guard, previousGuard, bundle.Live)
@@ -202,7 +202,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		values:     values,
 		service:    serviceCoordinate(project, stack),
 		role:       roleCoordinate(project, stack),
-		public:     routedPublicly(spec),
+		public:     isRoutedPublicly(spec),
 	}, nil
 }
 
@@ -552,7 +552,7 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	if work.transformed, err = transformStackSpec(ctx, r.cfg.Transform, spec); err != nil {
 		return provider.StackResult{}, err
 	}
-	public, err := publicRanges(spec)
+	public, err := readPublicRanges(spec)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -592,8 +592,8 @@ func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, wor
 	return provider.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.app, rulePlacements, err)
 }
 
-func publicRanges(spec provider.StackSpec) ([]string, error) {
-	if !routedPublicly(spec) {
+func readPublicRanges(spec provider.StackSpec) ([]string, error) {
+	if !isRoutedPublicly(spec) {
 		return nil, nil
 	}
 	var ranges []string
@@ -619,7 +619,7 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if !present || (routedPublicly(spec) && infra.PublicListener == "") {
+	if !present || (isRoutedPublicly(spec) && infra.PublicListener == "") {
 		shared := provider.ChangeGroup{
 			Kind:   provider.StackGroupKind,
 			Name:   containerInfraRef(spec.Ref.Tier).Name.String(),

@@ -372,7 +372,7 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	fronts := pulumi.StringArray{front.ID()}
 	var public *ec2.SecurityGroup
 	if len(w.public) > 0 {
-		if public, err = w.publicSecurityGroup(ctx, vpc.Id, tags); err != nil {
+		if public, err = w.createPublicSecurityGroup(ctx, vpc.Id, tags); err != nil {
 			return err
 		}
 		fronts = append(fronts, public.ID())

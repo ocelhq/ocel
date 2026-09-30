@@ -35,12 +35,12 @@ const (
 	defaultCertificateAge = 10 * 365 * 24 * time.Hour
 )
 
-func livenessSource() string {
+func renderLivenessSource() string {
 	return fmt.Sprintf(`export const handler = async () => ({ statusCode: 204, statusDescription: "204 No Content", headers: { %q: %q }, body: "" });
 `, router.HeaderRouter, alb.Kind)
 }
 
-func (w *containerInfraWork) publicSecurityGroup(ctx *pulumi.Context, vpc string, tags pulumi.StringMap) (*ec2.SecurityGroup, error) {
+func (w *containerInfraWork) createPublicSecurityGroup(ctx *pulumi.Context, vpc string, tags pulumi.StringMap) (*ec2.SecurityGroup, error) {
 	return ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "public", "security-group"), &ec2.SecurityGroupArgs{
 		Name:        pulumi.String(containerInfraName(w.tier, "public")),
 		Description: pulumi.String("Ocel: the load balancer the edge forwards the hostnames of the " + string(w.tier) + " class to"),
@@ -154,7 +154,7 @@ func (w *containerInfraWork) runLiveness(ctx *pulumi.Context, listener *lb.Liste
 		Handler: pulumi.String("index.handler"),
 		Role:    role.Arn,
 		Code: pulumi.NewAssetArchive(map[string]any{
-			"index.mjs": pulumi.NewStringAsset(livenessSource()),
+			"index.mjs": pulumi.NewStringAsset(renderLivenessSource()),
 		}),
 		Tags: tags,
 	})
