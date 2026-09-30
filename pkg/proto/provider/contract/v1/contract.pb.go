@@ -2645,6 +2645,7 @@ type EdgeSelection struct {
 	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	Dns           *Dns                   `protobuf:"bytes,2,opt,name=dns,proto3" json:"dns,omitempty"`
 	AllowDegraded []string               `protobuf:"bytes,3,rep,name=allow_degraded,json=allowDegraded,proto3" json:"allow_degraded,omitempty"`
+	Tunnel        bool                   `protobuf:"varint,4,opt,name=tunnel,proto3" json:"tunnel,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2698,6 +2699,13 @@ func (x *EdgeSelection) GetAllowDegraded() []string {
 		return x.AllowDegraded
 	}
 	return nil
+}
+
+func (x *EdgeSelection) GetTunnel() bool {
+	if x != nil {
+		return x.Tunnel
+	}
+	return false
 }
 
 type BootstrapScope struct {
@@ -4845,11 +4853,12 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x05edges\x18\x06 \x03(\tR\x05edges\"-\n" +
 	"\x03Dns\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
-	"\x04zone\x18\x02 \x01(\tR\x04zone\"w\n" +
+	"\x04zone\x18\x02 \x01(\tR\x04zone\"\x8f\x01\n" +
 	"\rEdgeSelection\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12+\n" +
 	"\x03dns\x18\x02 \x01(\v2\x19.provider.contract.v1.DnsR\x03dns\x12%\n" +
-	"\x0eallow_degraded\x18\x03 \x03(\tR\rallowDegraded\"\xbe\x01\n" +
+	"\x0eallow_degraded\x18\x03 \x03(\tR\rallowDegraded\x12\x16\n" +
+	"\x06tunnel\x18\x04 \x01(\bR\x06tunnel\"\xbe\x01\n" +
 	"\x0eBootstrapScope\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x127\n" +
 	"\x04edge\x18\x02 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x128\n" +

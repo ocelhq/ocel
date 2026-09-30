@@ -421,6 +421,8 @@ message EdgeSelection {
   Dns dns = 2;
 
   repeated string allow_degraded = 3;
+
+  bool tunnel = 4;
 }
 
 message BootstrapScope {

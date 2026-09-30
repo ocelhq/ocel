@@ -213,19 +213,11 @@ func (d *hostnames) refreshOriginClaim(ctx context.Context, target ConfiguredHos
 	if d.routerOrigin() == nil {
 		return false, nil
 	}
-	changed, err := clientCertificatesChanged(ctx, d.front, target.Hostname, hostState.ClientCertificateDigests)
-	if err != nil {
+	stale, why, err := isOriginClaimStale(ctx, d.front, target.Hostname, d.tunnel, hostState, time.Now())
+	if err != nil || !stale {
 		return false, err
 	}
-	due := isOriginCertificateDue(hostState, time.Now())
-	if !changed && !due {
-		return false, nil
-	}
-	if due {
-		progress.Say(fmt.Sprintf("Claiming %s again: the certificate its origin answers it with is due for renewal", target.Hostname))
-	} else {
-		progress.Say(fmt.Sprintf("Claiming %s again: the client certificates %s presents to its origin changed", target.Hostname, describeFront(d.front.Kind())))
-	}
+	progress.Say(fmt.Sprintf("Claiming %s again: %s", target.Hostname, why))
 	return true, d.bindOrigin(ctx, target, hostState, progress)
 }
 
@@ -237,7 +229,7 @@ func (d *hostnames) claimRouterOrigin(ctx context.Context, target ConfiguredHost
 	if err != nil {
 		return originClaim{}, err
 	}
-	claim := router.Claim{Hostname: target.Hostname, App: target.App, Certificate: hostState.Certificate.ID}
+	claim := router.Claim{Hostname: target.Hostname, App: target.App, Certificate: hostState.Certificate.ID, Tunnel: d.tunnel}
 	claimed, err := claimOrigin(ctx, d.front, claim, routed.Claim, d.reserveOriginCertificate(target.Hostname, *hostState))
 	return claimed, errors.Join(err, d.adopt(routed))
 }

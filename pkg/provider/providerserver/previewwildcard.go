@@ -66,8 +66,10 @@ func (w *wildcards) save(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		w.recorded.Host.OriginCertificateID = stored.Host.OriginCertificateID
-		w.recorded.Host.OriginCertificateExpiresAt = stored.Host.OriginCertificateExpiresAt
+		if !w.recorded.Host.Tunneled {
+			w.recorded.Host.OriginCertificateID = stored.Host.OriginCertificateID
+			w.recorded.Host.OriginCertificateExpiresAt = stored.Host.OriginCertificateExpiresAt
+		}
 		if entry.Value, err = json.Marshal(w.recorded); err != nil {
 			return fmt.Errorf("record %s: %w", name, err)
 		}
@@ -213,7 +215,7 @@ func (w *wildcards) reconcileEntry(ctx context.Context, front edge.Edge, origin 
 	var claimed originClaim
 	if origin != nil {
 		var err error
-		claim := router.Claim{Hostname: w.recorded.Hostname(), Certificate: w.recorded.Host.Certificate.ID}
+		claim := router.Claim{Hostname: w.recorded.Hostname(), Certificate: w.recorded.Host.Certificate.ID, Tunnel: tunnelThrough(front, w.sel)}
 		if claimed, err = claimOrigin(ctx, front, claim, origin.ClaimPreviewEntry, w.reserveOriginCertificate); err != nil {
 			return "", err
 		}
@@ -288,14 +290,11 @@ func (w *wildcards) refreshEntryClaim(ctx context.Context, front edge.Edge, runP
 	if err != nil || origin == nil {
 		return err
 	}
-	changed, err := clientCertificatesChanged(ctx, front, w.recorded.Hostname(), w.recorded.Host.ClientCertificateDigests)
-	if err != nil {
+	stale, why, err := isOriginClaimStale(ctx, front, w.recorded.Hostname(), tunnelThrough(front, w.sel), &w.recorded.Host, time.Now())
+	if err != nil || !stale {
 		return err
 	}
-	if !changed && !isOriginCertificateDue(&w.recorded.Host, time.Now()) {
-		return nil
-	}
-	runProgress.Say("Claiming the shared preview entry on " + w.recorded.Hostname() + " again: what its origin trusts or answers with is due to change")
+	runProgress.Say("Claiming the shared preview entry on " + w.recorded.Hostname() + " again: " + why)
 	_, err = w.reconcileEntry(ctx, front, origin, runProgress)
 	if errors.Is(err, errPreviewEntryRenewing) {
 		runProgress.Say(err.Error())
