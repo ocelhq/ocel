@@ -192,7 +192,7 @@ async function assertImageOptimizerServes(ctx: CheckContext, urls: string[]): Pr
 async function assertDraftModeBypasses(
   ctx: CheckContext,
   prerendered: (res: Response) => void,
-  drafted: (res: Response) => void,
+  drafted?: (res: Response) => void,
 ): Promise<void> {
   const withoutCookie = await page(ctx, "/draft");
   prerendered(withoutCookie.res);
@@ -207,7 +207,7 @@ async function assertDraftModeBypasses(
   assert.equal(new URL(turned.headers.get("location") ?? "", ctx.baseUrl).pathname, "/draft");
 
   const withCookie = await page(ctx, "/draft", { headers: { cookie } });
-  drafted(withCookie.res);
+  drafted?.(withCookie.res);
   assertCacheControl(withCookie.res, DYNAMIC_CACHE_CONTROL, "the drafted page");
   assert.equal(marker(withCookie.html, "draft"), "enabled");
 }
@@ -378,10 +378,8 @@ export const nextOriginCacheChecks: Check[] = holdAt("origin", [
     title:
       "draft mode makes the Next server bypass its cache with a cookie that survives the redirect",
     run: (ctx) =>
-      assertDraftModeBypasses(
-        ctx,
-        (res) => assertServedFromNextCache(res, "the draft page without the cookie"),
-        () => undefined,
+      assertDraftModeBypasses(ctx, (res) =>
+        assertServedFromNextCache(res, "the draft page without the cookie"),
       ),
   },
 ]);
