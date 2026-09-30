@@ -47,7 +47,13 @@ Use HTTPS nor any redirect rule in your zone.
 
 A promote purges what Cloudflare cached for the hostnames it moved to the new release. The zone's SSL mode
 must be Full (strict). The token needs Zone Read, Zone Settings Read, DNS Edit, SSL and
-Certificates Edit and Cache Purge on the zone, and Account Settings Read.
+Certificates Edit and Cache Purge on the zone, and Account Settings Read and Cloudflare
+Tunnel Edit on the account.
+
+On a VPS box, `"edge": { "cloudflare": { "tunnel": true } }` reaches the box through a
+Cloudflare Tunnel instead of at its address, with no certificates and no SSL mode to set;
+see [through a Cloudflare Tunnel](/docs/providers/vps#through-a-cloudflare-tunnel). Other
+providers refuse `tunnel`.
 
 Hostname records go into the origin provider's own DNS unless you say otherwise. Write
 them into Cloudflare instead:
