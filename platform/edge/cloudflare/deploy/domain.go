@@ -21,8 +21,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		return errors.New("binding a domain to a Cloudflare stack needs a hostname")
 	}
 	if binding.Origin != nil {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge answers %s with its worker, and this binding names an origin to forward it to", Kind, binding.Hostname)
+		return s.bindForwarded(ctx, binding)
 	}
 	accountID, script, err := s.soleEntryWorker("bind")
 	if err != nil {
@@ -48,6 +47,9 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if hostname == "" {
 		return errors.New("unbinding a domain from a Cloudflare stack needs a hostname")
+	}
+	if s.isForwarded(hostname) {
+		return s.unbindForwarded(ctx, hostname)
 	}
 	accountID, scripts, err := s.entryWorkers("unbind")
 	if err != nil {

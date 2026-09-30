@@ -169,7 +169,7 @@ func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, 
 	}
 	pattern := routePattern(hostname)
 	for _, route := range inZone {
-		if route.Pattern != pattern {
+		if route.Pattern != pattern || route.Script == "" {
 			continue
 		}
 		if route.Script == previewEntryScript {
