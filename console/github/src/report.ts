@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 export const deployResultSchema = z.looseObject({
-  schemaVersion: z.literal(1),
   slug: z.string(),
   environment: z.looseObject({
     tier: z.string(),
@@ -9,7 +8,6 @@ export const deployResultSchema = z.looseObject({
   }),
   provider: z.looseObject({
     name: z.string(),
-    region: z.string().optional(),
   }),
   promotionId: z.string(),
   tag: z.string().optional(),

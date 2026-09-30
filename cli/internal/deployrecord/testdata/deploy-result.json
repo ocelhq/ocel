@@ -1,0 +1,23 @@
+{
+  "slug": "proj-123",
+  "environment": {
+    "tier": "preview",
+    "identity": "e2e-42"
+  },
+  "provider": {
+    "name": "aws"
+  },
+  "promotionId": "dep_abc",
+  "tag": "v1",
+  "apps": [
+    {
+      "name": "web",
+      "buildId": "bld_1",
+      "deploymentId": "3f7c1b9a5e2d4c8f",
+      "urls": [
+        "https://app.example.com"
+      ]
+    }
+  ],
+  "deployedAt": "2026-07-25T10:30:00Z"
+}

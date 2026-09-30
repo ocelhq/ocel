@@ -15,14 +15,14 @@ import (
 func TestWriteLeavesTheDocumentedRecordInTheProjectStateDir(t *testing.T) {
 	t.Parallel()
 
-	t.Run("writes the documented shape", func(t *testing.T) {
+	t.Run("writes the shape the preview app reads", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 
 		err := Write(dir, Record{
 			Slug:        "proj-123",
 			Environment: Environment{Tier: "preview", Identity: "e2e-42"},
-			Provider:    Provider{Name: "fake"},
+			Provider:    Provider{Name: "aws"},
 			PromotionID: "dep_abc",
 			Tag:         "v1",
 			Apps:        []App{{Name: "web", BuildID: "bld_1", DeploymentID: "3f7c1b9a5e2d4c8f", URLs: []string{"https://app.example.com"}}},
@@ -32,33 +32,16 @@ func TestWriteLeavesTheDocumentedRecordInTheProjectStateDir(t *testing.T) {
 			t.Fatalf("Write() error = %v", err)
 		}
 
-		raw, err := os.ReadFile(Path(dir))
+		got, err := os.ReadFile(Path(dir))
 		if err != nil {
 			t.Fatalf("read result file: %v", err)
 		}
-		var got map[string]any
-		if err := json.Unmarshal(raw, &got); err != nil {
-			t.Fatalf("result file is not valid JSON: %v", err)
+		want, err := os.ReadFile(filepath.Join("testdata", "deploy-result.json"))
+		if err != nil {
+			t.Fatalf("read golden: %v", err)
 		}
-
-		want := map[string]any{
-			"slug":        "proj-123",
-			"environment": map[string]any{"tier": "preview", "identity": "e2e-42"},
-			"provider":    map[string]any{"name": "fake"},
-			"promotionId": "dep_abc",
-			"tag":         "v1",
-			"apps":        []any{map[string]any{"name": "web", "buildId": "bld_1", "deploymentId": "3f7c1b9a5e2d4c8f", "urls": []any{"https://app.example.com"}}},
-			"deployedAt":  "2026-07-25T10:30:00Z",
-		}
-		for key, wantVal := range want {
-			if gotVal, ok := got[key]; !ok {
-				t.Errorf("result file is missing %q; got %v", key, got)
-			} else if !jsonEqual(gotVal, wantVal) {
-				t.Errorf("%s = %#v, want %#v", key, gotVal, wantVal)
-			}
-		}
-		if len(got) != len(want) {
-			t.Errorf("result file keys = %v, want exactly %v", keys(got), keys(want))
+		if string(got) != string(want) {
+			t.Errorf("result file =\n%s\nwant testdata/deploy-result.json =\n%s", got, want)
 		}
 	})
 
@@ -152,18 +135,4 @@ func readInto(t *testing.T, path string, v any) {
 	if err := json.Unmarshal(raw, v); err != nil {
 		t.Fatalf("unmarshal %s: %v", path, err)
 	}
-}
-
-func jsonEqual(a, b any) bool {
-	x, _ := json.Marshal(a)
-	y, _ := json.Marshal(b)
-	return string(x) == string(y)
-}
-
-func keys(m map[string]any) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }

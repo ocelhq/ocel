@@ -5,10 +5,9 @@ import type { DeployResult } from "../src/report";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 
 const result: DeployResult = {
-  schemaVersion: 1,
   slug: "ocelhq",
   environment: { tier: "preview", identity: "pr-7" },
-  provider: { name: "aws", region: "eu-west-2" },
+  provider: { name: "aws" },
   promotionId: "prom_1",
   apps: [
     { name: "web", urls: ["https://web.preview.example"] },
@@ -42,7 +41,7 @@ test("deployed leads with the provider mark and lands each app beside its checkm
   expect(body).toContain(
     '<img src="https://raw.githubusercontent.com/ocelhq/ocel/main/www/public/providers/aws.svg" alt="AWS" height="14"> Deployed [`0123456`]',
   );
-  expect(body).toContain("to your AWS account · eu-west-2 · Sep 6, 2026, 10:11 UTC");
+  expect(body).toContain("to your AWS account · Sep 6, 2026, 10:11 UTC");
   expect(body).toContain("| App | Preview | Status |");
   expect(body).toContain("| web | [Visit preview ↗](https://web.preview.example) | ✅ Ready |");
   expect(body).toContain("| worker | no url | ❌ No URL |");

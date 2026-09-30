@@ -63,10 +63,9 @@ const base: PreviewInput = {
 };
 
 const result: DeployResult = {
-  schemaVersion: 1,
   slug: "ocelhq",
   environment: { tier: "preview" },
-  provider: { name: "aws", region: "eu-west-2" },
+  provider: { name: "aws" },
   promotionId: "prom_1",
   apps: [{ name: "web", urls: ["https://web.preview.example"] }],
   deployedAt: "2026-09-06T10:11:12Z",
