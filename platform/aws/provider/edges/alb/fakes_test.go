@@ -312,6 +312,9 @@ func (f *fakeAWS) ModifyListener(_ context.Context, in *elbv2.ModifyListenerInpu
 	defer f.mu.Unlock()
 	if mutual := in.MutualAuthentication; mutual != nil {
 		f.listenerMode, f.listenerTrust = aws.ToString(mutual.Mode), aws.ToString(mutual.TrustStoreArn)
+		if f.listenerMode == "off" {
+			f.listenerTrust = ""
+		}
 	}
 	return &elbv2.ModifyListenerOutput{}, nil
 }
@@ -370,7 +373,50 @@ func (f *fakeAWS) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(
 	}
 	f.objects[key] = body
 	f.etags[key]++
-	return &s3.PutObjectOutput{}, nil
+	return &s3.PutObjectOutput{ETag: aws.String(strconv.Itoa(f.etags[key]))}, nil
+}
+
+func (f *fakeAWS) DeleteObject(_ context.Context, in *s3.DeleteObjectInput, _ ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := aws.ToString(in.Key)
+	_, found := f.objects[key]
+	if in.IfMatch != nil && (!found || aws.ToString(in.IfMatch) != strconv.Itoa(f.etags[key])) {
+		return nil, preconditionFailed{}
+	}
+	delete(f.objects, key)
+	return &s3.DeleteObjectOutput{}, nil
+}
+
+func (f *fakeAWS) DeleteTrustStore(_ context.Context, in *elbv2.DeleteTrustStoreInput, _ ...func(*elbv2.Options)) (*elbv2.DeleteTrustStoreOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.trustStore == "" || aws.ToString(in.TrustStoreArn) != f.trustStore {
+		return nil, &elbv2types.TrustStoreNotFoundException{Message: in.TrustStoreArn}
+	}
+	if f.listenerTrust == f.trustStore && f.listenerMode != "off" {
+		return nil, &elbv2types.TrustStoreInUseException{Message: in.TrustStoreArn}
+	}
+	f.trustStore, f.trustBundle, f.trustTags = "", "", map[string]string{}
+	return &elbv2.DeleteTrustStoreOutput{}, nil
+}
+
+func (f *fakeAWS) hold(key string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.objects[key] = []byte(fmt.Sprintf(`{"holder":"another deploy","until":%d}`, time.Now().Add(time.Hour).Unix()))
+	f.etags[key]++
+}
+
+func (f *fakeAWS) listKeys() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var keys []string
+	for key := range f.objects {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
 }
 
 func (f *fakeAWS) heldCertificates() []string {

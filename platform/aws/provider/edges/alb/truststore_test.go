@@ -121,3 +121,33 @@ func TestADisclaimRetriedAfterTheTrustRecordRefusedTheChangePrunesTheCA(t *testi
 		t.Errorf("the trust store holds\n%s\nwant zone two's CA pruned: the hostname stays recorded until what it held is released, so a retry finishes the job", trusted)
 	}
 }
+
+func TestAClaimWhileAnotherDeployAppliesTheTrustStoreLeavesItToThatDeployAndIsBusy(t *testing.T) {
+	f := newFakeAWS()
+	stack := claimedStack(t, f)
+	f.hold("ocel/trust/production/client-cas.lease")
+
+	_, err := stack.Claim(context.Background(), router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate, ClientCAs: []string{mintCA(t, "zone one")}})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Errorf("Claim while another deploy applies the trust store = %v, want a busy refusal", err)
+	}
+	if f.trustStore != "" {
+		t.Errorf("the trust store was raised as %q, want it untouched: two deploys writing the tier's one bundle and its digest tag at once can leave the store without a CA its tag claims", f.trustStore)
+	}
+}
+
+func TestDisclaimingTheLastHostnameThatTrustsACALeavesNoTrustStoreOrObjectBehind(t *testing.T) {
+	f := newFakeAWS()
+	stack := claimedStack(t, f, router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate, ClientCAs: []string{mintCA(t, "zone one")}})
+
+	if err := stack.Disclaim(context.Background(), testHostname); err != nil {
+		t.Fatalf("Disclaim: %v", err)
+	}
+	if f.trustStore != "" || f.listenerMode != "off" {
+		t.Errorf("the listener checks client certificates in mode %q, and trust store %q remains, want mode off and no trust store: no hostname trusts a CA any more", f.listenerMode, f.trustStore)
+	}
+	if keys := f.listKeys(); len(keys) != 0 {
+		t.Errorf("the bucket still holds %v, want nothing: a teardown reclaims what the deploy wrote", keys)
+	}
+}

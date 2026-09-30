@@ -22,7 +22,6 @@ import (
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -31,10 +30,10 @@ import (
 
 const (
 	recordWrites      = 5
-	trustApplies      = 5
 	trustStoreReads   = 30
 	trustStorePause   = 2 * time.Second
 	verifyMode        = "verify"
+	offMode           = "off"
 	preconditionError = "PreconditionFailed"
 	bundleDigestTag   = "ocel:client-cas-sha256"
 	caQuota           = "CA certificates per trust store (L-43FE5A42)"
@@ -94,7 +93,7 @@ func refuseNonAuthorities(hostname string, authorities []string) error {
 	return nil
 }
 
-func (s *stack) trustClientCAs(ctx context.Context, c Clients, listener publicListener, hostname string, authorities []string) error {
+func (s *stack) trustClientCAs(ctx context.Context, c Clients, hostname string, authorities []string) error {
 	if err := refuseNonAuthorities(hostname, authorities); err != nil {
 		return err
 	}
@@ -103,50 +102,31 @@ func (s *stack) trustClientCAs(ctx context.Context, c Clients, listener publicLi
 		trusted = append(trusted, strings.TrimSpace(authority))
 	}
 	slices.Sort(trusted)
-	record, err := s.updateTrustRecord(ctx, c, func(r trustRecord) trustRecord {
+	if err := s.updateTrustRecord(ctx, c, func(r trustRecord) trustRecord {
 		r.Hostnames[hostname] = slices.Compact(trusted)
 		return r
-	})
-	if err != nil {
-		return err
-	}
-	store, err := s.applyTrustRecord(ctx, c, record)
-	if err != nil {
-		return err
-	}
-	if mutual := listener.mutual; mutual != nil && aws.ToString(mutual.Mode) == verifyMode && aws.ToString(mutual.TrustStoreArn) == store {
-		return nil
-	}
-	if _, err := c.Balancers.ModifyListener(ctx, &elbv2.ModifyListenerInput{
-		ListenerArn: aws.String(listener.arn),
-		MutualAuthentication: &elbv2types.MutualAuthenticationAttributes{
-			Mode:          aws.String(verifyMode),
-			TrustStoreArn: aws.String(store),
-		},
 	}); err != nil {
-		return fmt.Errorf("require the client certificate the edge presents on %s: %w", listener.arn, err)
+		return err
 	}
-	return nil
+	return s.applyTrustRecord(ctx, c)
 }
 
 func (s *stack) untrustHostname(ctx context.Context, c Clients, hostname string) error {
-	record, err := s.updateTrustRecord(ctx, c, func(r trustRecord) trustRecord {
+	if err := s.updateTrustRecord(ctx, c, func(r trustRecord) trustRecord {
 		delete(r.Hostnames, hostname)
 		return r
-	})
-	if err != nil || len(record.listTrusted()) == 0 {
+	}); err != nil {
 		return err
 	}
-	_, err = s.applyTrustRecord(ctx, c, record)
-	return err
+	return s.applyTrustRecord(ctx, c)
 }
 
-func (s *stack) updateTrustRecord(ctx context.Context, c Clients, change func(trustRecord) trustRecord) (trustRecord, error) {
+func (s *stack) updateTrustRecord(ctx context.Context, c Clients, change func(trustRecord) trustRecord) error {
 	key := formatRecordKey(s.state.Tier)
 	for range recordWrites {
 		held, etag, err := readTrustRecord(ctx, c, key)
 		if err != nil {
-			return trustRecord{}, err
+			return err
 		}
 		prior := maps.Clone(held.Hostnames)
 		if held.Hostnames == nil {
@@ -154,11 +134,11 @@ func (s *stack) updateTrustRecord(ctx context.Context, c Clients, change func(tr
 		}
 		changed := change(held)
 		if maps.EqualFunc(prior, changed.Hostnames, slices.Equal) {
-			return changed, nil
+			return nil
 		}
 		body, err := json.Marshal(changed)
 		if err != nil {
-			return trustRecord{}, err
+			return err
 		}
 		put := &s3.PutObjectInput{Bucket: aws.String(c.Bucket), Key: aws.String(key), Body: bytes.NewReader(body)}
 		if etag == "" {
@@ -167,16 +147,15 @@ func (s *stack) updateTrustRecord(ctx context.Context, c Clients, change func(tr
 			put.IfMatch = aws.String(etag)
 		}
 		_, err = c.Objects.PutObject(ctx, put)
-		var api smithy.APIError
-		if errors.As(err, &api) && api.ErrorCode() == preconditionError {
+		if isConditionFailed(err) {
 			continue
 		}
 		if err != nil {
-			return trustRecord{}, fmt.Errorf("record the client CAs the load balancer trusts: %w", err)
+			return fmt.Errorf("record the client CAs the load balancer trusts: %w", err)
 		}
-		return changed, nil
+		return nil
 	}
-	return trustRecord{}, fmt.Errorf("record the client CAs the load balancer trusts: another deploy changed them on each of %d attempts", recordWrites)
+	return fmt.Errorf("record the client CAs the load balancer trusts: another deploy changed them on each of %d attempts", recordWrites)
 }
 
 func readTrustRecord(ctx context.Context, c Clients, key string) (trustRecord, string, error) {
@@ -200,29 +179,95 @@ func readTrustRecord(ctx context.Context, c Clients, key string) (trustRecord, s
 	return record, aws.ToString(read.ETag), nil
 }
 
-func (s *stack) applyTrustRecord(ctx context.Context, c Clients, record trustRecord) (string, error) {
-	for range trustApplies {
+func (s *stack) applyTrustRecord(ctx context.Context, c Clients) error {
+	return s.newLease(c, formatTrustLeaseKey(s.state.Tier), "applying the client CAs the load balancer trusts").hold(ctx, func(ctx context.Context) error {
+		record, etag, err := readTrustRecord(ctx, c, formatRecordKey(s.state.Tier))
+		if err != nil {
+			return err
+		}
+		listener, err := s.readPublicListener(ctx, c)
+		var refused refusal.Refusal
+		absent := errors.As(err, &refused) && refused.Code == refusal.CodeNotReady
+		if err != nil && !absent {
+			return err
+		}
 		trusted := record.listTrusted()
+		if len(trusted) == 0 {
+			return s.clearTrustStore(ctx, c, listener, etag)
+		}
+		if absent {
+			return err
+		}
 		digest := digestCertificates(trusted)
 		store, applied, err := s.readTrustStore(ctx, c)
 		if err != nil {
-			return "", err
+			return err
 		}
 		if applied != digest {
 			if store, err = s.writeTrustStore(ctx, c, store, trusted, digest); err != nil {
-				return "", err
+				return err
 			}
 		}
-		latest, _, err := readTrustRecord(ctx, c, formatRecordKey(s.state.Tier))
-		if err != nil {
-			return "", err
-		}
-		if digestCertificates(latest.listTrusted()) == digest {
-			return store, nil
-		}
-		record = latest
+		return requireClientCertificates(ctx, c, listener, store)
+	})
+}
+
+func requireClientCertificates(ctx context.Context, c Clients, listener publicListener, store string) error {
+	if mutual := listener.mutual; mutual != nil && aws.ToString(mutual.Mode) == verifyMode && aws.ToString(mutual.TrustStoreArn) == store {
+		return nil
 	}
-	return "", fmt.Errorf("the client CAs the load balancer trusts changed under each of %d attempts to apply them", trustApplies)
+	if _, err := c.Balancers.ModifyListener(ctx, &elbv2.ModifyListenerInput{
+		ListenerArn: aws.String(listener.arn),
+		MutualAuthentication: &elbv2types.MutualAuthenticationAttributes{
+			Mode:          aws.String(verifyMode),
+			TrustStoreArn: aws.String(store),
+		},
+	}); err != nil {
+		return fmt.Errorf("require the client certificate the edge presents on %s: %w", listener.arn, err)
+	}
+	return nil
+}
+
+func (s *stack) clearTrustStore(ctx context.Context, c Clients, listener publicListener, recordETag string) error {
+	if mutual := listener.mutual; listener.arn != "" && mutual != nil && aws.ToString(mutual.Mode) != offMode {
+		if _, err := c.Balancers.ModifyListener(ctx, &elbv2.ModifyListenerInput{
+			ListenerArn:          aws.String(listener.arn),
+			MutualAuthentication: &elbv2types.MutualAuthenticationAttributes{Mode: aws.String(offMode)},
+		}); err != nil {
+			return fmt.Errorf("stop requiring a client certificate on %s, which no hostname trusts a CA for any more: %w", listener.arn, err)
+		}
+	}
+	store, _, err := s.readTrustStore(ctx, c)
+	if err != nil {
+		return err
+	}
+	if store != "" {
+		_, err := c.Balancers.DeleteTrustStore(ctx, &elbv2.DeleteTrustStoreInput{TrustStoreArn: aws.String(store)})
+		var absent *elbv2types.TrustStoreNotFoundException
+		if err != nil && !errors.As(err, &absent) {
+			return fmt.Errorf("delete the trust store %s, which no hostname trusts a CA in any more: %w", store, err)
+		}
+	}
+	if err := deleteObject(ctx, c, formatBundleKey(s.state.Tier), ""); err != nil {
+		return err
+	}
+	if recordETag == "" {
+		return nil
+	}
+	return deleteObject(ctx, c, formatRecordKey(s.state.Tier), recordETag)
+}
+
+func deleteObject(ctx context.Context, c Clients, key, etag string) error {
+	in := &s3.DeleteObjectInput{Bucket: aws.String(c.Bucket), Key: aws.String(key)}
+	if etag != "" {
+		in.IfMatch = aws.String(etag)
+	}
+	_, err := c.Objects.DeleteObject(ctx, in)
+	var absent *s3types.NoSuchKey
+	if err == nil || isConditionFailed(err) || errors.As(err, &absent) {
+		return nil
+	}
+	return fmt.Errorf("delete %s: %w", key, err)
 }
 
 func (s *stack) readTrustStore(ctx context.Context, c Clients) (store, digest string, err error) {
@@ -240,7 +285,7 @@ func (s *stack) readTrustStore(ctx context.Context, c Clients) (store, digest st
 			digest, err := readBundleDigest(ctx, c, store)
 			return store, digest, err
 		}
-		if err := pauseBeforeRead(ctx, attempt); err != nil {
+		if err := s.pauseBeforeRead(ctx, attempt); err != nil {
 			return "", "", err
 		}
 	}
@@ -324,11 +369,14 @@ func refuseOverTrustQuota(err error, trusted int) error {
 	return err
 }
 
-func pauseBeforeRead(ctx context.Context, attempt int) error {
+func (s *stack) pauseBeforeRead(ctx context.Context, attempt int) error {
 	if attempt == 0 {
 		return nil
 	}
-	wait := trustStorePause/2 + rand.N(trustStorePause)
+	return s.pause(ctx, trustStorePause/2+rand.N(trustStorePause))
+}
+
+func pauseFor(ctx context.Context, wait time.Duration) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

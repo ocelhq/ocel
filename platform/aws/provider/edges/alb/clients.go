@@ -25,6 +25,7 @@ type Balancers interface {
 	DescribeTrustStores(ctx context.Context, in *elbv2.DescribeTrustStoresInput, opts ...func(*elbv2.Options)) (*elbv2.DescribeTrustStoresOutput, error)
 	CreateTrustStore(ctx context.Context, in *elbv2.CreateTrustStoreInput, opts ...func(*elbv2.Options)) (*elbv2.CreateTrustStoreOutput, error)
 	ModifyTrustStore(ctx context.Context, in *elbv2.ModifyTrustStoreInput, opts ...func(*elbv2.Options)) (*elbv2.ModifyTrustStoreOutput, error)
+	DeleteTrustStore(ctx context.Context, in *elbv2.DeleteTrustStoreInput, opts ...func(*elbv2.Options)) (*elbv2.DeleteTrustStoreOutput, error)
 	DescribeTags(ctx context.Context, in *elbv2.DescribeTagsInput, opts ...func(*elbv2.Options)) (*elbv2.DescribeTagsOutput, error)
 	AddTags(ctx context.Context, in *elbv2.AddTagsInput, opts ...func(*elbv2.Options)) (*elbv2.AddTagsOutput, error)
 }
@@ -36,6 +37,7 @@ type Services interface {
 type Objects interface {
 	GetObject(ctx context.Context, in *s3.GetObjectInput, opts ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 	PutObject(ctx context.Context, in *s3.PutObjectInput, opts ...func(*s3.Options)) (*s3.PutObjectOutput, error)
+	DeleteObject(ctx context.Context, in *s3.DeleteObjectInput, opts ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
 }
 
 type Clients struct {
