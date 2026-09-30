@@ -246,8 +246,9 @@ published record instead of writing it inline:
 Publish production's record once, with `ocel bindings set < orders.json`, and publish none for
 the preview tier as a whole. A record published with `--environment` serves that one preview,
 and can be published before the preview has ever deployed. A preview with no record of its own
-has nothing to bind `orders` to, so its deploy is refused rather than reaching a database
-another preview uses.
+falls back to the record published for the preview tier as a whole, when one exists, and its
+deploy is refused only when neither exists. With no tier-wide record, a preview that was never
+given its own is refused rather than reaching a database another preview uses.
 
 In CI, name each preview after its pull request, and on every run create its branch if it is
 missing and publish it before the deploy:
