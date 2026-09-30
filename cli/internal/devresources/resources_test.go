@@ -208,3 +208,20 @@ func TestProjectNamesAreReadableAndDistinctPerDirectory(t *testing.T) {
 		t.Fatalf("ProjectName = %q and %q, want a readable name that differs between two directories called the same", a, b)
 	}
 }
+
+func TestDevRefusesTopicsTasksConsumersAndWorkersNamingWhatWasDeclared(t *testing.T) {
+	t.Parallel()
+
+	for kind, name := range map[resourcesv1.ResourceType]string{
+		resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC:    "topic",
+		resourcesv1.ResourceType_RESOURCE_TYPE_TASK:     "task",
+		resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER: "consumer",
+		resourcesv1.ResourceType_RESOURCE_TYPE_WORKER:   "worker",
+	} {
+		stack := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir()})
+		_, err := stack.Resolve(context.Background(), []declaration.Resource{{Name: "orders", Type: kind}})
+		if err == nil || !strings.Contains(err.Error(), name+` "orders"`) || !strings.Contains(err.Error(), "does not run topics, tasks or workers") {
+			t.Errorf("Resolve(%s) = %v, want it refused naming the %s", kind, err, name)
+		}
+	}
+}

@@ -30,6 +30,19 @@ func TestParseKeepsTheTypedConfigAndRefusesAMalformedDeclaration(t *testing.T) {
 			},
 		},
 		{
+			name: "rejects a worker declared with a topic's config",
+			req: &resourcesv1.DeclareRequest{
+				Resource: &resourcesv1.ResourceIdentifier{Name: "media", Type: resourcesv1.ResourceType_RESOURCE_TYPE_WORKER},
+				Config:   &resourcesv1.DeclareRequest_Topic{Topic: &resourcesv1.TopicConfig{}},
+			},
+		},
+		{
+			name: "rejects a consumer declared with no config",
+			req: &resourcesv1.DeclareRequest{
+				Resource: &resourcesv1.ResourceIdentifier{Name: "email", Type: resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER},
+			},
+		},
+		{
 			name: "rejects a config that contradicts the type",
 			req: &resourcesv1.DeclareRequest{
 				Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
@@ -109,4 +122,60 @@ func TestParseKeepsTheTypedConfigAndRefusesAMalformedDeclaration(t *testing.T) {
 			t.Fatalf("Postgres = %+v, want nil", res.Postgres)
 		}
 	})
+}
+
+func TestParseRecordsTopicsTasksConsumersAndWorkersWithTheirConfig(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		req   *resourcesv1.DeclareRequest
+		check func(Resource) bool
+	}{
+		{
+			name: "a topic",
+			req: &resourcesv1.DeclareRequest{
+				Resource: &resourcesv1.ResourceIdentifier{Name: "orders", Type: resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC},
+				Config:   &resourcesv1.DeclareRequest_Topic{Topic: &resourcesv1.TopicConfig{Ordered: true}},
+				Source:   "src/orders.ts:4",
+			},
+			check: func(r Resource) bool { return r.Topic.GetOrdered() && r.Source == "src/orders.ts:4" },
+		},
+		{
+			name: "a task",
+			req: &resourcesv1.DeclareRequest{
+				Resource: &resourcesv1.ResourceIdentifier{Name: "resize-image", Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK},
+				Config:   &resourcesv1.DeclareRequest_Task{Task: &resourcesv1.TaskConfig{Worker: "media", Cron: "0 * * * *"}},
+			},
+			check: func(r Resource) bool { return r.Task.GetWorker() == "media" && r.Task.GetCron() == "0 * * * *" },
+		},
+		{
+			name: "a consumer",
+			req: &resourcesv1.DeclareRequest{
+				Resource: &resourcesv1.ResourceIdentifier{Name: "email", Type: resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER},
+				Config:   &resourcesv1.DeclareRequest_Consumer{Consumer: &resourcesv1.ConsumerConfig{Topic: "orders", Concurrency: 5}},
+			},
+			check: func(r Resource) bool { return r.Consumer.GetTopic() == "orders" && r.Consumer.GetConcurrency() == 5 },
+		},
+		{
+			name: "a worker",
+			req: &resourcesv1.DeclareRequest{
+				Resource: &resourcesv1.ResourceIdentifier{Name: "media", Type: resourcesv1.ResourceType_RESOURCE_TYPE_WORKER},
+				Config:   &resourcesv1.DeclareRequest_Worker{Worker: &resourcesv1.WorkerConfig{Concurrency: 8}},
+			},
+			check: func(r Resource) bool { return r.Worker.GetConcurrency() == 8 },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			res, err := Parse(tc.req)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if res.Name != tc.req.GetResource().GetName() || res.Type != tc.req.GetResource().GetType() || !tc.check(res) {
+				t.Errorf("Parse = %+v, want the declaration's name, type and config kept", res)
+			}
+		})
+	}
 }
