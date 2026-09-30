@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s inherit_errexit
 
 STATE_ROOT="${OCEL_EC2_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/ocel-ec2}"
 REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
