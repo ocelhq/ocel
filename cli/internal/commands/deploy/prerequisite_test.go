@@ -113,6 +113,7 @@ func TestADeployInAnEmptyDirectoryInitializesBootstrapsAndDeploys(t *testing.T) 
 		answer{line: "y"},
 		answer{line: fakeChoice(t)},
 		answer{line: "y"},
+		answer{line: "y"},
 		answer{line: "", before: saveHostname(t, root)},
 	)
 	var stdout, stderr bytes.Buffer
@@ -131,8 +132,8 @@ func TestADeployInAnEmptyDirectoryInitializesBootstrapsAndDeploys(t *testing.T) 
 			applied = append(applied, procedure)
 		}
 	}
-	if want := []string{contractv1connect.ProviderServiceBootstrapProcedure, contractv1connect.ProviderServiceDeployProcedure}; !slices.Equal(applied, want) {
-		t.Errorf("the provider received %q, want one bootstrap and then one deploy", applied)
+	if want := []string{contractv1connect.ProviderServiceBootstrapProcedure, contractv1connect.ProviderServiceBootstrapProcedure, contractv1connect.ProviderServiceDeployProcedure}; !slices.Equal(applied, want) {
+		t.Errorf("the provider received %q, want the bootstrap planned, then applied, then one deploy", applied)
 	}
 	if !strings.Contains(stdout.String(), "Deployed shop to production") {
 		t.Errorf("stdout = %q, want the deploy to finish", stdout.String())
@@ -209,6 +210,70 @@ func TestADeclinedSetupExitsZeroNamingTheCommand(t *testing.T) {
 	}
 	if sent := sentDeploys(t, fixture); len(sent) != 0 {
 		t.Errorf("the CLI sent %d deploys after the setup was declined, want none", len(sent))
+	}
+}
+
+func TestAcceptingTheBootstrapOfferShowsItsPlanAndAsksBeforeApplyingIt(t *testing.T) {
+	fixture := setUpDeployProject(t)
+	removeBootstrap(t, fixture, environment.TierProduction)
+	dependencies := newTestDependencies()
+	terminalStdin(&dependencies)
+	withSetups(&dependencies)
+	stubBuild(&dependencies, nil)
+	before := len(fixture.Provider.FakeBootstrap().Applied())
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	var shownBeforeAsked bool
+	stdin := answering(
+		answer{line: "y"},
+		answer{line: "y", before: func() {
+			shownBeforeAsked = strings.Contains(stdout.String(), "Proposed changes to the production bootstrap") &&
+				len(fixture.Provider.FakeBootstrap().Applied()) == before
+		}},
+	)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{}, &stdout, &stderr, stdin); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
+	}
+	if !shownBeforeAsked {
+		t.Errorf("stdout = %q, want the bootstrap plan shown, and nothing applied, before its confirmation is answered", stdout.String())
+	}
+	var applying []*contractv1.BootstrapRequest
+	for _, req := range clitest.RequestsTo[*contractv1.BootstrapRequest](t, fixture.Requests, contractv1connect.ProviderServiceBootstrapProcedure) {
+		if !req.GetDry() {
+			applying = append(applying, req)
+		}
+	}
+	if len(applying) != 1 || applying[0].GetConsented() == nil {
+		t.Errorf("the provider was sent %v to apply, want one bootstrap carrying the plan that was consented to", applying)
+	}
+	if sent := sentDeploys(t, fixture); len(sent) != 1 {
+		t.Errorf("the CLI sent %d deploys, want 1 once the bootstrap was applied", len(sent))
+	}
+}
+
+func TestDecliningTheBootstrapPlanAppliesNothingAndExitsZero(t *testing.T) {
+	fixture := setUpDeployProject(t)
+	removeBootstrap(t, fixture, environment.TierProduction)
+	dependencies := newTestDependencies()
+	terminalStdin(&dependencies)
+	withSetups(&dependencies)
+	stubBuild(&dependencies, nil)
+	before := len(fixture.Provider.FakeBootstrap().Applied())
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{}, &stdout, &stderr, strings.NewReader("y\nn\n")); err != nil {
+		t.Fatalf("runDeploy err = %v, want a declined plan to exit 0; stdout=%s", err, stdout.String())
+	}
+	if applied := fixture.Provider.FakeBootstrap().Applied()[before:]; len(applied) != 0 {
+		t.Errorf("the provider applied %+v after its plan was declined, want nothing", applied)
+	}
+	if !strings.Contains(stdout.String(), "Not confirmed, so this run changes nothing") {
+		t.Errorf("stdout = %q, want the declined plan to say the run changes nothing", stdout.String())
+	}
+	if sent := sentDeploys(t, fixture); len(sent) != 0 {
+		t.Errorf("the CLI sent %d deploys after the plan was declined, want none", len(sent))
 	}
 }
 

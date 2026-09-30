@@ -7,10 +7,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
-	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 func NewSetup() prerequisite.Setup {
@@ -21,13 +19,24 @@ func NewSetup() prerequisite.Setup {
 	}
 }
 
-func runSetup(ctx context.Context, _ consent.Policy, span *run.Span, missing prerequisite.MissingError) error {
+func runSetup(ctx context.Context, policy consent.Policy, span *run.Span, missing prerequisite.MissingError) error {
 	var incomplete readiness.MissingBootstrapError
 	if !errors.As(missing, &incomplete) {
 		return missing
 	}
-	req := incomplete.BootstrapRequest()
-	if _, err := providerprocess.Stream(ctx, incomplete.BootstrapProvider(), "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
+	req, provider := incomplete.BootstrapRequest(), incomplete.BootstrapProvider()
+	drawn, err := drawPlan(ctx, span, provider, req)
+	if err != nil {
+		return err
+	}
+	granted, err := confirmPlan(ctx, policy, span, provider, req.GetTier(), drawn)
+	if err != nil {
+		return err
+	}
+	if !granted {
+		return prerequisite.SetupDeclinedError{Missing: missing}
+	}
+	if err := applyPlan(ctx, provider, req, drawn); err != nil {
 		return err
 	}
 	span.Say(fmt.Sprintf("Bootstrapped %s", readiness.TierName(req.GetTier())))

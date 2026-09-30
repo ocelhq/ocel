@@ -988,7 +988,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		dependencies.Setups = prerequisite.Setups{prerequisite.Bootstrap: bootstrap.NewSetup()}
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), dependencies, project.Root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\n"), &stdout, &stderr)
+		err := runEnvSet(context.Background(), dependencies, project.Root, "LOG_LEVEL", "debug", envOptions{}, strings.NewReader("y\ny\n"), &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("runEnvSet err = %v, want the offer taken and the write landed; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
