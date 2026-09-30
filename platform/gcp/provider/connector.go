@@ -120,16 +120,16 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	}
 
 	released, err := p.deployService(ctx, serving{
-		service: names.Connector(),
-		image:   image,
-		account: names.ConnectorAccountEmail(),
-		compute: provider.ComputeServerless,
-		public:  true,
-		memory:  connectorMemory,
-		timeout: connectorTimeout,
-		ingress: ingressEverywhere,
-		most:    connectorInstances,
-		mounts:  []secretMount{connectorKeyMount(names.ConnectorKeySecret())},
+		service:   names.Connector(),
+		image:     image,
+		account:   names.ConnectorAccountEmail(),
+		compute:   provider.ComputeServerless,
+		public:    true,
+		memory:    connectorMemory,
+		timeout:   connectorTimeout,
+		ingress:   ingressEverywhere,
+		instances: provider.Instances{Max: connectorInstances},
+		mounts:    []secretMount{connectorKeyMount(names.ConnectorKeySecret())},
 		env: map[string]string{
 			provider.NamespaceEnvVar:       string(names.Namespace()),
 			ports.ProjectEnvVar:            names.project,
