@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AWS_IMAGE="${OCEL_FLOCI_IMAGE:-ghcr.io/ocelhq/floci:2.0.1-ocel.3}"
+AWS_IMAGE="${OCEL_FLOCI_IMAGE:-ghcr.io/ocelhq/floci:2.1.0-ocel.1}"
 GCP_IMAGE="${OCEL_FLOCI_GCP_IMAGE:-floci/floci-gcp:0.8.0}"
 DOCKER_SOCK="${OCEL_FLOCI_DOCKER_SOCK:-/var/run/docker.sock}"
 READY_WAIT_SECS="${OCEL_FLOCI_READY_WAIT:-180}"
@@ -21,7 +21,9 @@ usage: scripts/floci.sh [--cloud aws|gcp] <command> [args]
 
 The aws emulator answers on 4566 and exports OCEL_FLOCI_ENDPOINT; the gcp one
 answers on 4588 and exports OCEL_FLOCI_GCP_ENDPOINT. They are separate images
-and a run of one is invisible to the other.
+and a run of one is invisible to the other. The aws emulator also publishes
+6379-6399 on the host, where its ElastiCache caches answer, so only one aws
+emulator runs on a host at a time.
 EOF
     exit 2
 }
@@ -45,6 +47,7 @@ aws)
     MOUNTS_DOCKER=yes
     READY_PATH=/_localstack/health
     READY_BODY='"(cloudformation|s3|dynamodb|ssm|iam)":'
+    EXTRA_ARGS=(-p "127.0.0.1:6379-6399:6379-6399" -e FLOCI_HOSTNAME=localhost)
     ;;
 gcp)
     IMAGE=$GCP_IMAGE
@@ -53,6 +56,7 @@ gcp)
     MOUNTS_DOCKER=yes
     READY_PATH="/storage/v1/b?project=$GCP_PROJECT"
     READY_BODY='"kind": *"storage#buckets"'
+    EXTRA_ARGS=()
     ;;
 *) die "unknown cloud: $CLOUD (expected aws or gcp)" ;;
 esac
@@ -108,7 +112,7 @@ cmd_create() {
     if [ "$MOUNTS_DOCKER" = yes ] && [ -S "$DOCKER_SOCK" ]; then
         mounts=(-v "$DOCKER_SOCK:/var/run/docker.sock")
     fi
-    docker run -d --name "$name" -p "127.0.0.1::$PORT" "${mounts[@]}" "$IMAGE" >/dev/null
+    docker run -d --name "$name" -p "127.0.0.1::$PORT" "${EXTRA_ARGS[@]}" "${mounts[@]}" "$IMAGE" >/dev/null
     local endpoint
     endpoint=$(wait_ready "$name")
     trap - EXIT

@@ -198,7 +198,7 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 
 	ctx.Export(logicalName, pulumi.Map{
 		outputKeyHost:               group.PrimaryEndpointAddress,
-		outputKeyPort:               pulumi.Int(args.Port),
+		outputKeyPort:               group.Port,
 		outputKeyAuthTokenParameter: pulumi.String(args.AuthTokenParameter),
 	})
 	return nil
