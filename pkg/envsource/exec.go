@@ -36,12 +36,12 @@ var _ = register(Kind{
 	Deployed: &Config{
 		Doc:     "A command run on the machine that deploys, whose output is the tier's values. It runs at each deploy and on no schedule.",
 		Options: ExecOptions{},
-		decode:  decodeExec,
+		decode:  decodeAs(decodeExec),
 	},
 	Dev: &Config{
 		Doc:     "A command run on your machine, whose output is the values.",
 		Options: ExecOptions{},
-		decode:  decodeExec,
+		decode:  decodeAs(decodeExec),
 	},
 })
 
@@ -54,11 +54,7 @@ func (ExecOptions) Doc() string {
 	return "A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev."
 }
 
-func decodeExec(raw json.RawMessage) (decodedOptions, error) {
-	var options ExecOptions
-	if err := decodeStrictly(raw, &options); err != nil {
-		return decodedOptions{}, err
-	}
+func decodeExec(options ExecOptions) (decodedOptions, error) {
 	if len(options.Command) == 0 {
 		return decodedOptions{}, &OptionError{Field: "command", Reason: "is required: the command to run and its arguments, such as [\"op\", \"inject\"]"}
 	}

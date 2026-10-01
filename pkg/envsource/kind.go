@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 )
@@ -23,7 +24,7 @@ type Kind struct {
 type Config struct {
 	Doc     string
 	Options any
-	decode  func(options json.RawMessage) (decodedOptions, error)
+	decode  func(options json.RawMessage) (json.RawMessage, decodedOptions, error)
 }
 
 type decodedOptions struct {
@@ -88,13 +89,31 @@ var _ = register(Kind{Name: Builtin, Deployed: &Config{decode: decodeOwnStore(Bu
 
 var _ = register(Kind{Name: Dotenv, Dev: &Config{decode: decodeOwnStore(Dotenv)}})
 
-func decodeOwnStore(kind string) func(json.RawMessage) (decodedOptions, error) {
-	return func(options json.RawMessage) (decodedOptions, error) {
+func decodeOwnStore(kind string) func(json.RawMessage) (json.RawMessage, decodedOptions, error) {
+	return func(options json.RawMessage) (json.RawMessage, decodedOptions, error) {
 		switch string(bytes.TrimSpace(options)) {
 		case "", "null", "{}":
-			return decodedOptions{id: kind}, nil
+			return nil, decodedOptions{id: kind}, nil
 		}
-		return decodedOptions{}, &OptionError{Reason: fmt.Sprintf("%s takes no options", kind)}
+		return nil, decodedOptions{}, &OptionError{Reason: fmt.Sprintf("%s takes no options", kind)}
+	}
+}
+
+func decodeAs[T any](read func(T) (decodedOptions, error)) func(json.RawMessage) (json.RawMessage, decodedOptions, error) {
+	return func(raw json.RawMessage) (json.RawMessage, decodedOptions, error) {
+		var options T
+		if err := decodeStrictly(raw, &options); err != nil {
+			return nil, decodedOptions{}, err
+		}
+		decoded, err := read(options)
+		if err != nil {
+			return nil, decodedOptions{}, err
+		}
+		canonical, err := json.Marshal(options)
+		if err != nil {
+			return nil, decodedOptions{}, err
+		}
+		return canonical, decoded, nil
 	}
 }
 
@@ -103,6 +122,9 @@ func decodeStrictly(options json.RawMessage, into any) error {
 	decoder.DisallowUnknownFields()
 	err := decoder.Decode(into)
 	if err == nil {
+		if _, trailing := decoder.Token(); trailing != io.EOF {
+			return &OptionError{Reason: "the options are one JSON object with nothing after it"}
+		}
 		return nil
 	}
 	var mistyped *json.UnmarshalTypeError
