@@ -27,6 +27,10 @@ type memorystoreServer struct {
 	polls     int
 	throttles int
 	failed    string
+
+	throttledWrites int
+	writeIDs        []string
+	settling        map[string]int
 }
 
 func servingMemorystore(t *testing.T) (*Provider, *memorystoreServer) {
@@ -50,6 +54,15 @@ func (s *memorystoreServer) serve(t *testing.T) http.HandlerFunc {
 			return
 		}
 		name := strings.TrimPrefix(r.URL.Path, "/v1/")
+		if r.Method != http.MethodGet {
+			s.writeIDs = append(s.writeIDs, r.URL.Query().Get("requestId"))
+			if s.throttledWrites > 0 {
+				s.throttledWrites--
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte(`{"error":{"code":503,"message":"try again"}}`))
+				return
+			}
+		}
 		switch {
 		case r.Method == http.MethodGet && strings.Contains(name, "/operations/"):
 			s.polls++
@@ -69,6 +82,11 @@ func (s *memorystoreServer) serve(t *testing.T) http.HandlerFunc {
 			if !found {
 				w.WriteHeader(http.StatusNotFound)
 				w.Write([]byte(`{"error":{"code":404,"message":"not found"}}`))
+				return
+			}
+			if s.settling[name] > 0 {
+				s.settling[name]--
+				writeBody(w, &memorystoreInstance{Name: name, State: "CREATING"})
 				return
 			}
 			writeBody(w, instance)
@@ -110,6 +128,21 @@ func (s *memorystoreServer) serve(t *testing.T) http.HandlerFunc {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}
+}
+
+func (s *memorystoreServer) stillCreating(name string, reads int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.settling == nil {
+		s.settling = map[string]int{}
+	}
+	s.settling[name] = reads
+}
+
+func (s *memorystoreServer) requestIDs() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.writeIDs...)
 }
 
 func (s *memorystoreServer) operation(done bool) *memorystoreOperation {

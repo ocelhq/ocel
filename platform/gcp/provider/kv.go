@@ -175,6 +175,10 @@ func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionReques
 		current, err = createStore(ctx, service, clients, instance, desired, in.Resource.Name, progress)
 	case err != nil:
 		return provider.Binding{}, fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)
+	case current.State != instanceActive:
+		if current, err = service.readActiveInstance(ctx, instance.path, in.Resource.Name); err == nil {
+			current, err = reshapeStore(ctx, service, instance, store, current, in.Resource.Name, progress)
+		}
 	default:
 		current, err = reshapeStore(ctx, service, instance, store, current, in.Resource.Name, progress)
 	}

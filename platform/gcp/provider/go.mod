@@ -10,6 +10,7 @@ require (
 	cloud.google.com/go/storage v1.64.0
 	connectrpc.com/connect v1.20.0
 	github.com/google/go-containerregistry v0.21.7
+	github.com/google/uuid v1.6.0
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/pkg/provider/pulumi v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
@@ -101,7 +102,6 @@ require (
 	github.com/google/cel-go v0.26.1 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.20 // indirect
 	github.com/googleapis/gax-go/v2 v2.24.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
