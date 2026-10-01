@@ -1,7 +1,7 @@
+import { declarationSite } from "../declaration/callsite.js";
+import { defer } from "../declaration/defer.js";
 import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
-import { declarationSite } from "../utils/callsite.js";
-import { defer } from "../utils/defer.js";
-import { rpc } from "../utils/rpc.js";
+import { rpc } from "../runtime/rpc.js";
 import { registerWorker, type WorkerMiddleware } from "./registry.js";
 
 /** How a worker is declared. */

@@ -1,7 +1,7 @@
 import { Client } from "pg";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../utils/rpc", () => ({
+vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 

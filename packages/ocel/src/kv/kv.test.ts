@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { bindingKey } from "../binding/binding.js";
 import { KvShape, ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
 import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
-import { bindingKey } from "../utils/get-config.js";
 
 const declareMock = vi.hoisted(() => vi.fn((_req: unknown) => Promise.resolve({})));
 
-vi.mock("../utils/rpc", () => ({
+vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: declareMock } },
 }));
 

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TopicService } from "../gen/proto/app/topic/v1/topic_pb.js";
 import { type RuntimeProxy, serveRuntimeProxy } from "../testing/runtime-proxy.js";
 
-vi.mock("../utils/rpc", () => ({
+vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 

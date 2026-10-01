@@ -6,7 +6,7 @@ import { siteOfThisFile } from "./fixtures/callsite/postgres/index.js";
 
 const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
-vi.mock("../src/utils/rpc", () => ({
+vi.mock("../src/runtime/rpc", () => ({
   rpc: { resource: { declare: declareMock } },
 }));
 

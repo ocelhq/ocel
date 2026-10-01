@@ -1,4 +1,4 @@
-export { UnprovisionedResourceError } from "../utils/phase.js";
+export { UnprovisionedResourceError } from "../binding/unprovisioned.js";
 export { Bucket, type BucketOptions, bucket } from "./bucket.js";
 export {
   type BucketContext,

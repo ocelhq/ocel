@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { bindingKey } from "../binding/binding.js";
 import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
-import { bindingKey } from "../utils/get-config.js";
 
-vi.mock("../utils/rpc", () => ({
+vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 

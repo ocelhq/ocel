@@ -10,6 +10,7 @@ import {
 /** The binding types an app resolves; a custom record is read by transforms alone. */
 export type BindingCase = Exclude<NonNullable<Binding["properties"]["case"]>, "custom">;
 
+/** The properties a binding of the given type carries. */
 export type BindingProperties<TCase extends BindingCase> = Extract<
   Binding["properties"],
   { case: TCase }
@@ -72,31 +73,3 @@ export function getConfig<TCase extends BindingCase>(
   }
   return binding.properties.value as BindingProperties<TCase>;
 }
-
-export const RUNTIME_ADDRESS = "OCEL_RUNTIME_ADDRESS";
-
-export const SESSION_TOKEN = "OCEL_SESSION_TOKEN";
-
-export const getRuntimeAddress = () => {
-  const address = process.env[RUNTIME_ADDRESS];
-
-  if (!address) {
-    throw new Error(
-      `${RUNTIME_ADDRESS} is not defined, so no resource the ocel runtime serves can be reached. Run \`ocel dev\` to serve it locally, or \`ocel deploy\` to have the deployed runtime's address delivered.`,
-    );
-  }
-
-  return address;
-};
-
-export const getSessionToken = () => {
-  const token = process.env[SESSION_TOKEN];
-
-  if (!token) {
-    throw new Error(
-      `${SESSION_TOKEN} is not defined, so the ocel runtime at ${RUNTIME_ADDRESS} would refuse every call. It is delivered beside ${RUNTIME_ADDRESS} by \`ocel dev\` and by the deployed runtime, never set by hand.`,
-    );
-  }
-
-  return token;
-};

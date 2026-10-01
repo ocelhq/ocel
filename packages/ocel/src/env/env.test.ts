@@ -9,12 +9,12 @@ const reportEnvProblemsMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})))
 
 const source = vi.hoisted(() => ({ override: undefined as string | undefined }));
 
-vi.mock("../utils/callsite.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../utils/callsite.js")>();
+vi.mock("../declaration/callsite.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../declaration/callsite.js")>();
   return { ...actual, callSiteFile: () => source.override ?? actual.callSiteFile() };
 });
 
-vi.mock("../utils/rpc", () => ({
+vi.mock("../runtime/rpc", () => ({
   rpc: {
     resource: {
       declare: vi.fn(),

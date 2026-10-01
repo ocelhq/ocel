@@ -1,8 +1,8 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { ChainableCommander, Redis } from "ioredis";
+import { declarationSite } from "../declaration/callsite.js";
 import { describeIssues } from "../env/standard.js";
 import { KvShape } from "../gen/proto/app/resources/v1/resources_pb.js";
-import { declarationSite } from "../utils/callsite.js";
 import { InvalidKVValueError } from "./errors.js";
 import {
   buildKey,

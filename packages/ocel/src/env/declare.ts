@@ -3,7 +3,7 @@ import {
   VariableProblem_Kind,
   VariableClass as WireClass,
 } from "../gen/proto/app/resources/v1/variables_pb.js";
-import { rpc } from "../utils/rpc.js";
+import { rpc } from "../runtime/rpc.js";
 import {
   complaint,
   type FlatDefinitions,

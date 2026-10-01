@@ -1,4 +1,4 @@
-export { UnprovisionedResourceError } from "../utils/phase.js";
+export { UnprovisionedResourceError } from "../binding/unprovisioned.js";
 export type {
   CounterEntry,
   EntryDeclaration,

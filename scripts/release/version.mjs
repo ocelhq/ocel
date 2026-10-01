@@ -112,7 +112,7 @@ function stampNpm(version) {
     manifest.version = version;
     writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
   }
-  edit(join(REPO_ROOT, "packages", "ocel", "src", "utils", "version.ts"), (text) =>
+  edit(join(REPO_ROOT, "packages", "ocel", "src", "version.ts"), (text) =>
     withSdkVersion(text, version),
   );
 }
