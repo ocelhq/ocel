@@ -16,7 +16,7 @@ import {
 } from "../checks/context";
 import { journeyConfigIn } from "../config";
 import type { Lane, Phase } from "../matrix/types";
-import { configTree, runOcel, treeRoot, workTree } from "../ocel";
+import { configTree, recordOutput, runOcel, treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
 import type { PrepareFailures } from "../prepare";
 import { progress, relay } from "../progress";
@@ -244,11 +244,14 @@ export class DevTarget implements Target, Restart, Exposure {
     const dir = await workTree(cell, this.name);
     const env = this.ocelEnv(dir);
     await writeDotfile(cell, dir);
-    if (migrates(cell.fixture.checks)) {
-      await runOcel(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
-    }
     const served: ServedApps = { dir, env, apps: [], said: [] };
     this.served.set(cell.slug, served);
+    if (migrates(cell.fixture.checks)) {
+      await recordOutput(
+        served.said,
+        runOcel(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env),
+      );
+    }
     return this.serveApps(cell, served, "deploy");
   }
 
@@ -298,10 +301,10 @@ export class DevTarget implements Target, Restart, Exposure {
     served: ServedApps,
     phase: Phase,
   ): Promise<Deployment> {
-    const { dir, env } = served;
+    const { dir, env, said } = served;
     const urls = new Map<string, string>();
     for (const app of cell.fixture.apps) {
-      const one = await this.serve(cell, dir, env, app, phase);
+      const one = await this.serve(cell, dir, env, app, phase, said);
       served.apps.push(one);
       urls.set(app, `http://127.0.0.1:${one.port}`);
     }
@@ -374,6 +377,7 @@ export class DevTarget implements Target, Restart, Exposure {
     env: NodeJS.ProcessEnv,
     app: string,
     phase: Phase,
+    said: string[],
   ): Promise<ServedApp> {
     const port = await freePort();
     const child = spawn(ocelBin, ["dev", "--", ...appCommand(cell.fixture, app)], {
@@ -395,6 +399,9 @@ export class DevTarget implements Target, Restart, Exposure {
     const served: ServedApp = { app, port, child, output: () => captured };
     try {
       await waitForHealth(`http://127.0.0.1:${port}/health`, served);
+    } catch (error) {
+      said.push(captured);
+      throw error;
     } finally {
       await cell.evidence.write(phase, `dev-${app}.log`, captured);
     }

@@ -15,7 +15,7 @@ import {
 import { BOX_ZONE, journeyConfigIn, journeyZone, vpsZoneOf } from "../config";
 import { appHostname, HARNESS_PREFIX, isStranded } from "../identity";
 import type { Lane, Phase } from "../matrix/types";
-import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
+import { NonzeroExitError, ocel, recordOutput, runOcel, spawnOcel, workTree } from "../ocel";
 import { fixtureMember, outputRoot } from "../paths";
 import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
@@ -474,7 +474,7 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
     const said = redact(`${result.stdout}\n${result.stderr}`);
     await writeFile(path.join(dir, log), said, "utf8");
     if (result.code !== 0) {
-      throw exitedBadly(args, result);
+      throw new NonzeroExitError(args, result);
     }
     return said;
   }
@@ -745,18 +745,18 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
   }
 
   private driving(cell: CellUnderTest, session: BoxSession, phase: Phase) {
-    return async (name: string, args: string[]) => {
-      const result = await runOcel(
-        cell,
-        session.dir,
-        phase,
-        name,
-        ["--config", journeyConfigIn(session.dir), ...args],
-        session.env,
+    return (name: string, args: string[]) =>
+      recordOutput(
+        session.said,
+        runOcel(
+          cell,
+          session.dir,
+          phase,
+          name,
+          ["--config", journeyConfigIn(session.dir), ...args],
+          session.env,
+        ),
       );
-      session.said.push(result.stdout, result.stderr);
-      return result;
-    };
   }
 
   private async stillRecorded(slug: string): Promise<boolean> {
