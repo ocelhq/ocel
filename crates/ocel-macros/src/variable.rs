@@ -1,4 +1,4 @@
-use crate::attribute::entries;
+use crate::attribute::parse_entries;
 use proc_macro2::Span;
 use syn::{Field, GenericArgument, PathArguments, Type};
 
@@ -71,12 +71,12 @@ pub(crate) fn variable(field: &Field) -> syn::Result<Variable> {
     let mut fallback = None;
     let description = description(field)?;
 
-    for entry in entries(&field.attrs)? {
+    for entry in parse_entries(&field.attrs)? {
         let name = entry.name.to_string();
         match name.as_str() {
-            "key" => key = entry.literal()?.to_string(),
-            "default" => fallback = Some(entry.literal()?.to_string()),
-            "folders" => folders = Some(entry.list()?.to_vec()),
+            "key" => key = entry.read_literal()?.to_string(),
+            "default" => fallback = Some(entry.read_literal()?.to_string()),
+            "folders" => folders = Some(entry.read_list()?.to_vec()),
             "secret" => {
                 return Err(refused(entry.span(), &key, "is tagged secret. The secret class is declared by the field's type: make it an ocel::Secret and drop the attribute."))
             }

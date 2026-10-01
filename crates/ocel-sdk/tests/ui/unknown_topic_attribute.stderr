@@ -1,0 +1,5 @@
+error: field orders has an unknown attribute 'public'. The attributes of an ocel::Topic are name = "<NAME>", ordered, retry(...) and schema.
+ --> tests/ui/unknown_topic_attribute.rs:3:12
+  |
+3 |     #[ocel(public)]
+  |            ^^^^^^

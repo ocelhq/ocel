@@ -1,0 +1,5 @@
+error: #[ocel::consumer] has an unknown attribute 'batch'. Its attributes are topic = <TOPIC NAME>, name = "<NAME>", retry(...), concurrency = <NUMBER>, lanes = ["<LANE>"], max_duration = "<DURATION>" and worker = "<WORKER>".
+ --> tests/ui/consumer_with_batch.rs:6:41
+  |
+6 | #[ocel::consumer(topic = Infra::ORDERS, batch(size = 10))]
+  |                                         ^^^^^

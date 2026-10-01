@@ -1,0 +1,7 @@
+error: #[ocel::batch_consumer] names how many messages a batch holds: batch_size = <NUMBER>.
+ --> tests/ui/batch_consumer_without_batch_size.rs:6:1
+  |
+6 | #[ocel::batch_consumer(topic = Infra::ORDERS, batch_timeout = "1s")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `ocel::batch_consumer` (in Nightly builds, run with -Z macro-backtrace for more info)

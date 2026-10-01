@@ -1,0 +1,5 @@
+error: 'max_duration' is "5 minutes", and a duration is a whole number followed by ms, s, m, h or d, such as "500ms", "30s" or "5m".
+ --> tests/ui/bad_duration.rs:1:14
+  |
+1 | #[ocel::task(max_duration = "5 minutes")]
+  |              ^^^^^^^^^^^^

@@ -1,0 +1,5 @@
+error: #[ocel::consumer] names its topic by the constant its struct holds for it, such as topic = Infra::ORDERS for the field `orders` of `Infra`, not by a string.
+ --> tests/ui/consumer_naming_its_topic_by_a_string.rs:1:18
+  |
+1 | #[ocel::consumer(topic = "orders")]
+  |                  ^^^^^

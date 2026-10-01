@@ -1,0 +1,5 @@
+error: batch(...) names how many messages a batch holds: batch(size = <NUMBER>).
+ --> tests/ui/batch_task_without_size.rs:1:14
+  |
+1 | #[ocel::task(batch(timeout = "1s"))]
+  |              ^^^^^

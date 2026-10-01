@@ -3,31 +3,53 @@ use crate::proto::common::bindings::v1::binding::Properties;
 use crate::proto::common::bindings::v1::{Binding, BucketProperties, PostgresProperties};
 use crate::Error;
 
-pub(crate) fn postgres(name: &str) -> Result<PostgresProperties, Error> {
-    match read(&format!("OCEL_RESOURCE_POSTGRES_{name}"), "POSTGRES")? {
+pub(crate) fn read_postgres(name: &str) -> Result<PostgresProperties, Error> {
+    match read_binding(&format!("OCEL_RESOURCE_POSTGRES_{name}"), "POSTGRES")? {
         (Some(Properties::Postgres(properties)), _) => Ok(*properties),
         (other, key) => Err(Error::WrongBindingType {
             key,
-            found: kind_of(&other),
+            found: describe_kind(&other),
             expected: "POSTGRES".to_string(),
         }),
     }
 }
 
-pub(crate) fn bucket(name: &str) -> Result<BucketProperties, Error> {
-    match read(&format!("OCEL_RESOURCE_BUCKET_{name}"), "BUCKET")? {
+pub(crate) fn read_bucket(name: &str) -> Result<BucketProperties, Error> {
+    match read_binding(&format!("OCEL_RESOURCE_BUCKET_{name}"), "BUCKET")? {
         (Some(Properties::Bucket(properties)), _) => Ok(*properties),
         (other, key) => Err(Error::WrongBindingType {
             key,
-            found: kind_of(&other),
+            found: describe_kind(&other),
             expected: "BUCKET".to_string(),
         }),
     }
 }
 
-fn read(key: &str, expected: &str) -> Result<(Option<Properties>, String), Error> {
+pub(crate) fn read_topic(name: &str) -> Result<String, Error> {
+    match read_binding(&format!("OCEL_RESOURCE_TOPIC_{name}"), "TOPIC")? {
+        (Some(Properties::Topic(properties)), _) => Ok(properties.topic),
+        (other, key) => Err(Error::WrongBindingType {
+            key,
+            found: describe_kind(&other),
+            expected: "TOPIC".to_string(),
+        }),
+    }
+}
+
+pub(crate) fn read_task(name: &str) -> Result<String, Error> {
+    match read_binding(&format!("OCEL_RESOURCE_TASK_{name}"), "TASK")? {
+        (Some(Properties::Task(properties)), _) => Ok(properties.task),
+        (other, key) => Err(Error::WrongBindingType {
+            key,
+            found: describe_kind(&other),
+            expected: "TASK".to_string(),
+        }),
+    }
+}
+
+fn read_binding(key: &str, expected: &str) -> Result<(Option<Properties>, String), Error> {
     let key = key.to_string();
-    let Some(raw) = delivered(&key) else {
+    let Some(raw) = read_delivered(&key) else {
         return Err(Error::MissingBinding { key });
     };
     let delivered: Binding = serde_json::from_str(&raw).map_err(|_| Error::Binding {
@@ -37,7 +59,7 @@ fn read(key: &str, expected: &str) -> Result<(Option<Properties>, String), Error
     Ok((delivered.properties, key))
 }
 
-fn kind_of(properties: &Option<Properties>) -> String {
+fn describe_kind(properties: &Option<Properties>) -> String {
     match properties {
         Some(Properties::Postgres(_)) => "POSTGRES",
         Some(Properties::Bucket(_)) => "BUCKET",
@@ -50,14 +72,14 @@ fn kind_of(properties: &Option<Properties>) -> String {
     .to_string()
 }
 
-fn delivered(key: &str) -> Option<String> {
+fn read_delivered(key: &str) -> Option<String> {
     std::env::var(key)
         .ok()
         .or_else(|| live_file(key))
         .filter(|raw| !raw.is_empty())
 }
 
-pub(crate) fn encoded(value: &str) -> String {
+pub(crate) fn percent_encode(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for byte in value.bytes() {
         match byte {

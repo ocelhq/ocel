@@ -5,15 +5,16 @@ mod fake;
 #[cfg(test)]
 mod tests;
 
-use crate::binding::bucket;
-use crate::declare::discovering;
+use crate::binding::read_bucket;
+use crate::declare::is_discovering;
 use crate::proto::app::bucket::v1::{
     BucketServiceClient, CopyRequest, DeleteRequest, HeadRequest, ListRequest, ObjectInfo,
     PresignedTarget, SignConstraints, SignRequest, SignedAudience, SignedOperation,
 };
+use crate::runtime::read_client_config;
 use crate::Error;
 use bytes::Bytes;
-use connectrpc::client::{ClientConfig, ClientTransport, HttpClient};
+use connectrpc::client::{ClientTransport, HttpClient};
 use futures_core::Stream;
 use http_body_util::BodyExt;
 use std::collections::BTreeMap;
@@ -27,16 +28,14 @@ pub use writer::Writer;
 
 pub(crate) const KIND: &str = "bucket";
 
-const RUNTIME_ADDRESS_ENV: &str = "OCEL_RUNTIME_ADDRESS";
-const SESSION_TOKEN_ENV: &str = "OCEL_SESSION_TOKEN";
 const SINGLE_REQUEST_CEILING: usize = 16 << 20;
 const PART_SIZE: usize = 8 << 20;
 const PARTS_IN_FLIGHT: usize = 4;
 
 type Body = <HttpClient as ClientTransport>::ResponseBody;
 type Client = BucketServiceClient<HttpClient>;
-type Eventually<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
-type Arriving = futures_util::stream::MapErr<
+type ResultFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
+type BodyStream = futures_util::stream::MapErr<
     http_body_util::BodyDataStream<Body>,
     fn(<Body as connectrpc::http_body::Body>::Error) -> std::io::Error,
 >;
@@ -114,7 +113,7 @@ impl From<&str> for Payload {
 }
 
 #[derive(Clone)]
-struct Reached {
+struct Connection {
     client: Client,
     http: HttpClient,
     bucket: String,
@@ -132,7 +131,7 @@ pub(crate) struct Thresholds {
 #[derive(Clone)]
 pub struct Bucket {
     name: String,
-    reached: Arc<OnceLock<Reached>>,
+    connection: Arc<OnceLock<Connection>>,
     thresholds: Thresholds,
 }
 
@@ -143,7 +142,7 @@ impl Bucket {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            reached: Arc::default(),
+            connection: Arc::default(),
             thresholds: Thresholds {
                 single_ceiling: SINGLE_REQUEST_CEILING,
                 part_size: PART_SIZE,
@@ -163,7 +162,7 @@ impl Bucket {
             bucket: self,
             key: key.to_string(),
             body: body.into().into_bytes(),
-            options: Written::default(),
+            options: WriteOptions::default(),
         }
     }
 
@@ -179,17 +178,21 @@ impl Bucket {
 
     /// What the bucket knows about the object under `key`, or `None` when it has none.
     pub async fn head(&self, key: &str) -> Result<Option<Object>, Error> {
-        let reached = self.reached("head")?;
-        let response = reached
+        let connection = self.ensure_connection("head")?;
+        let response = connection
             .client
             .head(HeadRequest {
-                bucket: reached.bucket.clone(),
+                bucket: connection.bucket.clone(),
                 key: key.to_string(),
                 ..Default::default()
             })
             .await
-            .map_err(|err| refused(key, &err))?;
-        Ok(response.into_owned().object.into_option().map(object))
+            .map_err(|err| refuse_access(key, &err))?;
+        Ok(response
+            .into_owned()
+            .object
+            .into_option()
+            .map(convert_object_info))
     }
 
     /// Whether the bucket has an object under `key`.
@@ -214,39 +217,39 @@ impl Bucket {
         if keys.is_empty() {
             return Ok(());
         }
-        let reached = self.reached("delete")?;
+        let connection = self.ensure_connection("delete")?;
         let named = keys.join(", ");
-        reached
+        connection
             .client
             .delete(DeleteRequest {
-                bucket: reached.bucket.clone(),
+                bucket: connection.bucket.clone(),
                 keys,
                 ..Default::default()
             })
             .await
-            .map_err(|err| refused(&named, &err))?;
+            .map_err(|err| refuse_access(&named, &err))?;
         Ok(())
     }
 
     /// Copy the object under `source` to `destination` within the same bucket. It fails
     /// with [`Error::NotFound`] when the bucket has nothing under `source`.
     pub async fn copy(&self, source: &str, destination: &str) -> Result<Object, Error> {
-        let reached = self.reached("copy")?;
-        let response = reached
+        let connection = self.ensure_connection("copy")?;
+        let response = connection
             .client
             .copy(CopyRequest {
-                bucket: reached.bucket.clone(),
+                bucket: connection.bucket.clone(),
                 source_key: source.to_string(),
                 destination_key: destination.to_string(),
                 ..Default::default()
             })
             .await
-            .map_err(|err| refused(source, &err))?;
+            .map_err(|err| refuse_access(source, &err))?;
         response
             .into_owned()
             .object
             .into_option()
-            .map(object)
+            .map(convert_object_info)
             .ok_or_else(|| Error::NotFound {
                 key: source.to_string(),
             })
@@ -277,7 +280,7 @@ impl Bucket {
     /// Open the object under `key` for writing. Nothing reaches the bucket until the writer
     /// is shut down, and a writer dropped before that throws away what it had sent.
     pub async fn writer(&self, key: &str) -> Result<Writer, Error> {
-        Writer::open(self, key, Written::default()).await
+        Writer::open(self, key, WriteOptions::default()).await
     }
 
     /// A url that reads the object under `key` without a credential, for as long as it
@@ -306,20 +309,20 @@ impl Bucket {
     /// The address the object under `key` is served at anonymously. It fails on a bucket
     /// that has no public address.
     pub fn public_url(&self, key: &str) -> Result<String, Error> {
-        let reached = self.reached("public_url")?;
-        if reached.public_base_url.is_empty() {
+        let connection = self.ensure_connection("public_url")?;
+        if connection.public_base_url.is_empty() {
             return Err(Error::NotPublic {
                 key: key.to_string(),
             });
         }
         let path = key
             .split('/')
-            .map(escaped_segment)
+            .map(escape_segment)
             .collect::<Vec<_>>()
             .join("/");
         Ok(format!(
             "{}/{path}",
-            reached.public_base_url.trim_end_matches('/')
+            connection.public_base_url.trim_end_matches('/')
         ))
     }
 
@@ -332,48 +335,34 @@ impl Bucket {
         self
     }
 
-    fn reached(&self, access: &str) -> Result<&Reached, Error> {
-        if discovering() {
+    fn ensure_connection(&self, access: &str) -> Result<&Connection, Error> {
+        if is_discovering() {
             return Err(Error::Unprovisioned {
                 resource: format!("bucket(\"{}\")", self.name),
                 access: access.to_string(),
             });
         }
-        if let Some(reached) = self.reached.get() {
-            return Ok(reached);
+        if let Some(connection) = self.connection.get() {
+            return Ok(connection);
         }
-        let properties = bucket(&self.name)?;
-        let address = std::env::var(RUNTIME_ADDRESS_ENV).unwrap_or_default();
-        if address.is_empty() {
-            return Err(Error::UnreachableRuntime);
-        }
-        let Ok(base) = address.trim_end_matches('/').parse() else {
-            return Err(Error::RuntimeAddress { address });
-        };
-        let token = std::env::var(SESSION_TOKEN_ENV).unwrap_or_default();
-        if token.is_empty() {
-            return Err(Error::UntrustedRuntime);
-        }
+        let properties = read_bucket(&self.name)?;
+        let config = read_client_config()?;
         let http = HttpClient::plaintext();
-        let opened = Reached {
-            client: Client::new(
-                http.clone(),
-                ClientConfig::new(base)
-                    .with_default_header("authorization", format!("Bearer {token}")),
-            ),
+        let connection = Connection {
+            client: Client::new(http.clone(), config),
             http,
             bucket: properties.bucket,
             public_base_url: properties.public_base_url,
         };
-        Ok(self.reached.get_or_init(|| opened))
+        Ok(self.connection.get_or_init(|| connection))
     }
 
-    async fn sign(&self, access: &str, signed: Signed<'_>) -> Result<PresignedTarget, Error> {
-        let reached = self.reached(access)?;
-        let response = reached
+    async fn sign(&self, access: &str, signed: SignOptions<'_>) -> Result<PresignedTarget, Error> {
+        let connection = self.ensure_connection(access)?;
+        let response = connection
             .client
             .sign(SignRequest {
-                bucket: reached.bucket.clone(),
+                bucket: connection.bucket.clone(),
                 key: signed.key.to_string(),
                 operation: signed.operation.into(),
                 audience: signed.audience.into(),
@@ -389,7 +378,7 @@ impl Bucket {
                 ..Default::default()
             })
             .await
-            .map_err(|err| refused(signed.key, &err))?;
+            .map_err(|err| refuse_access(signed.key, &err))?;
         response
             .into_owned()
             .target
@@ -401,7 +390,7 @@ impl Bucket {
     }
 }
 
-struct Signed<'a> {
+struct SignOptions<'a> {
     key: &'a str,
     operation: SignedOperation,
     audience: SignedAudience,
@@ -410,7 +399,7 @@ struct Signed<'a> {
 }
 
 #[derive(Clone, Default)]
-struct Written {
+struct WriteOptions {
     content_type: String,
     cache_control: String,
     metadata: BTreeMap<String, String>,
@@ -423,7 +412,7 @@ pub struct Put<'a> {
     bucket: &'a Bucket,
     key: String,
     body: Bytes,
-    options: Written,
+    options: WriteOptions,
 }
 
 impl Put<'_> {
@@ -468,7 +457,7 @@ impl Put<'_> {
 
 impl<'a> IntoFuture for Put<'a> {
     type Output = Result<Object, Error>;
-    type IntoFuture = Eventually<'a, Object>;
+    type IntoFuture = ResultFuture<'a, Object>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
@@ -486,7 +475,7 @@ impl<'a> IntoFuture for Put<'a> {
             let target = bucket
                 .sign(
                     "put",
-                    Signed {
+                    SignOptions {
                         key: &key,
                         operation: SignedOperation::Put,
                         audience: SignedAudience::Internal,
@@ -500,7 +489,7 @@ impl<'a> IntoFuture for Put<'a> {
                     },
                 )
                 .await?;
-            let mut request = signed_request(&target, "PUT");
+            let mut request = build_signed_request(&target, "PUT");
             for (name, value) in [
                 ("content-type", &options.content_type),
                 ("cache-control", &options.cache_control),
@@ -514,8 +503,8 @@ impl<'a> IntoFuture for Put<'a> {
             for (name, value) in &options.metadata {
                 request = request.header(format!("x-amz-meta-{name}"), value);
             }
-            let response = send(bucket.reached("put")?, request, body).await?;
-            refusal(&key, response.status().as_u16())?;
+            let response = send_request(bucket.ensure_connection("put")?, request, body).await?;
+            check_status(&key, response.status().as_u16())?;
             bucket.head(&key).await?.ok_or(Error::NotFound { key })
         })
     }
@@ -547,7 +536,7 @@ impl Get<'_> {
 
 impl<'a> IntoFuture for Get<'a> {
     type Output = Result<GetResult, Error>;
-    type IntoFuture = Eventually<'a, GetResult>;
+    type IntoFuture = ResultFuture<'a, GetResult>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
@@ -558,7 +547,7 @@ impl<'a> IntoFuture for Get<'a> {
             let target = bucket
                 .sign(
                     "get",
-                    Signed {
+                    SignOptions {
                         key: &key,
                         operation: SignedOperation::Get,
                         audience: SignedAudience::Internal,
@@ -567,12 +556,13 @@ impl<'a> IntoFuture for Get<'a> {
                     },
                 )
                 .await?;
-            let mut request = signed_request(&target, "GET");
+            let mut request = build_signed_request(&target, "GET");
             if let Some(range) = &range {
                 request = request.header("range", range);
             }
-            let response = send(bucket.reached("get")?, request, Bytes::new()).await?;
-            refusal(&key, response.status().as_u16())?;
+            let response =
+                send_request(bucket.ensure_connection("get")?, request, Bytes::new()).await?;
+            check_status(&key, response.status().as_u16())?;
             Ok(GetResult {
                 info,
                 key,
@@ -626,7 +616,7 @@ impl GetResult {
 
 /// One object's bytes, read as they arrive.
 pub struct Reader {
-    inner: tokio_util::io::StreamReader<Arriving, Bytes>,
+    inner: tokio_util::io::StreamReader<BodyStream, Bytes>,
 }
 
 impl tokio::io::AsyncRead for Reader {
@@ -673,21 +663,25 @@ impl<'a> List<'a> {
                 let Some(cursor) = cursor else {
                     return Ok::<_, Error>(None);
                 };
-                let reached = bucket.reached("list")?;
-                let response = reached
+                let connection = bucket.ensure_connection("list")?;
+                let response = connection
                     .client
                     .list(ListRequest {
-                        bucket: reached.bucket.clone(),
+                        bucket: connection.bucket.clone(),
                         prefix: prefix.clone(),
                         cursor,
                         limit,
                         ..Default::default()
                     })
                     .await
-                    .map_err(|err| refused(&prefix, &err))?
+                    .map_err(|err| refuse_access(&prefix, &err))?
                     .into_owned();
                 let next = (!response.next_cursor.is_empty()).then_some(response.next_cursor);
-                let page: Vec<Object> = response.objects.into_iter().map(object).collect();
+                let page: Vec<Object> = response
+                    .objects
+                    .into_iter()
+                    .map(convert_object_info)
+                    .collect();
                 Ok(Some((
                     futures_util::stream::iter(page.into_iter().map(Ok)),
                     next,
@@ -722,7 +716,7 @@ impl Sign<'_> {
 
 impl<'a> IntoFuture for Sign<'a> {
     type Output = Result<String, Error>;
-    type IntoFuture = Eventually<'a, String>;
+    type IntoFuture = ResultFuture<'a, String>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
@@ -730,7 +724,7 @@ impl<'a> IntoFuture for Sign<'a> {
                 .bucket
                 .sign(
                     "signed_url",
-                    Signed {
+                    SignOptions {
                         key: &self.key,
                         operation: SignedOperation::Get,
                         audience: SignedAudience::External,
@@ -778,7 +772,7 @@ impl SignUpload<'_> {
 
 impl<'a> IntoFuture for SignUpload<'a> {
     type Output = Result<SignedUpload, Error>;
-    type IntoFuture = Eventually<'a, SignedUpload>;
+    type IntoFuture = ResultFuture<'a, SignedUpload>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
@@ -786,7 +780,7 @@ impl<'a> IntoFuture for SignUpload<'a> {
                 .bucket
                 .sign(
                     "signed_upload",
-                    Signed {
+                    SignOptions {
                         key: &self.key,
                         operation: SignedOperation::PostUpload,
                         audience: SignedAudience::External,
@@ -812,7 +806,7 @@ impl<'a> IntoFuture for SignUpload<'a> {
     }
 }
 
-fn signed_request(target: &PresignedTarget, method: &str) -> http::request::Builder {
+fn build_signed_request(target: &PresignedTarget, method: &str) -> http::request::Builder {
     let mut request = http::Request::builder().method(method).uri(&target.url);
     for (name, value) in &target.headers {
         request = request.header(name, value);
@@ -820,8 +814,8 @@ fn signed_request(target: &PresignedTarget, method: &str) -> http::request::Buil
     request
 }
 
-async fn send(
-    reached: &Reached,
+async fn send_request(
+    connection: &Connection,
     request: http::request::Builder,
     body: Bytes,
 ) -> Result<http::Response<Body>, Error> {
@@ -836,7 +830,7 @@ async fn send(
             key: key.clone(),
             said: err.to_string(),
         })?;
-    reached
+    connection
         .http
         .send(request)
         .await
@@ -846,7 +840,7 @@ async fn send(
         })
 }
 
-fn refusal(key: &str, status: u16) -> Result<(), Error> {
+fn check_status(key: &str, status: u16) -> Result<(), Error> {
     match status {
         200..=299 => Ok(()),
         404 => Err(Error::NotFound {
@@ -862,7 +856,7 @@ fn refusal(key: &str, status: u16) -> Result<(), Error> {
     }
 }
 
-fn refused(key: &str, err: &connectrpc::ConnectError) -> Error {
+fn refuse_access(key: &str, err: &connectrpc::ConnectError) -> Error {
     match err.code {
         connectrpc::ErrorCode::NotFound => Error::NotFound {
             key: key.to_string(),
@@ -877,7 +871,7 @@ fn refused(key: &str, err: &connectrpc::ConnectError) -> Error {
     }
 }
 
-fn object(info: ObjectInfo) -> Object {
+fn convert_object_info(info: ObjectInfo) -> Object {
     Object {
         key: info.key,
         size: info.size.max(0) as u64,
@@ -892,7 +886,7 @@ fn object(info: ObjectInfo) -> Object {
     }
 }
 
-fn escaped_segment(segment: &str) -> String {
+fn escape_segment(segment: &str) -> String {
     let mut out = String::with_capacity(segment.len());
     for byte in segment.as_bytes() {
         match byte {

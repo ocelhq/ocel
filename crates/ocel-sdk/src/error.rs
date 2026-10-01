@@ -161,6 +161,49 @@ pub enum Error {
         key: String,
     },
 
+    /// A payload could not be written as JSON.
+    #[error("the payload cannot be sent, because it does not encode as JSON: {said}")]
+    Payload {
+        /// What the encoder said.
+        said: String,
+    },
+
+    /// A payload's JSON is larger than any topic or task accepts.
+    #[error(
+        "the payload is {size} bytes of JSON, and a payload is at most 262144 bytes (256 KiB)"
+    )]
+    PayloadTooLarge {
+        /// The size of the payload's JSON in bytes.
+        size: usize,
+    },
+
+    /// The runtime refused an operation on a topic, a task or its runs.
+    #[error("'{resource}' {access} was refused by the runtime: {said}")]
+    RuntimeRefused {
+        /// The declaration or the runs the operation names.
+        resource: String,
+        /// The operation that was refused.
+        access: String,
+        /// What the runtime said.
+        said: String,
+    },
+
+    /// No run has the id an operation named.
+    #[error("no run has the id '{id}'")]
+    UnknownRun {
+        /// The id that named nothing.
+        id: String,
+    },
+
+    /// A batch contains a trigger built from another task.
+    #[error("a batch triggering '{task}' contains a trigger of '{other}': every trigger in a batch is built from the task the batch is sent to")]
+    MixedBatch {
+        /// The task the batch is sent to.
+        task: String,
+        /// The task the stray trigger was built from.
+        other: String,
+    },
+
     /// The pool over a delivered binding could not be opened.
     #[cfg(feature = "postgres")]
     #[error("{0}")]

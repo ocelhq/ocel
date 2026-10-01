@@ -1,0 +1,5 @@
+error: #[ocel::task] has an unknown attribute 'priority'. Its attributes are name = "<NAME>", retry(...), concurrency = <NUMBER>, max_duration = "<DURATION>", ttl = "<DURATION>", ordered, batch(...), worker = "<WORKER>", cron = "<CRON>", schema, on_success, on_failure, on_complete, on_cancel, catch_error, middleware and on_start_attempt.
+ --> tests/ui/unknown_task_attribute.rs:1:14
+  |
+1 | #[ocel::task(priority = 1)]
+  |              ^^^^^^^^

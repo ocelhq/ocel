@@ -3,11 +3,15 @@ use crate::proto::app::resources::v1::declare_request::Config;
 use crate::proto::app::resources::v1::variable_problem::Kind;
 use crate::proto::app::resources::v1::ResourceType;
 use crate::proto::app::resources::v1::{
-    BucketConfig, DeclareEnvRequest, DeclareRequest, GroupDefinition, PostgresConfig,
-    ReportEnvProblemsRequest, ResourceIdentifier, ResourceServiceClient, VariableCell,
-    VariableClass, VariableDefinition, VariableProblem,
+    BatchPolicy, BucketConfig, ConsumerConfig, DeclareEnvRequest, DeclareRequest, GroupDefinition,
+    PostgresConfig, ReportEnvProblemsRequest, ResourceIdentifier, ResourceServiceClient,
+    RetryPolicy, TaskConfig, TopicConfig, VariableCell, VariableClass, VariableDefinition,
+    VariableProblem, WorkerConfig,
 };
-use crate::Error;
+use crate::run::BoxFuture;
+use crate::worker::{OnStart, WorkerMiddleware};
+use crate::{Error, Lane};
+use std::time::Duration;
 
 const PHASE_ENV: &str = "OCEL_PHASE";
 const DEV_SERVER_ENV: &str = "OCEL_DEV_SERVER";
@@ -18,6 +22,27 @@ const SDK_VERSION_HEADER: &str = "ocel-sdk-version";
 const SDK_VERSION: &str = concat!("rust/", env!("CARGO_PKG_VERSION"));
 
 #[doc(hidden)]
+#[derive(Clone, Copy)]
+pub struct Retry {
+    pub max_attempts: i32,
+    pub min_delay: Option<Duration>,
+    pub max_delay: Option<Duration>,
+}
+
+#[doc(hidden)]
+#[derive(Clone, Copy)]
+pub struct Batch {
+    pub size: i32,
+    pub timeout: Option<Duration>,
+}
+
+#[doc(hidden)]
+pub type Schema = fn() -> String;
+
+#[doc(hidden)]
+pub type DeliveryFn = fn(crate::deliver::Delivery) -> BoxFuture<'static, crate::deliver::Outcome>;
+
+#[doc(hidden)]
 pub enum DeclaredConfig {
     Postgres {
         version: &'static str,
@@ -26,6 +51,38 @@ pub enum DeclaredConfig {
         public: bool,
         allowed_origins: &'static [&'static str],
     },
+    Topic {
+        schema: Option<Schema>,
+        ordered: bool,
+        retry: Option<Retry>,
+    },
+    Task {
+        schema: Option<Schema>,
+        ordered: bool,
+        retry: Option<Retry>,
+        concurrency: i32,
+        max_duration: Option<Duration>,
+        ttl: Option<Duration>,
+        batch: Option<Batch>,
+        worker: &'static str,
+        cron: &'static str,
+        deliver: DeliveryFn,
+    },
+    Consumer {
+        topic: &'static str,
+        worker: &'static str,
+        retry: Option<Retry>,
+        concurrency: i32,
+        max_duration: Option<Duration>,
+        lanes: &'static [Lane],
+        batch: Option<Batch>,
+        deliver: DeliveryFn,
+    },
+    Worker {
+        concurrency: i32,
+        on_start: Option<OnStart>,
+        middleware: Option<WorkerMiddleware>,
+    },
 }
 
 impl DeclaredConfig {
@@ -33,6 +90,26 @@ impl DeclaredConfig {
         match self {
             Self::Postgres { .. } => crate::postgres::KIND,
             Self::Bucket { .. } => crate::bucket::KIND,
+            Self::Topic { .. } => "topic",
+            Self::Task { .. } => "task",
+            Self::Consumer { .. } => "consumer",
+            Self::Worker { .. } => "worker",
+        }
+    }
+
+    fn namespace(&self) -> &'static str {
+        match self {
+            Self::Postgres { .. } | Self::Bucket { .. } => "resource",
+            Self::Topic { .. } | Self::Task { .. } => "topic",
+            Self::Consumer { .. } => "consumer",
+            Self::Worker { .. } => "worker",
+        }
+    }
+
+    fn claimed_name(&self, name: &str) -> String {
+        match self {
+            Self::Consumer { topic, .. } => format!("{topic}/{name}"),
+            _ => name.to_string(),
         }
     }
 
@@ -40,6 +117,10 @@ impl DeclaredConfig {
         match self {
             Self::Postgres { .. } => ResourceType::RESOURCE_TYPE_POSTGRES,
             Self::Bucket { .. } => ResourceType::RESOURCE_TYPE_BUCKET,
+            Self::Topic { .. } => ResourceType::RESOURCE_TYPE_TOPIC,
+            Self::Task { .. } => ResourceType::RESOURCE_TYPE_TASK,
+            Self::Consumer { .. } => ResourceType::RESOURCE_TYPE_CONSUMER,
+            Self::Worker { .. } => ResourceType::RESOURCE_TYPE_WORKER,
         }
     }
 
@@ -57,7 +138,80 @@ impl DeclaredConfig {
                 allowed_origins: allowed_origins.iter().map(|one| one.to_string()).collect(),
                 ..Default::default()
             }),
+            Self::Topic {
+                schema,
+                ordered,
+                retry,
+            } => Config::from(TopicConfig {
+                schema: schema.map(|schema| schema()).unwrap_or_default(),
+                ordered: *ordered,
+                retry: retry.map(build_retry_policy).into(),
+                ..Default::default()
+            }),
+            Self::Task {
+                schema,
+                ordered,
+                retry,
+                concurrency,
+                max_duration,
+                ttl,
+                batch,
+                worker,
+                cron,
+                deliver: _,
+            } => Config::from(TaskConfig {
+                schema: schema.map(|schema| schema()).unwrap_or_default(),
+                ordered: *ordered,
+                retry: retry.map(build_retry_policy).into(),
+                concurrency: *concurrency,
+                max_duration: max_duration.map(Into::into).into(),
+                ttl: ttl.map(Into::into).into(),
+                batch: batch.map(build_batch_policy).into(),
+                worker: worker.to_string(),
+                cron: cron.to_string(),
+                ..Default::default()
+            }),
+            Self::Consumer {
+                topic,
+                worker,
+                retry,
+                concurrency,
+                max_duration,
+                lanes,
+                batch,
+                deliver: _,
+            } => Config::from(ConsumerConfig {
+                topic: topic.to_string(),
+                worker: worker.to_string(),
+                retry: retry.map(build_retry_policy).into(),
+                concurrency: *concurrency,
+                max_duration: max_duration.map(Into::into).into(),
+                lanes: lanes.iter().map(|lane| lane.to_wire().into()).collect(),
+                batch: batch.map(build_batch_policy).into(),
+                ..Default::default()
+            }),
+            Self::Worker { concurrency, .. } => Config::from(WorkerConfig {
+                concurrency: *concurrency,
+                ..Default::default()
+            }),
         }
+    }
+}
+
+fn build_retry_policy(retry: Retry) -> RetryPolicy {
+    RetryPolicy {
+        max_attempts: retry.max_attempts,
+        min_delay: retry.min_delay.map(Into::into).into(),
+        max_delay: retry.max_delay.map(Into::into).into(),
+        ..Default::default()
+    }
+}
+
+fn build_batch_policy(batch: Batch) -> BatchPolicy {
+    BatchPolicy {
+        size: batch.size,
+        timeout: batch.timeout.map(Into::into).into(),
+        ..Default::default()
     }
 }
 
@@ -129,10 +283,10 @@ inventory::collect!(Registered);
 /// runs on is this call's own thread, so `discover` blocks whether or not the app has
 /// a runtime of its own.
 pub fn discover() -> Result<bool, Error> {
-    if !discovering() {
+    if !is_discovering() {
         return Ok(false);
     }
-    let declared = collected()?;
+    let declared = collect_declarations()?;
     std::thread::scope(|scope| {
         scope
             .spawn(|| {
@@ -148,41 +302,36 @@ pub fn discover() -> Result<bool, Error> {
     Ok(true)
 }
 
-pub(crate) fn discovering() -> bool {
+pub(crate) fn is_discovering() -> bool {
     std::env::var(PHASE_ENV).as_deref() == Ok(DISCOVERY_PHASE)
 }
 
-fn collected() -> Result<Declared, Error> {
+pub(crate) fn collect_declarations() -> Result<Declared, Error> {
     let mut structs: Vec<Declared> = inventory::iter::<Registered>
         .into_iter()
         .map(|registered| (registered.0)())
         .collect();
-    structs.sort_by_key(order);
+    structs.sort_by_key(find_first_site);
 
     let mut all = Declared {
         resources: Vec::new(),
         variables: Vec::new(),
         groups: Vec::new(),
     };
-    let mut resource_owners: Vec<(&str, String)> = Vec::new();
+    let mut resource_owners: Vec<(String, String)> = Vec::new();
     let mut variable_owners: Vec<(&str, String)> = Vec::new();
     let mut group_owners: Vec<(&str, String)> = Vec::new();
 
     for one in structs {
         for resource in one.resources {
-            claim(
-                &mut resource_owners,
-                resource.name,
-                site(resource.file, resource.line),
-                "A resource name is declared exactly once, in exactly one file.",
-            )?;
+            claim_resource(&mut resource_owners, &resource)?;
             all.resources.push(resource);
         }
         for variable in one.variables {
             claim(
                 &mut variable_owners,
                 variable.key,
-                site(variable.file, variable.line),
+                format_site(variable.file, variable.line),
                 "A key is declared exactly once, in exactly one file.",
             )?;
             all.variables.push(variable);
@@ -191,17 +340,17 @@ fn collected() -> Result<Declared, Error> {
             claim(
                 &mut group_owners,
                 group.key,
-                site(group.file, group.line),
+                format_site(group.file, group.line),
                 "A group is declared exactly once, in exactly one file.",
             )?;
             all.groups.push(group);
         }
     }
-    joined(&mut all)?;
+    join_group_members(&mut all)?;
     Ok(all)
 }
 
-fn joined(all: &mut Declared) -> Result<(), Error> {
+fn join_group_members(all: &mut Declared) -> Result<(), Error> {
     for index in 0..all.groups.len() {
         let (key, members) = (all.groups[index].key, (all.groups[index].members)());
         for mut member in members.variables {
@@ -216,8 +365,8 @@ fn joined(all: &mut Declared) -> Result<(), Error> {
                     ),
                     None => {
                         let (existing, member) = (
-                            site(existing.file, existing.line),
-                            site(member.file, member.line),
+                            format_site(existing.file, existing.line),
+                            format_site(member.file, member.line),
                         );
                         format!(
                             "is declared in {existing} and in the group '{key}' at {member}. A key is declared exactly once, in exactly one file."
@@ -236,7 +385,7 @@ fn joined(all: &mut Declared) -> Result<(), Error> {
     Ok(())
 }
 
-fn order(one: &Declared) -> (&'static str, u32) {
+fn find_first_site(one: &Declared) -> (&'static str, u32) {
     let resources = one
         .resources
         .iter()
@@ -253,8 +402,31 @@ fn order(one: &Declared) -> (&'static str, u32) {
         .unwrap_or_default()
 }
 
-fn site(file: &str, line: u32) -> String {
+fn format_site(file: &str, line: u32) -> String {
     format!("{file}:{line}")
+}
+
+fn claim_resource(
+    owners: &mut Vec<(String, String)>,
+    resource: &DeclaredResource,
+) -> Result<(), Error> {
+    let name = resource.config.claimed_name(resource.name);
+    let key = format!("{}:{name}", resource.config.namespace());
+    let site = format_site(resource.file, resource.line);
+    if let Some((_, claimed)) = owners.iter().find(|(seen, _)| *seen == key) {
+        let rule = match resource.config.namespace() {
+            "topic" => "Topics and tasks share one namespace, and a name in it is declared exactly once, in exactly one file.",
+            "consumer" => "A topic's consumer is declared exactly once, in exactly one file.",
+            "worker" => "A worker is declared exactly once, in exactly one file.",
+            _ => "A resource name is declared exactly once, in exactly one file.",
+        };
+        return Err(Error::Definition {
+            key: name,
+            detail: format!("is declared in {claimed} and {site}. {rule}"),
+        });
+    }
+    owners.push((key, site));
+    Ok(())
 }
 
 fn claim<'a>(
@@ -290,9 +462,9 @@ async fn post_all(declared: &Declared) -> Result<(), Error> {
     );
     for resource in &declared.resources {
         client
-            .declare(request(resource))
+            .declare(build_declare_request(resource))
             .await
-            .map_err(|err| failed(resource, err.to_string()))?;
+            .map_err(|err| refuse_declaration(resource, err.to_string()))?;
     }
     if declared.variables.is_empty() {
         return Ok(());
@@ -300,8 +472,8 @@ async fn post_all(declared: &Declared) -> Result<(), Error> {
 
     let response = client
         .declare_env(DeclareEnvRequest {
-            definitions: declared.variables.iter().map(definition).collect(),
-            groups: declared.groups.iter().map(group).collect(),
+            definitions: declared.variables.iter().map(build_definition).collect(),
+            groups: declared.groups.iter().map(build_group_definition).collect(),
             ..Default::default()
         })
         .await
@@ -309,7 +481,7 @@ async fn post_all(declared: &Declared) -> Result<(), Error> {
             said: err.to_string(),
         })?;
 
-    let problems = validate(declared, &response.into_owned().cells);
+    let problems = find_problems(declared, &response.into_owned().cells);
     if problems.is_empty() {
         return Ok(());
     }
@@ -325,13 +497,13 @@ async fn post_all(declared: &Declared) -> Result<(), Error> {
     Ok(())
 }
 
-fn definition(variable: &DeclaredVariable) -> VariableDefinition {
+fn build_definition(variable: &DeclaredVariable) -> VariableDefinition {
     VariableDefinition {
         key: variable.key.to_string(),
-        class: class(variable.class).into(),
+        class: convert_class(variable.class).into(),
         required: variable.required,
         folders: variable.folders.iter().map(|f| f.to_string()).collect(),
-        source: source(variable.file, variable.line),
+        source: format_source(variable.file, variable.line),
         has_schema: variable.check.is_some(),
         description: variable.description.unwrap_or_default().to_string(),
         group: variable.group.unwrap_or_default().to_string(),
@@ -339,7 +511,7 @@ fn definition(variable: &DeclaredVariable) -> VariableDefinition {
     }
 }
 
-fn group(group: &DeclaredGroup) -> GroupDefinition {
+fn build_group_definition(group: &DeclaredGroup) -> GroupDefinition {
     GroupDefinition {
         key: group.key.to_string(),
         required: group.required,
@@ -348,7 +520,7 @@ fn group(group: &DeclaredGroup) -> GroupDefinition {
     }
 }
 
-fn class(class: Class) -> VariableClass {
+fn convert_class(class: Class) -> VariableClass {
     match class {
         Class::Plain => VariableClass::VARIABLE_CLASS_PLAIN,
         Class::Sensitive => VariableClass::VARIABLE_CLASS_SENSITIVE,
@@ -356,7 +528,7 @@ fn class(class: Class) -> VariableClass {
     }
 }
 
-fn validate(declared: &Declared, cells: &[VariableCell]) -> Vec<VariableProblem> {
+fn find_problems(declared: &Declared, cells: &[VariableCell]) -> Vec<VariableProblem> {
     let mut problems = Vec::new();
     for variable in &declared.variables {
         let stored: Vec<&VariableCell> = cells
@@ -365,14 +537,14 @@ fn validate(declared: &Declared, cells: &[VariableCell]) -> Vec<VariableProblem>
             .collect();
 
         if variable.required {
-            for folder in required_folders(variable) {
+            for folder in list_required_folders(variable) {
                 if stored.iter().any(|cell| cell.folder == folder) {
                     continue;
                 }
-                if !required_at(declared, variable, cells, folder) {
+                if !is_required_at(declared, variable, cells, folder) {
                     continue;
                 }
-                problems.push(problem(
+                problems.push(new_problem(
                     variable.key,
                     folder,
                     Kind::KIND_MISSING,
@@ -386,7 +558,7 @@ fn validate(declared: &Declared, cells: &[VariableCell]) -> Vec<VariableProblem>
         };
         for cell in stored {
             if let Err(said) = check(&cell.value) {
-                problems.push(problem(
+                problems.push(new_problem(
                     variable.key,
                     &cell.folder,
                     Kind::KIND_INVALID,
@@ -398,7 +570,7 @@ fn validate(declared: &Declared, cells: &[VariableCell]) -> Vec<VariableProblem>
     problems
 }
 
-fn required_at(
+fn is_required_at(
     declared: &Declared,
     variable: &DeclaredVariable,
     cells: &[VariableCell],
@@ -411,10 +583,15 @@ fn required_at(
         .groups
         .iter()
         .any(|group| group.key == key && group.required);
-    required || switched_on(declared, key, cells, folder)
+    required || is_group_switched_on(declared, key, cells, folder)
 }
 
-fn switched_on(declared: &Declared, key: &str, cells: &[VariableCell], folder: &str) -> bool {
+fn is_group_switched_on(
+    declared: &Declared,
+    key: &str,
+    cells: &[VariableCell],
+    folder: &str,
+) -> bool {
     declared
         .variables
         .iter()
@@ -434,14 +611,14 @@ fn has_cell(variable: &DeclaredVariable, cells: &[VariableCell], folder: &str) -
     (!folder.is_empty() && at(folder)) || at("")
 }
 
-fn required_folders(variable: &DeclaredVariable) -> Vec<&str> {
+fn list_required_folders(variable: &DeclaredVariable) -> Vec<&str> {
     if variable.folders.is_empty() {
         return vec![""];
     }
     variable.folders.to_vec()
 }
 
-fn problem(key: &str, folder: &str, kind: Kind, detail: String) -> VariableProblem {
+fn new_problem(key: &str, folder: &str, kind: Kind, detail: String) -> VariableProblem {
     VariableProblem {
         key: key.to_string(),
         folder: folder.to_string(),
@@ -451,7 +628,7 @@ fn problem(key: &str, folder: &str, kind: Kind, detail: String) -> VariableProbl
     }
 }
 
-fn request(resource: &DeclaredResource) -> DeclareRequest {
+fn build_declare_request(resource: &DeclaredResource) -> DeclareRequest {
     DeclareRequest {
         resource: ResourceIdentifier {
             r#type: resource.config.resource_type().into(),
@@ -460,29 +637,29 @@ fn request(resource: &DeclaredResource) -> DeclareRequest {
         }
         .into(),
         config: Some(resource.config.config()),
-        source: source(resource.file, resource.line),
+        source: format_source(resource.file, resource.line),
         ..Default::default()
     }
 }
 
-fn source(file: &str, line: u32) -> String {
+fn format_source(file: &str, line: u32) -> String {
     let path = std::path::Path::new(file);
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        source_root().join(path)
+        read_source_root().join(path)
     };
     format!("{}:{}", absolute.display(), line)
 }
 
-fn source_root() -> std::path::PathBuf {
+fn read_source_root() -> std::path::PathBuf {
     match std::env::var(SOURCE_ROOT_ENV) {
         Ok(root) if !root.is_empty() => std::path::PathBuf::from(root),
         _ => std::env::current_dir().unwrap_or_default(),
     }
 }
 
-fn failed(resource: &DeclaredResource, said: String) -> Error {
+fn refuse_declaration(resource: &DeclaredResource, said: String) -> Error {
     Error::Declare {
         kind: resource.config.kind().to_string(),
         name: resource.name.to_string(),

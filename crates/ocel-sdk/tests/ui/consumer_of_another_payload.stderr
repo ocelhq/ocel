@@ -1,0 +1,23 @@
+error[E0308]: mismatched types
+ --> tests/ui/consumer_of_another_payload.rs:6:26
+  |
+6 | #[ocel::consumer(topic = Infra::ORDERS)]
+  |                          -----^^^^^^^^
+  |                          |
+  |                          expected `TopicName<u64>`, found `TopicName<String>`
+  |                          expected because of the type of the constant
+  |
+  = note: expected struct `TopicName<u64>`
+             found struct `TopicName<String>`
+
+error[E0308]: mismatched types
+  --> tests/ui/consumer_of_another_payload.rs:11:32
+   |
+11 | #[ocel::batch_consumer(topic = Infra::ORDERS, batch_size = 10)]
+   |                                -----^^^^^^^^
+   |                                |
+   |                                expected `TopicName<u64>`, found `TopicName<String>`
+   |                                expected because of the type of the constant
+   |
+   = note: expected struct `TopicName<u64>`
+              found struct `TopicName<String>`

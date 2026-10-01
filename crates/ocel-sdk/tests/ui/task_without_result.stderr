@@ -1,0 +1,5 @@
+error: a #[ocel::task] function is `async fn resize(payload: P, run: &ocel::Run) -> Result<R, ocel::RunError>`.
+ --> tests/ui/task_without_result.rs:2:54
+  |
+2 | async fn resize(_image: String, _run: &ocel::Run) -> u32 {
+  |                                                      ^^^

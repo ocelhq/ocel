@@ -1,0 +1,5 @@
+error: field orders: retry has an unknown attribute 'attempts'. Its attributes are max_attempts = <NUMBER>, min_delay = "<DURATION>" and max_delay = "<DURATION>".
+ --> tests/ui/unknown_retry_attribute.rs:3:18
+  |
+3 |     #[ocel(retry(attempts = 3))]
+  |                  ^^^^^^^^
