@@ -31,6 +31,10 @@ var pulumiTokens = map[string]string{
 	"aws:ecs/taskDefinition:TaskDefinition":   "aws_ecs_task_definition",
 	"aws:ecs/service:Service":                 "aws_ecs_service",
 	"aws:lb/loadBalancer:LoadBalancer":        "aws_lb",
+
+	"aws:elasticache/replicationGroup:ReplicationGroup": "aws_elasticache_replication_group",
+	"aws:elasticache/parameterGroup:ParameterGroup":     "aws_elasticache_parameter_group",
+	"aws:elasticache/subnetGroup:SubnetGroup":           "aws_elasticache_subnet_group",
 }
 
 func shapeRequest(t *testing.T) provider.ShapeRequest {
@@ -51,6 +55,7 @@ func shapeRequest(t *testing.T) provider.ShapeRequest {
 			{Name: "main", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}},
 			{Name: "uploads", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
 			{Name: "shared", Type: provider.BindingBucket, Binding: "elsewhere"},
+			{Name: "cache", Type: provider.BindingKV, KV: &provider.KVSpec{}},
 		},
 		Functions: map[string][]provider.FunctionSpec{
 			"web": {{Name: "fn--web--entry"}, {Name: "fn--web--admin", Route: "/admin"}},
@@ -135,6 +140,13 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 		if err := registerPostgres(pctx, "shop", "prod", "main", translatePostgres(nil), "vpc-1", "10.0.0.0/16", []string{"subnet-a"}); err != nil {
 			return err
 		}
+		store, err := translateKV("cache", nil)
+		if err != nil {
+			return err
+		}
+		if err := registerKV(pctx, "shop", "prod", "cache", store, "vpc-1", "10.0.0.0/16", []string{"subnet-a"}); err != nil {
+			return err
+		}
 		return registerBucket(pctx, "shop", "prod", "uploads", translateBucket(nil), "ocel-state", containerCfg.AppBoundaryARN, newSessionScope("shop", "prod", "arn"), testUploadCompleter())
 	})
 
@@ -148,6 +160,7 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 	got := countTypes(set)
 	delete(got, "aws_secretsmanager_secret")
 	delete(got, "aws_ecr_repository")
+	delete(got, "aws_ssm_parameter")
 	if !maps.Equal(got, registered) {
 		t.Errorf("shape counts %v, the programs register %v", got, registered)
 	}
@@ -175,6 +188,14 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 	registeredScaling := cluster["serverlessv2ScalingConfiguration"].ObjectValue()
 	if scaling["min_capacity"] != registeredScaling["minCapacity"].NumberValue() || scaling["max_capacity"] != registeredScaling["maxCapacity"].NumberValue() {
 		t.Errorf("shaped scaling = %v, program registered %v", scaling, registeredScaling)
+	}
+	group := recordedOf(t, rec, "aws:elasticache/replicationGroup:ReplicationGroup")
+	store := shapedNamed(t, set, "aws_elasticache_replication_group", "cache")
+	if store["node_type"] != group["nodeType"].StringValue() || store["num_cache_clusters"] != group["numCacheClusters"].NumberValue() {
+		t.Errorf("shaped store = %v, program registered node %v times %v", store, group["nodeType"], group["numCacheClusters"])
+	}
+	if token := shapedNamed(t, set, "aws_ssm_parameter", "cache"); token["type"] != "SecureString" {
+		t.Errorf("shaped token = %v, want the SecureString the store's AUTH token is kept in", token)
 	}
 }
 
@@ -243,6 +264,7 @@ const sizingModule = `
 		aws: {
 			function: { lambda: { memorySize: 2048, vpcConfig: { subnetIds: bindings.custom.network.subnetIds, securityGroupIds: bindings.custom.network.securityGroupIds } } },
 			postgres: { cluster: { serverlessv2ScalingConfiguration: { minCapacity: 0.5, maxCapacity: 8 } } },
+			kv: { replicationGroup: { numCacheClusters: 1, automaticFailoverEnabled: false, multiAzEnabled: false } },
 		},
 	}))
 `
@@ -261,6 +283,9 @@ func TestTransformsResizeTheShapeAndBindingOutputsStayUnknown(t *testing.T) {
 	scaling := shapedNamed(t, set, "aws_rds_cluster", "main")["serverlessv2_scaling_configuration"].(map[string]any)
 	if scaling["min_capacity"] != 0.5 || scaling["max_capacity"] != float64(8) {
 		t.Errorf("scaling = %v, want the transform's 0.5 to 8", scaling)
+	}
+	if nodes := shapedNamed(t, set, "aws_elasticache_replication_group", "cache")["num_cache_clusters"]; nodes != float64(1) {
+		t.Errorf("num_cache_clusters = %v, want the transform's single node", nodes)
 	}
 	for _, r := range set.GetResources() {
 		if r.GetType() == "aws_lambda_function" && r.GetName() == "fn--web--entry" {

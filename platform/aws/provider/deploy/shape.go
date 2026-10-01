@@ -32,6 +32,11 @@ const (
 	tfLoadBalancer       = "aws_lb"
 	tfECRRepository      = "aws_ecr_repository"
 
+	tfElastiCacheReplicationGroup = "aws_elasticache_replication_group"
+	tfElastiCacheParameterGroup   = "aws_elasticache_parameter_group"
+	tfElastiCacheSubnetGroup      = "aws_elasticache_subnet_group"
+	tfSSMParameter                = "aws_ssm_parameter"
+
 	lambdaDefaultMemoryMB    = 128
 	lambdaDefaultEphemeralMB = 512
 )
@@ -62,6 +67,10 @@ func Shape(ctx context.Context, pass transform.Pass, region string, req provider
 			shape.postgres(scopes.Environment, project, req.Deploy.Env, resource)
 		case provider.BindingBucket:
 			shape.bucket(scopes.Environment, project, req.Deploy.Env, resource)
+		case provider.BindingKV:
+			if err := shape.kv(scopes.Environment, project, req.Deploy.Env, resource); err != nil {
+				return err
+			}
 		}
 	}
 	hasContainers := false
@@ -180,6 +189,27 @@ func (s costShape) postgres(scope, project, env string, resource provider.Resour
 		},
 	}, names["instance"])
 	s.plain(scope, tfSecret, resource.Name, map[string]any{"managed_by": "rds"})
+}
+
+func (s costShape) kv(scope, project, env string, resource provider.Resource) error {
+	args, err := translateKV(resource.Name, resource.KV)
+	if err != nil {
+		return err
+	}
+	names := kvResourceNames(project, env, resource.Name)
+	s.add(scope, tfElastiCacheReplicationGroup, resource.Name, map[string]any{
+		"engine":                     args.Engine,
+		"engine_version":             args.EngineVersion,
+		"node_type":                  args.NodeType,
+		"num_cache_clusters":         args.NumCacheClusters,
+		"automatic_failover_enabled": args.AutomaticFailoverEnabled,
+		"multi_az_enabled":           args.MultiAZEnabled,
+		"snapshot_retention_limit":   args.SnapshotRetentionLimit,
+	}, names["replicationGroup"])
+	s.add(scope, tfElastiCacheParameterGroup, resource.Name, map[string]any{"family": args.Family}, names["parameterGroup"])
+	s.add(scope, tfElastiCacheSubnetGroup, resource.Name, map[string]any{}, names["subnetGroup"])
+	s.plain(scope, tfSSMParameter, resource.Name, map[string]any{"type": "SecureString"})
+	return nil
 }
 
 func (s costShape) bucket(scope, project, env string, resource provider.Resource) {

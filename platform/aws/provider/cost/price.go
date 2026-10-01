@@ -36,6 +36,7 @@ const (
 	usageHTTPSRequests     = "monthly_https_requests.us"
 	usageInvocations       = "monthly_invocations"
 	usageOutboundInternet  = "monthly_outbound_internet_gb"
+	usageSnapshotStorage   = "snapshot_storage_gb"
 
 	lambdaGB        = 1024
 	fargateCPUUnits = 1024
@@ -95,6 +96,11 @@ var formulas = pricing.Table{
 	"aws_api_gateway_rest_api":        restAPI,
 	"aws_ecr_repository":              registry,
 	"aws_data_transfer":               dataTransfer,
+
+	"aws_elasticache_replication_group": replicationGroup,
+	"aws_elasticache_parameter_group":   free,
+	"aws_elasticache_subnet_group":      free,
+	"aws_ssm_parameter":                 free,
 }
 
 func Price(req *costv1.PriceRequest, edges ...pricing.EdgeRates) (*costv1.Estimate, error) {
@@ -167,6 +173,14 @@ func auroraInstance(r *pricing.Subject) {
 	high, _ := maximum.Float64()
 	acu := r.Usage(usageCapacityUnits, pricing.Band{Light: low, Moderate: middle, Heavy: high})
 	r.Add(pricing.Component{Name: "Aurora Serverless v2 capacity", Unit: "ACU-hours", Rate: "aws/rds/aurora-serverless-v2", Quantity: acu.Mul(pricing.MonthlyHours), UsageBased: true})
+}
+
+func replicationGroup(r *pricing.Subject) {
+	r.Add(pricing.Component{
+		Name: "Nodes", Unit: "node-hours", Rate: "aws/elasticache/node-" + r.String("node_type"),
+		Quantity: r.Number("num_cache_clusters").Mul(pricing.MonthlyHours),
+	})
+	r.Add(pricing.Component{Name: "Snapshot storage", Unit: "GB-month", Rate: "aws/elasticache/snapshot", Quantity: r.Usage(usageSnapshotStorage, storageBand), UsageBased: true})
 }
 
 func secret(r *pricing.Subject) {
