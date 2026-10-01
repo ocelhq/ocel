@@ -172,6 +172,58 @@ func TestServiceListsEveryDeclarationItKept(t *testing.T) {
 	})
 }
 
+func TestAKVDeclarationResentFromItsLineReplacesTheOneBefore(t *testing.T) {
+	t.Parallel()
+
+	s := NewService(nil)
+	store := func(entries ...string) *resourcesv1.DeclareRequest {
+		config := &resourcesv1.KvConfig{}
+		for _, entry := range entries {
+			config.Entries = append(config.Entries, &resourcesv1.KvEntry{Name: entry, Pattern: entry + "/:id", Shape: resourcesv1.KvShape_KV_SHAPE_TEXT})
+		}
+		return &resourcesv1.DeclareRequest{
+			Resource: &resourcesv1.ResourceIdentifier{Name: "cache", Type: resourcesv1.ResourceType_RESOURCE_TYPE_KV},
+			Config:   &resourcesv1.DeclareRequest_Kv{Kv: config},
+			Source:   "/app/cache.go:10",
+		}
+	}
+	for _, req := range []*resourcesv1.DeclareRequest{store(), store("session"), store("session", "requests")} {
+		if _, err := s.Declare(context.Background(), req); err != nil {
+			t.Fatalf("Declare: %v", err)
+		}
+	}
+	other := store()
+	other.Source = "/app/other.go:3"
+	if _, err := s.Declare(context.Background(), other); err != nil {
+		t.Fatalf("Declare: %v", err)
+	}
+
+	got := s.Resources()
+	if len(got) != 2 || len(got[0].KV.GetEntries()) != 2 || got[1].Source != "/app/other.go:3" {
+		t.Errorf("Resources() = %+v, want the store from cache.go:10 once, with both entries, and the one from other.go:3 kept beside it", got)
+	}
+}
+
+func TestANonKVDeclarationRepeatedFromOneLineKeepsBothForTheManifestToRefuse(t *testing.T) {
+	t.Parallel()
+
+	s := NewService(nil)
+	for range 2 {
+		_, err := s.Declare(context.Background(), &resourcesv1.DeclareRequest{
+			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+			Config:   &resourcesv1.DeclareRequest_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
+			Source:   "/app/db.go:4",
+		})
+		if err != nil {
+			t.Fatalf("Declare: %v", err)
+		}
+	}
+
+	if got := s.Resources(); len(got) != 2 {
+		t.Errorf("Resources() = %+v, want both postgres declarations kept", got)
+	}
+}
+
 func declarePostgres(t *testing.T, s *Service, name string) {
 	t.Helper()
 	_, err := s.Declare(context.Background(), &resourcesv1.DeclareRequest{

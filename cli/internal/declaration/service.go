@@ -37,8 +37,14 @@ func (s *Service) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*
 		return nil, err
 	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, prior := range s.resources {
+		if resource.Type == resourcesv1.ResourceType_RESOURCE_TYPE_KV && resource.Source != "" && prior.Source == resource.Source && prior.Type == resource.Type && prior.Name == resource.Name {
+			s.resources[i] = resource
+			return &resourcesv1.DeclareResponse{}, nil
+		}
+	}
 	s.resources = append(s.resources, resource)
-	s.mu.Unlock()
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
