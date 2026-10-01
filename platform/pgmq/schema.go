@@ -42,6 +42,8 @@ CREATE INDEX IF NOT EXISTS runs_by_topic ON ocel.runs (topic, created_at DESC, e
 CREATE INDEX IF NOT EXISTS runs_by_creation ON ocel.runs (created_at DESC, execution DESC);
 CREATE INDEX IF NOT EXISTS runs_by_queue_status ON ocel.runs (queue, status);
 CREATE INDEX IF NOT EXISTS delayed_runs_by_due ON ocel.runs (due_at) WHERE status = 'delayed';
+CREATE INDEX IF NOT EXISTS unstarted_runs_by_expiry ON ocel.runs (expires_at) WHERE attempts = 0 AND status IN ('queued', 'delayed');
+CREATE INDEX IF NOT EXISTS runs_by_finish ON ocel.runs (finished_at);
 
 CREATE TABLE IF NOT EXISTS ocel.deployment (
 	only_row boolean PRIMARY KEY DEFAULT true CHECK (only_row),
