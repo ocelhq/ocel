@@ -2,22 +2,22 @@ package gateway
 
 import "sync"
 
-type Hub struct {
+type hub struct {
 	mu       sync.RWMutex
 	channels map[string]map[subscriber]struct{}
 }
 
 type subscriber struct {
 	id    string
-	queue *Queue
+	queue *queue
 }
 
-func NewHub() *Hub {
-	return &Hub{channels: map[string]map[subscriber]struct{}{}}
+func newHub() *hub {
+	return &hub{channels: map[string]map[subscriber]struct{}{}}
 }
 
-func (h *Hub) Subscribe(channel, id string, queue *Queue) (unsubscribe func()) {
-	s := subscriber{id: id, queue: queue}
+func (h *hub) Subscribe(channel, id string, outbound *queue) (unsubscribe func()) {
+	s := subscriber{id: id, queue: outbound}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.channels[channel] == nil {
@@ -34,23 +34,27 @@ func (h *Hub) Subscribe(channel, id string, queue *Queue) (unsubscribe func()) {
 	}
 }
 
-func (h *Hub) Publish(channel, event string) {
+func (h *hub) Publish(channel, event string) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	for s := range h.channels[channel] {
-		s.queue.Offer(encodeData(s.id, event))
-	}
-	for i := len(channel) - 1; i > 0; i-- {
-		if channel[i] != '/' {
-			continue
-		}
-		for s := range h.channels[channel[:i]+wildcardSuffix] {
+	for _, subscribed := range subscribedChannels(channel) {
+		for s := range h.channels[subscribed] {
 			s.queue.Offer(encodeData(s.id, event))
 		}
 	}
 }
 
 const wildcardSuffix = "/*"
+
+func subscribedChannels(channel string) []string {
+	subscribed := []string{channel}
+	for i := len(channel) - 1; i > 0; i-- {
+		if channel[i] == '/' {
+			subscribed = append(subscribed, channel[:i]+wildcardSuffix)
+		}
+	}
+	return subscribed
+}
 
 func encodeData(id, event string) []byte {
 	return mustEncode(dataFrame{Type: frameData, ID: id, Event: event})

@@ -26,10 +26,10 @@ type publishedEvent struct {
 }
 
 type failedEvent struct {
-	Identifier string `json:"identifier,omitempty"`
-	Index      int    `json:"index"`
-	Code       string `json:"code"`
-	Message    string `json:"message"`
+	Identifier string    `json:"identifier,omitempty"`
+	Index      int       `json:"index"`
+	Code       errorType `json:"code"`
+	Message    string    `json:"message"`
 }
 
 func (g *Gateway) servePublish(w http.ResponseWriter, r *http.Request) {
@@ -67,10 +67,8 @@ func (g *Gateway) servePublish(w http.ResponseWriter, r *http.Request) {
 	writeAnswer(w, http.StatusOK, answer)
 }
 
-func answerError(w http.ResponseWriter, status int, errorType, message string) {
-	writeAnswer(w, status, struct {
-		Errors []errorMessage `json:"errors"`
-	}{Errors: []errorMessage{{ErrorType: errorType, Message: message}}})
+func answerError(w http.ResponseWriter, status int, kind errorType, message string) {
+	writeAnswer(w, status, newErrorFrame("", "", kind, message))
 }
 
 func writeAnswer(w http.ResponseWriter, status int, answer any) {

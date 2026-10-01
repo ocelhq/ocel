@@ -10,12 +10,13 @@ import (
 	"time"
 )
 
+const maxSubscriptions = 200
+
 const (
 	Subprotocol = "aws-appsync-event-ws"
 	SocketPath  = "/event/realtime"
 	PublishPath = "/event"
 
-	MaxSubscriptions    = 200
 	MaxEventBytes       = 240 * 1024
 	MaxEventsPerPublish = 5
 
@@ -34,7 +35,7 @@ type Config struct {
 
 type Gateway struct {
 	cfg Config
-	hub *Hub
+	hub *hub
 	mux *http.ServeMux
 
 	shutdown    context.Context
@@ -53,7 +54,7 @@ func New(cfg Config) *Gateway {
 	if cfg.AllowedOrigins == nil {
 		cfg.AllowedOrigins = func() []string { return nil }
 	}
-	g := &Gateway{cfg: cfg, hub: NewHub(), mux: http.NewServeMux()}
+	g := &Gateway{cfg: cfg, hub: newHub(), mux: http.NewServeMux()}
 	g.shutdown, g.stop = context.WithCancel(context.Background())
 	g.mux.HandleFunc("GET "+SocketPath, g.serveSocket)
 	g.mux.HandleFunc("POST "+PublishPath, g.servePublish)
