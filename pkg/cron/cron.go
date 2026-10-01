@@ -60,6 +60,33 @@ func Parse(expr string) (Schedule, error) {
 	return s, nil
 }
 
+type Fields struct {
+	Minutes, Hours, Days, Months, Weekdays []int
+	AnyDay, AnyWeekday                     bool
+}
+
+func (s Schedule) Fields() Fields {
+	return Fields{
+		Minutes:    members(s.minutes, fields[0]),
+		Hours:      members(s.hours, fields[1]),
+		Days:       members(s.days, fields[2]),
+		Months:     members(s.months, fields[3]),
+		Weekdays:   members(s.weekdays, field{min: 0, max: 6}),
+		AnyDay:     s.anyDay,
+		AnyWeekday: s.anyWeekday,
+	}
+}
+
+func members(set uint64, f field) []int {
+	var values []int
+	for n := f.min; n <= f.max; n++ {
+		if set&(1<<n) != 0 {
+			values = append(values, n)
+		}
+	}
+	return values
+}
+
 func (s Schedule) isReachable() bool {
 	if !s.anyWeekday {
 		return true

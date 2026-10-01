@@ -78,6 +78,7 @@ func (p *Provider) Facts() provider.Facts {
 		DNSKinds:          dns.Kinds(),
 		RendersTransforms: true,
 		StoresArtifacts:   true,
+		WorkerCeilings:    deploy.WorkerCeilings,
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/variables/baked"
 	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 )
@@ -68,6 +69,7 @@ type appBundle struct {
 	Envelope    string
 	Ciphertext  []byte
 	Live        []byte
+	Queues      []byte
 	Referenced  []string
 	Fingerprint string
 }
@@ -86,6 +88,9 @@ func (b appBundle) overlay() map[string][]byte {
 	}
 	if len(b.Live) > 0 {
 		files[variables.FilePath] = b.Live
+	}
+	if len(b.Queues) > 0 {
+		files[queues.FilePath] = b.Queues
 	}
 	if len(files) == 0 {
 		return nil

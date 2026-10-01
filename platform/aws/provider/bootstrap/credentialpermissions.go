@@ -40,6 +40,12 @@ const (
 	appInstanceARN    = "arn:aws:rds:*:*:db:" + appScopePrefix + "*"
 	appSubnetGroupARN = "arn:aws:rds:*:*:subgrp:" + appScopePrefix + "*"
 
+	appQueueARN         = "arn:aws:sqs:*:*:" + appScopePrefix + "*"
+	appTopicARN         = "arn:aws:sns:*:*:" + appScopePrefix + "*"
+	appSubscriptionARN  = "arn:aws:sns:*:*:" + appScopePrefix + "*:*"
+	appScheduleGroupARN = "arn:aws:scheduler:*:*:schedule-group/" + appScopePrefix + "*"
+	appScheduleARN      = "arn:aws:scheduler:*:*:schedule/" + appScopePrefix + "*/*"
+
 	appReplicationGroupARN   = "arn:aws:elasticache:*:*:replicationgroup:" + appScopePrefix + "*"
 	appCacheClusterARN       = "arn:aws:elasticache:*:*:cluster:" + appScopePrefix + "*"
 	anyCacheClusterARN       = "arn:aws:elasticache:*:*:cluster:*"
@@ -385,6 +391,77 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Actions:   []string{"iam:PassRole"},
 			Resources: []string{appRoleARN},
 			Condition: passedToECSTasks(),
+		},
+		{
+			Actions:   []string{"iam:PassRole"},
+			Resources: []string{appRoleARN},
+			Condition: passedTo(schedulerServicePrincipal, true),
+		},
+		{
+			Actions: []string{
+				"sqs:CreateQueue",
+				"sqs:DeleteQueue",
+				"sqs:GetQueueAttributes",
+				"sqs:GetQueueUrl",
+				"sqs:ListQueueTags",
+				"sqs:SetQueueAttributes",
+				"sqs:TagQueue",
+				"sqs:UntagQueue",
+			},
+			Resources: []string{appQueueARN},
+		},
+		{
+			Actions: []string{
+				"sns:CreateTopic",
+				"sns:DeleteTopic",
+				"sns:GetSubscriptionAttributes",
+				"sns:GetTopicAttributes",
+				"sns:ListTagsForResource",
+				"sns:SetSubscriptionAttributes",
+				"sns:SetTopicAttributes",
+				"sns:Subscribe",
+				"sns:TagResource",
+				"sns:Unsubscribe",
+				"sns:UntagResource",
+			},
+			Resources: []string{appTopicARN, appSubscriptionARN},
+		},
+		{
+			Actions:   []string{"lambda:CreateEventSourceMapping"},
+			Resources: []string{UnscopedResource},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions: []string{
+				"lambda:DeleteEventSourceMapping",
+				"lambda:GetEventSourceMapping",
+				"lambda:ListTags",
+				"lambda:TagResource",
+				"lambda:UntagResource",
+				"lambda:UpdateEventSourceMapping",
+			},
+			Resources: []string{bootstrapEventSourceARN},
+			Condition: taggedByOcel(),
+		},
+		{
+			Actions: []string{
+				"scheduler:CreateScheduleGroup",
+				"scheduler:DeleteScheduleGroup",
+				"scheduler:GetScheduleGroup",
+				"scheduler:ListTagsForResource",
+				"scheduler:TagResource",
+				"scheduler:UntagResource",
+			},
+			Resources: []string{appScheduleGroupARN},
+		},
+		{
+			Actions: []string{
+				"scheduler:CreateSchedule",
+				"scheduler:DeleteSchedule",
+				"scheduler:GetSchedule",
+				"scheduler:UpdateSchedule",
+			},
+			Resources: []string{appScheduleARN},
 		},
 		{
 			Actions:   []string{"iam:CreateServiceLinkedRole"},

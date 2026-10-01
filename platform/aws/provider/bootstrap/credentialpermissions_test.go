@@ -70,8 +70,6 @@ var bootstrapOnlyActions = []string{
 	"kms:CreateKey",
 	"kms:PutKeyPolicy",
 	"kms:ScheduleKeyDeletion",
-	"sqs:CreateQueue",
-	"sqs:DeleteQueue",
 }
 
 func parsePolicy(t *testing.T, document string) parsedPolicy {
@@ -646,15 +644,50 @@ func TestEveryCredentialReadsWritesAndDeletesTheKVTokensAndNoOtherParameterThatW
 	}
 }
 
-func TestTheBootstrapCredentialTouchesOnlyEventSourceMappingsOfItsOwnFunctions(t *testing.T) {
+func TestEveryCredentialTouchesOnlyEventSourceMappingsOfTheBootstrapsFunctionsOrOnesOcelTagged(t *testing.T) {
 	r := defaultNamespace.ScopedARNs()
-	want := conditionJSON(t, map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction}})
-	for g := range grantsOf(t, mustRender(t, BootstrapCredentialPermissions)) {
-		if !strings.HasSuffix(g.action, "EventSourceMapping") {
+	allowed := map[string]bool{
+		conditionJSON(t, map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction}}): true,
+		conditionJSON(t, taggedOnCreate()): true,
+		conditionJSON(t, taggedByOcel()):   true,
+	}
+	for purpose, document := range bothCredentials(t) {
+		for g := range grantsOf(t, document) {
+			if !strings.HasSuffix(g.action, "EventSourceMapping") {
+				continue
+			}
+			if !allowed[g.condition] {
+				t.Errorf("the %s credential grants %s on %s under %s, want it pinned to the bootstrap's own functions or to mappings Ocel tagged", purpose, g.action, g.resource, g.condition)
+			}
+		}
+	}
+}
+
+func TestTheDeployCredentialMakesAndRemovesOnlyTheQueuesTopicsAndSchedulesOfApps(t *testing.T) {
+	scoped := map[string][]string{
+		"sqs:CreateQueue":               {appQueueARN},
+		"sqs:DeleteQueue":               {appQueueARN},
+		"sns:CreateTopic":               {appTopicARN, appSubscriptionARN},
+		"sns:DeleteTopic":               {appTopicARN, appSubscriptionARN},
+		"scheduler:CreateSchedule":      {appScheduleARN},
+		"scheduler:DeleteSchedule":      {appScheduleARN},
+		"scheduler:CreateScheduleGroup": {appScheduleGroupARN},
+		"scheduler:DeleteScheduleGroup": {appScheduleGroupARN},
+	}
+	granted := map[string]bool{}
+	for g := range grantsOf(t, mustRender(t, DeployCredentialPermissions)) {
+		resources, watched := scoped[g.action]
+		if !watched {
 			continue
 		}
-		if g.condition != want {
-			t.Errorf("the bootstrap credential grants %s on %s under %s, want it pinned to the bootstrap's own functions through lambda:FunctionArn", g.action, g.resource, g.condition)
+		granted[g.action] = true
+		if !slices.Contains(resources, g.resource) {
+			t.Errorf("the deploy credential grants %s on %s, want it only on %v, the app scope a deploy names its queues, topics and schedules under", g.action, g.resource, resources)
+		}
+	}
+	for action := range scoped {
+		if !granted[action] {
+			t.Errorf("the deploy credential grants no %s, and a deploy of a task, topic or cron task needs it", action)
 		}
 	}
 }

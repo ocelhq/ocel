@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
 var pulumiTokens = map[string]string{
@@ -35,6 +36,11 @@ var pulumiTokens = map[string]string{
 	"aws:elasticache/replicationGroup:ReplicationGroup": "aws_elasticache_replication_group",
 	"aws:elasticache/parameterGroup:ParameterGroup":     "aws_elasticache_parameter_group",
 	"aws:elasticache/subnetGroup:SubnetGroup":           "aws_elasticache_subnet_group",
+
+	"aws:sqs/queue:Queue":                              "aws_sqs_queue",
+	"aws:sns/topic:Topic":                              "aws_sns_topic",
+	"aws:lambda/eventSourceMapping:EventSourceMapping": "aws_lambda_event_source_mapping",
+	"aws:scheduler/schedule:Schedule":                  "aws_scheduler_schedule",
 }
 
 func shapeRequest(t *testing.T) provider.ShapeRequest {
@@ -47,7 +53,7 @@ func shapeRequest(t *testing.T) provider.ShapeRequest {
 			Env:   "prod",
 			Infra: naming.InfraStack("prod"),
 			Apps: []provider.AppEntry{
-				{App: "web", Stack: naming.AppStack("prod", "web", release), Manifest: &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: "next"}, Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}}},
+				{App: "web", Stack: naming.AppStack("prod", "web", release), Manifest: &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: "next"}, Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}}, Workers: []provider.WorkerSpec{{Name: "worker"}, {Name: "ledger"}}},
 				{App: "api", Stack: naming.AppStack("prod", "api", release), Manifest: &contractv1.ManifestApp{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}, Instances: provider.Instances{Min: 1, Max: 1}},
 			},
 		},
@@ -56,6 +62,8 @@ func shapeRequest(t *testing.T) provider.ShapeRequest {
 			{Name: "uploads", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
 			{Name: "shared", Type: provider.BindingBucket, Binding: "elsewhere"},
 			{Name: "cache", Type: provider.BindingKV, KV: &provider.KVSpec{}},
+			taskResource("heartbeat", provider.ConsumerSpec{Worker: "worker"}, cronEveryMinute),
+			topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}, provider.ConsumerSpec{Name: "ledger-entry", Worker: "ledger"}),
 		},
 		Functions: map[string][]provider.FunctionSpec{
 			"web": {{Name: "fn--web--entry"}, {Name: "fn--web--admin", Route: "/admin"}},
@@ -136,6 +144,17 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 	}
 	run("container", containerWork.run)
 	run("container-infra", (&containerInfraWork{tier: environment.TierProduction, boundary: containerCfg.AppBoundaryARN}).run)
+	topicsRelease := &release{cfg: Config{Region: "us-east-1", StateTableARN: testStateTableARN}}
+	req := shapeRequest(t)
+	run("topics", func(pctx *pulumi.Context) error {
+		return topicsRelease.declareTopics(pctx, "shop", "prod", req.Resources)
+	})
+	hosted := &workersWork{
+		project: "shop", stack: workersStack("prod", "web"), topics: topicsOf("shop", "prod", req.Resources), workers: req.Deploy.Apps[0].Workers,
+		args: functionArgs{Runtime: defaultFunctionRuntime, Arch: "arm64", MemorySizeMB: 1024}, role: executionRole{App: "web", Boundary: testBoundaryARN},
+		region: "us-east-1", account: mockAccount, table: testStateTableARN, prefix: naming.TaskKeyPrefix("shop", "prod"), group: queues.ScheduleGroupName("shop", "prod"),
+	}
+	run("workers", hosted.run)
 	run(naming.InfraApp, func(pctx *pulumi.Context) error {
 		if err := registerPostgres(pctx, "shop", "prod", "main", translatePostgres(nil), "vpc-1", "10.0.0.0/16", []string{"subnet-a"}); err != nil {
 			return err
@@ -247,7 +266,7 @@ func TestAnAppWithNoBuildShapesOneFunction(t *testing.T) {
 	t.Parallel()
 
 	req := shapeRequest(t)
-	req.Functions = nil
+	req.Functions, req.Deploy.Apps[0].Workers = nil, nil
 	set := shaped(t, nil, req)
 
 	if got := countTypes(set)["aws_lambda_function"]; got != 2 {
@@ -292,6 +311,20 @@ func TestTransformsResizeTheShapeAndBindingOutputsStayUnknown(t *testing.T) {
 			if !slices.Contains(r.GetUnknown(), "vpc_config") {
 				t.Errorf("unknown = %v, want vpc_config, which a binding fills at deploy", r.GetUnknown())
 			}
+		}
+	}
+}
+
+func TestAnEphemeralPreviewShapesNoWorkerItWouldNotRun(t *testing.T) {
+	t.Parallel()
+
+	req := shapeRequest(t)
+	req.Deploy.Infra = naming.StackName{}
+	set := shaped(t, nil, req)
+
+	for _, r := range set.GetResources() {
+		if r.GetType() == "aws_lambda_function" && (r.GetName() == "worker" || r.GetName() == "ledger") {
+			t.Errorf("an ephemeral preview shapes worker %s, want none: a preview runs no workers", r.GetName())
 		}
 	}
 }

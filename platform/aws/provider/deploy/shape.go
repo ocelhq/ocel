@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -36,6 +37,11 @@ const (
 	tfElastiCacheParameterGroup   = "aws_elasticache_parameter_group"
 	tfElastiCacheSubnetGroup      = "aws_elasticache_subnet_group"
 	tfSSMParameter                = "aws_ssm_parameter"
+
+	tfSQSQueue           = "aws_sqs_queue"
+	tfSNSTopic           = "aws_sns_topic"
+	tfEventSourceMapping = "aws_lambda_event_source_mapping"
+	tfSchedulerSchedule  = "aws_scheduler_schedule"
 
 	lambdaDefaultMemoryMB    = 128
 	lambdaDefaultEphemeralMB = 512
@@ -72,6 +78,11 @@ func Shape(ctx context.Context, pass transform.Pass, region string, req provider
 				return err
 			}
 		}
+	}
+	topics := topicsOf(project, req.Deploy.Env, req.Resources)
+	shape.topics(scopes.Environment, topics)
+	if err := shape.workers(scopes.Environment, req, topics); err != nil {
+		return err
 	}
 	hasContainers := false
 	for _, app := range req.Deploy.Apps {
@@ -142,6 +153,87 @@ func (s costShape) functions(scope, project string, app provider.AppEntry, specs
 		s.add(scope, tfLambdaFunctionURL, spec.Name, map[string]any{"invoke_mode": args.InvokeMode}, names["url"])
 	}
 	return nil
+}
+
+func (s costShape) topics(scope string, topics []deployedTopic) {
+	for _, topic := range topics {
+		if topic.sns != "" {
+			s.plain(scope, tfSNSTopic, topic.resource.Declared, map[string]any{"fifo_topic": topic.declared.Ordered})
+		}
+		for _, queue := range topic.queues {
+			s.plain(scope, tfSQSQueue, queue.topic+"/"+queue.consumer.Name, map[string]any{"fifo_queue": queue.fifo})
+			s.plain(scope, tfSQSQueue, queue.topic+"/"+queue.consumer.Name+"/dead-letters", map[string]any{"fifo_queue": queue.fifo})
+		}
+	}
+}
+
+func (s costShape) workers(environment string, req provider.ShapeRequest, topics []deployedTopic) error {
+	if req.Deploy.Infra.IsZero() {
+		return nil
+	}
+	for _, app := range req.Deploy.Apps {
+		if len(app.Workers) == 0 || app.Compute() != provider.ComputeServerless {
+			continue
+		}
+		if err := s.appWorkers(environment, req, app, topics); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s costShape) appWorkers(environment string, req provider.ShapeRequest, app provider.AppEntry, topics []deployedTopic) error {
+	scope := s.tree.Scope(environment, pricing.ScopeApp, app.App)
+	args, err := workerFunctionArgs(app, req.Functions[app.App])
+	if err != nil {
+		return err
+	}
+	hosted := &workersWork{topics: topics}
+	for _, worker := range app.Workers {
+		s.plain(scope, tfLambdaFunction, worker.Name, map[string]any{
+			"runtime":           args.Runtime,
+			"memory_size":       args.MemorySizeMB,
+			"timeout":           int(workerTimeout(topics, worker.Name).Seconds()),
+			"architectures":     []any{args.Arch},
+			"ephemeral_storage": map[string]any{"size": lambdaDefaultEphemeralMB},
+		})
+		s.plain(scope, tfLogGroup, worker.Name, map[string]any{"retention_in_days": lambdaLogRetentionDays})
+		for _, queue := range hosted.served(worker.Name) {
+			s.plain(scope, tfEventSourceMapping, queue.topic+"/"+queue.consumer.Name, map[string]any{"batch_size": batchSize(queue.consumer)})
+		}
+		for _, task := range hosted.cronTasks(worker.Name) {
+			expressions, err := schedulerExpressions(task.declared.Cron)
+			if err != nil {
+				return fmt.Errorf("task %s: %w", task.resource.Declared, err)
+			}
+			for _, expression := range expressions {
+				s.plain(scope, tfSchedulerSchedule, task.resource.Declared, map[string]any{"schedule_expression": expression})
+			}
+		}
+	}
+	return nil
+}
+
+func batchSize(consumer provider.ConsumerSpec) int {
+	if consumer.Batch == nil {
+		return 1
+	}
+	return max(consumer.Batch.Size, 1)
+}
+
+func workerFunctionArgs(app provider.AppEntry, specs []provider.FunctionSpec) (functionArgs, error) {
+	framework := app.Manifest.GetFramework().GetName()
+	spec := provider.FunctionSpec{Name: app.App}
+	if len(specs) > 0 {
+		spec = specs[0]
+	}
+	if spec.Framework.Name == "" {
+		spec.Framework.Name = framework
+	}
+	if spec.Framework.Arch == "" {
+		spec.Framework.Arch = arch.Architecture(app.Manifest.GetFramework().GetArch())
+	}
+	return translateFunctionSpec(framework, spec)
 }
 
 func (s costShape) container(scope string, app provider.AppEntry) {

@@ -1,6 +1,7 @@
 package cron_test
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -14,6 +15,31 @@ func at(t *testing.T, text string) time.Time {
 		t.Fatal(err)
 	}
 	return parsed
+}
+
+func TestAScheduleNamesTheValuesEachFieldMatches(t *testing.T) {
+	t.Parallel()
+
+	schedule, err := cron.Parse("*/20 9-11 * JAN,jul 7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := schedule.Fields()
+	for name, tc := range map[string]struct {
+		got, want []int
+	}{
+		"minutes":  {fields.Minutes, []int{0, 20, 40}},
+		"hours":    {fields.Hours, []int{9, 10, 11}},
+		"months":   {fields.Months, []int{1, 7}},
+		"weekdays": {fields.Weekdays, []int{0}},
+	} {
+		if !slices.Equal(tc.got, tc.want) {
+			t.Errorf("%s = %v, want %v", name, tc.got, tc.want)
+		}
+	}
+	if len(fields.Days) != 31 || !fields.AnyDay || fields.AnyWeekday {
+		t.Errorf("days = %v (any %v), any weekday %v, want every day of the month named as any, and a weekday named", fields.Days, fields.AnyDay, fields.AnyWeekday)
+	}
 }
 
 func TestAScheduleFiresAtTheNextMinuteItMatchesAfterTheGivenTime(t *testing.T) {

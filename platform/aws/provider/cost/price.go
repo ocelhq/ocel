@@ -70,6 +70,7 @@ var (
 	tableStoreBand = pricing.Band{Light: 0.1, Moderate: 1, Heavy: 10}
 	apiCallsBand   = pricing.Band{Light: 1_000, Moderate: 10_000, Heavy: 100_000}
 	imagesBand     = pricing.Band{Light: 1, Moderate: 5, Heavy: 50}
+	scheduleBand   = pricing.Band{Light: 1_440, Moderate: 43_200, Heavy: 1_000_000}
 
 	thousand        = decimal.NewFromInt(1000)
 	secondsPerMonth = pricing.MonthlyHours.Mul(decimal.NewFromInt(secondsPerHour))
@@ -92,6 +93,8 @@ var formulas = pricing.Table{
 	"aws_dynamodb_table":              dynamoTable,
 	"aws_kms_key":                     kmsKey,
 	"aws_sqs_queue":                   queue,
+	"aws_sns_topic":                   topic,
+	"aws_scheduler_schedule":          schedule,
 	"aws_cloudfront_function":         cloudFrontFunction,
 	"aws_cloudfront_key_value_store":  free,
 	"aws_cloudfront_distribution":     distribution,
@@ -235,6 +238,18 @@ func queue(r *pricing.Subject) {
 		rate = "aws/sqs/requests-fifo"
 	}
 	r.Add(pricing.Component{Name: "Requests", Unit: "requests", Rate: rate, Quantity: r.Usage(usageRequests, writesBand), UsageBased: true})
+}
+
+func topic(r *pricing.Subject) {
+	rate := "aws/sns/requests"
+	if r.Bool("fifo_topic") {
+		rate = "aws/sns/requests-fifo"
+	}
+	r.Add(pricing.Component{Name: "Publish requests", Unit: "requests", Rate: rate, Quantity: r.Usage(usageRequests, writesBand), UsageBased: true})
+}
+
+func schedule(r *pricing.Subject) {
+	r.Add(pricing.Component{Name: "Invocations", Unit: "invocations", Rate: "aws/scheduler/invocations", Quantity: r.Usage(usageInvocations, scheduleBand), UsageBased: true})
 }
 
 func cloudFrontFunction(r *pricing.Subject) {

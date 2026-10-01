@@ -790,7 +790,7 @@ func runStorelessArtifactStore(t *testing.T, artifacts provider.ArtifactStore, r
 func declared(serves []provider.BindingType) []provider.Resource {
 	resources := make([]provider.Resource, 0, len(serves))
 	for _, kind := range serves {
-		resource := provider.Resource{Name: "c-" + string(kind), Type: kind}
+		resource := provider.Resource{Name: "c-" + string(kind), Declared: "c-" + string(kind), Type: kind}
 		switch kind {
 		case provider.BindingTopic:
 			resource.Topic = &provider.TopicSpec{Consumers: []provider.ConsumerSpec{{Name: "c-consumer", Worker: "c-worker", Retry: provider.ResolveRetryPolicy()}}}
