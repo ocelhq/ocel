@@ -497,6 +497,43 @@ func TestOneProjectsRunningContainerIsNeverReadAsAnothersUnderTheSameAppName(t *
 	}
 }
 
+func TestAReleasesRootTheLoginCannotReachIsNotCalledMissing(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("root enters every directory, so nothing here can be made unreachable")
+	}
+	shut := filepath.Join(releasesDir(t), "ocel")
+	root := filepath.Join(shut, "releases")
+	if err := os.MkdirAll(root, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(shut, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(shut, 0o750) })
+
+	said := unreachable(t, releasesScript, "OCEL_RELEASES_ROOT="+root, "shop/web", "reconcile", "ocel/shop/web")
+	if strings.Contains(said, "missing") || !strings.Contains(said, shut+": Permission denied") {
+		t.Errorf("the helper said %q, want %s named as denied rather than a missing directory to bootstrap again", said, shut)
+	}
+}
+
+func unreachable(t *testing.T, script []byte, env string, args ...string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "helper")
+	if err := os.WriteFile(path, script, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("/bin/sh", append([]string{path}, args...)...)
+	cmd.Env = append(os.Environ(), env)
+	said, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("the helper ran under a directory it cannot enter and exited 0 with %q", said)
+	}
+	return string(said)
+}
+
 func swept(rendered string) string { return strings.TrimSpace(rendered) }
 
 type dockerStub struct{ dir string }

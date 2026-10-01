@@ -12,6 +12,18 @@ abort() {
 	exit 2
 }
 
+reached() {
+	local p
+	p=$1
+	while [ "${p%/*}" != "$p" ]; do
+		p=${p%/*}
+		[ -n "$p" ] || return 0
+		if [ -d "$p" ] && [ ! -x "$p" ]; then
+			abort "$p: Permission denied to $(id -un)"
+		fi
+	done
+}
+
 keep=3
 
 [ $# -ge 2 ] || usage
@@ -28,6 +40,7 @@ project=${scope%/*}
 app=${scope#*/}
 
 root="${OCEL_RELEASES_ROOT:-/var/lib/ocel/releases}"
+reached "$root"
 [ -d "$root" ] || abort "$root is missing; run ocel bootstrap"
 
 lock() {
