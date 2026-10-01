@@ -1,7 +1,16 @@
 import { describe, expect, it } from "bun:test";
-import { NonzeroExitError, type Ran, recordOutput } from "./ocel";
+import { maskArgs, NonzeroExitError, type Ran, recordOutput } from "./ocel";
 
 const PRINTED = "connecting to redis://default:hunter2-in-clear@127.0.0.1:6379";
+
+describe("maskArgs", () => {
+  it("hides the value an env set writes, whatever flags come before the command", () => {
+    expect(maskArgs(["env", "set", "NONCE=held-back"])).toBe("env set <redacted>");
+    expect(maskArgs(["--config", "ocel.journey.json", "env", "set", "NONCE=held-back"])).toBe(
+      "--config ocel.journey.json env set <redacted>",
+    );
+  });
+});
 
 describe("recordOutput", () => {
   it("keeps what a command that succeeded printed", async () => {

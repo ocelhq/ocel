@@ -13,9 +13,8 @@ export type Ran = { code: number | null; stdout: string; stderr: string };
 export const COMMAND_LOG = "commands.jsonl";
 
 export function maskArgs(args: string[]): string {
-  const shown = args.map((arg, index) =>
-    args[0] === "env" && args[1] === "set" && index === 3 ? REDACTED : arg,
-  );
+  const at = args.findIndex((arg, index) => arg === "env" && args[index + 1] === "set");
+  const shown = args.map((arg, index) => (at >= 0 && index > at + 1 ? REDACTED : arg));
   return redact(shown.join(" "));
 }
 
