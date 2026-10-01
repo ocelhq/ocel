@@ -19,6 +19,7 @@ type Resource struct {
 	Consumer *resourcesv1.ConsumerConfig
 	Worker   *resourcesv1.WorkerConfig
 	KV       *resourcesv1.KvConfig
+	Realtime *resourcesv1.RealtimeConfig
 	Source   string
 }
 
@@ -43,6 +44,7 @@ func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
 		Consumer: req.GetConsumer(),
 		Worker:   req.GetWorker(),
 		KV:       req.GetKv(),
+		Realtime: req.GetRealtime(),
 		Source:   req.GetSource(),
 	}, nil
 }

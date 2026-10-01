@@ -206,3 +206,29 @@ func TestParseRecordsAKVStoreAndItsEntries(t *testing.T) {
 		t.Errorf("Parse KV = %v, want the store's eviction and both entries kept with their patterns and lines", res.KV)
 	}
 }
+
+func TestParseRecordsARealtimeResourceAndItsChannels(t *testing.T) {
+	t.Parallel()
+
+	res, err := Parse(&resourcesv1.DeclareRequest{
+		Resource: &resourcesv1.ResourceIdentifier{Name: "app", Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME},
+		Config: &resourcesv1.DeclareRequest_Realtime{Realtime: &resourcesv1.RealtimeConfig{
+			Channels: []*resourcesv1.RealtimeChannel{
+				{Pattern: "orders/:orderId", Subscribe: resourcesv1.RealtimeSubscribe_REALTIME_SUBSCRIBE_RULE, Publish: resourcesv1.RealtimePublish_REALTIME_PUBLISH_SERVER, Source: "src/realtime.ts:8"},
+				{Pattern: "projects/:projectId/deploys/:deployId", Wildcard: true, Schema: `{"type":"object"}`, Subscribe: resourcesv1.RealtimeSubscribe_REALTIME_SUBSCRIBE_RULE, Publish: resourcesv1.RealtimePublish_REALTIME_PUBLISH_RULE, Source: "src/realtime.ts:14"},
+				{Pattern: "status", Subscribe: resourcesv1.RealtimeSubscribe_REALTIME_SUBSCRIBE_PUBLIC, Publish: resourcesv1.RealtimePublish_REALTIME_PUBLISH_SERVER, Source: "src/realtime.ts:20"},
+			},
+		}},
+		Source: "src/realtime.ts:3",
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if res.Type != resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME || res.Name != "app" || res.Source != "src/realtime.ts:3" {
+		t.Errorf("Parse = %+v, want realtime app declared at src/realtime.ts:3", res)
+	}
+	channels := res.Realtime.GetChannels()
+	if len(channels) != 3 || !channels[1].GetWildcard() || channels[1].GetSource() != "src/realtime.ts:14" || channels[2].GetSubscribe() != resourcesv1.RealtimeSubscribe_REALTIME_SUBSCRIBE_PUBLIC {
+		t.Errorf("Parse Realtime = %v, want all three channels kept with their modes and lines", res.Realtime)
+	}
+}
