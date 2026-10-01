@@ -111,16 +111,16 @@ func pushBody(p push) []byte {
 	for name, value := range p.attributes {
 		attributes[name] = value
 	}
-	body, _ := json.Marshal(map[string]any{
-		"message": map[string]any{
-			"data":        base64.StdEncoding.EncodeToString([]byte(p.payload)),
-			"attributes":  attributes,
-			"messageId":   "17",
-			"publishTime": p.publishedAt.UTC().Format(time.RFC3339Nano),
-			"orderingKey": p.orderingKey,
-		},
-		"subscription": "projects/floci-local/subscriptions/whatever",
-	})
+	message := map[string]any{
+		"data":        base64.StdEncoding.EncodeToString([]byte(p.payload)),
+		"attributes":  attributes,
+		"messageId":   "17",
+		"orderingKey": p.orderingKey,
+	}
+	if !p.publishedAt.IsZero() {
+		message["publishTime"] = p.publishedAt.UTC().Format(time.RFC3339Nano)
+	}
+	body, _ := json.Marshal(map[string]any{"message": message, "subscription": "projects/floci-local/subscriptions/whatever"})
 	return body
 }
 
@@ -353,6 +353,25 @@ func TestLiveAMessageWithNoOcelIDTakesOneDrawnFromItsPubSubID(t *testing.T) {
 	execution := envelope.MessageIDFrom(at, "17") + "-resize"
 	if run := d.run(execution); run.Status != provider.RunCompleted {
 		t.Errorf("the scheduled run %s is %s, want completed", execution, run.Status)
+	}
+}
+
+func TestLiveAMessageWithNoOcelIDOrPublishTimeKeepsOneRunAcrossRedeliveries(t *testing.T) {
+	worker := newFakeWorker(t, always(http.StatusOK, `{}`))
+	d := newDelivering(t, worker)
+
+	for range 2 {
+		if code := d.push("resize", "resize", push{payload: `{}`}); !acked(code) {
+			t.Fatalf("the push answered %d, want it acked", code)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if received := worker.received(); len(received) != 1 {
+		t.Errorf("the worker got %d envelopes for one message delivered twice, want 1", len(received))
+	}
+	execution := envelope.MessageIDFrom(time.Unix(0, 0), "17") + "-resize"
+	if run := d.run(execution); run.Status != provider.RunCompleted {
+		t.Errorf("the run %s is %s, want completed", execution, run.Status)
 	}
 }
 
