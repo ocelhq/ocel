@@ -54,6 +54,11 @@ differently refuses rather than letting one win.
 | `function` | `lambda`, `url`, `urlPermission`, `logGroup`, `role` |
 | `bucket` | `bucket`, `publicAccessBlock`, `cors`, `uploadCompleterRole`, `uploadCompleterS3Policy`, `uploadCompleterSessionsPolicy`, `uploadCompleterLogsPolicy`, `uploadCompleterLogGroup`, `uploadCompleter`, `uploadCompleterPermission`, `notification` |
 | `postgres` | `securityGroup`, `subnetGroup`, `cluster`, `instance` |
+| `kv` | `securityGroup`, `subnetGroup`, `parameterGroup`, `replicationGroup` |
+
+A kv store's token, port, TLS, engine version and parameters stay ocel's, because its binding is
+made from them. Its node type and node count are yours: [one node](/docs/providers/aws#kv-stores)
+halves the cost and loses the data when ElastiCache replaces the node.
 
 ## On a VPS
 
