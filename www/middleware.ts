@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 const REPO = "https://github.com/ocelhq/ocel";
 
@@ -11,12 +11,15 @@ const GO_IMPORT = `<!doctype html>
 </html>
 `;
 
-export function middleware(): NextResponse {
-  return new NextResponse(GO_IMPORT, {
-    headers: { "content-type": "text/html; charset=utf-8" },
-  });
+export function middleware(request: NextRequest): NextResponse {
+  if (request.nextUrl.searchParams.get("go-get") === "1") {
+    return new NextResponse(GO_IMPORT, {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  }
+  return NextResponse.redirect(new URL("/docs", request.url));
 }
 
 export const config = {
-  matcher: [{ source: "/:path*", has: [{ type: "query", key: "go-get", value: "1" }] }],
+  matcher: [{ source: "/:path*", has: [{ type: "query", key: "go-get", value: "1" }] }, "/"],
 };
