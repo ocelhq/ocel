@@ -23,7 +23,7 @@ type recordedMessage struct {
 	Message string `json:"message"`
 }
 
-func (t Topics) topic(name string) (*contractv1.ManifestTopic, error) {
+func (t Topics) declared(name string) (*contractv1.ManifestTopic, error) {
 	topic, found := t.deployment.Declared[name]
 	if !found || isTask(topic) {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no topic named %q is deployed", name))
@@ -32,7 +32,7 @@ func (t Topics) topic(name string) (*contractv1.ManifestTopic, error) {
 }
 
 func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.SendResponse, error) {
-	topic, err := t.topic(req.GetTopic())
+	topic, err := t.declared(req.GetTopic())
 	if err != nil {
 		return nil, err
 	}

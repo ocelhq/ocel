@@ -18,8 +18,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func (t Topics) consumerOf(topicName, consumerName string) (*contractv1.ManifestTopic, error) {
-	topic, err := t.topic(topicName)
+func (t Topics) topicDeclaring(topicName, consumerName string) (*contractv1.ManifestTopic, error) {
+	topic, err := t.declared(topicName)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (s Store) deadLetters(topic, consumer string) (firestore.Query, error) {
 	return runs.Where("topic", "==", topic).Where("consumer", "==", consumer).Where("status", "==", string(provider.RunFailed)), nil
 }
 
-func (s Store) eachDeadLetter(ctx context.Context, topic, consumer string, executions []string, each func(runRecord) error) error {
+func (s Store) eachDeadLetter(ctx context.Context, topic, consumer string, executions []string, each func(storedRun) error) error {
 	query, err := s.deadLetters(topic, consumer)
 	if err != nil {
 		return err
@@ -57,11 +57,11 @@ func (s Store) eachDeadLetter(ctx context.Context, topic, consumer string, execu
 		if len(executions) > 0 && !slices.Contains(executions, snapshot.Ref.ID) {
 			continue
 		}
-		record, err := recordOf(snapshot)
+		run, err := storedRunOf(snapshot)
 		if err != nil {
 			return err
 		}
-		if err := each(record); err != nil {
+		if err := each(run); err != nil {
 			return err
 		}
 	}
@@ -83,8 +83,8 @@ func (s Store) removeDeadLetter(ctx context.Context, execution string) (bool, er
 		if err != nil || !found {
 			return err
 		}
-		record, err := recordOf(snapshot)
-		if err != nil || record.Status != provider.RunFailed {
+		run, err := storedRunOf(snapshot)
+		if err != nil || run.Status != provider.RunFailed {
 			return err
 		}
 		removed = true
@@ -126,45 +126,45 @@ func (t Topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLetter
 			resp.NextCursor = cursorOf(lastFinished, resp.GetDeadLetters()[limit-1].GetExecution())
 			return resp, nil
 		}
-		record, err := recordOf(snapshot)
+		run, err := storedRunOf(snapshot)
 		if err != nil {
 			return nil, err
 		}
-		lastFinished = record.FinishedAt
-		resp.DeadLetters = append(resp.DeadLetters, deadLetterOf(record))
+		lastFinished = run.FinishedAt
+		resp.DeadLetters = append(resp.DeadLetters, deadLetterOf(run))
 	}
 }
 
-func deadLetterOf(record runRecord) *topicv1.DeadLetter {
-	message := &topicv1.Message{Id: record.delivery.MessageID}
-	if record.delivery.PublishedAt != nil {
-		message.PublishedAt = timestamppb.New(*record.delivery.PublishedAt)
+func deadLetterOf(run storedRun) *topicv1.DeadLetter {
+	message := &topicv1.Message{Id: run.delivery.MessageID}
+	if run.delivery.PublishedAt != nil {
+		message.PublishedAt = timestamppb.New(*run.delivery.PublishedAt)
 	}
 	return &topicv1.DeadLetter{
-		Execution: record.Execution,
+		Execution: run.Execution,
 		Message:   message,
-		Payload:   record.Payload,
-		Attempts:  int32(record.Attempts),
-		Error:     record.Error,
-		FailedAt:  timestampOf(record.FinishedAt),
+		Payload:   run.Payload,
+		Attempts:  int32(run.Attempts),
+		Error:     run.Error,
+		FailedAt:  timestampOf(run.FinishedAt),
 	}
 }
 
 func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDeadLettersRequest) (*topicv1.RedriveDeadLettersResponse, error) {
-	topic, err := t.consumerOf(req.GetTopic(), req.GetConsumer())
+	topic, err := t.topicDeclaring(req.GetTopic(), req.GetConsumer())
 	if err != nil {
 		return nil, err
 	}
 	store := t.deployment.Store()
 	var redriven int64
-	err = store.eachDeadLetter(ctx, req.GetTopic(), req.GetConsumer(), req.GetExecutions(), func(letter runRecord) error {
+	err = store.eachDeadLetter(ctx, req.GetTopic(), req.GetConsumer(), req.GetExecutions(), func(letter storedRun) error {
 		now := time.Now()
-		_, err := store.changeRun(ctx, letter.Execution, func(record *runRecord, found bool) error {
-			if !found || record.Status != provider.RunFailed {
+		_, err := store.changeRun(ctx, letter.Execution, func(run *storedRun, found bool) error {
+			if !found || run.Status != provider.RunFailed {
 				return errRunUnchanged
 			}
-			record.Status, record.Attempts, record.Error, record.DueAt = provider.RunQueued, 0, "", now
-			record.StartedAt, record.FinishedAt = time.Time{}, time.Time{}
+			run.Status, run.Attempts, run.Error, run.DueAt = provider.RunQueued, 0, "", now
+			run.StartedAt, run.FinishedAt = time.Time{}, time.Time{}
 			return nil
 		})
 		if errors.Is(err, errRunUnchanged) {
@@ -187,13 +187,13 @@ func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDead
 	return &topicv1.RedriveDeadLettersResponse{Redriven: redriven}, nil
 }
 
-func (s Store) restoreDeadLetter(ctx context.Context, letter runRecord) error {
-	_, err := s.changeRun(ctx, letter.Execution, func(record *runRecord, found bool) error {
-		if !found || record.Status != provider.RunQueued || record.Attempts != 0 {
+func (s Store) restoreDeadLetter(ctx context.Context, letter storedRun) error {
+	_, err := s.changeRun(ctx, letter.Execution, func(run *storedRun, found bool) error {
+		if !found || run.Status != provider.RunQueued || run.Attempts != 0 {
 			return errRunUnchanged
 		}
-		record.Status, record.Attempts, record.Error, record.DueAt = provider.RunFailed, letter.Attempts, letter.Error, letter.DueAt
-		record.StartedAt, record.FinishedAt = letter.StartedAt, letter.FinishedAt
+		run.Status, run.Attempts, run.Error, run.DueAt = provider.RunFailed, letter.Attempts, letter.Error, letter.DueAt
+		run.StartedAt, run.FinishedAt = letter.StartedAt, letter.FinishedAt
 		return nil
 	})
 	if err != nil && !errors.Is(err, errRunUnchanged) {
@@ -205,7 +205,7 @@ func (s Store) restoreDeadLetter(ctx context.Context, letter runRecord) error {
 func (t Topics) PurgeDeadLetters(ctx context.Context, req *topicv1.PurgeDeadLettersRequest) (*topicv1.PurgeDeadLettersResponse, error) {
 	store := t.deployment.Store()
 	var purged int64
-	err := store.eachDeadLetter(ctx, req.GetTopic(), req.GetConsumer(), req.GetExecutions(), func(letter runRecord) error {
+	err := store.eachDeadLetter(ctx, req.GetTopic(), req.GetConsumer(), req.GetExecutions(), func(letter storedRun) error {
 		removed, err := store.removeDeadLetter(ctx, letter.Execution)
 		if removed {
 			purged++

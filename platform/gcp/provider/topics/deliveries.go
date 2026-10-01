@@ -146,15 +146,6 @@ func pushedRunOf(topicName string, topic *contractv1.ManifestTopic, consumer *co
 	return delivered
 }
 
-type scheduledPayload struct {
-	Timestamp string `json:"timestamp"`
-}
-
-func scheduledPayloadOf(fired time.Time) json.RawMessage {
-	payload, _ := json.Marshal(scheduledPayload{Timestamp: fired.UTC().Truncate(time.Minute).Format(time.RFC3339)})
-	return payload
-}
-
 func (p pushedRun) execution() string { return executionOf(p.messageID, p.consumer.GetName()) }
 
 func executionOf(messageID, consumer string) string { return messageID + "-" + consumer }
@@ -196,40 +187,40 @@ func (d Deliveries) deliver(ctx context.Context, delivered pushedRun) error {
 	return nil
 }
 
-func (d Deliveries) claim(ctx context.Context, delivered pushedRun) (runRecord, error) {
-	return d.Store.changeRun(ctx, delivered.execution(), func(record *runRecord, found bool) error {
+func (d Deliveries) claim(ctx context.Context, delivered pushedRun) (storedRun, error) {
+	return d.Store.changeRun(ctx, delivered.execution(), func(run *storedRun, found bool) error {
 		now := time.Now()
 		if !found {
-			startRecord(record, delivered)
+			startStoredRun(run, delivered)
 		}
-		if record.delivery.MaxAttempts == 0 {
-			record.delivery.MaxAttempts = delivered.maxAttempts
+		if run.delivery.MaxAttempts == 0 {
+			run.delivery.MaxAttempts = delivered.maxAttempts
 		}
-		if isFinished(record.Status) || isSuperseded(*record, delivered) {
+		if isFinished(run.Status) || isSuperseded(*run, delivered) {
 			return errRunUnchanged
 		}
-		if record.Attempts == 0 && !record.ExpiresAt.IsZero() && !record.ExpiresAt.After(now) {
-			record.Status, record.FinishedAt = provider.RunExpired, now
+		if run.Attempts == 0 && !run.ExpiresAt.IsZero() && !run.ExpiresAt.After(now) {
+			run.Status, run.FinishedAt = provider.RunExpired, now
 			return nil
 		}
-		record.Status, record.Error = provider.RunExecuting, ""
-		record.Attempts++
-		if record.StartedAt.IsZero() {
-			record.StartedAt = now
+		run.Status, run.Error = provider.RunExecuting, ""
+		run.Attempts++
+		if run.StartedAt.IsZero() {
+			run.StartedAt = now
 		}
 		return nil
 	})
 }
 
-func isSuperseded(record runRecord, delivered pushedRun) bool {
-	return delivered.delayTask != "" && delivered.delayTask != record.delivery.DelayTask
+func isSuperseded(run storedRun, delivered pushedRun) bool {
+	return delivered.delayTask != "" && delivered.delayTask != run.delivery.DelayTask
 }
 
-func startRecord(record *runRecord, delivered pushedRun) {
+func startStoredRun(run *storedRun, delivered pushedRun) {
 	publishedAt := delivered.publishedAt
-	record.Topic, record.Consumer = delivered.topicName, delivered.consumer.GetName()
-	record.Status, record.CreatedAt, record.DueAt = provider.RunQueued, publishedAt, delivered.dueAt
-	record.delivery = deliveryFields{
+	run.Topic, run.Consumer = delivered.topicName, delivered.consumer.GetName()
+	run.Status, run.CreatedAt, run.DueAt = provider.RunQueued, publishedAt, delivered.dueAt
+	run.delivery = deliveryFields{
 		MessageID:   delivered.messageID,
 		PublishedAt: &publishedAt,
 		MaxAttempts: delivered.maxAttempts,
@@ -238,14 +229,14 @@ func startRecord(record *runRecord, delivered pushedRun) {
 		DelayTask:   delivered.delayTask,
 	}
 	if ttl := delivered.topic.GetTtl().AsDuration(); ttl > 0 {
-		record.ExpiresAt = delivered.dueAt.Add(ttl)
+		run.ExpiresAt = delivered.dueAt.Add(ttl)
 	}
 	if isTask(delivered.topic) {
-		record.Payload = delivered.payload
+		run.Payload = delivered.payload
 	}
 }
 
-func envelopeOf(delivered pushedRun, claimed runRecord) *topicv1.Envelope {
+func envelopeOf(delivered pushedRun, claimed storedRun) *topicv1.Envelope {
 	message := &topicv1.Message{Id: delivered.messageID, PublishedAt: timestamppb.New(delivered.publishedAt)}
 	attempt := &topicv1.Attempt{
 		Number:           int32(claimed.Attempts),
@@ -268,15 +259,15 @@ func envelopeOf(delivered pushedRun, claimed runRecord) *topicv1.Envelope {
 
 func (d Deliveries) finish(ctx context.Context, delivered pushedRun, res envelope.Result) (bool, error) {
 	retry := false
-	_, err := d.Store.changeRun(ctx, delivered.execution(), func(record *runRecord, found bool) error {
-		if !found || record.Status != provider.RunExecuting {
+	_, err := d.Store.changeRun(ctx, delivered.execution(), func(run *storedRun, found bool) error {
+		if !found || run.Status != provider.RunExecuting {
 			return errRunUnchanged
 		}
 		now := time.Now()
 		settle := func(status provider.RunStatus, output json.RawMessage, reason string) {
-			record.Status, record.Output, record.Error, record.FinishedAt = status, output, reason, now
-			if status != provider.RunCompleted && len(record.Payload) == 0 {
-				record.Payload = delivered.payload
+			run.Status, run.Output, run.Error, run.FinishedAt = status, output, reason, now
+			if status != provider.RunCompleted && len(run.Payload) == 0 {
+				run.Payload = delivered.payload
 			}
 		}
 		switch res.Outcome {
@@ -295,11 +286,11 @@ func (d Deliveries) finish(ctx context.Context, delivered pushedRun, res envelop
 				return nil
 			}
 		}
-		if record.Attempts >= record.delivery.MaxAttempts {
+		if run.Attempts >= run.delivery.MaxAttempts {
 			settle(provider.RunFailed, nil, res.Reason)
 			return nil
 		}
-		record.Status, record.Error = provider.RunQueued, res.Reason
+		run.Status, run.Error = provider.RunQueued, res.Reason
 		retry = true
 		return nil
 	})
