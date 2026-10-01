@@ -195,6 +195,7 @@ func memorystoreInstance(r *pricing.Subject) {
 		r.Add(pricing.Component{Name: "Append-only persistence", Unit: "GB-hours", Rate: "gcp/memorystore/aof",
 			Quantity: r.Number("node_capacity_gb").Mul(nodes).Mul(pricing.MonthlyHours)})
 	}
+	r.Add(pricing.Component{Name: "Inter-zone data processed", Unit: "GiB", Rate: "gcp/psc/consumer-data-processing", Quantity: r.Usage(usageDataProcessed, egressBand), UsageBased: true})
 }
 
 func forwardingRule(r *pricing.Subject) {
