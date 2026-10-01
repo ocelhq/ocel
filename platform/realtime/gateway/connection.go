@@ -230,7 +230,7 @@ func (c *connection) subscribe(frame clientFrame) {
 func (c *connection) unsubscribe(frame clientFrame) {
 	unsubscribe, subscribed := c.subscriptions[frame.ID]
 	if !subscribed {
-		c.reply(errorFrame{Type: frameUnsubscribeError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorUnknownOp, Message: "unknown operation id " + frame.ID}}})
+		c.reply(errorFrame{Type: frameUnsubscribeError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorUnknownOp, Message: "Unknown operation id " + frame.ID}}})
 		return
 	}
 	unsubscribe()
