@@ -1,0 +1,5 @@
+error: field user names no param of pattern "orders/:order_id": the fields of Orders are its params.
+ --> tests/ui/channel_without_a_field_for_its_param.rs:7:5
+  |
+7 |     user: String,
+  |     ^^^^

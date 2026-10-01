@@ -1,0 +1,5 @@
+error: pattern "orders_x" has segment "orders_x", which is no literal: a literal is letters, digits and -, at most 50 characters, starting and ending with a letter or digit
+ --> tests/ui/channel_with_a_literal_no_transport_takes.rs:5:26
+  |
+5 | #[ocel(realtime = "app", pattern = "orders_x", event = Event, public)]
+  |                          ^^^^^^^

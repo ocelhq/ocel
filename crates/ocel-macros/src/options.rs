@@ -3,17 +3,21 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 pub(crate) fn parse_duration(entry: &Entry) -> syn::Result<TokenStream> {
+    let (seconds, nanos) = read_duration(entry)?;
+    Ok(quote!(::core::option::Option::Some(::core::time::Duration::new(#seconds, #nanos))))
+}
+
+pub(crate) fn read_duration(entry: &Entry) -> syn::Result<(u64, u32)> {
     let text = entry.read_literal()?;
-    let Some((seconds, nanos)) = parse_duration_text(text) else {
-        return Err(syn::Error::new(
+    parse_duration_text(text).ok_or_else(|| {
+        syn::Error::new(
             entry.span(),
             format!(
                 "'{}' is \"{text}\", and a duration is a whole number followed by ms, s, m, h or d, such as \"500ms\", \"30s\" or \"5m\".",
                 entry.name
             ),
-        ));
-    };
-    Ok(quote!(::core::option::Option::Some(::core::time::Duration::new(#seconds, #nanos))))
+        )
+    })
 }
 
 fn parse_duration_text(text: &str) -> Option<(u64, u32)> {

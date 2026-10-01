@@ -1,0 +1,5 @@
+error: pattern "status" sets wildcard, and a pattern with no params has no trailing param a subscriber could leave off.
+ --> tests/ui/channel_with_a_wildcard_and_no_params.rs:5:26
+  |
+5 | #[ocel(realtime = "app", pattern = "status", event = Event, wildcard, public)]
+  |                          ^^^^^^^

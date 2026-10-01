@@ -38,6 +38,20 @@ pub(crate) fn read_kv(name: &str) -> Result<KvProperties, Error> {
     }
 }
 
+#[cfg(feature = "realtime")]
+pub(crate) fn read_realtime(
+    name: &str,
+) -> Result<crate::proto::common::bindings::v1::RealtimeProperties, Error> {
+    match read_binding(&format!("OCEL_RESOURCE_REALTIME_{name}"), "REALTIME")? {
+        (Some(Properties::Realtime(properties)), _) => Ok(*properties),
+        (other, key) => Err(Error::WrongBindingType {
+            key,
+            found: describe_kind(&other),
+            expected: "REALTIME".to_string(),
+        }),
+    }
+}
+
 pub(crate) fn refuse_unbound_topic(name: &str) -> Result<(), Error> {
     match read_binding(&format!("OCEL_RESOURCE_TOPIC_{name}"), "TOPIC")? {
         (Some(Properties::Topic(_)), _) => Ok(()),
