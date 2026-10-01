@@ -95,11 +95,20 @@ func Prefix(prefix string) ListOption { return prefixOption(prefix) }
 
 type limitOption int32
 
-func (o limitOption) applyList(l *listOptions) { l.limit = int32(o) }
+func (o limitOption) applyList(l *listOptions)                      { l.limit = int32(o) }
+func (o limitOption) applyRunList(s *runListSettings)               { s.limit = int32(o) }
+func (o limitOption) applyDeadLetterList(s *deadLetterListSettings) { s.limit = int32(o) }
 
-// Limit is how many objects one page of a listing contains, at most 1000. The
-// listing itself is not bounded by it.
-func Limit(objects int) ListOption { return limitOption(objects) }
+// A LimitOption sizes a page of any listing: of a bucket's objects, of runs,
+// or of dead letters.
+type LimitOption interface {
+	ListOption
+	PageOption
+}
+
+// Limit is how many entries one page of a listing contains, at most 1000. A
+// bucket's List walks every page, so is not bounded by it.
+func Limit(entries int) LimitOption { return limitOption(entries) }
 
 type expiresOption time.Duration
 

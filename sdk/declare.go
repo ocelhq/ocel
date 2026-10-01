@@ -2,8 +2,11 @@ package ocel
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
+	"runtime"
+	"strings"
 
 	"connectrpc.com/connect"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
@@ -34,6 +37,22 @@ var authorizing = connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) conn
 		return next(ctx, req)
 	}
 })
+
+func readCallSite() string {
+	_, file, line, _ := runtime.Caller(2)
+	return fmt.Sprintf("%s:%d", file, line)
+}
+
+func declareResource(source string, req *resourcesv1.DeclareRequest) {
+	if !discovering() {
+		return
+	}
+	req.Source = source
+	if err := declare(req); err != nil {
+		kind := strings.ToLower(strings.TrimPrefix(req.GetResource().GetType().String(), "RESOURCE_TYPE_"))
+		panic(fmt.Sprintf("ocel: declare %s %q: %v", kind, req.GetResource().GetName(), err))
+	}
+}
 
 func declare(req *resourcesv1.DeclareRequest) error {
 	_, err := resources().Declare(context.Background(), req)

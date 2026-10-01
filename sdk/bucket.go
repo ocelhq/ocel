@@ -7,7 +7,6 @@ import (
 	"iter"
 	"net/http"
 	"net/url"
-	"os"
 	"runtime"
 	"sync"
 	"time"
@@ -94,12 +93,12 @@ type BucketStore struct {
 	singleCeiling int64
 	partSize      int64
 
-	once    sync.Once
-	reached *reachedBucket
-	err     error
+	once  sync.Once
+	bound *boundBucket
+	err   error
 }
 
-type reachedBucket struct {
+type boundBucket struct {
 	client        bucketv1connect.BucketServiceClient
 	bucket        string
 	publicBaseURL string
@@ -167,12 +166,12 @@ func (b *BucketStore) Delete(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return nil
 	}
-	reached, err := b.runtime("Delete")
+	bound, err := b.connect("Delete")
 	if err != nil {
 		return err
 	}
-	_, err = reached.client.Delete(ctx, &bucketv1.DeleteRequest{
-		Bucket: reached.bucket,
+	_, err = bound.client.Delete(ctx, &bucketv1.DeleteRequest{
+		Bucket: bound.bucket,
 		Keys:   keys,
 	})
 	return err
@@ -181,12 +180,12 @@ func (b *BucketStore) Delete(ctx context.Context, keys ...string) error {
 // Copy copies the object under src to dst within the same bucket. It reports
 // [ErrObjectNotFound] when the bucket has nothing under src.
 func (b *BucketStore) Copy(ctx context.Context, dst, src string) (*Object, error) {
-	reached, err := b.runtime("Copy")
+	bound, err := b.connect("Copy")
 	if err != nil {
 		return nil, err
 	}
-	res, err := reached.client.Copy(ctx, &bucketv1.CopyRequest{
-		Bucket:         reached.bucket,
+	res, err := bound.client.Copy(ctx, &bucketv1.CopyRequest{
+		Bucket:         bound.bucket,
 		SourceKey:      src,
 		DestinationKey: dst,
 	})
@@ -200,7 +199,7 @@ func (b *BucketStore) Copy(ctx context.Context, dst, src string) (*Object, error
 // first error it meets before stopping.
 func (b *BucketStore) List(ctx context.Context, opts ...ListOption) iter.Seq2[*Object, error] {
 	return func(yield func(*Object, error) bool) {
-		reached, err := b.runtime("List")
+		bound, err := b.connect("List")
 		if err != nil {
 			yield(nil, err)
 			return
@@ -211,8 +210,8 @@ func (b *BucketStore) List(ctx context.Context, opts ...ListOption) iter.Seq2[*O
 		}
 		cursor := ""
 		for {
-			res, err := reached.client.List(ctx, &bucketv1.ListRequest{
-				Bucket: reached.bucket,
+			res, err := bound.client.List(ctx, &bucketv1.ListRequest{
+				Bucket: bound.bucket,
 				Prefix: options.prefix,
 				Limit:  options.limit,
 				Cursor: cursor,
@@ -288,18 +287,18 @@ func (b *BucketStore) SignedUpload(ctx context.Context, key string, opts ...Sign
 // PublicURL is the address the object under key is served at anonymously. It
 // fails on a bucket that has no public address.
 func (b *BucketStore) PublicURL(key string) (*url.URL, error) {
-	reached, err := b.runtime("PublicURL")
+	bound, err := b.connect("PublicURL")
 	if err != nil {
 		return nil, err
 	}
-	if reached.publicBaseURL == "" {
+	if bound.publicBaseURL == "" {
 		return nil, fmt.Errorf(
 			"this bucket has no public address, so %q has no public url: "+
 				"declare the bucket with ocel.BucketPublic() and give the project a domain to serve it from",
 			key,
 		)
 	}
-	base, err := url.Parse(reached.publicBaseURL)
+	base, err := url.Parse(bound.publicBaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("the public address this bucket was delivered is not a url: %w", err)
 	}
@@ -307,12 +306,12 @@ func (b *BucketStore) PublicURL(key string) (*url.URL, error) {
 }
 
 func (b *BucketStore) head(ctx context.Context, access, key string) (*Object, error) {
-	reached, err := b.runtime(access)
+	bound, err := b.connect(access)
 	if err != nil {
 		return nil, err
 	}
-	res, err := reached.client.Head(ctx, &bucketv1.HeadRequest{
-		Bucket: reached.bucket,
+	res, err := bound.client.Head(ctx, &bucketv1.HeadRequest{
+		Bucket: bound.bucket,
 		Key:    key,
 	})
 	if err != nil {
@@ -333,12 +332,12 @@ func (b *BucketStore) sign(
 	constraints *bucketv1.SignConstraints,
 	expires time.Duration,
 ) (*bucketv1.PresignedTarget, error) {
-	reached, err := b.runtime(access)
+	bound, err := b.connect(access)
 	if err != nil {
 		return nil, err
 	}
 	req := &bucketv1.SignRequest{
-		Bucket:      reached.bucket,
+		Bucket:      bound.bucket,
 		Key:         key,
 		Operation:   operation,
 		Audience:    audience,
@@ -347,7 +346,7 @@ func (b *BucketStore) sign(
 	if expires > 0 {
 		req.ExpiresIn = durationpb.New(expires)
 	}
-	res, err := reached.client.Sign(ctx, req)
+	res, err := bound.client.Sign(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +357,7 @@ func (b *BucketStore) sign(
 	return target, nil
 }
 
-func (b *BucketStore) runtime(access string) (*reachedBucket, error) {
+func (b *BucketStore) connect(access string) (*boundBucket, error) {
 	if discovering() {
 		return nil, &UnprovisionedError{Resource: b.resource(), Access: access}
 	}
@@ -368,58 +367,23 @@ func (b *BucketStore) runtime(access string) (*reachedBucket, error) {
 			b.err = err
 			return
 		}
-		address := os.Getenv(runtimeAddressEnv)
-		if address == "" {
-			b.err = &unaddressedRuntimeError{}
-			return
-		}
-		token := os.Getenv(sessionTokenEnv)
-		if token == "" {
-			b.err = &untokenedRuntimeError{}
+		address, authorized, err := readRuntimeConnection()
+		if err != nil {
+			b.err = err
 			return
 		}
 		properties := delivered.GetBucket()
-		b.reached = &reachedBucket{
-			client: bucketv1connect.NewBucketServiceClient(b.http, address,
-				connect.WithInterceptors(bearing(token))),
+		b.bound = &boundBucket{
+			client:        bucketv1connect.NewBucketServiceClient(b.http, address, authorized),
 			bucket:        properties.GetBucket(),
 			publicBaseURL: properties.GetPublicBaseUrl(),
 		}
 	})
-	return b.reached, b.err
-}
-
-type unaddressedRuntimeError struct{}
-
-func (*unaddressedRuntimeError) Error() string {
-	return fmt.Sprintf(
-		"%s is not defined, so no resource the ocel runtime serves can be reached. "+
-			"Run `ocel dev` to serve it locally, or `ocel deploy` to have the deployed runtime's address delivered.",
-		runtimeAddressEnv,
-	)
-}
-
-type untokenedRuntimeError struct{}
-
-func (*untokenedRuntimeError) Error() string {
-	return fmt.Sprintf(
-		"%s is not defined, so the ocel runtime at %s would refuse every call. "+
-			"It is delivered beside %s by `ocel dev` and by the deployed runtime, never set by hand.",
-		sessionTokenEnv, runtimeAddressEnv, runtimeAddressEnv,
-	)
+	return b.bound, b.err
 }
 
 func (b *BucketStore) resource() string {
 	return fmt.Sprintf("bucket(%q)", b.name)
-}
-
-func bearing(token string) connect.Interceptor {
-	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			req.Header().Set("Authorization", bearer(token))
-			return next(ctx, req)
-		}
-	})
 }
 
 func objectFrom(wire *bucketv1.ObjectInfo) *Object {

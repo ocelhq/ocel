@@ -85,6 +85,10 @@ func typeOf(delivered *bindingsv1.Binding) bindingsv1.BindingType {
 		return bindingsv1.BindingType_BINDING_TYPE_BUCKET
 	case *bindingsv1.Binding_Custom:
 		return bindingsv1.BindingType_BINDING_TYPE_CUSTOM
+	case *bindingsv1.Binding_Topic:
+		return bindingsv1.BindingType_BINDING_TYPE_TOPIC
+	case *bindingsv1.Binding_Task:
+		return bindingsv1.BindingType_BINDING_TYPE_TASK
 	}
 	return bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED
 }
