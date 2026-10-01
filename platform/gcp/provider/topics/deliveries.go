@@ -22,6 +22,7 @@ import (
 const (
 	MessageAttribute     = "ocel-message"
 	PublishedAtAttribute = "ocel-published-at"
+	DueAtAttribute       = "ocel-due-at"
 	MaxAttemptsAttribute = "ocel-max-attempts"
 	LaneAttribute        = "ocel-lane"
 	ScheduleAttribute    = "ocel-schedule"
@@ -52,6 +53,7 @@ type pushedRun struct {
 	consumer    *contractv1.ManifestConsumer
 	messageID   string
 	publishedAt time.Time
+	dueAt       time.Time
 	payload     json.RawMessage
 	key         string
 	lane        string
@@ -124,6 +126,10 @@ func pushedRunOf(topicName string, topic *contractv1.ManifestTopic, consumer *co
 	}
 	if at, err := time.Parse(time.RFC3339Nano, attributes[PublishedAtAttribute]); err == nil {
 		delivered.publishedAt = at
+	}
+	delivered.dueAt = delivered.publishedAt
+	if at, err := time.Parse(time.RFC3339Nano, attributes[DueAtAttribute]); err == nil {
+		delivered.dueAt = at
 	}
 	if _, scheduled := attributes[ScheduleAttribute]; scheduled {
 		delivered.payload = scheduledPayloadOf(publishTime)
@@ -214,7 +220,7 @@ func (d Deliveries) claim(ctx context.Context, delivered pushedRun) (runRecord, 
 func startRecord(record *runRecord, delivered pushedRun) {
 	publishedAt := delivered.publishedAt
 	record.Topic, record.Consumer = delivered.topicName, delivered.consumer.GetName()
-	record.Status, record.CreatedAt, record.DueAt = provider.RunQueued, publishedAt, publishedAt
+	record.Status, record.CreatedAt, record.DueAt = provider.RunQueued, publishedAt, delivered.dueAt
 	record.delivery = deliveryFields{
 		MessageID:   delivered.messageID,
 		PublishedAt: &publishedAt,
@@ -223,7 +229,7 @@ func startRecord(record *runRecord, delivered pushedRun) {
 		Lane:        delivered.lane,
 	}
 	if ttl := delivered.topic.GetTtl().AsDuration(); ttl > 0 {
-		record.ExpiresAt = publishedAt.Add(ttl)
+		record.ExpiresAt = delivered.dueAt.Add(ttl)
 	}
 	if isTask(delivered.topic) {
 		record.Payload = delivered.payload

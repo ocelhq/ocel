@@ -84,6 +84,7 @@ func deployedTopics() map[string]*contractv1.ManifestTopic {
 		},
 		"slow": {Consumers: []*contractv1.ManifestConsumer{{Name: "slow", Worker: "worker", Exclusive: true, MaxDuration: durationpb.New(200 * time.Millisecond)}}},
 		"orders": {
+			Ttl:   durationpb.New(24 * time.Hour),
 			Retry: &resourcesv1.RetryPolicy{MaxAttempts: 2},
 			Consumers: []*contractv1.ManifestConsumer{
 				{Name: "ship", Worker: "worker", MaxDuration: durationpb.New(200 * time.Millisecond)},
@@ -371,6 +372,26 @@ func TestLiveABatchConsumerGetsEachMessageAsABatchOfOne(t *testing.T) {
 	_ = json.Unmarshal(received[0]["messages"], &deliveries)
 	if len(deliveries) != 1 || string(deliveries[0]["payload"]) != exactJSON {
 		t.Errorf("the batch envelope carries %s, want one delivery of %s", received[0]["messages"], exactJSON)
+	}
+}
+
+func TestLiveADelayedSendIsAgedFromItsDueTimeNotItsSendTime(t *testing.T) {
+	worker := newFakeWorker(t, always(http.StatusOK, `{}`))
+	d := newDelivering(t, worker)
+	sent := aMessage(`{}`)
+	sent.publishedAt = sent.publishedAt.Add(-48 * time.Hour)
+	due := time.Now().UTC().Truncate(time.Millisecond)
+	sent.attributes = map[string]string{topics.DueAtAttribute: due.Format(time.RFC3339Nano)}
+
+	if code := d.push("orders", "ship", sent); !acked(code) {
+		t.Fatalf("the push answered %d, want it acked", code)
+	}
+	if len(worker.received()) != 1 {
+		t.Fatal("a send due now with a day of ttl left never reached the worker")
+	}
+	run := d.run(sent.messageID + "-ship")
+	if run.Status != provider.RunCompleted || !run.DueAt.Equal(due) || !run.ExpiresAt.Equal(due.Add(24*time.Hour)) {
+		t.Errorf("the run is %s due %v expiring %v, want completed, due %v and expiring a ttl after it", run.Status, run.DueAt, run.ExpiresAt, due)
 	}
 }
 

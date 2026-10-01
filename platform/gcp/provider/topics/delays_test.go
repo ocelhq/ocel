@@ -112,7 +112,7 @@ func TestLiveADelayedTriggerWaitsInCloudTasksAndIsPublishedAtItsDueTime(t *testi
 
 func TestLiveADelayedSendWaitsInCloudTasks(t *testing.T) {
 	p := newDelayed(t)
-	due := time.Now().Add(time.Hour)
+	due := time.Now().Add(time.Hour).UTC().Truncate(time.Millisecond)
 
 	if _, err := p.deployment.Topics().Send(context.Background(), &topicv1.SendRequest{Topic: "orders", Payload: []byte(exactJSON), DueAt: timestamppb.New(due)}); err != nil {
 		t.Fatal(err)
@@ -128,7 +128,10 @@ func TestLiveADelayedSendWaitsInCloudTasks(t *testing.T) {
 	p.dispatch(tasks[0])
 	pulled := p.pull("orders", "ship")
 	if len(pulled) != 1 || pulled[0].payload() != exactJSON {
-		t.Errorf("once published the consumer's subscription holds %d messages, want the one sent with %s", len(pulled), exactJSON)
+		t.Fatalf("once published the consumer's subscription holds %d messages, want the one sent with %s", len(pulled), exactJSON)
+	}
+	if at, err := time.Parse(time.RFC3339Nano, pulled[0].Message.Attributes[topics.DueAtAttribute]); err != nil || !at.Equal(due) {
+		t.Errorf("the published message is due at %q, want %v so its run is aged from then", pulled[0].Message.Attributes[topics.DueAtAttribute], due)
 	}
 }
 
