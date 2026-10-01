@@ -16,7 +16,7 @@ export function parse(schema: StandardSchemaV1, value: unknown): ParseResult {
   return { ok: true, value: result.value };
 }
 
-function describeIssues(issues: ReadonlyArray<StandardSchemaV1.Issue>): string {
+export function describeIssues(issues: ReadonlyArray<StandardSchemaV1.Issue>): string {
   return issues
     .map((issue) => {
       const path = (issue.path ?? [])

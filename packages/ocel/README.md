@@ -36,6 +36,9 @@ Every entry point is a subpath — there is no root export.
 | `ocel/bucket/hono` | `bucket`, `uploader`, `createRouteHandler` returning a Hono handler |
 | `ocel/bucket/express` | `bucket`, `uploader`, `createRouteHandler` returning Express middleware |
 | `ocel/bucket/client` | `createUploadClient` — browser-side uploads against a bucket's uploaders |
+| `ocel/task` | `task(name, options)` — declares a task and returns the handle its runs are triggered through, plus `runs` and `AbortTaskRunError` |
+| `ocel/topic` | `topic(name, options?)` — declares a topic and returns the handle messages are sent through and consumers are declared on |
+| `ocel/worker` | `worker(name, options?)` — declares the worker tasks and consumers run on, plus `deliver`, which the generated worker entry calls |
 
 `next`, `hono`, `express`, and `pg` are optional peer dependencies; install only the one
 your app uses.
