@@ -158,9 +158,9 @@ func (c *client) subscribe(id, channel, tok string) map[string]any {
 	return c.read()
 }
 
-func envelope(t *testing.T, id, channel string, data any) string {
+func event(t *testing.T, data any) string {
 	t.Helper()
-	raw, err := json.Marshal(map[string]any{"v": 1, "id": id, "ch": channel, "ts": 1_790_000_000_000, "kind": "live", "data": data})
+	raw, err := json.Marshal(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func (h *harness) publish(tok, channel string, events ...string) (*http.Response
 	return resp, answer
 }
 
-func TestAServerPublishReachesASubscriberAsTheEnvelopeItSent(t *testing.T) {
+func TestAServerPublishReachesASubscriberAsTheEventItSent(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
@@ -199,7 +199,7 @@ func TestAServerPublishReachesASubscriberAsTheEnvelopeItSent(t *testing.T) {
 		t.Fatalf("subscribe answered %v, want subscribe_success for s-1", got)
 	}
 
-	sent := envelope(t, "e-1", channel, map[string]string{"status": "shipped"})
+	sent := event(t, map[string]string{"status": "shipped"})
 	resp, answer := h.publish(h.mint(token.Publish, channel), channel, sent)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("publish answered %s %v, want 200", resp.Status, answer)
@@ -219,7 +219,7 @@ func TestASubscriberThatStopsReadingIsDisconnectedWithoutHoldingUpThePublisher(t
 	channel := "/app/feed"
 	c.subscribe("s-1", channel, h.mint(token.Subscribe, channel))
 
-	large := envelope(t, "e", channel, strings.Repeat("x", 200<<10))
+	large := event(t, strings.Repeat("x", 200<<10))
 	started := time.Now()
 	for range 40 {
 		if resp, answer := h.publish(h.mint(token.Publish, channel), channel, large, large, large, large, large); resp.StatusCode != http.StatusOK {
@@ -274,7 +274,7 @@ func TestASubscribeTokenIsRefusedOnAnyChannelButTheOneItNames(t *testing.T) {
 		t.Fatalf("subscribe answered %v, want subscribe_error for s-1", got)
 	}
 
-	h.publish(h.mint(token.Publish, "/app/orders/o-2"), "/app/orders/o-2", envelope(t, "e-1", "/app/orders/o-2", "secret"))
+	h.publish(h.mint(token.Publish, "/app/orders/o-2"), "/app/orders/o-2", event(t, "secret"))
 	if frame, err := c.next(200 * time.Millisecond); err == nil {
 		t.Fatalf("a refused subscription received %v", frame)
 	}
@@ -358,7 +358,7 @@ func TestAnUnsubscribedChannelDeliversNothingMore(t *testing.T) {
 		t.Fatalf("unsubscribe answered %v, want unsubscribe_success for s-1", got)
 	}
 
-	h.publish(h.mint(token.Publish, channel), channel, envelope(t, "e-1", channel, "late"))
+	h.publish(h.mint(token.Publish, channel), channel, event(t, "late"))
 	if frame, err := c.next(200 * time.Millisecond); err == nil {
 		t.Fatalf("an unsubscribed connection received %v", frame)
 	}
@@ -371,7 +371,7 @@ func TestABrowserCannotPublishOverTheSocket(t *testing.T) {
 	c := h.connect()
 	channel := "/app/rooms/r-1"
 
-	c.send(map[string]any{"type": "publish", "id": "p-1", "channel": channel, "events": []string{envelope(t, "e-1", channel, "hi")}, "authorization": map[string]string{"Authorization": h.mint(token.Publish, channel)}})
+	c.send(map[string]any{"type": "publish", "id": "p-1", "channel": channel, "events": []string{event(t, "hi")}, "authorization": map[string]string{"Authorization": h.mint(token.Publish, channel)}})
 
 	if got := c.read(); got["type"] != "publish_error" || got["id"] != "p-1" {
 		t.Fatalf("publish answered %v, want publish_error for p-1", got)
@@ -384,14 +384,14 @@ func TestAServerPublishWithASubscribeTokenIsUnauthorized(t *testing.T) {
 	h := newHarness(t)
 	channel := "/app/orders/o-1"
 
-	resp, answer := h.publish(h.mint(token.Subscribe, channel), channel, envelope(t, "e-1", channel, "forged"))
+	resp, answer := h.publish(h.mint(token.Subscribe, channel), channel, event(t, "forged"))
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("publish answered %s %v, want 401", resp.Status, answer)
 	}
 }
 
-func TestAServerPublishRefusesAnEventOverTheSizeLimitOrNotAnEnvelopeOfItsChannel(t *testing.T) {
+func TestAServerPublishRelaysAnyJSONEventAndRefusesOneOverTheSizeLimitOrNotJSON(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
@@ -399,20 +399,28 @@ func TestAServerPublishRefusesAnEventOverTheSizeLimitOrNotAnEnvelopeOfItsChannel
 	channel := "/app/orders/o-1"
 	c.subscribe("s-1", channel, h.mint(token.Subscribe, channel))
 
-	oversized := envelope(t, "e-big", channel, strings.Repeat("x", gateway.MaxEventBytes))
-	elsewhere := envelope(t, "e-other", "/app/orders/o-2", "misaddressed")
-	fits := envelope(t, "e-ok", channel, "fits")
-	resp, answer := h.publish(h.mint(token.Publish, channel), channel, oversized, elsewhere, `"bare"`, fits)
+	oversized := event(t, strings.Repeat("x", gateway.MaxEventBytes))
+	object := `{"ch":"/app/orders/o-2","anything":true}`
+	bare := `"bare"`
+	resp, answer := h.publish(h.mint(token.Publish, channel), channel, oversized, object, "not json", bare)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("publish answered %s %v, want 200", resp.Status, answer)
 	}
 
 	failed, _ := answer["failed"].([]any)
 	successful, _ := answer["successful"].([]any)
-	if len(failed) != 3 || len(successful) != 1 || successful[0].(map[string]any)["identifier"] != "e-ok" {
-		t.Fatalf("publish answered %v, want three events failed and e-ok published", answer)
+	if len(failed) != 2 || len(successful) != 2 {
+		t.Fatalf("publish answered %v, want the oversized and the non-JSON event failed and the other two published", answer)
 	}
-	if got := c.read(); got["event"] != fits {
-		t.Fatalf("subscriber got %v, want only the event that fits", got)
+	for _, published := range successful {
+		if identifier, _ := published.(map[string]any)["identifier"].(string); identifier == "" {
+			t.Fatalf("publish answered %v, want every published event given an identifier", answer)
+		}
+	}
+	if got := c.read(); got["event"] != object {
+		t.Fatalf("subscriber got %v, want %s as published", got, object)
+	}
+	if got := c.read(); got["event"] != bare {
+		t.Fatalf("subscriber got %v, want %s as published", got, bare)
 	}
 }
