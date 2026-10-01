@@ -113,8 +113,12 @@ func (p *Provider) resourceHooks() resources.Hooks {
 	}
 }
 
-func (p *Provider) Bootstrap(edge.Kind) (provider.Bootstrap, error) {
-	return elevating{Bootstrap: host.NewBootstrap(p.host, Vendor, p.project), elevated: p.elevated}, nil
+func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
+	bootstrap := elevating{Bootstrap: host.NewBootstrap(p.host, Vendor, p.project), elevated: p.elevated}
+	if kind == edge.None {
+		bootstrap.served = p.refuseServingPortsClosedFromOutside
+	}
+	return bootstrap, nil
 }
 
 func (p *Provider) Stacks() provider.Stacks {

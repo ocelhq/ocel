@@ -20,15 +20,20 @@ func (p *Provider) elevated(ctx context.Context) error {
 type elevating struct {
 	provider.Bootstrap
 	elevated func(context.Context) error
+	served   func(context.Context, environment.Tier) error
 }
 
 func (e elevating) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	if !req.Repair {
-		if err := e.elevated(ctx); err != nil {
-			return err
-		}
+	if req.Repair {
+		return e.Bootstrap.Apply(ctx, req, progress)
 	}
-	return e.Bootstrap.Apply(ctx, req, progress)
+	if err := e.elevated(ctx); err != nil {
+		return err
+	}
+	if err := e.Bootstrap.Apply(ctx, req, progress); err != nil || e.served == nil {
+		return err
+	}
+	return e.served(ctx, req.Tier)
 }
 
 func (e elevating) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {

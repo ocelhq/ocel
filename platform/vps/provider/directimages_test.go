@@ -14,18 +14,10 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
-
-type warned struct {
-	progress.Log
-	lines []string
-}
-
-func (w *warned) Warn(message string) { w.lines = append(w.lines, message) }
 
 func timedImagesOn(t *testing.T, machine *box, step time.Duration) provider.ImageStore {
 	t.Helper()
@@ -83,7 +75,7 @@ func imageOf(t *testing.T, size int64) v1.Image {
 func TestASlowTransferWarnsWithItsDurationAndPointsAtTheRegistryDocs(t *testing.T) {
 	daemonServing(t, "tar-bytes")
 	store := timedImagesOn(t, &box{drains: true}, 48*time.Second)
-	log := &warned{Log: progress.Discard()}
+	log := &warned{}
 	push := aPush(t)
 	push.Built = imageOf(t, 120_000_000)
 
@@ -114,7 +106,7 @@ func TestAPullFromARegistryDoesNotWarnHoweverLongItTakes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log := &warned{Log: progress.Discard()}
+	log := &warned{}
 
 	if err := store.Push(context.Background(), aPull(target), log); err != nil {
 		t.Fatalf("Push() = %v", err)
@@ -127,7 +119,7 @@ func TestAPullFromARegistryDoesNotWarnHoweverLongItTakes(t *testing.T) {
 func TestALargeTransferWarnsWithItsSizeEvenWhenItWasQuick(t *testing.T) {
 	daemonServing(t, "tar-bytes")
 	store := timedImagesOn(t, &box{drains: true}, time.Second)
-	log := &warned{Log: progress.Discard()}
+	log := &warned{}
 	push := aPush(t)
 	push.Built = imageOf(t, 320_000_000)
 
@@ -147,7 +139,7 @@ func TestALargeTransferWarnsWithItsSizeEvenWhenItWasQuick(t *testing.T) {
 func TestAQuickSmallTransferDoesNotWarn(t *testing.T) {
 	daemonServing(t, "tar-bytes")
 	store := timedImagesOn(t, &box{}, time.Second)
-	log := &warned{Log: progress.Discard()}
+	log := &warned{}
 
 	if err := store.Push(context.Background(), aPush(t), log); err != nil {
 		t.Fatalf("Push() = %v", err)

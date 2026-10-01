@@ -136,6 +136,7 @@ func preflighting(machine *scripted) error {
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
+	p.Reaching(reachedFromOutside)
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
 	if err != nil {
 		return err
@@ -154,6 +155,7 @@ func preflightingInstances(machine *scripted, instances provider.Instances) erro
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
+	p.Reaching(reachedFromOutside)
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
 	if err != nil {
 		return err

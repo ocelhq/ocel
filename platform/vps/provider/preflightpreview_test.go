@@ -26,6 +26,7 @@ func newBoxServingPreviews(t *testing.T, base string) *scripted {
 func preflightTier(machine *scripted, options vps.Options, tier environment.Tier) error {
 	options.SSH = vps.Target{Host: "box.invalid", User: "ada"}
 	p := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
+	p.Reaching(reachedFromOutside)
 	stack, err := naming.ParseStackName("pr-7--web--r0a1b2c3d")
 	if err != nil {
 		return err
