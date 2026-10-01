@@ -210,3 +210,17 @@ func TestATriggeredRunIsPostedToItsWorkerAsAnEnvelopeAndCompletesWithTheWorkersA
 		t.Errorf("run = %v, want one attempt of resize, tagged, started and finished", run)
 	}
 }
+
+func TestARunWaitingOnAnUnservedWorkerRunsOnceALaterDeploymentServesIt(t *testing.T) {
+	worker := newWorker(t, succeeding)
+	topics := map[string]*contractv1.ManifestTopic{"resize": aTask()}
+	engine := dispatching(t, topics, map[string]Worker{"other": {URL: worker.server.URL}})
+	id := trigger(t, engine, "resize", `{}`, nil)
+	time.Sleep(500 * time.Millisecond)
+
+	served := map[string]Worker{"other": {URL: worker.server.URL}, "worker": {URL: worker.server.URL}}
+	if err := engine.Apply(context.Background(), Deployment{Topics: topics, Workers: served}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_COMPLETED)
+}

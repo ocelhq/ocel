@@ -27,11 +27,12 @@ type Config struct {
 type Engine struct {
 	pool *pgxpool.Pool
 
-	mu         sync.Mutex
-	deployment Deployment
-	applied    chan struct{}
-	wakes      map[string]chan struct{}
-	inFlight   map[string]context.CancelFunc
+	mu          sync.Mutex
+	deployment  Deployment
+	workerSlots map[string]*slots
+	applied     chan struct{}
+	wakes       map[string]chan struct{}
+	inFlight    map[string]context.CancelFunc
 }
 
 func Open(ctx context.Context, cfg Config) (*Engine, error) {
@@ -55,10 +56,11 @@ func Open(ctx context.Context, cfg Config) (*Engine, error) {
 		return nil, err
 	}
 	return &Engine{
-		pool:     pool,
-		applied:  make(chan struct{}, 1),
-		wakes:    map[string]chan struct{}{},
-		inFlight: map[string]context.CancelFunc{},
+		pool:        pool,
+		workerSlots: map[string]*slots{},
+		applied:     make(chan struct{}, 1),
+		wakes:       map[string]chan struct{}{},
+		inFlight:    map[string]context.CancelFunc{},
 	}, nil
 }
 
