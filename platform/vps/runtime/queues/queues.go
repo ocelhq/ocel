@@ -92,7 +92,7 @@ func (h *Engines) Run(ctx context.Context) {
 		}
 		select {
 		case <-ctx.Done():
-			h.closeAll()
+			h.Close()
 			return
 		case <-ticker.C:
 		}
@@ -270,7 +270,7 @@ func (h *Engines) forget(id queueID) {
 	}
 }
 
-func (h *Engines) closeAll() {
+func (h *Engines) Close() {
 	h.mu.Lock()
 	served := h.served
 	h.served = nil
