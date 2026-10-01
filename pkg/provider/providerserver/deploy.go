@@ -1062,6 +1062,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					DiscoveredHealthCheckPath: discovered,
 					Arch:                      entry.Arch,
 					Instances:                 entry.Instances,
+					Workers:                   entry.Workers,
 					Values:                    values,
 					Grants:                    grants,
 					Routing:                   facts.OriginDispatch,

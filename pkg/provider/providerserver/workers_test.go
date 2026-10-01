@@ -3,6 +3,7 @@ package providerserver_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -84,6 +85,7 @@ func TestADeployDeclaringATaskIsRefusedAtPreflightBeforeAnythingUploads(t *testi
 
 	req := deployRequest()
 	req.Manifest.Resources = append(req.Manifest.Resources, topicResource(resourcesv1.ResourceType_RESOURCE_TYPE_TASK, "resize-image"))
+	req.Manifest.Workers = []*contractv1.ManifestWorker{{Name: "worker", App: "web", Compute: string(provider.ComputeServerless)}}
 	stream, err := client.Deploy(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
@@ -105,6 +107,31 @@ func TestADeployDeclaringATaskIsRefusedAtPreflightBeforeAnythingUploads(t *testi
 	}
 	if ran := vendor.Preflighted(); len(ran) != 0 {
 		t.Errorf("the vendor's own preflight ran %d times, want the refusal to come first", len(ran))
+	}
+}
+
+func TestADeployHandsEachAppStackTheWorkersThatJoinIt(t *testing.T) {
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)).WithFacts(func(facts *provider.Facts) {
+		facts.WorkerCeilings = []provider.WorkerCeiling{{Compute: provider.ComputeServerless, MaxDuration: 15 * time.Minute}}
+	})
+	client := servedBy(t, vendor)
+
+	req := twoAppRequest()
+	req.Manifest.Workers = []*contractv1.ManifestWorker{{Name: "media", Concurrency: 4, App: "admin", Compute: string(provider.ComputeServerless)}}
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	workers := map[string][]provider.WorkerSpec{}
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.App != nil {
+			workers[spec.App.App] = spec.App.Workers
+		}
+	}
+	want := map[string][]provider.WorkerSpec{"web": nil, "admin": {{Name: "media", Concurrency: 4}}}
+	if !reflect.DeepEqual(workers, want) {
+		t.Errorf("app stacks were handed workers %+v, want %+v", workers, want)
 	}
 }
 

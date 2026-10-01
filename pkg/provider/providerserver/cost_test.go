@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -134,6 +136,59 @@ func TestShapeOfAPersistentPreviewPricesTheResourcesItProvisions(t *testing.T) {
 	}
 	if types := countShapedTypes(set); types[fake.TypePostgres] != 1 || types[fake.TypeBucket] != 1 {
 		t.Errorf("shaped types = %v, want the postgres and the bucket its infra stack provisions", types)
+	}
+}
+
+type shapeRecorded struct {
+	provider.Provider
+	shaped *provider.ShapeRequest
+}
+
+func (s shapeRecorded) Hooks() provider.Hooks {
+	hooks := s.Provider.Hooks()
+	shape := hooks.Cost.Shape
+	hooks.Cost = &provider.CostHooks{
+		Shape: func(ctx context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
+			*s.shaped = req
+			return shape(ctx, req)
+		},
+		Estimate: hooks.Cost.Estimate,
+	}
+	return hooks
+}
+
+func TestShapeHandsTheProviderEachConsumerScheduleAndWorkerItWouldRun(t *testing.T) {
+	recorded := shapeRecorded{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), shaped: &provider.ShapeRequest{}}
+	client, _ := costServed(t, recorded)
+	req := shapeRequest()
+	req.Manifest.Workers = []*contractv1.ManifestWorker{{Name: "media", App: "admin", Compute: string(provider.ComputeServerless)}}
+	req.Manifest.Resources = append(req.Manifest.Resources, &contractv1.ManifestResource{
+		LogicalName: "task--nightly-report",
+		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: "nightly-report"},
+		Config: &contractv1.ManifestResource_Topic{Topic: &contractv1.ManifestTopic{
+			Cron:      "0 3 * * *",
+			Consumers: []*contractv1.ManifestConsumer{{Name: "nightly-report", Worker: "media", Exclusive: true}},
+		}},
+	})
+
+	if _, err := client.Shape(context.Background(), req); err != nil {
+		t.Fatalf("Shape() error = %v", err)
+	}
+	var task *provider.TopicSpec
+	for _, resource := range recorded.shaped.Resources {
+		if resource.Type == provider.BindingTask {
+			task = resource.Topic
+		}
+	}
+	if task == nil || task.Cron != "0 3 * * *" || len(task.Consumers) != 1 || task.Consumers[0].Worker != "media" {
+		t.Errorf("shaped task = %+v, want its schedule and its one consumer on worker media", task)
+	}
+	workers := map[string][]provider.WorkerSpec{}
+	for _, app := range recorded.shaped.Deploy.Apps {
+		workers[app.App] = app.Workers
+	}
+	if want := []provider.WorkerSpec{{Name: "media"}}; !reflect.DeepEqual(workers["admin"], want) {
+		t.Errorf("shaped admin workers = %+v, want %+v", workers["admin"], want)
 	}
 }
 

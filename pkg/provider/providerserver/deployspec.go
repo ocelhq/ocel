@@ -49,11 +49,16 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 	if !ephemeral(env) {
 		spec.Infra = naming.InfraStack(name)
 	}
+	workers, err := workersByApp(manifest)
+	if err != nil {
+		return provider.DeploySpec{}, err
+	}
 	for _, app := range manifest.GetApps() {
 		entry, err := appEntry(app, name, promotionID)
 		if err != nil {
 			return provider.DeploySpec{}, err
 		}
+		entry.Workers = workers[entry.App]
 		spec.Builds[entry.App] = entry.Build.String()
 		spec.Apps = append(spec.Apps, entry)
 	}
