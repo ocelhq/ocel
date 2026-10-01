@@ -6,6 +6,7 @@ export * from "./nextCache";
 export * from "./nextRouting";
 export * from "./probes";
 export * from "./product";
+export * from "./realtime";
 export * from "./static";
 export * from "./tasks";
 export * from "./wire";

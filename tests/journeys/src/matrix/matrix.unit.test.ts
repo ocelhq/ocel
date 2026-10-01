@@ -7,6 +7,12 @@ import {
   nextDataCacheChecks,
   nextOriginCacheChecks,
   nextOriginDataCacheChecks,
+  realtimeEventSizeCheck,
+  realtimePublicCheck,
+  realtimeReauthorizeCheck,
+  realtimeRelayedPublishCheck,
+  realtimeRuleAllowsCheck,
+  realtimeWildcardCheck,
 } from "../checks";
 import { NO_FILTER, plan, type RunFilter } from "../plan";
 import { filterFrom } from "../run/filter";
@@ -284,6 +290,51 @@ describe("the tasks concern", () => {
         expect(refusal?.reason).toMatch(/topics, tasks and workers are unsupported/);
       }
       expect(planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name)).toContain("tasks/node");
+    }
+  });
+});
+
+describe("the realtime concern", () => {
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+
+  it("runs the behavioural suite on dev, expecting red only what needs a server publish to reach the gateway", () => {
+    const planned = planOn("dev");
+    expect(planned.cells.map((cell) => cell.name)).toContain("realtime/node");
+    const listed = Object.entries(planned.expectedFailures["realtime/node/web"] ?? {}).map(
+      ([title, gaps]) => [title, gaps.map((gap) => gap.issue)],
+    );
+    expect(Object.fromEntries(listed)).toEqual(
+      Object.fromEntries(
+        [
+          realtimeRuleAllowsCheck,
+          realtimePublicCheck,
+          realtimeWildcardCheck,
+          realtimeRelayedPublishCheck,
+          realtimeReauthorizeCheck,
+          realtimeEventSizeCheck,
+        ].map((one) => [one.title, [1540]]),
+      ),
+    );
+  });
+
+  it("skips the suite on aws, gcp and a box with the provider's refusal, under each target's ticket", () => {
+    const tickets = {
+      aws: 1514,
+      "aws.floci": 1514,
+      gcp: 1515,
+      "gcp.floci": 1515,
+      vps: 1516,
+      "vps.incus": 1516,
+    } as const;
+    for (const [lane, issue] of Object.entries(tickets) as [Lane, number][]) {
+      const planned = planOn(lane);
+      const skipped = Object.keys(planned.skipped).filter((cell) => cell.startsWith("realtime/"));
+      expect(skipped).toEqual(["realtime/node"]);
+      const refusal = planned.skipped["realtime/node"]?.find((gap) => gap.issue === issue);
+      expect(refusal?.reason).toMatch(/realtime is unsupported/);
+      expect(planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name)).toContain(
+        "realtime/node",
+      );
     }
   });
 });

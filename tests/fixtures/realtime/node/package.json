@@ -1,0 +1,22 @@
+{
+  "name": "@ocel-fixtures/realtime-node",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "~5.0.0",
+    "ocel": "workspace:^",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "~5.0.0",
+    "@types/node": "^20",
+    "tsx": "^4.19.2",
+    "typescript": "^5"
+  }
+}
