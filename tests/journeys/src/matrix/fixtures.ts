@@ -3,6 +3,7 @@ import {
   envChecks,
   healthChecks,
   httpProbeChecks,
+  kvChecks,
   nativeModuleChecks,
   nextCacheChecks,
   nextDataCacheChecks,
@@ -54,6 +55,7 @@ const NEXT_STATE_AND_DATA_CACHE_CHECKS = [
   ...nextOriginDataCacheChecks,
 ];
 const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
+const KV_CHECKS = [...healthChecks, ...staticChecks, ...kvChecks];
 
 export const deploy = {
   node: fixture("deploy/node", {
@@ -166,6 +168,11 @@ export const sdk = {
       vps: [defaults],
     },
     sample: { group: "node-http", representative: true },
+  }),
+  kv: fixture("sdk/kv", {
+    apps: ["web"],
+    checks: KV_CHECKS,
+    on: { dev: [defaults], vps: [defaults] },
   }),
   withTransforms: fixture("sdk/with-transforms", {
     apps: ["web"],
