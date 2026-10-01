@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
 import { Lane, type SendRequest, TopicService } from "../gen/proto/app/topic/v1/topic_pb.js";
+import { EXACT_JSON, parseKeepingNumberText } from "../testing/exact-json.js";
 import { type RuntimeProxy, serveRuntimeProxy } from "../testing/runtime-proxy.js";
 
 const declareMock = vi.hoisted(() => vi.fn((_req: unknown) => Promise.resolve({})));
@@ -151,6 +152,18 @@ describe("a topic at runtime", () => {
     expect(sends[0]?.topic).toBe("orders");
     expect(new TextDecoder().decode(sends[0]?.payload)).toBe('{"id":"o1"}');
     expect(proxy.authorizations).toEqual(["Bearer session-token"]);
+  });
+
+  it("sends to the declared name though the binding names another, with the payload's JSON text unchanged", async () => {
+    vi.stubEnv(
+      "OCEL_RESOURCE_TOPIC_measures",
+      JSON.stringify({ name: "physical-measures", topic: {} }),
+    );
+
+    await topic("measures").send(parseKeepingNumberText(EXACT_JSON));
+
+    expect(sends[0]?.topic).toBe("measures");
+    expect(new TextDecoder().decode(sends[0]?.payload)).toBe(EXACT_JSON);
   });
 
   it("sends every send option, the delay as the time the message is due", async () => {
