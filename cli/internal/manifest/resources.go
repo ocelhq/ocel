@@ -23,9 +23,11 @@ type declaredResource struct {
 	Consumer *resourcesv1.ConsumerConfig
 	Worker   *resourcesv1.WorkerConfig
 	KV       *resourcesv1.KvConfig
+	Realtime *resourcesv1.RealtimeConfig
 	Source   string
 
-	KVEntries []declaredEntry
+	KVEntries        []declaredEntry
+	RealtimeChannels []declaredChannel
 }
 
 type declarationKind struct {
@@ -151,10 +153,14 @@ func declaredResources(configDir string, resources []declaration.Resource) []dec
 			Consumer: r.Consumer,
 			Worker:   r.Worker,
 			KV:       r.KV,
+			Realtime: r.Realtime,
 			Source:   source,
 		}
 		if r.KV != nil {
 			declared[i].KVEntries = declaredEntries(configDir, r.KV, source)
+		}
+		if r.Realtime != nil {
+			declared[i].RealtimeChannels = declaredChannels(configDir, r.Realtime, source)
 		}
 	}
 	return declared
@@ -210,6 +216,12 @@ func manifestResources(declarations []declaredResource, topics map[string]*contr
 				return nil, nil, err
 			}
 			resource.Config = &contractv1.ManifestResource_Kv{Kv: manifestKV(d)}
+		}
+		if d.Realtime != nil {
+			if err := firstRefusal(refuseInvalidName(d, d.Name), refuseRealtime(d)); err != nil {
+				return nil, nil, err
+			}
+			resource.Config = &contractv1.ManifestResource_Realtime{Realtime: manifestRealtime(d)}
 		}
 		if topic, found := topics[d.Name]; found && declaredKind.declaresTopic {
 			resource.Config = &contractv1.ManifestResource_Topic{Topic: topic}
