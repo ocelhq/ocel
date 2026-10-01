@@ -12,14 +12,15 @@ import (
 )
 
 type valueSource struct {
-	id     string
-	values map[string]string
+	id       string
+	ownStore bool
+	values   map[string]string
 }
 
 func readValueSource(ctx context.Context, cfg *project.Project) (valueSource, error) {
 	descriptor := cfg.EnvSource.Dev
 	if descriptor.Reading() == envsource.ReadingOwnStore {
-		return valueSource{id: descriptor.ID()}, nil
+		return valueSource{id: descriptor.ID(), ownStore: true}, nil
 	}
 	source, err := descriptor.Open(cfg.Dir, os.LookupEnv)
 	if err != nil {
@@ -44,24 +45,22 @@ func readValueSource(ctx context.Context, cfg *project.Project) (valueSource, er
 	return valueSource{id: descriptor.ID(), values: values}, nil
 }
 
-func (s valueSource) isDotenv() bool { return s.id == envsource.Dotenv }
-
 func (s valueSource) files() []string {
-	if s.isDotenv() {
+	if s.ownStore {
 		return []string{dotfile.FileName, dotfile.LocalFileName}
 	}
 	return []string{dotfile.LocalFileName}
 }
 
 func (s valueSource) where() string {
-	if s.isDotenv() {
+	if s.ownStore {
 		return dotfile.FileName
 	}
 	return s.id + " and " + dotfile.LocalFileName
 }
 
 func (s valueSource) remedy(key string) string {
-	if s.isDotenv() {
+	if s.ownStore {
 		return fmt.Sprintf("add %s=<VALUE> to %s", key, dotfile.FileName)
 	}
 	return fmt.Sprintf("set %s in %s, or add %s=<VALUE> to %s", key, s.id, key, dotfile.LocalFileName)
@@ -78,7 +77,7 @@ type valueLayers []valueLayer
 
 func (s valueSource) read(dir string) (valueLayers, error) {
 	var layers valueLayers
-	if s.isDotenv() {
+	if s.ownStore {
 		shared, err := dotfile.Load(dir)
 		if err != nil {
 			return nil, err
