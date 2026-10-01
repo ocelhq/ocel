@@ -1,0 +1,7 @@
+error: #[derive(ocel::Channel)] declares a realtime channel: enable the `realtime` feature of the ocel-sdk dependency
+ --> tests/ui-without-realtime/channel_without_the_feature.rs:4:10
+  |
+4 | #[derive(ocel::Channel)]
+  |          ^^^^^^^^^^^^^
+  |
+  = note: this error originates in the macro `::ocel::__realtime_channel` which comes from the expansion of the derive macro `ocel::Channel` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -66,6 +66,8 @@ mod payload;
 mod postgres;
 #[doc(hidden)]
 pub mod proto;
+#[cfg(feature = "realtime")]
+pub mod realtime;
 mod run;
 pub mod runs;
 mod runtime;
@@ -85,6 +87,8 @@ pub use error::Error;
 pub use kv::{Kv, KvKey, KvParameter};
 pub use lane::Lane;
 pub use postgres::Postgres;
+#[cfg(feature = "realtime")]
+pub use realtime::Channel;
 pub use run::{Attempt, Message, Next, Run, RunError, RunKind};
 pub use serve::serve_worker;
 pub use task::{RunHandle, Task, Trigger};
@@ -106,6 +110,31 @@ pub use ocel_macros::Resources;
 /// Derives [`KvKey`] for a struct whose fields are the parameters of its entry's pattern,
 /// checking the fields against the pattern when the app builds.
 pub use ocel_macros::KvKey;
+
+/// Derives `ocel::realtime::Channel` for a struct whose fields are the params of a realtime
+/// channel pattern, and registers the pattern at link time so discovery sees it. It needs the
+/// `realtime` feature.
+pub use ocel_macros::Channel;
+
+#[cfg(feature = "realtime")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __realtime_channel {
+    ($($channel:tt)*) => {
+        $($channel)*
+    };
+}
+
+#[cfg(not(feature = "realtime"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __realtime_channel {
+    ($($channel:tt)*) => {
+        ::core::compile_error!(
+            "#[derive(ocel::Channel)] declares a realtime channel: enable the `realtime` feature of the ocel-sdk dependency"
+        );
+    };
+}
 
 /// Declares every field of a struct as an environment variable, and writes the `load` that
 /// reads the delivered values into it.

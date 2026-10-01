@@ -5,6 +5,7 @@ mod attribute;
 mod env;
 mod kv;
 mod options;
+mod realtime;
 mod resources;
 mod source;
 mod task;
@@ -87,6 +88,37 @@ pub fn kv_key(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     refuse_generics(&input, "ocel::KvKey", FIXED)
         .and_then(|()| kv::derive(&input))
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Make a struct the params of one channel pattern of a realtime resource, and register the
+/// pattern at link time, so discovery sees it without loading anything.
+///
+/// ```ignore
+/// #[derive(ocel::Channel)]
+/// #[ocel(realtime = "app", pattern = "orders/:order_id", event = OrderEvent)]
+/// pub struct Orders {
+///     pub order_id: String,
+/// }
+/// ```
+///
+/// `realtime` names the resource, `pattern` is at most 4 `/`-separated segments that are
+/// each a literal or a `:param`, and `event` is the type every channel of the pattern
+/// carries. `public` lets anyone subscribe; otherwise the resource's builder takes a
+/// subscribe rule for the channel. `publish` lets browsers publish through a publish rule
+/// the builder takes. `wildcard` lets subscribers leave off trailing params, and `schema`
+/// declares the event's JSON Schema, derived with schemars, which every event published on
+/// the channel must pass. `token_ttl = "30s"` sets how long each token the resource mints
+/// lives, 10 to 300 whole seconds, 60 without it; it is one value for the whole resource, so
+/// every channel of the resource that sets it sets the same. Each field is a `String`, one
+/// for each param; a field the pattern lacks, or a param no field holds, is a compile error.
+/// It needs the `realtime` feature of ocel-sdk.
+#[proc_macro_derive(Channel, attributes(ocel))]
+pub fn channel(item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    refuse_generics(&input, "ocel::Channel", REGISTERED)
+        .and_then(|()| realtime::derive(&input))
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }

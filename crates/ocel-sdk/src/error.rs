@@ -259,6 +259,40 @@ pub enum Error {
         port: i32,
     },
 
+    #[cfg(feature = "realtime")]
+    /// A realtime resource's name, token TTL or rules disagree with the contract or with
+    /// the channels declared under its name.
+    #[error("ocel: realtime '{name}': {detail}")]
+    RealtimeDeclaration {
+        /// The name the resource was built under.
+        name: String,
+        /// What is wrong and how to fix it.
+        detail: String,
+    },
+
+    #[cfg(feature = "realtime")]
+    /// A publish named a channel, params or an event the realtime resource cannot carry.
+    #[error("realtime channel '{pattern}' refuses the publish: {code}")]
+    PublishRefused {
+        /// The channel pattern published on.
+        pattern: String,
+        /// The reason: `unknown-pattern` for a channel of another realtime resource,
+        /// `empty-value` or `value-too-long` for a param, `invalid-body` for an event the
+        /// channel's JSON Schema refuses, or `body-too-large` for an event over 240 KiB.
+        code: crate::realtime::DenialCode,
+    },
+
+    #[cfg(feature = "realtime")]
+    /// The transport refused a publish, could not be reached, or did not answer within 10
+    /// seconds.
+    #[error("ocel: realtime '{name}': {said}")]
+    PublishFailed {
+        /// The realtime resource published on.
+        name: String,
+        /// What went wrong.
+        said: String,
+    },
+
     /// A kv store refused an operation, or could not be reached.
     #[cfg(feature = "kv")]
     #[error("{0}")]

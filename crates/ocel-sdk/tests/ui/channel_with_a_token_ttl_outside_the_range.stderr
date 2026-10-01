@@ -1,0 +1,5 @@
+error: token_ttl is "301s", and a token lives 10s to 300s in whole seconds: long enough to open a socket and no longer.
+ --> tests/ui/channel_with_a_token_ttl_outside_the_range.rs:5:69
+  |
+5 | #[ocel(realtime = "app", pattern = "status", event = Event, public, token_ttl = "301s")]
+  |                                                                     ^^^^^^^^^

@@ -9,6 +9,12 @@ use crate::proto::app::resources::v1::{
     ResourceServiceClient, RetryPolicy, TaskConfig, TopicConfig, VariableCell, VariableClass,
     VariableDefinition, VariableProblem, WorkerConfig,
 };
+#[cfg(feature = "realtime")]
+use crate::proto::app::resources::v1::{
+    RealtimeChannel, RealtimeConfig, RealtimePublish, RealtimeSubscribe,
+};
+#[cfg(feature = "realtime")]
+use crate::realtime::{list_declared_channels, resolve_token_ttl, DeclaredChannel};
 use crate::run::BoxFuture;
 use crate::worker::{OnStart, WorkerMiddleware};
 use crate::{Error, Lane};
@@ -90,6 +96,11 @@ pub enum DeclaredConfig {
         memory: &'static str,
         entries: Vec<KvEntryDeclaration>,
     },
+    #[cfg(feature = "realtime")]
+    Realtime {
+        channels: Vec<DeclaredChannel>,
+        token_ttl: Duration,
+    },
 }
 
 impl DeclaredConfig {
@@ -102,12 +113,16 @@ impl DeclaredConfig {
             Self::Consumer { .. } => "consumer",
             Self::Worker { .. } => "worker",
             Self::Kv { .. } => "kv",
+            #[cfg(feature = "realtime")]
+            Self::Realtime { .. } => "realtime",
         }
     }
 
     fn namespace(&self) -> &'static str {
         match self {
             Self::Postgres { .. } | Self::Bucket { .. } | Self::Kv { .. } => "resource",
+            #[cfg(feature = "realtime")]
+            Self::Realtime { .. } => "resource",
             Self::Topic { .. } | Self::Task { .. } => "topic",
             Self::Consumer { .. } => "consumer",
             Self::Worker { .. } => "worker",
@@ -130,6 +145,8 @@ impl DeclaredConfig {
             Self::Consumer { .. } => ResourceType::RESOURCE_TYPE_CONSUMER,
             Self::Worker { .. } => ResourceType::RESOURCE_TYPE_WORKER,
             Self::Kv { .. } => ResourceType::RESOURCE_TYPE_KV,
+            #[cfg(feature = "realtime")]
+            Self::Realtime { .. } => ResourceType::RESOURCE_TYPE_REALTIME,
         }
     }
 
@@ -222,6 +239,36 @@ impl DeclaredConfig {
                         ..Default::default()
                     })
                     .collect(),
+                ..Default::default()
+            }),
+            #[cfg(feature = "realtime")]
+            Self::Realtime {
+                channels,
+                token_ttl,
+            } => Config::from(RealtimeConfig {
+                channels: channels
+                    .iter()
+                    .map(|channel| RealtimeChannel {
+                        pattern: channel.pattern.to_string(),
+                        wildcard: channel.wildcard,
+                        schema: channel.schema.map(|schema| schema()).unwrap_or_default(),
+                        subscribe: if channel.public {
+                            RealtimeSubscribe::REALTIME_SUBSCRIBE_PUBLIC
+                        } else {
+                            RealtimeSubscribe::REALTIME_SUBSCRIBE_RULE
+                        }
+                        .into(),
+                        publish: if channel.publish {
+                            RealtimePublish::REALTIME_PUBLISH_RULE
+                        } else {
+                            RealtimePublish::REALTIME_PUBLISH_SERVER
+                        }
+                        .into(),
+                        source: format_source(channel.file, channel.line),
+                        ..Default::default()
+                    })
+                    .collect(),
+                token_ttl: buffa::MessageField::some((*token_ttl).into()),
                 ..Default::default()
             }),
         }
@@ -377,8 +424,70 @@ pub(crate) fn collect_declarations() -> Result<Declared, Error> {
             all.groups.push(group);
         }
     }
+    #[cfg(feature = "realtime")]
+    for resource in collect_realtime_resources()? {
+        claim_resource(&mut resource_owners, &resource)?;
+        all.resources.push(resource);
+    }
     join_group_members(&mut all)?;
     Ok(all)
+}
+
+#[cfg(feature = "realtime")]
+fn collect_realtime_resources() -> Result<Vec<DeclaredResource>, Error> {
+    let mut resources: Vec<DeclaredResource> = Vec::new();
+    for channel in list_declared_channels() {
+        let resource = match resources
+            .iter_mut()
+            .find(|resource| resource.name == channel.realtime)
+        {
+            Some(resource) => resource,
+            None => {
+                resources.push(DeclaredResource {
+                    name: channel.realtime,
+                    config: DeclaredConfig::Realtime {
+                        channels: Vec::new(),
+                        token_ttl: Duration::ZERO,
+                    },
+                    file: channel.file,
+                    line: channel.line,
+                });
+                resources.last_mut().expect("the resource just pushed")
+            }
+        };
+        let DeclaredConfig::Realtime { channels, .. } = &mut resource.config else {
+            unreachable!("a realtime resource holds realtime channels");
+        };
+        if let Some(prior) = channels
+            .iter()
+            .find(|prior| prior.pattern == channel.pattern)
+        {
+            return Err(Error::Definition {
+                key: channel.realtime.to_string(),
+                detail: format!(
+                    "declares channel \"{}\" at {} and at {}, and a realtime resource declares each pattern once",
+                    channel.pattern,
+                    format_site(prior.file, prior.line),
+                    format_site(channel.file, channel.line)
+                ),
+            });
+        }
+        channels.push(channel);
+    }
+    for resource in &mut resources {
+        let DeclaredConfig::Realtime {
+            channels,
+            token_ttl,
+        } = &mut resource.config
+        else {
+            unreachable!("a realtime resource holds realtime channels");
+        };
+        *token_ttl = resolve_token_ttl(channels).map_err(|detail| Error::Definition {
+            key: resource.name.to_string(),
+            detail,
+        })?;
+    }
+    Ok(resources)
 }
 
 fn join_group_members(all: &mut Declared) -> Result<(), Error> {
