@@ -1764,10 +1764,10 @@ pub enum ResourceType {
     RESOURCE_TYPE_UNSPECIFIED = 0i32,
     RESOURCE_TYPE_POSTGRES = 1i32,
     RESOURCE_TYPE_BUCKET = 2i32,
-    RESOURCE_TYPE_TOPIC = 4i32,
-    RESOURCE_TYPE_TASK = 5i32,
-    RESOURCE_TYPE_WORKER = 6i32,
-    RESOURCE_TYPE_CONSUMER = 7i32,
+    RESOURCE_TYPE_TOPIC = 3i32,
+    RESOURCE_TYPE_TASK = 4i32,
+    RESOURCE_TYPE_WORKER = 5i32,
+    RESOURCE_TYPE_CONSUMER = 6i32,
 }
 impl ResourceType {
     ///Idiomatic alias for [`Self::RESOURCE_TYPE_UNSPECIFIED`]; `Debug` prints the variant name.
@@ -1889,10 +1889,10 @@ impl ::buffa::Enumeration for ResourceType {
             0i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_UNSPECIFIED),
             1i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_POSTGRES),
             2i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_BUCKET),
-            4i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_TOPIC),
-            5i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_TASK),
-            6i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_WORKER),
-            7i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_CONSUMER),
+            3i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_TOPIC),
+            4i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_TASK),
+            5i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_WORKER),
+            6i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_CONSUMER),
             _ => ::core::option::Option::None,
         }
     }
