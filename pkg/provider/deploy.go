@@ -32,6 +32,8 @@ type AppEntry struct {
 	HealthCheckPath string
 	Arch            string
 	Instances       Instances
+
+	Workers []WorkerSpec
 }
 
 type Instances struct {
