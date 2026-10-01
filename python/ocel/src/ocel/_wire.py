@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from protobuf.wkt import Duration, Timestamp, Value
+from protobuf.wkt import Duration, Timestamp
 
 from ocel.gen.app.resources.v1.resources_pb import RetryPolicy
 from ocel.gen.app.topic.v1.topic_pb import Lane as WireLane
@@ -43,22 +43,6 @@ def encode_lane(value: Any) -> WireLane:
     if name not in ("HIGH", "DEFAULT", "LOW"):
         raise ValueError(f"a lane is 'high', 'default' or 'low', not {value!r}")
     return WireLane[name]
-
-
-def decode_value(value: Value | None) -> Any:
-    if value is None:
-        return None
-    return convert_whole_floats(value.to_python())
-
-
-def convert_whole_floats(value: Any) -> Any:
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    if isinstance(value, dict):
-        return {key: convert_whole_floats(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [convert_whole_floats(item) for item in value]
-    return value
 
 
 def decode_timestamp(value: Timestamp | None) -> datetime | None:

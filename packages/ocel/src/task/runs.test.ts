@@ -1,10 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import {
-  type Timestamp,
-  timestampDate,
-  timestampFromDate,
-  ValueSchema,
-} from "@bufbuild/protobuf/wkt";
+import { type Timestamp, timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type ListRunsRequest,
@@ -25,16 +20,11 @@ const storedRun = create(RunSchema, {
   id: "run_1",
   task: "resize-image",
   status: RunStatus.COMPLETED,
-  payload: create(ValueSchema, {
-    kind: {
-      case: "structValue",
-      value: { fields: { url: { kind: { case: "stringValue", value: "a.png" } } } },
-    },
-  }),
-  output: create(ValueSchema, { kind: { case: "numberValue", value: 3 } }),
+  payload: new TextEncoder().encode('{"url":"a.png","width":2.0}'),
+  output: new TextEncoder().encode("3"),
   attempts: 2,
   tags: ["user:1"],
-  metadata: { source: "upload" },
+  metadata: new TextEncoder().encode('{"source":"upload"}'),
   createdAt: timestampFromDate(new Date("2026-01-01T00:00:00Z")),
   finishedAt: timestampFromDate(new Date("2026-01-01T00:01:00Z")),
 });
@@ -90,7 +80,7 @@ describe("runs", () => {
       id: "run_1",
       task: "resize-image",
       status: "COMPLETED",
-      payload: { url: "a.png" },
+      payload: { url: "a.png", width: 2 },
       output: 3,
       error: undefined,
       attempts: 2,

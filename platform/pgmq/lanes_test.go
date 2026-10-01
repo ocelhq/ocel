@@ -55,7 +55,8 @@ func TestWaitingMessagesAreDeliveredFromEachLaneByWeightWithoutStarvingLow(t *te
 	got := awaitDelivered(t, worker, 10)
 	counts := map[string]int{}
 	for _, d := range got[:10] {
-		counts[d.envelope.GetPayload().GetStructValue().GetFields()["lane"].GetStringValue()]++
+		lane, _ := fieldOf(d.envelope.GetPayload(), "lane").(string)
+		counts[lane]++
 	}
 	if counts["high"] != 6 || counts["default"] != 3 || counts["low"] != 1 {
 		t.Errorf("the first 10 deliveries by lane = %v, want 6 high, 3 default, 1 low", counts)

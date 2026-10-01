@@ -8,7 +8,8 @@ from typing import Any, Literal, Protocol
 
 from ocel._binding import read_runtime, refuse_unprovisioned
 from ocel._declare import is_discovering
-from ocel._wire import Seconds, convert_whole_floats, decode_timestamp, decode_value, encode_due_at
+from ocel._payload import decode_json
+from ocel._wire import Seconds, decode_timestamp, encode_due_at
 from ocel.gen.app.task.v1.task_connect import TaskServiceClient, TaskServiceClientSync
 from ocel.gen.app.task.v1.task_pb import (
     CancelRunRequest,
@@ -308,12 +309,12 @@ def _build_run(wire: WireRun | None) -> Run:
         id=wire.id,
         task=wire.task,
         status=RunStatus[wire.status.name],
-        payload=decode_value(wire.payload),
-        output=decode_value(wire.output),
+        payload=decode_json(wire.payload),
+        output=decode_json(wire.output),
         error=wire.error,
         attempts=wire.attempts,
         tags=builtins.list(wire.tags),
-        metadata=convert_whole_floats(wire.metadata.to_python()) if wire.metadata else {},
+        metadata=decode_json(wire.metadata) if wire.metadata else {},
         created_at=decode_timestamp(wire.created_at),
         due_at=decode_timestamp(wire.due_at),
         started_at=decode_timestamp(wire.started_at),

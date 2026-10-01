@@ -6,7 +6,6 @@ option go_package = "github.com/ocelhq/ocel/pkg/proto/app/task/v1;taskv1";
 import "app/topic/v1/topic.proto";
 import "buf/validate/validate.proto";
 import "google/protobuf/duration.proto";
-import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 service TaskService {
@@ -66,7 +65,7 @@ message TriggerOptions {
 
   repeated string tags = 9 [(buf.validate.field).repeated.items.string.min_len = 1];
 
-  google.protobuf.Struct metadata = 10;
+  bytes metadata = 10 [(buf.validate.field).bytes.max_len = 262144];
 }
 
 message TriggerRequest {
@@ -104,9 +103,9 @@ message Run {
 
   RunStatus status = 3;
 
-  google.protobuf.Value payload = 4;
+  bytes payload = 4 [(buf.validate.field).bytes.max_len = 262144];
 
-  google.protobuf.Value output = 5;
+  bytes output = 5 [(buf.validate.field).bytes.max_len = 262144];
 
   string error = 6;
 
@@ -114,7 +113,7 @@ message Run {
 
   repeated string tags = 8;
 
-  google.protobuf.Struct metadata = 9;
+  bytes metadata = 9;
 
   google.protobuf.Timestamp created_at = 10;
 

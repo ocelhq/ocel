@@ -22,7 +22,8 @@ func batchesOf(got []delivered) [][]int {
 	for _, d := range got {
 		var batch []int
 		for _, m := range d.envelope.GetMessages() {
-			batch = append(batch, int(m.GetPayload().GetStructValue().GetFields()["n"].GetNumberValue()))
+			n, _ := fieldOf(m.GetPayload(), "n").(float64)
+			batch = append(batch, int(n))
 		}
 		batches = append(batches, batch)
 	}

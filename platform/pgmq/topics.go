@@ -118,7 +118,7 @@ func (t Topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLetter
 		return listedLetter{finished: finished, letter: &topicv1.DeadLetter{
 			Execution: execution,
 			Message:   &topicv1.Message{Id: messageID, PublishedAt: timestampOf(published)},
-			Payload:   valueOf(payload),
+			Payload:   compactJSON(payload),
 			Attempts:  attempts,
 			Error:     reason,
 			FailedAt:  timestampOf(finished),

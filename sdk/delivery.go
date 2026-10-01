@@ -2,11 +2,11 @@ package ocel
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
 	topicv1 "ocel.dev/internal/proto/app/topic/v1"
 )
 
@@ -29,8 +29,8 @@ func deliver(ctx context.Context, worker string, body io.Reader) answer {
 	if err != nil {
 		return newRefusalAnswer(http.StatusBadRequest, "the delivery could not be read: %v", err)
 	}
-	envelope := &topicv1.Envelope{}
-	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(raw, envelope); err != nil {
+	envelope, err := decodeEnvelope(raw)
+	if err != nil {
 		return newRefusalAnswer(http.StatusBadRequest, "the delivery is not an envelope: %v", err)
 	}
 	r := findRoute(envelope.GetTopic(), envelope.GetConsumer())
@@ -56,10 +56,50 @@ func deliver(ctx context.Context, worker string, body io.Reader) answer {
 	return r.serve(ctx, envelope, served.wrapAttempt)
 }
 
+func decodeEnvelope(raw []byte) (*topicv1.Envelope, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, err
+	}
+	payload := fields["payload"]
+	delete(fields, "payload")
+	var deliveries []map[string]json.RawMessage
+	if batch, found := fields["messages"]; found {
+		if err := json.Unmarshal(batch, &deliveries); err != nil {
+			return nil, err
+		}
+	}
+	payloads := make([]json.RawMessage, len(deliveries))
+	for i, delivery := range deliveries {
+		payloads[i] = delivery["payload"]
+		delete(delivery, "payload")
+	}
+	if deliveries != nil {
+		batch, err := json.Marshal(deliveries)
+		if err != nil {
+			return nil, err
+		}
+		fields["messages"] = batch
+	}
+	bare, err := json.Marshal(fields)
+	if err != nil {
+		return nil, err
+	}
+	envelope := &topicv1.Envelope{}
+	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(bare, envelope); err != nil {
+		return nil, err
+	}
+	envelope.Payload = payload
+	for i, delivery := range envelope.GetMessages() {
+		delivery.Payload = payloads[i]
+	}
+	return envelope, nil
+}
+
 func newSingleServeFunc[P, R any](w work[P, R]) serveFunc {
 	return func(ctx context.Context, envelope *topicv1.Envelope, wrap middleware) answer {
 		var payload P
-		if err := decodeValue(envelope.GetPayload(), &payload); err != nil {
+		if err := decodePayload(envelope.GetPayload(), &payload); err != nil {
 			return newAbortAnswer(err.Error())
 		}
 		return w.serve(ctx, payload, wrap)
@@ -68,16 +108,16 @@ func newSingleServeFunc[P, R any](w work[P, R]) serveFunc {
 
 func newBatchServeFunc[P, R any](w work[[]P, R]) serveFunc {
 	return func(ctx context.Context, envelope *topicv1.Envelope, wrap middleware) answer {
-		values := []*structpb.Value{envelope.GetPayload()}
+		raws := [][]byte{envelope.GetPayload()}
 		if batch := envelope.GetMessages(); len(batch) > 0 {
-			values = values[:0]
+			raws = raws[:0]
 			for _, delivery := range batch {
-				values = append(values, delivery.GetPayload())
+				raws = append(raws, delivery.GetPayload())
 			}
 		}
-		payloads := make([]P, len(values))
-		for i, value := range values {
-			if err := decodeValue(value, &payloads[i]); err != nil {
+		payloads := make([]P, len(raws))
+		for i, raw := range raws {
+			if err := decodePayload(raw, &payloads[i]); err != nil {
 				return newAbortAnswer(err.Error())
 			}
 		}

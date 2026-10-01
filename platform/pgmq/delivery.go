@@ -16,6 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 )
@@ -23,6 +24,7 @@ import (
 const (
 	envelopeVersion      = 1
 	maxAnswerBytes       = 1 << 20
+	maxOutputBytes       = 256 << 10
 	maxErrorExcerptBytes = 512
 	newRevisionSQL       = "md5(random()::text || clock_timestamp()::text)"
 	stagedPayloadSQL     = "(SELECT value FROM ocel.records WHERE purpose = 'staged-payload' AND topic = ocel.runs.topic AND key = ocel.runs.message_id)"
@@ -55,6 +57,7 @@ const (
 	failed
 	canceled
 	interrupted
+	refused
 )
 
 type result struct {
@@ -170,7 +173,7 @@ func envelopeOf(deployed deployedConsumer, claims []claim, batch bool) *topicv1.
 		envelope.Execution = claimed.execution
 		envelope.Message = messageOf(claimed)
 		envelope.Attempt = attemptOf(claimed)
-		envelope.Payload = valueOf(claimed.payload)
+		envelope.Payload = claimed.payload
 		return envelope
 	}
 	for _, claimed := range claims {
@@ -178,7 +181,7 @@ func envelopeOf(deployed deployedConsumer, claims []claim, batch bool) *topicv1.
 			Execution: claimed.execution,
 			Message:   messageOf(claimed),
 			Attempt:   attemptOf(claimed),
-			Payload:   valueOf(claimed.payload),
+			Payload:   claimed.payload,
 		})
 	}
 	return envelope
@@ -200,10 +203,54 @@ func schemaOf(schema string) string {
 	return "sha256-" + hex.EncodeToString(sum[:])
 }
 
-func (e *Engine) post(ctx, attemptCtx context.Context, url string, envelope *topicv1.Envelope) result {
-	body, err := protojson.Marshal(envelope)
+func encodeEnvelope(envelope *topicv1.Envelope) ([]byte, error) {
+	bare := proto.CloneOf(envelope)
+	bare.Payload = nil
+	for _, delivery := range bare.GetMessages() {
+		delivery.Payload = nil
+	}
+	encoded, err := protojson.Marshal(bare)
 	if err != nil {
-		return result{outcome: failed, reason: fmt.Sprintf("encode the envelope: %v", err)}
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		return nil, err
+	}
+	if len(envelope.GetPayload()) > 0 {
+		fields["payload"] = envelope.GetPayload()
+	}
+	if len(envelope.GetMessages()) > 0 {
+		var deliveries []map[string]json.RawMessage
+		if err := json.Unmarshal(fields["messages"], &deliveries); err != nil {
+			return nil, err
+		}
+		for i, delivery := range envelope.GetMessages() {
+			if len(delivery.GetPayload()) > 0 {
+				deliveries[i]["payload"] = delivery.GetPayload()
+			}
+		}
+		if fields["messages"], err = encodeJSONVerbatim(deliveries); err != nil {
+			return nil, err
+		}
+	}
+	return encodeJSONVerbatim(fields)
+}
+
+func encodeJSONVerbatim(value any) ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
+}
+
+func (e *Engine) post(ctx, attemptCtx context.Context, url string, envelope *topicv1.Envelope) result {
+	body, err := encodeEnvelope(envelope)
+	if err != nil {
+		return result{outcome: refused, reason: fmt.Sprintf("encode the envelope: %v", err)}
 	}
 	req, err := http.NewRequestWithContext(attemptCtx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
@@ -220,6 +267,9 @@ func (e *Engine) post(ctx, attemptCtx context.Context, url string, envelope *top
 		return classifyInterruption(ctx, attemptCtx, err)
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if len(answer) > maxOutputBytes {
+			return result{outcome: refused, reason: "the worker answered an output over the 256 KiB a run may store"}
+		}
 		if !json.Valid(answer) {
 			answer = nil
 		}
@@ -254,7 +304,7 @@ func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedC
 		return nil
 	case succeeded:
 		return e.settle(ctx, loop.name, claimed, "completed", res.output, "")
-	case aborted:
+	case aborted, refused:
 		return e.settle(ctx, loop.name, claimed, "failed", nil, res.reason)
 	case timedOut:
 		if isTask(deployed.topic) {

@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const maxPayloadBytes = 256 << 10
@@ -32,27 +29,19 @@ func encodePayload(payload any) ([]byte, error) {
 	return body, nil
 }
 
-func encodeValueAsJSON(value *structpb.Value) (json.RawMessage, error) {
-	if value == nil {
-		return nil, nil
-	}
-	raw, err := protojson.Marshal(value)
-	if err != nil {
-		return nil, fmt.Errorf("the value is not JSON: %w", err)
-	}
-	return raw, nil
-}
-
-func decodeValue[P any](value *structpb.Value, into *P) error {
-	raw, err := encodeValueAsJSON(value)
-	if err != nil {
-		return err
-	}
-	if raw == nil {
-		raw = json.RawMessage("null")
+func decodePayload[P any](raw []byte, into *P) error {
+	if len(raw) == 0 {
+		raw = []byte("null")
 	}
 	if err := json.Unmarshal(raw, into); err != nil {
 		return fmt.Errorf("the payload does not decode into a %T: %w", *into, err)
 	}
 	return nil
+}
+
+func readJSON(raw []byte) json.RawMessage {
+	if len(raw) == 0 {
+		return nil
+	}
+	return raw
 }

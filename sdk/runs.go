@@ -61,8 +61,8 @@ type Run struct {
 	Attempts int
 	// Tags are the run's [Tags].
 	Tags []string
-	// Metadata is the run's [RunMetadata].
-	Metadata map[string]any
+	// Metadata is the run's [RunMetadata] as a JSON object.
+	Metadata json.RawMessage
 	// CreatedAt is when the run was triggered.
 	CreatedAt time.Time
 	// DueAt is when the run is or was due.
@@ -227,19 +227,12 @@ func decodeRun(wire *taskv1.Run) (*Run, error) {
 	if wire == nil {
 		return nil, fmt.Errorf("the runtime answered with no run")
 	}
-	payload, err := encodeValueAsJSON(wire.GetPayload())
-	if err != nil {
-		return nil, err
-	}
-	output, err := encodeValueAsJSON(wire.GetOutput())
-	if err != nil {
-		return nil, err
-	}
 	run := &Run{
 		ID:         wire.GetId(),
 		Task:       wire.GetTask(),
-		Payload:    payload,
-		Output:     output,
+		Payload:    readJSON(wire.GetPayload()),
+		Output:     readJSON(wire.GetOutput()),
+		Metadata:   readJSON(wire.GetMetadata()),
 		Error:      wire.GetError(),
 		Attempts:   int(wire.GetAttempts()),
 		Tags:       wire.GetTags(),
@@ -251,9 +244,6 @@ func decodeRun(wire *taskv1.Run) (*Run, error) {
 	}
 	if status := wire.GetStatus(); status != taskv1.RunStatus_RUN_STATUS_UNSPECIFIED {
 		run.Status = RunStatus(strings.TrimPrefix(status.String(), "RUN_STATUS_"))
-	}
-	if metadata := wire.GetMetadata(); metadata != nil {
-		run.Metadata = metadata.AsMap()
 	}
 	return run, nil
 }

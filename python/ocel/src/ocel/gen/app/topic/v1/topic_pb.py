@@ -10,13 +10,13 @@ from typing import Literal, TYPE_CHECKING, TypeAlias
 
 from protobuf import Enum, Message as Message_
 from protobuf._codegen import file_desc
-from protobuf.wkt import struct_pb, timestamp_pb
+from protobuf.wkt import timestamp_pb
 
 from ....buf.validate import validate_pb
 
 if TYPE_CHECKING:
     from protobuf import DescFile, Oneof
-    from protobuf.wkt import Timestamp, Value
+    from protobuf.wkt import Timestamp
 
 
 _SendRequestFields: TypeAlias = Literal["topic", "payload", "due_at", "idempotency_key", "key", "lane"]
@@ -202,7 +202,7 @@ class Delivery(Message_[_DeliveryFields]):
             ```
         payload:
             ```proto
-            optional google.protobuf.Value payload = 4;
+            bytes payload = 4;
             ```
     """
 
@@ -216,14 +216,14 @@ class Delivery(Message_[_DeliveryFields]):
             execution: str = "",
             message: Message | None = None,
             attempt: Attempt | None = None,
-            payload: Value | None = None,
+            payload: bytes = b"",
         ) -> None:
             pass
 
         execution: str
         message: Message | None
         attempt: Attempt | None
-        payload: Value | None
+        payload: bytes
 
 _EnvelopeFields: TypeAlias = Literal["v", "topic", "consumer", "execution", "message", "attempt", "schema", "payload", "messages"]
 
@@ -264,7 +264,7 @@ class Envelope(Message_[_EnvelopeFields]):
             ```
         payload:
             ```proto
-            optional google.protobuf.Value payload = 8;
+            bytes payload = 8;
             ```
         messages:
             ```proto
@@ -286,7 +286,7 @@ class Envelope(Message_[_EnvelopeFields]):
             message: Message | None = None,
             attempt: Attempt | None = None,
             schema: str = "",
-            payload: Value | None = None,
+            payload: bytes = b"",
             messages: list[Delivery] | None = None,
         ) -> None:
             pass
@@ -298,7 +298,7 @@ class Envelope(Message_[_EnvelopeFields]):
         message: Message | None
         attempt: Attempt | None
         schema: str
-        payload: Value | None
+        payload: bytes
         messages: list[Delivery]
 
 _AbortFields: TypeAlias = Literal["reason"]
@@ -376,7 +376,7 @@ class DeadLetter(Message_[_DeadLetterFields]):
             ```
         payload:
             ```proto
-            optional google.protobuf.Value payload = 3;
+            bytes payload = 3;
             ```
         attempts:
             ```proto
@@ -401,7 +401,7 @@ class DeadLetter(Message_[_DeadLetterFields]):
             *,
             execution: str = "",
             message: Message | None = None,
-            payload: Value | None = None,
+            payload: bytes = b"",
             attempts: int = 0,
             error: str = "",
             failed_at: Timestamp | None = None,
@@ -410,7 +410,7 @@ class DeadLetter(Message_[_DeadLetterFields]):
 
         execution: str
         message: Message | None
-        payload: Value | None
+        payload: bytes
         attempts: int
         error: str
         failed_at: Timestamp | None
@@ -725,10 +725,9 @@ class Lane(Enum):
 
 
 _DESC = file_desc(
-    b'\n\x18app/topic/v1/topic.proto\x12\x0capp.topic.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto"\x81\x03\n\x0bSendRequest\x127\n\x05topic\x18\x01 \x01(\tR\x05topicB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$\x12#\n\x07payload\x18\x02 \x01(\x0cR\x07payloadB\t\xbaH\x06z\x04\x18\x80\x80\x10\x12\xa6\x01\n\x06due_at\x18\x03 \x01(\x0b2\x1a.google.protobuf.TimestampR\x05dueAtBs\xbaHp\xba\x01m\n\x12topics.send.due_at\x127a message is delivered at most 30 days after it is sent\x1a\x1ethis <= now + duration(\'720h\')\x12\'\n\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\x12\x10\n\x03key\x18\x05 \x01(\tR\x03key\x120\n\x04lane\x18\x06 \x01(\x0e2\x12.app.topic.v1.LaneR\x04laneB\x08\xbaH\x05\x82\x01\x02\x10\x01"-\n\x0cSendResponse\x12\x1d\n\nmessage_id\x18\x01 \x01(\tR\tmessageId"y\n\x07Message\x12/\n\x02id\x18\x01 \x01(\tR\x02idB\x1f\xbaH\x1cr\x1a2\x18^[0-9A-HJKMNP-TV-Z]{26}$\x12=\n\x0cpublished_at\x18\x02 \x01(\x0b2\x1a.google.protobuf.TimestampR\x0bpublishedAt"\x8f\x01\n\x07Attempt\x12\x1f\n\x06number\x18\x01 \x01(\x05R\x06numberB\x07\xbaH\x04\x1a\x02(\x01\x12\x19\n\x02of\x18\x02 \x01(\x05R\x02ofB\t\xbaH\x06\x1a\x04\x18d(\x01\x12H\n\x12first_attempted_at\x18\x03 \x01(\x0b2\x1a.google.protobuf.TimestampR\x10firstAttemptedAt"\xbc\x01\n\x08Delivery\x12\x1c\n\texecution\x18\x01 \x01(\tR\texecution\x12/\n\x07message\x18\x02 \x01(\x0b2\x15.app.topic.v1.MessageR\x07message\x12/\n\x07attempt\x18\x03 \x01(\x0b2\x15.app.topic.v1.AttemptR\x07attempt\x120\n\x07payload\x18\x04 \x01(\x0b2\x16.google.protobuf.ValueR\x07payload"\xbf\x03\n\x08Envelope\x12\x15\n\x01v\x18\x01 \x01(\x05R\x01vB\x07\xbaH\x04\x1a\x02\x08\x01\x125\n\x05topic\x18\x02 \x01(\tR\x05topicB\x1f\xbaH\x1cr\x1a2\x18^[a-z0-9]+(-[a-z0-9]+)*$\x12;\n\x08consumer\x18\x03 \x01(\tR\x08consumerB\x1f\xbaH\x1cr\x1a2\x18^[a-z0-9]+(-[a-z0-9]+)*$\x12\x1c\n\texecution\x18\x04 \x01(\tR\texecution\x12/\n\x07message\x18\x05 \x01(\x0b2\x15.app.topic.v1.MessageR\x07message\x12/\n\x07attempt\x18\x06 \x01(\x0b2\x15.app.topic.v1.AttemptR\x07attempt\x127\n\x06schema\x18\x07 \x01(\tR\x06schemaB\x1f\xbaH\x1c\xd8\x01\x01r\x172\x15^sha256-[0-9a-f]{64}$\x120\n\x07payload\x18\x08 \x01(\x0b2\x16.google.protobuf.ValueR\x07payload\x12=\n\x08messages\x18\t \x03(\x0b2\x16.app.topic.v1.DeliveryR\x08messagesB\t\xbaH\x06\x92\x01\x03\x10\xe8\x07"\x1f\n\x05Abort\x12\x16\n\x06reason\x18\x01 \x01(\tR\x06reason"@\n\x06Answer\x12+\n\x05abort\x18\x01 \x01(\x0b2\x13.app.topic.v1.AbortH\x00R\x05abortB\t\n\x07outcome"\xf8\x01\n\nDeadLetter\x12\x1c\n\texecution\x18\x01 \x01(\tR\texecution\x12/\n\x07message\x18\x02 \x01(\x0b2\x15.app.topic.v1.MessageR\x07message\x120\n\x07payload\x18\x03 \x01(\x0b2\x16.google.protobuf.ValueR\x07payload\x12\x1a\n\x08attempts\x18\x04 \x01(\x05R\x08attempts\x12\x14\n\x05error\x18\x05 \x01(\tR\x05error\x127\n\tfailed_at\x18\x06 \x01(\x0b2\x1a.google.protobuf.TimestampR\x08failedAt"\x96\x01\n\x16ListDeadLettersRequest\x12\x1d\n\x05topic\x18\x01 \x01(\tR\x05topicB\x07\xbaH\x04r\x02\x10\x01\x12#\n\x08consumer\x18\x02 \x01(\tR\x08consumerB\x07\xbaH\x04r\x02\x10\x01\x12\x16\n\x06cursor\x18\x03 \x01(\tR\x06cursor\x12 \n\x05limit\x18\x04 \x01(\x05R\x05limitB\n\xbaH\x07\x1a\x05\x18\xe8\x07(\x00"w\n\x17ListDeadLettersResponse\x12;\n\x0cdead_letters\x18\x01 \x03(\x0b2\x18.app.topic.v1.DeadLetterR\x0bdeadLetters\x12\x1f\n\x0bnext_cursor\x18\x02 \x01(\tR\nnextCursor"\x8a\x01\n\x19RedriveDeadLettersRequest\x12\x1d\n\x05topic\x18\x01 \x01(\tR\x05topicB\x07\xbaH\x04r\x02\x10\x01\x12#\n\x08consumer\x18\x02 \x01(\tR\x08consumerB\x07\xbaH\x04r\x02\x10\x01\x12)\n\nexecutions\x18\x03 \x03(\tR\nexecutionsB\t\xbaH\x06\x92\x01\x03\x10\xe8\x07"8\n\x1aRedriveDeadLettersResponse\x12\x1a\n\x08redriven\x18\x01 \x01(\x03R\x08redriven"\x88\x01\n\x17PurgeDeadLettersRequest\x12\x1d\n\x05topic\x18\x01 \x01(\tR\x05topicB\x07\xbaH\x04r\x02\x10\x01\x12#\n\x08consumer\x18\x02 \x01(\tR\x08consumerB\x07\xbaH\x04r\x02\x10\x01\x12)\n\nexecutions\x18\x03 \x03(\tR\nexecutionsB\t\xbaH\x06\x92\x01\x03\x10\xe8\x07"2\n\x18PurgeDeadLettersResponse\x12\x16\n\x06purged\x18\x01 \x01(\x03R\x06purged"]\n\x17CountDeadLettersRequest\x12\x1d\n\x05topic\x18\x01 \x01(\tR\x05topicB\x07\xbaH\x04r\x02\x10\x01\x12#\n\x08consumer\x18\x02 \x01(\tR\x08consumerB\x07\xbaH\x04r\x02\x10\x01"0\n\x18CountDeadLettersResponse\x12\x14\n\x05count\x18\x01 \x01(\x03R\x05count*K\n\x04Lane\x12\x14\n\x10LANE_UNSPECIFIED\x10\x00\x12\r\n\tLANE_HIGH\x10\x01\x12\x10\n\x0cLANE_DEFAULT\x10\x02\x12\x0c\n\x08LANE_LOW\x10\x032\xdc\x03\n\x0cTopicService\x12=\n\x04Send\x12\x19.app.topic.v1.SendRequest\x1a\x1a.app.topic.v1.SendResponse\x12^\n\x0fListDeadLetters\x12$.app.topic.v1.ListDeadLettersRequest\x1a%.app.topic.v1.ListDeadLettersResponse\x12g\n\x12RedriveDeadLetters\x12\'.app.topic.v1.RedriveDeadLettersRequest\x1a(.app.topic.v1.RedriveDeadLettersResponse\x12a\n\x10PurgeDeadLetters\x12%.app.topic.v1.PurgeDeadLettersRequest\x1a&.app.topic.v1.PurgeDeadLettersResponse\x12a\n\x10CountDeadLetters\x12%.app.topic.v1.CountDeadLettersRequest\x1a&.app.topic.v1.CountDeadLettersResponseB7Z5github.com/ocelhq/ocel/pkg/proto/app/topic/v1;topicv1b\x06proto3',
+    b'\n\x18app/topic/v1/topic.proto\x12\x0capp.topic.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto"\x81\x03\n\x0bSendRequest\x127\n\x05topic\x18\x01 \x01(\tR\x05topicB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$\x12#\n\x07payload\x18\x02 \x01(\x0cR\x07payloadB\t\xbaH\x06z\x04\x18\x80\x80\x10\x12\xa6\x01\n\x06due_at\x18\x03 \x01(\x0b2\x1a.google.protobuf.TimestampR\x05dueAtBs\xbaHp\xba\x01m\n\x12topics.send.due_at\x127a message is delivered at most 30 days after it is sent\x1a\x1ethis <= now + duration(\'720h\')\x12\'\n\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\x12\x10\n\x03key\x18\x05 \x01(\tR\x03key\x120\n\x04lane\x18\x06 \x01(\x0e2\x12.app.topic.v1.LaneR\x04laneB\x08\xbaH\x05\x82\x01\x02\x10\x01"-\n\x0cSendResponse\x12\x1d\n\nmessage_id\x18\x01 \x01(\tR\tmessageId"y\n\x07Message\x12/\n\x02id\x18\x01 \x01(\tR\x02idB\x1f\xbaH\x1cr\x1a2\x18^[0-9A-HJKMNP-TV-Z]{26}$\x12=\n\x0cpublished_at\x18\x02 \x01(\x0b2\x1a.google.protobuf.TimestampR\x0bpublishedAt"\x8f\x01\n\x07Attempt\x12\x1f\n\x06number\x18\x01 \x01(\x05R\x06numberB\x07\xbaH\x04\x1a\x02(\x01\x12\x19\n\x02of\x18\x02 \x01(\x05R\x02ofB\t\xbaH\x06\x1a\x04\x18d(\x01\x12H\n\x12first_attempted_at\x18\x03 \x01(\x0b2\x1a.google.protobuf.TimestampR\x10firstAttemptedAt"\xaf\x01\n\x08Delivery\x12\x1c\n\texecution\x18\x01 \x01(\tR\texecution\x12/\n\x07message\x18\x02 \x01(\x0b2\x15.app.topic.v1.MessageR\x07message\x12/\n\x07attempt\x18\x03 \x01(\x0b2\x15.app.topic.v1.AttemptR\x07attempt\x12#\n\x07payload\x18\x04 \x01(\x0cR\x07payloadB\t\xbaH\x06z\x04\x18\x80\x80\x10"\xb2\x03\n\x08Envelope\x12\x15\n\x01v\x18\x01 \x01(\x05R\x01vB\x07\xbaH\x04\x1a\x02\x08\x01\x125\n\x05topic\x18\x02 \x01(\tR\x05topicB\x1f\xbaH\x1cr\x1a2\x18^[a-z0-9]+(-[a-z0-9]+)*$\x12;\n\x08consumer\x18\x03 \x01(\tR\x08consumerB\x1f\xbaH\x1cr\x1a2\x18^[a-z0-9]+(-[a-z0-9]+)*$\x12\x1c\n\texecution\x18\x04 \x01(\tR\texecution\x12/\n\x07message\x18\x05 \x01(\x0b2\x15.app.topic.v1.MessageR\x07message\x12/\n\x07attempt\x18\x06 \x01(\x0b2\x15.app.topic.v1.AttemptR\x07attempt\x127\n\x06schema\x18\x07 \x01(\tR\x06schemaB\x1f\xbaH\x1c\xd8\x01\x01r\x172\x15^sha256-[0-9a-f]{64}$\x12#\n\x07payload\x18\x08 \x01(\x0cR\x07payloadB\t\xbaH\x06z\x04\x18\x80\x80\x10\x12=\n\x08messages\x18\t \x03(\x0b2\x16.app.topic.v1.DeliveryR\x08messagesB\t\xbaH\x06\x92\x01\x03\x10\xe8\x07"\x1f\n\x05Abort\x12\x16\n\x06reason\x18\x01 \x01(\tR\x06reason"@\n\x06Answer\x12+\n\x05abort\x18\x01 \x01(\x0b2\x13.app.topic.v1.AbortH\x00R\x05abortB\t\n\x07outcome"\xeb\x01\n\nDeadLetter\x12\x1c\n\texecution\x18\x01 \x01(\tR\texecution\x12/\n\x07message\x18\x02 \x01(\x0b2\x15.app.topic.v1.MessageR\x07message\x12#\n\x07payload\x18\x03 \x01(\x0cR\x07payloadB\t\xbaH\x06z\x04\x18\x80\x80\x10\x12\x1a\n\x08attempts\x18\x04 \x01(\x05R\x08attempts\x12\x14\n\x05error\x18\x05 \x01(\tR\x05error\x127\n\tfailed_at\x18\x06 \x01(\x0b2\x1a.google.protobuf.TimestampR\x08failedAt"\x96\x01\n\x16ListDeadLettersRequest\x12\x1d\n\x05topic\x18\x01 \x01(\tR\x05topicB\x07\xbaH\x04r\x02\x10\x01\x12#\n\x08consumer\x18\x02 \x01(\tR\x08consumerB\x07\xbaH\x04r\x02\x10\x01\x12\x16\n\x06cursor\x18\x03 \x01(\tR\x06cursor\x12 \n\x05limit\x18\x04 \x01(\x05R\x05limitB\n\xbaH\x07\x1a\x05\x18\xe8\x07(\x00"w\n\x17ListDeadLettersResponse\x12;\n\x0cdead_letters\x18\x01 \x03(\x0b2\x18.app.topic.v1.DeadLetterR\x0bdeadLetters\x12\x1f\n\x0bnext_cursor\x18\x02 \x01(\tR\nnextCursor"\x8a\x01\n\x19RedriveDeadLettersRequest\x12\x1d\n\x05topic\x18\x01 \x01(\tR\x05topicB\x07\xbaH\x04r\x02\x10\x01\x12#\n\x08consumer\x18\x02 \x01(\tR\x08consumerB\x07\xbaH\x04r\x02\x10\x01\x12)\n\nexecutions\x18\x03 \x03(\tR\nexecutionsB\t\xbaH\x06\x92\x01\x03\x10\xe8\x07"8\n\x1aRedriveDeadLettersResponse\x12\x1a\n\x08redriven\x18\x01 \x01(\x03R\x08redriven"\x88\x01\n\x17PurgeDeadLettersRequest\x12\x1d\n\x05topic\x18\x01 \x01(\tR\x05topicB\x07\xbaH\x04r\x02\x10\x01\x12#\n\x08consumer\x18\x02 \x01(\tR\x08consumerB\x07\xbaH\x04r\x02\x10\x01\x12)\n\nexecutions\x18\x03 \x03(\tR\nexecutionsB\t\xbaH\x06\x92\x01\x03\x10\xe8\x07"2\n\x18PurgeDeadLettersResponse\x12\x16\n\x06purged\x18\x01 \x01(\x03R\x06purged"]\n\x17CountDeadLettersRequest\x12\x1d\n\x05topic\x18\x01 \x01(\tR\x05topicB\x07\xbaH\x04r\x02\x10\x01\x12#\n\x08consumer\x18\x02 \x01(\tR\x08consumerB\x07\xbaH\x04r\x02\x10\x01"0\n\x18CountDeadLettersResponse\x12\x14\n\x05count\x18\x01 \x01(\x03R\x05count*K\n\x04Lane\x12\x14\n\x10LANE_UNSPECIFIED\x10\x00\x12\r\n\tLANE_HIGH\x10\x01\x12\x10\n\x0cLANE_DEFAULT\x10\x02\x12\x0c\n\x08LANE_LOW\x10\x032\xdc\x03\n\x0cTopicService\x12=\n\x04Send\x12\x19.app.topic.v1.SendRequest\x1a\x1a.app.topic.v1.SendResponse\x12^\n\x0fListDeadLetters\x12$.app.topic.v1.ListDeadLettersRequest\x1a%.app.topic.v1.ListDeadLettersResponse\x12g\n\x12RedriveDeadLetters\x12\'.app.topic.v1.RedriveDeadLettersRequest\x1a(.app.topic.v1.RedriveDeadLettersResponse\x12a\n\x10PurgeDeadLetters\x12%.app.topic.v1.PurgeDeadLettersRequest\x1a&.app.topic.v1.PurgeDeadLettersResponse\x12a\n\x10CountDeadLetters\x12%.app.topic.v1.CountDeadLettersRequest\x1a&.app.topic.v1.CountDeadLettersResponseB7Z5github.com/ocelhq/ocel/pkg/proto/app/topic/v1;topicv1b\x06proto3',
     [
         validate_pb.desc(),
-        struct_pb.desc(),
         timestamp_pb.desc(),
     ],
     {

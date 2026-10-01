@@ -232,7 +232,7 @@ def test_a_trigger_sends_every_option_it_was_given(runtime):
     assert options.lane is WireLane.HIGH
     assert options.max_attempts == 2
     assert list(options.tags) == ["user:1", "plan:pro"]
-    assert options.metadata.to_python() == {"plan": "pro", "seats": 3.0}
+    assert options.metadata == b'{"plan":"pro","seats":3}'
 
 
 def test_a_trigger_delayed_until_a_moment_is_due_then(runtime):

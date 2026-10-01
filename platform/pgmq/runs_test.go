@@ -185,7 +185,7 @@ func TestAReplayRunsTheSamePayloadAgainAsANewRun(t *testing.T) {
 		t.Fatal("ReplayRun answered the original run's id")
 	}
 	replayed := awaitRun(t, engine, resp.GetId(), taskv1.RunStatus_RUN_STATUS_COMPLETED)
-	if replayed.GetPayload().GetStructValue().GetFields()["image"].GetStringValue() != "cat.png" || len(replayed.GetTags()) != 1 {
+	if fieldOf(replayed.GetPayload(), "image") != "cat.png" || len(replayed.GetTags()) != 1 {
 		t.Errorf("replayed run = %v, want the original's payload and tags", replayed)
 	}
 	if got := len(worker.received()); got != 2 {

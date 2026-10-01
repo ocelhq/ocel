@@ -72,8 +72,8 @@ func TestAMessageSentToATopicReachesEveryConsumerOnItsOwnWorker(t *testing.T) {
 		if envelope.GetConsumer() != consumer || envelope.GetTopic() != "orders" || envelope.GetExecution() != id+"-"+consumer || envelope.GetMessage().GetId() != id {
 			t.Errorf("%s received %v, want message %s as execution %s-%s", consumer, envelope, id, id, consumer)
 		}
-		if envelope.GetPayload().GetStructValue().GetFields()["order"].GetNumberValue() != 42 {
-			t.Errorf("%s received payload %v, want the sent one", consumer, envelope.GetPayload())
+		if fieldOf(envelope.GetPayload(), "order") != 42.0 {
+			t.Errorf("%s received payload %s, want the sent one", consumer, envelope.GetPayload())
 		}
 	}
 }
@@ -202,7 +202,7 @@ func TestAMessageThatFailsEveryAttemptIsDeadLetteredWithItsPayloadAndError(t *te
 	var listed []string
 	for _, letter := range append(resp.GetDeadLetters(), rest.GetDeadLetters()...) {
 		listed = append(listed, letter.GetExecution())
-		if letter.GetPayload().GetStructValue().GetFields()["n"] == nil || letter.GetAttempts() != 1 || letter.GetError() == "" || letter.GetFailedAt() == nil || letter.GetMessage().GetId() == "" {
+		if fieldOf(letter.GetPayload(), "n") == nil || letter.GetAttempts() != 1 || letter.GetError() == "" || letter.GetFailedAt() == nil || letter.GetMessage().GetId() == "" {
 			t.Errorf("dead letter = %v, want its payload, attempts, error, message and when it failed", letter)
 		}
 	}

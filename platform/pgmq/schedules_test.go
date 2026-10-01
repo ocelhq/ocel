@@ -48,7 +48,7 @@ func TestADueScheduleTriggersOneRunForAllTheTimesItMissedAndMovesToItsNextTime(t
 	if n := len(worker.received()); n != 1 {
 		t.Errorf("the schedule ran %d times, want one run for the days it missed", n)
 	}
-	timestamp := got[0].envelope.GetPayload().GetStructValue().GetFields()["timestamp"].GetStringValue()
+	timestamp := fieldOf(got[0].envelope.GetPayload(), "timestamp").(string)
 	if fired, err := time.Parse(time.RFC3339, timestamp); err != nil || !fired.Equal(missed) {
 		t.Errorf("the run's payload timestamp = %q, want the time it was scheduled for, %s", timestamp, missed.Format(time.RFC3339))
 	}

@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"ocel.dev"
 	taskv1 "ocel.dev/internal/proto/app/task/v1"
@@ -16,17 +15,16 @@ import (
 var createdAt = time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
 
 func storedRun() *taskv1.Run {
-	metadata, _ := structpb.NewStruct(map[string]any{"source": "upload"})
 	return &taskv1.Run{
 		Id:         "run-1",
 		Task:       "resize",
 		Status:     taskv1.RunStatus_RUN_STATUS_TIMED_OUT,
-		Payload:    structpb.NewStructValue(&structpb.Struct{Fields: map[string]*structpb.Value{"key": structpb.NewStringValue("a.png")}}),
-		Output:     structpb.NewNullValue(),
+		Payload:    []byte(`{"key":"a.png","id":9007199254740993}`),
+		Output:     []byte(`2.0`),
 		Error:      "the attempt ran past its max duration",
 		Attempts:   1,
 		Tags:       []string{"user:1"},
-		Metadata:   metadata,
+		Metadata:   []byte(`{"source":"upload"}`),
 		CreatedAt:  timestamppb.New(createdAt),
 		DueAt:      timestamppb.New(createdAt.Add(time.Minute)),
 		StartedAt:  timestamppb.New(createdAt.Add(2 * time.Minute)),
@@ -48,9 +46,9 @@ func TestRetrieveRunReadsTheRunRecord(t *testing.T) {
 		t.Errorf("id = %q", req.GetId())
 	}
 	if run.ID != "run-1" || run.Task != "resize" || run.Status != ocel.RunTimedOut ||
-		string(run.Payload) != `{"key":"a.png"}` || string(run.Output) != "null" ||
+		string(run.Payload) != `{"key":"a.png","id":9007199254740993}` || string(run.Output) != "2.0" ||
 		run.Error != "the attempt ran past its max duration" || run.Attempts != 1 ||
-		!slices.Equal(run.Tags, []string{"user:1"}) || run.Metadata["source"] != "upload" {
+		!slices.Equal(run.Tags, []string{"user:1"}) || string(run.Metadata) != `{"source":"upload"}` {
 		t.Errorf("run = %+v", run)
 	}
 	if !run.CreatedAt.Equal(createdAt) || !run.DueAt.Equal(createdAt.Add(time.Minute)) ||

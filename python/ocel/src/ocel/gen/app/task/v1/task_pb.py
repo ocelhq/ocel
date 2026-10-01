@@ -10,14 +10,14 @@ from typing import Literal, TYPE_CHECKING, TypeAlias
 
 from protobuf import Enum, Message
 from protobuf._codegen import file_desc
-from protobuf.wkt import duration_pb, struct_pb, timestamp_pb
+from protobuf.wkt import duration_pb, timestamp_pb
 
 from ....buf.validate import validate_pb
 from ...topic.v1 import topic_pb
 
 if TYPE_CHECKING:
     from protobuf import DescFile
-    from protobuf.wkt import Duration, Struct, Timestamp, Value
+    from protobuf.wkt import Duration, Timestamp
 
     from ...topic.v1.topic_pb import Lane
 
@@ -103,7 +103,7 @@ class TriggerOptions(Message[_TriggerOptionsFields]):
             ```
         metadata:
             ```proto
-            optional google.protobuf.Struct metadata = 10;
+            bytes metadata = 10;
             ```
     """
 
@@ -123,7 +123,7 @@ class TriggerOptions(Message[_TriggerOptionsFields]):
             lane: Lane | None = None,
             max_attempts: int = 0,
             tags: list[str] | None = None,
-            metadata: Struct | None = None,
+            metadata: bytes = b"",
         ) -> None:
             pass
 
@@ -136,7 +136,7 @@ class TriggerOptions(Message[_TriggerOptionsFields]):
         lane: Lane
         max_attempts: int
         tags: list[str]
-        metadata: Struct | None
+        metadata: bytes
 
 _TriggerRequestFields: TypeAlias = Literal["task", "payload", "options"]
 
@@ -325,11 +325,11 @@ class Run(Message[_RunFields]):
             ```
         payload:
             ```proto
-            optional google.protobuf.Value payload = 4;
+            bytes payload = 4;
             ```
         output:
             ```proto
-            optional google.protobuf.Value output = 5;
+            bytes output = 5;
             ```
         error:
             ```proto
@@ -345,7 +345,7 @@ class Run(Message[_RunFields]):
             ```
         metadata:
             ```proto
-            optional google.protobuf.Struct metadata = 9;
+            bytes metadata = 9;
             ```
         created_at:
             ```proto
@@ -379,12 +379,12 @@ class Run(Message[_RunFields]):
             id: str = "",
             task: str = "",
             status: RunStatus | None = None,
-            payload: Value | None = None,
-            output: Value | None = None,
+            payload: bytes = b"",
+            output: bytes = b"",
             error: str = "",
             attempts: int = 0,
             tags: list[str] | None = None,
-            metadata: Struct | None = None,
+            metadata: bytes = b"",
             created_at: Timestamp | None = None,
             due_at: Timestamp | None = None,
             started_at: Timestamp | None = None,
@@ -396,12 +396,12 @@ class Run(Message[_RunFields]):
         id: str
         task: str
         status: RunStatus
-        payload: Value | None
-        output: Value | None
+        payload: bytes
+        output: bytes
         error: str
         attempts: int
         tags: list[str]
-        metadata: Struct | None
+        metadata: bytes
         created_at: Timestamp | None
         due_at: Timestamp | None
         started_at: Timestamp | None
@@ -781,12 +781,11 @@ class RunStatus(Enum):
 
 
 _DESC = file_desc(
-    b'\n\x16app/task/v1/task.proto\x12\x0bapp.task.v1\x1a\x18app/topic/v1/topic.proto\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto"g\n\x08Debounce\x12\x19\n\x03key\x18\x01 \x01(\tR\x03keyB\x07\xbaH\x04r\x02\x10\x01\x12@\n\x05delay\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x05delayB\x0f\xbaH\x0c\xaa\x01\t"\x05\x08\x80\x9a\x9e\x01*\x00"\xed\x04\n\x0eTriggerOptions\x12\xa3\x01\n\x06due_at\x18\x01 \x01(\x0b2\x1a.google.protobuf.TimestampR\x05dueAtBp\xbaHm\xba\x01j\n\x14tasks.trigger.due_at\x122a run is due at most 30 days after it is triggered\x1a\x1ethis <= now + duration(\'720h\')\x12;\n\x03ttl\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x03ttlB\x0e\xbaH\x0b\xaa\x01\x08"\x04\x08\x80\xeaI*\x00\x12\'\n\x0fidempotency_key\x18\x03 \x01(\tR\x0eidempotencyKey\x12S\n\x13idempotency_key_ttl\x18\x04 \x01(\x0b2\x19.google.protobuf.DurationR\x11idempotencyKeyTtlB\x08\xbaH\x05\xaa\x01\x02*\x00\x121\n\x08debounce\x18\x05 \x01(\x0b2\x15.app.task.v1.DebounceR\x08debounce\x12\x10\n\x03key\x18\x06 \x01(\tR\x03key\x120\n\x04lane\x18\x07 \x01(\x0e2\x12.app.topic.v1.LaneR\x04laneB\x08\xbaH\x05\x82\x01\x02\x10\x01\x12,\n\x0cmax_attempts\x18\x08 \x01(\x05R\x0bmaxAttemptsB\t\xbaH\x06\x1a\x04\x18d(\x00\x12 \n\x04tags\x18\t \x03(\tR\x04tagsB\x0c\xbaH\t\x92\x01\x06"\x04r\x02\x10\x01\x123\n\x08metadata\x18\n \x01(\x0b2\x17.google.protobuf.StructR\x08metadata"\xa3\x01\n\x0eTriggerRequest\x125\n\x04task\x18\x01 \x01(\tR\x04taskB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$\x12#\n\x07payload\x18\x02 \x01(\x0cR\x07payloadB\t\xbaH\x06z\x04\x18\x80\x80\x10\x125\n\x07options\x18\x03 \x01(\x0b2\x1b.app.task.v1.TriggerOptionsR\x07options"!\n\x0fTriggerResponse\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id"n\n\x10BatchTriggerItem\x12#\n\x07payload\x18\x01 \x01(\x0cR\x07payloadB\t\xbaH\x06z\x04\x18\x80\x80\x10\x125\n\x07options\x18\x02 \x01(\x0b2\x1b.app.task.v1.TriggerOptionsR\x07options"\x8e\x01\n\x13BatchTriggerRequest\x125\n\x04task\x18\x01 \x01(\tR\x04taskB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$\x12@\n\x05items\x18\x02 \x03(\x0b2\x1d.app.task.v1.BatchTriggerItemR\x05itemsB\x0b\xbaH\x08\x92\x01\x05\x08\x01\x10\xe8\x07"(\n\x14BatchTriggerResponse\x12\x10\n\x03ids\x18\x01 \x03(\tR\x03ids"\xd7\x04\n\x03Run\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n\x04task\x18\x02 \x01(\tR\x04task\x12.\n\x06status\x18\x03 \x01(\x0e2\x16.app.task.v1.RunStatusR\x06status\x120\n\x07payload\x18\x04 \x01(\x0b2\x16.google.protobuf.ValueR\x07payload\x12.\n\x06output\x18\x05 \x01(\x0b2\x16.google.protobuf.ValueR\x06output\x12\x14\n\x05error\x18\x06 \x01(\tR\x05error\x12\x1a\n\x08attempts\x18\x07 \x01(\x05R\x08attempts\x12\x12\n\x04tags\x18\x08 \x03(\tR\x04tags\x123\n\x08metadata\x18\t \x01(\x0b2\x17.google.protobuf.StructR\x08metadata\x129\n\ncreated_at\x18\n \x01(\x0b2\x1a.google.protobuf.TimestampR\tcreatedAt\x121\n\x06due_at\x18\x0b \x01(\x0b2\x1a.google.protobuf.TimestampR\x05dueAt\x129\n\nstarted_at\x18\x0c \x01(\x0b2\x1a.google.protobuf.TimestampR\tstartedAt\x12;\n\x0bfinished_at\x18\r \x01(\x0b2\x1a.google.protobuf.TimestampR\nfinishedAt\x129\n\nexpires_at\x18\x0e \x01(\x0b2\x1a.google.protobuf.TimestampR\texpiresAt"-\n\x12RetrieveRunRequest\x12\x17\n\x02id\x18\x01 \x01(\tR\x02idB\x07\xbaH\x04r\x02\x10\x01"9\n\x13RetrieveRunResponse\x12"\n\x03run\x18\x01 \x01(\x0b2\x10.app.task.v1.RunR\x03run"\xb8\x01\n\x0fListRunsRequest\x12\x12\n\x04task\x18\x01 \x01(\tR\x04task\x12C\n\x08statuses\x18\x02 \x03(\x0e2\x16.app.task.v1.RunStatusR\x08statusesB\x0f\xbaH\x0c\x92\x01\t"\x07\x82\x01\x04\x10\x01 \x00\x12\x12\n\x04tags\x18\x03 \x03(\tR\x04tags\x12\x16\n\x06cursor\x18\x04 \x01(\tR\x06cursor\x12 \n\x05limit\x18\x05 \x01(\x05R\x05limitB\n\xbaH\x07\x1a\x05\x18\xe8\x07(\x00"Y\n\x10ListRunsResponse\x12$\n\x04runs\x18\x01 \x03(\x0b2\x10.app.task.v1.RunR\x04runs\x12\x1f\n\x0bnext_cursor\x18\x02 \x01(\tR\nnextCursor"+\n\x10CancelRunRequest\x12\x17\n\x02id\x18\x01 \x01(\tR\x02idB\x07\xbaH\x04r\x02\x10\x01"7\n\x11CancelRunResponse\x12"\n\x03run\x18\x01 \x01(\x0b2\x10.app.task.v1.RunR\x03run"+\n\x10ReplayRunRequest\x12\x17\n\x02id\x18\x01 \x01(\tR\x02idB\x07\xbaH\x04r\x02\x10\x01"#\n\x11ReplayRunResponse\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id"\xce\x01\n\x14RescheduleRunRequest\x12\x17\n\x02id\x18\x01 \x01(\tR\x02idB\x07\xbaH\x04r\x02\x10\x01\x12\x9c\x01\n\x06due_at\x18\x02 \x01(\x0b2\x1a.google.protobuf.TimestampR\x05dueAtBi\xbaHf\xba\x01`\n\x17tasks.reschedule.due_at\x12%a run is due at most 30 days from now\x1a\x1ethis <= now + duration(\'720h\')\xc8\x01\x01";\n\x15RescheduleRunResponse\x12"\n\x03run\x18\x01 \x01(\x0b2\x10.app.task.v1.RunR\x03run*\xec\x01\n\tRunStatus\x12\x1a\n\x16RUN_STATUS_UNSPECIFIED\x10\x00\x12\x16\n\x12RUN_STATUS_DELAYED\x10\x01\x12\x15\n\x11RUN_STATUS_QUEUED\x10\x02\x12\x18\n\x14RUN_STATUS_EXECUTING\x10\x03\x12\x18\n\x14RUN_STATUS_COMPLETED\x10\x04\x12\x15\n\x11RUN_STATUS_FAILED\x10\x05\x12\x17\n\x13RUN_STATUS_CANCELED\x10\x06\x12\x16\n\x12RUN_STATUS_EXPIRED\x10\x07\x12\x18\n\x14RUN_STATUS_TIMED_OUT\x10\x082\xb3\x04\n\x0bTaskService\x12D\n\x07Trigger\x12\x1b.app.task.v1.TriggerRequest\x1a\x1c.app.task.v1.TriggerResponse\x12S\n\x0cBatchTrigger\x12 .app.task.v1.BatchTriggerRequest\x1a!.app.task.v1.BatchTriggerResponse\x12P\n\x0bRetrieveRun\x12\x1f.app.task.v1.RetrieveRunRequest\x1a .app.task.v1.RetrieveRunResponse\x12G\n\x08ListRuns\x12\x1c.app.task.v1.ListRunsRequest\x1a\x1d.app.task.v1.ListRunsResponse\x12J\n\tCancelRun\x12\x1d.app.task.v1.CancelRunRequest\x1a\x1e.app.task.v1.CancelRunResponse\x12J\n\tReplayRun\x12\x1d.app.task.v1.ReplayRunRequest\x1a\x1e.app.task.v1.ReplayRunResponse\x12V\n\rRescheduleRun\x12!.app.task.v1.RescheduleRunRequest\x1a".app.task.v1.RescheduleRunResponseB5Z3github.com/ocelhq/ocel/pkg/proto/app/task/v1;taskv1b\x06proto3',
+    b'\n\x16app/task/v1/task.proto\x12\x0bapp.task.v1\x1a\x18app/topic/v1/topic.proto\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto"g\n\x08Debounce\x12\x19\n\x03key\x18\x01 \x01(\tR\x03keyB\x07\xbaH\x04r\x02\x10\x01\x12@\n\x05delay\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x05delayB\x0f\xbaH\x0c\xaa\x01\t"\x05\x08\x80\x9a\x9e\x01*\x00"\xdf\x04\n\x0eTriggerOptions\x12\xa3\x01\n\x06due_at\x18\x01 \x01(\x0b2\x1a.google.protobuf.TimestampR\x05dueAtBp\xbaHm\xba\x01j\n\x14tasks.trigger.due_at\x122a run is due at most 30 days after it is triggered\x1a\x1ethis <= now + duration(\'720h\')\x12;\n\x03ttl\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x03ttlB\x0e\xbaH\x0b\xaa\x01\x08"\x04\x08\x80\xeaI*\x00\x12\'\n\x0fidempotency_key\x18\x03 \x01(\tR\x0eidempotencyKey\x12S\n\x13idempotency_key_ttl\x18\x04 \x01(\x0b2\x19.google.protobuf.DurationR\x11idempotencyKeyTtlB\x08\xbaH\x05\xaa\x01\x02*\x00\x121\n\x08debounce\x18\x05 \x01(\x0b2\x15.app.task.v1.DebounceR\x08debounce\x12\x10\n\x03key\x18\x06 \x01(\tR\x03key\x120\n\x04lane\x18\x07 \x01(\x0e2\x12.app.topic.v1.LaneR\x04laneB\x08\xbaH\x05\x82\x01\x02\x10\x01\x12,\n\x0cmax_attempts\x18\x08 \x01(\x05R\x0bmaxAttemptsB\t\xbaH\x06\x1a\x04\x18d(\x00\x12 \n\x04tags\x18\t \x03(\tR\x04tagsB\x0c\xbaH\t\x92\x01\x06"\x04r\x02\x10\x01\x12%\n\x08metadata\x18\n \x01(\x0cR\x08metadataB\t\xbaH\x06z\x04\x18\x80\x80\x10"\xa3\x01\n\x0eTriggerRequest\x125\n\x04task\x18\x01 \x01(\tR\x04taskB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$\x12#\n\x07payload\x18\x02 \x01(\x0cR\x07payloadB\t\xbaH\x06z\x04\x18\x80\x80\x10\x125\n\x07options\x18\x03 \x01(\x0b2\x1b.app.task.v1.TriggerOptionsR\x07options"!\n\x0fTriggerResponse\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id"n\n\x10BatchTriggerItem\x12#\n\x07payload\x18\x01 \x01(\x0cR\x07payloadB\t\xbaH\x06z\x04\x18\x80\x80\x10\x125\n\x07options\x18\x02 \x01(\x0b2\x1b.app.task.v1.TriggerOptionsR\x07options"\x8e\x01\n\x13BatchTriggerRequest\x125\n\x04task\x18\x01 \x01(\tR\x04taskB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$\x12@\n\x05items\x18\x02 \x03(\x0b2\x1d.app.task.v1.BatchTriggerItemR\x05itemsB\x0b\xbaH\x08\x92\x01\x05\x08\x01\x10\xe8\x07"(\n\x14BatchTriggerResponse\x12\x10\n\x03ids\x18\x01 \x03(\tR\x03ids"\xa4\x04\n\x03Run\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n\x04task\x18\x02 \x01(\tR\x04task\x12.\n\x06status\x18\x03 \x01(\x0e2\x16.app.task.v1.RunStatusR\x06status\x12#\n\x07payload\x18\x04 \x01(\x0cR\x07payloadB\t\xbaH\x06z\x04\x18\x80\x80\x10\x12!\n\x06output\x18\x05 \x01(\x0cR\x06outputB\t\xbaH\x06z\x04\x18\x80\x80\x10\x12\x14\n\x05error\x18\x06 \x01(\tR\x05error\x12\x1a\n\x08attempts\x18\x07 \x01(\x05R\x08attempts\x12\x12\n\x04tags\x18\x08 \x03(\tR\x04tags\x12\x1a\n\x08metadata\x18\t \x01(\x0cR\x08metadata\x129\n\ncreated_at\x18\n \x01(\x0b2\x1a.google.protobuf.TimestampR\tcreatedAt\x121\n\x06due_at\x18\x0b \x01(\x0b2\x1a.google.protobuf.TimestampR\x05dueAt\x129\n\nstarted_at\x18\x0c \x01(\x0b2\x1a.google.protobuf.TimestampR\tstartedAt\x12;\n\x0bfinished_at\x18\r \x01(\x0b2\x1a.google.protobuf.TimestampR\nfinishedAt\x129\n\nexpires_at\x18\x0e \x01(\x0b2\x1a.google.protobuf.TimestampR\texpiresAt"-\n\x12RetrieveRunRequest\x12\x17\n\x02id\x18\x01 \x01(\tR\x02idB\x07\xbaH\x04r\x02\x10\x01"9\n\x13RetrieveRunResponse\x12"\n\x03run\x18\x01 \x01(\x0b2\x10.app.task.v1.RunR\x03run"\xb8\x01\n\x0fListRunsRequest\x12\x12\n\x04task\x18\x01 \x01(\tR\x04task\x12C\n\x08statuses\x18\x02 \x03(\x0e2\x16.app.task.v1.RunStatusR\x08statusesB\x0f\xbaH\x0c\x92\x01\t"\x07\x82\x01\x04\x10\x01 \x00\x12\x12\n\x04tags\x18\x03 \x03(\tR\x04tags\x12\x16\n\x06cursor\x18\x04 \x01(\tR\x06cursor\x12 \n\x05limit\x18\x05 \x01(\x05R\x05limitB\n\xbaH\x07\x1a\x05\x18\xe8\x07(\x00"Y\n\x10ListRunsResponse\x12$\n\x04runs\x18\x01 \x03(\x0b2\x10.app.task.v1.RunR\x04runs\x12\x1f\n\x0bnext_cursor\x18\x02 \x01(\tR\nnextCursor"+\n\x10CancelRunRequest\x12\x17\n\x02id\x18\x01 \x01(\tR\x02idB\x07\xbaH\x04r\x02\x10\x01"7\n\x11CancelRunResponse\x12"\n\x03run\x18\x01 \x01(\x0b2\x10.app.task.v1.RunR\x03run"+\n\x10ReplayRunRequest\x12\x17\n\x02id\x18\x01 \x01(\tR\x02idB\x07\xbaH\x04r\x02\x10\x01"#\n\x11ReplayRunResponse\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id"\xce\x01\n\x14RescheduleRunRequest\x12\x17\n\x02id\x18\x01 \x01(\tR\x02idB\x07\xbaH\x04r\x02\x10\x01\x12\x9c\x01\n\x06due_at\x18\x02 \x01(\x0b2\x1a.google.protobuf.TimestampR\x05dueAtBi\xbaHf\xba\x01`\n\x17tasks.reschedule.due_at\x12%a run is due at most 30 days from now\x1a\x1ethis <= now + duration(\'720h\')\xc8\x01\x01";\n\x15RescheduleRunResponse\x12"\n\x03run\x18\x01 \x01(\x0b2\x10.app.task.v1.RunR\x03run*\xec\x01\n\tRunStatus\x12\x1a\n\x16RUN_STATUS_UNSPECIFIED\x10\x00\x12\x16\n\x12RUN_STATUS_DELAYED\x10\x01\x12\x15\n\x11RUN_STATUS_QUEUED\x10\x02\x12\x18\n\x14RUN_STATUS_EXECUTING\x10\x03\x12\x18\n\x14RUN_STATUS_COMPLETED\x10\x04\x12\x15\n\x11RUN_STATUS_FAILED\x10\x05\x12\x17\n\x13RUN_STATUS_CANCELED\x10\x06\x12\x16\n\x12RUN_STATUS_EXPIRED\x10\x07\x12\x18\n\x14RUN_STATUS_TIMED_OUT\x10\x082\xb3\x04\n\x0bTaskService\x12D\n\x07Trigger\x12\x1b.app.task.v1.TriggerRequest\x1a\x1c.app.task.v1.TriggerResponse\x12S\n\x0cBatchTrigger\x12 .app.task.v1.BatchTriggerRequest\x1a!.app.task.v1.BatchTriggerResponse\x12P\n\x0bRetrieveRun\x12\x1f.app.task.v1.RetrieveRunRequest\x1a .app.task.v1.RetrieveRunResponse\x12G\n\x08ListRuns\x12\x1c.app.task.v1.ListRunsRequest\x1a\x1d.app.task.v1.ListRunsResponse\x12J\n\tCancelRun\x12\x1d.app.task.v1.CancelRunRequest\x1a\x1e.app.task.v1.CancelRunResponse\x12J\n\tReplayRun\x12\x1d.app.task.v1.ReplayRunRequest\x1a\x1e.app.task.v1.ReplayRunResponse\x12V\n\rRescheduleRun\x12!.app.task.v1.RescheduleRunRequest\x1a".app.task.v1.RescheduleRunResponseB5Z3github.com/ocelhq/ocel/pkg/proto/app/task/v1;taskv1b\x06proto3',
     [
         topic_pb.desc(),
         validate_pb.desc(),
         duration_pb.desc(),
-        struct_pb.desc(),
         timestamp_pb.desc(),
     ],
     {

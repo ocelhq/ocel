@@ -1,5 +1,4 @@
-import { create } from "@bufbuild/protobuf";
-import { timestampFromDate, ValueSchema } from "@bufbuild/protobuf/wkt";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TopicService } from "../gen/proto/app/topic/v1/topic_pb.js";
 import { type RuntimeProxy, serveRuntimeProxy } from "../testing/runtime-proxy.js";
@@ -30,7 +29,7 @@ describe("a consumer's dead letters", () => {
                   id: "01J00000000000000000000000",
                   publishedAt: timestampFromDate(new Date("2026-01-01T00:00:00Z")),
                 },
-                payload: create(ValueSchema, { kind: { case: "numberValue", value: 7 } }),
+                payload: new TextEncoder().encode("7"),
                 attempts: 3,
                 error: "card declined",
                 failedAt: timestampFromDate(new Date("2026-01-01T00:05:00Z")),

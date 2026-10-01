@@ -4,7 +4,6 @@ package app.topic.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/app/topic/v1;topicv1";
 
 import "buf/validate/validate.proto";
-import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 service TopicService {
@@ -69,7 +68,7 @@ message Delivery {
 
   Attempt attempt = 3;
 
-  google.protobuf.Value payload = 4;
+  bytes payload = 4 [(buf.validate.field).bytes.max_len = 262144];
 }
 
 message Envelope {
@@ -87,7 +86,7 @@ message Envelope {
 
   string schema = 7 [(buf.validate.field).string.pattern = "^sha256-[0-9a-f]{64}$", (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
-  google.protobuf.Value payload = 8;
+  bytes payload = 8 [(buf.validate.field).bytes.max_len = 262144];
 
   repeated Delivery messages = 9 [(buf.validate.field).repeated.max_items = 1000];
 }
@@ -107,7 +106,7 @@ message DeadLetter {
 
   Message message = 2;
 
-  google.protobuf.Value payload = 3;
+  bytes payload = 3 [(buf.validate.field).bytes.max_len = 262144];
 
   int32 attempts = 4;
 

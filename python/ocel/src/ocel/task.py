@@ -5,12 +5,11 @@ from datetime import datetime
 from typing import Any, Generic, Literal, Protocol, TypeVar, cast, overload
 
 from protobuf import Oneof
-from protobuf.wkt import Struct
 
 from ocel import _registry
 from ocel._binding import read_runtime, refuse_unbound, refuse_unprovisioned
 from ocel._declare import declare, find_caller_source, is_discovering
-from ocel._payload import Codec, find_payload_type
+from ocel._payload import Codec, encode_json, find_payload_type
 from ocel._wire import Seconds, encode_due_at, encode_duration, encode_lane, encode_retry_policy
 from ocel.gen.app.resources.v1.resources_pb import (
     BatchPolicy,
@@ -256,7 +255,7 @@ def _build_trigger_options(trigger: Trigger[Any]) -> TriggerOptions | None:
         lane=encode_lane(trigger.lane),
         max_attempts=trigger.max_attempts or 0,
         tags=list(trigger.tags),
-        metadata=Struct.from_python(dict(trigger.metadata)) if trigger.metadata else None,
+        metadata=encode_json(dict(trigger.metadata)).encode() if trigger.metadata else b"",
     )
     return None if options == TriggerOptions() else options
 

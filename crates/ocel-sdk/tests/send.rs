@@ -95,7 +95,7 @@ async fn a_consumers_dead_letters_are_listed_redriven_purged_and_counted() {
                     ..Default::default()
                 }
                 .into(),
-                payload: serde_json::from_value(serde_json::json!({ "id": 7 })).expect("a value"),
+                payload: br#"{"id":7}"#.to_vec(),
                 attempts: 3,
                 error: "smtp refused".into(),
                 ..Default::default()
@@ -181,6 +181,32 @@ async fn a_consumers_dead_letters_are_listed_redriven_purged_and_counted() {
         (count.topic.as_str(), count.consumer.as_str()),
         ("orders", "email")
     );
+}
+
+#[tokio::test]
+async fn a_dead_letters_payload_keeps_large_integers_and_floats_exactly() {
+    let numbers = r#"{"ratio":2.0,"id":9007199254740993,"count":2}"#;
+    let runtime = runtime();
+    runtime.answer(
+        "ListDeadLetters",
+        ListDeadLettersResponse {
+            dead_letters: vec![DeadLetter {
+                execution: "01J0000000000000000000000A-email".into(),
+                payload: numbers.as_bytes().to_vec(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+    );
+    let page = orders().dead_letter("email").list().await.expect("a page");
+    let payload = &page.dead_letters[0].payload;
+    assert_eq!(
+        *payload,
+        serde_json::from_str::<serde_json::Value>(numbers).expect("json")
+    );
+    assert_eq!(payload["id"].as_u64(), Some(9_007_199_254_740_993));
+    assert!(payload["ratio"].is_f64(), "{payload}");
+    assert!(payload["count"].is_u64(), "{payload}");
 }
 
 #[tokio::test]

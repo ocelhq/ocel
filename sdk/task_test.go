@@ -146,8 +146,8 @@ func TestTriggerCarriesEveryOptionItIsGiven(t *testing.T) {
 		!slices.Equal(options.GetTags(), []string{"user:1", "plan:pro"}) {
 		t.Errorf("options = %v", options)
 	}
-	if metadata := options.GetMetadata().AsMap(); metadata["source"] != "upload" || metadata["retries"] != float64(2) {
-		t.Errorf("metadata = %v", metadata)
+	if metadata := string(options.GetMetadata()); metadata != `{"retries":2,"source":"upload"}` {
+		t.Errorf("metadata = %s", metadata)
 	}
 }
 

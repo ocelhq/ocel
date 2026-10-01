@@ -23,8 +23,9 @@ type keyedLog struct {
 }
 
 func (l *keyedLog) respond(envelope *topicv1.Envelope) reply {
-	fields := envelope.GetPayload().GetStructValue().GetFields()
-	key, n := fields["key"].GetStringValue(), int(fields["n"].GetNumberValue())
+	key, _ := fieldOf(envelope.GetPayload(), "key").(string)
+	number, _ := fieldOf(envelope.GetPayload(), "n").(float64)
+	n := int(number)
 	l.mu.Lock()
 	l.inFlight[key]++
 	l.running++

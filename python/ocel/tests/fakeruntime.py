@@ -3,7 +3,7 @@ import threading
 from wsgiref.simple_server import make_server
 
 from fakebucket import _body, _Quiet, _Threading
-from protobuf.wkt import Struct, Timestamp, Value
+from protobuf.wkt import Timestamp
 
 from ocel.gen.app.task.v1.task_connect import TaskServiceWSGIApplication
 from ocel.gen.app.task.v1.task_pb import (
@@ -33,17 +33,23 @@ TOKEN = "letmein"
 _AT = Timestamp(seconds=1_700_000_000, nanos=0)
 
 
-def stored_run(id: str, task: str = "resize-image") -> Run:
+def stored_run(
+    id: str,
+    task: str = "resize-image",
+    payload: bytes = b'{"url":"a.png","width":100}',
+    output: bytes = b'{"ok":true}',
+    metadata: bytes = b'{"plan":"pro"}',
+) -> Run:
     return Run(
         id=id,
         task=task,
         status=RunStatus.COMPLETED,
-        payload=Value.from_python({"url": "a.png", "width": 100}),
-        output=Value.from_python({"ok": True}),
+        payload=payload,
+        output=output,
         error="",
         attempts=2,
         tags=["user:1"],
-        metadata=Struct.from_python({"plan": "pro"}),
+        metadata=metadata,
         created_at=_AT,
         due_at=_AT,
         started_at=_AT,
@@ -66,7 +72,7 @@ class Tasks:
 
     def retrieve_run(self, request, ctx):
         self.runtime.seen("RetrieveRun", request, ctx)
-        return RetrieveRunResponse(run=stored_run(request.id))
+        return RetrieveRunResponse(run=stored_run(request.id, **self.runtime.stored_run_json))
 
     def list_runs(self, request, ctx):
         self.runtime.seen("ListRuns", request, ctx)
@@ -105,7 +111,7 @@ class Topics:
                 DeadLetter(
                     execution="01HZY3V0J9Q8C7B6A5Z4Y3X2W1-ship",
                     message=Message(id="01HZY3V0J9Q8C7B6A5Z4Y3X2W1", published_at=_AT),
-                    payload=Value.from_python({"order": 7}),
+                    payload=self.runtime.dead_letter_payload,
                     attempts=3,
                     error="carrier down",
                     failed_at=_AT,
@@ -131,6 +137,8 @@ class Runtime:
     def __init__(self):
         self.calls: list[tuple[str, object]] = []
         self.authorizations: list[str | None] = []
+        self.stored_run_json: dict[str, bytes] = {}
+        self.dead_letter_payload = b'{"order":7}'
         self._tasks = TaskServiceWSGIApplication(Tasks(self))
         self._topics = TopicServiceWSGIApplication(Topics(self))
         self.server = make_server(

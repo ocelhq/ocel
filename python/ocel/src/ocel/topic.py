@@ -10,11 +10,10 @@ from protobuf import Oneof
 from ocel import _registry
 from ocel._binding import read_runtime, refuse_unbound, refuse_unprovisioned
 from ocel._declare import declare, find_caller_source, is_discovering
-from ocel._payload import Codec, find_payload_type
+from ocel._payload import Codec, decode_json, find_payload_type
 from ocel._wire import (
     Seconds,
     decode_timestamp,
-    decode_value,
     encode_due_at,
     encode_duration,
     encode_lane,
@@ -434,7 +433,7 @@ def _build_dead_letter(letter: WireDeadLetter) -> DeadLetter:
         execution=letter.execution,
         message_id=message.id if message else "",
         published_at=decode_timestamp(message.published_at) if message else None,
-        payload=decode_value(letter.payload),
+        payload=decode_json(letter.payload),
         attempts=letter.attempts,
         error=letter.error,
         failed_at=decode_timestamp(letter.failed_at),

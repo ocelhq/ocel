@@ -76,7 +76,7 @@ func TestTriggersWithOneDebounceKeyFoldIntoOneRunDueADelayAfterTheLast(t *testin
 	if len(got) != 1 {
 		t.Fatalf("the worker received %d runs, want the one debounced run", len(got))
 	}
-	if n := got[0].envelope.GetPayload().GetStructValue().GetFields()["n"].GetNumberValue(); n != 1 {
+	if n := fieldOf(got[0].envelope.GetPayload(), "n"); n != 1.0 {
 		t.Errorf("the debounced run ran payload n=%v, want the first trigger's n=1", n)
 	}
 	if got[0].at.Before(last.Add(600 * time.Millisecond)) {
