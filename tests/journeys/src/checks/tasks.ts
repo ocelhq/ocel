@@ -158,21 +158,26 @@ export const delayCheck: Check = {
   },
 };
 
+const DELAY_BOUND_MS = 30 * 24 * 60 * 60 * 1_000;
+const PAST_THE_BOUND_MS = 60_000;
+
 export const delayBoundCheck: Check = {
-  title: "a trigger due more than 30 days out is refused, and one due in 30 is taken",
+  title: "a trigger due exactly 30 days out is taken, and one due a minute past 30 days is refused",
   run: async (ctx) => {
-    const refused = await post(ctx, "/api/tasks/echo/trigger", {
-      payload: {},
-      options: { delay: "31d" },
-    });
-    assert.notEqual(refused.res.status, 200, `a 31-day delay answered ${describeReply(refused)}`);
-    assert.match(describeReply(refused), /30 days/);
-    const id = await trigger(ctx, "echo", {}, { delay: "29d" });
+    const id = await trigger(ctx, "echo", {}, { delay: "30d" });
     assert.equal((await retrieve(ctx, id)).status, "DELAYED");
     assert.equal(
       readAnswer<RunRecord>(await post(ctx, `/api/runs/${id}/cancel`), "the cancel").status,
       "CANCELED",
     );
+    const dueAt = new Date(Date.now() + DELAY_BOUND_MS + PAST_THE_BOUND_MS).toISOString();
+    const refused = await post(ctx, "/api/tasks/echo/trigger", { payload: {}, options: { dueAt } });
+    assert.notEqual(
+      refused.res.status,
+      200,
+      `a run due a minute past 30 days answered ${describeReply(refused)}`,
+    );
+    assert.match(describeReply(refused), /30 days/);
   },
 };
 
