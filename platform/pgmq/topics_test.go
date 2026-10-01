@@ -2,6 +2,7 @@ package pgmq
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -75,6 +76,26 @@ func TestAMessageSentToATopicReachesEveryConsumerOnItsOwnWorker(t *testing.T) {
 		if fieldOf(envelope.GetPayload(), "order") != 42.0 {
 			t.Errorf("%s received payload %s, want the sent one", consumer, envelope.GetPayload())
 		}
+	}
+}
+
+func TestAnEnvelopeNamesTheDeclaredTopicAndConsumerRatherThanTheQueueItWasReadFrom(t *testing.T) {
+	worker := newWorker(t, succeeding)
+	engine := dispatching(t, map[string]*contractv1.ManifestTopic{
+		"order-events": aTopic(&contractv1.ManifestConsumer{Name: "send-email", Worker: "worker"}),
+		"resize-image": aTask(named("resize-image")),
+	}, map[string]Worker{"worker": {URL: worker.server.URL}})
+
+	send(t, engine, "order-events", `{}`, nil)
+	trigger(t, engine, "resize-image", `{}`, nil)
+
+	names := map[string]string{}
+	for _, got := range awaitDelivered(t, worker, 2) {
+		names[got.envelope.GetConsumer()] = got.envelope.GetTopic()
+	}
+	if want := map[string]string{"send-email": "order-events", "resize-image": "resize-image"}; !maps.Equal(names, want) {
+		t.Errorf("envelopes named consumer → topic %v, want %v, the names declared and not those of the queues %s and %s",
+			names, want, queueName("order-events", "send-email"), queueName("resize-image", "resize-image"))
 	}
 }
 
