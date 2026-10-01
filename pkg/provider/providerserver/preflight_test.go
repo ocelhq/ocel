@@ -705,3 +705,59 @@ func TestPreflightReportsCredentialsTheEdgeAndItsDNSShareOnce(t *testing.T) {
 		t.Errorf("Preflight() reported %v, want the one problem the edge and its DNS writer share", problems)
 	}
 }
+
+func TestPreflightChecksNoDNSCredentialsTheEdgeOfTheSameVendorAlreadyPassed(t *testing.T) {
+	t.Parallel()
+
+	dns := fake.NewDNS()
+	dns.Verifies(errors.New("token revoked"))
+	vendor := edgeVendorDNS{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)), dns: dns}
+	vendor.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{Account: "edge-account"}, nil)
+	client := servedProvider(t, "1.2.3", vendor)
+
+	selection := dnsSelection(provider.DNSKind(fake.KindRelay))
+	selection.Kind = string(fake.KindRelay)
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Edge:         selection,
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if problems := resp.GetCredentialProblems(); len(problems) != 0 {
+		t.Errorf("Preflight() reported %v, want none: the edge's passing check covers its own vendor's DNS writer", problems)
+	}
+	if got := resp.GetIdentity().GetEdgeScope(); got != "edge-account" {
+		t.Errorf("Preflight() edge scope = %q, want the account the edge's check answered with", got)
+	}
+}
+
+type frontRefusingDNS struct {
+	*fake.Provider
+}
+
+func (v frontRefusingDNS) DNS() provider.DNS { return v }
+
+func (v frontRefusingDNS) Open(kind provider.DNSKind, zone string, front edge.Kind) (edge.DNSRecords, error) {
+	if front == fake.KindRelay {
+		return nil, refusal.Refuse(refusal.CodeInvalid, "%s cannot write the records a %s edge answers on", kind, front)
+	}
+	return v.Provider.DNS().Open(kind, zone, front)
+}
+
+func TestPreflightRefusesADNSWriterThatCannotServeTheSelectedEdge(t *testing.T) {
+	t.Parallel()
+
+	vendor := frontRefusingDNS{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))}
+	client := servedProvider(t, "1.2.3", vendor)
+
+	selection := dnsSelection(fake.KindZone)
+	selection.Kind = string(fake.KindRelay)
+	_, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Edge:         selection,
+	})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "cannot write the records a relay edge answers on") {
+		t.Fatalf("Preflight() error = %v, want the DNS writer's refusal of the edge it would front, before the build", err)
+	}
+}

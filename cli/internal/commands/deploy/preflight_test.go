@@ -401,8 +401,9 @@ func TestADNSCredentialProblemAbortsTheDeployBeforeTheBuild(t *testing.T) {
 	}
 
 	out := stdout.String()
-	if !strings.Contains(out, string(fake.KindZone)) || !strings.Contains(out, "zone token was revoked") {
-		t.Errorf("stdout = %q, want the DNS writer named with its credential problem", out)
+	want := "✗ " + string(fake.KindZone) + ": could not authenticate: the zone token was revoked"
+	if !strings.Contains(out, want) {
+		t.Errorf("stdout = %q, want the problem line %q naming the DNS writer", out, want)
 	}
 	if strings.Contains(out, "[build]") {
 		t.Errorf("stdout = %q, want the build to be skipped on a DNS credential failure", out)
