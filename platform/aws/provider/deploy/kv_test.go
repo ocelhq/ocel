@@ -231,6 +231,16 @@ func TestAStoreAdmitsItsPortFromTheVPCAlone(t *testing.T) {
 	}
 }
 
+func TestAStoreSendsNothingOutOfItsSecurityGroup(t *testing.T) {
+	t.Parallel()
+
+	group := registeredKV(t, "shop").inputsOf(t, tokenEC2SecurityGroup, "kv-cache-security-group")
+
+	if egress, set := group["egress"]; !set || !egress.IsArray() || len(egress.ArrayValue()) != 0 {
+		t.Errorf("security group egress = %v, want an empty list: ElastiCache opens no connection out, and an empty list also revokes the allow-all rule AWS adds", egress)
+	}
+}
+
 func TestEveryResourceOfAStoreIsTaggedAsAKVStore(t *testing.T) {
 	t.Parallel()
 
