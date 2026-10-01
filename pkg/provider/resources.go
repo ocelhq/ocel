@@ -19,6 +19,7 @@ type Resource struct {
 
 	Postgres *PostgresSpec
 	Bucket   *BucketSpec
+	KV       *KVSpec
 }
 
 type PostgresSpec struct {
@@ -28,6 +29,12 @@ type PostgresSpec struct {
 type BucketSpec struct {
 	AllowedOrigins []string
 	Public         bool
+}
+
+type KVSpec struct {
+	Version     string
+	Eviction    string
+	MemoryBytes int64
 }
 
 const (

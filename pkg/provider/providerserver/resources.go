@@ -1,6 +1,9 @@
 package providerserver
 
 import (
+	"cmp"
+
+	"github.com/ocelhq/ocel/pkg/kvstore"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -50,6 +53,29 @@ func manifestResource(message *contractv1.ManifestResource) (provider.Resource, 
 		resource.Postgres = &provider.PostgresSpec{Version: message.GetPostgres().GetVersion()}
 	case message.GetBucket() != nil:
 		resource.Bucket = &provider.BucketSpec{AllowedOrigins: message.GetBucket().GetAllowedOrigins(), Public: message.GetBucket().GetPublic()}
+	case message.GetKv() != nil:
+		spec, err := kvSpec(message.GetKv())
+		if err != nil {
+			return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "kv store %s: %s", declared, err)
+		}
+		resource.KV = spec
 	}
 	return resource, nil
+}
+
+func kvSpec(config *resourcesv1.KvConfig) (*provider.KVSpec, error) {
+	version := cmp.Or(config.GetVersion(), kvstore.DefaultVersion)
+	if err := kvstore.RefuseVersion(version); err != nil {
+		return nil, err
+	}
+	if eviction := config.GetEviction(); eviction != "" {
+		if err := kvstore.RefuseEviction(eviction); err != nil {
+			return nil, err
+		}
+	}
+	memory, err := kvstore.ParseMemory(cmp.Or(config.GetMemory(), kvstore.DefaultMemory))
+	if err != nil {
+		return nil, err
+	}
+	return &provider.KVSpec{Version: version, Eviction: config.GetEviction(), MemoryBytes: memory}, nil
 }
