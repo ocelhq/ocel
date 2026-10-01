@@ -77,7 +77,7 @@ while (Date.now() < deadline) {
 process.exit(4);
 `
 
-func taskProject(t *testing.T) string {
+func liveProject(t *testing.T, declarations string) string {
 	t.Helper()
 	if os.Getenv(liveDockerEnv) == "" {
 		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveDockerEnv)
@@ -95,15 +95,43 @@ func taskProject(t *testing.T) string {
 	})
 	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "worker-dev", "provider": "aws", "apps": [{"name": "web", "path": "."}]}`)
 	clitest.WriteFile(t, filepath.Join(root, "package.json"), `{"name": "worker-dev", "type": "module"}`)
-	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "index.ts"), greetTask)
-	clitest.WriteFile(t, filepath.Join(root, "trigger.ts"), fmt.Sprintf(triggerGreet, discovery.DefaultRootDirName))
-	clitest.WriteFile(t, filepath.Join(root, "retrieve.ts"), retrieveRun)
+	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "index.ts"), declarations)
 	if err := os.MkdirAll(filepath.Join(root, "node_modules"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(filepath.Join(fixturetest.RepoDir(t), "packages", "ocel"), filepath.Join(root, "node_modules", "ocel")); err != nil {
 		t.Fatal(err)
 	}
+	return root
+}
+
+const auditConsumer = `import { writeFileSync } from "node:fs";
+import { topic } from "ocel/topic";
+
+export const orders = topic<{ name: string }>("orders");
+
+export const audit = orders.consumer("audit", (payload) => {
+  writeFileSync(%q, payload.name);
+});
+`
+
+const sendOrder = `import { existsSync, readFileSync } from "node:fs";
+import { orders } from "./%[1]s/index.ts";
+
+await orders.send({ name: "ada" });
+const deadline = Date.now() + 120_000;
+while (Date.now() < deadline) {
+  if (existsSync(%[2]q) && readFileSync(%[2]q, "utf8") === "ada") process.exit(0);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}
+process.exit(4);
+`
+
+func taskProject(t *testing.T) string {
+	t.Helper()
+	root := liveProject(t, greetTask)
+	clitest.WriteFile(t, filepath.Join(root, "trigger.ts"), fmt.Sprintf(triggerGreet, discovery.DefaultRootDirName))
+	clitest.WriteFile(t, filepath.Join(root, "retrieve.ts"), retrieveRun)
 	return root
 }
 
@@ -130,6 +158,22 @@ func TestDockerOcelDevRunsATriggeredTaskOnItsWorkerPrintsTheRunAndKeepsItAcrossR
 	var again syncBuffer
 	if err := runDev(context.Background(), deps, false, root, []string{"node", filepath.Join(root, "retrieve.ts")}, &stdout, &again, strings.NewReader("")); err != nil {
 		t.Fatalf("the run greet completed in the last ocel dev is not completed in the next: %v; stderr=%s", err, again.String())
+	}
+}
+
+func TestDockerOcelDevDeliversAMessageSentToATopicToItsConsumerOnTheWorker(t *testing.T) {
+	audited := filepath.Join(t.TempDir(), "audited")
+	root := liveProject(t, fmt.Sprintf(auditConsumer, audited))
+	clitest.WriteFile(t, filepath.Join(root, "send.ts"), fmt.Sprintf(sendOrder, discovery.DefaultRootDirName, audited))
+	deps := devDeps()
+	deps.OpenDocker = docker.Open
+
+	var stdout, stderr syncBuffer
+	if err := runDev(context.Background(), deps, false, root, []string{"node", filepath.Join(root, "send.ts")}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDev err = %v, want the consumer to record the message the app sent; stderr=%s", err, stderr.String())
+	}
+	if want := `consumer "audit" of topic "orders" execution `; !strings.Contains(stderr.String(), want) {
+		t.Errorf("stderr = %s, want a line starting %q", stderr.String(), want)
 	}
 }
 
