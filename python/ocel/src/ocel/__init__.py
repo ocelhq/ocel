@@ -22,6 +22,7 @@ from ocel.env import (
     group,
     var,
 )
+from ocel.kv import KV, InvalidKVValueError, kv
 from ocel.postgres import Postgres, postgres
 from ocel.run import (
     AbortTaskRunError,
@@ -58,6 +59,8 @@ __all__ = [
     "EnvScopeError",
     "EnvValueError",
     "Group",
+    "InvalidKVValueError",
+    "KV",
     "Lane",
     "ObjectBody",
     "ObjectInfo",
@@ -85,6 +88,7 @@ __all__ = [
     "bucket",
     "deployment_url",
     "group",
+    "kv",
     "postgres",
     "runs",
     "task",
