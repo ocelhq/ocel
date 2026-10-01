@@ -11,6 +11,7 @@ import (
 	"cloud.google.com/go/firestore"
 	kms "cloud.google.com/go/kms/apiv1"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/cloudscheduler/v1"
 	"google.golang.org/api/option"
 	pubsub "google.golang.org/api/pubsub/v1"
 	"google.golang.org/grpc"
@@ -55,6 +56,7 @@ type Clients struct {
 	kms       memo[*kms.KeyManagementClient]
 	pubsub    memo[*pubsub.Service]
 	tasks     memo[*cloudtasks.Client]
+	scheduler memo[*cloudscheduler.Service]
 }
 
 func (c *Clients) Emulated() bool { return c.Endpoint != "" }
@@ -118,6 +120,12 @@ func (c *Clients) PubSub() (*pubsub.Service, error) {
 func (c *Clients) CloudTasks() (*cloudtasks.Client, error) {
 	return Opened(c, &c.tasks, "Cloud Tasks", func() (*cloudtasks.Client, error) {
 		return cloudtasks.NewClient(context.Background(), EmulatorGRPC(c.Endpoint)...)
+	})
+}
+
+func (c *Clients) Scheduler() (*cloudscheduler.Service, error) {
+	return Opened(c, &c.scheduler, "Cloud Scheduler", func() (*cloudscheduler.Service, error) {
+		return cloudscheduler.NewService(context.Background(), EmulatorREST(c.Endpoint)...)
 	})
 }
 

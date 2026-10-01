@@ -24,6 +24,7 @@ const (
 	PublishedAtAttribute = "ocel-published-at"
 	MaxAttemptsAttribute = "ocel-max-attempts"
 	LaneAttribute        = "ocel-lane"
+	ScheduleAttribute    = "ocel-schedule"
 
 	pushPrefix    = "/topics/"
 	consumerInfix = "/consumers/"
@@ -124,12 +125,24 @@ func pushedRunOf(topicName string, topic *contractv1.ManifestTopic, consumer *co
 	if at, err := time.Parse(time.RFC3339Nano, attributes[PublishedAtAttribute]); err == nil {
 		delivered.publishedAt = at
 	}
+	if _, scheduled := attributes[ScheduleAttribute]; scheduled {
+		delivered.payload = scheduledPayloadOf(publishTime)
+	}
 	if delivered.messageID == "" {
 		delivered.messageID = envelope.MessageIDFrom(publishTime, pushed.Message.MessageID)
 	}
 	requested, _ := strconv.Atoi(attributes[MaxAttemptsAttribute])
 	delivered.maxAttempts = retryPolicyOf(topic, consumer).attemptsFor(int32(requested))
 	return delivered
+}
+
+type scheduledPayload struct {
+	Timestamp string `json:"timestamp"`
+}
+
+func scheduledPayloadOf(fired time.Time) json.RawMessage {
+	payload, _ := json.Marshal(scheduledPayload{Timestamp: fired.UTC().Truncate(time.Minute).Format(time.RFC3339)})
+	return payload
 }
 
 func (p pushedRun) execution() string { return executionOf(p.messageID, p.consumer.GetName()) }

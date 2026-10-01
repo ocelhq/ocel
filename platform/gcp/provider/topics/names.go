@@ -9,6 +9,7 @@ import (
 
 const (
 	nameSeparator  = "."
+	jobSeparator   = "_"
 	deadLetterWord = "dead"
 )
 
@@ -33,4 +34,8 @@ func (n Names) Subscription(topic, consumer string) string {
 
 func (n Names) DeadLetterTopic(topic, consumer string) string {
 	return n.Subscription(topic, consumer) + nameSeparator + deadLetterWord
+}
+
+func (n Names) ScheduleJob(task string) string {
+	return strings.ReplaceAll(n.Topic(task), nameSeparator, jobSeparator)
 }
