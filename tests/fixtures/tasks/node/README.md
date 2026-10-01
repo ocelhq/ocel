@@ -33,4 +33,7 @@ ocel dev -- pnpm dev
 OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --config ocel.vps.json
 ```
 
+On a box, `web`'s image carries the bundled worker entry, and `worker`, `ledger` and `capped`
+each run as a container of their own from that image, which the box's agent delivers to.
+
 `ocel destroy` takes the queues, the runs and the workers down with the app.
