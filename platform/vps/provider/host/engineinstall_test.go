@@ -64,6 +64,7 @@ func installedOn(dir, command string) session.Result {
 
 func installsOn(dir string, progress *fake.Log) (*bench, *[]int) {
 	box := machine(nil)
+	box.dest.User = "ada"
 	var toldBefore []int
 	box.answer = func(command string) (session.Result, bool) {
 		if !strings.Contains(command, dockerSource) {

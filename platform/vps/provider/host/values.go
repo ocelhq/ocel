@@ -80,8 +80,12 @@ func (h *Host) note(ctx context.Context, spec Container) error {
 	if err != nil {
 		return err
 	}
+	acting, err := h.reachStateRoot(ctx)
+	if err != nil {
+		return err
+	}
 	_, err = h.ran(ctx, "note the names "+spec.App+" is handed",
-		"install -D -m 0600 /dev/stdin "+quoted(HandedNote(spec.Tier, spec.Name)), bytes.NewReader(rendered), "")
+		"install -D -m 0600 /dev/stdin "+quoted(HandedNote(spec.Tier, spec.Name)), bytes.NewReader(rendered), acting)
 	return err
 }
 
@@ -91,7 +95,11 @@ func handedCommand(tier environment.Tier, container string) string {
 }
 
 func (h *Host) handed(ctx context.Context, spec Container) (Note, bool, error) {
-	said, err := h.ran(ctx, "ask what "+spec.Name+" was handed", handedCommand(spec.Tier, spec.Name), nil, "")
+	acting, err := h.reachStateRoot(ctx)
+	if err != nil {
+		return Note{}, false, err
+	}
+	said, err := h.ran(ctx, "ask what "+spec.Name+" was handed", handedCommand(spec.Tier, spec.Name), nil, acting)
 	if err != nil {
 		return Note{}, false, err
 	}
@@ -173,8 +181,12 @@ func (h *Host) hand(ctx context.Context, delivery handoff, spec Container) error
 	if err != nil {
 		return err
 	}
+	acting, err := h.reachStateRoot(ctx)
+	if err != nil {
+		return err
+	}
 	_, err = h.ran(ctx, "write the values "+spec.App+" is handed",
-		"install -m 0600 /dev/stdin "+quoted(delivery.path), bytes.NewReader(rendered), "")
+		"install -m 0600 /dev/stdin "+quoted(delivery.path), bytes.NewReader(rendered), acting)
 	return err
 }
 

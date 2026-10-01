@@ -63,11 +63,11 @@ func (h *Host) owning(ctx context.Context, what, command string, stdin []byte) (
 	if err == nil || !strings.Contains(strings.ToLower(refused), "permission denied") {
 		return said, err
 	}
-	elevation, unelevated := h.elevate(ctx)
-	if unelevated != nil || elevation == "" {
+	acting, unreached := h.reachStateRoot(ctx)
+	if unreached != nil || acting == "" {
 		return said, err
 	}
-	return h.ran(ctx, what, command, fed(), elevation)
+	return h.ran(ctx, what, command, fed(), acting)
 }
 
 func keepCommand(tier environment.Tier, path string) string {

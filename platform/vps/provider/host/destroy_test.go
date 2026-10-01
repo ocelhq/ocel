@@ -278,6 +278,7 @@ func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 
 	tier := environment.TierProduction
 	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
+	box.dest.User = "ada"
 
 	plan, err := NewBootstrap(box.host(), testVendor, "shop").PlanRemove(context.Background(), tier)
 	if err != nil {

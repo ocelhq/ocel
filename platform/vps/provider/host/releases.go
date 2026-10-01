@@ -28,13 +28,13 @@ func Repository(imageRef string) (string, bool) {
 func Scope(project, app string) string { return naming.Sanitize(project) + "/" + app }
 
 func (h *Host) Promote(ctx context.Context, tier environment.Tier, project, app, imageRef string) error {
-	_, err := h.releases(ctx, "record "+imageRef+" as "+app+"'s release", "",
+	_, err := h.releases(ctx, "record "+imageRef+" as "+app+"'s release",
 		Scope(project, app), "promote", string(tier), imageRef)
 	return err
 }
 
 func (h *Host) Forget(ctx context.Context, tier environment.Tier, project, app string) error {
-	_, err := h.releases(ctx, "forget "+app+"'s releases", "",
+	_, err := h.releases(ctx, "forget "+app+"'s releases",
 		Scope(project, app), "forget", string(tier))
 	return err
 }
@@ -45,11 +45,7 @@ func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, pro
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s runs %s, which names no repository and tag", app, imageRef)
 	}
-	elevation, err := h.reachDocker(ctx)
-	if err != nil {
-		return err
-	}
-	said, err := h.releases(ctx, "reconcile "+app+"'s images", elevation, Scope(project, app), "reconcile", repository)
+	said, err := h.releases(ctx, "reconcile "+app+"'s images", Scope(project, app), "reconcile", repository)
 	if err != nil {
 		return err
 	}
@@ -66,10 +62,14 @@ func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, pro
 	return nil
 }
 
-func (h *Host) releases(ctx context.Context, what, elevation, scope string, args ...string) (string, error) {
-	command := quoted(releasesHelper) + " " + quoted(scope)
+func (h *Host) releases(ctx context.Context, what, scope string, args ...string) (string, error) {
+	acting, err := h.reachStateRoot(ctx)
+	if err != nil {
+		return "", err
+	}
+	command := acting + quoted(releasesHelper) + " " + quoted(scope)
 	for _, arg := range args {
 		command += " " + quoted(arg)
 	}
-	return h.ran(ctx, what, command, nil, elevation)
+	return h.ran(ctx, what, command, nil, "")
 }
