@@ -198,6 +198,35 @@ func TestAPayloadReachesTheRunAsTheJSONTextItWasSentAs(t *testing.T) {
 	}
 }
 
+func TestAConsumerIsHandedThePayloadTextAndRunsAsTheTopicAndConsumerTheEnvelopeNames(t *testing.T) {
+	var raw json.RawMessage
+	var run ocel.RunContext
+	ocel.Topic[json.RawMessage]("measure-events").Consumer("measure-log", func(ctx context.Context, in json.RawMessage) error {
+		raw = in
+		run, _ = ocel.RunFrom(ctx)
+		return nil
+	})
+
+	status, _ := deliver(t, "worker", envelope("measure-events", "measure-log", 1, 3, exactJSON))
+
+	if status != http.StatusOK || string(raw) != exactJSON {
+		t.Errorf("answer = %d after handing the consumer %s, want 200 after %s", status, raw, exactJSON)
+	}
+	if run.Kind != ocel.KindConsumer || run.Name != "measure-log" || run.Topic != "measure-events" {
+		t.Errorf("run = %+v, want consumer measure-log of topic measure-events", run)
+	}
+}
+
+func TestATaskReturningTheJSONTextItWasHandedAnswersItUnchanged(t *testing.T) {
+	ocel.Task("measure-echo", func(_ context.Context, in json.RawMessage) (json.RawMessage, error) { return in, nil })
+
+	status, body := deliver(t, "worker", envelope("measure-echo", "measure-echo", 1, 3, exactJSON))
+
+	if status != http.StatusOK || body != exactJSON {
+		t.Errorf("answer = %d %s, want 200 %s", status, body, exactJSON)
+	}
+}
+
 func TestAWholeFloatInAPayloadDoesNotDecodeIntoAnInteger(t *testing.T) {
 	ran := false
 	ocel.Task("measure-float", func(_ context.Context, in measurement) (any, error) {
