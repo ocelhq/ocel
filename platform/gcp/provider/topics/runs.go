@@ -15,6 +15,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
+const (
+	moveAttempts     = 5
+	debounceAttempts = 5
+)
+
 func noRun(id string) error {
 	return connect.NewError(connect.CodeNotFound, fmt.Errorf("no run %q", id))
 }
@@ -76,6 +81,16 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 }
 
 func (t Tasks) move(ctx context.Context, id string, due time.Time, keepTTL bool) error {
+	var err error
+	for range moveAttempts {
+		if err = t.moveOnce(ctx, id, due, keepTTL); connect.CodeOf(err) != connect.CodeAborted {
+			return err
+		}
+	}
+	return err
+}
+
+func (t Tasks) moveOnce(ctx context.Context, id string, due time.Time, keepTTL bool) error {
 	current, err := t.deployment.Store().readRecord(ctx, id)
 	if errors.Is(err, keyvalue.ErrNotFound) {
 		return noRun(id)
@@ -137,10 +152,11 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 	if !original.ExpiresAt.IsZero() && !original.DueAt.IsZero() {
 		ttl = original.ExpiresAt.Sub(original.DueAt)
 	}
-	if err := t.start(ctx, replay, now, ttl, original.Tags, original.Metadata); err != nil {
+	run := t.deployment.newStoredRun(replay, now, ttl, original.Tags, original.Metadata)
+	if err := t.start(ctx, replay, run); err != nil {
 		return nil, err
 	}
-	return &taskv1.ReplayRunResponse{Id: executionOf(replay.messageID, topic.GetConsumers()[0].GetName())}, nil
+	return &taskv1.ReplayRunResponse{Id: run.Execution}, nil
 }
 
 func refuseUnreschedulable(record runRecord, now time.Time) error {
