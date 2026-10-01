@@ -12,6 +12,7 @@ enum BindingType {
   BINDING_TYPE_CUSTOM = 3;
   BINDING_TYPE_TOPIC = 4;
   BINDING_TYPE_TASK = 5;
+  BINDING_TYPE_KV = 6;
 }
 
 enum PostgresTlsMode {
@@ -29,6 +30,7 @@ message Binding {
     google.protobuf.Struct custom = 6;
     TopicProperties topic = 7;
     TaskProperties task = 8;
+    KvProperties kv = 9;
   }
 
   repeated Grant grants = 4;
@@ -68,6 +70,14 @@ message TopicProperties {
 
 message TaskProperties {
   string task = 1;
+}
+
+message KvProperties {
+  string host = 1;
+  int32 port = 2;
+  string username = 3;
+  string password = 4 [debug_redact = true];
+  bool tls = 5;
 }
 
 message Grant {

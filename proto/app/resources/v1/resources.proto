@@ -23,6 +23,7 @@ enum ResourceType {
   RESOURCE_TYPE_TASK = 4;
   RESOURCE_TYPE_WORKER = 5;
   RESOURCE_TYPE_CONSUMER = 6;
+  RESOURCE_TYPE_KV = 7;
 }
 
 message ResourceIdentifier {
@@ -43,6 +44,7 @@ message DeclareRequest {
     TaskConfig task = 6;
     WorkerConfig worker = 7;
     ConsumerConfig consumer = 8;
+    KvConfig kv = 9;
   }
 
   string source = 4;
@@ -118,4 +120,33 @@ message TaskConfig {
 
 message WorkerConfig {
   int32 concurrency = 1;
+}
+
+enum KvShape {
+  KV_SHAPE_UNSPECIFIED = 0;
+  KV_SHAPE_TEXT = 1;
+  KV_SHAPE_COUNTER = 2;
+  KV_SHAPE_JSON = 3;
+  KV_SHAPE_LIST = 4;
+  KV_SHAPE_SET = 5;
+}
+
+message KvEntry {
+  string name = 1;
+
+  string pattern = 2;
+
+  KvShape shape = 3;
+
+  string source = 4;
+}
+
+message KvConfig {
+  string version = 1;
+
+  string eviction = 2;
+
+  string memory = 3;
+
+  repeated KvEntry entries = 4;
 }

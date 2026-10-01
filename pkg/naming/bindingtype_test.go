@@ -66,6 +66,7 @@ func TestResourceEnvName(t *testing.T) {
 		{bindingsv1.BindingType_BINDING_TYPE_BUCKET, "OCEL_RESOURCE_BUCKET_orders"},
 		{bindingsv1.BindingType_BINDING_TYPE_TOPIC, "OCEL_RESOURCE_TOPIC_orders"},
 		{bindingsv1.BindingType_BINDING_TYPE_TASK, "OCEL_RESOURCE_TASK_orders"},
+		{bindingsv1.BindingType_BINDING_TYPE_KV, "OCEL_RESOURCE_KV_orders"},
 	} {
 		if got := ResourceEnvName(tc.typ, "orders"); got != tc.want {
 			t.Errorf("ResourceEnvName(%v) = %q, want %q — the env contract does not move with the enum name", tc.typ, got, tc.want)
@@ -98,6 +99,7 @@ func TestBindingTypeOf(t *testing.T) {
 		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Custom{Custom: &structpb.Struct{}}}, bindingsv1.BindingType_BINDING_TYPE_CUSTOM},
 		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Topic{Topic: &bindingsv1.TopicProperties{}}}, bindingsv1.BindingType_BINDING_TYPE_TOPIC},
 		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Task{Task: &bindingsv1.TaskProperties{}}}, bindingsv1.BindingType_BINDING_TYPE_TASK},
+		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Kv{Kv: &bindingsv1.KvProperties{}}}, bindingsv1.BindingType_BINDING_TYPE_KV},
 		{&bindingsv1.Binding{}, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED},
 		{nil, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED},
 	} {
@@ -164,5 +166,12 @@ func TestATaskSharesItsNamespaceWithTopics(t *testing.T) {
 	task, _ := KindOf(bindingsv1.BindingType_BINDING_TYPE_TASK)
 	if topic != KindTopic || task != KindTopic {
 		t.Errorf("KindOf(topic) = %q, KindOf(task) = %q, want both %q: a task is a topic with one consumer, and the two names share one namespace", topic, task, KindTopic)
+	}
+}
+
+func TestAKVStoreIsAComponentOfItsOwn(t *testing.T) {
+	kind, bound := KindOf(bindingsv1.BindingType_BINDING_TYPE_KV)
+	if !bound || kind != KindKV || !kind.Valid() || kind.Component() != "kv" {
+		t.Errorf("KindOf(kv) = %q (bound %v), component %q, want %q with component \"kv\"", kind, bound, kind.Component(), KindKV)
 	}
 }

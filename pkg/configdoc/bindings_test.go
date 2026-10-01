@@ -117,3 +117,22 @@ func TestATopicOrTaskIsNotBoundInConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestAKVStoreIsBoundToARecordPublishedElsewhere(t *testing.T) {
+	properties := bindingsSchema(t)["properties"].(map[string]any)
+	kv, keyed := properties["kv"].(map[string]any)
+	if !keyed {
+		t.Fatalf("the bindings schema has no kv key, want one: ocel bindings set publishes a kv record to bind")
+	}
+	if description, _ := kv["description"].(string); !strings.Contains(description, `"@shared-cache"`) {
+		t.Errorf("bindings.kv description = %q, want its example a record a cache is published under, \"@shared-cache\"", description)
+	}
+	published := map[string]any{"slug": "shop", "bindings": map[string]any{"kv": map[string]any{"cache": "@shared-cache"}}}
+	if err := Check("", Document{}, published); err != nil {
+		t.Errorf("Check = %v, want bindings.kv.cache admitted as a published record", err)
+	}
+	inline := map[string]any{"slug": "shop", "bindings": map[string]any{"kv": map[string]any{"cache": map[string]any{"host": "cache.internal"}}}}
+	if err := Check("", Document{}, inline); err == nil {
+		t.Error("Check = nil, want an inline kv record refused: a kv store is bound only to a published record")
+	}
+}

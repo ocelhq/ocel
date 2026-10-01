@@ -44,6 +44,7 @@ fn kind_of(properties: &Option<Properties>) -> String {
         Some(Properties::Custom(_)) => "CUSTOM",
         Some(Properties::Topic(_)) => "TOPIC",
         Some(Properties::Task(_)) => "TASK",
+        Some(Properties::Kv(_)) => "KV",
         None => "UNSPECIFIED",
     }
     .to_string()

@@ -17,6 +17,7 @@ var bindingKinds = map[bindingsv1.BindingType]Kind{
 	bindingsv1.BindingType_BINDING_TYPE_BUCKET:   KindBucket,
 	bindingsv1.BindingType_BINDING_TYPE_TOPIC:    KindTopic,
 	bindingsv1.BindingType_BINDING_TYPE_TASK:     KindTopic,
+	bindingsv1.BindingType_BINDING_TYPE_KV:       KindKV,
 }
 
 var proxiedTypes = map[bindingsv1.BindingType]bool{
@@ -52,6 +53,8 @@ func BindingTypeOf(l *bindingsv1.Binding) bindingsv1.BindingType {
 		return bindingsv1.BindingType_BINDING_TYPE_TOPIC
 	case *bindingsv1.Binding_Task:
 		return bindingsv1.BindingType_BINDING_TYPE_TASK
+	case *bindingsv1.Binding_Kv:
+		return bindingsv1.BindingType_BINDING_TYPE_KV
 	}
 	return bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED
 }

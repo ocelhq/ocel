@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from protobuf.wkt import Struct
 
 
-_BindingFields: TypeAlias = Literal["name", "postgres", "bucket", "custom", "topic", "task", "grants", "source"]
+_BindingFields: TypeAlias = Literal["name", "postgres", "bucket", "custom", "topic", "task", "kv", "grants", "source"]
 
 class Binding(Message[_BindingFields]):
     """
@@ -52,14 +52,14 @@ class Binding(Message[_BindingFields]):
             self,
             *,
             name: str = "",
-            properties: Oneof[Literal["postgres"], PostgresProperties] | Oneof[Literal["bucket"], BucketProperties] | Oneof[Literal["custom"], Struct] | Oneof[Literal["topic"], TopicProperties] | Oneof[Literal["task"], TaskProperties] | None = None,
+            properties: Oneof[Literal["postgres"], PostgresProperties] | Oneof[Literal["bucket"], BucketProperties] | Oneof[Literal["custom"], Struct] | Oneof[Literal["topic"], TopicProperties] | Oneof[Literal["task"], TaskProperties] | Oneof[Literal["kv"], KvProperties] | None = None,
             grants: list[Grant] | None = None,
             source: str = "",
         ) -> None:
             pass
 
         name: str
-        properties: Oneof[Literal["postgres"], PostgresProperties] | Oneof[Literal["bucket"], BucketProperties] | Oneof[Literal["custom"], Struct] | Oneof[Literal["topic"], TopicProperties] | Oneof[Literal["task"], TaskProperties] | None
+        properties: Oneof[Literal["postgres"], PostgresProperties] | Oneof[Literal["bucket"], BucketProperties] | Oneof[Literal["custom"], Struct] | Oneof[Literal["topic"], TopicProperties] | Oneof[Literal["task"], TaskProperties] | Oneof[Literal["kv"], KvProperties] | None
         grants: list[Grant]
         source: str
 
@@ -265,6 +265,58 @@ class TaskProperties(Message[_TaskPropertiesFields]):
 
         task: str
 
+_KvPropertiesFields: TypeAlias = Literal["host", "port", "username", "password", "tls"]
+
+class KvProperties(Message[_KvPropertiesFields]):
+    """
+    ```proto
+    message common.bindings.v1.KvProperties
+    ```
+
+    Attributes:
+        host:
+            ```proto
+            string host = 1;
+            ```
+        port:
+            ```proto
+            int32 port = 2;
+            ```
+        username:
+            ```proto
+            string username = 3;
+            ```
+        password:
+            ```proto
+            string password = 4;
+            ```
+        tls:
+            ```proto
+            bool tls = 5;
+            ```
+    """
+
+    __slots__ = ("host", "port", "username", "password", "tls")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            host: str = "",
+            port: int = 0,
+            username: str = "",
+            password: str = "",
+            tls: bool = False,
+        ) -> None:
+            pass
+
+        host: str
+        port: int
+        username: str
+        password: str
+        tls: bool
+
 _GrantFields: TypeAlias = Literal["actions", "resources", "label", "conditions"]
 
 class Grant(Message[_GrantFields]):
@@ -382,6 +434,10 @@ class BindingType(Enum):
             ```proto
             BINDING_TYPE_TASK = 5
             ```
+        KV:
+            ```proto
+            BINDING_TYPE_KV = 6
+            ```
     """
 
     UNSPECIFIED = 0
@@ -390,6 +446,7 @@ class BindingType(Enum):
     CUSTOM = 3
     TOPIC = 4
     TASK = 5
+    KV = 6
 
 class PostgresTlsMode(Enum):
     """
@@ -418,7 +475,7 @@ class PostgresTlsMode(Enum):
 
 
 _DESC = file_desc(
-    b'\n!common/bindings/v1/bindings.proto\x12\x12common.bindings.v1\x1a\x1cgoogle/protobuf/struct.proto"\xa6\x03\n\x07Binding\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12D\n\x08postgres\x18\x02 \x01(\x0b2&.common.bindings.v1.PostgresPropertiesH\x00R\x08postgres\x12>\n\x06bucket\x18\x03 \x01(\x0b2$.common.bindings.v1.BucketPropertiesH\x00R\x06bucket\x121\n\x06custom\x18\x06 \x01(\x0b2\x17.google.protobuf.StructH\x00R\x06custom\x12;\n\x05topic\x18\x07 \x01(\x0b2#.common.bindings.v1.TopicPropertiesH\x00R\x05topic\x128\n\x04task\x18\x08 \x01(\x0b2".common.bindings.v1.TaskPropertiesH\x00R\x04task\x121\n\x06grants\x18\x04 \x03(\x0b2\x19.common.bindings.v1.GrantR\x06grants\x12\x16\n\x06source\x18\x05 \x01(\tR\x06sourceB\x0c\n\nproperties"\x83\x02\n\x12PostgresProperties\x12\x12\n\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n\x08database\x18\x03 \x01(\tR\x08database\x12\x1a\n\x08username\x18\x04 \x01(\tR\x08username\x12\x1f\n\x08password\x18\x05 \x01(\tR\x08passwordB\x03\x80\x01\x01\x12\x15\n\x03url\x18\x06 \x01(\tR\x03urlB\x03\x80\x01\x01\x12>\n\x08tls_mode\x18\x07 \x01(\x0e2#.common.bindings.v1.PostgresTlsModeR\x07tlsMode\x12\x15\n\x06tls_ca\x18\x08 \x01(\tR\x05tlsCa"\xaa\x02\n\x10BucketProperties\x12\x16\n\x06bucket\x18\x01 \x01(\tR\x06bucket\x12&\n\x0fpublic_base_url\x18\x02 \x01(\tR\rpublicBaseUrl\x12\x16\n\x06public\x18\x03 \x01(\x08R\x06public\x12\x1a\n\x08endpoint\x18\x04 \x01(\tR\x08endpoint\x12\x16\n\x06region\x18\x05 \x01(\tR\x06region\x12\x1d\n\npath_style\x18\x06 \x01(\x08R\tpathStyle\x12\x16\n\x06prefix\x18\x07 \x01(\tR\x06prefix\x12"\n\raccess_key_id\x18\x08 \x01(\tR\x0baccessKeyId\x12/\n\x11secret_access_key\x18\t \x01(\tR\x0fsecretAccessKeyB\x03\x80\x01\x01"\'\n\x0fTopicProperties\x12\x14\n\x05topic\x18\x01 \x01(\tR\x05topic"$\n\x0eTaskProperties\x12\x12\n\x04task\x18\x01 \x01(\tR\x04task"\x99\x01\n\x05Grant\x12\x18\n\x07actions\x18\x01 \x03(\tR\x07actions\x12\x1c\n\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n\x05label\x18\x03 \x01(\tR\x05label\x12B\n\nconditions\x18\x04 \x03(\x0b2".common.bindings.v1.GrantConditionR\nconditions"V\n\x0eGrantCondition\x12\x1a\n\x08operator\x18\x01 \x01(\tR\x08operator\x12\x10\n\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n\x06values\x18\x03 \x03(\tR\x06values*\xa7\x01\n\x0bBindingType\x12\x1c\n\x18BINDING_TYPE_UNSPECIFIED\x10\x00\x12\x19\n\x15BINDING_TYPE_POSTGRES\x10\x01\x12\x17\n\x13BINDING_TYPE_BUCKET\x10\x02\x12\x17\n\x13BINDING_TYPE_CUSTOM\x10\x03\x12\x16\n\x12BINDING_TYPE_TOPIC\x10\x04\x12\x15\n\x11BINDING_TYPE_TASK\x10\x05*v\n\x0fPostgresTlsMode\x12!\n\x1dPOSTGRES_TLS_MODE_UNSPECIFIED\x10\x00\x12\x1d\n\x19POSTGRES_TLS_MODE_REQUIRE\x10\x01\x12!\n\x1dPOSTGRES_TLS_MODE_VERIFY_FULL\x10\x02B@Z>github.com/ocelhq/ocel/pkg/proto/common/bindings/v1;bindingsv1b\x06proto3',
+    b'\n!common/bindings/v1/bindings.proto\x12\x12common.bindings.v1\x1a\x1cgoogle/protobuf/struct.proto"\xda\x03\n\x07Binding\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12D\n\x08postgres\x18\x02 \x01(\x0b2&.common.bindings.v1.PostgresPropertiesH\x00R\x08postgres\x12>\n\x06bucket\x18\x03 \x01(\x0b2$.common.bindings.v1.BucketPropertiesH\x00R\x06bucket\x121\n\x06custom\x18\x06 \x01(\x0b2\x17.google.protobuf.StructH\x00R\x06custom\x12;\n\x05topic\x18\x07 \x01(\x0b2#.common.bindings.v1.TopicPropertiesH\x00R\x05topic\x128\n\x04task\x18\x08 \x01(\x0b2".common.bindings.v1.TaskPropertiesH\x00R\x04task\x122\n\x02kv\x18\t \x01(\x0b2 .common.bindings.v1.KvPropertiesH\x00R\x02kv\x121\n\x06grants\x18\x04 \x03(\x0b2\x19.common.bindings.v1.GrantR\x06grants\x12\x16\n\x06source\x18\x05 \x01(\tR\x06sourceB\x0c\n\nproperties"\x83\x02\n\x12PostgresProperties\x12\x12\n\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n\x08database\x18\x03 \x01(\tR\x08database\x12\x1a\n\x08username\x18\x04 \x01(\tR\x08username\x12\x1f\n\x08password\x18\x05 \x01(\tR\x08passwordB\x03\x80\x01\x01\x12\x15\n\x03url\x18\x06 \x01(\tR\x03urlB\x03\x80\x01\x01\x12>\n\x08tls_mode\x18\x07 \x01(\x0e2#.common.bindings.v1.PostgresTlsModeR\x07tlsMode\x12\x15\n\x06tls_ca\x18\x08 \x01(\tR\x05tlsCa"\xaa\x02\n\x10BucketProperties\x12\x16\n\x06bucket\x18\x01 \x01(\tR\x06bucket\x12&\n\x0fpublic_base_url\x18\x02 \x01(\tR\rpublicBaseUrl\x12\x16\n\x06public\x18\x03 \x01(\x08R\x06public\x12\x1a\n\x08endpoint\x18\x04 \x01(\tR\x08endpoint\x12\x16\n\x06region\x18\x05 \x01(\tR\x06region\x12\x1d\n\npath_style\x18\x06 \x01(\x08R\tpathStyle\x12\x16\n\x06prefix\x18\x07 \x01(\tR\x06prefix\x12"\n\raccess_key_id\x18\x08 \x01(\tR\x0baccessKeyId\x12/\n\x11secret_access_key\x18\t \x01(\tR\x0fsecretAccessKeyB\x03\x80\x01\x01"\'\n\x0fTopicProperties\x12\x14\n\x05topic\x18\x01 \x01(\tR\x05topic"$\n\x0eTaskProperties\x12\x12\n\x04task\x18\x01 \x01(\tR\x04task"\x85\x01\n\x0cKvProperties\x12\x12\n\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n\x08username\x18\x03 \x01(\tR\x08username\x12\x1f\n\x08password\x18\x04 \x01(\tR\x08passwordB\x03\x80\x01\x01\x12\x10\n\x03tls\x18\x05 \x01(\x08R\x03tls"\x99\x01\n\x05Grant\x12\x18\n\x07actions\x18\x01 \x03(\tR\x07actions\x12\x1c\n\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n\x05label\x18\x03 \x01(\tR\x05label\x12B\n\nconditions\x18\x04 \x03(\x0b2".common.bindings.v1.GrantConditionR\nconditions"V\n\x0eGrantCondition\x12\x1a\n\x08operator\x18\x01 \x01(\tR\x08operator\x12\x10\n\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n\x06values\x18\x03 \x03(\tR\x06values*\xbc\x01\n\x0bBindingType\x12\x1c\n\x18BINDING_TYPE_UNSPECIFIED\x10\x00\x12\x19\n\x15BINDING_TYPE_POSTGRES\x10\x01\x12\x17\n\x13BINDING_TYPE_BUCKET\x10\x02\x12\x17\n\x13BINDING_TYPE_CUSTOM\x10\x03\x12\x16\n\x12BINDING_TYPE_TOPIC\x10\x04\x12\x15\n\x11BINDING_TYPE_TASK\x10\x05\x12\x13\n\x0fBINDING_TYPE_KV\x10\x06*v\n\x0fPostgresTlsMode\x12!\n\x1dPOSTGRES_TLS_MODE_UNSPECIFIED\x10\x00\x12\x1d\n\x19POSTGRES_TLS_MODE_REQUIRE\x10\x01\x12!\n\x1dPOSTGRES_TLS_MODE_VERIFY_FULL\x10\x02B@Z>github.com/ocelhq/ocel/pkg/proto/common/bindings/v1;bindingsv1b\x06proto3',
     [
         struct_pb.desc(),
     ],
@@ -428,6 +485,7 @@ _DESC = file_desc(
         "BucketProperties": BucketProperties,
         "TopicProperties": TopicProperties,
         "TaskProperties": TaskProperties,
+        "KvProperties": KvProperties,
         "Grant": Grant,
         "GrantCondition": GrantCondition,
         "BindingType": BindingType,

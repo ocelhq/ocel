@@ -1,0 +1,10 @@
+{
+  "name": "kv--cache",
+  "kv": {
+    "host": "shop-prod-cache-h4j5k6l7.ab12cd.ng.0001.use1.cache.amazonaws.com",
+    "port": 6380,
+    "username": "fixture_operator",
+    "password": "fixture-password-not-a-secret",
+    "tls": true
+  }
+}

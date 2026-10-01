@@ -31,6 +31,7 @@ const (
 	BindingType_BINDING_TYPE_CUSTOM      BindingType = 3
 	BindingType_BINDING_TYPE_TOPIC       BindingType = 4
 	BindingType_BINDING_TYPE_TASK        BindingType = 5
+	BindingType_BINDING_TYPE_KV          BindingType = 6
 )
 
 // Enum value maps for BindingType.
@@ -42,6 +43,7 @@ var (
 		3: "BINDING_TYPE_CUSTOM",
 		4: "BINDING_TYPE_TOPIC",
 		5: "BINDING_TYPE_TASK",
+		6: "BINDING_TYPE_KV",
 	}
 	BindingType_value = map[string]int32{
 		"BINDING_TYPE_UNSPECIFIED": 0,
@@ -50,6 +52,7 @@ var (
 		"BINDING_TYPE_CUSTOM":      3,
 		"BINDING_TYPE_TOPIC":       4,
 		"BINDING_TYPE_TASK":        5,
+		"BINDING_TYPE_KV":          6,
 	}
 )
 
@@ -139,6 +142,7 @@ type Binding struct {
 	//	*Binding_Custom
 	//	*Binding_Topic
 	//	*Binding_Task
+	//	*Binding_Kv
 	Properties    isBinding_Properties `protobuf_oneof:"properties"`
 	Grants        []*Grant             `protobuf:"bytes,4,rep,name=grants,proto3" json:"grants,omitempty"`
 	Source        string               `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
@@ -235,6 +239,15 @@ func (x *Binding) GetTask() *TaskProperties {
 	return nil
 }
 
+func (x *Binding) GetKv() *KvProperties {
+	if x != nil {
+		if x, ok := x.Properties.(*Binding_Kv); ok {
+			return x.Kv
+		}
+	}
+	return nil
+}
+
 func (x *Binding) GetGrants() []*Grant {
 	if x != nil {
 		return x.Grants
@@ -273,6 +286,10 @@ type Binding_Task struct {
 	Task *TaskProperties `protobuf:"bytes,8,opt,name=task,proto3,oneof"`
 }
 
+type Binding_Kv struct {
+	Kv *KvProperties `protobuf:"bytes,9,opt,name=kv,proto3,oneof"`
+}
+
 func (*Binding_Postgres) isBinding_Properties() {}
 
 func (*Binding_Bucket) isBinding_Properties() {}
@@ -282,6 +299,8 @@ func (*Binding_Custom) isBinding_Properties() {}
 func (*Binding_Topic) isBinding_Properties() {}
 
 func (*Binding_Task) isBinding_Properties() {}
+
+func (*Binding_Kv) isBinding_Properties() {}
 
 type PostgresProperties struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -579,6 +598,82 @@ func (x *TaskProperties) GetTask() string {
 	return ""
 }
 
+type KvProperties struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Port          int32                  `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	Username      string                 `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
+	Password      string                 `protobuf:"bytes,4,opt,name=password,proto3" json:"password,omitempty"`
+	Tls           bool                   `protobuf:"varint,5,opt,name=tls,proto3" json:"tls,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KvProperties) Reset() {
+	*x = KvProperties{}
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KvProperties) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KvProperties) ProtoMessage() {}
+
+func (x *KvProperties) ProtoReflect() protoreflect.Message {
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KvProperties.ProtoReflect.Descriptor instead.
+func (*KvProperties) Descriptor() ([]byte, []int) {
+	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *KvProperties) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *KvProperties) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *KvProperties) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *KvProperties) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *KvProperties) GetTls() bool {
+	if x != nil {
+		return x.Tls
+	}
+	return false
+}
+
 type Grant struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Actions       []string               `protobuf:"bytes,1,rep,name=actions,proto3" json:"actions,omitempty"`
@@ -591,7 +686,7 @@ type Grant struct {
 
 func (x *Grant) Reset() {
 	*x = Grant{}
-	mi := &file_common_bindings_v1_bindings_proto_msgTypes[5]
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -603,7 +698,7 @@ func (x *Grant) String() string {
 func (*Grant) ProtoMessage() {}
 
 func (x *Grant) ProtoReflect() protoreflect.Message {
-	mi := &file_common_bindings_v1_bindings_proto_msgTypes[5]
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -616,7 +711,7 @@ func (x *Grant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Grant.ProtoReflect.Descriptor instead.
 func (*Grant) Descriptor() ([]byte, []int) {
-	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{5}
+	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Grant) GetActions() []string {
@@ -658,7 +753,7 @@ type GrantCondition struct {
 
 func (x *GrantCondition) Reset() {
 	*x = GrantCondition{}
-	mi := &file_common_bindings_v1_bindings_proto_msgTypes[6]
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -670,7 +765,7 @@ func (x *GrantCondition) String() string {
 func (*GrantCondition) ProtoMessage() {}
 
 func (x *GrantCondition) ProtoReflect() protoreflect.Message {
-	mi := &file_common_bindings_v1_bindings_proto_msgTypes[6]
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -683,7 +778,7 @@ func (x *GrantCondition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantCondition.ProtoReflect.Descriptor instead.
 func (*GrantCondition) Descriptor() ([]byte, []int) {
-	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{6}
+	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GrantCondition) GetOperator() string {
@@ -711,14 +806,15 @@ var File_common_bindings_v1_bindings_proto protoreflect.FileDescriptor
 
 const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\n" +
-	"!common/bindings/v1/bindings.proto\x12\x12common.bindings.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xa6\x03\n" +
+	"!common/bindings/v1/bindings.proto\x12\x12common.bindings.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xda\x03\n" +
 	"\aBinding\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12D\n" +
 	"\bpostgres\x18\x02 \x01(\v2&.common.bindings.v1.PostgresPropertiesH\x00R\bpostgres\x12>\n" +
 	"\x06bucket\x18\x03 \x01(\v2$.common.bindings.v1.BucketPropertiesH\x00R\x06bucket\x121\n" +
 	"\x06custom\x18\x06 \x01(\v2\x17.google.protobuf.StructH\x00R\x06custom\x12;\n" +
 	"\x05topic\x18\a \x01(\v2#.common.bindings.v1.TopicPropertiesH\x00R\x05topic\x128\n" +
-	"\x04task\x18\b \x01(\v2\".common.bindings.v1.TaskPropertiesH\x00R\x04task\x121\n" +
+	"\x04task\x18\b \x01(\v2\".common.bindings.v1.TaskPropertiesH\x00R\x04task\x122\n" +
+	"\x02kv\x18\t \x01(\v2 .common.bindings.v1.KvPropertiesH\x00R\x02kv\x121\n" +
 	"\x06grants\x18\x04 \x03(\v2\x19.common.bindings.v1.GrantR\x06grants\x12\x16\n" +
 	"\x06source\x18\x05 \x01(\tR\x06sourceB\f\n" +
 	"\n" +
@@ -746,7 +842,13 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\x0fTopicProperties\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\"$\n" +
 	"\x0eTaskProperties\x12\x12\n" +
-	"\x04task\x18\x01 \x01(\tR\x04task\"\x99\x01\n" +
+	"\x04task\x18\x01 \x01(\tR\x04task\"\x85\x01\n" +
+	"\fKvProperties\x12\x12\n" +
+	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
+	"\busername\x18\x03 \x01(\tR\busername\x12\x1f\n" +
+	"\bpassword\x18\x04 \x01(\tB\x03\x80\x01\x01R\bpassword\x12\x10\n" +
+	"\x03tls\x18\x05 \x01(\bR\x03tls\"\x99\x01\n" +
 	"\x05Grant\x12\x18\n" +
 	"\aactions\x18\x01 \x03(\tR\aactions\x12\x1c\n" +
 	"\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n" +
@@ -757,14 +859,15 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\x0eGrantCondition\x12\x1a\n" +
 	"\boperator\x18\x01 \x01(\tR\boperator\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n" +
-	"\x06values\x18\x03 \x03(\tR\x06values*\xa7\x01\n" +
+	"\x06values\x18\x03 \x03(\tR\x06values*\xbc\x01\n" +
 	"\vBindingType\x12\x1c\n" +
 	"\x18BINDING_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15BINDING_TYPE_POSTGRES\x10\x01\x12\x17\n" +
 	"\x13BINDING_TYPE_BUCKET\x10\x02\x12\x17\n" +
 	"\x13BINDING_TYPE_CUSTOM\x10\x03\x12\x16\n" +
 	"\x12BINDING_TYPE_TOPIC\x10\x04\x12\x15\n" +
-	"\x11BINDING_TYPE_TASK\x10\x05*v\n" +
+	"\x11BINDING_TYPE_TASK\x10\x05\x12\x13\n" +
+	"\x0fBINDING_TYPE_KV\x10\x06*v\n" +
 	"\x0fPostgresTlsMode\x12!\n" +
 	"\x1dPOSTGRES_TLS_MODE_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19POSTGRES_TLS_MODE_REQUIRE\x10\x01\x12!\n" +
@@ -783,7 +886,7 @@ func file_common_bindings_v1_bindings_proto_rawDescGZIP() []byte {
 }
 
 var file_common_bindings_v1_bindings_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_common_bindings_v1_bindings_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_common_bindings_v1_bindings_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_common_bindings_v1_bindings_proto_goTypes = []any{
 	(BindingType)(0),           // 0: common.bindings.v1.BindingType
 	(PostgresTlsMode)(0),       // 1: common.bindings.v1.PostgresTlsMode
@@ -792,24 +895,26 @@ var file_common_bindings_v1_bindings_proto_goTypes = []any{
 	(*BucketProperties)(nil),   // 4: common.bindings.v1.BucketProperties
 	(*TopicProperties)(nil),    // 5: common.bindings.v1.TopicProperties
 	(*TaskProperties)(nil),     // 6: common.bindings.v1.TaskProperties
-	(*Grant)(nil),              // 7: common.bindings.v1.Grant
-	(*GrantCondition)(nil),     // 8: common.bindings.v1.GrantCondition
-	(*structpb.Struct)(nil),    // 9: google.protobuf.Struct
+	(*KvProperties)(nil),       // 7: common.bindings.v1.KvProperties
+	(*Grant)(nil),              // 8: common.bindings.v1.Grant
+	(*GrantCondition)(nil),     // 9: common.bindings.v1.GrantCondition
+	(*structpb.Struct)(nil),    // 10: google.protobuf.Struct
 }
 var file_common_bindings_v1_bindings_proto_depIdxs = []int32{
-	3, // 0: common.bindings.v1.Binding.postgres:type_name -> common.bindings.v1.PostgresProperties
-	4, // 1: common.bindings.v1.Binding.bucket:type_name -> common.bindings.v1.BucketProperties
-	9, // 2: common.bindings.v1.Binding.custom:type_name -> google.protobuf.Struct
-	5, // 3: common.bindings.v1.Binding.topic:type_name -> common.bindings.v1.TopicProperties
-	6, // 4: common.bindings.v1.Binding.task:type_name -> common.bindings.v1.TaskProperties
-	7, // 5: common.bindings.v1.Binding.grants:type_name -> common.bindings.v1.Grant
-	1, // 6: common.bindings.v1.PostgresProperties.tls_mode:type_name -> common.bindings.v1.PostgresTlsMode
-	8, // 7: common.bindings.v1.Grant.conditions:type_name -> common.bindings.v1.GrantCondition
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	3,  // 0: common.bindings.v1.Binding.postgres:type_name -> common.bindings.v1.PostgresProperties
+	4,  // 1: common.bindings.v1.Binding.bucket:type_name -> common.bindings.v1.BucketProperties
+	10, // 2: common.bindings.v1.Binding.custom:type_name -> google.protobuf.Struct
+	5,  // 3: common.bindings.v1.Binding.topic:type_name -> common.bindings.v1.TopicProperties
+	6,  // 4: common.bindings.v1.Binding.task:type_name -> common.bindings.v1.TaskProperties
+	7,  // 5: common.bindings.v1.Binding.kv:type_name -> common.bindings.v1.KvProperties
+	8,  // 6: common.bindings.v1.Binding.grants:type_name -> common.bindings.v1.Grant
+	1,  // 7: common.bindings.v1.PostgresProperties.tls_mode:type_name -> common.bindings.v1.PostgresTlsMode
+	9,  // 8: common.bindings.v1.Grant.conditions:type_name -> common.bindings.v1.GrantCondition
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_common_bindings_v1_bindings_proto_init() }
@@ -823,6 +928,7 @@ func file_common_bindings_v1_bindings_proto_init() {
 		(*Binding_Custom)(nil),
 		(*Binding_Topic)(nil),
 		(*Binding_Task)(nil),
+		(*Binding_Kv)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -830,7 +936,7 @@ func file_common_bindings_v1_bindings_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_bindings_v1_bindings_proto_rawDesc), len(file_common_bindings_v1_bindings_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

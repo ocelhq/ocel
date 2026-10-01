@@ -28,6 +28,8 @@ export interface OcelConfig {
           production?: BucketBinding;
         }
     >;
+    /** Each key is a kv resource this project declares; its value is "@" followed by the name the record is published under, such as "@shared-cache". */
+    kv?: Record<string, `@${string}`>;
     /** Each key is a postgres resource this project declares. Its value is "@" followed by the name a record is published under, such as "@warehouse"; or the record itself, whose secrets are ocel variables written { "$env": "NAME" }; or that record keyed by the tier it serves, leaving the other tier to provision its own. */
     postgres?: Record<
       string,
