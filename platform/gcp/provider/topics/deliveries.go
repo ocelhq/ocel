@@ -40,7 +40,7 @@ type pushRequest struct {
 		Data        []byte            `json:"data"`
 		Attributes  map[string]string `json:"attributes"`
 		MessageID   string            `json:"messageId"`
-		PublishTime time.Time         `json:"publishTime"`
+		PublishTime string            `json:"publishTime"`
 		OrderingKey string            `json:"orderingKey"`
 	} `json:"message"`
 }
@@ -107,12 +107,16 @@ func (d Deliveries) consumerOf(topicName, consumerName string) (*contractv1.Mani
 
 func pushedRunOf(topicName string, topic *contractv1.ManifestTopic, consumer *contractv1.ManifestConsumer, pushed pushRequest) pushedRun {
 	attributes := pushed.Message.Attributes
+	publishTime, err := time.Parse(time.RFC3339Nano, pushed.Message.PublishTime)
+	if err != nil {
+		publishTime = time.Now()
+	}
 	delivered := pushedRun{
 		topicName:   topicName,
 		topic:       topic,
 		consumer:    consumer,
 		messageID:   attributes[MessageAttribute],
-		publishedAt: pushed.Message.PublishTime,
+		publishedAt: publishTime,
 		payload:     pushed.Message.Data,
 		key:         pushed.Message.OrderingKey,
 		lane:        attributes[LaneAttribute],
@@ -121,7 +125,7 @@ func pushedRunOf(topicName string, topic *contractv1.ManifestTopic, consumer *co
 		delivered.publishedAt = at
 	}
 	if delivered.messageID == "" {
-		delivered.messageID = envelope.MessageIDFrom(pushed.Message.PublishTime, pushed.Message.MessageID)
+		delivered.messageID = envelope.MessageIDFrom(publishTime, pushed.Message.MessageID)
 	}
 	requested, _ := strconv.Atoi(attributes[MaxAttemptsAttribute])
 	delivered.maxAttempts = retryPolicyOf(topic, consumer).attemptsFor(int32(requested))
