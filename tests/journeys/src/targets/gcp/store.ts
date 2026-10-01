@@ -106,12 +106,22 @@ export function bearer(where: Where): Record<string, string> {
 }
 
 export async function readServices(where: Where): Promise<unknown> {
-  const at = servicesUrl(where);
-  const answered = await fetch(at, { headers: bearer(where) });
-  if (!answered.ok) {
-    throw new Error(`GET ${at} = ${answered.status} ${await answered.text()}`);
-  }
-  return answered.json();
+  const services: unknown[] = [];
+  let pageToken = "";
+  do {
+    const at = new URL(servicesUrl(where));
+    if (pageToken) {
+      at.searchParams.set("pageToken", pageToken);
+    }
+    const answered = await fetch(at, { headers: bearer(where) });
+    if (!answered.ok) {
+      throw new Error(`GET ${at} = ${answered.status} ${await answered.text()}`);
+    }
+    const page = (await answered.json()) as { services?: unknown[]; nextPageToken?: string };
+    services.push(...(page.services ?? []));
+    pageToken = page.nextPageToken ?? "";
+  } while (pageToken);
+  return { services };
 }
 
 export async function listServices(where: Where): Promise<Service[]> {
