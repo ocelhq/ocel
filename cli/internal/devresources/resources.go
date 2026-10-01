@@ -130,8 +130,8 @@ func (r *Resources) Resolve(ctx context.Context, resources []declaration.Resourc
 	var kinds []resourcesv1.ResourceType
 	byKind := map[resourcesv1.ResourceType][]declaration.Resource{}
 	for _, resource := range resources {
-		if refusedInDev[resource.Type] {
-			return nil, fmt.Errorf("%s %q: ocel dev does not run topics, tasks or workers yet", label(resource.Type), resource.Name)
+		if refused, ok := refusedInDev[resource.Type]; ok {
+			return nil, fmt.Errorf("%s %q: ocel dev does not run %s yet", label(resource.Type), resource.Name, refused)
 		}
 		if _, served := r.backends[resource.Type]; !served {
 			return nil, fmt.Errorf("%s %q: ocel dev serves no %s", label(resource.Type), resource.Name, resource.Type)
@@ -162,12 +162,16 @@ func (r *Resources) Resolve(ctx context.Context, resources []declaration.Resourc
 	return out, nil
 }
 
-// TODO(#1466): ocel dev runs topics, tasks and workers on the pgmq engine; until then it refuses them.
-var refusedInDev = map[resourcesv1.ResourceType]bool{
-	resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC:    true,
-	resourcesv1.ResourceType_RESOURCE_TYPE_TASK:     true,
-	resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER: true,
-	resourcesv1.ResourceType_RESOURCE_TYPE_WORKER:   true,
+const topicsTasksAndWorkers = "topics, tasks or workers"
+
+var refusedInDev = map[resourcesv1.ResourceType]string{
+	// TODO(#1466): ocel dev runs topics, tasks and workers on the pgmq engine; until then it refuses them.
+	resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC:    topicsTasksAndWorkers,
+	resourcesv1.ResourceType_RESOURCE_TYPE_TASK:     topicsTasksAndWorkers,
+	resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER: topicsTasksAndWorkers,
+	resourcesv1.ResourceType_RESOURCE_TYPE_WORKER:   topicsTasksAndWorkers,
+	// TODO(#1476): ocel dev runs a kv store in a pinned Valkey container; until then it refuses one.
+	resourcesv1.ResourceType_RESOURCE_TYPE_KV: "kv stores",
 }
 
 func label(kind resourcesv1.ResourceType) string {

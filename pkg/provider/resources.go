@@ -35,6 +35,7 @@ const (
 	BindingBucket   BindingType = "bucket"
 	BindingTopic    BindingType = "topic"
 	BindingTask     BindingType = "task"
+	BindingKV       BindingType = "kv"
 	BindingCustom   BindingType = "custom"
 )
 
@@ -48,6 +49,7 @@ const (
 	PropertyPublicBaseURL = "publicBaseUrl"
 	PropertyPublic        = "public"
 	PropertyEndpoint      = "endpoint"
+	PropertyTLS           = "tls"
 )
 
 func (b Binding) Endpointed() bool {
@@ -60,6 +62,8 @@ func RequiredProperties(t BindingType) []string {
 		return []string{PropertyHost, PropertyPort, PropertyDatabase, PropertyUsername, PropertyPassword}
 	case BindingBucket:
 		return []string{PropertyBucket}
+	case BindingKV:
+		return []string{PropertyHost, PropertyPort, PropertyPassword}
 	}
 	return nil
 }
@@ -75,7 +79,7 @@ func VerifyProperties(binding Binding) error {
 				binding.Name, name, binding.Type, RequiredProperties(binding.Type))
 		}
 	}
-	if binding.Type == BindingPostgres {
+	if binding.Type == BindingPostgres || binding.Type == BindingKV {
 		if _, err := strconv.Atoi(binding.Properties[PropertyPort]); err != nil {
 			return refusal.Refuse(refusal.CodeInvalid, "binding %s came back with port %q, which is not a port number",
 				binding.Name, binding.Properties[PropertyPort])
@@ -104,6 +108,15 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 			Bucket:        binding.Properties[PropertyBucket],
 			PublicBaseUrl: binding.Properties[PropertyPublicBaseURL],
 			Public:        binding.Properties[PropertyPublic] == "true",
+		}}
+	case BindingKV:
+		port, _ := strconv.Atoi(binding.Properties[PropertyPort])
+		message.Properties = &bindingsv1.Binding_Kv{Kv: &bindingsv1.KvProperties{
+			Host:     binding.Properties[PropertyHost],
+			Port:     int32(port),
+			Username: binding.Properties[PropertyUsername],
+			Password: binding.Properties[PropertyPassword],
+			Tls:      binding.Properties[PropertyTLS] == "true",
 		}}
 	default:
 		fields := make(map[string]any, len(binding.Properties))
@@ -182,6 +195,7 @@ var bindingTypes = map[bindingsv1.BindingType]BindingType{
 	bindingsv1.BindingType_BINDING_TYPE_BUCKET:   BindingBucket,
 	bindingsv1.BindingType_BINDING_TYPE_TOPIC:    BindingTopic,
 	bindingsv1.BindingType_BINDING_TYPE_TASK:     BindingTask,
+	bindingsv1.BindingType_BINDING_TYPE_KV:       BindingKV,
 	bindingsv1.BindingType_BINDING_TYPE_CUSTOM:   BindingCustom,
 }
 

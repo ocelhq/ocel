@@ -224,3 +224,12 @@ func TestATopicOrTaskBindingIsRefused(t *testing.T) {
 		}
 	}
 }
+
+func TestAKVStoreBindsToARecordPublishedElsewhere(t *testing.T) {
+	cfg := mustLoadJSON(t, `{"slug":"shop","bindings":{"kv":{"cache":"@shared-cache"}}}`)
+
+	bound := cfg.BindingsFor(environmentv1.Tier_TIER_PRODUCTION)
+	if len(bound) != 1 || bound[0].External != "shared-cache" || bound[0].Type != resourcesv1.ResourceType_RESOURCE_TYPE_KV {
+		t.Errorf("BindingsFor(production) = %+v, want kv store cache bound to the record published as shared-cache", bound)
+	}
+}

@@ -12,6 +12,7 @@ var resourceTypes = map[resourcesv1.ResourceType]provider.BindingType{
 	resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:   provider.BindingBucket,
 	resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC:    provider.BindingTopic,
 	resourcesv1.ResourceType_RESOURCE_TYPE_TASK:     provider.BindingTask,
+	resourcesv1.ResourceType_RESOURCE_TYPE_KV:       provider.BindingKV,
 }
 
 func manifestResources(manifest *contractv1.Manifest) ([]provider.Resource, error) {

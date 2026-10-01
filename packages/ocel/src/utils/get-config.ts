@@ -23,6 +23,7 @@ const typeOfCase: {
   custom: BindingType.CUSTOM,
   topic: BindingType.TOPIC,
   task: BindingType.TASK,
+  kv: BindingType.KV,
 };
 
 /** The type a binding's properties case declares; UNSPECIFIED when it has none. */

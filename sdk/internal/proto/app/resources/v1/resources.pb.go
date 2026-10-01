@@ -33,6 +33,7 @@ const (
 	ResourceType_RESOURCE_TYPE_TASK        ResourceType = 4
 	ResourceType_RESOURCE_TYPE_WORKER      ResourceType = 5
 	ResourceType_RESOURCE_TYPE_CONSUMER    ResourceType = 6
+	ResourceType_RESOURCE_TYPE_KV          ResourceType = 7
 )
 
 // Enum value maps for ResourceType.
@@ -45,6 +46,7 @@ var (
 		4: "RESOURCE_TYPE_TASK",
 		5: "RESOURCE_TYPE_WORKER",
 		6: "RESOURCE_TYPE_CONSUMER",
+		7: "RESOURCE_TYPE_KV",
 	}
 	ResourceType_value = map[string]int32{
 		"RESOURCE_TYPE_UNSPECIFIED": 0,
@@ -54,6 +56,7 @@ var (
 		"RESOURCE_TYPE_TASK":        4,
 		"RESOURCE_TYPE_WORKER":      5,
 		"RESOURCE_TYPE_CONSUMER":    6,
+		"RESOURCE_TYPE_KV":          7,
 	}
 )
 
@@ -82,6 +85,64 @@ func (x ResourceType) Number() protoreflect.EnumNumber {
 // Deprecated: Use ResourceType.Descriptor instead.
 func (ResourceType) EnumDescriptor() ([]byte, []int) {
 	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{0}
+}
+
+type KvShape int32
+
+const (
+	KvShape_KV_SHAPE_UNSPECIFIED KvShape = 0
+	KvShape_KV_SHAPE_TEXT        KvShape = 1
+	KvShape_KV_SHAPE_COUNTER     KvShape = 2
+	KvShape_KV_SHAPE_JSON        KvShape = 3
+	KvShape_KV_SHAPE_LIST        KvShape = 4
+	KvShape_KV_SHAPE_SET         KvShape = 5
+)
+
+// Enum value maps for KvShape.
+var (
+	KvShape_name = map[int32]string{
+		0: "KV_SHAPE_UNSPECIFIED",
+		1: "KV_SHAPE_TEXT",
+		2: "KV_SHAPE_COUNTER",
+		3: "KV_SHAPE_JSON",
+		4: "KV_SHAPE_LIST",
+		5: "KV_SHAPE_SET",
+	}
+	KvShape_value = map[string]int32{
+		"KV_SHAPE_UNSPECIFIED": 0,
+		"KV_SHAPE_TEXT":        1,
+		"KV_SHAPE_COUNTER":     2,
+		"KV_SHAPE_JSON":        3,
+		"KV_SHAPE_LIST":        4,
+		"KV_SHAPE_SET":         5,
+	}
+)
+
+func (x KvShape) Enum() *KvShape {
+	p := new(KvShape)
+	*p = x
+	return p
+}
+
+func (x KvShape) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (KvShape) Descriptor() protoreflect.EnumDescriptor {
+	return file_app_resources_v1_resources_proto_enumTypes[1].Descriptor()
+}
+
+func (KvShape) Type() protoreflect.EnumType {
+	return &file_app_resources_v1_resources_proto_enumTypes[1]
+}
+
+func (x KvShape) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use KvShape.Descriptor instead.
+func (KvShape) EnumDescriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{1}
 }
 
 type ResourceIdentifier struct {
@@ -183,6 +244,7 @@ type DeclareRequest struct {
 	//	*DeclareRequest_Task
 	//	*DeclareRequest_Worker
 	//	*DeclareRequest_Consumer
+	//	*DeclareRequest_Kv
 	Config        isDeclareRequest_Config `protobuf_oneof:"config"`
 	Source        string                  `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -287,6 +349,15 @@ func (x *DeclareRequest) GetConsumer() *ConsumerConfig {
 	return nil
 }
 
+func (x *DeclareRequest) GetKv() *KvConfig {
+	if x != nil {
+		if x, ok := x.Config.(*DeclareRequest_Kv); ok {
+			return x.Kv
+		}
+	}
+	return nil
+}
+
 func (x *DeclareRequest) GetSource() string {
 	if x != nil {
 		return x.Source
@@ -322,6 +393,10 @@ type DeclareRequest_Consumer struct {
 	Consumer *ConsumerConfig `protobuf:"bytes,8,opt,name=consumer,proto3,oneof"`
 }
 
+type DeclareRequest_Kv struct {
+	Kv *KvConfig `protobuf:"bytes,9,opt,name=kv,proto3,oneof"`
+}
+
 func (*DeclareRequest_Postgres) isDeclareRequest_Config() {}
 
 func (*DeclareRequest_Bucket) isDeclareRequest_Config() {}
@@ -333,6 +408,8 @@ func (*DeclareRequest_Task) isDeclareRequest_Config() {}
 func (*DeclareRequest_Worker) isDeclareRequest_Config() {}
 
 func (*DeclareRequest_Consumer) isDeclareRequest_Config() {}
+
+func (*DeclareRequest_Kv) isDeclareRequest_Config() {}
 
 type PostgresConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -846,6 +923,142 @@ func (x *WorkerConfig) GetConcurrency() int32 {
 	return 0
 }
 
+type KvEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Pattern       string                 `protobuf:"bytes,2,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	Shape         KvShape                `protobuf:"varint,3,opt,name=shape,proto3,enum=app.resources.v1.KvShape" json:"shape,omitempty"`
+	Source        string                 `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KvEntry) Reset() {
+	*x = KvEntry{}
+	mi := &file_app_resources_v1_resources_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KvEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KvEntry) ProtoMessage() {}
+
+func (x *KvEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_resources_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KvEntry.ProtoReflect.Descriptor instead.
+func (*KvEntry) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *KvEntry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *KvEntry) GetPattern() string {
+	if x != nil {
+		return x.Pattern
+	}
+	return ""
+}
+
+func (x *KvEntry) GetShape() KvShape {
+	if x != nil {
+		return x.Shape
+	}
+	return KvShape_KV_SHAPE_UNSPECIFIED
+}
+
+func (x *KvEntry) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+type KvConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Eviction      string                 `protobuf:"bytes,2,opt,name=eviction,proto3" json:"eviction,omitempty"`
+	Memory        string                 `protobuf:"bytes,3,opt,name=memory,proto3" json:"memory,omitempty"`
+	Entries       []*KvEntry             `protobuf:"bytes,4,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KvConfig) Reset() {
+	*x = KvConfig{}
+	mi := &file_app_resources_v1_resources_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KvConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KvConfig) ProtoMessage() {}
+
+func (x *KvConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_resources_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KvConfig.ProtoReflect.Descriptor instead.
+func (*KvConfig) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *KvConfig) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *KvConfig) GetEviction() string {
+	if x != nil {
+		return x.Eviction
+	}
+	return ""
+}
+
+func (x *KvConfig) GetMemory() string {
+	if x != nil {
+		return x.Memory
+	}
+	return ""
+}
+
+func (x *KvConfig) GetEntries() []*KvEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
 var File_app_resources_v1_resources_proto protoreflect.FileDescriptor
 
 const file_app_resources_v1_resources_proto_rawDesc = "" +
@@ -854,7 +1067,7 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\x12ResourceIdentifier\x122\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x1e.app.resources.v1.ResourceTypeR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x11\n" +
-	"\x0fDeclareResponse\"\xd3\x03\n" +
+	"\x0fDeclareResponse\"\x81\x04\n" +
 	"\x0eDeclareRequest\x12@\n" +
 	"\bresource\x18\x01 \x01(\v2$.app.resources.v1.ResourceIdentifierR\bresource\x12>\n" +
 	"\bpostgres\x18\x02 \x01(\v2 .app.resources.v1.PostgresConfigH\x00R\bpostgres\x128\n" +
@@ -862,7 +1075,8 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\x05topic\x18\x05 \x01(\v2\x1d.app.resources.v1.TopicConfigH\x00R\x05topic\x122\n" +
 	"\x04task\x18\x06 \x01(\v2\x1c.app.resources.v1.TaskConfigH\x00R\x04task\x128\n" +
 	"\x06worker\x18\a \x01(\v2\x1e.app.resources.v1.WorkerConfigH\x00R\x06worker\x12>\n" +
-	"\bconsumer\x18\b \x01(\v2 .app.resources.v1.ConsumerConfigH\x00R\bconsumer\x12\x16\n" +
+	"\bconsumer\x18\b \x01(\v2 .app.resources.v1.ConsumerConfigH\x00R\bconsumer\x12,\n" +
+	"\x02kv\x18\t \x01(\v2\x1a.app.resources.v1.KvConfigH\x00R\x02kv\x12\x16\n" +
 	"\x06source\x18\x04 \x01(\tR\x06sourceB\b\n" +
 	"\x06config\"*\n" +
 	"\x0ePostgresConfig\x12\x18\n" +
@@ -901,7 +1115,17 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\x06worker\x18\b \x01(\tR\x06worker\x12\x12\n" +
 	"\x04cron\x18\t \x01(\tR\x04cron\"0\n" +
 	"\fWorkerConfig\x12 \n" +
-	"\vconcurrency\x18\x01 \x01(\x05R\vconcurrency*\xca\x01\n" +
+	"\vconcurrency\x18\x01 \x01(\x05R\vconcurrency\"\x80\x01\n" +
+	"\aKvEntry\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\apattern\x18\x02 \x01(\tR\apattern\x12/\n" +
+	"\x05shape\x18\x03 \x01(\x0e2\x19.app.resources.v1.KvShapeR\x05shape\x12\x16\n" +
+	"\x06source\x18\x04 \x01(\tR\x06source\"\x8d\x01\n" +
+	"\bKvConfig\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1a\n" +
+	"\beviction\x18\x02 \x01(\tR\beviction\x12\x16\n" +
+	"\x06memory\x18\x03 \x01(\tR\x06memory\x123\n" +
+	"\aentries\x18\x04 \x03(\v2\x19.app.resources.v1.KvEntryR\aentries*\xe0\x01\n" +
 	"\fResourceType\x12\x1d\n" +
 	"\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n" +
@@ -909,7 +1133,15 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\x13RESOURCE_TYPE_TOPIC\x10\x03\x12\x16\n" +
 	"\x12RESOURCE_TYPE_TASK\x10\x04\x12\x18\n" +
 	"\x14RESOURCE_TYPE_WORKER\x10\x05\x12\x1a\n" +
-	"\x16RESOURCE_TYPE_CONSUMER\x10\x062\xa8\x02\n" +
+	"\x16RESOURCE_TYPE_CONSUMER\x10\x06\x12\x14\n" +
+	"\x10RESOURCE_TYPE_KV\x10\a*\x84\x01\n" +
+	"\aKvShape\x12\x18\n" +
+	"\x14KV_SHAPE_UNSPECIFIED\x10\x00\x12\x11\n" +
+	"\rKV_SHAPE_TEXT\x10\x01\x12\x14\n" +
+	"\x10KV_SHAPE_COUNTER\x10\x02\x12\x11\n" +
+	"\rKV_SHAPE_JSON\x10\x03\x12\x11\n" +
+	"\rKV_SHAPE_LIST\x10\x04\x12\x10\n" +
+	"\fKV_SHAPE_SET\x10\x052\xa8\x02\n" +
 	"\x0fResourceService\x12N\n" +
 	"\aDeclare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n" +
 	"\n" +
@@ -928,60 +1160,66 @@ func file_app_resources_v1_resources_proto_rawDescGZIP() []byte {
 	return file_app_resources_v1_resources_proto_rawDescData
 }
 
-var file_app_resources_v1_resources_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_app_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_app_resources_v1_resources_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_app_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_app_resources_v1_resources_proto_goTypes = []any{
 	(ResourceType)(0),                 // 0: app.resources.v1.ResourceType
-	(*ResourceIdentifier)(nil),        // 1: app.resources.v1.ResourceIdentifier
-	(*DeclareResponse)(nil),           // 2: app.resources.v1.DeclareResponse
-	(*DeclareRequest)(nil),            // 3: app.resources.v1.DeclareRequest
-	(*PostgresConfig)(nil),            // 4: app.resources.v1.PostgresConfig
-	(*BucketConfig)(nil),              // 5: app.resources.v1.BucketConfig
-	(*RetryPolicy)(nil),               // 6: app.resources.v1.RetryPolicy
-	(*BatchPolicy)(nil),               // 7: app.resources.v1.BatchPolicy
-	(*TopicConfig)(nil),               // 8: app.resources.v1.TopicConfig
-	(*ConsumerConfig)(nil),            // 9: app.resources.v1.ConsumerConfig
-	(*TaskConfig)(nil),                // 10: app.resources.v1.TaskConfig
-	(*WorkerConfig)(nil),              // 11: app.resources.v1.WorkerConfig
-	(*durationpb.Duration)(nil),       // 12: google.protobuf.Duration
-	(v1.Lane)(0),                      // 13: app.topic.v1.Lane
-	(*DeclareEnvRequest)(nil),         // 14: app.resources.v1.DeclareEnvRequest
-	(*ReportEnvProblemsRequest)(nil),  // 15: app.resources.v1.ReportEnvProblemsRequest
-	(*DeclareEnvResponse)(nil),        // 16: app.resources.v1.DeclareEnvResponse
-	(*ReportEnvProblemsResponse)(nil), // 17: app.resources.v1.ReportEnvProblemsResponse
+	(KvShape)(0),                      // 1: app.resources.v1.KvShape
+	(*ResourceIdentifier)(nil),        // 2: app.resources.v1.ResourceIdentifier
+	(*DeclareResponse)(nil),           // 3: app.resources.v1.DeclareResponse
+	(*DeclareRequest)(nil),            // 4: app.resources.v1.DeclareRequest
+	(*PostgresConfig)(nil),            // 5: app.resources.v1.PostgresConfig
+	(*BucketConfig)(nil),              // 6: app.resources.v1.BucketConfig
+	(*RetryPolicy)(nil),               // 7: app.resources.v1.RetryPolicy
+	(*BatchPolicy)(nil),               // 8: app.resources.v1.BatchPolicy
+	(*TopicConfig)(nil),               // 9: app.resources.v1.TopicConfig
+	(*ConsumerConfig)(nil),            // 10: app.resources.v1.ConsumerConfig
+	(*TaskConfig)(nil),                // 11: app.resources.v1.TaskConfig
+	(*WorkerConfig)(nil),              // 12: app.resources.v1.WorkerConfig
+	(*KvEntry)(nil),                   // 13: app.resources.v1.KvEntry
+	(*KvConfig)(nil),                  // 14: app.resources.v1.KvConfig
+	(*durationpb.Duration)(nil),       // 15: google.protobuf.Duration
+	(v1.Lane)(0),                      // 16: app.topic.v1.Lane
+	(*DeclareEnvRequest)(nil),         // 17: app.resources.v1.DeclareEnvRequest
+	(*ReportEnvProblemsRequest)(nil),  // 18: app.resources.v1.ReportEnvProblemsRequest
+	(*DeclareEnvResponse)(nil),        // 19: app.resources.v1.DeclareEnvResponse
+	(*ReportEnvProblemsResponse)(nil), // 20: app.resources.v1.ReportEnvProblemsResponse
 }
 var file_app_resources_v1_resources_proto_depIdxs = []int32{
 	0,  // 0: app.resources.v1.ResourceIdentifier.type:type_name -> app.resources.v1.ResourceType
-	1,  // 1: app.resources.v1.DeclareRequest.resource:type_name -> app.resources.v1.ResourceIdentifier
-	4,  // 2: app.resources.v1.DeclareRequest.postgres:type_name -> app.resources.v1.PostgresConfig
-	5,  // 3: app.resources.v1.DeclareRequest.bucket:type_name -> app.resources.v1.BucketConfig
-	8,  // 4: app.resources.v1.DeclareRequest.topic:type_name -> app.resources.v1.TopicConfig
-	10, // 5: app.resources.v1.DeclareRequest.task:type_name -> app.resources.v1.TaskConfig
-	11, // 6: app.resources.v1.DeclareRequest.worker:type_name -> app.resources.v1.WorkerConfig
-	9,  // 7: app.resources.v1.DeclareRequest.consumer:type_name -> app.resources.v1.ConsumerConfig
-	12, // 8: app.resources.v1.RetryPolicy.min_delay:type_name -> google.protobuf.Duration
-	12, // 9: app.resources.v1.RetryPolicy.max_delay:type_name -> google.protobuf.Duration
-	12, // 10: app.resources.v1.BatchPolicy.timeout:type_name -> google.protobuf.Duration
-	6,  // 11: app.resources.v1.TopicConfig.retry:type_name -> app.resources.v1.RetryPolicy
-	6,  // 12: app.resources.v1.ConsumerConfig.retry:type_name -> app.resources.v1.RetryPolicy
-	12, // 13: app.resources.v1.ConsumerConfig.max_duration:type_name -> google.protobuf.Duration
-	13, // 14: app.resources.v1.ConsumerConfig.lanes:type_name -> app.topic.v1.Lane
-	7,  // 15: app.resources.v1.ConsumerConfig.batch:type_name -> app.resources.v1.BatchPolicy
-	6,  // 16: app.resources.v1.TaskConfig.retry:type_name -> app.resources.v1.RetryPolicy
-	12, // 17: app.resources.v1.TaskConfig.max_duration:type_name -> google.protobuf.Duration
-	12, // 18: app.resources.v1.TaskConfig.ttl:type_name -> google.protobuf.Duration
-	7,  // 19: app.resources.v1.TaskConfig.batch:type_name -> app.resources.v1.BatchPolicy
-	3,  // 20: app.resources.v1.ResourceService.Declare:input_type -> app.resources.v1.DeclareRequest
-	14, // 21: app.resources.v1.ResourceService.DeclareEnv:input_type -> app.resources.v1.DeclareEnvRequest
-	15, // 22: app.resources.v1.ResourceService.ReportEnvProblems:input_type -> app.resources.v1.ReportEnvProblemsRequest
-	2,  // 23: app.resources.v1.ResourceService.Declare:output_type -> app.resources.v1.DeclareResponse
-	16, // 24: app.resources.v1.ResourceService.DeclareEnv:output_type -> app.resources.v1.DeclareEnvResponse
-	17, // 25: app.resources.v1.ResourceService.ReportEnvProblems:output_type -> app.resources.v1.ReportEnvProblemsResponse
-	23, // [23:26] is the sub-list for method output_type
-	20, // [20:23] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	2,  // 1: app.resources.v1.DeclareRequest.resource:type_name -> app.resources.v1.ResourceIdentifier
+	5,  // 2: app.resources.v1.DeclareRequest.postgres:type_name -> app.resources.v1.PostgresConfig
+	6,  // 3: app.resources.v1.DeclareRequest.bucket:type_name -> app.resources.v1.BucketConfig
+	9,  // 4: app.resources.v1.DeclareRequest.topic:type_name -> app.resources.v1.TopicConfig
+	11, // 5: app.resources.v1.DeclareRequest.task:type_name -> app.resources.v1.TaskConfig
+	12, // 6: app.resources.v1.DeclareRequest.worker:type_name -> app.resources.v1.WorkerConfig
+	10, // 7: app.resources.v1.DeclareRequest.consumer:type_name -> app.resources.v1.ConsumerConfig
+	14, // 8: app.resources.v1.DeclareRequest.kv:type_name -> app.resources.v1.KvConfig
+	15, // 9: app.resources.v1.RetryPolicy.min_delay:type_name -> google.protobuf.Duration
+	15, // 10: app.resources.v1.RetryPolicy.max_delay:type_name -> google.protobuf.Duration
+	15, // 11: app.resources.v1.BatchPolicy.timeout:type_name -> google.protobuf.Duration
+	7,  // 12: app.resources.v1.TopicConfig.retry:type_name -> app.resources.v1.RetryPolicy
+	7,  // 13: app.resources.v1.ConsumerConfig.retry:type_name -> app.resources.v1.RetryPolicy
+	15, // 14: app.resources.v1.ConsumerConfig.max_duration:type_name -> google.protobuf.Duration
+	16, // 15: app.resources.v1.ConsumerConfig.lanes:type_name -> app.topic.v1.Lane
+	8,  // 16: app.resources.v1.ConsumerConfig.batch:type_name -> app.resources.v1.BatchPolicy
+	7,  // 17: app.resources.v1.TaskConfig.retry:type_name -> app.resources.v1.RetryPolicy
+	15, // 18: app.resources.v1.TaskConfig.max_duration:type_name -> google.protobuf.Duration
+	15, // 19: app.resources.v1.TaskConfig.ttl:type_name -> google.protobuf.Duration
+	8,  // 20: app.resources.v1.TaskConfig.batch:type_name -> app.resources.v1.BatchPolicy
+	1,  // 21: app.resources.v1.KvEntry.shape:type_name -> app.resources.v1.KvShape
+	13, // 22: app.resources.v1.KvConfig.entries:type_name -> app.resources.v1.KvEntry
+	4,  // 23: app.resources.v1.ResourceService.Declare:input_type -> app.resources.v1.DeclareRequest
+	17, // 24: app.resources.v1.ResourceService.DeclareEnv:input_type -> app.resources.v1.DeclareEnvRequest
+	18, // 25: app.resources.v1.ResourceService.ReportEnvProblems:input_type -> app.resources.v1.ReportEnvProblemsRequest
+	3,  // 26: app.resources.v1.ResourceService.Declare:output_type -> app.resources.v1.DeclareResponse
+	19, // 27: app.resources.v1.ResourceService.DeclareEnv:output_type -> app.resources.v1.DeclareEnvResponse
+	20, // 28: app.resources.v1.ResourceService.ReportEnvProblems:output_type -> app.resources.v1.ReportEnvProblemsResponse
+	26, // [26:29] is the sub-list for method output_type
+	23, // [23:26] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_app_resources_v1_resources_proto_init() }
@@ -997,14 +1235,15 @@ func file_app_resources_v1_resources_proto_init() {
 		(*DeclareRequest_Task)(nil),
 		(*DeclareRequest_Worker)(nil),
 		(*DeclareRequest_Consumer)(nil),
+		(*DeclareRequest_Kv)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_resources_v1_resources_proto_rawDesc), len(file_app_resources_v1_resources_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   11,
+			NumEnums:      2,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

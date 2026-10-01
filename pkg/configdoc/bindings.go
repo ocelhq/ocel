@@ -357,7 +357,7 @@ func (Bindings) jsonSchema() object {
 				"type":                 "object",
 				"additionalProperties": published,
 				"description": fmt.Sprintf(
-					"Each key is a %s resource this project declares; its value is \"@\" followed by the name the record is published under, such as \"@warehouse\".",
+					"Each key is a %s resource this project declares; its value is \"@\" followed by the name the record is published under, such as \"@shared-cache\".",
 					name),
 			}
 			continue

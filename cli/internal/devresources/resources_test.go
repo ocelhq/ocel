@@ -225,3 +225,13 @@ func TestDevRefusesTopicsTasksConsumersAndWorkersNamingWhatWasDeclared(t *testin
 		}
 	}
 }
+
+func TestDevRefusesAKVStoreNamingWhatWasDeclared(t *testing.T) {
+	t.Parallel()
+
+	stack := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir()})
+	_, err := stack.Resolve(context.Background(), []declaration.Resource{{Name: "cache", Type: resourcesv1.ResourceType_RESOURCE_TYPE_KV}})
+	if err == nil || !strings.Contains(err.Error(), `kv "cache"`) || !strings.Contains(err.Error(), "does not run kv stores") {
+		t.Errorf("Resolve(kv) = %v, want kv store cache refused by name", err)
+	}
+}

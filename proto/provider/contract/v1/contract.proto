@@ -298,6 +298,7 @@ message ManifestResource {
     app.resources.v1.PostgresConfig postgres = 3;
     app.resources.v1.BucketConfig bucket = 4;
     ManifestTopic topic = 6;
+    app.resources.v1.KvConfig kv = 7;
   }
 
   string binding = 5;
