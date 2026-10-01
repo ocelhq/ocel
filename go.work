@@ -11,6 +11,7 @@ use (
 	./platform/gcp/connector
 	./platform/gcp/provider
 	./platform/gcp/runtime
+	./platform/pgmq
 	./platform/s3
 	./platform/vps/connector
 	./platform/vps/provider
