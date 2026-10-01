@@ -165,7 +165,9 @@ pub fn group(item: TokenStream) -> TokenStream {
 }
 
 /// Run discovery before the app does anything, and return from `main` once discovery has
-/// posted what the binary declares.
+/// posted what the binary declares. When Ocel runs the binary as a worker, serve the
+/// deliveries of the tasks and consumers it declares instead, without ever entering the body
+/// of `main`.
 ///
 /// ```ignore
 /// #[ocel::main]
@@ -181,17 +183,31 @@ pub fn group(item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn main(_attribute: TokenStream, item: TokenStream) -> TokenStream {
     let mut function = parse_macro_input!(item as ItemFn);
-    let discovery: syn::Stmt = match classify_return(&function.sig.output) {
-        Some(ReturnShape::Unit) => syn::parse_quote! {
-            if ::ocel::discover().expect("ocel discovery") {
-                return;
-            }
-        },
-        Some(ReturnShape::Result) => syn::parse_quote! {
-            if ::ocel::discover()? {
-                return Ok(());
-            }
-        },
+    let roles: [syn::Stmt; 2] = match classify_return(&function.sig.output) {
+        Some(ReturnShape::Unit) => [
+            syn::parse_quote! {
+                if ::ocel::discover().expect("ocel discovery") {
+                    return;
+                }
+            },
+            syn::parse_quote! {
+                if ::ocel::serve_worker().expect("ocel worker") {
+                    return;
+                }
+            },
+        ],
+        Some(ReturnShape::Result) => [
+            syn::parse_quote! {
+                if ::ocel::discover()? {
+                    return Ok(());
+                }
+            },
+            syn::parse_quote! {
+                if ::ocel::serve_worker()? {
+                    return Ok(());
+                }
+            },
+        ],
         None => {
             return quote! {
                 ::core::compile_error!("#[ocel::main] supports fn main() and fn main() -> Result<_, _>");
@@ -200,7 +216,7 @@ pub fn main(_attribute: TokenStream, item: TokenStream) -> TokenStream {
             .into()
         }
     };
-    function.block.stmts.insert(0, discovery);
+    function.block.stmts.splice(0..0, roles);
     quote!(#function).into()
 }
 

@@ -70,6 +70,7 @@ mod run;
 pub mod runs;
 mod runtime;
 mod schema;
+mod serve;
 mod task;
 mod topic;
 mod worker;
@@ -85,13 +86,15 @@ pub use kv::{Kv, KvKey, KvParameter};
 pub use lane::Lane;
 pub use postgres::Postgres;
 pub use run::{Attempt, Message, Next, Run, RunError, RunKind};
+pub use serve::serve_worker;
 pub use task::{RunHandle, Task, Trigger};
 pub use topic::{
     DeadLetter, DeadLetterList, DeadLetterPage, DeadLetters, Topic, TopicName, TopicSend,
 };
 pub use worker::Worker;
 
-/// Runs discovery before `main`, and returns from `main` once discovery is done.
+/// Runs discovery before `main`, and returns from `main` once discovery is done. A binary Ocel
+/// runs as a worker serves its tasks and consumers instead of entering `main`.
 pub use ocel_macros::main;
 
 /// Declares every [`Postgres`], [`Bucket`], [`Topic`], [`Worker`] and [`Kv`] field of a struct, and
