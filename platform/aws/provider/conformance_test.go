@@ -93,3 +93,10 @@ func TestTopicsTasksAndWorkersAreRefusedAtPreflightAsUnsupported(t *testing.T) {
 	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	conformance.RunWorkers(t, p.Facts())
 }
+
+func TestKVStoresAreRefusedAtPreflightAsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	conformance.RunKVStores(t, p.Facts())
+}

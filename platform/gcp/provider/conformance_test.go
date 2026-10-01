@@ -133,3 +133,9 @@ func TestTopicsTasksAndWorkersAreRefusedAtPreflightAsUnsupported(t *testing.T) {
 	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
 	conformance.RunWorkers(t, p.Facts())
 }
+
+func TestKVStoresAreRefusedAtPreflightAsUnsupported(t *testing.T) {
+	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
+	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	conformance.RunKVStores(t, p.Facts())
+}
