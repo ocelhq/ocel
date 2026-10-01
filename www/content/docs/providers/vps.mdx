@@ -639,6 +639,31 @@ that runs. If any step fails, the old version is started again on the data it ha
 
 **Removing it.** `ocel destroy` takes the container, its volume, its password and its dumps.
 
+## KV stores
+
+`kv("cache")` runs as one Valkey container per store on your project's own network. It
+publishes no port on the machine, so only your project's apps reach it. Its data lives on a
+docker volume, written to an append-only file synced every second plus snapshots. A crash
+loses about the last second of writes. The default user is off. Apps connect as `ocel` with a
+password generated on the first deploy and kept sealed on the box. The container is handed
+only that password's hash. TLS is off, because the store never leaves the project's network.
+
+A [transform](/docs/transforms#on-a-vps) can change the image, add arguments, cap the
+container's memory, or move the volume.
+
+**Backups.** Once a day the box pauses the store, copies its volume and keeps the newest seven
+copies under `/var/lib/ocel/<tier>/backups/<container>/`.
+
+**Changing the version.** Moving `version` from 8 to 9 stops the store, copies its files to a
+fresh volume and starts 9 on them. Valkey 8 cannot read data that 9 wrote, so a move back from
+9 to 8 fails and starts 9 again on its data.
+
+**Removing it.** `ocel destroy` takes the container, its volume, its password and its backups.
+
+**Kernel settings.** Bootstrap warns if `vm.overcommit_memory` is not `1` or transparent huge
+pages are `always`. Valkey logs a warning about both, and a background save can fail without
+overcommit.
+
 ## Buckets
 
 A bucket runs in a store the box keeps for the project. Bind it to a store you already run and
