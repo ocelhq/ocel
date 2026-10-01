@@ -107,7 +107,7 @@ func (e *Engine) serveQueue(ctx context.Context, queue string, workers map[strin
 	var running sync.WaitGroup
 	defer running.Wait()
 	running.Go(func() { e.renewLeases(ctx, loop) })
-	wake := e.wake(queue)
+	wake := e.ensureWakeChannel(queue)
 	for ctx.Err() == nil {
 		deployment := e.current()
 		deployed, found := deployment.consumers()[queue]
@@ -182,14 +182,14 @@ func concurrencyOf(deployed deployedConsumer) int {
 	return maxInFlight
 }
 
-func wait(ctx context.Context, wake <-chan struct{}, a, b <-chan struct{}) {
+func wait(ctx context.Context, wake <-chan struct{}, consumerChanged, workerChanged <-chan struct{}) {
 	timer := time.NewTimer(pollInterval)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 	case <-wake:
-	case <-a:
-	case <-b:
+	case <-consumerChanged:
+	case <-workerChanged:
 	case <-timer.C:
 	}
 }
@@ -212,15 +212,15 @@ func (e *Engine) renewLeases(ctx context.Context, loop *queueLoop) {
 }
 
 func (e *Engine) read(ctx context.Context, loop *queueLoop, deployed deployedConsumer, n int) ([]message, error) {
-	vt := int(lease.Seconds())
+	leaseSeconds := int(lease.Seconds())
 	size := int(deployed.consumer.GetBatch().GetSize())
 	switch {
 	case deployed.topic.GetOrdered() && size > 0:
 		return e.collectBatch(ctx, loop, deployed, size, func(want int) ([]message, error) {
-			return e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read_grouped($1, $2, $3)", loop.name, vt, want)
+			return e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read_grouped($1, $2, $3)", loop.name, leaseSeconds, want)
 		})
 	case deployed.topic.GetOrdered():
-		return e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read_grouped_head($1, $2, $3)", loop.name, vt, n)
+		return e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read_grouped_head($1, $2, $3)", loop.name, leaseSeconds, n)
 	case size > 0:
 		return e.collectBatch(ctx, loop, deployed, size, func(want int) ([]message, error) { return e.readLanes(ctx, loop, deployed, want) })
 	default:
@@ -255,21 +255,21 @@ func (e *Engine) collectBatch(ctx context.Context, loop *queueLoop, deployed dep
 }
 
 func (e *Engine) readLanes(ctx context.Context, loop *queueLoop, deployed deployedConsumer, n int) ([]message, error) {
-	vt := int(lease.Seconds())
+	leaseSeconds := int(lease.Seconds())
 	var read []message
 	for lane, share := range loop.lanes.share(lanesOf(deployed.consumer), n) {
 		condition, err := json.Marshal(map[string]string{"lane": laneName(lane)})
 		if err != nil {
 			return nil, err
 		}
-		got, err := e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read($1, $2, $3, $4::jsonb)", loop.name, vt, share, string(condition))
+		got, err := e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read($1, $2, $3, $4::jsonb)", loop.name, leaseSeconds, share, string(condition))
 		if err != nil {
 			return read, err
 		}
 		read = append(read, got...)
 	}
 	if rest := n - len(read); rest > 0 {
-		got, err := e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read($1, $2, $3)", loop.name, vt, rest)
+		got, err := e.readWith(ctx, "SELECT msg_id, message FROM pgmq.read($1, $2, $3)", loop.name, leaseSeconds, rest)
 		if err != nil {
 			return read, err
 		}

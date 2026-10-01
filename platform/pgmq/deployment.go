@@ -10,7 +10,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-const maxQueueName = 47
+const maxQueueNameLength = 47
 
 type Deployment struct {
 	Topics  map[string]*contractv1.ManifestTopic
@@ -61,12 +61,12 @@ func isTask(topic *contractv1.ManifestTopic) bool {
 
 func queueName(topic, consumer string) string {
 	name := strings.ReplaceAll(topic+"__"+consumer, "-", "_")
-	if len(name) <= maxQueueName {
+	if len(name) <= maxQueueNameLength {
 		return name
 	}
 	sum := sha256.Sum256([]byte(topic + "/" + consumer))
 	suffix := "_" + hex.EncodeToString(sum[:4])
-	return name[:maxQueueName-len(suffix)] + suffix
+	return name[:maxQueueNameLength-len(suffix)] + suffix
 }
 
 func (e *Engine) Apply(ctx context.Context, deployment Deployment) error {

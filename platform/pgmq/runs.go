@@ -53,7 +53,7 @@ func (t Tasks) ListRuns(ctx context.Context, req *taskv1.ListRunsRequest) (*task
 	}
 	resp := &taskv1.ListRunsResponse{NextCursor: page.NextCursor}
 	for _, run := range page.Runs {
-		resp.Runs = append(resp.Runs, runMessage(run))
+		resp.Runs = append(resp.Runs, newRunMessage(run))
 	}
 	return resp, nil
 }

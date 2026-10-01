@@ -89,14 +89,14 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 		if options.GetIdempotencyKeyTtl() != nil {
 			life = options.GetIdempotencyKeyTtl().AsDuration()
 		}
-		existing, created, err := ensureRecord(ctx, tx, runRecord(provider.RecordIdempotency, name, key, execution, now.Add(life)))
+		existing, created, err := ensureRecord(ctx, tx, newRunRecord(provider.RecordIdempotency, name, key, execution, now.Add(life)))
 		if err != nil || !created {
-			return runIn(existing), err
+			return readRecordedRun(existing), err
 		}
 	}
 	if debounce := options.GetDebounce(); debounce != nil {
 		toPublish.dueAt = now.Add(debounce.GetDelay().AsDuration())
-		pending, err := t.debounce(ctx, tx, runRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt))
+		pending, err := t.debounce(ctx, tx, newRunRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt))
 		if err != nil || pending != "" {
 			return pending, err
 		}
@@ -111,12 +111,12 @@ type recordedRun struct {
 	Run string `json:"run"`
 }
 
-func runRecord(purpose provider.RecordPurpose, task, key, execution string, expires time.Time) provider.ExpiringRecord {
+func newRunRecord(purpose provider.RecordPurpose, task, key, execution string, expires time.Time) provider.ExpiringRecord {
 	value, _ := json.Marshal(recordedRun{Run: execution})
 	return provider.ExpiringRecord{Purpose: purpose, Topic: task, Key: key, Value: value, ExpiresAt: expires}
 }
 
-func runIn(record provider.ExpiringRecord) string {
+func readRecordedRun(record provider.ExpiringRecord) string {
 	var recorded recordedRun
 	_ = json.Unmarshal(record.Value, &recorded)
 	return recorded.Run
@@ -127,7 +127,7 @@ func (t Tasks) debounce(ctx context.Context, tx pgx.Tx, record provider.Expiring
 	if err != nil || created {
 		return "", err
 	}
-	pending := runIn(existing)
+	pending := readRecordedRun(existing)
 	run, err := lockRun(ctx, tx, pending)
 	if err != nil && connect.CodeOf(err) != connect.CodeNotFound {
 		return "", err
@@ -163,7 +163,7 @@ func (t Tasks) RetrieveRun(ctx context.Context, req *taskv1.RetrieveRunRequest) 
 	if err != nil {
 		return nil, err
 	}
-	return &taskv1.RetrieveRunResponse{Run: runMessage(run)}, nil
+	return &taskv1.RetrieveRunResponse{Run: newRunMessage(run)}, nil
 }
 
 var runStatuses = map[provider.RunStatus]taskv1.RunStatus{
@@ -177,7 +177,7 @@ var runStatuses = map[provider.RunStatus]taskv1.RunStatus{
 	provider.RunTimedOut:  taskv1.RunStatus_RUN_STATUS_TIMED_OUT,
 }
 
-func runMessage(run provider.Run) *taskv1.Run {
+func newRunMessage(run provider.Run) *taskv1.Run {
 	message := &taskv1.Run{
 		Id:         run.Execution,
 		Task:       run.Topic,

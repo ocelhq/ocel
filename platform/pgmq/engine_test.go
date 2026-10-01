@@ -20,7 +20,7 @@ func aDatabase(t *testing.T) Config {
 	server := enginetest.SharedQueueDatabase(t)
 	sum := sha256.Sum256([]byte(t.Name()))
 	database := "test_" + hex.EncodeToString(sum[:8])
-	server.ClaimDatabase(t, database)
+	server.Claim(t, database)
 	return Config{ServerURL: server.URL, Database: database}
 }
 

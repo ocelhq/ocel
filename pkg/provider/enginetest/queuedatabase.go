@@ -26,7 +26,7 @@ func SharedQueueDatabase(t *testing.T) QueueDatabase {
 	return queueDatabase.get(t, func() (QueueDatabase, string) { return startQueueDatabase(labels, 90*time.Second) })
 }
 
-func (s QueueDatabase) ClaimDatabase(t *testing.T, database string) {
+func (s QueueDatabase) Claim(t *testing.T, database string) {
 	t.Helper()
 	if err := databases.take(database, t.Name()); err != nil {
 		t.Fatal(err)

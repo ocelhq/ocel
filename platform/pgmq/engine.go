@@ -81,7 +81,7 @@ func (e *Engine) signalApplied() {
 	}
 }
 
-func (e *Engine) wake(queue string) chan struct{} {
+func (e *Engine) ensureWakeChannel(queue string) chan struct{} {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	wake, found := e.wakes[queue]
@@ -94,7 +94,7 @@ func (e *Engine) wake(queue string) chan struct{} {
 
 func (e *Engine) signal(queue string) {
 	select {
-	case e.wake(queue) <- struct{}{}:
+	case e.ensureWakeChannel(queue) <- struct{}{}:
 	default:
 	}
 }
@@ -141,10 +141,10 @@ func isAtLeast(version, minimum string) bool {
 		if i >= len(have) {
 			return false
 		}
-		h, _ := strconv.Atoi(have[i])
-		w, _ := strconv.Atoi(want[i])
-		if h != w {
-			return h > w
+		haveNumber, _ := strconv.Atoi(have[i])
+		wantNumber, _ := strconv.Atoi(want[i])
+		if haveNumber != wantNumber {
+			return haveNumber > wantNumber
 		}
 	}
 	return true
