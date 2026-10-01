@@ -12,8 +12,10 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/runtime/agent"
+	"github.com/ocelhq/ocel/platform/vps/runtime/queues"
 )
 
 const (
@@ -55,11 +57,20 @@ func run(argv []string, errs *os.File) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+	queued := &queues.Host{
+		Records: live.KeyValues{Root: *stateRoot},
+		Tiers:   []environment.Tier{environment.TierProduction, environment.TierPreview},
+		Cipher:  live.Cipher{Root: *tierRoot},
+		Locate:  inspect,
+		Open:    queues.OpenPgmq,
+	}
+	go queued.Run(ctx)
 	server := &agent.Server{
 		Proc:    *proc,
 		Inspect: inspect,
 		Resolve: agent.Store{TierRoot: *tierRoot, StateRoot: *stateRoot, RoutingTable: *routingTable},
 		Space:   inspect,
+		Queues:  queued,
 	}
 	if err := server.Serve(ctx, ln); err != nil {
 		fmt.Fprintln(errs, "ocel-live: "+err.Error())

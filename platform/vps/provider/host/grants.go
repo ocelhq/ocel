@@ -72,7 +72,8 @@ func grants(tier environment.Tier, arch string, front Front) []Grant {
 			Name: "no hand in " + LiveSocket,
 			Detail: "root's agent at " + agent.Name + ", run by systemd as " + LiveService + ", not by " + deployer.name +
 				". App containers get " + LiveSocketDir + " read-only; the agent identifies them by connecting process, " +
-				"opens values under the tier key, and answers no process outside a container",
+				"opens values under the tier key, and answers no process outside a container. " +
+				"It also runs each environment's topics and tasks against that environment's queue database, and delivers them to its worker containers",
 		})
 	}
 	if unit := written(items, KindUnit, EnvSourceSyncService(tier)); unit.Name != "" {
