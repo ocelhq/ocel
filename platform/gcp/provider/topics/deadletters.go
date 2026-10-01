@@ -40,6 +40,9 @@ func (s Store) deadLetters(topic, consumer string) (firestore.Query, error) {
 }
 
 func (s Store) eachDeadLetter(ctx context.Context, topic, consumer string, executions []string, each func(storedRun) error) error {
+	if len(executions) > 0 {
+		return s.eachNamedDeadLetter(ctx, topic, consumer, executions, each)
+	}
 	query, err := s.deadLetters(topic, consumer)
 	if err != nil {
 		return err
@@ -54,9 +57,6 @@ func (s Store) eachDeadLetter(ctx context.Context, topic, consumer string, execu
 		if err != nil {
 			return fmt.Errorf("read the dead letters of %s/%s: %w", topic, consumer, err)
 		}
-		if len(executions) > 0 && !slices.Contains(executions, snapshot.Ref.ID) {
-			continue
-		}
 		run, err := storedRunOf(snapshot)
 		if err != nil {
 			return err
@@ -65,6 +65,41 @@ func (s Store) eachDeadLetter(ctx context.Context, topic, consumer string, execu
 			return err
 		}
 	}
+}
+
+func (s Store) eachNamedDeadLetter(ctx context.Context, topic, consumer string, executions []string, each func(storedRun) error) error {
+	runs, err := s.runs()
+	if err != nil {
+		return err
+	}
+	client, err := s.Clients.Firestore()
+	if err != nil {
+		return err
+	}
+	var docs []*firestore.DocumentRef
+	for _, execution := range slices.Compact(slices.Sorted(slices.Values(executions))) {
+		docs = append(docs, runs.Doc(execution))
+	}
+	snapshots, err := client.GetAll(ctx, docs)
+	if err != nil {
+		return fmt.Errorf("read the dead letters %v of %s/%s: %w", executions, topic, consumer, err)
+	}
+	for _, snapshot := range snapshots {
+		if !snapshot.Exists() {
+			continue
+		}
+		run, err := storedRunOf(snapshot)
+		if err != nil {
+			return err
+		}
+		if run.Topic != topic || run.Consumer != consumer || run.Status != provider.RunFailed {
+			continue
+		}
+		if err := each(run); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s Store) removeDeadLetter(ctx context.Context, execution string) (bool, error) {
