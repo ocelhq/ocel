@@ -312,6 +312,22 @@ func (s Store) changeRun(ctx context.Context, execution string, change func(reco
 	return changed, nil
 }
 
+var errRunExists = errors.New("a run with this execution is already recorded")
+
+func (s Store) createRun(ctx context.Context, record runRecord) error {
+	_, err := s.changeRun(ctx, record.Execution, func(current *runRecord, found bool) error {
+		if found {
+			return errRunExists
+		}
+		*current = record
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("record run %s: %w", record.Execution, err)
+	}
+	return nil
+}
+
 func (s Store) ListRuns(ctx context.Context, filter provider.RunFilter) (provider.RunPage, error) {
 	runs, err := s.runs()
 	if err != nil {
