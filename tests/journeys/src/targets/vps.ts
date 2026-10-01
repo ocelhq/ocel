@@ -3,13 +3,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
-import { migrates, setsEnv, setsPasswordReportNonce, setsSecret } from "../checks";
+import { migrates, setsEnv, setsSecret } from "../checks";
 import {
   INITIAL_GREETING,
-  PASSWORD_REPORT_NONCE_ENV,
+  JOURNEY_NONCE_ENV,
   REDACTED,
   redact,
   SECRET_TOKEN,
+  setsJourneyNonce,
   UNCAPPED_BODY_BYTES,
 } from "../checks/context";
 import { BOX_ZONE, journeyConfigIn, journeyZone, vpsZoneOf } from "../config";
@@ -493,12 +494,8 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
     if (setsSecret(cell.fixture.checks)) {
       await drive("env-secret", ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`]);
     }
-    if (setsPasswordReportNonce(cell.fixture.checks)) {
-      await drive("env-password-report-nonce", [
-        "env",
-        "set",
-        `${PASSWORD_REPORT_NONCE_ENV}=${cell.passwordReportNonce}`,
-      ]);
+    if (setsJourneyNonce(cell.fixture.checks)) {
+      await drive("env-journey-nonce", ["env", "set", `${JOURNEY_NONCE_ENV}=${cell.journeyNonce}`]);
     }
     const deployed = await drive("deploy", ["deploy", "--yes"]);
     const transcript = `${deployed.stdout}\n${deployed.stderr}`;

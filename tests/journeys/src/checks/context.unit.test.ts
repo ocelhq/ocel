@@ -20,7 +20,7 @@ function context(asked: string, answered: string): CheckContext {
     notes: new Map(),
     fetch: answering(answered),
     readExposed: async () => "",
-    passwordReportNonce: "journey-password-report-nonce",
+    journeyNonce: "journey-nonce",
   };
 }
 

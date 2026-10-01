@@ -1,7 +1,7 @@
 import { defineEnv } from "ocel/env";
 
 export const env = defineEnv({
-  PASSWORD_REPORT_NONCE: {
+  JOURNEY_NONCE: {
     class: "secret",
   },
 });

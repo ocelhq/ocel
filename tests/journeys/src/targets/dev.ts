@@ -6,12 +6,13 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
-import { migrates, setsEnv, setsPasswordReportNonce, setsSecret } from "../checks";
+import { migrates, setsEnv, setsSecret } from "../checks";
 import {
   INITIAL_GREETING,
-  PASSWORD_REPORT_NONCE_ENV,
+  JOURNEY_NONCE_ENV,
   redact,
   SECRET_TOKEN,
+  setsJourneyNonce,
   UNCAPPED_BODY_BYTES,
 } from "../checks/context";
 import { journeyConfigIn } from "../config";
@@ -200,12 +201,12 @@ async function writeDotfile(cell: CellUnderTest, dir: string): Promise<void> {
   if (setsSecret(cell.fixture.checks)) {
     lines.push(`SECRET_TOKEN=${SECRET_TOKEN}`);
   }
-  if (setsPasswordReportNonce(cell.fixture.checks)) {
-    lines.push(`${PASSWORD_REPORT_NONCE_ENV}=${cell.passwordReportNonce}`);
+  if (setsJourneyNonce(cell.fixture.checks)) {
+    lines.push(`${JOURNEY_NONCE_ENV}=${cell.journeyNonce}`);
   }
   const written = `${lines.join("\n")}\n`;
   await writeFile(path.join(dir, DOTFILE), written, "utf8");
-  await cell.evidence.write("deploy", DOTFILE, redact(written, [cell.passwordReportNonce]));
+  await cell.evidence.write("deploy", DOTFILE, redact(written, [cell.journeyNonce]));
 }
 
 export class DevTarget implements Target, Restart, Exposure {

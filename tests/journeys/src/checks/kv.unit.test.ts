@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Phase } from "../matrix/types";
-import { type CheckContext, type Fetch, PASSWORD_REPORT_NONCE_HEADER } from "./context";
+import { type CheckContext, type Fetch, JOURNEY_NONCE_HEADER } from "./context";
 import {
   kvJsonInvalidStoredCheck,
   kvPasswordOutOfEnvironmentCheck,
@@ -8,7 +8,7 @@ import {
 } from "./kv";
 
 const BASE = "https://web-j-1-kv-node.journey.test";
-const NONCE = "journey-password-report-nonce";
+const NONCE = "journey-nonce";
 
 type Request = { method: string; path: string };
 
@@ -44,7 +44,7 @@ function context(fetch: Fetch, phase: Phase, notes: Map<string, string>): CheckC
     notes,
     fetch,
     readExposed: async () => "",
-    passwordReportNonce: NONCE,
+    journeyNonce: NONCE,
   };
 }
 
@@ -148,7 +148,7 @@ describe("kvJsonInvalidStoredCheck", () => {
 describe("kvPasswordOutOfEnvironmentCheck", () => {
   it("asks for the password report with the nonce the cell handed the app", async () => {
     const fetch: Fetch = async (input, init) => {
-      const asked = new Headers(init?.headers).get(PASSWORD_REPORT_NONCE_HEADER);
+      const asked = new Headers(init?.headers).get(JOURNEY_NONCE_HEADER);
       if (new URL(String(input)).pathname !== "/api/kv/password-report" || asked !== NONCE) {
         return Response.json({ error: "forbidden" }, { status: 403 });
       }

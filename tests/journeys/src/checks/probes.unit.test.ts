@@ -23,7 +23,7 @@ function context(fetch: Fetch, baseUrl = BASE): CheckContext {
     notes: new Map(),
     fetch,
     readExposed: async () => "",
-    passwordReportNonce: "journey-password-report-nonce",
+    journeyNonce: "journey-nonce",
   };
 }
 

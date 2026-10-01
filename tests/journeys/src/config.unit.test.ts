@@ -44,7 +44,7 @@ function cell(fixture: Fixture, variant: Variant = defaults): CellUnderTest {
     slug: `j-1-${fixture.name.replace("/", "-")}`,
     runId: "1",
     evidence: evidence("/nowhere"),
-    passwordReportNonce: "journey-password-report-nonce",
+    journeyNonce: "journey-nonce",
   };
 }
 
