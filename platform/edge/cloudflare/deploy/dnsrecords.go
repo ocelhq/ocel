@@ -31,8 +31,9 @@ type zoneAPI interface {
 }
 
 type dnsRecords struct {
-	records recordAPI
-	zones   zoneAPI
+	records  recordAPI
+	zones    zoneAPI
+	accounts accountAPI
 
 	accountID string
 	named     string
@@ -41,22 +42,24 @@ type dnsRecords struct {
 	seen []edge.Zone
 }
 
-func NewDNS(zone string) (edge.DNSRecords, error) {
-	accountID, err := requireAccountID("write DNS records in Cloudflare")
-	if err != nil {
-		return nil, err
-	}
+func NewDNS(zone string) edge.DNSRecords {
 	client := cf.NewClient(option.WithMaxRetries(clientMaxRetries))
 	return &dnsRecords{
 		records:   client.DNS.Records,
 		zones:     client.Zones,
-		accountID: accountID,
+		accounts:  client.Accounts,
+		accountID: readAccountID(),
 		named:     zone,
-	}, nil
+	}
 }
 
 func (w *dnsRecords) TTL() time.Duration {
 	return automaticTTL
+}
+
+func (w *dnsRecords) VerifyCredentials(ctx context.Context) error {
+	_, err := verifyAccount(ctx, w.accounts, w.accountID)
+	return err
 }
 
 func (w *dnsRecords) Ensure(ctx context.Context, records []edge.Record, say func(string)) ([]edge.Record, error) {
@@ -238,6 +241,9 @@ func (w *dnsRecords) zoneFor(ctx context.Context, hostname string) (edge.Zone, e
 }
 
 func (w *dnsRecords) ownedZones(ctx context.Context) ([]edge.Zone, error) {
+	if w.accountID == "" {
+		return nil, fmt.Errorf("%s is not set; it is required to write DNS records in Cloudflare", envAccountID)
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.seen != nil {

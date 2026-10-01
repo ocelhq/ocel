@@ -3,9 +3,11 @@ package cloudflare
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/cloudflare/cloudflare-go/v4/accounts"
 	"github.com/cloudflare/cloudflare-go/v4/dns"
 	"github.com/cloudflare/cloudflare-go/v4/option"
 	"github.com/cloudflare/cloudflare-go/v4/packages/pagination"
@@ -371,5 +373,54 @@ func TestDNSRecordsDeleteRecords(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+type refusingAccounts struct{ err error }
+
+func (a refusingAccounts) Get(context.Context, accounts.AccountGetParams, ...option.RequestOption) (*accounts.Account, error) {
+	return nil, a.err
+}
+
+func TestTheDNSWriterVerifiesTheCredentialsItWritesWith(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		accountID string
+		apiToken  string
+		accounts  accountAPI
+		want      string
+	}{
+		{name: "an unset account id is named", apiToken: "tok", want: envAccountID + " is not set"},
+		{name: "an unset API token is named", accountID: testAccountID, want: envAPIToken + " is not set"},
+		{
+			name:      "a token Cloudflare rejects is named with the account it was tried against",
+			accountID: testAccountID,
+			apiToken:  "tok",
+			accounts:  refusingAccounts{err: errors.New("401 Unauthorized")},
+			want:      envAPIToken + " was rejected by Cloudflare for account " + testAccountID,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(envAccountID, tc.accountID)
+			t.Setenv(envAPIToken, tc.apiToken)
+
+			writer := NewDNS("app.com")
+			if tc.accounts != nil {
+				writer.(*dnsRecords).accounts = tc.accounts
+			}
+			err := writer.VerifyCredentials(t.Context())
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("VerifyCredentials() error = %v, want it to say %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestADNSWriterWithNoAccountIDRefusesToWrite(t *testing.T) {
+	t.Setenv(envAccountID, "")
+
+	_, err := NewDNS("app.com").Ensure(t.Context(), []edge.Record{{Name: "app.com", Type: edge.RecordTypeA, Value: "192.0.2.1"}}, nil)
+	if err == nil || !strings.Contains(err.Error(), envAccountID+" is not set; it is required to write DNS records in Cloudflare") {
+		t.Errorf("Ensure() error = %v, want the unset account id named", err)
 	}
 }

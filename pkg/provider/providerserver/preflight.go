@@ -45,7 +45,11 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	if err := h.edgeIdentity(ctx, p, gate.Edge, req.GetEdge(), resp); err != nil {
+	edgeVerified, err := h.edgeIdentity(ctx, p, gate.Edge, req.GetEdge(), resp)
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyDNSCredentials(ctx, p, gate.Edge, edgeVerified, req.GetEdge().GetDns(), resp); err != nil {
 		return nil, err
 	}
 	resp.HostnameRequired, err = h.hostnameRequired(p, req.GetEdge())
@@ -117,24 +121,50 @@ func (h *handlers) edgeIdentity(
 	kind edge.Kind,
 	sel *contractv1.EdgeSelection,
 	resp *contractv1.PreflightResponse,
-) error {
+) (bool, error) {
 	if kind == "" {
-		return nil
+		return false, nil
 	}
 	front, err := h.edgeFor(p, sel)
 	if err != nil {
-		return provider.RefusalError(err)
+		return false, provider.RefusalError(err)
 	}
 	verify := front.Hooks().VerifyCredentials
 	if verify == nil {
-		return nil
+		return false, nil
 	}
 	scope, err := verify(ctx)
 	if err != nil {
 		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(provider.Vendor(kind), err))
-		return nil
+		return true, nil
 	}
 	resp.Identity.EdgeScope = scope.Account
+	return true, nil
+}
+
+func verifyDNSCredentials(
+	ctx context.Context,
+	p provider.Provider,
+	front edge.Kind,
+	edgeVerified bool,
+	sel *contractv1.Dns,
+	resp *contractv1.PreflightResponse,
+) error {
+	kind := provider.DNSKind(sel.GetKind())
+	if kind == "" {
+		return nil
+	}
+	writer, err := p.DNS().Open(kind, sel.GetZone(), front)
+	if err != nil {
+		return provider.RefusalError(err)
+	}
+	vendor := provider.Vendor(kind)
+	if edgeVerified && vendor == provider.Vendor(front) {
+		return nil
+	}
+	if err := writer.VerifyCredentials(ctx); err != nil {
+		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(vendor, err))
+	}
 	return nil
 }
 

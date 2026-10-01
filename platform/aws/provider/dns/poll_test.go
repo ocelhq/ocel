@@ -101,6 +101,8 @@ func (d *deletingWriter) Delete(_ context.Context, records []edge.Record) error 
 
 func (d *deletingWriter) TTL() time.Duration { return 0 }
 
+func (d *deletingWriter) VerifyCredentials(context.Context) error { return nil }
+
 func TestRelease(t *testing.T) {
 	t.Parallel()
 

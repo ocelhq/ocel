@@ -385,6 +385,33 @@ func TestACredentialProblemAbortsTheDeployBeforeTheBuild(t *testing.T) {
 	}
 }
 
+func TestADNSCredentialProblemAbortsTheDeployBeforeTheBuild(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	pretendStdoutIsTerminal(&dependencies)
+	fixture := setUpDeployProject(t)
+	writeConfig(t, fixture.Root, "  dns: { zone: { zone: \"acme.com\" } },\n")
+	fixture.Provider.DNS().(*fake.DNS).Verifies(errors.New("the zone token was revoked"))
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want a credential-check error")
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, string(fake.KindZone)) || !strings.Contains(out, "zone token was revoked") {
+		t.Errorf("stdout = %q, want the DNS writer named with its credential problem", out)
+	}
+	if strings.Contains(out, "[build]") {
+		t.Errorf("stdout = %q, want the build to be skipped on a DNS credential failure", out)
+	}
+	if sent := sentDeploys(t, fixture); len(sent) != 0 {
+		t.Errorf("the CLI sent %d deploys, want none", len(sent))
+	}
+}
+
 func TestADeployRefusesWithoutProductionInfrastructure(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
