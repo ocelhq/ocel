@@ -112,7 +112,7 @@ func TestAServerlessAppThatPushesAnImageIsRefused(t *testing.T) {
 
 	cfg, spec := containerStackSpec(t)
 	spec.App.Compute = provider.ComputeServerless
-	if _, _, err := releasing(t, cfg).prepare(context.Background(), spec, false); err == nil || !strings.Contains(err.Error(), "serverless") {
+	if _, _, err := releasing(t, cfg).prepare(context.Background(), spec, runProvision); err == nil || !strings.Contains(err.Error(), "serverless") {
 		t.Fatalf("prepare() of a serverless app that pushes an image = %v, want it refused: functions run no image", err)
 	}
 }

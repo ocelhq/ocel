@@ -408,7 +408,7 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	if runsContainer(spec) {
 		return r.provisionContainer(ctx, spec, progress)
 	}
-	prepared, work, err := r.prepare(ctx, spec, false)
+	prepared, work, err := r.prepare(ctx, spec, runProvision)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -442,7 +442,7 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 	if runsContainer(spec) {
 		return r.planContainer(ctx, spec, progress)
 	}
-	prepared, _, err := r.prepare(ctx, spec, true)
+	prepared, _, err := r.prepare(ctx, spec, runPreview)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -466,7 +466,14 @@ func transformedIn(spec provider.StackSpec) *transformPatches {
 	return nil
 }
 
-func (r *release) prepare(ctx context.Context, spec provider.StackSpec, previewing bool) (provider.StackSpec, *appWork, error) {
+type runKind int
+
+const (
+	runProvision runKind = iota
+	runPreview
+)
+
+func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind runKind) (provider.StackSpec, *appWork, error) {
 	if spec.VendorState != nil {
 		return spec, nil, nil
 	}
@@ -482,7 +489,7 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, previewi
 		if err := r.refuseHandover(ctx, spec); err != nil {
 			return provider.StackSpec{}, nil, err
 		}
-		work := &infraWork{transformed: transformed, previewing: previewing}
+		work := &infraWork{transformed: transformed, previewing: kind == runPreview}
 		if provisionsBucket(spec) {
 			if work.completer, err = placeUploadCompleter(ctx, r.cfg); err != nil {
 				return provider.StackSpec{}, nil, err

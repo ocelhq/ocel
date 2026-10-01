@@ -82,21 +82,21 @@ func translateKV(name string, spec *provider.KVSpec) (kvArgs, error) {
 		return kvArgs{}, refusal.Refuse(refusal.CodeInvalid,
 			"kv %s asks for version %q; this provider runs %s", name, major, strings.Join(slices.Sorted(maps.Keys(kvEngineVersions)), ", "))
 	}
-	memory := declared.MemoryBytes
-	if memory == 0 {
-		memory, _ = kvstore.ParseMemory(kvstore.DefaultMemory)
+	memoryBytes := declared.MemoryBytes
+	if memoryBytes == 0 {
+		memoryBytes, _ = kvstore.ParseMemory(kvstore.DefaultMemory)
 	}
-	node, reserve, fits := kvNodeFor(memory)
+	node, reservePercent, fits := pickKVNode(memoryBytes)
 	if !fits {
 		return kvArgs{}, refusal.Refuse(refusal.CodeInvalid,
-			"kv %s asks for %d bytes of memory, and the largest node this provider runs, %s, holds less", name, memory, kvNodeLadder[len(kvNodeLadder)-1].Type)
+			"kv %s asks for %d bytes of memory, and the largest node this provider runs, %s, holds less", name, memoryBytes, kvNodeLadder[len(kvNodeLadder)-1].Type)
 	}
 	return kvArgs{
 		Engine:                   kvEngine,
 		EngineVersion:            version,
 		Family:                   kvEngine + major,
 		NodeType:                 node,
-		ReservedMemoryPercent:    reserve,
+		ReservedMemoryPercent:    reservePercent,
 		MaxMemoryPolicy:          cmp.Or(declared.Eviction, kvDefaultMaxMemoryPolicy),
 		Port:                     kvstore.ValkeyPort,
 		NumCacheClusters:         kvNodeCount,
@@ -192,15 +192,15 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 	return nil
 }
 
-func kvNodeFor(memoryBytes int64) (string, int, bool) {
+func pickKVNode(memoryBytes int64) (string, int, bool) {
 	const gib = int64(1) << 30
 	for _, node := range kvNodeLadder {
-		advertised := node.MemoryHundredthsGiB * gib
-		if advertised*int64(100-node.MinReservePercent) < memoryBytes*100*100 {
+		advertisedBytes := node.MemoryHundredthsGiB * gib
+		if advertisedBytes*int64(100-node.MinReservePercent) < memoryBytes*100*100 {
 			continue
 		}
-		held := int(memoryBytes * 100 * 100 / advertised)
-		return node.Type, max(node.MinReservePercent, 100-held), true
+		heldPercent := int(memoryBytes * 100 * 100 / advertisedBytes)
+		return node.Type, max(node.MinReservePercent, 100-heldPercent), true
 	}
 	return "", 0, false
 }

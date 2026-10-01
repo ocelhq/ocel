@@ -236,16 +236,9 @@ func shapeTransforms(ctx context.Context, pass transform.Pass, project string, r
 		if resource.Binding != "" {
 			continue
 		}
-		switch resource.Type {
-		case provider.BindingPostgres:
-			request.Resources = append(request.Resources, transform.Resource{Type: transformTypePostgres, Name: resource.Name})
-			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypePostgres, Name: resource.Name}, names: postgresResourceNames(project, req.Deploy.Env, resource.Name)})
-		case provider.BindingBucket:
-			request.Resources = append(request.Resources, transform.Resource{Type: transformTypeBucket, Name: resource.Name})
-			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeBucket, Name: resource.Name}, names: bucketResourceNames(project, req.Deploy.Env, resource.Name)})
-		case provider.BindingKV:
-			request.Resources = append(request.Resources, transform.Resource{Type: transformTypeKV, Name: resource.Name})
-			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeKV, Name: resource.Name}, names: kvResourceNames(project, req.Deploy.Env, resource.Name)})
+		if shown, candidate, patchable := newInfraTransformCandidate(project, req.Deploy.Env, resource); patchable {
+			request.Resources = append(request.Resources, shown)
+			candidates = append(candidates, candidate)
 		}
 	}
 	for _, app := range req.Deploy.Apps {

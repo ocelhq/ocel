@@ -144,8 +144,8 @@ func collectKVBinding(ctx context.Context, params ParametersAPI, name string, fi
 		return nil, err
 	}
 	port := kvstore.ValkeyPort
-	if p, ok := fields[outputKeyPort].(float64); ok {
-		port = int(p)
+	if recorded, ok := fields[outputKeyPort].(float64); ok {
+		port = int(recorded)
 	}
 	token, found, err := readKVToken(ctx, params, parameter)
 	if err != nil {
