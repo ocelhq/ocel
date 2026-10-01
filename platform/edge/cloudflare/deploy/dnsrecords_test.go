@@ -441,8 +441,8 @@ func TestTheDNSWriterVerifiesTheCredentialsItWritesWith(t *testing.T) {
 					t.Fatalf("VerifyCredentials() error = %v, want the credentials accepted", err)
 				}
 				asked := tc.zones.asked[0]
-				if asked.Account.Value.ID.Value != testAccountID || asked.PerPage.Value != 1 {
-					t.Errorf("VerifyCredentials() listed zones with %+v, want one zone of account %s", asked, testAccountID)
+				if asked.Account.Value.ID.Value != testAccountID || asked.PerPage.Value != 5 {
+					t.Errorf("VerifyCredentials() listed zones with %+v, want the smallest page of zones Cloudflare accepts, 5, of account %s", asked, testAccountID)
 				}
 				return
 			}
