@@ -4,11 +4,13 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
@@ -153,6 +155,33 @@ func TestAListOfDeadLettersHoldsAtMostAThousandAPage(t *testing.T) {
 	}
 	if len(resp.GetDeadLetters()) != 1000 || resp.GetNextCursor() == "" {
 		t.Errorf("ListDeadLetters(limit 5000) = %d with cursor %q, want a page of 1000 and a cursor", len(resp.GetDeadLetters()), resp.GetNextCursor())
+	}
+}
+
+func TestAConsumersAttemptPastMaxDurationIsRetriedAndThenDeadLettered(t *testing.T) {
+	worker := newWorker(t, func(*topicv1.Envelope) reply { return reply{status: http.StatusOK, hold: 5 * time.Second} })
+	email := &contractv1.ManifestConsumer{Name: "email", Worker: "worker", MaxDuration: durationpb.New(300 * time.Millisecond)}
+	orders := aTopic(email)
+	orders.Retry = &resourcesv1.RetryPolicy{MaxAttempts: 2, MinDelay: durationpb.New(50 * time.Millisecond), MaxDelay: durationpb.New(50 * time.Millisecond)}
+	engine := dispatching(t, map[string]*contractv1.ManifestTopic{"orders": orders}, map[string]Worker{"worker": {URL: worker.server.URL}})
+
+	send(t, engine, "orders", `{"n":1}`, nil)
+	deadline := time.Now().Add(15 * time.Second)
+	for countDeadLetters(t, engine) < 1 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d messages dead-lettered after %d attempts, want the timed-out message", countDeadLetters(t, engine), len(worker.received()))
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	resp, err := engine.Topics().ListDeadLetters(context.Background(), &topicv1.ListDeadLettersRequest{Topic: "orders", Consumer: "email"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if letter := resp.GetDeadLetters()[0]; letter.GetAttempts() != 2 || !strings.Contains(letter.GetError(), "maxDuration") {
+		t.Errorf("dead letter = %v, want both attempts spent and the maxDuration error", letter)
+	}
+	if got := len(worker.received()); got != 2 {
+		t.Errorf("the worker received %d attempts, want 2", got)
 	}
 }
 

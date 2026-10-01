@@ -257,7 +257,9 @@ func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedC
 	case aborted:
 		return e.settle(ctx, loop.name, claimed, "failed", nil, res.reason)
 	case timedOut:
-		return e.settle(ctx, loop.name, claimed, "timed-out", nil, res.reason)
+		if isTask(deployed.topic) {
+			return e.settle(ctx, loop.name, claimed, "timed-out", nil, res.reason)
+		}
 	}
 	if claimed.attempt >= claimed.maxAttempts {
 		return e.settle(ctx, loop.name, claimed, "failed", nil, res.reason)
