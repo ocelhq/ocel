@@ -45,11 +45,11 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	edgeVerified, err := h.edgeIdentity(ctx, p, gate.Edge, req.GetEdge(), resp)
+	edgeCredentialsChecked, err := h.verifyEdgeCredentials(ctx, p, gate.Edge, req.GetEdge(), resp)
 	if err != nil {
 		return nil, err
 	}
-	if err := verifyDNSCredentials(ctx, p, gate.Edge, edgeVerified, req.GetEdge().GetDns(), resp); err != nil {
+	if err := verifyDNSCredentials(ctx, p, gate.Edge, edgeCredentialsChecked, req.GetEdge().GetDns(), resp); err != nil {
 		return nil, err
 	}
 	resp.HostnameRequired, err = h.hostnameRequired(p, req.GetEdge())
@@ -115,7 +115,7 @@ func containerArchs(ctx context.Context, runtime provider.Runtime, containers []
 	return archs, nil
 }
 
-func (h *handlers) edgeIdentity(
+func (h *handlers) verifyEdgeCredentials(
 	ctx context.Context,
 	p provider.Provider,
 	kind edge.Kind,
@@ -146,7 +146,7 @@ func verifyDNSCredentials(
 	ctx context.Context,
 	p provider.Provider,
 	front edge.Kind,
-	edgeVerified bool,
+	edgeCredentialsChecked bool,
 	sel *contractv1.Dns,
 	resp *contractv1.PreflightResponse,
 ) error {
@@ -159,7 +159,7 @@ func verifyDNSCredentials(
 		return provider.RefusalError(err)
 	}
 	vendor := provider.Vendor(kind)
-	if edgeVerified && vendor == provider.Vendor(front) {
+	if edgeCredentialsChecked && vendor == provider.Vendor(front) {
 		return nil
 	}
 	if err := writer.VerifyCredentials(ctx); err != nil {

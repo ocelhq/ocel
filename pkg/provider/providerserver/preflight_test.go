@@ -613,7 +613,7 @@ func dnsSelection(kind provider.DNSKind) *contractv1.EdgeSelection {
 	return &contractv1.EdgeSelection{Dns: &contractv1.Dns{Kind: string(kind), Zone: "acme.com"}}
 }
 
-func TestPreflightReportsDNSCredentialsThatWouldNotAnswer(t *testing.T) {
+func TestPreflightReportsDNSCredentialsThatFailVerification(t *testing.T) {
 	t.Parallel()
 
 	client, vendor := contractServed(t, "1.2.3")
