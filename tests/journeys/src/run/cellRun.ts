@@ -26,7 +26,7 @@ export function messageOf(error: unknown): string {
 
 export type CellUnderTest = Pick<
   CellRun,
-  "name" | "fixture" | "variant" | "dir" | "slug" | "runId" | "evidence" | "passwordReportNonce"
+  "name" | "fixture" | "variant" | "dir" | "slug" | "runId" | "evidence" | "journeyNonce"
 >;
 
 export class CellRun {
@@ -37,7 +37,7 @@ export class CellRun {
   readonly slug: string;
   readonly runId: string;
   readonly evidence: Evidence;
-  readonly passwordReportNonce: string = randomUUID();
+  readonly journeyNonce: string = randomUUID();
 
   private readonly target: Target;
   private readonly keep: boolean;
@@ -168,7 +168,7 @@ export class CellRun {
       notes: this.notes,
       fetch: guard.fetch,
       readExposed: () => this.readExposed(),
-      passwordReportNonce: this.passwordReportNonce,
+      journeyNonce: this.journeyNonce,
     }).then(
       () => undefined,
       (error: unknown) => ({ error }),

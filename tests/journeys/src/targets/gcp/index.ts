@@ -2,11 +2,12 @@ import { execFile } from "node:child_process";
 import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { migrates, setsEnv, setsPasswordReportNonce, setsSecret } from "../../checks";
+import { migrates, setsEnv, setsSecret } from "../../checks";
 import {
   INITIAL_GREETING,
-  PASSWORD_REPORT_NONCE_ENV,
+  JOURNEY_NONCE_ENV,
   SECRET_TOKEN,
+  setsJourneyNonce,
   UNCAPPED_BODY_BYTES,
 } from "../../checks/context";
 import { GCP_BASE, journeyConfigIn, type Overlay, writeJourneyConfig } from "../../config";
@@ -219,13 +220,13 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
         env,
       );
     }
-    if (setsPasswordReportNonce(cell.fixture.checks)) {
+    if (setsJourneyNonce(cell.fixture.checks)) {
       await this.run(
         cell,
         dir,
         "deploy",
-        "env-password-report-nonce",
-        ["env", "set", `${PASSWORD_REPORT_NONCE_ENV}=${cell.passwordReportNonce}`],
+        "env-journey-nonce",
+        ["env", "set", `${JOURNEY_NONCE_ENV}=${cell.journeyNonce}`],
         env,
       );
     }

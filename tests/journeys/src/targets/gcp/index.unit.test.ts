@@ -38,7 +38,7 @@ describe("gcpSweepOverlay", () => {
         slug,
         runId,
         evidence: evidence("/nowhere"),
-        passwordReportNonce: "journey-password-report-nonce",
+        journeyNonce: "journey-nonce",
       };
       const overlay = gcpSweepOverlay(cell, slug, env);
       expect(overlay).toEqual(overlayFor(deployed, "gcp", env));

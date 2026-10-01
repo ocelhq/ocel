@@ -5,7 +5,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { Refusal } from "../matrix/types";
 import { fixtureDir } from "../paths";
-import { type Check, type CheckContext, json, PASSWORD_REPORT_NONCE_HEADER } from "./context";
+import { type Check, type CheckContext, JOURNEY_NONCE_HEADER, json } from "./context";
 
 const TTL_MS = 2_000;
 const EXPIRED_WITHIN_MS = 15_000;
@@ -422,7 +422,7 @@ type PasswordReport = { password: string; environment: string[] };
 
 async function readPasswordReport(ctx: CheckContext): Promise<PasswordReport> {
   const sent = await json(ctx, "/api/kv/password-report", {
-    headers: { [PASSWORD_REPORT_NONCE_HEADER]: ctx.passwordReportNonce },
+    headers: { [JOURNEY_NONCE_HEADER]: ctx.journeyNonce },
   });
   assertStatus(sent, 200, "the password report");
   const shown = sent.body as PasswordReport;
@@ -432,6 +432,7 @@ async function readPasswordReport(ctx: CheckContext): Promise<PasswordReport> {
 
 export const kvPasswordUnprintedCheck: Check = {
   title: "the store's password shows in clear in nothing ocel prints or runs",
+  sendsJourneyNonce: true,
   run: async (ctx) => {
     const { password } = await readPasswordReport(ctx);
     const exposed = await ctx.readExposed();
@@ -442,6 +443,7 @@ export const kvPasswordUnprintedCheck: Check = {
 
 export const kvPasswordOutOfEnvironmentCheck: Check = {
   title: "the store's password is in clear in no environment variable of the app",
+  sendsJourneyNonce: true,
   run: async (ctx) => {
     const { environment } = await readPasswordReport(ctx);
     assert.deepEqual(environment, [], `${environment.join(", ")} holds the password in clear`);
@@ -475,12 +477,6 @@ export const kvChecks: Check[] = [
   kvPasswordUnprintedCheck,
   kvPasswordOutOfEnvironmentCheck,
 ];
-
-export function setsPasswordReportNonce(checks: Check[]): boolean {
-  return checks.some(
-    (one) => one === kvPasswordUnprintedCheck || one === kvPasswordOutOfEnvironmentCheck,
-  );
-}
 
 type Site = { file: string; line: number };
 

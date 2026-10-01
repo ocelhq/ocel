@@ -256,8 +256,8 @@ app.get("/api/kv/unauthenticated", async (_req, res) => {
   }
 });
 
-function isReportNonce(given: string | undefined): boolean {
-  const expected = env.PASSWORD_REPORT_NONCE;
+function isJourneyNonce(given: string | undefined): boolean {
+  const expected = env.JOURNEY_NONCE;
   if (given === undefined) {
     return false;
   }
@@ -268,7 +268,7 @@ function isReportNonce(given: string | undefined): boolean {
 }
 
 app.get("/api/kv/password-report", (req, res) => {
-  if (!isReportNonce(req.get("x-password-report-nonce"))) {
+  if (!isJourneyNonce(req.get("x-journey-nonce"))) {
     res.status(403).json({ error: "the password report needs the nonce the harness set" });
     return;
   }

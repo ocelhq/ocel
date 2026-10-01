@@ -8,8 +8,8 @@ export const INITIAL_GREETING = "journey-hello";
 export const REDEPLOY_GREETING = "redeployed";
 export const SECRET_TOKEN = "journey-secret-never-in-a-body";
 export const REDACTED = "<redacted>";
-export const PASSWORD_REPORT_NONCE_ENV = "PASSWORD_REPORT_NONCE";
-export const PASSWORD_REPORT_NONCE_HEADER = "x-password-report-nonce";
+export const JOURNEY_NONCE_ENV = "JOURNEY_NONCE";
+export const JOURNEY_NONCE_HEADER = "x-journey-nonce";
 
 export const OCEL_SVG_BYTES = 365;
 export const LARGE_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -26,14 +26,19 @@ export type CheckContext = {
   notes: Map<string, string>;
   fetch: Fetch;
   readExposed: () => Promise<string>;
-  passwordReportNonce: string;
+  journeyNonce: string;
 };
 
 export type Check = {
   title: string;
   cacheLayer?: CacheLayer;
+  sendsJourneyNonce?: true;
   run: (ctx: CheckContext) => Promise<void>;
 };
+
+export function setsJourneyNonce(checks: Check[]): boolean {
+  return checks.some((one) => one.sendsJourneyNonce);
+}
 
 const PASSWORD_IN_URL = /(:\/\/[^\s/@:]+:)[^\s/@]+@/g;
 const PASSWORD_IN_JSON = /("password"\s*:\s*)"(?:[^"\\]|\\.)*"/g;
