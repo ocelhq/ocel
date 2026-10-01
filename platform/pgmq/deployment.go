@@ -22,6 +22,21 @@ type Worker struct {
 	Concurrency int
 }
 
+func DeploymentOf(manifest *contractv1.Manifest, workerURLs map[string]string) Deployment {
+	deployment := Deployment{Topics: map[string]*contractv1.ManifestTopic{}, Workers: map[string]Worker{}}
+	for _, resource := range manifest.GetResources() {
+		if topic := resource.GetTopic(); topic != nil {
+			deployment.Topics[resource.GetLogicalName()] = topic
+		}
+	}
+	for _, worker := range manifest.GetWorkers() {
+		if url, served := workerURLs[worker.GetName()]; served {
+			deployment.Workers[worker.GetName()] = Worker{URL: url, Concurrency: int(worker.GetConcurrency())}
+		}
+	}
+	return deployment
+}
+
 type consumerRef struct {
 	topicName string
 	topic     *contractv1.ManifestTopic
