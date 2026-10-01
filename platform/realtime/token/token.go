@@ -116,6 +116,18 @@ func Verify(raw string, key ed25519.PublicKey, now time.Time, want Expected) (Cl
 	return claims, nil
 }
 
+func ReadUnverifiedNamespace(raw string) (string, error) {
+	parts := strings.Split(raw, ".")
+	if len(parts) != 3 {
+		return "", refuse(ReasonMalformed)
+	}
+	var claims Claims
+	if err := decodeSegment(parts[1], &claims); err != nil {
+		return "", refuse(ReasonMalformed)
+	}
+	return claims.Ocel.Namespace, nil
+}
+
 func decodeSegment(segment string, into any) error {
 	raw, err := base64.RawURLEncoding.DecodeString(segment)
 	if err != nil {
