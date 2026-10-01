@@ -230,6 +230,37 @@ func TestAStoreIsProvisionedThroughThrottling(t *testing.T) {
 	}
 }
 
+func TestAStoreCreateRetriedThroughAnOutageIsAskedForOnceUnderOneRequestID(t *testing.T) {
+	p, server := servingMemorystore(t)
+	server.throttledWrites = 1
+
+	if _, err := p.ProvisionKV(context.Background(), aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20}), nil); err != nil {
+		t.Fatalf("ProvisionKV() through a 503 = %v", err)
+	}
+	ids := server.requestIDs()
+	if len(ids) != 2 || ids[0] == "" || ids[0] != ids[1] {
+		t.Errorf("the create was sent under request ids %q, want one id on both attempts so Memorystore runs it once", ids)
+	}
+}
+
+func TestAStoreStillBeingCreatedIsAwaitedRatherThanCreatedAgain(t *testing.T) {
+	p, server := servingMemorystore(t)
+	in := aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20})
+	if _, err := p.ProvisionKV(context.Background(), in, nil); err != nil {
+		t.Fatalf("ProvisionKV() = %v", err)
+	}
+	server.stillCreating(storeInstance(t, p), 2)
+
+	binding, err := p.ProvisionKV(context.Background(), in, nil)
+	if err != nil {
+		t.Fatalf("ProvisionKV() of a store still being created = %v, want it awaited", err)
+	}
+	if binding.Properties[provider.PropertyHost] != storeAddress || len(server.creates()) != 1 || len(server.masks()) != 0 {
+		t.Errorf("a store still being created bound %q after %d creates and updates %v, want it awaited and bound unchanged",
+			binding.Properties[provider.PropertyHost], len(server.creates()), server.masks())
+	}
+}
+
 func TestAStoreWhoseCreateFailsIsRefusedWithWhatMemorystoreSaid(t *testing.T) {
 	p, server := servingMemorystore(t)
 	server.failed = "the service connection policy is missing"

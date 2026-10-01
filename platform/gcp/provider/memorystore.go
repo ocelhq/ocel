@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -129,20 +130,27 @@ func (m memorystore) readInstance(ctx context.Context, name string) (*memorystor
 
 func (m memorystore) createInstance(ctx context.Context, location, id string, instance *memorystoreInstance) (*memorystoreOperation, error) {
 	var started memorystoreOperation
-	err := m.call(ctx, http.MethodPost, location+"/instances", url.Values{"instanceId": {id}}, instance, &started)
+	err := m.call(ctx, http.MethodPost, location+"/instances", url.Values{"instanceId": {id}, "requestId": {uuid.NewString()}}, instance, &started)
 	return &started, err
 }
 
 func (m memorystore) updateInstance(ctx context.Context, name string, mask []string, instance *memorystoreInstance) (*memorystoreOperation, error) {
 	var started memorystoreOperation
-	err := m.call(ctx, http.MethodPatch, name, url.Values{"updateMask": {strings.Join(mask, ",")}}, instance, &started)
+	query := url.Values{"updateMask": {strings.Join(mask, ",")}, "requestId": {uuid.NewString()}}
+	err := m.call(ctx, http.MethodPatch, name, query, instance, &started)
 	return &started, err
 }
 
 func (m memorystore) deleteInstance(ctx context.Context, name string) (*memorystoreOperation, error) {
 	var started memorystoreOperation
-	err := m.call(ctx, http.MethodDelete, name, nil, nil, &started)
+	err := m.call(ctx, http.MethodDelete, name, url.Values{"requestId": {uuid.NewString()}}, nil, &started)
 	return &started, err
+}
+
+func (m memorystore) readActiveInstance(ctx context.Context, name, store string) (*memorystoreInstance, error) {
+	return waiting(ctx, memorystorePatience, "kv "+store+" to finish what Memorystore is doing to it", func() (*memorystoreInstance, error) {
+		return m.readInstance(ctx, name)
+	}, func(instance *memorystoreInstance) bool { return instance.State == instanceActive })
 }
 
 func (m memorystore) readOperation(ctx context.Context, name string) (*memorystoreOperation, error) {
