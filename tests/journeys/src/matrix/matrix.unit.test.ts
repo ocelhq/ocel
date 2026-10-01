@@ -213,8 +213,8 @@ describe("the registry variant", () => {
 describe("the kv concern", () => {
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
 
-  it("runs the behavioural suite on dev and on either box", () => {
-    for (const lane of ["dev", "vps", "vps.incus"] as const) {
+  it("runs the behavioural suite on dev, on either box and on real gcp", () => {
+    for (const lane of ["dev", "vps", "vps.incus", "gcp"] as const) {
       expect(planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name)).toContain("kv/node");
     }
   });
@@ -232,17 +232,11 @@ describe("the kv concern", () => {
     expect(planned.skipped["kv/node-container"]?.map((gap) => gap.issue)).toEqual([995]);
   });
 
-  it("skips the suite on gcp with the provider's refusal, under its ticket", () => {
-    const tickets = { gcp: 1480, "gcp.floci": 1480 } as const;
-    for (const [lane, issue] of Object.entries(tickets) as [Lane, number][]) {
-      const planned = planOn(lane);
-      const skipped = Object.keys(planned.skipped).filter((cell) => cell.startsWith("kv/"));
-      expect(skipped).not.toEqual([]);
-      for (const cell of skipped) {
-        const refusal = planned.skipped[cell]?.find((gap) => gap.issue === issue);
-        expect(refusal?.reason).toMatch(/kv stores are unsupported/);
-      }
-    }
+  it("skips the suite on floci's gcp, which serves no Memorystore", () => {
+    const planned = planOn("gcp.floci");
+    expect(planned.skipped["kv/node"]?.map((gap) => gap.id)).toEqual([
+      "floci-serves-no-memorystore",
+    ]);
   });
 });
 

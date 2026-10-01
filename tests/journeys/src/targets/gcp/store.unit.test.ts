@@ -4,6 +4,7 @@ import path from "node:path";
 import { repoRoot } from "../../paths";
 import {
   BOOTSTRAP_APIS,
+  exposedServices,
   hasServicesUnder,
   reachable,
   servedBy,
@@ -112,5 +113,23 @@ describe("reachable", () => {
     expect(reachable(web.uri, "http://127.0.0.1:33104")).toBe(
       "http://ocel-j-1-deploy-node-prod-web-a1b2c3-9f8.europe-west1.run.localhost.floci.io:33104",
     );
+  });
+});
+
+describe("exposedServices", () => {
+  it("is every field Cloud Run holds of the services a cell deployed, and none of another's", () => {
+    const held = {
+      ...web,
+      template: { containers: [{ env: [{ name: "OCEL_LIVE", value: "manifest" }] }] },
+    };
+    const other = {
+      ...web,
+      name: "projects/floci-local/locations/europe-west1/services/ocel-j-2-deploy-node-prod-web-a1b2c3",
+    };
+    const exposed = exposedServices({ services: [held, api, other] }, [
+      "ocel-j-1-deploy-node-prod-web",
+    ]);
+
+    expect(JSON.parse(exposed)).toEqual([held, api]);
   });
 });

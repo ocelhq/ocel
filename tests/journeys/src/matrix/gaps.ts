@@ -404,13 +404,12 @@ export const gaps: Gap[] = [
     where: [{ on: ["dev"], fixtures: [kv.node], fails: [check(kvPasswordOutOfEnvironmentCheck)] }],
   },
   {
-    id: "gcp-refuses-kv",
+    id: "floci-serves-no-memorystore",
     reason:
-      "the gcp provider refuses a deploy that declares a store at preflight: kv stores are unsupported on gcp, so it provisions none",
-    issue: 1480,
+      "floci serves no Memorystore, and the floci lane's bootstrap installs no kv network, so the gcp provider refuses a deploy that declares a store at preflight",
     where: [
       {
-        on: ["gcp", "gcp.floci"],
+        on: ["gcp.floci"],
         fixtures: [kv.node],
         fails: [step.deploy],
         skipsCell: true,

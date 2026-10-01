@@ -13,7 +13,8 @@ import { GCP_BASE, journeyConfigIn, type Overlay, writeJourneyConfig } from "../
 import { currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
 import type { Cell, Lane, Phase } from "../../matrix/types";
-import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
+import { sanitize } from "../../naming";
+import { configTree, ocel, type Ran, recordOutput, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { cellsOn, fixturesOn } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
@@ -21,13 +22,24 @@ import type { CellUnderTest } from "../../run/cellRun";
 import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
 import { cloudflareUrls } from "../cloudflare";
-import type { Deployment, ReleaseCycle, Sweeper, Target } from "../types";
+import type { Deployment, Exposure, ReleaseCycle, Restart, Sweeper, Target } from "../types";
+import {
+  createTimesIn,
+  deleteStore,
+  KV_FEATURE,
+  listStores,
+  simulateMaintenance,
+  storeFilter,
+  strayStores,
+} from "./memorystore";
 import { fittedSlug, gcpSlug, namespaceOf, roomForSlug, serviceLead } from "./names";
 import {
   deleteService,
+  exposedServices,
   hasServicesUnder,
   listServices,
   reachable,
+  readServices,
   servedBy,
   strayServices,
   switchOn,
@@ -116,13 +128,15 @@ export function gcpSweepOverlay(cell: Cell, slug: string, env: NodeJS.ProcessEnv
   };
 }
 
-export class GcpTarget implements Target, ReleaseCycle {
+export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
   readonly name = "gcp";
   readonly workers = 2;
   readonly maxRequestBodyBytes = UNCAPPED_BODY_BYTES;
   readonly stepTimeoutMs = 900_000;
 
   private minted: Promise<string | undefined> | undefined;
+
+  private readonly said = new Map<string, string[]>();
 
   readonly sweeper: Sweeper = {
     list: () => this.deployedSlugs(),
@@ -163,7 +177,12 @@ export class GcpTarget implements Target, ReleaseCycle {
         base: GCP_BASE,
         slug: projectSlug(path.posix.basename(first.name), runId),
       });
-      await ocel(dir, ["bootstrap", "production", "--yes"], childEnv(dir));
+      const bootstrap = ["bootstrap", "production", "--yes"];
+      await ocel(
+        dir,
+        emulator ? bootstrap : [...bootstrap, "--features", KV_FEATURE],
+        childEnv(dir),
+      );
     } catch (error) {
       return { lane: error instanceof Error ? error.message : String(error) };
     } finally {
@@ -181,7 +200,7 @@ export class GcpTarget implements Target, ReleaseCycle {
     const env = childEnv(dir);
 
     if (setsEnv(cell.fixture.checks)) {
-      await runOcel(
+      await this.run(
         cell,
         dir,
         "deploy",
@@ -191,7 +210,7 @@ export class GcpTarget implements Target, ReleaseCycle {
       );
     }
     if (setsSecret(cell.fixture.checks)) {
-      await runOcel(
+      await this.run(
         cell,
         dir,
         "deploy",
@@ -201,7 +220,7 @@ export class GcpTarget implements Target, ReleaseCycle {
       );
     }
     if (setsPasswordReportNonce(cell.fixture.checks)) {
-      await runOcel(
+      await this.run(
         cell,
         dir,
         "deploy",
@@ -210,9 +229,17 @@ export class GcpTarget implements Target, ReleaseCycle {
         env,
       );
     }
-    await runOcel(cell, dir, "deploy", "deploy", ["deploy", "--yes"], env);
+    const deployed = await this.run(cell, dir, "deploy", "deploy", ["deploy", "--yes"], env);
+    const created = createTimesIn(`${deployed.stdout}\n${deployed.stderr}`);
+    if (created.length > 0) {
+      await cell.evidence.write(
+        "deploy",
+        "kv-create.json",
+        `${JSON.stringify(created, null, 2)}\n`,
+      );
+    }
     if (migrates(cell.fixture.checks)) {
-      await runOcel(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
+      await this.run(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
     }
     return this.deployment(cell, "deploy");
   }
@@ -221,7 +248,7 @@ export class GcpTarget implements Target, ReleaseCycle {
     const dir = await cellTree(cell);
     const env = childEnv(dir);
     if (setsEnv(cell.fixture.checks)) {
-      await runOcel(
+      await this.run(
         cell,
         dir,
         "redeploy",
@@ -230,20 +257,44 @@ export class GcpTarget implements Target, ReleaseCycle {
         env,
       );
     }
-    await runOcel(cell, dir, "redeploy", "deploy", ["deploy", "--yes"], env);
+    await this.run(cell, dir, "redeploy", "deploy", ["deploy", "--yes"], env);
     return this.deployment(cell, "redeploy");
   }
 
   async rollback(cell: CellUnderTest): Promise<Deployment> {
     const dir = await cellTree(cell);
-    await runOcel(cell, dir, "rollback", "rollback", ["rollback"], childEnv(dir));
+    await this.run(cell, dir, "rollback", "rollback", ["rollback"], childEnv(dir));
     return this.deployment(cell, "rollback");
+  }
+
+  async restart(cell: CellUnderTest): Promise<Deployment> {
+    const where = await this.where();
+    const slug = gcpSlug(cell, process.env);
+    const stores = await listStores(where, storeFilter(namespaceOf(process.env), slug));
+    await cell.evidence.write("restart", "restarted.json", `${JSON.stringify(stores, null, 2)}\n`);
+    if (stores.length === 0) {
+      throw new Error(
+        `no Memorystore instance is labelled ocel-project=${slug}, so nothing ${cell.name} declared was restarted`,
+      );
+    }
+    for (const store of stores) {
+      await simulateMaintenance(where, store.name);
+    }
+    return this.deployment(cell, "restart");
+  }
+
+  async readExposed(cell: CellUnderTest): Promise<string> {
+    const services = exposedServices(
+      await readServices(await this.where()),
+      leadsFor(cell.slug, cell.fixture.apps),
+    );
+    return [...this.saidFor(cell), services].join("\n");
   }
 
   async destroy(cell: CellUnderTest): Promise<void> {
     const dir = await cellTree(cell);
     try {
-      await runOcel(
+      await this.run(
         cell,
         dir,
         "destroy",
@@ -252,8 +303,29 @@ export class GcpTarget implements Target, ReleaseCycle {
         childEnv(dir),
       );
     } finally {
+      this.said.delete(cell.slug);
       await rm(treeRoot(cell, "gcp"), { recursive: true, force: true });
     }
+  }
+
+  private saidFor(cell: CellUnderTest): string[] {
+    let said = this.said.get(cell.slug);
+    if (!said) {
+      said = [];
+      this.said.set(cell.slug, said);
+    }
+    return said;
+  }
+
+  private run(
+    cell: CellUnderTest,
+    dir: string,
+    phase: Phase,
+    name: string,
+    args: string[],
+    env: NodeJS.ProcessEnv,
+  ): Promise<Ran> {
+    return recordOutput(this.saidFor(cell), runOcel(cell, dir, phase, name, args, env));
   }
 
   private token(): Promise<string | undefined> {
@@ -362,6 +434,9 @@ export class GcpTarget implements Target, ReleaseCycle {
     );
     const found = await this.services();
     const at = await this.where();
+    if (!endpoint()) {
+      complaints.push(...(await this.sweepStores(at, runId)));
+    }
     for (const name of strayServices(
       found.map((service) => service.name),
       namespaceOf(process.env),
@@ -377,5 +452,25 @@ export class GcpTarget implements Target, ReleaseCycle {
     if (complaints.length > 0) {
       throw new Error(`the gcp sweep left work behind:\n${complaints.join("\n")}`);
     }
+  }
+
+  private async sweepStores(at: Where, runId: string): Promise<string[]> {
+    const namespace = namespaceOf(process.env);
+    const mine = gcpCells().map((cell) =>
+      sanitize(
+        gcpSlug({ slug: projectSlug(cell.name, runId), fixture: cell.fixture }, process.env),
+      ),
+    );
+    const complaints: string[] = [];
+    const stores = await listStores(at, `labels.ocel-namespace="${sanitize(namespace)}"`);
+    for (const name of strayStores(stores, mine)) {
+      try {
+        await deleteStore(at, name);
+        process.stdout.write(`swept ${name}\n`);
+      } catch (error) {
+        complaints.push(`${name}: ${String(error)}`);
+      }
+    }
+    return complaints;
   }
 }
