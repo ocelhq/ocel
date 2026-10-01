@@ -9,7 +9,7 @@ import (
 func TestAnInvalidCronIsRefusedAtTheTask(t *testing.T) {
 	t.Parallel()
 
-	for _, cron := range []string{"* * * *", "60 * * * *", "* 24 * * *", "* * 0 * *", "* * * 13 *", "* * * * 8", "*/0 * * * *", "5-1 * * * *", "a * * * *", "* * * * * *"} {
+	for _, cron := range []string{"* * * *", "60 * * * *", "* 24 * * *", "* * 0 * *", "* * * 13 *", "* * * * 8", "*/0 * * * *", "5-1 * * * *", "a * * * *", "* * * * * *", "0 0 31 2 *"} {
 		t.Run(cron, func(t *testing.T) {
 			t.Parallel()
 

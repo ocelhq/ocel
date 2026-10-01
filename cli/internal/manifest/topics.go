@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/ocelhq/ocel/pkg/cron"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -177,8 +178,8 @@ func refuseTaskLimits(d declaredResource) error {
 	if task.GetOrdered() && task.GetBatch() != nil {
 		return refuse(d, "is ordered and batches, and an ordered task runs one run per key at a time: drop ordered or batch")
 	}
-	if cron := task.GetCron(); cron != "" {
-		if err := refuseInvalidCron(cron); err != nil {
+	if expr := task.GetCron(); expr != "" {
+		if _, err := cron.Parse(expr); err != nil {
 			return refuse(d, "has an invalid schedule: %v", err)
 		}
 	}
