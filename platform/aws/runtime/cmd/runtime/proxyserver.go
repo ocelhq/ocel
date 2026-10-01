@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sns"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -15,8 +19,10 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bucket"
+	"github.com/ocelhq/ocel/platform/aws/runtime/tasks"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -25,6 +31,20 @@ const (
 	sessionPrefixEnvVar = "OCEL_RUNTIME_SESSION_PREFIX"
 )
 
+type proxyConfig struct {
+	table         string
+	sessionPrefix string
+	queues        *queues.Manifest
+	worker        string
+	workerURL     string
+}
+
+type proxy struct {
+	env    []string
+	errs   <-chan error
+	engine *tasks.Engine
+}
+
 func proxyWanted(bindings []live.Binding) bool {
 	for _, l := range bindings {
 		if naming.Proxied(l.Type) {
@@ -32,6 +52,10 @@ func proxyWanted(bindings []live.Binding) bool {
 		}
 	}
 	return false
+}
+
+func bindsAny(bindings []live.Binding, types ...bindingsv1.BindingType) bool {
+	return slices.ContainsFunc(bindings, func(l live.Binding) bool { return slices.Contains(types, l.Type) })
 }
 
 func grantedBuckets(values s3store.Records) func() []string {
@@ -56,37 +80,73 @@ func grantedBuckets(values s3store.Records) func() []string {
 	}
 }
 
-func serveProxy(ctx context.Context, values s3store.Records, table, sessionPrefix string) ([]string, <-chan error, error) {
+func readQueueManifest(root string) (*queues.Manifest, error) {
+	data, err := os.ReadFile(filepath.Join(root, queues.FilePath))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", queues.FilePath, err)
+	}
+	manifest, err := queues.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return &manifest, nil
+}
+
+func serveProxy(ctx context.Context, values s3store.Records, cfg proxyConfig) (proxy, error) {
 	bindings := values.Bindings()
-	if !proxyWanted(bindings) {
-		return nil, nil, nil
+	servesTasks := cfg.worker != "" || bindsAny(bindings, bindingsv1.BindingType_BINDING_TYPE_TASK, bindingsv1.BindingType_BINDING_TYPE_TOPIC)
+	if !proxyWanted(bindings) && !servesTasks {
+		return proxy{}, nil
 	}
-	if table == "" {
-		return nil, nil, fmt.Errorf("%s is not set, so the sessions this deployment's buckets keep have nowhere to live", stateTableEnvVar)
+	servesBuckets := bindsAny(bindings, bindingsv1.BindingType_BINDING_TYPE_BUCKET)
+	if servesBuckets && cfg.table == "" {
+		return proxy{}, fmt.Errorf("%s is not set, so the sessions this deployment's buckets keep have nowhere to live", stateTableEnvVar)
 	}
-	if sessionPrefix == "" {
-		return nil, nil, fmt.Errorf("%s is not set, so this deployment's sessions would share a key space with every other deployment in the account", sessionPrefixEnvVar)
+	if servesBuckets && cfg.sessionPrefix == "" {
+		return proxy{}, fmt.Errorf("%s is not set, so this deployment's sessions would share a key space with every other deployment in the account", sessionPrefixEnvVar)
+	}
+	if servesTasks && cfg.queues == nil {
+		return proxy{}, fmt.Errorf("this deployment binds a task or topic, and its code carries no %s naming the queues behind them", queues.FilePath)
 	}
 
-	cfg, err := sdkconfig.Workload(ctx)
+	aws, err := sdkconfig.Workload(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("load aws config: %w", err)
+		return proxy{}, fmt.Errorf("load aws config: %w", err)
 	}
-	objects := s3.NewFromConfig(cfg)
-	svc := bucket.New(bucket.Config{
-		DDB:              dynamodb.NewFromConfig(cfg),
-		Presigner:        s3.NewPresignClient(objects),
-		Objects:          objects,
-		Table:            table,
-		SessionKeyPrefix: sessionPrefix,
-		Granted:          grantedBuckets(values),
-	})
+	db := dynamodb.NewFromConfig(aws)
+	var services bindingproxy.Services
+	if servesBuckets {
+		objects := s3.NewFromConfig(aws)
+		services.Buckets = s3store.NewDispatch(bucket.New(bucket.Config{
+			DDB:              db,
+			Presigner:        s3.NewPresignClient(objects),
+			Objects:          objects,
+			Table:            cfg.table,
+			SessionKeyPrefix: cfg.sessionPrefix,
+			Granted:          grantedBuckets(values),
+		}), values, s3store.HTTPPoster{})
+	}
+	var engine *tasks.Engine
+	if servesTasks {
+		engine = tasks.New(tasks.Config{
+			Manifest:  *cfg.queues,
+			Table:     db,
+			Queues:    sqs.NewFromConfig(aws),
+			Topics:    sns.NewFromConfig(aws),
+			Worker:    cfg.worker,
+			WorkerURL: cfg.workerURL,
+		})
+		services.Tasks, services.Topics = engine.Tasks(), engine.Topics()
+	}
 
-	served, err := bindingproxy.Serve(bindingproxy.Services{Buckets: s3store.NewDispatch(svc, values, s3store.HTTPPoster{})})
+	served, err := bindingproxy.Serve(services)
 	if err != nil {
-		return nil, nil, err
+		return proxy{}, err
 	}
-	return served.Env, served.Errs, nil
+	return proxy{env: served.Env, errs: served.Errs, engine: engine}, nil
 }
 
 func superviseProxy(served <-chan error) {
