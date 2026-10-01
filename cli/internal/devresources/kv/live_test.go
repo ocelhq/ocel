@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/kv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -68,6 +71,39 @@ func TestDockerDeclaredStoresComeUpBehindTheirUserAndKeepTheirDataAcrossRuns(t *
 	props = bound(t, again[0].Env["OCEL_RESOURCE_KV_cache"])
 	if said := converse(t, props, props.GetPassword(), "GET kept"); said != "yes" {
 		t.Errorf("GET kept after a restart = %q, want the data kept on its volume", said)
+	}
+}
+
+func TestDockerAResetLeavesNoStoreContainerVolumeOrPasswordBehind(t *testing.T) {
+	if os.Getenv(liveEnv) == "" {
+		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
+	}
+	ctx := context.Background()
+	const project = "kv-reset-live-test"
+	state := t.TempDir()
+	stack := devresources.New(project, devresources.Options{Open: docker.Open, StateDir: state})
+	if _, err := stack.Resolve(ctx, []declaration.Resource{declared("cache", &resourcesv1.KvConfig{Memory: "64mb"})}); err != nil {
+		t.Fatalf("Resolve = %v", err)
+	}
+	if err := stack.Close(ctx); err != nil {
+		t.Fatalf("Close = %v", err)
+	}
+
+	if err := devresources.Reset(ctx, docker.Open, state, project); err != nil {
+		t.Fatalf("Reset = %v", err)
+	}
+	labelled := "label=" + docker.LabelProject + "=" + project
+	for _, list := range [][]string{{"ps", "--all", "--quiet", "--filter", labelled}, {"volume", "ls", "--quiet", "--filter", labelled}} {
+		left, err := exec.CommandContext(ctx, "docker", list...).Output()
+		if err != nil {
+			t.Fatalf("docker %s = %v", strings.Join(list, " "), err)
+		}
+		if strings.TrimSpace(string(left)) != "" {
+			t.Errorf("docker %s after the reset lists %s", strings.Join(list, " "), left)
+		}
+	}
+	if passwords, _ := filepath.Glob(filepath.Join(state, "secrets", "kv-*-password")); len(passwords) != 0 {
+		t.Errorf("the reset left %v behind", passwords)
 	}
 }
 
