@@ -76,8 +76,12 @@ func collectBuildAndAssemble(ctx context.Context, dependencies Dependencies, a a
 	if err := checkAppPaths(cfg, filepath.Base(cfg.Path)); err != nil {
 		return nil, nil, err
 	}
+	placement, err := manifest.PlaceConsumers(cfg, resources)
+	if err != nil {
+		return nil, nil, err
+	}
 	steps := newBuildSteps(a.phase)
-	built, err := buildApps(ctx, dependencies, a, steps, clientenv.AppsOf(cfg, values))
+	built, err := buildApps(ctx, dependencies, a, steps, clientenv.AppsOf(cfg, values), placement.HostedWorkers())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -92,7 +96,7 @@ func collectBuildAndAssemble(ctx context.Context, dependencies Dependencies, a a
 	return assembled, inline, nil
 }
 
-func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps *buildSteps, clients []clientenv.App) (build.Output, error) {
+func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps *buildSteps, clients []clientenv.App, workers build.HostedWorkers) (build.Output, error) {
 	cfg, span := a.cfg, a.span
 	if a.prebuilt {
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
@@ -117,7 +121,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	span.End(nil)
 	var built build.Output
 	err := steps.run(cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
-		built, err = dependencies.BuildApps(ctx, cfg, build.Env(clients), a.containerArchs, steps.log())
+		built, err = dependencies.BuildApps(ctx, cfg, build.Env(clients), a.containerArchs, workers, steps.log())
 		if err != nil {
 			return err
 		}

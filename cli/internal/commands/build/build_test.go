@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -13,13 +14,47 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
+
+func TestBuildBakesTheWorkersAnAppHostsIntoItsBuild(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  apps: [{ name: "api", path: ".", framework: "node", compute: "serverless" }],
+};
+`)
+	source := filepath.Join(root, discovery.DefaultRootDirName, "jobs.ts") + ":4"
+	dependencies := newTestDependencies()
+	dependencies.CollectDeclarations = func(context.Context, *project.Project, *variables.Declarations, io.Writer, io.Writer) ([]declaration.Resource, error) {
+		return []declaration.Resource{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: "greet", Task: &resourcesv1.TaskConfig{}, Source: source}}, nil
+	}
+	var handed build.HostedWorkers
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, workers build.HostedWorkers, _ build.Log) (build.Output, error) {
+		handed = workers
+		return build.Output{Functions: []build.Function{{Route: "index", App: "api"}}}, nil
+	}
+	dependencies.Events = run.NewBus(time.Now)
+	clitest.AttachTerminalSink(dependencies.Invocation, &bytes.Buffer{})
+	if err := runBuild(context.Background(), dependencies, root); err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+	if len(handed["api"]) != 1 || handed["api"][0] != source {
+		t.Errorf("the build was handed workers %v, want api hosting the default worker that serves greet, so `ocel deploy --prebuilt` runs it", handed)
+	}
+}
 
 func TestBuildNeedsNoLoginAndNoProvider(t *testing.T) {
 	t.Parallel()
@@ -37,7 +72,7 @@ export default {
 
 		var built *project.Project
 		dependencies := newTestDependencies()
-		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
 			built = cfg
 			return build.Output{Functions: []build.Function{{Route: "index", App: "api"}}}, nil
 		}
@@ -83,7 +118,7 @@ export default {
 
 		var archs map[string]string
 		dependencies := newTestDependencies()
-		dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, asked map[string]string, _ build.Log) (build.Output, error) {
+		dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, asked map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
 			archs = asked
 			return build.Output{
 				Functions: []build.Function{{Route: "index", App: "api"}},
@@ -121,7 +156,7 @@ export default {
 
 		var env map[string]map[string]string
 		dependencies := newTestDependencies()
-		dependencies.BuildApps = func(_ context.Context, _ *project.Project, handed map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+		dependencies.BuildApps = func(_ context.Context, _ *project.Project, handed map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
 			env = handed
 			return build.Output{}, nil
 		}
@@ -144,7 +179,7 @@ export default { slug: "test-app" };
 `)
 
 		dependencies := newTestDependencies()
-		dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+		dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Log) (build.Output, error) {
 			return build.Output{}, errors.New("boom: app build failed")
 		}
 
@@ -201,7 +236,7 @@ func TestBuildAsksTheProviderWhichComputeAnAppNamingNoneRunsOn(t *testing.T) {
 
 	dependencies := newTestDependencies()
 	var built *project.Project
-	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
 		built = cfg
 		return build.Output{}, nil
 	}
@@ -227,7 +262,7 @@ export default {
 
 	dependencies := newTestDependencies()
 	built := false
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Log) (build.Output, error) {
 		built = true
 		return build.Output{}, nil
 	}

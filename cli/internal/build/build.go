@@ -48,30 +48,33 @@ type imageBuild func(ctx context.Context, app image.App, arch string, progress i
 
 type builtArchitecture func(ctx context.Context, repository, digest string) (string, error)
 
+type fileAddition func(ctx context.Context, base image.Image, slug, app, files, dst, arch string, progress io.Writer) (image.Image, error)
+
 type tools struct {
 	node         nodeRun
 	image        imageBuild
 	architecture builtArchitecture
+	addFiles     fileAddition
 }
 
-var installed = tools{node: runNode, image: image.Build, architecture: images.BuiltArchitecture}
+var installed = tools{node: runNode, image: image.Build, architecture: images.BuiltArchitecture, addFiles: image.AddFiles}
 
-func Apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log Log) (Output, error) {
-	return installed.apps(ctx, cfg, env, archs, log)
+func Apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers HostedWorkers, log Log) (Output, error) {
+	return installed.apps(ctx, cfg, env, archs, workers, log)
 }
 
 func ReadPrebuilt(ctx context.Context, cfg *project.Project, archs map[string]string) (Output, error) {
 	return installed.readPrebuilt(ctx, cfg, archs)
 }
 
-func (t tools) apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log Log) (Output, error) {
+func (t tools) apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers HostedWorkers, log Log) (Output, error) {
 	if unresolved := cfg.UnresolvedApps(); len(unresolved) > 0 {
 		return Output{}, fmt.Errorf("the build reached %s with no compute resolved, and an app is built for the compute it runs on", english.And(english.Quoted(unresolved)))
 	}
 	if err := t.functions(ctx, cfg, env, log); err != nil {
 		return Output{}, err
 	}
-	images, err := t.images(ctx, cfg, archs, log)
+	images, err := t.images(ctx, cfg, archs, workers, log)
 	if err != nil {
 		return Output{}, err
 	}

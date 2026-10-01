@@ -63,7 +63,10 @@ func bundleEntry(configDir, resolveDir, name, sourcefile, source string) (string
 		return "", fmt.Errorf("create %s: %w", statedir.Name, err)
 	}
 	outfile := filepath.Join(outDir, name)
+	return outfile, bundleTo(resolveDir, outfile, sourcefile, source)
+}
 
+func bundleTo(resolveDir, outfile, sourcefile, source string) error {
 	result := api.Build(api.BuildOptions{
 		Stdin: &api.StdinOptions{
 			Contents:   source,
@@ -83,8 +86,7 @@ func bundleEntry(configDir, resolveDir, name, sourcefile, source string) (string
 	})
 	if len(result.Errors) > 0 {
 		msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{Color: false})
-		return "", errors.New(strings.Join(msgs, "\n"))
+		return errors.New(strings.Join(msgs, "\n"))
 	}
-
-	return outfile, nil
+	return nil
 }

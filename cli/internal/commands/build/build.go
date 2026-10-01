@@ -15,10 +15,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -28,7 +32,8 @@ import (
 
 type Dependencies struct {
 	commands.Invocation
-	BuildApps func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error)
+	BuildApps           func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, log build.Log) (build.Output, error)
+	CollectDeclarations func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
 }
 
 func NewCommand(dependencies Dependencies) *cobra.Command {
@@ -82,8 +87,12 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 	}
 	phase := building.Phase(progressv1.Phase_PHASE_BUILD)
 
+	workers, err := hostedWorkers(ctx, dependencies, cfg, phase)
+	if err != nil {
+		return err
+	}
 	clients := builtInClients(cfg, appurl.FormatProductionURLs(cfg))
-	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.Env(clients), declaredArchs(cfg), appBuildLog(phase))
+	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.Env(clients), declaredArchs(cfg), workers, appBuildLog(phase))
 	if err != nil {
 		return err
 	}
@@ -96,6 +105,28 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 	}
 	building.Succeed(builtHeadline(built))
 	return nil
+}
+
+func hostedWorkers(ctx context.Context, dependencies Dependencies, cfg *project.Project, phase *run.Span) (build.HostedWorkers, error) {
+	said := phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
+	declarations := variables.NewDeclarations(noValues{}, variables.Scope{Apps: variablescope.Apps(cfg)})
+	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, said, said)
+	if err != nil {
+		return nil, err
+	}
+	placement, err := manifest.PlaceConsumers(cfg, resources)
+	if err != nil {
+		return nil, err
+	}
+	return placement.HostedWorkers(), nil
+}
+
+type noValues struct{}
+
+func (noValues) List(context.Context) ([]variables.ValueMetadata, error) { return nil, nil }
+
+func (noValues) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
+	return nil, nil
 }
 
 func resolveBuiltComputes(ctx context.Context, dependencies Dependencies, building *run.Run, declared *project.Project) (resolved *project.Project, err error) {

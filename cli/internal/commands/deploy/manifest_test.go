@@ -17,6 +17,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -60,6 +62,31 @@ func manifestVariable(t *testing.T, manifest *contractv1.Manifest, app, key stri
 	return nil
 }
 
+func TestTheBuildIsHandedTheWorkersEachAppHosts(t *testing.T) {
+	root := t.TempDir()
+	clitest.WritePrebuiltFunction(t, root, "api", "index")
+	dependencies := newTestDependencies()
+	stubRecordedDeploymentIDs(&dependencies)
+	source := filepath.Join(root, discovery.DefaultRootDirName, "jobs.ts") + ":4"
+	dependencies.CollectDeclarations = func(context.Context, *project.Project, *variables.Declarations, io.Writer, io.Writer) ([]declaration.Resource, error) {
+		return []declaration.Resource{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: "greet", Task: &resourcesv1.TaskConfig{}, Source: source}}, nil
+	}
+	var handed build.HostedWorkers
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, workers build.HostedWorkers, _ build.Log) (build.Output, error) {
+		handed = workers
+		return functionsOnDisk(cfg)
+	}
+
+	s, _ := newBuildSpan(t)
+	cfg := prebuiltConfig(root)
+	if _, _, err := collectBuildAndAssemble(context.Background(), dependencies, assembly{cfg: onCompute(cfg, "serverless"), declarations: emptyDeclarations(cfg), phase: s, span: s}); err != nil {
+		t.Fatalf("collectBuildAndAssemble: %v", err)
+	}
+	if len(handed) != 1 || len(handed["api"]) != 1 || handed["api"][0] != source {
+		t.Errorf("the build was handed workers %v, want api hosting the default worker that serves greet", handed)
+	}
+}
+
 func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	root := t.TempDir()
 	clitest.WritePrebuiltFunction(t, root, "api", "index")
@@ -67,7 +94,7 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	stubRecordedDeploymentIDs(&dependencies)
 
 	var built map[string]map[string]string
-	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, env map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, env map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
 		built = env
 		return functionsOnDisk(cfg)
 	}
@@ -407,7 +434,7 @@ func newBuildSpan(t *testing.T) (*run.Span, *bytes.Buffer) {
 func recordBuildApp(dependencies *Dependencies) *bool {
 	stubRecordedDeploymentIDs(dependencies)
 	ran := false
-	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
 		ran = true
 		return functionsOnDisk(cfg)
 	}
@@ -592,7 +619,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		generated := ""
 		dependencies := newTestDependencies()
 		stubRecordedDeploymentIDs(&dependencies)
-		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
 			data, err := os.ReadFile(filepath.Join(root, statedir.Name, "env-client.ts"))
 			if err != nil {
 				return build.Output{}, err
@@ -845,7 +872,7 @@ func TestAProjectWhoseAppsBuildNothingDeploysItsResourcesAlone(t *testing.T) {
 func TestAnAppBuildFailureStopsTheDeployBeforeTheProviderDeploysAnything(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Log) (build.Output, error) {
 		return build.Output{}, errors.New("boom: app build failed")
 	}
 	fixture := setUpDeployProject(t)
@@ -976,8 +1003,8 @@ func twoAppProject(t *testing.T) (Dependencies, clitest.FakeProject) {
 	return dependencies, fixture
 }
 
-func buildingEach(failing string) func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.Log) (build.Output, error) {
-	return func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, out build.Log) (build.Output, error) {
+func buildingEach(failing string) func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Log) (build.Output, error) {
+	return func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, out build.Log) (build.Output, error) {
 		_, _ = io.WriteString(out.Shared, "the builder started\n")
 		for _, app := range cfg.Apps {
 			log, ended := out.App(app.Name)
@@ -1117,7 +1144,7 @@ func TestEachAppsBuildPrintsAsABlockOfItsOwnWhenThatAppFinishes(t *testing.T) {
 
 func TestABuilderFailureOutsideEveryAppsBuildEndsASpanOfItsOwnHoldingWhatTheBuilderSaid(t *testing.T) {
 	dependencies, fixture := twoAppProject(t)
-	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, out build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, out build.Log) (build.Output, error) {
 		_, _ = io.WriteString(out.Shared, "Error: Cannot find module 'esbuild'\n")
 		return build.Output{}, errors.New("node-builder failed (exit status 1): Error: Cannot find module 'esbuild'")
 	}

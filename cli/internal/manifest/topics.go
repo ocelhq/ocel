@@ -7,6 +7,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/cron"
@@ -34,6 +35,14 @@ func PlaceConsumers(cfg *project.Project, resources []declaration.Resource) (Pla
 		}
 	}
 	return Placement{Topics: topics, Workers: workers, Sources: sources}, nil
+}
+
+func (p Placement) HostedWorkers() build.HostedWorkers {
+	hosted := build.HostedWorkers{}
+	for _, worker := range p.Workers {
+		hosted[worker.GetApp()] = append(hosted[worker.GetApp()], p.Sources[worker.GetName()]...)
+	}
+	return hosted
 }
 
 func placeConsumers(apps []app, declarations []declaredResource, ceilings []provider.WorkerCeiling) (map[string]*contractv1.ManifestTopic, []*contractv1.ManifestWorker, error) {

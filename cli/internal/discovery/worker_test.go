@@ -198,6 +198,26 @@ func TestTheGeneratedNodeWorkerServesATaskAndAConsumerWithItsWorkersOnStartAndMi
 	wantAudited(t, url)
 }
 
+func TestTheNodeWorkerBundleServesFromADirectoryWithNoNodeModulesBesideIt(t *testing.T) {
+	configDir := repoFixture(t, filepath.Join("worker", "node"))
+	roots, err := RootsOf(&project.Project{Dir: configDir, Apps: []project.App{{Name: "web", Path: "."}}})
+	if err != nil {
+		t.Fatalf("RootsOf: %v", err)
+	}
+	image := t.TempDir()
+	entry := filepath.Join(image, "worker.mjs")
+	if err := BundleNodeWorker(configDir, roots, entry); err != nil {
+		t.Fatalf("BundleNodeWorker: %v", err)
+	}
+	cmd := exec.CommandContext(context.Background(), "node", entry)
+	cmd.Dir = image
+	cmd.Env = os.Environ()
+	url := startWorker(t, cmd, "worker")
+
+	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
+	wantAudited(t, url)
+}
+
 func TestTheGeneratedGoWorkerServesATaskAndAConsumerWithItsWorkersOnStartAndMiddleware(t *testing.T) {
 	url := servedFixture(t, "go")
 

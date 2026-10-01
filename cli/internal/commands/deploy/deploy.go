@@ -36,7 +36,7 @@ type deployOptions struct {
 
 type Dependencies struct {
 	commands.Invocation
-	BuildApps               func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error)
+	BuildApps               func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, log build.Log) (build.Output, error)
 	RefuseUnbuildableImages func(ctx context.Context, span *run.Span, cfg *project.Project, archs map[string]string) error
 	ReadPrebuilt            func(ctx context.Context, cfg *project.Project, archs map[string]string) (build.Output, error)
 	DeploymentID            func(projectDir, app string) (string, error)

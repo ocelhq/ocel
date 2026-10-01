@@ -165,9 +165,9 @@ func registryProject(t *testing.T, registry string) (Dependencies, clitest.FakeP
 	stubAppImages(&dependencies, "api")
 	built := false
 	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, log build.Log) (build.Output, error) {
 		built = true
-		return buildApps(ctx, cfg, env, archs, log)
+		return buildApps(ctx, cfg, env, archs, workers, log)
 	}
 
 	fixture := setUpDeployProject(t)
@@ -378,9 +378,9 @@ func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *t
 		return nil
 	}
 	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, log build.Log) (build.Output, error) {
 		built = archs
-		return buildApps(ctx, cfg, env, archs, log)
+		return buildApps(ctx, cfg, env, archs, workers, log)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -409,9 +409,9 @@ func TestAnAppThatFallsBackToContainerIsBuiltForTheArchitectureTheProviderNames(
 		return nil
 	}
 	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, log build.Log) (build.Output, error) {
 		built = archs
-		return buildApps(ctx, cfg, env, archs, log)
+		return buildApps(ctx, cfg, env, archs, workers, log)
 	}
 
 	var stdout, stderr bytes.Buffer
