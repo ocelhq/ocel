@@ -14,3 +14,5 @@ type Deployment struct {
 func (d Deployment) Store() Store { return Store{Clients: d.Clients, Scope: d.Names.Scope} }
 
 func (d Deployment) Topics() Topics { return Topics{deployment: d} }
+
+func (d Deployment) Tasks() Tasks { return Tasks{deployment: d} }
