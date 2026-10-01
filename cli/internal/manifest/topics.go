@@ -186,26 +186,12 @@ func manifestTopic(d declaredResource, consumers []declaredResource) *contractv1
 }
 
 func withRetry(consumer *contractv1.ManifestConsumer, declared *resourcesv1.RetryPolicy) *contractv1.ManifestConsumer {
-	resolved := &resourcesv1.RetryPolicy{
-		MaxAttempts: provider.DefaultRetryMaxAttempts,
-		MinDelay:    durationpb.New(provider.DefaultRetryMinDelay),
-		MaxDelay:    durationpb.New(provider.DefaultRetryMaxDelay),
+	resolved := provider.ResolveRetryPolicy(declared, consumer.GetRetry())
+	consumer.Retry = &resourcesv1.RetryPolicy{
+		MaxAttempts: int32(resolved.MaxAttempts),
+		MinDelay:    durationpb.New(resolved.MinDelay),
+		MaxDelay:    durationpb.New(resolved.MaxDelay),
 	}
-	for _, retry := range []*resourcesv1.RetryPolicy{declared, consumer.GetRetry()} {
-		if retry.GetMaxAttempts() > 0 {
-			resolved.MaxAttempts = retry.GetMaxAttempts()
-		}
-		if retry.GetMinDelay() != nil {
-			resolved.MinDelay = retry.GetMinDelay()
-		}
-		if retry.GetMaxDelay() != nil {
-			resolved.MaxDelay = retry.GetMaxDelay()
-		}
-	}
-	if resolved.GetMinDelay().AsDuration() > resolved.GetMaxDelay().AsDuration() {
-		resolved.MaxDelay = resolved.GetMinDelay()
-	}
-	consumer.Retry = resolved
 	return consumer
 }
 

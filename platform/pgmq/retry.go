@@ -4,7 +4,6 @@ import (
 	"math/rand/v2"
 	"time"
 
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -14,23 +13,8 @@ type retryPolicy struct {
 }
 
 func retryPolicyOf(deployed deployedConsumer) retryPolicy {
-	policy := retryPolicy{maxAttempts: provider.DefaultRetryMaxAttempts, minDelay: provider.DefaultRetryMinDelay, maxDelay: provider.DefaultRetryMaxDelay}
-	for _, declared := range []*resourcesv1.RetryPolicy{deployed.topic.GetRetry(), deployed.consumer.GetRetry()} {
-		if declared == nil {
-			continue
-		}
-		if declared.GetMaxAttempts() > 0 {
-			policy.maxAttempts = int(declared.GetMaxAttempts())
-		}
-		if declared.GetMinDelay() != nil {
-			policy.minDelay = declared.GetMinDelay().AsDuration()
-		}
-		if declared.GetMaxDelay() != nil {
-			policy.maxDelay = declared.GetMaxDelay().AsDuration()
-		}
-	}
-	policy.maxDelay = max(policy.maxDelay, policy.minDelay)
-	return policy
+	resolved := provider.ResolveRetryPolicy(deployed.topic.GetRetry(), deployed.consumer.GetRetry())
+	return retryPolicy{maxAttempts: resolved.MaxAttempts, minDelay: resolved.MinDelay, maxDelay: resolved.MaxDelay}
 }
 
 func (p retryPolicy) attemptsFor(requested int32) int {
