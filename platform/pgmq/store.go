@@ -107,7 +107,7 @@ func writeRun(ctx context.Context, db querier, run provider.Run) (keyvalue.Revis
 		return "", err
 	}
 	args := []any{run.Execution, run.Topic, run.Consumer, string(run.Status), jsonOrNull(run.Payload), jsonOrNull(run.Output),
-		run.Error, run.Attempts, tagsOf(run.Tags), jsonOrNull(run.Metadata), run.CreatedAt,
+		run.Error, run.Attempts, orEmpty(run.Tags), jsonOrNull(run.Metadata), run.CreatedAt,
 		nullTime(run.DueAt), nullTime(run.StartedAt), nullTime(run.FinishedAt), nullTime(run.ExpiresAt), string(next)}
 	var tag pgconn.CommandTag
 	if run.Revision == "" {
@@ -220,11 +220,11 @@ func compactJSON(value []byte) json.RawMessage {
 	return compacted.Bytes()
 }
 
-func tagsOf(tags []string) []string {
-	if tags == nil {
+func orEmpty(values []string) []string {
+	if values == nil {
 		return []string{}
 	}
-	return tags
+	return values
 }
 
 func nullTime(t time.Time) any {

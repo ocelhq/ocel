@@ -132,7 +132,7 @@ func insertRun(ctx context.Context, tx pgx.Tx, run enqueuedRun) error {
 		INSERT INTO ocel.runs (execution, topic, consumer, status, payload, tags, metadata, created_at, due_at, expires_at,
 			revision, message_id, published_at, queue, queue_message, key, lane, max_attempts)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $8, $13, $14, $15, $16, $17)`,
-		run.execution, run.ref.topicName, run.ref.consumer.GetName(), string(status), jsonOrNull(run.payload), tagsOf(run.tags),
+		run.execution, run.ref.topicName, run.ref.consumer.GetName(), string(status), jsonOrNull(run.payload), orEmpty(run.tags),
 		jsonOrNull(run.metadata), run.publishedAt, run.dueAt, nullTime(run.expiresAt), string(revision), run.messageID,
 		run.ref.queue, msgID, run.key, run.lane, run.maxAttempts,
 	); err != nil {
