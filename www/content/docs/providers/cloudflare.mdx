@@ -79,6 +79,11 @@ them into Cloudflare instead:
 }
 ```
 
+`"dns": "cloudflare"` works without the Cloudflare edge too. The token then needs only Zone
+Read and DNS Edit on the zone. A deploy checks `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_API_TOKEN` before the build, and stops there if either is unset or Cloudflare
+will not list the account's zones for the token.
+
 Dev mode starts the resources the app declares on your machine, linked or not, and reads its values from `.env`, or from the env source the config names for dev, with `.env.local` on top.
 
 ## Container apps on AWS
