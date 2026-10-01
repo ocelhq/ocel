@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
@@ -148,13 +150,34 @@ func TestPresignUploadRequiresABucketAndAFile(t *testing.T) {
 	}
 }
 
+func TestTheProxyMountsOnlyTheServicesItIsHanded(t *testing.T) {
+	t.Parallel()
+
+	mux := NewMux(testToken, Services{Tasks: taskv1connect.UnimplementedTaskServiceHandler{}})
+	for service, mounted := range map[string]bool{
+		taskv1connect.TaskServiceName:     true,
+		topicv1connect.TopicServiceName:   false,
+		bucketv1connect.BucketServiceName: false,
+	} {
+		if _, pattern := mux.Handler(httptest.NewRequest(http.MethodPost, "/"+service+"/", nil)); (pattern != "") != mounted {
+			t.Errorf("%s mounted = %v, want %v", service, pattern != "", mounted)
+		}
+	}
+}
+
 func TestTheProxyAnswersForEveryBindingTypeAnAppReachesThroughIt(t *testing.T) {
 	t.Parallel()
 
 	services := map[bindingsv1.BindingType]string{
 		bindingsv1.BindingType_BINDING_TYPE_BUCKET: bucketv1connect.BucketServiceName,
+		bindingsv1.BindingType_BINDING_TYPE_TASK:   taskv1connect.TaskServiceName,
+		bindingsv1.BindingType_BINDING_TYPE_TOPIC:  topicv1connect.TopicServiceName,
 	}
-	mux := NewMux(testToken, Services{Buckets: &recordingBuckets{}})
+	mux := NewMux(testToken, Services{
+		Buckets: &recordingBuckets{},
+		Tasks:   taskv1connect.UnimplementedTaskServiceHandler{},
+		Topics:  topicv1connect.UnimplementedTopicServiceHandler{},
+	})
 	for wire := range bindingsv1.BindingType_name {
 		kind := bindingsv1.BindingType(wire)
 		if !naming.Proxied(kind) {

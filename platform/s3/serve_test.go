@@ -33,3 +33,11 @@ func TestARuntimeWithNoBucketStoreOfItsOwnServesOnlyTheBoundOnes(t *testing.T) {
 		}
 	}
 }
+
+func TestAnAppBoundToATaskOrTopicAloneServesNoBucketProxy(t *testing.T) {
+	for _, kind := range []bindingsv1.BindingType{bindingsv1.BindingType_BINDING_TYPE_TASK, bindingsv1.BindingType_BINDING_TYPE_TOPIC} {
+		if dispatch := NewBoundDispatch(fixedRecords{bindings: []live.Binding{{Name: "orders", Key: "OCEL_RESOURCE_ORDERS", Type: kind}}}, "127.0.0.1:1"); dispatch != nil {
+			t.Errorf("NewBoundDispatch with only a %v binding = a bucket service, want none: the app reaches no bucket", kind)
+		}
+	}
+}
