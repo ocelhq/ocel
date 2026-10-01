@@ -20,6 +20,7 @@ use (
 	./scripts/redactvet
 	./sdk
 	./tests/fixtures/deploy/go/server
+	./tests/fixtures/realtime/go
 	./tests/fixtures/sdk/go
 	./tests/fixtures/tasks/go
 	./tests/fixtures/worker/go

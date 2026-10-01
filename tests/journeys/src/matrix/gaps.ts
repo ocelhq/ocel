@@ -466,7 +466,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["dev"],
-        fixtures: [realtime.node],
+        fixtures: [realtime.node, realtime.go],
         fails: [
           check(realtimeRuleAllowsCheck),
           check(realtimePublicCheck),
@@ -489,7 +489,14 @@ export const gaps: Gap[] = [
       id: `${target}-refuses-realtime`,
       reason: `the ${target} provider refuses a deploy that declares a realtime resource at preflight: realtime is unsupported on ${target}, as it runs no transport for channels`,
       issue,
-      where: [{ on: [...lanes], fixtures: [realtime.node], fails: [step.deploy], skipsCell: true }],
+      where: [
+        {
+          on: [...lanes],
+          fixtures: [realtime.node, realtime.go],
+          fails: [step.deploy],
+          skipsCell: true,
+        },
+      ],
     }),
   ),
 ];

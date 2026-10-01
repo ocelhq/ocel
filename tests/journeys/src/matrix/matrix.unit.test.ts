@@ -296,25 +296,27 @@ describe("the tasks concern", () => {
 
 describe("the realtime concern", () => {
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+  const CELLS = ["realtime/node", "realtime/go"];
 
-  it("runs the behavioural suite on dev, expecting red only what needs a server publish to reach the gateway", () => {
+  it("runs the behavioural suite on dev in TypeScript and Go, expecting red only what needs a server publish to reach the gateway", () => {
     const planned = planOn("dev");
-    expect(planned.cells.map((cell) => cell.name)).toContain("realtime/node");
-    const listed = Object.entries(planned.expectedFailures["realtime/node/web"] ?? {}).map(
-      ([title, gaps]) => [title, gaps.map((gap) => gap.issue)],
+    expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(CELLS));
+    const needsServerPublish = Object.fromEntries(
+      [
+        realtimeRuleAllowsCheck,
+        realtimePublicCheck,
+        realtimeWildcardCheck,
+        realtimeRelayedPublishCheck,
+        realtimeReauthorizeCheck,
+        realtimeEventSizeCheck,
+      ].map((one) => [one.title, [1540]]),
     );
-    expect(Object.fromEntries(listed)).toEqual(
-      Object.fromEntries(
-        [
-          realtimeRuleAllowsCheck,
-          realtimePublicCheck,
-          realtimeWildcardCheck,
-          realtimeRelayedPublishCheck,
-          realtimeReauthorizeCheck,
-          realtimeEventSizeCheck,
-        ].map((one) => [one.title, [1540]]),
-      ),
-    );
+    for (const cell of CELLS) {
+      const listed = Object.entries(planned.expectedFailures[`${cell}/web`] ?? {}).map(
+        ([title, gaps]) => [title, gaps.map((gap) => gap.issue)],
+      );
+      expect(Object.fromEntries(listed)).toEqual(needsServerPublish);
+    }
   });
 
   it("skips the suite on aws, gcp and a box with the provider's refusal, under each target's ticket", () => {
@@ -329,11 +331,13 @@ describe("the realtime concern", () => {
     for (const [lane, issue] of Object.entries(tickets) as [Lane, number][]) {
       const planned = planOn(lane);
       const skipped = Object.keys(planned.skipped).filter((cell) => cell.startsWith("realtime/"));
-      expect(skipped).toEqual(["realtime/node"]);
-      const refusal = planned.skipped["realtime/node"]?.find((gap) => gap.issue === issue);
-      expect(refusal?.reason).toMatch(/realtime is unsupported/);
-      expect(planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name)).toContain(
-        "realtime/node",
+      expect(skipped).toEqual(CELLS);
+      for (const cell of CELLS) {
+        const refusal = planned.skipped[cell]?.find((gap) => gap.issue === issue);
+        expect(refusal?.reason).toMatch(/realtime is unsupported/);
+      }
+      expect(planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name)).toEqual(
+        expect.arrayContaining(CELLS),
       );
     }
   });
