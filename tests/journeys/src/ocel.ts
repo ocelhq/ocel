@@ -6,7 +6,7 @@ import type { Phase, TargetName } from "./matrix/types";
 import { fixtureMember, ocelBin, providersDir, treeDir } from "./paths";
 import { type Log, progress, relay } from "./progress";
 import type { CellUnderTest } from "./run/cellRun";
-import { plantWorkspace } from "./tree";
+import { writeTree } from "./tree";
 
 export type Ran = { code: number | null; stdout: string; stderr: string };
 
@@ -31,7 +31,7 @@ export function appDirs(cell: CellUnderTest): string[] {
 }
 
 export async function workTree(cell: CellUnderTest, target: TargetName): Promise<string> {
-  await plantWorkspace(treeRoot(cell, target), `journey-${cell.name}`, appDirs(cell));
+  await writeTree(treeRoot(cell, target), `journey-${cell.name}`, appDirs(cell));
   const dir = configTree(cell, target);
   await writeJourneyConfig(dir, overlayFor(cell, target, process.env));
   return dir;
