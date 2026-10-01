@@ -96,6 +96,7 @@ export type Fixture = {
   name: string;
   concern: Concern;
   apps: string[];
+  devCommands?: Record<string, string[]>;
   restarts?: true;
   redeploys?: true | "where-releases-are-kept";
   checks: Check[];

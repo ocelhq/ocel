@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { sdk } from "./matrix/fixtures";
+import { sdk, tasks } from "./matrix/fixtures";
 import { appCommand, appHomes, migrateCommand, stateComplaint } from "./workspace";
 
 const workspace = sdk.workspace;
@@ -16,6 +16,16 @@ describe("a multi-app fixture", () => {
     ]);
     expect(appCommand(workspace, "next")).toEqual(["pnpm", "--dir", "apps/next", "run", "dev"]);
     expect(appCommand(composite, "web")).toEqual(["pnpm", "--dir", ".", "run", "dev"]);
+  });
+
+  it("runs a go app with go itself, from where the config sits", () => {
+    expect(appCommand(tasks.go, "web")).toEqual(["go", "run", "./server"]);
+  });
+
+  it("runs only the app a dev command is named for with it, and every other app with its dev script", () => {
+    const mixed = { ...workspace, devCommands: { express: ["go", "run", "./server"] } };
+    expect(appCommand(mixed, "express")).toEqual(["go", "run", "./server"]);
+    expect(appCommand(mixed, "next")).toEqual(["pnpm", "--dir", "apps/next", "run", "dev"]);
   });
 
   it("migrates where the config sits, since the schema belongs to the project", () => {

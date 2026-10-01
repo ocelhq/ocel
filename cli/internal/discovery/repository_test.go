@@ -90,6 +90,9 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		"tests/fixtures/sdk/go/server/main.go": {
 			"example.com/web/" + DefaultRootDirName: true,
 		},
+		"tests/fixtures/tasks/go/server/main.go": {
+			"example.com/tasks/" + DefaultRootDirName: true,
+		},
 	}
 	segments := []*regexp.Regexp{
 		regexp.MustCompile(`(?:^|[/\\"'])` + regexp.QuoteMeta(DefaultRootDirName) + `(?:$|[/\\"'])`),
@@ -165,6 +168,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		"tests/fixtures/sdk/python",
 		"tests/fixtures/sdk/with-transforms",
 		"tests/fixtures/sdk/workspace",
+		"tests/fixtures/tasks/go",
 		"tests/fixtures/tasks/node",
 		"tests/fixtures/worker/go",
 		"tests/fixtures/worker/node",

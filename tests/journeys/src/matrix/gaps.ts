@@ -433,7 +433,9 @@ export const gaps: Gap[] = [
       id: `${target}-refuses-tasks`,
       reason: `the ${target} provider refuses a deploy that declares a topic, task or worker at preflight: topics, tasks and workers are unsupported on ${target}, as it names no compute a worker runs on`,
       issue,
-      where: [{ on: [...lanes], fixtures: [tasks.node], fails: [step.deploy], skipsCell: true }],
+      where: [
+        { on: [...lanes], fixtures: [tasks.node, tasks.go], fails: [step.deploy], skipsCell: true },
+      ],
     }),
   ),
 ];

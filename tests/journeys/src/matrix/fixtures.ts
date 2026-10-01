@@ -15,6 +15,7 @@ import {
   overlapRefusal,
   staticChecks,
   tasksChecks,
+  tasksWireChecks,
   todoAndDocumentChecks,
   vendoredDependencyChecks,
 } from "../checks";
@@ -59,6 +60,7 @@ const NEXT_STATE_AND_DATA_CACHE_CHECKS = [
 const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
 const KV_CHECKS = [...healthChecks, ...staticChecks, ...kvChecks];
 const TASKS_CHECKS = [...healthChecks, ...tasksChecks];
+const TASKS_WIRE_CHECKS = [...healthChecks, ...tasksWireChecks];
 
 export const deploy = {
   node: fixture("deploy/node", {
@@ -200,6 +202,12 @@ export const tasks = {
   node: fixture("tasks/node", {
     apps: ["web"],
     checks: TASKS_CHECKS,
+    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
+  }),
+  go: fixture("tasks/go", {
+    apps: ["web"],
+    devCommands: { web: ["go", "run", "./server"] },
+    checks: TASKS_WIRE_CHECKS,
     on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
   }),
 };
