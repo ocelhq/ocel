@@ -23,7 +23,7 @@ type EnvSource struct {
 }
 
 func (s EnvSource) OwnsValues() bool {
-	return s.ID != "" && s.ID != string(envsource.Builtin)
+	return s.ID != "" && s.ID != envsource.Builtin
 }
 
 func (s EnvSource) CanSet(at Coordinate) bool {

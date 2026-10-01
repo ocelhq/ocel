@@ -2,7 +2,9 @@ package envsource_test
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -10,18 +12,41 @@ import (
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
-var universal = envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: "INFISICAL_CLIENT_ID", ClientSecretVariable: "INFISICAL_CLIENT_SECRET"}
+var universal = &envsource.InfisicalAuth{Universal: &envsource.UniversalAuth{
+	ClientID:     envsource.Variable{Name: "INFISICAL_CLIENT_ID"},
+	ClientSecret: envsource.Variable{Name: "INFISICAL_CLIENT_SECRET"},
+}}
 
-var cloudIdentity = envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: "identity-1"}
+var cloudIdentity = identityAuth("identity-1")
 
-func infisicalRegistration(project, host string, auth envsource.InfisicalAuth, folders ...string) envsource.Registration {
+func identityAuth(id string) *envsource.InfisicalAuth {
+	return &envsource.InfisicalAuth{Identity: &envsource.IdentityAuth{IdentityID: id}}
+}
+
+func infisicalDescriptor(options envsource.InfisicalOptions) envsource.Descriptor {
+	encoded, err := json.Marshal(options)
+	if err != nil {
+		panic(err)
+	}
+	descriptor, err := envsource.NewDescriptor("infisical", encoded)
+	if err != nil {
+		panic(err)
+	}
+	return descriptor
+}
+
+func infisicalWriting(project, host string, auth *envsource.InfisicalAuth, write envsource.WritePolicy, folders ...string) envsource.Registration {
 	return envsource.Registration{
 		Project: project,
-		Descriptor: envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{
-			Project: "p-1", Environment: "prod", Path: "/", Host: host, Auth: auth, Write: envsource.WriteNever,
-		}},
+		Descriptor: infisicalDescriptor(envsource.InfisicalOptions{
+			Project: "p-1", Environment: "prod", Path: "/", Host: host, Auth: auth, Write: write,
+		}),
 		Folders: folders,
 	}
+}
+
+func infisicalRegistration(project, host string, auth *envsource.InfisicalAuth, folders ...string) envsource.Registration {
+	return infisicalWriting(project, host, auth, envsource.WriteNever, folders...)
 }
 
 func TestARegistrationIsReadBackPerProjectWithItsFoldersSortedOnce(t *testing.T) {
@@ -86,7 +111,7 @@ func TestRestoringARegistrationLeavesOneAnotherDeployRegisteredSince(t *testing.
 		t.Fatal(err)
 	}
 	current, _, err := envsource.Registered(ctx, store.KeyValues, tier, "shop")
-	if err != nil || current.Descriptor.Infisical.Host != "https://since.example.com" {
+	if err != nil || !strings.Contains(string(current.Descriptor.Options()), "https://since.example.com") {
 		t.Fatalf("Registered() = %+v, %v, want the registration made since the failed one left in place", current, err)
 	}
 }

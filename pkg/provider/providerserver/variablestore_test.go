@@ -196,13 +196,10 @@ func TestAnEnvSourceLogsInWithTheCloudIdentityTheProviderProves(t *testing.T) {
 	_, err := variables.SyncEnvSource(context.Background(), &variablestorev1.SyncEnvSourceRequest{
 		Slug: slug,
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
-		From: &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Infisical{Infisical: &variablestorev1.InfisicalEnvSource{
-			Project:     "p-1",
-			Environment: "prod",
-			Host:        infisical.URL,
-			Write:       variablestorev1.WritePolicy_WRITE_POLICY_NEVER,
-			Auth:        &variablestorev1.InfisicalAuth{Method: &variablestorev1.InfisicalAuth_Identity{Identity: &variablestorev1.InfisicalIdentityAuth{IdentityId: "identity-1"}}},
-		}}}},
+		From: &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: &variablestorev1.EnvSource{
+			Kind:    "infisical",
+			Options: []byte(`{"project":"p-1","environment":"prod","host":"` + infisical.URL + `","write":"never","auth":{"identity":{"identityId":"identity-1"}}}`),
+		}},
 	})
 	if err != nil {
 		t.Fatalf("SyncEnvSource() with identity auth on a provider that proves its cloud identity = %v, want it logged in with the proof the provider gave", err)

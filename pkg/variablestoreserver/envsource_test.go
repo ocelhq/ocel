@@ -13,6 +13,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/envsource"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
@@ -129,33 +130,50 @@ func loggedIn(method string, body map[string]string) bool {
 	return false
 }
 
-func infisicalSource(host string, write variablestorev1.WritePolicy) *variablestorev1.EnvSource {
-	return &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Infisical{Infisical: &variablestorev1.InfisicalEnvSource{
+func envSource(t *testing.T, kind string, options any, values ...*variablestorev1.EnvSourceValue) *variablestorev1.EnvSource {
+	t.Helper()
+	encoded, err := json.Marshal(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &variablestorev1.EnvSource{Kind: kind, Options: encoded, Values: values}
+}
+
+func infisicalSource(t *testing.T, host string, write envsource.WritePolicy, edits ...func(*envsource.InfisicalOptions)) *variablestorev1.EnvSource {
+	t.Helper()
+	options := envsource.InfisicalOptions{
 		Project:     "p-1",
 		Environment: "prod",
 		Path:        "/",
 		Host:        host,
 		Write:       write,
-		Auth: &variablestorev1.InfisicalAuth{Method: &variablestorev1.InfisicalAuth_Universal{Universal: &variablestorev1.InfisicalUniversalAuth{
-			ClientIdVariable:     "INFISICAL_CLIENT_ID",
-			ClientSecretVariable: "INFISICAL_CLIENT_SECRET",
-		}}},
-	}}}
+		Auth: &envsource.InfisicalAuth{Universal: &envsource.UniversalAuth{
+			ClientID:     envsource.Variable{Name: "INFISICAL_CLIENT_ID"},
+			ClientSecret: envsource.Variable{Name: "INFISICAL_CLIENT_SECRET"},
+		}},
+	}
+	for _, edit := range edits {
+		edit(&options)
+	}
+	return envSource(t, "infisical", options)
 }
 
-func identitySource(host string, auth *variablestorev1.InfisicalAuth) *variablestorev1.EnvSource {
-	source := infisicalSource(host, never)
-	source.GetInfisical().Auth = auth
-	return source
+func withIdentity(options *envsource.InfisicalOptions) {
+	options.Auth = &envsource.InfisicalAuth{Identity: &envsource.IdentityAuth{IdentityID: "identity-1"}}
+}
+
+func execSource(t *testing.T, values ...*variablestorev1.EnvSourceValue) *variablestorev1.EnvSource {
+	t.Helper()
+	return envSource(t, "exec", envsource.ExecOptions{Command: []string{"op", "inject"}, Format: envsource.FormatJSON}, values...)
 }
 
 const (
-	never   = variablestorev1.WritePolicy_WRITE_POLICY_NEVER
-	missing = variablestorev1.WritePolicy_WRITE_POLICY_MISSING
-	values  = variablestorev1.WritePolicy_WRITE_POLICY_VALUES
+	never   = envsource.WriteNever
+	missing = envsource.WriteMissing
+	values  = envsource.WriteValues
 )
 
-var identityAuth = &variablestorev1.InfisicalAuth{Method: &variablestorev1.InfisicalAuth_Identity{Identity: &variablestorev1.InfisicalIdentityAuth{IdentityId: "identity-1"}}}
+var builtin = &variablestorev1.EnvSource{Kind: envsource.Builtin}
 
 func servedWithIdentity(t *testing.T) variablestorev1connect.VariableStoreServiceClient {
 	t.Helper()
@@ -213,13 +231,13 @@ func TestADeploySyncReadsInfisicalWithTheCredentialOcelStores(t *testing.T) {
 	fake.secrets["/web"]["API_KEY"] = "web-key"
 	production := environmentv1.Tier_TIER_PRODUCTION
 
-	_, err := syncEnvSource(variables, production, infisicalSource(server.URL, never))
+	_, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, never))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "INFISICAL_CLIENT_ID") {
 		t.Fatalf("SyncEnvSource() with no credential set = %v, want the credential named", err)
 	}
 
 	setCredentials(t, variables, production)
-	synced, err := syncEnvSource(variables, production, infisicalSource(server.URL, never))
+	synced, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, never))
 	if err != nil {
 		t.Fatalf("SyncEnvSource() = %v", err)
 	}
@@ -276,7 +294,7 @@ func TestASyncRefusedForItsCredentialsNamesEachOneForTheCallerToSet(t *testing.T
 	_, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 
-	_, err := syncEnvSource(variables, production, infisicalSource(server.URL, never))
+	_, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, never))
 	refused := credentialRefusals(err)
 	if len(refused) != 2 || !refused["INFISICAL_CLIENT_ID"].GetUnset() || !refused["INFISICAL_CLIENT_SECRET"].GetUnset() {
 		t.Fatalf("SyncEnvSource() with no credential set = %v, want both credentials refused as unset", err)
@@ -285,7 +303,7 @@ func TestASyncRefusedForItsCredentialsNamesEachOneForTheCallerToSet(t *testing.T
 	if err := setValue(t, variables, production, cell("INFISICAL_CLIENT_ID"), "id"); err != nil {
 		t.Fatal(err)
 	}
-	_, err = syncEnvSource(variables, production, infisicalSource(server.URL, never))
+	_, err = syncEnvSource(variables, production, infisicalSource(t, server.URL, never))
 	if refused := credentialRefusals(err); len(refused) != 1 || refused["INFISICAL_CLIENT_SECRET"] == nil {
 		t.Fatalf("SyncEnvSource() with the client secret unset = %v, want the client secret alone refused", err)
 	}
@@ -310,7 +328,7 @@ func TestAValueTheEnvSourceOwnsIsRefusedToEveryOtherWriter(t *testing.T) {
 	if err := setValue(t, variables, preview, cell("LEFTOVER"), "set-before-the-env-source"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := syncEnvSource(variables, preview, infisicalSource(server.URL, never)); err != nil {
+	if _, err := syncEnvSource(variables, preview, infisicalSource(t, server.URL, never)); err != nil {
 		t.Fatalf("SyncEnvSource() = %v", err)
 	}
 
@@ -338,7 +356,6 @@ func TestAValueTheEnvSourceOwnsIsRefusedToEveryOtherWriter(t *testing.T) {
 		t.Fatalf("GetValue() of a value set before the env source found=%t, %v, want it removed by the sync, which is the one writer now", leftover.GetFound(), err)
 	}
 
-	builtin := &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Builtin{Builtin: &variablestorev1.BuiltinEnvSource{}}}
 	back, err := syncEnvSource(variables, preview, builtin)
 	if err != nil || back.GetStatus().GetEnvSource() != "builtin" {
 		t.Fatalf("SyncEnvSource(builtin) = %+v, %v", back, err)
@@ -354,11 +371,10 @@ func TestATierSwitchedBackToBuiltinKeepsEachCopiedValueAsOcelsOwn(t *testing.T) 
 	fake.secrets["/"]["DATABASE_URL"] = "postgres://prod"
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
-	if _, err := syncEnvSource(variables, production, infisicalSource(server.URL, never)); err != nil {
+	if _, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, never)); err != nil {
 		t.Fatal(err)
 	}
 
-	builtin := &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Builtin{Builtin: &variablestorev1.BuiltinEnvSource{}}}
 	if _, err := syncEnvSource(variables, production, builtin); err != nil {
 		t.Fatal(err)
 	}
@@ -371,13 +387,10 @@ func TestATierSwitchedBackToBuiltinKeepsEachCopiedValueAsOcelsOwn(t *testing.T) 
 func TestAnExecEnvSourceIsWrittenAsTheOutputTheCallerReadAndIsNeverScheduled(t *testing.T) {
 	variables, _ := served(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
-	exec := &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Exec{Exec: &variablestorev1.ExecEnvSource{
-		Command: []string{"op", "inject"},
-		Values: []*variablestorev1.EnvSourceValue{
-			{Cell: &variablestorev1.Cell{Key: "TOKEN"}, Value: "t"},
-			{Cell: &variablestorev1.Cell{Folder: "/web", Key: "API_KEY"}, Value: "k"},
-		},
-	}}}
+	exec := execSource(t,
+		&variablestorev1.EnvSourceValue{Cell: &variablestorev1.Cell{Key: "TOKEN"}, Value: "t"},
+		&variablestorev1.EnvSourceValue{Cell: &variablestorev1.Cell{Folder: "/web", Key: "API_KEY"}, Value: "k"},
+	)
 	synced, err := syncEnvSource(variables, production, exec)
 	if err != nil {
 		t.Fatalf("SyncEnvSource(exec) = %v", err)
@@ -399,7 +412,7 @@ func TestAnEnvSourceWritingMissingKeysCreatesOneThenCopiesItButNeverUpdatesOne(t
 	fake, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
-	if _, err := syncEnvSource(variables, production, infisicalSource(server.URL, missing)); err != nil {
+	if _, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, missing)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -446,7 +459,7 @@ func TestAnEnvSourceWritingValuesUpdatesOneItHoldsThenCopiesIt(t *testing.T) {
 	fake.secrets["/web"]["API_KEY"] = "old"
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
-	synced, err := syncEnvSource(variables, production, infisicalSource(server.URL, values))
+	synced, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, values))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -481,7 +494,7 @@ func TestAnUpdateOfAValueEditedInTheEnvSourceSinceOcelCopiedItIsRefused(t *testi
 	fake.secrets["/web"]["API_KEY"] = "copied"
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
-	if _, err := syncEnvSource(variables, production, infisicalSource(server.URL, values)); err != nil {
+	if _, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, values)); err != nil {
 		t.Fatal(err)
 	}
 	fake.mu.Lock()
@@ -502,7 +515,7 @@ func TestAKeyTheEnvSourceGainedSinceOcelLastReadItIsNeverOverwritten(t *testing.
 	fake, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
-	if _, err := syncEnvSource(variables, production, infisicalSource(server.URL, values)); err != nil {
+	if _, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, values)); err != nil {
 		t.Fatal(err)
 	}
 	fake.mu.Lock()
@@ -524,7 +537,7 @@ func TestAnUpdateOfAKeyTheFolderNoLongerKeepsSaysWhereItMayLive(t *testing.T) {
 	fake.secrets["/web"]["API_KEY"] = "copied"
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
-	if _, err := syncEnvSource(variables, production, infisicalSource(server.URL, values)); err != nil {
+	if _, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, values)); err != nil {
 		t.Fatal(err)
 	}
 	fake.mu.Lock()
@@ -546,7 +559,7 @@ func TestAKeyADeployCreatedEmptyIsFilledInUnderWriteValues(t *testing.T) {
 	fake.secrets["/web"]["STRIPE_KEY"] = ""
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
-	if _, err := syncEnvSource(variables, production, infisicalSource(server.URL, values)); err != nil {
+	if _, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, values)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -562,7 +575,7 @@ func TestAnUpdateHeldForApprovalIsReportedAsWaiting(t *testing.T) {
 	fake.secrets["/web"]["API_KEY"] = "old"
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
-	if _, err := syncEnvSource(variables, production, infisicalSource(server.URL, values)); err != nil {
+	if _, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, values)); err != nil {
 		t.Fatal(err)
 	}
 	fake.mu.Lock()
@@ -580,7 +593,7 @@ func TestAValueIsCreatedOnlyInAFolderTheDeployRegistered(t *testing.T) {
 	fake, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
-	if _, err := syncEnvSource(variables, production, infisicalSource(server.URL, missing)); err != nil {
+	if _, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, missing)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -604,7 +617,7 @@ func TestACredentialIsNeverCreatedInTheEnvSourceItLogsInTo(t *testing.T) {
 	fake, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
-	if _, err := syncEnvSource(variables, production, infisicalSource(server.URL, missing)); err != nil {
+	if _, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, missing)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -622,7 +635,7 @@ func TestAReadOnlyEnvSourceTakesNoWrite(t *testing.T) {
 	_, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
-	if _, err := syncEnvSource(variables, production, infisicalSource(server.URL, never)); err != nil {
+	if _, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, never)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -648,7 +661,7 @@ func TestAValueForANamedPreviewEnvironmentIsNeverCreatedInTheEnvSource(t *testin
 func TestAnIdentityAuthOnATargetWithNoCloudIdentityIsRefusedBeforeItIsRegistered(t *testing.T) {
 	variables, _ := served(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
-	_, err := syncEnvSource(variables, production, identitySource("https://infisical.example.com", identityAuth))
+	_, err := syncEnvSource(variables, production, infisicalSource(t, "https://infisical.example.com", never, withIdentity))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "this target's cloud identity") || !strings.Contains(err.Error(), "universal") {
 		t.Errorf("SyncEnvSource() with identity auth on a target with no cloud identity = %v, want a refusal naming universal auth instead", err)
 	}
@@ -663,7 +676,7 @@ func TestAnIdentityAuthLogsInAsTheTargetsOwnCloudIdentity(t *testing.T) {
 	fake, server := newInfisical(t)
 	fake.secrets["/"]["DATABASE_URL"] = "postgres://prod"
 
-	synced, err := syncEnvSource(variables, environmentv1.Tier_TIER_PRODUCTION, identitySource(server.URL, identityAuth))
+	synced, err := syncEnvSource(variables, environmentv1.Tier_TIER_PRODUCTION, infisicalSource(t, server.URL, never, withIdentity))
 	if err != nil || synced.GetWritten() != 1 {
 		t.Fatalf("SyncEnvSource() with identity auth = %+v, %v, want the value read as the target's own cloud identity", synced, err)
 	}
@@ -684,18 +697,16 @@ func TestAConnectorCallerNamingItsOwnEnvSourceIsRefused(t *testing.T) {
 	if err := setValue(t, deploy, production, cell("STRIPE_KEY"), "sk_live"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := syncEnvSource(deploy, production, infisicalSource(server.URL, never)); err != nil {
+	if _, err := syncEnvSource(deploy, production, infisicalSource(t, server.URL, never)); err != nil {
 		t.Fatalf("SyncEnvSource() on the deploy path = %v, want the descriptor a deploy names accepted", err)
 	}
 
-	otherCredential := infisicalSource(server.URL, never)
-	otherCredential.GetInfisical().GetAuth().GetUniversal().ClientSecretVariable = "STRIPE_KEY"
-	exec := &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Exec{Exec: &variablestorev1.ExecEnvSource{
-		Command: []string{"op"},
-		Values:  []*variablestorev1.EnvSourceValue{{Cell: &variablestorev1.Cell{Key: "DATABASE_URL"}, Value: "postgres://mine"}},
-	}}}
+	otherCredential := infisicalSource(t, server.URL, never, func(options *envsource.InfisicalOptions) {
+		options.Auth.Universal.ClientSecret = envsource.Variable{Name: "STRIPE_KEY"}
+	})
+	exec := execSource(t, &variablestorev1.EnvSourceValue{Cell: &variablestorev1.Cell{Key: "DATABASE_URL"}, Value: "postgres://mine"})
 	for name, source := range map[string]*variablestorev1.EnvSource{
-		"another host":                infisicalSource(other.URL, never),
+		"another host":                infisicalSource(t, other.URL, never),
 		"another credential variable": otherCredential,
 		"exec values":                 exec,
 	} {
@@ -718,7 +729,7 @@ func TestAConnectorSyncsTheEnvSourceADeployRegistered(t *testing.T) {
 	fake, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, deploy, production)
-	if _, err := syncEnvSource(deploy, production, infisicalSource(server.URL, never)); err != nil {
+	if _, err := syncEnvSource(deploy, production, infisicalSource(t, server.URL, never)); err != nil {
 		t.Fatal(err)
 	}
 	fake.secrets["/web"]["API_KEY"] = "added-since"
@@ -741,10 +752,7 @@ func TestSyncingWhatIsRegisteredWhereNothingIsReadsAsBuiltin(t *testing.T) {
 func TestARegisteredExecEnvSourceIsReReadOnlyByADeploy(t *testing.T) {
 	deploy, connector := servedToDeployAndConnector(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
-	exec := &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Exec{Exec: &variablestorev1.ExecEnvSource{
-		Command: []string{"op"},
-		Values:  []*variablestorev1.EnvSourceValue{{Cell: &variablestorev1.Cell{Key: "TOKEN"}, Value: "t"}},
-	}}}
+	exec := execSource(t, &variablestorev1.EnvSourceValue{Cell: &variablestorev1.Cell{Key: "TOKEN"}, Value: "t"})
 	if _, err := syncEnvSource(deploy, production, exec); err != nil {
 		t.Fatal(err)
 	}
@@ -759,10 +767,8 @@ func TestARegisteredExecEnvSourceIsReReadOnlyByADeploy(t *testing.T) {
 	}
 }
 
-func unreadable(host string) *variablestorev1.EnvSource {
-	source := infisicalSource(host, never)
-	source.GetInfisical().Path = "/gone"
-	return source
+func unreadable(t *testing.T, host string) *variablestorev1.EnvSource {
+	return infisicalSource(t, host, never, func(options *envsource.InfisicalOptions) { options.Path = "/gone" })
 }
 
 func TestADeployWhoseNewEnvSourceCannotBeReadLeavesTheOneItReplacedSyncing(t *testing.T) {
@@ -770,11 +776,11 @@ func TestADeployWhoseNewEnvSourceCannotBeReadLeavesTheOneItReplacedSyncing(t *te
 	fake, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, deploy, production)
-	if _, err := syncEnvSource(deploy, production, infisicalSource(server.URL, never)); err != nil {
+	if _, err := syncEnvSource(deploy, production, infisicalSource(t, server.URL, never)); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := syncEnvSource(deploy, production, unreadable(server.URL))
+	_, err := syncEnvSource(deploy, production, unreadable(t, server.URL))
 	if err == nil || len(credentialRefusals(err)) != 0 {
 		t.Fatalf("SyncEnvSource() of a path Infisical lacks = %v, want a read failure", err)
 	}
@@ -791,7 +797,7 @@ func TestADeployWhoseFirstEnvSourceCannotBeReadLeavesTheTierBuiltin(t *testing.T
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
 
-	if _, err := syncEnvSource(variables, production, unreadable(server.URL)); err == nil {
+	if _, err := syncEnvSource(variables, production, unreadable(t, server.URL)); err == nil {
 		t.Fatal("SyncEnvSource() of a path Infisical lacks = nil, want a read failure")
 	}
 	described, err := variables.DescribeEnvSource(context.Background(), &variablestorev1.DescribeEnvSourceRequest{Tier: production, Slug: slug})
@@ -808,11 +814,12 @@ func TestADeployWhoseNewEnvSourceLacksItsCredentialRegistersItSoTheCredentialCan
 	_, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, variables, production)
-	if _, err := syncEnvSource(variables, production, infisicalSource(server.URL, never)); err != nil {
+	if _, err := syncEnvSource(variables, production, infisicalSource(t, server.URL, never)); err != nil {
 		t.Fatal(err)
 	}
-	renamed := infisicalSource(server.URL, never)
-	renamed.GetInfisical().GetAuth().GetUniversal().ClientIdVariable = "OTHER_CLIENT_ID"
+	renamed := infisicalSource(t, server.URL, never, func(options *envsource.InfisicalOptions) {
+		options.Auth.Universal.ClientID = envsource.Variable{Name: "OTHER_CLIENT_ID"}
+	})
 
 	_, err := syncEnvSource(variables, production, renamed)
 	if refused := credentialRefusals(err); refused["OTHER_CLIENT_ID"] == nil {
@@ -823,5 +830,40 @@ func TestADeployWhoseNewEnvSourceLacksItsCredentialRegistersItSoTheCredentialCan
 	}
 	if _, err := syncEnvSource(variables, production, renamed); err != nil {
 		t.Fatalf("SyncEnvSource() once its credential is set = %v", err)
+	}
+}
+
+func TestAnEnvSourceTheCallerNamesIsDecodedBeforeAnythingIsRegistered(t *testing.T) {
+	variables, _ := served(t)
+	production := environmentv1.Tier_TIER_PRODUCTION
+	for name, c := range map[string]struct {
+		source *variablestorev1.EnvSource
+		want   string
+	}{
+		"a kind ocel does not know":    {&variablestorev1.EnvSource{Kind: "vault", Options: []byte(`{}`)}, `"vault"`},
+		"dotenv, which only dev reads": {&variablestorev1.EnvSource{Kind: envsource.Dotenv}, "dotenv"},
+		"options that are no JSON":     {&variablestorev1.EnvSource{Kind: "infisical", Options: []byte(`{"project":`)}, "infisical"},
+		"infisical with no project": {infisicalSource(t, "https://infisical.example.com", never, func(options *envsource.InfisicalOptions) {
+			options.Project = ""
+		}), "project"},
+		"infisical with no auth": {infisicalSource(t, "https://infisical.example.com", never, func(options *envsource.InfisicalOptions) {
+			options.Auth = nil
+		}), "auth"},
+		"infisical writing a way ocel does not know": {infisicalSource(t, "https://infisical.example.com", "always"), "write"},
+		"exec with no command":                       {envSource(t, "exec", envsource.ExecOptions{Format: envsource.FormatJSON}), "command"},
+		"infisical sent with values a deploy read": {&variablestorev1.EnvSource{
+			Kind:    "infisical",
+			Options: infisicalSource(t, "https://infisical.example.com", never).GetOptions(),
+			Values:  []*variablestorev1.EnvSourceValue{{Cell: &variablestorev1.Cell{Key: "TOKEN"}, Value: "t"}},
+		}, "values"},
+	} {
+		_, err := syncEnvSource(variables, production, c.source)
+		if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("SyncEnvSource() naming %s = %v, want it refused as invalid naming %s", name, err, c.want)
+		}
+	}
+	described, err := variables.DescribeEnvSource(context.Background(), &variablestorev1.DescribeEnvSourceRequest{Tier: production, Slug: slug})
+	if err != nil || described.GetStatus().GetEnvSource() != "builtin" {
+		t.Errorf("DescribeEnvSource() after every refusal = %+v, %v, want nothing registered", described, err)
 	}
 }

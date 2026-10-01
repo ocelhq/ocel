@@ -73,6 +73,7 @@ func schemaOf(target reflect.Type) object {
 	for target.Kind() == reflect.Pointer {
 		target = target.Elem()
 	}
+	target = spelledAs(target)
 	if target == rawMessageType {
 		return object{"type": "object"}
 	}

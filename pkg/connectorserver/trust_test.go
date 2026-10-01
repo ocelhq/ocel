@@ -368,16 +368,10 @@ func TestAConnectorSyncsOnlyTheEnvSourceADeployRegistered(t *testing.T) {
 	_, err = variables.SyncEnvSource(context.Background(), &variablestorev1.SyncEnvSourceRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug: "shop",
-		From: &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Infisical{Infisical: &variablestorev1.InfisicalEnvSource{
-			Project:     "p-1",
-			Environment: "prod",
-			Host:        "https://infisical.example.com",
-			Write:       variablestorev1.WritePolicy_WRITE_POLICY_NEVER,
-			Auth: &variablestorev1.InfisicalAuth{Method: &variablestorev1.InfisicalAuth_Universal{Universal: &variablestorev1.InfisicalUniversalAuth{
-				ClientIdVariable:     "INFISICAL_CLIENT_ID",
-				ClientSecretVariable: "STRIPE_KEY",
-			}}},
-		}}}},
+		From: &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: &variablestorev1.EnvSource{
+			Kind:    "infisical",
+			Options: []byte(`{"project":"p-1","environment":"prod","host":"https://infisical.example.com","write":"never","auth":{"universal":{"clientId":{"$env":"INFISICAL_CLIENT_ID"},"clientSecret":{"$env":"STRIPE_KEY"}}}}`),
+		}},
 	})
 	if connect.CodeOf(err) != connect.CodePermissionDenied || !strings.Contains(err.Error(), "deploy") {
 		t.Fatalf("SyncEnvSource() naming an env source through a connector = %v, want it refused pointing at a deploy", err)

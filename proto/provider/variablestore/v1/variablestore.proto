@@ -273,65 +273,11 @@ message PropertyShape {
 }
 
 message EnvSource {
-  oneof kind {
-    option (buf.validate.oneof).required = true;
+  string kind = 1 [(buf.validate.field).string.min_len = 1];
 
-    BuiltinEnvSource builtin = 1;
+  bytes options = 2;
 
-    InfisicalEnvSource infisical = 2;
-
-    ExecEnvSource exec = 3;
-  }
-}
-
-message BuiltinEnvSource {
-}
-
-message InfisicalEnvSource {
-  string project = 1 [(buf.validate.field).string.min_len = 1];
-
-  string environment = 2 [(buf.validate.field).string.min_len = 1];
-
-  string path = 3 [(buf.validate.field).string.pattern = "^(/.*)?$"];
-
-  string host = 4 [(buf.validate.field).string.pattern = "^(https?://.+)?$"];
-
-  InfisicalAuth auth = 5 [(buf.validate.field).required = true];
-
-  WritePolicy write = 6 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
-}
-
-enum WritePolicy {
-  WRITE_POLICY_UNSPECIFIED = 0;
-  WRITE_POLICY_NEVER = 1;
-  WRITE_POLICY_MISSING = 2;
-  WRITE_POLICY_VALUES = 3;
-}
-
-message InfisicalAuth {
-  oneof method {
-    option (buf.validate.oneof).required = true;
-
-    InfisicalUniversalAuth universal = 1;
-
-    InfisicalIdentityAuth identity = 2;
-  }
-}
-
-message InfisicalUniversalAuth {
-  string client_id_variable = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
-
-  string client_secret_variable = 2 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
-}
-
-message InfisicalIdentityAuth {
-  string identity_id = 1 [(buf.validate.field).string.min_len = 1];
-}
-
-message ExecEnvSource {
-  repeated string command = 1 [(buf.validate.field).repeated.min_items = 1];
-
-  repeated EnvSourceValue values = 2;
+  repeated EnvSourceValue values = 3;
 }
 
 message EnvSourceValue {

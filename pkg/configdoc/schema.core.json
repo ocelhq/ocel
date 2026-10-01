@@ -1412,6 +1412,47 @@
                 {
                   "additionalProperties": false,
                   "properties": {
+                    "exec": {
+                      "allOf": [
+                        {
+                          "additionalProperties": false,
+                          "description": "A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev.",
+                          "properties": {
+                            "command": {
+                              "description": "The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read.",
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "format": {
+                              "description": "What the command prints: a JSON object of names to values, or KEY=VALUE lines.",
+                              "enum": [
+                                "json",
+                                "dotenv"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "command",
+                            "format"
+                          ],
+                          "title": "ExecOptions",
+                          "type": "object"
+                        }
+                      ],
+                      "description": "A command run on your machine, whose output is the values."
+                    }
+                  },
+                  "required": [
+                    "exec"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
                     "infisical": {
                       "allOf": [
                         {
@@ -1567,6 +1608,23 @@
                     "infisical"
                   ],
                   "type": "object"
+                }
+              ],
+              "title": "DevEnvSourceDescriptor"
+            }
+          ],
+          "description": "Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file (\"dotenv\"). .env.local overrides whatever this reads."
+        },
+        "preview": {
+          "allOf": [
+            {
+              "description": "Where production or preview reads its values from: ocel's own store in your account (\"builtin\"), or an env source keyed by its identifier with its options as the value.",
+              "oneOf": [
+                {
+                  "enum": [
+                    "builtin"
+                  ],
+                  "type": "string"
                 },
                 {
                   "additionalProperties": false,
@@ -1601,30 +1659,13 @@
                           "type": "object"
                         }
                       ],
-                      "description": "A command run on your machine, whose output is the values."
+                      "description": "A command run on the machine that deploys, whose output is the tier's values. It runs at each deploy and on no schedule."
                     }
                   },
                   "required": [
                     "exec"
                   ],
                   "type": "object"
-                }
-              ],
-              "title": "DevEnvSourceDescriptor"
-            }
-          ],
-          "description": "Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file (\"dotenv\"). .env.local overrides whatever this reads."
-        },
-        "preview": {
-          "allOf": [
-            {
-              "description": "Where production or preview reads its values from: ocel's own store in your account (\"builtin\"), or an env source keyed by its identifier with its options as the value.",
-              "oneOf": [
-                {
-                  "enum": [
-                    "builtin"
-                  ],
-                  "type": "string"
                 },
                 {
                   "additionalProperties": false,
@@ -1782,47 +1823,6 @@
                   },
                   "required": [
                     "infisical"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "exec": {
-                      "allOf": [
-                        {
-                          "additionalProperties": false,
-                          "description": "A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev.",
-                          "properties": {
-                            "command": {
-                              "description": "The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read.",
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
-                            },
-                            "format": {
-                              "description": "What the command prints: a JSON object of names to values, or KEY=VALUE lines.",
-                              "enum": [
-                                "json",
-                                "dotenv"
-                              ],
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "command",
-                            "format"
-                          ],
-                          "title": "ExecOptions",
-                          "type": "object"
-                        }
-                      ],
-                      "description": "A command run on the machine that deploys, whose output is the tier's values. It runs at each deploy and on no schedule."
-                    }
-                  },
-                  "required": [
-                    "exec"
                   ],
                   "type": "object"
                 }
@@ -1846,6 +1846,47 @@
                 {
                   "additionalProperties": false,
                   "properties": {
+                    "exec": {
+                      "allOf": [
+                        {
+                          "additionalProperties": false,
+                          "description": "A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev.",
+                          "properties": {
+                            "command": {
+                              "description": "The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read.",
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "format": {
+                              "description": "What the command prints: a JSON object of names to values, or KEY=VALUE lines.",
+                              "enum": [
+                                "json",
+                                "dotenv"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "command",
+                            "format"
+                          ],
+                          "title": "ExecOptions",
+                          "type": "object"
+                        }
+                      ],
+                      "description": "A command run on the machine that deploys, whose output is the tier's values. It runs at each deploy and on no schedule."
+                    }
+                  },
+                  "required": [
+                    "exec"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
                     "infisical": {
                       "allOf": [
                         {
@@ -1999,47 +2040,6 @@
                   },
                   "required": [
                     "infisical"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "exec": {
-                      "allOf": [
-                        {
-                          "additionalProperties": false,
-                          "description": "A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev.",
-                          "properties": {
-                            "command": {
-                              "description": "The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read.",
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
-                            },
-                            "format": {
-                              "description": "What the command prints: a JSON object of names to values, or KEY=VALUE lines.",
-                              "enum": [
-                                "json",
-                                "dotenv"
-                              ],
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "command",
-                            "format"
-                          ],
-                          "title": "ExecOptions",
-                          "type": "object"
-                        }
-                      ],
-                      "description": "A command run on the machine that deploys, whose output is the tier's values. It runs at each deploy and on no schedule."
-                    }
-                  },
-                  "required": [
-                    "exec"
                   ],
                   "type": "object"
                 }
