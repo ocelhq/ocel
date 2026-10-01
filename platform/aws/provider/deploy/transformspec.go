@@ -61,25 +61,9 @@ func transformStackSpec(ctx context.Context, pass transform.Pass, spec provider.
 			if resource.Binding != "" {
 				continue
 			}
-			switch resource.Type {
-			case provider.BindingPostgres:
-				req.Resources = append(req.Resources, transform.Resource{Type: transformTypePostgres, Name: resource.Name})
-				candidates = append(candidates, transformCandidate{
-					key:   resourceKey{Type: transformTypePostgres, Name: resource.Name},
-					names: postgresResourceNames(project, stack.Env, resource.Name),
-				})
-			case provider.BindingBucket:
-				req.Resources = append(req.Resources, transform.Resource{Type: transformTypeBucket, Name: resource.Name})
-				candidates = append(candidates, transformCandidate{
-					key:   resourceKey{Type: transformTypeBucket, Name: resource.Name},
-					names: bucketResourceNames(project, stack.Env, resource.Name),
-				})
-			case provider.BindingKV:
-				req.Resources = append(req.Resources, transform.Resource{Type: transformTypeKV, Name: resource.Name})
-				candidates = append(candidates, transformCandidate{
-					key:   resourceKey{Type: transformTypeKV, Name: resource.Name},
-					names: kvResourceNames(project, stack.Env, resource.Name),
-				})
+			if shown, candidate, patchable := newInfraTransformCandidate(project, stack.Env, resource); patchable {
+				req.Resources = append(req.Resources, shown)
+				candidates = append(candidates, candidate)
 			}
 		}
 	}
@@ -284,4 +268,21 @@ func resolveSpecBindings(ctx context.Context, bindings provider.Bindings, names 
 		records[name] = resolved[i]
 	}
 	return records, nil
+}
+
+func newInfraTransformCandidate(project, env string, resource provider.Resource) (transform.Resource, transformCandidate, bool) {
+	var kind string
+	var names map[string]resourceRef
+	switch resource.Type {
+	case provider.BindingPostgres:
+		kind, names = transformTypePostgres, postgresResourceNames(project, env, resource.Name)
+	case provider.BindingBucket:
+		kind, names = transformTypeBucket, bucketResourceNames(project, env, resource.Name)
+	case provider.BindingKV:
+		kind, names = transformTypeKV, kvResourceNames(project, env, resource.Name)
+	default:
+		return transform.Resource{}, transformCandidate{}, false
+	}
+	key := resourceKey{Type: kind, Name: resource.Name}
+	return transform.Resource{Type: kind, Name: resource.Name}, transformCandidate{key: key, names: names}, true
 }
