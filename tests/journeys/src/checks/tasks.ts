@@ -372,15 +372,17 @@ export const batchRetryCheck: Check = {
 };
 
 const LANE_RUNS = 6;
+const HIGH_READS_IN_TEN = 6;
 
-function findMeanRank(spans: Span[], of: number[]): number {
-  const ranked = [...spans].sort((a, b) => a.startedAt - b.startedAt).map((span) => span.n);
-  return of.reduce((sum, n) => sum + ranked.indexOf(n), 0) / of.length;
+export function countStartedBeforeLast(spans: Span[], counted: number[], lastOf: number[]): number {
+  const started = [...spans].sort((a, b) => a.startedAt - b.startedAt).map((span) => span.n);
+  const last = Math.max(...lastOf.map((n) => started.indexOf(n)));
+  return started.slice(0, last).filter((n) => counted.includes(n)).length;
 }
 
 export const lanesCheck: Check = {
   title:
-    "runs waiting in the high lane are read ahead of those in the low lane, and low still runs",
+    "runs waiting in the high lane take six of every ten reads, so all six start within the first ten, and low still runs",
   run: async (ctx) => {
     const blocker = await trigger(ctx, "laned", { n: 0, ms: 3_000 });
     await waitForRun(ctx, blocker, ["EXECUTING", ...ENDED]);
@@ -401,11 +403,11 @@ export const lanesCheck: Check = {
       )),
     ];
     const spans = await waitForSpans(ctx, ids);
-    const highRank = findMeanRank(spans, high);
-    const lowRank = findMeanRank(spans, low);
+    const lowFirst = countStartedBeforeLast(spans, low, high);
+    const order = [...spans].sort((a, b) => a.startedAt - b.startedAt).map((span) => span.n);
     assert.ok(
-      highRank < lowRank,
-      `high runs started at a mean rank of ${highRank}, low ones at ${lowRank}`,
+      lowFirst <= 10 - HIGH_READS_IN_TEN,
+      `${lowFirst} low runs started before the last high one, in the order ${order.join(", ")}`,
     );
   },
 };
