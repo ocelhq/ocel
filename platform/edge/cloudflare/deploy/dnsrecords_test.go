@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudflare/cloudflare-go/v4/accounts"
 	"github.com/cloudflare/cloudflare-go/v4/dns"
 	"github.com/cloudflare/cloudflare-go/v4/option"
 	"github.com/cloudflare/cloudflare-go/v4/packages/pagination"
@@ -49,15 +48,27 @@ func (f *fakeRecords) Delete(_ context.Context, recordID string, _ dns.RecordDel
 
 type fakeZones struct {
 	owned []zones.Zone
+	err   error
 	lists int
+	asked []zones.ZoneListParams
 }
 
 func (f *fakeZones) List(_ context.Context, params zones.ZoneListParams, _ ...option.RequestOption) (*pagination.V4PagePaginationArray[zones.Zone], error) {
+	f.asked = append(f.asked, params)
+	if f.err != nil {
+		return nil, f.err
+	}
 	if params.Page.Value > 1 {
 		return &pagination.V4PagePaginationArray[zones.Zone]{}, nil
 	}
 	f.lists++
-	return &pagination.V4PagePaginationArray[zones.Zone]{Result: f.owned}, nil
+	var listed []zones.Zone
+	for _, z := range f.owned {
+		if !params.Name.Present || z.Name == params.Name.Value {
+			listed = append(listed, z)
+		}
+	}
+	return &pagination.V4PagePaginationArray[zones.Zone]{Result: listed}, nil
 }
 
 func newTestWriter(records *fakeRecords, owned []zones.Zone, named string) (*dnsRecords, *fakeZones) {
@@ -376,41 +387,70 @@ func TestDNSRecordsDeleteRecords(t *testing.T) {
 	}
 }
 
-type refusingAccounts struct{ err error }
-
-func (a refusingAccounts) Get(context.Context, accounts.AccountGetParams, ...option.RequestOption) (*accounts.Account, error) {
-	return nil, a.err
-}
-
 func TestTheDNSWriterVerifiesTheCredentialsItWritesWith(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		accountID string
 		apiToken  string
-		accounts  accountAPI
+		named     string
+		zones     *fakeZones
 		want      string
 	}{
-		{name: "an unset account id is named", apiToken: "tok", want: envAccountID + " is not set"},
+		{name: "an unset account id is named", apiToken: "a-secret-token", want: envAccountID + " is not set"},
 		{name: "an unset API token is named", accountID: testAccountID, want: envAPIToken + " is not set"},
 		{
-			name:      "a token Cloudflare rejects is named with the account it was tried against",
+			name:      "a token that may list the account's zones is accepted without reading the account itself",
 			accountID: testAccountID,
-			apiToken:  "tok",
-			accounts:  refusingAccounts{err: errors.New("401 Unauthorized")},
+			apiToken:  "a-secret-token",
+			zones:     &fakeZones{owned: testZones},
+		},
+		{
+			name:      "a token Cloudflare refuses the zone list to is named with the account it was tried against",
+			accountID: testAccountID,
+			apiToken:  "a-secret-token",
+			zones:     &fakeZones{err: errors.New("403 Forbidden")},
 			want:      envAPIToken + " was rejected by Cloudflare for account " + testAccountID,
+		},
+		{
+			name:      "a named zone the token can see is accepted",
+			accountID: testAccountID,
+			apiToken:  "a-secret-token",
+			named:     "App.com",
+			zones:     &fakeZones{owned: testZones},
+		},
+		{
+			name:      "a named zone the token cannot see is named",
+			accountID: testAccountID,
+			apiToken:  "a-secret-token",
+			named:     "other.com",
+			zones:     &fakeZones{owned: testZones},
+			want:      `no zone named "other.com" is reachable with ` + envAPIToken + " in account " + testAccountID,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(envAccountID, tc.accountID)
 			t.Setenv(envAPIToken, tc.apiToken)
 
-			writer := NewDNS("app.com")
-			if tc.accounts != nil {
-				writer.(*dnsRecords).accounts = tc.accounts
+			writer := NewDNS(tc.named).(*dnsRecords)
+			if tc.zones != nil {
+				writer.zones = tc.zones
 			}
 			err := writer.VerifyCredentials(t.Context())
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("VerifyCredentials() error = %v, want the credentials accepted", err)
+				}
+				asked := tc.zones.asked[0]
+				if asked.Account.Value.ID.Value != testAccountID || asked.PerPage.Value != 1 {
+					t.Errorf("VerifyCredentials() listed zones with %+v, want one zone of account %s", asked, testAccountID)
+				}
+				return
+			}
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("VerifyCredentials() error = %v, want it to say %q", err, tc.want)
+			}
+			if err != nil && strings.Contains(err.Error(), "a-secret-token") {
+				t.Errorf("VerifyCredentials() error = %v, want the token kept out of it", err)
 			}
 		})
 	}

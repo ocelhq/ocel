@@ -9,7 +9,6 @@ import (
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/accounts"
-	"github.com/cloudflare/cloudflare-go/v4/option"
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
@@ -78,22 +77,15 @@ func credentialPermissions(purpose edge.CredentialPurpose) (edge.CredentialDocum
 	}, nil
 }
 
-type accountAPI interface {
-	Get(ctx context.Context, params accounts.AccountGetParams, opts ...option.RequestOption) (*accounts.Account, error)
-}
-
 func (p *cloudflare) verifyCredentials(ctx context.Context) (edge.CredentialIdentity, error) {
-	return verifyAccount(ctx, p.client.Accounts, readAccountID())
-}
-
-func verifyAccount(ctx context.Context, api accountAPI, accountID string) (edge.CredentialIdentity, error) {
+	accountID := readAccountID()
 	if accountID == "" {
 		return edge.CredentialIdentity{}, fmt.Errorf("%s is not set", envAccountID)
 	}
 	if os.Getenv(envAPIToken) == "" {
 		return edge.CredentialIdentity{}, fmt.Errorf("%s is not set", envAPIToken)
 	}
-	if _, err := api.Get(ctx, accounts.AccountGetParams{AccountID: cf.F(accountID)}); err != nil {
+	if _, err := p.client.Accounts.Get(ctx, accounts.AccountGetParams{AccountID: cf.F(accountID)}); err != nil {
 		return edge.CredentialIdentity{}, fmt.Errorf("%s was rejected by Cloudflare for account %s: %w", envAPIToken, accountID, err)
 	}
 	return edge.CredentialIdentity{Account: accountID}, nil
