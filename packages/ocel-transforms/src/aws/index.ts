@@ -1,4 +1,4 @@
-import type { cloudwatch, ec2, iam, lambda, rds, s3 } from "@pulumi/aws";
+import type { cloudwatch, ec2, elasticache, iam, lambda, rds, s3 } from "@pulumi/aws";
 import type { Unwrap } from "@pulumi/pulumi";
 import type { Patch } from "../patch";
 
@@ -32,6 +32,17 @@ export interface AwsResourceArgs {
     subnetGroup: rds.SubnetGroupArgs;
     cluster: rds.ClusterArgs;
     instance: rds.ClusterInstanceArgs;
+  };
+  /**
+   * A kv store: a Valkey replication group of two nodes across zones. Setting
+   * `numCacheClusters: 1` with `automaticFailoverEnabled` and `multiAzEnabled`
+   * off halves its cost, and a store whose one node is replaced comes back empty.
+   */
+  kv: {
+    securityGroup: ec2.SecurityGroupArgs;
+    subnetGroup: elasticache.SubnetGroupArgs;
+    parameterGroup: elasticache.ParameterGroupArgs;
+    replicationGroup: elasticache.ReplicationGroupArgs;
   };
 }
 
@@ -142,6 +153,31 @@ export const awsOwnedFields = {
       "identifier",
       "identifierPrefix",
       "tags",
+    ],
+  },
+  kv: {
+    securityGroup: ["name", "namePrefix", "tags", "vpcId"],
+    subnetGroup: ["name", "subnetIds", "tags"],
+    parameterGroup: ["family", "name", "parameters", "tags"],
+    replicationGroup: [
+      "authToken",
+      "authTokenUpdateStrategy",
+      "clusterMode",
+      "engine",
+      "engineVersion",
+      "globalReplicationGroupId",
+      "numNodeGroups",
+      "parameterGroupName",
+      "port",
+      "replicasPerNodeGroup",
+      "replicationGroupId",
+      "securityGroupIds",
+      "securityGroupNames",
+      "subnetGroupName",
+      "tags",
+      "transitEncryptionEnabled",
+      "transitEncryptionMode",
+      "userGroupIds",
     ],
   },
 } as const satisfies OwnedFieldNames;

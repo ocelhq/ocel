@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strconv"
@@ -125,7 +126,7 @@ func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) 
 }
 
 func Serves() []provider.BindingType {
-	return []provider.BindingType{provider.BindingPostgres, provider.BindingBucket}
+	return []provider.BindingType{provider.BindingPostgres, provider.BindingBucket, provider.BindingKV}
 }
 
 const skipTeardownRefreshEnv = "OCEL_SKIP_TEARDOWN_REFRESH"
@@ -156,6 +157,7 @@ type stackWork struct {
 type infraWork struct {
 	transformed *transformPatches
 	completer   payloads.Placement
+	previewing  bool
 }
 
 func (r *release) Run(pctx *sdk.Context, spec provider.StackSpec) error {
@@ -219,9 +221,11 @@ func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraW
 			args.Tags = transformed.tagsFor(transformTypeBucket, resource.Name)
 			args.PatchedCORS = transformed.opensCORS(resource.Name)
 			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, work.completer)
+		case provider.BindingKV:
+			err = r.declareKV(pctx, project, env, resource, work, vpc.Id, vpc.CidrBlock, subnets.Ids)
 		default:
 			return refusal.Refuse(refusal.CodeInvalid,
-				"this provider provisions no %s; it provisions %s and %s", resource.Type, provider.BindingPostgres, provider.BindingBucket)
+				"this provider provisions no %s; it provisions %s, %s and %s", resource.Type, provider.BindingPostgres, provider.BindingBucket, provider.BindingKV)
 		}
 		if err != nil {
 			return fmt.Errorf("declare %s: %w", resource.Name, err)
@@ -297,6 +301,8 @@ func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs a
 			binding, err = collectPostgresBinding(ctx, r.cfg.Secrets, resource.Name, fields)
 		case provider.BindingBucket:
 			binding, err = collectBucketBinding(resource.Name, sessions, fields)
+		case provider.BindingKV:
+			binding, err = collectKVBinding(ctx, r.cfg.Parameters, resource.Name, fields)
 		}
 		if err != nil {
 			return provider.StackResult{}, err
@@ -320,6 +326,13 @@ func bindingOf(kind provider.BindingType, binding *bindingsv1.Binding) provider.
 		properties[provider.PropertyPassword] = p.GetPassword()
 	case provider.BindingBucket:
 		properties[provider.PropertyBucket] = binding.GetBucket().GetBucket()
+	case provider.BindingKV:
+		kv := binding.GetKv()
+		properties[provider.PropertyHost] = kv.GetHost()
+		properties[provider.PropertyPort] = strconv.Itoa(int(kv.GetPort()))
+		properties[provider.PropertyUsername] = kv.GetUsername()
+		properties[provider.PropertyPassword] = kv.GetPassword()
+		properties[provider.PropertyTLS] = strconv.FormatBool(kv.GetTls())
 	}
 	return provider.Binding{
 		Type:       kind,
@@ -396,7 +409,7 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	if runsContainer(spec) {
 		return r.provisionContainer(ctx, spec, progress)
 	}
-	prepared, work, err := r.prepare(ctx, spec)
+	prepared, work, err := r.prepare(ctx, spec, false)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -404,11 +417,20 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 		r.pending.add(work.stack, work.sets, progress)
 		defer r.pending.drop(work.stack, work.sets)
 	}
+	var priorTokens map[string]string
+	if spec.App == nil {
+		if priorTokens, err = r.kvTokensProvisioned(ctx, spec.Ref, progress); err != nil {
+			return provider.StackResult{}, err
+		}
+	}
 	result, err := r.automation.Run(ctx, prepared, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
 	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
+		return provider.StackResult{}, err
+	}
+	if err := deleteKVTokens(ctx, r.cfg.Parameters, kvTokensRemoved(priorTokens, spec)); err != nil {
 		return provider.StackResult{}, err
 	}
 	if err := writeOriginRecord(ctx, r.cfg, spec.Ref.Name.App, work, result); err != nil {
@@ -421,7 +443,7 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 	if runsContainer(spec) {
 		return r.planContainer(ctx, spec, progress)
 	}
-	prepared, _, err := r.prepare(ctx, spec)
+	prepared, _, err := r.prepare(ctx, spec, true)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -445,7 +467,7 @@ func transformedIn(spec provider.StackSpec) *transformPatches {
 	return nil
 }
 
-func (r *release) prepare(ctx context.Context, spec provider.StackSpec) (provider.StackSpec, *appWork, error) {
+func (r *release) prepare(ctx context.Context, spec provider.StackSpec, previewing bool) (provider.StackSpec, *appWork, error) {
 	if spec.VendorState != nil {
 		return spec, nil, nil
 	}
@@ -461,7 +483,7 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec) (provide
 		if err := r.refuseHandover(ctx, spec); err != nil {
 			return provider.StackSpec{}, nil, err
 		}
-		work := &infraWork{transformed: transformed}
+		work := &infraWork{transformed: transformed, previewing: previewing}
 		if provisionsBucket(spec) {
 			if work.completer, err = placeUploadCompleter(ctx, r.cfg); err != nil {
 				return provider.StackSpec{}, nil, err
@@ -483,7 +505,16 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress pr
 	if err != nil {
 		return err
 	}
+	var tokens map[string]string
+	if ref.Name.IsInfra() {
+		if tokens, err = opened.kvTokensProvisioned(ctx, ref, progress); err != nil {
+			return err
+		}
+	}
 	if err := opened.automation.Destroy(ctx, ref, progress); err != nil {
+		return err
+	}
+	if err := deleteKVTokens(ctx, opened.cfg.Parameters, slices.Sorted(maps.Values(tokens))); err != nil {
 		return err
 	}
 	if opened.cfg.Tags != nil {

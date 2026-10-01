@@ -74,6 +74,12 @@ func transformStackSpec(ctx context.Context, pass transform.Pass, spec provider.
 					key:   resourceKey{Type: transformTypeBucket, Name: resource.Name},
 					names: bucketResourceNames(project, stack.Env, resource.Name),
 				})
+			case provider.BindingKV:
+				req.Resources = append(req.Resources, transform.Resource{Type: transformTypeKV, Name: resource.Name})
+				candidates = append(candidates, transformCandidate{
+					key:   resourceKey{Type: transformTypeKV, Name: resource.Name},
+					names: kvResourceNames(project, stack.Env, resource.Name),
+				})
 			}
 		}
 	}

@@ -184,6 +184,7 @@ func provisionedOutputs() auto.OutputMap {
 			outputKeySecretARN: "arn:aws:secretsmanager:eu-west-1:111122223333:secret:shop",
 		}},
 		"c-bucket": auto.OutputValue{Value: map[string]any{outputKeyBucket: "shop-prod-uploads"}},
+		"c-kv":     kvOutput("c-kv"),
 	}
 }
 
@@ -192,7 +193,13 @@ func conformingStacks(engine *mockedEngine) *Stacks {
 }
 
 func stacksPlacingInto(engine *mockedEngine, uploader *fakeArtifactStore) *Stacks {
-	cfg := Config{
+	return stacksWith(conformingConfig(uploader), engine)
+}
+
+func conformingConfig(uploader *fakeArtifactStore) Config {
+	params := newFakeParameters()
+	params.values[conformanceKVToken("c-kv")] = "a-kv-token"
+	return Config{
 		Slug:           "conformance",
 		Region:         "eu-west-1",
 		BackendURL:     "s3://ocel-state/conformance",
@@ -204,8 +211,9 @@ func stacksPlacingInto(engine *mockedEngine, uploader *fakeArtifactStore) *Stack
 		AppBoundaryARN: "arn:aws:iam::111122223333:policy/ocel-app-boundary",
 		ArtifactBucket: conformanceArtifactBucket,
 		Objects:        uploader,
+		Parameters:     params,
+		KVTokenRoot:    conformanceKVTokenRoot,
 	}
-	return stacksWith(cfg, engine)
 }
 
 const conformanceArtifactBucket = "ocel-artifacts"

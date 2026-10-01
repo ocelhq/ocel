@@ -29,6 +29,7 @@ func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 		transformTypeFunction: functionResourceNames("proj", naming.StackName{Env: "prod", App: "api"}, "api"),
 		transformTypeBucket:   bucketResourceNames("proj", "prod", "uploads"),
 		transformTypePostgres: postgresResourceNames("proj", "prod", "main"),
+		transformTypeKV:       kvResourceNames("proj", "prod", "cache"),
 	}
 
 	root := transformtest.Root(t, map[string]string{"conformance.transform.ts": conformanceModule})
