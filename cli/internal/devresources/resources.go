@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -22,12 +23,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/kv"
 	"github.com/ocelhq/ocel/cli/internal/devresources/postgres"
-	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/devresources/topic"
+	projectpkg "github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 type Backend struct {
+	Kinds   []resourcesv1.ResourceType
 	Resolve func(ctx context.Context, project string, resources []declaration.Resource) ([]binding.Resolved, error)
 	Routes  func(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption)
 	Close   func(ctx context.Context, stopContainers bool) error
@@ -36,23 +39,9 @@ type Backend struct {
 type Options struct {
 	Open       docker.OpenFunc
 	StateDir   string
+	Project    *projectpkg.Project
 	AppOrigins func() []string
 	Announce   func(line string)
-}
-
-var backends = map[resourcesv1.ResourceType]func(Options) Backend{
-	resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES: func(opts Options) Backend {
-		servers := postgres.New(opts.Open, filepath.Join(opts.StateDir, secretsDir))
-		return Backend{Resolve: servers.Resolve, Close: servers.Close}
-	},
-	resourcesv1.ResourceType_RESOURCE_TYPE_KV: func(opts Options) Backend {
-		stores := kv.New(opts.Open, filepath.Join(opts.StateDir, secretsDir))
-		return Backend{Resolve: stores.Resolve, Close: stores.Close}
-	},
-	resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET: func(opts Options) Backend {
-		buckets := bucket.New(opts.Open, filepath.Join(opts.StateDir, secretsDir), opts.AppOrigins)
-		return Backend{Resolve: buckets.Resolve, Routes: buckets.Routes, Close: buckets.Close}
-	},
 }
 
 const (
@@ -72,12 +61,14 @@ type Resources struct {
 	project  string
 	announce func(line string)
 
-	backends map[resourcesv1.ResourceType]Backend
+	backends []Backend
+	topics   *topic.Backend
 
 	mu        sync.Mutex
 	engine    docker.Engine
 	usersLock *flock.Flock
 	printed   map[string]struct{}
+	resolving map[int]bool
 }
 
 func New(project string, opts Options) *Resources {
@@ -87,7 +78,10 @@ func New(project string, opts Options) *Resources {
 	if opts.AppOrigins == nil {
 		opts.AppOrigins = func() []string { return nil }
 	}
-	r := &Resources{project: project, announce: opts.Announce, backends: map[resourcesv1.ResourceType]Backend{}, printed: map[string]struct{}{}}
+	if opts.Project == nil {
+		opts.Project = &projectpkg.Project{}
+	}
+	r := &Resources{project: project, announce: opts.Announce, printed: map[string]struct{}{}, resolving: map[int]bool{}}
 	open := opts.Open
 	opts.Open = func(ctx context.Context) (docker.Engine, error) {
 		r.mu.Lock()
@@ -112,15 +106,23 @@ func New(project string, opts Options) *Resources {
 		r.engine = engine
 		return r.engine, nil
 	}
-	for kind, build := range backends {
-		r.backends[kind] = build(opts)
+	secrets := filepath.Join(opts.StateDir, secretsDir)
+	servers := postgres.New(opts.Open, secrets)
+	stores := kv.New(opts.Open, secrets)
+	buckets := bucket.New(opts.Open, secrets, opts.AppOrigins)
+	r.topics = topic.New(opts.Open, secrets, opts.Project, opts.Announce)
+	r.backends = []Backend{
+		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}, Resolve: servers.Resolve, Close: servers.Close},
+		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_KV}, Resolve: stores.Resolve, Close: stores.Close},
+		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET}, Resolve: buckets.Resolve, Routes: buckets.Routes, Close: buckets.Close},
+		{Kinds: topic.Kinds, Resolve: r.topics.Resolve, Routes: r.topics.Routes, Close: r.topics.Close},
 	}
 	return r
 }
 
 func ProjectName(dir string) string {
 	sum := sha256.Sum256([]byte(filepath.Clean(dir)))
-	return strings.Trim(project.DeriveSlug(filepath.Base(dir)), "-") + "-" + hex.EncodeToString(sum[:4])
+	return strings.Trim(projectpkg.DeriveSlug(filepath.Base(dir)), "-") + "-" + hex.EncodeToString(sum[:4])
 }
 
 func (r *Resources) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
@@ -131,50 +133,72 @@ func (r *Resources) Routes(mux *http.ServeMux, guard func(http.Handler) http.Han
 	}
 }
 
+func (r *Resources) Workers() []topic.Worker { return r.topics.Workers() }
+
+func (r *Resources) ServeWorkers(ctx context.Context, urls map[string]string) error {
+	return r.topics.Serve(ctx, urls)
+}
+
+func (r *Resources) backendOf(kind resourcesv1.ResourceType) (int, bool) {
+	for i, backend := range r.backends {
+		if slices.Contains(backend.Kinds, kind) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 func (r *Resources) Resolve(ctx context.Context, resources []declaration.Resource) ([]binding.Resolved, error) {
-	var kinds []resourcesv1.ResourceType
-	byKind := map[resourcesv1.ResourceType][]declaration.Resource{}
+	byBackend := map[int][]declaration.Resource{}
 	for _, resource := range resources {
 		if refused, ok := refusedInDev[resource.Type]; ok {
 			return nil, fmt.Errorf("%s %q: ocel dev does not run %s yet", label(resource.Type), resource.Name, refused)
 		}
-		if _, served := r.backends[resource.Type]; !served {
+		i, served := r.backendOf(resource.Type)
+		if !served {
 			return nil, fmt.Errorf("%s %q: ocel dev serves no %s", label(resource.Type), resource.Name, resource.Type)
 		}
-		if _, seen := byKind[resource.Type]; !seen {
-			kinds = append(kinds, resource.Type)
-		}
-		byKind[resource.Type] = append(byKind[resource.Type], resource)
+		byBackend[i] = append(byBackend[i], resource)
 	}
 
 	var out []binding.Resolved
-	for _, kind := range kinds {
-		resolved, err := r.backends[kind].Resolve(ctx, r.project, byKind[kind])
+	for i, backend := range r.backends {
+		declared, resolvedBefore := byBackend[i], r.isResolving(i)
+		if len(declared) == 0 && !resolvedBefore {
+			continue
+		}
+		r.markResolving(i, len(declared) > 0)
+		resolved, err := backend.Resolve(ctx, r.project, declared)
 		if err != nil {
 			var unreachable *docker.Unreachable
-			if errors.As(err, &unreachable) {
+			if errors.As(err, &unreachable) && len(declared) > 0 {
 				needed := *unreachable
-				needed.For = fmt.Sprintf("%s %q", label(kind), byKind[kind][0].Name)
+				needed.For = fmt.Sprintf("%s %q", label(declared[0].Type), declared[0].Name)
 				return nil, &needed
 			}
 			return nil, err
 		}
 		for _, one := range resolved {
-			r.announceOnce(fmt.Sprintf("%s %q → %s", label(kind), one.Name, one.Origin))
+			r.announceOnce(fmt.Sprintf("%s %q → %s", label(one.Type), one.Name, one.Origin))
 		}
 		out = append(out, resolved...)
 	}
 	return out, nil
 }
 
-const topicsTasksAndWorkers = "topics, tasks or workers"
+func (r *Resources) isResolving(backend int) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.resolving[backend]
+}
+
+func (r *Resources) markResolving(backend int, declared bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.resolving[backend] = declared
+}
 
 var refusedInDev = map[resourcesv1.ResourceType]string{
-	// TODO(#1466): ocel dev runs topics, tasks and workers on the pgmq engine; until then it refuses them.
-	resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC:    topicsTasksAndWorkers,
-	resourcesv1.ResourceType_RESOURCE_TYPE_TASK:     topicsTasksAndWorkers,
-	resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER: topicsTasksAndWorkers,
-	resourcesv1.ResourceType_RESOURCE_TYPE_WORKER:   topicsTasksAndWorkers,
 	// TODO(#1510): ocel dev runs the realtime gateway in-process; until then it refuses a realtime resource.
 	resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME: "realtime channels",
 }

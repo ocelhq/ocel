@@ -22,6 +22,7 @@ require (
 	github.com/moby/moby/client v0.4.1
 	github.com/moby/patternmatcher v0.6.1
 	github.com/ocelhq/ocel/pkg v0.0.0
+	github.com/ocelhq/ocel/platform/pgmq v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
 	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
@@ -159,6 +160,7 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.11.0 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jedisct1/go-minisign v0.0.0-20211028175153-1c139d1cc84b // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/klauspost/compress v1.19.2 // indirect
@@ -244,6 +246,8 @@ tool (
 	github.com/air-verse/air
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )
+
+replace github.com/ocelhq/ocel/platform/pgmq => ../platform/pgmq
 
 replace github.com/ocelhq/ocel/platform/s3 => ../platform/s3
 

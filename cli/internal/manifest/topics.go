@@ -8,6 +8,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/cron"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -24,6 +26,10 @@ const (
 	maxOrderedConsumers   = 100
 	maxUnorderedConsumers = 1000
 )
+
+func PlaceConsumers(cfg *project.Project, resources []declaration.Resource) (map[string]*contractv1.ManifestTopic, []*contractv1.ManifestWorker, error) {
+	return placeConsumers(appsOf(cfg.Dir, cfg.Apps, nil, nil), declaredResources(cfg.Dir, resources), nil)
+}
 
 func placeConsumers(apps []app, declarations []declaredResource, ceilings []provider.WorkerCeiling) (map[string]*contractv1.ManifestTopic, []*contractv1.ManifestWorker, error) {
 	topics := map[string]declaredResource{}

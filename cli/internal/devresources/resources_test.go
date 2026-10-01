@@ -3,6 +3,8 @@ package devresources_test
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker/dockertest"
+	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -249,19 +253,42 @@ func TestProjectNamesAreReadableAndDistinctPerDirectory(t *testing.T) {
 	}
 }
 
-func TestDevRefusesTopicsTasksConsumersAndWorkersNamingWhatWasDeclared(t *testing.T) {
+func TestATopicAndItsConsumerAreResolvedTogetherSoTheConsumerFindsItsTopic(t *testing.T) {
 	t.Parallel()
 
-	for kind, name := range map[resourcesv1.ResourceType]string{
-		resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC:    "topic",
-		resourcesv1.ResourceType_RESOURCE_TYPE_TASK:     "task",
-		resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER: "consumer",
-		resourcesv1.ResourceType_RESOURCE_TYPE_WORKER:   "worker",
-	} {
-		stack := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir()})
-		_, err := stack.Resolve(context.Background(), []declaration.Resource{{Name: "orders", Type: kind}})
-		if err == nil || !strings.Contains(err.Error(), name+` "orders"`) || !strings.Contains(err.Error(), "does not run topics, tasks or workers") {
-			t.Errorf("Resolve(%s) = %v, want it refused naming the %s", kind, err, name)
+	dir := t.TempDir()
+	stack := devresources.New("shop", devresources.Options{
+		Open:     (&dockertest.Engine{}).OpenFunc(),
+		StateDir: t.TempDir(),
+		Project:  &project.Project{Dir: dir, Apps: []project.App{{Name: "web", Path: "."}}},
+	})
+	_, err := stack.Resolve(context.Background(), []declaration.Resource{{
+		Name: "audit", Type: resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER,
+		Consumer: &resourcesv1.ConsumerConfig{Topic: "orders"}, Source: filepath.Join(dir, "jobs", "orders.ts") + ":7",
+	}})
+	if err == nil || !strings.Contains(err.Error(), `consumes topic "orders", and nothing declares it`) || !strings.Contains(err.Error(), "jobs/orders.ts:7") {
+		t.Errorf("Resolve = %v, want the consumer of an undeclared topic refused at its declaration, as the build refuses it", err)
+	}
+}
+
+func TestTheTaskAndTopicServicesRefuseACallWithoutTheAppsSessionToken(t *testing.T) {
+	t.Parallel()
+
+	stack := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir()})
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	address := strings.TrimPrefix(server.URL, "http://")
+	stack.Routes(mux, func(next http.Handler) http.Handler { return localrpc.LoopbackGuard(address, "app-token", next) })
+
+	for _, path := range []string{"/app.task.v1.TaskService/Trigger", "/app.topic.v1.TopicService/Send"} {
+		resp, err := http.Post(server.URL+path, "application/json", strings.NewReader(`{}`))
+		if err != nil {
+			t.Fatalf("POST %s: %v", path, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("POST %s with no session token = %s, want 403 Forbidden", path, resp.Status)
 		}
 	}
 }

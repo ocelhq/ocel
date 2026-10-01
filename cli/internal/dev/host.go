@@ -17,9 +17,10 @@ import (
 )
 
 type host struct {
-	server  *devserver.Server
-	address string
-	close   func()
+	server    *devserver.Server
+	resources *devresources.Resources
+	address   string
+	close     func()
 }
 
 func startHost(ctx context.Context, opts Options, source valueSource) (*host, error) {
@@ -33,6 +34,7 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 	resources := devresources.New(devresources.ProjectName(cfg.Dir), devresources.Options{
 		Open:       opts.OpenDocker,
 		StateDir:   stateDir(cfg),
+		Project:    cfg,
 		AppOrigins: appOrigins(cfg.Dir, source),
 		Announce:   opts.session().Say,
 	})
@@ -41,7 +43,7 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 	httpServer := &http.Server{Handler: server.Mux()}
 	go httpServer.Serve(listener)
 
-	return &host{server: server, address: address, close: func() {
+	return &host{server: server, resources: resources, address: address, close: func() {
 		stopping, cancel := context.WithTimeout(context.WithoutCancel(ctx), docker.StopsWithin)
 		defer cancel()
 		if err := resources.Close(stopping); err != nil {

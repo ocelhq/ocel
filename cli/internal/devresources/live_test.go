@@ -3,12 +3,52 @@ package devresources_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	projectpkg "github.com/ocelhq/ocel/cli/internal/project"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
+
+func TestDockerAWorkerWhoseLastTaskIsDeletedNoLongerRuns(t *testing.T) {
+	if os.Getenv(liveEnv) == "" {
+		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
+	}
+	ctx := context.Background()
+	const project = "devresources-live-forget-test"
+	t.Cleanup(func() {
+		engine, err := docker.Open(ctx)
+		if err != nil {
+			return
+		}
+		_ = engine.Wipe(ctx, docker.ProjectLabels(project))
+		_ = engine.Close()
+	})
+	dir := t.TempDir()
+	stack := devresources.New(project, devresources.Options{
+		Open:     docker.Open,
+		StateDir: t.TempDir(),
+		Project:  &projectpkg.Project{Dir: dir, Slug: project, Apps: []projectpkg.App{{Name: "web", Path: "."}}},
+	})
+	t.Cleanup(func() { _ = stack.Close(ctx) })
+
+	greet := declaration.Resource{Name: "greet", Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Task: &resourcesv1.TaskConfig{}, Source: filepath.Join(dir, "jobs", "index.ts") + ":3"}
+	if _, err := stack.Resolve(ctx, []declaration.Resource{greet}); err != nil {
+		t.Fatalf("Resolve = %v", err)
+	}
+	if workers := stack.Workers(); len(workers) != 1 {
+		t.Fatalf("workers = %+v, want the default worker serving greet", workers)
+	}
+	if _, err := stack.Resolve(ctx, nil); err != nil {
+		t.Fatalf("Resolve with nothing declared = %v", err)
+	}
+	if workers := stack.Workers(); len(workers) != 0 {
+		t.Fatalf("workers = %+v after the last task was deleted, want none to run", workers)
+	}
+}
 
 const liveEnv = "OCEL_LIVE_DOCKER"
 
