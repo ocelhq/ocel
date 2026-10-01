@@ -2,16 +2,19 @@ package gcp
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func aKVStore(t *testing.T, spec provider.KVSpec) resources.ProvisionRequest {
@@ -287,5 +290,30 @@ func TestRemovingAStoreDeletesItsInstanceAndAMissingOneIsAlreadyGone(t *testing.
 	}
 	if err := p.RemoveResource(context.Background(), in.Ref, binding, nil); err != nil {
 		t.Errorf("RemoveResource() of a store already gone = %v, want nil", err)
+	}
+}
+
+func TestAStoreMemorystoreHoldsInAStateThatNeverSettlesIsRefusedWithoutWaiting(t *testing.T) {
+	for _, state := range []string{"DELETING", "FAILED", "SUSPENDED", "STATE_UNSPECIFIED"} {
+		t.Run(state, func(t *testing.T) {
+			p, server := servingMemorystore(t)
+			in := aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20})
+			if _, err := p.ProvisionKV(context.Background(), in, nil); err != nil {
+				t.Fatalf("ProvisionKV() = %v", err)
+			}
+			server.heldIn(storeInstance(t, p), state)
+			before := server.instanceReads()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, err := p.ProvisionKV(ctx, in, nil)
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || !strings.Contains(refused.Message, state) || !strings.Contains(refused.Message, "cache") {
+				t.Errorf("ProvisionKV() of a store held %s = %v, want it refused naming the store and its state", state, err)
+			}
+			if reads := server.instanceReads() - before; reads != 1 {
+				t.Errorf("a store held %s was read %d times, want it refused on the read that sees the state rather than awaited", state, reads)
+			}
+		})
 	}
 }

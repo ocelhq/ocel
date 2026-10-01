@@ -23,6 +23,8 @@ const memorystoreTimeout = 60 * time.Second
 
 const (
 	instanceActive   = "ACTIVE"
+	instanceCreating = "CREATING"
+	instanceUpdating = "UPDATING"
 	tokenActive      = "ACTIVE"
 	primaryEndpoint  = "CONNECTION_TYPE_PRIMARY"
 	defaultTokenUser = "default"
@@ -147,11 +149,13 @@ func (m memorystore) deleteInstance(ctx context.Context, name string) (*memoryst
 	return &started, err
 }
 
-func (m memorystore) readActiveInstance(ctx context.Context, name, store string) (*memorystoreInstance, error) {
+func (m memorystore) readSettledInstance(ctx context.Context, name, store string) (*memorystoreInstance, error) {
 	return waiting(ctx, memorystorePatience, "kv "+store+" to finish what Memorystore is doing to it", func() (*memorystoreInstance, error) {
 		return m.readInstance(ctx, name)
-	}, func(instance *memorystoreInstance) bool { return instance.State == instanceActive })
+	}, func(instance *memorystoreInstance) bool { return !isSettling(instance.State) })
 }
+
+func isSettling(state string) bool { return state == instanceCreating || state == instanceUpdating }
 
 func (m memorystore) readOperation(ctx context.Context, name string) (*memorystoreOperation, error) {
 	var polled memorystoreOperation
