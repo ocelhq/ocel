@@ -103,6 +103,44 @@ describe("the vps branch", () => {
     expect(() => evaluate(asked, modules)).toThrow(/vps\.bucket\.container\.publish/);
   });
 
+  it("hands the provider the kv store a rule tuned, keyed by its container and volume", () => {
+    const modules = [
+      module(
+        "./kv.transform.ts",
+        defineTransform({
+          vps: {
+            kv: {
+              container: { args: ["--io-threads", "4"], memory: "1g" },
+              volume: { driverOpts: { device: "/mnt/kv" } },
+            },
+          },
+        }),
+      ),
+    ];
+    const asked = request([{ type: "kv", name: "cache" }]);
+
+    expect(evaluate(asked, modules).resources[0]).toEqual({
+      name: "cache",
+      patches: {
+        container: { args: ["--io-threads", "4"], memory: "1g" },
+        volume: { driverOpts: { device: "/mnt/kv" } },
+      },
+      tags: {},
+    });
+  });
+
+  it("refuses a patch of what the box fills itself on a kv store", () => {
+    const modules = [
+      module(
+        "./owned-kv.transform.ts",
+        defineTransform({ vps: { kv: { container: { publish: ["6379:6379"] } } } } as never),
+      ),
+    ];
+    const asked = request([{ type: "kv", name: "cache" }]);
+
+    expect(() => evaluate(asked, modules)).toThrow(/vps\.kv\.container\.publish/);
+  });
+
   it("refuses a module that only ever patched aws", () => {
     const modules = [module("./aws.transform.ts", defineTransform({ aws: {} }))];
 

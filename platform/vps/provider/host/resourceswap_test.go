@@ -27,9 +27,9 @@ func swapping(t *testing.T, restoreFails bool) (string, int) {
 	spec := resourced()
 	spec.Volume.Generation, spec.Database = "17", "main"
 	spec.Ready = []string{"pg_isready"}
-	script := strings.ReplaceAll(
-		swapCommand(spec, "16", "0123456789ab", "/tmp/handed.env", "/var/lib/ocel/production/backups/x/1.dump"),
-		BackupsHelper, filepath.Join(bin, "backups"))
+	swap, _ := swapCommand(spec, "16", "0123456789ab", "/tmp/handed.env",
+		upgradeSteps{after: restoreCommand(spec.Tier, spec.Name, spec.Database, "/var/lib/ocel/production/backups/x/1.dump") + "\n"}, "secret")
+	script := strings.ReplaceAll(swap, BackupsHelper, filepath.Join(bin, "backups"))
 	run := exec.Command("/bin/sh", "-c", script)
 	run.Env = []string{"PATH=" + bin + ":" + os.Getenv("PATH")}
 	code := 0
@@ -99,6 +99,45 @@ func TestASwapWhoseRestoreFailsPutsTheOldServerBackOnTheDataItHad(t *testing.T) 
 	)
 	if strings.Contains(ran, "docker volume rm "+name+"-g16") {
 		t.Errorf("a swap that failed removed the only copy of the data the old server had:\n%s", ran)
+	}
+}
+
+func TestASwapWhoseNewServerAnswersButRefusesTheCredentialPutsTheOldServerBackOnItsData(t *testing.T) {
+	t.Parallel()
+
+	bin := t.TempDir()
+	log := filepath.Join(bin, "log")
+	executable(t, filepath.Join(bin, "docker"), "#!/bin/sh\n"+
+		"printf 'docker %s\\n' \"$*\" >>"+log+"\n"+
+		"case \"$*\" in *--askpass*) printf 'fed %s\\n' \"$(cat)\" >>"+log+"; echo 'NOAUTH Authentication required.'; exit 1;; esac\n")
+	spec := resourced()
+	spec.User, spec.Volume.Generation = "valkey:valkey", "8"
+	spec.Ready = []string{"valkey-cli", "ping"}
+	spec.Credential = Credential{Reassert: func(secret string) ([]string, string) {
+		return []string{"valkey-cli", "--user", "ocel", "--askpass", "ping"}, secret + "\n"
+	}}
+	script, stdin := swapCommand(spec, "9", "0123456789ab", "/tmp/handed.env", volumeCopy(spec, "9"), "the-password")
+	run := exec.Command("/bin/sh", "-c", script)
+	run.Env = []string{"PATH=" + bin + ":" + os.Getenv("PATH")}
+	run.Stdin = strings.NewReader(stdin)
+	if err := run.Run(); err == nil {
+		t.Error("a swap whose new server refused the credential was reported as landed")
+	}
+	logged, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ran := string(logged)
+	ordered(t, ran,
+		"docker exec "+spec.Name+" valkey-cli ping",
+		"fed the-password",
+		"docker rm --force "+spec.Name,
+		"docker volume rm "+spec.Name+"-g8",
+		"docker rename "+spec.Name+"-retired "+spec.Name,
+		"docker start "+spec.Name,
+	)
+	if strings.Contains(ran, "docker volume rm "+spec.Name+"-g9") {
+		t.Errorf("a swap whose new server refused the credential removed the only copy of the data the old server had:\n%s", ran)
 	}
 }
 

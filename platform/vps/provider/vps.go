@@ -107,6 +107,7 @@ func (p *Provider) resourceHooks() resources.Hooks {
 	return resources.Hooks{
 		ProvisionPostgres: p.ProvisionPostgres,
 		ProvisionBucket:   p.ProvisionBucket,
+		ProvisionKV:       p.ProvisionKV,
 		RemoveResource:    p.RemoveResource,
 		Containers:        &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
 		Retention:         &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},

@@ -55,6 +55,16 @@ export interface VpsResourceArgs {
     container: VpsContainerArgs;
     volume: VpsVolumeArgs;
   };
+  /**
+   * A kv store's Valkey container. `args` are appended after the settings ocel
+   * renders, and a deploy refuses one that sets any of them, such as
+   * `--maxmemory` or `--user`; `memory` caps the whole container, so give it
+   * well over twice the store's `memory`, which a background save can need.
+   */
+  kv: {
+    container: VpsContainerArgs;
+    volume: VpsVolumeArgs;
+  };
 }
 
 /** The ocel resource types the vps provider renders patchable resources for. */
@@ -78,6 +88,10 @@ export const vpsOwnedFields = {
     volume: ["name", "labels"],
   },
   bucket: {
+    container: ["name", "network", "labels", "publish", "mounts"],
+    volume: ["name", "labels"],
+  },
+  kv: {
     container: ["name", "network", "labels", "publish", "mounts"],
     volume: ["name", "labels"],
   },

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/kvstore"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -21,6 +22,7 @@ const (
 	transformProvider     = "vps"
 	transformTypePostgres = "postgres"
 	transformTypeBucket   = "bucket"
+	transformTypeKV       = "kv"
 
 	surfaceContainer = "container"
 	surfaceVolume    = "volume"
@@ -33,6 +35,11 @@ var pinnedImage = regexp.MustCompile(`@sha256:[0-9a-f]{64}$`)
 var ownEnv = map[string][]string{
 	transformTypePostgres: postgresOwnEnv,
 	transformTypeBucket:   storeOwnEnv,
+	transformTypeKV:       {"VALKEY_EXTRA_FLAGS"},
+}
+
+var appendedArgs = map[string]func(args []string) error{
+	transformTypeKV: kvstore.RefuseOwnedArgs,
 }
 
 var storeOwnEnv = []string{
@@ -163,7 +170,14 @@ func containerPatched(kind, resource string, spec host.ResourceContainer, patch 
 		}
 		spec.Env[name] = decoded.Env[name]
 	}
-	if len(decoded.Args) > 0 {
+	switch refuseOwned, appended := appendedArgs[kind]; {
+	case len(decoded.Args) == 0:
+	case appended:
+		if err := refuseOwned(decoded.Args); err != nil {
+			return spec, refusal.Refuse(refusal.CodeInvalid, "a transform sets %s %s's args: %v", kind, resource, err)
+		}
+		spec.Args = append(slices.Clone(spec.Args), decoded.Args...)
+	default:
 		spec.Args = decoded.Args
 	}
 	for _, limit := range []struct {

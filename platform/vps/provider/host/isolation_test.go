@@ -167,7 +167,7 @@ func TestNothingAContainerIsEntitledToIsTheKeyTheRecordsOrTheTierStateItself(t *
 func TestEveryContainerThisPackageRunsIsBoundByTheIsolationRules(t *testing.T) {
 	t.Parallel()
 
-	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "placementRun", "renderTunnelTokenArgv", "resourceRun", "run"},
+	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "volumeCopy", "placementRun", "renderTunnelTokenArgv", "resourceRun", "run"},
 		"a container run built somewhere this bench does not read is bound by none of the rules in this file")
 }
 
@@ -190,5 +190,28 @@ func TestAPlacementContainerIsBoundByTheIsolationRulesAndMountsNothingButItsDire
 	}
 	if want := []string{SwitchboardDir, "/etc/traefik/dynamic"}; !slices.Equal(mounted, want) {
 		t.Errorf("a placement runs %q and mounts %q, want %q alone: nothing under %s or %s is its business", command, mounted, want, tierRoot, stateRoot)
+	}
+}
+
+func TestAVolumeCopyRunsOfflineWithoutCapabilitiesAndMountsNothingButTheTwoVolumes(t *testing.T) {
+	t.Parallel()
+
+	spec := resourced()
+	spec.User, spec.Volume.Generation = "valkey:valkey", "9"
+	command := volumeCopy(spec, "8").before
+	for _, want := range []string{quoted("--network") + " " + quoted("none"), quoted("--cap-drop") + " " + quoted("ALL"), quoted("--user") + " " + quoted("valkey:valkey")} {
+		if !strings.Contains(command, want) {
+			t.Errorf("a volume copy runs %q, without %s", command, want)
+		}
+	}
+	for _, refused := range []string{"docker.sock", "--pid", "--privileged", "--volume", "--cap-add", "bind"} {
+		if strings.Contains(command, refused) {
+			t.Errorf("a volume copy runs %q, and names %s", command, refused)
+		}
+	}
+	for _, token := range strings.Fields(command) {
+		if path := source(token); underARoot(path) {
+			t.Errorf("a volume copy runs %q and names %q: it has business with two volumes and nothing on the host", command, path)
+		}
 	}
 }

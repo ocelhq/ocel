@@ -2,9 +2,6 @@ package vps
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/images"
@@ -24,10 +21,8 @@ const (
 	postgresSuperuser = "postgres"
 	postgresData      = "/var/lib/postgresql/data"
 	postgresSecretEnv = "POSTGRES_PASSWORD"
-	postgresSecretLen = 24
 
-	postgresSecretFolder = "resources"
-	postgresSecretName   = "password"
+	postgresSecretName = "password"
 )
 
 var postgresCapabilities = []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"}
@@ -67,14 +62,6 @@ func postgresContainer(in resources.ProvisionRequest) (host.ResourceContainer, e
 	}, nil
 }
 
-func mintPostgresSecret() (string, error) {
-	raw := make([]byte, postgresSecretLen)
-	if _, err := rand.Read(raw); err != nil {
-		return "", fmt.Errorf("mint a postgres password: %w", err)
-	}
-	return hex.EncodeToString(raw), nil
-}
-
 func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
 	spec, err := postgresContainer(in)
 	if err != nil {
@@ -108,7 +95,7 @@ func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Provision
 }
 
 func newPostgresSecretAssociatedData(ref provider.StackRef, resource string) (seal.AssociatedData, error) {
-	return live.NewSecretAssociatedData(ref.Project, ref.Tier, ref.Name.String(), postgresSecretFolder, resource, postgresSecretName)
+	return live.NewSecretAssociatedData(ref.Project, ref.Tier, ref.Name.String(), resourceSecretFolder, resource, postgresSecretName)
 }
 
 func (p *Provider) postgresSecret(ctx context.Context, in resources.ProvisionRequest, name string) (string, error) {
@@ -116,31 +103,5 @@ func (p *Provider) postgresSecret(ctx context.Context, in resources.ProvisionReq
 	if err != nil {
 		return "", err
 	}
-	sealed, err := p.host.Kept(ctx, in.Ref.Tier, name)
-	if err != nil {
-		return "", err
-	}
-	if len(sealed) == 0 {
-		minted, err := mintPostgresSecret()
-		if err != nil {
-			return "", err
-		}
-		candidate, err := p.cipher.Seal(ctx, in.Ref.Tier, bound, []byte(minted))
-		if err != nil {
-			return "", err
-		}
-		if sealed, err = p.host.KeepOnce(ctx, in.Ref.Tier, name, candidate); err != nil {
-			return "", err
-		}
-	}
-	opened, err := p.cipher.Open(ctx, in.Ref.Tier, bound, sealed)
-	if err != nil {
-		return "", err
-	}
-	if len(opened) == 0 {
-		return "", refusal.Refuse(refusal.CodeNotReady,
-			"the credential kept for %s is empty\nRemove %s on the box",
-			in.Resource.Name, host.KeptPath(in.Ref.Tier, name))
-	}
-	return string(opened), nil
+	return p.keptSecret(ctx, in, name, bound)
 }

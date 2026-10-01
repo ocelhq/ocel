@@ -24,6 +24,7 @@ type ProvisionRequest struct {
 type Hooks struct {
 	ProvisionPostgres func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
 	ProvisionBucket   func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
+	ProvisionKV       func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
 	RemoveResource    func(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error
 	Functions         *FunctionHooks
 	Containers        *ContainerHooks
@@ -76,6 +77,7 @@ type primitive struct {
 var primitives = []primitive{
 	{kind: provider.BindingPostgres, of: func(h Hooks) provisionFunc { return h.ProvisionPostgres }},
 	{kind: provider.BindingBucket, of: func(h Hooks) provisionFunc { return h.ProvisionBucket }},
+	{kind: provider.BindingKV, of: func(h Hooks) provisionFunc { return h.ProvisionKV }},
 }
 
 type hookStacks struct {
