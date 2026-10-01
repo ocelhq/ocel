@@ -436,7 +436,7 @@ export const gaps: Gap[] = [
     issue: 1528,
     where: [
       {
-        on: ["dev"],
+        on: ["dev", "vps", "vps.incus"],
         fixtures: [tasks.node],
         fails: [check(exactTaskPayloadCheck), check(exactTopicPayloadCheck)],
       },
@@ -446,7 +446,6 @@ export const gaps: Gap[] = [
     [
       { target: "aws", lanes: ["aws", "aws.floci"], issue: 1469 },
       { target: "gcp", lanes: ["gcp", "gcp.floci"], issue: 1470 },
-      { target: "vps", lanes: ["vps", "vps.incus"], issue: 1471 },
     ] as const
   ).map(
     ({ target, lanes, issue }): Gap => ({
