@@ -23,7 +23,7 @@ func (e *Engine) sweep(ctx context.Context) {
 		case <-ticker.C:
 		}
 		if err := e.sweepOnce(ctx); err != nil && ctx.Err() == nil {
-			slog.Warn("sweep expired runs and records", "error", err)
+			slog.Warn("sweep due and expired runs and records", "error", err)
 		}
 	}
 }
@@ -37,6 +37,10 @@ func (e *Engine) sweepOnce(ctx context.Context) error {
 				RETURNING queue, queue_message
 			)
 			SELECT pgmq.delete(queue, queue_message) FROM expired WHERE queue_message IS NOT NULL`); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = 'queued', revision = `+newRevisionSQL+`
+			WHERE status = 'delayed' AND due_at <= clock_timestamp()`); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, "DELETE FROM ocel.records WHERE expires_at <= clock_timestamp()"); err != nil {

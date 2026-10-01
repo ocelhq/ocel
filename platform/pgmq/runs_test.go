@@ -46,6 +46,15 @@ func TestADelayedRunWaitsUntilItIsDue(t *testing.T) {
 	}
 }
 
+func TestADelayedRunPastItsDueTimeIsQueuedWhileItWaitsForAWorker(t *testing.T) {
+	engine, _ := aServedTask(t, succeeding, func(topic *contractv1.ManifestTopic) {
+		topic.Consumers[0].Worker = "elsewhere"
+	})
+
+	id := trigger(t, engine, "resize", `{}`, &taskv1.TriggerOptions{DueAt: timestamppb.New(time.Now().Add(300 * time.Millisecond))})
+	awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_QUEUED)
+}
+
 func TestARescheduledRunRunsAtItsNewTime(t *testing.T) {
 	engine, worker := aServedTask(t, succeeding)
 	id := trigger(t, engine, "resize", `{}`, &taskv1.TriggerOptions{DueAt: timestamppb.New(time.Now().Add(time.Hour))})
