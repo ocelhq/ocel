@@ -33,20 +33,20 @@ func (e *Engine) sweepOnce(ctx context.Context) error {
 		if _, err := tx.Exec(ctx, `
 			WITH expired AS (
 				UPDATE ocel.runs SET status = 'expired', finished_at = clock_timestamp(), revision = `+newRevisionSQL+`
-				WHERE status IN ('queued', 'delayed') AND attempts = 0 AND expires_at <= clock_timestamp()
+				WHERE status IN ('queued', 'delayed') AND attempts = 0 AND expires_at <= now()
 				RETURNING queue, queue_message
 			)
 			SELECT pgmq.delete(queue, queue_message) FROM expired WHERE queue_message IS NOT NULL`); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = 'queued', revision = `+newRevisionSQL+`
-			WHERE status = 'delayed' AND due_at <= clock_timestamp()`); err != nil {
+			WHERE status = 'delayed' AND due_at <= now()`); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, "DELETE FROM ocel.records WHERE expires_at <= clock_timestamp()"); err != nil {
+		if _, err := tx.Exec(ctx, "DELETE FROM ocel.records WHERE expires_at <= now()"); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, "DELETE FROM ocel.runs WHERE finished_at < clock_timestamp() - make_interval(secs => $1)", runRetention.Seconds())
+		_, err := tx.Exec(ctx, "DELETE FROM ocel.runs WHERE finished_at < now() - make_interval(secs => $1)", runRetention.Seconds())
 		return err
 	})
 }
