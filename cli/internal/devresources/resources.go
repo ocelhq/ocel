@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/kv"
 	"github.com/ocelhq/ocel/cli/internal/devresources/postgres"
 	"github.com/ocelhq/ocel/cli/internal/devresources/queue"
+	"github.com/ocelhq/ocel/cli/internal/devresources/realtime"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -112,11 +113,13 @@ func New(projectName string, opts Options) *Resources {
 	stores := kv.New(opts.Open, secrets)
 	buckets := bucket.New(opts.Open, secrets, opts.AppOrigins)
 	r.queue = queue.New(opts.Open, secrets, opts.Project, opts.Announce)
+	gateway := realtime.New(opts.AppOrigins)
 	r.backends = []*Backend{
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}, Resolve: servers.Resolve, Close: servers.Close},
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_KV}, Resolve: stores.Resolve, Close: stores.Close},
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET}, Resolve: buckets.Resolve, Routes: buckets.Routes, Close: buckets.Close},
 		{Kinds: queue.Kinds, Resolve: r.queue.Resolve, Routes: r.queue.Routes, Close: r.queue.Close},
+		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME}, Resolve: gateway.Resolve, Close: gateway.Close},
 	}
 	return r
 }
@@ -148,9 +151,6 @@ func (r *Resources) backendOf(kind resourcesv1.ResourceType) (*Backend, bool) {
 func (r *Resources) Resolve(ctx context.Context, resources []declaration.Resource) ([]binding.Resolved, error) {
 	byBackend := map[*Backend][]declaration.Resource{}
 	for _, resource := range resources {
-		if refused, ok := refusedInDev[resource.Type]; ok {
-			return nil, fmt.Errorf("%s %q: ocel dev does not run %s yet", label(resource.Type), resource.Name, refused)
-		}
 		backend, served := r.backendOf(resource.Type)
 		if !served {
 			return nil, fmt.Errorf("%s %q: ocel dev serves no %s", label(resource.Type), resource.Name, resource.Type)
@@ -193,11 +193,6 @@ func (r *Resources) recordDeclaredThisPass(backend *Backend, declared bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	backend.declaredLastPass = declared
-}
-
-var refusedInDev = map[resourcesv1.ResourceType]string{
-	// TODO(#1510): ocel dev runs the realtime gateway in-process; until then it refuses a realtime resource.
-	resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME: "realtime channels",
 }
 
 func label(kind resourcesv1.ResourceType) string {

@@ -26,7 +26,7 @@ const (
 type Config struct {
 	Host           string
 	Keys           func(namespace string) (ed25519.PublicKey, bool)
-	AllowedOrigins []string
+	AllowedOrigins func() []string
 	KeepAlive      time.Duration
 	QueueBudget    int
 	Now            func() time.Time
@@ -44,6 +44,9 @@ func New(cfg Config) *Gateway {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
+	if cfg.AllowedOrigins == nil {
+		cfg.AllowedOrigins = func() []string { return nil }
+	}
 	g := &Gateway{cfg: cfg, hub: NewHub(), mux: http.NewServeMux()}
 	g.mux.HandleFunc("GET "+SocketPath, g.serveSocket)
 	g.mux.HandleFunc("POST "+PublishPath, g.servePublish)
@@ -60,7 +63,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (g *Gateway) isAllowedOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
-	return origin == "" || slices.Contains(g.cfg.AllowedOrigins, origin)
+	return origin == "" || slices.Contains(g.cfg.AllowedOrigins(), origin)
 }
 
 var channelSegment = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$`)
