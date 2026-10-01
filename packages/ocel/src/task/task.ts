@@ -67,7 +67,7 @@ export interface TriggerOptions {
   idempotencyKey?: string;
   /** How long `idempotencyKey` is remembered. */
   idempotencyKeyTTL?: Duration;
-  /** Triggers sharing `key` within `delay` of each other start one run, with the last payload. */
+  /** Triggers sharing `key` within `delay` of each other fold into the first one's run, due `delay` after the last. */
   debounce?: { key: string; delay: Duration };
   /** Runs of an `ordered` task sharing this key run one at a time, in order. */
   key?: string;
