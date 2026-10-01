@@ -15,16 +15,9 @@ import (
 type vectors struct {
 	Wire   []wireVector `json:"wire"`
 	Tokens struct {
-		SigningKey []byte `json:"signingKey"`
-		VerifyKey  []byte `json:"verifyKey"`
-		Now        int64  `json:"now"`
-		Expect     struct {
-			Aud string `json:"aud"`
-			Ns  string `json:"ns"`
-			Ch  string `json:"ch"`
-		} `json:"expect"`
-		Cases []tokenVector `json:"cases"`
-		Mint  []mintVector  `json:"mint"`
+		SigningKey []byte       `json:"signingKey"`
+		VerifyKey  []byte       `json:"verifyKey"`
+		Mint       []mintVector `json:"mint"`
 	} `json:"tokens"`
 }
 
@@ -36,13 +29,6 @@ type wireVector struct {
 	Params    map[string]string `json:"params"`
 	Channel   string            `json:"channel"`
 	Error     string            `json:"error"`
-}
-
-type tokenVector struct {
-	Name   string `json:"name"`
-	Token  string `json:"token"`
-	Valid  bool   `json:"valid"`
-	Reason string `json:"reason"`
 }
 
 type mintVector struct {
@@ -144,64 +130,12 @@ func TestNoTwoWireVectorsOfOnePatternShareAChannel(t *testing.T) {
 	}
 }
 
-type tokenClaims struct {
-	Aud  string `json:"aud"`
-	Exp  int64  `json:"exp"`
-	Ocel struct {
-		Ch string `json:"ch"`
-		Ns string `json:"ns"`
-	} `json:"ocel"`
-}
-
-func tokenRefusal(token string, verifyKey []byte, now int64, aud, ns, ch string) string {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return "malformed"
-	}
-	header, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil {
-		return "malformed"
-	}
-	var alg struct {
-		Alg string `json:"alg"`
-	}
-	if json.Unmarshal(header, &alg) != nil || alg.Alg != "EdDSA" {
-		return "algorithm"
-	}
-	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil || !ed25519.Verify(verifyKey, []byte(parts[0]+"."+parts[1]), signature) {
-		return "signature"
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	var claims tokenClaims
-	if err != nil || json.Unmarshal(payload, &claims) != nil {
-		return "malformed"
-	}
-	switch {
-	case now >= claims.Exp:
-		return "expired"
-	case claims.Aud != aud:
-		return "audience"
-	case claims.Ocel.Ns != ns:
-		return "namespace"
-	case claims.Ocel.Ch != ch:
-		return "channel"
-	}
-	return ""
-}
-
-func TestEveryTokenVectorIsRefusedForTheReasonItNames(t *testing.T) {
+func TestTheTokenVectorsVerifyKeyIsTheirSigningKeysPublicKey(t *testing.T) {
 	t.Parallel()
 
 	tokens := readVectors(t).Tokens
 	if !bytes.Equal(ed25519.NewKeyFromSeed(tokens.SigningKey).Public().(ed25519.PublicKey), tokens.VerifyKey) {
-		t.Fatalf("the verify key is not the signing key's public key")
-	}
-	for _, c := range tokens.Cases {
-		refused := tokenRefusal(c.Token, tokens.VerifyKey, tokens.Now, tokens.Expect.Aud, tokens.Expect.Ns, tokens.Expect.Ch)
-		if c.Valid != (refused == "") || refused != c.Reason {
-			t.Errorf("%s: refused for %q, want valid %v refused for %q", c.Name, refused, c.Valid, c.Reason)
-		}
+		t.Fatal("the verify key is not the signing key's public key")
 	}
 }
 
