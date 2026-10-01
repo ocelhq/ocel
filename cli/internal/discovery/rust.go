@@ -15,26 +15,34 @@ import (
 const ocelCrate = "ocel-sdk"
 
 func rustCommand(ctx context.Context, _ string, root Root, server Server) (*exec.Cmd, error) {
+	cmd, workspaceRoot, err := cargoRunCommand(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Env = append(append(os.Environ(), server.Env()...), "OCEL_SOURCE_ROOT="+workspaceRoot)
+	return cmd, nil
+}
+
+func cargoRunCommand(ctx context.Context, root Root) (*exec.Cmd, string, error) {
 	workspace, err := cargo.Metadata(ctx, root.Dir, "--no-deps")
 	if err != nil {
-		return nil, fmt.Errorf("discovery: %w", err)
+		return nil, "", fmt.Errorf("discovery: %w", err)
 	}
 	crate, ok := workspace.PackageAt(root.Dir)
 	if !ok {
-		return nil, fmt.Errorf("discovery: %s has no Cargo.toml naming a package to declare from", root.Dir)
+		return nil, "", fmt.Errorf("discovery: %s has no Cargo.toml naming a package to declare from", root.Dir)
 	}
 	bins := crate.Bins()
 	if len(bins) == 0 {
-		return nil, fmt.Errorf("discovery: %s contains %s, which builds no binary to declare from", root.Dir, crate.Name)
+		return nil, "", fmt.Errorf("discovery: %s contains %s, which builds no binary to declare from", root.Dir, crate.Name)
 	}
 	if len(bins) > 1 {
-		return nil, fmt.Errorf("discovery: %s builds %d binaries, and ocel runs one binary per crate: keep one bin target in the crate at %s", crate.Name, len(bins), root.Dir)
+		return nil, "", fmt.Errorf("discovery: %s builds %d binaries, and ocel runs one binary per crate: keep one bin target in the crate at %s", crate.Name, len(bins), root.Dir)
 	}
 
 	cmd := exec.CommandContext(ctx, "cargo", "run", "--quiet", "--manifest-path", crate.ManifestPath, "--bin", bins[0].Name)
 	cmd.Dir = workspace.Root
-	cmd.Env = append(append(os.Environ(), server.Env()...), "OCEL_SOURCE_ROOT="+workspace.Root)
-	return cmd, nil
+	return cmd, workspace.Root, nil
 }
 
 func declaresThroughOcel(at string) bool {

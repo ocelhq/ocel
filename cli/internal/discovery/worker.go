@@ -122,6 +122,13 @@ func WorkerCommand(ctx context.Context, configDir string, roots []Root, served R
 		return cmd, nil
 	case language.Python:
 		return pythonWorkerCommand(ctx, configDir, roots, served)
+	case language.Rust:
+		cmd, _, err := cargoRunCommand(ctx, served)
+		if err != nil {
+			return nil, err
+		}
+		cmd.Env = os.Environ()
+		return cmd, nil
 	}
 	return nil, fmt.Errorf("discovery: %s is a %s folder, and ocel runs no worker from one", served.Dir, served.Language)
 }
