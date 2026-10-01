@@ -58,7 +58,7 @@ differently refuses rather than letting one win.
 ## On a VPS
 
 A box has no Pulumi resources, so the `vps` branch patches what the box runs instead: the
-container and the volume a `postgres` or a `bucket` runs as.
+container and the volume a `postgres`, a `bucket` or a `kv` store runs as.
 
 ```ts title="transforms/stack.transform.ts"
 import { defineTransform } from "@ocel/transforms";
@@ -86,6 +86,8 @@ export default defineTransform({
 | `postgres` | `volume` | `driver`, `driverOpts` |
 | `bucket` | `container` | `image`, `args`, `env`, `memory`, `cpus`, `shmSize` |
 | `bucket` | `volume` | `driver`, `driverOpts` |
+| `kv` | `container` | `image`, `args`, `env`, `memory`, `cpus`, `shmSize` |
+| `kv` | `volume` | `driver`, `driverOpts` |
 
 One store contains every bucket the project declares, so the `bucket` branch shapes that single
 container and volume rather than one per declaration. Gate the rule on the environment, not on
@@ -95,7 +97,11 @@ An `image` has to be pinned by digest. The container's name, network, labels, pu
 and mounts stay ocel's, and so do the variables an app's binding depends on: `POSTGRES_USER`,
 `POSTGRES_DB`, `POSTGRES_PASSWORD`, `POSTGRES_HOST_AUTH_METHOD` and `PGDATA` on a postgres,
 `RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY`, `RUSTFS_ADDRESS`, `RUSTFS_REGION` and
-`RUSTFS_VOLUMES` on a store. `tags` become labels on the container and the volume. Every value
+`RUSTFS_VOLUMES` on a store, and `VALKEY_EXTRA_FLAGS` on a kv store. A kv store's `args` come
+after the settings ocel renders, and a deploy refuses one that sets any of them: the user and
+password, `maxmemory` and its policy, persistence, the data directory and the listener. `memory`
+caps the whole container. Give it well over twice the store's own `memory`, because a background
+save forks the server and the copy can grow to the size of the data. `tags` become labels on the container and the volume. Every value
 is written down; a box has no binding outputs to fill one from.
 
 ## Gates and tags
