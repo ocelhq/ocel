@@ -55,9 +55,15 @@ func queueName(topic, consumer string) string {
 }
 
 func (e *Engine) Apply(ctx context.Context, deployment Deployment) error {
-	for queue := range deployment.consumers() {
+	for queue, ref := range deployment.consumers() {
 		if _, err := e.pool.Exec(ctx, "SELECT pgmq.create($1)", queue); err != nil {
 			return fmt.Errorf("create queue %s: %w", queue, err)
+		}
+		if !ref.topic.GetOrdered() {
+			continue
+		}
+		if _, err := e.pool.Exec(ctx, "SELECT pgmq.create_fifo_index($1)", queue); err != nil {
+			return fmt.Errorf("index queue %s by key: %w", queue, err)
 		}
 	}
 	if err := e.applySchedules(ctx, deployment); err != nil {
