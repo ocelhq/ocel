@@ -63,6 +63,38 @@ func TestAContainerAppWithAFloorOfZeroIsRefusedOnAws(t *testing.T) {
 	}
 }
 
+func TestAServerlessAppUsingAKVStoreIsRefusedUntilFunctionsJoinTheVPC(t *testing.T) {
+	t.Parallel()
+
+	container := &contractv1.ManifestApp{Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}
+	cache := provider.Resource{Name: "kv--cache", Type: provider.BindingKV}
+	pre := provider.DeployPreflight{
+		Deploy: provider.DeploySpec{Apps: []provider.AppEntry{
+			{App: "api", Manifest: container, Instances: provider.Instances{Min: 1, Max: 2}},
+			{App: "web", Manifest: &contractv1.ManifestApp{}},
+		}},
+		Apps: []provider.AppUsage{
+			{App: "api", Resources: []provider.Resource{cache}},
+			{App: "web", Resources: []provider.Resource{cache}},
+		},
+	}
+
+	err := refuseKVOnServerlessApps(pre)
+	if err == nil {
+		t.Fatal("preflight let a serverless app use a kv store, and a function outside the VPC cannot reach the store")
+	}
+	for _, want := range []string{"web", "kv--cache", "#1473"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("preflight = %q, want it to name %s", err, want)
+		}
+	}
+
+	pre.Apps = pre.Apps[:1]
+	if err := refuseKVOnServerlessApps(pre); err != nil {
+		t.Fatalf("preflight of a container app using a kv store = %v, want it to pass", err)
+	}
+}
+
 func TestTheArchitectureContainersAreBuiltForIsOneTheProviderShipsARuntimeFor(t *testing.T) {
 	t.Parallel()
 
