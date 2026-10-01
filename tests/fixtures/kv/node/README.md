@@ -8,8 +8,8 @@ or its native client. The declarations sit in the default discovery directory an
 provisioning step.
 
 `/api/kv/password-report` answers with the `cache` password in clear, so it answers only a
-request whose `x-password-report-nonce` header matches the secret `PASSWORD_REPORT_NONCE`
-`infra/variables.ts` declares; the journey sets a fresh one for each run.
+request whose `x-password-report-nonce` header matches the secret `PASSWORD_REPORT_NONCE` the
+app declares; the journey sets a fresh one for each run.
 
 ## Run it
 
