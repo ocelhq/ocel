@@ -169,12 +169,23 @@ func (p published) deliverPulled(worker *fakeWorker, topic, consumer string) []i
 	deliveries := topics.Deliveries{Store: p.deployment.Store(), Topics: p.deployment.Declared, Worker: worker.url}
 	var codes []int
 	for _, message := range p.pull(topic, consumer) {
-		req := httptest.NewRequest(http.MethodPost, topics.PushPath(topic, consumer), bytes.NewReader(message.pushBody()))
-		recorder := httptest.NewRecorder()
-		deliveries.ServeHTTP(recorder, req)
-		codes = append(codes, recorder.Code)
+		push := httptestPush(message, topic, consumer)
+		deliveries.ServeHTTP(push.recorder, push.request)
+		codes = append(codes, push.recorder.Code)
 	}
 	return codes
+}
+
+type recordedPush struct {
+	request  *http.Request
+	recorder *httptest.ResponseRecorder
+}
+
+func httptestPush(message pulledMessage, topic, consumer string) recordedPush {
+	return recordedPush{
+		request:  httptest.NewRequest(http.MethodPost, topics.PushPath(topic, consumer), bytes.NewReader(message.pushBody())),
+		recorder: httptest.NewRecorder(),
+	}
 }
 
 func TestLiveASendReachesEveryConsumerAsARunOfItsOwn(t *testing.T) {

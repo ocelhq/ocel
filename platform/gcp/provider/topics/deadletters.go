@@ -1,0 +1,214 @@
+package topics
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"time"
+
+	"cloud.google.com/go/firestore"
+	"cloud.google.com/go/firestore/apiv1/firestorepb"
+	"connectrpc.com/connect"
+	"google.golang.org/api/iterator"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+)
+
+func (t Topics) consumerOf(topicName, consumerName string) (*contractv1.ManifestTopic, error) {
+	topic, err := t.topic(topicName)
+	if err != nil {
+		return nil, err
+	}
+	for _, consumer := range topic.GetConsumers() {
+		if consumer.GetName() == consumerName {
+			return topic, nil
+		}
+	}
+	return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("topic %q has no consumer %q deployed", topicName, consumerName))
+}
+
+func (s Store) deadLetters(topic, consumer string) (firestore.Query, error) {
+	runs, err := s.runs()
+	if err != nil {
+		return firestore.Query{}, err
+	}
+	return runs.Where("topic", "==", topic).Where("consumer", "==", consumer).Where("status", "==", string(provider.RunFailed)), nil
+}
+
+func (s Store) eachDeadLetter(ctx context.Context, topic, consumer string, executions []string, each func(runRecord) error) error {
+	query, err := s.deadLetters(topic, consumer)
+	if err != nil {
+		return err
+	}
+	documents := query.Documents(ctx)
+	defer documents.Stop()
+	for {
+		snapshot, err := documents.Next()
+		if errors.Is(err, iterator.Done) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read the dead letters of %s/%s: %w", topic, consumer, err)
+		}
+		if len(executions) > 0 && !slices.Contains(executions, snapshot.Ref.ID) {
+			continue
+		}
+		record, err := recordOf(snapshot)
+		if err != nil {
+			return err
+		}
+		if err := each(record); err != nil {
+			return err
+		}
+	}
+}
+
+func (s Store) removeDeadLetter(ctx context.Context, execution string) (bool, error) {
+	runs, err := s.runs()
+	if err != nil {
+		return false, err
+	}
+	client, err := s.Clients.Firestore()
+	if err != nil {
+		return false, err
+	}
+	doc := runs.Doc(execution)
+	removed := false
+	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snapshot, found, err := readInTransaction(tx, doc)
+		if err != nil || !found {
+			return err
+		}
+		record, err := recordOf(snapshot)
+		if err != nil || record.Status != provider.RunFailed {
+			return err
+		}
+		removed = true
+		return tx.Delete(doc)
+	})
+	if err != nil {
+		return false, fmt.Errorf("purge dead letter %s: %w", execution, err)
+	}
+	return removed, nil
+}
+
+func (t Topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLettersRequest) (*topicv1.ListDeadLettersResponse, error) {
+	query, err := t.deployment.Store().deadLetters(req.GetTopic(), req.GetConsumer())
+	if err != nil {
+		return nil, err
+	}
+	limit := pageLimit(int(req.GetLimit()))
+	query = query.OrderBy("finishedAt", firestore.Asc).OrderBy(firestore.DocumentID, firestore.Asc)
+	if req.GetCursor() != "" {
+		finished, execution, err := parseCursor(req.GetCursor())
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		query = query.StartAfter(finished, execution)
+	}
+	documents := query.Limit(limit + 1).Documents(ctx)
+	defer documents.Stop()
+	resp := &topicv1.ListDeadLettersResponse{}
+	var lastFinished time.Time
+	for {
+		snapshot, err := documents.Next()
+		if errors.Is(err, iterator.Done) {
+			return resp, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("list dead letters: %w", err)
+		}
+		if len(resp.GetDeadLetters()) == limit {
+			resp.NextCursor = cursorOf(lastFinished, resp.GetDeadLetters()[limit-1].GetExecution())
+			return resp, nil
+		}
+		record, err := recordOf(snapshot)
+		if err != nil {
+			return nil, err
+		}
+		lastFinished = record.FinishedAt
+		resp.DeadLetters = append(resp.DeadLetters, deadLetterOf(record))
+	}
+}
+
+func deadLetterOf(record runRecord) *topicv1.DeadLetter {
+	message := &topicv1.Message{Id: record.delivery.MessageID}
+	if record.delivery.PublishedAt != nil {
+		message.PublishedAt = timestamppb.New(*record.delivery.PublishedAt)
+	}
+	return &topicv1.DeadLetter{
+		Execution: record.Execution,
+		Message:   message,
+		Payload:   record.Payload,
+		Attempts:  int32(record.Attempts),
+		Error:     record.Error,
+		FailedAt:  timestampOf(record.FinishedAt),
+	}
+}
+
+func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDeadLettersRequest) (*topicv1.RedriveDeadLettersResponse, error) {
+	topic, err := t.consumerOf(req.GetTopic(), req.GetConsumer())
+	if err != nil {
+		return nil, err
+	}
+	store := t.deployment.Store()
+	var redriven int64
+	err = store.eachDeadLetter(ctx, req.GetTopic(), req.GetConsumer(), req.GetExecutions(), func(letter runRecord) error {
+		now := time.Now()
+		_, err := store.changeRun(ctx, letter.Execution, func(record *runRecord, found bool) error {
+			if !found || record.Status != provider.RunFailed {
+				return errRunUnchanged
+			}
+			record.Status, record.Attempts, record.Error, record.DueAt = provider.RunQueued, 0, "", now
+			record.StartedAt, record.FinishedAt = time.Time{}, time.Time{}
+			return nil
+		})
+		if errors.Is(err, errRunUnchanged) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		redriven++
+		again := publicationOf(letter, topic)
+		again.dueAt, again.consumer = now, req.GetConsumer()
+		return t.deployment.publishNow(ctx, again)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &topicv1.RedriveDeadLettersResponse{Redriven: redriven}, nil
+}
+
+func (t Topics) PurgeDeadLetters(ctx context.Context, req *topicv1.PurgeDeadLettersRequest) (*topicv1.PurgeDeadLettersResponse, error) {
+	store := t.deployment.Store()
+	var purged int64
+	err := store.eachDeadLetter(ctx, req.GetTopic(), req.GetConsumer(), req.GetExecutions(), func(letter runRecord) error {
+		removed, err := store.removeDeadLetter(ctx, letter.Execution)
+		if removed {
+			purged++
+		}
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &topicv1.PurgeDeadLettersResponse{Purged: purged}, nil
+}
+
+func (t Topics) CountDeadLetters(ctx context.Context, req *topicv1.CountDeadLettersRequest) (*topicv1.CountDeadLettersResponse, error) {
+	query, err := t.deployment.Store().deadLetters(req.GetTopic(), req.GetConsumer())
+	if err != nil {
+		return nil, err
+	}
+	counted, err := query.NewAggregationQuery().WithCount("count").Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("count the dead letters of %s/%s: %w", req.GetTopic(), req.GetConsumer(), err)
+	}
+	count, _ := counted["count"].(*firestorepb.Value)
+	return &topicv1.CountDeadLettersResponse{Count: count.GetIntegerValue()}, nil
+}
