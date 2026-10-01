@@ -64,16 +64,30 @@ export const sequence = task("sequence", {
   },
 });
 
-type TallyEntry = { n: number; poison?: boolean };
+type TallyEntry = { n: number; probe?: string; poison?: boolean };
+
+const poisonFailed = new Set<string>();
 
 export const tally = task("tally", {
   batch: { size: 5, timeout: "2s" },
   retry: { maxAttempts: 3, minDelay: "1s", maxDelay: "1s" },
-  run: (payloads: TallyEntry[], { ctx }) => {
-    if (ctx.attempt.number === 1 && payloads.some((one) => one.poison)) {
-      throw new Error("a batch holding a poisoned item fails its first attempt");
+  run: async (entries: TallyEntry[], { ctx }) => {
+    const batch = entries.map((entry) => entry.n);
+    const poisoned = entries
+      .filter((entry) => entry.poison)
+      .map((entry) => `${entry.probe}/${entry.n}`)
+      .filter((key) => !poisonFailed.has(key));
+    for (const key of poisoned) {
+      poisonFailed.add(key);
     }
-    return { batch: payloads.map((one) => one.n), attempt: ctx.attempt.number };
+    const failed = poisoned.length > 0;
+    for (const probe of new Set(entries.flatMap((entry) => (entry.probe ? [entry.probe] : [])))) {
+      await receipt.trigger({ probe, batch, failed }, { tags: [probe] });
+    }
+    if (failed) {
+      throw new Error("a batch fails the first time it holds a poisoned entry");
+    }
+    return { batch, attempt: ctx.attempt.number };
   },
 });
 
