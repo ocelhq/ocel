@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -154,6 +155,39 @@ func TestBundle(t *testing.T) {
 
 		if got := runNode(t, l.functionDir); !strings.Contains(got, "lib:cjs") {
 			t.Errorf("bundle printed %q, want the bundled dependency to answer", got)
+		}
+	})
+
+	t.Run("a worker entry is bundled beside the handler and named in the config", func(t *testing.T) {
+		t.Parallel()
+
+		l := newLayout(t, tree{
+			"package.json":                      appPkg,
+			"server.js":                         "console.log('server');\n",
+			"tasks.js":                          "import dep from 'cjs-dep';\nexport const shape = dep.shape;\n",
+			"node_modules/cjs-dep/package.json": `{"name":"cjs-dep","main":"index.js"}`,
+			"node_modules/cjs-dep/index.js":     "module.exports = { shape: 'worker:' + typeof __dirname };\n",
+		})
+		target := l.target("server.js")
+		target.WorkerSource = "const { shape } = await import(" + strconv.Quote(filepath.Join(l.appSrc, "tasks.js")) + ");\nconsole.log(shape);\n"
+		target.WorkerResolveDir = l.appSrc
+
+		if err := Bundle(context.Background(), target); err != nil {
+			t.Fatalf("Bundle: %v", err)
+		}
+		var cfg buildoutput.FunctionDescriptor
+		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.functionDir, buildoutput.FunctionDescriptorFile))), &cfg); err != nil {
+			t.Fatal(err)
+		}
+		if want := []string{"node", workerFile}; !reflect.DeepEqual(cfg.Worker, want) {
+			t.Errorf("%s worker = %v, want %v", buildoutput.FunctionDescriptorFile, cfg.Worker, want)
+		}
+		if _, err := exec.LookPath("node"); err != nil {
+			t.Skip("node not on PATH")
+		}
+		out, err := exec.Command("node", filepath.Join(l.functionDir, workerFile)).CombinedOutput()
+		if err != nil || !strings.Contains(string(out), "worker:string") {
+			t.Errorf("the worker entry printed %q (%v), want the bundled declarations to run", out, err)
 		}
 	})
 
