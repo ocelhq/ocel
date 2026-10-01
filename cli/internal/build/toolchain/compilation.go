@@ -16,6 +16,7 @@ type Compilation struct {
 	Framework      buildoutput.Framework
 	Source         string
 	Entrypoint     string
+	WorkerPackage  string
 	FunctionDir    string
 	AppDir         string
 	DiscoveryRoots []string
