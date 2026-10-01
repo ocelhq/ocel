@@ -33,6 +33,23 @@ export interface ReleaseCycle {
   redeploy(cell: CellUnderTest, greeting: string): Promise<Deployment>;
   rollback(cell: CellUnderTest, greeting: string): Promise<Deployment>;
 }
+
+export interface Exposure {
+  readExposed(cell: CellUnderTest): Promise<string>;
+}
+
+export function hasExposure<T extends object>(target: T): target is T & Exposure {
+  return typeof (target as Partial<Exposure>).readExposed === "function";
+}
+
+export interface Restart {
+  restart(cell: CellUnderTest): Promise<Deployment>;
+}
+
+export function hasRestart<T extends object>(target: T): target is T & Restart {
+  return typeof (target as Partial<Restart>).restart === "function";
+}
+
 export function hasReleaseCycle<T extends object>(target: T): target is T & ReleaseCycle {
   const cycled = target as Partial<ReleaseCycle>;
   return typeof cycled.redeploy === "function" && typeof cycled.rollback === "function";

@@ -99,10 +99,9 @@ export function cellNamed(fixtures: Fixture[], target: TargetName, name: string)
   return found;
 }
 
-function longestFirst(cells: Cell[]): Cell[] {
-  return [...cells].sort(
-    (a, b) => phasesOf(b.fixture, false).length - phasesOf(a.fixture, false).length,
-  );
+function longestFirst(cells: Cell[], releaseCycle: boolean): Cell[] {
+  const length = (cell: Cell) => phasesOf(cell.fixture, false, releaseCycle).length;
+  return [...cells].sort((a, b) => length(b) - length(a));
 }
 
 type LaneTest = { cell: string; app: string; fixture: string; variant: string; title: string };
@@ -258,7 +257,7 @@ function checkGaps(gaps: Gap[]) {
 }
 
 function checkReleaseCycle(fixtures: Fixture[], target: TargetName, releaseCycle: boolean) {
-  const redeploying = fixtures.find((one) => one.redeploys);
+  const redeploying = fixtures.find((one) => one.redeploys === true);
   if (redeploying && !releaseCycle) {
     throw new Error(
       `${redeploying.name} redeploys, and ${target} has no release cycle to redeploy it with`,
@@ -296,7 +295,7 @@ export function plan(input: {
 
   const laneTests: LaneTest[] = offered.flatMap((one) =>
     cellsOn(one, target).flatMap((cell) =>
-      stepsOf(cell, phasesOf(one, false)).map((step) => ({
+      stepsOf(cell, phasesOf(one, false, releaseCycle)).map((step) => ({
         cell: cell.name,
         app: step.app,
         fixture: one.name,
@@ -327,20 +326,21 @@ export function plan(input: {
     }
   }
 
-  const cells = longestFirst(chosen.flatMap((one) => covered.get(one.name) ?? [])).map(
-    (cell): PlannedCell => {
-      const phases = phasesOf(cell.fixture, filter.keep);
-      return {
-        name: cell.name,
-        fixture: cell.fixture.name,
-        variant: cell.variant.name,
-        phases,
-        steps: stepsOf(cell, phases).map(({ app, title, phase }) =>
-          phase === undefined ? { app, title } : { app, title, phase },
-        ),
-      };
-    },
-  );
+  const cells = longestFirst(
+    chosen.flatMap((one) => covered.get(one.name) ?? []),
+    releaseCycle,
+  ).map((cell): PlannedCell => {
+    const phases = phasesOf(cell.fixture, filter.keep, releaseCycle);
+    return {
+      name: cell.name,
+      fixture: cell.fixture.name,
+      variant: cell.variant.name,
+      phases,
+      steps: stepsOf(cell, phases).map(({ app, title, phase }) =>
+        phase === undefined ? { app, title } : { app, title, phase },
+      ),
+    };
+  });
 
   const expectedFailures: ExpectedFailures = {};
   for (const test of testsOf({ cells })) {

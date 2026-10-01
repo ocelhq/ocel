@@ -6,8 +6,10 @@ import {
   entryFile,
   heldProbe,
   hostnamesWithoutUrl,
+  projectExposure,
   projectLeftovers,
   projectListing,
+  resourceRestart,
   slugsOf,
   ssh,
   stampRewritten,
@@ -110,6 +112,24 @@ describe("projectLeftovers", () => {
     expect(projectLeftovers("j-kv")).toBe(
       "sudo docker ps -a --filter label=ocel.project=j-kv --format 'the container {{.Names}}'; " +
         "sudo docker volume ls --filter label=ocel.project=j-kv --format 'the volume {{.Name}}'",
+    );
+  });
+});
+
+describe("resourceRestart", () => {
+  it("restarts only the containers the project's resources run in, naming each", () => {
+    expect(resourceRestart("j-kv")).toBe(
+      "sudo docker ps -q --filter label=ocel.project=j-kv --filter label=ocel.resource " +
+        "| xargs -r sudo docker restart",
+    );
+  });
+});
+
+describe("projectExposure", () => {
+  it("shows the spec of every container labelled with the project, and the box's process table", () => {
+    expect(projectExposure("j-kv")).toBe(
+      "sudo docker ps -aq --filter label=ocel.project=j-kv | xargs -r sudo docker inspect; " +
+        "ps -eo args",
     );
   });
 });

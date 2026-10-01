@@ -34,7 +34,7 @@ import {
 } from "./front";
 import { type Gateway, openGateway, type Scheme } from "./gateway";
 import { plannedWrites } from "./planStream";
-import type { Deployment, ReleaseCycle, Sweeper, Target } from "./types";
+import type { Deployment, Exposure, ReleaseCycle, Restart, Sweeper, Target } from "./types";
 
 const DEPLOY_LOGIN = "ocel-deploy";
 const INCUS_MARKER = "/dev/virtio-ports/org.linuxcontainers.incus";
@@ -95,7 +95,7 @@ const BRING_A_BOX_UP = [
 
 export type Box = { host: string; user: string; identityFile: string };
 
-type BoxSession = { dir: string; gateway: Gateway; env: NodeJS.ProcessEnv };
+type BoxSession = { dir: string; gateway: Gateway; env: NodeJS.ProcessEnv; said: string[] };
 
 const ran = promisify(execFile);
 
@@ -141,6 +141,14 @@ export function projectLeftovers(slug: string): string {
     `sudo docker ps -a ${filter} --format 'the container {{.Names}}'`,
     `sudo docker volume ls ${filter} --format 'the volume {{.Name}}'`,
   ].join("; ");
+}
+
+export function resourceRestart(slug: string): string {
+  return `sudo docker ps -q --filter label=ocel.project=${slug} --filter label=ocel.resource | xargs -r sudo docker restart`;
+}
+
+export function projectExposure(slug: string): string {
+  return `sudo docker ps -aq --filter label=ocel.project=${slug} | xargs -r sudo docker inspect; ps -eo args`;
 }
 
 export function projectListing(prefix: string): string {
@@ -264,7 +272,7 @@ export function stampRewritten(before: string, after: string): string | undefine
   return `the stamp a re-apply left at ${STAMP}: ${missed.join("; ")}`;
 }
 
-export class VpsTarget implements Target, ReleaseCycle {
+export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
   readonly name = "vps";
   readonly workers = 2;
   readonly maxRequestBodyBytes = UNCAPPED_BODY_BYTES;
@@ -515,6 +523,26 @@ export class VpsTarget implements Target, ReleaseCycle {
     return this.deployment(cell, session);
   }
 
+  async restart(cell: CellUnderTest): Promise<Deployment> {
+    const session = await this.sessionFor(cell);
+    const target = this.box();
+    const restarted = await ssh(target, target.user, resourceRestart(cell.slug));
+    await cell.evidence.write("restart", "restarted.txt", restarted);
+    if (restarted.trim() === "") {
+      throw new Error(
+        `no container on the box is labelled ocel.project=${cell.slug} and ocel.resource, so nothing ${cell.name} declared was restarted`,
+      );
+    }
+    return this.deployment(cell, session);
+  }
+
+  async readExposed(cell: CellUnderTest): Promise<string> {
+    const session = await this.sessionFor(cell);
+    const target = this.box();
+    const shown = await ssh(target, target.user, projectExposure(cell.slug));
+    return [...session.said, shown].join("\n");
+  }
+
   async rollback(cell: CellUnderTest): Promise<Deployment> {
     const session = await this.sessionFor(cell);
 
@@ -702,14 +730,15 @@ export class VpsTarget implements Target, ReleaseCycle {
       dir: await workTree(cell, "vps"),
       gateway: openGateway(this.box().host, schemeOf(this.front())),
       env: this.boxEnv(DEPLOY_LOGIN),
+      said: [],
     };
     this.sessions.set(cell.slug, session);
     return session;
   }
 
   private driving(cell: CellUnderTest, session: BoxSession, phase: Phase) {
-    return (name: string, args: string[]) =>
-      runOcel(
+    return async (name: string, args: string[]) => {
+      const result = await runOcel(
         cell,
         session.dir,
         phase,
@@ -717,6 +746,9 @@ export class VpsTarget implements Target, ReleaseCycle {
         ["--config", journeyConfigIn(session.dir), ...args],
         session.env,
       );
+      session.said.push(result.stdout, result.stderr);
+      return result;
+    };
   }
 
   private async stillRecorded(slug: string): Promise<boolean> {

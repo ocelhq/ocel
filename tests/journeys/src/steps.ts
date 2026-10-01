@@ -12,6 +12,7 @@ export type Step = {
 };
 
 export const DEPLOY = "deploy";
+const RESTART = "restart";
 const REDEPLOY = "redeploy";
 const ROLLBACK = "rollback";
 const DESTROY = "destroy";
@@ -24,9 +25,9 @@ const STACK_POINT_TITLES: Record<StackPoint, string> = {
   afterStackDestroy: "after stack destroy",
 };
 
-export type CheckedPhase = "verify" | "redeploy" | "rollback";
+export type CheckedPhase = "verify" | "restart" | "redeploy" | "rollback";
 
-const CHECKED_PHASES: CheckedPhase[] = ["verify", "redeploy", "rollback"];
+const CHECKED_PHASES: CheckedPhase[] = ["verify", "restart", "redeploy", "rollback"];
 
 function checkTitle(phase: CheckedPhase, title: string): string {
   return phase === "verify" ? title : `${phase} · ${title}`;
@@ -60,17 +61,39 @@ export function check(
   return selector(listed.flatMap((one) => phases.map((phase) => checkTitle(phase, one.title))));
 }
 
-export function phasesOf(fixture: Fixture, keep: boolean): Phase[] {
+export function phasesOf(fixture: Fixture, keep: boolean, releaseCycle = true): Phase[] {
+  if (fixture.refusal) {
+    return ["deploy", ...(keep ? [] : (["destroy"] as const))];
+  }
+  const redeploys = fixture.redeploys === true || (fixture.redeploys !== undefined && releaseCycle);
   return [
     "deploy",
     "verify",
-    ...(fixture.redeploys ? (["redeploy", "rollback"] as const) : []),
+    ...(fixture.restarts ? (["restart"] as const) : []),
+    ...(redeploys ? (["redeploy", "rollback"] as const) : []),
     ...(keep ? [] : (["destroy"] as const)),
   ];
 }
 
 export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
-  const { apps, stack } = cell.fixture;
+  const { apps, stack, refusal } = cell.fixture;
+  if (refusal) {
+    return apps.flatMap((app) => [
+      ...(phases.includes("deploy")
+        ? [
+            {
+              app,
+              title: refusal.title,
+              phase: "deploy" as const,
+              run: (run: CellRun) => run.refusedDeploy(refusal),
+            },
+          ]
+        : []),
+      ...(phases.includes("destroy")
+        ? [{ app, title: DESTROY, phase: "destroy" as const, run: (run: CellRun) => run.destroy() }]
+        : []),
+    ]);
+  }
   const checks = [...cell.fixture.checks, ...(cell.variant.checks ?? [])].filter(
     (one) => one.cacheLayer === undefined || one.cacheLayer === cell.cacheLayer,
   );
@@ -99,7 +122,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
     })),
   ];
 
-  const replaced = (phase: "redeploy" | "rollback", title: string): Step[] =>
+  const replaced = (phase: "restart" | "redeploy" | "rollback", title: string): Step[] =>
     has(phase)
       ? [
           ...perApp((app) => [{ app, title, phase, run: (run) => run[phase]() }]),
@@ -133,6 +156,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
         ])
       : []),
     ...(has("verify") ? perApp((app) => verified(app, "verify")) : []),
+    ...replaced("restart", RESTART),
     ...replaced("redeploy", REDEPLOY),
     ...replaced("rollback", ROLLBACK),
     ...(has("destroy")

@@ -9,14 +9,14 @@ import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
 import { migrates, setsEnv, setsSecret } from "../checks";
 import { INITIAL_GREETING, redact, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../checks/context";
 import { journeyConfigIn } from "../config";
-import type { Lane } from "../matrix/types";
+import type { Lane, Phase } from "../matrix/types";
 import { configTree, runOcel, treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
 import type { PrepareFailures } from "../prepare";
 import { progress, relay } from "../progress";
 import type { CellUnderTest } from "../run/cellRun";
 import { appCommand, appHomes, migrateCommand, stateComplaint } from "../workspace";
-import type { Deployment, Sweeper, Target } from "./types";
+import type { Deployment, Exposure, Restart, Sweeper, Target } from "./types";
 
 const HEALTH_TIMEOUT_MS = 120_000;
 
@@ -33,7 +33,7 @@ const run = promisify(execFile);
 
 type ServedApp = { app: string; port: number; child: ChildProcess; output: () => string };
 
-type ServedApps = { dir: string; apps: ServedApp[] };
+type ServedApps = { dir: string; env: NodeJS.ProcessEnv; apps: ServedApp[]; said: string[] };
 
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -123,6 +123,29 @@ async function labelled(kind: "container" | "volume", project: string): Promise<
   return stdout.split("\n").filter((line) => line.trim() !== "");
 }
 
+export function keptRunning(before: Map<string, string>, after: Map<string, string>): string[] {
+  return [...after].filter(([name, started]) => before.get(name) === started).map(([name]) => name);
+}
+
+async function startTimes(project: string): Promise<Map<string, string>> {
+  const containers = await labelled("container", project);
+  if (containers.length === 0) {
+    return new Map();
+  }
+  const { stdout } = await run("docker", [
+    "inspect",
+    "--format",
+    "{{.Name}} {{.State.StartedAt}}",
+    ...containers,
+  ]);
+  return new Map(
+    stdout
+      .split("\n")
+      .filter((line) => line.trim() !== "")
+      .map((line) => line.trim().split(" ") as [string, string]),
+  );
+}
+
 export function volumesIn(inspected: string): string[] {
   return [...new Set(inspected.split(/\s+/).filter((name) => name !== ""))];
 }
@@ -175,7 +198,7 @@ async function writeDotfile(cell: CellUnderTest, dir: string): Promise<void> {
   await cell.evidence.write("deploy", DOTFILE, `${lines.join("\n")}\n`);
 }
 
-export class DevTarget implements Target {
+export class DevTarget implements Target, Restart, Exposure {
   readonly name = "dev";
   readonly workers = 4;
   readonly maxRequestBodyBytes = UNCAPPED_BODY_BYTES;
@@ -214,12 +237,61 @@ export class DevTarget implements Target {
     if (migrates(cell.fixture.checks)) {
       await runOcel(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
     }
-
-    const served: ServedApps = { dir, apps: [] };
+    const served: ServedApps = { dir, env, apps: [], said: [] };
     this.served.set(cell.slug, served);
+    return this.serveApps(cell, served, "deploy");
+  }
+
+  async restart(cell: CellUnderTest): Promise<Deployment> {
+    const project = devProject(this.servedFor(cell).dir);
+    const before = await startTimes(project);
+    const deployed = await this.serveApps(cell, await this.stopApps(cell), "restart");
+    const kept = keptRunning(before, await startTimes(project));
+    if (kept.length > 0) {
+      throw new Error(
+        `${kept.join(", ")} kept running while ocel dev stopped and started again, so nothing ${cell.name} declared was restarted`,
+      );
+    }
+    return deployed;
+  }
+
+  async readExposed(cell: CellUnderTest): Promise<string> {
+    const served = this.servedFor(cell);
+    const containers = await labelled("container", devProject(served.dir));
+    const inspected =
+      containers.length === 0 ? "" : (await run("docker", ["inspect", ...containers])).stdout;
+    const processes = (await run("ps", ["-eo", "args"])).stdout;
+    return [...served.said, ...served.apps.map((one) => one.output()), inspected, processes].join(
+      "\n",
+    );
+  }
+
+  private servedFor(cell: CellUnderTest): ServedApps {
+    const served = this.served.get(cell.slug);
+    if (!served) {
+      throw new Error(`${cell.name} is not served on ${this.name}`);
+    }
+    return served;
+  }
+
+  private async stopApps(cell: CellUnderTest): Promise<ServedApps> {
+    const served = this.servedFor(cell);
+    for (const one of served.apps.splice(0)) {
+      await stop(one);
+      served.said.push(one.output());
+    }
+    return served;
+  }
+
+  private async serveApps(
+    cell: CellUnderTest,
+    served: ServedApps,
+    phase: Phase,
+  ): Promise<Deployment> {
+    const { dir, env } = served;
     const urls = new Map<string, string>();
     for (const app of cell.fixture.apps) {
-      const one = await this.serve(cell, dir, env, app);
+      const one = await this.serve(cell, dir, env, app, phase);
       served.apps.push(one);
       urls.set(app, `http://127.0.0.1:${one.port}`);
     }
@@ -232,7 +304,7 @@ export class DevTarget implements Target {
     }
 
     await cell.evidence.write(
-      "deploy",
+      phase,
       "deployment.json",
       `${JSON.stringify({ slug: cell.slug, dir, apps: Object.fromEntries(urls) }, null, 2)}\n`,
     );
@@ -291,6 +363,7 @@ export class DevTarget implements Target {
     dir: string,
     env: NodeJS.ProcessEnv,
     app: string,
+    phase: Phase,
   ): Promise<ServedApp> {
     const port = await freePort();
     const child = spawn(ocelBin, ["dev", "--", ...appCommand(cell.fixture, app)], {
@@ -305,7 +378,7 @@ export class DevTarget implements Target {
     };
     child.stdout?.on("data", capture);
     child.stderr?.on("data", capture);
-    const log = progress(`${cell.name} deploy/dev-${app} |`);
+    const log = progress(`${cell.name} ${phase}/dev-${app} |`);
     relay(child.stdout, log);
     relay(child.stderr, log);
 
@@ -313,7 +386,7 @@ export class DevTarget implements Target {
     try {
       await waitForHealth(`http://127.0.0.1:${port}/health`, served);
     } finally {
-      await cell.evidence.write("deploy", `dev-${app}.log`, captured);
+      await cell.evidence.write(phase, `dev-${app}.log`, captured);
     }
     return served;
   }

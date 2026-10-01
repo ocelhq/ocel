@@ -3,11 +3,12 @@ import { filterFrom } from "./filter";
 
 describe("the concerns a run asks for", () => {
   it("is every concern but iac when nothing names one", () => {
-    expect(filterFrom({}).concerns).toEqual(["deploy", "lifecycle", "sdk"]);
+    expect(filterFrom({}).concerns).toEqual(["deploy", "lifecycle", "sdk", "kv"]);
     expect(filterFrom({ OCEL_JOURNEY_CONCERN: "  " }).concerns).toEqual([
       "deploy",
       "lifecycle",
       "sdk",
+      "kv",
     ]);
   });
 

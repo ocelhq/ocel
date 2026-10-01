@@ -1,5 +1,5 @@
 {
-  "name": "@ocel-fixtures/sdk-kv",
+  "name": "@ocel-fixtures/kv-node",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,8 @@
   "dependencies": {
     "express": "~5.0.0",
     "ioredis": "^5.11.1",
-    "ocel": "workspace:^"
+    "ocel": "workspace:^",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "~5.0.0",

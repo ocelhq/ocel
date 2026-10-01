@@ -19,6 +19,7 @@ function context(asked: string, answered: string): CheckContext {
     phase: "verify",
     notes: new Map(),
     fetch: answering(answered),
+    readExposed: async () => "",
   };
 }
 
