@@ -4,7 +4,7 @@ import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 
 const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
-vi.mock("../utils/rpc", () => ({
+vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: declareMock } },
 }));
 

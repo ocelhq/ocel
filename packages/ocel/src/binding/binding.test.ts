@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
-import { bindingKey, bindingTypeOf, getConfig, getRuntimeAddress } from "./get-config.js";
+import { bindingKey, bindingTypeOf, getConfig } from "./binding.js";
 
 const LIVE_VALUES = Symbol.for("ocel.env.liveValues");
 
@@ -132,21 +132,5 @@ describe("bindingTypeOf", () => {
     expect(bindingTypeOf({ properties: { case: undefined } } as never)).toBe(
       BindingType.UNSPECIFIED,
     );
-  });
-});
-
-describe("getRuntimeAddress", () => {
-  afterEach(() => {
-    delete process.env.OCEL_RUNTIME_ADDRESS;
-  });
-
-  it("reads the one address every runtime-backed resource shares", () => {
-    process.env.OCEL_RUNTIME_ADDRESS = "http://127.0.0.1:41235";
-
-    expect(getRuntimeAddress()).toBe("http://127.0.0.1:41235");
-  });
-
-  it("throws when the runtime address is undefined", () => {
-    expect(() => getRuntimeAddress()).toThrow("OCEL_RUNTIME_ADDRESS");
   });
 });

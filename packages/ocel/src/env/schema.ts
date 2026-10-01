@@ -1,5 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { callSiteFile } from "../utils/callsite.js";
+import { callSiteFile } from "../declaration/callsite.js";
 import { EnvClientError } from "./client.js";
 import type { Definitions, EnvDefinitions } from "./definition.js";
 import { parse } from "./standard.js";

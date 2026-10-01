@@ -255,7 +255,7 @@ const specs = [
     "filePatterns": [
       "cli/internal/cmd/devserver/main.go",
       "cli/internal/devserver/*.go",
-      "packages/ocel/src/utils/rpc.ts"
+      "packages/ocel/src/runtime/rpc.ts"
     ],
     "patterns": [
       {
@@ -485,7 +485,7 @@ const specs = [
     "filePatterns": [
       "cli/internal/cmd/devserver/main.go",
       "cli/internal/devserver/*.go",
-      "packages/ocel/src/utils/rpc.ts"
+      "packages/ocel/src/runtime/rpc.ts"
     ],
     "patterns": [
       {

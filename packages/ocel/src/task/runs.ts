@@ -1,6 +1,8 @@
 import { type JsonObject, toJson } from "@bufbuild/protobuf";
 import { type Timestamp, timestampDate, ValueSchema } from "@bufbuild/protobuf/wkt";
 import { type Client, createClient } from "@connectrpc/connect";
+import { getConfig } from "../binding/binding.js";
+import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
 import { type Duration, encodeDueAt } from "../delivery/duration.js";
 import {
   type Run as ProtoRun,
@@ -8,8 +10,6 @@ import {
   TaskService,
 } from "../gen/proto/app/task/v1/task_pb.js";
 import { createRuntimeTransport } from "../runtime/transport.js";
-import { getConfig } from "../utils/get-config.js";
-import { unprovisioned, unprovisionedPhase } from "../utils/phase.js";
 import type { RunHandle, Task } from "./task.js";
 
 /** Where a run is in its life. */

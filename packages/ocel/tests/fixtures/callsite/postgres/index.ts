@@ -1,4 +1,4 @@
-import { declarationSite } from "../../../../src/utils/callsite.js";
+import { declarationSite } from "../../../../src/declaration/callsite.js";
 
 export function siteOfThisFile(): string {
   return declarationSite();

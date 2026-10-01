@@ -1,10 +1,10 @@
+import { getConfig } from "../binding/binding.js";
+import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
+import { declarationSite } from "../declaration/callsite.js";
+import { defer } from "../declaration/defer.js";
 import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
 import type { BucketProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
-import { declarationSite } from "../utils/callsite.js";
-import { defer } from "../utils/defer.js";
-import { getConfig } from "../utils/get-config.js";
-import { unprovisioned, unprovisionedPhase } from "../utils/phase.js";
-import { rpc } from "../utils/rpc.js";
+import { rpc } from "../runtime/rpc.js";
 import { type BucketContext, resolveBucketContext } from "./bucket-context.js";
 import {
   type BucketObjects,

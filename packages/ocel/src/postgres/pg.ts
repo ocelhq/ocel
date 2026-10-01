@@ -1,10 +1,10 @@
+import { getConfig } from "../binding/binding.js";
+import { declarationSite } from "../declaration/callsite.js";
+import type { Component } from "../declaration/component.js";
+import { defer } from "../declaration/defer.js";
 import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
 import type { PostgresProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
-import { declarationSite } from "../utils/callsite.js";
-import type { Component } from "../utils/component.js";
-import { defer } from "../utils/defer.js";
-import { getConfig } from "../utils/get-config.js";
-import { rpc } from "../utils/rpc.js";
+import { rpc } from "../runtime/rpc.js";
 
 export interface PostgresConfig {
   version?: string;

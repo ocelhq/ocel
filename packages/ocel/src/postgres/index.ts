@@ -1,12 +1,12 @@
 import { Pool, type PoolConfig } from "pg";
+import { unprovisionedPhase, unprovisionedProxy } from "../binding/unprovisioned.js";
 import {
   type PostgresProperties,
   PostgresTlsMode,
 } from "../gen/proto/common/bindings/v1/bindings_pb.js";
-import { unprovisionedPhase, unprovisionedProxy } from "../utils/phase.js";
 import { Postgres, type PostgresConfig } from "./pg.js";
 
-export { UnprovisionedResourceError } from "../utils/phase.js";
+export { UnprovisionedResourceError } from "../binding/unprovisioned.js";
 
 type PgReturn = Pool & { connectionString: string };
 

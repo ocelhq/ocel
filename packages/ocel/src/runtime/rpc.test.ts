@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, expect, it, vi } from "vitest";
 import packageJson from "../../package.json" with { type: "json" };
-import { SDK_VERSION } from "./version.js";
+import { SDK_VERSION } from "../version.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();

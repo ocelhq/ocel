@@ -1,7 +1,7 @@
+export { UnprovisionedResourceError } from "../binding/unprovisioned.js";
 export type { Duration } from "../delivery/duration.js";
 export type { Lane } from "../delivery/lane.js";
 export type { RetryOptions } from "../delivery/retry.js";
-export { UnprovisionedResourceError } from "../utils/phase.js";
 export type { RunContext, RunOptions } from "../worker/context.js";
 export { AbortTaskRunError } from "./errors.js";
 export type { CatchErrorResult, TaskHooks, TaskResult } from "./hooks.js";

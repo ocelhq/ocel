@@ -12,7 +12,7 @@ import { type RuntimeProxy, serveRuntimeProxy } from "../testing/runtime-proxy.j
 
 const declareMock = vi.hoisted(() => vi.fn((_req: unknown) => Promise.resolve({})));
 
-vi.mock("../utils/rpc", () => ({
+vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: declareMock } },
 }));
 

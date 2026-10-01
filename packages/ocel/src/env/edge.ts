@@ -1,4 +1,4 @@
-import { callSiteFile } from "../utils/callsite.js";
+import { callSiteFile } from "../declaration/callsite.js";
 import { type Env, envAccessor, FIXED } from "./access.js";
 import {
   type EnvDefinitions,

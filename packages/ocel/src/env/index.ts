@@ -1,5 +1,5 @@
-import { callSiteFile } from "../utils/callsite.js";
-import { defer } from "../utils/defer.js";
+import { callSiteFile } from "../declaration/callsite.js";
+import { defer } from "../declaration/defer.js";
 import { type Env, envAccessor, FIXED, UNCACHED } from "./access.js";
 import { declareEnv } from "./declare.js";
 import {
