@@ -20,6 +20,9 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := refuseContainersScaledToZero(pre); err != nil {
 		return err
 	}
+	if err := refuseKVOnServerlessApps(pre); err != nil {
+		return err
+	}
 	if err := p.nagStaleEdgeKey(ctx, pre); err != nil {
 		return err
 	}
@@ -107,6 +110,27 @@ func refusePublicBuckets(pre provider.DeployPreflight) error {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"bucket %s asks to be public, and this provider provisions its buckets with public access blocked at the account's edge: serve the objects through your app or a signed url instead, or drop `public` from %s",
 			resource.Name, resource.Name)
+	}
+	return nil
+}
+
+func refuseKVOnServerlessApps(pre provider.DeployPreflight) error {
+	serverless := map[string]bool{}
+	for _, app := range pre.Deploy.Apps {
+		serverless[app.App] = app.Compute() != provider.ComputeContainer
+	}
+	for _, usage := range pre.Apps {
+		if !serverless[usage.App] {
+			continue
+		}
+		for _, resource := range usage.Resources {
+			if resource.Type != provider.BindingKV {
+				continue
+			}
+			return refusal.Refuse(refusal.CodeUnsupported,
+				"app %s uses kv %s, and this provider runs %s as functions outside the VPC the store answers in, so it could never reach it: run %s as a container app, or wait for https://github.com/ocelhq/ocel/issues/1473 (#1473), which decides how functions join the VPC",
+				usage.App, resource.Name, usage.App, usage.App)
+		}
 	}
 	return nil
 }
