@@ -220,8 +220,8 @@ func (c *connection) subscribe(frame clientFrame) {
 		c.replyError(frameSubscribeError, frame.ID, errorUnauthorized, err.Error())
 		return
 	}
-	c.reply(idFrame{Type: frameSubscribeSuccess, ID: frame.ID})
 	c.subscriptions[frame.ID] = c.g.hub.Subscribe(frame.Channel, frame.ID, c.queue)
+	c.reply(idFrame{Type: frameSubscribeSuccess, ID: frame.ID})
 }
 
 func (c *connection) unsubscribe(frame clientFrame) {
