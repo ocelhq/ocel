@@ -19,7 +19,7 @@ import (
 type Writer struct {
 	ctx     context.Context
 	store   *BucketStore
-	reached *reachedBucket
+	bound   *boundBucket
 	key     string
 	options writeOptions
 
@@ -45,7 +45,7 @@ func (b *BucketStore) NewWriter(ctx context.Context, key string, opts ...WriteOp
 	for _, opt := range opts {
 		opt.applyWrite(&w.options)
 	}
-	w.reached, w.err = b.runtime("NewWriter")
+	w.bound, w.err = b.connect("NewWriter")
 	return w
 }
 
@@ -132,9 +132,9 @@ func (w *Writer) discard() {
 	}
 	id := w.uploadID
 	w.uploadID = ""
-	_, _ = w.reached.client.AbortMultipart(context.WithoutCancel(w.ctx),
+	_, _ = w.bound.client.AbortMultipart(context.WithoutCancel(w.ctx),
 		&bucketv1.AbortMultipartRequest{
-			Bucket:   w.reached.bucket,
+			Bucket:   w.bound.bucket,
 			Key:      w.key,
 			UploadId: id,
 		})
@@ -169,8 +169,8 @@ func (w *Writer) drain(final bool) error {
 }
 
 func (w *Writer) begin() error {
-	res, err := w.reached.client.CreateMultipart(w.ctx, &bucketv1.CreateMultipartRequest{
-		Bucket:       w.reached.bucket,
+	res, err := w.bound.client.CreateMultipart(w.ctx, &bucketv1.CreateMultipartRequest{
+		Bucket:       w.bound.bucket,
 		Key:          w.key,
 		ContentType:  w.options.contentType,
 		CacheControl: w.options.cacheControl,
@@ -196,8 +196,8 @@ func (w *Writer) flush() error {
 	for _, part := range w.pending {
 		numbers = append(numbers, part.number)
 	}
-	res, err := w.reached.client.SignParts(w.ctx, &bucketv1.SignPartsRequest{
-		Bucket:      w.reached.bucket,
+	res, err := w.bound.client.SignParts(w.ctx, &bucketv1.SignPartsRequest{
+		Bucket:      w.bound.bucket,
 		Key:         w.key,
 		UploadId:    w.uploadID,
 		PartNumbers: numbers,
@@ -265,8 +265,8 @@ func (w *Writer) completeMultipart() error {
 		return int(a.GetPartNumber() - b.GetPartNumber())
 	})
 	id := w.uploadID
-	_, err := w.reached.client.CompleteMultipart(w.ctx, &bucketv1.CompleteMultipartRequest{
-		Bucket:      w.reached.bucket,
+	_, err := w.bound.client.CompleteMultipart(w.ctx, &bucketv1.CompleteMultipartRequest{
+		Bucket:      w.bound.bucket,
 		Key:         w.key,
 		UploadId:    id,
 		Parts:       w.completed,
