@@ -172,3 +172,13 @@ func TestABootstrapRequestingTheKVNetworkRaisesItAndDroppingItTakesItDown(t *tes
 		t.Errorf("removing a bootstrap with the kv network left %v", server.networks)
 	}
 }
+
+func TestAConnectionPolicyCreateAnsweredWithAnUnnamedUnfinishedOperationIsAnError(t *testing.T) {
+	b, server := servingNetworks(t)
+	server.unnamed = true
+
+	err := b.raiseNetwork(context.Background(), environment.TierProduction, nil)
+	if err == nil || !strings.Contains(err.Error(), "no name") {
+		t.Errorf("raiseNetwork() = %v, want an operation nothing can poll named as an error rather than taken as done", err)
+	}
+}

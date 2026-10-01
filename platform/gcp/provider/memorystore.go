@@ -13,8 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/api/googleapi"
-
-	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const memorystoreHost = "https://memorystore.googleapis.com"
@@ -247,19 +245,16 @@ func memorystoreRefusal(code int, answer []byte) error {
 }
 
 func (m memorystore) awaited(ctx context.Context, doing string, started *memorystoreOperation) (*memorystoreOperation, error) {
-	finished, err := waiting(ctx, memorystorePatience, doing, func() (*memorystoreOperation, error) {
-		if started.Done || started.Name == "" {
-			return started, nil
-		}
-		return m.readOperation(ctx, started.Name)
-	}, func(polled *memorystoreOperation) bool { return polled.Done || polled.Name == "" })
-	if err != nil {
-		return nil, err
+	return awaitOperation(ctx, memorystorePatience, "Memorystore", doing, started, (*memorystoreOperation).outcome,
+		func(name string) (*memorystoreOperation, error) { return m.readOperation(ctx, name) })
+}
+
+func (o *memorystoreOperation) outcome() operationOutcome {
+	outcome := operationOutcome{name: o.Name, done: o.Done}
+	if o.Error != nil {
+		outcome.failure = failureOf(int64(o.Error.Code), o.Error.Message)
 	}
-	if finished.Error != nil {
-		return nil, refusal.Refuse(refusal.CodeNotReady, "Memorystore refused %s: %s", doing, finished.Error.Message)
-	}
-	return finished, nil
+	return outcome
 }
 
 var memorystorePatience = patience{attempts: 180, ceiling: 15 * time.Second}

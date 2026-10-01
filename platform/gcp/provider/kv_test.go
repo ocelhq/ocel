@@ -317,3 +317,13 @@ func TestAStoreMemorystoreHoldsInAStateThatNeverSettlesIsRefusedWithoutWaiting(t
 		})
 	}
 }
+
+func TestAStoreCreateAnsweredWithAnUnnamedUnfinishedOperationIsAnError(t *testing.T) {
+	p, server := servingMemorystore(t)
+	server.unnamed = true
+
+	_, err := p.ProvisionKV(context.Background(), aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20}), nil)
+	if err == nil || !strings.Contains(err.Error(), "no name") {
+		t.Errorf("ProvisionKV() = %v, want an operation nothing can poll named as an error rather than taken as done", err)
+	}
+}
