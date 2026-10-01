@@ -93,9 +93,8 @@ type BucketStore struct {
 	singleCeiling int64
 	partSize      int64
 
-	once  sync.Once
+	mu    sync.Mutex
 	bound *boundBucket
-	err   error
 }
 
 type boundBucket struct {
@@ -361,25 +360,26 @@ func (b *BucketStore) connect(access string) (*boundBucket, error) {
 	if discovering() {
 		return nil, &UnprovisionedError{Resource: b.resource(), Access: access}
 	}
-	b.once.Do(func() {
-		delivered, err := binding(b.name, bindingsv1.BindingType_BINDING_TYPE_BUCKET)
-		if err != nil {
-			b.err = err
-			return
-		}
-		address, authorized, err := readRuntimeConnection()
-		if err != nil {
-			b.err = err
-			return
-		}
-		properties := delivered.GetBucket()
-		b.bound = &boundBucket{
-			client:        bucketv1connect.NewBucketServiceClient(b.http, address, authorized),
-			bucket:        properties.GetBucket(),
-			publicBaseURL: properties.GetPublicBaseUrl(),
-		}
-	})
-	return b.bound, b.err
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.bound != nil {
+		return b.bound, nil
+	}
+	delivered, err := binding(b.name, bindingsv1.BindingType_BINDING_TYPE_BUCKET)
+	if err != nil {
+		return nil, err
+	}
+	address, authorized, err := readRuntimeConnection()
+	if err != nil {
+		return nil, err
+	}
+	properties := delivered.GetBucket()
+	b.bound = &boundBucket{
+		client:        bucketv1connect.NewBucketServiceClient(b.http, address, authorized),
+		bucket:        properties.GetBucket(),
+		publicBaseURL: properties.GetPublicBaseUrl(),
+	}
+	return b.bound, nil
 }
 
 func (b *BucketStore) resource() string {

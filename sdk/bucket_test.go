@@ -109,3 +109,19 @@ func TestABucketIsPrivateWithNoOriginsByDefault(t *testing.T) {
 		t.Errorf("bucket = %v, want neither public nor allowed origins", bucket)
 	}
 }
+
+func TestABucketConnectsOnceTheBindingArrivesAfterAFailedConnect(t *testing.T) {
+	store := ocel.Bucket("late")
+
+	var missing *ocel.MissingBindingError
+	if _, err := store.PublicURL("a"); !errors.As(err, &missing) {
+		t.Fatalf("PublicURL() before the binding err = %v, want a *ocel.MissingBindingError", err)
+	}
+	t.Setenv("OCEL_RUNTIME_ADDRESS", "http://127.0.0.1:1")
+	t.Setenv("OCEL_SESSION_TOKEN", storeToken)
+	t.Setenv("OCEL_RESOURCE_BUCKET_late", fmt.Sprintf(`{"name":"late","bucket":{"bucket":%q,"publicBaseUrl":%q}}`, storeBucket, publicBase))
+
+	if _, err := store.PublicURL("a"); err != nil {
+		t.Errorf("PublicURL() after the binding arrived = %v, want the bucket connected", err)
+	}
+}
