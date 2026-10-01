@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { repoRoot } from "../../paths";
@@ -7,6 +7,7 @@ import {
   exposedServices,
   hasServicesUnder,
   reachable,
+  readServices,
   servedBy,
   servicesIn,
   strayServices,
@@ -131,5 +132,37 @@ describe("exposedServices", () => {
     ]);
 
     expect(JSON.parse(exposed)).toEqual([held, api]);
+  });
+});
+
+describe("readServices", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it("holds the services of every page of the listing", async () => {
+    const asked: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      asked.push(`${url.pathname}${url.search}`);
+      return url.searchParams.get("pageToken") === "next"
+        ? Response.json({ services: [{ name: "b" }] })
+        : Response.json({ services: [{ name: "a" }], nextPageToken: "next" });
+    }) as typeof fetch;
+
+    const read = await readServices({
+      endpoint: "http://127.0.0.1:4566",
+      project: "p",
+      region: "r",
+      token: undefined,
+    });
+
+    expect(read).toEqual({ services: [{ name: "a" }, { name: "b" }] });
+    expect(asked).toEqual([
+      "/v2/projects/p/locations/r/services",
+      "/v2/projects/p/locations/r/services?pageToken=next",
+    ]);
   });
 });
