@@ -30,6 +30,13 @@ func writeRefusal(w http.ResponseWriter, err error) {
 	writeAnswer(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 }
 
+func describeError(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -40,35 +47,33 @@ func main() {
 		writeAnswer(w, http.StatusOK, map[string]any{"ok": true, "app": "web"})
 	})
 
-	http.HandleFunc("POST /api/tasks/exact-echo/trigger", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("GET /api/wire/names", func(w http.ResponseWriter, _ *http.Request) {
+		writeAnswer(w, http.StatusOK, map[string]infra.Names{"task": infra.ReadTaskNames(), "topic": infra.ReadTopicNames()})
+	})
+
+	http.HandleFunc("POST /api/wire/trigger", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			writeRefusal(w, err)
 			return
 		}
+		since := infra.CountRequests()
 		handle, err := infra.ExactEcho.Trigger(r.Context(), json.RawMessage(body))
-		if err != nil {
-			writeRefusal(w, err)
-			return
-		}
-		writeAnswer(w, http.StatusOK, map[string]string{"id": handle.ID})
+		writeAnswer(w, http.StatusOK, map[string]any{"id": handle.ID, "error": describeError(err), "requests": infra.ListRequestsSince(since)})
 	})
 
-	http.HandleFunc("POST /api/topics/exact-orders/send", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /api/wire/send", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			writeRefusal(w, err)
 			return
 		}
+		since := infra.CountRequests()
 		messageID, err := infra.ExactOrders.Send(r.Context(), json.RawMessage(body))
-		if err != nil {
-			writeRefusal(w, err)
-			return
-		}
-		writeAnswer(w, http.StatusOK, map[string]string{"messageId": messageID})
+		writeAnswer(w, http.StatusOK, map[string]any{"messageId": messageID, "error": describeError(err), "requests": infra.ListRequestsSince(since)})
 	})
 
-	http.HandleFunc("GET /api/runs/{id}", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("GET /api/wire/runs/{id}", func(w http.ResponseWriter, r *http.Request) {
 		run, err := ocel.RetrieveRun(r.Context(), r.PathValue("id"))
 		if err != nil {
 			writeRefusal(w, err)
@@ -80,22 +85,40 @@ func main() {
 		})
 	})
 
-	http.HandleFunc("GET /api/seen/{tag}", func(w http.ResponseWriter, r *http.Request) {
-		page, err := ocel.ListRuns(r.Context(), ocel.ForTask(infra.SeenTask.Name()), ocel.Tags(r.PathValue("tag")), ocel.Statuses(ocel.RunCompleted))
+	http.HandleFunc("GET /api/wire/sightings/{tag}", func(w http.ResponseWriter, r *http.Request) {
+		page, err := ocel.ListRuns(r.Context(), ocel.ForTask(infra.SightingTask.Name()), ocel.Tags(r.PathValue("tag")), ocel.Statuses(ocel.RunCompleted))
 		if err != nil {
 			writeRefusal(w, err)
 			return
 		}
-		seen := []infra.Sighting{}
+		sightings := []infra.Sighting{}
 		for _, run := range page.Runs {
-			var one infra.Sighting
-			if err := json.Unmarshal(run.Output, &one); err != nil {
+			var sighting infra.Sighting
+			if err := json.Unmarshal(run.Output, &sighting); err != nil {
 				writeRefusal(w, err)
 				return
 			}
-			seen = append(seen, one)
+			sightings = append(sightings, sighting)
 		}
-		writeAnswer(w, http.StatusOK, seen)
+		writeAnswer(w, http.StatusOK, sightings)
+	})
+
+	http.HandleFunc("GET /api/wire/envelopes/{tag}", func(w http.ResponseWriter, r *http.Request) {
+		page, err := ocel.ListRuns(r.Context(), ocel.ForTask(infra.EnvelopeTask.Name()), ocel.Tags(r.PathValue("tag")), ocel.Statuses(ocel.RunCompleted))
+		if err != nil {
+			writeRefusal(w, err)
+			return
+		}
+		envelopes := []string{}
+		for _, run := range page.Runs {
+			var recorded infra.RecordedEnvelope
+			if err := json.Unmarshal(run.Output, &recorded); err != nil {
+				writeRefusal(w, err)
+				return
+			}
+			envelopes = append(envelopes, recorded.RecordedEnvelope)
+		}
+		writeAnswer(w, http.StatusOK, envelopes)
 	})
 
 	log.Printf("tasks go listening on http://localhost:%s", port)
