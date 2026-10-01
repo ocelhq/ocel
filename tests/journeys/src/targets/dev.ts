@@ -123,11 +123,11 @@ async function labelled(kind: "container" | "volume", project: string): Promise<
   return stdout.split("\n").filter((line) => line.trim() !== "");
 }
 
-export function keptRunning(before: Map<string, string>, after: Map<string, string>): string[] {
+export function findKeptRunning(before: Map<string, string>, after: Map<string, string>): string[] {
   return [...after].filter(([name, started]) => before.get(name) === started).map(([name]) => name);
 }
 
-async function startTimes(project: string): Promise<Map<string, string>> {
+async function readStartTimes(project: string): Promise<Map<string, string>> {
   const containers = await labelled("container", project);
   if (containers.length === 0) {
     return new Map();
@@ -244,9 +244,9 @@ export class DevTarget implements Target, Restart, Exposure {
 
   async restart(cell: CellUnderTest): Promise<Deployment> {
     const project = devProject(this.servedFor(cell).dir);
-    const before = await startTimes(project);
+    const before = await readStartTimes(project);
     const deployed = await this.serveApps(cell, await this.stopApps(cell), "restart");
-    const kept = keptRunning(before, await startTimes(project));
+    const kept = findKeptRunning(before, await readStartTimes(project));
     if (kept.length > 0) {
       throw new Error(
         `${kept.join(", ")} kept running while ocel dev stopped and started again, so nothing ${cell.name} declared was restarted`,
