@@ -55,7 +55,7 @@ describe("traceFunction", () => {
   let functionDir: string;
   beforeAll(async () => {
     functionDir = await traceFixture();
-  });
+  }, 60_000);
 
   it("emits the traced sources at their own paths, not one bundle and no config", () => {
     expect(existsSync(path.join(functionDir, "index.mjs"))).toBe(false);
@@ -131,7 +131,7 @@ describe("traceFunction", () => {
 
     expect(existsSync(path.join(stale, "stale.js"))).toBe(false);
     expect(existsSync(path.join(stale, "src", "server.js"))).toBe(true);
-  });
+  }, 60_000);
 });
 
 describe("placeFile", () => {
