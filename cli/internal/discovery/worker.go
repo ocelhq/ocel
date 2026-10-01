@@ -225,3 +225,59 @@ func pythonWorkerCommand(ctx context.Context, configDir string, roots []Root, se
 	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
 	return cmd, nil
 }
+
+func WorkerRoot(configDir string, roots []Root, worker string, sources []string) (Root, error) {
+	var served Root
+	var servedAt string
+	for _, source := range sources {
+		colon := strings.LastIndex(source, ":")
+		if colon <= 0 {
+			continue
+		}
+		file := source[:colon]
+		if !filepath.IsAbs(file) {
+			file = filepath.Join(configDir, file)
+		}
+		at := displayedSite(configDir, file, source[colon+1:])
+		root, found := rootContaining(roots, file)
+		if !found {
+			return Root{}, fmt.Errorf("worker %q serves %s, which is in no discovery folder", worker, at)
+		}
+		if servedAt == "" {
+			served, servedAt = root, at
+			continue
+		}
+		if root.Language != served.Language {
+			return Root{}, fmt.Errorf("worker %q serves %s in %s and %s in %s, and a worker runs in one language: give one of them a worker of its own", worker, servedAt, served.Language, at, root.Language)
+		}
+	}
+	if servedAt != "" {
+		return served, nil
+	}
+	if len(roots) == 1 {
+		return roots[0], nil
+	}
+	return Root{}, fmt.Errorf("worker %q serves nothing declared in a discovery folder", worker)
+}
+
+func displayedSite(configDir, file, line string) string {
+	if rel, err := filepath.Rel(configDir, file); err == nil && !strings.HasPrefix(rel, "..") {
+		file = filepath.ToSlash(rel)
+	}
+	return file + ":" + line
+}
+
+func rootContaining(roots []Root, file string) (Root, bool) {
+	var deepest Root
+	found := false
+	for _, root := range roots {
+		rel, err := filepath.Rel(root.Dir, file)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if !found || len(root.Dir) > len(deepest.Dir) {
+			deepest, found = root, true
+		}
+	}
+	return deepest, found
+}
