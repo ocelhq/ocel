@@ -2,12 +2,11 @@ package deploy
 
 import (
 	"context"
-	"maps"
 	"slices"
 
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -29,30 +28,21 @@ func (r *release) declareKV(pctx *sdk.Context, project, env string, resource pro
 	return registerKV(pctx, project, env, resource.Name, args, vpcID, vpcCIDR, subnetIDs)
 }
 
-func (r *release) kvTokensProvisioned(ctx context.Context, ref provider.StackRef, progress progress.Log) (map[string]string, error) {
-	outputs, err := r.automation.Outputs(ctx, ref, progress)
-	if err != nil {
-		return nil, err
-	}
-	tokens := map[string]string{}
-	for name, output := range outputs {
-		fields, mapped := output.Value.(map[string]any)
-		if !mapped {
-			continue
-		}
-		if parameter, ok := fields[outputKeyAuthTokenParameter].(string); ok && parameter != "" {
-			tokens[name] = parameter
-		}
-	}
-	return tokens, nil
+func (r *release) listKVTokens(ctx context.Context, ref provider.StackRef) ([]string, error) {
+	return listKVTokens(ctx, r.cfg.Parameters, kvTokenPath(r.cfg.KVTokenRoot, naming.Sanitize(ref.Project), ref.Name.Env))
 }
 
-func kvTokensRemoved(prior map[string]string, spec provider.StackSpec) []string {
-	removed := maps.Clone(prior)
-	for _, resource := range spec.Resources {
-		if resource.Type == provider.BindingKV && resource.Binding == "" {
-			delete(removed, resource.Name)
+func (r *release) findUndeclaredKVTokens(listed []string, spec provider.StackSpec) []string {
+	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
+	var undeclared []string
+	for _, name := range listed {
+		declared := slices.ContainsFunc(spec.Resources, func(resource provider.Resource) bool {
+			return resource.Type == provider.BindingKV && resource.Binding == "" &&
+				kvTokenParameter(r.cfg.KVTokenRoot, project, env, resource.Name) == name
+		})
+		if !declared {
+			undeclared = append(undeclared, name)
 		}
 	}
-	return slices.Sorted(maps.Values(removed))
+	return undeclared
 }

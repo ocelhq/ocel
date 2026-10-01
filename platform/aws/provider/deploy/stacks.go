@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"os"
 	"slices"
 	"strconv"
@@ -417,9 +416,9 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 		r.pending.add(work.stack, work.sets, progress)
 		defer r.pending.drop(work.stack, work.sets)
 	}
-	var priorTokens map[string]string
+	var listedTokens []string
 	if spec.App == nil {
-		if priorTokens, err = r.kvTokensProvisioned(ctx, spec.Ref, progress); err != nil {
+		if listedTokens, err = r.listKVTokens(ctx, spec.Ref); err != nil {
 			return provider.StackResult{}, err
 		}
 	}
@@ -430,7 +429,7 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := deleteKVTokens(ctx, r.cfg.Parameters, kvTokensRemoved(priorTokens, spec)); err != nil {
+	if err := deleteKVTokens(ctx, r.cfg.Parameters, r.findUndeclaredKVTokens(listedTokens, spec)); err != nil {
 		return provider.StackResult{}, err
 	}
 	if err := writeOriginRecord(ctx, r.cfg, spec.Ref.Name.App, work, result); err != nil {
@@ -505,17 +504,17 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress pr
 	if err != nil {
 		return err
 	}
-	var tokens map[string]string
-	if ref.Name.IsInfra() {
-		if tokens, err = opened.kvTokensProvisioned(ctx, ref, progress); err != nil {
-			return err
-		}
-	}
 	if err := opened.automation.Destroy(ctx, ref, progress); err != nil {
 		return err
 	}
-	if err := deleteKVTokens(ctx, opened.cfg.Parameters, slices.Sorted(maps.Values(tokens))); err != nil {
-		return err
+	if ref.Name.IsInfra() {
+		tokens, err := opened.listKVTokens(ctx, ref)
+		if err != nil {
+			return err
+		}
+		if err := deleteKVTokens(ctx, opened.cfg.Parameters, tokens); err != nil {
+			return err
+		}
 	}
 	if opened.cfg.Tags != nil {
 		if err := opened.cfg.Tags.Sweep(ctx, naming.Sanitize(ref.Project), ref.Name); err != nil {

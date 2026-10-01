@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
@@ -125,6 +126,60 @@ func TestDestroyingAStackDeletesTheTokensOfItsStores(t *testing.T) {
 	}
 	if !slices.Equal(params.deleted, []string{conformanceKVToken("c-kv")}) {
 		t.Errorf("Destroy() deleted %v, want the token of the stack's store", params.deleted)
+	}
+}
+
+func TestATokenLeftByAFailedFirstDeployIsDeletedByTheNextDeployThatDropsTheStore(t *testing.T) {
+	t.Parallel()
+
+	params := newFakeParameters()
+	params.values[conformanceKVToken("c-kv")] = "minted-before-the-deploy-failed"
+	params.values[conformanceKVToken("c-kept")] = "the-kept-token"
+	otherEnv := kvTokenParameter(conformanceKVTokenRoot, "conformance", "staging", "c-kv")
+	params.values[otherEnv] = "another-environments-token"
+	engine := &mockedEngine{outputs: auto.OutputMap{
+		"c-kept":   kvOutput("c-kept"),
+		"c-bucket": auto.OutputValue{Value: map[string]any{outputKeyBucket: "conformance-uploads"}},
+	}}
+	if _, err := kvStacks(engine, params).Provision(context.Background(), provider.StackSpec{
+		Ref:  conformanceInfra,
+		Kind: provider.StackInfra,
+		Resources: []provider.Resource{
+			{Name: "c-kept", Type: provider.BindingKV, KV: &provider.KVSpec{}},
+			{Name: "c-bucket", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
+		},
+	}, nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+
+	if !slices.Equal(params.deleted, []string{conformanceKVToken("c-kv")}) {
+		t.Errorf("the deploy deleted %v, want the token no declared store uses, though no stack output ever named it", params.deleted)
+	}
+}
+
+func TestDestroyingAStackDeletesEveryTokenUnderItsEnvironmentAndNoOther(t *testing.T) {
+	t.Parallel()
+
+	params := newFakeParameters()
+	var want []string
+	for i := range 12 {
+		name := conformanceKVToken("c-kv-" + strconv.Itoa(i))
+		params.values[name] = "a-token"
+		want = append(want, name)
+	}
+	slices.Sort(want)
+	otherEnv := kvTokenParameter(conformanceKVTokenRoot, "conformance", "staging", "c-kv")
+	params.values[otherEnv] = "another-environments-token"
+	engine := &mockedEngine{outputs: auto.OutputMap{}}
+	if err := kvStacks(engine, params).Destroy(context.Background(), conformanceInfra, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	deleted := slices.Sorted(slices.Values(params.deleted))
+	if !slices.Equal(deleted, want) {
+		t.Errorf("Destroy() deleted %v, want every token under the environment, the ones no failed deploy recorded among them", deleted)
+	}
+	if _, kept := params.values[otherEnv]; !kept {
+		t.Error("Destroy() deleted another environment's token")
 	}
 }
 

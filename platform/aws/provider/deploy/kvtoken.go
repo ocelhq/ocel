@@ -25,10 +25,33 @@ type ParametersAPI interface {
 	GetParameter(ctx context.Context, in *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
 	PutParameter(ctx context.Context, in *ssm.PutParameterInput, optFns ...func(*ssm.Options)) (*ssm.PutParameterOutput, error)
 	DeleteParameter(ctx context.Context, in *ssm.DeleteParameterInput, optFns ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error)
+	GetParametersByPath(ctx context.Context, in *ssm.GetParametersByPathInput, optFns ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error)
+}
+
+func kvTokenPath(root, project, env string) string {
+	return strings.Join([]string{root, project, env}, "/")
 }
 
 func kvTokenParameter(root, project, env, logicalName string) string {
-	return strings.Join([]string{root, project, env, logicalName}, "/")
+	return kvTokenPath(root, project, env) + "/" + logicalName
+}
+
+func listKVTokens(ctx context.Context, params ParametersAPI, path string) ([]string, error) {
+	if params == nil {
+		return nil, errors.New("no SSM client configured")
+	}
+	var names []string
+	pages := ssm.NewGetParametersByPathPaginator(params, &ssm.GetParametersByPathInput{Path: aws.String(path)})
+	for pages.HasMorePages() {
+		page, err := pages.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list %s: %w", path, err)
+		}
+		for _, parameter := range page.Parameters {
+			names = append(names, aws.ToString(parameter.Name))
+		}
+	}
+	return names, nil
 }
 
 func mintKVToken() (string, error) {
