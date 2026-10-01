@@ -8,7 +8,8 @@ import unicodedata
 from collections.abc import Sequence
 from typing import Any, overload
 
-from ocel._declare import declare_env, discovering, report_env_problems
+from ocel._declare import declare_env, is_discovering, report_env_problems
+from ocel._error import format_error
 from ocel._live import live_value
 from ocel.gen.app.resources.v1.variables_pb import (
     DeclareEnvRequest,
@@ -123,9 +124,9 @@ class Secret:
         """The secret's current value. It raises an :class:`EnvValueError` when the key
         has no value any more, the way the read of a missing variable fails, rather than
         hand back an empty secret."""
-        delivered = _delivered(self._key)
+        delivered = _read_delivered_value(self._key)
         if delivered is None:
-            raise _unset(self._key)
+            raise _refuse_unset(self._key)
         return delivered
 
     def __str__(self) -> str:
@@ -211,9 +212,9 @@ def var(
 
 class _Variable:
     __slots__ = (
-        "attr",
+        "attribute",
         "key",
-        "klass",
+        "variable_class",
         "target",
         "optional",
         "folders",
@@ -224,9 +225,9 @@ class _Variable:
 
     def __init__(
         self,
-        attr: str,
+        attribute: str,
         key: str,
-        klass: VariableClass,
+        variable_class: VariableClass,
         target: Any,
         optional: bool,
         folders: tuple[str, ...],
@@ -234,9 +235,9 @@ class _Variable:
         default_value: Any,
         description: str,
     ) -> None:
-        self.attr = attr
+        self.attribute = attribute
         self.key = key
-        self.klass = klass
+        self.variable_class = variable_class
         self.target = target
         self.optional = optional
         self.folders = folders
@@ -260,11 +261,11 @@ class _Variable:
     def has_schema(self) -> bool:
         return self.target is not str and not self.live
 
-    def complaint(self, message: str) -> str:
-        if self.klass is VariableClass.PLAIN:
+    def redact_message(self, message: str) -> str:
+        if self.variable_class is VariableClass.PLAIN:
             return message
         return (
-            f"withheld, because a '{_CLASS_NAMES[self.klass]}' value's parse message "
+            f"withheld, because a '{_CLASS_NAMES[self.variable_class]}' value's parse message "
             f"can quote the value itself"
         )
 
@@ -273,16 +274,16 @@ class _Variable:
             return self
         value = self.read()
         if not self.live:
-            instance.__dict__[self.attr] = value
+            instance.__dict__[self.attribute] = value
         return value
 
     def read(self) -> Any:
         if self.folders and os.environ.get(APP_FOLDER_ENV, "") not in self.folders:
             raise EnvScopeError(self.key, self.folders, os.environ.get(APP_FOLDER_ENV, ""))
-        raw = _delivered(self.key)
+        raw = _read_delivered_value(self.key)
         if self.live:
             if raw is None:
-                raise _unset(self.key)
+                raise _refuse_unset(self.key)
             return Secret(self.key)
         if raw is None:
             if self.default_value is not _UNSET:
@@ -292,13 +293,14 @@ class _Variable:
             elif self.optional:
                 return None
             else:
-                raise _unset(self.key)
+                raise _refuse_unset(self.key)
         try:
-            return _parse(self.target, raw)
+            return _parse_value(self.target, raw)
         except Exception as error:
+            message = self.redact_message(format_error(error))
             raise EnvValueError(
                 self.key,
-                f"is set but does not satisfy its type: {self.complaint(_said(error))}. "
+                f"is set but does not satisfy its type: {message}. "
                 f"Fix it with `ocel env set {self.key}=<VALUE>`.",
             ) from None
 
@@ -341,10 +343,10 @@ class Group:
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         _refuse_restatement(cls, Group)
-        members = _members(cls)
+        members = _build_group_members(cls)
         _MEMBERS[cls] = members
         for member in members:
-            setattr(cls, member.attr, member)
+            setattr(cls, member.attribute, member)
 
 
 class Env:
@@ -375,18 +377,18 @@ class Env:
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         _refuse_restatement(cls, Env)
-        site = _site(cls)
-        entries = _entries(cls, site)
+        site = _find_declaring_site(cls)
+        entries = _register_entries(cls, site)
         for entry in entries:
-            setattr(cls, entry.attr, entry)
-        if discovering():
-            _declare(entries, site)
+            setattr(cls, entry.attribute, entry)
+        if is_discovering():
+            _declare_entries(entries, site)
 
 
 def deployment_url() -> str:
     """The absolute url this app is served on, scheme and all: the deployed hostname, or
     the local one under ``ocel dev``. Ocel writes it; nothing declares it."""
-    delivered = _delivered(URL_KEY)
+    delivered = _read_delivered_value(URL_KEY)
     if delivered is None:
         raise EnvValueError(
             URL_KEY,
@@ -399,27 +401,27 @@ def deployment_url() -> str:
 
 
 class _Site:
-    __slots__ = ("file", "line", "scope", "cls")
+    __slots__ = ("file", "line", "scope", "class_name")
 
-    def __init__(self, file: str, line: int, scope: dict[str, Any], cls: str) -> None:
+    def __init__(self, file: str, line: int, scope: dict[str, Any], class_name: str) -> None:
         self.file = file
         self.line = line
         self.scope = scope
-        self.cls = cls
+        self.class_name = class_name
 
     def __str__(self) -> str:
         return f"{self.file}:{self.line}"
 
-    def rerun_of(self, claimed: "_Site") -> bool:
+    def is_rerun_of(self, claimed: "_Site") -> bool:
         return self.file == claimed.file and self.scope is not claimed.scope
 
 
-def _site(cls: type) -> _Site:
-    frame = _caller()
+def _find_declaring_site(cls: type) -> _Site:
+    frame = _find_caller_frame()
     return _Site(frame.filename, frame.lineno, frame.frame.f_globals, cls.__qualname__)
 
 
-def _caller() -> inspect.FrameInfo:
+def _find_caller_frame() -> inspect.FrameInfo:
     for frame in inspect.stack(0):
         if frame.filename != __file__:
             return frame
@@ -437,16 +439,16 @@ def _refuse_restatement(cls: type, base: type) -> None:
             )
 
 
-def _members(cls: type) -> tuple[_Variable, ...]:
+def _build_group_members(cls: type) -> tuple[_Variable, ...]:
     members: list[_Variable] = []
-    for attr, annotation in inspect.get_annotations(cls, eval_str=True).items():
-        if _group_annotation(annotation)[0] is not None:
+    for attribute, annotation in inspect.get_annotations(cls, eval_str=True).items():
+        if _parse_group_annotation(annotation)[0] is not None:
             raise EnvDefinitionError(
                 "",
-                f"{cls.__name__}.{attr} is itself a group. A group contains "
+                f"{cls.__name__}.{attribute} is itself a group. A group contains "
                 f"variables, and groups nest one level only.",
             )
-        member = _definition(cls, attr, annotation)
+        member = _build_variable(cls, attribute, annotation)
         if any(seen.key == member.key for seen in members):
             raise EnvDefinitionError(member.key, _DECLARED_TWICE)
         members.append(member)
@@ -459,26 +461,26 @@ def _members(cls: type) -> tuple[_Variable, ...]:
     return tuple(members)
 
 
-def _entries(cls: type, site: _Site) -> "list[_Variable | _Group]":
+def _register_entries(cls: type, site: _Site) -> "list[_Variable | _Group]":
     entries: list[_Variable | _Group] = []
     with _owner_lock:
-        for attr, annotation in inspect.get_annotations(cls, eval_str=True).items():
-            target, optional = _group_annotation(annotation)
+        for attribute, annotation in inspect.get_annotations(cls, eval_str=True).items():
+            target, optional = _parse_group_annotation(annotation)
             if target is None:
-                entry: _Variable | _Group = _definition(cls, attr, annotation)
+                entry: _Variable | _Group = _build_variable(cls, attribute, annotation)
             else:
-                entry = _group(cls, attr, target, optional)
+                entry = _build_group(cls, attribute, target, optional)
                 if any(other.key == entry.key for other in entries if isinstance(other, _Group)):
                     raise EnvDefinitionError(
                         entry.key,
                         "is declared by two attributes of the same class. A group is "
                         "declared by exactly one attribute.",
                     )
-            for variable in _variables(entry):
-                if any(seen.key == variable.key for seen in _flattened(entries)):
+            for variable in _list_variables(entry):
+                if any(seen.key == variable.key for seen in _list_all_variables(entries)):
                     raise EnvDefinitionError(variable.key, _DECLARED_TWICE)
                 claimed = _owner.get(variable.key)
-                if claimed is not None and not site.rerun_of(claimed):
+                if claimed is not None and not site.is_rerun_of(claimed):
                     if claimed.file != site.file:
                         raise EnvDefinitionError(
                             variable.key,
@@ -487,36 +489,36 @@ def _entries(cls: type, site: _Site) -> "list[_Variable | _Group]":
                         )
                     raise EnvDefinitionError(
                         variable.key,
-                        f"is already declared by {claimed.cls} in {claimed.file}. A key "
+                        f"is already declared by {claimed.class_name} in {claimed.file}. A key "
                         f"is declared by exactly one class.",
                     )
             entries.append(entry)
-        for variable in _flattened(entries):
+        for variable in _list_all_variables(entries):
             _owner[variable.key] = site
     return entries
 
 
-def _variables(entry: "_Variable | _Group") -> tuple[_Variable, ...]:
+def _list_variables(entry: "_Variable | _Group") -> tuple[_Variable, ...]:
     return entry.members if isinstance(entry, _Group) else (entry,)
 
 
-def _flattened(entries: Sequence["_Variable | _Group"]) -> list[_Variable]:
-    return [variable for entry in entries for variable in _variables(entry)]
+def _list_all_variables(entries: Sequence["_Variable | _Group"]) -> list[_Variable]:
+    return [variable for entry in entries for variable in _list_variables(entry)]
 
 
 class _Group:
-    __slots__ = ("attr", "key", "target", "optional", "description", "members")
+    __slots__ = ("attribute", "key", "target", "optional", "description", "members")
 
     def __init__(
         self,
-        attr: str,
+        attribute: str,
         key: str,
         target: type,
         optional: bool,
         description: str,
         members: tuple[_Variable, ...],
     ) -> None:
-        self.attr = attr
+        self.attribute = attribute
         self.key = key
         self.target = target
         self.optional = optional
@@ -524,49 +526,49 @@ class _Group:
         self.members = members
 
     @property
-    def on(self) -> bool:
+    def is_on(self) -> bool:
         return not self.optional or any(
-            _delivered(member.key) is not None for member in self.members
+            _read_delivered_value(member.key) is not None for member in self.members
         )
 
     def __get__(self, instance: object, owner: type | None = None) -> Any:
         if instance is None:
             return self
-        value = self.target() if self.on else None
-        instance.__dict__[self.attr] = value
+        value = self.target() if self.is_on else None
+        instance.__dict__[self.attribute] = value
         return value
 
 
-def _group(cls: type, attr: str, target: type, optional: bool) -> _Group:
-    assigned = cls.__dict__.get(attr, _UNSET)
+def _build_group(cls: type, attribute: str, target: type, optional: bool) -> _Group:
+    assigned = cls.__dict__.get(attribute, _UNSET)
     if optional and assigned is None:
         assigned = _UNSET
     if assigned is not _UNSET and not isinstance(assigned, _GroupMarker):
         raise EnvDefinitionError(
-            attr,
+            attribute,
             "is a group with a value of its own. A group attribute takes ocel.group(), "
             "or None to leave an optional one unset.",
         )
     marker = assigned if isinstance(assigned, _GroupMarker) else None
-    key = (marker.key if marker and marker.key else None) or attr
+    key = (marker.key if marker and marker.key else None) or attribute
     if "#" in key or any(unicodedata.category(character) == "Cc" for character in key):
         raise EnvDefinitionError(
             key, "is not a usable group name: a group name is one line and has no '#'."
         )
     description = marker.description if marker else ""
-    problem = _description_problem(description)
+    problem = _find_description_problem(description)
     if problem:
         raise EnvDefinitionError(key, f"has an unusable description: {problem}")
     members = _MEMBERS[target]
-    unshared = _unshared_scopes(members)
+    unshared = _find_unshared_scopes(members)
     if unshared is not None:
         raise EnvDefinitionError(
             key, f"is read as one, and no folder satisfies every member: {unshared}."
         )
-    return _Group(attr, key, target, optional, description, members)
+    return _Group(attribute, key, target, optional, description, members)
 
 
-def _unshared_scopes(members: Sequence[_Variable]) -> str | None:
+def _find_unshared_scopes(members: Sequence[_Variable]) -> str | None:
     shared: set[str] | None = None
     scoped: list[str] = []
     for member in members:
@@ -580,7 +582,7 @@ def _unshared_scopes(members: Sequence[_Variable]) -> str | None:
     return ", ".join(scoped)
 
 
-def _group_annotation(annotation: Any) -> tuple[type | None, bool]:
+def _parse_group_annotation(annotation: Any) -> tuple[type | None, bool]:
     origin = typing.get_origin(annotation)
     if origin is types.UnionType or origin is typing.Union:
         arguments = typing.get_args(annotation)
@@ -599,7 +601,7 @@ def _is_group(annotation: Any) -> bool:
     return issubclass(annotation, Group)
 
 
-def _description_problem(description: str) -> str:
+def _find_description_problem(description: str) -> str:
     if len(description.encode()) > 120:
         return "a description is at most 120 bytes."
     if any(unicodedata.category(character) == "Cc" for character in description):
@@ -607,13 +609,13 @@ def _description_problem(description: str) -> str:
     return ""
 
 
-def _definition(cls: type, attr: str, annotation: Any) -> _Variable:
-    assigned = cls.__dict__.get(attr, _UNSET)
+def _build_variable(cls: type, attribute: str, annotation: Any) -> _Variable:
+    assigned = cls.__dict__.get(attribute, _UNSET)
     marker = (
         assigned if isinstance(assigned, _Marker) else _Marker(None, assigned, False, None, None)
     )
 
-    key = marker.key or attr.upper()
+    key = marker.key or attribute.upper()
     if not _KEY_PATTERN.fullmatch(key):
         raise EnvDefinitionError(
             key,
@@ -622,17 +624,17 @@ def _definition(cls: type, attr: str, annotation: Any) -> _Variable:
         )
 
     description = marker.description or ""
-    problem = _description_problem(description)
+    problem = _find_description_problem(description)
     if problem:
         raise EnvDefinitionError(key, f"has an unusable description: {problem}")
 
-    target, optional = _target(key, annotation)
+    target, optional = _resolve_target(key, annotation)
     live = target is Secret
-    klass = VariableClass.PLAIN
+    variable_class = VariableClass.PLAIN
     if live:
-        klass = VariableClass.SECRET
+        variable_class = VariableClass.SECRET
     elif marker.sensitive:
-        klass = VariableClass.SENSITIVE
+        variable_class = VariableClass.SENSITIVE
 
     if live and marker.sensitive:
         raise EnvDefinitionError(
@@ -647,11 +649,11 @@ def _definition(cls: type, attr: str, annotation: Any) -> _Variable:
             "so a declared one would be overwritten before anything read it. Read it with "
             "`ocel.deployment_url()`.",
         )
-    if klass is VariableClass.PLAIN and key.startswith(RESERVED_PREFIX):
+    if variable_class is VariableClass.PLAIN and key.startswith(RESERVED_PREFIX):
         raise EnvDefinitionError(
             key,
             f"starts with the reserved prefix {RESERVED_PREFIX}. A "
-            f"'{_CLASS_NAMES[klass]}' variable is delivered under its own name, so Ocel "
+            f"'{_CLASS_NAMES[variable_class]}' variable is delivered under its own name, so Ocel "
             f"would overwrite it.",
         )
     if live and marker.default is not _UNSET:
@@ -670,24 +672,27 @@ def _definition(cls: type, attr: str, annotation: Any) -> _Variable:
     folders: tuple[str, ...] = ()
     if marker.folders is not None:
         folders = tuple(marker.folders)
-        problem = _scope_problem(folders)
+        problem = _find_scope_problem(folders)
         if problem:
             raise EnvDefinitionError(key, f"has an unusable folder scope: {problem}")
 
-    variable = _Variable(attr, key, klass, target, optional, folders, None, _UNSET, description)
+    variable = _Variable(
+        attribute, key, variable_class, target, optional, folders, None, _UNSET, description
+    )
     if marker.default is not _UNSET and not (optional and marker.default is None):
-        _default(variable, marker.default)
+        _apply_default(variable, marker.default)
     return variable
 
 
-def _default(variable: _Variable, default: Any) -> None:
+def _apply_default(variable: _Variable, default: Any) -> None:
     if isinstance(default, str) and variable.target is not str:
         try:
-            _parse(variable.target, default)
+            _parse_value(variable.target, default)
         except Exception as error:
+            message = variable.redact_message(format_error(error))
             raise EnvDefinitionError(
                 variable.key,
-                f"has a default its own type rejects: {variable.complaint(_said(error))}.",
+                f"has a default its own type rejects: {message}.",
             ) from None
         variable.default_raw = default
         return
@@ -695,19 +700,19 @@ def _default(variable: _Variable, default: Any) -> None:
         raise EnvDefinitionError(
             variable.key,
             f"has a default its own type rejects: a {type(default).__name__} where the "
-            f"annotation says {_render(variable.target)}.",
+            f"annotation says {_format_annotation(variable.target)}.",
         )
     variable.default_value = default
 
 
-def _target(key: str, annotation: Any) -> tuple[Any, bool]:
+def _resolve_target(key: str, annotation: Any) -> tuple[Any, bool]:
     origin = typing.get_origin(annotation)
     if origin is types.UnionType or origin is typing.Union:
         arguments = typing.get_args(annotation)
         inner = [argument for argument in arguments if argument is not type(None)]
         if len(arguments) != 2 or len(inner) != 1:
-            raise _unparseable(key, annotation)
-        target, _ = _target(key, inner[0])
+            raise _refuse_unparseable_annotation(key, annotation)
+        target, _ = _resolve_target(key, inner[0])
         return target, True
     if annotation is Secret or annotation is str or annotation is bool:
         return annotation, False
@@ -720,25 +725,25 @@ def _target(key: str, annotation: Any) -> tuple[Any, bool]:
         )
     if isinstance(annotation, type):
         return annotation, False
-    raise _unparseable(key, annotation)
+    raise _refuse_unparseable_annotation(key, annotation)
 
 
-def _unparseable(key: str, annotation: Any) -> EnvDefinitionError:
+def _refuse_unparseable_annotation(key: str, annotation: Any) -> EnvDefinitionError:
     return EnvDefinitionError(
         key,
-        f"is read into a {_render(annotation)}, which nothing parses a value into. Use a "
-        f"str, a bool, an ocel.Secret, any type whose constructor takes the delivered "
+        f"is read into a {_format_annotation(annotation)}, which nothing parses a value "
+        f"into. Use a str, a bool, an ocel.Secret, any type whose constructor takes the delivered "
         f"text, or 'T | None' for an optional one.",
     )
 
 
-def _render(annotation: Any) -> str:
+def _format_annotation(annotation: Any) -> str:
     if isinstance(annotation, type):
         return annotation.__name__
     return str(annotation)
 
 
-def _scope_problem(folders: Sequence[str]) -> str:
+def _find_scope_problem(folders: Sequence[str]) -> str:
     if not folders:
         return (
             "an empty folder scope says nothing. Leave 'folders' off to keep the variable "
@@ -752,13 +757,13 @@ def _scope_problem(folders: Sequence[str]) -> str:
                 f"folder it names."
             )
         seen.add(folder)
-        problem = _folder_problem(folder)
+        problem = _find_folder_problem(folder)
         if problem:
             return f"folder '{folder}': {problem}"
     return ""
 
 
-def _folder_problem(folder: str) -> str:
+def _find_folder_problem(folder: str) -> str:
     if not folder.startswith("/"):
         return "a folder path must start with '/'."
     if folder == "/":
@@ -775,7 +780,7 @@ def _folder_problem(folder: str) -> str:
     return ""
 
 
-def _declare(entries: Sequence[_Variable | _Group], site: _Site) -> None:
+def _declare_entries(entries: Sequence[_Variable | _Group], site: _Site) -> None:
     source = str(site)
     definitions: list[VariableDefinition] = []
     groups: list[GroupDefinition] = []
@@ -787,11 +792,11 @@ def _declare(entries: Sequence[_Variable | _Group], site: _Site) -> None:
                     key=entry.key, required=not entry.optional, description=entry.description
                 )
             )
-        for variable in _variables(entry):
+        for variable in _list_variables(entry):
             definitions.append(
                 VariableDefinition(
                     key=variable.key,
-                    class_=variable.klass,
+                    class_=variable.variable_class,
                     required=variable.required,
                     folders=list(variable.folders),
                     source=source,
@@ -801,43 +806,43 @@ def _declare(entries: Sequence[_Variable | _Group], site: _Site) -> None:
                 )
             )
     response = declare_env(DeclareEnvRequest(definitions=definitions, groups=groups))
-    problems = _problems(entries, response.cells)
+    problems = _find_problems(entries, response.cells)
     if problems:
         report_env_problems(ReportEnvProblemsRequest(problems=problems))
 
 
-def _problems(
+def _find_problems(
     entries: Sequence[_Variable | _Group], cells: Sequence[VariableCell]
 ) -> list[VariableProblem]:
     problems: list[VariableProblem] = []
     for entry in entries:
         gate = entry if isinstance(entry, _Group) and entry.optional else None
-        for variable in _variables(entry):
-            problems.extend(_faults(variable, cells, gate))
+        for variable in _list_variables(entry):
+            problems.extend(_find_variable_problems(variable, cells, gate))
     return problems
 
 
 def _has_cell(variable: _Variable, cells: Sequence[VariableCell], folder: str) -> bool:
-    def at(where: str) -> bool:
+    def has_cell_at(where: str) -> bool:
         return any(cell.key == variable.key and cell.folder == where for cell in cells)
 
     if variable.folders:
-        return folder != "" and folder in variable.folders and at(folder)
-    return (folder != "" and at(folder)) or at("")
+        return folder != "" and folder in variable.folders and has_cell_at(folder)
+    return (folder != "" and has_cell_at(folder)) or has_cell_at("")
 
 
-def _switched_on(group: _Group, cells: Sequence[VariableCell], folder: str) -> bool:
+def _is_group_on(group: _Group, cells: Sequence[VariableCell], folder: str) -> bool:
     return any(_has_cell(member, cells, folder) for member in group.members)
 
 
-def _faults(
+def _find_variable_problems(
     variable: _Variable, cells: Sequence[VariableCell], gate: "_Group | None"
 ) -> list[VariableProblem]:
     problems: list[VariableProblem] = []
     stored = [cell for cell in cells if cell.key == variable.key]
     if variable.required:
         for folder in variable.folders or ("",):
-            if gate is not None and not _switched_on(gate, cells, folder):
+            if gate is not None and not _is_group_on(gate, cells, folder):
                 continue
             if not any(cell.folder == folder for cell in stored):
                 problems.append(
@@ -849,20 +854,20 @@ def _faults(
         return problems
     for cell in stored:
         try:
-            _parse(variable.target, cell.value)
+            _parse_value(variable.target, cell.value)
         except Exception as error:
             problems.append(
                 VariableProblem(
                     key=variable.key,
                     folder=cell.folder,
                     kind=VariableProblem.Kind.INVALID,
-                    detail=variable.complaint(_said(error)),
+                    detail=variable.redact_message(format_error(error)),
                 )
             )
     return problems
 
 
-def _parse(target: Any, raw: str) -> Any:
+def _parse_value(target: Any, raw: str) -> Any:
     if target is str:
         return raw
     if target is bool:
@@ -874,11 +879,7 @@ def _parse(target: Any, raw: str) -> Any:
     return target(raw)
 
 
-def _said(error: Exception) -> str:
-    return str(error).strip() or type(error).__name__
-
-
-def _delivered(key: str) -> str | None:
+def _read_delivered_value(key: str) -> str | None:
     delivered = os.environ.get(DELIVERED_PREFIX + key)
     if delivered is not None:
         return delivered
@@ -888,5 +889,5 @@ def _delivered(key: str) -> str | None:
     return live_value(key)
 
 
-def _unset(key: str) -> EnvValueError:
+def _refuse_unset(key: str) -> EnvValueError:
     return EnvValueError(key, f"has no value. Set one with `ocel env set {key}=<VALUE>`.")

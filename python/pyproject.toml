@@ -2,7 +2,7 @@
 members = ["*"]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio>=1", "ruff>=0.14"]
+dev = ["pydantic>=2.7,<3", "pytest>=8", "pytest-asyncio>=1", "ruff>=0.14"]
 
 [tool.ruff]
 line-length = 100
