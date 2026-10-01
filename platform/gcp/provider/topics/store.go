@@ -71,6 +71,22 @@ type runDocument struct {
 	ExpiresAt  *time.Time `firestore:"expiresAt"`
 	PurgeAt    *time.Time `firestore:"purgeAt"`
 	Revision   string     `firestore:"revision"`
+
+	Delivery deliveryFields `firestore:"delivery"`
+}
+
+type deliveryFields struct {
+	MessageID   string     `firestore:"messageId"`
+	PublishedAt *time.Time `firestore:"publishedAt"`
+	MaxAttempts int        `firestore:"maxAttempts"`
+	Key         string     `firestore:"key"`
+	Lane        string     `firestore:"lane"`
+	DelayTask   string     `firestore:"delayTask"`
+}
+
+type runRecord struct {
+	provider.Run
+	delivery deliveryFields
 }
 
 func (s Store) scopeDocument() (*firestore.DocumentRef, error) {
@@ -156,11 +172,16 @@ func (s Store) ReadRun(ctx context.Context, execution string) (provider.Run, err
 }
 
 func runOf(snapshot *firestore.DocumentSnapshot) (provider.Run, error) {
+	record, err := recordOf(snapshot)
+	return record.Run, err
+}
+
+func recordOf(snapshot *firestore.DocumentSnapshot) (runRecord, error) {
 	var doc runDocument
 	if err := snapshot.DataTo(&doc); err != nil {
-		return provider.Run{}, fmt.Errorf("decode run %s: %w", snapshot.Ref.ID, err)
+		return runRecord{}, fmt.Errorf("decode run %s: %w", snapshot.Ref.ID, err)
 	}
-	return provider.Run{
+	return runRecord{delivery: doc.Delivery, Run: provider.Run{
 		Execution:  snapshot.Ref.ID,
 		Topic:      doc.Topic,
 		Consumer:   doc.Consumer,
@@ -177,11 +198,12 @@ func runOf(snapshot *firestore.DocumentSnapshot) (provider.Run, error) {
 		FinishedAt: timeOf(doc.FinishedAt),
 		ExpiresAt:  timeOf(doc.ExpiresAt),
 		Revision:   keyvalue.Revision(doc.Revision),
-	}, nil
+	}}, nil
 }
 
-func documentOf(run provider.Run, revision keyvalue.Revision) runDocument {
+func documentOf(run provider.Run, delivery deliveryFields, revision keyvalue.Revision) runDocument {
 	doc := runDocument{
+		Delivery:   delivery,
 		Topic:      run.Topic,
 		Consumer:   run.Consumer,
 		Status:     string(run.Status),
@@ -230,13 +252,16 @@ func (s Store) WriteRun(ctx context.Context, run provider.Run) (keyvalue.Revisio
 			if run.Revision != "" {
 				return keyvalue.ErrStale
 			}
-			return tx.Create(doc, documentOf(run, next))
+			return tx.Create(doc, documentOf(run, deliveryFields{}, next))
 		}
-		current, err := snapshot.DataAt("revision")
-		if err != nil || run.Revision == "" || current != string(run.Revision) {
+		current, err := recordOf(snapshot)
+		if err != nil {
+			return err
+		}
+		if run.Revision == "" || current.Revision != run.Revision {
 			return keyvalue.ErrStale
 		}
-		return tx.Set(doc, documentOf(run, next))
+		return tx.Set(doc, documentOf(run, current.delivery, next))
 	})
 	if errors.Is(err, keyvalue.ErrStale) {
 		return "", keyvalue.ErrStale
@@ -245,6 +270,46 @@ func (s Store) WriteRun(ctx context.Context, run provider.Run) (keyvalue.Revisio
 		return "", fmt.Errorf("write run %s: %w", run.Execution, err)
 	}
 	return next, nil
+}
+
+var errRunUnchanged = errors.New("the run is left as it was")
+
+func (s Store) changeRun(ctx context.Context, execution string, change func(record *runRecord, found bool) error) (runRecord, error) {
+	runs, err := s.runs()
+	if err != nil {
+		return runRecord{}, err
+	}
+	client, err := s.Clients.Firestore()
+	if err != nil {
+		return runRecord{}, err
+	}
+	doc := runs.Doc(execution)
+	var changed runRecord
+	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snapshot, found, err := readInTransaction(tx, doc)
+		if err != nil {
+			return err
+		}
+		changed = runRecord{Run: provider.Run{Execution: execution}}
+		if found {
+			if changed, err = recordOf(snapshot); err != nil {
+				return err
+			}
+		}
+		if err := change(&changed, found); err != nil {
+			return err
+		}
+		next, err := keyvalue.NewRevision()
+		if err != nil {
+			return err
+		}
+		changed.Revision = next
+		return tx.Set(doc, documentOf(changed.Run, changed.delivery, next))
+	})
+	if err != nil {
+		return changed, err
+	}
+	return changed, nil
 }
 
 func (s Store) ListRuns(ctx context.Context, filter provider.RunFilter) (provider.RunPage, error) {
