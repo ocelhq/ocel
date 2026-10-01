@@ -1,4 +1,5 @@
 import { RealtimeError } from "./client-error.js";
+import type { Transport } from "./transport.js";
 
 /** What the realtime handler answered a connect with: where the socket is and its token. */
 export interface ConnectGrant {
@@ -36,12 +37,12 @@ export interface ClientTransport {
   ): Promise<TransportConnection>;
 }
 
-const transports: Record<string, () => Promise<ClientTransport>> = {
+const transports: Partial<Record<Transport["name"], () => Promise<ClientTransport>>> = {
   "ocel-gateway": async () => (await import("./client-gateway.js")).gatewayTransport,
 };
 
 /** Loads the transport the realtime handler named, so a bundle carries only the one it uses. */
-export async function loadTransport(name: string): Promise<ClientTransport> {
+export async function loadTransport(name: Transport["name"]): Promise<ClientTransport> {
   const load = transports[name];
   if (!load) {
     // TODO(#1514): load the AppSync Events adapter for "appsync-events" once the AWS target lands.

@@ -6,7 +6,7 @@ import {
   type RealtimeRuntime,
   readRuntime,
 } from "./realtime.js";
-import { mintToken } from "./token.js";
+import { mintToken, type Token } from "./token.js";
 import { resolveTransport, type Transport } from "./transport.js";
 import { encodeWireChannel, type WireRefusal } from "./wire.js";
 
@@ -37,7 +37,8 @@ const operationKeys = new Set(["op", "pattern", "params", "body"]);
 
 type OperationName = "subscribe" | "publish";
 
-type RealtimeDenial =
+/** Why the realtime handler denied one operation of a batch. */
+export type RealtimeDenial =
   | "invalid-op"
   | "unknown-op"
   | "unknown-pattern"
@@ -54,6 +55,20 @@ type RealtimeDenial =
 type Grant = { i: number; wire: string; token?: string };
 type Denial = { i: number; code: RealtimeDenial };
 type Outcome = { grant: Grant } | { denied: Denial };
+
+/**
+ * What the realtime handler answers a batch with: the transport and socket URL, a connect
+ * token when the batch asked to connect, and for each operation, by its index `i`, either a
+ * grant carrying its wire channel (and a subscribe token for a subscribe) or a denial.
+ */
+export interface RealtimeBatchAnswer {
+  transport: Transport["name"];
+  url: string;
+  host?: string;
+  connect?: Token;
+  grants: Grant[];
+  denied: Denial[];
+}
 
 interface BatchRequest {
   runtime: RealtimeRuntime;
@@ -319,18 +334,15 @@ async function serveBatch(
     ? mintToken(properties, runtime, batch.subject, "connect", `/${runtime.name}`)
     : undefined;
   const outcomes = await evaluateOperations(batch, parsed.operations);
-  return respond(
-    200,
-    {
-      transport: transport.name,
-      url: properties.url,
-      ...(transport.host === undefined ? {} : { host: transport.host }),
-      ...(connect === undefined ? {} : { connect }),
-      grants: outcomes.flatMap((o) => ("grant" in o ? [o.grant] : [])),
-      denied: outcomes.flatMap((o) => ("denied" in o ? [o.denied] : [])),
-    },
-    cors,
-  );
+  const answer: RealtimeBatchAnswer = {
+    transport: transport.name,
+    url: properties.url,
+    ...(transport.host === undefined ? {} : { host: transport.host }),
+    ...(connect === undefined ? {} : { connect }),
+    grants: outcomes.flatMap((outcome) => ("grant" in outcome ? [outcome.grant] : [])),
+    denied: outcomes.flatMap((outcome) => ("denied" in outcome ? [outcome.denied] : [])),
+  };
+  return respond(200, answer, cors);
 }
 
 /**

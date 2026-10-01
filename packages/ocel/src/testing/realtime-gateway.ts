@@ -58,9 +58,11 @@ export function readClaims(token: string): Record<string, unknown> & {
 export interface FakeGatewayOptions {
   status?: number;
   answering?: boolean;
+  acknowledgingConnections?: boolean;
+  answeringSubscribes?: boolean;
 }
 
-function admits(
+function findRefusal(
   token: string | undefined,
   host: string,
   op: string,
@@ -96,6 +98,8 @@ function isSubscribedTo(subscribed: string, channel: string): boolean {
 export async function serveFakeGateway({
   status = 202,
   answering = true,
+  acknowledgingConnections = true,
+  answeringSubscribes = true,
 }: FakeGatewayOptions = {}): Promise<FakeGateway> {
   const published: PublishedEvent[] = [];
   const sockets: WebSocket[] = [];
@@ -139,9 +143,9 @@ export async function serveFakeGateway({
   socketServer.on("connection", (socket, req) => {
     sockets.push(socket);
     const offered = new Set(
-      (req.headers["sec-websocket-protocol"] ?? "").split(",").map((p) => p.trim()),
+      (req.headers["sec-websocket-protocol"] ?? "").split(",").map((protocol) => protocol.trim()),
     );
-    const refusal = admits(readConnectToken(offered), host, "connect", "/app");
+    const refusal = findRefusal(readConnectToken(offered), host, "connect", "/app");
     if (refusal) {
       socket.send(
         JSON.stringify({
@@ -159,10 +163,17 @@ export async function serveFakeGateway({
       const frame = JSON.parse(raw.toString());
       const reply = (answer: unknown) => socket.send(JSON.stringify(answer));
       if (frame.type === "connection_init") {
+        if (!acknowledgingConnections) return;
         reply({ type: "connection_ack", connectionTimeoutMs: 300_000 });
       } else if (frame.type === "subscribe") {
         subscribes.push({ id: frame.id, channel: frame.channel });
-        const denied = admits(frame.authorization?.Authorization, host, "subscribe", frame.channel);
+        if (!answeringSubscribes) return;
+        const denied = findRefusal(
+          frame.authorization?.Authorization,
+          host,
+          "subscribe",
+          frame.channel,
+        );
         if (denied) {
           reply({
             type: "subscribe_error",
