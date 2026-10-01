@@ -678,6 +678,150 @@
         "service": "AmazonECR",
         "usagetype": "TimedStorage-ByteHrs"
       }
+    },
+    {
+      "id": "aws/elasticache/node-cache.t4g.micro",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0128"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20260914063714/us-east-1/index.json#JSGVEAU2ZJSWY42F",
+      "verified": "2026-10-01",
+      "query": {
+        "cacheEngine": "Valkey",
+        "service": "AmazonElastiCache",
+        "usagetype": "NodeUsage:cache.t4g.micro"
+      }
+    },
+    {
+      "id": "aws/elasticache/node-cache.t4g.small",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0256"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20260914063714/us-east-1/index.json#SWRGTJTDUJ972J3G",
+      "verified": "2026-10-01",
+      "query": {
+        "cacheEngine": "Valkey",
+        "service": "AmazonElastiCache",
+        "usagetype": "NodeUsage:cache.t4g.small"
+      }
+    },
+    {
+      "id": "aws/elasticache/node-cache.t4g.medium",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.052"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20260914063714/us-east-1/index.json#APX3AQ7H55MB8PGA",
+      "verified": "2026-10-01",
+      "query": {
+        "cacheEngine": "Valkey",
+        "service": "AmazonElastiCache",
+        "usagetype": "NodeUsage:cache.t4g.medium"
+      }
+    },
+    {
+      "id": "aws/elasticache/node-cache.m7g.large",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.1264"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20260914063714/us-east-1/index.json#P3VK2HEV6XR83SCP",
+      "verified": "2026-10-01",
+      "query": {
+        "cacheEngine": "Valkey",
+        "service": "AmazonElastiCache",
+        "usagetype": "NodeUsage:cache.m7g.large"
+      }
+    },
+    {
+      "id": "aws/elasticache/node-cache.r7g.large",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.1752"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20260914063714/us-east-1/index.json#HWKSXZUY7UAK8DKC",
+      "verified": "2026-10-01",
+      "query": {
+        "cacheEngine": "Valkey",
+        "service": "AmazonElastiCache",
+        "usagetype": "NodeUsage:cache.r7g.large"
+      }
+    },
+    {
+      "id": "aws/elasticache/node-cache.r7g.xlarge",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.3496"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20260914063714/us-east-1/index.json#PYHN6K7E6KP5TYPE",
+      "verified": "2026-10-01",
+      "query": {
+        "cacheEngine": "Valkey",
+        "service": "AmazonElastiCache",
+        "usagetype": "NodeUsage:cache.r7g.xlarge"
+      }
+    },
+    {
+      "id": "aws/elasticache/node-cache.r7g.2xlarge",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.6984"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20260914063714/us-east-1/index.json#WVSKQUR5HDJ3Q4A4",
+      "verified": "2026-10-01",
+      "query": {
+        "cacheEngine": "Valkey",
+        "service": "AmazonElastiCache",
+        "usagetype": "NodeUsage:cache.r7g.2xlarge"
+      }
+    },
+    {
+      "id": "aws/elasticache/snapshot",
+      "region": "us-east-1",
+      "unit": "GB-Mo",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.085"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20260914063714/us-east-1/index.json#2XE22ZNH57J5EQV8",
+      "verified": "2026-10-01",
+      "query": {
+        "cacheEngine": "Valkey",
+        "service": "AmazonElastiCache",
+        "usagetype": "ElastiCache:BackupUsage:Valkey"
+      }
     }
   ]
 }
