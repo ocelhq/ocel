@@ -387,10 +387,11 @@ func TestAPostgresDeclaringNoVersionRunsTheOneEverySdkDeclaresByDefault(t *testi
 func TestALoginThatDoesNotOwnTheStateDirectoryKeepsThePasswordThroughSudo(t *testing.T) {
 	t.Parallel()
 
-	machine := &box{unsocket: true}
+	machine := &box{unsocket: true, login: "ada"}
+	actingAsOwner := "sudo -n -u " + host.DeployUser() + " "
 	machine.refuses = func(command string) (session.Result, bool) {
 		owns := strings.Contains(command, "/kept/") || strings.Contains(command, ".env")
-		if owns && !strings.HasPrefix(command, "sudo ") {
+		if owns && !strings.HasPrefix(command, actingAsOwner) {
 			return session.Result{Code: 1, Stderr: "mkdir: cannot create directory '/var/lib/ocel': Permission denied"}, true
 		}
 		return session.Result{}, false
@@ -402,14 +403,18 @@ func TestALoginThatDoesNotOwnTheStateDirectoryKeepsThePasswordThroughSudo(t *tes
 	if binding.Properties[provider.PropertyPassword] == "" {
 		t.Error("the binding includes no password")
 	}
-	kept := machine.commands()[len(machine.commands())-1]
+	var keptAsOwner bool
 	for _, command := range machine.commands() {
-		if strings.HasPrefix(command, "sudo ") && strings.Contains(command, "/kept/") && strings.Contains(command, "ln ") {
-			kept = command
+		if !strings.Contains(command, "/kept/") {
+			continue
 		}
+		if strings.HasPrefix(command, "sudo -n sh ") {
+			t.Errorf("the password was kept as root with %q, and the deploy login that owns the state directory cannot open what root leaves there", command)
+		}
+		keptAsOwner = keptAsOwner || strings.HasPrefix(command, actingAsOwner) && strings.Contains(command, "ln ")
 	}
-	if !strings.Contains(kept, "chown") {
-		t.Errorf("what root kept is left root's, and the deploy login that owns the state directory can no longer open it:\n%s", kept)
+	if !keptAsOwner {
+		t.Errorf("the password was never kept as %s: %v", host.DeployUser(), machine.commands())
 	}
 }
 

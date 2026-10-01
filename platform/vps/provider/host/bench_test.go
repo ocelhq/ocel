@@ -43,7 +43,7 @@ func machine(installed map[environment.Tier][]Item) *bench {
 			Written:    "ocelbox",
 			Address:    "203.0.113.10",
 			Port:       2222,
-			User:       "ada",
+			User:       deployUser,
 			KnownHosts: []string{"/home/ada/.ssh/known_hosts"},
 		},
 		facts:     session.Facts{Root: true, Systemd: true, Arch: "x86_64"},

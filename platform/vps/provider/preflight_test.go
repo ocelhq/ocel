@@ -128,7 +128,7 @@ func (s *scripted) Preflight(context.Context) (session.Facts, error) {
 }
 
 func (s *scripted) Destination() session.Destination {
-	return session.Destination{Written: "box.invalid", Address: "box.invalid", Port: 22, User: "ada"}
+	return session.Destination{Written: "box.invalid", Address: "box.invalid", Port: 22, User: host.DeployUser()}
 }
 
 func preflighting(machine *scripted) error {

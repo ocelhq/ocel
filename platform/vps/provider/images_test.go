@@ -40,6 +40,7 @@ type box struct {
 	fed        []string
 	hasImage   bool
 	unsocket   bool
+	login      string
 	serves     map[string]string
 	images     map[string]string
 	reads      map[string]string
@@ -234,7 +235,11 @@ func (b *box) Preflight(context.Context) (session.Facts, error) {
 }
 
 func (b *box) Destination() session.Destination {
-	return session.Destination{Written: "ada@box.invalid", Address: "box.invalid", Port: 22, User: "ada"}
+	login := b.login
+	if login == "" {
+		login = host.DeployUser()
+	}
+	return session.Destination{Written: "ada@box.invalid", Address: "box.invalid", Port: 22, User: login}
 }
 
 func (b *box) commands() []string {
