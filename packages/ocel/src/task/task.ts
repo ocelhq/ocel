@@ -109,7 +109,7 @@ function encodeTriggerOptions(options: TriggerOptions = {}) {
     lane: encodeLane(options.lane),
     maxAttempts: options.maxAttempts ?? 0,
     tags: options.tags ?? [],
-    metadata: options.metadata,
+    metadata: options.metadata && new TextEncoder().encode(JSON.stringify(options.metadata)),
   };
 }
 

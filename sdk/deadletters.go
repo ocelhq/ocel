@@ -140,14 +140,10 @@ func (d *DeadLetters) formatAccess(op string) string {
 }
 
 func decodeDeadLetter(wire *topicv1.DeadLetter) (*DeadLetter, error) {
-	payload, err := encodeValueAsJSON(wire.GetPayload())
-	if err != nil {
-		return nil, err
-	}
 	return &DeadLetter{
 		Execution: wire.GetExecution(),
 		Message:   Message{ID: wire.GetMessage().GetId(), PublishedAt: decodeTimestamp(wire.GetMessage().GetPublishedAt())},
-		Payload:   payload,
+		Payload:   readJSON(wire.GetPayload()),
 		Attempts:  int(wire.GetAttempts()),
 		Error:     wire.GetError(),
 		FailedAt:  decodeTimestamp(wire.GetFailedAt()),

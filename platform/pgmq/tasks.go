@@ -9,8 +9,6 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -74,9 +72,8 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 	if options.GetTtl() != nil {
 		toPublish.ttl = options.GetTtl().AsDuration()
 	}
-	if options.GetMetadata() != nil {
-		metadata, err := protojson.Marshal(options.GetMetadata())
-		if err != nil {
+	if metadata := options.GetMetadata(); len(metadata) > 0 {
+		if err := refuseNonObject(metadata); err != nil {
 			return "", err
 		}
 		toPublish.metadata = metadata
@@ -168,6 +165,14 @@ func refuseNonJSON(payload []byte) error {
 	return nil
 }
 
+func refuseNonObject(metadata []byte) error {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(metadata, &object); err != nil || object == nil {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("the metadata is not a JSON object"))
+	}
+	return nil
+}
+
 func (t Tasks) RetrieveRun(ctx context.Context, req *taskv1.RetrieveRunRequest) (*taskv1.RetrieveRunResponse, error) {
 	run, err := readRun(ctx, t.engine.pool, req.GetId())
 	if errors.Is(err, keyvalue.ErrNotFound) {
@@ -191,12 +196,13 @@ var runStatuses = map[provider.RunStatus]taskv1.RunStatus{
 }
 
 func newRunMessage(run provider.Run) *taskv1.Run {
-	message := &taskv1.Run{
+	return &taskv1.Run{
 		Id:         run.Execution,
 		Task:       run.Topic,
 		Status:     runStatuses[run.Status],
-		Payload:    valueOf(run.Payload),
-		Output:     valueOf(run.Output),
+		Payload:    run.Payload,
+		Output:     run.Output,
+		Metadata:   run.Metadata,
 		Error:      run.Error,
 		Attempts:   int32(run.Attempts),
 		Tags:       run.Tags,
@@ -206,24 +212,6 @@ func newRunMessage(run provider.Run) *taskv1.Run {
 		FinishedAt: timestampOf(run.FinishedAt),
 		ExpiresAt:  timestampOf(run.ExpiresAt),
 	}
-	if len(run.Metadata) > 0 {
-		metadata := &structpb.Struct{}
-		if protojson.Unmarshal(run.Metadata, metadata) == nil {
-			message.Metadata = metadata
-		}
-	}
-	return message
-}
-
-func valueOf(raw json.RawMessage) *structpb.Value {
-	if len(raw) == 0 {
-		return nil
-	}
-	value := &structpb.Value{}
-	if err := protojson.Unmarshal(raw, value); err != nil {
-		return nil
-	}
-	return value
 }
 
 func timestampOf(t time.Time) *timestamppb.Timestamp {

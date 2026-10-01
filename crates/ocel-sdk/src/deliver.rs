@@ -1,12 +1,13 @@
 use crate::declare::{collect_declarations, DeclaredConfig, DeliveryFn};
-use crate::json::{convert_timestamp, convert_value};
+use crate::json::convert_timestamp;
 use crate::proto::app::topic::v1::Envelope;
 use crate::run::{Attempt, BoxFuture, Message, Next, Run, RunError, RunKind};
 use crate::worker::{OnStart, WorkerMiddleware};
 use futures_util::future::{select, Either};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::collections::HashMap;
+use serde_json::value::RawValue;
+use std::collections::{BTreeMap, HashMap};
 use std::pin::pin;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::{OnceCell, OwnedSemaphorePermit, Semaphore};
@@ -17,7 +18,7 @@ const DEFAULT_WORKER: &str = "worker";
 #[doc(hidden)]
 pub struct Delivery {
     run: Run,
-    payload: serde_json::Value,
+    payload: String,
     middleware: Option<WorkerMiddleware>,
 }
 
@@ -88,7 +89,7 @@ where
             payload,
             middleware,
         } = delivery;
-        let payload = match P::deserialize(&payload) {
+        let payload = match serde_json::from_str::<P>(&payload) {
             Ok(payload) => payload,
             Err(err) => return Outcome::Abort(describe_payload_mismatch(&err)),
         };
@@ -337,10 +338,11 @@ fn ensure_registry() -> &'static Result<Registry, String> {
 /// [`Run::cancelled`].
 #[doc(hidden)]
 pub async fn deliver(worker: &str, body: &[u8]) -> (u16, Vec<u8>) {
-    let envelope: Envelope = match serde_json::from_slice(body) {
-        Ok(envelope) => envelope,
+    let received = match split_envelope(body) {
+        Ok(received) => received,
         Err(err) => return answer_text(400, format!("the body is not a delivery envelope: {err}")),
     };
+    let envelope = &received.envelope;
     let registry = match ensure_registry() {
         Ok(registry) => registry,
         Err(err) => return answer_text(500, err.clone()),
@@ -382,7 +384,8 @@ pub async fn deliver(worker: &str, body: &[u8]) -> (u16, Vec<u8>) {
     }
     let slot = setup.acquire_slot().await;
 
-    let (run, payload) = read_envelope(registration, envelope);
+    let run = read_run(registration, envelope);
+    let payload = join_payload_text(registration, received);
     let cancellation = run.cancellation.clone();
     let delivery = Delivery {
         run,
@@ -410,7 +413,61 @@ pub async fn deliver(worker: &str, body: &[u8]) -> (u16, Vec<u8>) {
     }
 }
 
-fn read_envelope(registration: &Registration, envelope: Envelope) -> (Run, serde_json::Value) {
+struct ReceivedEnvelope {
+    envelope: Envelope,
+    payload: Option<Box<RawValue>>,
+    message_payloads: Vec<Option<Box<RawValue>>>,
+}
+
+type JsonFields = BTreeMap<String, Box<RawValue>>;
+
+const PAYLOAD_FIELD: &str = "payload";
+const MESSAGES_FIELD: &str = "messages";
+
+fn split_envelope(body: &[u8]) -> Result<ReceivedEnvelope, serde_json::Error> {
+    let mut fields: JsonFields = serde_json::from_slice(body)?;
+    let payload = fields.remove(PAYLOAD_FIELD);
+    let mut message_payloads = Vec::new();
+    if let Some(messages) = fields.remove(MESSAGES_FIELD) {
+        let deliveries: Option<Vec<JsonFields>> = serde_json::from_str(messages.get())?;
+        if let Some(mut deliveries) = deliveries {
+            message_payloads = deliveries
+                .iter_mut()
+                .map(|delivery| delivery.remove(PAYLOAD_FIELD))
+                .collect();
+            fields.insert(
+                MESSAGES_FIELD.to_string(),
+                serde_json::value::to_raw_value(&deliveries)?,
+            );
+        }
+    }
+    Ok(ReceivedEnvelope {
+        envelope: serde_json::from_str(&serde_json::to_string(&fields)?)?,
+        payload,
+        message_payloads,
+    })
+}
+
+fn join_payload_text(registration: &Registration, received: ReceivedEnvelope) -> String {
+    match (registration.batch, received.message_payloads.is_empty()) {
+        (true, false) => {
+            let texts: Vec<&str> = received
+                .message_payloads
+                .iter()
+                .map(read_payload_text)
+                .collect();
+            format!("[{}]", texts.join(","))
+        }
+        (true, true) => format!("[{}]", read_payload_text(&received.payload)),
+        (false, _) => read_payload_text(&received.payload).to_string(),
+    }
+}
+
+fn read_payload_text(payload: &Option<Box<RawValue>>) -> &str {
+    payload.as_deref().map_or("null", RawValue::get)
+}
+
+fn read_run(registration: &Registration, envelope: &Envelope) -> Run {
     let first = envelope.messages.first();
     let (id, message) = match first {
         Some(delivery) => (
@@ -427,7 +484,7 @@ fn read_envelope(registration: &Registration, envelope: Envelope) -> (Run, serde
         .or(envelope.attempt.as_option())
         .cloned()
         .unwrap_or_default();
-    let run = Run {
+    Run {
         kind: registration.kind,
         name: registration.name.to_string(),
         topic: envelope.topic.clone(),
@@ -451,19 +508,7 @@ fn read_envelope(registration: &Registration, envelope: Envelope) -> (Run, serde
                 .and_then(convert_timestamp),
         },
         cancellation: CancellationToken::new(),
-    };
-    let payload = match (registration.batch, envelope.messages.is_empty()) {
-        (true, false) => serde_json::Value::Array(
-            envelope
-                .messages
-                .iter()
-                .map(|delivery| convert_value(delivery.payload.as_option()))
-                .collect(),
-        ),
-        (true, true) => serde_json::Value::Array(vec![convert_value(envelope.payload.as_option())]),
-        (false, _) => convert_value(envelope.payload.as_option()),
-    };
-    (run, payload)
+    }
 }
 
 fn answer_text(status: u16, message: String) -> (u16, Vec<u8>) {

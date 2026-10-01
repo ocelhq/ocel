@@ -10,7 +10,6 @@ import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -321,7 +320,7 @@ type Delivery struct {
 	Execution     string                 `protobuf:"bytes,1,opt,name=execution,proto3" json:"execution,omitempty"`
 	Message       *Message               `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	Attempt       *Attempt               `protobuf:"bytes,3,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	Payload       *structpb.Value        `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -377,7 +376,7 @@ func (x *Delivery) GetAttempt() *Attempt {
 	return nil
 }
 
-func (x *Delivery) GetPayload() *structpb.Value {
+func (x *Delivery) GetPayload() []byte {
 	if x != nil {
 		return x.Payload
 	}
@@ -393,7 +392,7 @@ type Envelope struct {
 	Message       *Message               `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
 	Attempt       *Attempt               `protobuf:"bytes,6,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	Schema        string                 `protobuf:"bytes,7,opt,name=schema,proto3" json:"schema,omitempty"`
-	Payload       *structpb.Value        `protobuf:"bytes,8,opt,name=payload,proto3" json:"payload,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,8,opt,name=payload,proto3" json:"payload,omitempty"`
 	Messages      []*Delivery            `protobuf:"bytes,9,rep,name=messages,proto3" json:"messages,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -478,7 +477,7 @@ func (x *Envelope) GetSchema() string {
 	return ""
 }
 
-func (x *Envelope) GetPayload() *structpb.Value {
+func (x *Envelope) GetPayload() []byte {
 	if x != nil {
 		return x.Payload
 	}
@@ -606,7 +605,7 @@ type DeadLetter struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Execution     string                 `protobuf:"bytes,1,opt,name=execution,proto3" json:"execution,omitempty"`
 	Message       *Message               `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	Payload       *structpb.Value        `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
 	Attempts      int32                  `protobuf:"varint,4,opt,name=attempts,proto3" json:"attempts,omitempty"`
 	Error         string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
 	FailedAt      *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=failed_at,json=failedAt,proto3" json:"failed_at,omitempty"`
@@ -658,7 +657,7 @@ func (x *DeadLetter) GetMessage() *Message {
 	return nil
 }
 
-func (x *DeadLetter) GetPayload() *structpb.Value {
+func (x *DeadLetter) GetPayload() []byte {
 	if x != nil {
 		return x.Payload
 	}
@@ -1114,7 +1113,7 @@ var File_app_topic_v1_topic_proto protoreflect.FileDescriptor
 
 const file_app_topic_v1_topic_proto_rawDesc = "" +
 	"\n" +
-	"\x18app/topic/v1/topic.proto\x12\fapp.topic.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x81\x03\n" +
+	"\x18app/topic/v1/topic.proto\x12\fapp.topic.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x81\x03\n" +
 	"\vSendRequest\x127\n" +
 	"\x05topic\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x05topic\x12#\n" +
 	"\apayload\x18\x02 \x01(\fB\t\xbaH\x06z\x04\x18\x80\x80\x10R\apayload\x12\xa6\x01\n" +
@@ -1132,12 +1131,12 @@ const file_app_topic_v1_topic_proto_rawDesc = "" +
 	"\aAttempt\x12\x1f\n" +
 	"\x06number\x18\x01 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\x06number\x12\x19\n" +
 	"\x02of\x18\x02 \x01(\x05B\t\xbaH\x06\x1a\x04\x18d(\x01R\x02of\x12H\n" +
-	"\x12first_attempted_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x10firstAttemptedAt\"\xbc\x01\n" +
+	"\x12first_attempted_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x10firstAttemptedAt\"\xaf\x01\n" +
 	"\bDelivery\x12\x1c\n" +
 	"\texecution\x18\x01 \x01(\tR\texecution\x12/\n" +
 	"\amessage\x18\x02 \x01(\v2\x15.app.topic.v1.MessageR\amessage\x12/\n" +
-	"\aattempt\x18\x03 \x01(\v2\x15.app.topic.v1.AttemptR\aattempt\x120\n" +
-	"\apayload\x18\x04 \x01(\v2\x16.google.protobuf.ValueR\apayload\"\xbf\x03\n" +
+	"\aattempt\x18\x03 \x01(\v2\x15.app.topic.v1.AttemptR\aattempt\x12#\n" +
+	"\apayload\x18\x04 \x01(\fB\t\xbaH\x06z\x04\x18\x80\x80\x10R\apayload\"\xb2\x03\n" +
 	"\bEnvelope\x12\x15\n" +
 	"\x01v\x18\x01 \x01(\x05B\a\xbaH\x04\x1a\x02\b\x01R\x01v\x125\n" +
 	"\x05topic\x18\x02 \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x05topic\x12;\n" +
@@ -1145,19 +1144,19 @@ const file_app_topic_v1_topic_proto_rawDesc = "" +
 	"\texecution\x18\x04 \x01(\tR\texecution\x12/\n" +
 	"\amessage\x18\x05 \x01(\v2\x15.app.topic.v1.MessageR\amessage\x12/\n" +
 	"\aattempt\x18\x06 \x01(\v2\x15.app.topic.v1.AttemptR\aattempt\x127\n" +
-	"\x06schema\x18\a \x01(\tB\x1f\xbaH\x1c\xd8\x01\x01r\x172\x15^sha256-[0-9a-f]{64}$R\x06schema\x120\n" +
-	"\apayload\x18\b \x01(\v2\x16.google.protobuf.ValueR\apayload\x12=\n" +
+	"\x06schema\x18\a \x01(\tB\x1f\xbaH\x1c\xd8\x01\x01r\x172\x15^sha256-[0-9a-f]{64}$R\x06schema\x12#\n" +
+	"\apayload\x18\b \x01(\fB\t\xbaH\x06z\x04\x18\x80\x80\x10R\apayload\x12=\n" +
 	"\bmessages\x18\t \x03(\v2\x16.app.topic.v1.DeliveryB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\bmessages\"\x1f\n" +
 	"\x05Abort\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\"@\n" +
 	"\x06Answer\x12+\n" +
 	"\x05abort\x18\x01 \x01(\v2\x13.app.topic.v1.AbortH\x00R\x05abortB\t\n" +
-	"\aoutcome\"\xf8\x01\n" +
+	"\aoutcome\"\xeb\x01\n" +
 	"\n" +
 	"DeadLetter\x12\x1c\n" +
 	"\texecution\x18\x01 \x01(\tR\texecution\x12/\n" +
-	"\amessage\x18\x02 \x01(\v2\x15.app.topic.v1.MessageR\amessage\x120\n" +
-	"\apayload\x18\x03 \x01(\v2\x16.google.protobuf.ValueR\apayload\x12\x1a\n" +
+	"\amessage\x18\x02 \x01(\v2\x15.app.topic.v1.MessageR\amessage\x12#\n" +
+	"\apayload\x18\x03 \x01(\fB\t\xbaH\x06z\x04\x18\x80\x80\x10R\apayload\x12\x1a\n" +
 	"\battempts\x18\x04 \x01(\x05R\battempts\x12\x14\n" +
 	"\x05error\x18\x05 \x01(\tR\x05error\x127\n" +
 	"\tfailed_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\bfailedAt\"\x96\x01\n" +
@@ -1238,7 +1237,6 @@ var file_app_topic_v1_topic_proto_goTypes = []any{
 	(*CountDeadLettersRequest)(nil),    // 16: app.topic.v1.CountDeadLettersRequest
 	(*CountDeadLettersResponse)(nil),   // 17: app.topic.v1.CountDeadLettersResponse
 	(*timestamppb.Timestamp)(nil),      // 18: google.protobuf.Timestamp
-	(*structpb.Value)(nil),             // 19: google.protobuf.Value
 }
 var file_app_topic_v1_topic_proto_depIdxs = []int32{
 	18, // 0: app.topic.v1.SendRequest.due_at:type_name -> google.protobuf.Timestamp
@@ -1247,31 +1245,28 @@ var file_app_topic_v1_topic_proto_depIdxs = []int32{
 	18, // 3: app.topic.v1.Attempt.first_attempted_at:type_name -> google.protobuf.Timestamp
 	3,  // 4: app.topic.v1.Delivery.message:type_name -> app.topic.v1.Message
 	4,  // 5: app.topic.v1.Delivery.attempt:type_name -> app.topic.v1.Attempt
-	19, // 6: app.topic.v1.Delivery.payload:type_name -> google.protobuf.Value
-	3,  // 7: app.topic.v1.Envelope.message:type_name -> app.topic.v1.Message
-	4,  // 8: app.topic.v1.Envelope.attempt:type_name -> app.topic.v1.Attempt
-	19, // 9: app.topic.v1.Envelope.payload:type_name -> google.protobuf.Value
-	5,  // 10: app.topic.v1.Envelope.messages:type_name -> app.topic.v1.Delivery
-	7,  // 11: app.topic.v1.Answer.abort:type_name -> app.topic.v1.Abort
-	3,  // 12: app.topic.v1.DeadLetter.message:type_name -> app.topic.v1.Message
-	19, // 13: app.topic.v1.DeadLetter.payload:type_name -> google.protobuf.Value
-	18, // 14: app.topic.v1.DeadLetter.failed_at:type_name -> google.protobuf.Timestamp
-	9,  // 15: app.topic.v1.ListDeadLettersResponse.dead_letters:type_name -> app.topic.v1.DeadLetter
-	1,  // 16: app.topic.v1.TopicService.Send:input_type -> app.topic.v1.SendRequest
-	10, // 17: app.topic.v1.TopicService.ListDeadLetters:input_type -> app.topic.v1.ListDeadLettersRequest
-	12, // 18: app.topic.v1.TopicService.RedriveDeadLetters:input_type -> app.topic.v1.RedriveDeadLettersRequest
-	14, // 19: app.topic.v1.TopicService.PurgeDeadLetters:input_type -> app.topic.v1.PurgeDeadLettersRequest
-	16, // 20: app.topic.v1.TopicService.CountDeadLetters:input_type -> app.topic.v1.CountDeadLettersRequest
-	2,  // 21: app.topic.v1.TopicService.Send:output_type -> app.topic.v1.SendResponse
-	11, // 22: app.topic.v1.TopicService.ListDeadLetters:output_type -> app.topic.v1.ListDeadLettersResponse
-	13, // 23: app.topic.v1.TopicService.RedriveDeadLetters:output_type -> app.topic.v1.RedriveDeadLettersResponse
-	15, // 24: app.topic.v1.TopicService.PurgeDeadLetters:output_type -> app.topic.v1.PurgeDeadLettersResponse
-	17, // 25: app.topic.v1.TopicService.CountDeadLetters:output_type -> app.topic.v1.CountDeadLettersResponse
-	21, // [21:26] is the sub-list for method output_type
-	16, // [16:21] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	3,  // 6: app.topic.v1.Envelope.message:type_name -> app.topic.v1.Message
+	4,  // 7: app.topic.v1.Envelope.attempt:type_name -> app.topic.v1.Attempt
+	5,  // 8: app.topic.v1.Envelope.messages:type_name -> app.topic.v1.Delivery
+	7,  // 9: app.topic.v1.Answer.abort:type_name -> app.topic.v1.Abort
+	3,  // 10: app.topic.v1.DeadLetter.message:type_name -> app.topic.v1.Message
+	18, // 11: app.topic.v1.DeadLetter.failed_at:type_name -> google.protobuf.Timestamp
+	9,  // 12: app.topic.v1.ListDeadLettersResponse.dead_letters:type_name -> app.topic.v1.DeadLetter
+	1,  // 13: app.topic.v1.TopicService.Send:input_type -> app.topic.v1.SendRequest
+	10, // 14: app.topic.v1.TopicService.ListDeadLetters:input_type -> app.topic.v1.ListDeadLettersRequest
+	12, // 15: app.topic.v1.TopicService.RedriveDeadLetters:input_type -> app.topic.v1.RedriveDeadLettersRequest
+	14, // 16: app.topic.v1.TopicService.PurgeDeadLetters:input_type -> app.topic.v1.PurgeDeadLettersRequest
+	16, // 17: app.topic.v1.TopicService.CountDeadLetters:input_type -> app.topic.v1.CountDeadLettersRequest
+	2,  // 18: app.topic.v1.TopicService.Send:output_type -> app.topic.v1.SendResponse
+	11, // 19: app.topic.v1.TopicService.ListDeadLetters:output_type -> app.topic.v1.ListDeadLettersResponse
+	13, // 20: app.topic.v1.TopicService.RedriveDeadLetters:output_type -> app.topic.v1.RedriveDeadLettersResponse
+	15, // 21: app.topic.v1.TopicService.PurgeDeadLetters:output_type -> app.topic.v1.PurgeDeadLettersResponse
+	17, // 22: app.topic.v1.TopicService.CountDeadLetters:output_type -> app.topic.v1.CountDeadLettersResponse
+	18, // [18:23] is the sub-list for method output_type
+	13, // [13:18] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_app_topic_v1_topic_proto_init() }

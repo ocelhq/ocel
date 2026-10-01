@@ -450,12 +450,10 @@ pub struct TriggerOptions {
     /// Field 10: `metadata`
     #[serde(
         rename = "metadata",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
+        with = "::buffa::json_helpers::bytes",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_bytes"
     )]
-    pub metadata: ::buffa::MessageField<
-        ::buffa_types::google::protobuf::Struct,
-        ::buffa::Inline<::buffa_types::google::protobuf::Struct>,
-    >,
+    pub metadata: ::buffa::alloc::vec::Vec<u8>,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -555,13 +553,8 @@ impl ::buffa::Message for TriggerOptions {
         for v in &self.tags {
             size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
         }
-        if self.metadata.is_set() {
-            let __slot = __cache.reserve();
-            let inner_size = self.metadata.compute_size(__cache);
-            __cache.set(__slot, inner_size);
-            size
-                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                    + inner_size as u64;
+        if !self.metadata.is_empty() {
+            size += 1u64 + ::buffa::types::bytes_encoded_len(&self.metadata) as u64;
         }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
@@ -623,13 +616,8 @@ impl ::buffa::Message for TriggerOptions {
         for v in &self.tags {
             ::buffa::types::put_string_field(9u32, v, buf);
         }
-        if self.metadata.is_set() {
-            ::buffa::types::put_len_delimited_header(
-                10u32,
-                u64::from(__cache.consume_next()),
-                buf,
-            );
-            self.metadata.write_to(__cache, buf);
+        if !self.metadata.is_empty() {
+            ::buffa::types::put_shared_bytes_field(10u32, &self.metadata, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -732,11 +720,7 @@ impl ::buffa::Message for TriggerOptions {
                     tag,
                     ::buffa::encoding::WireType::LengthDelimited,
                 )?;
-                ::buffa::Message::merge_length_delimited(
-                    self.metadata.get_or_insert_default(),
-                    buf,
-                    ctx,
-                )?;
+                ::buffa::types::merge_bytes(&mut self.metadata, buf)?;
             }
             _ => {
                 self.__buffa_unknown_fields
@@ -755,7 +739,7 @@ impl ::buffa::Message for TriggerOptions {
         self.lane = ::buffa::EnumValue::from(0);
         self.max_attempts = 0i32;
         self.tags.clear();
-        self.metadata = ::buffa::MessageField::none();
+        self.metadata.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -1575,23 +1559,17 @@ pub struct Run {
     /// Field 4: `payload`
     #[serde(
         rename = "payload",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field",
-        deserialize_with = "::buffa::json_helpers::message_field_always_present"
+        with = "::buffa::json_helpers::bytes",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_bytes"
     )]
-    pub payload: ::buffa::MessageField<
-        ::buffa_types::google::protobuf::Value,
-        ::buffa::Inline<::buffa_types::google::protobuf::Value>,
-    >,
+    pub payload: ::buffa::alloc::vec::Vec<u8>,
     /// Field 5: `output`
     #[serde(
         rename = "output",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field",
-        deserialize_with = "::buffa::json_helpers::message_field_always_present"
+        with = "::buffa::json_helpers::bytes",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_bytes"
     )]
-    pub output: ::buffa::MessageField<
-        ::buffa_types::google::protobuf::Value,
-        ::buffa::Inline<::buffa_types::google::protobuf::Value>,
-    >,
+    pub output: ::buffa::alloc::vec::Vec<u8>,
     /// Field 6: `error`
     #[serde(
         rename = "error",
@@ -1616,12 +1594,10 @@ pub struct Run {
     /// Field 9: `metadata`
     #[serde(
         rename = "metadata",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
+        with = "::buffa::json_helpers::bytes",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_bytes"
     )]
-    pub metadata: ::buffa::MessageField<
-        ::buffa_types::google::protobuf::Struct,
-        ::buffa::Inline<::buffa_types::google::protobuf::Struct>,
-    >,
+    pub metadata: ::buffa::alloc::vec::Vec<u8>,
     /// Field 10: `created_at`
     #[serde(
         rename = "createdAt",
@@ -1735,21 +1711,11 @@ impl ::buffa::Message for Run {
                 size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
             }
         }
-        if self.payload.is_set() {
-            let __slot = __cache.reserve();
-            let inner_size = self.payload.compute_size(__cache);
-            __cache.set(__slot, inner_size);
-            size
-                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                    + inner_size as u64;
+        if !self.payload.is_empty() {
+            size += 1u64 + ::buffa::types::bytes_encoded_len(&self.payload) as u64;
         }
-        if self.output.is_set() {
-            let __slot = __cache.reserve();
-            let inner_size = self.output.compute_size(__cache);
-            __cache.set(__slot, inner_size);
-            size
-                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                    + inner_size as u64;
+        if !self.output.is_empty() {
+            size += 1u64 + ::buffa::types::bytes_encoded_len(&self.output) as u64;
         }
         if !self.error.is_empty() {
             size += 1u64 + ::buffa::types::string_encoded_len(&self.error) as u64;
@@ -1760,13 +1726,8 @@ impl ::buffa::Message for Run {
         for v in &self.tags {
             size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
         }
-        if self.metadata.is_set() {
-            let __slot = __cache.reserve();
-            let inner_size = self.metadata.compute_size(__cache);
-            __cache.set(__slot, inner_size);
-            size
-                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                    + inner_size as u64;
+        if !self.metadata.is_empty() {
+            size += 1u64 + ::buffa::types::bytes_encoded_len(&self.metadata) as u64;
         }
         if self.created_at.is_set() {
             let __slot = __cache.reserve();
@@ -1830,21 +1791,11 @@ impl ::buffa::Message for Run {
                 ::buffa::types::put_int32_field(3u32, val, buf);
             }
         }
-        if self.payload.is_set() {
-            ::buffa::types::put_len_delimited_header(
-                4u32,
-                u64::from(__cache.consume_next()),
-                buf,
-            );
-            self.payload.write_to(__cache, buf);
+        if !self.payload.is_empty() {
+            ::buffa::types::put_shared_bytes_field(4u32, &self.payload, buf);
         }
-        if self.output.is_set() {
-            ::buffa::types::put_len_delimited_header(
-                5u32,
-                u64::from(__cache.consume_next()),
-                buf,
-            );
-            self.output.write_to(__cache, buf);
+        if !self.output.is_empty() {
+            ::buffa::types::put_shared_bytes_field(5u32, &self.output, buf);
         }
         if !self.error.is_empty() {
             ::buffa::types::put_string_field(6u32, &self.error, buf);
@@ -1855,13 +1806,8 @@ impl ::buffa::Message for Run {
         for v in &self.tags {
             ::buffa::types::put_string_field(8u32, v, buf);
         }
-        if self.metadata.is_set() {
-            ::buffa::types::put_len_delimited_header(
-                9u32,
-                u64::from(__cache.consume_next()),
-                buf,
-            );
-            self.metadata.write_to(__cache, buf);
+        if !self.metadata.is_empty() {
+            ::buffa::types::put_shared_bytes_field(9u32, &self.metadata, buf);
         }
         if self.created_at.is_set() {
             ::buffa::types::put_len_delimited_header(
@@ -1944,22 +1890,14 @@ impl ::buffa::Message for Run {
                     tag,
                     ::buffa::encoding::WireType::LengthDelimited,
                 )?;
-                ::buffa::Message::merge_length_delimited(
-                    self.payload.get_or_insert_default(),
-                    buf,
-                    ctx,
-                )?;
+                ::buffa::types::merge_bytes(&mut self.payload, buf)?;
             }
             5u32 => {
                 ::buffa::encoding::check_wire_type(
                     tag,
                     ::buffa::encoding::WireType::LengthDelimited,
                 )?;
-                ::buffa::Message::merge_length_delimited(
-                    self.output.get_or_insert_default(),
-                    buf,
-                    ctx,
-                )?;
+                ::buffa::types::merge_bytes(&mut self.output, buf)?;
             }
             6u32 => {
                 ::buffa::encoding::check_wire_type(
@@ -1991,11 +1929,7 @@ impl ::buffa::Message for Run {
                     tag,
                     ::buffa::encoding::WireType::LengthDelimited,
                 )?;
-                ::buffa::Message::merge_length_delimited(
-                    self.metadata.get_or_insert_default(),
-                    buf,
-                    ctx,
-                )?;
+                ::buffa::types::merge_bytes(&mut self.metadata, buf)?;
             }
             10u32 => {
                 ::buffa::encoding::check_wire_type(
@@ -2063,12 +1997,12 @@ impl ::buffa::Message for Run {
         self.id.clear();
         self.task.clear();
         self.status = ::buffa::EnumValue::from(0);
-        self.payload = ::buffa::MessageField::none();
-        self.output = ::buffa::MessageField::none();
+        self.payload.clear();
+        self.output.clear();
         self.error.clear();
         self.attempts = 0i32;
         self.tags.clear();
-        self.metadata = ::buffa::MessageField::none();
+        self.metadata.clear();
         self.created_at = ::buffa::MessageField::none();
         self.due_at = ::buffa::MessageField::none();
         self.started_at = ::buffa::MessageField::none();
@@ -3975,9 +3909,7 @@ pub mod __buffa {
             /// Field 9: `tags`
             pub tags: ::buffa::RepeatedView<'a, &'a str>,
             /// Field 10: `metadata`
-            pub metadata: ::buffa::MessageFieldView<
-                ::buffa_types::google::protobuf::__buffa::view::StructView<'a>,
-            >,
+            pub metadata: &'a [u8],
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::buffa::MessageView<'a> for TriggerOptionsView<'a> {
@@ -4151,25 +4083,7 @@ pub mod __buffa {
                             tag,
                             ::buffa::encoding::WireType::LengthDelimited,
                         )?;
-                        let __sub_ctx = ctx.descend()?;
-                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
-                        match view.metadata.as_mut() {
-                            Some(existing) => {
-                                ::buffa::MessageView::merge_into_view(
-                                    existing,
-                                    sub,
-                                    __sub_ctx,
-                                )?
-                            }
-                            None => {
-                                view.metadata = ::buffa::MessageFieldView::set(
-                                    <::buffa_types::google::protobuf::__buffa::view::StructView as ::buffa::MessageView>::decode_view_ctx(
-                                        sub,
-                                        __sub_ctx,
-                                    )?,
-                                );
-                            }
-                        }
+                        view.metadata = ::buffa::types::borrow_bytes(&mut cur)?;
                     }
                     9u32 => {
                         ::buffa::encoding::check_wire_type(
@@ -4252,15 +4166,7 @@ pub mod __buffa {
                     lane: self.lane,
                     max_attempts: self.max_attempts,
                     tags: self.tags.iter().map(|s| s.to_string()).collect(),
-                    metadata: match self.metadata.as_option() {
-                        Some(v) => {
-                            ::buffa::MessageField::<
-                                ::buffa_types::google::protobuf::Struct,
-                                ::buffa::Inline<::buffa_types::google::protobuf::Struct>,
-                            >::some(v.to_owned_from_source(__buffa_src)?)
-                        }
-                        None => ::buffa::MessageField::none(),
-                    },
+                    metadata: (self.metadata).to_vec(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -4331,13 +4237,10 @@ pub mod __buffa {
                 for v in &self.tags {
                     size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
                 }
-                if self.metadata.is_set() {
-                    let __slot = __cache.reserve();
-                    let inner_size = self.metadata.compute_size(__cache);
-                    __cache.set(__slot, inner_size);
+                if !self.metadata.is_empty() {
                     size
-                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                            + inner_size as u64;
+                        += 1u64
+                            + ::buffa::types::bytes_encoded_len(&self.metadata) as u64;
                 }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
@@ -4400,13 +4303,8 @@ pub mod __buffa {
                 for v in &self.tags {
                     ::buffa::types::put_string_field(9u32, v, buf);
                 }
-                if self.metadata.is_set() {
-                    ::buffa::types::put_len_delimited_header(
-                        10u32,
-                        u64::from(__cache.consume_next()),
-                        buf,
-                    );
-                    self.metadata.write_to(__cache, buf);
+                if !self.metadata.is_empty() {
+                    ::buffa::types::put_shared_bytes_field(10u32, &self.metadata, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -4472,11 +4370,12 @@ pub mod __buffa {
                 if !self.tags.is_empty() {
                     __map.serialize_entry("tags", &*self.tags)?;
                 }
-                {
-                    if let ::core::option::Option::Some(__v) = self.metadata.as_option()
-                    {
-                        __map.serialize_entry("metadata", __v)?;
-                    }
+                if !::buffa::json_helpers::skip_if::is_empty_bytes(self.metadata) {
+                    __map
+                        .serialize_entry(
+                            "metadata",
+                            &::buffa::json_helpers::BytesJson(self.metadata),
+                        )?;
                 }
                 __map.end()
             }
@@ -4638,12 +4537,8 @@ pub mod __buffa {
             }
             /// Field 10: `metadata`
             #[must_use]
-            pub fn metadata(
-                &self,
-            ) -> &::buffa::MessageFieldView<
-                ::buffa_types::google::protobuf::__buffa::view::StructView<'_>,
-            > {
-                &self.0.reborrow().metadata
+            pub fn metadata(&self) -> &'_ [u8] {
+                self.0.reborrow().metadata
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<TriggerOptionsView<'static>>>
@@ -6250,13 +6145,9 @@ pub mod __buffa {
             /// Field 3: `status`
             pub status: ::buffa::EnumValue<super::super::RunStatus>,
             /// Field 4: `payload`
-            pub payload: ::buffa::MessageFieldView<
-                ::buffa_types::google::protobuf::__buffa::view::ValueView<'a>,
-            >,
+            pub payload: &'a [u8],
             /// Field 5: `output`
-            pub output: ::buffa::MessageFieldView<
-                ::buffa_types::google::protobuf::__buffa::view::ValueView<'a>,
-            >,
+            pub output: &'a [u8],
             /// Field 6: `error`
             pub error: &'a str,
             /// Field 7: `attempts`
@@ -6264,9 +6155,7 @@ pub mod __buffa {
             /// Field 8: `tags`
             pub tags: ::buffa::RepeatedView<'a, &'a str>,
             /// Field 9: `metadata`
-            pub metadata: ::buffa::MessageFieldView<
-                ::buffa_types::google::protobuf::__buffa::view::StructView<'a>,
-            >,
+            pub metadata: &'a [u8],
             /// Field 10: `created_at`
             pub created_at: ::buffa::MessageFieldView<
                 ::buffa_types::google::protobuf::__buffa::view::TimestampView<'a>,
@@ -6353,50 +6242,14 @@ pub mod __buffa {
                             tag,
                             ::buffa::encoding::WireType::LengthDelimited,
                         )?;
-                        let __sub_ctx = ctx.descend()?;
-                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
-                        match view.payload.as_mut() {
-                            Some(existing) => {
-                                ::buffa::MessageView::merge_into_view(
-                                    existing,
-                                    sub,
-                                    __sub_ctx,
-                                )?
-                            }
-                            None => {
-                                view.payload = ::buffa::MessageFieldView::set(
-                                    <::buffa_types::google::protobuf::__buffa::view::ValueView as ::buffa::MessageView>::decode_view_ctx(
-                                        sub,
-                                        __sub_ctx,
-                                    )?,
-                                );
-                            }
-                        }
+                        view.payload = ::buffa::types::borrow_bytes(&mut cur)?;
                     }
                     5u32 => {
                         ::buffa::encoding::check_wire_type(
                             tag,
                             ::buffa::encoding::WireType::LengthDelimited,
                         )?;
-                        let __sub_ctx = ctx.descend()?;
-                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
-                        match view.output.as_mut() {
-                            Some(existing) => {
-                                ::buffa::MessageView::merge_into_view(
-                                    existing,
-                                    sub,
-                                    __sub_ctx,
-                                )?
-                            }
-                            None => {
-                                view.output = ::buffa::MessageFieldView::set(
-                                    <::buffa_types::google::protobuf::__buffa::view::ValueView as ::buffa::MessageView>::decode_view_ctx(
-                                        sub,
-                                        __sub_ctx,
-                                    )?,
-                                );
-                            }
-                        }
+                        view.output = ::buffa::types::borrow_bytes(&mut cur)?;
                     }
                     6u32 => {
                         ::buffa::encoding::check_wire_type(
@@ -6417,25 +6270,7 @@ pub mod __buffa {
                             tag,
                             ::buffa::encoding::WireType::LengthDelimited,
                         )?;
-                        let __sub_ctx = ctx.descend()?;
-                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
-                        match view.metadata.as_mut() {
-                            Some(existing) => {
-                                ::buffa::MessageView::merge_into_view(
-                                    existing,
-                                    sub,
-                                    __sub_ctx,
-                                )?
-                            }
-                            None => {
-                                view.metadata = ::buffa::MessageFieldView::set(
-                                    <::buffa_types::google::protobuf::__buffa::view::StructView as ::buffa::MessageView>::decode_view_ctx(
-                                        sub,
-                                        __sub_ctx,
-                                    )?,
-                                );
-                            }
-                        }
+                        view.metadata = ::buffa::types::borrow_bytes(&mut cur)?;
                     }
                     10u32 => {
                         ::buffa::encoding::check_wire_type(
@@ -6599,36 +6434,12 @@ pub mod __buffa {
                     id: self.id.to_string(),
                     task: self.task.to_string(),
                     status: self.status,
-                    payload: match self.payload.as_option() {
-                        Some(v) => {
-                            ::buffa::MessageField::<
-                                ::buffa_types::google::protobuf::Value,
-                                ::buffa::Inline<::buffa_types::google::protobuf::Value>,
-                            >::some(v.to_owned_from_source(__buffa_src)?)
-                        }
-                        None => ::buffa::MessageField::none(),
-                    },
-                    output: match self.output.as_option() {
-                        Some(v) => {
-                            ::buffa::MessageField::<
-                                ::buffa_types::google::protobuf::Value,
-                                ::buffa::Inline<::buffa_types::google::protobuf::Value>,
-                            >::some(v.to_owned_from_source(__buffa_src)?)
-                        }
-                        None => ::buffa::MessageField::none(),
-                    },
+                    payload: (self.payload).to_vec(),
+                    output: (self.output).to_vec(),
                     error: self.error.to_string(),
                     attempts: self.attempts,
                     tags: self.tags.iter().map(|s| s.to_string()).collect(),
-                    metadata: match self.metadata.as_option() {
-                        Some(v) => {
-                            ::buffa::MessageField::<
-                                ::buffa_types::google::protobuf::Struct,
-                                ::buffa::Inline<::buffa_types::google::protobuf::Struct>,
-                            >::some(v.to_owned_from_source(__buffa_src)?)
-                        }
-                        None => ::buffa::MessageField::none(),
-                    },
+                    metadata: (self.metadata).to_vec(),
                     created_at: match self.created_at.as_option() {
                         Some(v) => {
                             ::buffa::MessageField::<
@@ -6700,21 +6511,14 @@ pub mod __buffa {
                         size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
                     }
                 }
-                if self.payload.is_set() {
-                    let __slot = __cache.reserve();
-                    let inner_size = self.payload.compute_size(__cache);
-                    __cache.set(__slot, inner_size);
+                if !self.payload.is_empty() {
                     size
-                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                            + inner_size as u64;
+                        += 1u64
+                            + ::buffa::types::bytes_encoded_len(&self.payload) as u64;
                 }
-                if self.output.is_set() {
-                    let __slot = __cache.reserve();
-                    let inner_size = self.output.compute_size(__cache);
-                    __cache.set(__slot, inner_size);
+                if !self.output.is_empty() {
                     size
-                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                            + inner_size as u64;
+                        += 1u64 + ::buffa::types::bytes_encoded_len(&self.output) as u64;
                 }
                 if !self.error.is_empty() {
                     size
@@ -6728,13 +6532,10 @@ pub mod __buffa {
                 for v in &self.tags {
                     size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
                 }
-                if self.metadata.is_set() {
-                    let __slot = __cache.reserve();
-                    let inner_size = self.metadata.compute_size(__cache);
-                    __cache.set(__slot, inner_size);
+                if !self.metadata.is_empty() {
                     size
-                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
-                            + inner_size as u64;
+                        += 1u64
+                            + ::buffa::types::bytes_encoded_len(&self.metadata) as u64;
                 }
                 if self.created_at.is_set() {
                     let __slot = __cache.reserve();
@@ -6799,21 +6600,11 @@ pub mod __buffa {
                         ::buffa::types::put_int32_field(3u32, val, buf);
                     }
                 }
-                if self.payload.is_set() {
-                    ::buffa::types::put_len_delimited_header(
-                        4u32,
-                        u64::from(__cache.consume_next()),
-                        buf,
-                    );
-                    self.payload.write_to(__cache, buf);
+                if !self.payload.is_empty() {
+                    ::buffa::types::put_shared_bytes_field(4u32, &self.payload, buf);
                 }
-                if self.output.is_set() {
-                    ::buffa::types::put_len_delimited_header(
-                        5u32,
-                        u64::from(__cache.consume_next()),
-                        buf,
-                    );
-                    self.output.write_to(__cache, buf);
+                if !self.output.is_empty() {
+                    ::buffa::types::put_shared_bytes_field(5u32, &self.output, buf);
                 }
                 if !self.error.is_empty() {
                     ::buffa::types::put_string_field(6u32, &self.error, buf);
@@ -6824,13 +6615,8 @@ pub mod __buffa {
                 for v in &self.tags {
                     ::buffa::types::put_string_field(8u32, v, buf);
                 }
-                if self.metadata.is_set() {
-                    ::buffa::types::put_len_delimited_header(
-                        9u32,
-                        u64::from(__cache.consume_next()),
-                        buf,
-                    );
-                    self.metadata.write_to(__cache, buf);
+                if !self.metadata.is_empty() {
+                    ::buffa::types::put_shared_bytes_field(9u32, &self.metadata, buf);
                 }
                 if self.created_at.is_set() {
                     ::buffa::types::put_len_delimited_header(
@@ -6902,15 +6688,19 @@ pub mod __buffa {
                 if !::buffa::json_helpers::skip_if::is_default_enum_value(&self.status) {
                     __map.serialize_entry("status", &self.status)?;
                 }
-                {
-                    if let ::core::option::Option::Some(__v) = self.payload.as_option() {
-                        __map.serialize_entry("payload", __v)?;
-                    }
+                if !::buffa::json_helpers::skip_if::is_empty_bytes(self.payload) {
+                    __map
+                        .serialize_entry(
+                            "payload",
+                            &::buffa::json_helpers::BytesJson(self.payload),
+                        )?;
                 }
-                {
-                    if let ::core::option::Option::Some(__v) = self.output.as_option() {
-                        __map.serialize_entry("output", __v)?;
-                    }
+                if !::buffa::json_helpers::skip_if::is_empty_bytes(self.output) {
+                    __map
+                        .serialize_entry(
+                            "output",
+                            &::buffa::json_helpers::BytesJson(self.output),
+                        )?;
                 }
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.error) {
                     __map.serialize_entry("error", self.error)?;
@@ -6925,11 +6715,12 @@ pub mod __buffa {
                 if !self.tags.is_empty() {
                     __map.serialize_entry("tags", &*self.tags)?;
                 }
-                {
-                    if let ::core::option::Option::Some(__v) = self.metadata.as_option()
-                    {
-                        __map.serialize_entry("metadata", __v)?;
-                    }
+                if !::buffa::json_helpers::skip_if::is_empty_bytes(self.metadata) {
+                    __map
+                        .serialize_entry(
+                            "metadata",
+                            &::buffa::json_helpers::BytesJson(self.metadata),
+                        )?;
                 }
                 {
                     if let ::core::option::Option::Some(__v) = self
@@ -7076,21 +6867,13 @@ pub mod __buffa {
             }
             /// Field 4: `payload`
             #[must_use]
-            pub fn payload(
-                &self,
-            ) -> &::buffa::MessageFieldView<
-                ::buffa_types::google::protobuf::__buffa::view::ValueView<'_>,
-            > {
-                &self.0.reborrow().payload
+            pub fn payload(&self) -> &'_ [u8] {
+                self.0.reborrow().payload
             }
             /// Field 5: `output`
             #[must_use]
-            pub fn output(
-                &self,
-            ) -> &::buffa::MessageFieldView<
-                ::buffa_types::google::protobuf::__buffa::view::ValueView<'_>,
-            > {
-                &self.0.reborrow().output
+            pub fn output(&self) -> &'_ [u8] {
+                self.0.reborrow().output
             }
             /// Field 6: `error`
             #[must_use]
@@ -7109,12 +6892,8 @@ pub mod __buffa {
             }
             /// Field 9: `metadata`
             #[must_use]
-            pub fn metadata(
-                &self,
-            ) -> &::buffa::MessageFieldView<
-                ::buffa_types::google::protobuf::__buffa::view::StructView<'_>,
-            > {
-                &self.0.reborrow().metadata
+            pub fn metadata(&self) -> &'_ [u8] {
+                self.0.reborrow().metadata
             }
             /// Field 10: `created_at`
             #[must_use]

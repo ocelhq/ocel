@@ -1,5 +1,5 @@
-import { fromJsonString, toJson } from "@bufbuild/protobuf";
-import { type Timestamp, timestampDate, type Value, ValueSchema } from "@bufbuild/protobuf/wkt";
+import { fromJson, type JsonValue } from "@bufbuild/protobuf";
+import { type Timestamp, timestampDate } from "@bufbuild/protobuf/wkt";
 import { validatePayload } from "../delivery/schema.js";
 import { type Envelope, EnvelopeSchema } from "../gen/proto/app/topic/v1/topic_pb.js";
 import { AbortTaskRunError } from "../task/errors.js";
@@ -26,7 +26,32 @@ const createAbortAnswer = (reason: string): DeliveryAnswer => ({
 const decodeTimestamp = (timestamp: Timestamp | undefined) =>
   timestamp ? timestampDate(timestamp) : undefined;
 
-const decodeValue = (value: Value | undefined) => (value ? toJson(ValueSchema, value) : null);
+interface ParsedEnvelope {
+  envelope: Envelope;
+  payloads: unknown[];
+}
+
+function parseEnvelope(body: string): ParsedEnvelope {
+  const parsed: unknown = JSON.parse(body);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("the envelope is not a JSON object");
+  }
+  const { payload, messages, ...fields } = parsed as Record<string, unknown>;
+  const deliveries = Array.isArray(messages) ? (messages as Record<string, unknown>[]) : [];
+  const bare = Array.isArray(messages)
+    ? deliveries.map(({ payload: _payload, ...delivery }) => delivery)
+    : messages;
+  const envelope = fromJson(
+    EnvelopeSchema,
+    (bare === undefined ? fields : { ...fields, messages: bare }) as JsonValue,
+    { ignoreUnknownFields: true },
+  );
+  const payloads =
+    deliveries.length > 0
+      ? deliveries.map((delivery) => delivery.payload ?? null)
+      : [payload ?? null];
+  return { envelope, payloads };
+}
 
 const starts = new Map<string, Promise<unknown>>();
 const semaphores = new Map<string, Semaphore>();
@@ -99,7 +124,7 @@ function createRunContext(
 
 async function decodePayload(
   registration: Registration,
-  envelope: Envelope,
+  { envelope, payloads: values }: ParsedEnvelope,
 ): Promise<{ ok: true; payload: unknown } | { ok: false; answer: DeliveryAnswer }> {
   const isBatchEnvelope = envelope.messages.length > 0;
   if (!registration.batch && isBatchEnvelope) {
@@ -111,9 +136,6 @@ async function decodePayload(
       },
     };
   }
-  const values = isBatchEnvelope
-    ? envelope.messages.map((delivery) => decodeValue(delivery.payload))
-    : [decodeValue(envelope.payload)];
   const { schema } = registration;
   if (!schema) return { ok: true, payload: registration.batch ? values : values[0] };
   const validated: unknown[] = [];
@@ -133,13 +155,13 @@ async function decodePayload(
 async function serveAttempt(
   registration: Registration,
   workerName: string,
-  envelope: Envelope,
+  delivered: ParsedEnvelope,
   signal: AbortSignal,
 ): Promise<DeliveryAnswer> {
-  const parsed = await decodePayload(registration, envelope);
+  const parsed = await decodePayload(registration, delivered);
   if (!parsed.ok) return parsed.answer;
   const { payload } = parsed;
-  const ctx = createRunContext(registration, envelope, signal);
+  const ctx = createRunContext(registration, delivered.envelope, signal);
   const { hooks } = registration;
   const workerMiddleware = findWorker(workerName)?.middleware;
 
@@ -242,12 +264,13 @@ export async function deliver(
   body: string,
   signal: AbortSignal = new AbortController().signal,
 ): Promise<DeliveryAnswer> {
-  let envelope: Envelope;
+  let delivered: ParsedEnvelope;
   try {
-    envelope = fromJsonString(EnvelopeSchema, body, { ignoreUnknownFields: true });
+    delivered = parseEnvelope(body);
   } catch (error) {
     return { status: 400, body: `the body is not a message envelope: ${describeError(error)}` };
   }
+  const { envelope } = delivered;
   const registration = findRegistration(envelope.topic, envelope.consumer);
   if (!registration) {
     return {
@@ -267,7 +290,7 @@ export async function deliver(
     return { status: 500, body: `worker "${workerName}" failed to start: ${describeError(error)}` };
   }
   const semaphore = ensureSemaphore(workerName);
-  if (!semaphore) return serveAttempt(registration, workerName, envelope, signal);
+  if (!semaphore) return serveAttempt(registration, workerName, delivered, signal);
   try {
     await semaphore.acquire(signal);
   } catch {
@@ -277,7 +300,7 @@ export async function deliver(
     };
   }
   try {
-    return await serveAttempt(registration, workerName, envelope, signal);
+    return await serveAttempt(registration, workerName, delivered, signal);
   } finally {
     semaphore.release();
   }

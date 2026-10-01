@@ -2,7 +2,7 @@
 //! reschedule one by its id.
 
 use crate::declare::is_discovering;
-use crate::json::{convert_object, convert_timestamp, convert_value};
+use crate::json::{convert_timestamp, read_json};
 use crate::payload::Due;
 use crate::proto::app::task::v1::{
     CancelRunRequest, ListRunsRequest, ReplayRunRequest, RescheduleRunRequest, RetrieveRunRequest,
@@ -77,9 +77,11 @@ pub struct RunRecord {
     pub task: String,
     /// Where the run is in its life, or `None` for a status this SDK does not know.
     pub status: Option<RunStatus>,
-    /// The payload the run was triggered with.
+    /// The payload the run was triggered with, exactly as it was encoded: integers stay
+    /// integers at full 64-bit precision and floats stay floats. `null` when the run has no
+    /// payload.
     pub payload: serde_json::Value,
-    /// What the run returned, `null` until it completes.
+    /// What the run returned, exactly as the run encoded it, or `null` until it completes.
     pub output: serde_json::Value,
     /// The error the last failed attempt returned.
     pub error: String,
@@ -87,7 +89,7 @@ pub struct RunRecord {
     pub attempts: u32,
     /// The tags the run was triggered with.
     pub tags: Vec<String>,
-    /// The metadata the run was triggered with.
+    /// The metadata the run was triggered with, empty when it was triggered with none.
     pub metadata: serde_json::Map<String, serde_json::Value>,
     /// When the run was triggered.
     pub created_at: Option<SystemTime>,
@@ -136,17 +138,20 @@ fn refuse_access(id: &str, access: &str, err: connectrpc::ConnectError) -> Error
     }
 }
 
-fn convert_run(run: Option<&WireRun>) -> RunRecord {
+fn convert_run(run: Option<&WireRun>, access: &str) -> Result<RunRecord, Error> {
     let run = run.cloned().unwrap_or_default();
-    let metadata = run
-        .metadata
-        .as_option()
-        .map(convert_object)
-        .unwrap_or_default();
-    RunRecord {
+    let refuse_json = |field: &str, err: serde_json::Error| Error::RuntimeRefused {
+        resource: "runs".to_string(),
+        access: access.to_string(),
+        said: format!("run {} has a {field} that is not JSON: {err}", run.id),
+    };
+    let payload = read_json(&run.payload).map_err(|err| refuse_json("payload", err))?;
+    let output = read_json(&run.output).map_err(|err| refuse_json("output", err))?;
+    let metadata = read_json(&run.metadata).map_err(|err| refuse_json("metadata", err))?;
+    Ok(RunRecord {
         status: run.status.as_known().and_then(RunStatus::from_wire),
-        payload: convert_value(run.payload.as_option()),
-        output: convert_value(run.output.as_option()),
+        payload,
+        output,
         attempts: run.attempts.max(0) as u32,
         created_at: run.created_at.as_option().and_then(convert_timestamp),
         due_at: run.due_at.as_option().and_then(convert_timestamp),
@@ -158,7 +163,7 @@ fn convert_run(run: Option<&WireRun>) -> RunRecord {
         task: run.task,
         error: run.error,
         tags: run.tags,
-    }
+    })
 }
 
 /// Read the run with `id`. It fails with [`Error::UnknownRun`] when no run has it.
@@ -171,7 +176,7 @@ pub async fn retrieve(id: &str) -> Result<RunRecord, Error> {
         .await
         .map_err(|err| refuse_access(id, "retrieve", err))?
         .into_owned();
-    Ok(convert_run(response.run.as_option()))
+    convert_run(response.run.as_option(), "retrieve")
 }
 
 /// Cancel the run with `id`: no attempt starts after this, and a running attempt is told
@@ -185,7 +190,7 @@ pub async fn cancel(id: &str) -> Result<RunRecord, Error> {
         .await
         .map_err(|err| refuse_access(id, "cancel", err))?
         .into_owned();
-    Ok(convert_run(response.run.as_option()))
+    convert_run(response.run.as_option(), "cancel")
 }
 
 /// Trigger the run with `id` again with its payload and options, and answer with the new
@@ -258,7 +263,7 @@ impl IntoFuture for Reschedule {
                 .await
                 .map_err(|err| refuse_access(&self.id, "reschedule", err))?
                 .into_owned();
-            Ok(convert_run(response.run.as_option()))
+            convert_run(response.run.as_option(), "reschedule")
         })
     }
 }
@@ -337,8 +342,8 @@ impl IntoFuture for RunList {
                 runs: response
                     .runs
                     .iter()
-                    .map(|run| convert_run(Some(run)))
-                    .collect(),
+                    .map(|run| convert_run(Some(run), "list"))
+                    .collect::<Result<_, _>>()?,
                 next_cursor: Some(response.next_cursor).filter(|cursor| !cursor.is_empty()),
             })
         })

@@ -1,8 +1,9 @@
-import { type JsonObject, toJson } from "@bufbuild/protobuf";
-import { type Timestamp, timestampDate, ValueSchema } from "@bufbuild/protobuf/wkt";
+import type { JsonObject } from "@bufbuild/protobuf";
+import { type Timestamp, timestampDate } from "@bufbuild/protobuf/wkt";
 import { type Client, createClient } from "@connectrpc/connect";
 import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
 import { type Duration, encodeDueAt } from "../delivery/duration.js";
+import { decodeJson } from "../delivery/payload.js";
 import {
   type Run as ProtoRun,
   RunStatus as ProtoRunStatus,
@@ -91,12 +92,12 @@ function decodeRun(run: ProtoRun | undefined): Run {
     id: run.id,
     task: run.task,
     status: ProtoRunStatus[run.status] as RunStatus,
-    payload: run.payload ? toJson(ValueSchema, run.payload) : null,
-    output: run.output ? toJson(ValueSchema, run.output) : null,
+    payload: decodeJson(run.payload),
+    output: decodeJson(run.output),
     error: run.error || undefined,
     attempts: run.attempts,
     tags: run.tags,
-    metadata: run.metadata ?? {},
+    metadata: (decodeJson(run.metadata) as JsonObject | null) ?? {},
     createdAt: decodeTimestamp(run.createdAt),
     dueAt: decodeTimestamp(run.dueAt),
     startedAt: decodeTimestamp(run.startedAt),

@@ -11,7 +11,7 @@ from ocel import _registry
 from ocel._declare import declare, find_caller_source, is_discovering
 from ocel._error import format_error
 from ocel._payload import encode_json
-from ocel._wire import decode_timestamp, decode_value
+from ocel._wire import decode_timestamp
 from ocel.gen.app.resources.v1.resources_pb import (
     DeclareRequest,
     ResourceIdentifier,
@@ -133,7 +133,7 @@ async def deliver(worker: str, body: bytes) -> tuple[int, bytes]:
     and no other lifecycle hook. A run that returns or raises once cancelled is answered
     for what it did."""
     try:
-        envelope = Envelope.from_json(body)
+        envelope, payloads = _read_envelope(body)
     except Exception as error:
         return 400, f"the body is not a delivery envelope: {format_error(error)}".encode()
     registration = _registry.registrations.get((envelope.topic, envelope.consumer))
@@ -158,17 +158,28 @@ async def deliver(worker: str, body: bytes) -> tuple[int, bytes]:
     except Exception as error:
         return 500, f'worker "{worker}" failed to start: {format_error(error)}'.encode()
     if handle._slots is None:
-        return await _run_attempt(handle, registration, envelope)
+        return await _run_attempt(handle, registration, envelope, payloads)
     async with handle._slots:
-        return await _run_attempt(handle, registration, envelope)
+        return await _run_attempt(handle, registration, envelope, payloads)
+
+
+def _read_envelope(body: bytes) -> tuple[Envelope, list[Any]]:
+    fields = json.loads(body)
+    if not isinstance(fields, dict):
+        raise TypeError(f"a delivery envelope is a JSON object, not {type(fields).__name__}")
+    payload = fields.pop("payload", None)
+    messages = fields.get("messages")
+    payloads = [each.pop("payload", None) for each in messages] if messages else [payload]
+    envelope = Envelope.from_json(json.dumps(fields), ignore_unknown_fields=True)
+    return envelope, payloads
 
 
 async def _run_attempt(
-    handle: Worker, registration: _registry.Registration, envelope: Envelope
+    handle: Worker, registration: _registry.Registration, envelope: Envelope, payloads: list[Any]
 ) -> tuple[int, bytes]:
     ctx = _build_context(registration, envelope)
     try:
-        payload = _decode_payload(registration, envelope)
+        payload = _decode_payload(registration, payloads)
     except Exception as error:
         return _build_abort_answer(error)
     hooks = registration.hooks
@@ -225,12 +236,10 @@ async def _run_attempt(
     return 500, format_error(failure).encode()
 
 
-def _decode_payload(registration: _registry.Registration, envelope: Envelope) -> Any:
+def _decode_payload(registration: _registry.Registration, payloads: list[Any]) -> Any:
     if not registration.batch:
-        return registration.decode(decode_value(envelope.payload))
-    if not envelope.messages:
-        return [registration.decode(decode_value(envelope.payload))]
-    return [registration.decode(decode_value(each.payload)) for each in envelope.messages]
+        return registration.decode(payloads[0])
+    return [registration.decode(each) for each in payloads]
 
 
 def _is_cancelling() -> bool:

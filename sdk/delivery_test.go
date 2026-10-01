@@ -2,6 +2,7 @@ package ocel_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -166,6 +167,67 @@ func TestAPayloadThatDoesNotDecodeIntoTheTypeAborts(t *testing.T) {
 	}
 }
 
+const exactJSON = `{"ratio":2.0,"id":9007199254740993,"count":2}`
+
+type measurement struct {
+	Ratio float64 `json:"ratio"`
+	ID    int64   `json:"id"`
+	Count int     `json:"count"`
+}
+
+func TestAPayloadReachesTheRunAsTheJSONTextItWasSentAs(t *testing.T) {
+	var raw json.RawMessage
+	var typed measurement
+	ocel.Task("measure-raw", func(_ context.Context, in json.RawMessage) (any, error) {
+		raw = in
+		return nil, nil
+	})
+	ocel.Task("measure-typed", func(_ context.Context, in measurement) (any, error) {
+		typed = in
+		return nil, nil
+	})
+
+	deliver(t, "worker", envelope("measure-raw", "measure-raw", 1, 3, exactJSON))
+	deliver(t, "worker", envelope("measure-typed", "measure-typed", 1, 3, exactJSON))
+
+	if string(raw) != exactJSON {
+		t.Errorf("payload = %s, want %s", raw, exactJSON)
+	}
+	if typed != (measurement{Ratio: 2, ID: 9007199254740993, Count: 2}) {
+		t.Errorf("payload = %+v, want the id above 2^53 exact", typed)
+	}
+}
+
+func TestAWholeFloatInAPayloadDoesNotDecodeIntoAnInteger(t *testing.T) {
+	ran := false
+	ocel.Task("measure-float", func(_ context.Context, in measurement) (any, error) {
+		ran = true
+		return nil, nil
+	})
+
+	status, _ := deliver(t, "worker", envelope("measure-float", "measure-float", 1, 3, `{"count":2.0}`))
+
+	if status != http.StatusUnprocessableEntity || ran {
+		t.Errorf("status = %d, ran = %v, want 2.0 refused as an int", status, ran)
+	}
+}
+
+func TestABatchHandsEachPayloadAsTheJSONTextItWasSentAs(t *testing.T) {
+	var got []json.RawMessage
+	ocel.Topic[json.RawMessage]("measures-batch").BatchConsumer("ledger", 10, func(_ context.Context, in []json.RawMessage) error {
+		got = in
+		return nil
+	})
+
+	deliver(t, "worker", `{"v":1,"topic":"measures-batch","consumer":"ledger","messages":[`+
+		`{"execution":"e-1","message":{"id":"m-1"},"payload":`+exactJSON+`},`+
+		`{"execution":"e-2","message":{"id":"m-2"},"payload":2.0}]}`)
+
+	if len(got) != 2 || string(got[0]) != exactJSON || string(got[1]) != "2.0" {
+		t.Errorf("payloads = %s, want each as sent", got)
+	}
+}
+
 func TestABatchConsumerIsHandedEveryPayloadOfTheBatch(t *testing.T) {
 	var got []order
 	var run ocel.RunContext
@@ -188,12 +250,16 @@ func TestABatchConsumerIsHandedEveryPayloadOfTheBatch(t *testing.T) {
 }
 
 func TestAConsumerOfSingleMessagesRefusesABatchWith400(t *testing.T) {
-	ocel.Topic[order]("orders-unbatched").Consumer("audit", func(context.Context, order) error { return nil })
+	ran := false
+	ocel.Topic[order]("orders-unbatched").Consumer("audit", func(context.Context, order) error {
+		ran = true
+		return nil
+	})
 
-	status, _ := deliver(t, "worker", `{"v":1,"topic":"orders-unbatched","consumer":"audit","messages":[{"execution":"e-1","payload":{}}]}`)
+	status, _ := deliver(t, "worker", `{"v":1,"topic":"orders-unbatched","consumer":"audit","messages":[{"execution":"e-1","payload":{}},{"execution":"e-2","payload":{}}]}`)
 
-	if status != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", status)
+	if status != http.StatusBadRequest || ran {
+		t.Errorf("status = %d with the handler run %t, want 400 and no run", status, ran)
 	}
 }
 

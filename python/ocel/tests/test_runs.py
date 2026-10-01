@@ -46,6 +46,30 @@ def test_a_retrieved_run_carries_its_whole_record(runtime):
     assert runtime.authorizations == ["Bearer letmein"]
 
 
+def typed(value):
+    return [(key, each, type(each)) for key, each in value.items()]
+
+
+def test_a_retrieved_run_keeps_integers_beyond_2_53_and_tells_2_from_2_0(runtime):
+    exact = b'{"ratio":2.0,"id":9007199254740993,"count":2}'
+    runtime.stored_run_json = {"payload": exact, "output": exact, "metadata": exact}
+
+    run = runs.retrieve("run_1")
+
+    expected = [("ratio", 2.0, float), ("id", 9007199254740993, int), ("count", 2, int)]
+    assert typed(run.payload) == expected
+    assert typed(run.output) == expected
+    assert typed(run.metadata) == expected
+
+
+def test_a_retrieved_run_without_payload_output_or_metadata_reads_them_as_none_and_empty(runtime):
+    runtime.stored_run_json = {"payload": b"", "output": b"", "metadata": b""}
+
+    run = runs.retrieve("run_1")
+
+    assert (run.payload, run.output, run.metadata) == (None, None, {})
+
+
 def test_a_run_listing_filters_by_the_declared_task_statuses_and_tags(runtime):
     @task("resize-image")
     def resize(payload, ctx):

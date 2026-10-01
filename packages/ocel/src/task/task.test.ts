@@ -197,7 +197,7 @@ describe("a task at runtime", () => {
     expect(options?.lane).toBe(Lane.HIGH);
     expect(options?.maxAttempts).toBe(2);
     expect(options?.tags).toEqual(["user:1"]);
-    expect(options?.metadata).toEqual({ source: "upload", size: 3 });
+    expect(new TextDecoder().decode(options?.metadata)).toBe('{"source":"upload","size":3}');
   });
 
   it("sends a delay given as a date as that date", async () => {
@@ -221,7 +221,7 @@ describe("a task at runtime", () => {
     expect(options?.debounce).toBeUndefined();
     expect(options?.lane).toBe(Lane.UNSPECIFIED);
     expect(options?.maxAttempts).toBe(0);
-    expect(options?.metadata).toBeUndefined();
+    expect(options?.metadata).toHaveLength(0);
   });
 
   it("triggers a batch in one request, and answers a handle per item in order", async () => {

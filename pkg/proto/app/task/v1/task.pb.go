@@ -12,7 +12,6 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
-	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -156,7 +155,7 @@ type TriggerOptions struct {
 	Lane              v1.Lane                `protobuf:"varint,7,opt,name=lane,proto3,enum=app.topic.v1.Lane" json:"lane,omitempty"`
 	MaxAttempts       int32                  `protobuf:"varint,8,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
 	Tags              []string               `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty"`
-	Metadata          *structpb.Struct       `protobuf:"bytes,10,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Metadata          []byte                 `protobuf:"bytes,10,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -254,7 +253,7 @@ func (x *TriggerOptions) GetTags() []string {
 	return nil
 }
 
-func (x *TriggerOptions) GetMetadata() *structpb.Struct {
+func (x *TriggerOptions) GetMetadata() []byte {
 	if x != nil {
 		return x.Metadata
 	}
@@ -518,12 +517,12 @@ type Run struct {
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Task          string                 `protobuf:"bytes,2,opt,name=task,proto3" json:"task,omitempty"`
 	Status        RunStatus              `protobuf:"varint,3,opt,name=status,proto3,enum=app.task.v1.RunStatus" json:"status,omitempty"`
-	Payload       *structpb.Value        `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
-	Output        *structpb.Value        `protobuf:"bytes,5,opt,name=output,proto3" json:"output,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
+	Output        []byte                 `protobuf:"bytes,5,opt,name=output,proto3" json:"output,omitempty"`
 	Error         string                 `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
 	Attempts      int32                  `protobuf:"varint,7,opt,name=attempts,proto3" json:"attempts,omitempty"`
 	Tags          []string               `protobuf:"bytes,8,rep,name=tags,proto3" json:"tags,omitempty"`
-	Metadata      *structpb.Struct       `protobuf:"bytes,9,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Metadata      []byte                 `protobuf:"bytes,9,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	DueAt         *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=due_at,json=dueAt,proto3" json:"due_at,omitempty"`
 	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
@@ -584,14 +583,14 @@ func (x *Run) GetStatus() RunStatus {
 	return RunStatus_RUN_STATUS_UNSPECIFIED
 }
 
-func (x *Run) GetPayload() *structpb.Value {
+func (x *Run) GetPayload() []byte {
 	if x != nil {
 		return x.Payload
 	}
 	return nil
 }
 
-func (x *Run) GetOutput() *structpb.Value {
+func (x *Run) GetOutput() []byte {
 	if x != nil {
 		return x.Output
 	}
@@ -619,7 +618,7 @@ func (x *Run) GetTags() []string {
 	return nil
 }
 
-func (x *Run) GetMetadata() *structpb.Struct {
+func (x *Run) GetMetadata() []byte {
 	if x != nil {
 		return x.Metadata
 	}
@@ -1153,10 +1152,10 @@ var File_app_task_v1_task_proto protoreflect.FileDescriptor
 
 const file_app_task_v1_task_proto_rawDesc = "" +
 	"\n" +
-	"\x16app/task/v1/task.proto\x12\vapp.task.v1\x1a\x18app/topic/v1/topic.proto\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"g\n" +
+	"\x16app/task/v1/task.proto\x12\vapp.task.v1\x1a\x18app/topic/v1/topic.proto\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"g\n" +
 	"\bDebounce\x12\x19\n" +
 	"\x03key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\x12@\n" +
-	"\x05delay\x18\x02 \x01(\v2\x19.google.protobuf.DurationB\x0f\xbaH\f\xaa\x01\t\"\x05\b\x80\x9a\x9e\x01*\x00R\x05delay\"\xed\x04\n" +
+	"\x05delay\x18\x02 \x01(\v2\x19.google.protobuf.DurationB\x0f\xbaH\f\xaa\x01\t\"\x05\b\x80\x9a\x9e\x01*\x00R\x05delay\"\xdf\x04\n" +
 	"\x0eTriggerOptions\x12\xa3\x01\n" +
 	"\x06due_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampBp\xbaHm\xba\x01j\n" +
 	"\x14tasks.trigger.due_at\x122a run is due at most 30 days after it is triggered\x1a\x1ethis <= now + duration('720h')R\x05dueAt\x12;\n" +
@@ -1167,9 +1166,9 @@ const file_app_task_v1_task_proto_rawDesc = "" +
 	"\x03key\x18\x06 \x01(\tR\x03key\x120\n" +
 	"\x04lane\x18\a \x01(\x0e2\x12.app.topic.v1.LaneB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04lane\x12,\n" +
 	"\fmax_attempts\x18\b \x01(\x05B\t\xbaH\x06\x1a\x04\x18d(\x00R\vmaxAttempts\x12 \n" +
-	"\x04tags\x18\t \x03(\tB\f\xbaH\t\x92\x01\x06\"\x04r\x02\x10\x01R\x04tags\x123\n" +
+	"\x04tags\x18\t \x03(\tB\f\xbaH\t\x92\x01\x06\"\x04r\x02\x10\x01R\x04tags\x12%\n" +
 	"\bmetadata\x18\n" +
-	" \x01(\v2\x17.google.protobuf.StructR\bmetadata\"\xa3\x01\n" +
+	" \x01(\fB\t\xbaH\x06z\x04\x18\x80\x80\x10R\bmetadata\"\xa3\x01\n" +
 	"\x0eTriggerRequest\x125\n" +
 	"\x04task\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04task\x12#\n" +
 	"\apayload\x18\x02 \x01(\fB\t\xbaH\x06z\x04\x18\x80\x80\x10R\apayload\x125\n" +
@@ -1183,17 +1182,17 @@ const file_app_task_v1_task_proto_rawDesc = "" +
 	"\x04task\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04task\x12@\n" +
 	"\x05items\x18\x02 \x03(\v2\x1d.app.task.v1.BatchTriggerItemB\v\xbaH\b\x92\x01\x05\b\x01\x10\xe8\aR\x05items\"(\n" +
 	"\x14BatchTriggerResponse\x12\x10\n" +
-	"\x03ids\x18\x01 \x03(\tR\x03ids\"\xd7\x04\n" +
+	"\x03ids\x18\x01 \x03(\tR\x03ids\"\xa4\x04\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04task\x18\x02 \x01(\tR\x04task\x12.\n" +
-	"\x06status\x18\x03 \x01(\x0e2\x16.app.task.v1.RunStatusR\x06status\x120\n" +
-	"\apayload\x18\x04 \x01(\v2\x16.google.protobuf.ValueR\apayload\x12.\n" +
-	"\x06output\x18\x05 \x01(\v2\x16.google.protobuf.ValueR\x06output\x12\x14\n" +
+	"\x06status\x18\x03 \x01(\x0e2\x16.app.task.v1.RunStatusR\x06status\x12#\n" +
+	"\apayload\x18\x04 \x01(\fB\t\xbaH\x06z\x04\x18\x80\x80\x10R\apayload\x12!\n" +
+	"\x06output\x18\x05 \x01(\fB\t\xbaH\x06z\x04\x18\x80\x80\x10R\x06output\x12\x14\n" +
 	"\x05error\x18\x06 \x01(\tR\x05error\x12\x1a\n" +
 	"\battempts\x18\a \x01(\x05R\battempts\x12\x12\n" +
-	"\x04tags\x18\b \x03(\tR\x04tags\x123\n" +
-	"\bmetadata\x18\t \x01(\v2\x17.google.protobuf.StructR\bmetadata\x129\n" +
+	"\x04tags\x18\b \x03(\tR\x04tags\x12\x1a\n" +
+	"\bmetadata\x18\t \x01(\fR\bmetadata\x129\n" +
 	"\n" +
 	"created_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x121\n" +
@@ -1289,8 +1288,6 @@ var file_app_task_v1_task_proto_goTypes = []any{
 	(*durationpb.Duration)(nil),   // 19: google.protobuf.Duration
 	(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
 	(v1.Lane)(0),                  // 21: app.topic.v1.Lane
-	(*structpb.Struct)(nil),       // 22: google.protobuf.Struct
-	(*structpb.Value)(nil),        // 23: google.protobuf.Value
 }
 var file_app_task_v1_task_proto_depIdxs = []int32{
 	19, // 0: app.task.v1.Debounce.delay:type_name -> google.protobuf.Duration
@@ -1299,44 +1296,40 @@ var file_app_task_v1_task_proto_depIdxs = []int32{
 	19, // 3: app.task.v1.TriggerOptions.idempotency_key_ttl:type_name -> google.protobuf.Duration
 	1,  // 4: app.task.v1.TriggerOptions.debounce:type_name -> app.task.v1.Debounce
 	21, // 5: app.task.v1.TriggerOptions.lane:type_name -> app.topic.v1.Lane
-	22, // 6: app.task.v1.TriggerOptions.metadata:type_name -> google.protobuf.Struct
-	2,  // 7: app.task.v1.TriggerRequest.options:type_name -> app.task.v1.TriggerOptions
-	2,  // 8: app.task.v1.BatchTriggerItem.options:type_name -> app.task.v1.TriggerOptions
-	5,  // 9: app.task.v1.BatchTriggerRequest.items:type_name -> app.task.v1.BatchTriggerItem
-	0,  // 10: app.task.v1.Run.status:type_name -> app.task.v1.RunStatus
-	23, // 11: app.task.v1.Run.payload:type_name -> google.protobuf.Value
-	23, // 12: app.task.v1.Run.output:type_name -> google.protobuf.Value
-	22, // 13: app.task.v1.Run.metadata:type_name -> google.protobuf.Struct
-	20, // 14: app.task.v1.Run.created_at:type_name -> google.protobuf.Timestamp
-	20, // 15: app.task.v1.Run.due_at:type_name -> google.protobuf.Timestamp
-	20, // 16: app.task.v1.Run.started_at:type_name -> google.protobuf.Timestamp
-	20, // 17: app.task.v1.Run.finished_at:type_name -> google.protobuf.Timestamp
-	20, // 18: app.task.v1.Run.expires_at:type_name -> google.protobuf.Timestamp
-	8,  // 19: app.task.v1.RetrieveRunResponse.run:type_name -> app.task.v1.Run
-	0,  // 20: app.task.v1.ListRunsRequest.statuses:type_name -> app.task.v1.RunStatus
-	8,  // 21: app.task.v1.ListRunsResponse.runs:type_name -> app.task.v1.Run
-	8,  // 22: app.task.v1.CancelRunResponse.run:type_name -> app.task.v1.Run
-	20, // 23: app.task.v1.RescheduleRunRequest.due_at:type_name -> google.protobuf.Timestamp
-	8,  // 24: app.task.v1.RescheduleRunResponse.run:type_name -> app.task.v1.Run
-	3,  // 25: app.task.v1.TaskService.Trigger:input_type -> app.task.v1.TriggerRequest
-	6,  // 26: app.task.v1.TaskService.BatchTrigger:input_type -> app.task.v1.BatchTriggerRequest
-	9,  // 27: app.task.v1.TaskService.RetrieveRun:input_type -> app.task.v1.RetrieveRunRequest
-	11, // 28: app.task.v1.TaskService.ListRuns:input_type -> app.task.v1.ListRunsRequest
-	13, // 29: app.task.v1.TaskService.CancelRun:input_type -> app.task.v1.CancelRunRequest
-	15, // 30: app.task.v1.TaskService.ReplayRun:input_type -> app.task.v1.ReplayRunRequest
-	17, // 31: app.task.v1.TaskService.RescheduleRun:input_type -> app.task.v1.RescheduleRunRequest
-	4,  // 32: app.task.v1.TaskService.Trigger:output_type -> app.task.v1.TriggerResponse
-	7,  // 33: app.task.v1.TaskService.BatchTrigger:output_type -> app.task.v1.BatchTriggerResponse
-	10, // 34: app.task.v1.TaskService.RetrieveRun:output_type -> app.task.v1.RetrieveRunResponse
-	12, // 35: app.task.v1.TaskService.ListRuns:output_type -> app.task.v1.ListRunsResponse
-	14, // 36: app.task.v1.TaskService.CancelRun:output_type -> app.task.v1.CancelRunResponse
-	16, // 37: app.task.v1.TaskService.ReplayRun:output_type -> app.task.v1.ReplayRunResponse
-	18, // 38: app.task.v1.TaskService.RescheduleRun:output_type -> app.task.v1.RescheduleRunResponse
-	32, // [32:39] is the sub-list for method output_type
-	25, // [25:32] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	2,  // 6: app.task.v1.TriggerRequest.options:type_name -> app.task.v1.TriggerOptions
+	2,  // 7: app.task.v1.BatchTriggerItem.options:type_name -> app.task.v1.TriggerOptions
+	5,  // 8: app.task.v1.BatchTriggerRequest.items:type_name -> app.task.v1.BatchTriggerItem
+	0,  // 9: app.task.v1.Run.status:type_name -> app.task.v1.RunStatus
+	20, // 10: app.task.v1.Run.created_at:type_name -> google.protobuf.Timestamp
+	20, // 11: app.task.v1.Run.due_at:type_name -> google.protobuf.Timestamp
+	20, // 12: app.task.v1.Run.started_at:type_name -> google.protobuf.Timestamp
+	20, // 13: app.task.v1.Run.finished_at:type_name -> google.protobuf.Timestamp
+	20, // 14: app.task.v1.Run.expires_at:type_name -> google.protobuf.Timestamp
+	8,  // 15: app.task.v1.RetrieveRunResponse.run:type_name -> app.task.v1.Run
+	0,  // 16: app.task.v1.ListRunsRequest.statuses:type_name -> app.task.v1.RunStatus
+	8,  // 17: app.task.v1.ListRunsResponse.runs:type_name -> app.task.v1.Run
+	8,  // 18: app.task.v1.CancelRunResponse.run:type_name -> app.task.v1.Run
+	20, // 19: app.task.v1.RescheduleRunRequest.due_at:type_name -> google.protobuf.Timestamp
+	8,  // 20: app.task.v1.RescheduleRunResponse.run:type_name -> app.task.v1.Run
+	3,  // 21: app.task.v1.TaskService.Trigger:input_type -> app.task.v1.TriggerRequest
+	6,  // 22: app.task.v1.TaskService.BatchTrigger:input_type -> app.task.v1.BatchTriggerRequest
+	9,  // 23: app.task.v1.TaskService.RetrieveRun:input_type -> app.task.v1.RetrieveRunRequest
+	11, // 24: app.task.v1.TaskService.ListRuns:input_type -> app.task.v1.ListRunsRequest
+	13, // 25: app.task.v1.TaskService.CancelRun:input_type -> app.task.v1.CancelRunRequest
+	15, // 26: app.task.v1.TaskService.ReplayRun:input_type -> app.task.v1.ReplayRunRequest
+	17, // 27: app.task.v1.TaskService.RescheduleRun:input_type -> app.task.v1.RescheduleRunRequest
+	4,  // 28: app.task.v1.TaskService.Trigger:output_type -> app.task.v1.TriggerResponse
+	7,  // 29: app.task.v1.TaskService.BatchTrigger:output_type -> app.task.v1.BatchTriggerResponse
+	10, // 30: app.task.v1.TaskService.RetrieveRun:output_type -> app.task.v1.RetrieveRunResponse
+	12, // 31: app.task.v1.TaskService.ListRuns:output_type -> app.task.v1.ListRunsResponse
+	14, // 32: app.task.v1.TaskService.CancelRun:output_type -> app.task.v1.CancelRunResponse
+	16, // 33: app.task.v1.TaskService.ReplayRun:output_type -> app.task.v1.ReplayRunResponse
+	18, // 34: app.task.v1.TaskService.RescheduleRun:output_type -> app.task.v1.RescheduleRunResponse
+	28, // [28:35] is the sub-list for method output_type
+	21, // [21:28] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_app_task_v1_task_proto_init() }

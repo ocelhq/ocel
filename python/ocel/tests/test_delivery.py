@@ -562,3 +562,57 @@ async def test_an_envelope_without_an_attempt_runs_attempt_1_of_1():
 
     assert (await deliver("worker", json.dumps(body).encode()))[0] == 200
     assert seen == [RunAttempt(number=1, of=1)]
+
+
+_EXACT = '{"ratio":2.0,"id":9007199254740993,"count":2}'
+
+
+def typed(payload):
+    return [(key, value, type(value)) for key, value in payload.items()]
+
+
+async def test_a_delivered_payload_keeps_integers_beyond_2_53_and_tells_2_from_2_0():
+    seen = []
+
+    @task("tally")
+    def tally(payload, ctx):
+        seen.append(payload)
+
+    status, _ = await deliver("worker", envelope("tally", "tally", json.loads(_EXACT)))
+
+    assert status == 200
+    assert [typed(each) for each in seen] == [
+        [("ratio", 2.0, float), ("id", 9007199254740993, int), ("count", 2, int)]
+    ]
+
+
+async def test_a_delivered_batch_keeps_integers_beyond_2_53_and_tells_2_from_2_0():
+    seen = []
+
+    @topic("orders").batch_consumer("index", batch_size=10)
+    def index(batch, ctx):
+        seen.extend(batch)
+
+    status, _ = await deliver(
+        "worker", envelope("orders", "index", messages=[json.loads(_EXACT), {"n": 3.0}])
+    )
+
+    assert status == 200
+    assert [typed(each) for each in seen] == [
+        [("ratio", 2.0, float), ("id", 9007199254740993, int), ("count", 2, int)],
+        [("n", 3.0, float)],
+    ]
+
+
+async def test_an_envelope_without_a_payload_delivers_none():
+    seen = []
+
+    @task("noop")
+    def noop(payload, ctx):
+        seen.append(payload)
+
+    body = json.loads(envelope("noop", "noop"))
+    del body["payload"]
+
+    assert (await deliver("worker", json.dumps(body).encode()))[0] == 200
+    assert seen == [None]

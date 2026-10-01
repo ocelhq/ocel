@@ -2,11 +2,10 @@ package ocel
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 	taskv1 "ocel.dev/internal/proto/app/task/v1"
 	"ocel.dev/internal/proto/app/task/v1/taskv1connect"
@@ -187,10 +186,11 @@ func encodeTriggerOptions(opts []TriggerOption) (*taskv1.TriggerOptions, error) 
 		if err != nil {
 			return nil, fmt.Errorf("the run's metadata does not encode as JSON: %w", err)
 		}
-		options.Metadata = &structpb.Struct{}
-		if err := protojson.Unmarshal(raw, options.Metadata); err != nil {
-			return nil, fmt.Errorf("the run's metadata is not a JSON object: %w", err)
+		var object map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &object); err != nil || object == nil {
+			return nil, fmt.Errorf("the run's metadata is not a JSON object: %s", raw)
 		}
+		options.Metadata = raw
 	}
 	return options, nil
 }

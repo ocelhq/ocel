@@ -54,6 +54,10 @@ def encode_json(value: Any) -> str:
         return json.dumps(to_jsonable_python(value), separators=(",", ":"))
 
 
+def decode_json(text: bytes) -> Any:
+    return json.loads(text) if text else None
+
+
 def find_payload_type(handler: Callable[..., Any] | None, batch: bool) -> Any:
     if handler is None:
         return None

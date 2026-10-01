@@ -1,6 +1,6 @@
-import { toJson } from "@bufbuild/protobuf";
-import { timestampDate, ValueSchema } from "@bufbuild/protobuf/wkt";
+import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { Client } from "@connectrpc/connect";
+import { decodeJson } from "../delivery/payload.js";
 import type {
   DeadLetter as ProtoDeadLetter,
   TopicService,
@@ -52,7 +52,7 @@ function decodeDeadLetter(letter: ProtoDeadLetter): DeadLetter {
     publishedAt: letter.message?.publishedAt
       ? timestampDate(letter.message.publishedAt)
       : undefined,
-    payload: letter.payload ? toJson(ValueSchema, letter.payload) : null,
+    payload: decodeJson(letter.payload),
     attempts: letter.attempts,
     error: letter.error,
     failedAt: letter.failedAt ? timestampDate(letter.failedAt) : undefined,

@@ -190,6 +190,18 @@ def test_a_dead_letter_listing_reads_one_page_of_a_consumer(runtime):
     assert letter.failed_at == datetime(2023, 11, 14, 22, 13, 20, tzinfo=timezone.utc)
 
 
+def test_a_dead_letter_keeps_integers_beyond_2_53_and_tells_2_from_2_0(runtime):
+    runtime.dead_letter_payload = b'{"ratio":2.0,"id":9007199254740993,"count":2}'
+
+    [letter] = topic("orders").dead_letter("ship").list().dead_letters
+
+    assert [(key, value, type(value)) for key, value in letter.payload.items()] == [
+        ("ratio", 2.0, float),
+        ("id", 9007199254740993, int),
+        ("count", 2, int),
+    ]
+
+
 def test_dead_letters_are_redriven_purged_and_counted_by_consumer_name(runtime):
     letters = topic("orders").dead_letter("ship")
 

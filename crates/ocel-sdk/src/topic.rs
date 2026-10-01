@@ -1,6 +1,6 @@
 use crate::binding;
 use crate::declare::is_discovering;
-use crate::json::{convert_timestamp, convert_value};
+use crate::json::{convert_timestamp, read_json};
 use crate::payload::{encode_payload, Due};
 use crate::proto::app::topic::v1::{
     CountDeadLettersRequest, ListDeadLettersRequest, PurgeDeadLettersRequest,
@@ -238,7 +238,8 @@ pub struct DeadLetter {
     pub execution: String,
     /// The message that was sent.
     pub message: Message,
-    /// The message's payload, as JSON.
+    /// The message's payload, exactly as it was sent: integers stay integers at full 64-bit
+    /// precision and floats stay floats.
     pub payload: serde_json::Value,
     /// How many attempts the consumer made.
     pub attempts: u32,
@@ -401,7 +402,7 @@ impl<'a, T> IntoFuture for DeadLetterList<'a, T> {
                 })
                 .await
                 .map_err(|err| Error::RuntimeRefused {
-                    resource,
+                    resource: resource.clone(),
                     access: "dead_letter.list".to_string(),
                     said: err.to_string(),
                 })?
@@ -410,26 +411,37 @@ impl<'a, T> IntoFuture for DeadLetterList<'a, T> {
                 dead_letters: response
                     .dead_letters
                     .into_iter()
-                    .map(|letter| DeadLetter {
-                        message: Message {
-                            id: letter
-                                .message
-                                .as_option()
-                                .map(|message| message.id.clone())
-                                .unwrap_or_default(),
-                            published_at: letter
-                                .message
-                                .as_option()
-                                .and_then(|message| message.published_at.as_option())
-                                .and_then(convert_timestamp),
-                        },
-                        payload: convert_value(letter.payload.as_option()),
-                        attempts: letter.attempts.max(0) as u32,
-                        failed_at: letter.failed_at.as_option().and_then(convert_timestamp),
-                        execution: letter.execution,
-                        error: letter.error,
+                    .map(|letter| {
+                        let payload =
+                            read_json(&letter.payload).map_err(|err| Error::RuntimeRefused {
+                                resource: resource.clone(),
+                                access: "dead_letter.list".to_string(),
+                                said: format!(
+                                    "dead letter {} has a payload that is not JSON: {err}",
+                                    letter.execution
+                                ),
+                            })?;
+                        Ok(DeadLetter {
+                            message: Message {
+                                id: letter
+                                    .message
+                                    .as_option()
+                                    .map(|message| message.id.clone())
+                                    .unwrap_or_default(),
+                                published_at: letter
+                                    .message
+                                    .as_option()
+                                    .and_then(|message| message.published_at.as_option())
+                                    .and_then(convert_timestamp),
+                            },
+                            payload,
+                            attempts: letter.attempts.max(0) as u32,
+                            failed_at: letter.failed_at.as_option().and_then(convert_timestamp),
+                            execution: letter.execution,
+                            error: letter.error,
+                        })
                     })
-                    .collect(),
+                    .collect::<Result<_, Error>>()?,
                 next_cursor: Some(response.next_cursor).filter(|cursor| !cursor.is_empty()),
             })
         })

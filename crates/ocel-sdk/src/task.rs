@@ -111,7 +111,7 @@ impl<P: Serialize, R> Task<P, R> {
             }
             items.push(BatchTriggerItem {
                 payload: trigger.payload?,
-                options: trigger.options.into_wire()?.into(),
+                options: trigger.options.into_wire().into(),
                 ..Default::default()
             });
         }
@@ -148,18 +148,8 @@ struct Options {
 }
 
 impl Options {
-    fn into_wire(self) -> Result<TriggerOptions, Error> {
-        let metadata = match self.metadata {
-            Some(metadata) => Some(
-                serde_json::from_value(serde_json::Value::Object(metadata)).map_err(|err| {
-                    Error::Payload {
-                        said: format!("the metadata is not a JSON object: {err}"),
-                    }
-                })?,
-            ),
-            None => None,
-        };
-        Ok(TriggerOptions {
+    fn into_wire(self) -> TriggerOptions {
+        TriggerOptions {
             due_at: self.due.map(Due::to_timestamp).into(),
             ttl: self.ttl.map(Into::into).into(),
             idempotency_key: self.idempotency_key,
@@ -176,9 +166,12 @@ impl Options {
             lane: self.lane.map(Lane::to_wire).unwrap_or_default().into(),
             max_attempts: self.max_attempts,
             tags: self.tags,
-            metadata: metadata.into(),
+            metadata: self
+                .metadata
+                .map(|metadata| serde_json::Value::Object(metadata).to_string().into_bytes())
+                .unwrap_or_default(),
             ..Default::default()
-        })
+        }
     }
 }
 
@@ -270,12 +263,10 @@ impl<'a, P, R> IntoFuture for Trigger<'a, P, R> {
             payload,
             options,
         } = self;
-        let request = payload.and_then(|payload| {
-            Ok(TriggerRequest {
-                payload,
-                options: options.into_wire()?.into(),
-                ..Default::default()
-            })
+        let request = payload.map(|payload| TriggerRequest {
+            payload,
+            options: options.into_wire().into(),
+            ..Default::default()
         });
         let connection = task.ensure_connection("trigger");
         let resource = task.describe_resource();

@@ -405,6 +405,91 @@ async fn a_batch_envelope_hands_the_task_every_message_in_order() {
     assert_eq!((status, body.as_str()), (200, r#"["a","b"]"#));
 }
 
+#[derive(serde::Deserialize)]
+pub struct Reading {
+    pub ratio: f64,
+    pub id: u64,
+    pub count: i64,
+}
+
+fn describe_reading(reading: &Reading) -> String {
+    format!("{} {} {}", reading.ratio, reading.id, reading.count)
+}
+
+#[ocel::task]
+async fn read_numbers(reading: Reading, _run: &ocel::Run) -> Result<String, ocel::RunError> {
+    Ok(describe_reading(&reading))
+}
+
+#[ocel::task]
+async fn inspect_numbers(numbers: Value, _run: &ocel::Run) -> Result<Value, ocel::RunError> {
+    Ok(json!({
+        "ratio_is_float": numbers["ratio"].is_f64(),
+        "count_is_integer": numbers["count"].is_u64() && numbers["count"].is_i64(),
+        "id": numbers["id"].as_u64().map(|id| id.to_string()),
+    }))
+}
+
+#[ocel::task(batch(size = 10))]
+async fn read_number_batch(
+    readings: Vec<Reading>,
+    _run: &ocel::Run,
+) -> Result<Vec<String>, ocel::RunError> {
+    Ok(readings.iter().map(describe_reading).collect())
+}
+
+const NUMBERS: &str = r#"{"ratio":2.0,"id":9007199254740993,"count":2}"#;
+
+fn build_numbers_envelope(task: &str, payload: &str) -> Vec<u8> {
+    format!(
+        r#"{{"v":1,"topic":"{task}","consumer":"{task}","execution":"run_1","message":{{"id":"01J0000000000000000000000A"}},"attempt":{{"number":1,"of":1}},"payload":{payload}}}"#
+    )
+    .into_bytes()
+}
+
+#[tokio::test]
+async fn a_delivered_payload_reaches_a_typed_handler_with_integers_above_2_to_the_53_exact() {
+    let (status, body) =
+        deliver_body("worker", build_numbers_envelope("read-numbers", NUMBERS)).await;
+    assert_eq!((status, body.as_str()), (200, r#""2 9007199254740993 2""#));
+}
+
+#[tokio::test]
+async fn a_delivered_payload_reaches_a_json_handler_with_floats_and_integers_kept_apart() {
+    let (status, body) =
+        deliver_body("worker", build_numbers_envelope("inspect-numbers", NUMBERS)).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        serde_json::from_str::<Value>(&body).expect("json"),
+        json!({ "ratio_is_float": true, "count_is_integer": true, "id": "9007199254740993" })
+    );
+}
+
+#[tokio::test]
+async fn a_delivered_float_is_not_coerced_into_an_integer_field() {
+    let (status, body) = deliver_body(
+        "worker",
+        build_numbers_envelope("read-numbers", r#"{"ratio":2.0,"id":1,"count":2.0}"#),
+    )
+    .await;
+    assert_eq!(status, 422, "{body}");
+}
+
+#[tokio::test]
+async fn a_batch_envelope_hands_every_payload_over_with_integers_above_2_to_the_53_exact() {
+    let body = format!(
+        r#"{{"v":1,"topic":"read-number-batch","consumer":"read-number-batch","messages":[{{"execution":"run_a","message":{{"id":"01J0000000000000000000000A"}},"attempt":{{"number":1,"of":1}},"payload":{NUMBERS}}},{{"execution":"run_b","message":{{"id":"01J0000000000000000000000B"}},"payload":{{"ratio":0.5,"id":18446744073709551615,"count":-3}}}}]}}"#
+    );
+    let (status, body) = deliver_body("worker", body.into_bytes()).await;
+    assert_eq!(
+        (status, body.as_str()),
+        (
+            200,
+            r#"["2 9007199254740993 2","0.5 18446744073709551615 -3"]"#
+        )
+    );
+}
+
 static STARTS: AtomicUsize = AtomicUsize::new(0);
 
 async fn start_flaky() -> Result<(), ocel::RunError> {

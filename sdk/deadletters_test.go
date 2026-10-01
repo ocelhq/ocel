@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"ocel.dev"
 	topicv1 "ocel.dev/internal/proto/app/topic/v1"
@@ -17,7 +16,7 @@ func TestDeadLetterListReadsAPageOfTheConsumersDeadLetters(t *testing.T) {
 	runtime.letters = []*topicv1.DeadLetter{{
 		Execution: "01HZY4B6Q0Z0Z0Z0Z0Z0Z0Z0Z0-audit",
 		Message:   &topicv1.Message{Id: "01HZY4B6Q0Z0Z0Z0Z0Z0Z0Z0Z0", PublishedAt: timestamppb.New(failedAt.Add(-time.Hour))},
-		Payload:   structpb.NewStructValue(&structpb.Struct{Fields: map[string]*structpb.Value{"id": structpb.NewStringValue("o-1")}}),
+		Payload:   []byte(`{"id":"o-1","total":9007199254740993}`),
 		Attempts:  3,
 		Error:     "the ledger refused it",
 		FailedAt:  timestamppb.New(failedAt),
@@ -37,7 +36,7 @@ func TestDeadLetterListReadsAPageOfTheConsumersDeadLetters(t *testing.T) {
 	}
 	letter := page.DeadLetters[0]
 	if letter.Execution != "01HZY4B6Q0Z0Z0Z0Z0Z0Z0Z0Z0-audit" || letter.Message.ID != "01HZY4B6Q0Z0Z0Z0Z0Z0Z0Z0Z0" ||
-		string(letter.Payload) != `{"id":"o-1"}` || letter.Attempts != 3 || letter.Error != "the ledger refused it" ||
+		string(letter.Payload) != `{"id":"o-1","total":9007199254740993}` || letter.Attempts != 3 || letter.Error != "the ledger refused it" ||
 		!letter.FailedAt.Equal(failedAt) || !letter.Message.PublishedAt.Equal(failedAt.Add(-time.Hour)) {
 		t.Errorf("dead letter = %+v", letter)
 	}

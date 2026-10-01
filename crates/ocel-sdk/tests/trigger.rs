@@ -105,8 +105,8 @@ async fn a_trigger_sends_the_payload_as_json_to_the_task_by_its_declared_name_wi
     assert_eq!(options.max_attempts, 2);
     assert_eq!(options.tags, ["user:1", "png"]);
     assert_eq!(
-        serde_json::to_value(options.metadata.as_option().expect("metadata")).expect("json"),
-        serde_json::json!({ "source": "upload" })
+        String::from_utf8(options.metadata.clone()).expect("utf-8"),
+        r#"{"source":"upload"}"#
     );
 }
 
@@ -237,12 +237,11 @@ fn build_wire_run(id: &str) -> Run {
         id: id.into(),
         task: "resize-image".into(),
         status: RunStatus::RUN_STATUS_COMPLETED.into(),
-        payload: serde_json::from_value(serde_json::json!({ "url": "a.png" })).expect("a value"),
-        output: serde_json::from_value(serde_json::json!(5)).expect("a value"),
+        payload: br#"{"url":"a.png"}"#.to_vec(),
+        output: b"5".to_vec(),
         attempts: 2,
         tags: vec!["png".into()],
-        metadata: serde_json::from_value(serde_json::json!({ "source": "upload" }))
-            .expect("a struct"),
+        metadata: br#"{"source":"upload"}"#.to_vec(),
         created_at: buffa_types::google::protobuf::Timestamp::from_unix_secs(1_700_000_000).into(),
         ..Default::default()
     }
@@ -271,6 +270,57 @@ async fn a_retrieved_run_comes_back_with_its_payload_and_output_as_json() {
         Some(UNIX_EPOCH + Duration::from_secs(1_700_000_000))
     );
     assert_eq!(run.finished_at, None);
+}
+
+const NUMBERS: &str = r#"{"ratio":2.0,"id":9007199254740993,"count":2}"#;
+
+#[tokio::test]
+async fn a_retrieved_runs_payload_and_output_keep_large_integers_and_floats_exactly() {
+    let runtime = runtime();
+    runtime.answer(
+        "RetrieveRun",
+        RetrieveRunResponse {
+            run: Run {
+                payload: NUMBERS.as_bytes().to_vec(),
+                output: NUMBERS.as_bytes().to_vec(),
+                ..build_wire_run("run_1")
+            }
+            .into(),
+            ..Default::default()
+        },
+    );
+    let run = ocel::runs::retrieve("run_1").await.expect("the run");
+    for value in [&run.payload, &run.output] {
+        assert_eq!(
+            *value,
+            serde_json::from_str::<serde_json::Value>(NUMBERS).expect("json")
+        );
+        assert_eq!(value["id"].as_u64(), Some(9_007_199_254_740_993));
+        assert!(value["ratio"].is_f64(), "{value}");
+        assert!(value["count"].is_u64(), "{value}");
+    }
+}
+
+#[tokio::test]
+async fn a_retrieved_run_without_a_payload_output_or_metadata_has_null_and_an_empty_map() {
+    let runtime = runtime();
+    runtime.answer(
+        "RetrieveRun",
+        RetrieveRunResponse {
+            run: Run {
+                payload: Vec::new(),
+                output: Vec::new(),
+                metadata: Vec::new(),
+                ..build_wire_run("run_1")
+            }
+            .into(),
+            ..Default::default()
+        },
+    );
+    let run = ocel::runs::retrieve("run_1").await.expect("the run");
+    assert_eq!(run.payload, serde_json::Value::Null);
+    assert_eq!(run.output, serde_json::Value::Null);
+    assert!(run.metadata.is_empty());
 }
 
 #[tokio::test]

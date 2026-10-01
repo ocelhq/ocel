@@ -2,6 +2,7 @@ package pgmq
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -29,6 +30,7 @@ type reply struct {
 
 type delivered struct {
 	envelope *topicv1.Envelope
+	body     []byte
 	at       time.Time
 }
 
@@ -58,13 +60,13 @@ func (w *aWorker) serve(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, "want a JSON POST", http.StatusBadRequest)
 		return
 	}
-	envelope := &topicv1.Envelope{}
-	if err := protojson.Unmarshal(body, envelope); err != nil {
+	envelope, err := decodeEnvelope(body)
+	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
 	w.mu.Lock()
-	w.envelopes = append(w.envelopes, delivered{envelope: envelope, at: time.Now()})
+	w.envelopes = append(w.envelopes, delivered{envelope: envelope, body: body, at: time.Now()})
 	w.inFlight++
 	w.peak = max(w.peak, w.inFlight)
 	w.mu.Unlock()
@@ -83,6 +85,52 @@ func (w *aWorker) serve(rw http.ResponseWriter, req *http.Request) {
 	}
 	rw.WriteHeader(answer.status)
 	_, _ = io.WriteString(rw, answer.body)
+}
+
+func decodeEnvelope(body []byte) (*topicv1.Envelope, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return nil, err
+	}
+	payload := fields["payload"]
+	delete(fields, "payload")
+	var deliveries []map[string]json.RawMessage
+	if raw, found := fields["messages"]; found {
+		if err := json.Unmarshal(raw, &deliveries); err != nil {
+			return nil, err
+		}
+	}
+	payloads := make([][]byte, len(deliveries))
+	for i, delivery := range deliveries {
+		payloads[i] = delivery["payload"]
+		delete(delivery, "payload")
+	}
+	if deliveries != nil {
+		raw, err := json.Marshal(deliveries)
+		if err != nil {
+			return nil, err
+		}
+		fields["messages"] = raw
+	}
+	bare, err := json.Marshal(fields)
+	if err != nil {
+		return nil, err
+	}
+	envelope := &topicv1.Envelope{}
+	if err := protojson.Unmarshal(bare, envelope); err != nil {
+		return nil, err
+	}
+	envelope.Payload = payload
+	for i, delivery := range envelope.GetMessages() {
+		delivery.Payload = payloads[i]
+	}
+	return envelope, nil
+}
+
+func fieldOf(raw []byte, name string) any {
+	var fields map[string]any
+	_ = json.Unmarshal(raw, &fields)
+	return fields[name]
 }
 
 func (w *aWorker) received() []delivered {
@@ -202,11 +250,11 @@ func TestATriggeredRunIsPostedToItsWorkerAsAnEnvelopeAndCompletesWithTheWorkersA
 	if a := envelope.GetAttempt(); a.GetNumber() != 1 || a.GetOf() != provider.DefaultRetryMaxAttempts || a.GetFirstAttemptedAt() == nil {
 		t.Errorf("attempt = %v, want 1 of %d with when it was first attempted", a, provider.DefaultRetryMaxAttempts)
 	}
-	if image := envelope.GetPayload().GetStructValue().GetFields()["image"].GetStringValue(); image != "cat.png" {
-		t.Errorf("payload = %v, want the triggered one", envelope.GetPayload())
+	if image := fieldOf(envelope.GetPayload(), "image"); image != "cat.png" {
+		t.Errorf("payload = %s, want the triggered one", envelope.GetPayload())
 	}
-	if done := run.GetOutput().GetStructValue().GetFields()["done"].GetBoolValue(); !done {
-		t.Errorf("output = %v, want what the worker answered", run.GetOutput())
+	if done := fieldOf(run.GetOutput(), "done"); done != true {
+		t.Errorf("output = %s, want what the worker answered", run.GetOutput())
 	}
 	if run.GetAttempts() != 1 || run.GetTask() != "resize" || len(run.GetTags()) != 1 || run.GetStartedAt() == nil || run.GetFinishedAt() == nil {
 		t.Errorf("run = %v, want one attempt of resize, tagged, started and finished", run)
