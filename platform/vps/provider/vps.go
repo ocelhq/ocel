@@ -38,6 +38,7 @@ type Provider struct {
 	now       func() time.Time
 
 	stores liveStores
+	queues queueDatabases
 
 	dial sync.Mutex
 	live *session.Session
@@ -90,6 +91,7 @@ func (p *Provider) Facts() provider.Facts {
 		RendersTransforms:        true,
 		RunsTunnels:              true,
 		RetainsContainerReleases: true,
+		WorkerCeilings:           slices.Clone(workerCeilings),
 	}
 }
 
@@ -108,6 +110,7 @@ func (p *Provider) resourceHooks() resources.Hooks {
 		ProvisionPostgres: p.ProvisionPostgres,
 		ProvisionBucket:   p.ProvisionBucket,
 		ProvisionKV:       p.ProvisionKV,
+		ProvisionTopic:    p.ProvisionTopic,
 		RemoveResource:    p.RemoveResource,
 		Containers:        &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
 		Retention:         &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
@@ -26,31 +27,36 @@ func mintResourceSecret() (string, error) {
 }
 
 func (p *Provider) keptSecret(ctx context.Context, in resources.ProvisionRequest, name string, bound seal.AssociatedData) (string, error) {
-	sealed, err := p.host.Kept(ctx, in.Ref.Tier, name)
+	_, opened, err := p.keptSealed(ctx, in.Ref.Tier, name, in.Resource.Name, bound)
+	return opened, err
+}
+
+func (p *Provider) keptSealed(ctx context.Context, tier environment.Tier, name, resource string, bound seal.AssociatedData) ([]byte, string, error) {
+	sealed, err := p.host.Kept(ctx, tier, name)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	if len(sealed) == 0 {
 		minted, err := mintResourceSecret()
 		if err != nil {
-			return "", err
+			return nil, "", err
 		}
-		candidate, err := p.cipher.Seal(ctx, in.Ref.Tier, bound, []byte(minted))
+		candidate, err := p.cipher.Seal(ctx, tier, bound, []byte(minted))
 		if err != nil {
-			return "", err
+			return nil, "", err
 		}
-		if sealed, err = p.host.KeepOnce(ctx, in.Ref.Tier, name, candidate); err != nil {
-			return "", err
+		if sealed, err = p.host.KeepOnce(ctx, tier, name, candidate); err != nil {
+			return nil, "", err
 		}
 	}
-	opened, err := p.cipher.Open(ctx, in.Ref.Tier, bound, sealed)
+	opened, err := p.cipher.Open(ctx, tier, bound, sealed)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	if len(opened) == 0 {
-		return "", refusal.Refuse(refusal.CodeNotReady,
+		return nil, "", refusal.Refuse(refusal.CodeNotReady,
 			"the credential kept for %s is empty\nRemove %s on the box",
-			in.Resource.Name, host.KeptPath(in.Ref.Tier, name))
+			resource, host.KeptPath(tier, name))
 	}
-	return string(opened), nil
+	return sealed, string(opened), nil
 }

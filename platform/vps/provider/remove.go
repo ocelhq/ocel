@@ -22,6 +22,8 @@ func (p *Provider) RemoveResource(ctx context.Context, ref provider.StackRef, bi
 			progress.Say("Removing kv " + binding.Name + ", its container " + name + " and its data")
 		}
 		return p.host.RemoveResource(ctx, host.ResourceRef{Tier: ref.Tier, Project: ref.Project, Resource: binding.Name, Name: name})
+	case provider.BindingTopic, provider.BindingTask:
+		return p.removeTopic(ctx, ref, binding, progress)
 	case provider.BindingBucket:
 		return p.removeBucket(ctx, ref, binding, progress)
 	default:

@@ -27,18 +27,26 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 			"app %s names no image", app.App)
 	}
 	physical := host.ContainerName(spec.Ref.Name.String(), app.App, app.Deployment, app.Image)
+	command, err := workerCommand(app)
+	if err != nil {
+		return nil, err
+	}
 	store, err := p.storeSection(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("pin the store %s writes through: %w", app.App, err)
 	}
-	manifest, err := variables.Render(variables.Manifest{
+	pinned := variables.Manifest{
 		Slug:        spec.Ref.Project,
 		Tier:        string(spec.Ref.Tier),
 		Environment: liveEnvironment(spec.Ref),
 		Keys:        liveKeys(app.Values),
 		Bindings:    liveBindings(app.Values),
 		Store:       store,
-	})
+	}
+	if usesQueue(app) {
+		pinned.Queue = spec.Ref.Name.Env
+	}
+	manifest, err := variables.Render(pinned)
 	if err != nil {
 		return nil, fmt.Errorf("pin %s's live values: %w", app.App, err)
 	}
@@ -73,6 +81,9 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err := p.host.Promote(ctx, spec.Ref.Tier, spec.Ref.Project, app.App, app.Image); err != nil {
 		return nil, err
 	}
+	if err := p.runWorkers(ctx, spec, command, manifest, progress); err != nil {
+		return nil, err
+	}
 	return []provider.AppContainer{{
 		Name:                      app.App,
 		Physical:                  physical,
@@ -83,6 +94,9 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 }
 
 func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Log) error {
+	if err := p.removeWorkers(ctx, ref); err != nil {
+		return err
+	}
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue

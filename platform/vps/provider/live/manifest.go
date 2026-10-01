@@ -50,6 +50,7 @@ type Manifest struct {
 	Keys        []live.Key     `json:"keys,omitempty"`
 	Bindings    []live.Binding `json:"bindings,omitempty"`
 	Store       *Store         `json:"store,omitempty"`
+	Queue       string         `json:"queue,omitempty"`
 }
 
 func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }
