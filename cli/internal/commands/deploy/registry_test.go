@@ -277,8 +277,8 @@ func deployContainerProject(t *testing.T, health string) *contractv1.ManifestApp
 func TestAContainerAppReachesTheProviderAsOneDigestPinnedProcess(t *testing.T) {
 	container := deployContainerProject(t, "").GetContainer()
 
-	if container.GetImage() != clitest.FixtureImage("api") || container.GetHealthCheckPath() != "/" {
-		t.Errorf("container = %s checked at %s, want %s checked at / — the container reaching the provider pinned at the digest the build produced", container.GetImage(), container.GetHealthCheckPath(), clitest.FixtureImage("api"))
+	if container.GetImage() != clitest.FixtureImage("api") || container.GetHealthCheckPath() != "" {
+		t.Errorf("container = %s checked at %q, want %s with no health path — the container reaching the provider pinned at the digest the build produced, and the provider choosing the path for an app that names none", container.GetImage(), container.GetHealthCheckPath(), clitest.FixtureImage("api"))
 	}
 }
 

@@ -21,6 +21,8 @@ const (
 
 const HealthPathVar = "OCEL_HEALTH_PATH"
 
+const AppUnansweredHeader = "X-Ocel-App-Unanswered"
+
 type Guard struct {
 	expected [][sha256.Size]byte
 }
@@ -93,11 +95,13 @@ func Handler(opts Options) http.Handler {
 			r.Out.Header.Del(OriginSecretHeader)
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
+			w.Header().Set(AppUnansweredHeader, "true")
 			http.Error(w, "the app did not answer", http.StatusBadGateway)
 		},
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if opts.Ready != nil && !opts.Ready() {
+			w.Header().Set(AppUnansweredHeader, "true")
 			http.Error(w, "the app is still starting", http.StatusServiceUnavailable)
 			return
 		}

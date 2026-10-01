@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -27,6 +28,7 @@ const (
 	exitNotServingYet  = 3
 	exitSilent         = 4
 	exitUnattributable = 5
+	exitNoHealthPath   = 6
 )
 
 const (
@@ -71,6 +73,8 @@ func run(ctx context.Context, argv []string, in io.Reader, out, errs io.Writer) 
 		return speaking.cutover(ctx, rest)
 	case "gate":
 		return gate(rest, out, errs)
+	case "find-health-path":
+		return findHealthPath(rest, out, errs)
 	case "idle":
 		if len(rest) == 0 {
 			return usage(errs)
@@ -114,6 +118,7 @@ func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --admit <socket> --table <path> [--relay <addr|cidr>]... [--relay-network <docker network>]... [--https-listen <host:port|docker network:port>] [--tunnel-listen <host:port|docker network:port>] |")
 	fmt.Fprintln(errs, "       load <table> |")
 	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
+	fmt.Fprintln(errs, "       find-health-path --deploy-timeout <seconds> <host:port> </path>... |")
 	fmt.Fprintln(errs, "       cutover [--drain-timeout <seconds> --retire <host:port>...] <table> |")
 	fmt.Fprintln(errs, "       idle <host:port>... |")
 	fmt.Fprintln(errs, "       upstreams |")
@@ -436,4 +441,52 @@ func gating(target, path string, window time.Duration, out, errs io.Writer) int 
 	fmt.Fprintln(out, status)
 	fmt.Fprintf(errs, "%s answered %s with status %d, no 2xx within %s\n", target, path, status, window)
 	return exitNotServingYet
+}
+
+func findHealthPath(argv []string, out, errs io.Writer) int {
+	flags := flag.NewFlagSet("find-health-path", flag.ContinueOnError)
+	flags.SetOutput(errs)
+	deployTimeout := flags.Int("deploy-timeout", 0, "")
+	if err := flags.Parse(argv); err != nil || *deployTimeout <= 0 || flags.NArg() < 2 {
+		return usage(errs)
+	}
+	target, paths := flags.Arg(0), flags.Args()[1:]
+	for _, path := range paths {
+		if !strings.HasPrefix(path, "/") {
+			return usage(errs)
+		}
+	}
+	window := time.Duration(*deployTimeout) * time.Second
+	deadline := time.Now().Add(window)
+	client := &http.Client{Timeout: min(window, gateAttempt)}
+	for _, path := range paths {
+		status := appAnswer(client, target, path, deadline)
+		if status == 0 {
+			fmt.Fprintf(errs, "%s never answered %s within %s\n", target, path, window)
+			return exitSilent
+		}
+		fmt.Fprintf(out, "%s %s %d\n", switchboard.Answered, path, status)
+		if status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
+			return 0
+		}
+	}
+	fmt.Fprintf(errs, "%s answered 404 or 405 on every path asked: %s\n", target, strings.Join(paths, ", "))
+	return exitNoHealthPath
+}
+
+func appAnswer(client *http.Client, target, path string, deadline time.Time) int {
+	for {
+		answer, err := client.Get("http://" + target + path)
+		if err == nil {
+			_, _ = io.Copy(io.Discard, answer.Body)
+			_ = answer.Body.Close()
+			if answer.Header.Get(originguard.AppUnansweredHeader) == "" {
+				return answer.StatusCode
+			}
+		}
+		if time.Now().Add(gateInterval).After(deadline) {
+			return 0
+		}
+		time.Sleep(gateInterval)
+	}
 }

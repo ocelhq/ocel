@@ -593,6 +593,76 @@ func TestTheStagedRecordNamesTheHealthPathTheReleaseIsGatedOn(t *testing.T) {
 	}
 }
 
+func TestTheStagedRecordKeepsTheHealthPathTheProviderDiscoveredAndMarksItDiscovered(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
+
+	result, _ := deploy(t, client, namingARegistry(containerDeployRequest("")))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	staged := stager.records()
+	if len(staged) != 1 {
+		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+	}
+	if staged[0].HealthPath != fake.DiscoveredHealthPath || !staged[0].HealthPathDiscovered {
+		t.Errorf("the staged record names the health path %q (discovered %t), want %q discovered: a later release gates on the path this one found", staged[0].HealthPath, staged[0].HealthPathDiscovered, fake.DiscoveredHealthPath)
+	}
+}
+
+func TestAnAppThatNamesNoHealthPathIsHandedThePathItsLiveReleaseDiscovered(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	client, vendor := deployServed(t)
+
+	if result, _ := deploy(t, client, namingARegistry(containerDeployRequest(""))); result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	next := namingARegistry(containerDeployRequest(""))
+	next.Manifest.Apps[0].DeploymentId = "fedcba9876543210fedcba9876543210"
+	if result, _ := deploy(t, client, next); result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	specs := vendor.FakeStacks().Provisioned()
+	app := specs[len(specs)-1].App
+	if app == nil {
+		t.Fatal("the last spec the stacks port saw provisions no app")
+	}
+	if app.HealthCheckPath != "" || app.DiscoveredHealthCheckPath != fake.DiscoveredHealthPath {
+		t.Errorf("the second release was handed health path %q and discovered path %q, want none and %q: a path the first release discovered stays the app's until it names one", app.HealthCheckPath, app.DiscoveredHealthCheckPath, fake.DiscoveredHealthPath)
+	}
+}
+
+func TestAnAppThatNamesAHealthPathIsHandedNoDiscoveredOne(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
+
+	if result, _ := deploy(t, client, namingARegistry(containerDeployRequest(""))); result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	next := namingARegistry(containerDeployRequest("/ready"))
+	next.Manifest.Apps[0].DeploymentId = "fedcba9876543210fedcba9876543210"
+	if result, _ := deploy(t, client, next); result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	specs := vendor.FakeStacks().Provisioned()
+	if app := specs[len(specs)-1].App; app.DiscoveredHealthCheckPath != "" {
+		t.Errorf("an app naming /ready was handed the discovered path %q, want none: a path the config names always wins", app.DiscoveredHealthCheckPath)
+	}
+	for _, record := range stager.records() {
+		if record.HealthPath == "/ready" && record.HealthPathDiscovered {
+			t.Errorf("the record for the release naming /ready marks its path discovered")
+		}
+	}
+}
+
 func TestTheStagedRecordNamesTheContainerTheReleaseProvisioned(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)

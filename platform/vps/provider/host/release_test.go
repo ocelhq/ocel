@@ -555,6 +555,25 @@ func TestAFirstDeployThatFailsLeavesNothingServingAndIsNotAPathOfItsOwn(t *testi
 	}
 }
 
+func TestAGateOnADiscoveredHealthPathThatFailsSaysItWasFoundByProbingAndHowToNameOne(t *testing.T) {
+	t.Parallel()
+
+	discovered := aRelease()
+	discovered.Apps[0].HealthPathDiscovered = true
+	_, err := released(t, discovered, session.Result{Code: 3, Stderr: "answered /healthz with status 503"}, session.Result{}, nil)
+	if err == nil {
+		t.Fatal("a release whose gate failed released successfully")
+	}
+	for _, want := range []string{"found earlier by probing", `"health.path"`, `"health": { "path": "/health" }`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal reads\n%s\nand never says %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "set by") {
+		t.Errorf("the refusal reads\n%s\nand says the config set a path ocel discovered", err)
+	}
+}
+
 func TestAReleaseWithNoHealthPathIsRefusedBeforeTheHelperEverRuns(t *testing.T) {
 	t.Parallel()
 

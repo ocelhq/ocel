@@ -38,8 +38,9 @@ type Release struct {
 
 type AppRelease struct {
 	RouteKey
-	Target     string
-	HealthPath string
+	Target               string
+	HealthPath           string
+	HealthPathDiscovered bool
 }
 
 func (a AppRelease) path() string { return "/" + strings.TrimPrefix(a.HealthPath, "/") }
@@ -51,6 +52,13 @@ func (a AppRelease) route() AppRoute {
 func (a AppRelease) gate() string { return a.Target + a.path() }
 
 func (a AppRelease) name() string { return containerOf(a.Target) }
+
+func (a AppRelease) pathSource() string {
+	if a.HealthPathDiscovered {
+		return fmt.Sprintf("found earlier by probing, since %s sets no %q: set it to name the path yourself, e.g. %s", a.App, healthKey, healthPathExample)
+	}
+	return fmt.Sprintf("set by %q", healthKey)
+}
 
 func (r Release) apps() string { return listed(r.Apps, func(app AppRelease) string { return app.App }) }
 
@@ -717,8 +725,8 @@ func (h *Host) ungated(ctx context.Context, rel Release, outcome, verdict, said,
 		if logs == "" {
 			logs = noLogOutput
 		}
-		fmt.Fprintf(&evidence, "\ngate: http://%s, %s to answer 2xx (set by %q)\nstate: %s\nlogs (last %s lines): %s",
-			app.gate(), rel.DeployTimeout, healthKey, state, appLogTail, logs)
+		fmt.Fprintf(&evidence, "\ngate: http://%s, %s to answer 2xx (%s)\nstate: %s\nlogs (last %s lines): %s",
+			app.gate(), rel.DeployTimeout, app.pathSource(), state, appLogTail, logs)
 	}
 	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the gate %s; the previous release is still live\n%s%s%s",

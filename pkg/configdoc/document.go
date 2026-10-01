@@ -48,7 +48,7 @@ type BuildConfig struct {
 }
 
 type HealthConfig struct {
-	Path string `json:"path,omitempty" doc:"The path the check requests, off the app's own root. Any 2xx answer means up. Left off, the check requests /."`
+	Path string `json:"path,omitempty" doc:"The path the check requests, off the app's own root. Any 2xx answer means up. Left off, a VPS finds the path by probing /up, /health, /healthz and / in turn and keeps the first that exists, and AWS and Google Cloud request /."`
 }
 
 type AppDomainConfig struct {

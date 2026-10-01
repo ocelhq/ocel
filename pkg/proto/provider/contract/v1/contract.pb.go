@@ -5445,10 +5445,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04path\x18\x04 \x01(\tR\x04path\x12!\n" +
 	"\acompute\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\acompute\"Z\n" +
 	"\x12ServerlessArtifact\x12D\n" +
-	"\tfunctions\x18\x01 \x03(\v2&.provider.contract.v1.ManifestFunctionR\tfunctions\"\x95\x04\n" +
+	"\tfunctions\x18\x01 \x03(\v2&.provider.contract.v1.ManifestFunctionR\tfunctions\"\x98\x04\n" +
 	"\x11ContainerArtifact\x12u\n" +
-	"\x05image\x18\x01 \x01(\tB_\xbaH\\rZ2X^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$R\x05image\x12N\n" +
-	"\x11health_check_path\x18\x02 \x01(\tB\"\xbaH\x1fr\x1d2\x1b^/[^#?[:space:][:cntrl:]]*$R\x0fhealthCheckPath\x12+\n" +
+	"\x05image\x18\x01 \x01(\tB_\xbaH\\rZ2X^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$R\x05image\x12Q\n" +
+	"\x11health_check_path\x18\x02 \x01(\tB%\xbaH\"\xd8\x01\x01r\x1d2\x1b^/[^#?[:space:][:cntrl:]]*$R\x0fhealthCheckPath\x12+\n" +
 	"\x04arch\x18\x03 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\x12#\n" +
 	"\rmin_instances\x18\x04 \x01(\rR\fminInstances\x12,\n" +
 	"\rmax_instances\x18\x05 \x01(\rB\a\xbaH\x04*\x02(\x01R\fmaxInstances:\xb8\x01\xbaH\xb4\x01\x1a\xb1\x01\n" +

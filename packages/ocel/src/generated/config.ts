@@ -108,7 +108,7 @@ export interface AppDomainConfig {
 
 /** How a container app is checked before it is served. */
 export interface HealthConfig {
-  /** The path the check requests, off the app's own root. Any 2xx answer means up. Left off, the check requests /. */
+  /** The path the check requests, off the app's own root. Any 2xx answer means up. Left off, a VPS finds the path by probing /up, /health, /healthz and / in turn and keeps the first that exists, and AWS and Google Cloud request /. */
   path?: string;
 }
 

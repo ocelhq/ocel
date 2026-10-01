@@ -488,6 +488,28 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItCutsOver(t *testing.T) {
 	}
 }
 
+func TestAPromotionOfARecordWhosePathWasDiscoveredSaysSoToTheGate(t *testing.T) {
+	t.Parallel()
+
+	m, _, stack := reconciled(t)
+	if err := stack.Ledger().PutStaged(context.Background(), router.DeploymentRecord{
+		App: "web", Build: "b1", Entry: "/", Image: imageFor("web", "b1"), Physical: "shop-web-1111",
+		HealthPath: "/up", HealthPathDiscovered: true,
+	}); err != nil {
+		t.Fatalf("PutStaged: %v", err)
+	}
+
+	if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
+		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
+	}}, progress.Discard()); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+
+	if got := m.releases[0].Apps[0]; got.HealthPath != "/up" || !got.HealthPathDiscovered {
+		t.Errorf("the release is gated on %q (discovered %t), want /up marked discovered: a failed gate then says the path came from probing", got.HealthPath, got.HealthPathDiscovered)
+	}
+}
+
 func TestAPromotionOfSeveralAppsCutsOverThemAllInOneRelease(t *testing.T) {
 	t.Parallel()
 

@@ -11,6 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const deployment = "0123456789abcdef0123456789abcdef"
@@ -87,17 +89,89 @@ func TestTwoReleasesOfOneAppNeverShareAContainerName(t *testing.T) {
 	}
 }
 
-func TestAnAppWithNoHealthPathIsRefusedRatherThanGivenOneThisProviderChose(t *testing.T) {
+func findingHealthPath(found session.Result) *box {
+	return &box{refuses: func(command string) (session.Result, bool) {
+		if strings.Contains(command, "find-health-path") {
+			return found, true
+		}
+		return session.Result{}, false
+	}}
+}
+
+func TestAnAppWithNoHealthPathRecordsThePathTheBoxFoundForItBeforeItIsPromoted(t *testing.T) {
 	t.Parallel()
 
 	pathless := anApp()
 	pathless.HealthCheckPath = ""
-	_, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, pathless), nil)
-	if err == nil {
-		t.Fatal("an app with no health path started, and the gate would then probe a path the user was never shown")
+	machine := findingHealthPath(session.Result{Stdout: switchboard.Answered + " /up 404\n" + switchboard.Answered + " /health 200\n"})
+	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, pathless), nil)
+	if err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if !strings.Contains(err.Error(), "health") {
-		t.Errorf("the refusal reads %q and never names what is missing", err)
+	if len(started) != 1 || started[0].DiscoveredHealthCheckPath != "/health" {
+		t.Fatalf("ProvisionContainers() = %+v, want the container recorded with the discovered path /health", started)
+	}
+	found, promoted := -1, -1
+	for at, command := range machine.commands() {
+		if found < 0 && strings.Contains(command, "find-health-path") {
+			found = at
+		}
+		if promoted < 0 && strings.Contains(command, "promote") {
+			promoted = at
+		}
+	}
+	if found < 0 || promoted >= 0 && promoted < found {
+		t.Errorf("the box was asked for a health path at %d and the image promoted at %d, want the path found first: %v", found, promoted, machine.commands())
+	}
+}
+
+func TestAnAppWhoseEveryProbedPathIsAbsentIsRefusedWithHowToNameOne(t *testing.T) {
+	t.Parallel()
+
+	pathless := anApp()
+	pathless.HealthCheckPath = ""
+	var said strings.Builder
+	for _, path := range []string{"/up", "/health", "/healthz", "/"} {
+		said.WriteString(switchboard.Answered + " " + path + " 404\n")
+	}
+	_, err := over(findingHealthPath(session.Result{Code: 6, Stdout: said.String()})).ProvisionContainers(context.Background(), aStack(t, pathless), nil)
+	if err == nil || !strings.Contains(err.Error(), "health.path") {
+		t.Fatalf("ProvisionContainers() = %v, want a refusal naming health.path", err)
+	}
+}
+
+func TestAnAppWithAPathAnEarlierReleaseDiscoveredIsGatedOnItWithNoProbing(t *testing.T) {
+	t.Parallel()
+
+	pinned := anApp()
+	pinned.HealthCheckPath = ""
+	pinned.DiscoveredHealthCheckPath = "/healthz"
+	machine := findingHealthPath(session.Result{Code: 1})
+	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, pinned), nil)
+	if err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	if started[0].DiscoveredHealthCheckPath != "/healthz" {
+		t.Errorf("the container is recorded with discovered path %q, want /healthz kept", started[0].DiscoveredHealthCheckPath)
+	}
+	for _, command := range machine.commands() {
+		if strings.Contains(command, "find-health-path") {
+			t.Errorf("a release with a discovered path probed for another: %s", command)
+		}
+	}
+}
+
+func TestAnAppNamingAHealthPathRecordsNoneDiscovered(t *testing.T) {
+	t.Parallel()
+
+	named := anApp()
+	named.DiscoveredHealthCheckPath = "/up"
+	started, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, named), nil)
+	if err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	if started[0].DiscoveredHealthCheckPath != "" {
+		t.Errorf("an app naming /healthz is recorded with discovered path %q, want none: a path the config names always wins", started[0].DiscoveredHealthCheckPath)
 	}
 }
 

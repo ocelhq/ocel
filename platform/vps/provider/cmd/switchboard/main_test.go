@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -925,13 +926,79 @@ func TestTheGateCallsATargetUpOnlyOnATwoHundredAndNamesTheOneThatWasNot(t *testi
 	}
 }
 
+func appAnswering(t *testing.T, statuses map[string]int, starting int) string {
+	t.Helper()
+	var mu sync.Mutex
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if starting > 0 {
+			starting--
+			w.Header().Set(originguard.AppUnansweredHeader, "true")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		status, named := statuses[r.URL.Path]
+		if !named {
+			status = http.StatusNotFound
+		}
+		w.WriteHeader(status)
+	}))
+	t.Cleanup(server.Close)
+	return strings.TrimPrefix(server.URL, "http://")
+}
+
+func TestFindingAHealthPathWaitsOutTheRuntimeAndTakesTheFirstPathThatIsNotAbsent(t *testing.T) {
+	target := appAnswering(t, map[string]int{"/up": http.StatusMethodNotAllowed, "/healthz": http.StatusServiceUnavailable, "/": http.StatusOK}, 3)
+
+	code, out, errs := ran(t, "find-health-path", "--deploy-timeout", "5", target, "/up", "/health", "/healthz", "/")
+	if code != 0 {
+		t.Fatalf("finding a health path = %d, %q %q, want 0", code, out, errs)
+	}
+	want := switchboard.Answered + " /up 405\n" + switchboard.Answered + " /health 404\n" + switchboard.Answered + " /healthz 503\n"
+	if out != want {
+		t.Errorf("printed %q, want %q: a 503 the app gives means the path exists and is unhealthy, never that it is absent", out, want)
+	}
+}
+
+func TestFindingAHealthPathWhereEveryPathIsAbsentNamesWhatEachAnswered(t *testing.T) {
+	target := appAnswering(t, map[string]int{"/health": http.StatusMethodNotAllowed}, 0)
+
+	code, out, errs := ran(t, "find-health-path", "--deploy-timeout", "5", target, "/up", "/health", "/")
+	if code != exitNoHealthPath {
+		t.Errorf("finding a health path among absent ones = %d, %q, want %d", code, errs, exitNoHealthPath)
+	}
+	want := switchboard.Answered + " /up 404\n" + switchboard.Answered + " /health 405\n" + switchboard.Answered + " / 404\n"
+	if out != want {
+		t.Errorf("printed %q, want %q", out, want)
+	}
+}
+
+func TestFindingAHealthPathOnATargetThatNeverAnswersAppIsSilent(t *testing.T) {
+	starting := appAnswering(t, nil, 1<<30)
+	for _, target := range []string{"127.0.0.1:1", starting} {
+		if code, out, errs := ran(t, "find-health-path", "--deploy-timeout", "1", target, "/up", "/"); code != exitSilent || out != "" {
+			t.Errorf("finding a health path on %s = %d, %q %q, want %d with nothing answered", target, code, out, errs, exitSilent)
+		}
+	}
+	for what, argv := range map[string][]string{
+		"no path":            {"find-health-path", "--deploy-timeout", "1", "127.0.0.1:1"},
+		"no window":          {"find-health-path", "127.0.0.1:1", "/up"},
+		"a path off no root": {"find-health-path", "--deploy-timeout", "1", "127.0.0.1:1", "up"},
+	} {
+		if code, _, _ := ran(t, argv...); code != exitRefused {
+			t.Errorf("finding a health path with %s = %d, want the usage refusal", what, code)
+		}
+	}
+}
+
 func TestAVerbTheSwitchboardDoesNotKnowIsRefusedWithTheOnesItDoes(t *testing.T) {
 	for _, argv := range [][]string{{}, {"forget", "shop.example.com"}, {"config", "/"}, {"listeners"}} {
 		code, _, errs := ran(t, argv...)
 		if code != exitRefused {
 			t.Errorf("%v = %d, want the usage refusal", argv, code)
 		}
-		for _, verb := range []string{"serve", "load", "gate", "cutover", "idle", "upstreams", "leaf", "probe", "inodes", "answers"} {
+		for _, verb := range []string{"serve", "load", "gate", "cutover", "idle", "upstreams", "leaf", "probe", "inodes", "answers", "find-health-path"} {
 			if !strings.Contains(errs, verb) {
 				t.Errorf("the usage %q never names %s", errs, verb)
 			}

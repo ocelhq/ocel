@@ -153,6 +153,14 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	if _, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra()); err == nil {
 		t.Error("containerWork accepted a health check path a load balancer cannot probe")
 	}
+	spec.App.HealthCheckPath = ""
+	unnamed, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
+	if err != nil {
+		t.Fatalf("containerWork() with no health check path = %v, want the root probed", err)
+	}
+	if got := unnamed.definitionEnv()[originguard.HealthPathVar]; got != "/" {
+		t.Errorf("%s = %q with no health check path, want /", originguard.HealthPathVar, got)
+	}
 	cfg.OriginSecret = ""
 	spec.App.HealthCheckPath = "/healthz"
 	if _, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra()); err == nil {

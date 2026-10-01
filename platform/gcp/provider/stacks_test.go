@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -279,5 +280,28 @@ func TestDestroyingEveryReleaseOfAFunctionDeletesItsServiceWhicheverGoesFirst(t 
 				t.Errorf("destroying every release left Cloud Run service %s standing", active.Physical)
 			}
 		})
+	}
+}
+
+func TestAContainerThatNamesNoHealthPathIsProbedAtTheRoot(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	spec := previewSpec(sharedPreviewLabel)
+	spec.App.HealthCheckPath = ""
+
+	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	if len(server.created) == 0 {
+		t.Fatal("ProvisionContainers() created no service")
+	}
+	container := server.created[len(server.created)-1].Template.Containers[0]
+	if container.StartupProbe == nil || container.StartupProbe.HttpGet == nil || container.StartupProbe.HttpGet.Path != "/" {
+		t.Errorf("a container naming no health path is probed at %+v, want /", container.StartupProbe)
+	}
+	for _, env := range container.Env {
+		if env.Name == originguard.HealthPathVar && env.Value != "/" {
+			t.Errorf("%s = %q, want /: the runtime answers the probe the service sends", originguard.HealthPathVar, env.Value)
+		}
 	}
 }

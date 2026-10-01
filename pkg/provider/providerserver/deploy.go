@@ -1034,6 +1034,10 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err != nil {
 				return err
 			}
+			discovered, err := r.readDiscoveredHealthPath(ctx, entry)
+			if err != nil {
+				return err
+			}
 			spec := provider.StackSpec{
 				Ref:      r.ref(entry.Stack),
 				Kind:     provider.StackApp,
@@ -1043,27 +1047,28 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				Images:   images,
 				Bindings: r.publishedBindings(),
 				App: &provider.AppSpec{
-					App:             entry.App,
-					Framework:       entry.Manifest.GetFramework().GetName(),
-					Entry:           entryLogicalName(entry.Manifest, facts.Entry),
-					Deployment:      entry.Build.DeploymentID(),
-					Compute:         entry.Compute(),
-					Router:          r.appRouters[entry.App],
-					Functions:       r.functionSpecs(entry),
-					Image:           imageToRun(images, entry),
-					HealthCheckPath: entry.HealthCheckPath,
-					Arch:            entry.Arch,
-					Instances:       entry.Instances,
-					Values:          values,
-					Grants:          grants,
-					Routing:         facts.OriginDispatch,
-					ISR:             facts.ISR,
-					Bytecode:        facts.Bytecode,
-					AssetPrefix:     facts.AssetPrefix,
-					PreviewLabel:    r.previewLabel(slot),
-					Guard:           facts.Guard,
-					VendorState:     pack.VendorState,
-					Proxied:         anyProxied(proxied, grants),
+					App:                       entry.App,
+					Framework:                 entry.Manifest.GetFramework().GetName(),
+					Entry:                     entryLogicalName(entry.Manifest, facts.Entry),
+					Deployment:                entry.Build.DeploymentID(),
+					Compute:                   entry.Compute(),
+					Router:                    r.appRouters[entry.App],
+					Functions:                 r.functionSpecs(entry),
+					Image:                     imageToRun(images, entry),
+					HealthCheckPath:           entry.HealthCheckPath,
+					DiscoveredHealthCheckPath: discovered,
+					Arch:                      entry.Arch,
+					Instances:                 entry.Instances,
+					Values:                    values,
+					Grants:                    grants,
+					Routing:                   facts.OriginDispatch,
+					ISR:                       facts.ISR,
+					Bytecode:                  facts.Bytecode,
+					AssetPrefix:               facts.AssetPrefix,
+					PreviewLabel:              r.previewLabel(slot),
+					Guard:                     facts.Guard,
+					VendorState:               pack.VendorState,
+					Proxied:                   anyProxied(proxied, grants),
 				},
 			}
 			if r.dry {
@@ -1359,28 +1364,29 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 		routing = json.RawMessage(facts.EdgeDispatch.Manifest)
 	}
 	record := router.DeploymentRecord{
-		RoutingManifest:  routing,
-		App:              entry.App,
-		Framework:        entry.Manifest.GetFramework().GetName(),
-		Build:            r.spec.Builds[entry.App],
-		DeploymentID:     entry.Build.DeploymentID(),
-		Entry:            facts.Entry,
-		EntryFunction:    physicalByLogical[entryLogicalName(entry.Manifest, facts.Entry)],
-		Image:            images.ImageRef(entry.App),
-		Physical:         physicalOf(result.Containers, entry.App),
-		Revisions:        revisionsOf(result, entry.App, logical),
-		Origin:           originOf(result.Containers, entry.App),
-		HealthPath:       entry.HealthCheckPath,
-		FunctionURLs:     urls,
-		AssetPrefix:      coordinate.AssetKey(""),
-		IsrPrefix:        withoutSlash(coordinate.ISRPrefix()),
-		IsrWriteSecret:   result.ISRWriteSecret,
-		CreatedAt:        time.Now().Unix(),
-		BuildFingerprint: entry.Build.Fingerprint(),
-		Variables:        declaredVariables(entry.Manifest.GetClientBundle(), values),
-		Needs:            r.needs[entry.App].Needs,
-		SupportInEffect:  r.needs[entry.App].InEffect,
-		Waived:           r.needs[entry.App].Waived,
+		RoutingManifest:      routing,
+		App:                  entry.App,
+		Framework:            entry.Manifest.GetFramework().GetName(),
+		Build:                r.spec.Builds[entry.App],
+		DeploymentID:         entry.Build.DeploymentID(),
+		Entry:                facts.Entry,
+		EntryFunction:        physicalByLogical[entryLogicalName(entry.Manifest, facts.Entry)],
+		Image:                images.ImageRef(entry.App),
+		Physical:             physicalOf(result.Containers, entry.App),
+		Revisions:            revisionsOf(result, entry.App, logical),
+		Origin:               originOf(result.Containers, entry.App),
+		HealthPath:           healthPathOf(entry, result.Containers),
+		HealthPathDiscovered: entry.HealthCheckPath == "" && discoveredHealthPathOf(result.Containers, entry.App) != "",
+		FunctionURLs:         urls,
+		AssetPrefix:          coordinate.AssetKey(""),
+		IsrPrefix:            withoutSlash(coordinate.ISRPrefix()),
+		IsrWriteSecret:       result.ISRWriteSecret,
+		CreatedAt:            time.Now().Unix(),
+		BuildFingerprint:     entry.Build.Fingerprint(),
+		Variables:            declaredVariables(entry.Manifest.GetClientBundle(), values),
+		Needs:                r.needs[entry.App].Needs,
+		SupportInEffect:      r.needs[entry.App].InEffect,
+		Waived:               r.needs[entry.App].Waived,
 	}
 	code, err := r.edgeCode(entry, result)
 	if err != nil {
@@ -1726,6 +1732,41 @@ func physicalOf(containers []provider.AppContainer, app string) string {
 		}
 	}
 	return ""
+}
+
+func discoveredHealthPathOf(containers []provider.AppContainer, app string) string {
+	for _, container := range containers {
+		if container.Name == app {
+			return container.DiscoveredHealthCheckPath
+		}
+	}
+	return ""
+}
+
+func healthPathOf(entry provider.AppEntry, containers []provider.AppContainer) string {
+	if entry.HealthCheckPath != "" {
+		return entry.HealthCheckPath
+	}
+	return discoveredHealthPathOf(containers, entry.App)
+}
+
+func (r *deployRun) readDiscoveredHealthPath(ctx context.Context, entry provider.AppEntry) (string, error) {
+	if r.dry || entry.Compute() != provider.ComputeContainer || entry.HealthCheckPath != "" {
+		return "", nil
+	}
+	promotion, active, err := r.ledger.ReadActive(ctx, r.spec.Pointer)
+	if err != nil || !active {
+		return "", err
+	}
+	build, promoted := promotion.Builds[entry.App]
+	if !promoted {
+		return "", nil
+	}
+	record, staged, err := r.ledger.Record(ctx, entry.App, build)
+	if err != nil || !staged || !record.HealthPathDiscovered {
+		return "", err
+	}
+	return record.HealthPath, nil
 }
 
 func originOf(containers []provider.AppContainer, app string) string {

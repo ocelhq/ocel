@@ -26,10 +26,6 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image", app.App)
 	}
-	if strings.TrimSpace(app.HealthCheckPath) == "" {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s has no health check path", app.App)
-	}
 	physical := host.ContainerName(spec.Ref.Name.String(), app.App, app.Deployment, app.Image)
 	store, err := p.storeSection(ctx, spec)
 	if err != nil {
@@ -55,20 +51,34 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if progress != nil {
 		progress.Say("Starting " + app.App + "'s container " + physical)
 	}
+	healthPath, discovered := app.HealthCheckPath, ""
+	if healthPath == "" {
+		healthPath, discovered = app.DiscoveredHealthCheckPath, app.DiscoveredHealthCheckPath
+	}
 	if err := p.host.RunContainer(ctx, host.Container{
 		Name: physical, Project: spec.Ref.Project, App: app.App, Image: app.Image,
-		Tier: spec.Ref.Tier, Env: app.Values.ContainerEnv, HealthPath: app.HealthCheckPath, Manifest: manifest, Resolved: true,
+		Tier: spec.Ref.Tier, Env: app.Values.ContainerEnv, HealthPath: healthPath, Manifest: manifest, Resolved: true,
 	}); err != nil {
 		return nil, err
+	}
+	target := physical + ":" + containerimage.PortText
+	switch {
+	case healthPath == "":
+		if discovered, err = p.host.FindHealthPath(ctx, host.HealthPathSearch{App: app.App, Target: target, Window: host.DeployWindow}, progress); err != nil {
+			return nil, err
+		}
+	case discovered != "" && progress != nil:
+		progress.Say(app.App + " answers its health check on " + discovered + ", found by probing on an earlier release")
 	}
 	if err := p.host.Promote(ctx, spec.Ref.Tier, spec.Ref.Project, app.App, app.Image); err != nil {
 		return nil, err
 	}
 	return []provider.AppContainer{{
-		Name:     app.App,
-		Physical: physical,
-		URL:      "http://" + physical + ":" + containerimage.PortText,
-		Image:    app.Image,
+		Name:                      app.App,
+		Physical:                  physical,
+		URL:                       "http://" + target,
+		Image:                     app.Image,
+		DiscoveredHealthCheckPath: discovered,
 	}}, nil
 }
 

@@ -61,9 +61,10 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 			return router.Unserved{Err: err}
 		}
 		apps = append(apps, host.AppRelease{
-			RouteKey:   release.key,
-			Target:     release.record.Physical + ":" + containerimage.PortText,
-			HealthPath: release.record.HealthPath,
+			RouteKey:             release.key,
+			Target:               release.record.Physical + ":" + containerimage.PortText,
+			HealthPath:           release.record.HealthPath,
+			HealthPathDiscovered: release.record.HealthPathDiscovered,
 		})
 	}
 	return s.e.machine.Release(ctx, host.Release{

@@ -24,6 +24,8 @@ func serviceFor(names Names, spec provider.StackSpec, app *provider.AppSpec, fun
 	return names.Service(spec.Ref.Project, spec.Ref.Name.Env, app.App, function)
 }
 
+const rootHealthPath = "/"
+
 const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: nothing in front of it shields it, " +
 	"and Cloud Run's invoker check would shut browsers out too. Front previews with an edge that shields the origin, or keep their urls to yourselves"
 
@@ -142,8 +144,9 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 			"app %s names no image, and a Cloud Run service runs what a registry coordinate names and nothing else", app.App)
 	}
 	if strings.TrimSpace(app.HealthCheckPath) == "" {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s names no health check path, and up means a 2xx on the path the deploy request named rather than on one this provider chose", app.App)
+		probed := *app
+		probed.HealthCheckPath = rootHealthPath
+		spec.App, app = &probed, &probed
 	}
 	names, err := p.Names(ctx)
 	if err != nil {
