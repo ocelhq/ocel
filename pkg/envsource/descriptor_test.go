@@ -67,6 +67,8 @@ func TestMalformedOptionsAreRefusedNamingTheFieldAtFault(t *testing.T) {
 		{"a blank project", "infisical", `{"project":"  ","environment":"prod","auth":{"identity":{"identityId":"i"}}}`, "project"},
 		{"no environment", "infisical", `{"project":"p","auth":{"identity":{"identityId":"i"}}}`, "environment"},
 		{"a host that is no http URL", "infisical", `{"project":"p","environment":"e","host":"infisical.example.com","auth":{"identity":{"identityId":"i"}}}`, "host"},
+		{"a path not rooted at /", "infisical", `{"project":"p","environment":"e","path":"web","auth":{"identity":{"identityId":"i"}}}`, "path"},
+		{"a path climbing out of the root", "infisical", `{"project":"p","environment":"e","path":"../web","auth":{"identity":{"identityId":"i"}}}`, "path"},
 		{"no auth", "infisical", `{"project":"p","environment":"e"}`, "auth"},
 		{"auth keyed by nothing", "infisical", `{"project":"p","environment":"e","auth":{}}`, "auth"},
 		{"auth keyed twice", "infisical", `{"project":"p","environment":"e","auth":{"identity":{"identityId":"i"},"universal":{"clientId":{"$env":"ID"},"clientSecret":{"$env":"S"}}}}`, "auth"},
