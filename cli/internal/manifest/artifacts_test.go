@@ -118,7 +118,7 @@ func TestAContainerNamesTheArchitectureItsAppDeclares(t *testing.T) {
 	}
 }
 
-func TestAContainerThatAsksForNoHealthPathIsWrittenWithTheDefaultOne(t *testing.T) {
+func TestAContainerThatAsksForNoHealthPathIsWrittenWithNoneSoTheProviderChooses(t *testing.T) {
 	t.Parallel()
 
 	manifest, err := assembleOn("container", "proj-1", project.Domains{}, []app{
@@ -128,8 +128,8 @@ func TestAContainerThatAsksForNoHealthPathIsWrittenWithTheDefaultOne(t *testing.
 		t.Fatalf("assemble: %v", err)
 	}
 
-	if got, want := containerOf(t, manifest, "api").GetHealthCheckPath(), defaultHealthCheckPath; got != want {
-		t.Errorf("health_check_path = %q, want the default resolved here so no provider resolves one of its own", got)
+	if got := containerOf(t, manifest, "api").GetHealthCheckPath(); got != "" {
+		t.Errorf("health_check_path = %q, want none: a provider chooses the path for an app that names none", got)
 	}
 }
 

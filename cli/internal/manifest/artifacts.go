@@ -8,8 +8,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const defaultHealthCheckPath = "/"
-
 func attachArtifact(manifestApp *contractv1.ManifestApp, a app, functions []*contractv1.ManifestFunction) error {
 	if a.Compute != provider.ComputeContainer {
 		manifestApp.Artifact = serverlessArtifact(functions)
@@ -21,13 +19,9 @@ func attachArtifact(manifestApp *contractv1.ManifestApp, a app, functions []*con
 	if !containerimage.IsPinned(a.Image) {
 		return fmt.Errorf("app %q names image %q, and a release pins one repository at one digest: a tag repoints under a running release, so it never rides in the identity", a.Name, a.Image)
 	}
-	path := a.HealthCheckPath
-	if path == "" {
-		path = defaultHealthCheckPath
-	}
 	manifestApp.Artifact = &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
 		Image:           a.Image,
-		HealthCheckPath: path,
+		HealthCheckPath: a.HealthCheckPath,
 		Arch:            a.Arch,
 		MinInstances:    uint32(a.Instances.Min),
 		MaxInstances:    uint32(a.Instances.Max),

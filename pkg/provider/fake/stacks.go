@@ -166,17 +166,31 @@ func ProvisionedFunctions(spec provider.StackSpec) []provider.Function {
 	return functions
 }
 
+const DiscoveredHealthPath = "/up"
+
 func ProvisionedContainers(spec provider.StackSpec) []provider.AppContainer {
 	if spec.App == nil || spec.App.Compute != provider.ComputeContainer {
 		return nil
 	}
 	physical := spec.Ref.Name.String() + "-" + spec.App.App
 	return []provider.AppContainer{{
-		Name:     spec.App.App,
-		Physical: physical,
-		URL:      "https://" + physical + ".ctr.fake.invalid",
-		Image:    spec.App.Image,
+		Name:                      spec.App.App,
+		Physical:                  physical,
+		URL:                       "https://" + physical + ".ctr.fake.invalid",
+		Image:                     spec.App.Image,
+		DiscoveredHealthCheckPath: discoveredHealthPath(spec.App),
 	}}
+}
+
+func discoveredHealthPath(app *provider.AppSpec) string {
+	switch {
+	case app.HealthCheckPath != "":
+		return ""
+	case app.DiscoveredHealthCheckPath != "":
+		return app.DiscoveredHealthCheckPath
+	default:
+		return DiscoveredHealthPath
+	}
 }
 
 func (r *Stacks) recordDestroyed(names ...string) {

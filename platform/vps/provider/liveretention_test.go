@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -152,13 +153,13 @@ func TestLiveAFailedReleaseSweepsItsOwnImage(t *testing.T) {
 	sweepsUp(t, p, "r1")
 
 	spec := sweepSpec(t, "leak")
-	spec.App.HealthCheckPath = ""
+	spec.App.Values.ContainerEnv = map[string]string{originguard.HealthPathVar: "/"}
 	stacks := p.Stacks()
 	_, err := stacks.Provision(context.Background(), spec, nil)
 	if err == nil {
-		t.Fatal("Provision() of an app with no health path succeeded, and this test needs the failure path")
+		t.Fatal("Provision() of an app setting a variable the runtime reserves succeeded, and this test needs the failure path")
 	}
-	if !strings.Contains(err.Error(), "health check path") {
+	if !strings.Contains(err.Error(), "ocel's runtime reserves") {
 		t.Fatalf("Provision() = %v, which is not the failure this test induces: a release that fell over somewhere earlier proves nothing about the release that leaked an image", err)
 	}
 

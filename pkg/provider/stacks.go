@@ -76,10 +76,11 @@ type AppSpec struct {
 	Router     router.Kind
 	Functions  []FunctionSpec
 
-	Image           string
-	HealthCheckPath string
-	Arch            string
-	Instances       Instances
+	Image                     string
+	HealthCheckPath           string
+	DiscoveredHealthCheckPath string
+	Arch                      string
+	Instances                 Instances
 
 	Values AppValues
 
@@ -220,11 +221,12 @@ type Function struct {
 }
 
 type AppContainer struct {
-	Name     string `json:"name"`
-	Physical string `json:"physical,omitempty"`
-	URL      string `json:"url,omitempty"`
-	Image    string `json:"image,omitempty"`
-	Revision string `json:"revision,omitempty"`
+	Name                      string `json:"name"`
+	Physical                  string `json:"physical,omitempty"`
+	URL                       string `json:"url,omitempty"`
+	Image                     string `json:"image,omitempty"`
+	Revision                  string `json:"revision,omitempty"`
+	DiscoveredHealthCheckPath string `json:"discoveredHealthCheckPath,omitempty"`
 }
 
 type InspectedStack struct {

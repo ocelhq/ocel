@@ -254,7 +254,7 @@ func normalizeHealth(a configdoc.AppConfig) (*Health, error) {
 	}
 	path := strings.TrimSpace(a.Health.Path)
 	if path != "" && !strings.HasPrefix(path, "/") {
-		return nil, fmt.Errorf("app %q sets health.path to %q, which is not a path off the app's root: give it one starting with %q, or drop health.path to have %q probed at %q", a.Name, a.Health.Path, "/", a.Name, "/")
+		return nil, fmt.Errorf("app %q sets health.path to %q, which is not a path off the app's root: give it one starting with %q, or drop health.path to have the provider choose %q's health check", a.Name, a.Health.Path, "/", a.Name)
 	}
 	if path != "" && !containerimage.IsHealthCheckPath(path) {
 		return nil, fmt.Errorf("app %q sets health.path to %q, and a probe asks one path of the process: give %q a path containing no %q, %q, whitespace or control character, since a query or fragment names nothing the process is asked for", a.Name, a.Health.Path, a.Name, "?", "#")

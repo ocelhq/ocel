@@ -12,6 +12,7 @@ const (
 	DrainExpired = "drain-expired"
 	Drained      = "drained"
 	Ungated      = "ungated"
+	Answered     = "answered"
 )
 
 type Drain struct {

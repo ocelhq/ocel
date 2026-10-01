@@ -200,6 +200,9 @@ func TestHandler(t *testing.T) {
 			if resp.StatusCode != http.StatusServiceUnavailable {
 				t.Errorf("status for %s = %d, want %d while the app is still starting", sent.path, resp.StatusCode, http.StatusServiceUnavailable)
 			}
+			if resp.Header.Get(AppUnansweredHeader) == "" {
+				t.Errorf("the 503 for %s carries no %s, so a probe would take the runtime's answer for the app's", sent.path, AppUnansweredHeader)
+			}
 		}
 		if up.seen != 0 {
 			t.Error("a request reached the app before it was listening")
@@ -225,8 +228,21 @@ func TestHandler(t *testing.T) {
 		up.server.Close()
 		front := serveFront(t, up, nil, nil)
 
-		if resp := ask(t, front, http.MethodGet, "/", ""); resp.StatusCode != http.StatusBadGateway {
+		resp := ask(t, front, http.MethodGet, "/", "")
+		if resp.StatusCode != http.StatusBadGateway {
 			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadGateway)
+		}
+		if resp.Header.Get(AppUnansweredHeader) == "" {
+			t.Errorf("the 502 carries no %s, so a probe would take the runtime's answer for the app's", AppUnansweredHeader)
+		}
+	})
+
+	t.Run("an answer the app gives carries no mark that the runtime answered", func(t *testing.T) {
+		up := serveUpstream(t)
+		front := serveFront(t, up, nil, nil)
+
+		if resp := ask(t, front, http.MethodGet, "/", ""); resp.Header.Get(AppUnansweredHeader) != "" {
+			t.Errorf("the app's own answer carries %s", AppUnansweredHeader)
 		}
 	})
 }

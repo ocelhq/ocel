@@ -36,6 +36,8 @@ import (
 	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 )
 
+const rootHealthPath = "/"
+
 const (
 	containerPort       = "8080"
 	containerPortNumber = 8080
@@ -163,9 +165,13 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image, and a container on this provider runs what a registry coordinate names and nothing else", app.App)
 	}
-	if !containerimage.IsHealthCheckPath(app.HealthCheckPath) {
+	healthPath := app.HealthCheckPath
+	if healthPath == "" {
+		healthPath = rootHealthPath
+	}
+	if !containerimage.IsHealthCheckPath(healthPath) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s is probed at %q, which is not a path a load balancer can send a health check to", app.App, app.HealthCheckPath)
+			"app %s is probed at %q, which is not a path a load balancer can send a health check to", app.App, healthPath)
 	}
 	if r.cfg.OriginSecret == "" {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
@@ -202,7 +208,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		app:        app.App,
 		arch:       app.Arch,
 		image:      app.Image,
-		healthPath: app.HealthCheckPath,
+		healthPath: healthPath,
 		instances:  app.Instances,
 		env:        env,
 		tags:       spec.Tags,

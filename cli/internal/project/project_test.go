@@ -883,7 +883,7 @@ export default {
   apps: [{ name: "api", path: "services/api", compute: "container", health: { path: "healthz" } }],
 };
 `,
-			wantErr: []string{`app "api"`, "health.path"},
+			wantErr: []string{`app "api"`, "health.path", "drop health.path to have the provider choose"},
 		},
 		{
 			name: "rejects a health.path containing a query the wire would refuse",
