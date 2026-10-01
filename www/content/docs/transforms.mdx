@@ -57,8 +57,10 @@ differently refuses rather than letting one win.
 | `kv` | `securityGroup`, `subnetGroup`, `parameterGroup`, `replicationGroup` |
 
 A kv store's token, port, TLS, engine version and parameters stay ocel's, because its binding is
-made from them. Its node type and node count are yours: [one node](/docs/providers/aws#kv-stores)
-halves the cost and loses the data when ElastiCache replaces the node.
+made from them. Its node type stays ocel's too: `memory` picks it, and the store's reserved memory
+is sized for that node. Its node count is yours: [one node](/docs/providers/aws#kv-stores) halves
+the cost and loses the data when ElastiCache replaces the node, and a deploy refuses it unless the
+same patch turns `automaticFailoverEnabled` and `multiAzEnabled` off.
 
 ## On a VPS
 

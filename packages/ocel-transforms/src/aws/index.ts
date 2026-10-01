@@ -34,9 +34,11 @@ export interface AwsResourceArgs {
     instance: rds.ClusterInstanceArgs;
   };
   /**
-   * A kv store: a Valkey replication group of two nodes across zones. Setting
+   * A kv store: a Valkey replication group of two nodes across zones, each the
+   * cheapest node that holds the store's declared memory. Setting
    * `numCacheClusters: 1` with `automaticFailoverEnabled` and `multiAzEnabled`
    * off halves its cost, and a store whose one node is replaced comes back empty.
+   * A deploy refuses one node with either flag left on.
    */
   kv: {
     securityGroup: ec2.SecurityGroupArgs;
@@ -166,6 +168,7 @@ export const awsOwnedFields = {
       "engine",
       "engineVersion",
       "globalReplicationGroupId",
+      "nodeType",
       "numNodeGroups",
       "parameterGroupName",
       "port",
