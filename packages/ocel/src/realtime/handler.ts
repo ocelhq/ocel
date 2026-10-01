@@ -32,10 +32,10 @@ export interface RealtimeHandler {
 
 /** The most bytes a realtime handler reads of a request body before refusing it with 413. */
 export const maxRequestBytes = 1024 * 1024;
-const maxOps = 50;
-const opKeys = new Set(["op", "pattern", "params", "body"]);
+const maxOperations = 50;
+const operationKeys = new Set(["op", "pattern", "params", "body"]);
 
-type OpName = "subscribe" | "publish";
+type OperationName = "subscribe" | "publish";
 
 type RealtimeDenial =
   | "invalid-op"
@@ -152,7 +152,7 @@ function copyRequest(request: Request, text: string): Request {
   return new Request(request, { body: text });
 }
 
-function parseBatch(text: string): { connect: boolean; ops: unknown[] } | undefined {
+function parseBatch(text: string): { connect: boolean; operations: unknown[] } | undefined {
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -161,11 +161,11 @@ function parseBatch(text: string): { connect: boolean; ops: unknown[] } | undefi
   }
   if (!isPlainObject(value)) return undefined;
   if (Object.keys(value).some((key) => key !== "connect" && key !== "ops")) return undefined;
-  const { connect, ops } = value;
-  if (!Array.isArray(ops) || (connect !== undefined && typeof connect !== "boolean")) {
+  const { connect, ops: operations } = value;
+  if (!Array.isArray(operations) || (connect !== undefined && typeof connect !== "boolean")) {
     return undefined;
   }
-  return { connect: connect ?? false, ops };
+  return { connect: connect ?? false, operations };
 }
 
 async function runRule(
@@ -178,31 +178,31 @@ async function runRule(
   }
 }
 
-async function evaluateOp(batch: BatchRequest, value: unknown, i: number): Promise<Outcome> {
+async function evaluateOperation(batch: BatchRequest, value: unknown, i: number): Promise<Outcome> {
   const deny = (code: RealtimeDenial): Outcome => ({ denied: { i, code } });
   if (
     !isPlainObject(value) ||
-    Object.keys(value).some((key) => !opKeys.has(key)) ||
+    Object.keys(value).some((key) => !operationKeys.has(key)) ||
     (value.op === "subscribe" && Object.hasOwn(value, "body"))
   ) {
     return deny("invalid-op");
   }
-  const op = value.op;
-  if (op !== "subscribe" && op !== "publish") return deny("unknown-op");
+  const operation = value.op;
+  if (operation !== "subscribe" && operation !== "publish") return deny("unknown-op");
   const channel =
     typeof value.pattern === "string" ? batch.runtime.channels.get(value.pattern) : undefined;
   if (!channel) return deny("unknown-pattern");
-  if (op === "publish" && !channel.publish) return deny("no-publish-rule");
+  if (operation === "publish" && !channel.publish) return deny("no-publish-rule");
   const params = value.params ?? {};
   if (!isParams(params)) return deny("invalid-params");
   const wire = encodeWireChannel(
     batch.runtime.name,
     channel.pattern,
     params,
-    op === "subscribe" && channel.wildcard,
+    operation === "subscribe" && channel.wildcard,
   );
   if ("refused" in wire) return deny(wire.refused);
-  return op === "subscribe"
+  return operation === "subscribe"
     ? evaluateSubscribe(batch, channel, params, wire.channel, i)
     : evaluatePublish(batch, channel, params, wire.channel, value, i);
 }
@@ -230,13 +230,13 @@ async function evaluatePublish(
   channel: DeclaredChannel,
   params: Record<string, string>,
   wire: string,
-  op: Record<string, unknown>,
+  operation: Record<string, unknown>,
   i: number,
 ): Promise<Outcome> {
   const rule = channel.publish;
   if (!rule) return { denied: { i, code: "no-publish-rule" } };
-  if (!Object.hasOwn(op, "body")) return { denied: { i, code: "invalid-body" } };
-  const event = await encodeEvent(channel, wire, op.body);
+  if (!Object.hasOwn(operation, "body")) return { denied: { i, code: "invalid-body" } };
+  const event = await encodeEvent(channel, wire, operation.body);
   if ("refused" in event) return { denied: { i, code: event.refused } };
   if (batch.auth === null) return { denied: { i, code: "unauthenticated" } };
   const request = copyRequest(batch.request, batch.text);
@@ -253,16 +253,16 @@ async function evaluatePublish(
   return { grant: { i, wire } };
 }
 
-function isOpNamed(value: unknown, name: OpName): boolean {
+function isOperationNamed(value: unknown, name: OperationName): boolean {
   return isPlainObject(value) && value.op === name;
 }
 
-function evaluateOps(batch: BatchRequest, ops: unknown[]): Promise<Outcome[]> {
+function evaluateOperations(batch: BatchRequest, operations: unknown[]): Promise<Outcome[]> {
   let publishing: Promise<unknown> = Promise.resolve();
   return Promise.all(
-    ops.map((value, i) => {
-      if (!isOpNamed(value, "publish")) return evaluateOp(batch, value, i);
-      const outcome = publishing.then(() => evaluateOp(batch, value, i));
+    operations.map((value, i) => {
+      if (!isOperationNamed(value, "publish")) return evaluateOperation(batch, value, i);
+      const outcome = publishing.then(() => evaluateOperation(batch, value, i));
       publishing = outcome.catch(() => undefined);
       return outcome;
     }),
@@ -291,8 +291,8 @@ async function serveBatch(
       cors,
     );
   }
-  if (parsed.ops.length > maxOps) {
-    return respond(400, { error: `a request holds at most ${maxOps} ops` }, cors);
+  if (parsed.operations.length > maxOperations) {
+    return respond(400, { error: `a request holds at most ${maxOperations} ops` }, cors);
   }
 
   const properties = runtime.properties("handler");
@@ -318,7 +318,7 @@ async function serveBatch(
   const connect = parsed.connect
     ? mintToken(properties, runtime, batch.subject, "connect", `/${runtime.name}`)
     : undefined;
-  const outcomes = await evaluateOps(batch, parsed.ops);
+  const outcomes = await evaluateOperations(batch, parsed.operations);
   return respond(
     200,
     {
