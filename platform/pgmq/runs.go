@@ -121,8 +121,8 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 		if err != nil {
 			return err
 		}
-		if run.status != provider.RunDelayed && run.status != provider.RunQueued {
-			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q is %s, and only a run that has not started can be rescheduled", req.GetId(), run.status))
+		if run.status != provider.RunDelayed {
+			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q is %s, and only a delayed run can be rescheduled", req.GetId(), run.status))
 		}
 		if run.message == nil {
 			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q is on no queue, so nothing would run it at a new time", req.GetId()))
@@ -154,8 +154,10 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 	var task, key, lane string
 	var payload, metadata []byte
 	var tags []string
-	err := t.engine.pool.QueryRow(ctx, "SELECT topic, key, lane, payload, metadata, tags FROM ocel.runs WHERE execution = $1", req.GetId()).
-		Scan(&task, &key, &lane, &payload, &metadata, &tags)
+	var maxAttempts int32
+	var due, expires *time.Time
+	err := t.engine.pool.QueryRow(ctx, "SELECT topic, key, lane, payload, metadata, tags, max_attempts, due_at, expires_at FROM ocel.runs WHERE execution = $1", req.GetId()).
+		Scan(&task, &key, &lane, &payload, &metadata, &tags, &maxAttempts, &due, &expires)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no run %q", req.GetId()))
 	}
@@ -176,9 +178,13 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 		payload:     json.RawMessage(payload),
 		key:         key,
 		lane:        laneOf(lane),
+		maxAttempts: maxAttempts,
 		ttl:         topic.GetTtl().AsDuration(),
 		tags:        tags,
 		metadata:    json.RawMessage(metadata),
+	}
+	if due != nil && expires != nil {
+		toPublish.ttl = expires.Sub(*due)
 	}
 	var executions []string
 	err = t.engine.inTx(ctx, func(tx pgx.Tx) error {

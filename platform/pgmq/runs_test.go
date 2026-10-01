@@ -109,6 +109,18 @@ func TestARunTheStoreWroteWithoutAQueueMessageExpiresOnceItsTTLPasses(t *testing
 	awaitRun(t, engine, "stored", taskv1.RunStatus_RUN_STATUS_EXPIRED)
 }
 
+func TestAQueuedRunCannotBeRescheduled(t *testing.T) {
+	engine, _ := aServedTask(t, succeeding, func(topic *contractv1.ManifestTopic) {
+		topic.Consumers[0].Worker = "elsewhere"
+	})
+	id := trigger(t, engine, "resize", `{}`, nil)
+
+	_, err := engine.Tasks().RescheduleRun(context.Background(), &taskv1.RescheduleRunRequest{Id: id, DueAt: timestamppb.New(time.Now().Add(time.Hour))})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("RescheduleRun of a queued run = %v, want FailedPrecondition", err)
+	}
+}
+
 func TestACanceledRunThatHasNotStartedNeverRuns(t *testing.T) {
 	engine, worker := aServedTask(t, succeeding)
 	id := trigger(t, engine, "resize", `{}`, &taskv1.TriggerOptions{DueAt: timestamppb.New(time.Now().Add(500 * time.Millisecond))})
@@ -219,4 +231,32 @@ func TestListingRunsWhenTheDatabaseIsUnreachableIsNotTheCallersFault(t *testing.
 	if err == nil || connect.CodeOf(err) == connect.CodeInvalidArgument {
 		t.Errorf("ListRuns on a closed engine = %v, want an error that does not blame the request", err)
 	}
+}
+
+func TestAReplayKeepsTheMaxAttemptsItsTriggerLowered(t *testing.T) {
+	engine, _ := aServedTask(t, failingUntil(100), retrying(5, 50*time.Millisecond, 50*time.Millisecond))
+	id := trigger(t, engine, "resize", `{}`, &taskv1.TriggerOptions{MaxAttempts: 2})
+	awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_FAILED)
+
+	resp, err := engine.Tasks().ReplayRun(context.Background(), &taskv1.ReplayRunRequest{Id: id})
+	if err != nil {
+		t.Fatalf("ReplayRun: %v", err)
+	}
+	if replayed := awaitRun(t, engine, resp.GetId(), taskv1.RunStatus_RUN_STATUS_FAILED); replayed.GetAttempts() != 2 {
+		t.Errorf("the replay ran %d attempts, want the 2 its trigger allowed", replayed.GetAttempts())
+	}
+}
+
+func TestAReplayKeepsTheTTLItsTriggerSet(t *testing.T) {
+	engine, _ := aServedTask(t, succeeding, func(topic *contractv1.ManifestTopic) {
+		topic.Consumers[0].Worker = "elsewhere"
+	})
+	id := trigger(t, engine, "resize", `{}`, &taskv1.TriggerOptions{Ttl: durationpb.New(300 * time.Millisecond)})
+	awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_EXPIRED)
+
+	resp, err := engine.Tasks().ReplayRun(context.Background(), &taskv1.ReplayRunRequest{Id: id})
+	if err != nil {
+		t.Fatalf("ReplayRun: %v", err)
+	}
+	awaitRun(t, engine, resp.GetId(), taskv1.RunStatus_RUN_STATUS_EXPIRED)
 }
