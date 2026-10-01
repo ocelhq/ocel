@@ -279,6 +279,22 @@ func TestACommandWhoseDataAndRunShareOneTerminalDrawsTheGroupedViewSoNoLineOfDat
 	}
 }
 
+func TestACommandThatPrintsItsReportOnlyOnceItsRunEndsDrawsTheLiveLineOnTheTerminalItsReportShares(t *testing.T) {
+	inADeployedProject(t)
+	tty, screen := aTerminal(t, "xterm-256color", 80)
+
+	executeRootOn(t, tty, tty, "doctor")
+
+	got := screen()
+	if !strings.Contains(got, liveFrame) {
+		t.Errorf("the terminal shows %q, want the doctor's run drawn in live-line frames", got)
+	}
+	_, report, ok := strings.Cut(got, "✓ Doctor finished")
+	if !ok || !strings.Contains(ansi.Strip(report), "\nProject  ") {
+		t.Errorf("the terminal shows %q, want the report on rows of its own after the run's result", got)
+	}
+}
+
 func TestTheLiveLineIsErasedWhenTheRunsResultIsDrawnNotWhenTheCommandExits(t *testing.T) {
 	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 80)

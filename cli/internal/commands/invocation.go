@@ -58,6 +58,6 @@ func (i Invocation) IsBrowserReachable(stdin io.Reader) bool {
 func (i Invocation) AttachCommandSink(cmd *cobra.Command) {
 	w := ChooseRunOutput(cmd)
 	present := i.Presentation(w)
-	present.SharedTerminal = isTerminalSharedWithChild(cmd) || isStdoutReserved(cmd) && terminal.IsTerminal(cmd.OutOrStdout())
+	present.SharedTerminal = isTerminalSharedWithChild(cmd) || isStdoutWrittenDuringRun(cmd) && terminal.IsTerminal(cmd.OutOrStdout())
 	i.Events.Attach(terminal.NewSink(present, w))
 }
