@@ -22,7 +22,10 @@ type declaredResource struct {
 	Task     *resourcesv1.TaskConfig
 	Consumer *resourcesv1.ConsumerConfig
 	Worker   *resourcesv1.WorkerConfig
+	KV       *resourcesv1.KvConfig
 	Source   string
+
+	KVEntries []declaredEntry
 }
 
 type declarationKind struct {
@@ -147,7 +150,11 @@ func declaredResources(configDir string, resources []declaration.Resource) []dec
 			Task:     r.Task,
 			Consumer: r.Consumer,
 			Worker:   r.Worker,
+			KV:       r.KV,
 			Source:   source,
+		}
+		if r.KV != nil {
+			declared[i].KVEntries = declaredEntries(configDir, r.KV, source)
 		}
 	}
 	return declared
@@ -197,6 +204,12 @@ func manifestResources(declarations []declaredResource, topics map[string]*contr
 		}
 		if d.Bucket != nil {
 			resource.Config = &contractv1.ManifestResource_Bucket{Bucket: d.Bucket}
+		}
+		if d.KV != nil {
+			if err := firstRefusal(refuseInvalidName(d, d.Name), refuseKVStore(d)); err != nil {
+				return nil, nil, err
+			}
+			resource.Config = &contractv1.ManifestResource_Kv{Kv: manifestKV(d)}
 		}
 		if topic, found := topics[d.Name]; found && declaredKind.declaresTopic {
 			resource.Config = &contractv1.ManifestResource_Topic{Topic: topic}
