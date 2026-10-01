@@ -1,0 +1,5 @@
+error: pattern "session/{id}" holds { or }, which a store reserves as the hash tag syntax
+ --> tests/ui/kv_key_with_a_hash_tag.rs:2:8
+  |
+2 | #[ocel(pattern = "session/{id}", text)]
+  |        ^^^^^^^

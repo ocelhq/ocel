@@ -1,4 +1,4 @@
-use ocel::{Error, Postgres};
+use ocel::{Error, Kv, Postgres};
 use std::sync::{Mutex, MutexGuard};
 static ENV: Mutex<()> = Mutex::new(());
 
@@ -186,4 +186,51 @@ fn properties(url: &str) -> serde_json::Value {
         "username": username,
         "password": password,
     })
+}
+
+#[test]
+fn the_kv_binding_fixture_decodes_as_the_other_sdks_decode_it() {
+    let _env = env();
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../proto/common/bindings/v1/fixtures/kv.json");
+    std::env::set_var(
+        "OCEL_RESOURCE_KV_fixture",
+        std::fs::read_to_string(fixture).expect("the kv binding fixture"),
+    );
+    assert_eq!(
+        Kv::new("fixture").connection_string().expect("a connection string"),
+        "rediss://fixture_operator:fixture-password-not-a-secret@shop-prod-cache-h4j5k6l7.ab12cd.ng.0001.use1.cache.amazonaws.com:6380"
+    );
+}
+
+#[test]
+fn a_kv_connection_string_names_the_scheme_the_bindings_tls_asks() {
+    let _env = env();
+    std::env::set_var(
+        "OCEL_RESOURCE_KV_plain",
+        r#"{"name":"kv--plain","kv":{"host":"127.0.0.1","port":6379,"password":"p@ss/word"}}"#,
+    );
+    assert_eq!(
+        Kv::new("plain")
+            .connection_string()
+            .expect("a connection string"),
+        "redis://:p%40ss%2Fword@127.0.0.1:6379"
+    );
+}
+
+#[test]
+fn a_kv_binding_whose_port_is_no_tcp_port_is_refused() {
+    let _env = env();
+    std::env::set_var(
+        "OCEL_RESOURCE_KV_badport",
+        r#"{"name":"kv--badport","kv":{"host":"127.0.0.1","port":70000}}"#,
+    );
+
+    let err = Kv::new("badport")
+        .connection_string()
+        .expect_err("a port past 65535");
+    assert!(
+        matches!(err, Error::InvalidKvPort { port: 70000, .. }),
+        "{err}"
+    );
 }

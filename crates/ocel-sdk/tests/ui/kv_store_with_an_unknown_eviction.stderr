@@ -1,0 +1,5 @@
+error: field cache: 'eviction' is "lru", and a store evicts by one of noeviction, allkeys-lru, allkeys-lfu, allkeys-random, volatile-lru, volatile-lfu, volatile-random, volatile-ttl.
+ --> tests/ui/kv_store_with_an_unknown_eviction.rs:9:12
+  |
+9 |     #[ocel(eviction = "lru", entries = [Session])]
+  |            ^^^^^^^^

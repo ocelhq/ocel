@@ -1,12 +1,13 @@
 use crate::env::{complaint, Class};
+use crate::kv::{KvEntryDeclaration, ParsedPattern};
 use crate::proto::app::resources::v1::declare_request::Config;
 use crate::proto::app::resources::v1::variable_problem::Kind;
 use crate::proto::app::resources::v1::ResourceType;
 use crate::proto::app::resources::v1::{
     BatchPolicy, BucketConfig, ConsumerConfig, DeclareEnvRequest, DeclareRequest, GroupDefinition,
-    PostgresConfig, ReportEnvProblemsRequest, ResourceIdentifier, ResourceServiceClient,
-    RetryPolicy, TaskConfig, TopicConfig, VariableCell, VariableClass, VariableDefinition,
-    VariableProblem, WorkerConfig,
+    KvConfig, KvEntry, PostgresConfig, ReportEnvProblemsRequest, ResourceIdentifier,
+    ResourceServiceClient, RetryPolicy, TaskConfig, TopicConfig, VariableCell, VariableClass,
+    VariableDefinition, VariableProblem, WorkerConfig,
 };
 use crate::run::BoxFuture;
 use crate::worker::{OnStart, WorkerMiddleware};
@@ -83,6 +84,12 @@ pub enum DeclaredConfig {
         on_start: Option<OnStart>,
         middleware: Option<WorkerMiddleware>,
     },
+    Kv {
+        version: &'static str,
+        eviction: &'static str,
+        memory: &'static str,
+        entries: Vec<KvEntryDeclaration>,
+    },
 }
 
 impl DeclaredConfig {
@@ -94,12 +101,13 @@ impl DeclaredConfig {
             Self::Task { .. } => "task",
             Self::Consumer { .. } => "consumer",
             Self::Worker { .. } => "worker",
+            Self::Kv { .. } => "kv",
         }
     }
 
     fn namespace(&self) -> &'static str {
         match self {
-            Self::Postgres { .. } | Self::Bucket { .. } => "resource",
+            Self::Postgres { .. } | Self::Bucket { .. } | Self::Kv { .. } => "resource",
             Self::Topic { .. } | Self::Task { .. } => "topic",
             Self::Consumer { .. } => "consumer",
             Self::Worker { .. } => "worker",
@@ -121,6 +129,7 @@ impl DeclaredConfig {
             Self::Task { .. } => ResourceType::RESOURCE_TYPE_TASK,
             Self::Consumer { .. } => ResourceType::RESOURCE_TYPE_CONSUMER,
             Self::Worker { .. } => ResourceType::RESOURCE_TYPE_WORKER,
+            Self::Kv { .. } => ResourceType::RESOURCE_TYPE_KV,
         }
     }
 
@@ -192,6 +201,27 @@ impl DeclaredConfig {
             }),
             Self::Worker { concurrency, .. } => Config::from(WorkerConfig {
                 concurrency: *concurrency,
+                ..Default::default()
+            }),
+            Self::Kv {
+                version,
+                eviction,
+                memory,
+                entries,
+            } => Config::from(KvConfig {
+                version: version.to_string(),
+                eviction: eviction.to_string(),
+                memory: memory.to_string(),
+                entries: entries
+                    .iter()
+                    .map(|entry| KvEntry {
+                        name: entry.name.to_string(),
+                        pattern: entry.pattern.to_string(),
+                        shape: entry.shape.to_wire().into(),
+                        source: format_source(entry.file, entry.line),
+                        ..Default::default()
+                    })
+                    .collect(),
                 ..Default::default()
             }),
         }
@@ -325,6 +355,7 @@ pub(crate) fn collect_declarations() -> Result<Declared, Error> {
     for one in structs {
         for resource in one.resources {
             claim_resource(&mut resource_owners, &resource)?;
+            refuse_overlapping_entries(&resource)?;
             all.resources.push(resource);
         }
         for variable in one.variables {
@@ -426,6 +457,40 @@ fn claim_resource(
         });
     }
     owners.push((key, site));
+    Ok(())
+}
+
+fn refuse_overlapping_entries(resource: &DeclaredResource) -> Result<(), Error> {
+    let DeclaredConfig::Kv { entries, .. } = &resource.config else {
+        return Ok(());
+    };
+    for (index, entry) in entries.iter().enumerate() {
+        for prior in &entries[..index] {
+            let (site, prior_site) = (
+                format_site(entry.file, entry.line),
+                format_site(prior.file, prior.line),
+            );
+            let detail = if prior.name == entry.name {
+                format!(
+                    "has entry '{}' declared at {prior_site} and at {site}, and a store names each entry once",
+                    entry.name
+                )
+            } else if ParsedPattern::parse(prior.pattern)
+                .overlaps(&ParsedPattern::parse(entry.pattern))
+            {
+                format!(
+                    "has entry '{}' declared at {site} with pattern \"{}\", which overlaps pattern \"{}\" of entry '{}' declared at {prior_site}: some key would match both, so neither entry could tell its keys from the other's",
+                    entry.name, entry.pattern, prior.pattern, prior.name
+                )
+            } else {
+                continue;
+            };
+            return Err(Error::Definition {
+                key: resource.name.to_string(),
+                detail,
+            });
+        }
+    }
     Ok(())
 }
 

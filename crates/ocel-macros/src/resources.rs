@@ -27,6 +27,12 @@ enum Config {
         on_start: Option<syn::Path>,
         middleware: Option<syn::Path>,
     },
+    Kv {
+        version: String,
+        eviction: String,
+        memory: String,
+        entries: Vec<syn::Path>,
+    },
 }
 
 struct Resource {
@@ -71,6 +77,19 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                         schema: #schema,
                         ordered: #ordered,
                         retry: #retry,
+                    }
+                },
+                Config::Kv {
+                    version,
+                    eviction,
+                    memory,
+                    entries,
+                } => quote! {
+                    ::ocel::DeclaredConfig::Kv {
+                        version: #version,
+                        eviction: #eviction,
+                        memory: #memory,
+                        entries: ::std::vec![#(<#entries as ::ocel::KvKey>::ENTRY),*],
                     }
                 },
                 Config::Worker {
@@ -130,6 +149,9 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                 quote!(#field: ::ocel::Topic::<#payload>::new(#name))
             }
             Config::Worker { .. } => quote!(#field: ::ocel::Worker::new(#name)),
+            Config::Kv { entries, .. } => {
+                quote!(#field: ::ocel::Kv::new(#name)#(.with_entry::<#entries>())*)
+            }
         }
     });
 
@@ -209,7 +231,7 @@ fn read_resources(input: &DeriveInput) -> syn::Result<Vec<Resource>> {
             return Err(syn::Error::new_spanned(
                 &field.ty,
                 format!(
-                    "field {ident} is not an ocel::Postgres, an ocel::Bucket, an ocel::Topic<T> or an ocel::Worker, and every field of an ocel::Resources struct declares one."
+                    "field {ident} is not an ocel::Postgres, an ocel::Bucket, an ocel::Topic<T>, an ocel::Worker or an ocel::Kv, and every field of an ocel::Resources struct declares one."
                 ),
             ));
         };
@@ -233,6 +255,12 @@ fn read_resources(input: &DeriveInput) -> syn::Result<Vec<Resource>> {
                 concurrency: 0,
                 on_start: None,
                 middleware: None,
+            },
+            Kind::Kv => Config::Kv {
+                version: String::new(),
+                eviction: String::new(),
+                memory: String::new(),
+                entries: Vec::new(),
             },
         };
         for entry in parse_entries(&field.attrs)? {
@@ -302,6 +330,10 @@ fn read_entry(
         (Config::Worker { middleware, .. }, "middleware") => {
             *middleware = Some(entry.read_path()?.clone())
         }
+        (Config::Kv { version, .. }, "version") => *version = read_kv_version(entry)?,
+        (Config::Kv { eviction, .. }, "eviction") => *eviction = read_kv_eviction(entry)?,
+        (Config::Kv { memory, .. }, "memory") => *memory = entry.read_literal()?.to_string(),
+        (Config::Kv { entries, .. }, "entries") => *entries = entry.read_paths()?,
         (_, other) => {
             return Err(syn::Error::new(
                 entry.span(),
@@ -323,7 +355,7 @@ fn quote_topic_schema(entry: &Entry, payload: &Type) -> syn::Result<TokenStream>
 
 fn read_namespace(config: &Config) -> &'static str {
     match config {
-        Config::Postgres { .. } | Config::Bucket { .. } => "resource",
+        Config::Postgres { .. } | Config::Bucket { .. } | Config::Kv { .. } => "resource",
         Config::Topic { .. } => "topic",
         Config::Worker { .. } => "worker",
     }
@@ -334,6 +366,7 @@ enum Kind {
     Bucket,
     Topic(Box<Type>),
     Worker,
+    Kv,
 }
 
 impl Kind {
@@ -343,6 +376,7 @@ impl Kind {
             Self::Bucket => "an ocel::Bucket",
             Self::Topic(_) => "an ocel::Topic",
             Self::Worker => "an ocel::Worker",
+            Self::Kv => "an ocel::Kv",
         }
     }
 
@@ -353,6 +387,9 @@ impl Kind {
             Self::Topic(_) => "name = \"<NAME>\", ordered, retry(...) and schema",
             Self::Worker => {
                 "name = \"<NAME>\", concurrency = <NUMBER>, on_start = <PATH> and middleware = <PATH>"
+            }
+            Self::Kv => {
+                "name = \"<NAME>\", version = \"<VERSION>\", eviction = \"<POLICY>\", memory = \"<SIZE>\" and entries = [<KEY TYPE>, ...]"
             }
         }
     }
@@ -370,6 +407,7 @@ fn find_kind(field_type: &Type) -> Option<Kind> {
         "Postgres" => Some(Kind::Postgres),
         "Bucket" => Some(Kind::Bucket),
         "Worker" => Some(Kind::Worker),
+        "Kv" => Some(Kind::Kv),
         "Topic" => {
             let PathArguments::AngleBracketed(arguments) = &last.arguments else {
                 return None;
@@ -381,4 +419,45 @@ fn find_kind(field_type: &Type) -> Option<Kind> {
         }
         _ => None,
     }
+}
+
+const KV_VERSIONS: &[&str] = &["8", "9"];
+
+const KV_EVICTIONS: &[&str] = &[
+    "noeviction",
+    "allkeys-lru",
+    "allkeys-lfu",
+    "allkeys-random",
+    "volatile-lru",
+    "volatile-lfu",
+    "volatile-random",
+    "volatile-ttl",
+];
+
+fn read_kv_version(entry: &Entry) -> syn::Result<String> {
+    let version = entry.read_literal()?;
+    if !KV_VERSIONS.contains(&version) {
+        return Err(syn::Error::new(
+            entry.span(),
+            format!(
+                "'version' is \"{version}\", and a store runs version {}.",
+                KV_VERSIONS.join(" or ")
+            ),
+        ));
+    }
+    Ok(version.to_string())
+}
+
+fn read_kv_eviction(entry: &Entry) -> syn::Result<String> {
+    let eviction = entry.read_literal()?;
+    if !KV_EVICTIONS.contains(&eviction) {
+        return Err(syn::Error::new(
+            entry.span(),
+            format!(
+                "'eviction' is \"{eviction}\", and a store evicts by one of {}.",
+                KV_EVICTIONS.join(", ")
+            ),
+        ));
+    }
+    Ok(eviction.to_string())
 }

@@ -3,6 +3,7 @@
 
 mod attribute;
 mod env;
+mod kv;
 mod options;
 mod resources;
 mod source;
@@ -26,9 +27,9 @@ fn refuse_generics(input: &DeriveInput, derive: &str, because: &str) -> syn::Res
 const REGISTERED: &str = "its declarations register once per binary";
 const FIXED: &str = "what it declares is fixed once per binary";
 
-/// Declare every `ocel::Postgres`, `ocel::Bucket`, `ocel::Topic<T>` and `ocel::Worker` field
-/// of a struct, and write the `load` that hands the struct back with a handle in each
-/// field.
+/// Declare every `ocel::Postgres`, `ocel::Bucket`, `ocel::Topic<T>`, `ocel::Worker` and
+/// `ocel::Kv` field of a struct, and write the `load` that hands the struct back with a
+/// handle in each field.
 ///
 /// ```ignore
 /// #[derive(ocel::Resources, Clone)]
@@ -42,12 +43,16 @@ const FIXED: &str = "what it declares is fixed once per binary";
 ///     pub orders: ocel::Topic<Order>,
 ///     #[ocel(concurrency = 4)]
 ///     pub media: ocel::Worker,
+///     #[ocel(eviction = "allkeys-lru", memory = "256mb", entries = [Requests, SessionKey])]
+///     pub sessions: ocel::Kv,
 /// }
 /// ```
 ///
 /// A field's name defaults to its identifier, a postgres field's version to `17`, and a
-/// bucket is private and takes no browser origin unless it says otherwise. Every field is
-/// one of the four, and anything else is a compile error naming the field. Each topic field
+/// bucket is private and takes no browser origin unless it says otherwise. A kv store's
+/// `entries` are the [`KvKey`](macro@KvKey) types whose keys it holds, and it leaves its
+/// version and memory to the provider and evicts nothing unless it says otherwise. Every
+/// field is one of the five, and anything else is a compile error naming the field. Each topic field
 /// also gets an `ocel::TopicName<T>` constant on the struct, named after the field in upper
 /// case (`Infra::ORDERS` above), which `#[ocel::consumer]` and `#[ocel::batch_consumer]`
 /// name their topic by.
@@ -56,6 +61,32 @@ pub fn resources(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     refuse_generics(&input, "ocel::Resources", REGISTERED)
         .and_then(|()| resources::derive(&input))
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Make a struct the key of one entry of an `ocel::Kv` store: its fields are the parameters
+/// of the entry's pattern, checked against the pattern when the app builds.
+///
+/// ```ignore
+/// #[derive(ocel::KvKey)]
+/// #[ocel(pattern = "session/:id", json = Session, ttl = "30d")]
+/// pub struct SessionKey {
+///     pub id: String,
+/// }
+/// ```
+///
+/// The attribute names the pattern, `/`-separated segments that are each a literal or a
+/// `:parameter`, and one shape: `text`, `counter`, `json = <TYPE>`, `list` or `set`. `ttl` is
+/// how long a key lives after each write, `on_invalid = "miss"` makes a json value that does
+/// not decode read as `None`, and `name` names the entry, the struct's name in snake case by
+/// default. A field the pattern lacks, or a parameter no field holds, is a compile error. A
+/// field is a string or an integer, written into the key percent-encoded.
+#[proc_macro_derive(KvKey, attributes(ocel))]
+pub fn kv_key(item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    refuse_generics(&input, "ocel::KvKey", FIXED)
+        .and_then(|()| kv::derive(&input))
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }

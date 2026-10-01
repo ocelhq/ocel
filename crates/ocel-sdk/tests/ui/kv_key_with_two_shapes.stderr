@@ -1,0 +1,5 @@
+error: Session declares two shapes, and an entry has one: text, counter, json = <TYPE>, list or set.
+ --> tests/ui/kv_key_with_two_shapes.rs:2:39
+  |
+2 | #[ocel(pattern = "session/:id", text, counter)]
+  |                                       ^^^^^^^
