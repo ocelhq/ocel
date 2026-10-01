@@ -16,6 +16,7 @@ var bindable = map[resourcesv1.ResourceType]bindingsv1.BindingType{
 	resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC:    bindingsv1.BindingType_BINDING_TYPE_TOPIC,
 	resourcesv1.ResourceType_RESOURCE_TYPE_TASK:     bindingsv1.BindingType_BINDING_TYPE_TASK,
 	resourcesv1.ResourceType_RESOURCE_TYPE_KV:       bindingsv1.BindingType_BINDING_TYPE_KV,
+	resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME: bindingsv1.BindingType_BINDING_TYPE_REALTIME,
 }
 
 func BindableAs(t resourcesv1.ResourceType) (bindingsv1.BindingType, bool) {

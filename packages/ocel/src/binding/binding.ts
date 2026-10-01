@@ -25,6 +25,7 @@ const typeOfCase: {
   topic: BindingType.TOPIC,
   task: BindingType.TASK,
   kv: BindingType.KV,
+  realtime: BindingType.REALTIME,
 };
 
 /** The type a binding's properties case declares; UNSPECIFIED when it has none. */

@@ -80,6 +80,7 @@ fn describe_kind(properties: &Option<Properties>) -> String {
         Some(Properties::Topic(_)) => "TOPIC",
         Some(Properties::Task(_)) => "TASK",
         Some(Properties::Kv(_)) => "KV",
+        Some(Properties::Realtime(_)) => "REALTIME",
         None => "UNSPECIFIED",
     }
     .to_string()

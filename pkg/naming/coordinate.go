@@ -13,27 +13,31 @@ import (
 type Kind string
 
 const (
-	KindFunction        Kind = "fn"
-	KindWorker          Kind = "worker"
-	KindDatabase        Kind = "db"
-	KindBucket          Kind = "bucket"
-	KindRole            Kind = "role"
-	KindTopic           Kind = "topic"
-	KindKV              Kind = "kv"
-	KindUploadCompleter Kind = "upload-completer"
-	KindService         Kind = "svc"
+	KindFunction           Kind = "fn"
+	KindWorker             Kind = "worker"
+	KindDatabase           Kind = "db"
+	KindBucket             Kind = "bucket"
+	KindRole               Kind = "role"
+	KindTopic              Kind = "topic"
+	KindKV                 Kind = "kv"
+	KindRealtime           Kind = "realtime"
+	KindRealtimeAuthorizer Kind = "realtime-authorizer"
+	KindUploadCompleter    Kind = "upload-completer"
+	KindService            Kind = "svc"
 )
 
 var components = map[Kind]string{
-	KindFunction:        "function",
-	KindWorker:          "worker",
-	KindDatabase:        "database",
-	KindBucket:          "bucket",
-	KindRole:            "role",
-	KindTopic:           "topic",
-	KindKV:              "kv",
-	KindUploadCompleter: "upload-completer",
-	KindService:         "service",
+	KindFunction:           "function",
+	KindWorker:             "worker",
+	KindDatabase:           "database",
+	KindBucket:             "bucket",
+	KindRole:               "role",
+	KindTopic:              "topic",
+	KindKV:                 "kv",
+	KindRealtime:           "realtime",
+	KindRealtimeAuthorizer: "realtime-authorizer",
+	KindUploadCompleter:    "upload-completer",
+	KindService:            "service",
 }
 
 func (k Kind) Valid() bool {

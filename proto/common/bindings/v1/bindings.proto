@@ -13,6 +13,7 @@ enum BindingType {
   BINDING_TYPE_TOPIC = 4;
   BINDING_TYPE_TASK = 5;
   BINDING_TYPE_KV = 6;
+  BINDING_TYPE_REALTIME = 7;
 }
 
 enum PostgresTlsMode {
@@ -31,6 +32,7 @@ message Binding {
     TopicProperties topic = 7;
     TaskProperties task = 8;
     KvProperties kv = 9;
+    RealtimeProperties realtime = 10;
   }
 
   repeated Grant grants = 4;
@@ -74,6 +76,20 @@ message KvProperties {
   string username = 3;
   string password = 4 [debug_redact = true];
   bool tls = 5;
+}
+
+enum RealtimeTransport {
+  REALTIME_TRANSPORT_UNSPECIFIED = 0;
+  REALTIME_TRANSPORT_APPSYNC_EVENTS = 1;
+  REALTIME_TRANSPORT_OCEL_GATEWAY = 2;
+}
+
+message RealtimeProperties {
+  RealtimeTransport transport = 1;
+  string url = 2;
+  string host = 3;
+  bytes signing_key = 4 [debug_redact = true];
+  bytes verify_key = 5;
 }
 
 message Grant {

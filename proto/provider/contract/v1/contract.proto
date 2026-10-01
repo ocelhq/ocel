@@ -299,6 +299,7 @@ message ManifestResource {
     app.resources.v1.BucketConfig bucket = 4;
     ManifestTopic topic = 6;
     app.resources.v1.KvConfig kv = 7;
+    app.resources.v1.RealtimeConfig realtime = 8;
   }
 
   string binding = 5;

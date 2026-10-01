@@ -132,6 +132,8 @@ var inlineForms = map[string]inlineForm{
 var unboundInConfig = map[resourcesv1.ResourceType]bool{
 	resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC: true,
 	resourcesv1.ResourceType_RESOURCE_TYPE_TASK:  true,
+
+	resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME: true,
 }
 
 func BindableTypes() []string {

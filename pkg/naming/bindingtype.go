@@ -1,6 +1,7 @@
 package naming
 
 import (
+	"encoding/base64"
 	"maps"
 	"slices"
 	"strings"
@@ -18,6 +19,7 @@ var bindingKinds = map[bindingsv1.BindingType]Kind{
 	bindingsv1.BindingType_BINDING_TYPE_TOPIC:    KindTopic,
 	bindingsv1.BindingType_BINDING_TYPE_TASK:     KindTopic,
 	bindingsv1.BindingType_BINDING_TYPE_KV:       KindKV,
+	bindingsv1.BindingType_BINDING_TYPE_REALTIME: KindRealtime,
 }
 
 var proxiedTypes = map[bindingsv1.BindingType]bool{
@@ -55,6 +57,8 @@ func BindingTypeOf(l *bindingsv1.Binding) bindingsv1.BindingType {
 		return bindingsv1.BindingType_BINDING_TYPE_TASK
 	case *bindingsv1.Binding_Kv:
 		return bindingsv1.BindingType_BINDING_TYPE_KV
+	case *bindingsv1.Binding_Realtime:
+		return bindingsv1.BindingType_BINDING_TYPE_REALTIME
 	}
 	return bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED
 }
@@ -127,6 +131,8 @@ func propertyScalar(fd protoreflect.FieldDescriptor, v protoreflect.Value) any {
 		return float64(v.Uint())
 	case protoreflect.FloatKind, protoreflect.DoubleKind:
 		return v.Float()
+	case protoreflect.BytesKind:
+		return base64.StdEncoding.EncodeToString(v.Bytes())
 	case protoreflect.EnumKind:
 		if named := fd.Enum().Values().ByNumber(v.Enum()); named != nil {
 			return string(named.Name())

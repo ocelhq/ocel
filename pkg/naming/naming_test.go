@@ -278,3 +278,9 @@ func TestAWorkerAndATopicAreComponentsOfTheirOwn(t *testing.T) {
 		}
 	}
 }
+
+func TestTheRealtimeAuthorizerIsAComponentOfItsOwn(t *testing.T) {
+	if !KindRealtimeAuthorizer.Valid() || KindRealtimeAuthorizer.Component() != "realtime-authorizer" {
+		t.Errorf("%q: valid = %v, component = %q, want \"realtime-authorizer\"", KindRealtimeAuthorizer, KindRealtimeAuthorizer.Valid(), KindRealtimeAuthorizer.Component())
+	}
+}

@@ -284,3 +284,13 @@ func TestDevRunsAKVStoreAndPrintsWhereItAnswers(t *testing.T) {
 		t.Errorf("announced %q, want %q", announced, want)
 	}
 }
+
+func TestDevRefusesARealtimeResourceNamingWhatWasDeclared(t *testing.T) {
+	t.Parallel()
+
+	stack := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir()})
+	_, err := stack.Resolve(context.Background(), []declaration.Resource{{Name: "app", Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME}})
+	if err == nil || !strings.Contains(err.Error(), `realtime "app"`) || !strings.Contains(err.Error(), "does not run realtime channels") {
+		t.Errorf("Resolve(realtime) = %v, want realtime app refused by name", err)
+	}
+}

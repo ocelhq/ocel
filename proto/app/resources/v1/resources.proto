@@ -24,6 +24,7 @@ enum ResourceType {
   RESOURCE_TYPE_WORKER = 5;
   RESOURCE_TYPE_CONSUMER = 6;
   RESOURCE_TYPE_KV = 7;
+  RESOURCE_TYPE_REALTIME = 8;
 }
 
 message ResourceIdentifier {
@@ -45,6 +46,7 @@ message DeclareRequest {
     WorkerConfig worker = 7;
     ConsumerConfig consumer = 8;
     KvConfig kv = 9;
+    RealtimeConfig realtime = 10;
   }
 
   string source = 4;
@@ -149,4 +151,36 @@ message KvConfig {
   string memory = 3;
 
   repeated KvEntry entries = 4;
+}
+
+enum RealtimeSubscribe {
+  REALTIME_SUBSCRIBE_UNSPECIFIED = 0;
+  REALTIME_SUBSCRIBE_PUBLIC = 1;
+  REALTIME_SUBSCRIBE_RULE = 2;
+}
+
+enum RealtimePublish {
+  REALTIME_PUBLISH_UNSPECIFIED = 0;
+  REALTIME_PUBLISH_SERVER = 1;
+  REALTIME_PUBLISH_RULE = 2;
+}
+
+message RealtimeChannel {
+  string pattern = 1;
+
+  bool wildcard = 2;
+
+  string schema = 3;
+
+  RealtimeSubscribe subscribe = 4;
+
+  RealtimePublish publish = 5;
+
+  string source = 6;
+}
+
+message RealtimeConfig {
+  repeated RealtimeChannel channels = 1;
+
+  google.protobuf.Duration token_ttl = 2;
 }
