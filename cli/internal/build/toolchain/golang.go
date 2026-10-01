@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 const goModuleFile = "go.mod"
@@ -28,16 +29,27 @@ func (c Compilation) compileGo(ctx context.Context) error {
 	if err := os.MkdirAll(c.FunctionDir, 0o755); err != nil {
 		return err
 	}
-	binary := filepath.Join(c.FunctionDir, c.App)
-	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", binary, ".")
-	cmd.Dir = c.pkg()
+	if err := c.buildGo(ctx, goarch, c.pkg(), ".", c.App); err != nil {
+		return err
+	}
+	if c.WorkerPackage != "" {
+		if err := c.buildGo(ctx, goarch, c.Source, c.WorkerPackage, buildoutput.GoWorkerBinary); err != nil {
+			return err
+		}
+	}
+	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, c.FunctionDir, c.AppDir)
+}
+
+func (c Compilation) buildGo(ctx context.Context, goarch, dir, pkg, binary string) error {
+	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", filepath.Join(c.FunctionDir, binary), pkg)
+	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off", "GOOS=linux", "GOARCH="+goarch)
 	var said bytes.Buffer
 	cmd.Stdout = &said
 	cmd.Stderr = &said
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("compile app %q in %s for linux/%s (%w):\n%s", c.App, c.pkg(), goarch, err, said.String())
+		return fmt.Errorf("compile %s of app %q in %s for linux/%s (%w):\n%s", pkg, c.App, dir, goarch, err, said.String())
 	}
 	c.report("compiling", said.String())
-	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, c.FunctionDir, c.AppDir)
+	return nil
 }

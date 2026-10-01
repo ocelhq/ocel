@@ -197,6 +197,42 @@ func TestCompileReportsWhatTheCompilerSaidWhenTheAppDoesNotBuild(t *testing.T) {
 	}
 }
 
+func TestCompileBuildsTheWorkerPackageAsASecondBinaryInTheSameArtifact(t *testing.T) {
+	t.Parallel()
+	pkg := goModule(t)
+	worker := filepath.Join(pkg, "cmd", "worker")
+	if err := os.MkdirAll(worker, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(worker, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	functionDir := filepath.Join(t.TempDir(), "index.func")
+	err := Compile(context.Background(), Compilation{
+		App:           "web",
+		Framework:     buildoutput.Framework{Name: "go", Arch: "arm64"},
+		Source:        pkg,
+		WorkerPackage: "./cmd/worker",
+		FunctionDir:   functionDir,
+		AppDir:        t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	for _, name := range []string{"web", buildoutput.GoWorkerBinary} {
+		read, err := elf.Open(filepath.Join(functionDir, name))
+		if err != nil {
+			t.Fatalf("the artifact has no linux executable %s: %v", name, err)
+		}
+		machine := read.Machine
+		_ = read.Close()
+		if machine != elf.EM_AARCH64 {
+			t.Errorf("%s is built for %v, want the app's arm64", name, machine)
+		}
+	}
+}
+
 func readJSON(t *testing.T, path string, into any) {
 	t.Helper()
 	read, err := os.ReadFile(path)

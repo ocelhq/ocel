@@ -5,8 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -69,6 +72,47 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) 
 	binary := filepath.Join(root, statedir.Name, "output", "apps", "api", "functions", "index.func", "api")
 	if _, err := os.Stat(binary); err != nil {
 		t.Fatalf("the build wrote no binary for the function to boot: %v", err)
+	}
+}
+
+func TestAGoAppWhoseModuleDeclaresTasksCarriesTheWorkerAsASecondBinary(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeBuildScript(t, root)
+	fixture := filepath.Join(fixturetest.RepoDir(t), "tests", "fixtures", "worker", "go")
+	module, err := os.ReadFile(filepath.Join(fixture, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	module = []byte(strings.Replace(string(module), "=> ../../../../sdk", "=> "+filepath.Join(fixturetest.RepoDir(t), "sdk"), 1))
+	sums, err := os.ReadFile(filepath.Join(fixture, "go.sum"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	declarations, err := os.ReadFile(filepath.Join(fixture, discovery.DefaultRootDirName, "infra.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "go.mod"), string(module))
+	writeFile(t, filepath.Join(root, "go.sum"), string(sums))
+	writeFile(t, filepath.Join(root, discovery.DefaultRootDirName, "infra.go"), string(declarations))
+	writeFile(t, filepath.Join(root, "main.go"), "package main\n\nfunc main() {}\n")
+	cfg := &project.Project{
+		Dir:  root,
+		Apps: []project.App{{Name: "worker", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
+	}
+
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
+	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	functionDir := filepath.Join(root, statedir.Name, "output", "apps", "worker", "functions", "index.func")
+	for _, binary := range []string{"worker", buildoutput.GoWorkerBinary} {
+		if _, err := os.Stat(filepath.Join(functionDir, binary)); err != nil {
+			t.Errorf("the artifact has no %s binary: %v", binary, err)
+		}
 	}
 }
 
