@@ -121,6 +121,10 @@
       "types": "./dist/realtime/hono.d.ts",
       "import": "./dist/realtime/hono.js"
     },
+    "./realtime/client": {
+      "types": "./dist/realtime/client.d.ts",
+      "import": "./dist/realtime/client.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -146,6 +150,7 @@
     "@types/express": "~5.0.0",
     "@types/ioredis-mock": "^8.2.8",
     "@types/pg": "^8.20.0",
+    "@types/ws": "^8.18.2",
     "express": "~5.0.0",
     "hono": "~4.11.1",
     "ioredis": "^5.11.1",
@@ -156,7 +161,8 @@
     "react-dom": "catalog:",
     "typescript": "^5.9.3",
     "vite": "^8.1.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "ws": "^8.21.0"
   },
   "peerDependencies": {
     "@types/express": ">=5.0.0",
