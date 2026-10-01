@@ -12,20 +12,38 @@ import (
 )
 
 type envSourceTier struct {
+	name     string
 	configOf func(envsource.Kind) *envsource.Config
 	decode   func(kind string, options json.RawMessage) (envsource.Descriptor, error)
 }
 
 var (
 	deployedTier = envSourceTier{
+		name:     "production and preview",
 		configOf: func(kind envsource.Kind) *envsource.Config { return kind.Deployed },
 		decode:   envsource.NewDescriptor,
 	}
 	devTier = envSourceTier{
+		name:     "dev",
 		configOf: func(kind envsource.Kind) *envsource.Config { return kind.Dev },
 		decode:   envsource.NewDevDescriptor,
 	}
 )
+
+func tiersReading(id string) []string {
+	var out []string
+	for _, kind := range envsource.Kinds() {
+		if kind.Name != id {
+			continue
+		}
+		for _, tier := range []envSourceTier{deployedTier, devTier} {
+			if tier.configOf(kind) != nil {
+				out = append(out, tier.name)
+			}
+		}
+	}
+	return out
+}
 
 func (t envSourceTier) namedAlone() []string {
 	var out []string
@@ -235,12 +253,11 @@ func checkEnvSourceNamedAlone(path, id string, tier envSourceTier) error {
 	switch {
 	case slices.Contains(tier.namedAlone(), id):
 		return nil
-	case id == envsource.Dotenv:
-		return fmt.Errorf("%s names %q, which reads .env files on your machine and so serves dev alone — name %q, or key it by one of %s", PathName(path), id, envsource.Builtin, keys)
-	case id == envsource.Builtin:
-		return fmt.Errorf("%s names %q, ocel's own store in your account, which only production and preview deploy into — name %q, or key it by one of %s", PathName(path), id, envsource.Dotenv, keys)
 	case keyed:
 		return fmt.Errorf("%s names %q with no options, and %s cannot go without them — write { %q: { … } }", PathName(path), id, id, id)
+	}
+	if reading := tiersReading(id); len(reading) > 0 {
+		return fmt.Errorf("%s names %q, which only %s reads — name %q, or key it by one of %s", PathName(path), id, strings.Join(reading, " and "), alone, keys)
 	}
 	return fmt.Errorf("%s names %q, and ocel knows no such env source — name one of %s, %s", PathName(path), id, alone, keys)
 }
