@@ -116,13 +116,13 @@ func aQueue(t *testing.T, store keyvalue.Store) {
 	record(t, store, live.QueueWorkerKey(tier, "shop", "prod", "ledger"), live.QueueWorker{App: "web", Stack: "prod--web--r1", Container: "shop-ledger"})
 }
 
-func aHost(store keyvalue.Store, opened *engines) *queues.Host {
-	return &queues.Host{
-		Records: store,
-		Tiers:   []environment.Tier{tier},
-		Cipher:  cipher{},
-		Locate:  located{"shop-prod-infra-ocel-queue": "10.0.0.2", "shop-worker": "10.0.0.3"},
-		Open:    opened.open,
+func aHost(store keyvalue.Store, opened *engines) *queues.Engines {
+	return &queues.Engines{
+		Records:   store,
+		Tiers:     []environment.Tier{tier},
+		Cipher:    cipher{},
+		Addresses: located{"shop-prod-infra-ocel-queue": "10.0.0.2", "shop-worker": "10.0.0.3"},
+		Open:      opened.open,
 	}
 }
 

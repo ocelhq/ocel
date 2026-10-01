@@ -30,7 +30,7 @@ func workerCommand(app *provider.AppSpec) ([]string, error) {
 	return command, nil
 }
 
-func usesQueue(app *provider.AppSpec) bool {
+func hasQueue(app *provider.AppSpec) bool {
 	return len(app.Workers) > 0 || slices.ContainsFunc(app.Values.Bindings, func(binding provider.Binding) bool {
 		return binding.Type == provider.BindingTopic || binding.Type == provider.BindingTask
 	})
