@@ -8,6 +8,7 @@ import {
   type TriggerRequest,
 } from "../gen/proto/app/task/v1/task_pb.js";
 import { Lane } from "../gen/proto/app/topic/v1/topic_pb.js";
+import { EXACT_JSON, parseKeepingNumberText } from "../testing/exact-json.js";
 import { type RuntimeProxy, serveRuntimeProxy } from "../testing/runtime-proxy.js";
 
 const declareMock = vi.hoisted(() => vi.fn((_req: unknown) => Promise.resolve({})));
@@ -166,6 +167,19 @@ describe("a task at runtime", () => {
     expect(triggers[0]?.task).toBe("resize-image");
     expect(new TextDecoder().decode(triggers[0]?.payload)).toBe('{"url":"s3://a.png"}');
     expect(proxy.authorizations).toEqual(["Bearer session-token"]);
+  });
+
+  it("triggers by the declared name though the binding names another, with the payload's JSON text unchanged", async () => {
+    vi.stubEnv(
+      "OCEL_RESOURCE_TASK_measure",
+      JSON.stringify({ name: "physical-measure", task: {} }),
+    );
+    const measure = task("measure", { run: async (_payload: unknown) => {} });
+
+    await measure.trigger(parseKeepingNumberText(EXACT_JSON));
+
+    expect(triggers[0]?.task).toBe("measure");
+    expect(new TextDecoder().decode(triggers[0]?.payload)).toBe(EXACT_JSON);
   });
 
   it("sends every trigger option, the delay as the time the run is due", async () => {
