@@ -89,6 +89,18 @@
       "types": "./dist/bucket/client.d.ts",
       "import": "./dist/bucket/client.js"
     },
+    "./task": {
+      "types": "./dist/task/index.d.ts",
+      "import": "./dist/task/index.js"
+    },
+    "./topic": {
+      "types": "./dist/topic/index.d.ts",
+      "import": "./dist/topic/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker/index.d.ts",
+      "import": "./dist/worker/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

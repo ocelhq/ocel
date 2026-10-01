@@ -34,6 +34,7 @@
     "test",
     "**/__tests__/*.ts",
     "src/**/*.test.ts",
-    "src/**/*.test-d.ts"
+    "src/**/*.test-d.ts",
+    "src/testing/**"
   ]
 }

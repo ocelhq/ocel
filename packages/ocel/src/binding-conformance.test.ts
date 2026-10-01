@@ -9,6 +9,8 @@ vi.mock("./utils/rpc", () => ({
 
 const { postgres } = await import("./postgres/index.js");
 const { bucket } = await import("./bucket/bucket.js");
+const { task } = await import("./task/index.js");
+const { topic } = await import("./topic/index.js");
 
 function repoRoot() {
   let dir = new URL("./", import.meta.url);
@@ -74,5 +76,21 @@ describe("the binding conformance fixtures", () => {
     vi.stubEnv(bindingKey("uploads", BindingType.BUCKET), body);
 
     expect(bucket("uploads", { uploaders: {} }).__config()).toMatchObject(JSON.parse(body).bucket);
+  });
+
+  it("reach task() through its live key", () => {
+    const body = raw(BindingType.TASK);
+    vi.stubEnv(bindingKey("resize-image", BindingType.TASK), body);
+
+    expect(task("resize-image", { run: async () => {} }).__config()).toMatchObject(
+      JSON.parse(body).task,
+    );
+  });
+
+  it("reach topic() through its live key", () => {
+    const body = raw(BindingType.TOPIC);
+    vi.stubEnv(bindingKey("orders", BindingType.TOPIC), body);
+
+    expect(topic("orders").__config()).toMatchObject(JSON.parse(body).topic);
   });
 });

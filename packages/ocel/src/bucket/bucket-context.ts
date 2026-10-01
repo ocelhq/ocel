@@ -1,6 +1,4 @@
-import type { Interceptor } from "@connectrpc/connect";
-import { createConnectTransport } from "@connectrpc/connect-node";
-import { getRuntimeAddress, getSessionToken } from "../utils/get-config.js";
+import { createRuntimeTransport } from "../runtime/transport.js";
 import type { Bucket } from "./bucket.js";
 import { type BucketServiceClient, createBucketClient } from "./bucket-client.js";
 
@@ -10,19 +8,11 @@ export interface BucketContext {
   publicBaseUrl: string;
 }
 
-function authorized(token: string): Interceptor {
-  return (next) => (req) => {
-    req.header.set("Authorization", `Bearer ${token}`);
-    return next(req);
-  };
-}
-
 export function resolveBucketContext(bucket: Bucket): BucketContext {
   const { bucket: storeBucket, publicBaseUrl } = bucket.__config();
-  const transport = createConnectTransport({
-    httpVersion: "1.1",
-    baseUrl: getRuntimeAddress(),
-    interceptors: [authorized(getSessionToken())],
-  });
-  return { client: createBucketClient(transport), bucket: storeBucket, publicBaseUrl };
+  return {
+    client: createBucketClient(createRuntimeTransport()),
+    bucket: storeBucket,
+    publicBaseUrl,
+  };
 }
