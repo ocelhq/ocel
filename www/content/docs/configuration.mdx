@@ -202,6 +202,32 @@ What the two numbers do depends on the provider:
 A serverless app scales itself, so either field on one is refused. The same goes for an app
 whose provider runs it on functions because it names no `compute`.
 
+## health
+
+The path a container app is checked on before a release of it serves traffic. Any 2xx
+answer means it is up.
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [
+    { "name": "api", "path": "api", "compute": "container", "health": { "path": "/health" } }
+  ]
+}
+```
+
+The path starts with `/` and has no query or fragment. A path you set is always the one
+checked. Left off, the provider picks one:
+
+| Provider | With no `health.path` |
+| --- | --- |
+| AWS | The load balancer checks `/`. |
+| Google Cloud | Cloud Run's startup probe requests `/`. |
+| VPS | The first deploy of the app finds the path by probing, and later deploys reuse it. See [Health checks](/docs/providers/vps#health-checks). |
+
+A serverless app runs no process to check, so `health` on one is refused.
+
 ## bindings
 
 A resource the code declares is provisioned in your account, unless `bindings` names what it
