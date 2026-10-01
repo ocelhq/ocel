@@ -165,6 +165,27 @@ func TestLiveTopologyGivesEachConsumerASubscriptionAndDeadLetterTopicOfItsOwn(t 
 	}
 }
 
+func TestLiveATopicWhoseOrderingChangedIsRefusedAndItsSubscriptionsKept(t *testing.T) {
+	endpoint := emulatedEndpoint(t)
+	clients := liveClients(t)
+	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
+	declared := ordersAndResize()
+	topology := topics.Topology{Names: names, Topics: declared, Pushes: pushesTo("https://worker.run.app")}
+	if err := topology.Ensure(context.Background(), clients); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
+
+	declared["orders"].Ordered = false
+	err := topology.Ensure(context.Background(), clients)
+	if err == nil || !strings.Contains(err.Error(), "ship") {
+		t.Fatalf("Ensure() after orders stopped being ordered = %v, want it refused naming the subscription: Pub/Sub cannot change a subscription's ordering", err)
+	}
+	if ship, _ := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship")); !ship.EnableOrdering {
+		t.Error("the refused Ensure() changed orders/ship's ordering anyway")
+	}
+}
+
 func TestLiveFlociDropsAPushSubscriptionsOIDCToken(t *testing.T) {
 	endpoint := emulatedEndpoint(t)
 	clients := liveClients(t)
