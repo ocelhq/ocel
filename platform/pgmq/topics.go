@@ -87,10 +87,7 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 }
 
 func (t Topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLettersRequest) (*topicv1.ListDeadLettersResponse, error) {
-	limit := int(req.GetLimit())
-	if limit <= 0 {
-		limit = defaultRunPage
-	}
+	limit := pageLimit(int(req.GetLimit()))
 	args := []any{req.GetTopic(), req.GetConsumer(), limit + 1}
 	query := `SELECT execution, message_id, published_at, payload, attempts, error, finished_at FROM ocel.runs
 		WHERE topic = $1 AND consumer = $2 AND status IN ` + deadLetterStatuses

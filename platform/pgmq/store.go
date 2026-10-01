@@ -134,11 +134,7 @@ func (s Store) ListRuns(ctx context.Context, filter provider.RunFilter) (provide
 }
 
 func listRuns(ctx context.Context, db querier, filter provider.RunFilter) (provider.RunPage, error) {
-	limit := filter.Limit
-	if limit <= 0 {
-		limit = defaultRunPage
-	}
-	limit = min(limit, maxRunPage)
+	limit := pageLimit(filter.Limit)
 	var where []string
 	var args []any
 	arg := func(value any) string {
@@ -185,6 +181,13 @@ func listRuns(ctx context.Context, db querier, filter provider.RunFilter) (provi
 		page.NextCursor = cursorOf(last.CreatedAt, last.Execution)
 	}
 	return page, nil
+}
+
+func pageLimit(requested int) int {
+	if requested <= 0 {
+		return defaultRunPage
+	}
+	return min(requested, maxRunPage)
 }
 
 func cursorOf(created time.Time, execution string) string {

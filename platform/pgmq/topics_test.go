@@ -139,6 +139,23 @@ func countDeadLetters(t *testing.T, engine *Engine) int64 {
 	return resp.GetCount()
 }
 
+func TestAListOfDeadLettersHoldsAtMostAThousandAPage(t *testing.T) {
+	engine := applied(t, map[string]*contractv1.ManifestTopic{"orders": aTopic(&contractv1.ManifestConsumer{Name: "email", Worker: "mail"})}, nil)
+	if _, err := engine.pool.Exec(context.Background(), `
+		INSERT INTO ocel.runs (execution, topic, consumer, status, created_at, finished_at, revision, message_id, published_at)
+		SELECT 'e' || n, 'orders', 'email', 'failed', now(), now(), 'r', 'm' || n, now() FROM generate_series(1, 1001) AS n`); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := engine.Topics().ListDeadLetters(context.Background(), &topicv1.ListDeadLettersRequest{Topic: "orders", Consumer: "email", Limit: 5000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.GetDeadLetters()) != 1000 || resp.GetNextCursor() == "" {
+		t.Errorf("ListDeadLetters(limit 5000) = %d with cursor %q, want a page of 1000 and a cursor", len(resp.GetDeadLetters()), resp.GetNextCursor())
+	}
+}
+
 func TestAMessageThatFailsEveryAttemptIsDeadLetteredWithItsPayloadAndError(t *testing.T) {
 	engine, _, sent := deadLettered(t)
 
