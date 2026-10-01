@@ -25,19 +25,19 @@ function send(ctx: CheckContext, method: string, at: string, body?: unknown): Pr
   });
 }
 
-function key(of: string): string {
+function newKey(of: string): string {
   return `${of}-${randomUUID()}`;
 }
 
-function said(sent: Sent): string {
+function describeSent(sent: Sent): string {
   return `${sent.res.status} ${JSON.stringify(sent.body)}`;
 }
 
-function answered(sent: Sent, status: number, what: string): void {
-  assert.equal(sent.res.status, status, `${what} answered ${said(sent)}`);
+function assertStatus(sent: Sent, status: number, what: string): void {
+  assert.equal(sent.res.status, status, `${what} answered ${describeSent(sent)}`);
 }
 
-async function storeAnswers(ctx: CheckContext): Promise<void> {
+async function waitForStore(ctx: CheckContext): Promise<void> {
   const deadline = Date.now() + READY_WITHIN_MS;
   let last = "nothing";
   while (Date.now() < deadline) {
@@ -49,7 +49,7 @@ async function storeAnswers(ctx: CheckContext): Promise<void> {
       return;
     }
     if (sent) {
-      last = said(sent);
+      last = describeSent(sent);
     }
     await delay(1_000);
   }
@@ -72,7 +72,7 @@ export const kvBindingCheck: Check = {
 export const kvPingCheck: Check = {
   title: "GET /api/kv/ping answers PONG through the store's client",
   run: async (ctx) => {
-    await storeAnswers(ctx);
+    await waitForStore(ctx);
     const { res, body } = await json(ctx, "/api/kv/ping");
     assert.equal(res.status, 200);
     assert.deepEqual(body, { pong: "PONG" });
@@ -82,11 +82,11 @@ export const kvPingCheck: Check = {
 export const kvTextCheck: Check = {
   title: "a text entry reads back the string written under a key",
   run: async (ctx) => {
-    const at = `/api/kv/text/${key("text")}`;
+    const at = `/api/kv/text/${newKey("text")}`;
     const value = `journey-${randomUUID()} ünïcødé`;
-    answered(await send(ctx, "PUT", at, { value }), 204, "the write");
+    assertStatus(await send(ctx, "PUT", at, { value }), 204, "the write");
     const read = await send(ctx, "GET", at);
-    answered(read, 200, "the read");
+    assertStatus(read, 200, "the read");
     assert.deepEqual(read.body, { value });
   },
 };
@@ -94,16 +94,16 @@ export const kvTextCheck: Check = {
 export const kvCounterCheck: Check = {
   title: "a counter entry reads back the integer written, incremented and decremented",
   run: async (ctx) => {
-    const at = `/api/kv/counter/${key("counter")}`;
-    answered(await send(ctx, "PUT", at, { value: 40 }), 204, "the write");
+    const at = `/api/kv/counter/${newKey("counter")}`;
+    assertStatus(await send(ctx, "PUT", at, { value: 40 }), 204, "the write");
     const up = await send(ctx, "POST", `${at}/increment`, { by: 5 });
-    answered(up, 200, "the increment");
+    assertStatus(up, 200, "the increment");
     assert.deepEqual(up.body, { value: 45 });
     const down = await send(ctx, "POST", `${at}/decrement`, {});
-    answered(down, 200, "the decrement");
+    assertStatus(down, 200, "the decrement");
     assert.deepEqual(down.body, { value: 44 });
     const read = await send(ctx, "GET", at);
-    answered(read, 200, "the read");
+    assertStatus(read, 200, "the read");
     assert.deepEqual(read.body, { value: 44 });
   },
 };
@@ -111,11 +111,11 @@ export const kvCounterCheck: Check = {
 export const kvJsonCheck: Check = {
   title: "a json entry reads back the value its schema accepted",
   run: async (ctx) => {
-    const at = `/api/kv/json/${key("json")}`;
+    const at = `/api/kv/json/${newKey("json")}`;
     const value = { name: "ada", visits: 3, tags: ["a", "b/c"] };
-    answered(await send(ctx, "PUT", at, { value }), 204, "the write");
+    assertStatus(await send(ctx, "PUT", at, { value }), 204, "the write");
     const read = await send(ctx, "GET", at);
-    answered(read, 200, "the read");
+    assertStatus(read, 200, "the read");
     assert.deepEqual(read.body, { value });
   },
 };
@@ -123,21 +123,21 @@ export const kvJsonCheck: Check = {
 export const kvListCheck: Check = {
   title: "a list entry keeps the order values were pushed and unshifted in",
   run: async (ctx) => {
-    const at = `/api/kv/list/${key("list")}`;
+    const at = `/api/kv/list/${newKey("list")}`;
     const pushed = await send(ctx, "POST", `${at}/push`, { values: ["b", "c"] });
-    answered(pushed, 200, "the push");
+    assertStatus(pushed, 200, "the push");
     assert.deepEqual(pushed.body, { length: 2 });
     const unshifted = await send(ctx, "POST", `${at}/unshift`, { values: ["a"] });
-    answered(unshifted, 200, "the unshift");
+    assertStatus(unshifted, 200, "the unshift");
     assert.deepEqual(unshifted.body, { length: 3 });
     const read = await send(ctx, "GET", at);
-    answered(read, 200, "the read");
+    assertStatus(read, 200, "the read");
     assert.deepEqual(read.body, { values: ["a", "b", "c"] });
     const popped = await send(ctx, "POST", `${at}/pop`);
-    answered(popped, 200, "the pop");
+    assertStatus(popped, 200, "the pop");
     assert.deepEqual(popped.body, { value: "c" });
     const shifted = await send(ctx, "POST", `${at}/shift`);
-    answered(shifted, 200, "the shift");
+    assertStatus(shifted, 200, "the shift");
     assert.deepEqual(shifted.body, { value: "a" });
   },
 };
@@ -145,14 +145,14 @@ export const kvListCheck: Check = {
 export const kvSetCheck: Check = {
   title: "a set entry holds each member once and answers whether it holds one",
   run: async (ctx) => {
-    const at = `/api/kv/set/${key("set")}`;
+    const at = `/api/kv/set/${newKey("set")}`;
     const added = await send(ctx, "POST", `${at}/add`, { members: ["x", "y", "x"] });
-    answered(added, 200, "the add");
+    assertStatus(added, 200, "the add");
     assert.deepEqual(added.body, { added: 2 });
     const again = await send(ctx, "POST", `${at}/add`, { members: ["y", "z"] });
     assert.deepEqual(again.body, { added: 1 });
     const read = await send(ctx, "GET", at);
-    answered(read, 200, "the read");
+    assertStatus(read, 200, "the read");
     assert.deepEqual(read.body, { members: ["x", "y", "z"] });
     assert.deepEqual((await send(ctx, "GET", `${at}/has/y`)).body, { has: true });
     assert.deepEqual((await send(ctx, "GET", `${at}/has/w`)).body, { has: false });
@@ -163,40 +163,40 @@ export const kvMissCheck: Check = {
   title: "a key never written reads as absent in every shape",
   run: async (ctx) => {
     for (const shape of ["text", "counter", "json"]) {
-      const read = await send(ctx, "GET", `/api/kv/${shape}/${key("never-written")}`);
-      answered(read, 404, `a ${shape} read of a key never written`);
+      const read = await send(ctx, "GET", `/api/kv/${shape}/${newKey("never-written")}`);
+      assertStatus(read, 404, `a ${shape} read of a key never written`);
     }
-    const list = await send(ctx, "GET", `/api/kv/list/${key("never-written")}`);
+    const list = await send(ctx, "GET", `/api/kv/list/${newKey("never-written")}`);
     assert.deepEqual(list.body, { values: [] });
-    const set = await send(ctx, "GET", `/api/kv/set/${key("never-written")}`);
+    const set = await send(ctx, "GET", `/api/kv/set/${newKey("never-written")}`);
     assert.deepEqual(set.body, { members: [] });
   },
 };
 
 type Lived = { value: string; ttlMs: number };
 
-async function livedAt(ctx: CheckContext, at: string): Promise<Lived | undefined> {
+async function readLived(ctx: CheckContext, at: string): Promise<Lived | undefined> {
   const read = await send(ctx, "GET", at);
   if (read.res.status === 404) {
     return undefined;
   }
-  answered(read, 200, "the read");
+  assertStatus(read, 200, "the read");
   return read.body as Lived;
 }
 
 export const kvTtlExpiryCheck: Check = {
   title: "a key written to an entry with a ttl expires after it",
   run: async (ctx) => {
-    const at = `/api/kv/ttl/${key("expires")}`;
-    answered(await send(ctx, "PUT", at, { value: "brief" }), 204, "the write");
-    const fresh = await livedAt(ctx, at);
+    const at = `/api/kv/ttl/${newKey("expires")}`;
+    assertStatus(await send(ctx, "PUT", at, { value: "brief" }), 204, "the write");
+    const fresh = await readLived(ctx, at);
     assert.ok(fresh, "the key was absent right after it was written");
     assert.ok(
       fresh.ttlMs > 0 && fresh.ttlMs <= TTL_MS,
       `the key lives ${fresh.ttlMs}ms, not the entry's ${TTL_MS}ms`,
     );
     const deadline = Date.now() + EXPIRED_WITHIN_MS;
-    while ((await livedAt(ctx, at)) !== undefined) {
+    while ((await readLived(ctx, at)) !== undefined) {
       assert.ok(Date.now() < deadline, `the key outlived its ttl by ${EXPIRED_WITHIN_MS}ms`);
       await delay(250);
     }
@@ -206,9 +206,9 @@ export const kvTtlExpiryCheck: Check = {
 export const kvTtlOverrideCheck: Check = {
   title: "a write that names its own ttl replaces the entry's",
   run: async (ctx) => {
-    const at = `/api/kv/ttl/${key("override")}`;
-    answered(await send(ctx, "PUT", at, { value: "kept", ttl: "60s" }), 204, "the write");
-    const lived = await livedAt(ctx, at);
+    const at = `/api/kv/ttl/${newKey("override")}`;
+    assertStatus(await send(ctx, "PUT", at, { value: "kept", ttl: "60s" }), 204, "the write");
+    const lived = await readLived(ctx, at);
     assert.ok(lived, "the key was absent right after it was written");
     assert.ok(
       lived.ttlMs > TTL_MS && lived.ttlMs <= OVERRIDE_TTL_MS,
@@ -220,10 +220,18 @@ export const kvTtlOverrideCheck: Check = {
 export const kvTtlKeepCheck: Check = {
   title: "a write that keeps the ttl leaves the key's current one in place",
   run: async (ctx) => {
-    const at = `/api/kv/ttl/${key("keep")}`;
-    answered(await send(ctx, "PUT", at, { value: "first", ttl: "60s" }), 204, "the first write");
-    answered(await send(ctx, "PUT", at, { value: "second", ttl: "keep" }), 204, "the second write");
-    const lived = await livedAt(ctx, at);
+    const at = `/api/kv/ttl/${newKey("keep")}`;
+    assertStatus(
+      await send(ctx, "PUT", at, { value: "first", ttl: "60s" }),
+      204,
+      "the first write",
+    );
+    assertStatus(
+      await send(ctx, "PUT", at, { value: "second", ttl: "keep" }),
+      204,
+      "the second write",
+    );
+    const lived = await readLived(ctx, at);
     assert.ok(lived, "the key was absent right after it was written");
     assert.equal(lived.value, "second");
     assert.ok(
@@ -236,24 +244,24 @@ export const kvTtlKeepCheck: Check = {
 export const kvTtlClearCheck: Check = {
   title: "a write that clears the ttl leaves the key to live until it is deleted",
   run: async (ctx) => {
-    const at = `/api/kv/ttl/${key("clear")}`;
-    answered(await send(ctx, "PUT", at, { value: "lasting", ttl: null }), 204, "the write");
-    const lived = await livedAt(ctx, at);
+    const at = `/api/kv/ttl/${newKey("clear")}`;
+    assertStatus(await send(ctx, "PUT", at, { value: "lasting", ttl: null }), 204, "the write");
+    const lived = await readLived(ctx, at);
     assert.ok(lived, "the key was absent right after it was written");
     assert.equal(lived.ttlMs, -1, `the key lives ${lived.ttlMs}ms, not without end`);
     await delay(TTL_MS + 500);
-    assert.ok(await livedAt(ctx, at), "the key expired with the entry's ttl");
+    assert.ok(await readLived(ctx, at), "the key expired with the entry's ttl");
   },
 };
 
 export const kvConcurrentIncrementCheck: Check = {
   title: "concurrent increments of one counter each count once",
   run: async (ctx) => {
-    const at = `/api/kv/counter/${key("concurrent")}`;
+    const at = `/api/kv/counter/${newKey("concurrent")}`;
     const sums = await Promise.all(
       Array.from({ length: CONCURRENT_INCREMENTS }, async () => {
         const up = await send(ctx, "POST", `${at}/increment`, {});
-        answered(up, 200, "an increment");
+        assertStatus(up, 200, "an increment");
         return (up.body as { value: number }).value;
       }),
     );
@@ -268,29 +276,29 @@ export const kvConcurrentIncrementCheck: Check = {
 export const kvJsonRefusesInvalidWriteCheck: Check = {
   title: "a json entry refuses a value its schema rejects, and writes nothing",
   run: async (ctx) => {
-    const at = `/api/kv/json/${key("refused")}`;
+    const at = `/api/kv/json/${newKey("refused")}`;
     const refused = await send(ctx, "PUT", at, { value: { name: 7 } });
-    answered(refused, 422, "the invalid write");
+    assertStatus(refused, 422, "the invalid write");
     assert.equal((refused.body as { error: string }).error, "InvalidKVValueError");
-    answered(await send(ctx, "GET", at), 404, "the read after a refused write");
+    assertStatus(await send(ctx, "GET", at), 404, "the read after a refused write");
   },
 };
 
 export const kvJsonInvalidStoredCheck: Check = {
   title: "a json entry throws on a stored value its schema rejects, or misses where it opts to",
   run: async (ctx) => {
-    const id = key("stored");
+    const id = newKey("stored");
     for (const [entry, raw] of [
       ["json", "not json at all"],
       ["lenient", '{"name":7}'],
     ] as const) {
       const written = await send(ctx, "PUT", `/api/kv/raw/${entry}/${id}`, { raw });
-      answered(written, 204, `the raw write under the ${entry} entry`);
+      assertStatus(written, 204, `the raw write under the ${entry} entry`);
     }
     const thrown = await send(ctx, "GET", `/api/kv/json/${id}`);
-    answered(thrown, 422, "the read of an invalid stored value");
+    assertStatus(thrown, 422, "the read of an invalid stored value");
     assert.equal((thrown.body as { error: string }).error, "InvalidKVValueError");
-    answered(
+    assertStatus(
       await send(ctx, "GET", `/api/kv/lenient/${id}`),
       404,
       "the read of an invalid stored value where the entry treats it as a miss",
@@ -301,13 +309,13 @@ export const kvJsonInvalidStoredCheck: Check = {
 export const kvParameterSlashCheck: Check = {
   title: "a parameter holding / stays inside its own entry's key",
   run: async (ctx) => {
-    const owner = key("doc");
+    const owner = newKey("doc");
     const id = `${owner}/meta`;
-    answered(await send(ctx, "PUT", "/api/kv/docs", { id, value: "forged" }), 204, "the write");
+    assertStatus(await send(ctx, "PUT", "/api/kv/docs", { id, value: "forged" }), 204, "the write");
     const read = await send(ctx, "POST", "/api/kv/docs/read", { id });
-    answered(read, 200, "the read through the same entry");
+    assertStatus(read, 200, "the read through the same entry");
     assert.deepEqual(read.body, { value: "forged" });
-    answered(
+    assertStatus(
       await send(ctx, "GET", `/api/kv/meta/${owner}`),
       404,
       "the read of the entry the slash would have reached",
@@ -319,7 +327,7 @@ type Filled = { written: number; kept: number; refused?: string };
 
 async function fill(ctx: CheckContext, store: string): Promise<Filled> {
   const filled = await send(ctx, "POST", `/api/kv/fill/${store}`, {});
-  answered(filled, 200, `filling ${store}`);
+  assertStatus(filled, 200, `filling ${store}`);
   return filled.body as Filled;
 }
 
@@ -347,10 +355,10 @@ export const kvLruEvictionCheck: Check = {
 export const kvPersistenceCheck: Check = {
   title: "what a store held before a restart or redeploy is still there after",
   run: async (ctx) => {
-    await storeAnswers(ctx);
+    await waitForStore(ctx);
     if (ctx.phase === "verify") {
-      const written = key("persisted");
-      answered(
+      const written = newKey("persisted");
+      assertStatus(
         await send(ctx, "PUT", `/api/kv/text/${written}`, { value: written }),
         204,
         "the write",
@@ -361,7 +369,7 @@ export const kvPersistenceCheck: Check = {
     const kept = ctx.notes.get(PERSISTED_NOTE);
     assert.ok(kept, `nothing was written before the ${ctx.phase} to read back`);
     const read = await send(ctx, "GET", `/api/kv/text/${kept}`);
-    answered(read, 200, `the read after the ${ctx.phase}`);
+    assertStatus(read, 200, `the read after the ${ctx.phase}`);
     assert.deepEqual(read.body, { value: kept });
   },
 };
@@ -369,9 +377,9 @@ export const kvPersistenceCheck: Check = {
 export const kvPubSubCheck: Check = {
   title: "the native client delivers a message published to a channel a duplicate subscribed to",
   run: async (ctx) => {
-    const channel = key("channel");
+    const channel = newKey("channel");
     const sent = await send(ctx, "POST", "/api/kv/native/pubsub", { channel });
-    answered(sent, 200, "the round trip");
+    assertStatus(sent, 200, "the round trip");
     assert.deepEqual(sent.body, { received: `hello ${channel}` });
   },
 };
@@ -379,8 +387,8 @@ export const kvPubSubCheck: Check = {
 export const kvTransactionCheck: Check = {
   title: "the native client runs a transaction's commands together",
   run: async (ctx) => {
-    const sent = await send(ctx, "POST", "/api/kv/native/transaction", { key: key("multi") });
-    answered(sent, 200, "the transaction");
+    const sent = await send(ctx, "POST", "/api/kv/native/transaction", { key: newKey("multi") });
+    assertStatus(sent, 200, "the transaction");
     assert.deepEqual(sent.body, { results: ["OK", 2, "2"] });
   },
 };
@@ -388,8 +396,8 @@ export const kvTransactionCheck: Check = {
 export const kvBlockingPopCheck: Check = {
   title: "the native client's duplicated connection wakes from a blocking pop on a push",
   run: async (ctx) => {
-    const sent = await send(ctx, "POST", "/api/kv/native/blocking-pop", { key: key("queue") });
-    answered(sent, 200, "the blocking pop");
+    const sent = await send(ctx, "POST", "/api/kv/native/blocking-pop", { key: newKey("queue") });
+    assertStatus(sent, 200, "the blocking pop");
     assert.deepEqual(sent.body, { popped: "woken" });
   },
 };
@@ -398,19 +406,19 @@ export const kvUnauthenticatedCheck: Check = {
   title: "a connection to the store without its password is refused",
   run: async (ctx) => {
     const sent = await send(ctx, "GET", "/api/kv/unauthenticated");
-    answered(sent, 200, "the attempt");
+    assertStatus(sent, 200, "the attempt");
     const attempt = sent.body as { refused: boolean; error?: string };
     assert.equal(attempt.refused, true, "the store answered a connection that gave no password");
     assert.match(attempt.error ?? "", /NOAUTH|WRONGPASS/);
   },
 };
 
-type Exposure = { password: string; environment: string[] };
+type PasswordReport = { password: string; environment: string[] };
 
-async function exposure(ctx: CheckContext): Promise<Exposure> {
+async function readPasswordReport(ctx: CheckContext): Promise<PasswordReport> {
   const sent = await send(ctx, "GET", "/api/kv/exposure");
-  answered(sent, 200, "the exposure");
-  const shown = sent.body as Exposure;
+  assertStatus(sent, 200, "the exposure");
+  const shown = sent.body as PasswordReport;
   assert.ok(shown.password.length >= 16, "the app resolved no password worth hiding");
   return shown;
 }
@@ -418,7 +426,7 @@ async function exposure(ctx: CheckContext): Promise<Exposure> {
 export const kvPasswordUnprintedCheck: Check = {
   title: "the store's password shows in clear in nothing ocel prints or runs",
   run: async (ctx) => {
-    const { password } = await exposure(ctx);
+    const { password } = await readPasswordReport(ctx);
     const exposed = await ctx.readExposed();
     assert.ok(exposed.length > 0, "the target exposed nothing to search");
     assert.ok(!exposed.includes(password), "the password shows in clear outside the app");
@@ -428,7 +436,7 @@ export const kvPasswordUnprintedCheck: Check = {
 export const kvPasswordOutOfEnvironmentCheck: Check = {
   title: "the store's password is in clear in no environment variable of the app",
   run: async (ctx) => {
-    const { environment } = await exposure(ctx);
+    const { environment } = await readPasswordReport(ctx);
     assert.deepEqual(environment, [], `${environment.join(", ")} holds the password in clear`);
   },
 };
@@ -463,7 +471,7 @@ export const kvChecks: Check[] = [
 
 type Site = { file: string; line: number };
 
-function declaringSites(dir: string, marks: string[]): Site[] {
+function findDeclaringSites(dir: string, marks: string[]): Site[] {
   const sources = readdirSync(dir, { recursive: true, encoding: "utf8" }).filter(
     (file) => /\.(ts|py|go|rs)$/.test(file) && !file.split(path.sep).includes("node_modules"),
   );
@@ -484,7 +492,7 @@ export function overlapRefusal(fixture: string, patterns: [string, string]): Ref
   return {
     title: "the build refuses entries whose patterns overlap, naming both declarations",
     run: async (said) => {
-      const sites = declaringSites(
+      const sites = findDeclaringSites(
         fixtureDir(fixture),
         patterns.map((one) => `"${one}"`),
       );

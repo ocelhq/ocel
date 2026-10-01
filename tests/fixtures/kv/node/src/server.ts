@@ -15,7 +15,7 @@ const OCEL_SVG_BYTES = Buffer.from(OCEL_SVG, "utf8");
 const app = express();
 app.use(express.json());
 
-function found(res: Response, value: unknown): void {
+function sendFound(res: Response, value: unknown): void {
   if (value === undefined) {
     res.status(404).json({ error: "no such key" });
     return;
@@ -23,7 +23,7 @@ function found(res: Response, value: unknown): void {
   res.json({ value });
 }
 
-function refusedAsInvalid(res: Response, error: unknown): void {
+function sendInvalid(res: Response, error: unknown): void {
   if (error instanceof InvalidKVValueError) {
     res.status(422).json({ error: error.name, message: error.message });
     return;
@@ -60,7 +60,7 @@ app.put("/api/kv/text/:key", async (req, res) => {
 });
 
 app.get("/api/kv/text/:key", async (req, res) => {
-  found(res, await cache.text.get({ key: req.params.key }));
+  sendFound(res, await cache.text.get({ key: req.params.key }));
 });
 
 app.put("/api/kv/counter/:key", async (req, res) => {
@@ -69,7 +69,7 @@ app.put("/api/kv/counter/:key", async (req, res) => {
 });
 
 app.get("/api/kv/counter/:key", async (req, res) => {
-  found(res, await cache.counter.get({ key: req.params.key }));
+  sendFound(res, await cache.counter.get({ key: req.params.key }));
 });
 
 app.post("/api/kv/counter/:key/increment", async (req, res) => {
@@ -85,20 +85,20 @@ app.put("/api/kv/json/:key", async (req, res) => {
     await cache.json.set({ key: req.params.key }, req.body.value);
     res.status(204).end();
   } catch (error) {
-    refusedAsInvalid(res, error);
+    sendInvalid(res, error);
   }
 });
 
 app.get("/api/kv/json/:key", async (req, res) => {
   try {
-    found(res, await cache.json.get({ key: req.params.key }));
+    sendFound(res, await cache.json.get({ key: req.params.key }));
   } catch (error) {
-    refusedAsInvalid(res, error);
+    sendInvalid(res, error);
   }
 });
 
 app.get("/api/kv/lenient/:key", async (req, res) => {
-  found(res, await cache.lenient.get({ key: req.params.key }));
+  sendFound(res, await cache.lenient.get({ key: req.params.key }));
 });
 
 app.put("/api/kv/raw/:entry/:key", async (req, res) => {
@@ -115,11 +115,11 @@ app.post("/api/kv/list/:key/unshift", async (req, res) => {
 });
 
 app.post("/api/kv/list/:key/pop", async (req, res) => {
-  found(res, await cache.list.pop({ key: req.params.key }));
+  sendFound(res, await cache.list.pop({ key: req.params.key }));
 });
 
 app.post("/api/kv/list/:key/shift", async (req, res) => {
-  found(res, await cache.list.shift({ key: req.params.key }));
+  sendFound(res, await cache.list.shift({ key: req.params.key }));
 });
 
 app.get("/api/kv/list/:key", async (req, res) => {
@@ -148,7 +148,7 @@ app.put("/api/kv/ttl/:key", async (req, res) => {
 app.get("/api/kv/ttl/:key", async (req, res) => {
   const value = await cache.fleeting.get({ key: req.params.key });
   if (value === undefined) {
-    found(res, value);
+    sendFound(res, value);
     return;
   }
   res.json({ value, ttlMs: await cache.client.pttl(`fleeting/${req.params.key}`) });
@@ -160,11 +160,11 @@ app.put("/api/kv/docs", async (req, res) => {
 });
 
 app.post("/api/kv/docs/read", async (req, res) => {
-  found(res, await cache.docs.get({ id: req.body.id }));
+  sendFound(res, await cache.docs.get({ id: req.body.id }));
 });
 
 app.get("/api/kv/meta/:id", async (req, res) => {
-  found(res, await cache.meta.get({ id: req.params.id }));
+  sendFound(res, await cache.meta.get({ id: req.params.id }));
 });
 
 const filled = { bounded, evicting };

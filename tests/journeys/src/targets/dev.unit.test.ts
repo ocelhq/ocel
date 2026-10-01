@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { devProject, keptRunning, startedResources, volumesIn } from "./dev";
+import { devProject, findKeptRunning, startedResources, volumesIn } from "./dev";
 
 describe("the containers a restart kept running", () => {
   it("names each container whose start time did not move", () => {
@@ -11,7 +11,7 @@ describe("the containers a restart kept running", () => {
       ["/dev-kv-cache", "2026-10-01T10:05:00Z"],
       ["/dev-kv-bounded", "2026-10-01T10:00:01Z"],
     ]);
-    expect(keptRunning(before, after)).toEqual(["/dev-kv-bounded"]);
+    expect(findKeptRunning(before, after)).toEqual(["/dev-kv-bounded"]);
   });
 
   it("names none when every container started again or is new", () => {
@@ -20,7 +20,7 @@ describe("the containers a restart kept running", () => {
       ["/dev-kv-cache", "2026-10-01T10:05:00Z"],
       ["/dev-kv-evicting", "2026-10-01T10:05:01Z"],
     ]);
-    expect(keptRunning(before, after)).toEqual([]);
+    expect(findKeptRunning(before, after)).toEqual([]);
   });
 });
 
