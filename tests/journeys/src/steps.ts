@@ -75,6 +75,10 @@ export function phasesOf(fixture: Fixture, keep: boolean, releaseCycle = true): 
   ];
 }
 
+function newDestroyStep(app: string): Step {
+  return { app, title: DESTROY, phase: "destroy", run: (run) => run.destroy() };
+}
+
 export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
   const { apps, stack, refusal } = cell.fixture;
   if (refusal) {
@@ -89,9 +93,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
             },
           ]
         : []),
-      ...(phases.includes("destroy")
-        ? [{ app, title: DESTROY, phase: "destroy" as const, run: (run: CellRun) => run.destroy() }]
-        : []),
+      ...(phases.includes("destroy") ? [newDestroyStep(app)] : []),
     ]);
   }
   const checks = [...cell.fixture.checks, ...(cell.variant.checks ?? [])].filter(
@@ -159,11 +161,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
     ...replaced("restart", RESTART),
     ...replaced("redeploy", REDEPLOY),
     ...replaced("rollback", ROLLBACK),
-    ...(has("destroy")
-      ? perApp((app) => [
-          { app, title: DESTROY, phase: "destroy" as const, run: (run: CellRun) => run.destroy() },
-        ])
-      : []),
+    ...(has("destroy") ? perApp((app) => [newDestroyStep(app)]) : []),
     ...perApp((app) => [
       ...at("afterOcelDestroy").map((one) => ({
         app,
