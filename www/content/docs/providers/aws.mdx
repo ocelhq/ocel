@@ -60,7 +60,8 @@ Store under `/<namespace>/kv/`.
 change the node, change `memory`; a transform cannot set the node type. Leave
 `eviction` out and the store never evicts, as on every other provider; ElastiCache's own default
 is `volatile-lru`. Version 8 runs ElastiCache 8.1 and version 9 runs 9.1. ElastiCache takes a
-snapshot once a day and keeps it for a day.
+snapshot once a day and keeps it for a day, which costs nothing: ElastiCache stores one snapshot of each
+active cache free.
 
 **One node.** A [transform](/docs/transforms) can drop a store to a single node and halve its
 cost, for an environment that can afford to lose its data. ElastiCache runs neither failover nor

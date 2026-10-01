@@ -38,6 +38,8 @@ const (
 	usageOutboundInternet  = "monthly_outbound_internet_gb"
 	usageSnapshotStorage   = "snapshot_storage_gb"
 
+	elastiCacheFreeSnapshots = 1
+
 	lambdaGB        = 1024
 	fargateCPUUnits = 1024
 	fargateMemoryMB = 1024
@@ -180,7 +182,9 @@ func replicationGroup(r *pricing.Subject) {
 		Name: "Nodes", Unit: "node-hours", Rate: "aws/elasticache/node-" + r.String("node_type"),
 		Quantity: r.Number("num_cache_clusters").Mul(pricing.MonthlyHours),
 	})
-	r.Add(pricing.Component{Name: "Snapshot storage", Unit: "GB-month", Rate: "aws/elasticache/snapshot", Quantity: r.Usage(usageSnapshotStorage, storageBand), UsageBased: true})
+	if billed := r.Number("snapshot_retention_limit").Sub(decimal.NewFromInt(elastiCacheFreeSnapshots)); billed.IsPositive() {
+		r.Add(pricing.Component{Name: "Snapshot storage", Unit: "GB-month", Rate: "aws/elasticache/snapshot", Quantity: r.Usage(usageSnapshotStorage, storageBand).Mul(billed), UsageBased: true})
+	}
 }
 
 func secret(r *pricing.Subject) {

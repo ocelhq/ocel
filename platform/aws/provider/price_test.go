@@ -178,8 +178,8 @@ func TestPriceOfAFunctionWithUnknownArchitecturesIsNotGuessedAsX86(t *testing.T)
 func TestAKVStoreIsPricedPerNodeItRuns(t *testing.T) {
 	_, costs := costServed(t)
 
-	group := func(name string, nodes int) *costv1.Resource {
-		properties, _ := structpb.NewStruct(map[string]any{"node_type": "cache.t4g.micro", "num_cache_clusters": nodes})
+	group := func(name string, nodes, retention int) *costv1.Resource {
+		properties, _ := structpb.NewStruct(map[string]any{"node_type": "cache.t4g.micro", "num_cache_clusters": nodes, "snapshot_retention_limit": retention})
 		return &costv1.Resource{
 			Id: "p/aws_elasticache_replication_group:" + name, Scope: "p", Vendor: "aws", Type: "aws_elasticache_replication_group", Name: name, Region: "us-east-1",
 			Properties: properties,
@@ -193,7 +193,7 @@ func TestAKVStoreIsPricedPerNodeItRuns(t *testing.T) {
 		Source: "ocel",
 		Scopes: []*costv1.Scope{{Id: "p", Kind: "project", Name: "shop"}},
 		Resources: []*costv1.Resource{
-			group("cache", 2), group("single", 1),
+			group("cache", 2, 1), group("single", 1, 1), group("kept", 2, 3),
 			free("aws_elasticache_parameter_group"), free("aws_elasticache_subnet_group"), free("aws_ssm_parameter"),
 		},
 	}
@@ -207,8 +207,14 @@ func TestAKVStoreIsPricedPerNodeItRuns(t *testing.T) {
 	if got := estimateNamed(t, est, "p/aws_elasticache_replication_group:single").GetMonthlyFixed(); got != "9.34" {
 		t.Errorf("one node = %s, want 9.34 (cache.t4g.micro for 730 h at 0.0128)", got)
 	}
-	if got := componentNamed(t, est, "p/aws_elasticache_replication_group:cache", "Snapshot storage"); got.GetMonthlyCost() == "" {
-		t.Errorf("snapshot storage = %v, want it priced at 0.085 per GiB-month", got)
+	for _, c := range estimateNamed(t, est, "p/aws_elasticache_replication_group:cache").GetComponents() {
+		if c.GetName() == "Snapshot storage" {
+			t.Errorf("a store keeping one snapshot is billed %v for it, want nothing: ElastiCache keeps one snapshot of each active cache free", c)
+		}
+	}
+	kept := componentNamed(t, est, "p/aws_elasticache_replication_group:kept", "Snapshot storage")
+	if kept.GetUnitPrice() != "0.085" || kept.GetMonthlyQuantity() != "20" {
+		t.Errorf("a store keeping three snapshots is billed %s GB-month at %s, want the two beyond the free one at 0.085 (10 GB each, the moderate profile)", kept.GetMonthlyQuantity(), kept.GetUnitPrice())
 	}
 	for _, typ := range []string{"aws_elasticache_parameter_group", "aws_elasticache_subnet_group", "aws_ssm_parameter"} {
 		if got := estimateNamed(t, est, "p/"+typ+":cache"); got.GetStatus() != costv1.ResourceEstimate_STATUS_FREE {
