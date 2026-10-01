@@ -2,6 +2,7 @@ package pgmq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -20,6 +22,7 @@ const (
 	defaultLease = 60 * time.Second
 
 	minimumPgmq = "1.11.1"
+	openLock    = "ocel.pgmq.open"
 )
 
 type Config struct {
@@ -116,6 +119,9 @@ func ensureDatabase(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("connect to the queue database's server: %w", err)
 	}
 	defer func() { _ = conn.Close(ctx) }()
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock(hashtext($1))", openLock); err != nil {
+		return fmt.Errorf("wait for other engines creating databases: %w", err)
+	}
 	var exists bool
 	if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)", cfg.Database).Scan(&exists); err != nil {
 		return fmt.Errorf("look for database %s: %w", cfg.Database, err)
@@ -123,27 +129,37 @@ func ensureDatabase(ctx context.Context, cfg Config) error {
 	if exists {
 		return nil
 	}
-	if _, err := conn.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{cfg.Database}.Sanitize()); err != nil {
+	if _, err := conn.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{cfg.Database}.Sanitize()); err != nil && !isDuplicateDatabase(err) {
 		return fmt.Errorf("create database %s: %w", cfg.Database, err)
 	}
 	return nil
 }
 
+func isDuplicateDatabase(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "42P04"
+}
+
 func ensureSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	if _, err := pool.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS pgmq"); err != nil {
-		return fmt.Errorf("install pgmq: %w", err)
-	}
-	var version string
-	if err := pool.QueryRow(ctx, "SELECT extversion FROM pg_extension WHERE extname = 'pgmq'").Scan(&version); err != nil {
-		return fmt.Errorf("read pgmq's version: %w", err)
-	}
-	if !isAtLeast(version, minimumPgmq) {
-		return fmt.Errorf("the queue database runs pgmq %s, and an ordered consumer needs read_grouped_head from pgmq %s or later: run ALTER EXTENSION pgmq UPDATE", version, minimumPgmq)
-	}
-	if _, err := pool.Exec(ctx, schema); err != nil {
-		return fmt.Errorf("create the engine's tables: %w", err)
-	}
-	return nil
+	return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", openLock); err != nil {
+			return fmt.Errorf("wait for other engines creating the schema: %w", err)
+		}
+		if _, err := tx.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS pgmq"); err != nil {
+			return fmt.Errorf("install pgmq: %w", err)
+		}
+		var version string
+		if err := tx.QueryRow(ctx, "SELECT extversion FROM pg_extension WHERE extname = 'pgmq'").Scan(&version); err != nil {
+			return fmt.Errorf("read pgmq's version: %w", err)
+		}
+		if !isAtLeast(version, minimumPgmq) {
+			return fmt.Errorf("the queue database runs pgmq %s, and an ordered consumer needs read_grouped_head from pgmq %s or later: run ALTER EXTENSION pgmq UPDATE", version, minimumPgmq)
+		}
+		if _, err := tx.Exec(ctx, schema); err != nil {
+			return fmt.Errorf("create the engine's tables: %w", err)
+		}
+		return nil
+	})
 }
 
 func isAtLeast(version, minimum string) bool {
