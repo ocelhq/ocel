@@ -1,0 +1,43 @@
+{
+  "keys": [
+    { "pattern": "config", "params": {}, "key": "config" },
+    { "pattern": "requests/:userId", "params": { "userId": "u_42" }, "key": "requests/u_42" },
+    { "pattern": "session/:id", "params": { "id": "a/b" }, "key": "session/a%2Fb" },
+    {
+      "pattern": "rooms/:room/members/:member",
+      "params": { "room": "lobby", "member": "ada lovelace" },
+      "key": "rooms/lobby/members/ada%20lovelace"
+    },
+    {
+      "pattern": "files/:name",
+      "params": { "name": "naïve-café~v1.2_final.txt" },
+      "key": "files/na%C3%AFve-caf%C3%A9~v1.2_final.txt"
+    },
+    {
+      "pattern": "q/:query",
+      "params": { "query": "100%:{tag}*!'()+@&=?#" },
+      "key": "q/100%25%3A%7Btag%7D%2A%21%27%28%29%2B%40%26%3D%3F%23"
+    },
+    { "pattern": "emoji/:e", "params": { "e": "🙂" }, "key": "emoji/%F0%9F%99%82" }
+  ],
+  "values": {
+    "text": [
+      { "value": "hello", "stored": "hello" },
+      { "value": "héllo wörld 🙂", "stored": "héllo wörld 🙂" },
+      { "value": "", "stored": "" }
+    ],
+    "counter": [
+      { "value": 42, "stored": "42" },
+      { "value": -7, "stored": "-7" },
+      { "value": 0, "stored": "0" }
+    ],
+    "json": [
+      {
+        "value": { "user": "ada", "roles": ["admin", "ops"], "visits": 3, "note": "café <&> \"quoted\"" },
+        "stored": "{\"user\":\"ada\",\"roles\":[\"admin\",\"ops\"],\"visits\":3,\"note\":\"café <&> \\\"quoted\\\"\"}"
+      }
+    ],
+    "list": [{ "value": ["b", "a", "b"], "stored": ["b", "a", "b"] }],
+    "set": [{ "value": ["a", "b"], "stored": ["a", "b"] }]
+  }
+}

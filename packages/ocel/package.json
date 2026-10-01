@@ -101,6 +101,10 @@
       "types": "./dist/worker/index.d.ts",
       "import": "./dist/worker/index.js"
     },
+    "./kv": {
+      "types": "./dist/kv/index.d.ts",
+      "import": "./dist/kv/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -124,9 +128,12 @@
   "devDependencies": {
     "@types/aws-lambda": "^8.10.160",
     "@types/express": "~5.0.0",
+    "@types/ioredis-mock": "^8.2.8",
     "@types/pg": "^8.20.0",
     "express": "~5.0.0",
     "hono": "~4.11.1",
+    "ioredis": "^5.11.1",
+    "ioredis-mock": "^8.13.1",
     "next": "catalog:",
     "pg": "^8.22.0",
     "react": "catalog:",
@@ -139,6 +146,7 @@
     "@types/express": ">=5.0.0",
     "express": ">=5.0.0",
     "hono": ">=4.11.1",
+    "ioredis": ">=5",
     "next": ">=14",
     "pg": "^8.22.0"
   },
@@ -156,6 +164,9 @@
       "optional": true
     },
     "pg": {
+      "optional": true
+    },
+    "ioredis": {
       "optional": true
     }
   },
