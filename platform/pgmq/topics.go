@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const deadLetterStatuses = "('failed', 'timed-out')"
+const deadLetterStatuses = "('failed')"
 
 type Topics struct {
 	engine *Engine

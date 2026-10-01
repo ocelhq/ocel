@@ -121,7 +121,7 @@ func TestAnAbortFailsTheRunWithoutRetrying(t *testing.T) {
 	}
 }
 
-func TestAnAttemptPastMaxDurationTimesTheRunOutWithoutRetrying(t *testing.T) {
+func TestATaskAttemptPastMaxDurationTimesTheRunOutWithoutRetrying(t *testing.T) {
 	worker := newWorker(t, func(*topicv1.Envelope) reply { return reply{status: http.StatusOK, hold: 5 * time.Second} })
 	engine := dispatching(t, map[string]*contractv1.ManifestTopic{"resize": aTask(retrying(5, 50*time.Millisecond, 50*time.Millisecond), func(topic *contractv1.ManifestTopic) {
 		topic.Consumers[0].MaxDuration = durationpb.New(300 * time.Millisecond)
