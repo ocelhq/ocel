@@ -28,6 +28,7 @@ const (
 
 	defaultRunPage = 100
 	maxRunPage     = 1000
+	maxRunScan     = 1000
 
 	RunRetention = 30 * 24 * time.Hour
 )
@@ -492,12 +493,21 @@ func (s Store) ListRuns(ctx context.Context, filter provider.RunFilter) (provide
 		}
 		query = query.StartAfter(created, execution)
 	}
-	documents := query.Documents(ctx)
+	scanLimit := limit + 1
+	if len(filter.Tags) > 1 {
+		scanLimit = max(maxRunScan, scanLimit)
+	}
+	documents := query.Limit(scanLimit).Documents(ctx)
 	defer documents.Stop()
 	var page provider.RunPage
+	var scanned int
+	var last provider.Run
 	for {
 		snapshot, err := documents.Next()
 		if errors.Is(err, iterator.Done) {
+			if scanned == scanLimit {
+				page.NextCursor = cursorOf(last.CreatedAt, last.Execution)
+			}
 			return page, nil
 		}
 		if err != nil {
@@ -507,15 +517,17 @@ func (s Store) ListRuns(ctx context.Context, filter provider.RunFilter) (provide
 		if err != nil {
 			return provider.RunPage{}, err
 		}
+		scanned++
 		if !holdsEveryTag(run.Tags, filter.Tags) {
+			last = run
 			continue
 		}
 		if len(page.Runs) == limit {
-			last := page.Runs[limit-1]
 			page.NextCursor = cursorOf(last.CreatedAt, last.Execution)
 			return page, nil
 		}
 		page.Runs = append(page.Runs, run)
+		last = run
 	}
 }
 

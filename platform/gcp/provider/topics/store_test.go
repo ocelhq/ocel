@@ -1,9 +1,12 @@
 package topics_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -48,4 +51,49 @@ func TestLiveFirestoreStoreKeepsRunsAndRecordsAsEveryTaskStoreMust(t *testing.T)
 	taskstoretest.Run(t, func(t *testing.T) provider.TaskStore {
 		return topics.Store{Clients: clients, Scope: scopeOf(t)}
 	})
+}
+
+func TestLiveAListingByManyTagsReadsABoundedPageAndCarriesOnFromItsCursor(t *testing.T) {
+	store := topics.Store{Clients: liveClients(t), Scope: scopeOf(t)}
+	ctx := context.Background()
+	base := time.Now().UTC().Truncate(time.Millisecond)
+	wanted := provider.Run{Execution: "wanted", Topic: "resize", Consumer: "resize", Status: provider.RunQueued, Tags: []string{"eu", "big"}, CreatedAt: base.Add(-time.Hour)}
+	if _, err := store.WriteRun(ctx, wanted); err != nil {
+		t.Fatal(err)
+	}
+	const others = 1000
+	work := make(chan int)
+	var wg sync.WaitGroup
+	for range 16 {
+		wg.Go(func() {
+			for i := range work {
+				run := provider.Run{Execution: fmt.Sprintf("other-%04d", i), Topic: "resize", Consumer: "resize", Status: provider.RunQueued, Tags: []string{"eu"}, CreatedAt: base.Add(time.Duration(i) * time.Millisecond)}
+				if _, err := store.WriteRun(ctx, run); err != nil {
+					t.Error(err)
+				}
+			}
+		})
+	}
+	for i := range others {
+		work <- i
+	}
+	close(work)
+	wg.Wait()
+
+	filter := provider.RunFilter{Topic: "resize", Tags: []string{"eu", "big"}, Limit: 10}
+	first, err := store.ListRuns(ctx, filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Runs) != 0 || first.NextCursor == "" {
+		t.Fatalf("the first page holds %d runs with cursor %q, want none and a cursor: a listing reads at most a bounded number of runs", len(first.Runs), first.NextCursor)
+	}
+	filter.Cursor = first.NextCursor
+	next, err := store.ListRuns(ctx, filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(next.Runs) != 1 || next.Runs[0].Execution != "wanted" || next.NextCursor != "" {
+		t.Errorf("the page after the cursor holds %v with cursor %q, want only the run holding both tags and no cursor", next.Runs, next.NextCursor)
+	}
 }
