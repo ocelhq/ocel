@@ -13,10 +13,15 @@ const (
 	tokenBinding = "BINDING"
 	tokenEnv     = "ENV"
 	tokenSession = "SESSION"
+	tokenTasks   = "TASKS"
 )
 
 func SessionKeyPrefix(project, env string) string {
 	return token(tokenProject, project) + KeySeparator + token(tokenEnv, env) + KeySeparator + tokenSession + KeySeparator
+}
+
+func TaskKeyPrefix(project, env string) string {
+	return token(tokenProject, project) + KeySeparator + token(tokenEnv, env) + KeySeparator + tokenTasks + KeySeparator
 }
 
 func ProjectKey(project string) string {

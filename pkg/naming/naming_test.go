@@ -205,6 +205,19 @@ func TestSessionKeysPartitionByProjectAndEnvironment(t *testing.T) {
 	}
 }
 
+func TestTaskKeysPartitionByProjectAndEnvironmentApartFromSessions(t *testing.T) {
+	prod := TaskKeyPrefix("shop", "prod")
+
+	for _, other := range []string{TaskKeyPrefix("shop", "pr-7"), TaskKeyPrefix("bank", "prod"), SessionKeyPrefix("shop", "prod")} {
+		if strings.HasPrefix(other, prod) || strings.HasPrefix(prod, other) {
+			t.Errorf("%q and %q overlap; a LeadingKeys condition on one would reach the other's keys", prod, other)
+		}
+	}
+	if !strings.HasSuffix(prod, KeySeparator) {
+		t.Errorf("TaskKeyPrefix = %q, want it to end on %q so %q* cannot match a longer scope", prod, KeySeparator, prod)
+	}
+}
+
 func TestStackKeysRoundTrip(t *testing.T) {
 	want := AppStack("pr-7", "web", NewRelease("build-1", "fp"))
 	project, got, err := ParseStackKey(StackKey("shop", want))
