@@ -5,7 +5,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { Refusal } from "../matrix/types";
 import { fixtureDir } from "../paths";
-import { type Check, type CheckContext, json } from "./context";
+import { type Check, type CheckContext, json, PASSWORD_REPORT_NONCE_HEADER } from "./context";
 
 const TTL_MS = 2_000;
 const EXPIRED_WITHIN_MS = 15_000;
@@ -421,8 +421,10 @@ export const kvUnauthenticatedCheck: Check = {
 type PasswordReport = { password: string; environment: string[] };
 
 async function readPasswordReport(ctx: CheckContext): Promise<PasswordReport> {
-  const sent = await send(ctx, "GET", "/api/kv/exposure");
-  assertStatus(sent, 200, "the exposure");
+  const sent = await json(ctx, "/api/kv/password-report", {
+    headers: { [PASSWORD_REPORT_NONCE_HEADER]: ctx.passwordReportNonce },
+  });
+  assertStatus(sent, 200, "the password report");
   const shown = sent.body as PasswordReport;
   assert.ok(shown.password.length >= 16, "the app resolved no password worth hiding");
   return shown;
@@ -473,6 +475,12 @@ export const kvChecks: Check[] = [
   kvPasswordUnprintedCheck,
   kvPasswordOutOfEnvironmentCheck,
 ];
+
+export function setsPasswordReportNonce(checks: Check[]): boolean {
+  return checks.some(
+    (one) => one === kvPasswordUnprintedCheck || one === kvPasswordOutOfEnvironmentCheck,
+  );
+}
 
 type Site = { file: string; line: number };
 

@@ -1,7 +1,7 @@
 import { access, rm } from "node:fs/promises";
 import { setTimeout as pause } from "node:timers/promises";
-import { migrates, setsEnv, setsSecret } from "../../checks";
-import { INITIAL_GREETING, SECRET_TOKEN } from "../../checks/context";
+import { migrates, setsEnv, setsPasswordReportNonce, setsSecret } from "../../checks";
+import { INITIAL_GREETING, PASSWORD_REPORT_NONCE_ENV, SECRET_TOKEN } from "../../checks/context";
 import { appHostname } from "../../identity";
 import type { Lane, Phase } from "../../matrix/types";
 import { configTree, runOcel, treeRoot, workTree } from "../../ocel";
@@ -77,6 +77,16 @@ export class AwsTarget implements Target, ReleaseCycle {
         "deploy",
         "env-secret",
         ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`],
+        env,
+      );
+    }
+    if (setsPasswordReportNonce(cell.fixture.checks)) {
+      await runOcel(
+        cell,
+        dir,
+        "deploy",
+        "env-password-report-nonce",
+        ["env", "set", `${PASSWORD_REPORT_NONCE_ENV}=${cell.passwordReportNonce}`],
         env,
       );
     }

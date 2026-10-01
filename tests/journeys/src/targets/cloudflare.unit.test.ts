@@ -15,6 +15,7 @@ function cell(variant: Variant): CellUnderTest {
     slug: "j-1-deploy-node",
     runId: "1",
     evidence: evidence("/nowhere"),
+    passwordReportNonce: "journey-password-report-nonce",
   };
 }
 
