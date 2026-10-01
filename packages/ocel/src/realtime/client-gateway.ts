@@ -2,6 +2,7 @@ import { RealtimeError } from "./client-error.js";
 import type { ClientTransport, TransportConnection } from "./client-transport.js";
 
 const subprotocol = "aws-appsync-event-ws";
+const answerDeadlineMilliseconds = 10_000;
 
 interface GatewayFrame {
   type: string;
@@ -11,6 +12,13 @@ interface GatewayFrame {
   errors?: { errorType?: string; message?: string }[];
 }
 
+interface PendingSubscribe {
+  resolve(): void;
+  reject(error: RealtimeError): void;
+  deadline: ReturnType<typeof setTimeout>;
+  isCancelled: boolean;
+}
+
 function encodeBase64url(text: string): string {
   let binary = "";
   for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
@@ -18,7 +26,7 @@ function encodeBase64url(text: string): string {
 }
 
 function describeErrors(frame: GatewayFrame): string {
-  return (frame.errors ?? []).map((e) => e.message ?? e.errorType ?? "").join("; ");
+  return (frame.errors ?? []).map((error) => error.message ?? error.errorType ?? "").join("; ");
 }
 
 /** The Ocel gateway's socket, which speaks the AppSync Events protocol. */
@@ -33,22 +41,26 @@ export const gatewayTransport: ClientTransport = {
         ),
       );
       const socket = new WebSocket(grant.url, [subprotocol, `header-${authorization}`]);
-      const pending = new Map<
-        string,
-        { resolve(): void; reject(error: RealtimeError): void; isCancelled: boolean }
-      >();
+      const pending = new Map<string, PendingSubscribe>();
       const listeners = new Map<string, (envelope: string) => void>();
       let isOpen = false;
+      let hasEnded = false;
       let isClosedByClient = false;
       let silenceTimer: ReturnType<typeof setTimeout> | undefined;
-      let silenceLimitMs = 0;
+      let silenceLimitMilliseconds = 0;
 
       const send = (frame: unknown) => {
         if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(frame));
       };
       const end = (error: RealtimeError) => {
+        if (hasEnded) return;
+        hasEnded = true;
+        clearTimeout(handshakeDeadline);
         clearTimeout(silenceTimer);
-        for (const waiting of pending.values()) waiting.reject(error);
+        for (const waiting of pending.values()) {
+          clearTimeout(waiting.deadline);
+          waiting.reject(error);
+        }
         pending.clear();
         listeners.clear();
         if (!isOpen) {
@@ -58,19 +70,41 @@ export const gatewayTransport: ClientTransport = {
         isOpen = false;
         if (!isClosedByClient) onDrop(error);
       };
-      const watchSilence = () => {
-        if (silenceLimitMs <= 0) return;
-        clearTimeout(silenceTimer);
-        silenceTimer = setTimeout(() => {
-          socket.close();
-          end(
+      const abandon = (error: RealtimeError) => {
+        socket.close();
+        end(error);
+      };
+      const handshakeDeadline = setTimeout(
+        () =>
+          abandon(
             new RealtimeError(
-              "connection-lost",
+              "connection-failed",
               true,
-              `the gateway sent nothing for ${silenceLimitMs}ms`,
+              `the gateway did not accept the connection within ${answerDeadlineMilliseconds}ms`,
             ),
-          );
-        }, silenceLimitMs);
+          ),
+        answerDeadlineMilliseconds,
+      );
+      const watchSilence = () => {
+        if (silenceLimitMilliseconds <= 0) return;
+        clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(
+          () =>
+            abandon(
+              new RealtimeError(
+                "connection-lost",
+                true,
+                `the gateway sent nothing for ${silenceLimitMilliseconds}ms`,
+              ),
+            ),
+          silenceLimitMilliseconds,
+        );
+      };
+      const settleSubscribe = (id: string) => {
+        const waiting = pending.get(id);
+        pending.delete(id);
+        if (waiting) clearTimeout(waiting.deadline);
+        return waiting;
       };
 
       const connection: TransportConnection = {
@@ -81,13 +115,24 @@ export const gatewayTransport: ClientTransport = {
             );
           }
           return new Promise<void>((subscribed, refused) => {
-            const waiting = {
+            const waiting: PendingSubscribe = {
               resolve: () => {
                 if (waiting.isCancelled) send({ type: "unsubscribe", id });
                 else listeners.set(id, onEvent);
                 subscribed();
               },
               reject: refused,
+              deadline: setTimeout(
+                () =>
+                  abandon(
+                    new RealtimeError(
+                      "connection-lost",
+                      true,
+                      `the gateway did not answer a subscribe within ${answerDeadlineMilliseconds}ms`,
+                    ),
+                  ),
+                answerDeadlineMilliseconds,
+              ),
               isCancelled: false,
             };
             pending.set(id, waiting);
@@ -117,31 +162,26 @@ export const gatewayTransport: ClientTransport = {
         watchSilence();
         switch (frame.type) {
           case "connection_ack":
+            clearTimeout(handshakeDeadline);
             isOpen = true;
-            silenceLimitMs = frame.connectionTimeoutMs ?? 0;
+            silenceLimitMilliseconds = frame.connectionTimeoutMs ?? 0;
             watchSilence();
             resolve(connection);
             return;
           case "connection_error":
-            end(
+            abandon(
               new RealtimeError(
                 "connection-failed",
                 true,
                 `the gateway refused the connection: ${describeErrors(frame)}`,
               ),
             );
-            socket.close();
             return;
-          case "subscribe_success": {
-            const waiting = pending.get(frame.id ?? "");
-            pending.delete(frame.id ?? "");
-            waiting?.resolve();
+          case "subscribe_success":
+            settleSubscribe(frame.id ?? "")?.resolve();
             return;
-          }
-          case "subscribe_error": {
-            const waiting = pending.get(frame.id ?? "");
-            pending.delete(frame.id ?? "");
-            waiting?.reject(
+          case "subscribe_error":
+            settleSubscribe(frame.id ?? "")?.reject(
               new RealtimeError(
                 "subscribe-refused",
                 false,
@@ -149,7 +189,6 @@ export const gatewayTransport: ClientTransport = {
               ),
             );
             return;
-          }
           case "data":
             if (frame.event !== undefined) listeners.get(frame.id ?? "")?.(frame.event);
             return;

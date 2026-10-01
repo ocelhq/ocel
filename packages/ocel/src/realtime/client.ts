@@ -1,6 +1,7 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { RealtimeError } from "./client-error.js";
+import { RealtimeError, type RealtimeErrorCode } from "./client-error.js";
 import { loadTransport, type TransportConnection } from "./client-transport.js";
+import type { RealtimeBatchAnswer } from "./handler.js";
 import type { ChannelShape } from "./realtime.js";
 
 export { RealtimeError, type RealtimeErrorCode } from "./client-error.js";
@@ -95,15 +96,16 @@ export interface EventMeta {
   /** The wire channel it was published on, such as `/app/orders/o-1`. */
   channel: string;
   /** When the server published it, in epoch milliseconds. */
-  ts: number;
+  publishedAt: number;
 }
 
 /**
- * The client's connection: `connecting` until its socket first opens, `connected` while it
- * is open, `reconnecting` after it dropped, until every live subscription is authorized and
- * subscribed again.
+ * The client's socket: `idle` while no subscription needs one, `connecting` until it opens,
+ * `connected` while it is open, `reconnecting` after it dropped with subscriptions left to
+ * restore, until it opens again, and `closed` once `close` is called. Whether each
+ * subscription is restored is reported through its own `onError`, not here.
  */
-export type RealtimeClientState = "connecting" | "connected" | "reconnecting";
+export type RealtimeClientState = "idle" | "connecting" | "connected" | "reconnecting" | "closed";
 
 /** Where a realtime client finds the app's realtime handler. */
 export interface RealtimeClientOptions {
@@ -164,29 +166,27 @@ interface Subscription {
   isSubscribed: boolean;
 }
 
-type Op =
-  | { op: "subscribe"; subscription: Subscription }
+type Operation =
+  | { kind: "subscribe"; subscription: Subscription }
   | {
-      op: "publish";
+      kind: "publish";
       pattern: string;
       params: Record<string, string>;
       body: unknown;
       settle: (error?: RealtimeError) => void;
     };
 
-interface HandlerAnswer {
-  transport: string;
-  url: string;
-  host?: string;
-  connect?: { token: string; expiresAt: number };
-  grants: { i: number; wire: string; token?: string }[];
-  denied: { i: number; code: string }[];
+interface GrantedSubscribe {
+  subscription: Subscription;
+  wire: string;
+  token: string;
 }
 
-const maxOpsPerRequest = 50;
-const initialBackoffMs = 500;
-const maxBackoffMs = 30_000;
-const retriableDenials = new Set(["rule-error", "publish-failed"]);
+const maxOperationsPerRequest = 50;
+const initialBackoffMilliseconds = 500;
+const maxBackoffMilliseconds = 30_000;
+const requestDeadlineMilliseconds = 10_000;
+const retriableDenials = new Set<RealtimeErrorCode>(["rule-error", "publish-failed"]);
 
 function dropUndefined(params: Record<string, string | undefined> | undefined) {
   const out: Record<string, string> = {};
@@ -198,6 +198,34 @@ function dropUndefined(params: Record<string, string | undefined> | undefined) {
 
 function isRetriableStatus(status: number): boolean {
   return status >= 500 || status === 408 || status === 429;
+}
+
+function readPattern(operation: Operation): string {
+  return operation.kind === "subscribe" ? operation.subscription.pattern : operation.pattern;
+}
+
+function describeOperation(operation: Operation) {
+  return operation.kind === "subscribe"
+    ? {
+        op: "subscribe",
+        pattern: operation.subscription.pattern,
+        params: operation.subscription.params,
+      }
+    : { op: "publish", pattern: operation.pattern, params: operation.params, body: operation.body };
+}
+
+function deliver(subscription: Subscription, text: string) {
+  let envelope: { id: string; ch: string; ts: number; data: unknown };
+  try {
+    envelope = JSON.parse(text);
+  } catch {
+    return;
+  }
+  subscription.handler(envelope.data, {
+    id: envelope.id,
+    channel: envelope.ch,
+    publishedAt: envelope.ts,
+  });
 }
 
 /**
@@ -217,52 +245,81 @@ function isRetriableStatus(status: number): boolean {
 export function createRealtimeClient<T>(
   options: RealtimeClientOptions,
 ): RealtimeClient<ClientChannels<T>> {
-  let state: RealtimeClientState = "connecting";
+  let state: RealtimeClientState = "idle";
   const stateListeners = new Set<(state: RealtimeClientState) => void>();
   const subscriptions = new Map<string, Subscription>();
-  let queue: Op[] = [];
+  let queue: Operation[] = [];
+  let sending: Operation[] = [];
   let isPumping = false;
   let isClosed = false;
+  let hasDropped = false;
   let connection: TransportConnection | undefined;
   let failedAttempts = 0;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let nextId = 0;
 
-  const setState = (next: RealtimeClientState) => {
+  const settleState = () => {
+    let next: RealtimeClientState;
+    if (isClosed) next = "closed";
+    else if (connection) next = "connected";
+    else if (subscriptions.size === 0) {
+      hasDropped = false;
+      next = "idle";
+    } else next = hasDropped ? "reconnecting" : "connecting";
     if (state === next) return;
     state = next;
     for (const listener of stateListeners) listener(next);
   };
 
-  const failSubscription = (subscription: Subscription, error: RealtimeError) => {
-    if (!error.retriable) subscriptions.delete(subscription.id);
-    subscription.onError?.(error);
-  };
+  const isLive = (subscription: Subscription) =>
+    subscriptions.get(subscription.id) === subscription;
+
+  const isAwaiting = (subscription: Subscription) =>
+    [...queue, ...sending].some(
+      (operation) => operation.kind === "subscribe" && operation.subscription === subscription,
+    );
 
   const scheduleRetry = () => {
     if (isClosed || retryTimer !== undefined) return;
-    const ceiling = Math.min(maxBackoffMs, initialBackoffMs * 2 ** failedAttempts);
+    const ceiling = Math.min(
+      maxBackoffMilliseconds,
+      initialBackoffMilliseconds * 2 ** failedAttempts,
+    );
     failedAttempts += 1;
     retryTimer = setTimeout(() => {
       retryTimer = undefined;
       for (const subscription of subscriptions.values()) {
-        const isQueued = queue.some(
-          (op) => op.op === "subscribe" && op.subscription === subscription,
-        );
-        if (!subscription.isSubscribed && !isQueued) queue.push({ op: "subscribe", subscription });
+        if (!subscription.isSubscribed && !isAwaiting(subscription)) {
+          queue.push({ kind: "subscribe", subscription });
+        }
       }
       void pump();
     }, Math.random() * ceiling);
   };
 
+  const failSubscription = (subscription: Subscription, error: RealtimeError) => {
+    if (!isLive(subscription)) return;
+    if (error.retriable) {
+      scheduleRetry();
+    } else {
+      subscriptions.delete(subscription.id);
+      settleState();
+    }
+    subscription.onError?.(error);
+  };
+
+  const failOperation = (operation: Operation, error: RealtimeError) => {
+    if (operation.kind === "publish") operation.settle(error);
+    else failSubscription(operation.subscription, error);
+  };
+
   const onDrop = (error: RealtimeError) => {
     connection = undefined;
-    setState("reconnecting");
-    for (const subscription of subscriptions.values()) {
-      subscription.isSubscribed = false;
-      subscription.onError?.(error);
-    }
-    scheduleRetry();
+    hasDropped = true;
+    for (const subscription of subscriptions.values()) subscription.isSubscribed = false;
+    settleState();
+    for (const subscription of [...subscriptions.values()]) subscription.onError?.(error);
+    if (subscriptions.size > 0) scheduleRetry();
   };
 
   const readHeaders = async () =>
@@ -270,7 +327,7 @@ export function createRealtimeClient<T>(
 
   const request = async (
     body: unknown,
-  ): Promise<{ answer: HandlerAnswer } | { error: RealtimeError }> => {
+  ): Promise<{ answer: RealtimeBatchAnswer } | { error: RealtimeError }> => {
     let headers: Record<string, string>;
     try {
       headers = await readHeaders();
@@ -283,140 +340,152 @@ export function createRealtimeClient<T>(
         ),
       };
     }
-    let response: Response;
-    try {
-      response = await fetch(options.url, {
-        method: "POST",
-        headers: { ...headers, "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    } catch (cause) {
-      return {
-        error: new RealtimeError(
-          "handler-unreachable",
-          true,
-          `the realtime handler at ${options.url} could not be reached: ${(cause as Error).message}`,
-        ),
-      };
-    }
-    if (!response.ok) {
-      return {
-        error: new RealtimeError(
-          "handler-refused",
-          isRetriableStatus(response.status),
-          `the realtime handler at ${options.url} answered ${response.status}`,
-        ),
-      };
-    }
-    try {
-      return { answer: (await response.json()) as HandlerAnswer };
-    } catch (cause) {
-      return {
-        error: new RealtimeError(
-          "handler-unreachable",
-          true,
-          `the realtime handler at ${options.url} sent no JSON answer: ${(cause as Error).message}`,
-        ),
-      };
-    }
-  };
-
-  const subscribeGranted = async (subscription: Subscription, wire: string, token: string) => {
-    if (!connection || subscriptions.get(subscription.id) !== subscription) return;
-    try {
-      await connection.subscribe(subscription.id, wire, token, (text) => {
-        let envelope: { id: string; ch: string; ts: number; data: unknown };
-        try {
-          envelope = JSON.parse(text);
-        } catch {
-          return;
-        }
-        subscription.handler(envelope.data, {
-          id: envelope.id,
-          channel: envelope.ch,
-          ts: envelope.ts,
-        });
-      });
-      subscription.isSubscribed = subscriptions.get(subscription.id) === subscription;
-    } catch (error) {
-      failSubscription(subscription, error as RealtimeError);
-    }
-  };
-
-  const send = async (batch: Op[]) => {
-    const live = batch.filter(
-      (op) => op.op === "publish" || subscriptions.get(op.subscription.id) === op.subscription,
-    );
-    if (live.length === 0) return;
-    const needsConnection = !connection && live.some((op) => op.op === "subscribe");
-    const result = await request({
-      ...(needsConnection ? { connect: true } : {}),
-      ops: live.map((op) =>
-        op.op === "subscribe"
-          ? { op: "subscribe", pattern: op.subscription.pattern, params: op.subscription.params }
-          : { op: "publish", pattern: op.pattern, params: op.params, body: op.body },
-      ),
-    });
-    if ("error" in result) {
-      for (const op of live) {
-        if (op.op === "publish") op.settle(result.error);
-        else failSubscription(op.subscription, result.error);
-      }
-      if (result.error.retriable && live.some((op) => op.op === "subscribe")) scheduleRetry();
-      return;
-    }
-    const { answer } = result;
-    for (const { i, code } of answer.denied) {
-      const op = live[i];
-      if (!op) continue;
-      const error = new RealtimeError(
-        code,
-        retriableDenials.has(code),
-        op.op === "subscribe"
-          ? `the realtime handler denied the subscribe on "${op.subscription.pattern}": ${code}`
-          : `the realtime handler denied the publish on "${op.pattern}": ${code}`,
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort(), requestDeadlineMilliseconds);
+    const unreachable = (cause: unknown, failure: string) =>
+      new RealtimeError(
+        "handler-unreachable",
+        true,
+        controller.signal.aborted
+          ? `the realtime handler at ${options.url} did not answer within ${requestDeadlineMilliseconds}ms`
+          : `the realtime handler at ${options.url} ${failure}: ${(cause as Error).message}`,
       );
-      if (op.op === "publish") op.settle(error);
-      else failSubscription(op.subscription, error);
-    }
-    const subscribes: { subscription: Subscription; wire: string; token: string }[] = [];
-    for (const { i, wire, token } of answer.grants) {
-      const op = live[i];
-      if (op?.op === "publish") op.settle();
-      else if (op?.op === "subscribe" && token)
-        subscribes.push({ subscription: op.subscription, wire, token });
-    }
-    if (subscribes.length === 0) return;
-    if (!connection) {
-      if (!answer.connect) {
-        scheduleRetry();
-        return;
+    try {
+      let response: Response;
+      try {
+        response = await fetch(options.url, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } catch (cause) {
+        return { error: unreachable(cause, "could not be reached") };
+      }
+      if (!response.ok) {
+        return {
+          error: new RealtimeError(
+            "handler-refused",
+            isRetriableStatus(response.status),
+            `the realtime handler at ${options.url} answered ${response.status}`,
+          ),
+        };
       }
       try {
-        const transport = await loadTransport(answer.transport);
-        connection = await transport.connect(
-          { url: answer.url, host: answer.host, token: answer.connect.token },
-          onDrop,
-        );
-      } catch (error) {
-        for (const { subscription } of subscribes)
-          failSubscription(subscription, error as RealtimeError);
-        if ((error as RealtimeError).retriable) scheduleRetry();
-        return;
+        return { answer: (await response.json()) as RealtimeBatchAnswer };
+      } catch (cause) {
+        return { error: unreachable(cause, "sent no JSON answer") };
       }
-      if (isClosed) {
-        connection.close();
-        connection = undefined;
-        return;
-      }
-      failedAttempts = 0;
-      setState("connected");
+    } finally {
+      clearTimeout(deadline);
     }
-    await Promise.all(
-      subscribes.map(({ subscription, wire, token }) =>
-        subscribeGranted(subscription, wire, token),
-      ),
+  };
+
+  const settleDenials = (live: Operation[], denied: RealtimeBatchAnswer["denied"]) => {
+    for (const { i, code } of denied) {
+      const operation = live[i];
+      if (!operation) continue;
+      failOperation(
+        operation,
+        new RealtimeError(
+          code,
+          retriableDenials.has(code),
+          `the realtime handler denied the ${operation.kind} on "${readPattern(operation)}": ${code}`,
+        ),
+      );
+    }
+  };
+
+  const settleGrants = (
+    live: Operation[],
+    grants: RealtimeBatchAnswer["grants"],
+  ): GrantedSubscribe[] => {
+    const granted: GrantedSubscribe[] = [];
+    for (const { i, wire, token } of grants) {
+      const operation = live[i];
+      if (operation?.kind === "publish") {
+        operation.settle();
+      } else if (operation?.kind === "subscribe" && token) {
+        granted.push({ subscription: operation.subscription, wire, token });
+      } else if (operation?.kind === "subscribe") {
+        failSubscription(
+          operation.subscription,
+          new RealtimeError(
+            "invalid-grant",
+            false,
+            `the realtime handler granted the subscribe on "${operation.subscription.pattern}" without a token`,
+          ),
+        );
+      }
+    }
+    return granted;
+  };
+
+  const connect = async (
+    answer: RealtimeBatchAnswer,
+    granted: GrantedSubscribe[],
+  ): Promise<TransportConnection | undefined> => {
+    if (!answer.connect) {
+      scheduleRetry();
+      return undefined;
+    }
+    let opened: TransportConnection;
+    try {
+      const transport = await loadTransport(answer.transport);
+      opened = await transport.connect(
+        { url: answer.url, host: answer.host, token: answer.connect.token },
+        onDrop,
+      );
+    } catch (error) {
+      for (const { subscription } of granted) {
+        failSubscription(subscription, error as RealtimeError);
+      }
+      return undefined;
+    }
+    if (isClosed) {
+      opened.close();
+      return undefined;
+    }
+    connection = opened;
+    failedAttempts = 0;
+    hasDropped = false;
+    settleState();
+    return opened;
+  };
+
+  const subscribeGranted = async (
+    opened: TransportConnection,
+    { subscription, wire, token }: GrantedSubscribe,
+  ) => {
+    if (!isLive(subscription)) return;
+    try {
+      await opened.subscribe(subscription.id, wire, token, (text) => deliver(subscription, text));
+      subscription.isSubscribed = isLive(subscription);
+    } catch (error) {
+      if (connection === opened) failSubscription(subscription, error as RealtimeError);
+    }
+  };
+
+  const send = async (batch: Operation[]) => {
+    const live = batch.filter(
+      (operation) => operation.kind === "publish" || isLive(operation.subscription),
     );
+    if (live.length === 0) return;
+    const needsConnection = !connection && live.some((operation) => operation.kind === "subscribe");
+    const result = await request({
+      ...(needsConnection ? { connect: true } : {}),
+      ops: live.map(describeOperation),
+    });
+    if ("error" in result) {
+      for (const operation of live) failOperation(operation, result.error);
+      return;
+    }
+    settleDenials(live, result.answer.denied);
+    const granted = settleGrants(live, result.answer.grants);
+    if (granted.length === 0) return;
+    const opened = connection ?? (await connect(result.answer, granted));
+    if (!opened) return;
+    await Promise.all(granted.map((grant) => subscribeGranted(opened, grant)));
   };
 
   const pump = async () => {
@@ -425,9 +494,11 @@ export function createRealtimeClient<T>(
     await Promise.resolve();
     try {
       while (queue.length > 0 && !isClosed) {
-        await send(queue.splice(0, maxOpsPerRequest));
+        sending = queue.splice(0, maxOperationsPerRequest);
+        await send(sending);
       }
     } finally {
+      sending = [];
       isPumping = false;
     }
   };
@@ -453,21 +524,25 @@ export function createRealtimeClient<T>(
         isSubscribed: false,
       };
       subscriptions.set(subscription.id, subscription);
-      queue.push({ op: "subscribe", subscription });
+      queue.push({ kind: "subscribe", subscription });
+      settleState();
       void pump();
       return () => {
-        if (subscriptions.get(subscription.id) !== subscription) return;
+        if (!isLive(subscription)) return;
         subscriptions.delete(subscription.id);
-        queue = queue.filter((op) => op.op !== "subscribe" || op.subscription !== subscription);
+        queue = queue.filter(
+          (operation) => operation.kind !== "subscribe" || operation.subscription !== subscription,
+        );
         connection?.unsubscribe(subscription.id);
         subscription.isSubscribed = false;
+        settleState();
       };
     },
     publish(pattern, message) {
       if (isClosed) return Promise.reject(refuseClosed());
       return new Promise<void>((resolve, reject) => {
         queue.push({
-          op: "publish",
+          kind: "publish",
           pattern,
           params: dropUndefined(message.params as Record<string, string> | undefined),
           body: message.body,
@@ -480,10 +555,13 @@ export function createRealtimeClient<T>(
       isClosed = true;
       clearTimeout(retryTimer);
       subscriptions.clear();
-      for (const op of queue) if (op.op === "publish") op.settle(refuseClosed());
+      for (const operation of queue) {
+        if (operation.kind === "publish") operation.settle(refuseClosed());
+      }
       queue = [];
       connection?.close();
       connection = undefined;
+      settleState();
     },
   };
 }
