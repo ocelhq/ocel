@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -122,9 +121,6 @@ func folderArgument(folder string) string {
 }
 
 func runCommand(ctx context.Context, dir string, argv []string) ([]byte, error) {
-	if len(argv) == 0 {
-		return nil, errors.New("the env source's exec names no command")
-	}
 	running, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(running, argv[0], argv[1:]...)
@@ -165,27 +161,24 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 }
 
 func parsePrinted(printed []byte, format Format, command string) (map[string]string, error) {
-	switch format {
-	case FormatDotenv:
+	if format == FormatDotenv {
 		file, err := dotenv.Parse(bytes.NewReader(printed))
 		if err != nil {
 			return nil, fmt.Errorf("read what %s printed: %w", command, err)
 		}
 		return file.Values, nil
-	case FormatJSON:
-		var raw map[string]json.RawMessage
-		if json.Unmarshal(printed, &raw) != nil {
-			return nil, fmt.Errorf("%s printed no JSON object of names to values", command)
-		}
-		out := make(map[string]string, len(raw))
-		for key, printedValue := range raw {
-			var value string
-			if json.Unmarshal(printedValue, &value) != nil {
-				return nil, fmt.Errorf("%s printed %s as something other than text; quote it", command, key)
-			}
-			out[key] = value
-		}
-		return out, nil
 	}
-	return nil, fmt.Errorf("an env source's exec prints json or dotenv, not %q", format)
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(printed, &raw) != nil {
+		return nil, fmt.Errorf("%s printed no JSON object of names to values", command)
+	}
+	out := make(map[string]string, len(raw))
+	for key, printedValue := range raw {
+		var value string
+		if json.Unmarshal(printedValue, &value) != nil {
+			return nil, fmt.Errorf("%s printed %s as something other than text; quote it", command, key)
+		}
+		out[key] = value
+	}
+	return out, nil
 }

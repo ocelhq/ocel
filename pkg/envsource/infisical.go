@@ -28,7 +28,6 @@ func NewInfisical(options InfisicalOptions, credential Credential, client *http.
 	if client == nil {
 		client = &http.Client{Timeout: infisicalRequestTimeout}
 	}
-	options = options.Normalize()
 	return &infisical{options: options, client: &infisicalClient{host: options.Host, http: client, credential: credential}}
 }
 
