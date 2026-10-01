@@ -304,6 +304,25 @@ func TestAListingThatCannotBeReadIsNoEmptyListing(t *testing.T) {
 	}
 }
 
+func TestAKeyValueTierTheLoginCannotReachIsNotCalledMissing(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("root enters every directory, so nothing here can be made unreachable")
+	}
+	dir := helperDir(t)
+	shut := filepath.Join(dir, helperTier)
+	if err := os.Chmod(shut, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(shut, 0o750) })
+
+	said := unreachable(t, keyValuesScript, "OCEL_STATE_ROOT="+dir, helperTier, "list", "conformance+tree", "tree")
+	if strings.Contains(said, "missing") || !strings.Contains(said, shut+": Permission denied") {
+		t.Errorf("the helper said %q, want %s named as denied rather than a missing tier to bootstrap again", said, shut)
+	}
+}
+
 func TestTheKeyValueTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 	t.Parallel()
 
