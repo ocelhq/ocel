@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import {
+  exactTaskPayloadCheck,
+  exactTopicPayloadCheck,
+  hyphenatedTaskCheck,
   nextCacheChecks,
   nextDataCacheChecks,
   nextOriginCacheChecks,
@@ -250,6 +253,23 @@ describe("the tasks concern", () => {
     const planned = planOn("dev").cells.map((cell) => cell.name);
     expect(planned).toContain("tasks/node");
     expect(planned).toContain("tasks/go");
+  });
+
+  it("expects only the payload checks red on tasks/node on dev, under the TypeScript SDK's ticket, and nothing red on tasks/go", () => {
+    const { expectedFailures } = planOn("dev");
+    const issuesOf = (cell: string) =>
+      Object.fromEntries(
+        Object.entries(expectedFailures[cell] ?? {}).map(([title, listed]) => [
+          title,
+          listed.map((gap) => gap.issue),
+        ]),
+      );
+    expect(issuesOf("tasks/node/web")).toEqual({
+      [hyphenatedTaskCheck.title]: [1526],
+      [exactTaskPayloadCheck.title]: [1528],
+      [exactTopicPayloadCheck.title]: [1528],
+    });
+    expect(issuesOf("tasks/go/web")).toEqual({});
   });
 
   it("skips the suite on aws, gcp and a box with the provider's refusal, under each target's ticket", () => {

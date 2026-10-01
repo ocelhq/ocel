@@ -2,20 +2,15 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { type Run, type RunStatus, runs, type Task, type TriggerOptions } from "ocel/task";
 import type { SendOptions, Topic } from "ocel/topic";
 import { tasks, topics } from "../infra/index";
+import { serveJSON } from "./serve";
+import { wire } from "./wire";
 
 const APP_NAME = "web";
 const PORT = Number(process.env.PORT ?? 3108);
 
 const app = express();
+app.use("/api/wire", wire);
 app.use(express.json());
-
-type JSONRoute = (req: Request, res: Response) => Promise<unknown>;
-
-function serveJSON(serve: JSONRoute) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    serve(req, res).then((body) => res.json(body), next);
-  };
-}
 
 function findTask(name: string): Task {
   const found = (tasks as Record<string, Task>)[name];
