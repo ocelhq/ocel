@@ -68,10 +68,28 @@ export async function spawnOcel(
   });
 }
 
-export function exitedBadly(args: string[], result: Ran): Error {
-  return new Error(
-    `ocel ${maskArgs(args)} exited ${result.code}\nstdout: ${redact(result.stdout)}\nstderr: ${redact(result.stderr)}`,
-  );
+export class NonzeroExitError extends Error {
+  readonly result: Ran;
+
+  constructor(args: string[], result: Ran) {
+    super(
+      `ocel ${maskArgs(args)} exited ${result.code}\nstdout: ${redact(result.stdout)}\nstderr: ${redact(result.stderr)}`,
+    );
+    this.result = result;
+  }
+}
+
+export async function recordOutput(said: string[], ran: Promise<Ran>): Promise<Ran> {
+  try {
+    const result = await ran;
+    said.push(result.stdout, result.stderr);
+    return result;
+  } catch (error) {
+    if (error instanceof NonzeroExitError) {
+      said.push(error.result.stdout, error.result.stderr);
+    }
+    throw error;
+  }
 }
 
 export async function ocel(
@@ -82,7 +100,7 @@ export async function ocel(
 ): Promise<Ran> {
   const result = await spawnOcel(dir, args, env, log);
   if (result.code !== 0) {
-    throw exitedBadly(args, result);
+    throw new NonzeroExitError(args, result);
   }
   return result;
 }
@@ -104,7 +122,7 @@ export async function runOcel(
   await cell.evidence.write(phase, `${name}.stdout`, result.stdout);
   await cell.evidence.write(phase, `${name}.stderr`, result.stderr);
   if (result.code !== 0) {
-    throw exitedBadly(args, result);
+    throw new NonzeroExitError(args, result);
   }
   return result;
 }
