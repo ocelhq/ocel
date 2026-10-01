@@ -95,6 +95,12 @@ func (w *aWorker) inFlightNow() int {
 	return w.inFlight
 }
 
+func (w *aWorker) peakInFlight() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.peak
+}
+
 func aTask(mods ...func(*contractv1.ManifestTopic)) *contractv1.ManifestTopic {
 	topic := &contractv1.ManifestTopic{Consumers: []*contractv1.ManifestConsumer{{Worker: "worker", Exclusive: true}}}
 	for _, mod := range mods {
@@ -109,7 +115,7 @@ func retrying(maxAttempts int32, minDelay, maxDelay time.Duration) func(*contrac
 	}
 }
 
-func dispatching(t *testing.T, topics map[string]*contractv1.ManifestTopic, workers map[string]Worker) *Engine {
+func applied(t *testing.T, topics map[string]*contractv1.ManifestTopic, workers map[string]Worker) *Engine {
 	t.Helper()
 	engine := anEngine(t)
 	for name, topic := range topics {
@@ -120,6 +126,18 @@ func dispatching(t *testing.T, topics map[string]*contractv1.ManifestTopic, work
 	if err := engine.Apply(context.Background(), Deployment{Topics: topics, Workers: workers}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
+	return engine
+}
+
+func dispatching(t *testing.T, topics map[string]*contractv1.ManifestTopic, workers map[string]Worker) *Engine {
+	t.Helper()
+	engine := applied(t, topics, workers)
+	startDispatch(t, engine)
+	return engine
+}
+
+func startDispatch(t *testing.T, engine *Engine) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- engine.Dispatch(ctx) }()
@@ -129,7 +147,6 @@ func dispatching(t *testing.T, topics map[string]*contractv1.ManifestTopic, work
 			t.Errorf("Dispatch: %v", err)
 		}
 	})
-	return engine
 }
 
 func trigger(t *testing.T, engine *Engine, task string, payload string, options *taskv1.TriggerOptions) string {

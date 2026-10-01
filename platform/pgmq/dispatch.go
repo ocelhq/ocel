@@ -104,9 +104,9 @@ func (e *Engine) Dispatch(ctx context.Context) error {
 
 func (e *Engine) serveQueue(ctx context.Context, queue string, workers map[string]*slots) {
 	q := &queueState{name: queue, consumers: newSlots(maxInFlight), held: map[int64]bool{}}
-	var deliveries sync.WaitGroup
-	defer deliveries.Wait()
-	deliveries.Go(func() { e.renewLeases(ctx, q) })
+	var running sync.WaitGroup
+	defer running.Wait()
+	running.Go(func() { e.renewLeases(ctx, q) })
 	wake := e.wake(queue)
 	for ctx.Err() == nil {
 		deployment := e.current()
@@ -121,49 +121,58 @@ func (e *Engine) serveQueue(ctx context.Context, queue string, workers map[strin
 			continue
 		}
 		q.consumers.setLimit(concurrencyOf(ref))
-		consumerFree, consumerChanged := q.consumers.free()
-		workerFree, workerChanged := workerSlots.free()
-		n := min(consumerFree, workerFree, maxReadPerPoll)
+		want := maxReadPerPoll
 		if ref.consumer.GetBatch().GetSize() > 0 {
-			n = min(n, 1)
+			want = 1
 		}
+		n, changed := reserveBoth(q.consumers, workerSlots, want)
 		if n == 0 {
-			wait(ctx, wake, consumerChanged, workerChanged)
+			wait(ctx, wake, changed[0], changed[1])
 			continue
 		}
 		messages, err := e.read(ctx, q, ref, n)
-		if err != nil {
-			if ctx.Err() == nil {
-				slog.Warn("read a queue", "queue", queue, "error", err)
-			}
-			wait(ctx, wake, nil, nil)
-			continue
+		if err != nil && ctx.Err() == nil {
+			slog.Warn("read a queue", "queue", queue, "error", err)
 		}
 		if len(messages) == 0 {
+			q.consumers.unreserve(n)
+			workerSlots.unreserve(n)
 			wait(ctx, wake, nil, nil)
 			continue
 		}
 		q.hold(messages)
-		if ref.consumer.GetBatch().GetSize() > 0 {
-			q.consumers.take(1)
-			workerSlots.take(1)
-			deliveries.Go(func() {
-				defer q.consumers.release(1)
-				defer workerSlots.release(1)
-				e.deliver(ctx, q, ref, worker, messages)
-			})
-			continue
+		deliveries := [][]message{messages}
+		if ref.consumer.GetBatch().GetSize() == 0 {
+			deliveries = deliveries[:0]
+			for _, m := range messages {
+				deliveries = append(deliveries, []message{m})
+			}
 		}
-		q.consumers.take(len(messages))
-		workerSlots.take(len(messages))
-		for _, m := range messages {
-			deliveries.Go(func() {
+		if unused := n - len(deliveries); unused > 0 {
+			q.consumers.unreserve(unused)
+			workerSlots.unreserve(unused)
+		}
+		for _, delivery := range deliveries {
+			running.Go(func() {
 				defer q.consumers.release(1)
 				defer workerSlots.release(1)
-				e.deliver(ctx, q, ref, worker, []message{m})
+				e.deliver(ctx, q, ref, worker, delivery)
 			})
 		}
 	}
+}
+
+func reserveBoth(consumer, worker *slots, want int) (int, [2]<-chan struct{}) {
+	consumerChanged, workerChanged := consumer.changes(), worker.changes()
+	granted := consumer.reserve(want)
+	if granted == 0 {
+		return 0, [2]<-chan struct{}{consumerChanged, workerChanged}
+	}
+	both := worker.reserve(granted)
+	if both < granted {
+		consumer.unreserve(granted - both)
+	}
+	return both, [2]<-chan struct{}{consumerChanged, workerChanged}
 }
 
 func concurrencyOf(ref consumerRef) int {
