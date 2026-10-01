@@ -845,6 +845,27 @@
       ],
       "source": "https://cloud.google.com/memorystore/valkey/pricing",
       "verified": "2026-10-01"
+    },
+    {
+      "id": "gcp/psc/consumer-data-processing",
+      "region": "",
+      "unit": "GiB",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.01"
+        },
+        {
+          "start": "1048576",
+          "price": "0.006"
+        },
+        {
+          "start": "5242880",
+          "price": "0.004"
+        }
+      ],
+      "source": "https://cloud.google.com/vpc/pricing#psc-consumer-data-processing",
+      "verified": "2026-10-01"
     }
   ]
 }

@@ -229,7 +229,7 @@ func TestShapeOfADeclaredStoreIsOneMemorystoreNodeOnTheTiersNetwork(t *testing.T
 	}
 }
 
-func TestPriceOfAStoreBillsItsNodeAndItsAppendOnlyFileEveryHour(t *testing.T) {
+func TestPriceOfAStoreBillsItsNodeAndItsAppendOnlyFileEveryHourAndTrafficFromOtherZonesByTheGiB(t *testing.T) {
 	set, est := shapeOfAStore(t, "us-central1", "256mb")
 
 	store := estimateOfType(t, est, set, "google_memorystore_instance", "project:shop/environment:prod")
@@ -239,8 +239,12 @@ func TestPriceOfAStoreBillsItsNodeAndItsAppendOnlyFileEveryHour(t *testing.T) {
 	if got := componentNamed(t, est, store.GetResource(), "Append-only persistence").GetMonthlyCost(); got != "0.50" {
 		t.Errorf("persistence costs %s, want 0.50 (1.25 GB for 730 h at 0.00054795)", got)
 	}
-	if store.GetMonthlyUsage() != "0.00" {
-		t.Errorf("the store bills %s with usage, want none: a node bills by the hour whatever it serves", store.GetMonthlyUsage())
+	traffic := componentNamed(t, est, store.GetResource(), "Inter-zone data processed")
+	if got := traffic.GetMonthlyCost(); got != "0.10" || !traffic.GetUsageBased() {
+		t.Errorf("inter-zone traffic costs %s, want 0.10 by usage (10 GiB at Private Service Connect's 0.01)", got)
+	}
+	if store.GetMonthlyUsage() != "0.10" {
+		t.Errorf("the store bills %s with usage, want only its inter-zone traffic", store.GetMonthlyUsage())
 	}
 	for _, typ := range []string{"google_compute_network", "google_compute_subnetwork", "google_network_connectivity_service_connection_policy"} {
 		if got := estimateOfType(t, est, set, typ, "project:shop/shared:production").GetStatus(); got != costv1.ResourceEstimate_STATUS_FREE {
