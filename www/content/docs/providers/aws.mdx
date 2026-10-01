@@ -41,6 +41,52 @@ ocel deploy
 | `variablesKey` | ARN of a KMS key to encrypt this account's variables under. Omit it and `ocel bootstrap --features variables-key` makes a key ocel owns. |
 | `certificates` | Already-issued ACM certificate ARNs, keyed by hostname. A hostname left off gets a certificate ocel requests, validates and deletes again. |
 
+## KV stores
+
+`kv("cache")` runs as an ElastiCache Valkey replication group with cluster mode off: a primary
+and a replica in another availability zone, which takes over if the primary fails. Two
+`cache.t4g.micro` nodes cost about $18.69 a month in us-east-1. The group sits in the default
+VPC's subnets, and its security group admits port 6379 from inside that VPC only, so only an app
+with `"compute": "container"` can reach it. A deploy refuses a serverless app that uses a store
+until functions can join the VPC ([#1473](https://github.com/ocelhq/ocel/issues/1473)).
+
+Traffic uses TLS and the data is encrypted at rest. Apps connect with no username and an AUTH
+token ocel generates on the first deploy. The token is kept as a SecureString in SSM Parameter
+Store under `/<namespace>/kv/`.
+
+`memory` picks the cheapest node that holds it: `cache.t4g.micro` up to 256mb, then
+`t4g.small`, `t4g.medium`, `m7g.large`, `r7g.large`, `r7g.xlarge` and `r7g.2xlarge` up to
+32gb. The rest of the node is reserved, so the store holds what it declares and no more. Leave
+`eviction` out and the store never evicts, as on every other provider; ElastiCache's own default
+is `volatile-lru`. Version 8 runs ElastiCache 8.1 and version 9 runs 9.1. ElastiCache takes a
+snapshot once a day and keeps it for a day.
+
+**One node.** A [transform](/docs/transforms) can drop a store to a single node and halve its
+cost, for an environment that can afford to lose its data:
+
+```ts title="transforms/kv.transform.ts"
+import { defineTransform } from "@ocel/transforms";
+
+export default defineTransform({
+  aws: {
+    kv: {
+      replicationGroup: { numCacheClusters: 1, automaticFailoverEnabled: false, multiAzEnabled: false },
+    },
+  },
+});
+```
+
+A single node has no replica to copy from, and ElastiCache keeps no append-only file. When
+ElastiCache replaces that node, after a hardware failure or during maintenance, the store comes
+back empty.
+
+**Changing the version.** Moving `version` from 8 to 9 creates a parameter group for the new
+family and upgrades the replication group in place. ElastiCache cannot move a group back to an
+older major.
+
+**Removing it.** `ocel destroy` takes the replication group with its snapshots, its parameter
+and subnet groups, its security group and its token.
+
 ## Edge
 
 Leave `edge` out and the deployment is fronted by CloudFront. Name an edge to choose it —
