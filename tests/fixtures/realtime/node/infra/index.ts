@@ -27,7 +27,7 @@ export function readCaller(request: Request): Caller | null {
 
 const Note = z.object({ text: z.string() });
 
-export const rt = realtime("app", {
+export const live = realtime("app", {
   authorize: readCaller,
   channels: {
     "orders/:orderId": {
