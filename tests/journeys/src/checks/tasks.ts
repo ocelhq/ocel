@@ -38,7 +38,7 @@ function describeSent(sent: Sent): string {
   return `${sent.res.status} ${JSON.stringify(sent.body)}`;
 }
 
-function answered<T>(sent: Sent, what: string): T {
+function readAnswer<T>(sent: Sent, what: string): T {
   assert.equal(sent.res.status, 200, `${what} answered ${describeSent(sent)}`);
   return sent.body as T;
 }
@@ -54,11 +54,11 @@ async function trigger(
   options: Record<string, unknown> = {},
 ): Promise<string> {
   const sent = await post(ctx, `/api/tasks/${task}/trigger`, { payload, options });
-  return answered<{ id: string }>(sent, `a trigger of ${task}`).id;
+  return readAnswer<{ id: string }>(sent, `a trigger of ${task}`).id;
 }
 
 async function retrieve(ctx: CheckContext, id: string): Promise<RunRecord> {
-  return answered<RunRecord>(await json(ctx, `/api/runs/${id}`), `the retrieve of ${id}`);
+  return readAnswer<RunRecord>(await json(ctx, `/api/runs/${id}`), `the retrieve of ${id}`);
 }
 
 async function waitForRun(
@@ -194,7 +194,7 @@ export const delayBoundCheck: Check = {
     const id = await trigger(ctx, "echo", {}, { delay: "29d" });
     assert.equal((await retrieve(ctx, id)).status, "DELAYED");
     assert.equal(
-      answered<RunRecord>(await post(ctx, `/api/runs/${id}/cancel`), "the cancel").status,
+      readAnswer<RunRecord>(await post(ctx, `/api/runs/${id}/cancel`), "the cancel").status,
       "CANCELED",
     );
   },
@@ -355,7 +355,7 @@ export const batchCheck: Check = {
     const sent = await post(ctx, "/api/tasks/tally/batch-trigger", {
       items: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ payload: { n } })),
     });
-    const { ids } = answered<{ ids: string[] }>(sent, "the batch trigger");
+    const { ids } = readAnswer<{ ids: string[] }>(sent, "the batch trigger");
     assert.equal(ids.length, 7);
     const batches: number[][] = [];
     for (const id of ids) {
@@ -378,7 +378,7 @@ export const batchRetryCheck: Check = {
     const sent = await post(ctx, "/api/tasks/tally/batch-trigger", {
       items: [{ payload: { n: 1 } }, { payload: { n: 2, poison: true } }, { payload: { n: 3 } }],
     });
-    const { ids } = answered<{ ids: string[] }>(sent, "the batch trigger");
+    const { ids } = readAnswer<{ ids: string[] }>(sent, "the batch trigger");
     for (const [i, id] of ids.entries()) {
       const run = await waitForRun(ctx, id);
       assertCompleted(run);
@@ -392,7 +392,7 @@ export const batchRetryCheck: Check = {
 
 const LANE_RUNS = 6;
 
-function meanRank(spans: Span[], of: number[]): number {
+function findMeanRank(spans: Span[], of: number[]): number {
   const ranked = [...spans].sort((a, b) => a.startedAt - b.startedAt).map((span) => span.n);
   return of.reduce((sum, n) => sum + ranked.indexOf(n), 0) / of.length;
 }
@@ -420,8 +420,8 @@ export const lanesCheck: Check = {
       )),
     ];
     const spans = await waitForSpans(ctx, ids);
-    const highRank = meanRank(spans, high);
-    const lowRank = meanRank(spans, low);
+    const highRank = findMeanRank(spans, high);
+    const lowRank = findMeanRank(spans, low);
     assert.ok(
       highRank < lowRank,
       `high runs started at a mean rank of ${highRank}, low ones at ${lowRank}`,
@@ -475,7 +475,7 @@ type RunPage = { runs: RunRecord[]; nextCursor: string };
 
 async function listRuns(ctx: CheckContext, query: Record<string, string>): Promise<RunRecord[]> {
   const sent = await json(ctx, `/api/runs?${new URLSearchParams(query)}`);
-  return answered<RunPage>(sent, `the listing of ${JSON.stringify(query)}`).runs;
+  return readAnswer<RunPage>(sent, `the listing of ${JSON.stringify(query)}`).runs;
 }
 
 export const listRunsCheck: Check = {
@@ -502,7 +502,7 @@ export const listRunsCheck: Check = {
 };
 
 async function cancel(ctx: CheckContext, id: string): Promise<RunRecord> {
-  return answered<RunRecord>(await post(ctx, `/api/runs/${id}/cancel`), `the cancel of ${id}`);
+  return readAnswer<RunRecord>(await post(ctx, `/api/runs/${id}/cancel`), `the cancel of ${id}`);
 }
 
 export const cancelDelayedCheck: Check = {
@@ -536,7 +536,7 @@ export const replayCheck: Check = {
     const payload = { probe: newProbe("replayed") };
     const original = await trigger(ctx, "echo", payload);
     assertCompleted(await waitForRun(ctx, original));
-    const replayed = answered<{ id: string }>(
+    const replayed = readAnswer<{ id: string }>(
       await post(ctx, `/api/runs/${original}/replay`),
       "the replay",
     ).id;
@@ -554,7 +554,7 @@ export const rescheduleCheck: Check = {
     const id = await trigger(ctx, "echo", { n: 1 }, { delay: "1h" });
     const dueAt = new Date(Date.now() + 2_000).toISOString();
     const sent = await post(ctx, `/api/runs/${id}/reschedule`, { dueAt });
-    const moved = answered<RunRecord>(sent, "the reschedule");
+    const moved = readAnswer<RunRecord>(sent, "the reschedule");
     assert.equal(moved.status, "DELAYED");
     assert.ok(
       Math.abs((moved.dueAt ?? 0) - Date.parse(dueAt)) <= CLOCK_SLACK_MS,
@@ -574,7 +574,7 @@ async function send(
   options: Record<string, unknown> = {},
 ): Promise<string> {
   const sent = await post(ctx, `/api/topics/${topic}/send`, { payload, options });
-  return answered<{ messageId: string }>(sent, `a send to ${topic}`).messageId;
+  return readAnswer<{ messageId: string }>(sent, `a send to ${topic}`).messageId;
 }
 
 type Receipt = {
@@ -649,7 +649,7 @@ async function readDeadLetters(
   consumer: string,
 ): Promise<DeadLetterPage> {
   const sent = await json(ctx, `/api/topics/${topic}/dead-letters/${consumer}`);
-  return answered<DeadLetterPage>(sent, `the dead letters of ${consumer}`);
+  return readAnswer<DeadLetterPage>(sent, `the dead letters of ${consumer}`);
 }
 
 async function waitForDeadLetter(
@@ -685,7 +685,7 @@ export const deadLetterCheck: Check = {
     const redriven = await post(ctx, "/api/topics/doomed/dead-letters/always-fails/redrive", {
       executions: [letter.execution],
     });
-    assert.deepEqual(answered(redriven, "the redrive"), { redriven: 1 });
+    assert.deepEqual(readAnswer(redriven, "the redrive"), { redriven: 1 });
     const pending = await readDeadLetters(ctx, "doomed", "always-fails");
     assert.ok(
       !pending.deadLetters.some((one) => one.execution === letter.execution),
@@ -697,7 +697,7 @@ export const deadLetterCheck: Check = {
     const purged = await post(ctx, "/api/topics/doomed/dead-letters/always-fails/purge", {
       executions: [letter.execution],
     });
-    assert.deepEqual(answered(purged, "the purge"), { purged: 1 });
+    assert.deepEqual(readAnswer(purged, "the purge"), { purged: 1 });
     const left = await readDeadLetters(ctx, "doomed", "always-fails");
     assert.ok(
       !left.deadLetters.some((one) => one.execution === letter.execution),
