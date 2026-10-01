@@ -14,8 +14,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
+	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
 func proxyEnvValue(t *testing.T, env []string, key string) string {
@@ -46,24 +49,24 @@ func binds(bindings ...live.Binding) declared { return declared{bindings: bindin
 
 func TestServeProxy(t *testing.T) {
 	t.Run("a deployment whose bindings all go direct serves nothing", func(t *testing.T) {
-		env, served, err := serveProxy(context.Background(), binds(live.Binding{Name: "db--main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}), "state", testSessionPrefix)
+		served, err := serveProxy(context.Background(), binds(live.Binding{Name: "db--main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}), proxyConfig{table: "state", sessionPrefix: testSessionPrefix})
 		if err != nil {
 			t.Fatalf("serveProxy: %v", err)
 		}
-		if env != nil || served != nil {
-			t.Fatalf("serveProxy = %q, want no proxy for a deployment that reaches postgres directly", env)
+		if served.env != nil || served.errs != nil {
+			t.Fatalf("serveProxy = %q, want no proxy for a deployment that reaches postgres directly", served.env)
 		}
 	})
 
 	t.Run("a bucket with nowhere to keep its sessions fails by name", func(t *testing.T) {
-		_, _, err := serveProxy(context.Background(), binds(live.Binding{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}), "", testSessionPrefix)
+		_, err := serveProxy(context.Background(), binds(live.Binding{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}), proxyConfig{sessionPrefix: testSessionPrefix})
 		if err == nil || !strings.Contains(err.Error(), stateTableEnvVar) {
 			t.Fatalf("serveProxy err = %v, want it to name %s", err, stateTableEnvVar)
 		}
 	})
 
 	t.Run("a bucket whose sessions have no key scope refuses to serve", func(t *testing.T) {
-		_, _, err := serveProxy(context.Background(), binds(live.Binding{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}), "state", "")
+		_, err := serveProxy(context.Background(), binds(live.Binding{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}), proxyConfig{table: "state"})
 		if err == nil || !strings.Contains(err.Error(), sessionPrefixEnvVar) {
 			t.Fatalf("serveProxy err = %v, want it to name %s", err, sessionPrefixEnvVar)
 		}
@@ -74,14 +77,15 @@ func TestServeProxy(t *testing.T) {
 		t.Setenv("AWS_ACCESS_KEY_ID", "test")
 		t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
 
-		env, served, err := serveProxy(context.Background(), binds(live.Binding{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}), "state", testSessionPrefix)
+		served, err := serveProxy(context.Background(), binds(live.Binding{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}), proxyConfig{table: "state", sessionPrefix: testSessionPrefix})
 		if err != nil {
 			t.Fatalf("serveProxy: %v", err)
 		}
-		if served == nil {
+		if served.errs == nil {
 			t.Fatal("serveProxy returned no channel to deliver the proxy's terminal error")
 		}
 
+		env := served.env
 		addr := proxyEnvValue(t, env, processenv.RuntimeAddressEnvVar)
 		if !strings.HasPrefix(addr, "http://127.0.0.1:") {
 			t.Fatalf("%s = %q, want a loopback address the sandbox alone can reach", processenv.RuntimeAddressEnvVar, addr)
@@ -117,10 +121,11 @@ func TestABucketBoundToAStoreIsSignedForThatStore(t *testing.T) {
 		},
 	}
 
-	env, _, err := serveProxy(context.Background(), values, "state", testSessionPrefix)
+	served, err := serveProxy(context.Background(), values, proxyConfig{table: "state", sessionPrefix: testSessionPrefix})
 	if err != nil {
 		t.Fatalf("serveProxy: %v", err)
 	}
+	env := served.env
 	client := bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearerToken(proxyEnvValue(t, env, localrpc.SessionTokenEnvVar))}, proxyEnvValue(t, env, processenv.RuntimeAddressEnvVar))
 	signed, err := client.Sign(context.Background(), &bucketv1.SignRequest{
 		Bucket: "OCEL_RESOURCE_BUCKET_uploads", Key: "a.png",
@@ -135,6 +140,30 @@ func TestABucketBoundToAStoreIsSignedForThatStore(t *testing.T) {
 	}
 	if granted := grantedBuckets(values)(); len(granted) != 0 {
 		t.Errorf("granted = %v, want the store-bound bucket kept off the account's own backend", granted)
+	}
+}
+
+func TestATaskIsServedThroughTheProxyOnlyWithTheQueueManifestBesideTheCode(t *testing.T) {
+	t.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_ACCESS_KEY_ID", "test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
+	values := binds(live.Binding{Name: "resize", Type: bindingsv1.BindingType_BINDING_TYPE_TASK})
+
+	if _, err := serveProxy(context.Background(), values, proxyConfig{}); err == nil || !strings.Contains(err.Error(), queues.FilePath) {
+		t.Fatalf("serveProxy with no queue manifest = %v, want an error naming %s", err, queues.FilePath)
+	}
+	manifest := &queues.Manifest{Table: "state", KeyPrefix: "PROJECT#shop#ENV#prod#TASKS#", Topics: map[string]queues.Topic{}}
+	served, err := serveProxy(context.Background(), values, proxyConfig{queues: manifest})
+	if err != nil {
+		t.Fatalf("serveProxy: %v", err)
+	}
+	if served.engine == nil {
+		t.Fatal("serveProxy built no engine for a deployment that binds a task")
+	}
+	client := taskv1connect.NewTaskServiceClient(&http.Client{Transport: bearerToken(proxyEnvValue(t, served.env, localrpc.SessionTokenEnvVar))}, proxyEnvValue(t, served.env, processenv.RuntimeAddressEnvVar))
+	_, err = client.Trigger(context.Background(), &taskv1.TriggerRequest{Task: "resize"})
+	if connect.CodeOf(err) != connect.CodeNotFound {
+		t.Errorf("a trigger of a task the manifest does not declare = %v, want NotFound from the engine behind the proxy", err)
 	}
 }
 

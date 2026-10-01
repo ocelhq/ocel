@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 	source "github.com/ocelhq/ocel/platform/aws/runtime/live"
@@ -51,13 +52,22 @@ func main() {
 		fatalInit(fmt.Sprintf("failed to open this deployment's encrypted variables: %v", err))
 	}
 
-	proxyEnv, proxyServed, err := serveProxy(ctx, resolved, os.Getenv(stateTableEnvVar), os.Getenv(sessionPrefixEnvVar))
+	queueManifest, err := readQueueManifest(taskRoot())
+	if err != nil {
+		fatalInit(err.Error())
+	}
+	proxyCfg := proxyConfig{table: os.Getenv(stateTableEnvVar), sessionPrefix: os.Getenv(sessionPrefixEnvVar), queues: queueManifest}
+	if worker := os.Getenv(processenv.WorkerEnvVar); worker != "" {
+		runWorker(ctx, worker, served, resolved, prefetch, bakedEnv, proxyCfg)
+		return
+	}
+	bindingsProxy, err := serveProxy(ctx, resolved, proxyCfg)
 	if err != nil {
 		fatalInit(fmt.Sprintf("failed to serve this deployment's proxied bindings: %v", err))
 	}
-	go superviseProxy(proxyServed)
+	go superviseProxy(bindingsProxy.errs)
 
-	child, err := bringUp(ctx, served, resolved, prefetch, childEnv(bakedEnv, resolved, proxyEnv), start, prime)
+	child, err := bringUp(ctx, served, resolved, prefetch, childEnv(bakedEnv, resolved, bindingsProxy.env), start, prime)
 	if err != nil {
 		fatalInit(err.Error())
 	}
