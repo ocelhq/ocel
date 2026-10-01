@@ -113,13 +113,13 @@ func New(projectName string, opts Options) *Resources {
 	stores := kv.New(opts.Open, secrets)
 	buckets := bucket.New(opts.Open, secrets, opts.AppOrigins)
 	r.queue = queue.New(opts.Open, secrets, opts.Project, opts.Announce)
-	gateway := realtime.New(opts.AppOrigins)
+	realtimeBackend := realtime.New(opts.AppOrigins)
 	r.backends = []*Backend{
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}, Resolve: servers.Resolve, Close: servers.Close},
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_KV}, Resolve: stores.Resolve, Close: stores.Close},
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET}, Resolve: buckets.Resolve, Routes: buckets.Routes, Close: buckets.Close},
 		{Kinds: queue.Kinds, Resolve: r.queue.Resolve, Routes: r.queue.Routes, Close: r.queue.Close},
-		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME}, Resolve: gateway.Resolve, Close: gateway.Close},
+		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME}, Resolve: realtimeBackend.Resolve, Close: realtimeBackend.Close},
 	}
 	return r
 }

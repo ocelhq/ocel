@@ -38,7 +38,7 @@ func (g *Gateway) servePublish(w http.ResponseWriter, r *http.Request) {
 		answerError(w, http.StatusBadRequest, errorBadRequest, "a publish is a JSON object of a channel and its events")
 		return
 	}
-	namespace, isChannel := namespaceOf(req.Channel, false)
+	namespace, isChannel := readPublishNamespace(req.Channel)
 	if !isChannel {
 		answerError(w, http.StatusBadRequest, errorBadRequest, "channel "+req.Channel+" is no channel to publish on")
 		return

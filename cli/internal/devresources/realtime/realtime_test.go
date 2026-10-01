@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/realtime"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/platform/realtime/gateway"
 	"github.com/ocelhq/ocel/platform/realtime/token"
 	"github.com/ocelhq/ocel/platform/realtime/token/tokentest"
 )
@@ -55,12 +56,12 @@ func resolveOne(t *testing.T, backend *realtime.Backend, name string) *bindingsv
 	return b.GetRealtime()
 }
 
-func mint(t *testing.T, bound *bindingsv1.RealtimeProperties, ns string, op token.Operation, channel string) string {
+func mint(t *testing.T, bound *bindingsv1.RealtimeProperties, namespace string, operation token.Operation, channel string) string {
 	t.Helper()
 	return tokentest.Sign(t, ed25519.NewKeyFromSeed(bound.GetSigningKey()), token.Claims{
 		Audience:  bound.GetHost(),
 		ExpiresAt: time.Now().Add(time.Minute).Unix(),
-		Ocel:      token.Grant{Channel: channel, Namespace: ns, Operation: op},
+		Ocel:      token.Grant{Channel: channel, Namespace: namespace, Operation: operation},
 	})
 }
 
@@ -73,7 +74,7 @@ func dial(t *testing.T, bound *bindingsv1.RealtimeProperties, connectToken strin
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	conn, _, err := websocket.Dial(ctx, bound.GetUrl(), &websocket.DialOptions{
-		Subprotocols: []string{"aws-appsync-event-ws", "header-" + base64.RawURLEncoding.EncodeToString(header)},
+		Subprotocols: []string{gateway.Subprotocol, "header-" + base64.RawURLEncoding.EncodeToString(header)},
 		HTTPHeader:   http.Header{"Origin": {appOrigin}},
 	})
 	if err != nil {
