@@ -19,8 +19,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const defaultIdempotencyKeyLife = 30 * 24 * time.Hour
-
 type Tasks struct {
 	engine *Engine
 }
@@ -86,7 +84,7 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 	execution := executionOf(toPublish.messageID, topic.GetConsumers()[0].GetName())
 	var idempotency provider.ExpiringRecord
 	if key := options.GetIdempotencyKey(); key != "" {
-		life := defaultIdempotencyKeyLife
+		life := provider.DefaultIdempotencyKeyLife
 		if options.GetIdempotencyKeyTtl() != nil {
 			life = options.GetIdempotencyKeyTtl().AsDuration()
 		}

@@ -64,7 +64,7 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 				return err
 			}
 			existing, created, err := ensureRecord(ctx, tx, provider.ExpiringRecord{
-				Purpose: provider.RecordIdempotency, Topic: req.GetTopic(), Key: key, Value: value, ExpiresAt: now.Add(defaultIdempotencyKeyLife),
+				Purpose: provider.RecordIdempotency, Topic: req.GetTopic(), Key: key, Value: value, ExpiresAt: now.Add(provider.DefaultIdempotencyKeyLife),
 			})
 			if err != nil {
 				return err

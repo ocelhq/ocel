@@ -26,6 +26,8 @@ const (
 	RecordStagedPayload RecordPurpose = "staged-payload"
 )
 
+const DefaultIdempotencyKeyLife = 30 * 24 * time.Hour
+
 type ExpiringRecord struct {
 	Purpose   RecordPurpose
 	Topic     string
