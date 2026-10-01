@@ -1,0 +1,104 @@
+package envelope_test
+
+import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/ocelhq/ocel/pkg/envelope"
+	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
+)
+
+const exactJSON = `{"ratio":2.0,"id":9007199254740993,"count":2}`
+
+func answering(t *testing.T, status int, body string, received *atomic.Int32, seen *string) string {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received.Add(1)
+		if seen != nil {
+			raw, _ := io.ReadAll(r.Body)
+			*seen = string(raw)
+		}
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func anEnvelope(payload string) *topicv1.Envelope {
+	return &topicv1.Envelope{V: envelope.Version, Topic: "orders", Consumer: "email", Execution: "01K0000000000000000000000A-email", Payload: []byte(payload)}
+}
+
+func TestAnEnvelopeCarriesItsPayloadInlineAndByteForByte(t *testing.T) {
+	var received atomic.Int32
+	var seen string
+	url := answering(t, http.StatusOK, exactJSON, &received, &seen)
+
+	res := envelope.Post(context.Background(), context.Background(), url, anEnvelope(exactJSON))
+
+	if res.Outcome != envelope.Succeeded || string(res.Output) != exactJSON {
+		t.Fatalf("Post = %+v, want success with the worker's output %s unchanged", res, exactJSON)
+	}
+	if !strings.Contains(seen, `"payload":`+exactJSON) {
+		t.Errorf("the worker read %s, want the payload %s inline and unchanged", seen, exactJSON)
+	}
+}
+
+func TestAnEnvelopeThatCannotBeEncodedIsRefusedWithoutAnAttemptAtTheWorker(t *testing.T) {
+	var received atomic.Int32
+	url := answering(t, http.StatusOK, "", &received, nil)
+
+	res := envelope.Post(context.Background(), context.Background(), url, anEnvelope(`{`))
+
+	if res.Outcome != envelope.Refused || received.Load() != 0 {
+		t.Errorf("Post = %+v with %d envelopes at the worker, want a refusal that reaches no worker", res, received.Load())
+	}
+}
+
+func TestAWorkersAnswerIsReadAsSuccessAbortOrFailure(t *testing.T) {
+	abort, err := protojson.Marshal(&topicv1.Answer{Outcome: &topicv1.Answer_Abort{Abort: &topicv1.Abort{Reason: "no such image"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+		want   envelope.Outcome
+		reason string
+	}{
+		{"an abort", http.StatusUnprocessableEntity, string(abort), envelope.Aborted, "no such image"},
+		{"a failure", http.StatusInternalServerError, "boom", envelope.Failed, "boom"},
+		{"an output over 256 KiB", http.StatusOK, `"` + strings.Repeat("a", 256<<10) + `"`, envelope.Refused, "256 KiB"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var received atomic.Int32
+			res := envelope.Post(context.Background(), context.Background(), answering(t, tc.status, tc.body, &received, nil), anEnvelope(`{}`))
+			if res.Outcome != tc.want || !strings.Contains(res.Reason, tc.reason) {
+				t.Errorf("Post = %+v, want outcome %v naming %q", res, tc.want, tc.reason)
+			}
+		})
+	}
+}
+
+func TestAnAttemptPastItsMaxDurationTimesOut(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+	attempt, cancel := context.WithTimeoutCause(context.Background(), 50*time.Millisecond, envelope.ErrTimedOut)
+	defer cancel()
+
+	if res := envelope.Post(context.Background(), attempt, server.URL, anEnvelope(`{}`)); res.Outcome != envelope.TimedOut {
+		t.Errorf("Post past its maxDuration = %+v, want it timed out", res)
+	}
+}
