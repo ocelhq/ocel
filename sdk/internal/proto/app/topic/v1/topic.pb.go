@@ -536,6 +536,72 @@ func (x *Abort) GetReason() string {
 	return ""
 }
 
+type Answer struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Outcome:
+	//
+	//	*Answer_Abort
+	Outcome       isAnswer_Outcome `protobuf_oneof:"outcome"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Answer) Reset() {
+	*x = Answer{}
+	mi := &file_app_topic_v1_topic_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Answer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Answer) ProtoMessage() {}
+
+func (x *Answer) ProtoReflect() protoreflect.Message {
+	mi := &file_app_topic_v1_topic_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Answer.ProtoReflect.Descriptor instead.
+func (*Answer) Descriptor() ([]byte, []int) {
+	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *Answer) GetOutcome() isAnswer_Outcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return nil
+}
+
+func (x *Answer) GetAbort() *Abort {
+	if x != nil {
+		if x, ok := x.Outcome.(*Answer_Abort); ok {
+			return x.Abort
+		}
+	}
+	return nil
+}
+
+type isAnswer_Outcome interface {
+	isAnswer_Outcome()
+}
+
+type Answer_Abort struct {
+	Abort *Abort `protobuf:"bytes,1,opt,name=abort,proto3,oneof"`
+}
+
+func (*Answer_Abort) isAnswer_Outcome() {}
+
 type DeadLetter struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Execution     string                 `protobuf:"bytes,1,opt,name=execution,proto3" json:"execution,omitempty"`
@@ -550,7 +616,7 @@ type DeadLetter struct {
 
 func (x *DeadLetter) Reset() {
 	*x = DeadLetter{}
-	mi := &file_app_topic_v1_topic_proto_msgTypes[7]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -562,7 +628,7 @@ func (x *DeadLetter) String() string {
 func (*DeadLetter) ProtoMessage() {}
 
 func (x *DeadLetter) ProtoReflect() protoreflect.Message {
-	mi := &file_app_topic_v1_topic_proto_msgTypes[7]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -575,7 +641,7 @@ func (x *DeadLetter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeadLetter.ProtoReflect.Descriptor instead.
 func (*DeadLetter) Descriptor() ([]byte, []int) {
-	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{7}
+	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DeadLetter) GetExecution() string {
@@ -632,7 +698,7 @@ type ListDeadLettersRequest struct {
 
 func (x *ListDeadLettersRequest) Reset() {
 	*x = ListDeadLettersRequest{}
-	mi := &file_app_topic_v1_topic_proto_msgTypes[8]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -644,7 +710,7 @@ func (x *ListDeadLettersRequest) String() string {
 func (*ListDeadLettersRequest) ProtoMessage() {}
 
 func (x *ListDeadLettersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_topic_v1_topic_proto_msgTypes[8]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -657,7 +723,7 @@ func (x *ListDeadLettersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeadLettersRequest.ProtoReflect.Descriptor instead.
 func (*ListDeadLettersRequest) Descriptor() ([]byte, []int) {
-	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{8}
+	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListDeadLettersRequest) GetTopic() string {
@@ -698,7 +764,7 @@ type ListDeadLettersResponse struct {
 
 func (x *ListDeadLettersResponse) Reset() {
 	*x = ListDeadLettersResponse{}
-	mi := &file_app_topic_v1_topic_proto_msgTypes[9]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -710,7 +776,7 @@ func (x *ListDeadLettersResponse) String() string {
 func (*ListDeadLettersResponse) ProtoMessage() {}
 
 func (x *ListDeadLettersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_topic_v1_topic_proto_msgTypes[9]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -723,7 +789,7 @@ func (x *ListDeadLettersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeadLettersResponse.ProtoReflect.Descriptor instead.
 func (*ListDeadLettersResponse) Descriptor() ([]byte, []int) {
-	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{9}
+	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListDeadLettersResponse) GetDeadLetters() []*DeadLetter {
@@ -751,7 +817,7 @@ type RedriveDeadLettersRequest struct {
 
 func (x *RedriveDeadLettersRequest) Reset() {
 	*x = RedriveDeadLettersRequest{}
-	mi := &file_app_topic_v1_topic_proto_msgTypes[10]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -763,7 +829,7 @@ func (x *RedriveDeadLettersRequest) String() string {
 func (*RedriveDeadLettersRequest) ProtoMessage() {}
 
 func (x *RedriveDeadLettersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_topic_v1_topic_proto_msgTypes[10]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -776,7 +842,7 @@ func (x *RedriveDeadLettersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RedriveDeadLettersRequest.ProtoReflect.Descriptor instead.
 func (*RedriveDeadLettersRequest) Descriptor() ([]byte, []int) {
-	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{10}
+	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RedriveDeadLettersRequest) GetTopic() string {
@@ -809,7 +875,7 @@ type RedriveDeadLettersResponse struct {
 
 func (x *RedriveDeadLettersResponse) Reset() {
 	*x = RedriveDeadLettersResponse{}
-	mi := &file_app_topic_v1_topic_proto_msgTypes[11]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -821,7 +887,7 @@ func (x *RedriveDeadLettersResponse) String() string {
 func (*RedriveDeadLettersResponse) ProtoMessage() {}
 
 func (x *RedriveDeadLettersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_topic_v1_topic_proto_msgTypes[11]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -834,7 +900,7 @@ func (x *RedriveDeadLettersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RedriveDeadLettersResponse.ProtoReflect.Descriptor instead.
 func (*RedriveDeadLettersResponse) Descriptor() ([]byte, []int) {
-	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{11}
+	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RedriveDeadLettersResponse) GetRedriven() int64 {
@@ -855,7 +921,7 @@ type PurgeDeadLettersRequest struct {
 
 func (x *PurgeDeadLettersRequest) Reset() {
 	*x = PurgeDeadLettersRequest{}
-	mi := &file_app_topic_v1_topic_proto_msgTypes[12]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -867,7 +933,7 @@ func (x *PurgeDeadLettersRequest) String() string {
 func (*PurgeDeadLettersRequest) ProtoMessage() {}
 
 func (x *PurgeDeadLettersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_topic_v1_topic_proto_msgTypes[12]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -880,7 +946,7 @@ func (x *PurgeDeadLettersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeDeadLettersRequest.ProtoReflect.Descriptor instead.
 func (*PurgeDeadLettersRequest) Descriptor() ([]byte, []int) {
-	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{12}
+	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *PurgeDeadLettersRequest) GetTopic() string {
@@ -913,7 +979,7 @@ type PurgeDeadLettersResponse struct {
 
 func (x *PurgeDeadLettersResponse) Reset() {
 	*x = PurgeDeadLettersResponse{}
-	mi := &file_app_topic_v1_topic_proto_msgTypes[13]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -925,7 +991,7 @@ func (x *PurgeDeadLettersResponse) String() string {
 func (*PurgeDeadLettersResponse) ProtoMessage() {}
 
 func (x *PurgeDeadLettersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_topic_v1_topic_proto_msgTypes[13]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -938,7 +1004,7 @@ func (x *PurgeDeadLettersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeDeadLettersResponse.ProtoReflect.Descriptor instead.
 func (*PurgeDeadLettersResponse) Descriptor() ([]byte, []int) {
-	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{13}
+	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *PurgeDeadLettersResponse) GetPurged() int64 {
@@ -958,7 +1024,7 @@ type CountDeadLettersRequest struct {
 
 func (x *CountDeadLettersRequest) Reset() {
 	*x = CountDeadLettersRequest{}
-	mi := &file_app_topic_v1_topic_proto_msgTypes[14]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -970,7 +1036,7 @@ func (x *CountDeadLettersRequest) String() string {
 func (*CountDeadLettersRequest) ProtoMessage() {}
 
 func (x *CountDeadLettersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_topic_v1_topic_proto_msgTypes[14]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -983,7 +1049,7 @@ func (x *CountDeadLettersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountDeadLettersRequest.ProtoReflect.Descriptor instead.
 func (*CountDeadLettersRequest) Descriptor() ([]byte, []int) {
-	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{14}
+	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CountDeadLettersRequest) GetTopic() string {
@@ -1009,7 +1075,7 @@ type CountDeadLettersResponse struct {
 
 func (x *CountDeadLettersResponse) Reset() {
 	*x = CountDeadLettersResponse{}
-	mi := &file_app_topic_v1_topic_proto_msgTypes[15]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1021,7 +1087,7 @@ func (x *CountDeadLettersResponse) String() string {
 func (*CountDeadLettersResponse) ProtoMessage() {}
 
 func (x *CountDeadLettersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_topic_v1_topic_proto_msgTypes[15]
+	mi := &file_app_topic_v1_topic_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1034,7 +1100,7 @@ func (x *CountDeadLettersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountDeadLettersResponse.ProtoReflect.Descriptor instead.
 func (*CountDeadLettersResponse) Descriptor() ([]byte, []int) {
-	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{15}
+	return file_app_topic_v1_topic_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CountDeadLettersResponse) GetCount() int64 {
@@ -1083,7 +1149,10 @@ const file_app_topic_v1_topic_proto_rawDesc = "" +
 	"\apayload\x18\b \x01(\v2\x16.google.protobuf.ValueR\apayload\x12=\n" +
 	"\bmessages\x18\t \x03(\v2\x16.app.topic.v1.DeliveryB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\bmessages\"\x1f\n" +
 	"\x05Abort\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xf8\x01\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"@\n" +
+	"\x06Answer\x12+\n" +
+	"\x05abort\x18\x01 \x01(\v2\x13.app.topic.v1.AbortH\x00R\x05abortB\t\n" +
+	"\aoutcome\"\xf8\x01\n" +
 	"\n" +
 	"DeadLetter\x12\x1c\n" +
 	"\texecution\x18\x01 \x01(\tR\texecution\x12/\n" +
@@ -1148,7 +1217,7 @@ func file_app_topic_v1_topic_proto_rawDescGZIP() []byte {
 }
 
 var file_app_topic_v1_topic_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_app_topic_v1_topic_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_app_topic_v1_topic_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_app_topic_v1_topic_proto_goTypes = []any{
 	(Lane)(0),                          // 0: app.topic.v1.Lane
 	(*SendRequest)(nil),                // 1: app.topic.v1.SendRequest
@@ -1158,49 +1227,51 @@ var file_app_topic_v1_topic_proto_goTypes = []any{
 	(*Delivery)(nil),                   // 5: app.topic.v1.Delivery
 	(*Envelope)(nil),                   // 6: app.topic.v1.Envelope
 	(*Abort)(nil),                      // 7: app.topic.v1.Abort
-	(*DeadLetter)(nil),                 // 8: app.topic.v1.DeadLetter
-	(*ListDeadLettersRequest)(nil),     // 9: app.topic.v1.ListDeadLettersRequest
-	(*ListDeadLettersResponse)(nil),    // 10: app.topic.v1.ListDeadLettersResponse
-	(*RedriveDeadLettersRequest)(nil),  // 11: app.topic.v1.RedriveDeadLettersRequest
-	(*RedriveDeadLettersResponse)(nil), // 12: app.topic.v1.RedriveDeadLettersResponse
-	(*PurgeDeadLettersRequest)(nil),    // 13: app.topic.v1.PurgeDeadLettersRequest
-	(*PurgeDeadLettersResponse)(nil),   // 14: app.topic.v1.PurgeDeadLettersResponse
-	(*CountDeadLettersRequest)(nil),    // 15: app.topic.v1.CountDeadLettersRequest
-	(*CountDeadLettersResponse)(nil),   // 16: app.topic.v1.CountDeadLettersResponse
-	(*timestamppb.Timestamp)(nil),      // 17: google.protobuf.Timestamp
-	(*structpb.Value)(nil),             // 18: google.protobuf.Value
+	(*Answer)(nil),                     // 8: app.topic.v1.Answer
+	(*DeadLetter)(nil),                 // 9: app.topic.v1.DeadLetter
+	(*ListDeadLettersRequest)(nil),     // 10: app.topic.v1.ListDeadLettersRequest
+	(*ListDeadLettersResponse)(nil),    // 11: app.topic.v1.ListDeadLettersResponse
+	(*RedriveDeadLettersRequest)(nil),  // 12: app.topic.v1.RedriveDeadLettersRequest
+	(*RedriveDeadLettersResponse)(nil), // 13: app.topic.v1.RedriveDeadLettersResponse
+	(*PurgeDeadLettersRequest)(nil),    // 14: app.topic.v1.PurgeDeadLettersRequest
+	(*PurgeDeadLettersResponse)(nil),   // 15: app.topic.v1.PurgeDeadLettersResponse
+	(*CountDeadLettersRequest)(nil),    // 16: app.topic.v1.CountDeadLettersRequest
+	(*CountDeadLettersResponse)(nil),   // 17: app.topic.v1.CountDeadLettersResponse
+	(*timestamppb.Timestamp)(nil),      // 18: google.protobuf.Timestamp
+	(*structpb.Value)(nil),             // 19: google.protobuf.Value
 }
 var file_app_topic_v1_topic_proto_depIdxs = []int32{
-	17, // 0: app.topic.v1.SendRequest.due_at:type_name -> google.protobuf.Timestamp
+	18, // 0: app.topic.v1.SendRequest.due_at:type_name -> google.protobuf.Timestamp
 	0,  // 1: app.topic.v1.SendRequest.lane:type_name -> app.topic.v1.Lane
-	17, // 2: app.topic.v1.Message.published_at:type_name -> google.protobuf.Timestamp
-	17, // 3: app.topic.v1.Attempt.first_attempted_at:type_name -> google.protobuf.Timestamp
+	18, // 2: app.topic.v1.Message.published_at:type_name -> google.protobuf.Timestamp
+	18, // 3: app.topic.v1.Attempt.first_attempted_at:type_name -> google.protobuf.Timestamp
 	3,  // 4: app.topic.v1.Delivery.message:type_name -> app.topic.v1.Message
 	4,  // 5: app.topic.v1.Delivery.attempt:type_name -> app.topic.v1.Attempt
-	18, // 6: app.topic.v1.Delivery.payload:type_name -> google.protobuf.Value
+	19, // 6: app.topic.v1.Delivery.payload:type_name -> google.protobuf.Value
 	3,  // 7: app.topic.v1.Envelope.message:type_name -> app.topic.v1.Message
 	4,  // 8: app.topic.v1.Envelope.attempt:type_name -> app.topic.v1.Attempt
-	18, // 9: app.topic.v1.Envelope.payload:type_name -> google.protobuf.Value
+	19, // 9: app.topic.v1.Envelope.payload:type_name -> google.protobuf.Value
 	5,  // 10: app.topic.v1.Envelope.messages:type_name -> app.topic.v1.Delivery
-	3,  // 11: app.topic.v1.DeadLetter.message:type_name -> app.topic.v1.Message
-	18, // 12: app.topic.v1.DeadLetter.payload:type_name -> google.protobuf.Value
-	17, // 13: app.topic.v1.DeadLetter.failed_at:type_name -> google.protobuf.Timestamp
-	8,  // 14: app.topic.v1.ListDeadLettersResponse.dead_letters:type_name -> app.topic.v1.DeadLetter
-	1,  // 15: app.topic.v1.TopicService.Send:input_type -> app.topic.v1.SendRequest
-	9,  // 16: app.topic.v1.TopicService.ListDeadLetters:input_type -> app.topic.v1.ListDeadLettersRequest
-	11, // 17: app.topic.v1.TopicService.RedriveDeadLetters:input_type -> app.topic.v1.RedriveDeadLettersRequest
-	13, // 18: app.topic.v1.TopicService.PurgeDeadLetters:input_type -> app.topic.v1.PurgeDeadLettersRequest
-	15, // 19: app.topic.v1.TopicService.CountDeadLetters:input_type -> app.topic.v1.CountDeadLettersRequest
-	2,  // 20: app.topic.v1.TopicService.Send:output_type -> app.topic.v1.SendResponse
-	10, // 21: app.topic.v1.TopicService.ListDeadLetters:output_type -> app.topic.v1.ListDeadLettersResponse
-	12, // 22: app.topic.v1.TopicService.RedriveDeadLetters:output_type -> app.topic.v1.RedriveDeadLettersResponse
-	14, // 23: app.topic.v1.TopicService.PurgeDeadLetters:output_type -> app.topic.v1.PurgeDeadLettersResponse
-	16, // 24: app.topic.v1.TopicService.CountDeadLetters:output_type -> app.topic.v1.CountDeadLettersResponse
-	20, // [20:25] is the sub-list for method output_type
-	15, // [15:20] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	7,  // 11: app.topic.v1.Answer.abort:type_name -> app.topic.v1.Abort
+	3,  // 12: app.topic.v1.DeadLetter.message:type_name -> app.topic.v1.Message
+	19, // 13: app.topic.v1.DeadLetter.payload:type_name -> google.protobuf.Value
+	18, // 14: app.topic.v1.DeadLetter.failed_at:type_name -> google.protobuf.Timestamp
+	9,  // 15: app.topic.v1.ListDeadLettersResponse.dead_letters:type_name -> app.topic.v1.DeadLetter
+	1,  // 16: app.topic.v1.TopicService.Send:input_type -> app.topic.v1.SendRequest
+	10, // 17: app.topic.v1.TopicService.ListDeadLetters:input_type -> app.topic.v1.ListDeadLettersRequest
+	12, // 18: app.topic.v1.TopicService.RedriveDeadLetters:input_type -> app.topic.v1.RedriveDeadLettersRequest
+	14, // 19: app.topic.v1.TopicService.PurgeDeadLetters:input_type -> app.topic.v1.PurgeDeadLettersRequest
+	16, // 20: app.topic.v1.TopicService.CountDeadLetters:input_type -> app.topic.v1.CountDeadLettersRequest
+	2,  // 21: app.topic.v1.TopicService.Send:output_type -> app.topic.v1.SendResponse
+	11, // 22: app.topic.v1.TopicService.ListDeadLetters:output_type -> app.topic.v1.ListDeadLettersResponse
+	13, // 23: app.topic.v1.TopicService.RedriveDeadLetters:output_type -> app.topic.v1.RedriveDeadLettersResponse
+	15, // 24: app.topic.v1.TopicService.PurgeDeadLetters:output_type -> app.topic.v1.PurgeDeadLettersResponse
+	17, // 25: app.topic.v1.TopicService.CountDeadLetters:output_type -> app.topic.v1.CountDeadLettersResponse
+	21, // [21:26] is the sub-list for method output_type
+	16, // [16:21] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_app_topic_v1_topic_proto_init() }
@@ -1208,13 +1279,16 @@ func file_app_topic_v1_topic_proto_init() {
 	if File_app_topic_v1_topic_proto != nil {
 		return
 	}
+	file_app_topic_v1_topic_proto_msgTypes[7].OneofWrappers = []any{
+		(*Answer_Abort)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_topic_v1_topic_proto_rawDesc), len(file_app_topic_v1_topic_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

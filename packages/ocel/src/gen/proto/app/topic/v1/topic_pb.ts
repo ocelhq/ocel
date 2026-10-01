@@ -13,7 +13,7 @@ import type { Message as Message$1 } from "@bufbuild/protobuf";
  * Describes the file app/topic/v1/topic.proto.
  */
 export const file_app_topic_v1_topic: GenFile = /*@__PURE__*/
-  fileDesc("ChhhcHAvdG9waWMvdjEvdG9waWMucHJvdG8SDGFwcC50b3BpYy52MSLPAgoLU2VuZFJlcXVlc3QSMAoFdG9waWMYASABKAlCIbpIHnIcGD8yGF5bYS16MC05XSsoLVthLXowLTldKykqJBIaCgdwYXlsb2FkGAIgASgMQgm6SAZ6BBiAgBASnwEKBmR1ZV9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCc7pIcLoBbQoSdG9waWNzLnNlbmQuZHVlX2F0EjdhIG1lc3NhZ2UgaXMgZGVsaXZlcmVkIGF0IG1vc3QgMzAgZGF5cyBhZnRlciBpdCBpcyBzZW50Gh50aGlzIDw9IG5vdyArIGR1cmF0aW9uKCc3MjBoJykSFwoPaWRlbXBvdGVuY3lfa2V5GAQgASgJEgsKA2tleRgFIAEoCRIqCgRsYW5lGAYgASgOMhIuYXBwLnRvcGljLnYxLkxhbmVCCLpIBYIBAhABIiIKDFNlbmRSZXNwb25zZRISCgptZXNzYWdlX2lkGAEgASgJImgKB01lc3NhZ2USKwoCaWQYASABKAlCH7pIHHIaMhheWzAtOUEtSEpLTU5QLVRWLVpdezI2fSQSMAoMcHVibGlzaGVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJxCgdBdHRlbXB0EhcKBm51bWJlchgBIAEoBUIHukgEGgIoARIVCgJvZhgCIAEoBUIJukgGGgQYZCgBEjYKEmZpcnN0X2F0dGVtcHRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAilgEKCERlbGl2ZXJ5EhEKCWV4ZWN1dGlvbhgBIAEoCRImCgdtZXNzYWdlGAIgASgLMhUuYXBwLnRvcGljLnYxLk1lc3NhZ2USJgoHYXR0ZW1wdBgDIAEoCzIVLmFwcC50b3BpYy52MS5BdHRlbXB0EicKB3BheWxvYWQYBCABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWUi8wIKCEVudmVsb3BlEhIKAXYYASABKAVCB7pIBBoCCAESLgoFdG9waWMYAiABKAlCH7pIHHIaMhheW2EtejAtOV0rKC1bYS16MC05XSspKiQSMQoIY29uc3VtZXIYAyABKAlCH7pIHHIaMhheW2EtejAtOV0rKC1bYS16MC05XSspKiQSEQoJZXhlY3V0aW9uGAQgASgJEiYKB21lc3NhZ2UYBSABKAsyFS5hcHAudG9waWMudjEuTWVzc2FnZRImCgdhdHRlbXB0GAYgASgLMhUuYXBwLnRvcGljLnYxLkF0dGVtcHQSLwoGc2NoZW1hGAcgASgJQh+6SBzYAQFyFzIVXnNoYTI1Ni1bMC05YS1mXXs2NH0kEicKB3BheWxvYWQYCCABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWUSMwoIbWVzc2FnZXMYCSADKAsyFi5hcHAudG9waWMudjEuRGVsaXZlcnlCCbpIBpIBAxDoByIXCgVBYm9ydBIOCgZyZWFzb24YASABKAkiwAEKCkRlYWRMZXR0ZXISEQoJZXhlY3V0aW9uGAEgASgJEiYKB21lc3NhZ2UYAiABKAsyFS5hcHAudG9waWMudjEuTWVzc2FnZRInCgdwYXlsb2FkGAMgASgLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlEhAKCGF0dGVtcHRzGAQgASgFEg0KBWVycm9yGAUgASgJEi0KCWZhaWxlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAidgoWTGlzdERlYWRMZXR0ZXJzUmVxdWVzdBIWCgV0b3BpYxgBIAEoCUIHukgEcgIQARIZCghjb25zdW1lchgCIAEoCUIHukgEcgIQARIOCgZjdXJzb3IYAyABKAkSGQoFbGltaXQYBCABKAVCCrpIBxoFGOgHKAAiXgoXTGlzdERlYWRMZXR0ZXJzUmVzcG9uc2USLgoMZGVhZF9sZXR0ZXJzGAEgAygLMhguYXBwLnRvcGljLnYxLkRlYWRMZXR0ZXISEwoLbmV4dF9jdXJzb3IYAiABKAkibQoZUmVkcml2ZURlYWRMZXR0ZXJzUmVxdWVzdBIWCgV0b3BpYxgBIAEoCUIHukgEcgIQARIZCghjb25zdW1lchgCIAEoCUIHukgEcgIQARIdCgpleGVjdXRpb25zGAMgAygJQgm6SAaSAQMQ6AciLgoaUmVkcml2ZURlYWRMZXR0ZXJzUmVzcG9uc2USEAoIcmVkcml2ZW4YASABKAMiawoXUHVyZ2VEZWFkTGV0dGVyc1JlcXVlc3QSFgoFdG9waWMYASABKAlCB7pIBHICEAESGQoIY29uc3VtZXIYAiABKAlCB7pIBHICEAESHQoKZXhlY3V0aW9ucxgDIAMoCUIJukgGkgEDEOgHIioKGFB1cmdlRGVhZExldHRlcnNSZXNwb25zZRIOCgZwdXJnZWQYASABKAMiTAoXQ291bnREZWFkTGV0dGVyc1JlcXVlc3QSFgoFdG9waWMYASABKAlCB7pIBHICEAESGQoIY29uc3VtZXIYAiABKAlCB7pIBHICEAEiKQoYQ291bnREZWFkTGV0dGVyc1Jlc3BvbnNlEg0KBWNvdW50GAEgASgDKksKBExhbmUSFAoQTEFORV9VTlNQRUNJRklFRBAAEg0KCUxBTkVfSElHSBABEhAKDExBTkVfREVGQVVMVBACEgwKCExBTkVfTE9XEAMy3AMKDFRvcGljU2VydmljZRI9CgRTZW5kEhkuYXBwLnRvcGljLnYxLlNlbmRSZXF1ZXN0GhouYXBwLnRvcGljLnYxLlNlbmRSZXNwb25zZRJeCg9MaXN0RGVhZExldHRlcnMSJC5hcHAudG9waWMudjEuTGlzdERlYWRMZXR0ZXJzUmVxdWVzdBolLmFwcC50b3BpYy52MS5MaXN0RGVhZExldHRlcnNSZXNwb25zZRJnChJSZWRyaXZlRGVhZExldHRlcnMSJy5hcHAudG9waWMudjEuUmVkcml2ZURlYWRMZXR0ZXJzUmVxdWVzdBooLmFwcC50b3BpYy52MS5SZWRyaXZlRGVhZExldHRlcnNSZXNwb25zZRJhChBQdXJnZURlYWRMZXR0ZXJzEiUuYXBwLnRvcGljLnYxLlB1cmdlRGVhZExldHRlcnNSZXF1ZXN0GiYuYXBwLnRvcGljLnYxLlB1cmdlRGVhZExldHRlcnNSZXNwb25zZRJhChBDb3VudERlYWRMZXR0ZXJzEiUuYXBwLnRvcGljLnYxLkNvdW50RGVhZExldHRlcnNSZXF1ZXN0GiYuYXBwLnRvcGljLnYxLkNvdW50RGVhZExldHRlcnNSZXNwb25zZUI3WjVnaXRodWIuY29tL29jZWxocS9vY2VsL3BrZy9wcm90by9hcHAvdG9waWMvdjE7dG9waWN2MWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("ChhhcHAvdG9waWMvdjEvdG9waWMucHJvdG8SDGFwcC50b3BpYy52MSLPAgoLU2VuZFJlcXVlc3QSMAoFdG9waWMYASABKAlCIbpIHnIcGD8yGF5bYS16MC05XSsoLVthLXowLTldKykqJBIaCgdwYXlsb2FkGAIgASgMQgm6SAZ6BBiAgBASnwEKBmR1ZV9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCc7pIcLoBbQoSdG9waWNzLnNlbmQuZHVlX2F0EjdhIG1lc3NhZ2UgaXMgZGVsaXZlcmVkIGF0IG1vc3QgMzAgZGF5cyBhZnRlciBpdCBpcyBzZW50Gh50aGlzIDw9IG5vdyArIGR1cmF0aW9uKCc3MjBoJykSFwoPaWRlbXBvdGVuY3lfa2V5GAQgASgJEgsKA2tleRgFIAEoCRIqCgRsYW5lGAYgASgOMhIuYXBwLnRvcGljLnYxLkxhbmVCCLpIBYIBAhABIiIKDFNlbmRSZXNwb25zZRISCgptZXNzYWdlX2lkGAEgASgJImgKB01lc3NhZ2USKwoCaWQYASABKAlCH7pIHHIaMhheWzAtOUEtSEpLTU5QLVRWLVpdezI2fSQSMAoMcHVibGlzaGVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJxCgdBdHRlbXB0EhcKBm51bWJlchgBIAEoBUIHukgEGgIoARIVCgJvZhgCIAEoBUIJukgGGgQYZCgBEjYKEmZpcnN0X2F0dGVtcHRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAilgEKCERlbGl2ZXJ5EhEKCWV4ZWN1dGlvbhgBIAEoCRImCgdtZXNzYWdlGAIgASgLMhUuYXBwLnRvcGljLnYxLk1lc3NhZ2USJgoHYXR0ZW1wdBgDIAEoCzIVLmFwcC50b3BpYy52MS5BdHRlbXB0EicKB3BheWxvYWQYBCABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWUi8wIKCEVudmVsb3BlEhIKAXYYASABKAVCB7pIBBoCCAESLgoFdG9waWMYAiABKAlCH7pIHHIaMhheW2EtejAtOV0rKC1bYS16MC05XSspKiQSMQoIY29uc3VtZXIYAyABKAlCH7pIHHIaMhheW2EtejAtOV0rKC1bYS16MC05XSspKiQSEQoJZXhlY3V0aW9uGAQgASgJEiYKB21lc3NhZ2UYBSABKAsyFS5hcHAudG9waWMudjEuTWVzc2FnZRImCgdhdHRlbXB0GAYgASgLMhUuYXBwLnRvcGljLnYxLkF0dGVtcHQSLwoGc2NoZW1hGAcgASgJQh+6SBzYAQFyFzIVXnNoYTI1Ni1bMC05YS1mXXs2NH0kEicKB3BheWxvYWQYCCABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWUSMwoIbWVzc2FnZXMYCSADKAsyFi5hcHAudG9waWMudjEuRGVsaXZlcnlCCbpIBpIBAxDoByIXCgVBYm9ydBIOCgZyZWFzb24YASABKAkiOQoGQW5zd2VyEiQKBWFib3J0GAEgASgLMhMuYXBwLnRvcGljLnYxLkFib3J0SABCCQoHb3V0Y29tZSLAAQoKRGVhZExldHRlchIRCglleGVjdXRpb24YASABKAkSJgoHbWVzc2FnZRgCIAEoCzIVLmFwcC50b3BpYy52MS5NZXNzYWdlEicKB3BheWxvYWQYAyABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWUSEAoIYXR0ZW1wdHMYBCABKAUSDQoFZXJyb3IYBSABKAkSLQoJZmFpbGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJ2ChZMaXN0RGVhZExldHRlcnNSZXF1ZXN0EhYKBXRvcGljGAEgASgJQge6SARyAhABEhkKCGNvbnN1bWVyGAIgASgJQge6SARyAhABEg4KBmN1cnNvchgDIAEoCRIZCgVsaW1pdBgEIAEoBUIKukgHGgUY6AcoACJeChdMaXN0RGVhZExldHRlcnNSZXNwb25zZRIuCgxkZWFkX2xldHRlcnMYASADKAsyGC5hcHAudG9waWMudjEuRGVhZExldHRlchITCgtuZXh0X2N1cnNvchgCIAEoCSJtChlSZWRyaXZlRGVhZExldHRlcnNSZXF1ZXN0EhYKBXRvcGljGAEgASgJQge6SARyAhABEhkKCGNvbnN1bWVyGAIgASgJQge6SARyAhABEh0KCmV4ZWN1dGlvbnMYAyADKAlCCbpIBpIBAxDoByIuChpSZWRyaXZlRGVhZExldHRlcnNSZXNwb25zZRIQCghyZWRyaXZlbhgBIAEoAyJrChdQdXJnZURlYWRMZXR0ZXJzUmVxdWVzdBIWCgV0b3BpYxgBIAEoCUIHukgEcgIQARIZCghjb25zdW1lchgCIAEoCUIHukgEcgIQARIdCgpleGVjdXRpb25zGAMgAygJQgm6SAaSAQMQ6AciKgoYUHVyZ2VEZWFkTGV0dGVyc1Jlc3BvbnNlEg4KBnB1cmdlZBgBIAEoAyJMChdDb3VudERlYWRMZXR0ZXJzUmVxdWVzdBIWCgV0b3BpYxgBIAEoCUIHukgEcgIQARIZCghjb25zdW1lchgCIAEoCUIHukgEcgIQASIpChhDb3VudERlYWRMZXR0ZXJzUmVzcG9uc2USDQoFY291bnQYASABKAMqSwoETGFuZRIUChBMQU5FX1VOU1BFQ0lGSUVEEAASDQoJTEFORV9ISUdIEAESEAoMTEFORV9ERUZBVUxUEAISDAoITEFORV9MT1cQAzLcAwoMVG9waWNTZXJ2aWNlEj0KBFNlbmQSGS5hcHAudG9waWMudjEuU2VuZFJlcXVlc3QaGi5hcHAudG9waWMudjEuU2VuZFJlc3BvbnNlEl4KD0xpc3REZWFkTGV0dGVycxIkLmFwcC50b3BpYy52MS5MaXN0RGVhZExldHRlcnNSZXF1ZXN0GiUuYXBwLnRvcGljLnYxLkxpc3REZWFkTGV0dGVyc1Jlc3BvbnNlEmcKElJlZHJpdmVEZWFkTGV0dGVycxInLmFwcC50b3BpYy52MS5SZWRyaXZlRGVhZExldHRlcnNSZXF1ZXN0GiguYXBwLnRvcGljLnYxLlJlZHJpdmVEZWFkTGV0dGVyc1Jlc3BvbnNlEmEKEFB1cmdlRGVhZExldHRlcnMSJS5hcHAudG9waWMudjEuUHVyZ2VEZWFkTGV0dGVyc1JlcXVlc3QaJi5hcHAudG9waWMudjEuUHVyZ2VEZWFkTGV0dGVyc1Jlc3BvbnNlEmEKEENvdW50RGVhZExldHRlcnMSJS5hcHAudG9waWMudjEuQ291bnREZWFkTGV0dGVyc1JlcXVlc3QaJi5hcHAudG9waWMudjEuQ291bnREZWFkTGV0dGVyc1Jlc3BvbnNlQjdaNWdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2FwcC90b3BpYy92MTt0b3BpY3YxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message app.topic.v1.SendRequest
@@ -230,6 +230,29 @@ export const AbortSchema: GenMessage<Abort> = /*@__PURE__*/
   messageDesc(file_app_topic_v1_topic, 6);
 
 /**
+ * @generated from message app.topic.v1.Answer
+ */
+export type Answer = Message$1<"app.topic.v1.Answer"> & {
+  /**
+   * @generated from oneof app.topic.v1.Answer.outcome
+   */
+  outcome: {
+    /**
+     * @generated from field: app.topic.v1.Abort abort = 1;
+     */
+    value: Abort;
+    case: "abort";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message app.topic.v1.Answer.
+ * Use `create(AnswerSchema)` to create a new message.
+ */
+export const AnswerSchema: GenMessage<Answer> = /*@__PURE__*/
+  messageDesc(file_app_topic_v1_topic, 7);
+
+/**
  * @generated from message app.topic.v1.DeadLetter
  */
 export type DeadLetter = Message$1<"app.topic.v1.DeadLetter"> & {
@@ -269,7 +292,7 @@ export type DeadLetter = Message$1<"app.topic.v1.DeadLetter"> & {
  * Use `create(DeadLetterSchema)` to create a new message.
  */
 export const DeadLetterSchema: GenMessage<DeadLetter> = /*@__PURE__*/
-  messageDesc(file_app_topic_v1_topic, 7);
+  messageDesc(file_app_topic_v1_topic, 8);
 
 /**
  * @generated from message app.topic.v1.ListDeadLettersRequest
@@ -301,7 +324,7 @@ export type ListDeadLettersRequest = Message$1<"app.topic.v1.ListDeadLettersRequ
  * Use `create(ListDeadLettersRequestSchema)` to create a new message.
  */
 export const ListDeadLettersRequestSchema: GenMessage<ListDeadLettersRequest> = /*@__PURE__*/
-  messageDesc(file_app_topic_v1_topic, 8);
+  messageDesc(file_app_topic_v1_topic, 9);
 
 /**
  * @generated from message app.topic.v1.ListDeadLettersResponse
@@ -323,7 +346,7 @@ export type ListDeadLettersResponse = Message$1<"app.topic.v1.ListDeadLettersRes
  * Use `create(ListDeadLettersResponseSchema)` to create a new message.
  */
 export const ListDeadLettersResponseSchema: GenMessage<ListDeadLettersResponse> = /*@__PURE__*/
-  messageDesc(file_app_topic_v1_topic, 9);
+  messageDesc(file_app_topic_v1_topic, 10);
 
 /**
  * @generated from message app.topic.v1.RedriveDeadLettersRequest
@@ -350,7 +373,7 @@ export type RedriveDeadLettersRequest = Message$1<"app.topic.v1.RedriveDeadLette
  * Use `create(RedriveDeadLettersRequestSchema)` to create a new message.
  */
 export const RedriveDeadLettersRequestSchema: GenMessage<RedriveDeadLettersRequest> = /*@__PURE__*/
-  messageDesc(file_app_topic_v1_topic, 10);
+  messageDesc(file_app_topic_v1_topic, 11);
 
 /**
  * @generated from message app.topic.v1.RedriveDeadLettersResponse
@@ -367,7 +390,7 @@ export type RedriveDeadLettersResponse = Message$1<"app.topic.v1.RedriveDeadLett
  * Use `create(RedriveDeadLettersResponseSchema)` to create a new message.
  */
 export const RedriveDeadLettersResponseSchema: GenMessage<RedriveDeadLettersResponse> = /*@__PURE__*/
-  messageDesc(file_app_topic_v1_topic, 11);
+  messageDesc(file_app_topic_v1_topic, 12);
 
 /**
  * @generated from message app.topic.v1.PurgeDeadLettersRequest
@@ -394,7 +417,7 @@ export type PurgeDeadLettersRequest = Message$1<"app.topic.v1.PurgeDeadLettersRe
  * Use `create(PurgeDeadLettersRequestSchema)` to create a new message.
  */
 export const PurgeDeadLettersRequestSchema: GenMessage<PurgeDeadLettersRequest> = /*@__PURE__*/
-  messageDesc(file_app_topic_v1_topic, 12);
+  messageDesc(file_app_topic_v1_topic, 13);
 
 /**
  * @generated from message app.topic.v1.PurgeDeadLettersResponse
@@ -411,7 +434,7 @@ export type PurgeDeadLettersResponse = Message$1<"app.topic.v1.PurgeDeadLettersR
  * Use `create(PurgeDeadLettersResponseSchema)` to create a new message.
  */
 export const PurgeDeadLettersResponseSchema: GenMessage<PurgeDeadLettersResponse> = /*@__PURE__*/
-  messageDesc(file_app_topic_v1_topic, 13);
+  messageDesc(file_app_topic_v1_topic, 14);
 
 /**
  * @generated from message app.topic.v1.CountDeadLettersRequest
@@ -433,7 +456,7 @@ export type CountDeadLettersRequest = Message$1<"app.topic.v1.CountDeadLettersRe
  * Use `create(CountDeadLettersRequestSchema)` to create a new message.
  */
 export const CountDeadLettersRequestSchema: GenMessage<CountDeadLettersRequest> = /*@__PURE__*/
-  messageDesc(file_app_topic_v1_topic, 14);
+  messageDesc(file_app_topic_v1_topic, 15);
 
 /**
  * @generated from message app.topic.v1.CountDeadLettersResponse
@@ -450,7 +473,7 @@ export type CountDeadLettersResponse = Message$1<"app.topic.v1.CountDeadLettersR
  * Use `create(CountDeadLettersResponseSchema)` to create a new message.
  */
 export const CountDeadLettersResponseSchema: GenMessage<CountDeadLettersResponse> = /*@__PURE__*/
-  messageDesc(file_app_topic_v1_topic, 15);
+  messageDesc(file_app_topic_v1_topic, 16);
 
 /**
  * @generated from enum app.topic.v1.Lane
