@@ -25,7 +25,7 @@ const SETTLED_WITHIN_MS = 15_000;
 const MAX_OPERATIONS = 50;
 const MAX_SUBSCRIPTIONS = 200;
 const MAX_EVENT_BYTES = 240 * 1024;
-const ELSEWHERE = "https://elsewhere.example";
+const FOREIGN_ORIGIN = "https://elsewhere.example";
 
 type Operation = {
   op: "subscribe" | "publish";
@@ -36,7 +36,7 @@ type Operation = {
 
 type Batch = { connect?: boolean; ops: Operation[] };
 
-type Answer = {
+type HandlerAnswer = {
   transport: string;
   url: string;
   host?: string;
@@ -69,10 +69,14 @@ function postBatch(ctx: CheckContext, batch: unknown, headers: Record<string, st
   });
 }
 
-async function requestBatch(ctx: CheckContext, batch: Batch, caller?: Caller): Promise<Answer> {
+async function requestBatch(
+  ctx: CheckContext,
+  batch: Batch,
+  caller?: Caller,
+): Promise<HandlerAnswer> {
   const sent = await postBatch(ctx, batch, caller ? { authorization: encodeBearer(caller) } : {});
   assert.equal(sent.res.status, 200, `the realtime handler answered ${sent.text}`);
-  return sent.body as Answer;
+  return sent.body as HandlerAnswer;
 }
 
 function buildSubscribe(pattern: string, params: Record<string, string> = {}): Operation {
@@ -107,23 +111,23 @@ async function assertPublishedFromServer(
   assert.equal(published.status, 204, `the server publish answered ${JSON.stringify(published)}`);
 }
 
-function readGrant(answer: Answer, i: number): { wire: string; token: string } {
+function readGrant(answer: HandlerAnswer, i: number): { wire: string; token: string } {
   const grant = answer.grants.find((one) => one.i === i);
   assert.ok(grant?.token, `op ${i} was not granted a token: ${JSON.stringify(answer)}`);
   return { wire: grant.wire, token: grant.token };
 }
 
-function readConnectToken(answer: Answer): string {
+function readConnectToken(answer: HandlerAnswer): string {
   assert.ok(answer.connect, `the handler minted no connect token: ${JSON.stringify(answer)}`);
   return answer.connect.token;
 }
 
-function connect(answer: Answer): Promise<EventSocket> {
+function openEventSocket(answer: HandlerAnswer): Promise<EventSocket> {
   return EventSocket.open(answer.url, answer.host, readConnectToken(answer));
 }
 
-async function runWithSocket(answer: Answer, use: (socket: EventSocket) => Promise<void>) {
-  const socket = await connect(answer);
+async function runWithSocket(answer: HandlerAnswer, use: (socket: EventSocket) => Promise<void>) {
+  const socket = await openEventSocket(answer);
   try {
     await use(socket);
   } finally {
@@ -140,7 +144,7 @@ async function assertSilent(socket: EventSocket, id: string, what: string): Prom
   );
 }
 
-function assertDenied(answer: Answer, expected: Record<number, string>): void {
+function assertDenied(answer: HandlerAnswer, expected: Record<number, string>): void {
   assert.deepEqual(
     Object.fromEntries(answer.denied.map(({ i, code }) => [i, code])),
     expected,
@@ -306,7 +310,7 @@ async function readRefusal(attempt: Promise<unknown>): Promise<string | undefine
   }
 }
 
-async function requestVectorGrants(ctx: CheckContext): Promise<Answer> {
+async function requestVectorGrants(ctx: CheckContext): Promise<HandlerAnswer> {
   const { expect } = readTokenVectors().tokens;
   const orderId = expect.ch.split("/").at(-1) ?? "";
   const answer = await requestBatch(
@@ -326,9 +330,9 @@ function signUnchanged(ctx: CheckContext, live: DecodedToken): Promise<string> {
   return signToken(ctx, "the live token re-signed", { ...live, signedBy: "binding" });
 }
 
-function describeAccepted(forgery: Forgery, refusal: string | undefined): string[] {
-  if (refusal === "UnauthorizedException") return [];
-  return [`${forgery.name} (${forgery.reason}): ${refusal ?? "accepted"}`];
+function describeAccepted(forgery: Forgery, refusal: string | undefined): string | undefined {
+  if (refusal === "UnauthorizedException") return undefined;
+  return `${forgery.name} (${forgery.reason}): ${refusal ?? "accepted"}`;
 }
 
 export const realtimeConnectTokenVectorsCheck: Check = {
@@ -350,9 +354,11 @@ export const realtimeConnectTokenVectorsCheck: Check = {
     );
     const wrong: string[] = [];
     for (const forgery of forgeRefusedCases(readTokenVectors(), live)) {
-      wrong.push(
-        ...describeAccepted(forgery, await open(await signForgery(ctx, forgery, serverSecond))),
+      const accepted = describeAccepted(
+        forgery,
+        await open(await signForgery(ctx, forgery, serverSecond)),
       );
+      if (accepted) wrong.push(accepted);
     }
     assert.deepEqual(wrong, [], "the transport did not refuse a bad connect token as unauthorized");
   },
@@ -371,12 +377,11 @@ export const realtimeSubscribeTokenVectorsCheck: Check = {
       const wrong: string[] = [];
       for (const [n, forgery] of forgeRefusedCases(readTokenVectors(), live).entries()) {
         const token = await signForgery(ctx, forgery, serverSecond);
-        wrong.push(
-          ...describeAccepted(
-            forgery,
-            await readRefusal(socket.subscribe(`bad-${n}`, grant.wire, token)),
-          ),
+        const accepted = describeAccepted(
+          forgery,
+          await readRefusal(socket.subscribe(`bad-${n}`, grant.wire, token)),
         );
+        if (accepted) wrong.push(accepted);
       }
       assert.deepEqual(
         wrong,
@@ -570,7 +575,7 @@ export const realtimeHandlerDefaultsCheck: Check = {
         headers: { "content-type": "text/plain" },
         body: JSON.stringify(batch),
       }),
-      elsewhere: await postBatch(ctx, batch, { origin: ELSEWHERE }),
+      elsewhere: await postBatch(ctx, batch, { origin: FOREIGN_ORIGIN }),
       own: await postBatch(ctx, batch, { origin: own }),
       noOrigin: await postBatch(ctx, batch),
       malformed: await json(ctx, HANDLER_PATH, {
@@ -594,7 +599,7 @@ export const realtimeHandlerDefaultsCheck: Check = {
     }
     const preflight = await ctx.fetch(`${ctx.baseUrl}${HANDLER_PATH}`, {
       method: "OPTIONS",
-      headers: { origin: ELSEWHERE, "access-control-request-method": "POST" },
+      headers: { origin: FOREIGN_ORIGIN, "access-control-request-method": "POST" },
     });
     assert.equal(preflight.headers.get("access-control-allow-origin"), null);
     assert.notEqual(
@@ -624,7 +629,7 @@ export const realtimeSubscriptionLimitCheck: Check = {
   run: async (ctx) => {
     const rooms = Array.from({ length: MAX_SUBSCRIPTIONS + 1 }, () => newId("r"));
     const grants: { wire: string; token: string }[] = [];
-    let first: Answer | undefined;
+    let first: HandlerAnswer | undefined;
     for (let at = 0; at < rooms.length; at += MAX_OPERATIONS) {
       const answer = await requestBatch(
         ctx,
@@ -640,7 +645,7 @@ export const realtimeSubscriptionLimitCheck: Check = {
       grants.push(...answer.grants.map((grant) => readGrant(answer, grant.i)));
     }
     assert.equal(grants.length, rooms.length);
-    await runWithSocket(first as Answer, async (socket) => {
+    await runWithSocket(first as HandlerAnswer, async (socket) => {
       for (const [n, grant] of grants.slice(0, MAX_SUBSCRIPTIONS).entries()) {
         await socket.subscribe(`room-${n}`, grant.wire, grant.token);
       }
