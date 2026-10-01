@@ -4,15 +4,18 @@ import { migrates, setsEnv, setsPasswordReportNonce, setsSecret } from "../../ch
 import { INITIAL_GREETING, PASSWORD_REPORT_NONCE_ENV, SECRET_TOKEN } from "../../checks/context";
 import { appHostname } from "../../identity";
 import type { Lane, Phase } from "../../matrix/types";
-import { configTree, runOcel, treeRoot, workTree } from "../../ocel";
+import { sanitize } from "../../naming";
+import { configTree, type Ran, recordOutput, runOcel, treeRoot, workTree } from "../../ocel";
 import type { PrepareFailures } from "../../prepare";
 import type { CellUnderTest } from "../../run/cellRun";
 import { migrateCommand } from "../../workspace";
-import type { Deployment, ReleaseCycle, Target } from "../types";
+import type { Deployment, Exposure, ReleaseCycle, Restart, Target } from "../types";
 import { AwsBootstrap } from "./bootstrap";
 import { AwsDispatch } from "./dispatch";
+import { exposedOf, failOver, persistedGroups, taggedGroups } from "./kv";
 import { ocelEnvIn } from "./namespace";
 import { awaitServing } from "./serving";
+import { cliAt } from "./store";
 import { AwsSweeper } from "./sweeper";
 import { awsWorld } from "./world";
 
@@ -20,6 +23,9 @@ const FUNCTION_URL_BODY_BYTES = 4_500_000;
 
 const SERVING_TIMEOUT_MS = 900_000;
 const SERVING_INTERVAL_MS = 5_000;
+
+const FAILOVER_TIMEOUT_MS = 1_200_000;
+const FAILOVER_INTERVAL_MS = 15_000;
 
 async function cellTree(cell: CellUnderTest): Promise<string> {
   const dir = configTree(cell, "aws");
@@ -31,7 +37,7 @@ async function cellTree(cell: CellUnderTest): Promise<string> {
   }
 }
 
-export class AwsTarget implements Target, ReleaseCycle {
+export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
   readonly name = "aws";
   readonly workers = 3;
   readonly maxRequestBodyBytes = FUNCTION_URL_BODY_BYTES;
@@ -41,6 +47,7 @@ export class AwsTarget implements Target, ReleaseCycle {
   private readonly bootstrap = new AwsBootstrap(this.world);
   private readonly dispatch = new AwsDispatch(this.world);
   readonly sweeper = new AwsSweeper(this.world);
+  private readonly said = new Map<string, string[]>();
 
   detectLane(): Promise<Lane> {
     return this.world.lane();
@@ -61,7 +68,7 @@ export class AwsTarget implements Target, ReleaseCycle {
     await this.bootstrap.bootstrapCell(cell, dir);
 
     if (setsEnv(cell.fixture.checks)) {
-      await runOcel(
+      await this.run(
         cell,
         dir,
         "deploy",
@@ -71,7 +78,7 @@ export class AwsTarget implements Target, ReleaseCycle {
       );
     }
     if (setsSecret(cell.fixture.checks)) {
-      await runOcel(
+      await this.run(
         cell,
         dir,
         "deploy",
@@ -81,7 +88,7 @@ export class AwsTarget implements Target, ReleaseCycle {
       );
     }
     if (setsPasswordReportNonce(cell.fixture.checks)) {
-      await runOcel(
+      await this.run(
         cell,
         dir,
         "deploy",
@@ -90,14 +97,14 @@ export class AwsTarget implements Target, ReleaseCycle {
         env,
       );
     }
-    await runOcel(cell, dir, "deploy", "deploy", ["deploy", "--yes"], env);
-    await runOcel(cell, dir, "deploy", "domain-add", ["domain", "add"], env);
+    await this.run(cell, dir, "deploy", "deploy", ["deploy", "--yes"], env);
+    await this.run(cell, dir, "deploy", "domain-add", ["domain", "add"], env);
 
     const deployed = await this.deployment(cell);
     await this.awaitEdge(cell, "deploy", deployed);
 
     if (migrates(cell.fixture.checks)) {
-      await runOcel(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
+      await this.run(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
     }
 
     await cell.evidence.write(
@@ -120,7 +127,7 @@ export class AwsTarget implements Target, ReleaseCycle {
     const dir = await cellTree(cell);
     const env = ocelEnvIn(dir, await this.bootstrap.namespaceOf(cell));
     if (setsEnv(cell.fixture.checks)) {
-      await runOcel(
+      await this.run(
         cell,
         dir,
         "redeploy",
@@ -129,7 +136,7 @@ export class AwsTarget implements Target, ReleaseCycle {
         env,
       );
     }
-    await runOcel(cell, dir, "redeploy", "deploy", ["deploy", "--yes"], env);
+    await this.run(cell, dir, "redeploy", "deploy", ["deploy", "--yes"], env);
     const deployed = await this.deployment(cell);
     await this.awaitEdge(cell, "redeploy", deployed);
     return deployed;
@@ -138,7 +145,7 @@ export class AwsTarget implements Target, ReleaseCycle {
   async rollback(cell: CellUnderTest): Promise<Deployment> {
     const dir = await cellTree(cell);
     const env = ocelEnvIn(dir, await this.bootstrap.namespaceOf(cell));
-    await runOcel(cell, dir, "rollback", "rollback", ["rollback"], env);
+    await this.run(cell, dir, "rollback", "rollback", ["rollback"], env);
     const deployed = await this.deployment(cell);
     await this.awaitEdge(cell, "rollback", deployed);
     return deployed;
@@ -154,12 +161,12 @@ export class AwsTarget implements Target, ReleaseCycle {
       const env = ocelEnvIn(dir, namespace);
       for (const [app, host] of hosts) {
         try {
-          await runOcel(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
+          await this.run(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
         } catch (error) {
           unbound.push(error instanceof Error ? error.message : String(error));
         }
       }
-      await runOcel(cell, dir, "destroy", "destroy", ["destroy", "production", "--yes"], env);
+      await this.run(cell, dir, "destroy", "destroy", ["destroy", "production", "--yes"], env);
       if (unbound.length > 0 && (await this.sweeper.exists(cell.slug))) {
         throw new Error(unbound.join("\n"));
       }
@@ -169,6 +176,50 @@ export class AwsTarget implements Target, ReleaseCycle {
       }
       await rm(treeRoot(cell, "aws"), { recursive: true, force: true });
     }
+  }
+
+  async restart(cell: CellUnderTest): Promise<Deployment> {
+    const cli = cliAt(await this.world.endpoint());
+    const groups = persistedGroups(await taggedGroups(cli, sanitize(cell.slug)));
+    if (groups.length === 0) {
+      throw new Error(
+        `no replication group tagged ocel:project=${sanitize(cell.slug)} holds a store the persistence check reads, so nothing ${cell.name} declared was restarted`,
+      );
+    }
+    const failedOver: string[] = [];
+    for (const group of groups) {
+      failedOver.push(
+        await failOver(cli, group.id, {
+          timeoutMs: FAILOVER_TIMEOUT_MS,
+          intervalMs: FAILOVER_INTERVAL_MS,
+          now: () => Date.now(),
+          sleep: (ms) => pause(ms),
+        }),
+      );
+    }
+    await cell.evidence.write("restart", "failover.txt", `${failedOver.join("\n")}\n`);
+    return this.deployment(cell);
+  }
+
+  async readExposed(cell: CellUnderTest): Promise<string> {
+    const shown = await exposedOf(cliAt(await this.world.endpoint()), sanitize(cell.slug));
+    return [...(this.said.get(cell.slug) ?? []), shown].join("\n");
+  }
+
+  private run(
+    cell: CellUnderTest,
+    dir: string,
+    phase: Phase,
+    name: string,
+    args: string[],
+    env: NodeJS.ProcessEnv,
+  ): Promise<Ran> {
+    let said = this.said.get(cell.slug);
+    if (!said) {
+      said = [];
+      this.said.set(cell.slug, said);
+    }
+    return recordOutput(said, runOcel(cell, dir, phase, name, args, env));
   }
 
   private hostnames(cell: CellUnderTest): Map<string, string> {

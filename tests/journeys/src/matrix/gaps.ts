@@ -403,20 +403,6 @@ export const gaps: Gap[] = [
     where: [{ on: ["dev"], fixtures: [kv.node], fails: [check(kvPasswordOutOfEnvironmentCheck)] }],
   },
   {
-    id: "aws-refuses-kv",
-    reason:
-      "the aws provider refuses a deploy that declares a store at preflight: kv stores are unsupported on aws, so it provisions none",
-    issue: 1479,
-    where: [
-      {
-        on: ["aws", "aws.floci"],
-        fixtures: [kv.node],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-    ],
-  },
-  {
     id: "gcp-refuses-kv",
     reason:
       "the gcp provider refuses a deploy that declares a store at preflight: kv stores are unsupported on gcp, so it provisions none",
