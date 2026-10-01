@@ -24,10 +24,12 @@ type Kind struct {
 type Config struct {
 	Doc     string
 	Options any
-	decode  func(options json.RawMessage) (json.RawMessage, decodedOptions, error)
+	decode  func(options json.RawMessage) (json.RawMessage, behaviour, error)
 }
 
-type decodedOptions struct {
+func (c *Config) NamedAlone() bool { return c.Options == nil }
+
+type behaviour struct {
 	id                  string
 	canCreate           bool
 	canUpdate           bool
@@ -89,29 +91,29 @@ var _ = register(Kind{Name: Builtin, Deployed: &Config{decode: decodeOwnStore(Bu
 
 var _ = register(Kind{Name: Dotenv, Dev: &Config{decode: decodeOwnStore(Dotenv)}})
 
-func decodeOwnStore(kind string) func(json.RawMessage) (json.RawMessage, decodedOptions, error) {
-	return func(options json.RawMessage) (json.RawMessage, decodedOptions, error) {
+func decodeOwnStore(kind string) func(json.RawMessage) (json.RawMessage, behaviour, error) {
+	return func(options json.RawMessage) (json.RawMessage, behaviour, error) {
 		switch string(bytes.TrimSpace(options)) {
 		case "", "null", "{}":
-			return nil, decodedOptions{id: kind}, nil
+			return nil, behaviour{id: kind}, nil
 		}
-		return nil, decodedOptions{}, &OptionError{Reason: fmt.Sprintf("%s takes no options", kind)}
+		return nil, behaviour{}, &OptionError{Reason: fmt.Sprintf("%s takes no options", kind)}
 	}
 }
 
-func decodeAs[T any](read func(T) (decodedOptions, error)) func(json.RawMessage) (json.RawMessage, decodedOptions, error) {
-	return func(raw json.RawMessage) (json.RawMessage, decodedOptions, error) {
+func decodeAs[T any](read func(T) (behaviour, error)) func(json.RawMessage) (json.RawMessage, behaviour, error) {
+	return func(raw json.RawMessage) (json.RawMessage, behaviour, error) {
 		var options T
 		if err := decodeStrictly(raw, &options); err != nil {
-			return nil, decodedOptions{}, err
+			return nil, behaviour{}, err
 		}
 		decoded, err := read(options)
 		if err != nil {
-			return nil, decodedOptions{}, err
+			return nil, behaviour{}, err
 		}
 		canonical, err := json.Marshal(options)
 		if err != nil {
-			return nil, decodedOptions{}, err
+			return nil, behaviour{}, err
 		}
 		return canonical, decoded, nil
 	}
@@ -137,14 +139,14 @@ func decodeStrictly(options json.RawMessage, into any) error {
 	return &OptionError{Reason: "the options are not a JSON object: " + err.Error()}
 }
 
-func requireText(field, text, what string) error {
+func refuseBlank(field, text, what string) error {
 	if strings.TrimSpace(text) == "" {
 		return &OptionError{Field: field, Reason: "is required: " + what}
 	}
 	return nil
 }
 
-func requireOneOf[T ~string](field string, value T, allowed ...T) error {
+func refuseNotOneOf[T ~string](field string, value T, allowed ...T) error {
 	if slices.Contains(allowed, value) {
 		return nil
 	}
