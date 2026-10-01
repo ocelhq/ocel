@@ -246,3 +246,17 @@ func TestTopicOperationsRefuseDuringDiscovery(t *testing.T) {
 		}
 	}
 }
+
+func TestSendConnectsOnceTheBindingArrivesAfterAFailedSend(t *testing.T) {
+	orders := ocel.Topic[order]("orders")
+
+	var missing *ocel.MissingBindingError
+	if _, err := orders.Send(t.Context(), order{ID: "o-1"}); !errors.As(err, &missing) {
+		t.Fatalf("Send() before the binding err = %v, want a *ocel.MissingBindingError", err)
+	}
+	serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": boundTopic})
+
+	if _, err := orders.Send(t.Context(), order{ID: "o-1"}); err != nil {
+		t.Errorf("Send() after the binding arrived = %v, want the topic connected", err)
+	}
+}

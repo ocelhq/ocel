@@ -17,9 +17,8 @@ type boundResource[C any] struct {
 }
 
 type boundResourceConnection[C any] struct {
-	once     sync.Once
+	mu       sync.Mutex
 	resource *boundResource[C]
-	err      error
 }
 
 type serviceClientConstructor[C any] func(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) C
@@ -28,10 +27,17 @@ func (c *boundResourceConnection[C]) connect(resource, access string, dial func(
 	if discovering() {
 		return nil, &UnprovisionedError{Resource: resource, Access: access}
 	}
-	c.once.Do(func() {
-		c.resource, c.err = dial()
-	})
-	return c.resource, c.err
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.resource != nil {
+		return c.resource, nil
+	}
+	dialed, err := dial()
+	if err != nil {
+		return nil, err
+	}
+	c.resource = dialed
+	return dialed, nil
 }
 
 func dialBoundResource[C any](name string, bindingType bindingsv1.BindingType, readBoundName func(*bindingsv1.Binding) string, newClient serviceClientConstructor[C]) (*boundResource[C], error) {
