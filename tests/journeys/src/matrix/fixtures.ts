@@ -14,6 +14,7 @@ import {
   nodeRuntimeChecks,
   overlapRefusal,
   staticChecks,
+  tasksChecks,
   todoAndDocumentChecks,
   vendoredDependencyChecks,
 } from "../checks";
@@ -57,6 +58,7 @@ const NEXT_STATE_AND_DATA_CACHE_CHECKS = [
 ];
 const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
 const KV_CHECKS = [...healthChecks, ...staticChecks, ...kvChecks];
+const TASKS_CHECKS = [...healthChecks, ...tasksChecks];
 
 export const deploy = {
   node: fixture("deploy/node", {
@@ -194,6 +196,14 @@ export const kv = {
   }),
 };
 
+export const tasks = {
+  node: fixture("tasks/node", {
+    apps: ["web"],
+    checks: TASKS_CHECKS,
+    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
+  }),
+};
+
 export const iac = {
   withSst: fixture("iac/with-sst", {
     apps: ["web"],
@@ -216,5 +226,6 @@ export const fixtures: Fixture[] = [
   ...Object.values(lifecycle),
   ...Object.values(sdk),
   ...Object.values(kv),
+  ...Object.values(tasks),
   ...Object.values(iac),
 ];

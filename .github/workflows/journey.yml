@@ -47,7 +47,7 @@ on:
         type: choice
         options: [every-cell, sampled]
       concern:
-        description: "Concerns each lane covers, space separated: deploy asks whether the app runs there, lifecycle whether a release can be replaced and rolled back there, sdk whether its resources do, kv whether a kv store behaves as the map in #1474 says, iac whether it binds to what an SST or Pulumi stack provisions. Empty covers every one but iac, which runs only when named here, and then only with skips set to run: the gap list skips every iac cell on aws (#856, #857)."
+        description: "Concerns each lane covers, space separated: deploy asks whether the app runs there, lifecycle whether a release can be replaced and rolled back there, sdk whether its resources do, kv whether a kv store behaves as the map in #1474 says, tasks whether topics, tasks and workers behave as the map in #1463 says, iac whether it binds to what an SST or Pulumi stack provisions. Empty covers every one but iac, which runs only when named here, and then only with skips set to run: the gap list skips every iac cell on aws (#856, #857)."
         default: ""
         type: string
       fixtures:

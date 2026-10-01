@@ -20,10 +20,12 @@ resources; `lifecycle` asks whether a release can be replaced and rolled back th
 `fixtures/lifecycle/`; `sdk` asks whether what an app declares is provisioned, bound and
 usable, from `fixtures/sdk/`; `kv` asks whether a kv store behaves as the map in #1474 says on
 a target, from `fixtures/kv/`, restarting what the app declared and, where the target keeps
-releases, redeploying it to see its data survive; `iac` asks whether an app binds to what an SST or Pulumi stack
+releases, redeploying it to see its data survive; `tasks` asks whether topics, tasks and
+workers behave as the map in #1463 says on a target, from `fixtures/tasks/`; `iac` asks whether an app binds to what an SST or Pulumi stack
 provisions beside it, from `fixtures/iac/`, and runs only when a run names it. The harness
 starts nothing but the `ocel` binary; bring up what the target needs first. For `dev` that
-is a docker daemon, which `ocel dev` runs each declared postgres, bucket and kv store in:
+is a docker daemon, which `ocel dev` runs each declared postgres, bucket and kv store, and the
+database topics and tasks run on, in:
 
 ```
 node scripts/snapshot.mjs
@@ -111,7 +113,7 @@ left behind, and only projects the harness named.
 `--shard <index>/<total>` is accepted and validated by `cell`; it selects nothing yet.
 
 A pull request and a full run — workflow dispatch, or the `journey:real` label — both run
-`deploy`, `lifecycle`, `sdk` and `kv`, `lifecycle` cells first. `iac` deploys real SST and Pulumi
+`deploy`, `lifecycle`, `sdk`, `kv` and `tasks`, `lifecycle` cells first. `iac` deploys real SST and Pulumi
 stacks, so only a workflow dispatch that names it runs it, and only with `skips=run`: the gap
 list skips every `iac` cell on `aws` and `aws.floci` (#856, #857). Either way it spreads each
 edge of a fixture group over one member of that group, and runs every cell of a member whose

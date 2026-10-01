@@ -33,7 +33,7 @@ const DOTFILE = ".env";
 const PROJECT_LABEL = "dev.ocel.project";
 
 const START_DOCKER =
-  "ocel dev runs each declared postgres, bucket and kv store in a container, and the journey harness never starts a daemon. Start docker, or point DOCKER_HOST at one that is running";
+  "ocel dev runs each declared postgres, bucket and kv store, and the database topics and tasks run on, in a container, and the journey harness never starts a daemon. Start docker, or point DOCKER_HOST at one that is running";
 
 const run = promisify(execFile);
 
