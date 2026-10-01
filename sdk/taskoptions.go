@@ -19,6 +19,13 @@ type TaskTopicOption interface {
 	TopicOption
 }
 
+// A TaskTopicChannelOption tunes a task, a topic or a realtime channel alike.
+type TaskTopicChannelOption interface {
+	TaskOption
+	TopicOption
+	ChannelOption
+}
+
 // A TaskConsumerOption tunes a task or a consumer alike.
 type TaskConsumerOption interface {
 	TaskOption
@@ -85,6 +92,7 @@ type option struct {
 	send           func(*sendSettings)
 	runList        func(*runListSettings)
 	deadLetterList func(*deadLetterListSettings)
+	channel        func(*channelSettings)
 }
 
 func (o option) applyTask(s *taskSettings)                     { o.task(s) }
@@ -95,14 +103,16 @@ func (o option) applyTrigger(s *triggerSettings)               { o.trigger(s) }
 func (o option) applySend(s *sendSettings)                     { o.send(s) }
 func (o option) applyRunList(s *runListSettings)               { o.runList(s) }
 func (o option) applyDeadLetterList(s *deadLetterListSettings) { o.deadLetterList(s) }
+func (o option) applyChannel(s *channelSettings)               { o.channel(s) }
 
-// Schema is the JSON Schema document a payload is checked against, written
-// out as JSON. Ocel derives none from a Go type, so a task or topic without
-// one takes any payload P decodes from.
-func Schema(jsonSchema string) TaskTopicOption {
+// Schema is the JSON Schema document a payload or event is checked against,
+// written out as JSON. Ocel derives none from a Go type, so a task, topic or
+// channel without one takes any payload its type decodes from.
+func Schema(jsonSchema string) TaskTopicChannelOption {
 	return option{
-		task:  func(s *taskSettings) { s.config.Schema = jsonSchema },
-		topic: func(s *topicSettings) { s.config.Schema = jsonSchema },
+		task:    func(s *taskSettings) { s.config.Schema = jsonSchema },
+		topic:   func(s *topicSettings) { s.config.Schema = jsonSchema },
+		channel: func(s *channelSettings) { s.schema = jsonSchema },
 	}
 }
 

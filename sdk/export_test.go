@@ -10,3 +10,5 @@ func (b *BucketStore) Thresholds(single, part int64) {
 func Version() string { return version }
 
 var VersionIn = versionIn
+
+var RealtimePublishTimeout = &realtimePublishTimeout
