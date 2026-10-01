@@ -132,7 +132,7 @@ func (s kvStore) changes(current *memorystoreInstance) []string {
 	return mask
 }
 
-func kvLabels(names Names, ref provider.StackRef, store string) map[string]string {
+func labelsFor(names Names, ref provider.StackRef, store string) map[string]string {
 	return map[string]string{
 		"ocel-namespace":   naming.Sanitize(string(names.namespace)),
 		"ocel-project":     naming.Sanitize(ref.Project),
@@ -171,7 +171,7 @@ func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionReques
 	current, err := service.readInstance(ctx, instance.path)
 	switch {
 	case absent(err):
-		desired := store.instance(clients.project, clients.NetworkPath(in.Ref.Tier), kvLabels(clients.Names, in.Ref, in.Resource.Name))
+		desired := store.instance(clients.project, clients.NetworkPath(in.Ref.Tier), labelsFor(clients.Names, in.Ref, in.Resource.Name))
 		current, err = createStore(ctx, service, clients, instance, desired, in.Resource.Name, progress)
 	case err != nil:
 		return provider.Binding{}, fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)
@@ -185,7 +185,7 @@ func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionReques
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	return storeBinding(ctx, service, instance, current, in.Resource)
+	return readBinding(ctx, service, instance, current, in.Resource)
 }
 
 func createStore(
@@ -242,8 +242,8 @@ func reshapeStore(
 	return service.readInstance(ctx, instance.path)
 }
 
-func storeBinding(ctx context.Context, service memorystore, instance kvInstance, current *memorystoreInstance, resource provider.Resource) (provider.Binding, error) {
-	host, port, err := primaryAddress(current, resource.Name)
+func readBinding(ctx context.Context, service memorystore, instance kvInstance, current *memorystoreInstance, resource provider.Resource) (provider.Binding, error) {
+	host, port, err := primaryAddressOf(current, resource.Name)
 	if err != nil {
 		return provider.Binding{}, err
 	}
@@ -251,7 +251,7 @@ func storeBinding(ctx context.Context, service memorystore, instance kvInstance,
 	if err != nil {
 		return provider.Binding{}, fmt.Errorf("read the token kv %s authenticates with: %w", resource.Name, err)
 	}
-	token, err := newestActiveToken(tokens, resource.Name)
+	token, err := newestActiveTokenOf(tokens, resource.Name)
 	if err != nil {
 		return provider.Binding{}, err
 	}
@@ -259,7 +259,7 @@ func storeBinding(ctx context.Context, service memorystore, instance kvInstance,
 	if err != nil {
 		return provider.Binding{}, fmt.Errorf("read the certificate authority kv %s serves TLS under: %w", resource.Name, err)
 	}
-	pem, err := authorityPEM(authority, resource.Name)
+	pem, err := authorityPEMOf(authority, resource.Name)
 	if err != nil {
 		return provider.Binding{}, err
 	}
@@ -278,7 +278,7 @@ func storeBinding(ctx context.Context, service memorystore, instance kvInstance,
 	}, nil
 }
 
-func primaryAddress(instance *memorystoreInstance, store string) (string, int, error) {
+func primaryAddressOf(instance *memorystoreInstance, store string) (string, int, error) {
 	for _, endpoint := range instance.Endpoints {
 		for _, connection := range endpoint.Connections {
 			auto := connection.PSCAutoConnection
@@ -292,7 +292,7 @@ func primaryAddress(instance *memorystoreInstance, store string) (string, int, e
 		"the Memorystore instance kv %s runs on has no primary endpoint yet, so nothing names the address an app reaches it at", store)
 }
 
-func newestActiveToken(tokens []authToken, store string) (string, error) {
+func newestActiveTokenOf(tokens []authToken, store string) (string, error) {
 	var newest *authToken
 	for i := range tokens {
 		if tokens[i].State != tokenActive || tokens[i].Token == "" {
@@ -309,7 +309,7 @@ func newestActiveToken(tokens []authToken, store string) (string, error) {
 	return newest.Token, nil
 }
 
-func authorityPEM(authority *certificateAuthority, store string) (string, error) {
+func authorityPEMOf(authority *certificateAuthority, store string) (string, error) {
 	var pem strings.Builder
 	if authority.ManagedServerCA != nil {
 		for _, chain := range authority.ManagedServerCA.CACerts {
