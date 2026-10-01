@@ -1,0 +1,5 @@
+error: 'ttl' is "10 seconds", and a duration is a whole number followed by ms, s, m, h or d, such as "500ms", "30s" or "5m".
+ --> tests/ui/kv_key_with_a_bad_ttl.rs:2:39
+  |
+2 | #[ocel(pattern = "session/:id", text, ttl = "10 seconds")]
+  |                                       ^^^

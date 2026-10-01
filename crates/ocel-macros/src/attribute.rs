@@ -7,6 +7,7 @@ pub(crate) enum Value {
     Flag,
     Literal(String),
     List(Vec<String>),
+    Paths(Vec<syn::Path>),
     Path(syn::Path),
     Nested(Vec<Entry>),
 }
@@ -67,6 +68,20 @@ impl Entry {
         }
     }
 
+    pub(crate) fn read_paths(&self) -> syn::Result<Vec<syn::Path>> {
+        match &self.value {
+            Value::Paths(paths) => Ok(paths.clone()),
+            Value::List(items) if items.is_empty() => Ok(Vec::new()),
+            _ => Err(syn::Error::new(
+                self.span(),
+                format!(
+                    "'{}' wants a list of types: {} = [<TYPE>, ...].",
+                    self.name, self.name
+                ),
+            )),
+        }
+    }
+
     pub(crate) fn read_list(&self) -> syn::Result<&[String]> {
         match &self.value {
             Value::List(items) => Ok(items),
@@ -104,6 +119,13 @@ impl Parse for Entry {
         if input.peek(syn::token::Bracket) {
             let items;
             syn::bracketed!(items in input);
+            if !items.is_empty() && !items.peek(LitStr) {
+                let paths: Punctuated<syn::Path, Token![,]> = Punctuated::parse_terminated(&items)?;
+                return Ok(Self {
+                    name,
+                    value: Value::Paths(paths.into_iter().collect()),
+                });
+            }
             let strings: Punctuated<LitStr, Token![,]> = Punctuated::parse_terminated(&items)?;
             return Ok(Self {
                 name,

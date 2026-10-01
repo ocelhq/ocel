@@ -204,6 +204,55 @@ pub enum Error {
         other: String,
     },
 
+    /// A value read from a kv entry, or written to one, is not a value of the entry's
+    /// shape: json that does not decode into the entry's type, or a counter that holds no
+    /// integer.
+    #[error("kv key '{key}' {reason}")]
+    InvalidKvValue {
+        /// The key whose value is invalid.
+        key: String,
+        /// What is wrong with the value.
+        reason: String,
+    },
+
+    /// A write to a kv entry asked for a TTL shorter than the millisecond a store counts in.
+    #[error("a kv ttl is at least 1ms, and {ttl:?} is shorter")]
+    InvalidKvTtl {
+        /// The TTL the write asked for.
+        ttl: std::time::Duration,
+    },
+
+    /// A key reached a kv store whose `entries` do not list the key's type, so the store
+    /// never declared the key's pattern.
+    #[error("kv store '{store}' does not list {key} in its entries: add it to entries = [...]")]
+    UndeclaredKvEntry {
+        /// The store the key reached.
+        store: String,
+        /// The key's type.
+        key: String,
+    },
+
+    /// A write to a list or set entry was given no values, which no store command takes.
+    #[error("{access} takes one or more values, and was given none")]
+    EmptyKvWrite {
+        /// The entry and operation that was called, as `entry.operation`.
+        access: String,
+    },
+
+    /// A kv binding was delivered with a port no TCP connection can be made to.
+    #[error("{key} delivers port {port} for its kv store, and a port is 1 to 65535")]
+    InvalidKvPort {
+        /// The environment variable the binding arrived in.
+        key: String,
+        /// The port the binding delivered.
+        port: i32,
+    },
+
+    /// A kv store refused an operation, or could not be reached.
+    #[cfg(feature = "kv")]
+    #[error("{0}")]
+    Kv(#[from] redis::RedisError),
+
     /// The pool over a delivered binding could not be opened.
     #[cfg(feature = "postgres")]
     #[error("{0}")]

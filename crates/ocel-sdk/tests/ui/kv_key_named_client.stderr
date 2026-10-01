@@ -1,0 +1,5 @@
+error: the entry name 'client' is reserved, since a store already has a member of that name in some SDK: name the entry with name = "<NAME>"
+ --> tests/ui/kv_key_named_client.rs:3:8
+  |
+3 | struct Client {
+  |        ^^^^^^

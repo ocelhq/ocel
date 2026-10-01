@@ -12,6 +12,8 @@
 //!     pub orders: ocel::Topic<Order>,
 //!     #[ocel(name = "media", concurrency = 4)]
 //!     pub media: ocel::Worker,
+//!     #[ocel(eviction = "allkeys-lru", entries = [Requests])]
+//!     pub cache: ocel::Kv,
 //! }
 //!
 //! #[derive(ocel::Env, Clone)]
@@ -58,6 +60,7 @@ mod deliver;
 mod env;
 mod error;
 mod json;
+pub mod kv;
 mod lane;
 mod payload;
 mod postgres;
@@ -78,6 +81,7 @@ pub use bucket::{
 pub use declare::discover;
 pub use env::{deployment_url, Secret};
 pub use error::Error;
+pub use kv::{Kv, KvKey, KvParameter};
 pub use lane::Lane;
 pub use postgres::Postgres;
 pub use run::{Attempt, Message, Next, Run, RunError, RunKind};
@@ -90,11 +94,15 @@ pub use worker::Worker;
 /// Runs discovery before `main`, and returns from `main` once discovery is done.
 pub use ocel_macros::main;
 
-/// Declares every [`Postgres`], [`Bucket`], [`Topic`] and [`Worker`] field of a struct, and
+/// Declares every [`Postgres`], [`Bucket`], [`Topic`], [`Worker`] and [`Kv`] field of a struct, and
 /// writes the `load` that hands the struct back with a handle in each field. For each
 /// [`Topic`] field it also writes a [`TopicName`] constant named after the field in upper
 /// case, which consumers name their topic by.
 pub use ocel_macros::Resources;
+
+/// Derives [`KvKey`] for a struct whose fields are the parameters of its entry's pattern,
+/// checking the fields against the pattern when the app builds.
+pub use ocel_macros::KvKey;
 
 /// Declares every field of a struct as an environment variable, and writes the `load` that
 /// reads the delivered values into it.

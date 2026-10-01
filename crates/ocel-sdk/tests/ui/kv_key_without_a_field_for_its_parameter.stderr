@@ -1,0 +1,5 @@
+error: field user names no parameter of pattern "session/:id": the fields of Session are its parameters, :id.
+ --> tests/ui/kv_key_without_a_field_for_its_parameter.rs:4:5
+  |
+4 |     user: String,
+  |     ^^^^

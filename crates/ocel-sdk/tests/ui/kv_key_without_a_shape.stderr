@@ -1,0 +1,5 @@
+error: Session declares no shape: one of text, counter, json = <TYPE>, list or set.
+ --> tests/ui/kv_key_without_a_shape.rs:3:8
+  |
+3 | struct Session {
+  |        ^^^^^^^

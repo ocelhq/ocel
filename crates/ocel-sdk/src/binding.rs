@@ -1,6 +1,8 @@
 use crate::env::live_file;
 use crate::proto::common::bindings::v1::binding::Properties;
-use crate::proto::common::bindings::v1::{Binding, BucketProperties, PostgresProperties};
+use crate::proto::common::bindings::v1::{
+    Binding, BucketProperties, KvProperties, PostgresProperties,
+};
 use crate::Error;
 
 pub(crate) fn read_postgres(name: &str) -> Result<PostgresProperties, Error> {
@@ -21,6 +23,17 @@ pub(crate) fn read_bucket(name: &str) -> Result<BucketProperties, Error> {
             key,
             found: describe_kind(&other),
             expected: "BUCKET".to_string(),
+        }),
+    }
+}
+
+pub(crate) fn read_kv(name: &str) -> Result<KvProperties, Error> {
+    match read_binding(&format!("OCEL_RESOURCE_KV_{name}"), "KV")? {
+        (Some(Properties::Kv(properties)), _) => Ok(*properties),
+        (other, key) => Err(Error::WrongBindingType {
+            key,
+            found: describe_kind(&other),
+            expected: "KV".to_string(),
         }),
     }
 }
