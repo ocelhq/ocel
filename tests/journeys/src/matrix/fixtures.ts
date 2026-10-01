@@ -59,7 +59,7 @@ const NEXT_STATE_AND_DATA_CACHE_CHECKS = [
 ];
 const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
 const KV_CHECKS = [...healthChecks, ...staticChecks, ...kvChecks];
-const TASKS_CHECKS = [...healthChecks, ...tasksChecks];
+const TASKS_CHECKS = [...healthChecks, ...tasksChecks, ...tasksWireChecks];
 const TASKS_WIRE_CHECKS = [...healthChecks, ...tasksWireChecks];
 
 export const deploy = {
