@@ -18,7 +18,6 @@ import (
 
 func aWorkerApp() provider.AppSpec {
 	app := anApp()
-	app.Framework = "node"
 	app.Workers = []provider.WorkerSpec{{Name: "worker"}, {Name: "ledger", Concurrency: 2}}
 	app.Values.Bindings = []provider.Binding{{Type: provider.BindingTask, Name: "task--receipt", Resource: "receipt"}}
 	app.Values.ContainerEnv = map[string]string{"GREETING": "hello", originguard.OriginSecretVar: "edge-only"}
@@ -47,7 +46,7 @@ func runOf(machine *box, container string) string {
 	return ""
 }
 
-func TestEachWorkerJoiningAnAppRunsAsASecondContainerFromItsImageOnTheWorkerEntry(t *testing.T) {
+func TestEachWorkerJoiningAnAppRunsAsASecondContainerFromItsImage(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -71,8 +70,8 @@ func TestEachWorkerJoiningAnAppRunsAsASecondContainerFromItsImageOnTheWorkerEntr
 		if run == "" {
 			t.Fatalf("worker %s's container %s was never started:\n%s", name, worker.Container, strings.Join(machine.commands(), "\n"))
 		}
-		if !strings.HasSuffix(strings.TrimSuffix(run, " >/dev/null"), "'"+loadedImageRef+"' 'node' '/ocel/worker/worker.mjs'") {
-			t.Errorf("worker %s runs %q, want the app's image on the node worker entry", name, run)
+		if !strings.HasSuffix(strings.TrimSuffix(run, " >/dev/null"), "'"+loadedImageRef+"'") {
+			t.Errorf("worker %s runs %q, want the app's own image: its runtime runs the worker entry OCEL_WORKER asks for", name, run)
 		}
 		if !strings.Contains(run, "'--network' 'ocel-production-shop'") || strings.Contains(run, "--publish") {
 			t.Errorf("worker %s runs %q, want it on the project network and published nowhere", name, run)
@@ -212,16 +211,5 @@ func TestAnAppNoWorkerJoinsStartsNoWorker(t *testing.T) {
 	}
 	if runs != 1 {
 		t.Errorf("an app with no worker started %d containers, want its own alone", runs)
-	}
-}
-
-func TestAWorkerOnAFrameworkWhoseImageCarriesNoWorkerEntryIsRefusedByName(t *testing.T) {
-	t.Parallel()
-
-	app := aWorkerApp()
-	app.Framework = "python"
-	_, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, app), nil)
-	if err == nil || !strings.Contains(err.Error(), `"worker"`) || !strings.Contains(err.Error(), "python") {
-		t.Fatalf("ProvisionContainers() = %v, want the worker refused naming it and the framework", err)
 	}
 }

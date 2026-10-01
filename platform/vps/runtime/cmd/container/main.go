@@ -19,6 +19,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
@@ -47,6 +48,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	if len(command) == 0 {
 		return fatal("the image has no ENTRYPOINT or CMD")
 	}
+	command = commandFor(environ, command, present)
 	exposed := containerimage.PortText
 	env := make([]string, 0, len(environ))
 	manifest := ""
@@ -151,6 +153,18 @@ func run(ctx context.Context, command []string, environ []string) int {
 			return exitCode(exit)
 		}
 	}
+}
+
+func commandFor(environ, command []string, present func(path string) bool) []string {
+	if !slices.ContainsFunc(environ, func(entry string) bool { return strings.HasPrefix(entry, processenv.WorkerEnvVar+"=") }) {
+		return command
+	}
+	return containerimage.WorkerCommand(present, command)
+}
+
+func present(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func exitCode(exit child.Exit) int {

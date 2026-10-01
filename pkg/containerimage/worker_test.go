@@ -7,37 +7,25 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
-func TestAWorkerRunsFromItsAppsImageByTheEntryItsFrameworkCarries(t *testing.T) {
+func holding(paths ...string) func(string) bool {
+	return func(path string) bool { return slices.Contains(paths, path) }
+}
+
+func TestAWorkerRunsTheEntryItsImageWasBuiltWith(t *testing.T) {
 	t.Parallel()
 
+	served := []string{"pnpm", "start"}
 	for _, tc := range []struct {
-		framework string
-		want      []string
+		name  string
+		image func(string) bool
+		want  []string
 	}{
-		{framework: "node", want: []string{"node", "/ocel/worker/worker.mjs"}},
-		{framework: "next", want: []string{"node", "/ocel/worker/worker.mjs"}},
-		{framework: "go", want: []string{"/ocel/worker/ocel-worker"}},
+		{name: "a go entry", image: holding("/ocel/worker/ocel-worker"), want: []string{"/ocel/worker/ocel-worker"}},
+		{name: "a node entry", image: holding("/ocel/worker/worker.mjs"), want: []string{"node", "/ocel/worker/worker.mjs"}},
+		{name: "no entry, as a rust binary that serves as a worker itself", image: holding(), want: served},
 	} {
-		command, runs := containerimage.WorkerCommand(tc.framework)
-		if !runs || !slices.Equal(command, tc.want) {
-			t.Errorf("WorkerCommand(%q) = %q, %v, want %q", tc.framework, command, runs, tc.want)
+		if got := containerimage.WorkerCommand(tc.image, served); !slices.Equal(got, tc.want) {
+			t.Errorf("WorkerCommand(%s) = %q, want %q", tc.name, got, tc.want)
 		}
-	}
-}
-
-func TestARustWorkerRunsTheImagesOwnCommand(t *testing.T) {
-	t.Parallel()
-
-	command, runs := containerimage.WorkerCommand("rust")
-	if !runs || command != nil {
-		t.Errorf("WorkerCommand(rust) = %q, %v, want the image's own command: the app's binary serves as a worker when OCEL_WORKER names one", command, runs)
-	}
-}
-
-func TestAPythonImageRunsNoWorker(t *testing.T) {
-	t.Parallel()
-
-	if command, runs := containerimage.WorkerCommand("python"); runs {
-		t.Errorf("WorkerCommand(python) = %q, want no worker: nothing writes a worker entry into a python image", command)
 	}
 }

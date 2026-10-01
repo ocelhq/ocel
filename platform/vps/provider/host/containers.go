@@ -158,7 +158,6 @@ type Container struct {
 	Manifest   []byte
 	Resolved   bool
 	Declared   []string
-	Command    []string
 }
 
 func (c Container) delivered() map[string]string {
@@ -208,8 +207,7 @@ func containerRun(spec Container, env handoff) []string {
 		argv = append(argv, "--mount", "type=bind,src="+LiveSocketDir+",dst="+LiveSocketDir+",readonly",
 			"--tmpfs", containerimage.LivePath+":"+liveDirTmpfs)
 	}
-	argv = append(argv, "--env", containerimage.PortEnvVar+"="+containerimage.PortText, spec.Image)
-	return append(argv, spec.Command...)
+	return append(argv, "--env", containerimage.PortEnvVar+"="+containerimage.PortText, spec.Image)
 }
 
 func LabelSelector(label string) string {
