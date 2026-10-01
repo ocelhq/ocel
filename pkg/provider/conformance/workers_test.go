@@ -50,10 +50,23 @@ func TestABoundedWorkerCeilingOfNoTimeFails(t *testing.T) {
 	}
 }
 
+func TestAProviderRunningWorkersButServingNoTopicOrTaskBindingFails(t *testing.T) {
+	facts := provider.Facts{
+		Vendor:         "nowhere",
+		Computes:       []provider.Compute{provider.ComputeServerless},
+		Bindings:       []provider.BindingType{provider.BindingTopic},
+		WorkerCeilings: []provider.WorkerCeiling{{Compute: provider.ComputeServerless, MaxDuration: time.Minute}},
+	}
+	if found := workerFaults(facts); len(found) == 0 {
+		t.Error("workerFaults() = none, want a provider that lifts the refusal yet provisions no task flagged, since every task deploy would then fail at provisioning")
+	}
+}
+
 func TestAWorkerCeilingOnAComputeTheProviderRunsPasses(t *testing.T) {
 	facts := provider.Facts{
 		Vendor:         "nowhere",
 		Computes:       []provider.Compute{provider.ComputeServerless},
+		Bindings:       []provider.BindingType{provider.BindingTopic, provider.BindingTask},
 		WorkerCeilings: []provider.WorkerCeiling{{Compute: provider.ComputeServerless, MaxDuration: 15 * time.Minute}},
 	}
 	if found := workerFaults(facts); len(found) != 0 {

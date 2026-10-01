@@ -26,6 +26,11 @@ func workerFaults(facts provider.Facts) []string {
 		return unsupportedRefusalFaults(facts)
 	}
 	var found []string
+	for _, served := range []provider.BindingType{provider.BindingTopic, provider.BindingTask} {
+		if !slices.Contains(facts.Bindings, served) {
+			found = append(found, fmt.Sprintf("Facts.WorkerCeilings lifts the refusal of topics, tasks and workers, and Facts.Bindings serves no %s, so every deploy declaring one fails at provisioning", served))
+		}
+	}
 	named := map[provider.Compute]bool{}
 	for _, ceiling := range facts.WorkerCeilings {
 		if named[ceiling.Compute] {

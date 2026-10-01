@@ -131,7 +131,7 @@ func TestTheProviderNamesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) {
 	if p.Facts().Vendor != vps.Vendor {
 		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, vps.Vendor)
 	}
-	if got := p.Facts().Bindings; !slices.Equal(got, []provider.BindingType{provider.BindingPostgres, provider.BindingBucket, provider.BindingKV}) {
+	if got := p.Facts().Bindings; !slices.Equal(got, []provider.BindingType{provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTopic, provider.BindingTask}) {
 		t.Errorf("Facts().Bindings = %v, want the binding types a box provisions for itself", got)
 	}
 
@@ -196,7 +196,7 @@ func buildProvider(t *testing.T) string {
 	return binary
 }
 
-func TestTopicsTasksAndWorkersAreRefusedAtPreflightAsUnsupported(t *testing.T) {
+func TestTheTopicsTasksAndWorkersABoxRunsAreOnesTheBuildCanPlace(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
