@@ -1,9 +1,6 @@
 package pgmq
 
-import (
-	"math"
-	"sync"
-)
+import "sync"
 
 type slots struct {
 	mu      sync.Mutex
@@ -25,19 +22,27 @@ func (s *slots) setLimit(limit int) {
 	}
 }
 
-func (s *slots) free() (int, <-chan struct{}) {
+func (s *slots) changes() <-chan struct{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.limit <= 0 {
-		return math.MaxInt, s.changed
-	}
-	return max(s.limit-s.used, 0), s.changed
+	return s.changed
 }
 
-func (s *slots) take(n int) {
+func (s *slots) reserve(want int) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.used += n
+	granted := want
+	if s.limit > 0 {
+		granted = min(want, max(s.limit-s.used, 0))
+	}
+	s.used += granted
+	return granted
+}
+
+func (s *slots) unreserve(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.used -= n
 }
 
 func (s *slots) release(n int) {
