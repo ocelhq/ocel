@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -27,11 +28,18 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 			return err
 		}
 	}
-	return refusing([]error{
+	if err := refusing([]error{
 		p.host.CheckDisk(ctx, repositories(pre.Deploy)),
 		p.host.CheckProxy(ctx),
 		p.host.ProxyOwnsServingPorts(ctx),
-	})
+	}); err != nil || pre.Edge != edge.None {
+		return err
+	}
+	said, err := p.readServingPortsClosedFromOutside(ctx)
+	if said != "" && pre.Progress != nil {
+		pre.Progress.Warn(said)
+	}
+	return err
 }
 
 var oneInstance = provider.Instances{Min: 1, Max: 1}

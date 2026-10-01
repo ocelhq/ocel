@@ -36,6 +36,7 @@ func preflightingByHand(machine *scripted) error {
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}, Proxy: &vps.Proxy{Manual: &vps.Manual{}}},
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
+	p.Reaching(reachedFromOutside)
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
 	if err != nil {
 		return err

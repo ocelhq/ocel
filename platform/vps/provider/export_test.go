@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
@@ -28,8 +29,8 @@ func Whoami(ctx context.Context, live hostSurvey) (provider.Principal, error) {
 	return whoami(ctx, live)
 }
 
-func Elevating(inner provider.Bootstrap, gate func(context.Context) error) provider.Bootstrap {
-	return elevating{Bootstrap: inner, elevated: gate}
+func Elevating(inner provider.Bootstrap, gate func(context.Context) error, served func(context.Context, environment.Tier) error) provider.Bootstrap {
+	return elevating{Bootstrap: inner, elevated: gate, served: served}
 }
 
 func (p *Provider) Host() *host.Host { return p.host }
@@ -62,3 +63,7 @@ func ReachVerdict(ctx context.Context, dial Reach, address string) provider.Host
 func (p *Provider) Fronted() *Proxy { return p.options.Proxy }
 
 func FrontOf(p *Proxy) host.Front { return p.front() }
+
+func (p *Provider) RefuseServingPortsClosedFromOutside(ctx context.Context, tier environment.Tier) error {
+	return p.refuseServingPortsClosedFromOutside(ctx, tier)
+}

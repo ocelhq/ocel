@@ -53,7 +53,7 @@ func TestNothingWritesAsRootWithoutTheGrantToDoIt(t *testing.T) {
 
 	inner := &reached{}
 	ctx := context.Background()
-	gated := vps.Elevating(inner, unelevated)
+	gated := vps.Elevating(inner, unelevated, nil)
 	req := provider.BootstrapRequest{Tier: environment.TierProduction}
 
 	if err := gated.Apply(ctx, req, nil); err == nil {
@@ -72,7 +72,7 @@ func TestAskingWhatABootstrapWouldDoIsNotAskingToRunIt(t *testing.T) {
 
 	inner := &reached{}
 	ctx := context.Background()
-	gated := vps.Elevating(inner, unelevated)
+	gated := vps.Elevating(inner, unelevated, nil)
 
 	if _, err := gated.Plan(ctx, provider.BootstrapRequest{Tier: environment.TierProduction}); err != nil {
 		t.Fatalf("Plan() = %v, want the plan drawn: reporting what a bootstrap would write is a read, and the same read backs the preflight that answers a deploy's domain claims, bootstrap state and known slugs",
@@ -91,7 +91,7 @@ func TestARepairDoesNotNeedWhatABootstrapNeeds(t *testing.T) {
 
 	inner := &reached{}
 	ctx := context.Background()
-	gated := vps.Elevating(inner, unelevated)
+	gated := vps.Elevating(inner, unelevated, nil)
 	repairing := provider.BootstrapRequest{Tier: environment.TierProduction, Repair: true}
 
 	if _, err := gated.Plan(ctx, repairing); err != nil {
