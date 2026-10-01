@@ -12,6 +12,7 @@ import (
 
 func runningWorkers(facts *provider.Facts) {
 	facts.WorkerCeilings = []provider.WorkerCeiling{{Compute: provider.ComputeServerless, MaxDuration: 15 * time.Minute}}
+	facts.Bindings = append(facts.Bindings, provider.BindingTask, provider.BindingTopic)
 }
 
 func TestAnAppIsPackedAndProvisionedWithTheTopicsTheDeployDeclares(t *testing.T) {
