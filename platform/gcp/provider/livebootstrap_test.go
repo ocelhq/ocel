@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -56,13 +57,27 @@ func bootstrapOf(t *testing.T, p *gcp.Provider) provider.Bootstrap {
 	return bootstrap
 }
 
-func bootstrapped(t *testing.T, p *gcp.Provider, tier environment.Tier) provider.Bootstrap {
+type emulatedBootstrap struct{ provider.Bootstrap }
+
+func (b emulatedBootstrap) Catalogue() []provider.Feature {
+	return slices.DeleteFunc(b.Bootstrap.Catalogue(), func(f provider.Feature) bool { return f.Name == gcp.KVFeature })
+}
+
+func conformingBootstrap(t *testing.T, p *gcp.Provider) provider.Bootstrap {
+	t.Helper()
+	if emulated() {
+		return emulatedBootstrap{bootstrapOf(t, p)}
+	}
+	return bootstrapOf(t, p)
+}
+
+func bootstrapped(t *testing.T, p *gcp.Provider, tier environment.Tier, features ...string) provider.Bootstrap {
 	t.Helper()
 
 	servicesEnabled(t)
 	ctx := context.Background()
 	bootstrap := bootstrapOf(t, p)
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, Features: features, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v, want the resources every port beneath it reads and writes", tier, err)
 	}
 	t.Cleanup(func() {
@@ -77,7 +92,7 @@ func TestLiveBootstrapper(t *testing.T) {
 	p := live(t)
 	servicesEnabled(t)
 
-	conformance.RunBootstrap(t, bootstrapOf(t, p), p.Facts().DefaultEdge)
+	conformance.RunBootstrap(t, conformingBootstrap(t, p), p.Facts().DefaultEdge)
 }
 
 func TestLiveTheBootstrapProvisionsTheStackTheDataPortsRead(t *testing.T) {
