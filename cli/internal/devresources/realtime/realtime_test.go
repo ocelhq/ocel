@@ -170,3 +170,33 @@ func TestTheBindingCarriesAGatewayOnLoopbackThatAcceptsTheTokensItsKeySigns(t *t
 		t.Fatalf("got %v, want the published event", got)
 	}
 }
+
+func TestASocketOpenWhenTheBackendClosesIsClosed(t *testing.T) {
+	t.Parallel()
+
+	backend := newBackend(t)
+	bound := resolveOne(t, backend, "app")
+	conn, err := dial(t, bound, mint(t, bound, "app", token.Connect, "/app"))
+	if err != nil {
+		t.Fatalf("dial the gateway: %v", err)
+	}
+	if got := exchange(t, conn, map[string]any{"type": "connection_init"}); got["type"] != "connection_ack" {
+		t.Fatalf("got %v, want connection_ack", got)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	readEnded := make(chan error, 1)
+	go func() {
+		_, _, err := conn.Read(ctx)
+		readEnded <- err
+	}()
+
+	if err := backend.Close(ctx, true); err != nil {
+		t.Fatalf("Close = %v", err)
+	}
+
+	if err := <-readEnded; websocket.CloseStatus(err) != websocket.StatusGoingAway {
+		t.Fatalf("after Close the read ended with %v, want the socket closed as going away", err)
+	}
+}
