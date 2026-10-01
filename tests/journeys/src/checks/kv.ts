@@ -284,25 +284,30 @@ export const kvJsonRefusesInvalidWriteCheck: Check = {
   },
 };
 
+const INVALID_STORED = [
+  ["unparseable", "not json at all"],
+  ["schema-invalid", '{"name":7}'],
+] as const;
+
 export const kvJsonInvalidStoredCheck: Check = {
-  title: "a json entry throws on a stored value its schema rejects, or misses where it opts to",
+  title:
+    "a json entry throws on a stored value it cannot parse or its schema rejects, or misses where it opts to",
   run: async (ctx) => {
-    const id = newKey("stored");
-    for (const [entry, raw] of [
-      ["json", "not json at all"],
-      ["lenient", '{"name":7}'],
-    ] as const) {
-      const written = await send(ctx, "PUT", `/api/kv/raw/${entry}/${id}`, { raw });
-      assertStatus(written, 204, `the raw write under the ${entry} entry`);
+    for (const [invalid, raw] of INVALID_STORED) {
+      const id = newKey(invalid);
+      for (const entry of ["json", "lenient"]) {
+        const written = await send(ctx, "PUT", `/api/kv/raw/${entry}/${id}`, { raw });
+        assertStatus(written, 204, `the raw write of a ${invalid} value under the ${entry} entry`);
+      }
+      const thrown = await send(ctx, "GET", `/api/kv/json/${id}`);
+      assertStatus(thrown, 422, `the read of a stored ${invalid} value`);
+      assert.equal((thrown.body as { error: string }).error, "InvalidKVValueError");
+      assertStatus(
+        await send(ctx, "GET", `/api/kv/lenient/${id}`),
+        404,
+        `the read of a stored ${invalid} value where the entry treats it as a miss`,
+      );
     }
-    const thrown = await send(ctx, "GET", `/api/kv/json/${id}`);
-    assertStatus(thrown, 422, "the read of an invalid stored value");
-    assert.equal((thrown.body as { error: string }).error, "InvalidKVValueError");
-    assertStatus(
-      await send(ctx, "GET", `/api/kv/lenient/${id}`),
-      404,
-      "the read of an invalid stored value where the entry treats it as a miss",
-    );
   },
 };
 
