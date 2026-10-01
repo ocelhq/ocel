@@ -38,6 +38,35 @@ describe("reconciliation", () => {
     expect(row).toMatchObject({ verdict: "expected-failure", listed: [GAP] });
   });
 
+  it("stays green when a listed test fails the way its gap says it does", () => {
+    const listed = { ...GAP, failsWith: "answered \\d{3} with status 404" };
+    const results = allRan();
+    results[1] = {
+      ...result("GET /health answers", "failed"),
+      error: "answered 502 with status 404",
+    };
+    const report = reconcile({
+      planned,
+      results,
+      expectedFailures: { "node/web": { "GET /health answers": [listed] } },
+    });
+    expect(report.failed).toBe(false);
+  });
+
+  it("fails when a listed test fails another way than its gap says", () => {
+    const listed = { ...GAP, failsWith: "with status 404" };
+    const results = allRan();
+    results[1] = { ...result("GET /health answers", "failed"), error: "never heard shipped" };
+    const report = reconcile({
+      planned,
+      results,
+      expectedFailures: { "node/web": { "GET /health answers": [listed] } },
+    });
+    expect(report.failures).toMatchObject([
+      { title: "GET /health answers", verdict: "unexpected-failure", listed: [listed] },
+    ]);
+  });
+
   it("fails when a listed test passes", () => {
     const report = reconcile({
       planned,

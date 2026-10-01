@@ -36,7 +36,7 @@ export const NO_FILTER: RunFilter = {
   keep: false,
 };
 
-export type GapRef = Pick<Gap, "id" | "reason" | "issue">;
+export type GapRef = Pick<Gap, "id" | "reason" | "issue"> & { failsWith?: string };
 
 export type ExpectedFailures = Record<string, Record<string, GapRef[]>>;
 
@@ -107,9 +107,12 @@ function longestFirst(cells: Cell[], releaseCycle: boolean): Cell[] {
 type LaneTest = { cell: string; app: string; fixture: string; variant: string; title: string };
 
 function gapRefOf(gap: Gap): GapRef {
-  return gap.issue === undefined
-    ? { id: gap.id, reason: gap.reason }
-    : { id: gap.id, reason: gap.reason, issue: gap.issue };
+  return {
+    id: gap.id,
+    reason: gap.reason,
+    ...(gap.issue === undefined ? {} : { issue: gap.issue }),
+    ...(gap.failsWith === undefined ? {} : { failsWith: gap.failsWith.source }),
+  };
 }
 
 function hitsFor(scope: GapScope, tests: LaneTest[], said: string): LaneTest[] {
