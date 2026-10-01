@@ -5,7 +5,6 @@ import {
   corsCheck,
   emptyBodyCheck,
   encodedSlashCheck,
-  inflateCheck,
   kvPasswordOutOfEnvironmentCheck,
   malformedQueryCheck,
   nextCacheChecks,
@@ -59,7 +58,7 @@ export const gaps: Gap[] = [
   {
     id: "floci-api-gateway-buffers-and-rewrites",
     reason:
-      "floci's API Gateway invokes lambda synchronously and answers one buffered body, rejects a malformed escape itself, hands the path decoded, sets no forwarded client or scheme, and sends a gzip body as text",
+      "floci's API Gateway invokes lambda synchronously and answers one buffered body, rejects a malformed escape itself, hands the path decoded, and sets no forwarded client or scheme",
     where: [
       {
         on: ["aws.floci"],
@@ -71,7 +70,6 @@ export const gaps: Gap[] = [
           check(encodedSlashCheck),
           check(clientAddressCheck),
           check(publicOriginCheck),
-          check(inflateCheck),
         ],
       },
     ],
