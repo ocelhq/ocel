@@ -126,6 +126,9 @@ func refuseMalformedInfisical(options InfisicalOptions) error {
 	if err := requireText("environment", options.Environment, "the slug of the Infisical environment this tier reads"); err != nil {
 		return err
 	}
+	if options.Path != "" && !strings.HasPrefix(options.Path, "/") {
+		return &OptionError{Field: "path", Reason: "must start at the environment's root, /, such as /acme"}
+	}
 	if !infisicalHost.MatchString(options.Host) {
 		return &OptionError{Field: "host", Reason: "must be the http or https URL of an Infisical"}
 	}

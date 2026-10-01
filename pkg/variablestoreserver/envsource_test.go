@@ -847,6 +847,9 @@ func TestAnEnvSourceTheCallerNamesIsDecodedBeforeAnythingIsRegistered(t *testing
 		"infisical with no project": {infisicalSource(t, "https://infisical.example.com", never, func(options *envsource.InfisicalOptions) {
 			options.Project = ""
 		}), "project"},
+		"infisical with a path not rooted at /": {infisicalSource(t, "https://infisical.example.com", never, func(options *envsource.InfisicalOptions) {
+			options.Path = "web"
+		}), "path"},
 		"infisical with no auth": {infisicalSource(t, "https://infisical.example.com", never, func(options *envsource.InfisicalOptions) {
 			options.Auth = nil
 		}), "auth"},

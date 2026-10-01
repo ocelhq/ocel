@@ -52,7 +52,7 @@ func TestEveryTierLeftOffOrNamedAloneReadsItsDefaultEnvSource(t *testing.T) {
 func TestEachTierCarriesTheOptionsItsEnvSourceIsKeyedBy(t *testing.T) {
 	doc, err := Decode([]byte(`{"slug":"acme","envSource":{
 		"production":{"infisical":{"project":"p-1","environment":"prod","auth":{"universal":{"clientId":{"$env":"ID"},"clientSecret":{"$env":"SECRET"}}}}},
-		"preview":{"infisical":{"project":"p-1","environment":"staging","path":"acme/","host":"https://infisical.example.com/","write":"values","auth":{"identity":{"identityId":"ident"}}}},
+		"preview":{"infisical":{"project":"p-1","environment":"staging","path":"/acme/","host":"https://infisical.example.com/","write":"values","auth":{"identity":{"identityId":"ident"}}}},
 		"dev":{"exec":{"command":["op","run","{folder}"],"format":"json"}}
 	}}`), env(nil))
 	if err != nil {
@@ -65,7 +65,7 @@ func TestEachTierCarriesTheOptionsItsEnvSourceIsKeyedBy(t *testing.T) {
 		kind, want string
 	}{
 		{"production", tiers.Production, "infisical", `{"project":"p-1","environment":"prod","auth":{"universal":{"clientId":{"$env":"ID"},"clientSecret":{"$env":"SECRET"}}}}`},
-		{"preview", tiers.Preview, "infisical", `{"project":"p-1","environment":"staging","path":"acme/","host":"https://infisical.example.com/","write":"values","auth":{"identity":{"identityId":"ident"}}}`},
+		{"preview", tiers.Preview, "infisical", `{"project":"p-1","environment":"staging","path":"/acme/","host":"https://infisical.example.com/","write":"values","auth":{"identity":{"identityId":"ident"}}}`},
 		{"dev", tiers.Dev, "exec", `{"command":["op","run","{folder}"],"format":"json"}`},
 	} {
 		var got, want any
@@ -155,6 +155,7 @@ func TestDecodeRefusesAnEnvSourceTheTierCannotRead(t *testing.T) {
 		{"infisical with null options", `{"production":{"infisical":null}}`, []string{`"envSource.production.infisical"`, "an object of options"}},
 		{"infisical with no project", `{"production":{"infisical":{"environment":"prod","auth":{"identity":{"identityId":"i"}}}}}`, []string{`"envSource.production.infisical.project"`}},
 		{"infisical with no environment", `{"production":{"infisical":{"project":"p","auth":{"identity":{"identityId":"i"}}}}}`, []string{`"envSource.production.infisical.environment"`}},
+		{"infisical under a path not rooted at /", `{"production":{"infisical":{"project":"p","environment":"prod","path":"web","auth":{"identity":{"identityId":"i"}}}}}`, []string{`"envSource.production.infisical.path"`, "/"}},
 		{"infisical on a host that is no URL", `{"production":{"infisical":{"project":"p","environment":"prod","host":"infisical.example.com","auth":{"identity":{"identityId":"i"}}}}}`, []string{`"envSource.production.infisical.host"`, "https"}},
 		{"a deployed infisical with no auth", `{"production":{"infisical":{"project":"p","environment":"prod"}}}`, []string{`"envSource.production.infisical.auth"`, "machine identity"}},
 		{"a dev infisical with auth", `{"dev":{"infisical":{"project":"p","environment":"dev","auth":{"identity":{"identityId":"i"}}}}}`, []string{`"envSource.dev.infisical.auth"`, "INFISICAL_TOKEN"}},
