@@ -9,9 +9,9 @@ const PORT = Number(process.env.PORT ?? 3108);
 const app = express();
 app.use(express.json());
 
-type Served = (req: Request, res: Response) => Promise<unknown>;
+type JSONRoute = (req: Request, res: Response) => Promise<unknown>;
 
-function serveJSON(serve: Served) {
+function serveJSON(serve: JSONRoute) {
   return (req: Request, res: Response, next: NextFunction) => {
     serve(req, res).then((body) => res.json(body), next);
   };
@@ -41,7 +41,7 @@ function readTriggerOptions(raw: Record<string, unknown> = {}): TriggerOptions {
   };
 }
 
-function showRun(run: Run) {
+function serializeRun(run: Run) {
   return {
     ...run,
     createdAt: run.createdAt?.getTime(),
@@ -81,7 +81,7 @@ app.post(
 
 app.get(
   "/api/runs/:id",
-  serveJSON(async (req) => showRun(await runs.retrieve(String(req.params.id)))),
+  serveJSON(async (req) => serializeRun(await runs.retrieve(String(req.params.id)))),
 );
 
 app.get(
@@ -95,13 +95,13 @@ app.get(
       tags: readQueryList("tags"),
       limit: req.query.limit === undefined ? undefined : Number(req.query.limit),
     });
-    return { runs: page.runs.map(showRun), nextCursor: page.nextCursor };
+    return { runs: page.runs.map(serializeRun), nextCursor: page.nextCursor };
   }),
 );
 
 app.post(
   "/api/runs/:id/cancel",
-  serveJSON(async (req) => showRun(await runs.cancel(String(req.params.id)))),
+  serveJSON(async (req) => serializeRun(await runs.cancel(String(req.params.id)))),
 );
 
 app.post(
@@ -112,7 +112,7 @@ app.post(
 app.post(
   "/api/runs/:id/reschedule",
   serveJSON(async (req) =>
-    showRun(
+    serializeRun(
       await runs.reschedule(String(req.params.id), { delay: new Date(String(req.body.dueAt)) }),
     ),
   ),

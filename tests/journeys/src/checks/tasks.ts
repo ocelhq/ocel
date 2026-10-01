@@ -2,45 +2,22 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { type Check, type CheckContext, json } from "./context";
+import {
+  describeReply,
+  ENDED,
+  type Reply,
+  type RunRecord,
+  readAnswer,
+  SETTLED_WITHIN_MS,
+  waitFor,
+} from "./runs";
 
-const SETTLED_WITHIN_MS = 60_000;
-const POLL_MS = 250;
-
-const ENDED = ["COMPLETED", "FAILED", "CANCELED", "EXPIRED", "TIMED_OUT"];
-
-type Sent = { res: Response; body: unknown };
-
-export type RunRecord = {
-  id: string;
-  task: string;
-  status: string;
-  payload: unknown;
-  output: unknown;
-  error?: string;
-  attempts: number;
-  tags: string[];
-  createdAt?: number;
-  dueAt?: number;
-  startedAt?: number;
-  finishedAt?: number;
-  expiresAt?: number;
-};
-
-function post(ctx: CheckContext, at: string, body: unknown = {}): Promise<Sent> {
+function post(ctx: CheckContext, at: string, body: unknown = {}): Promise<Reply> {
   return json(ctx, at, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-}
-
-function describeSent(sent: Sent): string {
-  return `${sent.res.status} ${JSON.stringify(sent.body)}`;
-}
-
-function readAnswer<T>(sent: Sent, what: string): T {
-  assert.equal(sent.res.status, 200, `${what} answered ${describeSent(sent)}`);
-  return sent.body as T;
 }
 
 function newProbe(of: string): string {
@@ -67,17 +44,16 @@ async function waitForRun(
   statuses: string[] = ENDED,
   withinMs = SETTLED_WITHIN_MS,
 ): Promise<RunRecord> {
-  const deadline = Date.now() + withinMs;
-  let run = await retrieve(ctx, id);
-  while (!statuses.includes(run.status)) {
-    assert.ok(
-      Date.now() < deadline,
-      `run ${id} is still ${run.status} after ${withinMs}ms, not ${statuses.join(" or ")}: ${JSON.stringify(run)}`,
-    );
-    await delay(POLL_MS);
-    run = await retrieve(ctx, id);
-  }
-  return run;
+  let run: RunRecord | undefined;
+  return waitFor(
+    () =>
+      `run ${id} is still ${run?.status} after ${withinMs}ms, not ${statuses.join(" or ")}: ${JSON.stringify(run)}`,
+    async () => {
+      run = await retrieve(ctx, id);
+      return statuses.includes(run.status) ? run : undefined;
+    },
+    withinMs,
+  );
 }
 
 function assertCompleted(run: RunRecord): void {
@@ -189,8 +165,8 @@ export const delayBoundCheck: Check = {
       payload: {},
       options: { delay: "31d" },
     });
-    assert.notEqual(refused.res.status, 200, `a 31-day delay answered ${describeSent(refused)}`);
-    assert.match(describeSent(refused), /30 days/);
+    assert.notEqual(refused.res.status, 200, `a 31-day delay answered ${describeReply(refused)}`);
+    assert.match(describeReply(refused), /30 days/);
     const id = await trigger(ctx, "echo", {}, { delay: "29d" });
     assert.equal((await retrieve(ctx, id)).status, "DELAYED");
     assert.equal(
@@ -347,7 +323,7 @@ export const orderedKeysInParallelCheck: Check = {
   },
 };
 
-type Tallied = { batch: number[]; attempt: number };
+type Tally = { batch: number[]; attempt: number };
 
 export const batchCheck: Check = {
   title: "a batch task receives triggers together, up to its size",
@@ -361,7 +337,7 @@ export const batchCheck: Check = {
     for (const id of ids) {
       const run = await waitForRun(ctx, id);
       assertCompleted(run);
-      const { batch } = run.output as Tallied;
+      const { batch } = run.output as Tally;
       assert.ok(batch.length <= 5, `one attempt received ${batch.length} runs, over the size of 5`);
       batches.push(batch);
     }
@@ -383,7 +359,7 @@ export const batchRetryCheck: Check = {
       const run = await waitForRun(ctx, id);
       assertCompleted(run);
       assert.equal(run.attempts, 2, `run ${i + 1} took ${run.attempts} attempts`);
-      const { batch, attempt } = run.output as Tallied;
+      const { batch, attempt } = run.output as Tally;
       assert.equal(attempt, 2);
       assert.ok(batch.includes(i + 1), `run ${i + 1} completed in a batch of ${batch}`);
     }
@@ -563,7 +539,7 @@ export const rescheduleCheck: Check = {
     const run = await waitForRun(ctx, id, ENDED, STARTS_WITHIN_MS + 2_000);
     assertCompleted(run);
     const late = await post(ctx, `/api/runs/${id}/reschedule`, { dueAt });
-    assert.notEqual(late.res.status, 200, `an ended run was rescheduled: ${describeSent(late)}`);
+    assert.notEqual(late.res.status, 200, `an ended run was rescheduled: ${describeReply(late)}`);
   },
 };
 
@@ -591,15 +567,17 @@ async function waitForReceipts(
   probe: string,
   count: number,
 ): Promise<Receipt[]> {
-  const deadline = Date.now() + SETTLED_WITHIN_MS;
-  for (;;) {
-    const runs = await listRuns(ctx, { task: "receipt", tags: probe, status: "COMPLETED" });
-    if (runs.length >= count) {
-      return runs.map((run) => run.output as Receipt).sort((a, b) => a.name.localeCompare(b.name));
-    }
-    assert.ok(Date.now() < deadline, `${runs.length} of ${count} consumers received ${probe}`);
-    await delay(POLL_MS);
-  }
+  let received = 0;
+  return waitFor(
+    () => `${received} of ${count} consumers received ${probe}`,
+    async () => {
+      const runs = await listRuns(ctx, { task: "receipt", tags: probe, status: "COMPLETED" });
+      received = runs.length;
+      return runs.length >= count
+        ? runs.map((run) => run.output as Receipt).sort((a, b) => a.name.localeCompare(b.name))
+        : undefined;
+    },
+  );
 }
 
 export const fanOutCheck: Check = {
@@ -658,17 +636,14 @@ async function waitForDeadLetter(
   consumer: string,
   messageId: string,
 ): Promise<DeadLetter> {
-  const deadline = Date.now() + SETTLED_WITHIN_MS;
-  for (;;) {
+  return waitFor(`${messageId} reaching ${consumer}'s dead letters`, async () => {
     const page = await readDeadLetters(ctx, topic, consumer);
     const found = page.deadLetters.find((letter) => letter.messageId === messageId);
     if (found) {
       assert.ok(page.count >= 1, `${consumer} counts ${page.count} dead letters, listing one`);
-      return found;
     }
-    assert.ok(Date.now() < deadline, `${messageId} never reached ${consumer}'s dead letters`);
-    await delay(POLL_MS);
-  }
+    return found;
+  });
 }
 
 export const deadLetterCheck: Check = {
@@ -721,18 +696,21 @@ const CRON_WITHIN_MS = 75_000;
 export const cronCheck: Check = {
   title: "a task with a cron is triggered on its schedule",
   run: async (ctx) => {
-    const deadline = Date.now() + CRON_WITHIN_MS;
-    for (;;) {
-      const [run] = await listRuns(ctx, { task: "heartbeat", status: "COMPLETED", limit: "1" });
-      if (run) {
-        const { timestamp } = run.output as { timestamp: string };
-        assert.ok(!Number.isNaN(Date.parse(timestamp)), `the cron payload is ${timestamp}`);
-        assert.equal(new Date(Date.parse(timestamp)).getUTCSeconds(), 0);
-        return;
-      }
-      assert.ok(Date.now() < deadline, `no heartbeat ran within ${CRON_WITHIN_MS}ms`);
-      await delay(1_000);
-    }
+    const run = await waitFor(
+      "a heartbeat run",
+      async () => {
+        const [found] = await listRuns(ctx, {
+          task: "heartbeat",
+          status: "COMPLETED",
+          limit: "1",
+        });
+        return found;
+      },
+      CRON_WITHIN_MS,
+    );
+    const { timestamp } = run.output as { timestamp: string };
+    assert.ok(!Number.isNaN(Date.parse(timestamp)), `the cron payload is ${timestamp}`);
+    assert.equal(new Date(Date.parse(timestamp)).getUTCSeconds(), 0);
   },
 };
 

@@ -1,24 +1,14 @@
 import assert from "node:assert/strict";
-import { setTimeout as delay } from "node:timers/promises";
 import { type Check, type CheckContext, json } from "./context";
+import { type Reply, type RunRecord, readAnswer, waitFor } from "./runs";
 
 export const EXACT_JSON = '{"ratio":2.0,"id":9007199254740993,"count":2}';
 
-const SETTLED_WITHIN_MS = 60_000;
-const POLL_MS = 250;
+type RunRecordText = Omit<RunRecord, "payload" | "output"> & { payload: string; output: string };
 
-type Sent = { res: Response; text: string; body: unknown };
+type Sighting = { kind: string; name: string; topic: string; payload: string };
 
-type ShownRun = { id: string; task: string; status: string; payload: string; output: string };
-
-type Seen = { kind: string; name: string; topic: string; payload: string };
-
-function readAnswer<T>(sent: Sent, what: string): T {
-  assert.equal(sent.res.status, 200, `${what} answered ${sent.res.status} ${sent.text}`);
-  return sent.body as T;
-}
-
-function postExact(ctx: CheckContext, at: string): Promise<Sent> {
+function postExact(ctx: CheckContext, at: string): Promise<Reply> {
   return json(ctx, at, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -26,22 +16,13 @@ function postExact(ctx: CheckContext, at: string): Promise<Sent> {
   });
 }
 
-async function waitFor<T>(what: string, read: () => Promise<T | undefined>): Promise<T> {
-  const deadline = Date.now() + SETTLED_WITHIN_MS;
-  for (;;) {
-    const found = await read();
-    if (found !== undefined) {
-      return found;
-    }
-    assert.ok(Date.now() < deadline, `${what} within ${SETTLED_WITHIN_MS}ms`);
-    await delay(POLL_MS);
-  }
-}
-
-function waitForSeen(ctx: CheckContext, tag: string): Promise<Seen> {
+function waitForSeen(ctx: CheckContext, tag: string): Promise<Sighting> {
   return waitFor(`the handler never recorded what it was handed under ${tag}`, async () => {
-    const [seen] = readAnswer<Seen[]>(await json(ctx, `/api/seen/${tag}`), "the seen listing");
-    return seen;
+    const [sighting] = readAnswer<Sighting[]>(
+      await json(ctx, `/api/seen/${tag}`),
+      "the seen listing",
+    );
+    return sighting;
   });
 }
 
@@ -54,7 +35,7 @@ export const exactTaskPayloadCheck: Check = {
       "the trigger",
     );
     const run = await waitFor(`run ${id} never ended`, async () => {
-      const shown = readAnswer<ShownRun>(await json(ctx, `/api/runs/${id}`), "the retrieve");
+      const shown = readAnswer<RunRecordText>(await json(ctx, `/api/runs/${id}`), "the retrieve");
       return ["QUEUED", "DELAYED", "EXECUTING"].includes(shown.status) ? undefined : shown;
     });
     assert.equal(run.status, "COMPLETED");

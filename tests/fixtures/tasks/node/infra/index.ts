@@ -7,11 +7,11 @@ const ledger = worker("ledger");
 
 const capped = worker("capped", { concurrency: 2 });
 
-type Paced = { n: number; ms: number };
+type Pace = { n: number; ms: number };
 
 type Span = { n: number; startedAt: number; finishedAt: number };
 
-async function runPaced({ n, ms }: Paced): Promise<Span> {
+async function runPaced({ n, ms }: Pace): Promise<Span> {
   const startedAt = Date.now();
   await sleep(ms);
   return { n, startedAt, finishedAt: Date.now() };
@@ -50,7 +50,7 @@ export const flaky = task("flaky", {
   },
 });
 
-type InOrder = Paced & { failFirst?: boolean };
+type InOrder = Pace & { failFirst?: boolean };
 
 export const sequence = task("sequence", {
   ordered: true,
@@ -64,12 +64,12 @@ export const sequence = task("sequence", {
   },
 });
 
-type Tallied = { n: number; poison?: boolean };
+type TallyEntry = { n: number; poison?: boolean };
 
 export const tally = task("tally", {
   batch: { size: 5, timeout: "2s" },
   retry: { maxAttempts: 3, minDelay: "1s", maxDelay: "1s" },
-  run: (payloads: Tallied[], { ctx }) => {
+  run: (payloads: TallyEntry[], { ctx }) => {
     if (ctx.attempt.number === 1 && payloads.some((one) => one.poison)) {
       throw new Error("a batch holding a poisoned item fails its first attempt");
     }
@@ -110,20 +110,20 @@ export const heartbeat = task("heartbeat", {
   run: (payload: { timestamp: string }) => payload,
 });
 
-type Received = { probe: string } & Record<string, unknown>;
+type ProbeMessage = { probe: string } & Record<string, unknown>;
 
 export const receipt = task("receipt", {
-  run: (payload: Received) => payload,
+  run: (payload: ProbeMessage) => payload,
 });
 
-async function recordReceipt(payload: Received, options: RunOptions): Promise<void> {
+async function recordReceipt(payload: ProbeMessage, options: RunOptions): Promise<void> {
   await receipt.trigger(
     { ...payload, ...describeRun(options), worker: process.env.OCEL_WORKER ?? "" },
     { tags: [payload.probe] },
   );
 }
 
-export const orders = topic<Received>("orders");
+export const orders = topic<ProbeMessage>("orders");
 
 export const auditLog = orders.consumer("audit-log", recordReceipt);
 
@@ -131,7 +131,7 @@ export const ledgerEntry = orders.consumer("ledger-entry", recordReceipt, {
   worker: ledger,
 });
 
-export const doomed = topic<Received>("doomed");
+export const doomed = topic<ProbeMessage>("doomed");
 
 export const alwaysFails = doomed.consumer(
   "always-fails",
@@ -141,7 +141,7 @@ export const alwaysFails = doomed.consumer(
   { retry: { maxAttempts: 2, minDelay: "1s", maxDelay: "1s" } },
 );
 
-export const stalls = topic<Paced>("stalls");
+export const stalls = topic<Pace>("stalls");
 
 export const tooSlow = stalls.consumer("too-slow", runPaced, {
   maxDuration: "1s",
