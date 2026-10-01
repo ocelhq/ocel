@@ -154,7 +154,9 @@ on a tier without it is refused, naming that command. Cloud Run services and fun
 to a store reach private addresses over that subnetwork through direct VPC egress; the rest
 of their traffic leaves as before.
 
-**Removing it.** `ocel destroy` deletes the instance and its data.
+**Removing it.** `ocel destroy` deletes the instance and its data. Dropping `kv-network` from
+a bootstrap, or removing the bootstrap, is refused while any store is still on the tier's
+network, naming those stores.
 
 ## What to grant
 
