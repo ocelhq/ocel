@@ -31,7 +31,7 @@ type failedEvent struct {
 	Message    string `json:"message"`
 }
 
-type Envelope struct {
+type envelope struct {
 	Version int             `json:"v"`
 	ID      string          `json:"id"`
 	Channel string          `json:"ch"`
@@ -41,8 +41,8 @@ type Envelope struct {
 }
 
 const (
-	EnvelopeVersion = 1
-	KindLive        = "live"
+	envelopeVersion = 1
+	kindLive        = "live"
 )
 
 func (g *Gateway) servePublish(w http.ResponseWriter, r *http.Request) {
@@ -70,19 +70,19 @@ func (g *Gateway) servePublish(w http.ResponseWriter, r *http.Request) {
 			answer.Failed = append(answer.Failed, failedEvent{Index: i, Code: errorLimitExceeded, Message: "an event is at most 240 KB"})
 			continue
 		}
-		var envelope Envelope
-		if err := json.Unmarshal([]byte(event), &envelope); err != nil || !envelope.isLiveOn(req.Channel) {
+		var published envelope
+		if err := json.Unmarshal([]byte(event), &published); err != nil || !published.isLiveOn(req.Channel) {
 			answer.Failed = append(answer.Failed, failedEvent{Index: i, Code: errorBadRequest, Message: "an event is a version 1 live envelope of v, id, ch, ts, kind and data, its ch the channel published on"})
 			continue
 		}
 		g.hub.Publish(req.Channel, event)
-		answer.Successful = append(answer.Successful, publishedEvent{Identifier: envelope.ID, Index: i})
+		answer.Successful = append(answer.Successful, publishedEvent{Identifier: published.ID, Index: i})
 	}
 	writeAnswer(w, http.StatusOK, answer)
 }
 
-func (e Envelope) isLiveOn(channel string) bool {
-	return e.Version == EnvelopeVersion && e.ID != "" && e.Channel == channel && e.Time > 0 && e.Kind == KindLive && len(e.Data) > 0
+func (e envelope) isLiveOn(channel string) bool {
+	return e.Version == envelopeVersion && e.ID != "" && e.Channel == channel && e.Time > 0 && e.Kind == kindLive && len(e.Data) > 0
 }
 
 func answerError(w http.ResponseWriter, status int, errorType, message string) {
