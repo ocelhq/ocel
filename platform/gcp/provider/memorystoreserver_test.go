@@ -26,6 +26,7 @@ type memorystoreServer struct {
 	deleted   []string
 	polls     int
 	reads     int
+	unnamed   bool
 	throttles int
 	failed    string
 
@@ -168,6 +169,9 @@ func (s *memorystoreServer) requestIDs() []string {
 }
 
 func (s *memorystoreServer) operation(done bool) *memorystoreOperation {
+	if s.unnamed && !done {
+		return &memorystoreOperation{}
+	}
 	operation := &memorystoreOperation{Name: storeOperation, Done: done, Metadata: &operationMetadata{CreateTime: createdAt}}
 	if done {
 		operation.Metadata.EndTime = endedAt

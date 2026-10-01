@@ -22,6 +22,7 @@ type networkServer struct {
 	policies map[string]*networkconnectivity.ServiceConnectionPolicy
 	iam      map[string]*compute.Policy
 	writes   []string
+	unnamed  bool
 }
 
 func servingNetworks(t *testing.T) (bootstrap, *networkServer) {
@@ -149,6 +150,10 @@ func (s *networkServer) policy(w http.ResponseWriter, r *http.Request, name stri
 		id := r.URL.Query().Get("serviceConnectionPolicyId")
 		s.policies[id] = created
 		s.writes = append(s.writes, "create policy "+id)
+		if s.unnamed {
+			writeBody(w, map[string]any{"done": false})
+			return
+		}
 		writeBody(w, map[string]any{"name": "projects/acme-prod/locations/europe-west1/operations/op-policy", "done": true})
 	case http.MethodDelete:
 		if s.policies[name] == nil {

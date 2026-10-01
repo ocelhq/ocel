@@ -264,17 +264,17 @@ func (b bootstrap) computeAwaited(
 }
 
 func (b bootstrap) connectivityAwaited(ctx context.Context, service *networkconnectivity.Service, doing string, started *networkconnectivity.GoogleLongrunningOperation) error {
-	finished, err := until(ctx, doing, func() (*networkconnectivity.GoogleLongrunningOperation, error) {
-		if started.Done || started.Name == "" {
-			return started, nil
-		}
-		return attempted(ctx, service.Projects.Locations.Operations.Get(started.Name).Context(ctx).Do)
-	}, func(op *networkconnectivity.GoogleLongrunningOperation) bool { return op.Done || op.Name == "" })
-	if err != nil {
-		return err
+	_, err := awaitOperation(ctx, patience{attempts: waitAttempts, ceiling: waitCeiling}, "Network Connectivity", doing, started, connectivityOutcome,
+		func(name string) (*networkconnectivity.GoogleLongrunningOperation, error) {
+			return attempted(ctx, service.Projects.Locations.Operations.Get(name).Context(ctx).Do)
+		})
+	return err
+}
+
+func connectivityOutcome(operation *networkconnectivity.GoogleLongrunningOperation) operationOutcome {
+	outcome := operationOutcome{name: operation.Name, done: operation.Done}
+	if operation.Error != nil {
+		outcome.failure = failureOf(operation.Error.Code, operation.Error.Message)
 	}
-	if finished.Error != nil {
-		return refusal.Refuse(refusal.CodeNotReady, "Network Connectivity refused %s: %s", doing, finished.Error.Message)
-	}
-	return nil
+	return outcome
 }
