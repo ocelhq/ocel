@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -220,6 +221,11 @@ func TestCompileBuildsTheWorkerPackageAsASecondBinaryInTheSameArtifact(t *testin
 		t.Fatalf("compile: %v", err)
 	}
 
+	var cfg buildoutput.FunctionDescriptor
+	readJSON(t, filepath.Join(functionDir, buildoutput.FunctionDescriptorFile), &cfg)
+	if want := []string{"./" + buildoutput.GoWorkerBinary}; !slices.Equal(cfg.Worker, want) {
+		t.Errorf("the config names worker %v, want %v", cfg.Worker, want)
+	}
 	for _, name := range []string{"web", buildoutput.GoWorkerBinary} {
 		read, err := elf.Open(filepath.Join(functionDir, name))
 		if err != nil {

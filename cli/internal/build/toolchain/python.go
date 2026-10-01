@@ -48,7 +48,7 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if err := c.installRequirements(ctx, platform); err != nil {
 		return err
 	}
-	return describeArtifact(c.App, c.Framework, pythonEntryFile, []string{pythonRuntimeCommand, pythonEntryFile}, c.FunctionDir, c.AppDir)
+	return describeArtifact(c.App, c.Framework, pythonEntryFile, []string{pythonRuntimeCommand, pythonEntryFile}, nil, c.FunctionDir, c.AppDir)
 }
 
 func (c Compilation) copyDiscoveryRoots() error {

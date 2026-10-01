@@ -138,8 +138,24 @@ func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Ro
 }
 
 func BundleNodeWorker(configDir string, roots []Root, outfile string) error {
+	source, resolveDir, err := NodeWorkerSource(roots)
+	if err != nil {
+		return err
+	}
+	if source == "" {
+		source = fmt.Sprintf(nodeWorkerServer, "")
+	}
+	if resolveDir == "" {
+		resolveDir = configDir
+	}
+	if err := bundleTo(resolveDir, outfile, "ocel-worker-entry.ts", source); err != nil {
+		return fmt.Errorf("bundle the worker entry:\n%w", err)
+	}
+	return nil
+}
+
+func NodeWorkerSource(roots []Root) (source, resolveDir string, err error) {
 	var files []string
-	resolveDir := ""
 	for _, root := range roots {
 		if root.Language != language.JS {
 			continue
@@ -149,22 +165,18 @@ func BundleNodeWorker(configDir string, roots []Root, outfile string) error {
 		}
 		found, err := walkSourceFiles(root.Dir)
 		if err != nil {
-			return fmt.Errorf("discover resources: %w", err)
+			return "", "", fmt.Errorf("discover resources: %w", err)
 		}
 		files = append(files, found...)
 	}
-	if resolveDir == "" {
-		resolveDir = configDir
+	if len(files) == 0 {
+		return "", "", nil
 	}
-
 	var imports strings.Builder
 	for _, file := range files {
 		fmt.Fprintf(&imports, "await import(%q);\n", file)
 	}
-	if err := bundleTo(resolveDir, outfile, "ocel-worker-entry.ts", fmt.Sprintf(nodeWorkerServer, imports.String())); err != nil {
-		return fmt.Errorf("bundle the worker entry:\n%w", err)
-	}
-	return nil
+	return fmt.Sprintf(nodeWorkerServer, imports.String()), resolveDir, nil
 }
 
 func goWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error) {

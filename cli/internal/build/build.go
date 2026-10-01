@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
@@ -190,13 +191,23 @@ func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchai
 	if err != nil {
 		return toolchain.Target{}, fmt.Errorf("app %q: %w", a.Name, err)
 	}
+	roots, err := discovery.RootsOf(cfg)
+	if err != nil {
+		return toolchain.Target{}, err
+	}
+	workerSource, workerResolveDir, err := discovery.NodeWorkerSource(roots)
+	if err != nil {
+		return toolchain.Target{}, fmt.Errorf("app %q: %w", a.Name, err)
+	}
 	appDir := buildoutput.AppRoot(outputDir, a.Name)
 	return toolchain.Target{
-		App:         a.Name,
-		Framework:   buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: a.Architecture()},
-		Source:      source,
-		Entrypoint:  entrypoint,
-		FunctionDir: filepath.Join(appDir, functionsDirName, entryFunctionDirName),
-		AppDir:      appDir,
+		App:              a.Name,
+		Framework:        buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: a.Architecture()},
+		Source:           source,
+		Entrypoint:       entrypoint,
+		FunctionDir:      filepath.Join(appDir, functionsDirName, entryFunctionDirName),
+		AppDir:           appDir,
+		WorkerSource:     workerSource,
+		WorkerResolveDir: workerResolveDir,
 	}, nil
 }

@@ -69,11 +69,12 @@ func fileHash(path string) (string, error) {
 	return hex.EncodeToString(digest.Sum(nil)), nil
 }
 
-func describeArtifact(app string, framework buildoutput.Framework, entryFile string, command []string, functionDir, appDir string) error {
+func describeArtifact(app string, framework buildoutput.Framework, entryFile string, command, worker []string, functionDir, appDir string) error {
 	if err := writeJSON(filepath.Join(functionDir, buildoutput.FunctionDescriptorFile), buildoutput.FunctionDescriptor{
 		Framework: framework,
 		EntryFile: entryFile,
 		Command:   command,
+		Worker:    worker,
 		ID:        entryRouteID,
 		App:       app,
 	}); err != nil {

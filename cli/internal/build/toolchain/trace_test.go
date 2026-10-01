@@ -47,4 +47,14 @@ func TestTracedHandler(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("refuses an app whose discovery roots declare a worker", func(t *testing.T) {
+		t.Parallel()
+
+		target := Target{App: "api", Source: source, Entrypoint: filepath.Join(source, "server.js"), WorkerSource: "await import('./tasks.js');\n"}
+		_, err := target.TracedHandler()
+		if err == nil || !strings.Contains(err.Error(), "worker") || !strings.Contains(err.Error(), PreferTracingEnv) {
+			t.Errorf("TracedHandler err = %v, want a refusal naming the worker and %s", err, PreferTracingEnv)
+		}
+	})
 }

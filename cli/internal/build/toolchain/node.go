@@ -12,7 +12,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
-const handlerFile = "index.mjs"
+const (
+	handlerFile = "index.mjs"
+	workerFile  = "ocel-worker.mjs"
+)
 
 var engine = api.Engine{Name: api.EngineNode, Version: "24"}
 
@@ -81,6 +84,9 @@ type Target struct {
 	FunctionDir string
 	AppDir      string
 	Log         io.Writer
+
+	WorkerSource     string
+	WorkerResolveDir string
 }
 
 func Bundle(ctx context.Context, t Target) error {
@@ -96,36 +102,27 @@ func Bundle(ctx context.Context, t Target) error {
 
 	native := &addons{arch: t.Framework.Arch}
 	install := &crossInstall{arch: t.Framework.Arch}
-	result := api.Build(api.BuildOptions{
-		EntryPoints:       []string{t.Entrypoint},
-		AbsWorkingDir:     filepath.Dir(t.Entrypoint),
-		Bundle:            true,
-		Platform:          api.PlatformNode,
-		Format:            api.FormatESModule,
-		Engines:           []api.Engine{engine},
-		MinifyWhitespace:  true,
-		MinifyIdentifiers: true,
-		MinifySyntax:      true,
-		Outfile:           filepath.Join(t.FunctionDir, handlerFile),
-		Write:             true,
-		Metafile:          true,
-		LogLevel:          api.LogLevelSilent,
-		Banner:            map[string]string{"js": banner},
-		Define: map[string]string{
-			"__dirname":  "__ocelDirname",
-			"__filename": "__ocelFilename",
-		},
-		Plugins: []api.Plugin{install.plugin(), native.plugin()},
-	})
+	options := bundleOptions(filepath.Dir(t.Entrypoint), filepath.Join(t.FunctionDir, handlerFile), install, native)
+	options.EntryPoints = []string{t.Entrypoint}
+	result := api.Build(options)
 	if len(result.Errors) > 0 {
 		msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{Color: false})
 		return fmt.Errorf("bundle %s for app %q failed:\n%s", t.Entrypoint, t.App, strings.Join(msgs, "\n"))
 	}
-	if t.Log != nil && len(result.Warnings) > 0 {
-		msgs := api.FormatMessages(result.Warnings, api.FormatMessagesOptions{Color: false, Kind: api.WarningMessage})
-		fmt.Fprintf(t.Log, "ocel: bundling %s reported:\n%s\n", t.App, strings.Join(msgs, "\n"))
-	}
+	t.reportWarnings(result)
 	reportRuntimeFileRisk(t.Log, t.App, result.Metafile, filepath.Dir(t.Entrypoint))
+	var worker []string
+	if t.WorkerSource != "" {
+		options := bundleOptions(t.WorkerResolveDir, filepath.Join(t.FunctionDir, workerFile), install, native)
+		options.Stdin = &api.StdinOptions{Contents: t.WorkerSource, ResolveDir: t.WorkerResolveDir, Sourcefile: "ocel-worker-entry.ts", Loader: api.LoaderTS}
+		result := api.Build(options)
+		if len(result.Errors) > 0 {
+			msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{Color: false})
+			return fmt.Errorf("bundle the worker entry for app %q failed:\n%s", t.App, strings.Join(msgs, "\n"))
+		}
+		t.reportWarnings(result)
+		worker = []string{"node", workerFile}
+	}
 
 	if err := native.verify(); err != nil {
 		return err
@@ -136,7 +133,37 @@ func Bundle(ctx context.Context, t Target) error {
 	if err := install.installInto(ctx, t.App, filepath.Dir(t.Entrypoint), t.FunctionDir); err != nil {
 		return err
 	}
-	return describeArtifact(t.App, t.Framework, handlerFile, nil, t.FunctionDir, t.AppDir)
+	return describeArtifact(t.App, t.Framework, handlerFile, nil, worker, t.FunctionDir, t.AppDir)
+}
+
+func bundleOptions(workingDir, outfile string, install *crossInstall, native *addons) api.BuildOptions {
+	return api.BuildOptions{
+		AbsWorkingDir:     workingDir,
+		Bundle:            true,
+		Platform:          api.PlatformNode,
+		Format:            api.FormatESModule,
+		Engines:           []api.Engine{engine},
+		MinifyWhitespace:  true,
+		MinifyIdentifiers: true,
+		MinifySyntax:      true,
+		Outfile:           outfile,
+		Write:             true,
+		Metafile:          true,
+		LogLevel:          api.LogLevelSilent,
+		Banner:            map[string]string{"js": banner},
+		Define: map[string]string{
+			"__dirname":  "__ocelDirname",
+			"__filename": "__ocelFilename",
+		},
+		Plugins: []api.Plugin{install.plugin(), native.plugin()},
+	}
+}
+
+func (t Target) reportWarnings(result api.BuildResult) {
+	if t.Log != nil && len(result.Warnings) > 0 {
+		msgs := api.FormatMessages(result.Warnings, api.FormatMessagesOptions{Color: false, Kind: api.WarningMessage})
+		fmt.Fprintf(t.Log, "ocel: bundling %s reported:\n%s\n", t.App, strings.Join(msgs, "\n"))
+	}
 }
 
 func (t Target) validate() error {

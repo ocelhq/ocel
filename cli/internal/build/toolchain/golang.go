@@ -32,12 +32,14 @@ func (c Compilation) compileGo(ctx context.Context) error {
 	if err := c.buildGo(ctx, goarch, c.pkg(), ".", c.App); err != nil {
 		return err
 	}
+	var worker []string
 	if c.WorkerPackage != "" {
 		if err := c.buildGo(ctx, goarch, c.Source, c.WorkerPackage, buildoutput.GoWorkerBinary); err != nil {
 			return err
 		}
+		worker = []string{"./" + buildoutput.GoWorkerBinary}
 	}
-	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, c.FunctionDir, c.AppDir)
+	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, worker, c.FunctionDir, c.AppDir)
 }
 
 func (c Compilation) buildGo(ctx context.Context, goarch, dir, pkg, binary string) error {

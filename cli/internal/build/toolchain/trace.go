@@ -15,6 +15,10 @@ var emittedExtensions = map[string]string{
 }
 
 func (t Target) TracedHandler() (string, error) {
+	if t.WorkerSource != "" {
+		return "", fmt.Errorf("app %q has topics or tasks to run in a worker, and a traced app carries no worker entry; unset %s to bundle it",
+			t.App, PreferTracingEnv)
+	}
 	rel, err := filepath.Rel(t.Source, t.Entrypoint)
 	if err != nil || !filepath.IsLocal(rel) || slices.Contains(strings.Split(rel, string(filepath.Separator)), nodeModulesDir) {
 		return "", fmt.Errorf("entrypoint %s for app %q is not one of the app's own sources under %s, and a traced app is served from the entrypoint it copies there; name an entrypoint inside the app, or unset %s to bundle it",
@@ -40,5 +44,5 @@ func DescribeTrace(t Target) error {
 	if err != nil {
 		return err
 	}
-	return describeArtifact(t.App, t.Framework, handler, nil, t.FunctionDir, t.AppDir)
+	return describeArtifact(t.App, t.Framework, handler, nil, nil, t.FunctionDir, t.AppDir)
 }
