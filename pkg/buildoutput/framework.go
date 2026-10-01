@@ -7,8 +7,6 @@ const (
 	FrameworkNext = "next"
 	FrameworkGo   = "go"
 
-	GoWorkerBinary = "ocel-worker"
-
 	FrameworkPython = "python"
 
 	FrameworkRust = "rust"
