@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
@@ -183,7 +184,21 @@ func TestDestroyingAStackDeletesEveryTokenUnderItsEnvironmentAndNoOther(t *testi
 	}
 }
 
-func TestATransformDropsAStoreToOneNode(t *testing.T) {
+func provisionPatchedKV(t *testing.T, patch map[string]any) error {
+	t.Helper()
+	cfg := conformingConfig(&fakeArtifactStore{})
+	cfg.Transform = patchingPass{patch: func(patches []transform.Patches) {
+		patches[0]["replicationGroup"] = patch
+	}}
+	_, err := stacksWith(cfg, &mockedEngine{outputs: auto.OutputMap{"c-kv": kvOutput("c-kv")}}).Provision(context.Background(), provider.StackSpec{
+		Ref:       conformanceInfra,
+		Kind:      provider.StackInfra,
+		Resources: []provider.Resource{{Name: "c-kv", Type: provider.BindingKV, KV: &provider.KVSpec{}}},
+	}, nil)
+	return err
+}
+
+func TestATransformDropsAStoreToOneNodeWithNoFailover(t *testing.T) {
 	t.Parallel()
 
 	pass := patchingPass{patch: func(patches []transform.Patches) {
@@ -202,19 +217,47 @@ func TestATransformDropsAStoreToOneNode(t *testing.T) {
 		t.Fatalf("transformStackSpec() = %v", err)
 	}
 
-	group := resourceRef{Token: tokenElastiCacheReplicationGroup, Name: "kv-c-kv"}
-	transformed.claimed = map[resourceRef]bool{}
-	merged, claimed := transformed.claim(group, sdk.Map{
-		"numCacheClusters":         sdk.Int(kvNodeCount),
-		"automaticFailoverEnabled": sdk.Bool(true),
-		"multiAzEnabled":           sdk.Bool(true),
-	})
-	if !claimed {
-		t.Fatalf("the patch named %+v, and no replication group ocel constructs claimed it", group)
+	rendered := sdk.Map{}
+	for field, value := range registeredKV(t, "shop").inputsOf(t, tokenElastiCacheReplicationGroup, "kv-cache").Mappable() {
+		switch scalar := value.(type) {
+		case string:
+			rendered[field] = sdk.String(scalar)
+		case float64:
+			rendered[field] = sdk.Float64(scalar)
+		case bool:
+			rendered[field] = sdk.Bool(scalar)
+		}
 	}
-	for field, want := range map[string]any{"numCacheClusters": float64(1), "automaticFailoverEnabled": false, "multiAzEnabled": false} {
+	transformed.claimed = map[resourceRef]bool{}
+	merged, claimed := transformed.claim(resourceRef{Token: tokenElastiCacheReplicationGroup, Name: "kv-c-kv"}, rendered)
+	if !claimed {
+		t.Fatal("the patch reached no replication group ocel constructs")
+	}
+	for field, want := range map[string]any{
+		"numCacheClusters":         float64(1),
+		"automaticFailoverEnabled": false,
+		"multiAzEnabled":           false,
+		"nodeType":                 "cache.t4g.micro",
+		"transitEncryptionEnabled": true,
+	} {
 		if got := mergedValue(t, merged[field]); !sameValue(got, want) {
-			t.Errorf("%s = %#v, want %v", field, got, want)
+			t.Errorf("the patched replication group's %s = %#v, want %v", field, got, want)
+		}
+	}
+}
+
+func TestATransformDroppingAStoreToOneNodeWithFailoverStillOnIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for _, patch := range []map[string]any{
+		{"numCacheClusters": 1},
+		{"numCacheClusters": 1, "automaticFailoverEnabled": false},
+		{"numCacheClusters": 1, "multiAzEnabled": false},
+		{"numCacheClusters": 1, "automaticFailoverEnabled": true, "multiAzEnabled": false},
+	} {
+		err := provisionPatchedKV(t, patch)
+		if err == nil || !strings.Contains(err.Error(), "c-kv") || !strings.Contains(err.Error(), "automaticFailoverEnabled") || !strings.Contains(err.Error(), "multiAzEnabled") {
+			t.Errorf("Provision() with %v = %v, want it refused naming the store and both flags ElastiCache refuses on one node", patch, err)
 		}
 	}
 }
