@@ -1,0 +1,89 @@
+package gateway
+
+import (
+	"cmp"
+	"crypto/ed25519"
+	"net/http"
+	"regexp"
+	"slices"
+	"strings"
+	"time"
+)
+
+const (
+	Subprotocol = "aws-appsync-event-ws"
+	SocketPath  = "/event/realtime"
+	PublishPath = "/event"
+
+	MaxSubscriptions    = 200
+	MaxEventBytes       = 240 * 1024
+	MaxEventsPerPublish = 5
+
+	DefaultKeepAlive   = 60 * time.Second
+	DefaultQueueBudget = 1 << 20
+)
+
+type Config struct {
+	Host           string
+	Keys           func(namespace string) (ed25519.PublicKey, bool)
+	AllowedOrigins []string
+	KeepAlive      time.Duration
+	QueueBudget    int
+	Now            func() time.Time
+}
+
+type Gateway struct {
+	cfg Config
+	hub *Hub
+	mux *http.ServeMux
+}
+
+func New(cfg Config) *Gateway {
+	cfg.KeepAlive = cmp.Or(cfg.KeepAlive, DefaultKeepAlive)
+	cfg.QueueBudget = cmp.Or(cfg.QueueBudget, DefaultQueueBudget)
+	if cfg.Now == nil {
+		cfg.Now = time.Now
+	}
+	g := &Gateway{cfg: cfg, hub: NewHub(), mux: http.NewServeMux()}
+	g.mux.HandleFunc("GET "+SocketPath, g.serveSocket)
+	g.mux.HandleFunc("POST "+PublishPath, g.servePublish)
+	return g
+}
+
+func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if !g.isAllowedOrigin(r) {
+		http.Error(w, "this origin may not reach the realtime gateway", http.StatusForbidden)
+		return
+	}
+	g.mux.ServeHTTP(w, r)
+}
+
+func (g *Gateway) isAllowedOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	return origin == "" || slices.Contains(g.cfg.AllowedOrigins, origin)
+}
+
+var channelSegment = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$`)
+
+const maxChannelSegments = 5
+
+func namespaceOf(channel string, isWildcardAllowed bool) (string, bool) {
+	rest, rooted := strings.CutPrefix(channel, "/")
+	if !rooted {
+		return "", false
+	}
+	segments := strings.Split(rest, "/")
+	if len(segments) < 2 || len(segments) > maxChannelSegments {
+		return "", false
+	}
+	for i, segment := range segments {
+		isLast := i == len(segments)-1
+		if isLast && isWildcardAllowed && segment == "*" && i > 0 {
+			continue
+		}
+		if !channelSegment.MatchString(segment) {
+			return "", false
+		}
+	}
+	return segments[0], true
+}
