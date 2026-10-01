@@ -86,7 +86,7 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 			return "", err
 		}
 		if !created {
-			return readRecordedRun(existing), nil
+			return readRecordedRun(existing)
 		}
 	}
 	if debounce := options.GetDebounce(); debounce != nil {
@@ -152,7 +152,10 @@ func (t Tasks) debounce(ctx context.Context, record provider.ExpiringRecord) (st
 	if err != nil || created {
 		return "", err
 	}
-	pending := readRecordedRun(existing)
+	pending, err := readRecordedRun(existing)
+	if err != nil {
+		return "", err
+	}
 	err = t.move(ctx, pending, record.ExpiresAt, true)
 	if err == nil {
 		existing.ExpiresAt = record.ExpiresAt
@@ -183,10 +186,12 @@ func newRunRecord(purpose provider.RecordPurpose, task, key, execution string, e
 	return provider.ExpiringRecord{Purpose: purpose, Topic: task, Key: key, Value: value, ExpiresAt: expires}
 }
 
-func readRecordedRun(record provider.ExpiringRecord) string {
+func readRecordedRun(record provider.ExpiringRecord) (string, error) {
 	var recorded recordedRun
-	_ = json.Unmarshal(record.Value, &recorded)
-	return recorded.Run
+	if err := json.Unmarshal(record.Value, &recorded); err != nil {
+		return "", fmt.Errorf("read the run the %s record %q of %s names: %w", record.Purpose, record.Key, record.Topic, err)
+	}
+	return recorded.Run, nil
 }
 
 func refuseNonObject(metadata []byte) error {

@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -143,6 +145,27 @@ func TestLiveASendWithALiveIdempotencyKeyAnswersTheFirstMessageAndPublishesNoOth
 	}
 	if pulled := p.pull("orders", "ship"); len(pulled) != 1 {
 		t.Errorf("the consumer's subscription holds %d messages, want only the first", len(pulled))
+	}
+}
+
+func TestLiveASendThatFailsToPublishLeavesItsIdempotencyKeyFree(t *testing.T) {
+	p := newPublished(t)
+	ctx := context.Background()
+	send := &topicv1.SendRequest{Topic: "orders", Payload: []byte(`{}`), IdempotencyKey: "order-1", DueAt: timestamppb.New(time.Now().Add(time.Hour))}
+
+	failed, err := p.deployment.Topics().Send(ctx, send)
+	if err == nil {
+		t.Fatalf("Send() with no delay queue answered %s, want it to fail", failed.GetMessageId())
+	}
+
+	p = p.withDelays()
+	retried, err := p.deployment.Topics().Send(ctx, send)
+	if err != nil {
+		t.Fatalf("the retried Send() = %v", err)
+	}
+	tasks := p.delayTasks()
+	if len(tasks) != 1 || !strings.Contains(tasks[0].GetName(), retried.GetMessageId()) {
+		t.Errorf("the retried Send() answered %s and the delay queue holds %d tasks, want the one it answered scheduled", retried.GetMessageId(), len(tasks))
 	}
 }
 
