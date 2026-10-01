@@ -38,9 +38,10 @@ Every entry point is a subpath — there is no root export.
 | `ocel/bucket/client` | `createUploadClient` — browser-side uploads against a bucket's uploaders |
 | `ocel/task` | `task(name, options)` — declares a task and returns the handle its runs are triggered through, plus `runs` and `AbortTaskRunError` |
 | `ocel/topic` | `topic(name, options?)` — declares a topic and returns the handle messages are sent through and consumers are declared on |
+| `ocel/kv` | `kv(name, options?)` — declares a key-value store and returns its typed entries as members, beside its ioredis `client` and `connectionString`; `kv.text`, `kv.counter`, `kv.json`, `kv.list` and `kv.set` declare the entries |
 | `ocel/worker` | `worker(name, options?)` — declares the worker tasks and consumers run on, plus `deliver`, which the generated worker entry calls |
 
-`next`, `hono`, `express`, and `pg` are optional peer dependencies; install only the one
+`next`, `hono`, `express`, `pg` and `ioredis` are optional peer dependencies; install only the one
 your app uses.
 
 `ocel init` writes `ocel.json`, which needs none of this package. `ocel/config` is for a

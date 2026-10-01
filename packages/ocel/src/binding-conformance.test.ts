@@ -7,10 +7,16 @@ vi.mock("./utils/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 
+vi.mock("ioredis", async () => {
+  const { ValkeyMock } = await import("./testing/valkey-mock.js");
+  return { Redis: ValkeyMock, default: ValkeyMock };
+});
+
 const { postgres } = await import("./postgres/index.js");
 const { bucket } = await import("./bucket/bucket.js");
 const { task } = await import("./task/index.js");
 const { topic } = await import("./topic/index.js");
+const { kv } = await import("./kv/index.js");
 
 function repoRoot() {
   let dir = new URL("./", import.meta.url);
@@ -92,5 +98,24 @@ describe("the binding conformance fixtures", () => {
     vi.stubEnv(bindingKey("orders", BindingType.TOPIC), body);
 
     expect(topic("orders").__config()).toMatchObject(JSON.parse(body).topic);
+  });
+
+  it("reach kv() through its live key", () => {
+    const body = raw(BindingType.KV);
+    vi.stubEnv(bindingKey("cache", BindingType.KV), body);
+    const want = JSON.parse(body).kv;
+
+    const cache = kv("cache");
+
+    expect(cache.client.options).toMatchObject({
+      host: want.host,
+      port: want.port,
+      username: want.username,
+      password: want.password,
+      tls: { servername: want.host },
+    });
+    expect(cache.connectionString).toBe(
+      `rediss://${want.username}:${want.password}@${want.host}:${want.port}`,
+    );
   });
 });

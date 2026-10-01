@@ -14,6 +14,7 @@ const { Postgres } = await import("../src/postgres/pg.js");
 const { task } = await import("../src/task/index.js");
 const { topic } = await import("../src/topic/index.js");
 const { worker } = await import("../src/worker/index.js");
+const { kv } = await import("../src/kv/index.js");
 
 describe("declarationSite", () => {
   it("names a user file whose path looks like one of the SDK's own modules", () => {
@@ -54,6 +55,49 @@ describe("declarationSite", () => {
       ["callsite-consumer", `${here}:${line + 3}`],
       ["callsite-worker", `${here}:${line + 4}`],
     ]);
+  });
+
+  it("names the line a kv store and each of its entries were declared on", () => {
+    const line = Number(new Error().stack?.split("\n")[1]?.match(/:(\d+):\d+\)?$/)?.[1]);
+    kv("callsite-kv", {
+      entries: {
+        requests: kv.counter("requests/:userId"),
+        session: kv.text("session/:id"),
+      },
+    });
+
+    const here = fileURLToPath(import.meta.url);
+    const [request] = (
+      declareMock.mock.calls as unknown as [
+        {
+          resource: { name: string };
+          source: string;
+          config: { value: { entries: { name: string; source: string }[] } };
+        },
+      ][]
+    )
+      .map(([req]) => req)
+      .filter((req) => req.resource.name === "callsite-kv");
+    expect(request?.source).toBe(`${here}:${line + 1}`);
+    expect(request?.config.value.entries.map((entry) => [entry.name, entry.source])).toEqual([
+      ["requests", `${here}:${line + 3}`],
+      ["session", `${here}:${line + 4}`],
+    ]);
+  });
+
+  it("names both lines when two entries of a kv store overlap", () => {
+    const line = Number(new Error().stack?.split("\n")[1]?.match(/:(\d+):\d+\)?$/)?.[1]);
+    const here = fileURLToPath(import.meta.url);
+    expect(() =>
+      kv("callsite-overlap", {
+        entries: {
+          session: kv.text("session/:id"),
+          current: kv.text("session/current"),
+        },
+      }),
+    ).toThrow(
+      `declared at ${here}:${line + 6} has pattern "session/current", which overlaps pattern "session/:id" of entry "session" declared at ${here}:${line + 5}`,
+    );
   });
 
   it("names the module a schema was declared in", () => {
