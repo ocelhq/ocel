@@ -664,6 +664,28 @@ fresh volume and starts 9 on them. Valkey 8 cannot read data that 9 wrote, so a 
 pages are `always`. Valkey logs a warning about both, and a background save can fail without
 overcommit.
 
+## Topics, tasks and workers
+
+Every topic and task of an environment runs on one Postgres container with pgmq, on your
+project's own network, in a database of its own. It publishes no port on the machine. Its
+password is generated on the first deploy and kept sealed on the box. The box dumps it once a
+day like a [postgres](#postgres), and `ocel destroy` takes it when the last topic or task goes.
+
+Each worker runs as a container of its own, started from the image of the app it joins: the
+build adds the worker's entry to that image, and the worker container runs it instead of your
+app. A worker gets the app's values and bindings, publishes no port, and is never routed:
+only the box's agent calls it, over your project's network. A worker runs for as long as a
+run takes, so `maxDuration` has no ceiling here. A worker serves what is declared in a node,
+go or rust folder; a python one is refused at build.
+
+The box's agent runs the queues and delivers each run to its worker. An app sends and
+triggers through the runtime in its own container, which only that app's process can call.
+A box bootstrapped before topics and tasks runs an agent that serves none: run
+`ocel bootstrap` again.
+
+A deploy replaces the workers with the new release's and stops the old ones. Promoting an
+older release puts its app back, and leaves the workers on the newest code.
+
 ## Buckets
 
 A bucket runs in a store the box keeps for the project. Bind it to a store you already run and
