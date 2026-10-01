@@ -119,7 +119,7 @@ func (t *TopicDefinition[P]) Send(ctx context.Context, payload P, opts ...SendOp
 		opt.applySend(&settings)
 	}
 	res, err := topic.client.Send(ctx, &topicv1.SendRequest{
-		Topic:          topic.name,
+		Topic:          t.name,
 		Payload:        body,
 		DueAt:          settings.encodeDueAt(),
 		IdempotencyKey: settings.idempotencyKey,
@@ -135,13 +135,11 @@ func (t *TopicDefinition[P]) Send(ctx context.Context, payload P, opts ...SendOp
 // DeadLetter is the messages consumer gave up on, once they ran out of
 // attempts or were aborted.
 func (t *TopicDefinition[P]) DeadLetter(consumer string) *DeadLetters {
-	return &DeadLetters{consumer: consumer, connect: t.connect}
+	return &DeadLetters{topic: t.name, consumer: consumer, connect: t.connect}
 }
 
 func (t *TopicDefinition[P]) connect(access string) (*boundResource[topicv1connect.TopicServiceClient], error) {
 	return t.connection.connect(fmt.Sprintf("topic(%q)", t.name), access, func() (*boundResource[topicv1connect.TopicServiceClient], error) {
-		return dialBoundResource(t.name, bindingsv1.BindingType_BINDING_TYPE_TOPIC,
-			func(delivered *bindingsv1.Binding) string { return delivered.GetTopic().GetTopic() },
-			topicv1connect.NewTopicServiceClient)
+		return dialBoundResource(t.name, bindingsv1.BindingType_BINDING_TYPE_TOPIC, topicv1connect.NewTopicServiceClient)
 	})
 }

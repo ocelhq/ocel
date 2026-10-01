@@ -133,7 +133,7 @@ describe("a task at runtime", () => {
     vi.stubEnv("OCEL_PHASE", "");
     vi.stubEnv(
       "OCEL_RESOURCE_TASK_resize-image",
-      JSON.stringify({ name: "resize-image", task: { task: "shop-prod-resize-image" } }),
+      JSON.stringify({ name: "resize-image", task: {} }),
     );
     triggers.length = 0;
     batches.length = 0;
@@ -156,14 +156,14 @@ describe("a task at runtime", () => {
     await proxy.close();
   });
 
-  it("triggers a run of its bound task with the payload as JSON, and answers the run's id", async () => {
+  it("triggers a run of the task by its declared name with the payload as JSON, and answers the run's id", async () => {
     const resize = task("resize-image", { run: async (_image: { url: string }) => {} });
 
     const run = await resize.trigger({ url: "s3://a.png" });
 
     expect(run).toEqual({ id: "run_1" });
     expect(triggers).toHaveLength(1);
-    expect(triggers[0]?.task).toBe("shop-prod-resize-image");
+    expect(triggers[0]?.task).toBe("resize-image");
     expect(new TextDecoder().decode(triggers[0]?.payload)).toBe('{"url":"s3://a.png"}');
     expect(proxy.authorizations).toEqual(["Bearer session-token"]);
   });
@@ -233,7 +233,7 @@ describe("a task at runtime", () => {
     ]);
 
     expect(handles).toEqual([{ id: "run_1" }, { id: "run_2" }]);
-    expect(batches[0]?.task).toBe("shop-prod-resize-image");
+    expect(batches[0]?.task).toBe("resize-image");
     expect(batches[0]?.items.map((item) => new TextDecoder().decode(item.payload))).toEqual([
       '"a"',
       '"b"',

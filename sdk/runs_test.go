@@ -19,7 +19,7 @@ func storedRun() *taskv1.Run {
 	metadata, _ := structpb.NewStruct(map[string]any{"source": "upload"})
 	return &taskv1.Run{
 		Id:         "run-1",
-		Task:       "project-env-resize",
+		Task:       "resize",
 		Status:     taskv1.RunStatus_RUN_STATUS_TIMED_OUT,
 		Payload:    structpb.NewStructValue(&structpb.Struct{Fields: map[string]*structpb.Value{"key": structpb.NewStringValue("a.png")}}),
 		Output:     structpb.NewNullValue(),
@@ -47,7 +47,7 @@ func TestRetrieveRunReadsTheRunRecord(t *testing.T) {
 	if req := only[*taskv1.RetrieveRunRequest](t, runtime); req.GetId() != "run-1" {
 		t.Errorf("id = %q", req.GetId())
 	}
-	if run.ID != "run-1" || run.Task != "project-env-resize" || run.Status != ocel.RunTimedOut ||
+	if run.ID != "run-1" || run.Task != "resize" || run.Status != ocel.RunTimedOut ||
 		string(run.Payload) != `{"key":"a.png"}` || string(run.Output) != "null" ||
 		run.Error != "the attempt ran past its max duration" || run.Attempts != 1 ||
 		!slices.Equal(run.Tags, []string{"user:1"}) || run.Metadata["source"] != "upload" {
@@ -60,8 +60,8 @@ func TestRetrieveRunReadsTheRunRecord(t *testing.T) {
 	}
 }
 
-func TestListRunsNarrowsByTheBoundTaskStatusesAndTags(t *testing.T) {
-	runtime := serveRuntime(t, boundTask("resize-listed"))
+func TestListRunsNarrowsByTheDeclaredTaskStatusesAndTags(t *testing.T) {
+	runtime := serveRuntime(t, deliveredTask("resize-listed"))
 	runtime.run = storedRun()
 
 	page, err := ocel.ListRuns(t.Context(),
@@ -76,7 +76,7 @@ func TestListRunsNarrowsByTheBoundTaskStatusesAndTags(t *testing.T) {
 	}
 
 	req := only[*taskv1.ListRunsRequest](t, runtime)
-	if req.GetTask() != "project-env-resize" || req.GetCursor() != "c-1" || req.GetLimit() != 50 ||
+	if req.GetTask() != "resize-listed" || req.GetCursor() != "c-1" || req.GetLimit() != 50 ||
 		!slices.Equal(req.GetTags(), []string{"user:1"}) ||
 		!slices.Equal(req.GetStatuses(), []taskv1.RunStatus{taskv1.RunStatus_RUN_STATUS_FAILED, taskv1.RunStatus_RUN_STATUS_TIMED_OUT}) {
 		t.Errorf("request = %v", req)

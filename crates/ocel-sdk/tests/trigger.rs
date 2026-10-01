@@ -27,7 +27,7 @@ async fn other_task(_image: Image, _run: &ocel::Run) -> Result<(), ocel::RunErro
 fn bind_task() {
     std::env::set_var(
         "OCEL_RESOURCE_TASK_resize-image",
-        r#"{"name":"resize-image","task":{"task":"resize-image-7f3a"}}"#,
+        r#"{"name":"resize-image","task":{}}"#,
     );
 }
 
@@ -44,7 +44,7 @@ fn read_seconds(at: SystemTime) -> i64 {
 }
 
 #[tokio::test]
-async fn a_trigger_sends_the_payload_as_json_to_the_bound_task_with_its_options() {
+async fn a_trigger_sends_the_payload_as_json_to_the_task_by_its_declared_name_with_its_options() {
     let runtime = runtime();
     bind_task();
     runtime.answer(
@@ -79,7 +79,7 @@ async fn a_trigger_sends_the_payload_as_json_to_the_bound_task_with_its_options(
     assert_eq!(calls[0].path, "/app.task.v1.TaskService/Trigger");
     assert_eq!(calls[0].authorization, Some(format!("Bearer {TOKEN}")));
     let sent: TriggerRequest = calls[0].decode();
-    assert_eq!(sent.task, "resize-image-7f3a");
+    assert_eq!(sent.task, "resize-image");
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&sent.payload).expect("json"),
         serde_json::json!({ "url": "a.png" })
@@ -164,7 +164,7 @@ async fn a_batch_trigger_sends_every_payload_in_order_and_answers_their_ids() {
     );
 
     let sent: BatchTriggerRequest = runtime.only("BatchTrigger")[0].decode();
-    assert_eq!(sent.task, "resize-image-7f3a");
+    assert_eq!(sent.task, "resize-image");
     let urls: Vec<serde_json::Value> = sent
         .items
         .iter()
@@ -235,7 +235,7 @@ async fn a_trigger_during_discovery_names_the_task_and_the_access() {
 fn build_wire_run(id: &str) -> Run {
     Run {
         id: id.into(),
-        task: "resize-image-7f3a".into(),
+        task: "resize-image".into(),
         status: RunStatus::RUN_STATUS_COMPLETED.into(),
         payload: serde_json::from_value(serde_json::json!({ "url": "a.png" })).expect("a value"),
         output: serde_json::from_value(serde_json::json!(5)).expect("a value"),
@@ -283,7 +283,7 @@ async fn a_run_the_runtime_does_not_have_is_named_by_its_id() {
 }
 
 #[tokio::test]
-async fn a_listing_of_a_tasks_runs_names_the_bound_task_and_pages_by_cursor() {
+async fn a_listing_of_a_tasks_runs_names_the_declared_task_and_pages_by_cursor() {
     let runtime = runtime();
     bind_task();
     runtime.answer(
@@ -313,7 +313,7 @@ async fn a_listing_of_a_tasks_runs_names_the_bound_task_and_pages_by_cursor() {
     assert_eq!(page.next_cursor.as_deref(), Some("page-2"));
 
     let sent: ListRunsRequest = runtime.only("ListRuns")[0].decode();
-    assert_eq!(sent.task, "resize-image-7f3a");
+    assert_eq!(sent.task, "resize-image");
     assert_eq!(
         sent.statuses
             .iter()

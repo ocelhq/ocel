@@ -1,7 +1,6 @@
 //! The runs tasks were triggered into: read them, list them, and cancel, replay or
 //! reschedule one by its id.
 
-use crate::binding;
 use crate::declare::is_discovering;
 use crate::json::{convert_object, convert_timestamp, convert_value};
 use crate::payload::Due;
@@ -74,7 +73,7 @@ impl RunStatus {
 pub struct RunRecord {
     /// The run's id, as the trigger answered it.
     pub id: String,
-    /// The task the run belongs to.
+    /// The name the run's task was declared under.
     pub task: String,
     /// Where the run is in its life, or `None` for a status this SDK does not know.
     pub status: Option<RunStatus>,
@@ -313,10 +312,7 @@ impl IntoFuture for RunList {
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
             let client = ensure_client("list")?;
-            let task = match &self.task {
-                Some(name) => binding::read_task(name)?,
-                None => String::new(),
-            };
+            let task = self.task.clone().unwrap_or_default();
             let response = client
                 .list_runs(ListRunsRequest {
                     task,

@@ -16,7 +16,6 @@ export {
 export {
   type BatchOptions,
   type BatchTriggerItem,
-  type ResolvedTaskConfig,
   type RunFunction,
   type RunHandle,
   Task,

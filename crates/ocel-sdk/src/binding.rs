@@ -38,9 +38,9 @@ pub(crate) fn read_kv(name: &str) -> Result<KvProperties, Error> {
     }
 }
 
-pub(crate) fn read_topic(name: &str) -> Result<String, Error> {
+pub(crate) fn refuse_unbound_topic(name: &str) -> Result<(), Error> {
     match read_binding(&format!("OCEL_RESOURCE_TOPIC_{name}"), "TOPIC")? {
-        (Some(Properties::Topic(properties)), _) => Ok(properties.topic),
+        (Some(Properties::Topic(_)), _) => Ok(()),
         (other, key) => Err(Error::WrongBindingType {
             key,
             found: describe_kind(&other),
@@ -49,9 +49,9 @@ pub(crate) fn read_topic(name: &str) -> Result<String, Error> {
     }
 }
 
-pub(crate) fn read_task(name: &str) -> Result<String, Error> {
+pub(crate) fn refuse_unbound_task(name: &str) -> Result<(), Error> {
     match read_binding(&format!("OCEL_RESOURCE_TASK_{name}"), "TASK")? {
-        (Some(Properties::Task(properties)), _) => Ok(properties.task),
+        (Some(Properties::Task(_)), _) => Ok(()),
         (other, key) => Err(Error::WrongBindingType {
             key,
             found: describe_kind(&other),

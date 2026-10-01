@@ -21,7 +21,6 @@ type ResultFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send 
 
 struct Connection {
     client: TopicServiceClient<HttpClient>,
-    topic: String,
 }
 
 /// The name of a topic whose messages are of type `T`. A struct deriving
@@ -112,10 +111,9 @@ impl<T> Topic<T> {
         if let Some(connection) = self.connection.get() {
             return Ok(connection);
         }
-        let topic = binding::read_topic(&self.name)?;
+        binding::refuse_unbound_topic(&self.name)?;
         let connection = Connection {
             client: TopicServiceClient::new(HttpClient::plaintext(), read_client_config()?),
-            topic,
         };
         Ok(self.connection.get_or_init(|| connection))
     }
@@ -199,6 +197,7 @@ impl<'a, T> IntoFuture for TopicSend<'a, T> {
     fn into_future(self) -> Self::IntoFuture {
         let connection = self.topic.ensure_connection("send");
         let resource = self.topic.describe_resource();
+        let name = self.topic.name.to_string();
         let TopicSend {
             payload,
             due,
@@ -212,7 +211,7 @@ impl<'a, T> IntoFuture for TopicSend<'a, T> {
             let response = connection
                 .client
                 .send(SendRequest {
-                    topic: connection.topic.clone(),
+                    topic: name,
                     payload: payload?,
                     due_at: due.map(Due::to_timestamp).into(),
                     idempotency_key,
@@ -317,7 +316,7 @@ impl<T> DeadLetters<'_, T> {
         let response = connection
             .client
             .count_dead_letters(CountDeadLettersRequest {
-                topic: connection.topic.clone(),
+                topic: self.topic.name.to_string(),
                 consumer: self.consumer.clone(),
                 ..Default::default()
             })
@@ -331,7 +330,7 @@ impl<T> DeadLetters<'_, T> {
         let response = connection
             .client
             .redrive_dead_letters(RedriveDeadLettersRequest {
-                topic: connection.topic.clone(),
+                topic: self.topic.name.to_string(),
                 consumer: self.consumer.clone(),
                 executions,
                 ..Default::default()
@@ -346,7 +345,7 @@ impl<T> DeadLetters<'_, T> {
         let response = connection
             .client
             .purge_dead_letters(PurgeDeadLettersRequest {
-                topic: connection.topic.clone(),
+                topic: self.topic.name.to_string(),
                 consumer: self.consumer.clone(),
                 executions,
                 ..Default::default()
@@ -386,6 +385,7 @@ impl<'a, T> IntoFuture for DeadLetterList<'a, T> {
         let topic = self.dead_letters.topic;
         let connection = topic.ensure_connection("dead_letter.list");
         let resource = topic.describe_resource();
+        let name = topic.name.to_string();
         let consumer = self.dead_letters.consumer.clone();
         let (cursor, limit) = (self.cursor, self.limit);
         Box::pin(async move {
@@ -393,7 +393,7 @@ impl<'a, T> IntoFuture for DeadLetterList<'a, T> {
             let response = connection
                 .client
                 .list_dead_letters(ListDeadLettersRequest {
-                    topic: connection.topic.clone(),
+                    topic: name,
                     consumer,
                     cursor,
                     limit,

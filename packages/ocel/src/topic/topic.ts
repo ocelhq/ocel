@@ -1,6 +1,6 @@
 import { type Client, createClient } from "@connectrpc/connect";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { getConfig } from "../binding/binding.js";
+import { refuseUnbound } from "../binding/binding.js";
 import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
 import { declarationSite } from "../declaration/callsite.js";
 import { defer } from "../declaration/defer.js";
@@ -73,12 +73,6 @@ export interface Consumer {
   readonly topic: string;
 }
 
-/** The binding fields a topic resolves at runtime. */
-export interface ResolvedTopicConfig {
-  /** The name the topic is bound under. */
-  topic: string;
-}
-
 /** A declared topic, and the handle its messages are sent through. */
 export class Topic<TInput = unknown, TOutput = TInput> {
   /** The name this topic was declared under. */
@@ -109,17 +103,13 @@ export class Topic<TInput = unknown, TOutput = TInput> {
     }
   }
 
-  /** The binding delivered for this topic. */
-  __config(): ResolvedTopicConfig {
-    if (unprovisionedPhase()) {
-      throw unprovisioned(`topic("${this.name}")`, "__config");
-    }
-    return getConfig(this.name, "topic");
-  }
-
   private ensureClient(operation: string): Client<typeof TopicService> {
     if (unprovisionedPhase()) {
       throw unprovisioned(`topic("${this.name}")`, operation);
+    }
+    const refusal = refuseUnbound(this.name, "topic");
+    if (refusal) {
+      throw refusal;
     }
     return (this.client ??= createClient(TopicService, createRuntimeTransport()));
   }
@@ -128,7 +118,7 @@ export class Topic<TInput = unknown, TOutput = TInput> {
   async send(payload: TInput, options: SendOptions = {}): Promise<string> {
     const client = this.ensureClient("send");
     const { messageId } = await client.send({
-      topic: this.__config().topic,
+      topic: this.name,
       payload: encodePayload(payload),
       dueAt: encodeDueAt(options.delay),
       idempotencyKey: options.idempotencyKey ?? "",
@@ -201,7 +191,7 @@ export class Topic<TInput = unknown, TOutput = TInput> {
       typeof consumer === "string" ? consumer : consumer.name,
       (operation) => ({
         client: this.ensureClient(operation),
-        topic: this.__config().topic,
+        topic: this.name,
       }),
     );
   }

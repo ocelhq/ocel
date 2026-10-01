@@ -15,7 +15,7 @@ def runtime(monkeypatch):
     fake = fakeruntime.Runtime()
     monkeypatch.setenv(
         "OCEL_RESOURCE_TASK_resize-image",
-        json.dumps({"name": "resize-image", "task": {"task": "shop-prod-resize-image"}}),
+        json.dumps({"name": "resize-image", "task": {}}),
     )
     monkeypatch.setenv("OCEL_RUNTIME_ADDRESS", fake.url)
     monkeypatch.setenv("OCEL_SESSION_TOKEN", fakeruntime.TOKEN)
@@ -29,7 +29,7 @@ def test_a_retrieved_run_carries_its_whole_record(runtime):
     assert runtime.requests("RetrieveRun")[0].id == "run_1"
     assert run == Run(
         id="run_1",
-        task="shop-prod-resize-image",
+        task="resize-image",
         status=RunStatus.COMPLETED,
         payload={"url": "a.png", "width": 100},
         output={"ok": True},
@@ -46,7 +46,7 @@ def test_a_retrieved_run_carries_its_whole_record(runtime):
     assert runtime.authorizations == ["Bearer letmein"]
 
 
-def test_a_run_listing_filters_by_the_bound_task_statuses_and_tags(runtime):
+def test_a_run_listing_filters_by_the_declared_task_statuses_and_tags(runtime):
     @task("resize-image")
     def resize(payload, ctx):
         return None
@@ -60,7 +60,7 @@ def test_a_run_listing_filters_by_the_bound_task_statuses_and_tags(runtime):
     )
 
     [request] = runtime.requests("ListRuns")
-    assert request.task == "shop-prod-resize-image"
+    assert request.task == "resize-image"
     assert list(request.statuses) == [WireRunStatus.FAILED, WireRunStatus.TIMED_OUT]
     assert list(request.tags) == ["user:1"]
     assert (request.cursor, request.limit) == ("c1", 20)
@@ -72,7 +72,7 @@ def test_a_run_listing_takes_a_task_by_its_declared_name_and_one_status(runtime)
     runs.list(task="resize-image", status=RunStatus.QUEUED)
 
     [request] = runtime.requests("ListRuns")
-    assert request.task == "shop-prod-resize-image"
+    assert request.task == "resize-image"
     assert list(request.statuses) == [WireRunStatus.QUEUED]
 
 

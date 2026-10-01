@@ -117,7 +117,7 @@ def runtime(monkeypatch):
     fake = fakeruntime.Runtime()
     monkeypatch.setenv(
         "OCEL_RESOURCE_TOPIC_orders",
-        json.dumps({"name": "orders", "topic": {"topic": "shop-prod-orders"}}),
+        json.dumps({"name": "orders", "topic": {}}),
     )
     monkeypatch.setenv("OCEL_RUNTIME_ADDRESS", fake.url)
     monkeypatch.setenv("OCEL_SESSION_TOKEN", fakeruntime.TOKEN)
@@ -125,12 +125,12 @@ def runtime(monkeypatch):
     fake.close()
 
 
-def test_a_send_publishes_the_payload_as_json_to_the_bound_topic(runtime):
+def test_a_send_publishes_the_payload_as_json_to_the_topic_by_its_declared_name(runtime):
     message_id = topic("orders", schema=Order).send(Order(id=7))
 
     assert message_id == "01HZY3V0J9Q8C7B6A5Z4Y3X2W1"
     [request] = runtime.requests("Send")
-    assert request.topic == "shop-prod-orders"
+    assert request.topic == "orders"
     assert json.loads(request.payload) == {"id": 7}
     assert request.due_at is None
     assert request.lane is WireLane.UNSPECIFIED
@@ -175,7 +175,7 @@ def test_a_dead_letter_listing_reads_one_page_of_a_consumer(runtime):
 
     [request] = runtime.requests("ListDeadLetters")
     assert (request.topic, request.consumer, request.cursor, request.limit) == (
-        "shop-prod-orders",
+        "orders",
         "ship",
         "c1",
         10,

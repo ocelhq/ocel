@@ -15,7 +15,6 @@ export {
   type Consumer,
   type ConsumerFunction,
   type ConsumerOptions,
-  type ResolvedTopicConfig,
   type SendOptions,
   Topic,
   type TopicOptions,

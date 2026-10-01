@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal, Protocol
 
-from ocel._binding import read_runtime, read_task_binding, refuse_unprovisioned
+from ocel._binding import read_runtime, refuse_unprovisioned
 from ocel._declare import is_discovering
 from ocel._wire import Seconds, convert_whole_floats, decode_timestamp, decode_value, encode_due_at
 from ocel.gen.app.task.v1.task_connect import TaskServiceClient, TaskServiceClientSync
@@ -49,7 +49,7 @@ class Run:
 
     #: The run's id.
     id: str
-    #: The bound name of the task it runs.
+    #: The name its task was declared under.
     task: str
     #: Where the run stands.
     status: RunStatus
@@ -287,7 +287,7 @@ def _build_list_request(
         statuses = [RunStatus(each) for each in status]
     name = task if isinstance(task, str) or task is None else task.name
     return ListRunsRequest(
-        task=read_task_binding(name).task if name else "",
+        task=name or "",
         statuses=[WireRunStatus[each.name] for each in statuses],
         tags=builtins.list(tags),
         cursor=cursor or "",

@@ -47,7 +47,7 @@ func (s RunStatus) encode() (taskv1.RunStatus, error) {
 type Run struct {
 	// ID is the run's id.
 	ID string
-	// Task is the bound name of the task the run belongs to.
+	// Task is the name the run's task was declared under.
 	Task string
 	// Status is where the run is in its life.
 	Status RunStatus
@@ -148,14 +148,7 @@ func ListRuns(ctx context.Context, opts ...RunListOption) (*RunPage, error) {
 	for _, opt := range opts {
 		opt.applyRunList(&settings)
 	}
-	req := &taskv1.ListRunsRequest{Tags: settings.tags, Cursor: settings.cursor, Limit: settings.limit}
-	if settings.task != "" {
-		task, err := dialTask(settings.task)
-		if err != nil {
-			return nil, err
-		}
-		req.Task = task.name
-	}
+	req := &taskv1.ListRunsRequest{Task: settings.task, Tags: settings.tags, Cursor: settings.cursor, Limit: settings.limit}
 	for _, status := range settings.statuses {
 		encoded, err := status.encode()
 		if err != nil {

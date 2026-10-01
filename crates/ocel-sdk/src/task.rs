@@ -19,7 +19,6 @@ type ResultFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send 
 
 struct Connection {
     client: TaskServiceClient<HttpClient>,
-    task: String,
 }
 
 /// A run a trigger started. [`crate::runs`] reads and acts on it by its id.
@@ -63,10 +62,9 @@ impl<P, R> Task<P, R> {
         if let Some(connection) = self.connection.get() {
             return Ok(connection);
         }
-        let task = binding::read_task(self.name)?;
+        binding::refuse_unbound_task(self.name)?;
         let connection = Connection {
             client: TaskServiceClient::new(HttpClient::plaintext(), read_client_config()?),
-            task,
         };
         Ok(self.connection.get_or_init(|| connection))
     }
@@ -120,7 +118,7 @@ impl<P: Serialize, R> Task<P, R> {
         let response = connection
             .client
             .batch_trigger(BatchTriggerRequest {
-                task: connection.task.clone(),
+                task: self.name.to_string(),
                 items,
                 ..Default::default()
             })
@@ -281,10 +279,11 @@ impl<'a, P, R> IntoFuture for Trigger<'a, P, R> {
         });
         let connection = task.ensure_connection("trigger");
         let resource = task.describe_resource();
+        let name = task.name.to_string();
         Box::pin(async move {
             let connection = connection?;
             let mut request = request?;
-            request.task = connection.task.clone();
+            request.task = name;
             let response =
                 connection
                     .client
