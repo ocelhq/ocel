@@ -33,6 +33,15 @@ export function servedBy(services: Service[], lead: string): string {
   return serving.uri;
 }
 
+export function exposedServices(body: unknown, leads: string[]): string {
+  const raw = (body as { services?: Array<{ name?: string }> }).services ?? [];
+  const named = raw.filter((service) => {
+    const name = (service.name ?? "").split("/").pop() ?? "";
+    return leads.some((lead) => name.startsWith(`${lead}-`));
+  });
+  return JSON.stringify(named);
+}
+
 export function hasServicesUnder(services: Service[], leads: string[]): boolean {
   return leads.some((lead) => under(services, lead).length > 0);
 }
@@ -96,13 +105,17 @@ function bearer(where: Where): Record<string, string> {
   return where.token ? { authorization: `Bearer ${where.token}` } : {};
 }
 
-export async function listServices(where: Where): Promise<Service[]> {
+export async function readServices(where: Where): Promise<unknown> {
   const at = servicesUrl(where);
   const answered = await fetch(at, { headers: bearer(where) });
   if (!answered.ok) {
     throw new Error(`GET ${at} = ${answered.status} ${await answered.text()}`);
   }
-  return servicesIn(await answered.json());
+  return answered.json();
+}
+
+export async function listServices(where: Where): Promise<Service[]> {
+  return servicesIn(await readServices(where));
 }
 
 export async function deleteService(where: Where, name: string): Promise<void> {
