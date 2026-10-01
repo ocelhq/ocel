@@ -327,6 +327,8 @@ type executionRole struct {
 	VariablesReferenced []string
 
 	BindingPolicies []bindingPolicy
+
+	TasksPolicy string
 }
 
 func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []bindingPolicy, vpcAccess bool, dispatch *dispatchHost) executionRole {
@@ -413,6 +415,14 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "binding", binding.Binding), &iam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(binding.Policy),
+		}); err != nil {
+			return nil, err
+		}
+	}
+	if r.TasksPolicy != "" {
+		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "tasks"), &iam.RolePolicyArgs{
+			Role:   role.Name,
+			Policy: pulumi.String(r.TasksPolicy),
 		}); err != nil {
 			return nil, err
 		}
