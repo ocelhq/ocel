@@ -330,14 +330,35 @@ export const orderedKeysInParallelCheck: Check = {
 
 type Tally = { batch: number[]; attempt: number };
 
+type Delivery = { probe: string; batch: number[]; failed: boolean };
+
+async function listReceipts<T>(ctx: CheckContext, probe: string): Promise<T[]> {
+  const receipts = await listRuns(ctx, { task: "receipt", tags: probe, limit: "100" });
+  assert.ok(receipts.length < 100, `${probe} has ${receipts.length} receipts, a full page`);
+  return receipts.map((receipt) => receipt.payload as T);
+}
+
+async function batchTrigger(
+  ctx: CheckContext,
+  task: string,
+  payloads: unknown[],
+): Promise<string[]> {
+  const sent = await post(ctx, `/api/tasks/${task}/batch-trigger`, {
+    items: payloads.map((payload) => ({ payload })),
+  });
+  const { ids } = readAnswer<{ ids: string[] }>(sent, "the batch trigger");
+  assert.equal(ids.length, payloads.length);
+  return ids;
+}
+
 export const batchCheck: Check = {
   title: "a batch task receives triggers together, up to its size",
   run: async (ctx) => {
-    const sent = await post(ctx, "/api/tasks/tally/batch-trigger", {
-      items: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ payload: { n } })),
-    });
-    const { ids } = readAnswer<{ ids: string[] }>(sent, "the batch trigger");
-    assert.equal(ids.length, 7);
+    const ids = await batchTrigger(
+      ctx,
+      "tally",
+      [1, 2, 3, 4, 5, 6, 7].map((n) => ({ n })),
+    );
     const batches: number[][] = [];
     for (const id of ids) {
       const run = await waitForRun(ctx, id);
@@ -354,19 +375,49 @@ export const batchCheck: Check = {
 };
 
 export const batchRetryCheck: Check = {
-  title: "a failed batch retries each of its runs, every one counting its own attempts",
+  title:
+    "a failed batch retries the runs it held, each counting its own attempts, while runs outside it complete on their first",
   run: async (ctx) => {
-    const sent = await post(ctx, "/api/tasks/tally/batch-trigger", {
-      items: [{ payload: { n: 1 } }, { payload: { n: 2, poison: true } }, { payload: { n: 3 } }],
+    const probe = newProbe("batch");
+    const ids = await batchTrigger(ctx, "tally", [
+      { n: 1, probe },
+      { n: 2, probe, poison: true },
+      { n: 3, probe },
+    ]);
+    await waitFor("the poisoned batch's failed delivery", async () => {
+      const deliveries = await listReceipts<Delivery>(ctx, probe);
+      return deliveries.find((delivery) => delivery.failed);
     });
-    const { ids } = readAnswer<{ ids: string[] }>(sent, "the batch trigger");
+    ids.push(
+      ...(await batchTrigger(
+        ctx,
+        "tally",
+        [4, 5].map((n) => ({ n, probe })),
+      )),
+    );
+    const attempts = new Map<number, number>();
     for (const [i, id] of ids.entries()) {
       const run = await waitForRun(ctx, id);
       assertCompleted(run);
-      assert.equal(run.attempts, 2, `run ${i + 1} took ${run.attempts} attempts`);
-      const { batch, attempt } = run.output as Tally;
-      assert.equal(attempt, 2);
-      assert.ok(batch.includes(i + 1), `run ${i + 1} completed in a batch of ${batch}`);
+      attempts.set(i + 1, run.attempts);
+    }
+    const deliveries = await listReceipts<Delivery>(ctx, probe);
+    const failed = deliveries.filter((delivery) => delivery.failed);
+    assert.equal(failed.length, 1, `deliveries ${JSON.stringify(deliveries)}`);
+    const heldByFailed = failed[0]?.batch ?? [];
+    assert.ok(heldByFailed.includes(2), `the failed delivery held ${heldByFailed}`);
+    for (const [n, counted] of attempts) {
+      const held = deliveries.filter((delivery) => delivery.batch.includes(n)).length;
+      assert.equal(
+        counted,
+        held,
+        `run ${n} counts ${counted} attempts, and was delivered ${held} times`,
+      );
+      assert.equal(
+        counted,
+        heldByFailed.includes(n) ? 2 : 1,
+        `run ${n} took ${counted} attempts, and the failed delivery held ${heldByFailed}`,
+      );
     }
   },
 };
