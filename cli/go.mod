@@ -8,6 +8,7 @@ require (
 	connectrpc.com/connect v1.20.0
 	connectrpc.com/validate v0.6.0
 	github.com/bmatcuk/doublestar/v4 v4.10.0
+	github.com/charmbracelet/log v1.0.0
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/containerd/errdefs v1.0.0
 	github.com/creack/pty v1.1.24
@@ -83,7 +84,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/lipgloss v1.1.0 // indirect
-	github.com/charmbracelet/log v1.0.0 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260703014108-f5a850f9c2b7 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
