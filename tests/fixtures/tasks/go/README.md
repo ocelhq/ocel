@@ -18,4 +18,11 @@ under that tag.
 ocel dev -- go run ./server
 ```
 
+```bash
+OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --config ocel.vps.json
+```
+
+On a box, `web`'s image carries the compiled worker, and the default worker runs as a second
+container from that image, which the box's agent delivers each run to.
+
 `ocel destroy` takes the queues, the runs and the worker down with the app.
