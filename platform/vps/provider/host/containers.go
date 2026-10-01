@@ -330,7 +330,11 @@ func (h *Host) TakeDown(ctx context.Context, tier environment.Tier, name string)
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "forget what "+name+" was handed", "rm -f "+quoted(HandedNote(tier, name)), nil, "")
+	acting, err := h.reachStateRoot(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = h.ran(ctx, "forget what "+name+" was handed", "rm -f "+quoted(HandedNote(tier, name)), nil, acting)
 	return err
 }
 

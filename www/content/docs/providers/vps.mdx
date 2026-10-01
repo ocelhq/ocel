@@ -43,7 +43,9 @@ ocel bootstrap production
 ocel deploy
 ```
 
-Bootstrap creates the `ocel-deploy` login every later deploy acts as.
+Bootstrap creates the `ocel-deploy` login every later deploy acts as. Point `ssh.user` at it
+and deploys need no sudo; deploy as the login you bootstrapped with and Ocel uses its sudo
+to act as `ocel-deploy`, never as root.
 
 ## Bootstrap
 
@@ -54,7 +56,7 @@ changes anything: stop it, or run ocel [behind it](#behind-your-own-proxy).
 
 | What | Why |
 | --- | --- |
-| `ocel-deploy` login, `/var/lib/ocel/.ssh/authorized_keys` | Every deploy logs in as this account. The keys are copied from the login you bootstrap with, or taken from `deployKey`. |
+| `ocel-deploy` login, `/var/lib/ocel/.ssh/authorized_keys` | Every deploy acts as this account, which alone can open `/var/lib/ocel`. The keys are copied from the login you bootstrap with, or taken from `deployKey`. |
 | `/etc/ocel/<tier>/seal.key`, `/usr/local/lib/ocel/seal`, a sudoers line | Secret values are sealed to a key that never leaves the machine. `ocel-deploy` may run the seal helper as root and nothing else. Lose the key and the values can't be opened again. |
 | `/var/lib/ocel/<tier>/keyvalues`, `/usr/local/lib/ocel/keyvalues` | What is deployed, per tier. |
 | `/var/lib/ocel/releases`, `/usr/local/lib/ocel/releases` | The release window: which images a rollback can still reach. Older images are swept. |

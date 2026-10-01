@@ -22,6 +22,10 @@ func (h *Host) reachDocker(ctx context.Context) (string, error) {
 	if h.engined {
 		return h.engine, nil
 	}
+	if acting, ok := h.actAsStateOwner(ctx); ok {
+		h.engine, h.engined = acting, true
+		return h.engine, nil
+	}
 	result, err := h.stream(ctx, dockerReach+" >/dev/null", nil, "")
 	if err != nil {
 		return "", err
@@ -175,11 +179,11 @@ func pinnedTo(imageRef, digest string) (string, error) {
 }
 
 func (h *Host) LoadImage(ctx context.Context, imageRef string, tar io.Reader) (string, error) {
-	elevation, err := h.reachDocker(ctx)
+	acting, err := h.reachStateRoot(ctx)
 	if err != nil {
 		return "", err
 	}
-	said, err := h.ran(ctx, "load "+imageRef, "flock -x "+quoted(imagesLock)+" docker load", tar, elevation)
+	said, err := h.ran(ctx, "load "+imageRef, acting+"flock -x "+quoted(imagesLock)+" docker load", tar, "")
 	if err != nil {
 		return "", err
 	}
@@ -188,6 +192,7 @@ func (h *Host) LoadImage(ctx context.Context, imageRef string, tar io.Reader) (s
 		return "", err
 	}
 	if !has {
+		elevation, _ := h.reachDocker(ctx)
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"%s loaded the image but has no %s: %s\nengine state:\n%s",
 			h.named(), imageRef, strings.TrimSpace(said), h.said(ctx, loadEvidenceCommand(), elevation))
