@@ -11,7 +11,7 @@ state=/var/lib/ocel-front/nginx
 if ! command -v nginx >/dev/null 2>&1 || ! command -v openssl >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq nginx openssl >/dev/null
+    apt-get -o DPkg::Lock::Timeout=300 install -y -qq nginx openssl >/dev/null
 fi
 
 names=""

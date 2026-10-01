@@ -6,7 +6,7 @@ state=/var/lib/ocel-front/caddy
 if ! command -v caddy >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq caddy >/dev/null
+    apt-get -o DPkg::Lock::Timeout=300 install -y -qq caddy >/dev/null
 fi
 
 install -d -m 0755 /etc/caddy/ocel.d
