@@ -11,7 +11,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file common/bindings/v1/bindings.proto.
  */
 export const file_common_bindings_v1_bindings: GenFile = /*@__PURE__*/
-  fileDesc("CiFjb21tb24vYmluZGluZ3MvdjEvYmluZGluZ3MucHJvdG8SEmNvbW1vbi5iaW5kaW5ncy52MSKZAwoHQmluZGluZxIMCgRuYW1lGAEgASgJEjoKCHBvc3RncmVzGAIgASgLMiYuY29tbW9uLmJpbmRpbmdzLnYxLlBvc3RncmVzUHJvcGVydGllc0gAEjYKBmJ1Y2tldBgDIAEoCzIkLmNvbW1vbi5iaW5kaW5ncy52MS5CdWNrZXRQcm9wZXJ0aWVzSAASKQoGY3VzdG9tGAYgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEgAEjQKBXRvcGljGAcgASgLMiMuY29tbW9uLmJpbmRpbmdzLnYxLlRvcGljUHJvcGVydGllc0gAEjIKBHRhc2sYCCABKAsyIi5jb21tb24uYmluZGluZ3MudjEuVGFza1Byb3BlcnRpZXNIABIuCgJrdhgJIAEoCzIgLmNvbW1vbi5iaW5kaW5ncy52MS5LdlByb3BlcnRpZXNIABIpCgZncmFudHMYBCADKAsyGS5jb21tb24uYmluZGluZ3MudjEuR3JhbnQSDgoGc291cmNlGAUgASgJQgwKCnByb3BlcnRpZXMixAEKElBvc3RncmVzUHJvcGVydGllcxIMCgRob3N0GAEgASgJEgwKBHBvcnQYAiABKAUSEAoIZGF0YWJhc2UYAyABKAkSEAoIdXNlcm5hbWUYBCABKAkSFQoIcGFzc3dvcmQYBSABKAlCA4ABARIQCgN1cmwYBiABKAlCA4ABARI1Cgh0bHNfbW9kZRgHIAEoDjIjLmNvbW1vbi5iaW5kaW5ncy52MS5Qb3N0Z3Jlc1Rsc01vZGUSDgoGdGxzX2NhGAggASgJIsgBChBCdWNrZXRQcm9wZXJ0aWVzEg4KBmJ1Y2tldBgBIAEoCRIXCg9wdWJsaWNfYmFzZV91cmwYAiABKAkSDgoGcHVibGljGAMgASgIEhAKCGVuZHBvaW50GAQgASgJEg4KBnJlZ2lvbhgFIAEoCRISCgpwYXRoX3N0eWxlGAYgASgIEg4KBnByZWZpeBgHIAEoCRIVCg1hY2Nlc3Nfa2V5X2lkGAggASgJEh4KEXNlY3JldF9hY2Nlc3Nfa2V5GAkgASgJQgOAAQEiEQoPVG9waWNQcm9wZXJ0aWVzIhAKDlRhc2tQcm9wZXJ0aWVzImAKDEt2UHJvcGVydGllcxIMCgRob3N0GAEgASgJEgwKBHBvcnQYAiABKAUSEAoIdXNlcm5hbWUYAyABKAkSFQoIcGFzc3dvcmQYBCABKAlCA4ABARILCgN0bHMYBSABKAgicgoFR3JhbnQSDwoHYWN0aW9ucxgBIAMoCRIRCglyZXNvdXJjZXMYAiADKAkSDQoFbGFiZWwYAyABKAkSNgoKY29uZGl0aW9ucxgEIAMoCzIiLmNvbW1vbi5iaW5kaW5ncy52MS5HcmFudENvbmRpdGlvbiI/Cg5HcmFudENvbmRpdGlvbhIQCghvcGVyYXRvchgBIAEoCRILCgNrZXkYAiABKAkSDgoGdmFsdWVzGAMgAygJKrwBCgtCaW5kaW5nVHlwZRIcChhCSU5ESU5HX1RZUEVfVU5TUEVDSUZJRUQQABIZChVCSU5ESU5HX1RZUEVfUE9TVEdSRVMQARIXChNCSU5ESU5HX1RZUEVfQlVDS0VUEAISFwoTQklORElOR19UWVBFX0NVU1RPTRADEhYKEkJJTkRJTkdfVFlQRV9UT1BJQxAEEhUKEUJJTkRJTkdfVFlQRV9UQVNLEAUSEwoPQklORElOR19UWVBFX0tWEAYqdgoPUG9zdGdyZXNUbHNNb2RlEiEKHVBPU1RHUkVTX1RMU19NT0RFX1VOU1BFQ0lGSUVEEAASHQoZUE9TVEdSRVNfVExTX01PREVfUkVRVUlSRRABEiEKHVBPU1RHUkVTX1RMU19NT0RFX1ZFUklGWV9GVUxMEAJCQFo+Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vY29tbW9uL2JpbmRpbmdzL3YxO2JpbmRpbmdzdjFiBnByb3RvMw", [file_google_protobuf_struct]);
+  fileDesc("CiFjb21tb24vYmluZGluZ3MvdjEvYmluZGluZ3MucHJvdG8SEmNvbW1vbi5iaW5kaW5ncy52MSLVAwoHQmluZGluZxIMCgRuYW1lGAEgASgJEjoKCHBvc3RncmVzGAIgASgLMiYuY29tbW9uLmJpbmRpbmdzLnYxLlBvc3RncmVzUHJvcGVydGllc0gAEjYKBmJ1Y2tldBgDIAEoCzIkLmNvbW1vbi5iaW5kaW5ncy52MS5CdWNrZXRQcm9wZXJ0aWVzSAASKQoGY3VzdG9tGAYgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEgAEjQKBXRvcGljGAcgASgLMiMuY29tbW9uLmJpbmRpbmdzLnYxLlRvcGljUHJvcGVydGllc0gAEjIKBHRhc2sYCCABKAsyIi5jb21tb24uYmluZGluZ3MudjEuVGFza1Byb3BlcnRpZXNIABIuCgJrdhgJIAEoCzIgLmNvbW1vbi5iaW5kaW5ncy52MS5LdlByb3BlcnRpZXNIABI6CghyZWFsdGltZRgKIAEoCzImLmNvbW1vbi5iaW5kaW5ncy52MS5SZWFsdGltZVByb3BlcnRpZXNIABIpCgZncmFudHMYBCADKAsyGS5jb21tb24uYmluZGluZ3MudjEuR3JhbnQSDgoGc291cmNlGAUgASgJQgwKCnByb3BlcnRpZXMixAEKElBvc3RncmVzUHJvcGVydGllcxIMCgRob3N0GAEgASgJEgwKBHBvcnQYAiABKAUSEAoIZGF0YWJhc2UYAyABKAkSEAoIdXNlcm5hbWUYBCABKAkSFQoIcGFzc3dvcmQYBSABKAlCA4ABARIQCgN1cmwYBiABKAlCA4ABARI1Cgh0bHNfbW9kZRgHIAEoDjIjLmNvbW1vbi5iaW5kaW5ncy52MS5Qb3N0Z3Jlc1Rsc01vZGUSDgoGdGxzX2NhGAggASgJIsgBChBCdWNrZXRQcm9wZXJ0aWVzEg4KBmJ1Y2tldBgBIAEoCRIXCg9wdWJsaWNfYmFzZV91cmwYAiABKAkSDgoGcHVibGljGAMgASgIEhAKCGVuZHBvaW50GAQgASgJEg4KBnJlZ2lvbhgFIAEoCRISCgpwYXRoX3N0eWxlGAYgASgIEg4KBnByZWZpeBgHIAEoCRIVCg1hY2Nlc3Nfa2V5X2lkGAggASgJEh4KEXNlY3JldF9hY2Nlc3Nfa2V5GAkgASgJQgOAAQEiEQoPVG9waWNQcm9wZXJ0aWVzIhAKDlRhc2tQcm9wZXJ0aWVzImAKDEt2UHJvcGVydGllcxIMCgRob3N0GAEgASgJEgwKBHBvcnQYAiABKAUSEAoIdXNlcm5hbWUYAyABKAkSFQoIcGFzc3dvcmQYBCABKAlCA4ABARILCgN0bHMYBSABKAgilwEKElJlYWx0aW1lUHJvcGVydGllcxI4Cgl0cmFuc3BvcnQYASABKA4yJS5jb21tb24uYmluZGluZ3MudjEuUmVhbHRpbWVUcmFuc3BvcnQSCwoDdXJsGAIgASgJEgwKBGhvc3QYAyABKAkSGAoLc2lnbmluZ19rZXkYBCABKAxCA4ABARISCgp2ZXJpZnlfa2V5GAUgASgMInIKBUdyYW50Eg8KB2FjdGlvbnMYASADKAkSEQoJcmVzb3VyY2VzGAIgAygJEg0KBWxhYmVsGAMgASgJEjYKCmNvbmRpdGlvbnMYBCADKAsyIi5jb21tb24uYmluZGluZ3MudjEuR3JhbnRDb25kaXRpb24iPwoOR3JhbnRDb25kaXRpb24SEAoIb3BlcmF0b3IYASABKAkSCwoDa2V5GAIgASgJEg4KBnZhbHVlcxgDIAMoCSrXAQoLQmluZGluZ1R5cGUSHAoYQklORElOR19UWVBFX1VOU1BFQ0lGSUVEEAASGQoVQklORElOR19UWVBFX1BPU1RHUkVTEAESFwoTQklORElOR19UWVBFX0JVQ0tFVBACEhcKE0JJTkRJTkdfVFlQRV9DVVNUT00QAxIWChJCSU5ESU5HX1RZUEVfVE9QSUMQBBIVChFCSU5ESU5HX1RZUEVfVEFTSxAFEhMKD0JJTkRJTkdfVFlQRV9LVhAGEhkKFUJJTkRJTkdfVFlQRV9SRUFMVElNRRAHKnYKD1Bvc3RncmVzVGxzTW9kZRIhCh1QT1NUR1JFU19UTFNfTU9ERV9VTlNQRUNJRklFRBAAEh0KGVBPU1RHUkVTX1RMU19NT0RFX1JFUVVJUkUQARIhCh1QT1NUR1JFU19UTFNfTU9ERV9WRVJJRllfRlVMTBACKoMBChFSZWFsdGltZVRyYW5zcG9ydBIiCh5SRUFMVElNRV9UUkFOU1BPUlRfVU5TUEVDSUZJRUQQABIlCiFSRUFMVElNRV9UUkFOU1BPUlRfQVBQU1lOQ19FVkVOVFMQARIjCh9SRUFMVElNRV9UUkFOU1BPUlRfT0NFTF9HQVRFV0FZEAJCQFo+Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vY29tbW9uL2JpbmRpbmdzL3YxO2JpbmRpbmdzdjFiBnByb3RvMw", [file_google_protobuf_struct]);
 
 /**
  * @generated from message common.bindings.v1.Binding
@@ -61,6 +61,12 @@ export type Binding = Message<"common.bindings.v1.Binding"> & {
      */
     value: KvProperties;
     case: "kv";
+  } | {
+    /**
+     * @generated from field: common.bindings.v1.RealtimeProperties realtime = 10;
+     */
+    value: RealtimeProperties;
+    case: "realtime";
   } | { case: undefined; value?: undefined };
 
   /**
@@ -254,6 +260,43 @@ export const KvPropertiesSchema: GenMessage<KvProperties> = /*@__PURE__*/
   messageDesc(file_common_bindings_v1_bindings, 5);
 
 /**
+ * @generated from message common.bindings.v1.RealtimeProperties
+ */
+export type RealtimeProperties = Message<"common.bindings.v1.RealtimeProperties"> & {
+  /**
+   * @generated from field: common.bindings.v1.RealtimeTransport transport = 1;
+   */
+  transport: RealtimeTransport;
+
+  /**
+   * @generated from field: string url = 2;
+   */
+  url: string;
+
+  /**
+   * @generated from field: string host = 3;
+   */
+  host: string;
+
+  /**
+   * @generated from field: bytes signing_key = 4;
+   */
+  signingKey: Uint8Array;
+
+  /**
+   * @generated from field: bytes verify_key = 5;
+   */
+  verifyKey: Uint8Array;
+};
+
+/**
+ * Describes the message common.bindings.v1.RealtimeProperties.
+ * Use `create(RealtimePropertiesSchema)` to create a new message.
+ */
+export const RealtimePropertiesSchema: GenMessage<RealtimeProperties> = /*@__PURE__*/
+  messageDesc(file_common_bindings_v1_bindings, 6);
+
+/**
  * @generated from message common.bindings.v1.Grant
  */
 export type Grant = Message<"common.bindings.v1.Grant"> & {
@@ -283,7 +326,7 @@ export type Grant = Message<"common.bindings.v1.Grant"> & {
  * Use `create(GrantSchema)` to create a new message.
  */
 export const GrantSchema: GenMessage<Grant> = /*@__PURE__*/
-  messageDesc(file_common_bindings_v1_bindings, 6);
+  messageDesc(file_common_bindings_v1_bindings, 7);
 
 /**
  * @generated from message common.bindings.v1.GrantCondition
@@ -310,7 +353,7 @@ export type GrantCondition = Message<"common.bindings.v1.GrantCondition"> & {
  * Use `create(GrantConditionSchema)` to create a new message.
  */
 export const GrantConditionSchema: GenMessage<GrantCondition> = /*@__PURE__*/
-  messageDesc(file_common_bindings_v1_bindings, 7);
+  messageDesc(file_common_bindings_v1_bindings, 8);
 
 /**
  * @generated from enum common.bindings.v1.BindingType
@@ -350,6 +393,11 @@ export enum BindingType {
    * @generated from enum value: BINDING_TYPE_KV = 6;
    */
   KV = 6,
+
+  /**
+   * @generated from enum value: BINDING_TYPE_REALTIME = 7;
+   */
+  REALTIME = 7,
 }
 
 /**
@@ -383,4 +431,30 @@ export enum PostgresTlsMode {
  */
 export const PostgresTlsModeSchema: GenEnum<PostgresTlsMode> = /*@__PURE__*/
   enumDesc(file_common_bindings_v1_bindings, 1);
+
+/**
+ * @generated from enum common.bindings.v1.RealtimeTransport
+ */
+export enum RealtimeTransport {
+  /**
+   * @generated from enum value: REALTIME_TRANSPORT_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: REALTIME_TRANSPORT_APPSYNC_EVENTS = 1;
+   */
+  APPSYNC_EVENTS = 1,
+
+  /**
+   * @generated from enum value: REALTIME_TRANSPORT_OCEL_GATEWAY = 2;
+   */
+  OCEL_GATEWAY = 2,
+}
+
+/**
+ * Describes the enum common.bindings.v1.RealtimeTransport.
+ */
+export const RealtimeTransportSchema: GenEnum<RealtimeTransport> = /*@__PURE__*/
+  enumDesc(file_common_bindings_v1_bindings, 2);
 

@@ -67,6 +67,7 @@ func TestResourceEnvName(t *testing.T) {
 		{bindingsv1.BindingType_BINDING_TYPE_TOPIC, "OCEL_RESOURCE_TOPIC_orders"},
 		{bindingsv1.BindingType_BINDING_TYPE_TASK, "OCEL_RESOURCE_TASK_orders"},
 		{bindingsv1.BindingType_BINDING_TYPE_KV, "OCEL_RESOURCE_KV_orders"},
+		{bindingsv1.BindingType_BINDING_TYPE_REALTIME, "OCEL_RESOURCE_REALTIME_orders"},
 	} {
 		if got := ResourceEnvName(tc.typ, "orders"); got != tc.want {
 			t.Errorf("ResourceEnvName(%v) = %q, want %q — the env contract does not move with the enum name", tc.typ, got, tc.want)
@@ -100,6 +101,7 @@ func TestBindingTypeOf(t *testing.T) {
 		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Topic{Topic: &bindingsv1.TopicProperties{}}}, bindingsv1.BindingType_BINDING_TYPE_TOPIC},
 		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Task{Task: &bindingsv1.TaskProperties{}}}, bindingsv1.BindingType_BINDING_TYPE_TASK},
 		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Kv{Kv: &bindingsv1.KvProperties{}}}, bindingsv1.BindingType_BINDING_TYPE_KV},
+		{&bindingsv1.Binding{Properties: &bindingsv1.Binding_Realtime{Realtime: &bindingsv1.RealtimeProperties{}}}, bindingsv1.BindingType_BINDING_TYPE_REALTIME},
 		{&bindingsv1.Binding{}, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED},
 		{nil, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED},
 	} {
@@ -173,5 +175,12 @@ func TestAKVStoreIsAComponentOfItsOwn(t *testing.T) {
 	kind, bound := KindOf(bindingsv1.BindingType_BINDING_TYPE_KV)
 	if !bound || kind != KindKV || !kind.Valid() || kind.Component() != "kv" {
 		t.Errorf("KindOf(kv) = %q (bound %v), component %q, want %q with component \"kv\"", kind, bound, kind.Component(), KindKV)
+	}
+}
+
+func TestARealtimeResourceIsAComponentOfItsOwn(t *testing.T) {
+	kind, bound := KindOf(bindingsv1.BindingType_BINDING_TYPE_REALTIME)
+	if !bound || kind != KindRealtime || !kind.Valid() || kind.Component() != "realtime" {
+		t.Errorf("KindOf(realtime) = %q (bound %v), component %q, want %q with component \"realtime\"", kind, bound, kind.Component(), KindRealtime)
 	}
 }

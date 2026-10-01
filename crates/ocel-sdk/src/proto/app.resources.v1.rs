@@ -1769,6 +1769,7 @@ pub enum ResourceType {
     RESOURCE_TYPE_WORKER = 5i32,
     RESOURCE_TYPE_CONSUMER = 6i32,
     RESOURCE_TYPE_KV = 7i32,
+    RESOURCE_TYPE_REALTIME = 8i32,
 }
 impl ResourceType {
     ///Idiomatic alias for [`Self::RESOURCE_TYPE_UNSPECIFIED`]; `Debug` prints the variant name.
@@ -1795,6 +1796,9 @@ impl ResourceType {
     ///Idiomatic alias for [`Self::RESOURCE_TYPE_KV`]; `Debug` prints the variant name.
     #[allow(non_upper_case_globals)]
     pub const Kv: Self = Self::RESOURCE_TYPE_KV;
+    ///Idiomatic alias for [`Self::RESOURCE_TYPE_REALTIME`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Realtime: Self = Self::RESOURCE_TYPE_REALTIME;
 }
 impl ::core::default::Default for ResourceType {
     fn default() -> Self {
@@ -1898,6 +1902,7 @@ impl ::buffa::Enumeration for ResourceType {
             5i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_WORKER),
             6i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_CONSUMER),
             7i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_KV),
+            8i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_REALTIME),
             _ => ::core::option::Option::None,
         }
     }
@@ -1914,6 +1919,7 @@ impl ::buffa::Enumeration for ResourceType {
             Self::RESOURCE_TYPE_WORKER => "RESOURCE_TYPE_WORKER",
             Self::RESOURCE_TYPE_CONSUMER => "RESOURCE_TYPE_CONSUMER",
             Self::RESOURCE_TYPE_KV => "RESOURCE_TYPE_KV",
+            Self::RESOURCE_TYPE_REALTIME => "RESOURCE_TYPE_REALTIME",
         }
     }
     fn from_proto_name(name: &str) -> ::core::option::Option<Self> {
@@ -1940,6 +1946,9 @@ impl ::buffa::Enumeration for ResourceType {
                 ::core::option::Option::Some(Self::RESOURCE_TYPE_CONSUMER)
             }
             "RESOURCE_TYPE_KV" => ::core::option::Option::Some(Self::RESOURCE_TYPE_KV),
+            "RESOURCE_TYPE_REALTIME" => {
+                ::core::option::Option::Some(Self::RESOURCE_TYPE_REALTIME)
+            }
             _ => ::core::option::Option::None,
         }
     }
@@ -1953,6 +1962,7 @@ impl ::buffa::Enumeration for ResourceType {
             Self::RESOURCE_TYPE_WORKER,
             Self::RESOURCE_TYPE_CONSUMER,
             Self::RESOURCE_TYPE_KV,
+            Self::RESOURCE_TYPE_REALTIME,
         ]
     }
 }
@@ -2124,6 +2134,312 @@ impl ::buffa::Enumeration for KvShape {
             Self::KV_SHAPE_JSON,
             Self::KV_SHAPE_LIST,
             Self::KV_SHAPE_SET,
+        ]
+    }
+}
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[repr(i32)]
+pub enum RealtimeSubscribe {
+    REALTIME_SUBSCRIBE_UNSPECIFIED = 0i32,
+    REALTIME_SUBSCRIBE_PUBLIC = 1i32,
+    REALTIME_SUBSCRIBE_RULE = 2i32,
+}
+impl RealtimeSubscribe {
+    ///Idiomatic alias for [`Self::REALTIME_SUBSCRIBE_UNSPECIFIED`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Unspecified: Self = Self::REALTIME_SUBSCRIBE_UNSPECIFIED;
+    ///Idiomatic alias for [`Self::REALTIME_SUBSCRIBE_PUBLIC`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Public: Self = Self::REALTIME_SUBSCRIBE_PUBLIC;
+    ///Idiomatic alias for [`Self::REALTIME_SUBSCRIBE_RULE`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Rule: Self = Self::REALTIME_SUBSCRIBE_RULE;
+}
+impl ::core::default::Default for RealtimeSubscribe {
+    fn default() -> Self {
+        Self::REALTIME_SUBSCRIBE_UNSPECIFIED
+    }
+}
+impl ::serde::Serialize for RealtimeSubscribe {
+    fn serialize<S: ::serde::Serializer>(
+        &self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        s.serialize_str(::buffa::Enumeration::proto_name(self))
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for RealtimeSubscribe {
+    fn deserialize<D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        struct _V;
+        impl ::serde::de::Visitor<'_> for _V {
+            type Value = RealtimeSubscribe;
+            fn expecting(
+                &self,
+                f: &mut ::core::fmt::Formatter<'_>,
+            ) -> ::core::fmt::Result {
+                f.write_str(
+                    concat!(
+                        "a string, integer, or null for ", stringify!(RealtimeSubscribe)
+                    ),
+                )
+            }
+            fn visit_str<E: ::serde::de::Error>(
+                self,
+                v: &str,
+            ) -> ::core::result::Result<RealtimeSubscribe, E> {
+                <RealtimeSubscribe as ::buffa::Enumeration>::from_proto_name(v)
+                    .ok_or_else(|| { ::serde::de::Error::unknown_variant(v, &[]) })
+            }
+            fn visit_i64<E: ::serde::de::Error>(
+                self,
+                v: i64,
+            ) -> ::core::result::Result<RealtimeSubscribe, E> {
+                let v32 = i32::try_from(v)
+                    .map_err(|_| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                        )
+                    })?;
+                <RealtimeSubscribe as ::buffa::Enumeration>::from_i32(v32)
+                    .ok_or_else(|| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("unknown enum value {v32}"),
+                        )
+                    })
+            }
+            fn visit_u64<E: ::serde::de::Error>(
+                self,
+                v: u64,
+            ) -> ::core::result::Result<RealtimeSubscribe, E> {
+                let v32 = i32::try_from(v)
+                    .map_err(|_| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                        )
+                    })?;
+                <RealtimeSubscribe as ::buffa::Enumeration>::from_i32(v32)
+                    .ok_or_else(|| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("unknown enum value {v32}"),
+                        )
+                    })
+            }
+            fn visit_unit<E: ::serde::de::Error>(
+                self,
+            ) -> ::core::result::Result<RealtimeSubscribe, E> {
+                ::core::result::Result::Ok(::core::default::Default::default())
+            }
+        }
+        d.deserialize_any(_V)
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for RealtimeSubscribe {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+impl ::buffa::Enumeration for RealtimeSubscribe {
+    fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0i32 => ::core::option::Option::Some(Self::REALTIME_SUBSCRIBE_UNSPECIFIED),
+            1i32 => ::core::option::Option::Some(Self::REALTIME_SUBSCRIBE_PUBLIC),
+            2i32 => ::core::option::Option::Some(Self::REALTIME_SUBSCRIBE_RULE),
+            _ => ::core::option::Option::None,
+        }
+    }
+    fn to_i32(&self) -> i32 {
+        *self as i32
+    }
+    fn proto_name(&self) -> &'static str {
+        match self {
+            Self::REALTIME_SUBSCRIBE_UNSPECIFIED => "REALTIME_SUBSCRIBE_UNSPECIFIED",
+            Self::REALTIME_SUBSCRIBE_PUBLIC => "REALTIME_SUBSCRIBE_PUBLIC",
+            Self::REALTIME_SUBSCRIBE_RULE => "REALTIME_SUBSCRIBE_RULE",
+        }
+    }
+    fn from_proto_name(name: &str) -> ::core::option::Option<Self> {
+        match name {
+            "REALTIME_SUBSCRIBE_UNSPECIFIED" => {
+                ::core::option::Option::Some(Self::REALTIME_SUBSCRIBE_UNSPECIFIED)
+            }
+            "REALTIME_SUBSCRIBE_PUBLIC" => {
+                ::core::option::Option::Some(Self::REALTIME_SUBSCRIBE_PUBLIC)
+            }
+            "REALTIME_SUBSCRIBE_RULE" => {
+                ::core::option::Option::Some(Self::REALTIME_SUBSCRIBE_RULE)
+            }
+            _ => ::core::option::Option::None,
+        }
+    }
+    fn values() -> &'static [Self] {
+        &[
+            Self::REALTIME_SUBSCRIBE_UNSPECIFIED,
+            Self::REALTIME_SUBSCRIBE_PUBLIC,
+            Self::REALTIME_SUBSCRIBE_RULE,
+        ]
+    }
+}
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[repr(i32)]
+pub enum RealtimePublish {
+    REALTIME_PUBLISH_UNSPECIFIED = 0i32,
+    REALTIME_PUBLISH_SERVER = 1i32,
+    REALTIME_PUBLISH_RULE = 2i32,
+}
+impl RealtimePublish {
+    ///Idiomatic alias for [`Self::REALTIME_PUBLISH_UNSPECIFIED`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Unspecified: Self = Self::REALTIME_PUBLISH_UNSPECIFIED;
+    ///Idiomatic alias for [`Self::REALTIME_PUBLISH_SERVER`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Server: Self = Self::REALTIME_PUBLISH_SERVER;
+    ///Idiomatic alias for [`Self::REALTIME_PUBLISH_RULE`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Rule: Self = Self::REALTIME_PUBLISH_RULE;
+}
+impl ::core::default::Default for RealtimePublish {
+    fn default() -> Self {
+        Self::REALTIME_PUBLISH_UNSPECIFIED
+    }
+}
+impl ::serde::Serialize for RealtimePublish {
+    fn serialize<S: ::serde::Serializer>(
+        &self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        s.serialize_str(::buffa::Enumeration::proto_name(self))
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for RealtimePublish {
+    fn deserialize<D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        struct _V;
+        impl ::serde::de::Visitor<'_> for _V {
+            type Value = RealtimePublish;
+            fn expecting(
+                &self,
+                f: &mut ::core::fmt::Formatter<'_>,
+            ) -> ::core::fmt::Result {
+                f.write_str(
+                    concat!(
+                        "a string, integer, or null for ", stringify!(RealtimePublish)
+                    ),
+                )
+            }
+            fn visit_str<E: ::serde::de::Error>(
+                self,
+                v: &str,
+            ) -> ::core::result::Result<RealtimePublish, E> {
+                <RealtimePublish as ::buffa::Enumeration>::from_proto_name(v)
+                    .ok_or_else(|| { ::serde::de::Error::unknown_variant(v, &[]) })
+            }
+            fn visit_i64<E: ::serde::de::Error>(
+                self,
+                v: i64,
+            ) -> ::core::result::Result<RealtimePublish, E> {
+                let v32 = i32::try_from(v)
+                    .map_err(|_| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                        )
+                    })?;
+                <RealtimePublish as ::buffa::Enumeration>::from_i32(v32)
+                    .ok_or_else(|| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("unknown enum value {v32}"),
+                        )
+                    })
+            }
+            fn visit_u64<E: ::serde::de::Error>(
+                self,
+                v: u64,
+            ) -> ::core::result::Result<RealtimePublish, E> {
+                let v32 = i32::try_from(v)
+                    .map_err(|_| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                        )
+                    })?;
+                <RealtimePublish as ::buffa::Enumeration>::from_i32(v32)
+                    .ok_or_else(|| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("unknown enum value {v32}"),
+                        )
+                    })
+            }
+            fn visit_unit<E: ::serde::de::Error>(
+                self,
+            ) -> ::core::result::Result<RealtimePublish, E> {
+                ::core::result::Result::Ok(::core::default::Default::default())
+            }
+        }
+        d.deserialize_any(_V)
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for RealtimePublish {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+impl ::buffa::Enumeration for RealtimePublish {
+    fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0i32 => ::core::option::Option::Some(Self::REALTIME_PUBLISH_UNSPECIFIED),
+            1i32 => ::core::option::Option::Some(Self::REALTIME_PUBLISH_SERVER),
+            2i32 => ::core::option::Option::Some(Self::REALTIME_PUBLISH_RULE),
+            _ => ::core::option::Option::None,
+        }
+    }
+    fn to_i32(&self) -> i32 {
+        *self as i32
+    }
+    fn proto_name(&self) -> &'static str {
+        match self {
+            Self::REALTIME_PUBLISH_UNSPECIFIED => "REALTIME_PUBLISH_UNSPECIFIED",
+            Self::REALTIME_PUBLISH_SERVER => "REALTIME_PUBLISH_SERVER",
+            Self::REALTIME_PUBLISH_RULE => "REALTIME_PUBLISH_RULE",
+        }
+    }
+    fn from_proto_name(name: &str) -> ::core::option::Option<Self> {
+        match name {
+            "REALTIME_PUBLISH_UNSPECIFIED" => {
+                ::core::option::Option::Some(Self::REALTIME_PUBLISH_UNSPECIFIED)
+            }
+            "REALTIME_PUBLISH_SERVER" => {
+                ::core::option::Option::Some(Self::REALTIME_PUBLISH_SERVER)
+            }
+            "REALTIME_PUBLISH_RULE" => {
+                ::core::option::Option::Some(Self::REALTIME_PUBLISH_RULE)
+            }
+            _ => ::core::option::Option::None,
+        }
+    }
+    fn values() -> &'static [Self] {
+        &[
+            Self::REALTIME_PUBLISH_UNSPECIFIED,
+            Self::REALTIME_PUBLISH_SERVER,
+            Self::REALTIME_PUBLISH_RULE,
         ]
     }
 }
@@ -2514,6 +2830,14 @@ impl ::buffa::Message for DeclareRequest {
                         += 1u64 + ::buffa::encoding::varint_len(inner as u64) as u64
                             + inner as u64;
                 }
+                __buffa::oneof::declare_request::Config::Realtime(x) => {
+                    let __slot = __cache.reserve();
+                    let inner = x.compute_size(__cache);
+                    __cache.set(__slot, inner);
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(inner as u64) as u64
+                            + inner as u64;
+                }
             }
         }
         if !self.source.is_empty() {
@@ -2590,6 +2914,14 @@ impl ::buffa::Message for DeclareRequest {
                 __buffa::oneof::declare_request::Config::Kv(x) => {
                     ::buffa::types::put_len_delimited_header(
                         9u32,
+                        u64::from(__cache.consume_next()),
+                        buf,
+                    );
+                    x.write_to(__cache, buf);
+                }
+                __buffa::oneof::declare_request::Config::Realtime(x) => {
+                    ::buffa::types::put_len_delimited_header(
+                        10u32,
                         u64::from(__cache.consume_next()),
                         buf,
                     );
@@ -2759,6 +3091,26 @@ impl ::buffa::Message for DeclareRequest {
                     ::buffa::Message::merge_length_delimited(&mut val, buf, ctx)?;
                     self.config = ::core::option::Option::Some(
                         __buffa::oneof::declare_request::Config::Kv(
+                            ::buffa::alloc::boxed::Box::new(val),
+                        ),
+                    );
+                }
+            }
+            10u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                if let ::core::option::Option::Some(
+                    __buffa::oneof::declare_request::Config::Realtime(ref mut existing),
+                ) = self.config
+                {
+                    ::buffa::Message::merge_length_delimited(&mut **existing, buf, ctx)?;
+                } else {
+                    let mut val = ::core::default::Default::default();
+                    ::buffa::Message::merge_length_delimited(&mut val, buf, ctx)?;
+                    self.config = ::core::option::Option::Some(
+                        __buffa::oneof::declare_request::Config::Realtime(
                             ::buffa::alloc::boxed::Box::new(val),
                         ),
                     );
@@ -3018,6 +3370,30 @@ impl<'de> ::serde::Deserialize<'de> for DeclareRequest {
                                 }
                                 __oneof_config = Some(
                                     __buffa::oneof::declare_request::Config::Kv(
+                                        ::buffa::alloc::boxed::Box::new(v),
+                                    ),
+                                );
+                            }
+                        }
+                        "realtime" => {
+                            let v: ::core::option::Option<RealtimeConfig> = map
+                                .next_value_seed(
+                                    ::buffa::json_helpers::NullableDeserializeSeed(
+                                        ::buffa::json_helpers::DefaultDeserializeSeed::<
+                                            RealtimeConfig,
+                                        >::new(),
+                                    ),
+                                )?;
+                            if let Some(v) = v {
+                                if __oneof_config.is_some() {
+                                    return Err(
+                                        ::serde::de::Error::custom(
+                                            "multiple oneof fields set for 'config'",
+                                        ),
+                                    );
+                                }
+                                __oneof_config = Some(
+                                    __buffa::oneof::declare_request::Config::Realtime(
                                         ::buffa::alloc::boxed::Box::new(v),
                                     ),
                                 );
@@ -5136,6 +5512,438 @@ pub const __KV_CONFIG_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::
     type_url: "type.googleapis.com/app.resources.v1.KvConfig",
     to_json: ::buffa::type_registry::any_to_json::<KvConfig>,
     from_json: ::buffa::type_registry::any_from_json::<KvConfig>,
+    is_wkt: false,
+};
+#[derive(Clone, PartialEq, Default)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(default)]
+pub struct RealtimeChannel {
+    /// Field 1: `pattern`
+    #[serde(
+        rename = "pattern",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub pattern: ::buffa::alloc::string::String,
+    /// Field 2: `wildcard`
+    #[serde(
+        rename = "wildcard",
+        with = "::buffa::json_helpers::proto_bool",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
+    )]
+    pub wildcard: bool,
+    /// Field 3: `schema`
+    #[serde(
+        rename = "schema",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub schema: ::buffa::alloc::string::String,
+    /// Field 4: `subscribe`
+    #[serde(
+        rename = "subscribe",
+        with = "::buffa::json_helpers::proto_enum",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
+    )]
+    pub subscribe: ::buffa::EnumValue<RealtimeSubscribe>,
+    /// Field 5: `publish`
+    #[serde(
+        rename = "publish",
+        with = "::buffa::json_helpers::proto_enum",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
+    )]
+    pub publish: ::buffa::EnumValue<RealtimePublish>,
+    /// Field 6: `source`
+    #[serde(
+        rename = "source",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub source: ::buffa::alloc::string::String,
+    #[serde(skip)]
+    #[doc(hidden)]
+    pub __buffa_unknown_fields: ::buffa::UnknownFields,
+}
+impl ::core::fmt::Debug for RealtimeChannel {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.debug_struct("RealtimeChannel")
+            .field("pattern", &self.pattern)
+            .field("wildcard", &self.wildcard)
+            .field("schema", &self.schema)
+            .field("subscribe", &self.subscribe)
+            .field("publish", &self.publish)
+            .field("source", &self.source)
+            .finish()
+    }
+}
+impl RealtimeChannel {
+    /// Protobuf type URL for this message, for use with `Any::pack` and
+    /// `Any::unpack_if`.
+    ///
+    /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
+    pub const TYPE_URL: &'static str = "type.googleapis.com/app.resources.v1.RealtimeChannel";
+}
+::buffa::impl_default_instance!(RealtimeChannel);
+impl ::buffa::MessageName for RealtimeChannel {
+    const PACKAGE: &'static str = "app.resources.v1";
+    const NAME: &'static str = "RealtimeChannel";
+    const FULL_NAME: &'static str = "app.resources.v1.RealtimeChannel";
+    const TYPE_URL: &'static str = "type.googleapis.com/app.resources.v1.RealtimeChannel";
+}
+impl ::buffa::Message for RealtimeChannel {
+    /// Returns the total encoded size in bytes.
+    ///
+    /// Accumulates in `u64` (which cannot overflow for in-memory
+    /// data) and saturates to `u32` at return, so a message whose
+    /// encoded size exceeds the 2 GiB protobuf limit yields a value
+    /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+    /// points reject, never a silently wrapped size.
+    #[allow(clippy::let_and_return)]
+    fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        let mut size = 0u64;
+        if !self.pattern.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.pattern) as u64;
+        }
+        if self.wildcard {
+            size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+        }
+        if !self.schema.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.schema) as u64;
+        }
+        {
+            let val = self.subscribe.to_i32();
+            if val != 0 {
+                size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
+            }
+        }
+        {
+            let val = self.publish.to_i32();
+            if val != 0 {
+                size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
+            }
+        }
+        if !self.source.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.source) as u64;
+        }
+        size += self.__buffa_unknown_fields.encoded_len() as u64;
+        ::buffa::saturate_size(size)
+    }
+    fn write_to(
+        &self,
+        _cache: &mut ::buffa::SizeCache,
+        buf: &mut impl ::buffa::EncodeSink,
+    ) {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        if !self.pattern.is_empty() {
+            ::buffa::types::put_string_field(1u32, &self.pattern, buf);
+        }
+        if self.wildcard {
+            ::buffa::types::put_bool_field(2u32, self.wildcard, buf);
+        }
+        if !self.schema.is_empty() {
+            ::buffa::types::put_string_field(3u32, &self.schema, buf);
+        }
+        {
+            let val = self.subscribe.to_i32();
+            if val != 0 {
+                ::buffa::types::put_int32_field(4u32, val, buf);
+            }
+        }
+        {
+            let val = self.publish.to_i32();
+            if val != 0 {
+                ::buffa::types::put_int32_field(5u32, val, buf);
+            }
+        }
+        if !self.source.is_empty() {
+            ::buffa::types::put_string_field(6u32, &self.source, buf);
+        }
+        self.__buffa_unknown_fields.write_to(buf);
+    }
+    fn merge_field(
+        &mut self,
+        tag: ::buffa::encoding::Tag,
+        buf: &mut impl ::buffa::bytes::Buf,
+        ctx: ::buffa::DecodeContext<'_>,
+    ) -> ::core::result::Result<(), ::buffa::DecodeError> {
+        #[allow(unused_imports)]
+        use ::buffa::bytes::Buf as _;
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        match tag.field_number() {
+            1u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.pattern, buf)?;
+            }
+            2u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.wildcard = ::buffa::types::decode_bool(buf)?;
+            }
+            3u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.schema, buf)?;
+            }
+            4u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.subscribe = ::buffa::EnumValue::from(
+                    ::buffa::types::decode_int32(buf)?,
+                );
+            }
+            5u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.publish = ::buffa::EnumValue::from(
+                    ::buffa::types::decode_int32(buf)?,
+                );
+            }
+            6u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.source, buf)?;
+            }
+            _ => {
+                self.__buffa_unknown_fields
+                    .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+    fn clear(&mut self) {
+        self.pattern.clear();
+        self.wildcard = false;
+        self.schema.clear();
+        self.subscribe = ::buffa::EnumValue::from(0);
+        self.publish = ::buffa::EnumValue::from(0);
+        self.source.clear();
+        self.__buffa_unknown_fields.clear();
+    }
+}
+impl ::buffa::ExtensionSet for RealtimeChannel {
+    const PROTO_FQN: &'static str = "app.resources.v1.RealtimeChannel";
+    fn unknown_fields(&self) -> &::buffa::UnknownFields {
+        &self.__buffa_unknown_fields
+    }
+    fn unknown_fields_mut(&mut self) -> &mut ::buffa::UnknownFields {
+        &mut self.__buffa_unknown_fields
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for RealtimeChannel {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+#[doc(hidden)]
+pub const __REALTIME_CHANNEL_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
+    type_url: "type.googleapis.com/app.resources.v1.RealtimeChannel",
+    to_json: ::buffa::type_registry::any_to_json::<RealtimeChannel>,
+    from_json: ::buffa::type_registry::any_from_json::<RealtimeChannel>,
+    is_wkt: false,
+};
+#[derive(Clone, PartialEq, Default)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(default)]
+pub struct RealtimeConfig {
+    /// Field 1: `channels`
+    #[serde(
+        rename = "channels",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec",
+        deserialize_with = "::buffa::json_helpers::null_as_default"
+    )]
+    pub channels: ::buffa::alloc::vec::Vec<RealtimeChannel>,
+    /// Field 2: `token_ttl`
+    #[serde(
+        rename = "tokenTtl",
+        alias = "token_ttl",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
+    )]
+    pub token_ttl: ::buffa::MessageField<
+        ::buffa_types::google::protobuf::Duration,
+        ::buffa::Inline<::buffa_types::google::protobuf::Duration>,
+    >,
+    #[serde(skip)]
+    #[doc(hidden)]
+    pub __buffa_unknown_fields: ::buffa::UnknownFields,
+}
+impl ::core::fmt::Debug for RealtimeConfig {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.debug_struct("RealtimeConfig")
+            .field("channels", &self.channels)
+            .field("token_ttl", &self.token_ttl)
+            .finish()
+    }
+}
+impl RealtimeConfig {
+    /// Protobuf type URL for this message, for use with `Any::pack` and
+    /// `Any::unpack_if`.
+    ///
+    /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
+    pub const TYPE_URL: &'static str = "type.googleapis.com/app.resources.v1.RealtimeConfig";
+}
+::buffa::impl_default_instance!(RealtimeConfig);
+impl ::buffa::MessageName for RealtimeConfig {
+    const PACKAGE: &'static str = "app.resources.v1";
+    const NAME: &'static str = "RealtimeConfig";
+    const FULL_NAME: &'static str = "app.resources.v1.RealtimeConfig";
+    const TYPE_URL: &'static str = "type.googleapis.com/app.resources.v1.RealtimeConfig";
+}
+impl ::buffa::Message for RealtimeConfig {
+    /// Returns the total encoded size in bytes.
+    ///
+    /// Accumulates in `u64` (which cannot overflow for in-memory
+    /// data) and saturates to `u32` at return, so a message whose
+    /// encoded size exceeds the 2 GiB protobuf limit yields a value
+    /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+    /// points reject, never a silently wrapped size.
+    #[allow(clippy::let_and_return)]
+    fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        let mut size = 0u64;
+        for v in &self.channels {
+            let __slot = __cache.reserve();
+            let inner_size = v.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
+        if self.token_ttl.is_set() {
+            let __slot = __cache.reserve();
+            let inner_size = self.token_ttl.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
+        size += self.__buffa_unknown_fields.encoded_len() as u64;
+        ::buffa::saturate_size(size)
+    }
+    fn write_to(
+        &self,
+        __cache: &mut ::buffa::SizeCache,
+        buf: &mut impl ::buffa::EncodeSink,
+    ) {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        for v in &self.channels {
+            ::buffa::types::put_len_delimited_header(
+                1u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            v.write_to(__cache, buf);
+        }
+        if self.token_ttl.is_set() {
+            ::buffa::types::put_len_delimited_header(
+                2u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            self.token_ttl.write_to(__cache, buf);
+        }
+        self.__buffa_unknown_fields.write_to(buf);
+    }
+    fn merge_field(
+        &mut self,
+        tag: ::buffa::encoding::Tag,
+        buf: &mut impl ::buffa::bytes::Buf,
+        ctx: ::buffa::DecodeContext<'_>,
+    ) -> ::core::result::Result<(), ::buffa::DecodeError> {
+        #[allow(unused_imports)]
+        use ::buffa::bytes::Buf as _;
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        match tag.field_number() {
+            1u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                let mut elem = ::core::default::Default::default();
+                ctx.register_element_memory(
+                    ::buffa::__private::element_footprint(&elem),
+                )?;
+                ::buffa::Message::merge_length_delimited(&mut elem, buf, ctx)?;
+                self.channels.push(elem);
+            }
+            2u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::Message::merge_length_delimited(
+                    self.token_ttl.get_or_insert_default(),
+                    buf,
+                    ctx,
+                )?;
+            }
+            _ => {
+                self.__buffa_unknown_fields
+                    .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+    fn clear(&mut self) {
+        self.channels.clear();
+        self.token_ttl = ::buffa::MessageField::none();
+        self.__buffa_unknown_fields.clear();
+    }
+}
+impl ::buffa::ExtensionSet for RealtimeConfig {
+    const PROTO_FQN: &'static str = "app.resources.v1.RealtimeConfig";
+    fn unknown_fields(&self) -> &::buffa::UnknownFields {
+        &self.__buffa_unknown_fields
+    }
+    fn unknown_fields_mut(&mut self) -> &mut ::buffa::UnknownFields {
+        &mut self.__buffa_unknown_fields
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for RealtimeConfig {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+#[doc(hidden)]
+pub const __REALTIME_CONFIG_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
+    type_url: "type.googleapis.com/app.resources.v1.RealtimeConfig",
+    to_json: ::buffa::type_registry::any_to_json::<RealtimeConfig>,
+    from_json: ::buffa::type_registry::any_from_json::<RealtimeConfig>,
     is_wkt: false,
 };
 #[allow(
@@ -8692,6 +9500,37 @@ pub mod __buffa {
                             );
                         }
                     }
+                    10u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let __sub_ctx = ctx.descend()?;
+                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                        if let Some(
+                            super::super::__buffa::view::oneof::declare_request::Config::Realtime(
+                                ref mut existing,
+                            ),
+                        ) = view.config
+                        {
+                            ::buffa::MessageView::merge_into_view(
+                                &mut **existing,
+                                sub,
+                                __sub_ctx,
+                            )?;
+                        } else {
+                            view.config = Some(
+                                super::super::__buffa::view::oneof::declare_request::Config::Realtime(
+                                    ::buffa::alloc::boxed::Box::new(
+                                        <super::super::__buffa::view::RealtimeConfigView as ::buffa::MessageView>::decode_view_ctx(
+                                            sub,
+                                            __sub_ctx,
+                                        )?,
+                                    ),
+                                ),
+                            );
+                        }
+                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                         let span_len = before_tag.len() - cur.len();
@@ -8798,6 +9637,15 @@ pub mod __buffa {
                                             ),
                                         )
                                     }
+                                    super::super::__buffa::view::oneof::declare_request::Config::Realtime(
+                                        v,
+                                    ) => {
+                                        super::super::__buffa::oneof::declare_request::Config::Realtime(
+                                            ::buffa::alloc::boxed::Box::new(
+                                                v.to_owned_from_source(__buffa_src)?,
+                                            ),
+                                        )
+                                    }
                                 },
                             )
                         }
@@ -8888,6 +9736,16 @@ pub mod __buffa {
                                     + inner as u64;
                         }
                         super::super::__buffa::view::oneof::declare_request::Config::Kv(
+                            x,
+                        ) => {
+                            let __slot = __cache.reserve();
+                            let inner = x.compute_size(__cache);
+                            __cache.set(__slot, inner);
+                            size
+                                += 1u64 + ::buffa::encoding::varint_len(inner as u64) as u64
+                                    + inner as u64;
+                        }
+                        super::super::__buffa::view::oneof::declare_request::Config::Realtime(
                             x,
                         ) => {
                             let __slot = __cache.reserve();
@@ -8995,6 +9853,16 @@ pub mod __buffa {
                             );
                             x.write_to(__cache, buf);
                         }
+                        super::super::__buffa::view::oneof::declare_request::Config::Realtime(
+                            x,
+                        ) => {
+                            ::buffa::types::put_len_delimited_header(
+                                10u32,
+                                u64::from(__cache.consume_next()),
+                                buf,
+                            );
+                            x.write_to(__cache, buf);
+                        }
                     }
                 }
                 if !self.source.is_empty() {
@@ -9066,6 +9934,11 @@ pub mod __buffa {
                             v,
                         ) => {
                             __map.serialize_entry("kv", v)?;
+                        }
+                        super::super::__buffa::view::oneof::declare_request::Config::Realtime(
+                            v,
+                        ) => {
+                            __map.serialize_entry("realtime", v)?;
                         }
                     }
                 }
@@ -13104,6 +13977,788 @@ pub mod __buffa {
                 ::serde::Serialize::serialize(&self.0, __s)
             }
         }
+        #[derive(Clone, Debug, Default)]
+        pub struct RealtimeChannelView<'a> {
+            /// Field 1: `pattern`
+            pub pattern: &'a str,
+            /// Field 2: `wildcard`
+            pub wildcard: bool,
+            /// Field 3: `schema`
+            pub schema: &'a str,
+            /// Field 4: `subscribe`
+            pub subscribe: ::buffa::EnumValue<super::super::RealtimeSubscribe>,
+            /// Field 5: `publish`
+            pub publish: ::buffa::EnumValue<super::super::RealtimePublish>,
+            /// Field 6: `source`
+            pub source: &'a str,
+            pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
+        }
+        impl<'a> ::buffa::MessageView<'a> for RealtimeChannelView<'a> {
+            type Owned = super::super::RealtimeChannel;
+            fn decode_view(
+                buf: &'a [u8],
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                let __limit = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_UNKNOWN_FIELD_LIMIT,
+                );
+                let __elem = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_ELEMENT_MEMORY_LIMIT,
+                );
+                <Self as ::buffa::MessageView>::decode_view_ctx(
+                    buf,
+                    ::buffa::DecodeContext::new(::buffa::RECURSION_LIMIT, &__limit)
+                        .with_element_memory(&__elem),
+                )
+            }
+            fn decode_view_with_ctx(
+                buf: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
+            }
+            #[inline]
+            fn merge_view_field(
+                &mut self,
+                tag: ::buffa::encoding::Tag,
+                cur: &'a [u8],
+                before_tag: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<&'a [u8], ::buffa::DecodeError> {
+                let _ = ctx;
+                #[allow(unused_variables)]
+                let view = self;
+                let mut cur = cur;
+                match tag.field_number() {
+                    1u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.pattern = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    2u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.wildcard = ::buffa::types::decode_bool(&mut cur)?;
+                    }
+                    3u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.schema = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    4u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.subscribe = ::buffa::EnumValue::from(
+                            ::buffa::types::decode_int32(&mut cur)?,
+                        );
+                    }
+                    5u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.publish = ::buffa::EnumValue::from(
+                            ::buffa::types::decode_int32(&mut cur)?,
+                        );
+                    }
+                    6u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.source = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    _ => {
+                        ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
+                        let span_len = before_tag.len() - cur.len();
+                        view.__buffa_unknown_fields
+                            .push_record(before_tag, span_len, ctx)?;
+                    }
+                }
+                ::core::result::Result::Ok(cur)
+            }
+            fn to_owned_message(
+                &self,
+            ) -> ::core::result::Result<
+                super::super::RealtimeChannel,
+                ::buffa::DecodeError,
+            > {
+                self.to_owned_from_source(None)
+            }
+            #[allow(clippy::useless_conversion, clippy::needless_update)]
+            fn to_owned_from_source(
+                &self,
+                __buffa_src: ::core::option::Option<&::buffa::bytes::Bytes>,
+            ) -> ::core::result::Result<
+                super::super::RealtimeChannel,
+                ::buffa::DecodeError,
+            > {
+                #[allow(unused_imports)]
+                use ::buffa::alloc::string::ToString as _;
+                let _ = __buffa_src;
+                ::core::result::Result::Ok(super::super::RealtimeChannel {
+                    pattern: self.pattern.to_string(),
+                    wildcard: self.wildcard,
+                    schema: self.schema.to_string(),
+                    subscribe: self.subscribe,
+                    publish: self.publish,
+                    source: self.source.to_string(),
+                    __buffa_unknown_fields: self
+                        .__buffa_unknown_fields
+                        .to_owned()?
+                        .into(),
+                    ..::core::default::Default::default()
+                })
+            }
+        }
+        impl<'a> ::buffa::ViewEncode<'a> for RealtimeChannelView<'a> {
+            #[allow(clippy::needless_borrow, clippy::let_and_return)]
+            fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                let mut size = 0u64;
+                if !self.pattern.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.pattern) as u64;
+                }
+                if self.wildcard {
+                    size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+                }
+                if !self.schema.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.schema) as u64;
+                }
+                {
+                    let val = self.subscribe.to_i32();
+                    if val != 0 {
+                        size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
+                    }
+                }
+                {
+                    let val = self.publish.to_i32();
+                    if val != 0 {
+                        size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
+                    }
+                }
+                if !self.source.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.source) as u64;
+                }
+                size += self.__buffa_unknown_fields.encoded_len() as u64;
+                ::buffa::saturate_size(size)
+            }
+            #[allow(clippy::needless_borrow)]
+            fn write_to(
+                &self,
+                _cache: &mut ::buffa::SizeCache,
+                buf: &mut impl ::buffa::EncodeSink,
+            ) {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                if !self.pattern.is_empty() {
+                    ::buffa::types::put_string_field(1u32, &self.pattern, buf);
+                }
+                if self.wildcard {
+                    ::buffa::types::put_bool_field(2u32, self.wildcard, buf);
+                }
+                if !self.schema.is_empty() {
+                    ::buffa::types::put_string_field(3u32, &self.schema, buf);
+                }
+                {
+                    let val = self.subscribe.to_i32();
+                    if val != 0 {
+                        ::buffa::types::put_int32_field(4u32, val, buf);
+                    }
+                }
+                {
+                    let val = self.publish.to_i32();
+                    if val != 0 {
+                        ::buffa::types::put_int32_field(5u32, val, buf);
+                    }
+                }
+                if !self.source.is_empty() {
+                    ::buffa::types::put_string_field(6u32, &self.source, buf);
+                }
+                self.__buffa_unknown_fields.write_to(buf);
+            }
+        }
+        /// Serializes this view as protobuf JSON.
+        ///
+        /// Implicit-presence fields with default values are omitted, `required`
+        /// fields are always emitted, explicit-presence (`optional`) fields are
+        /// emitted only when set, bytes fields are base64-encoded, and enum
+        /// values are their proto name strings.
+        ///
+        /// This impl uses `serialize_map(None)` because the number of emitted
+        /// fields depends on default-omission rules; serializers that require
+        /// known map lengths (e.g. `bincode`) will return a runtime error.
+        /// Use the owned message type for those formats.
+        impl<'__a> ::serde::Serialize for RealtimeChannelView<'__a> {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                use ::serde::ser::SerializeMap as _;
+                let mut __map = __s.serialize_map(::core::option::Option::None)?;
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.pattern) {
+                    __map.serialize_entry("pattern", self.pattern)?;
+                }
+                if self.wildcard {
+                    __map.serialize_entry("wildcard", &self.wildcard)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.schema) {
+                    __map.serialize_entry("schema", self.schema)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_default_enum_value(
+                    &self.subscribe,
+                ) {
+                    __map.serialize_entry("subscribe", &self.subscribe)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_default_enum_value(
+                    &self.publish,
+                ) {
+                    __map.serialize_entry("publish", &self.publish)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.source) {
+                    __map.serialize_entry("source", self.source)?;
+                }
+                __map.end()
+            }
+        }
+        impl<'a> ::buffa::MessageName for RealtimeChannelView<'a> {
+            const PACKAGE: &'static str = "app.resources.v1";
+            const NAME: &'static str = "RealtimeChannel";
+            const FULL_NAME: &'static str = "app.resources.v1.RealtimeChannel";
+            const TYPE_URL: &'static str = "type.googleapis.com/app.resources.v1.RealtimeChannel";
+        }
+        ::buffa::impl_default_view_instance!(RealtimeChannelView);
+        ::buffa::impl_view_reborrow!(RealtimeChannelView);
+        /** Self-contained, `'static` owned view of a `RealtimeChannel` message.
+
+ Wraps [`::buffa::OwnedView`]`<`[`RealtimeChannelView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
+
+ Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`RealtimeChannelView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
+        #[derive(Clone, Debug)]
+        pub struct RealtimeChannelOwnedView(
+            ::buffa::OwnedView<RealtimeChannelView<'static>>,
+        );
+        impl RealtimeChannelOwnedView {
+            /// Decode an owned view from a [`::buffa::bytes::Bytes`] buffer.
+            ///
+            /// The view borrows directly from the buffer's data; the buffer is
+            /// retained inside the returned handle.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer contains invalid
+            /// protobuf data.
+            pub fn decode(
+                bytes: ::buffa::bytes::Bytes,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    RealtimeChannelOwnedView(::buffa::OwnedView::decode(bytes)?),
+                )
+            }
+            /// Decode with custom [`::buffa::DecodeOptions`] (recursion limit,
+            /// max message size).
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer is invalid or
+            /// exceeds the configured limits.
+            pub fn decode_with_options(
+                bytes: ::buffa::bytes::Bytes,
+                opts: &::buffa::DecodeOptions,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    RealtimeChannelOwnedView(
+                        ::buffa::OwnedView::decode_with_options(bytes, opts)?,
+                    ),
+                )
+            }
+            /// Build from an owned message via an encode → decode round-trip.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+            /// message's encoded size exceeds the 2 GiB protobuf limit, or
+            /// another [`::buffa::DecodeError`] if the re-encoded bytes are
+            /// somehow invalid (should not happen for well-formed messages).
+            pub fn from_owned(
+                msg: &super::super::RealtimeChannel,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    RealtimeChannelOwnedView(::buffa::OwnedView::from_owned(msg)?),
+                )
+            }
+            /// Borrow the full [`RealtimeChannelView`] with its lifetime tied to `&self`.
+            #[must_use]
+            pub fn view(&self) -> &RealtimeChannelView<'_> {
+                self.0.reborrow()
+            }
+            /// Convert to the owned message type.
+            ///
+            /// Infallible: this type's constructors wire-decode their
+            /// buffer, and a view produced by wire decoding always
+            /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+            /// whose contract also governs handles converted from a raw
+            /// [`::buffa::OwnedView`].
+            #[must_use]
+            pub fn to_owned_message(&self) -> super::super::RealtimeChannel {
+                self.0.to_owned_message()
+            }
+            /// The underlying bytes buffer.
+            #[must_use]
+            pub fn bytes(&self) -> &::buffa::bytes::Bytes {
+                self.0.bytes()
+            }
+            /// Consume the handle, returning the underlying bytes buffer.
+            #[must_use]
+            pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
+                self.0.into_bytes()
+            }
+            /// Field 1: `pattern`
+            #[must_use]
+            pub fn pattern(&self) -> &'_ str {
+                self.0.reborrow().pattern
+            }
+            /// Field 2: `wildcard`
+            #[must_use]
+            pub fn wildcard(&self) -> bool {
+                self.0.reborrow().wildcard
+            }
+            /// Field 3: `schema`
+            #[must_use]
+            pub fn schema(&self) -> &'_ str {
+                self.0.reborrow().schema
+            }
+            /// Field 4: `subscribe`
+            #[must_use]
+            pub fn subscribe(
+                &self,
+            ) -> ::buffa::EnumValue<super::super::RealtimeSubscribe> {
+                self.0.reborrow().subscribe
+            }
+            /// Field 5: `publish`
+            #[must_use]
+            pub fn publish(&self) -> ::buffa::EnumValue<super::super::RealtimePublish> {
+                self.0.reborrow().publish
+            }
+            /// Field 6: `source`
+            #[must_use]
+            pub fn source(&self) -> &'_ str {
+                self.0.reborrow().source
+            }
+        }
+        impl ::core::convert::From<::buffa::OwnedView<RealtimeChannelView<'static>>>
+        for RealtimeChannelOwnedView {
+            fn from(inner: ::buffa::OwnedView<RealtimeChannelView<'static>>) -> Self {
+                RealtimeChannelOwnedView(inner)
+            }
+        }
+        impl ::core::convert::From<RealtimeChannelOwnedView>
+        for ::buffa::OwnedView<RealtimeChannelView<'static>> {
+            fn from(wrapper: RealtimeChannelOwnedView) -> Self {
+                wrapper.0
+            }
+        }
+        impl ::core::convert::AsRef<::buffa::OwnedView<RealtimeChannelView<'static>>>
+        for RealtimeChannelOwnedView {
+            fn as_ref(&self) -> &::buffa::OwnedView<RealtimeChannelView<'static>> {
+                &self.0
+            }
+        }
+        impl ::buffa::HasMessageView for super::super::RealtimeChannel {
+            type View<'a> = RealtimeChannelView<'a>;
+            type ViewHandle = RealtimeChannelOwnedView;
+        }
+        impl ::serde::Serialize for RealtimeChannelOwnedView {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                ::serde::Serialize::serialize(&self.0, __s)
+            }
+        }
+        #[derive(Clone, Debug, Default)]
+        pub struct RealtimeConfigView<'a> {
+            /// Field 1: `channels`
+            pub channels: ::buffa::RepeatedView<
+                'a,
+                super::super::__buffa::view::RealtimeChannelView<'a>,
+            >,
+            /// Field 2: `token_ttl`
+            pub token_ttl: ::buffa::MessageFieldView<
+                ::buffa_types::google::protobuf::__buffa::view::DurationView<'a>,
+            >,
+            pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
+        }
+        impl<'a> ::buffa::MessageView<'a> for RealtimeConfigView<'a> {
+            type Owned = super::super::RealtimeConfig;
+            fn decode_view(
+                buf: &'a [u8],
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                let __limit = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_UNKNOWN_FIELD_LIMIT,
+                );
+                let __elem = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_ELEMENT_MEMORY_LIMIT,
+                );
+                <Self as ::buffa::MessageView>::decode_view_ctx(
+                    buf,
+                    ::buffa::DecodeContext::new(::buffa::RECURSION_LIMIT, &__limit)
+                        .with_element_memory(&__elem),
+                )
+            }
+            fn decode_view_with_ctx(
+                buf: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
+            }
+            #[inline]
+            fn merge_view_field(
+                &mut self,
+                tag: ::buffa::encoding::Tag,
+                cur: &'a [u8],
+                before_tag: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<&'a [u8], ::buffa::DecodeError> {
+                let _ = ctx;
+                #[allow(unused_variables)]
+                let view = self;
+                let mut cur = cur;
+                match tag.field_number() {
+                    2u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let __sub_ctx = ctx.descend()?;
+                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                        match view.token_ttl.as_mut() {
+                            Some(existing) => {
+                                ::buffa::MessageView::merge_into_view(
+                                    existing,
+                                    sub,
+                                    __sub_ctx,
+                                )?
+                            }
+                            None => {
+                                view.token_ttl = ::buffa::MessageFieldView::set(
+                                    <::buffa_types::google::protobuf::__buffa::view::DurationView as ::buffa::MessageView>::decode_view_ctx(
+                                        sub,
+                                        __sub_ctx,
+                                    )?,
+                                );
+                            }
+                        }
+                    }
+                    1u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let __sub_ctx = ctx.descend()?;
+                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                        ctx.register_element_memory(
+                            ::core::mem::size_of::<
+                                super::super::__buffa::view::RealtimeChannelView,
+                            >(),
+                        )?;
+                        view.channels
+                            .push(
+                                <super::super::__buffa::view::RealtimeChannelView as ::buffa::MessageView>::decode_view_ctx(
+                                    sub,
+                                    __sub_ctx,
+                                )?,
+                            );
+                    }
+                    _ => {
+                        ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
+                        let span_len = before_tag.len() - cur.len();
+                        view.__buffa_unknown_fields
+                            .push_record(before_tag, span_len, ctx)?;
+                    }
+                }
+                ::core::result::Result::Ok(cur)
+            }
+            fn to_owned_message(
+                &self,
+            ) -> ::core::result::Result<
+                super::super::RealtimeConfig,
+                ::buffa::DecodeError,
+            > {
+                self.to_owned_from_source(None)
+            }
+            #[allow(clippy::useless_conversion, clippy::needless_update)]
+            fn to_owned_from_source(
+                &self,
+                __buffa_src: ::core::option::Option<&::buffa::bytes::Bytes>,
+            ) -> ::core::result::Result<
+                super::super::RealtimeConfig,
+                ::buffa::DecodeError,
+            > {
+                #[allow(unused_imports)]
+                use ::buffa::alloc::string::ToString as _;
+                let _ = __buffa_src;
+                ::core::result::Result::Ok(super::super::RealtimeConfig {
+                    channels: self
+                        .channels
+                        .iter()
+                        .map(|v| v.to_owned_from_source(__buffa_src))
+                        .collect::<::core::result::Result<_, ::buffa::DecodeError>>()?,
+                    token_ttl: match self.token_ttl.as_option() {
+                        Some(v) => {
+                            ::buffa::MessageField::<
+                                ::buffa_types::google::protobuf::Duration,
+                                ::buffa::Inline<::buffa_types::google::protobuf::Duration>,
+                            >::some(v.to_owned_from_source(__buffa_src)?)
+                        }
+                        None => ::buffa::MessageField::none(),
+                    },
+                    __buffa_unknown_fields: self
+                        .__buffa_unknown_fields
+                        .to_owned()?
+                        .into(),
+                    ..::core::default::Default::default()
+                })
+            }
+        }
+        impl<'a> ::buffa::ViewEncode<'a> for RealtimeConfigView<'a> {
+            #[allow(clippy::needless_borrow, clippy::let_and_return)]
+            fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                let mut size = 0u64;
+                for v in &self.channels {
+                    let __slot = __cache.reserve();
+                    let inner_size = v.compute_size(__cache);
+                    __cache.set(__slot, inner_size);
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                            + inner_size as u64;
+                }
+                if self.token_ttl.is_set() {
+                    let __slot = __cache.reserve();
+                    let inner_size = self.token_ttl.compute_size(__cache);
+                    __cache.set(__slot, inner_size);
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                            + inner_size as u64;
+                }
+                size += self.__buffa_unknown_fields.encoded_len() as u64;
+                ::buffa::saturate_size(size)
+            }
+            #[allow(clippy::needless_borrow)]
+            fn write_to(
+                &self,
+                __cache: &mut ::buffa::SizeCache,
+                buf: &mut impl ::buffa::EncodeSink,
+            ) {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                for v in &self.channels {
+                    ::buffa::types::put_len_delimited_header(
+                        1u32,
+                        u64::from(__cache.consume_next()),
+                        buf,
+                    );
+                    v.write_to(__cache, buf);
+                }
+                if self.token_ttl.is_set() {
+                    ::buffa::types::put_len_delimited_header(
+                        2u32,
+                        u64::from(__cache.consume_next()),
+                        buf,
+                    );
+                    self.token_ttl.write_to(__cache, buf);
+                }
+                self.__buffa_unknown_fields.write_to(buf);
+            }
+        }
+        /// Serializes this view as protobuf JSON.
+        ///
+        /// Implicit-presence fields with default values are omitted, `required`
+        /// fields are always emitted, explicit-presence (`optional`) fields are
+        /// emitted only when set, bytes fields are base64-encoded, and enum
+        /// values are their proto name strings.
+        ///
+        /// This impl uses `serialize_map(None)` because the number of emitted
+        /// fields depends on default-omission rules; serializers that require
+        /// known map lengths (e.g. `bincode`) will return a runtime error.
+        /// Use the owned message type for those formats.
+        impl<'__a> ::serde::Serialize for RealtimeConfigView<'__a> {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                use ::serde::ser::SerializeMap as _;
+                let mut __map = __s.serialize_map(::core::option::Option::None)?;
+                if !self.channels.is_empty() {
+                    __map.serialize_entry("channels", &*self.channels)?;
+                }
+                {
+                    if let ::core::option::Option::Some(__v) = self.token_ttl.as_option()
+                    {
+                        __map.serialize_entry("tokenTtl", __v)?;
+                    }
+                }
+                __map.end()
+            }
+        }
+        impl<'a> ::buffa::MessageName for RealtimeConfigView<'a> {
+            const PACKAGE: &'static str = "app.resources.v1";
+            const NAME: &'static str = "RealtimeConfig";
+            const FULL_NAME: &'static str = "app.resources.v1.RealtimeConfig";
+            const TYPE_URL: &'static str = "type.googleapis.com/app.resources.v1.RealtimeConfig";
+        }
+        ::buffa::impl_default_view_instance!(RealtimeConfigView);
+        ::buffa::impl_view_reborrow!(RealtimeConfigView);
+        /** Self-contained, `'static` owned view of a `RealtimeConfig` message.
+
+ Wraps [`::buffa::OwnedView`]`<`[`RealtimeConfigView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
+
+ Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`RealtimeConfigView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
+        #[derive(Clone, Debug)]
+        pub struct RealtimeConfigOwnedView(
+            ::buffa::OwnedView<RealtimeConfigView<'static>>,
+        );
+        impl RealtimeConfigOwnedView {
+            /// Decode an owned view from a [`::buffa::bytes::Bytes`] buffer.
+            ///
+            /// The view borrows directly from the buffer's data; the buffer is
+            /// retained inside the returned handle.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer contains invalid
+            /// protobuf data.
+            pub fn decode(
+                bytes: ::buffa::bytes::Bytes,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    RealtimeConfigOwnedView(::buffa::OwnedView::decode(bytes)?),
+                )
+            }
+            /// Decode with custom [`::buffa::DecodeOptions`] (recursion limit,
+            /// max message size).
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer is invalid or
+            /// exceeds the configured limits.
+            pub fn decode_with_options(
+                bytes: ::buffa::bytes::Bytes,
+                opts: &::buffa::DecodeOptions,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    RealtimeConfigOwnedView(
+                        ::buffa::OwnedView::decode_with_options(bytes, opts)?,
+                    ),
+                )
+            }
+            /// Build from an owned message via an encode → decode round-trip.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+            /// message's encoded size exceeds the 2 GiB protobuf limit, or
+            /// another [`::buffa::DecodeError`] if the re-encoded bytes are
+            /// somehow invalid (should not happen for well-formed messages).
+            pub fn from_owned(
+                msg: &super::super::RealtimeConfig,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    RealtimeConfigOwnedView(::buffa::OwnedView::from_owned(msg)?),
+                )
+            }
+            /// Borrow the full [`RealtimeConfigView`] with its lifetime tied to `&self`.
+            #[must_use]
+            pub fn view(&self) -> &RealtimeConfigView<'_> {
+                self.0.reborrow()
+            }
+            /// Convert to the owned message type.
+            ///
+            /// Infallible: this type's constructors wire-decode their
+            /// buffer, and a view produced by wire decoding always
+            /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+            /// whose contract also governs handles converted from a raw
+            /// [`::buffa::OwnedView`].
+            #[must_use]
+            pub fn to_owned_message(&self) -> super::super::RealtimeConfig {
+                self.0.to_owned_message()
+            }
+            /// The underlying bytes buffer.
+            #[must_use]
+            pub fn bytes(&self) -> &::buffa::bytes::Bytes {
+                self.0.bytes()
+            }
+            /// Consume the handle, returning the underlying bytes buffer.
+            #[must_use]
+            pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
+                self.0.into_bytes()
+            }
+            /// Field 1: `channels`
+            #[must_use]
+            pub fn channels(
+                &self,
+            ) -> &::buffa::RepeatedView<
+                '_,
+                super::super::__buffa::view::RealtimeChannelView<'_>,
+            > {
+                &self.0.reborrow().channels
+            }
+            /// Field 2: `token_ttl`
+            #[must_use]
+            pub fn token_ttl(
+                &self,
+            ) -> &::buffa::MessageFieldView<
+                ::buffa_types::google::protobuf::__buffa::view::DurationView<'_>,
+            > {
+                &self.0.reborrow().token_ttl
+            }
+        }
+        impl ::core::convert::From<::buffa::OwnedView<RealtimeConfigView<'static>>>
+        for RealtimeConfigOwnedView {
+            fn from(inner: ::buffa::OwnedView<RealtimeConfigView<'static>>) -> Self {
+                RealtimeConfigOwnedView(inner)
+            }
+        }
+        impl ::core::convert::From<RealtimeConfigOwnedView>
+        for ::buffa::OwnedView<RealtimeConfigView<'static>> {
+            fn from(wrapper: RealtimeConfigOwnedView) -> Self {
+                wrapper.0
+            }
+        }
+        impl ::core::convert::AsRef<::buffa::OwnedView<RealtimeConfigView<'static>>>
+        for RealtimeConfigOwnedView {
+            fn as_ref(&self) -> &::buffa::OwnedView<RealtimeConfigView<'static>> {
+                &self.0
+            }
+        }
+        impl ::buffa::HasMessageView for super::super::RealtimeConfig {
+            type View<'a> = RealtimeConfigView<'a>;
+            type ViewHandle = RealtimeConfigOwnedView;
+        }
+        impl ::serde::Serialize for RealtimeConfigOwnedView {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                ::serde::Serialize::serialize(&self.0, __s)
+            }
+        }
         pub mod oneof {
             #[allow(unused_imports)]
             use super::*;
@@ -13157,6 +14812,13 @@ pub mod __buffa {
                             super::super::super::super::__buffa::view::KvConfigView<'a>,
                         >,
                     ),
+                    Realtime(
+                        ::buffa::alloc::boxed::Box<
+                            super::super::super::super::__buffa::view::RealtimeConfigView<
+                                'a,
+                            >,
+                        >,
+                    ),
                 }
             }
         }
@@ -13180,6 +14842,9 @@ pub mod __buffa {
                     ::buffa::alloc::boxed::Box<super::super::super::ConsumerConfig>,
                 ),
                 Kv(::buffa::alloc::boxed::Box<super::super::super::KvConfig>),
+                Realtime(
+                    ::buffa::alloc::boxed::Box<super::super::super::RealtimeConfig>,
+                ),
             }
             impl ::buffa::Oneof for Config {}
             impl From<super::super::super::PostgresConfig> for Config {
@@ -13258,6 +14923,17 @@ pub mod __buffa {
                     Self::Some(Config::from(v))
                 }
             }
+            impl From<super::super::super::RealtimeConfig> for Config {
+                fn from(v: super::super::super::RealtimeConfig) -> Self {
+                    Self::Realtime(::buffa::alloc::boxed::Box::new(v))
+                }
+            }
+            impl From<super::super::super::RealtimeConfig>
+            for ::core::option::Option<Config> {
+                fn from(v: super::super::super::RealtimeConfig) -> Self {
+                    Self::Some(Config::from(v))
+                }
+            }
             impl ::serde::Serialize for Config {
                 fn serialize<S: ::serde::Serializer>(
                     &self,
@@ -13286,6 +14962,9 @@ pub mod __buffa {
                         }
                         Self::Kv(v) => {
                             map.serialize_entry("kv", &**v)?;
+                        }
+                        Self::Realtime(v) => {
+                            map.serialize_entry("realtime", &**v)?;
                         }
                     }
                     map.end()
@@ -13316,6 +14995,8 @@ pub mod __buffa {
         reg.register_json_any(super::__WORKER_CONFIG_JSON_ANY);
         reg.register_json_any(super::__KV_ENTRY_JSON_ANY);
         reg.register_json_any(super::__KV_CONFIG_JSON_ANY);
+        reg.register_json_any(super::__REALTIME_CHANNEL_JSON_ANY);
+        reg.register_json_any(super::__REALTIME_CONFIG_JSON_ANY);
     }
 }
 #[doc(inline)]
@@ -13402,5 +15083,13 @@ pub use self::__buffa::view::KvEntryOwnedView;
 pub use self::__buffa::view::KvConfigView;
 #[doc(inline)]
 pub use self::__buffa::view::KvConfigOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::RealtimeChannelView;
+#[doc(inline)]
+pub use self::__buffa::view::RealtimeChannelOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::RealtimeConfigView;
+#[doc(inline)]
+pub use self::__buffa::view::RealtimeConfigOwnedView;
 #[doc(inline)]
 pub use self::__buffa::register_types;

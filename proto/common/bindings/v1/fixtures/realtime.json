@@ -1,0 +1,10 @@
+{
+  "name": "realtime--app",
+  "realtime": {
+    "transport": "REALTIME_TRANSPORT_APPSYNC_EVENTS",
+    "url": "wss://abcdefghijklmnopqrstuvwxyz.appsync-realtime-api.us-east-1.amazonaws.com/event/realtime",
+    "host": "abcdefghijklmnopqrstuvwxyz.appsync-api.us-east-1.amazonaws.com",
+    "signingKey": "Dz7/MDQ0hY/ciyup8vE6eE631B0GCzE0T6sKmokL8XQ=",
+    "verifyKey": "R7qnLMQ18iF3/y2chKstzN5a5yaRGK0qQF/aQ/bnuOM="
+  }
+}

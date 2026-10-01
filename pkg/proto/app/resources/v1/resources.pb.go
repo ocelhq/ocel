@@ -34,6 +34,7 @@ const (
 	ResourceType_RESOURCE_TYPE_WORKER      ResourceType = 5
 	ResourceType_RESOURCE_TYPE_CONSUMER    ResourceType = 6
 	ResourceType_RESOURCE_TYPE_KV          ResourceType = 7
+	ResourceType_RESOURCE_TYPE_REALTIME    ResourceType = 8
 )
 
 // Enum value maps for ResourceType.
@@ -47,6 +48,7 @@ var (
 		5: "RESOURCE_TYPE_WORKER",
 		6: "RESOURCE_TYPE_CONSUMER",
 		7: "RESOURCE_TYPE_KV",
+		8: "RESOURCE_TYPE_REALTIME",
 	}
 	ResourceType_value = map[string]int32{
 		"RESOURCE_TYPE_UNSPECIFIED": 0,
@@ -57,6 +59,7 @@ var (
 		"RESOURCE_TYPE_WORKER":      5,
 		"RESOURCE_TYPE_CONSUMER":    6,
 		"RESOURCE_TYPE_KV":          7,
+		"RESOURCE_TYPE_REALTIME":    8,
 	}
 )
 
@@ -143,6 +146,104 @@ func (x KvShape) Number() protoreflect.EnumNumber {
 // Deprecated: Use KvShape.Descriptor instead.
 func (KvShape) EnumDescriptor() ([]byte, []int) {
 	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{1}
+}
+
+type RealtimeSubscribe int32
+
+const (
+	RealtimeSubscribe_REALTIME_SUBSCRIBE_UNSPECIFIED RealtimeSubscribe = 0
+	RealtimeSubscribe_REALTIME_SUBSCRIBE_PUBLIC      RealtimeSubscribe = 1
+	RealtimeSubscribe_REALTIME_SUBSCRIBE_RULE        RealtimeSubscribe = 2
+)
+
+// Enum value maps for RealtimeSubscribe.
+var (
+	RealtimeSubscribe_name = map[int32]string{
+		0: "REALTIME_SUBSCRIBE_UNSPECIFIED",
+		1: "REALTIME_SUBSCRIBE_PUBLIC",
+		2: "REALTIME_SUBSCRIBE_RULE",
+	}
+	RealtimeSubscribe_value = map[string]int32{
+		"REALTIME_SUBSCRIBE_UNSPECIFIED": 0,
+		"REALTIME_SUBSCRIBE_PUBLIC":      1,
+		"REALTIME_SUBSCRIBE_RULE":        2,
+	}
+)
+
+func (x RealtimeSubscribe) Enum() *RealtimeSubscribe {
+	p := new(RealtimeSubscribe)
+	*p = x
+	return p
+}
+
+func (x RealtimeSubscribe) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RealtimeSubscribe) Descriptor() protoreflect.EnumDescriptor {
+	return file_app_resources_v1_resources_proto_enumTypes[2].Descriptor()
+}
+
+func (RealtimeSubscribe) Type() protoreflect.EnumType {
+	return &file_app_resources_v1_resources_proto_enumTypes[2]
+}
+
+func (x RealtimeSubscribe) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RealtimeSubscribe.Descriptor instead.
+func (RealtimeSubscribe) EnumDescriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{2}
+}
+
+type RealtimePublish int32
+
+const (
+	RealtimePublish_REALTIME_PUBLISH_UNSPECIFIED RealtimePublish = 0
+	RealtimePublish_REALTIME_PUBLISH_SERVER      RealtimePublish = 1
+	RealtimePublish_REALTIME_PUBLISH_RULE        RealtimePublish = 2
+)
+
+// Enum value maps for RealtimePublish.
+var (
+	RealtimePublish_name = map[int32]string{
+		0: "REALTIME_PUBLISH_UNSPECIFIED",
+		1: "REALTIME_PUBLISH_SERVER",
+		2: "REALTIME_PUBLISH_RULE",
+	}
+	RealtimePublish_value = map[string]int32{
+		"REALTIME_PUBLISH_UNSPECIFIED": 0,
+		"REALTIME_PUBLISH_SERVER":      1,
+		"REALTIME_PUBLISH_RULE":        2,
+	}
+)
+
+func (x RealtimePublish) Enum() *RealtimePublish {
+	p := new(RealtimePublish)
+	*p = x
+	return p
+}
+
+func (x RealtimePublish) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RealtimePublish) Descriptor() protoreflect.EnumDescriptor {
+	return file_app_resources_v1_resources_proto_enumTypes[3].Descriptor()
+}
+
+func (RealtimePublish) Type() protoreflect.EnumType {
+	return &file_app_resources_v1_resources_proto_enumTypes[3]
+}
+
+func (x RealtimePublish) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RealtimePublish.Descriptor instead.
+func (RealtimePublish) EnumDescriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{3}
 }
 
 type ResourceIdentifier struct {
@@ -245,6 +346,7 @@ type DeclareRequest struct {
 	//	*DeclareRequest_Worker
 	//	*DeclareRequest_Consumer
 	//	*DeclareRequest_Kv
+	//	*DeclareRequest_Realtime
 	Config        isDeclareRequest_Config `protobuf_oneof:"config"`
 	Source        string                  `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -358,6 +460,15 @@ func (x *DeclareRequest) GetKv() *KvConfig {
 	return nil
 }
 
+func (x *DeclareRequest) GetRealtime() *RealtimeConfig {
+	if x != nil {
+		if x, ok := x.Config.(*DeclareRequest_Realtime); ok {
+			return x.Realtime
+		}
+	}
+	return nil
+}
+
 func (x *DeclareRequest) GetSource() string {
 	if x != nil {
 		return x.Source
@@ -397,6 +508,10 @@ type DeclareRequest_Kv struct {
 	Kv *KvConfig `protobuf:"bytes,9,opt,name=kv,proto3,oneof"`
 }
 
+type DeclareRequest_Realtime struct {
+	Realtime *RealtimeConfig `protobuf:"bytes,10,opt,name=realtime,proto3,oneof"`
+}
+
 func (*DeclareRequest_Postgres) isDeclareRequest_Config() {}
 
 func (*DeclareRequest_Bucket) isDeclareRequest_Config() {}
@@ -410,6 +525,8 @@ func (*DeclareRequest_Worker) isDeclareRequest_Config() {}
 func (*DeclareRequest_Consumer) isDeclareRequest_Config() {}
 
 func (*DeclareRequest_Kv) isDeclareRequest_Config() {}
+
+func (*DeclareRequest_Realtime) isDeclareRequest_Config() {}
 
 type PostgresConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1059,6 +1176,142 @@ func (x *KvConfig) GetEntries() []*KvEntry {
 	return nil
 }
 
+type RealtimeChannel struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pattern       string                 `protobuf:"bytes,1,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	Wildcard      bool                   `protobuf:"varint,2,opt,name=wildcard,proto3" json:"wildcard,omitempty"`
+	Schema        string                 `protobuf:"bytes,3,opt,name=schema,proto3" json:"schema,omitempty"`
+	Subscribe     RealtimeSubscribe      `protobuf:"varint,4,opt,name=subscribe,proto3,enum=app.resources.v1.RealtimeSubscribe" json:"subscribe,omitempty"`
+	Publish       RealtimePublish        `protobuf:"varint,5,opt,name=publish,proto3,enum=app.resources.v1.RealtimePublish" json:"publish,omitempty"`
+	Source        string                 `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RealtimeChannel) Reset() {
+	*x = RealtimeChannel{}
+	mi := &file_app_resources_v1_resources_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RealtimeChannel) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RealtimeChannel) ProtoMessage() {}
+
+func (x *RealtimeChannel) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_resources_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RealtimeChannel.ProtoReflect.Descriptor instead.
+func (*RealtimeChannel) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RealtimeChannel) GetPattern() string {
+	if x != nil {
+		return x.Pattern
+	}
+	return ""
+}
+
+func (x *RealtimeChannel) GetWildcard() bool {
+	if x != nil {
+		return x.Wildcard
+	}
+	return false
+}
+
+func (x *RealtimeChannel) GetSchema() string {
+	if x != nil {
+		return x.Schema
+	}
+	return ""
+}
+
+func (x *RealtimeChannel) GetSubscribe() RealtimeSubscribe {
+	if x != nil {
+		return x.Subscribe
+	}
+	return RealtimeSubscribe_REALTIME_SUBSCRIBE_UNSPECIFIED
+}
+
+func (x *RealtimeChannel) GetPublish() RealtimePublish {
+	if x != nil {
+		return x.Publish
+	}
+	return RealtimePublish_REALTIME_PUBLISH_UNSPECIFIED
+}
+
+func (x *RealtimeChannel) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+type RealtimeConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Channels      []*RealtimeChannel     `protobuf:"bytes,1,rep,name=channels,proto3" json:"channels,omitempty"`
+	TokenTtl      *durationpb.Duration   `protobuf:"bytes,2,opt,name=token_ttl,json=tokenTtl,proto3" json:"token_ttl,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RealtimeConfig) Reset() {
+	*x = RealtimeConfig{}
+	mi := &file_app_resources_v1_resources_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RealtimeConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RealtimeConfig) ProtoMessage() {}
+
+func (x *RealtimeConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_resources_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RealtimeConfig.ProtoReflect.Descriptor instead.
+func (*RealtimeConfig) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RealtimeConfig) GetChannels() []*RealtimeChannel {
+	if x != nil {
+		return x.Channels
+	}
+	return nil
+}
+
+func (x *RealtimeConfig) GetTokenTtl() *durationpb.Duration {
+	if x != nil {
+		return x.TokenTtl
+	}
+	return nil
+}
+
 var File_app_resources_v1_resources_proto protoreflect.FileDescriptor
 
 const file_app_resources_v1_resources_proto_rawDesc = "" +
@@ -1067,7 +1320,7 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\x12ResourceIdentifier\x122\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x1e.app.resources.v1.ResourceTypeR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x11\n" +
-	"\x0fDeclareResponse\"\x81\x04\n" +
+	"\x0fDeclareResponse\"\xc1\x04\n" +
 	"\x0eDeclareRequest\x12@\n" +
 	"\bresource\x18\x01 \x01(\v2$.app.resources.v1.ResourceIdentifierR\bresource\x12>\n" +
 	"\bpostgres\x18\x02 \x01(\v2 .app.resources.v1.PostgresConfigH\x00R\bpostgres\x128\n" +
@@ -1076,7 +1329,9 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\x04task\x18\x06 \x01(\v2\x1c.app.resources.v1.TaskConfigH\x00R\x04task\x128\n" +
 	"\x06worker\x18\a \x01(\v2\x1e.app.resources.v1.WorkerConfigH\x00R\x06worker\x12>\n" +
 	"\bconsumer\x18\b \x01(\v2 .app.resources.v1.ConsumerConfigH\x00R\bconsumer\x12,\n" +
-	"\x02kv\x18\t \x01(\v2\x1a.app.resources.v1.KvConfigH\x00R\x02kv\x12\x16\n" +
+	"\x02kv\x18\t \x01(\v2\x1a.app.resources.v1.KvConfigH\x00R\x02kv\x12>\n" +
+	"\brealtime\x18\n" +
+	" \x01(\v2 .app.resources.v1.RealtimeConfigH\x00R\brealtime\x12\x16\n" +
 	"\x06source\x18\x04 \x01(\tR\x06sourceB\b\n" +
 	"\x06config\"*\n" +
 	"\x0ePostgresConfig\x12\x18\n" +
@@ -1125,7 +1380,17 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1a\n" +
 	"\beviction\x18\x02 \x01(\tR\beviction\x12\x16\n" +
 	"\x06memory\x18\x03 \x01(\tR\x06memory\x123\n" +
-	"\aentries\x18\x04 \x03(\v2\x19.app.resources.v1.KvEntryR\aentries*\xe0\x01\n" +
+	"\aentries\x18\x04 \x03(\v2\x19.app.resources.v1.KvEntryR\aentries\"\xf7\x01\n" +
+	"\x0fRealtimeChannel\x12\x18\n" +
+	"\apattern\x18\x01 \x01(\tR\apattern\x12\x1a\n" +
+	"\bwildcard\x18\x02 \x01(\bR\bwildcard\x12\x16\n" +
+	"\x06schema\x18\x03 \x01(\tR\x06schema\x12A\n" +
+	"\tsubscribe\x18\x04 \x01(\x0e2#.app.resources.v1.RealtimeSubscribeR\tsubscribe\x12;\n" +
+	"\apublish\x18\x05 \x01(\x0e2!.app.resources.v1.RealtimePublishR\apublish\x12\x16\n" +
+	"\x06source\x18\x06 \x01(\tR\x06source\"\x87\x01\n" +
+	"\x0eRealtimeConfig\x12=\n" +
+	"\bchannels\x18\x01 \x03(\v2!.app.resources.v1.RealtimeChannelR\bchannels\x126\n" +
+	"\ttoken_ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\btokenTtl*\xfc\x01\n" +
 	"\fResourceType\x12\x1d\n" +
 	"\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n" +
@@ -1134,14 +1399,23 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\x12RESOURCE_TYPE_TASK\x10\x04\x12\x18\n" +
 	"\x14RESOURCE_TYPE_WORKER\x10\x05\x12\x1a\n" +
 	"\x16RESOURCE_TYPE_CONSUMER\x10\x06\x12\x14\n" +
-	"\x10RESOURCE_TYPE_KV\x10\a*\x84\x01\n" +
+	"\x10RESOURCE_TYPE_KV\x10\a\x12\x1a\n" +
+	"\x16RESOURCE_TYPE_REALTIME\x10\b*\x84\x01\n" +
 	"\aKvShape\x12\x18\n" +
 	"\x14KV_SHAPE_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rKV_SHAPE_TEXT\x10\x01\x12\x14\n" +
 	"\x10KV_SHAPE_COUNTER\x10\x02\x12\x11\n" +
 	"\rKV_SHAPE_JSON\x10\x03\x12\x11\n" +
 	"\rKV_SHAPE_LIST\x10\x04\x12\x10\n" +
-	"\fKV_SHAPE_SET\x10\x052\xa8\x02\n" +
+	"\fKV_SHAPE_SET\x10\x05*s\n" +
+	"\x11RealtimeSubscribe\x12\"\n" +
+	"\x1eREALTIME_SUBSCRIBE_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19REALTIME_SUBSCRIBE_PUBLIC\x10\x01\x12\x1b\n" +
+	"\x17REALTIME_SUBSCRIBE_RULE\x10\x02*k\n" +
+	"\x0fRealtimePublish\x12 \n" +
+	"\x1cREALTIME_PUBLISH_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17REALTIME_PUBLISH_SERVER\x10\x01\x12\x19\n" +
+	"\x15REALTIME_PUBLISH_RULE\x10\x022\xa8\x02\n" +
 	"\x0fResourceService\x12N\n" +
 	"\aDeclare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n" +
 	"\n" +
@@ -1160,66 +1434,75 @@ func file_app_resources_v1_resources_proto_rawDescGZIP() []byte {
 	return file_app_resources_v1_resources_proto_rawDescData
 }
 
-var file_app_resources_v1_resources_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_app_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_app_resources_v1_resources_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_app_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_app_resources_v1_resources_proto_goTypes = []any{
 	(ResourceType)(0),                 // 0: app.resources.v1.ResourceType
 	(KvShape)(0),                      // 1: app.resources.v1.KvShape
-	(*ResourceIdentifier)(nil),        // 2: app.resources.v1.ResourceIdentifier
-	(*DeclareResponse)(nil),           // 3: app.resources.v1.DeclareResponse
-	(*DeclareRequest)(nil),            // 4: app.resources.v1.DeclareRequest
-	(*PostgresConfig)(nil),            // 5: app.resources.v1.PostgresConfig
-	(*BucketConfig)(nil),              // 6: app.resources.v1.BucketConfig
-	(*RetryPolicy)(nil),               // 7: app.resources.v1.RetryPolicy
-	(*BatchPolicy)(nil),               // 8: app.resources.v1.BatchPolicy
-	(*TopicConfig)(nil),               // 9: app.resources.v1.TopicConfig
-	(*ConsumerConfig)(nil),            // 10: app.resources.v1.ConsumerConfig
-	(*TaskConfig)(nil),                // 11: app.resources.v1.TaskConfig
-	(*WorkerConfig)(nil),              // 12: app.resources.v1.WorkerConfig
-	(*KvEntry)(nil),                   // 13: app.resources.v1.KvEntry
-	(*KvConfig)(nil),                  // 14: app.resources.v1.KvConfig
-	(*durationpb.Duration)(nil),       // 15: google.protobuf.Duration
-	(v1.Lane)(0),                      // 16: app.topic.v1.Lane
-	(*DeclareEnvRequest)(nil),         // 17: app.resources.v1.DeclareEnvRequest
-	(*ReportEnvProblemsRequest)(nil),  // 18: app.resources.v1.ReportEnvProblemsRequest
-	(*DeclareEnvResponse)(nil),        // 19: app.resources.v1.DeclareEnvResponse
-	(*ReportEnvProblemsResponse)(nil), // 20: app.resources.v1.ReportEnvProblemsResponse
+	(RealtimeSubscribe)(0),            // 2: app.resources.v1.RealtimeSubscribe
+	(RealtimePublish)(0),              // 3: app.resources.v1.RealtimePublish
+	(*ResourceIdentifier)(nil),        // 4: app.resources.v1.ResourceIdentifier
+	(*DeclareResponse)(nil),           // 5: app.resources.v1.DeclareResponse
+	(*DeclareRequest)(nil),            // 6: app.resources.v1.DeclareRequest
+	(*PostgresConfig)(nil),            // 7: app.resources.v1.PostgresConfig
+	(*BucketConfig)(nil),              // 8: app.resources.v1.BucketConfig
+	(*RetryPolicy)(nil),               // 9: app.resources.v1.RetryPolicy
+	(*BatchPolicy)(nil),               // 10: app.resources.v1.BatchPolicy
+	(*TopicConfig)(nil),               // 11: app.resources.v1.TopicConfig
+	(*ConsumerConfig)(nil),            // 12: app.resources.v1.ConsumerConfig
+	(*TaskConfig)(nil),                // 13: app.resources.v1.TaskConfig
+	(*WorkerConfig)(nil),              // 14: app.resources.v1.WorkerConfig
+	(*KvEntry)(nil),                   // 15: app.resources.v1.KvEntry
+	(*KvConfig)(nil),                  // 16: app.resources.v1.KvConfig
+	(*RealtimeChannel)(nil),           // 17: app.resources.v1.RealtimeChannel
+	(*RealtimeConfig)(nil),            // 18: app.resources.v1.RealtimeConfig
+	(*durationpb.Duration)(nil),       // 19: google.protobuf.Duration
+	(v1.Lane)(0),                      // 20: app.topic.v1.Lane
+	(*DeclareEnvRequest)(nil),         // 21: app.resources.v1.DeclareEnvRequest
+	(*ReportEnvProblemsRequest)(nil),  // 22: app.resources.v1.ReportEnvProblemsRequest
+	(*DeclareEnvResponse)(nil),        // 23: app.resources.v1.DeclareEnvResponse
+	(*ReportEnvProblemsResponse)(nil), // 24: app.resources.v1.ReportEnvProblemsResponse
 }
 var file_app_resources_v1_resources_proto_depIdxs = []int32{
 	0,  // 0: app.resources.v1.ResourceIdentifier.type:type_name -> app.resources.v1.ResourceType
-	2,  // 1: app.resources.v1.DeclareRequest.resource:type_name -> app.resources.v1.ResourceIdentifier
-	5,  // 2: app.resources.v1.DeclareRequest.postgres:type_name -> app.resources.v1.PostgresConfig
-	6,  // 3: app.resources.v1.DeclareRequest.bucket:type_name -> app.resources.v1.BucketConfig
-	9,  // 4: app.resources.v1.DeclareRequest.topic:type_name -> app.resources.v1.TopicConfig
-	11, // 5: app.resources.v1.DeclareRequest.task:type_name -> app.resources.v1.TaskConfig
-	12, // 6: app.resources.v1.DeclareRequest.worker:type_name -> app.resources.v1.WorkerConfig
-	10, // 7: app.resources.v1.DeclareRequest.consumer:type_name -> app.resources.v1.ConsumerConfig
-	14, // 8: app.resources.v1.DeclareRequest.kv:type_name -> app.resources.v1.KvConfig
-	15, // 9: app.resources.v1.RetryPolicy.min_delay:type_name -> google.protobuf.Duration
-	15, // 10: app.resources.v1.RetryPolicy.max_delay:type_name -> google.protobuf.Duration
-	15, // 11: app.resources.v1.BatchPolicy.timeout:type_name -> google.protobuf.Duration
-	7,  // 12: app.resources.v1.TopicConfig.retry:type_name -> app.resources.v1.RetryPolicy
-	7,  // 13: app.resources.v1.ConsumerConfig.retry:type_name -> app.resources.v1.RetryPolicy
-	15, // 14: app.resources.v1.ConsumerConfig.max_duration:type_name -> google.protobuf.Duration
-	16, // 15: app.resources.v1.ConsumerConfig.lanes:type_name -> app.topic.v1.Lane
-	8,  // 16: app.resources.v1.ConsumerConfig.batch:type_name -> app.resources.v1.BatchPolicy
-	7,  // 17: app.resources.v1.TaskConfig.retry:type_name -> app.resources.v1.RetryPolicy
-	15, // 18: app.resources.v1.TaskConfig.max_duration:type_name -> google.protobuf.Duration
-	15, // 19: app.resources.v1.TaskConfig.ttl:type_name -> google.protobuf.Duration
-	8,  // 20: app.resources.v1.TaskConfig.batch:type_name -> app.resources.v1.BatchPolicy
-	1,  // 21: app.resources.v1.KvEntry.shape:type_name -> app.resources.v1.KvShape
-	13, // 22: app.resources.v1.KvConfig.entries:type_name -> app.resources.v1.KvEntry
-	4,  // 23: app.resources.v1.ResourceService.Declare:input_type -> app.resources.v1.DeclareRequest
-	17, // 24: app.resources.v1.ResourceService.DeclareEnv:input_type -> app.resources.v1.DeclareEnvRequest
-	18, // 25: app.resources.v1.ResourceService.ReportEnvProblems:input_type -> app.resources.v1.ReportEnvProblemsRequest
-	3,  // 26: app.resources.v1.ResourceService.Declare:output_type -> app.resources.v1.DeclareResponse
-	19, // 27: app.resources.v1.ResourceService.DeclareEnv:output_type -> app.resources.v1.DeclareEnvResponse
-	20, // 28: app.resources.v1.ResourceService.ReportEnvProblems:output_type -> app.resources.v1.ReportEnvProblemsResponse
-	26, // [26:29] is the sub-list for method output_type
-	23, // [23:26] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	4,  // 1: app.resources.v1.DeclareRequest.resource:type_name -> app.resources.v1.ResourceIdentifier
+	7,  // 2: app.resources.v1.DeclareRequest.postgres:type_name -> app.resources.v1.PostgresConfig
+	8,  // 3: app.resources.v1.DeclareRequest.bucket:type_name -> app.resources.v1.BucketConfig
+	11, // 4: app.resources.v1.DeclareRequest.topic:type_name -> app.resources.v1.TopicConfig
+	13, // 5: app.resources.v1.DeclareRequest.task:type_name -> app.resources.v1.TaskConfig
+	14, // 6: app.resources.v1.DeclareRequest.worker:type_name -> app.resources.v1.WorkerConfig
+	12, // 7: app.resources.v1.DeclareRequest.consumer:type_name -> app.resources.v1.ConsumerConfig
+	16, // 8: app.resources.v1.DeclareRequest.kv:type_name -> app.resources.v1.KvConfig
+	18, // 9: app.resources.v1.DeclareRequest.realtime:type_name -> app.resources.v1.RealtimeConfig
+	19, // 10: app.resources.v1.RetryPolicy.min_delay:type_name -> google.protobuf.Duration
+	19, // 11: app.resources.v1.RetryPolicy.max_delay:type_name -> google.protobuf.Duration
+	19, // 12: app.resources.v1.BatchPolicy.timeout:type_name -> google.protobuf.Duration
+	9,  // 13: app.resources.v1.TopicConfig.retry:type_name -> app.resources.v1.RetryPolicy
+	9,  // 14: app.resources.v1.ConsumerConfig.retry:type_name -> app.resources.v1.RetryPolicy
+	19, // 15: app.resources.v1.ConsumerConfig.max_duration:type_name -> google.protobuf.Duration
+	20, // 16: app.resources.v1.ConsumerConfig.lanes:type_name -> app.topic.v1.Lane
+	10, // 17: app.resources.v1.ConsumerConfig.batch:type_name -> app.resources.v1.BatchPolicy
+	9,  // 18: app.resources.v1.TaskConfig.retry:type_name -> app.resources.v1.RetryPolicy
+	19, // 19: app.resources.v1.TaskConfig.max_duration:type_name -> google.protobuf.Duration
+	19, // 20: app.resources.v1.TaskConfig.ttl:type_name -> google.protobuf.Duration
+	10, // 21: app.resources.v1.TaskConfig.batch:type_name -> app.resources.v1.BatchPolicy
+	1,  // 22: app.resources.v1.KvEntry.shape:type_name -> app.resources.v1.KvShape
+	15, // 23: app.resources.v1.KvConfig.entries:type_name -> app.resources.v1.KvEntry
+	2,  // 24: app.resources.v1.RealtimeChannel.subscribe:type_name -> app.resources.v1.RealtimeSubscribe
+	3,  // 25: app.resources.v1.RealtimeChannel.publish:type_name -> app.resources.v1.RealtimePublish
+	17, // 26: app.resources.v1.RealtimeConfig.channels:type_name -> app.resources.v1.RealtimeChannel
+	19, // 27: app.resources.v1.RealtimeConfig.token_ttl:type_name -> google.protobuf.Duration
+	6,  // 28: app.resources.v1.ResourceService.Declare:input_type -> app.resources.v1.DeclareRequest
+	21, // 29: app.resources.v1.ResourceService.DeclareEnv:input_type -> app.resources.v1.DeclareEnvRequest
+	22, // 30: app.resources.v1.ResourceService.ReportEnvProblems:input_type -> app.resources.v1.ReportEnvProblemsRequest
+	5,  // 31: app.resources.v1.ResourceService.Declare:output_type -> app.resources.v1.DeclareResponse
+	23, // 32: app.resources.v1.ResourceService.DeclareEnv:output_type -> app.resources.v1.DeclareEnvResponse
+	24, // 33: app.resources.v1.ResourceService.ReportEnvProblems:output_type -> app.resources.v1.ReportEnvProblemsResponse
+	31, // [31:34] is the sub-list for method output_type
+	28, // [28:31] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_app_resources_v1_resources_proto_init() }
@@ -1236,14 +1519,15 @@ func file_app_resources_v1_resources_proto_init() {
 		(*DeclareRequest_Worker)(nil),
 		(*DeclareRequest_Consumer)(nil),
 		(*DeclareRequest_Kv)(nil),
+		(*DeclareRequest_Realtime)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_resources_v1_resources_proto_rawDesc), len(file_app_resources_v1_resources_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   13,
+			NumEnums:      4,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -74,7 +74,7 @@ class DeclareResponse(Message[_DeclareResponseFields]):
         ) -> None:
             pass
 
-_DeclareRequestFields: TypeAlias = Literal["resource", "postgres", "bucket", "topic", "task", "worker", "consumer", "kv", "source"]
+_DeclareRequestFields: TypeAlias = Literal["resource", "postgres", "bucket", "topic", "task", "worker", "consumer", "kv", "realtime", "source"]
 
 class DeclareRequest(Message[_DeclareRequestFields]):
     """
@@ -105,13 +105,13 @@ class DeclareRequest(Message[_DeclareRequestFields]):
             self,
             *,
             resource: ResourceIdentifier | None = None,
-            config: Oneof[Literal["postgres"], PostgresConfig] | Oneof[Literal["bucket"], BucketConfig] | Oneof[Literal["topic"], TopicConfig] | Oneof[Literal["task"], TaskConfig] | Oneof[Literal["worker"], WorkerConfig] | Oneof[Literal["consumer"], ConsumerConfig] | Oneof[Literal["kv"], KvConfig] | None = None,
+            config: Oneof[Literal["postgres"], PostgresConfig] | Oneof[Literal["bucket"], BucketConfig] | Oneof[Literal["topic"], TopicConfig] | Oneof[Literal["task"], TaskConfig] | Oneof[Literal["worker"], WorkerConfig] | Oneof[Literal["consumer"], ConsumerConfig] | Oneof[Literal["kv"], KvConfig] | Oneof[Literal["realtime"], RealtimeConfig] | None = None,
             source: str = "",
         ) -> None:
             pass
 
         resource: ResourceIdentifier | None
-        config: Oneof[Literal["postgres"], PostgresConfig] | Oneof[Literal["bucket"], BucketConfig] | Oneof[Literal["topic"], TopicConfig] | Oneof[Literal["task"], TaskConfig] | Oneof[Literal["worker"], WorkerConfig] | Oneof[Literal["consumer"], ConsumerConfig] | Oneof[Literal["kv"], KvConfig] | None
+        config: Oneof[Literal["postgres"], PostgresConfig] | Oneof[Literal["bucket"], BucketConfig] | Oneof[Literal["topic"], TopicConfig] | Oneof[Literal["task"], TaskConfig] | Oneof[Literal["worker"], WorkerConfig] | Oneof[Literal["consumer"], ConsumerConfig] | Oneof[Literal["kv"], KvConfig] | Oneof[Literal["realtime"], RealtimeConfig] | None
         source: str
 
 _PostgresConfigFields: TypeAlias = Literal["version"]
@@ -550,6 +550,98 @@ class KvConfig(Message[_KvConfigFields]):
         memory: str
         entries: list[KvEntry]
 
+_RealtimeChannelFields: TypeAlias = Literal["pattern", "wildcard", "schema", "subscribe", "publish", "source"]
+
+class RealtimeChannel(Message[_RealtimeChannelFields]):
+    """
+    ```proto
+    message app.resources.v1.RealtimeChannel
+    ```
+
+    Attributes:
+        pattern:
+            ```proto
+            string pattern = 1;
+            ```
+        wildcard:
+            ```proto
+            bool wildcard = 2;
+            ```
+        schema:
+            ```proto
+            string schema = 3;
+            ```
+        subscribe:
+            ```proto
+            app.resources.v1.RealtimeSubscribe subscribe = 4;
+            ```
+        publish:
+            ```proto
+            app.resources.v1.RealtimePublish publish = 5;
+            ```
+        source:
+            ```proto
+            string source = 6;
+            ```
+    """
+
+    __slots__ = ("pattern", "wildcard", "schema", "subscribe", "publish", "source")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            pattern: str = "",
+            wildcard: bool = False,
+            schema: str = "",
+            subscribe: RealtimeSubscribe | None = None,
+            publish: RealtimePublish | None = None,
+            source: str = "",
+        ) -> None:
+            pass
+
+        pattern: str
+        wildcard: bool
+        schema: str
+        subscribe: RealtimeSubscribe
+        publish: RealtimePublish
+        source: str
+
+_RealtimeConfigFields: TypeAlias = Literal["channels", "token_ttl"]
+
+class RealtimeConfig(Message[_RealtimeConfigFields]):
+    """
+    ```proto
+    message app.resources.v1.RealtimeConfig
+    ```
+
+    Attributes:
+        channels:
+            ```proto
+            repeated app.resources.v1.RealtimeChannel channels = 1;
+            ```
+        token_ttl:
+            ```proto
+            optional google.protobuf.Duration token_ttl = 2;
+            ```
+    """
+
+    __slots__ = ("channels", "token_ttl")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            channels: list[RealtimeChannel] | None = None,
+            token_ttl: Duration | None = None,
+        ) -> None:
+            pass
+
+        channels: list[RealtimeChannel]
+        token_ttl: Duration | None
+
 class ResourceType(Enum):
     """
     ```proto
@@ -589,6 +681,10 @@ class ResourceType(Enum):
             ```proto
             RESOURCE_TYPE_KV = 7
             ```
+        REALTIME:
+            ```proto
+            RESOURCE_TYPE_REALTIME = 8
+            ```
     """
 
     UNSPECIFIED = 0
@@ -599,6 +695,7 @@ class ResourceType(Enum):
     WORKER = 5
     CONSUMER = 6
     KV = 7
+    REALTIME = 8
 
 class KvShape(Enum):
     """
@@ -640,9 +737,59 @@ class KvShape(Enum):
     LIST = 4
     SET = 5
 
+class RealtimeSubscribe(Enum):
+    """
+    ```proto
+    enum app.resources.v1.RealtimeSubscribe
+    ```
+
+    Attributes:
+        UNSPECIFIED:
+            ```proto
+            REALTIME_SUBSCRIBE_UNSPECIFIED = 0
+            ```
+        PUBLIC:
+            ```proto
+            REALTIME_SUBSCRIBE_PUBLIC = 1
+            ```
+        RULE:
+            ```proto
+            REALTIME_SUBSCRIBE_RULE = 2
+            ```
+    """
+
+    UNSPECIFIED = 0
+    PUBLIC = 1
+    RULE = 2
+
+class RealtimePublish(Enum):
+    """
+    ```proto
+    enum app.resources.v1.RealtimePublish
+    ```
+
+    Attributes:
+        UNSPECIFIED:
+            ```proto
+            REALTIME_PUBLISH_UNSPECIFIED = 0
+            ```
+        SERVER:
+            ```proto
+            REALTIME_PUBLISH_SERVER = 1
+            ```
+        RULE:
+            ```proto
+            REALTIME_PUBLISH_RULE = 2
+            ```
+    """
+
+    UNSPECIFIED = 0
+    SERVER = 1
+    RULE = 2
+
 
 _DESC = file_desc(
-    b'\n app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\x1a\x18app/topic/v1/topic.proto\x1a\x1egoogle/protobuf/duration.proto"\\\n\x12ResourceIdentifier\x122\n\x04type\x18\x01 \x01(\x0e2\x1e.app.resources.v1.ResourceTypeR\x04type\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name"\x11\n\x0fDeclareResponse"\x81\x04\n\x0eDeclareRequest\x12@\n\x08resource\x18\x01 \x01(\x0b2$.app.resources.v1.ResourceIdentifierR\x08resource\x12>\n\x08postgres\x18\x02 \x01(\x0b2 .app.resources.v1.PostgresConfigH\x00R\x08postgres\x128\n\x06bucket\x18\x03 \x01(\x0b2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x125\n\x05topic\x18\x05 \x01(\x0b2\x1d.app.resources.v1.TopicConfigH\x00R\x05topic\x122\n\x04task\x18\x06 \x01(\x0b2\x1c.app.resources.v1.TaskConfigH\x00R\x04task\x128\n\x06worker\x18\x07 \x01(\x0b2\x1e.app.resources.v1.WorkerConfigH\x00R\x06worker\x12>\n\x08consumer\x18\x08 \x01(\x0b2 .app.resources.v1.ConsumerConfigH\x00R\x08consumer\x12,\n\x02kv\x18\t \x01(\x0b2\x1a.app.resources.v1.KvConfigH\x00R\x02kv\x12\x16\n\x06source\x18\x04 \x01(\tR\x06sourceB\x08\n\x06config"*\n\x0ePostgresConfig\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version"O\n\x0cBucketConfig\x12\'\n\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins\x12\x16\n\x06public\x18\x02 \x01(\x08R\x06public"\xa0\x01\n\x0bRetryPolicy\x12!\n\x0cmax_attempts\x18\x01 \x01(\x05R\x0bmaxAttempts\x126\n\tmin_delay\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x08minDelay\x126\n\tmax_delay\x18\x03 \x01(\x0b2\x19.google.protobuf.DurationR\x08maxDelay"V\n\x0bBatchPolicy\x12\x12\n\x04size\x18\x01 \x01(\x05R\x04size\x123\n\x07timeout\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x07timeout"t\n\x0bTopicConfig\x12\x16\n\x06schema\x18\x01 \x01(\tR\x06schema\x12\x18\n\x07ordered\x18\x02 \x01(\x08R\x07ordered\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry"\xb2\x02\n\x0eConsumerConfig\x12\x14\n\x05topic\x18\x01 \x01(\tR\x05topic\x12\x16\n\x06worker\x18\x02 \x01(\tR\x06worker\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry\x12 \n\x0bconcurrency\x18\x04 \x01(\x05R\x0bconcurrency\x12<\n\x0cmax_duration\x18\x05 \x01(\x0b2\x19.google.protobuf.DurationR\x0bmaxDuration\x12(\n\x05lanes\x18\x06 \x03(\x0e2\x12.app.topic.v1.LaneR\x05lanes\x123\n\x05batch\x18\x07 \x01(\x0b2\x1d.app.resources.v1.BatchPolicyR\x05batch"\xe1\x02\n\nTaskConfig\x12\x16\n\x06schema\x18\x01 \x01(\tR\x06schema\x12\x18\n\x07ordered\x18\x02 \x01(\x08R\x07ordered\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry\x12 \n\x0bconcurrency\x18\x04 \x01(\x05R\x0bconcurrency\x12<\n\x0cmax_duration\x18\x05 \x01(\x0b2\x19.google.protobuf.DurationR\x0bmaxDuration\x12+\n\x03ttl\x18\x06 \x01(\x0b2\x19.google.protobuf.DurationR\x03ttl\x123\n\x05batch\x18\x07 \x01(\x0b2\x1d.app.resources.v1.BatchPolicyR\x05batch\x12\x16\n\x06worker\x18\x08 \x01(\tR\x06worker\x12\x12\n\x04cron\x18\t \x01(\tR\x04cron"0\n\x0cWorkerConfig\x12 \n\x0bconcurrency\x18\x01 \x01(\x05R\x0bconcurrency"\x80\x01\n\x07KvEntry\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n\x07pattern\x18\x02 \x01(\tR\x07pattern\x12/\n\x05shape\x18\x03 \x01(\x0e2\x19.app.resources.v1.KvShapeR\x05shape\x12\x16\n\x06source\x18\x04 \x01(\tR\x06source"\x8d\x01\n\x08KvConfig\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version\x12\x1a\n\x08eviction\x18\x02 \x01(\tR\x08eviction\x12\x16\n\x06memory\x18\x03 \x01(\tR\x06memory\x123\n\x07entries\x18\x04 \x03(\x0b2\x19.app.resources.v1.KvEntryR\x07entries*\xe0\x01\n\x0cResourceType\x12\x1d\n\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x17\n\x13RESOURCE_TYPE_TOPIC\x10\x03\x12\x16\n\x12RESOURCE_TYPE_TASK\x10\x04\x12\x18\n\x14RESOURCE_TYPE_WORKER\x10\x05\x12\x1a\n\x16RESOURCE_TYPE_CONSUMER\x10\x06\x12\x14\n\x10RESOURCE_TYPE_KV\x10\x07*\x84\x01\n\x07KvShape\x12\x18\n\x14KV_SHAPE_UNSPECIFIED\x10\x00\x12\x11\n\rKV_SHAPE_TEXT\x10\x01\x12\x14\n\x10KV_SHAPE_COUNTER\x10\x02\x12\x11\n\rKV_SHAPE_JSON\x10\x03\x12\x11\n\rKV_SHAPE_LIST\x10\x04\x12\x10\n\x0cKV_SHAPE_SET\x10\x052\xa8\x02\n\x0fResourceService\x12N\n\x07Declare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n\nDeclareEnv\x12#.app.resources.v1.DeclareEnvRequest\x1a$.app.resources.v1.DeclareEnvResponse\x12l\n\x11ReportEnvProblems\x12*.app.resources.v1.ReportEnvProblemsRequest\x1a+.app.resources.v1.ReportEnvProblemsResponseB?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
+    b'\n app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\x1a\x18app/topic/v1/topic.proto\x1a\x1egoogle/protobuf/duration.proto"\\\n\x12ResourceIdentifier\x122\n\x04type\x18\x01 \x01(\x0e2\x1e.app.resources.v1.ResourceTypeR\x04type\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name"\x11\n\x0fDeclareResponse"\xc1\x04\n\x0eDeclareRequest\x12@\n\x08resource\x18\x01 \x01(\x0b2$.app.resources.v1.ResourceIdentifierR\x08resource\x12>\n\x08postgres\x18\x02 \x01(\x0b2 .app.resources.v1.PostgresConfigH\x00R\x08postgres\x128\n\x06bucket\x18\x03 \x01(\x0b2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x125\n\x05topic\x18\x05 \x01(\x0b2\x1d.app.resources.v1.TopicConfigH\x00R\x05topic\x122\n\x04task\x18\x06 \x01(\x0b2\x1c.app.resources.v1.TaskConfigH\x00R\x04task\x128\n\x06worker\x18\x07 \x01(\x0b2\x1e.app.resources.v1.WorkerConfigH\x00R\x06worker\x12>\n\x08consumer\x18\x08 \x01(\x0b2 .app.resources.v1.ConsumerConfigH\x00R\x08consumer\x12,\n\x02kv\x18\t \x01(\x0b2\x1a.app.resources.v1.KvConfigH\x00R\x02kv\x12>\n\x08realtime\x18\n \x01(\x0b2 .app.resources.v1.RealtimeConfigH\x00R\x08realtime\x12\x16\n\x06source\x18\x04 \x01(\tR\x06sourceB\x08\n\x06config"*\n\x0ePostgresConfig\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version"O\n\x0cBucketConfig\x12\'\n\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins\x12\x16\n\x06public\x18\x02 \x01(\x08R\x06public"\xa0\x01\n\x0bRetryPolicy\x12!\n\x0cmax_attempts\x18\x01 \x01(\x05R\x0bmaxAttempts\x126\n\tmin_delay\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x08minDelay\x126\n\tmax_delay\x18\x03 \x01(\x0b2\x19.google.protobuf.DurationR\x08maxDelay"V\n\x0bBatchPolicy\x12\x12\n\x04size\x18\x01 \x01(\x05R\x04size\x123\n\x07timeout\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x07timeout"t\n\x0bTopicConfig\x12\x16\n\x06schema\x18\x01 \x01(\tR\x06schema\x12\x18\n\x07ordered\x18\x02 \x01(\x08R\x07ordered\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry"\xb2\x02\n\x0eConsumerConfig\x12\x14\n\x05topic\x18\x01 \x01(\tR\x05topic\x12\x16\n\x06worker\x18\x02 \x01(\tR\x06worker\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry\x12 \n\x0bconcurrency\x18\x04 \x01(\x05R\x0bconcurrency\x12<\n\x0cmax_duration\x18\x05 \x01(\x0b2\x19.google.protobuf.DurationR\x0bmaxDuration\x12(\n\x05lanes\x18\x06 \x03(\x0e2\x12.app.topic.v1.LaneR\x05lanes\x123\n\x05batch\x18\x07 \x01(\x0b2\x1d.app.resources.v1.BatchPolicyR\x05batch"\xe1\x02\n\nTaskConfig\x12\x16\n\x06schema\x18\x01 \x01(\tR\x06schema\x12\x18\n\x07ordered\x18\x02 \x01(\x08R\x07ordered\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry\x12 \n\x0bconcurrency\x18\x04 \x01(\x05R\x0bconcurrency\x12<\n\x0cmax_duration\x18\x05 \x01(\x0b2\x19.google.protobuf.DurationR\x0bmaxDuration\x12+\n\x03ttl\x18\x06 \x01(\x0b2\x19.google.protobuf.DurationR\x03ttl\x123\n\x05batch\x18\x07 \x01(\x0b2\x1d.app.resources.v1.BatchPolicyR\x05batch\x12\x16\n\x06worker\x18\x08 \x01(\tR\x06worker\x12\x12\n\x04cron\x18\t \x01(\tR\x04cron"0\n\x0cWorkerConfig\x12 \n\x0bconcurrency\x18\x01 \x01(\x05R\x0bconcurrency"\x80\x01\n\x07KvEntry\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n\x07pattern\x18\x02 \x01(\tR\x07pattern\x12/\n\x05shape\x18\x03 \x01(\x0e2\x19.app.resources.v1.KvShapeR\x05shape\x12\x16\n\x06source\x18\x04 \x01(\tR\x06source"\x8d\x01\n\x08KvConfig\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version\x12\x1a\n\x08eviction\x18\x02 \x01(\tR\x08eviction\x12\x16\n\x06memory\x18\x03 \x01(\tR\x06memory\x123\n\x07entries\x18\x04 \x03(\x0b2\x19.app.resources.v1.KvEntryR\x07entries"\xf7\x01\n\x0fRealtimeChannel\x12\x18\n\x07pattern\x18\x01 \x01(\tR\x07pattern\x12\x1a\n\x08wildcard\x18\x02 \x01(\x08R\x08wildcard\x12\x16\n\x06schema\x18\x03 \x01(\tR\x06schema\x12A\n\tsubscribe\x18\x04 \x01(\x0e2#.app.resources.v1.RealtimeSubscribeR\tsubscribe\x12;\n\x07publish\x18\x05 \x01(\x0e2!.app.resources.v1.RealtimePublishR\x07publish\x12\x16\n\x06source\x18\x06 \x01(\tR\x06source"\x87\x01\n\x0eRealtimeConfig\x12=\n\x08channels\x18\x01 \x03(\x0b2!.app.resources.v1.RealtimeChannelR\x08channels\x126\n\ttoken_ttl\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x08tokenTtl*\xfc\x01\n\x0cResourceType\x12\x1d\n\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x17\n\x13RESOURCE_TYPE_TOPIC\x10\x03\x12\x16\n\x12RESOURCE_TYPE_TASK\x10\x04\x12\x18\n\x14RESOURCE_TYPE_WORKER\x10\x05\x12\x1a\n\x16RESOURCE_TYPE_CONSUMER\x10\x06\x12\x14\n\x10RESOURCE_TYPE_KV\x10\x07\x12\x1a\n\x16RESOURCE_TYPE_REALTIME\x10\x08*\x84\x01\n\x07KvShape\x12\x18\n\x14KV_SHAPE_UNSPECIFIED\x10\x00\x12\x11\n\rKV_SHAPE_TEXT\x10\x01\x12\x14\n\x10KV_SHAPE_COUNTER\x10\x02\x12\x11\n\rKV_SHAPE_JSON\x10\x03\x12\x11\n\rKV_SHAPE_LIST\x10\x04\x12\x10\n\x0cKV_SHAPE_SET\x10\x05*s\n\x11RealtimeSubscribe\x12"\n\x1eREALTIME_SUBSCRIBE_UNSPECIFIED\x10\x00\x12\x1d\n\x19REALTIME_SUBSCRIBE_PUBLIC\x10\x01\x12\x1b\n\x17REALTIME_SUBSCRIBE_RULE\x10\x02*k\n\x0fRealtimePublish\x12 \n\x1cREALTIME_PUBLISH_UNSPECIFIED\x10\x00\x12\x1b\n\x17REALTIME_PUBLISH_SERVER\x10\x01\x12\x19\n\x15REALTIME_PUBLISH_RULE\x10\x022\xa8\x02\n\x0fResourceService\x12N\n\x07Declare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n\nDeclareEnv\x12#.app.resources.v1.DeclareEnvRequest\x1a$.app.resources.v1.DeclareEnvResponse\x12l\n\x11ReportEnvProblems\x12*.app.resources.v1.ReportEnvProblemsRequest\x1a+.app.resources.v1.ReportEnvProblemsResponseB?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
     [
         variables_pb.desc(),
         topic_pb.desc(),
@@ -662,8 +809,12 @@ _DESC = file_desc(
         "WorkerConfig": WorkerConfig,
         "KvEntry": KvEntry,
         "KvConfig": KvConfig,
+        "RealtimeChannel": RealtimeChannel,
+        "RealtimeConfig": RealtimeConfig,
         "ResourceType": ResourceType,
         "KvShape": KvShape,
+        "RealtimeSubscribe": RealtimeSubscribe,
+        "RealtimePublish": RealtimePublish,
     },
 )
 

@@ -43,6 +43,7 @@ const (
 	BindingTopic    BindingType = "topic"
 	BindingTask     BindingType = "task"
 	BindingKV       BindingType = "kv"
+	BindingRealtime BindingType = "realtime"
 	BindingCustom   BindingType = "custom"
 )
 
@@ -57,6 +58,10 @@ const (
 	PropertyPublic        = "public"
 	PropertyEndpoint      = "endpoint"
 	PropertyTLS           = "tls"
+	PropertyTransport     = "transport"
+	PropertyURL           = "url"
+	PropertySigningKey    = "signingKey"
+	PropertyVerifyKey     = "verifyKey"
 )
 
 func (b Binding) Endpointed() bool {
@@ -71,6 +76,8 @@ func RequiredProperties(t BindingType) []string {
 		return []string{PropertyBucket}
 	case BindingKV:
 		return []string{PropertyHost, PropertyPort, PropertyPassword}
+	case BindingRealtime:
+		return []string{PropertyTransport, PropertyURL, PropertyHost, PropertySigningKey, PropertyVerifyKey}
 	}
 	return nil
 }
@@ -91,6 +98,9 @@ func VerifyProperties(binding Binding) error {
 			return refusal.Refuse(refusal.CodeInvalid, "binding %s came back with port %q, which is not a port number",
 				binding.Name, binding.Properties[PropertyPort])
 		}
+	}
+	if binding.Type == BindingRealtime {
+		return verifyRealtimeProperties(binding)
 	}
 	return nil
 }
@@ -125,6 +135,8 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 			Password: binding.Properties[PropertyPassword],
 			Tls:      binding.Properties[PropertyTLS] == "true",
 		}}
+	case BindingRealtime:
+		message.Properties = &bindingsv1.Binding_Realtime{Realtime: realtimeProperties(binding)}
 	default:
 		fields := make(map[string]any, len(binding.Properties))
 		for name, value := range binding.Properties {
@@ -203,6 +215,7 @@ var bindingTypes = map[bindingsv1.BindingType]BindingType{
 	bindingsv1.BindingType_BINDING_TYPE_TOPIC:    BindingTopic,
 	bindingsv1.BindingType_BINDING_TYPE_TASK:     BindingTask,
 	bindingsv1.BindingType_BINDING_TYPE_KV:       BindingKV,
+	bindingsv1.BindingType_BINDING_TYPE_REALTIME: BindingRealtime,
 	bindingsv1.BindingType_BINDING_TYPE_CUSTOM:   BindingCustom,
 }
 

@@ -136,3 +136,17 @@ func TestAKVStoreIsBoundToARecordPublishedElsewhere(t *testing.T) {
 		t.Error("Check = nil, want an inline kv record refused: a kv store is bound only to a published record")
 	}
 }
+
+func TestARealtimeResourceIsNotBoundInConfig(t *testing.T) {
+	properties := bindingsSchema(t)["properties"].(map[string]any)
+	if _, keyed := properties["realtime"]; keyed {
+		t.Error("the bindings schema has a realtime key, want none: a realtime resource's rules run in the app declaring it")
+	}
+	err := Check("", Document{}, map[string]any{
+		"slug":     "shop",
+		"bindings": map[string]any{"realtime": map[string]any{"app": "@shared-app"}},
+	})
+	if err == nil {
+		t.Error("Check = nil, want bindings.realtime refused")
+	}
+}

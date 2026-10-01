@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file app/resources/v1/resources.proto.
  */
 export const file_app_resources_v1_resources: GenFile = /*@__PURE__*/
-  fileDesc("CiBhcHAvcmVzb3VyY2VzL3YxL3Jlc291cmNlcy5wcm90bxIQYXBwLnJlc291cmNlcy52MSJQChJSZXNvdXJjZUlkZW50aWZpZXISLAoEdHlwZRgBIAEoDjIeLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VUeXBlEgwKBG5hbWUYAiABKAkiEQoPRGVjbGFyZVJlc3BvbnNlIroDCg5EZWNsYXJlUmVxdWVzdBI2CghyZXNvdXJjZRgBIAEoCzIkLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VJZGVudGlmaWVyEjQKCHBvc3RncmVzGAIgASgLMiAuYXBwLnJlc291cmNlcy52MS5Qb3N0Z3Jlc0NvbmZpZ0gAEjAKBmJ1Y2tldBgDIAEoCzIeLmFwcC5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSAASLgoFdG9waWMYBSABKAsyHS5hcHAucmVzb3VyY2VzLnYxLlRvcGljQ29uZmlnSAASLAoEdGFzaxgGIAEoCzIcLmFwcC5yZXNvdXJjZXMudjEuVGFza0NvbmZpZ0gAEjAKBndvcmtlchgHIAEoCzIeLmFwcC5yZXNvdXJjZXMudjEuV29ya2VyQ29uZmlnSAASNAoIY29uc3VtZXIYCCABKAsyIC5hcHAucmVzb3VyY2VzLnYxLkNvbnN1bWVyQ29uZmlnSAASKAoCa3YYCSABKAsyGi5hcHAucmVzb3VyY2VzLnYxLkt2Q29uZmlnSAASDgoGc291cmNlGAQgASgJQggKBmNvbmZpZyIhCg5Qb3N0Z3Jlc0NvbmZpZxIPCgd2ZXJzaW9uGAEgASgJIjcKDEJ1Y2tldENvbmZpZxIXCg9hbGxvd2VkX29yaWdpbnMYASADKAkSDgoGcHVibGljGAIgASgIIn8KC1JldHJ5UG9saWN5EhQKDG1heF9hdHRlbXB0cxgBIAEoBRIsCgltaW5fZGVsYXkYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SLAoJbWF4X2RlbGF5GAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIkcKC0JhdGNoUG9saWN5EgwKBHNpemUYASABKAUSKgoHdGltZW91dBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbiJcCgtUb3BpY0NvbmZpZxIOCgZzY2hlbWEYASABKAkSDwoHb3JkZXJlZBgCIAEoCBIsCgVyZXRyeRgDIAEoCzIdLmFwcC5yZXNvdXJjZXMudjEuUmV0cnlQb2xpY3ki9AEKDkNvbnN1bWVyQ29uZmlnEg0KBXRvcGljGAEgASgJEg4KBndvcmtlchgCIAEoCRIsCgVyZXRyeRgDIAEoCzIdLmFwcC5yZXNvdXJjZXMudjEuUmV0cnlQb2xpY3kSEwoLY29uY3VycmVuY3kYBCABKAUSLwoMbWF4X2R1cmF0aW9uGAUgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEiEKBWxhbmVzGAYgAygOMhIuYXBwLnRvcGljLnYxLkxhbmUSLAoFYmF0Y2gYByABKAsyHS5hcHAucmVzb3VyY2VzLnYxLkJhdGNoUG9saWN5IpUCCgpUYXNrQ29uZmlnEg4KBnNjaGVtYRgBIAEoCRIPCgdvcmRlcmVkGAIgASgIEiwKBXJldHJ5GAMgASgLMh0uYXBwLnJlc291cmNlcy52MS5SZXRyeVBvbGljeRITCgtjb25jdXJyZW5jeRgEIAEoBRIvCgxtYXhfZHVyYXRpb24YBSABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SJgoDdHRsGAYgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEiwKBWJhdGNoGAcgASgLMh0uYXBwLnJlc291cmNlcy52MS5CYXRjaFBvbGljeRIOCgZ3b3JrZXIYCCABKAkSDAoEY3JvbhgJIAEoCSIjCgxXb3JrZXJDb25maWcSEwoLY29uY3VycmVuY3kYASABKAUiYgoHS3ZFbnRyeRIMCgRuYW1lGAEgASgJEg8KB3BhdHRlcm4YAiABKAkSKAoFc2hhcGUYAyABKA4yGS5hcHAucmVzb3VyY2VzLnYxLkt2U2hhcGUSDgoGc291cmNlGAQgASgJImkKCEt2Q29uZmlnEg8KB3ZlcnNpb24YASABKAkSEAoIZXZpY3Rpb24YAiABKAkSDgoGbWVtb3J5GAMgASgJEioKB2VudHJpZXMYBCADKAsyGS5hcHAucmVzb3VyY2VzLnYxLkt2RW50cnkq4AEKDFJlc291cmNlVHlwZRIdChlSRVNPVVJDRV9UWVBFX1VOU1BFQ0lGSUVEEAASGgoWUkVTT1VSQ0VfVFlQRV9QT1NUR1JFUxABEhgKFFJFU09VUkNFX1RZUEVfQlVDS0VUEAISFwoTUkVTT1VSQ0VfVFlQRV9UT1BJQxADEhYKElJFU09VUkNFX1RZUEVfVEFTSxAEEhgKFFJFU09VUkNFX1RZUEVfV09SS0VSEAUSGgoWUkVTT1VSQ0VfVFlQRV9DT05TVU1FUhAGEhQKEFJFU09VUkNFX1RZUEVfS1YQByqEAQoHS3ZTaGFwZRIYChRLVl9TSEFQRV9VTlNQRUNJRklFRBAAEhEKDUtWX1NIQVBFX1RFWFQQARIUChBLVl9TSEFQRV9DT1VOVEVSEAISEQoNS1ZfU0hBUEVfSlNPThADEhEKDUtWX1NIQVBFX0xJU1QQBBIQCgxLVl9TSEFQRV9TRVQQBTKoAgoPUmVzb3VyY2VTZXJ2aWNlEk4KB0RlY2xhcmUSIC5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXF1ZXN0GiEuYXBwLnJlc291cmNlcy52MS5EZWNsYXJlUmVzcG9uc2USVwoKRGVjbGFyZUVudhIjLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZUVudlJlcXVlc3QaJC5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVFbnZSZXNwb25zZRJsChFSZXBvcnRFbnZQcm9ibGVtcxIqLmFwcC5yZXNvdXJjZXMudjEuUmVwb3J0RW52UHJvYmxlbXNSZXF1ZXN0GisuYXBwLnJlc291cmNlcy52MS5SZXBvcnRFbnZQcm9ibGVtc1Jlc3BvbnNlQj9aPWdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2FwcC9yZXNvdXJjZXMvdjE7cmVzb3VyY2VzdjFiBnByb3RvMw", [file_app_resources_v1_variables, file_app_topic_v1_topic, file_google_protobuf_duration]);
+  fileDesc("CiBhcHAvcmVzb3VyY2VzL3YxL3Jlc291cmNlcy5wcm90bxIQYXBwLnJlc291cmNlcy52MSJQChJSZXNvdXJjZUlkZW50aWZpZXISLAoEdHlwZRgBIAEoDjIeLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VUeXBlEgwKBG5hbWUYAiABKAkiEQoPRGVjbGFyZVJlc3BvbnNlIvADCg5EZWNsYXJlUmVxdWVzdBI2CghyZXNvdXJjZRgBIAEoCzIkLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VJZGVudGlmaWVyEjQKCHBvc3RncmVzGAIgASgLMiAuYXBwLnJlc291cmNlcy52MS5Qb3N0Z3Jlc0NvbmZpZ0gAEjAKBmJ1Y2tldBgDIAEoCzIeLmFwcC5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSAASLgoFdG9waWMYBSABKAsyHS5hcHAucmVzb3VyY2VzLnYxLlRvcGljQ29uZmlnSAASLAoEdGFzaxgGIAEoCzIcLmFwcC5yZXNvdXJjZXMudjEuVGFza0NvbmZpZ0gAEjAKBndvcmtlchgHIAEoCzIeLmFwcC5yZXNvdXJjZXMudjEuV29ya2VyQ29uZmlnSAASNAoIY29uc3VtZXIYCCABKAsyIC5hcHAucmVzb3VyY2VzLnYxLkNvbnN1bWVyQ29uZmlnSAASKAoCa3YYCSABKAsyGi5hcHAucmVzb3VyY2VzLnYxLkt2Q29uZmlnSAASNAoIcmVhbHRpbWUYCiABKAsyIC5hcHAucmVzb3VyY2VzLnYxLlJlYWx0aW1lQ29uZmlnSAASDgoGc291cmNlGAQgASgJQggKBmNvbmZpZyIhCg5Qb3N0Z3Jlc0NvbmZpZxIPCgd2ZXJzaW9uGAEgASgJIjcKDEJ1Y2tldENvbmZpZxIXCg9hbGxvd2VkX29yaWdpbnMYASADKAkSDgoGcHVibGljGAIgASgIIn8KC1JldHJ5UG9saWN5EhQKDG1heF9hdHRlbXB0cxgBIAEoBRIsCgltaW5fZGVsYXkYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SLAoJbWF4X2RlbGF5GAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIkcKC0JhdGNoUG9saWN5EgwKBHNpemUYASABKAUSKgoHdGltZW91dBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbiJcCgtUb3BpY0NvbmZpZxIOCgZzY2hlbWEYASABKAkSDwoHb3JkZXJlZBgCIAEoCBIsCgVyZXRyeRgDIAEoCzIdLmFwcC5yZXNvdXJjZXMudjEuUmV0cnlQb2xpY3ki9AEKDkNvbnN1bWVyQ29uZmlnEg0KBXRvcGljGAEgASgJEg4KBndvcmtlchgCIAEoCRIsCgVyZXRyeRgDIAEoCzIdLmFwcC5yZXNvdXJjZXMudjEuUmV0cnlQb2xpY3kSEwoLY29uY3VycmVuY3kYBCABKAUSLwoMbWF4X2R1cmF0aW9uGAUgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEiEKBWxhbmVzGAYgAygOMhIuYXBwLnRvcGljLnYxLkxhbmUSLAoFYmF0Y2gYByABKAsyHS5hcHAucmVzb3VyY2VzLnYxLkJhdGNoUG9saWN5IpUCCgpUYXNrQ29uZmlnEg4KBnNjaGVtYRgBIAEoCRIPCgdvcmRlcmVkGAIgASgIEiwKBXJldHJ5GAMgASgLMh0uYXBwLnJlc291cmNlcy52MS5SZXRyeVBvbGljeRITCgtjb25jdXJyZW5jeRgEIAEoBRIvCgxtYXhfZHVyYXRpb24YBSABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SJgoDdHRsGAYgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEiwKBWJhdGNoGAcgASgLMh0uYXBwLnJlc291cmNlcy52MS5CYXRjaFBvbGljeRIOCgZ3b3JrZXIYCCABKAkSDAoEY3JvbhgJIAEoCSIjCgxXb3JrZXJDb25maWcSEwoLY29uY3VycmVuY3kYASABKAUiYgoHS3ZFbnRyeRIMCgRuYW1lGAEgASgJEg8KB3BhdHRlcm4YAiABKAkSKAoFc2hhcGUYAyABKA4yGS5hcHAucmVzb3VyY2VzLnYxLkt2U2hhcGUSDgoGc291cmNlGAQgASgJImkKCEt2Q29uZmlnEg8KB3ZlcnNpb24YASABKAkSEAoIZXZpY3Rpb24YAiABKAkSDgoGbWVtb3J5GAMgASgJEioKB2VudHJpZXMYBCADKAsyGS5hcHAucmVzb3VyY2VzLnYxLkt2RW50cnkiwAEKD1JlYWx0aW1lQ2hhbm5lbBIPCgdwYXR0ZXJuGAEgASgJEhAKCHdpbGRjYXJkGAIgASgIEg4KBnNjaGVtYRgDIAEoCRI2CglzdWJzY3JpYmUYBCABKA4yIy5hcHAucmVzb3VyY2VzLnYxLlJlYWx0aW1lU3Vic2NyaWJlEjIKB3B1Ymxpc2gYBSABKA4yIS5hcHAucmVzb3VyY2VzLnYxLlJlYWx0aW1lUHVibGlzaBIOCgZzb3VyY2UYBiABKAkicwoOUmVhbHRpbWVDb25maWcSMwoIY2hhbm5lbHMYASADKAsyIS5hcHAucmVzb3VyY2VzLnYxLlJlYWx0aW1lQ2hhbm5lbBIsCgl0b2tlbl90dGwYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24q/AEKDFJlc291cmNlVHlwZRIdChlSRVNPVVJDRV9UWVBFX1VOU1BFQ0lGSUVEEAASGgoWUkVTT1VSQ0VfVFlQRV9QT1NUR1JFUxABEhgKFFJFU09VUkNFX1RZUEVfQlVDS0VUEAISFwoTUkVTT1VSQ0VfVFlQRV9UT1BJQxADEhYKElJFU09VUkNFX1RZUEVfVEFTSxAEEhgKFFJFU09VUkNFX1RZUEVfV09SS0VSEAUSGgoWUkVTT1VSQ0VfVFlQRV9DT05TVU1FUhAGEhQKEFJFU09VUkNFX1RZUEVfS1YQBxIaChZSRVNPVVJDRV9UWVBFX1JFQUxUSU1FEAgqhAEKB0t2U2hhcGUSGAoUS1ZfU0hBUEVfVU5TUEVDSUZJRUQQABIRCg1LVl9TSEFQRV9URVhUEAESFAoQS1ZfU0hBUEVfQ09VTlRFUhACEhEKDUtWX1NIQVBFX0pTT04QAxIRCg1LVl9TSEFQRV9MSVNUEAQSEAoMS1ZfU0hBUEVfU0VUEAUqcwoRUmVhbHRpbWVTdWJzY3JpYmUSIgoeUkVBTFRJTUVfU1VCU0NSSUJFX1VOU1BFQ0lGSUVEEAASHQoZUkVBTFRJTUVfU1VCU0NSSUJFX1BVQkxJQxABEhsKF1JFQUxUSU1FX1NVQlNDUklCRV9SVUxFEAIqawoPUmVhbHRpbWVQdWJsaXNoEiAKHFJFQUxUSU1FX1BVQkxJU0hfVU5TUEVDSUZJRUQQABIbChdSRUFMVElNRV9QVUJMSVNIX1NFUlZFUhABEhkKFVJFQUxUSU1FX1BVQkxJU0hfUlVMRRACMqgCCg9SZXNvdXJjZVNlcnZpY2USTgoHRGVjbGFyZRIgLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZVJlcXVlc3QaIS5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXNwb25zZRJXCgpEZWNsYXJlRW52EiMuYXBwLnJlc291cmNlcy52MS5EZWNsYXJlRW52UmVxdWVzdBokLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZUVudlJlc3BvbnNlEmwKEVJlcG9ydEVudlByb2JsZW1zEiouYXBwLnJlc291cmNlcy52MS5SZXBvcnRFbnZQcm9ibGVtc1JlcXVlc3QaKy5hcHAucmVzb3VyY2VzLnYxLlJlcG9ydEVudlByb2JsZW1zUmVzcG9uc2VCP1o9Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vYXBwL3Jlc291cmNlcy92MTtyZXNvdXJjZXN2MWIGcHJvdG8z", [file_app_resources_v1_variables, file_app_topic_v1_topic, file_google_protobuf_duration]);
 
 /**
  * @generated from message app.resources.v1.ResourceIdentifier
@@ -107,6 +107,12 @@ export type DeclareRequest = Message<"app.resources.v1.DeclareRequest"> & {
      */
     value: KvConfig;
     case: "kv";
+  } | {
+    /**
+     * @generated from field: app.resources.v1.RealtimeConfig realtime = 10;
+     */
+    value: RealtimeConfig;
+    case: "realtime";
   } | { case: undefined; value?: undefined };
 
   /**
@@ -423,6 +429,70 @@ export const KvConfigSchema: GenMessage<KvConfig> = /*@__PURE__*/
   messageDesc(file_app_resources_v1_resources, 12);
 
 /**
+ * @generated from message app.resources.v1.RealtimeChannel
+ */
+export type RealtimeChannel = Message<"app.resources.v1.RealtimeChannel"> & {
+  /**
+   * @generated from field: string pattern = 1;
+   */
+  pattern: string;
+
+  /**
+   * @generated from field: bool wildcard = 2;
+   */
+  wildcard: boolean;
+
+  /**
+   * @generated from field: string schema = 3;
+   */
+  schema: string;
+
+  /**
+   * @generated from field: app.resources.v1.RealtimeSubscribe subscribe = 4;
+   */
+  subscribe: RealtimeSubscribe;
+
+  /**
+   * @generated from field: app.resources.v1.RealtimePublish publish = 5;
+   */
+  publish: RealtimePublish;
+
+  /**
+   * @generated from field: string source = 6;
+   */
+  source: string;
+};
+
+/**
+ * Describes the message app.resources.v1.RealtimeChannel.
+ * Use `create(RealtimeChannelSchema)` to create a new message.
+ */
+export const RealtimeChannelSchema: GenMessage<RealtimeChannel> = /*@__PURE__*/
+  messageDesc(file_app_resources_v1_resources, 13);
+
+/**
+ * @generated from message app.resources.v1.RealtimeConfig
+ */
+export type RealtimeConfig = Message<"app.resources.v1.RealtimeConfig"> & {
+  /**
+   * @generated from field: repeated app.resources.v1.RealtimeChannel channels = 1;
+   */
+  channels: RealtimeChannel[];
+
+  /**
+   * @generated from field: google.protobuf.Duration token_ttl = 2;
+   */
+  tokenTtl?: Duration | undefined;
+};
+
+/**
+ * Describes the message app.resources.v1.RealtimeConfig.
+ * Use `create(RealtimeConfigSchema)` to create a new message.
+ */
+export const RealtimeConfigSchema: GenMessage<RealtimeConfig> = /*@__PURE__*/
+  messageDesc(file_app_resources_v1_resources, 14);
+
+/**
  * @generated from enum app.resources.v1.ResourceType
  */
 export enum ResourceType {
@@ -465,6 +535,11 @@ export enum ResourceType {
    * @generated from enum value: RESOURCE_TYPE_KV = 7;
    */
   KV = 7,
+
+  /**
+   * @generated from enum value: RESOURCE_TYPE_REALTIME = 8;
+   */
+  REALTIME = 8,
 }
 
 /**
@@ -513,6 +588,58 @@ export enum KvShape {
  */
 export const KvShapeSchema: GenEnum<KvShape> = /*@__PURE__*/
   enumDesc(file_app_resources_v1_resources, 1);
+
+/**
+ * @generated from enum app.resources.v1.RealtimeSubscribe
+ */
+export enum RealtimeSubscribe {
+  /**
+   * @generated from enum value: REALTIME_SUBSCRIBE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: REALTIME_SUBSCRIBE_PUBLIC = 1;
+   */
+  PUBLIC = 1,
+
+  /**
+   * @generated from enum value: REALTIME_SUBSCRIBE_RULE = 2;
+   */
+  RULE = 2,
+}
+
+/**
+ * Describes the enum app.resources.v1.RealtimeSubscribe.
+ */
+export const RealtimeSubscribeSchema: GenEnum<RealtimeSubscribe> = /*@__PURE__*/
+  enumDesc(file_app_resources_v1_resources, 2);
+
+/**
+ * @generated from enum app.resources.v1.RealtimePublish
+ */
+export enum RealtimePublish {
+  /**
+   * @generated from enum value: REALTIME_PUBLISH_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: REALTIME_PUBLISH_SERVER = 1;
+   */
+  SERVER = 1,
+
+  /**
+   * @generated from enum value: REALTIME_PUBLISH_RULE = 2;
+   */
+  RULE = 2,
+}
+
+/**
+ * Describes the enum app.resources.v1.RealtimePublish.
+ */
+export const RealtimePublishSchema: GenEnum<RealtimePublish> = /*@__PURE__*/
+  enumDesc(file_app_resources_v1_resources, 3);
 
 /**
  * @generated from service app.resources.v1.ResourceService

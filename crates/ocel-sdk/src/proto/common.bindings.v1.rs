@@ -11,6 +11,7 @@ pub enum BindingType {
     BINDING_TYPE_TOPIC = 4i32,
     BINDING_TYPE_TASK = 5i32,
     BINDING_TYPE_KV = 6i32,
+    BINDING_TYPE_REALTIME = 7i32,
 }
 impl BindingType {
     ///Idiomatic alias for [`Self::BINDING_TYPE_UNSPECIFIED`]; `Debug` prints the variant name.
@@ -34,6 +35,9 @@ impl BindingType {
     ///Idiomatic alias for [`Self::BINDING_TYPE_KV`]; `Debug` prints the variant name.
     #[allow(non_upper_case_globals)]
     pub const Kv: Self = Self::BINDING_TYPE_KV;
+    ///Idiomatic alias for [`Self::BINDING_TYPE_REALTIME`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Realtime: Self = Self::BINDING_TYPE_REALTIME;
 }
 impl ::core::default::Default for BindingType {
     fn default() -> Self {
@@ -136,6 +140,7 @@ impl ::buffa::Enumeration for BindingType {
             4i32 => ::core::option::Option::Some(Self::BINDING_TYPE_TOPIC),
             5i32 => ::core::option::Option::Some(Self::BINDING_TYPE_TASK),
             6i32 => ::core::option::Option::Some(Self::BINDING_TYPE_KV),
+            7i32 => ::core::option::Option::Some(Self::BINDING_TYPE_REALTIME),
             _ => ::core::option::Option::None,
         }
     }
@@ -151,6 +156,7 @@ impl ::buffa::Enumeration for BindingType {
             Self::BINDING_TYPE_TOPIC => "BINDING_TYPE_TOPIC",
             Self::BINDING_TYPE_TASK => "BINDING_TYPE_TASK",
             Self::BINDING_TYPE_KV => "BINDING_TYPE_KV",
+            Self::BINDING_TYPE_REALTIME => "BINDING_TYPE_REALTIME",
         }
     }
     fn from_proto_name(name: &str) -> ::core::option::Option<Self> {
@@ -172,6 +178,9 @@ impl ::buffa::Enumeration for BindingType {
             }
             "BINDING_TYPE_TASK" => ::core::option::Option::Some(Self::BINDING_TYPE_TASK),
             "BINDING_TYPE_KV" => ::core::option::Option::Some(Self::BINDING_TYPE_KV),
+            "BINDING_TYPE_REALTIME" => {
+                ::core::option::Option::Some(Self::BINDING_TYPE_REALTIME)
+            }
             _ => ::core::option::Option::None,
         }
     }
@@ -184,6 +193,7 @@ impl ::buffa::Enumeration for BindingType {
             Self::BINDING_TYPE_TOPIC,
             Self::BINDING_TYPE_TASK,
             Self::BINDING_TYPE_KV,
+            Self::BINDING_TYPE_REALTIME,
         ]
     }
 }
@@ -340,6 +350,161 @@ impl ::buffa::Enumeration for PostgresTlsMode {
         ]
     }
 }
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[repr(i32)]
+pub enum RealtimeTransport {
+    REALTIME_TRANSPORT_UNSPECIFIED = 0i32,
+    REALTIME_TRANSPORT_APPSYNC_EVENTS = 1i32,
+    REALTIME_TRANSPORT_OCEL_GATEWAY = 2i32,
+}
+impl RealtimeTransport {
+    ///Idiomatic alias for [`Self::REALTIME_TRANSPORT_UNSPECIFIED`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Unspecified: Self = Self::REALTIME_TRANSPORT_UNSPECIFIED;
+    ///Idiomatic alias for [`Self::REALTIME_TRANSPORT_APPSYNC_EVENTS`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const AppsyncEvents: Self = Self::REALTIME_TRANSPORT_APPSYNC_EVENTS;
+    ///Idiomatic alias for [`Self::REALTIME_TRANSPORT_OCEL_GATEWAY`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const OcelGateway: Self = Self::REALTIME_TRANSPORT_OCEL_GATEWAY;
+}
+impl ::core::default::Default for RealtimeTransport {
+    fn default() -> Self {
+        Self::REALTIME_TRANSPORT_UNSPECIFIED
+    }
+}
+impl ::serde::Serialize for RealtimeTransport {
+    fn serialize<S: ::serde::Serializer>(
+        &self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        s.serialize_str(::buffa::Enumeration::proto_name(self))
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for RealtimeTransport {
+    fn deserialize<D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        struct _V;
+        impl ::serde::de::Visitor<'_> for _V {
+            type Value = RealtimeTransport;
+            fn expecting(
+                &self,
+                f: &mut ::core::fmt::Formatter<'_>,
+            ) -> ::core::fmt::Result {
+                f.write_str(
+                    concat!(
+                        "a string, integer, or null for ", stringify!(RealtimeTransport)
+                    ),
+                )
+            }
+            fn visit_str<E: ::serde::de::Error>(
+                self,
+                v: &str,
+            ) -> ::core::result::Result<RealtimeTransport, E> {
+                <RealtimeTransport as ::buffa::Enumeration>::from_proto_name(v)
+                    .ok_or_else(|| { ::serde::de::Error::unknown_variant(v, &[]) })
+            }
+            fn visit_i64<E: ::serde::de::Error>(
+                self,
+                v: i64,
+            ) -> ::core::result::Result<RealtimeTransport, E> {
+                let v32 = i32::try_from(v)
+                    .map_err(|_| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                        )
+                    })?;
+                <RealtimeTransport as ::buffa::Enumeration>::from_i32(v32)
+                    .ok_or_else(|| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("unknown enum value {v32}"),
+                        )
+                    })
+            }
+            fn visit_u64<E: ::serde::de::Error>(
+                self,
+                v: u64,
+            ) -> ::core::result::Result<RealtimeTransport, E> {
+                let v32 = i32::try_from(v)
+                    .map_err(|_| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                        )
+                    })?;
+                <RealtimeTransport as ::buffa::Enumeration>::from_i32(v32)
+                    .ok_or_else(|| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("unknown enum value {v32}"),
+                        )
+                    })
+            }
+            fn visit_unit<E: ::serde::de::Error>(
+                self,
+            ) -> ::core::result::Result<RealtimeTransport, E> {
+                ::core::result::Result::Ok(::core::default::Default::default())
+            }
+        }
+        d.deserialize_any(_V)
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for RealtimeTransport {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+impl ::buffa::Enumeration for RealtimeTransport {
+    fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0i32 => ::core::option::Option::Some(Self::REALTIME_TRANSPORT_UNSPECIFIED),
+            1i32 => ::core::option::Option::Some(Self::REALTIME_TRANSPORT_APPSYNC_EVENTS),
+            2i32 => ::core::option::Option::Some(Self::REALTIME_TRANSPORT_OCEL_GATEWAY),
+            _ => ::core::option::Option::None,
+        }
+    }
+    fn to_i32(&self) -> i32 {
+        *self as i32
+    }
+    fn proto_name(&self) -> &'static str {
+        match self {
+            Self::REALTIME_TRANSPORT_UNSPECIFIED => "REALTIME_TRANSPORT_UNSPECIFIED",
+            Self::REALTIME_TRANSPORT_APPSYNC_EVENTS => {
+                "REALTIME_TRANSPORT_APPSYNC_EVENTS"
+            }
+            Self::REALTIME_TRANSPORT_OCEL_GATEWAY => "REALTIME_TRANSPORT_OCEL_GATEWAY",
+        }
+    }
+    fn from_proto_name(name: &str) -> ::core::option::Option<Self> {
+        match name {
+            "REALTIME_TRANSPORT_UNSPECIFIED" => {
+                ::core::option::Option::Some(Self::REALTIME_TRANSPORT_UNSPECIFIED)
+            }
+            "REALTIME_TRANSPORT_APPSYNC_EVENTS" => {
+                ::core::option::Option::Some(Self::REALTIME_TRANSPORT_APPSYNC_EVENTS)
+            }
+            "REALTIME_TRANSPORT_OCEL_GATEWAY" => {
+                ::core::option::Option::Some(Self::REALTIME_TRANSPORT_OCEL_GATEWAY)
+            }
+            _ => ::core::option::Option::None,
+        }
+    }
+    fn values() -> &'static [Self] {
+        &[
+            Self::REALTIME_TRANSPORT_UNSPECIFIED,
+            Self::REALTIME_TRANSPORT_APPSYNC_EVENTS,
+            Self::REALTIME_TRANSPORT_OCEL_GATEWAY,
+        ]
+    }
+}
 #[derive(Clone, PartialEq, Default)]
 #[derive(::serde::Serialize)]
 #[serde(default)]
@@ -461,6 +626,14 @@ impl ::buffa::Message for Binding {
                         += 1u64 + ::buffa::encoding::varint_len(inner as u64) as u64
                             + inner as u64;
                 }
+                __buffa::oneof::binding::Properties::Realtime(x) => {
+                    let __slot = __cache.reserve();
+                    let inner = x.compute_size(__cache);
+                    __cache.set(__slot, inner);
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(inner as u64) as u64
+                            + inner as u64;
+                }
             }
         }
         for v in &self.grants {
@@ -532,6 +705,14 @@ impl ::buffa::Message for Binding {
                 __buffa::oneof::binding::Properties::Kv(x) => {
                     ::buffa::types::put_len_delimited_header(
                         9u32,
+                        u64::from(__cache.consume_next()),
+                        buf,
+                    );
+                    x.write_to(__cache, buf);
+                }
+                __buffa::oneof::binding::Properties::Realtime(x) => {
+                    ::buffa::types::put_len_delimited_header(
+                        10u32,
                         u64::from(__cache.consume_next()),
                         buf,
                     );
@@ -685,6 +866,26 @@ impl ::buffa::Message for Binding {
                     ::buffa::Message::merge_length_delimited(&mut val, buf, ctx)?;
                     self.properties = ::core::option::Option::Some(
                         __buffa::oneof::binding::Properties::Kv(
+                            ::buffa::alloc::boxed::Box::new(val),
+                        ),
+                    );
+                }
+            }
+            10u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                if let ::core::option::Option::Some(
+                    __buffa::oneof::binding::Properties::Realtime(ref mut existing),
+                ) = self.properties
+                {
+                    ::buffa::Message::merge_length_delimited(&mut **existing, buf, ctx)?;
+                } else {
+                    let mut val = ::core::default::Default::default();
+                    ::buffa::Message::merge_length_delimited(&mut val, buf, ctx)?;
+                    self.properties = ::core::option::Option::Some(
+                        __buffa::oneof::binding::Properties::Realtime(
                             ::buffa::alloc::boxed::Box::new(val),
                         ),
                     );
@@ -960,6 +1161,30 @@ impl<'de> ::serde::Deserialize<'de> for Binding {
                                 }
                                 __oneof_properties = Some(
                                     __buffa::oneof::binding::Properties::Kv(
+                                        ::buffa::alloc::boxed::Box::new(v),
+                                    ),
+                                );
+                            }
+                        }
+                        "realtime" => {
+                            let v: ::core::option::Option<RealtimeProperties> = map
+                                .next_value_seed(
+                                    ::buffa::json_helpers::NullableDeserializeSeed(
+                                        ::buffa::json_helpers::DefaultDeserializeSeed::<
+                                            RealtimeProperties,
+                                        >::new(),
+                                    ),
+                                )?;
+                            if let Some(v) = v {
+                                if __oneof_properties.is_some() {
+                                    return Err(
+                                        ::serde::de::Error::custom(
+                                            "multiple oneof fields set for 'properties'",
+                                        ),
+                                    );
+                                }
+                                __oneof_properties = Some(
+                                    __buffa::oneof::binding::Properties::Realtime(
                                         ::buffa::alloc::boxed::Box::new(v),
                                     ),
                                 );
@@ -2039,6 +2264,230 @@ pub const __KV_PROPERTIES_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buf
 #[derive(Clone, PartialEq, Default)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(default)]
+pub struct RealtimeProperties {
+    /// Field 1: `transport`
+    #[serde(
+        rename = "transport",
+        with = "::buffa::json_helpers::proto_enum",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
+    )]
+    pub transport: ::buffa::EnumValue<RealtimeTransport>,
+    /// Field 2: `url`
+    #[serde(
+        rename = "url",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub url: ::buffa::alloc::string::String,
+    /// Field 3: `host`
+    #[serde(
+        rename = "host",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub host: ::buffa::alloc::string::String,
+    /// Field 4: `signing_key`
+    #[serde(
+        rename = "signingKey",
+        alias = "signing_key",
+        with = "::buffa::json_helpers::bytes",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_bytes"
+    )]
+    pub signing_key: ::buffa::alloc::vec::Vec<u8>,
+    /// Field 5: `verify_key`
+    #[serde(
+        rename = "verifyKey",
+        alias = "verify_key",
+        with = "::buffa::json_helpers::bytes",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_bytes"
+    )]
+    pub verify_key: ::buffa::alloc::vec::Vec<u8>,
+    #[serde(skip)]
+    #[doc(hidden)]
+    pub __buffa_unknown_fields: ::buffa::UnknownFields,
+}
+impl ::core::fmt::Debug for RealtimeProperties {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.debug_struct("RealtimeProperties")
+            .field("transport", &self.transport)
+            .field("url", &self.url)
+            .field("host", &self.host)
+            .field("signing_key", &::core::format_args!("[REDACTED]"))
+            .field("verify_key", &self.verify_key)
+            .finish()
+    }
+}
+impl RealtimeProperties {
+    /// Protobuf type URL for this message, for use with `Any::pack` and
+    /// `Any::unpack_if`.
+    ///
+    /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
+    pub const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.RealtimeProperties";
+}
+::buffa::impl_default_instance!(RealtimeProperties);
+impl ::buffa::MessageName for RealtimeProperties {
+    const PACKAGE: &'static str = "common.bindings.v1";
+    const NAME: &'static str = "RealtimeProperties";
+    const FULL_NAME: &'static str = "common.bindings.v1.RealtimeProperties";
+    const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.RealtimeProperties";
+}
+impl ::buffa::Message for RealtimeProperties {
+    /// Returns the total encoded size in bytes.
+    ///
+    /// Accumulates in `u64` (which cannot overflow for in-memory
+    /// data) and saturates to `u32` at return, so a message whose
+    /// encoded size exceeds the 2 GiB protobuf limit yields a value
+    /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+    /// points reject, never a silently wrapped size.
+    #[allow(clippy::let_and_return)]
+    fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        let mut size = 0u64;
+        {
+            let val = self.transport.to_i32();
+            if val != 0 {
+                size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
+            }
+        }
+        if !self.url.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.url) as u64;
+        }
+        if !self.host.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.host) as u64;
+        }
+        if !self.signing_key.is_empty() {
+            size += 1u64 + ::buffa::types::bytes_encoded_len(&self.signing_key) as u64;
+        }
+        if !self.verify_key.is_empty() {
+            size += 1u64 + ::buffa::types::bytes_encoded_len(&self.verify_key) as u64;
+        }
+        size += self.__buffa_unknown_fields.encoded_len() as u64;
+        ::buffa::saturate_size(size)
+    }
+    fn write_to(
+        &self,
+        _cache: &mut ::buffa::SizeCache,
+        buf: &mut impl ::buffa::EncodeSink,
+    ) {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        {
+            let val = self.transport.to_i32();
+            if val != 0 {
+                ::buffa::types::put_int32_field(1u32, val, buf);
+            }
+        }
+        if !self.url.is_empty() {
+            ::buffa::types::put_string_field(2u32, &self.url, buf);
+        }
+        if !self.host.is_empty() {
+            ::buffa::types::put_string_field(3u32, &self.host, buf);
+        }
+        if !self.signing_key.is_empty() {
+            ::buffa::types::put_shared_bytes_field(4u32, &self.signing_key, buf);
+        }
+        if !self.verify_key.is_empty() {
+            ::buffa::types::put_shared_bytes_field(5u32, &self.verify_key, buf);
+        }
+        self.__buffa_unknown_fields.write_to(buf);
+    }
+    fn merge_field(
+        &mut self,
+        tag: ::buffa::encoding::Tag,
+        buf: &mut impl ::buffa::bytes::Buf,
+        ctx: ::buffa::DecodeContext<'_>,
+    ) -> ::core::result::Result<(), ::buffa::DecodeError> {
+        #[allow(unused_imports)]
+        use ::buffa::bytes::Buf as _;
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        match tag.field_number() {
+            1u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.transport = ::buffa::EnumValue::from(
+                    ::buffa::types::decode_int32(buf)?,
+                );
+            }
+            2u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.url, buf)?;
+            }
+            3u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.host, buf)?;
+            }
+            4u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_bytes(&mut self.signing_key, buf)?;
+            }
+            5u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_bytes(&mut self.verify_key, buf)?;
+            }
+            _ => {
+                self.__buffa_unknown_fields
+                    .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+    fn clear(&mut self) {
+        self.transport = ::buffa::EnumValue::from(0);
+        self.url.clear();
+        self.host.clear();
+        self.signing_key.clear();
+        self.verify_key.clear();
+        self.__buffa_unknown_fields.clear();
+    }
+}
+impl ::buffa::ExtensionSet for RealtimeProperties {
+    const PROTO_FQN: &'static str = "common.bindings.v1.RealtimeProperties";
+    fn unknown_fields(&self) -> &::buffa::UnknownFields {
+        &self.__buffa_unknown_fields
+    }
+    fn unknown_fields_mut(&mut self) -> &mut ::buffa::UnknownFields {
+        &mut self.__buffa_unknown_fields
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for RealtimeProperties {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+#[doc(hidden)]
+pub const __REALTIME_PROPERTIES_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
+    type_url: "type.googleapis.com/common.bindings.v1.RealtimeProperties",
+    to_json: ::buffa::type_registry::any_to_json::<RealtimeProperties>,
+    from_json: ::buffa::type_registry::any_from_json::<RealtimeProperties>,
+    is_wkt: false,
+};
+#[derive(Clone, PartialEq, Default)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(default)]
 pub struct Grant {
     /// Field 1: `actions`
     #[serde(
@@ -2714,6 +3163,37 @@ pub mod __buffa {
                             );
                         }
                     }
+                    10u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let __sub_ctx = ctx.descend()?;
+                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                        if let Some(
+                            super::super::__buffa::view::oneof::binding::Properties::Realtime(
+                                ref mut existing,
+                            ),
+                        ) = view.properties
+                        {
+                            ::buffa::MessageView::merge_into_view(
+                                &mut **existing,
+                                sub,
+                                __sub_ctx,
+                            )?;
+                        } else {
+                            view.properties = Some(
+                                super::super::__buffa::view::oneof::binding::Properties::Realtime(
+                                    ::buffa::alloc::boxed::Box::new(
+                                        <super::super::__buffa::view::RealtimePropertiesView as ::buffa::MessageView>::decode_view_ctx(
+                                            sub,
+                                            __sub_ctx,
+                                        )?,
+                                    ),
+                                ),
+                            );
+                        }
+                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                         let span_len = before_tag.len() - cur.len();
@@ -2802,6 +3282,15 @@ pub mod __buffa {
                                             ),
                                         )
                                     }
+                                    super::super::__buffa::view::oneof::binding::Properties::Realtime(
+                                        v,
+                                    ) => {
+                                        super::super::__buffa::oneof::binding::Properties::Realtime(
+                                            ::buffa::alloc::boxed::Box::new(
+                                                v.to_owned_from_source(__buffa_src)?,
+                                            ),
+                                        )
+                                    }
                                 },
                             )
                         }
@@ -2877,6 +3366,16 @@ pub mod __buffa {
                                     + inner as u64;
                         }
                         super::super::__buffa::view::oneof::binding::Properties::Kv(
+                            x,
+                        ) => {
+                            let __slot = __cache.reserve();
+                            let inner = x.compute_size(__cache);
+                            __cache.set(__slot, inner);
+                            size
+                                += 1u64 + ::buffa::encoding::varint_len(inner as u64) as u64
+                                    + inner as u64;
+                        }
+                        super::super::__buffa::view::oneof::binding::Properties::Realtime(
                             x,
                         ) => {
                             let __slot = __cache.reserve();
@@ -2977,6 +3476,16 @@ pub mod __buffa {
                             );
                             x.write_to(__cache, buf);
                         }
+                        super::super::__buffa::view::oneof::binding::Properties::Realtime(
+                            x,
+                        ) => {
+                            ::buffa::types::put_len_delimited_header(
+                                10u32,
+                                u64::from(__cache.consume_next()),
+                                buf,
+                            );
+                            x.write_to(__cache, buf);
+                        }
                     }
                 }
                 for v in &self.grants {
@@ -3051,6 +3560,11 @@ pub mod __buffa {
                             v,
                         ) => {
                             __map.serialize_entry("kv", v)?;
+                        }
+                        super::super::__buffa::view::oneof::binding::Properties::Realtime(
+                            v,
+                        ) => {
+                            __map.serialize_entry("realtime", v)?;
                         }
                     }
                 }
@@ -5024,6 +5538,403 @@ pub mod __buffa {
                 ::serde::Serialize::serialize(&self.0, __s)
             }
         }
+        #[derive(Clone, Default)]
+        pub struct RealtimePropertiesView<'a> {
+            /// Field 1: `transport`
+            pub transport: ::buffa::EnumValue<super::super::RealtimeTransport>,
+            /// Field 2: `url`
+            pub url: &'a str,
+            /// Field 3: `host`
+            pub host: &'a str,
+            /// Field 4: `signing_key`
+            pub signing_key: &'a [u8],
+            /// Field 5: `verify_key`
+            pub verify_key: &'a [u8],
+            pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
+        }
+        impl<'a> ::core::fmt::Debug for RealtimePropertiesView<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                f.debug_struct("RealtimePropertiesView")
+                    .field("transport", &self.transport)
+                    .field("url", &self.url)
+                    .field("host", &self.host)
+                    .field("signing_key", &::core::format_args!("[REDACTED]"))
+                    .field("verify_key", &self.verify_key)
+                    .finish()
+            }
+        }
+        impl<'a> ::buffa::MessageView<'a> for RealtimePropertiesView<'a> {
+            type Owned = super::super::RealtimeProperties;
+            fn decode_view(
+                buf: &'a [u8],
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                let __limit = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_UNKNOWN_FIELD_LIMIT,
+                );
+                let __elem = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_ELEMENT_MEMORY_LIMIT,
+                );
+                <Self as ::buffa::MessageView>::decode_view_ctx(
+                    buf,
+                    ::buffa::DecodeContext::new(::buffa::RECURSION_LIMIT, &__limit)
+                        .with_element_memory(&__elem),
+                )
+            }
+            fn decode_view_with_ctx(
+                buf: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
+            }
+            #[inline]
+            fn merge_view_field(
+                &mut self,
+                tag: ::buffa::encoding::Tag,
+                cur: &'a [u8],
+                before_tag: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<&'a [u8], ::buffa::DecodeError> {
+                let _ = ctx;
+                #[allow(unused_variables)]
+                let view = self;
+                let mut cur = cur;
+                match tag.field_number() {
+                    1u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.transport = ::buffa::EnumValue::from(
+                            ::buffa::types::decode_int32(&mut cur)?,
+                        );
+                    }
+                    2u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.url = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    3u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.host = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    4u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.signing_key = ::buffa::types::borrow_bytes(&mut cur)?;
+                    }
+                    5u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.verify_key = ::buffa::types::borrow_bytes(&mut cur)?;
+                    }
+                    _ => {
+                        ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
+                        let span_len = before_tag.len() - cur.len();
+                        view.__buffa_unknown_fields
+                            .push_record(before_tag, span_len, ctx)?;
+                    }
+                }
+                ::core::result::Result::Ok(cur)
+            }
+            fn to_owned_message(
+                &self,
+            ) -> ::core::result::Result<
+                super::super::RealtimeProperties,
+                ::buffa::DecodeError,
+            > {
+                self.to_owned_from_source(None)
+            }
+            #[allow(clippy::useless_conversion, clippy::needless_update)]
+            fn to_owned_from_source(
+                &self,
+                __buffa_src: ::core::option::Option<&::buffa::bytes::Bytes>,
+            ) -> ::core::result::Result<
+                super::super::RealtimeProperties,
+                ::buffa::DecodeError,
+            > {
+                #[allow(unused_imports)]
+                use ::buffa::alloc::string::ToString as _;
+                let _ = __buffa_src;
+                ::core::result::Result::Ok(super::super::RealtimeProperties {
+                    transport: self.transport,
+                    url: self.url.to_string(),
+                    host: self.host.to_string(),
+                    signing_key: (self.signing_key).to_vec(),
+                    verify_key: (self.verify_key).to_vec(),
+                    __buffa_unknown_fields: self
+                        .__buffa_unknown_fields
+                        .to_owned()?
+                        .into(),
+                    ..::core::default::Default::default()
+                })
+            }
+        }
+        impl<'a> ::buffa::ViewEncode<'a> for RealtimePropertiesView<'a> {
+            #[allow(clippy::needless_borrow, clippy::let_and_return)]
+            fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                let mut size = 0u64;
+                {
+                    let val = self.transport.to_i32();
+                    if val != 0 {
+                        size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
+                    }
+                }
+                if !self.url.is_empty() {
+                    size += 1u64 + ::buffa::types::string_encoded_len(&self.url) as u64;
+                }
+                if !self.host.is_empty() {
+                    size += 1u64 + ::buffa::types::string_encoded_len(&self.host) as u64;
+                }
+                if !self.signing_key.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::bytes_encoded_len(&self.signing_key)
+                                as u64;
+                }
+                if !self.verify_key.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::bytes_encoded_len(&self.verify_key) as u64;
+                }
+                size += self.__buffa_unknown_fields.encoded_len() as u64;
+                ::buffa::saturate_size(size)
+            }
+            #[allow(clippy::needless_borrow)]
+            fn write_to(
+                &self,
+                _cache: &mut ::buffa::SizeCache,
+                buf: &mut impl ::buffa::EncodeSink,
+            ) {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                {
+                    let val = self.transport.to_i32();
+                    if val != 0 {
+                        ::buffa::types::put_int32_field(1u32, val, buf);
+                    }
+                }
+                if !self.url.is_empty() {
+                    ::buffa::types::put_string_field(2u32, &self.url, buf);
+                }
+                if !self.host.is_empty() {
+                    ::buffa::types::put_string_field(3u32, &self.host, buf);
+                }
+                if !self.signing_key.is_empty() {
+                    ::buffa::types::put_shared_bytes_field(4u32, &self.signing_key, buf);
+                }
+                if !self.verify_key.is_empty() {
+                    ::buffa::types::put_shared_bytes_field(5u32, &self.verify_key, buf);
+                }
+                self.__buffa_unknown_fields.write_to(buf);
+            }
+        }
+        /// Serializes this view as protobuf JSON.
+        ///
+        /// Implicit-presence fields with default values are omitted, `required`
+        /// fields are always emitted, explicit-presence (`optional`) fields are
+        /// emitted only when set, bytes fields are base64-encoded, and enum
+        /// values are their proto name strings.
+        ///
+        /// This impl uses `serialize_map(None)` because the number of emitted
+        /// fields depends on default-omission rules; serializers that require
+        /// known map lengths (e.g. `bincode`) will return a runtime error.
+        /// Use the owned message type for those formats.
+        impl<'__a> ::serde::Serialize for RealtimePropertiesView<'__a> {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                use ::serde::ser::SerializeMap as _;
+                let mut __map = __s.serialize_map(::core::option::Option::None)?;
+                if !::buffa::json_helpers::skip_if::is_default_enum_value(
+                    &self.transport,
+                ) {
+                    __map.serialize_entry("transport", &self.transport)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.url) {
+                    __map.serialize_entry("url", self.url)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.host) {
+                    __map.serialize_entry("host", self.host)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_bytes(self.signing_key) {
+                    __map
+                        .serialize_entry(
+                            "signingKey",
+                            &::buffa::json_helpers::BytesJson(self.signing_key),
+                        )?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_bytes(self.verify_key) {
+                    __map
+                        .serialize_entry(
+                            "verifyKey",
+                            &::buffa::json_helpers::BytesJson(self.verify_key),
+                        )?;
+                }
+                __map.end()
+            }
+        }
+        impl<'a> ::buffa::MessageName for RealtimePropertiesView<'a> {
+            const PACKAGE: &'static str = "common.bindings.v1";
+            const NAME: &'static str = "RealtimeProperties";
+            const FULL_NAME: &'static str = "common.bindings.v1.RealtimeProperties";
+            const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.RealtimeProperties";
+        }
+        ::buffa::impl_default_view_instance!(RealtimePropertiesView);
+        ::buffa::impl_view_reborrow!(RealtimePropertiesView);
+        /** Self-contained, `'static` owned view of a `RealtimeProperties` message.
+
+ Wraps [`::buffa::OwnedView`]`<`[`RealtimePropertiesView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
+
+ Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`RealtimePropertiesView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
+        #[derive(Clone, Debug)]
+        pub struct RealtimePropertiesOwnedView(
+            ::buffa::OwnedView<RealtimePropertiesView<'static>>,
+        );
+        impl RealtimePropertiesOwnedView {
+            /// Decode an owned view from a [`::buffa::bytes::Bytes`] buffer.
+            ///
+            /// The view borrows directly from the buffer's data; the buffer is
+            /// retained inside the returned handle.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer contains invalid
+            /// protobuf data.
+            pub fn decode(
+                bytes: ::buffa::bytes::Bytes,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    RealtimePropertiesOwnedView(::buffa::OwnedView::decode(bytes)?),
+                )
+            }
+            /// Decode with custom [`::buffa::DecodeOptions`] (recursion limit,
+            /// max message size).
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer is invalid or
+            /// exceeds the configured limits.
+            pub fn decode_with_options(
+                bytes: ::buffa::bytes::Bytes,
+                opts: &::buffa::DecodeOptions,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    RealtimePropertiesOwnedView(
+                        ::buffa::OwnedView::decode_with_options(bytes, opts)?,
+                    ),
+                )
+            }
+            /// Build from an owned message via an encode → decode round-trip.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+            /// message's encoded size exceeds the 2 GiB protobuf limit, or
+            /// another [`::buffa::DecodeError`] if the re-encoded bytes are
+            /// somehow invalid (should not happen for well-formed messages).
+            pub fn from_owned(
+                msg: &super::super::RealtimeProperties,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    RealtimePropertiesOwnedView(::buffa::OwnedView::from_owned(msg)?),
+                )
+            }
+            /// Borrow the full [`RealtimePropertiesView`] with its lifetime tied to `&self`.
+            #[must_use]
+            pub fn view(&self) -> &RealtimePropertiesView<'_> {
+                self.0.reborrow()
+            }
+            /// Convert to the owned message type.
+            ///
+            /// Infallible: this type's constructors wire-decode their
+            /// buffer, and a view produced by wire decoding always
+            /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+            /// whose contract also governs handles converted from a raw
+            /// [`::buffa::OwnedView`].
+            #[must_use]
+            pub fn to_owned_message(&self) -> super::super::RealtimeProperties {
+                self.0.to_owned_message()
+            }
+            /// The underlying bytes buffer.
+            #[must_use]
+            pub fn bytes(&self) -> &::buffa::bytes::Bytes {
+                self.0.bytes()
+            }
+            /// Consume the handle, returning the underlying bytes buffer.
+            #[must_use]
+            pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
+                self.0.into_bytes()
+            }
+            /// Field 1: `transport`
+            #[must_use]
+            pub fn transport(
+                &self,
+            ) -> ::buffa::EnumValue<super::super::RealtimeTransport> {
+                self.0.reborrow().transport
+            }
+            /// Field 2: `url`
+            #[must_use]
+            pub fn url(&self) -> &'_ str {
+                self.0.reborrow().url
+            }
+            /// Field 3: `host`
+            #[must_use]
+            pub fn host(&self) -> &'_ str {
+                self.0.reborrow().host
+            }
+            /// Field 4: `signing_key`
+            #[must_use]
+            pub fn signing_key(&self) -> &'_ [u8] {
+                self.0.reborrow().signing_key
+            }
+            /// Field 5: `verify_key`
+            #[must_use]
+            pub fn verify_key(&self) -> &'_ [u8] {
+                self.0.reborrow().verify_key
+            }
+        }
+        impl ::core::convert::From<::buffa::OwnedView<RealtimePropertiesView<'static>>>
+        for RealtimePropertiesOwnedView {
+            fn from(inner: ::buffa::OwnedView<RealtimePropertiesView<'static>>) -> Self {
+                RealtimePropertiesOwnedView(inner)
+            }
+        }
+        impl ::core::convert::From<RealtimePropertiesOwnedView>
+        for ::buffa::OwnedView<RealtimePropertiesView<'static>> {
+            fn from(wrapper: RealtimePropertiesOwnedView) -> Self {
+                wrapper.0
+            }
+        }
+        impl ::core::convert::AsRef<::buffa::OwnedView<RealtimePropertiesView<'static>>>
+        for RealtimePropertiesOwnedView {
+            fn as_ref(&self) -> &::buffa::OwnedView<RealtimePropertiesView<'static>> {
+                &self.0
+            }
+        }
+        impl ::buffa::HasMessageView for super::super::RealtimeProperties {
+            type View<'a> = RealtimePropertiesView<'a>;
+            type ViewHandle = RealtimePropertiesOwnedView;
+        }
+        impl ::serde::Serialize for RealtimePropertiesOwnedView {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                ::serde::Serialize::serialize(&self.0, __s)
+            }
+        }
         #[derive(Clone, Debug, Default)]
         pub struct GrantView<'a> {
             /// Field 1: `actions`
@@ -5764,6 +6675,13 @@ pub mod __buffa {
                             >,
                         >,
                     ),
+                    Realtime(
+                        ::buffa::alloc::boxed::Box<
+                            super::super::super::super::__buffa::view::RealtimePropertiesView<
+                                'a,
+                            >,
+                        >,
+                    ),
                 }
             }
         }
@@ -5788,6 +6706,9 @@ pub mod __buffa {
                 Topic(::buffa::alloc::boxed::Box<super::super::super::TopicProperties>),
                 Task(::buffa::alloc::boxed::Box<super::super::super::TaskProperties>),
                 Kv(::buffa::alloc::boxed::Box<super::super::super::KvProperties>),
+                Realtime(
+                    ::buffa::alloc::boxed::Box<super::super::super::RealtimeProperties>,
+                ),
             }
             impl ::buffa::Oneof for Properties {}
             impl From<super::super::super::PostgresProperties> for Properties {
@@ -5850,6 +6771,17 @@ pub mod __buffa {
                     Self::Some(Properties::from(v))
                 }
             }
+            impl From<super::super::super::RealtimeProperties> for Properties {
+                fn from(v: super::super::super::RealtimeProperties) -> Self {
+                    Self::Realtime(::buffa::alloc::boxed::Box::new(v))
+                }
+            }
+            impl From<super::super::super::RealtimeProperties>
+            for ::core::option::Option<Properties> {
+                fn from(v: super::super::super::RealtimeProperties) -> Self {
+                    Self::Some(Properties::from(v))
+                }
+            }
             impl ::serde::Serialize for Properties {
                 fn serialize<S: ::serde::Serializer>(
                     &self,
@@ -5876,6 +6808,9 @@ pub mod __buffa {
                         Self::Kv(v) => {
                             map.serialize_entry("kv", &**v)?;
                         }
+                        Self::Realtime(v) => {
+                            map.serialize_entry("realtime", &**v)?;
+                        }
                     }
                     map.end()
                 }
@@ -5890,6 +6825,7 @@ pub mod __buffa {
         reg.register_json_any(super::__TOPIC_PROPERTIES_JSON_ANY);
         reg.register_json_any(super::__TASK_PROPERTIES_JSON_ANY);
         reg.register_json_any(super::__KV_PROPERTIES_JSON_ANY);
+        reg.register_json_any(super::__REALTIME_PROPERTIES_JSON_ANY);
         reg.register_json_any(super::__GRANT_JSON_ANY);
         reg.register_json_any(super::__GRANT_CONDITION_JSON_ANY);
     }
@@ -5918,6 +6854,10 @@ pub use self::__buffa::view::TaskPropertiesOwnedView;
 pub use self::__buffa::view::KvPropertiesView;
 #[doc(inline)]
 pub use self::__buffa::view::KvPropertiesOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::RealtimePropertiesView;
+#[doc(inline)]
+pub use self::__buffa::view::RealtimePropertiesOwnedView;
 #[doc(inline)]
 pub use self::__buffa::view::GrantView;
 #[doc(inline)]

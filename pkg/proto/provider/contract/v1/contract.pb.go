@@ -1746,6 +1746,7 @@ type ManifestResource struct {
 	//	*ManifestResource_Bucket
 	//	*ManifestResource_Topic
 	//	*ManifestResource_Kv
+	//	*ManifestResource_Realtime
 	Config        isManifestResource_Config `protobuf_oneof:"config"`
 	Binding       string                    `protobuf:"bytes,5,opt,name=binding,proto3" json:"binding,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1839,6 +1840,15 @@ func (x *ManifestResource) GetKv() *v11.KvConfig {
 	return nil
 }
 
+func (x *ManifestResource) GetRealtime() *v11.RealtimeConfig {
+	if x != nil {
+		if x, ok := x.Config.(*ManifestResource_Realtime); ok {
+			return x.Realtime
+		}
+	}
+	return nil
+}
+
 func (x *ManifestResource) GetBinding() string {
 	if x != nil {
 		return x.Binding
@@ -1866,6 +1876,10 @@ type ManifestResource_Kv struct {
 	Kv *v11.KvConfig `protobuf:"bytes,7,opt,name=kv,proto3,oneof"`
 }
 
+type ManifestResource_Realtime struct {
+	Realtime *v11.RealtimeConfig `protobuf:"bytes,8,opt,name=realtime,proto3,oneof"`
+}
+
 func (*ManifestResource_Postgres) isManifestResource_Config() {}
 
 func (*ManifestResource_Bucket) isManifestResource_Config() {}
@@ -1873,6 +1887,8 @@ func (*ManifestResource_Bucket) isManifestResource_Config() {}
 func (*ManifestResource_Topic) isManifestResource_Config() {}
 
 func (*ManifestResource_Kv) isManifestResource_Config() {}
+
+func (*ManifestResource_Realtime) isManifestResource_Config() {}
 
 type ManifestTopic struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -5491,14 +5507,15 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\n" +
 	"entry_file\x18\x03 \x01(\tR\tentryFile\x12#\n" +
 	"\rartifact_path\x18\x04 \x01(\tR\fartifactPath\x12\x19\n" +
-	"\broute_id\x18\x06 \x01(\tR\arouteId\"\x80\x03\n" +
+	"\broute_id\x18\x06 \x01(\tR\arouteId\"\xc0\x03\n" +
 	"\x10ManifestResource\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12@\n" +
 	"\bresource\x18\x02 \x01(\v2$.app.resources.v1.ResourceIdentifierR\bresource\x12>\n" +
 	"\bpostgres\x18\x03 \x01(\v2 .app.resources.v1.PostgresConfigH\x00R\bpostgres\x128\n" +
 	"\x06bucket\x18\x04 \x01(\v2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x12;\n" +
 	"\x05topic\x18\x06 \x01(\v2#.provider.contract.v1.ManifestTopicH\x00R\x05topic\x12,\n" +
-	"\x02kv\x18\a \x01(\v2\x1a.app.resources.v1.KvConfigH\x00R\x02kv\x12\x18\n" +
+	"\x02kv\x18\a \x01(\v2\x1a.app.resources.v1.KvConfigH\x00R\x02kv\x12>\n" +
+	"\brealtime\x18\b \x01(\v2 .app.resources.v1.RealtimeConfigH\x00R\brealtime\x12\x18\n" +
 	"\abinding\x18\x05 \x01(\tR\abindingB\b\n" +
 	"\x06config\"\xfd\x01\n" +
 	"\rManifestTopic\x12\x16\n" +
@@ -5947,17 +5964,18 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(*v11.PostgresConfig)(nil),              // 88: app.resources.v1.PostgresConfig
 	(*v11.BucketConfig)(nil),                // 89: app.resources.v1.BucketConfig
 	(*v11.KvConfig)(nil),                    // 90: app.resources.v1.KvConfig
-	(*v11.RetryPolicy)(nil),                 // 91: app.resources.v1.RetryPolicy
-	(*durationpb.Duration)(nil),             // 92: google.protobuf.Duration
-	(v12.Lane)(0),                           // 93: app.topic.v1.Lane
-	(*v11.BatchPolicy)(nil),                 // 94: app.resources.v1.BatchPolicy
-	(*v1.Environment)(nil),                  // 95: common.environment.v1.Environment
-	(*v13.Binding)(nil),                     // 96: common.bindings.v1.Binding
-	(*v14.ChangePlan)(nil),                  // 97: common.plan.v1.ChangePlan
-	(v1.Lifecycle)(0),                       // 98: common.environment.v1.Lifecycle
-	(*v15.Propagation)(nil),                 // 99: common.progress.v1.Propagation
-	(*v15.OperationEvent)(nil),              // 100: common.progress.v1.OperationEvent
-	(*v16.ResourceSet)(nil),                 // 101: provider.cost.v1.ResourceSet
+	(*v11.RealtimeConfig)(nil),              // 91: app.resources.v1.RealtimeConfig
+	(*v11.RetryPolicy)(nil),                 // 92: app.resources.v1.RetryPolicy
+	(*durationpb.Duration)(nil),             // 93: google.protobuf.Duration
+	(v12.Lane)(0),                           // 94: app.topic.v1.Lane
+	(*v11.BatchPolicy)(nil),                 // 95: app.resources.v1.BatchPolicy
+	(*v1.Environment)(nil),                  // 96: common.environment.v1.Environment
+	(*v13.Binding)(nil),                     // 97: common.bindings.v1.Binding
+	(*v14.ChangePlan)(nil),                  // 98: common.plan.v1.ChangePlan
+	(v1.Lifecycle)(0),                       // 99: common.environment.v1.Lifecycle
+	(*v15.Propagation)(nil),                 // 100: common.progress.v1.Propagation
+	(*v15.OperationEvent)(nil),              // 101: common.progress.v1.OperationEvent
+	(*v16.ResourceSet)(nil),                 // 102: provider.cost.v1.ResourceSet
 }
 var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	84,  // 0: provider.contract.v1.ProviderConfig.options:type_name -> google.protobuf.Struct
@@ -5991,143 +6009,144 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	89,  // 28: provider.contract.v1.ManifestResource.bucket:type_name -> app.resources.v1.BucketConfig
 	27,  // 29: provider.contract.v1.ManifestResource.topic:type_name -> provider.contract.v1.ManifestTopic
 	90,  // 30: provider.contract.v1.ManifestResource.kv:type_name -> app.resources.v1.KvConfig
-	91,  // 31: provider.contract.v1.ManifestTopic.retry:type_name -> app.resources.v1.RetryPolicy
-	28,  // 32: provider.contract.v1.ManifestTopic.consumers:type_name -> provider.contract.v1.ManifestConsumer
-	92,  // 33: provider.contract.v1.ManifestTopic.ttl:type_name -> google.protobuf.Duration
-	91,  // 34: provider.contract.v1.ManifestConsumer.retry:type_name -> app.resources.v1.RetryPolicy
-	92,  // 35: provider.contract.v1.ManifestConsumer.max_duration:type_name -> google.protobuf.Duration
-	93,  // 36: provider.contract.v1.ManifestConsumer.lanes:type_name -> app.topic.v1.Lane
-	94,  // 37: provider.contract.v1.ManifestConsumer.batch:type_name -> app.resources.v1.BatchPolicy
-	16,  // 38: provider.contract.v1.DeployRequest.manifest:type_name -> provider.contract.v1.Manifest
-	95,  // 39: provider.contract.v1.DeployRequest.environment:type_name -> common.environment.v1.Environment
-	42,  // 40: provider.contract.v1.DeployRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	31,  // 41: provider.contract.v1.DeployRequest.project_registry:type_name -> provider.contract.v1.ImageRegistry
-	96,  // 42: provider.contract.v1.DeployRequest.inline_bindings:type_name -> common.bindings.v1.Binding
-	16,  // 43: provider.contract.v1.ShapeRequest.manifest:type_name -> provider.contract.v1.Manifest
-	95,  // 44: provider.contract.v1.ShapeRequest.environment:type_name -> common.environment.v1.Environment
-	42,  // 45: provider.contract.v1.ShapeRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	85,  // 46: provider.contract.v1.BootstrapRequest.tier:type_name -> common.environment.v1.Tier
-	42,  // 47: provider.contract.v1.BootstrapRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	97,  // 48: provider.contract.v1.BootstrapRequest.consented:type_name -> common.plan.v1.ChangePlan
-	85,  // 49: provider.contract.v1.DescribeBootstrapRequest.tier:type_name -> common.environment.v1.Tier
-	42,  // 50: provider.contract.v1.DescribeBootstrapRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	40,  // 51: provider.contract.v1.DescribeBootstrapResponse.features:type_name -> provider.contract.v1.Feature
-	36,  // 52: provider.contract.v1.DescribeBootstrapResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
-	85,  // 53: provider.contract.v1.BootstrapStatus.tier:type_name -> common.environment.v1.Tier
-	35,  // 54: provider.contract.v1.BootstrapStatus.stacks:type_name -> provider.contract.v1.BootstrapStack
-	0,   // 55: provider.contract.v1.CredentialPermissionsRequest.purpose:type_name -> provider.contract.v1.CredentialPurpose
-	42,  // 56: provider.contract.v1.CredentialPermissionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	39,  // 57: provider.contract.v1.CredentialPermissionsResponse.groups:type_name -> provider.contract.v1.CredentialGroup
-	41,  // 58: provider.contract.v1.EdgeSelection.dns:type_name -> provider.contract.v1.Dns
-	84,  // 59: provider.contract.v1.EdgeSelection.options:type_name -> google.protobuf.Struct
-	85,  // 60: provider.contract.v1.BootstrapScope.tier:type_name -> common.environment.v1.Tier
-	42,  // 61: provider.contract.v1.BootstrapScope.edge:type_name -> provider.contract.v1.EdgeSelection
-	97,  // 62: provider.contract.v1.BootstrapScope.consented:type_name -> common.plan.v1.ChangePlan
-	95,  // 63: provider.contract.v1.RemoveEnvironmentRequest.environment:type_name -> common.environment.v1.Environment
-	42,  // 64: provider.contract.v1.RemoveEnvironmentRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	95,  // 65: provider.contract.v1.ProjectRequest.environment:type_name -> common.environment.v1.Environment
-	42,  // 66: provider.contract.v1.ProjectRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	97,  // 67: provider.contract.v1.ProjectRequest.consented:type_name -> common.plan.v1.ChangePlan
-	50,  // 68: provider.contract.v1.ListEnvironmentsResponse.environments:type_name -> provider.contract.v1.PreviewEnvironment
-	95,  // 69: provider.contract.v1.GetEnvironmentRequest.environment:type_name -> common.environment.v1.Environment
-	50,  // 70: provider.contract.v1.GetEnvironmentResponse.environment:type_name -> provider.contract.v1.PreviewEnvironment
-	98,  // 71: provider.contract.v1.PreviewEnvironment.lifecycle:type_name -> common.environment.v1.Lifecycle
-	95,  // 72: provider.contract.v1.EnsurePreviewAliasRequest.environment:type_name -> common.environment.v1.Environment
-	81,  // 73: provider.contract.v1.EnsurePreviewAliasResponse.hostnames:type_name -> provider.contract.v1.EnsurePreviewAliasResponse.HostnamesEntry
-	95,  // 74: provider.contract.v1.ForgetPreviewAliasRequest.environment:type_name -> common.environment.v1.Environment
-	85,  // 75: provider.contract.v1.PreflightRequest.required_tier:type_name -> common.environment.v1.Tier
-	42,  // 76: provider.contract.v1.PreflightRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	56,  // 77: provider.contract.v1.PreflightRequest.containers:type_name -> provider.contract.v1.ContainerApp
-	85,  // 78: provider.contract.v1.PreflightResponse.infra_tier:type_name -> common.environment.v1.Tier
-	62,  // 79: provider.contract.v1.PreflightResponse.identity:type_name -> provider.contract.v1.Identity
-	64,  // 80: provider.contract.v1.PreflightResponse.credential_problems:type_name -> provider.contract.v1.CredentialProblem
-	61,  // 81: provider.contract.v1.PreflightResponse.domain_claims:type_name -> provider.contract.v1.DomainClaim
-	59,  // 82: provider.contract.v1.PreflightResponse.preview_wildcard:type_name -> provider.contract.v1.PreviewWildcard
-	36,  // 83: provider.contract.v1.PreflightResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
-	60,  // 84: provider.contract.v1.PreflightResponse.host_checks:type_name -> provider.contract.v1.HostCheck
-	82,  // 85: provider.contract.v1.PreflightResponse.container_archs:type_name -> provider.contract.v1.PreflightResponse.ContainerArchsEntry
-	58,  // 86: provider.contract.v1.PreflightResponse.worker_ceilings:type_name -> provider.contract.v1.WorkerCeiling
-	92,  // 87: provider.contract.v1.WorkerCeiling.max_duration:type_name -> google.protobuf.Duration
-	14,  // 88: provider.contract.v1.PreviewWildcard.certificate:type_name -> provider.contract.v1.CertificateState
-	2,   // 89: provider.contract.v1.HostCheck.verdict:type_name -> provider.contract.v1.HostCheck.Verdict
-	3,   // 90: provider.contract.v1.DomainClaim.status:type_name -> provider.contract.v1.DomainClaim.Status
-	63,  // 91: provider.contract.v1.Identity.details:type_name -> provider.contract.v1.Detail
-	83,  // 92: provider.contract.v1.Promotion.builds:type_name -> provider.contract.v1.Promotion.BuildsEntry
-	99,  // 93: provider.contract.v1.Promotion.propagation:type_name -> common.progress.v1.Propagation
-	65,  // 94: provider.contract.v1.PromotionHistoryEntry.promotion:type_name -> provider.contract.v1.Promotion
-	42,  // 95: provider.contract.v1.ListPromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	66,  // 96: provider.contract.v1.ListPromotionsResponse.promotions:type_name -> provider.contract.v1.PromotionHistoryEntry
-	42,  // 97: provider.contract.v1.RollbackRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	65,  // 98: provider.contract.v1.RollbackResponse.promoted:type_name -> provider.contract.v1.Promotion
-	95,  // 99: provider.contract.v1.RemoveStalePromotionsRequest.environment:type_name -> common.environment.v1.Environment
-	42,  // 100: provider.contract.v1.RemoveStalePromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	1,   // 101: provider.contract.v1.Refusal.code:type_name -> provider.contract.v1.RefusalCode
-	78,  // 102: provider.contract.v1.DescribeConnectorTargetResponse.installed:type_name -> provider.contract.v1.InstalledConnector
-	5,   // 103: provider.contract.v1.ProviderService.Configure:input_type -> provider.contract.v1.ConfigureRequest
-	29,  // 104: provider.contract.v1.ProviderService.Deploy:input_type -> provider.contract.v1.DeployRequest
-	32,  // 105: provider.contract.v1.ProviderService.Bootstrap:input_type -> provider.contract.v1.BootstrapRequest
-	33,  // 106: provider.contract.v1.ProviderService.DescribeBootstrap:input_type -> provider.contract.v1.DescribeBootstrapRequest
-	37,  // 107: provider.contract.v1.ProviderService.GetCredentialPermissions:input_type -> provider.contract.v1.CredentialPermissionsRequest
-	43,  // 108: provider.contract.v1.ProviderService.RemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
-	43,  // 109: provider.contract.v1.ProviderService.PlanRemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
-	44,  // 110: provider.contract.v1.ProviderService.RemoveEnvironment:input_type -> provider.contract.v1.RemoveEnvironmentRequest
-	45,  // 111: provider.contract.v1.ProviderService.RemoveProject:input_type -> provider.contract.v1.ProjectRequest
-	45,  // 112: provider.contract.v1.ProviderService.PlanRemoveProject:input_type -> provider.contract.v1.ProjectRequest
-	46,  // 113: provider.contract.v1.ProviderService.ListEnvironments:input_type -> provider.contract.v1.ListEnvironmentsRequest
-	48,  // 114: provider.contract.v1.ProviderService.GetEnvironment:input_type -> provider.contract.v1.GetEnvironmentRequest
-	51,  // 115: provider.contract.v1.ProviderService.EnsurePreviewAlias:input_type -> provider.contract.v1.EnsurePreviewAliasRequest
-	53,  // 116: provider.contract.v1.ProviderService.ForgetPreviewAlias:input_type -> provider.contract.v1.ForgetPreviewAliasRequest
-	55,  // 117: provider.contract.v1.ProviderService.Preflight:input_type -> provider.contract.v1.PreflightRequest
-	67,  // 118: provider.contract.v1.ProviderService.ListPromotions:input_type -> provider.contract.v1.ListPromotionsRequest
-	69,  // 119: provider.contract.v1.ProviderService.Rollback:input_type -> provider.contract.v1.RollbackRequest
-	71,  // 120: provider.contract.v1.ProviderService.RemoveStalePromotions:input_type -> provider.contract.v1.RemoveStalePromotionsRequest
-	8,   // 121: provider.contract.v1.ProviderService.UsePreviewWildcard:input_type -> provider.contract.v1.UsePreviewWildcardRequest
-	9,   // 122: provider.contract.v1.ProviderService.GetPreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
-	9,   // 123: provider.contract.v1.ProviderService.PlanRemovePreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
-	9,   // 124: provider.contract.v1.ProviderService.RemovePreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
-	12,  // 125: provider.contract.v1.ProviderService.AddHostname:input_type -> provider.contract.v1.HostnameRequest
-	12,  // 126: provider.contract.v1.ProviderService.RemoveHostname:input_type -> provider.contract.v1.HostnameRequest
-	12,  // 127: provider.contract.v1.ProviderService.GetHostnameStatus:input_type -> provider.contract.v1.HostnameRequest
-	76,  // 128: provider.contract.v1.ProviderService.DescribeConnectorTarget:input_type -> provider.contract.v1.DescribeConnectorTargetRequest
-	79,  // 129: provider.contract.v1.ProviderService.InstallConnector:input_type -> provider.contract.v1.InstallConnectorRequest
-	80,  // 130: provider.contract.v1.ProviderService.RemoveConnector:input_type -> provider.contract.v1.RemoveConnectorRequest
-	30,  // 131: provider.contract.v1.ProviderService.Shape:input_type -> provider.contract.v1.ShapeRequest
-	73,  // 132: provider.contract.v1.ProviderService.Confirm:input_type -> provider.contract.v1.ConfirmRequest
-	6,   // 133: provider.contract.v1.ProviderService.Configure:output_type -> provider.contract.v1.ConfigureResponse
-	100, // 134: provider.contract.v1.ProviderService.Deploy:output_type -> common.progress.v1.OperationEvent
-	100, // 135: provider.contract.v1.ProviderService.Bootstrap:output_type -> common.progress.v1.OperationEvent
-	34,  // 136: provider.contract.v1.ProviderService.DescribeBootstrap:output_type -> provider.contract.v1.DescribeBootstrapResponse
-	38,  // 137: provider.contract.v1.ProviderService.GetCredentialPermissions:output_type -> provider.contract.v1.CredentialPermissionsResponse
-	100, // 138: provider.contract.v1.ProviderService.RemoveBootstrap:output_type -> common.progress.v1.OperationEvent
-	97,  // 139: provider.contract.v1.ProviderService.PlanRemoveBootstrap:output_type -> common.plan.v1.ChangePlan
-	100, // 140: provider.contract.v1.ProviderService.RemoveEnvironment:output_type -> common.progress.v1.OperationEvent
-	100, // 141: provider.contract.v1.ProviderService.RemoveProject:output_type -> common.progress.v1.OperationEvent
-	97,  // 142: provider.contract.v1.ProviderService.PlanRemoveProject:output_type -> common.plan.v1.ChangePlan
-	47,  // 143: provider.contract.v1.ProviderService.ListEnvironments:output_type -> provider.contract.v1.ListEnvironmentsResponse
-	49,  // 144: provider.contract.v1.ProviderService.GetEnvironment:output_type -> provider.contract.v1.GetEnvironmentResponse
-	52,  // 145: provider.contract.v1.ProviderService.EnsurePreviewAlias:output_type -> provider.contract.v1.EnsurePreviewAliasResponse
-	54,  // 146: provider.contract.v1.ProviderService.ForgetPreviewAlias:output_type -> provider.contract.v1.ForgetPreviewAliasResponse
-	57,  // 147: provider.contract.v1.ProviderService.Preflight:output_type -> provider.contract.v1.PreflightResponse
-	68,  // 148: provider.contract.v1.ProviderService.ListPromotions:output_type -> provider.contract.v1.ListPromotionsResponse
-	70,  // 149: provider.contract.v1.ProviderService.Rollback:output_type -> provider.contract.v1.RollbackResponse
-	100, // 150: provider.contract.v1.ProviderService.RemoveStalePromotions:output_type -> common.progress.v1.OperationEvent
-	100, // 151: provider.contract.v1.ProviderService.UsePreviewWildcard:output_type -> common.progress.v1.OperationEvent
-	10,  // 152: provider.contract.v1.ProviderService.GetPreviewWildcard:output_type -> provider.contract.v1.GetPreviewWildcardResponse
-	97,  // 153: provider.contract.v1.ProviderService.PlanRemovePreviewWildcard:output_type -> common.plan.v1.ChangePlan
-	100, // 154: provider.contract.v1.ProviderService.RemovePreviewWildcard:output_type -> common.progress.v1.OperationEvent
-	100, // 155: provider.contract.v1.ProviderService.AddHostname:output_type -> common.progress.v1.OperationEvent
-	100, // 156: provider.contract.v1.ProviderService.RemoveHostname:output_type -> common.progress.v1.OperationEvent
-	13,  // 157: provider.contract.v1.ProviderService.GetHostnameStatus:output_type -> provider.contract.v1.GetHostnameStatusResponse
-	77,  // 158: provider.contract.v1.ProviderService.DescribeConnectorTarget:output_type -> provider.contract.v1.DescribeConnectorTargetResponse
-	100, // 159: provider.contract.v1.ProviderService.InstallConnector:output_type -> common.progress.v1.OperationEvent
-	100, // 160: provider.contract.v1.ProviderService.RemoveConnector:output_type -> common.progress.v1.OperationEvent
-	101, // 161: provider.contract.v1.ProviderService.Shape:output_type -> provider.cost.v1.ResourceSet
-	74,  // 162: provider.contract.v1.ProviderService.Confirm:output_type -> provider.contract.v1.ConfirmResponse
-	133, // [133:163] is the sub-list for method output_type
-	103, // [103:133] is the sub-list for method input_type
-	103, // [103:103] is the sub-list for extension type_name
-	103, // [103:103] is the sub-list for extension extendee
-	0,   // [0:103] is the sub-list for field type_name
+	91,  // 31: provider.contract.v1.ManifestResource.realtime:type_name -> app.resources.v1.RealtimeConfig
+	92,  // 32: provider.contract.v1.ManifestTopic.retry:type_name -> app.resources.v1.RetryPolicy
+	28,  // 33: provider.contract.v1.ManifestTopic.consumers:type_name -> provider.contract.v1.ManifestConsumer
+	93,  // 34: provider.contract.v1.ManifestTopic.ttl:type_name -> google.protobuf.Duration
+	92,  // 35: provider.contract.v1.ManifestConsumer.retry:type_name -> app.resources.v1.RetryPolicy
+	93,  // 36: provider.contract.v1.ManifestConsumer.max_duration:type_name -> google.protobuf.Duration
+	94,  // 37: provider.contract.v1.ManifestConsumer.lanes:type_name -> app.topic.v1.Lane
+	95,  // 38: provider.contract.v1.ManifestConsumer.batch:type_name -> app.resources.v1.BatchPolicy
+	16,  // 39: provider.contract.v1.DeployRequest.manifest:type_name -> provider.contract.v1.Manifest
+	96,  // 40: provider.contract.v1.DeployRequest.environment:type_name -> common.environment.v1.Environment
+	42,  // 41: provider.contract.v1.DeployRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	31,  // 42: provider.contract.v1.DeployRequest.project_registry:type_name -> provider.contract.v1.ImageRegistry
+	97,  // 43: provider.contract.v1.DeployRequest.inline_bindings:type_name -> common.bindings.v1.Binding
+	16,  // 44: provider.contract.v1.ShapeRequest.manifest:type_name -> provider.contract.v1.Manifest
+	96,  // 45: provider.contract.v1.ShapeRequest.environment:type_name -> common.environment.v1.Environment
+	42,  // 46: provider.contract.v1.ShapeRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	85,  // 47: provider.contract.v1.BootstrapRequest.tier:type_name -> common.environment.v1.Tier
+	42,  // 48: provider.contract.v1.BootstrapRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	98,  // 49: provider.contract.v1.BootstrapRequest.consented:type_name -> common.plan.v1.ChangePlan
+	85,  // 50: provider.contract.v1.DescribeBootstrapRequest.tier:type_name -> common.environment.v1.Tier
+	42,  // 51: provider.contract.v1.DescribeBootstrapRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	40,  // 52: provider.contract.v1.DescribeBootstrapResponse.features:type_name -> provider.contract.v1.Feature
+	36,  // 53: provider.contract.v1.DescribeBootstrapResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
+	85,  // 54: provider.contract.v1.BootstrapStatus.tier:type_name -> common.environment.v1.Tier
+	35,  // 55: provider.contract.v1.BootstrapStatus.stacks:type_name -> provider.contract.v1.BootstrapStack
+	0,   // 56: provider.contract.v1.CredentialPermissionsRequest.purpose:type_name -> provider.contract.v1.CredentialPurpose
+	42,  // 57: provider.contract.v1.CredentialPermissionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	39,  // 58: provider.contract.v1.CredentialPermissionsResponse.groups:type_name -> provider.contract.v1.CredentialGroup
+	41,  // 59: provider.contract.v1.EdgeSelection.dns:type_name -> provider.contract.v1.Dns
+	84,  // 60: provider.contract.v1.EdgeSelection.options:type_name -> google.protobuf.Struct
+	85,  // 61: provider.contract.v1.BootstrapScope.tier:type_name -> common.environment.v1.Tier
+	42,  // 62: provider.contract.v1.BootstrapScope.edge:type_name -> provider.contract.v1.EdgeSelection
+	98,  // 63: provider.contract.v1.BootstrapScope.consented:type_name -> common.plan.v1.ChangePlan
+	96,  // 64: provider.contract.v1.RemoveEnvironmentRequest.environment:type_name -> common.environment.v1.Environment
+	42,  // 65: provider.contract.v1.RemoveEnvironmentRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	96,  // 66: provider.contract.v1.ProjectRequest.environment:type_name -> common.environment.v1.Environment
+	42,  // 67: provider.contract.v1.ProjectRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	98,  // 68: provider.contract.v1.ProjectRequest.consented:type_name -> common.plan.v1.ChangePlan
+	50,  // 69: provider.contract.v1.ListEnvironmentsResponse.environments:type_name -> provider.contract.v1.PreviewEnvironment
+	96,  // 70: provider.contract.v1.GetEnvironmentRequest.environment:type_name -> common.environment.v1.Environment
+	50,  // 71: provider.contract.v1.GetEnvironmentResponse.environment:type_name -> provider.contract.v1.PreviewEnvironment
+	99,  // 72: provider.contract.v1.PreviewEnvironment.lifecycle:type_name -> common.environment.v1.Lifecycle
+	96,  // 73: provider.contract.v1.EnsurePreviewAliasRequest.environment:type_name -> common.environment.v1.Environment
+	81,  // 74: provider.contract.v1.EnsurePreviewAliasResponse.hostnames:type_name -> provider.contract.v1.EnsurePreviewAliasResponse.HostnamesEntry
+	96,  // 75: provider.contract.v1.ForgetPreviewAliasRequest.environment:type_name -> common.environment.v1.Environment
+	85,  // 76: provider.contract.v1.PreflightRequest.required_tier:type_name -> common.environment.v1.Tier
+	42,  // 77: provider.contract.v1.PreflightRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	56,  // 78: provider.contract.v1.PreflightRequest.containers:type_name -> provider.contract.v1.ContainerApp
+	85,  // 79: provider.contract.v1.PreflightResponse.infra_tier:type_name -> common.environment.v1.Tier
+	62,  // 80: provider.contract.v1.PreflightResponse.identity:type_name -> provider.contract.v1.Identity
+	64,  // 81: provider.contract.v1.PreflightResponse.credential_problems:type_name -> provider.contract.v1.CredentialProblem
+	61,  // 82: provider.contract.v1.PreflightResponse.domain_claims:type_name -> provider.contract.v1.DomainClaim
+	59,  // 83: provider.contract.v1.PreflightResponse.preview_wildcard:type_name -> provider.contract.v1.PreviewWildcard
+	36,  // 84: provider.contract.v1.PreflightResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
+	60,  // 85: provider.contract.v1.PreflightResponse.host_checks:type_name -> provider.contract.v1.HostCheck
+	82,  // 86: provider.contract.v1.PreflightResponse.container_archs:type_name -> provider.contract.v1.PreflightResponse.ContainerArchsEntry
+	58,  // 87: provider.contract.v1.PreflightResponse.worker_ceilings:type_name -> provider.contract.v1.WorkerCeiling
+	93,  // 88: provider.contract.v1.WorkerCeiling.max_duration:type_name -> google.protobuf.Duration
+	14,  // 89: provider.contract.v1.PreviewWildcard.certificate:type_name -> provider.contract.v1.CertificateState
+	2,   // 90: provider.contract.v1.HostCheck.verdict:type_name -> provider.contract.v1.HostCheck.Verdict
+	3,   // 91: provider.contract.v1.DomainClaim.status:type_name -> provider.contract.v1.DomainClaim.Status
+	63,  // 92: provider.contract.v1.Identity.details:type_name -> provider.contract.v1.Detail
+	83,  // 93: provider.contract.v1.Promotion.builds:type_name -> provider.contract.v1.Promotion.BuildsEntry
+	100, // 94: provider.contract.v1.Promotion.propagation:type_name -> common.progress.v1.Propagation
+	65,  // 95: provider.contract.v1.PromotionHistoryEntry.promotion:type_name -> provider.contract.v1.Promotion
+	42,  // 96: provider.contract.v1.ListPromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	66,  // 97: provider.contract.v1.ListPromotionsResponse.promotions:type_name -> provider.contract.v1.PromotionHistoryEntry
+	42,  // 98: provider.contract.v1.RollbackRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	65,  // 99: provider.contract.v1.RollbackResponse.promoted:type_name -> provider.contract.v1.Promotion
+	96,  // 100: provider.contract.v1.RemoveStalePromotionsRequest.environment:type_name -> common.environment.v1.Environment
+	42,  // 101: provider.contract.v1.RemoveStalePromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	1,   // 102: provider.contract.v1.Refusal.code:type_name -> provider.contract.v1.RefusalCode
+	78,  // 103: provider.contract.v1.DescribeConnectorTargetResponse.installed:type_name -> provider.contract.v1.InstalledConnector
+	5,   // 104: provider.contract.v1.ProviderService.Configure:input_type -> provider.contract.v1.ConfigureRequest
+	29,  // 105: provider.contract.v1.ProviderService.Deploy:input_type -> provider.contract.v1.DeployRequest
+	32,  // 106: provider.contract.v1.ProviderService.Bootstrap:input_type -> provider.contract.v1.BootstrapRequest
+	33,  // 107: provider.contract.v1.ProviderService.DescribeBootstrap:input_type -> provider.contract.v1.DescribeBootstrapRequest
+	37,  // 108: provider.contract.v1.ProviderService.GetCredentialPermissions:input_type -> provider.contract.v1.CredentialPermissionsRequest
+	43,  // 109: provider.contract.v1.ProviderService.RemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
+	43,  // 110: provider.contract.v1.ProviderService.PlanRemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
+	44,  // 111: provider.contract.v1.ProviderService.RemoveEnvironment:input_type -> provider.contract.v1.RemoveEnvironmentRequest
+	45,  // 112: provider.contract.v1.ProviderService.RemoveProject:input_type -> provider.contract.v1.ProjectRequest
+	45,  // 113: provider.contract.v1.ProviderService.PlanRemoveProject:input_type -> provider.contract.v1.ProjectRequest
+	46,  // 114: provider.contract.v1.ProviderService.ListEnvironments:input_type -> provider.contract.v1.ListEnvironmentsRequest
+	48,  // 115: provider.contract.v1.ProviderService.GetEnvironment:input_type -> provider.contract.v1.GetEnvironmentRequest
+	51,  // 116: provider.contract.v1.ProviderService.EnsurePreviewAlias:input_type -> provider.contract.v1.EnsurePreviewAliasRequest
+	53,  // 117: provider.contract.v1.ProviderService.ForgetPreviewAlias:input_type -> provider.contract.v1.ForgetPreviewAliasRequest
+	55,  // 118: provider.contract.v1.ProviderService.Preflight:input_type -> provider.contract.v1.PreflightRequest
+	67,  // 119: provider.contract.v1.ProviderService.ListPromotions:input_type -> provider.contract.v1.ListPromotionsRequest
+	69,  // 120: provider.contract.v1.ProviderService.Rollback:input_type -> provider.contract.v1.RollbackRequest
+	71,  // 121: provider.contract.v1.ProviderService.RemoveStalePromotions:input_type -> provider.contract.v1.RemoveStalePromotionsRequest
+	8,   // 122: provider.contract.v1.ProviderService.UsePreviewWildcard:input_type -> provider.contract.v1.UsePreviewWildcardRequest
+	9,   // 123: provider.contract.v1.ProviderService.GetPreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
+	9,   // 124: provider.contract.v1.ProviderService.PlanRemovePreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
+	9,   // 125: provider.contract.v1.ProviderService.RemovePreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
+	12,  // 126: provider.contract.v1.ProviderService.AddHostname:input_type -> provider.contract.v1.HostnameRequest
+	12,  // 127: provider.contract.v1.ProviderService.RemoveHostname:input_type -> provider.contract.v1.HostnameRequest
+	12,  // 128: provider.contract.v1.ProviderService.GetHostnameStatus:input_type -> provider.contract.v1.HostnameRequest
+	76,  // 129: provider.contract.v1.ProviderService.DescribeConnectorTarget:input_type -> provider.contract.v1.DescribeConnectorTargetRequest
+	79,  // 130: provider.contract.v1.ProviderService.InstallConnector:input_type -> provider.contract.v1.InstallConnectorRequest
+	80,  // 131: provider.contract.v1.ProviderService.RemoveConnector:input_type -> provider.contract.v1.RemoveConnectorRequest
+	30,  // 132: provider.contract.v1.ProviderService.Shape:input_type -> provider.contract.v1.ShapeRequest
+	73,  // 133: provider.contract.v1.ProviderService.Confirm:input_type -> provider.contract.v1.ConfirmRequest
+	6,   // 134: provider.contract.v1.ProviderService.Configure:output_type -> provider.contract.v1.ConfigureResponse
+	101, // 135: provider.contract.v1.ProviderService.Deploy:output_type -> common.progress.v1.OperationEvent
+	101, // 136: provider.contract.v1.ProviderService.Bootstrap:output_type -> common.progress.v1.OperationEvent
+	34,  // 137: provider.contract.v1.ProviderService.DescribeBootstrap:output_type -> provider.contract.v1.DescribeBootstrapResponse
+	38,  // 138: provider.contract.v1.ProviderService.GetCredentialPermissions:output_type -> provider.contract.v1.CredentialPermissionsResponse
+	101, // 139: provider.contract.v1.ProviderService.RemoveBootstrap:output_type -> common.progress.v1.OperationEvent
+	98,  // 140: provider.contract.v1.ProviderService.PlanRemoveBootstrap:output_type -> common.plan.v1.ChangePlan
+	101, // 141: provider.contract.v1.ProviderService.RemoveEnvironment:output_type -> common.progress.v1.OperationEvent
+	101, // 142: provider.contract.v1.ProviderService.RemoveProject:output_type -> common.progress.v1.OperationEvent
+	98,  // 143: provider.contract.v1.ProviderService.PlanRemoveProject:output_type -> common.plan.v1.ChangePlan
+	47,  // 144: provider.contract.v1.ProviderService.ListEnvironments:output_type -> provider.contract.v1.ListEnvironmentsResponse
+	49,  // 145: provider.contract.v1.ProviderService.GetEnvironment:output_type -> provider.contract.v1.GetEnvironmentResponse
+	52,  // 146: provider.contract.v1.ProviderService.EnsurePreviewAlias:output_type -> provider.contract.v1.EnsurePreviewAliasResponse
+	54,  // 147: provider.contract.v1.ProviderService.ForgetPreviewAlias:output_type -> provider.contract.v1.ForgetPreviewAliasResponse
+	57,  // 148: provider.contract.v1.ProviderService.Preflight:output_type -> provider.contract.v1.PreflightResponse
+	68,  // 149: provider.contract.v1.ProviderService.ListPromotions:output_type -> provider.contract.v1.ListPromotionsResponse
+	70,  // 150: provider.contract.v1.ProviderService.Rollback:output_type -> provider.contract.v1.RollbackResponse
+	101, // 151: provider.contract.v1.ProviderService.RemoveStalePromotions:output_type -> common.progress.v1.OperationEvent
+	101, // 152: provider.contract.v1.ProviderService.UsePreviewWildcard:output_type -> common.progress.v1.OperationEvent
+	10,  // 153: provider.contract.v1.ProviderService.GetPreviewWildcard:output_type -> provider.contract.v1.GetPreviewWildcardResponse
+	98,  // 154: provider.contract.v1.ProviderService.PlanRemovePreviewWildcard:output_type -> common.plan.v1.ChangePlan
+	101, // 155: provider.contract.v1.ProviderService.RemovePreviewWildcard:output_type -> common.progress.v1.OperationEvent
+	101, // 156: provider.contract.v1.ProviderService.AddHostname:output_type -> common.progress.v1.OperationEvent
+	101, // 157: provider.contract.v1.ProviderService.RemoveHostname:output_type -> common.progress.v1.OperationEvent
+	13,  // 158: provider.contract.v1.ProviderService.GetHostnameStatus:output_type -> provider.contract.v1.GetHostnameStatusResponse
+	77,  // 159: provider.contract.v1.ProviderService.DescribeConnectorTarget:output_type -> provider.contract.v1.DescribeConnectorTargetResponse
+	101, // 160: provider.contract.v1.ProviderService.InstallConnector:output_type -> common.progress.v1.OperationEvent
+	101, // 161: provider.contract.v1.ProviderService.RemoveConnector:output_type -> common.progress.v1.OperationEvent
+	102, // 162: provider.contract.v1.ProviderService.Shape:output_type -> provider.cost.v1.ResourceSet
+	74,  // 163: provider.contract.v1.ProviderService.Confirm:output_type -> provider.contract.v1.ConfirmResponse
+	134, // [134:164] is the sub-list for method output_type
+	104, // [104:134] is the sub-list for method input_type
+	104, // [104:104] is the sub-list for extension type_name
+	104, // [104:104] is the sub-list for extension extendee
+	0,   // [0:104] is the sub-list for field type_name
 }
 
 func init() { file_provider_contract_v1_contract_proto_init() }
@@ -6144,6 +6163,7 @@ func file_provider_contract_v1_contract_proto_init() {
 		(*ManifestResource_Bucket)(nil),
 		(*ManifestResource_Topic)(nil),
 		(*ManifestResource_Kv)(nil),
+		(*ManifestResource_Realtime)(nil),
 	}
 	file_provider_contract_v1_contract_proto_msgTypes[28].OneofWrappers = []any{}
 	type x struct{}

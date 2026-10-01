@@ -175,6 +175,8 @@ var refusedInDev = map[resourcesv1.ResourceType]string{
 	resourcesv1.ResourceType_RESOURCE_TYPE_TASK:     topicsTasksAndWorkers,
 	resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER: topicsTasksAndWorkers,
 	resourcesv1.ResourceType_RESOURCE_TYPE_WORKER:   topicsTasksAndWorkers,
+	// TODO(#1510): ocel dev runs the realtime gateway in-process; until then it refuses a realtime resource.
+	resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME: "realtime channels",
 }
 
 func label(kind resourcesv1.ResourceType) string {
