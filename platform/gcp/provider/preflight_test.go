@@ -52,15 +52,15 @@ func TestADeployDeclaringAStoreIsRefusedUntilTheTierHasItsNetwork(t *testing.T) 
 	}
 }
 
-func TestADeployDeclaringAStoreNoNodeHoldsIsRefusedBeforeAnythingIsRead(t *testing.T) {
+func TestADeployDeclaringAStoreAbove32GBIsRefusedBeforeAnythingIsRead(t *testing.T) {
 	served := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		t.Errorf("preflight called %s %s before refusing a store no node holds", r.Method, r.URL.Path)
+		t.Errorf("preflight called %s %s before refusing a store above 32gb", r.Method, r.URL.Path)
 	}))
 	t.Cleanup(served.Close)
 
 	err := pushing(t, served.URL).PreflightDeploy(context.Background(), declaringAStore(64<<30))
-	if err == nil || !strings.Contains(err.Error(), "highmem-xlarge") {
-		t.Errorf("PreflightDeploy() = %v, want the store refused naming the largest node", err)
+	if err == nil || !strings.Contains(err.Error(), "32gb") {
+		t.Errorf("PreflightDeploy() = %v, want the store refused naming the 32gb limit", err)
 	}
 }
 

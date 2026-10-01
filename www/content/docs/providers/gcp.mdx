@@ -124,8 +124,8 @@ gcloud services enable compute.googleapis.com certificatemanager.googleapis.com 
 
 `kv("cache")` runs as one Memorystore for Valkey instance per store: cluster mode off, one
 node, no replica. The node is the smallest whose keyspace holds the store's `memory`, from
-`custom-pico` (1.08 GB, about $22 a month in `us-central1`) up to `highmem-xlarge`
-(46.4 GB), and `maxmemory` is set to `memory`. `eviction` is sent as declared, and as
+`custom-pico` (1.08 GB, about $22 a month in `us-central1`) up to `highmem-xlarge`, and
+`maxmemory` is set to `memory`. A store above 32gb is refused when the deploy is planned. `eviction` is sent as declared, and as
 `noeviction` when you leave it out, since Memorystore's own default is `volatile-lru`.
 `version` `"8"` runs Valkey 8.0 and `"9"` runs 9.1.
 

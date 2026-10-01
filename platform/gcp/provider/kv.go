@@ -68,13 +68,12 @@ func readKVStore(resource provider.Resource) (kvStore, error) {
 		return kvStore{}, refusal.Refuse(refusal.CodeInvalid,
 			"kv %s asks for version %q, and Memorystore runs a store at version 8 or 9", resource.Name, version)
 	}
-	at := slices.IndexFunc(memorystoreNodes, func(node memorystoreNode) bool { return node.keyspace >= spec.MemoryBytes })
-	if at < 0 {
-		largest := memorystoreNodes[len(memorystoreNodes)-1]
+	if spec.MemoryBytes > kvstore.MaxMemoryBytes {
 		return kvStore{}, refusal.Refuse(refusal.CodeInvalid,
-			"kv %s declares %d bytes of memory, and the largest single Memorystore node, %s, holds %d: declare less",
-			resource.Name, spec.MemoryBytes, largest.shape, largest.keyspace)
+			"kv %s declares %d bytes of memory, and a store holds at most %dgb, on one Memorystore node: declare %dgb or less",
+			resource.Name, spec.MemoryBytes, kvstore.MaxMemoryBytes>>30, kvstore.MaxMemoryBytes>>30)
 	}
+	at := slices.IndexFunc(memorystoreNodes, func(node memorystoreNode) bool { return node.keyspace >= spec.MemoryBytes })
 	return kvStore{version: engine, node: memorystoreNodes[at], memory: spec.MemoryBytes, eviction: cmp.Or(spec.Eviction, engineEviction)}, nil
 }
 
