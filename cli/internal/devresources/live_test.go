@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
-	projectpkg "github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -18,20 +18,20 @@ func TestDockerAWorkerWhoseLastTaskIsDeletedNoLongerRuns(t *testing.T) {
 		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
 	}
 	ctx := context.Background()
-	const project = "devresources-live-forget-test"
+	const projectName = "devresources-live-forget-test"
 	t.Cleanup(func() {
 		engine, err := docker.Open(ctx)
 		if err != nil {
 			return
 		}
-		_ = engine.Wipe(ctx, docker.ProjectLabels(project))
+		_ = engine.Wipe(ctx, docker.ProjectLabels(projectName))
 		_ = engine.Close()
 	})
 	dir := t.TempDir()
-	stack := devresources.New(project, devresources.Options{
+	stack := devresources.New(projectName, devresources.Options{
 		Open:     docker.Open,
 		StateDir: t.TempDir(),
-		Project:  &projectpkg.Project{Dir: dir, Slug: project, Apps: []projectpkg.App{{Name: "web", Path: "."}}},
+		Project:  &project.Project{Dir: dir, Slug: projectName, Apps: []project.App{{Name: "web", Path: "."}}},
 	})
 	t.Cleanup(func() { _ = stack.Close(ctx) })
 
@@ -39,13 +39,13 @@ func TestDockerAWorkerWhoseLastTaskIsDeletedNoLongerRuns(t *testing.T) {
 	if _, err := stack.Resolve(ctx, []declaration.Resource{greet}); err != nil {
 		t.Fatalf("Resolve = %v", err)
 	}
-	if workers := stack.Workers(); len(workers) != 1 {
+	if workers := stack.Queue().Workers(); len(workers) != 1 {
 		t.Fatalf("workers = %+v, want the default worker serving greet", workers)
 	}
 	if _, err := stack.Resolve(ctx, nil); err != nil {
 		t.Fatalf("Resolve with nothing declared = %v", err)
 	}
-	if workers := stack.Workers(); len(workers) != 0 {
+	if workers := stack.Queue().Workers(); len(workers) != 0 {
 		t.Fatalf("workers = %+v after the last task was deleted, want none to run", workers)
 	}
 }

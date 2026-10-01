@@ -112,15 +112,15 @@ func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployed
 		}
 		if status != "" {
 			e.reportAttempt(Attempt{
-				Topic:     deployed.topicName,
-				Consumer:  deployed.consumer.GetName(),
-				Task:      isTask(deployed.topic),
-				Execution: claimed.execution,
-				Number:    claimed.attempt,
-				Of:        claimed.maxAttempts,
-				Status:    status,
-				Took:      took,
-				Reason:    res.reason,
+				Topic:       deployed.topicName,
+				Consumer:    deployed.consumer.GetName(),
+				IsTask:      isTask(deployed.topic),
+				Execution:   claimed.execution,
+				Number:      claimed.attempt,
+				MaxAttempts: claimed.maxAttempts,
+				Status:      status,
+				Took:        took,
+				Reason:      res.reason,
 			})
 		}
 	}

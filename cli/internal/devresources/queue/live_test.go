@@ -1,4 +1,4 @@
-package topic_test
+package queue_test
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
-	"github.com/ocelhq/ocel/cli/internal/devresources/topic"
+	"github.com/ocelhq/ocel/cli/internal/devresources/queue"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
@@ -75,14 +75,14 @@ func (p liveProject) greet() declaration.Resource {
 	return declaration.Resource{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: "greet", Task: &resourcesv1.TaskConfig{}, Source: p.source}
 }
 
-func (p liveProject) backend(t *testing.T, report func(string)) *topic.Backend {
+func (p liveProject) backend(t *testing.T, report func(string)) *queue.Backend {
 	t.Helper()
-	backend := topic.New(docker.Open, p.stateDir, p.cfg, report)
+	backend := queue.New(docker.Open, p.stateDir, p.cfg, report)
 	t.Cleanup(func() { _ = backend.Close(context.Background(), true) })
 	return backend
 }
 
-func tasksOf(t *testing.T, backend *topic.Backend) taskv1connect.TaskServiceClient {
+func tasksOf(t *testing.T, backend *queue.Backend) taskv1connect.TaskServiceClient {
 	t.Helper()
 	mux := http.NewServeMux()
 	backend.Routes(mux, func(next http.Handler) http.Handler { return next })
@@ -133,7 +133,7 @@ func TestDockerATriggeredTaskRunsOnTheWorkerItIsServedFromAndItsRunIsReported(t 
 		_, _ = io.WriteString(w, `"hello ada"`)
 	}))
 	t.Cleanup(worker.Close)
-	if err := backend.Serve(ctx, map[string]string{"worker": worker.URL}); err != nil {
+	if err := backend.DeliverTo(ctx, map[string]string{"worker": worker.URL}); err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
 
@@ -156,7 +156,7 @@ func TestDockerARunOutlivesTheDevSessionThatTriggeredIt(t *testing.T) {
 	live := newLiveProject(t, "topic-live-restart-test")
 	ctx := context.Background()
 
-	first := topic.New(docker.Open, live.stateDir, live.cfg, func(string) {})
+	first := queue.New(docker.Open, live.stateDir, live.cfg, func(string) {})
 	if _, err := first.Resolve(ctx, live.name, []declaration.Resource{live.greet()}); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}

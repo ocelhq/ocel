@@ -1,4 +1,4 @@
-package topic
+package queue
 
 import (
 	"context"
@@ -19,66 +19,58 @@ type tasks struct{ backend *Backend }
 
 type topics struct{ backend *Backend }
 
-func callTasks[Req, Res any](ctx context.Context, b *Backend, req *Req, call func(pgmq.Tasks, context.Context, *Req) (*Res, error)) (*Res, error) {
+func call[Service, Req, Res any](ctx context.Context, b *Backend, req *Req, service func(*pgmq.Engine) Service, method func(Service, context.Context, *Req) (*Res, error)) (*Res, error) {
 	engine, err := b.current()
 	if err != nil {
 		return nil, err
 	}
-	return call(engine.Tasks(), ctx, req)
-}
-
-func callTopics[Req, Res any](ctx context.Context, b *Backend, req *Req, call func(pgmq.Topics, context.Context, *Req) (*Res, error)) (*Res, error) {
-	engine, err := b.current()
-	if err != nil {
-		return nil, err
-	}
-	return call(engine.Topics(), ctx, req)
+	return method(service(engine), ctx, req)
 }
 
 func (t tasks) Trigger(ctx context.Context, req *taskv1.TriggerRequest) (*taskv1.TriggerResponse, error) {
-	return callTasks(ctx, t.backend, req, pgmq.Tasks.Trigger)
+	return call(ctx, t.backend, req, (*pgmq.Engine).Tasks, pgmq.Tasks.Trigger)
 }
 
 func (t tasks) BatchTrigger(ctx context.Context, req *taskv1.BatchTriggerRequest) (*taskv1.BatchTriggerResponse, error) {
-	return callTasks(ctx, t.backend, req, pgmq.Tasks.BatchTrigger)
+	return call(ctx, t.backend, req, (*pgmq.Engine).Tasks, pgmq.Tasks.BatchTrigger)
 }
 
 func (t tasks) RetrieveRun(ctx context.Context, req *taskv1.RetrieveRunRequest) (*taskv1.RetrieveRunResponse, error) {
-	return callTasks(ctx, t.backend, req, pgmq.Tasks.RetrieveRun)
+	return call(ctx, t.backend, req, (*pgmq.Engine).Tasks, pgmq.Tasks.RetrieveRun)
 }
 
 func (t tasks) ListRuns(ctx context.Context, req *taskv1.ListRunsRequest) (*taskv1.ListRunsResponse, error) {
-	return callTasks(ctx, t.backend, req, pgmq.Tasks.ListRuns)
+	return call(ctx, t.backend, req, (*pgmq.Engine).Tasks, pgmq.Tasks.ListRuns)
 }
 
 func (t tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*taskv1.CancelRunResponse, error) {
-	return callTasks(ctx, t.backend, req, pgmq.Tasks.CancelRun)
+	return call(ctx, t.backend, req, (*pgmq.Engine).Tasks, pgmq.Tasks.CancelRun)
 }
 
 func (t tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*taskv1.ReplayRunResponse, error) {
-	return callTasks(ctx, t.backend, req, pgmq.Tasks.ReplayRun)
+	return call(ctx, t.backend, req, (*pgmq.Engine).Tasks, pgmq.Tasks.ReplayRun)
 }
 
 func (t tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunRequest) (*taskv1.RescheduleRunResponse, error) {
-	return callTasks(ctx, t.backend, req, pgmq.Tasks.RescheduleRun)
+	return call(ctx, t.backend, req, (*pgmq.Engine).Tasks, pgmq.Tasks.RescheduleRun)
 }
 
 func (t topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.SendResponse, error) {
-	return callTopics(ctx, t.backend, req, pgmq.Topics.Send)
+	return call(ctx, t.backend, req, (*pgmq.Engine).Topics, pgmq.Topics.Send)
 }
 
 func (t topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLettersRequest) (*topicv1.ListDeadLettersResponse, error) {
-	return callTopics(ctx, t.backend, req, pgmq.Topics.ListDeadLetters)
+	return call(ctx, t.backend, req, (*pgmq.Engine).Topics, pgmq.Topics.ListDeadLetters)
 }
 
 func (t topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDeadLettersRequest) (*topicv1.RedriveDeadLettersResponse, error) {
-	return callTopics(ctx, t.backend, req, pgmq.Topics.RedriveDeadLetters)
+	return call(ctx, t.backend, req, (*pgmq.Engine).Topics, pgmq.Topics.RedriveDeadLetters)
 }
 
 func (t topics) PurgeDeadLetters(ctx context.Context, req *topicv1.PurgeDeadLettersRequest) (*topicv1.PurgeDeadLettersResponse, error) {
-	return callTopics(ctx, t.backend, req, pgmq.Topics.PurgeDeadLetters)
+	return call(ctx, t.backend, req, (*pgmq.Engine).Topics, pgmq.Topics.PurgeDeadLetters)
 }
 
 func (t topics) CountDeadLetters(ctx context.Context, req *topicv1.CountDeadLettersRequest) (*topicv1.CountDeadLettersResponse, error) {
-	return callTopics(ctx, t.backend, req, pgmq.Topics.CountDeadLetters)
+	return call(ctx, t.backend, req, (*pgmq.Engine).Topics, pgmq.Topics.CountDeadLetters)
 }

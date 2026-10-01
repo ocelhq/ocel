@@ -27,8 +27,25 @@ const (
 	maxUnorderedConsumers = 1000
 )
 
-func PlaceConsumers(cfg *project.Project, resources []declaration.Resource) (map[string]*contractv1.ManifestTopic, []*contractv1.ManifestWorker, error) {
-	return placeConsumers(appsOf(cfg.Dir, cfg.Apps, nil, nil), declaredResources(cfg.Dir, resources), nil)
+type Placement struct {
+	Topics  map[string]*contractv1.ManifestTopic
+	Workers []*contractv1.ManifestWorker
+	Sources map[string][]string
+}
+
+func PlaceConsumers(cfg *project.Project, resources []declaration.Resource) (Placement, error) {
+	declarations := declaredResources(cfg.Dir, resources)
+	topics, workers, err := placeConsumers(appsOf(cfg.Dir, cfg.Apps, nil, nil), declarations, nil)
+	if err != nil {
+		return Placement{}, err
+	}
+	sources := map[string][]string{}
+	for i, d := range declarations {
+		if consumer := d.consumer(); consumer != nil {
+			sources[consumer.GetWorker()] = append(sources[consumer.GetWorker()], resources[i].Source)
+		}
+	}
+	return Placement{Topics: topics, Workers: workers, Sources: sources}, nil
 }
 
 func placeConsumers(apps []app, declarations []declaredResource, ceilings []provider.WorkerCeiling) (map[string]*contractv1.ManifestTopic, []*contractv1.ManifestWorker, error) {

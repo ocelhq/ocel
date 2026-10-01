@@ -23,8 +23,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/kv"
 	"github.com/ocelhq/ocel/cli/internal/devresources/postgres"
-	"github.com/ocelhq/ocel/cli/internal/devresources/topic"
-	projectpkg "github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/devresources/queue"
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -34,12 +34,14 @@ type Backend struct {
 	Resolve func(ctx context.Context, project string, resources []declaration.Resource) ([]binding.Resolved, error)
 	Routes  func(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption)
 	Close   func(ctx context.Context, stopContainers bool) error
+
+	declaredLastPass bool
 }
 
 type Options struct {
 	Open       docker.OpenFunc
 	StateDir   string
-	Project    *projectpkg.Project
+	Project    *project.Project
 	AppOrigins func() []string
 	Announce   func(line string)
 }
@@ -61,17 +63,16 @@ type Resources struct {
 	project  string
 	announce func(line string)
 
-	backends []Backend
-	topics   *topic.Backend
+	backends []*Backend
+	queue    *queue.Backend
 
 	mu        sync.Mutex
 	engine    docker.Engine
 	usersLock *flock.Flock
 	printed   map[string]struct{}
-	resolving map[int]bool
 }
 
-func New(project string, opts Options) *Resources {
+func New(projectName string, opts Options) *Resources {
 	if opts.Announce == nil {
 		opts.Announce = func(string) {}
 	}
@@ -79,9 +80,9 @@ func New(project string, opts Options) *Resources {
 		opts.AppOrigins = func() []string { return nil }
 	}
 	if opts.Project == nil {
-		opts.Project = &projectpkg.Project{}
+		opts.Project = &project.Project{}
 	}
-	r := &Resources{project: project, announce: opts.Announce, printed: map[string]struct{}{}, resolving: map[int]bool{}}
+	r := &Resources{project: projectName, announce: opts.Announce, printed: map[string]struct{}{}}
 	open := opts.Open
 	opts.Open = func(ctx context.Context) (docker.Engine, error) {
 		r.mu.Lock()
@@ -110,19 +111,19 @@ func New(project string, opts Options) *Resources {
 	servers := postgres.New(opts.Open, secrets)
 	stores := kv.New(opts.Open, secrets)
 	buckets := bucket.New(opts.Open, secrets, opts.AppOrigins)
-	r.topics = topic.New(opts.Open, secrets, opts.Project, opts.Announce)
-	r.backends = []Backend{
+	r.queue = queue.New(opts.Open, secrets, opts.Project, opts.Announce)
+	r.backends = []*Backend{
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}, Resolve: servers.Resolve, Close: servers.Close},
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_KV}, Resolve: stores.Resolve, Close: stores.Close},
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET}, Resolve: buckets.Resolve, Routes: buckets.Routes, Close: buckets.Close},
-		{Kinds: topic.Kinds, Resolve: r.topics.Resolve, Routes: r.topics.Routes, Close: r.topics.Close},
+		{Kinds: queue.Kinds, Resolve: r.queue.Resolve, Routes: r.queue.Routes, Close: r.queue.Close},
 	}
 	return r
 }
 
 func ProjectName(dir string) string {
 	sum := sha256.Sum256([]byte(filepath.Clean(dir)))
-	return strings.Trim(projectpkg.DeriveSlug(filepath.Base(dir)), "-") + "-" + hex.EncodeToString(sum[:4])
+	return strings.Trim(project.DeriveSlug(filepath.Base(dir)), "-") + "-" + hex.EncodeToString(sum[:4])
 }
 
 func (r *Resources) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
@@ -133,41 +134,37 @@ func (r *Resources) Routes(mux *http.ServeMux, guard func(http.Handler) http.Han
 	}
 }
 
-func (r *Resources) Workers() []topic.Worker { return r.topics.Workers() }
+func (r *Resources) Queue() *queue.Backend { return r.queue }
 
-func (r *Resources) ServeWorkers(ctx context.Context, urls map[string]string) error {
-	return r.topics.Serve(ctx, urls)
-}
-
-func (r *Resources) backendOf(kind resourcesv1.ResourceType) (int, bool) {
-	for i, backend := range r.backends {
+func (r *Resources) backendOf(kind resourcesv1.ResourceType) (*Backend, bool) {
+	for _, backend := range r.backends {
 		if slices.Contains(backend.Kinds, kind) {
-			return i, true
+			return backend, true
 		}
 	}
-	return 0, false
+	return nil, false
 }
 
 func (r *Resources) Resolve(ctx context.Context, resources []declaration.Resource) ([]binding.Resolved, error) {
-	byBackend := map[int][]declaration.Resource{}
+	byBackend := map[*Backend][]declaration.Resource{}
 	for _, resource := range resources {
 		if refused, ok := refusedInDev[resource.Type]; ok {
 			return nil, fmt.Errorf("%s %q: ocel dev does not run %s yet", label(resource.Type), resource.Name, refused)
 		}
-		i, served := r.backendOf(resource.Type)
+		backend, served := r.backendOf(resource.Type)
 		if !served {
 			return nil, fmt.Errorf("%s %q: ocel dev serves no %s", label(resource.Type), resource.Name, resource.Type)
 		}
-		byBackend[i] = append(byBackend[i], resource)
+		byBackend[backend] = append(byBackend[backend], resource)
 	}
 
 	var out []binding.Resolved
-	for i, backend := range r.backends {
-		declared, resolvedBefore := byBackend[i], r.isResolving(i)
-		if len(declared) == 0 && !resolvedBefore {
+	for _, backend := range r.backends {
+		declared := byBackend[backend]
+		if len(declared) == 0 && !r.wasDeclaredLastPass(backend) {
 			continue
 		}
-		r.markResolving(i, len(declared) > 0)
+		r.recordDeclaredThisPass(backend, len(declared) > 0)
 		resolved, err := backend.Resolve(ctx, r.project, declared)
 		if err != nil {
 			var unreachable *docker.Unreachable
@@ -186,16 +183,16 @@ func (r *Resources) Resolve(ctx context.Context, resources []declaration.Resourc
 	return out, nil
 }
 
-func (r *Resources) isResolving(backend int) bool {
+func (r *Resources) wasDeclaredLastPass(backend *Backend) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.resolving[backend]
+	return backend.declaredLastPass
 }
 
-func (r *Resources) markResolving(backend int, declared bool) {
+func (r *Resources) recordDeclaredThisPass(backend *Backend, declared bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.resolving[backend] = declared
+	backend.declaredLastPass = declared
 }
 
 var refusedInDev = map[resourcesv1.ResourceType]string{
@@ -267,7 +264,7 @@ func (r *Resources) isLastUser() (bool, error) {
 	return isLast, nil
 }
 
-func Reset(ctx context.Context, open docker.OpenFunc, stateDir, project string) error {
+func Reset(ctx context.Context, open docker.OpenFunc, stateDir, projectName string) error {
 	lock, err := openUsersLock(stateDir)
 	if err != nil {
 		return err
@@ -286,7 +283,7 @@ func Reset(ctx context.Context, open docker.OpenFunc, stateDir, project string) 
 		return err
 	}
 	defer func() { _ = engine.Close() }()
-	if err := engine.Wipe(ctx, docker.ProjectLabels(project)); err != nil {
+	if err := engine.Wipe(ctx, docker.ProjectLabels(projectName)); err != nil {
 		return err
 	}
 	if err := os.RemoveAll(filepath.Join(stateDir, secretsDir)); err != nil {

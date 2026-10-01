@@ -1,7 +1,6 @@
-package topic
+package queue
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -30,13 +29,12 @@ import (
 )
 
 const (
-	backend       = "queue"
-	passwordFile  = "queue-database-password"
-	superuser     = "postgres"
-	serverPort    = 5432
-	dataPath      = "/var/lib/postgresql"
-	readyIn       = 2 * time.Minute
-	defaultWorker = "worker"
+	backend      = "queue"
+	passwordFile = "queue-database-password"
+	superuser    = "postgres"
+	serverPort   = 5432
+	dataPath     = "/var/lib/postgresql"
+	readyIn      = 2 * time.Minute
 )
 
 var Kinds = []resourcesv1.ResourceType{
@@ -73,7 +71,7 @@ func New(open docker.OpenFunc, secretsDir string, cfg *project.Project, report f
 }
 
 func (b *Backend) Resolve(ctx context.Context, project string, resources []declaration.Resource) ([]binding.Resolved, error) {
-	topics, workers, err := manifest.PlaceConsumers(b.cfg, resources)
+	placement, err := manifest.PlaceConsumers(b.cfg, resources)
 	if err != nil {
 		return nil, err
 	}
@@ -88,12 +86,15 @@ func (b *Backend) Resolve(ctx context.Context, project string, resources []decla
 	if err != nil {
 		return nil, err
 	}
-	b.topics = topics
+	b.topics = placement.Topics
 	b.workerConfigs = map[string]*contractv1.ManifestWorker{}
-	for _, worker := range workers {
+	b.workers = nil
+	for _, worker := range placement.Workers {
 		b.workerConfigs[worker.GetName()] = worker
+		if sources := placement.Sources[worker.GetName()]; len(sources) > 0 {
+			b.workers = append(b.workers, Worker{Name: worker.GetName(), Sources: sources})
+		}
 	}
-	b.workers = servedWorkers(resources)
 	if err := engine.Apply(ctx, b.deployment()); err != nil {
 		return nil, err
 	}
@@ -111,34 +112,6 @@ func (b *Backend) Resolve(ctx context.Context, project string, resources []decla
 		out = append(out, bound)
 	}
 	return out, nil
-}
-
-func servedWorkers(resources []declaration.Resource) []Worker {
-	sources := map[string][]string{}
-	for _, resource := range resources {
-		var worker string
-		switch {
-		case resource.Task != nil:
-			worker = resource.Task.GetWorker()
-		case resource.Consumer != nil:
-			worker = resource.Consumer.GetWorker()
-		default:
-			continue
-		}
-		name := cmp.Or(worker, defaultWorker)
-		sources[name] = append(sources[name], resource.Source)
-	}
-	var workers []Worker
-	for _, name := range slices.Sorted(func(yield func(string) bool) {
-		for name := range sources {
-			if !yield(name) {
-				return
-			}
-		}
-	}) {
-		workers = append(workers, Worker{Name: name, Sources: sources[name]})
-	}
-	return workers
 }
 
 func bind(resource declaration.Resource) (binding.Resolved, bool, error) {
@@ -171,7 +144,7 @@ func (b *Backend) Workers() []Worker {
 	return slices.Clone(b.workers)
 }
 
-func (b *Backend) Serve(ctx context.Context, urls map[string]string) error {
+func (b *Backend) DeliverTo(ctx context.Context, urls map[string]string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.workerURLs = urls
