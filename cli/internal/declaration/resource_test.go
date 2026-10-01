@@ -179,3 +179,30 @@ func TestParseRecordsTopicsTasksConsumersAndWorkersWithTheirConfig(t *testing.T)
 		})
 	}
 }
+
+func TestParseRecordsAKVStoreAndItsEntries(t *testing.T) {
+	t.Parallel()
+
+	res, err := Parse(&resourcesv1.DeclareRequest{
+		Resource: &resourcesv1.ResourceIdentifier{Name: "cache", Type: resourcesv1.ResourceType_RESOURCE_TYPE_KV},
+		Config: &resourcesv1.DeclareRequest_Kv{Kv: &resourcesv1.KvConfig{
+			Eviction: "allkeys-lru",
+			Memory:   "256mb",
+			Entries: []*resourcesv1.KvEntry{
+				{Name: "requests", Pattern: "requests/:userId", Shape: resourcesv1.KvShape_KV_SHAPE_COUNTER, Source: "src/cache.ts:4"},
+				{Name: "session", Pattern: "session/:id", Shape: resourcesv1.KvShape_KV_SHAPE_JSON, Source: "src/cache.ts:5"},
+			},
+		}},
+		Source: "src/cache.ts:2",
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if res.Type != resourcesv1.ResourceType_RESOURCE_TYPE_KV || res.Name != "cache" || res.Source != "src/cache.ts:2" {
+		t.Errorf("Parse = %+v, want kv store cache declared at src/cache.ts:2", res)
+	}
+	entries := res.KV.GetEntries()
+	if res.KV.GetEviction() != "allkeys-lru" || len(entries) != 2 || entries[1].GetPattern() != "session/:id" || entries[1].GetSource() != "src/cache.ts:5" {
+		t.Errorf("Parse KV = %v, want the store's eviction and both entries kept with their patterns and lines", res.KV)
+	}
+}
