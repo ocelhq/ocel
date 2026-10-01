@@ -110,7 +110,7 @@ func recordID(purpose provider.RecordPurpose, topic, key string) string {
 }
 
 func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord) (provider.ExpiringRecord, bool, error) {
-	scope, err := s.scopeDocument()
+	doc, err := s.recordDocument(record)
 	if err != nil {
 		return provider.ExpiringRecord{}, false, err
 	}
@@ -118,7 +118,6 @@ func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord)
 	if err != nil {
 		return provider.ExpiringRecord{}, false, err
 	}
-	doc := scope.Collection(recordsCollection).Doc(recordID(record.Purpose, record.Topic, record.Key))
 	kept := record
 	var created bool
 	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
@@ -143,6 +142,32 @@ func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord)
 		return provider.ExpiringRecord{}, false, fmt.Errorf("ensure the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
 	}
 	return kept, created, nil
+}
+
+func (s Store) recordDocument(record provider.ExpiringRecord) (*firestore.DocumentRef, error) {
+	scope, err := s.scopeDocument()
+	if err != nil {
+		return nil, err
+	}
+	return scope.Collection(recordsCollection).Doc(recordID(record.Purpose, record.Topic, record.Key)), nil
+}
+
+func (s Store) writeRecord(ctx context.Context, record provider.ExpiringRecord) error {
+	doc, err := s.recordDocument(record)
+	if err != nil {
+		return err
+	}
+	if _, err := doc.Set(ctx, recordDocument{Value: string(record.Value), ExpiresAt: record.ExpiresAt}); err != nil {
+		return fmt.Errorf("write the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
+	}
+	return nil
+}
+
+func (s Store) pointRecordAt(ctx context.Context, record provider.ExpiringRecord, execution string) error {
+	if record.Key == "" {
+		return nil
+	}
+	return s.writeRecord(ctx, newRunRecord(record.Purpose, record.Topic, record.Key, execution, record.ExpiresAt))
 }
 
 func readInTransaction(tx *firestore.Transaction, doc *firestore.DocumentRef) (*firestore.DocumentSnapshot, bool, error) {

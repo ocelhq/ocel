@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -64,43 +65,7 @@ func (t Tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*ta
 }
 
 func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunRequest) (*taskv1.RescheduleRunResponse, error) {
-	current, err := t.deployment.Store().readRecord(ctx, req.GetId())
-	if errors.Is(err, keyvalue.ErrNotFound) {
-		return nil, noRun(req.GetId())
-	}
-	if err != nil {
-		return nil, err
-	}
-	topic, err := t.task(current.Topic)
-	if err != nil {
-		return nil, err
-	}
-	if err := refuseUnreschedulable(current, time.Now()); err != nil {
-		return nil, err
-	}
-	moved := publicationOf(current, topic)
-	moved.dueAt = req.GetDueAt().AsTime()
-	delayTask := t.deployment.delayTaskOf(moved)
-	if err := t.deployment.publish(ctx, moved, delayTask); err != nil {
-		return nil, err
-	}
-	_, err = t.deployment.Store().changeRun(ctx, req.GetId(), func(record *runRecord, found bool) error {
-		if !found || record.delivery.DelayTask != current.delivery.DelayTask {
-			return connect.NewError(connect.CodeAborted, fmt.Errorf("run %q changed while it was rescheduled", req.GetId()))
-		}
-		if err := refuseUnreschedulable(*record, time.Now()); err != nil {
-			return err
-		}
-		record.DueAt, record.delivery.DelayTask, record.Status = moved.dueAt, delayTask, provider.RunDelayed
-		if delayTask == "" {
-			record.Status = provider.RunQueued
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, errors.Join(err, t.deployment.unschedule(ctx, delayTask))
-	}
-	if err := t.deployment.unschedule(ctx, current.delivery.DelayTask); err != nil {
+	if err := t.move(ctx, req.GetId(), req.GetDueAt().AsTime(), false); err != nil {
 		return nil, err
 	}
 	resp, err := t.RetrieveRun(ctx, &taskv1.RetrieveRunRequest{Id: req.GetId()})
@@ -108,6 +73,74 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 		return nil, err
 	}
 	return &taskv1.RescheduleRunResponse{Run: resp.GetRun()}, nil
+}
+
+func (t Tasks) move(ctx context.Context, id string, due time.Time, keepTTL bool) error {
+	current, err := t.deployment.Store().readRecord(ctx, id)
+	if errors.Is(err, keyvalue.ErrNotFound) {
+		return noRun(id)
+	}
+	if err != nil {
+		return err
+	}
+	topic, err := t.task(current.Topic)
+	if err != nil {
+		return err
+	}
+	if err := refuseUnreschedulable(current, time.Now()); err != nil {
+		return err
+	}
+	moved := publicationOf(current, topic)
+	moved.dueAt = due
+	delayTask := t.deployment.delayTaskOf(moved)
+	if err := t.deployment.publish(ctx, moved, delayTask); err != nil {
+		return err
+	}
+	_, err = t.deployment.Store().changeRun(ctx, id, func(record *runRecord, found bool) error {
+		if !found || record.delivery.DelayTask != current.delivery.DelayTask {
+			return connect.NewError(connect.CodeAborted, fmt.Errorf("run %q changed while it was rescheduled", id))
+		}
+		if err := refuseUnreschedulable(*record, time.Now()); err != nil {
+			return err
+		}
+		if keepTTL && !record.ExpiresAt.IsZero() {
+			record.ExpiresAt = record.ExpiresAt.Add(due.Sub(record.DueAt))
+		}
+		record.DueAt, record.delivery.DelayTask, record.Status = due, delayTask, provider.RunDelayed
+		if delayTask == "" {
+			record.Status = provider.RunQueued
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.Join(err, t.deployment.unschedule(ctx, delayTask))
+	}
+	return t.deployment.unschedule(ctx, current.delivery.DelayTask)
+}
+
+func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*taskv1.ReplayRunResponse, error) {
+	original, err := t.deployment.Store().readRecord(ctx, req.GetId())
+	if errors.Is(err, keyvalue.ErrNotFound) {
+		return nil, noRun(req.GetId())
+	}
+	if err != nil {
+		return nil, err
+	}
+	topic, err := t.task(original.Topic)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	replay := publicationOf(original, topic)
+	replay.messageID, replay.publishedAt, replay.dueAt = envelope.NewMessageID(now), now, now
+	ttl := topic.GetTtl().AsDuration()
+	if !original.ExpiresAt.IsZero() && !original.DueAt.IsZero() {
+		ttl = original.ExpiresAt.Sub(original.DueAt)
+	}
+	if err := t.start(ctx, replay, now, ttl, original.Tags, original.Metadata); err != nil {
+		return nil, err
+	}
+	return &taskv1.ReplayRunResponse{Id: executionOf(replay.messageID, topic.GetConsumers()[0].GetName())}, nil
 }
 
 func refuseUnreschedulable(record runRecord, now time.Time) error {

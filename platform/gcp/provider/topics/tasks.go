@@ -56,7 +56,6 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 		}
 	}
 	now := time.Now()
-	consumer := topic.GetConsumers()[0]
 	toPublish := publication{
 		topicName:   name,
 		topic:       topic,
@@ -71,13 +70,18 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 	if options.GetDueAt() != nil {
 		toPublish.dueAt = options.GetDueAt().AsTime()
 	}
-	execution := executionOf(toPublish.messageID, consumer.GetName())
+	if debounce := options.GetDebounce(); debounce != nil {
+		toPublish.dueAt = now.Add(debounce.GetDelay().AsDuration())
+	}
+	execution := executionOf(toPublish.messageID, topic.GetConsumers()[0].GetName())
+	var idempotency provider.ExpiringRecord
 	if key := options.GetIdempotencyKey(); key != "" {
 		life := provider.DefaultIdempotencyKeyLife
 		if options.GetIdempotencyKeyTtl() != nil {
 			life = options.GetIdempotencyKeyTtl().AsDuration()
 		}
-		existing, created, err := t.deployment.Store().EnsureRecord(ctx, newRunRecord(provider.RecordIdempotency, name, key, execution, now.Add(life)))
+		idempotency = newRunRecord(provider.RecordIdempotency, name, key, execution, now.Add(life))
+		existing, created, err := t.deployment.Store().EnsureRecord(ctx, idempotency)
 		if err != nil {
 			return "", err
 		}
@@ -85,10 +89,25 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 			return readRecordedRun(existing), nil
 		}
 	}
+	if debounce := options.GetDebounce(); debounce != nil {
+		pending, err := t.debounce(ctx, newRunRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt))
+		if err != nil {
+			return "", err
+		}
+		if pending != "" {
+			return pending, t.deployment.Store().pointRecordAt(ctx, idempotency, pending)
+		}
+	}
 	ttl := topic.GetTtl().AsDuration()
 	if options.GetTtl() != nil {
 		ttl = options.GetTtl().AsDuration()
 	}
+	return execution, t.start(ctx, toPublish, now, ttl, options.GetTags(), metadata)
+}
+
+func (t Tasks) start(ctx context.Context, toPublish publication, now time.Time, ttl time.Duration, tags []string, metadata []byte) error {
+	consumer := toPublish.topic.GetConsumers()[0]
+	execution := executionOf(toPublish.messageID, consumer.GetName())
 	delayTask := t.deployment.delayTaskOf(toPublish)
 	status := provider.RunQueued
 	if delayTask != "" {
@@ -97,11 +116,11 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 	record := runRecord{
 		Run: provider.Run{
 			Execution: execution,
-			Topic:     name,
+			Topic:     toPublish.topicName,
 			Consumer:  consumer.GetName(),
 			Status:    status,
-			Payload:   payload,
-			Tags:      options.GetTags(),
+			Payload:   toPublish.payload,
+			Tags:      tags,
 			Metadata:  metadata,
 			CreatedAt: now,
 			DueAt:     toPublish.dueAt,
@@ -109,7 +128,7 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 		delivery: deliveryFields{
 			MessageID:   toPublish.messageID,
 			PublishedAt: &now,
-			MaxAttempts: retryPolicyOf(topic, consumer).attemptsFor(options.GetMaxAttempts()),
+			MaxAttempts: retryPolicyOf(toPublish.topic, consumer).attemptsFor(toPublish.maxAttempts),
 			Key:         toPublish.key,
 			Lane:        toPublish.lane,
 			DelayTask:   delayTask,
@@ -119,12 +138,30 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 		record.ExpiresAt = toPublish.dueAt.Add(ttl)
 	}
 	if err := t.deployment.Store().createRun(ctx, record); err != nil {
-		return "", err
+		return err
 	}
 	if err := t.deployment.publish(ctx, toPublish, delayTask); err != nil {
-		return "", t.deployment.failUnpublished(ctx, execution, err)
+		return t.deployment.failUnpublished(ctx, execution, err)
 	}
-	return execution, nil
+	return nil
+}
+
+func (t Tasks) debounce(ctx context.Context, record provider.ExpiringRecord) (string, error) {
+	store := t.deployment.Store()
+	existing, created, err := store.EnsureRecord(ctx, record)
+	if err != nil || created {
+		return "", err
+	}
+	pending := readRecordedRun(existing)
+	err = t.move(ctx, pending, record.ExpiresAt, true)
+	if err == nil {
+		existing.ExpiresAt = record.ExpiresAt
+		return pending, store.writeRecord(ctx, existing)
+	}
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition && connect.CodeOf(err) != connect.CodeNotFound {
+		return "", err
+	}
+	return "", store.writeRecord(ctx, record)
 }
 
 func (d Deployment) failUnpublished(ctx context.Context, execution string, cause error) error {
@@ -158,6 +195,46 @@ func refuseNonObject(metadata []byte) error {
 		return connect.NewError(connect.CodeInvalidArgument, errors.New("the metadata is not a JSON object"))
 	}
 	return nil
+}
+
+func (t Tasks) BatchTrigger(ctx context.Context, req *taskv1.BatchTriggerRequest) (*taskv1.BatchTriggerResponse, error) {
+	topic, err := t.task(req.GetTask())
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(req.GetItems()))
+	for _, item := range req.GetItems() {
+		id, err := t.trigger(ctx, req.GetTask(), topic, item.GetPayload(), item.GetOptions())
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return &taskv1.BatchTriggerResponse{Ids: ids}, nil
+}
+
+func (t Tasks) ListRuns(ctx context.Context, req *taskv1.ListRunsRequest) (*taskv1.ListRunsResponse, error) {
+	filter := provider.RunFilter{Topic: req.GetTask(), Tags: req.GetTags(), Cursor: req.GetCursor(), Limit: int(req.GetLimit())}
+	for _, status := range req.GetStatuses() {
+		for stored, wire := range runStatuses {
+			if wire == status {
+				filter.Statuses = append(filter.Statuses, stored)
+			}
+		}
+	}
+	page, err := t.deployment.Store().ListRuns(ctx, filter)
+	if errors.Is(err, ErrUnknownCursor) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	resp := &taskv1.ListRunsResponse{NextCursor: page.NextCursor}
+	for _, run := range page.Runs {
+		resp.Runs = append(resp.Runs, newRunMessage(run, now))
+	}
+	return resp, nil
 }
 
 func (t Tasks) RetrieveRun(ctx context.Context, req *taskv1.RetrieveRunRequest) (*taskv1.RetrieveRunResponse, error) {
