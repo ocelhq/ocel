@@ -116,12 +116,12 @@ function hitsFor(scope: GapScope, tests: LaneTest[], said: string): LaneTest[] {
   const titles = new Set(scope.fails.flatMap((test) => test.titles));
   const fixtures = scope.fixtures?.map((one) => one.name);
   const variants = scope.variants?.map((one) => one.name);
-  const hits = tests.filter(
+  const scoped = tests.filter(
     (test) =>
       (fixtures === undefined || fixtures.includes(test.fixture)) &&
-      (variants === undefined || variants.includes(test.variant)) &&
-      titles.has(test.title),
+      (variants === undefined || variants.includes(test.variant)),
   );
+  const hits = scoped.filter((test) => titles.has(test.title));
   const reached = (names: string[] | undefined, of: (hit: LaneTest) => string) => {
     const dead = names?.find((name) => !hits.some((hit) => of(hit) === name));
     if (dead !== undefined) {
@@ -132,6 +132,12 @@ function hitsFor(scope: GapScope, tests: LaneTest[], said: string): LaneTest[] {
   reached(variants, (hit) => hit.variant);
   if (hits.length === 0) {
     throw new Error(`${said} lists nothing that is planned`);
+  }
+  const unskippable = scope.skipsCell
+    ? scoped.find((test) => !hits.some((hit) => hit.cell === test.cell))
+    : undefined;
+  if (unskippable) {
+    throw new Error(`${said} skips ${unskippable.cell}, which walks none of the tests named`);
   }
   return hits;
 }
