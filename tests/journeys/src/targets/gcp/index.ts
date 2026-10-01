@@ -136,7 +136,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
 
   private minted: Promise<string | undefined> | undefined;
 
-  private readonly said = new Map<string, string[]>();
+  private readonly output = new Map<string, string[]>();
 
   readonly sweeper: Sweeper = {
     list: () => this.deployedSlugs(),
@@ -288,7 +288,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
       await readServices(await this.where()),
       leadsFor(cell.slug, cell.fixture.apps),
     );
-    return [...this.saidFor(cell), services].join("\n");
+    return [...this.outputFor(cell), services].join("\n");
   }
 
   async destroy(cell: CellUnderTest): Promise<void> {
@@ -303,18 +303,18 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
         childEnv(dir),
       );
     } finally {
-      this.said.delete(cell.slug);
+      this.output.delete(cell.slug);
       await rm(treeRoot(cell, "gcp"), { recursive: true, force: true });
     }
   }
 
-  private saidFor(cell: CellUnderTest): string[] {
-    let said = this.said.get(cell.slug);
-    if (!said) {
-      said = [];
-      this.said.set(cell.slug, said);
+  private outputFor(cell: CellUnderTest): string[] {
+    let output = this.output.get(cell.slug);
+    if (!output) {
+      output = [];
+      this.output.set(cell.slug, output);
     }
-    return said;
+    return output;
   }
 
   private run(
@@ -325,7 +325,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     args: string[],
     env: NodeJS.ProcessEnv,
   ): Promise<Ran> {
-    return recordOutput(this.saidFor(cell), runOcel(cell, dir, phase, name, args, env));
+    return recordOutput(this.outputFor(cell), runOcel(cell, dir, phase, name, args, env));
   }
 
   private token(): Promise<string | undefined> {
