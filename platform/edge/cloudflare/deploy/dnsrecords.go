@@ -67,7 +67,7 @@ func (w *dnsRecords) VerifyCredentials(ctx context.Context) error {
 	}
 	params := zones.ZoneListParams{
 		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(w.accountID)}),
-		PerPage: cf.F(float64(1)),
+		PerPage: cf.F(float64(5)),
 	}
 	if w.named != "" {
 		params.Name = cf.F(strings.ToLower(w.named))
