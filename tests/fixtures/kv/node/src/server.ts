@@ -3,6 +3,7 @@ import express, { type Response } from "express";
 import { Redis } from "ioredis";
 import { InvalidKVValueError } from "ocel/kv";
 import { bounded, cache, evicting } from "../infra/index";
+import { env } from "../infra/variables";
 
 const APP_NAME = "web";
 const PORT = Number(process.env.PORT ?? 3107);
@@ -256,8 +257,8 @@ app.get("/api/kv/unauthenticated", async (_req, res) => {
 });
 
 function isReportNonce(given: string | undefined): boolean {
-  const expected = process.env.PASSWORD_REPORT_NONCE;
-  if (!expected || given === undefined) {
+  const expected = env.PASSWORD_REPORT_NONCE;
+  if (given === undefined) {
     return false;
   }
   const [givenBytes, expectedBytes] = [Buffer.from(given), Buffer.from(expected)];
