@@ -1,3 +1,4 @@
+import { X509Certificate } from "node:crypto";
 import type { ConnectionOptions } from "node:tls";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { Redis } from "ioredis";
@@ -188,13 +189,16 @@ const pemBlock = /-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----/g;
 
 function holdsCertificates(pem: string): boolean {
   const certificates = [...pem.matchAll(pemBlock)].filter(([, label]) => label === "CERTIFICATE");
-  return certificates.length > 0 && certificates.every(([, , body]) => isDER(body ?? ""));
+  return certificates.length > 0 && certificates.every(([block]) => isCertificate(block));
 }
 
-function isDER(body: string): boolean {
-  const encoded = body.replace(/\s+/g, "");
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0) return false;
-  return atob(encoded).charCodeAt(0) === 0x30;
+function isCertificate(block: string): boolean {
+  try {
+    new X509Certificate(block);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isAddress(host: string): boolean {

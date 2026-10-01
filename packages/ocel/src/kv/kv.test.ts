@@ -222,6 +222,7 @@ describe("kv at runtime", () => {
       "-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n",
     ],
     ["a private key", "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n"],
+    ["an empty DER sequence", "-----BEGIN CERTIFICATE-----\nMAA=\n-----END CERTIFICATE-----\n"],
   ])("refuses a caPem holding %s, naming the key it arrived in", (_, caPem) => {
     deliver("garbled", { tls: true, caPem });
 
