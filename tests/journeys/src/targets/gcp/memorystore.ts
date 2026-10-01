@@ -36,7 +36,10 @@ export function storeFilter(namespace: string, slug: string): string {
 
 export type Store = { name: string; project: string };
 
-type Listing = { instances?: Array<{ name?: string; labels?: Record<string, string> }> };
+type Listing = {
+  instances?: Array<{ name?: string; labels?: Record<string, string> }>;
+  nextPageToken?: string;
+};
 
 export function storesIn(body: unknown): Store[] {
   return ((body as Listing).instances ?? []).map((instance) => ({
@@ -60,11 +63,21 @@ async function answered(at: string, init: RequestInit): Promise<unknown> {
 }
 
 export async function listStores(where: Where, filter: string): Promise<Store[]> {
-  const at = new URL(
-    `${MEMORYSTORE}/v1/projects/${where.project}/locations/${where.region}/instances`,
-  );
-  at.searchParams.set("filter", filter);
-  return storesIn(await answered(at.toString(), { headers: bearer(where) }));
+  const stores: Store[] = [];
+  let pageToken = "";
+  do {
+    const at = new URL(
+      `${MEMORYSTORE}/v1/projects/${where.project}/locations/${where.region}/instances`,
+    );
+    at.searchParams.set("filter", filter);
+    if (pageToken) {
+      at.searchParams.set("pageToken", pageToken);
+    }
+    const page = (await answered(at.toString(), { headers: bearer(where) })) as Listing;
+    stores.push(...storesIn(page));
+    pageToken = page.nextPageToken ?? "";
+  } while (pageToken);
+  return stores;
 }
 
 type Operation = { name?: string; done?: boolean; error?: { message?: string } };
@@ -98,7 +111,11 @@ export async function simulateMaintenance(where: Where, name: string): Promise<v
 export async function deleteStore(where: Where, name: string): Promise<void> {
   const at = `${MEMORYSTORE}/v1/${name}`;
   const response = await fetch(at, { method: "DELETE", headers: bearer(where) });
-  if (!response.ok && response.status !== 404) {
+  if (response.status === 404) {
+    return;
+  }
+  if (!response.ok) {
     throw new Error(`DELETE ${at} = ${response.status} ${await response.text()}`);
   }
+  await awaited(where, `deleting ${name}`, (await response.json()) as Operation);
 }
