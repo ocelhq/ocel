@@ -104,8 +104,8 @@ jobs:
             dirs: platform/gcp/provider platform/gcp/runtime platform/gcp/connector
           - name: vps
             dirs: platform/vps/provider platform/vps/runtime platform/vps/connector
-          - name: pkg, s3 and edge
-            dirs: pkg pkg/provider/pulumi platform/s3 platform/edge/cloudflare/deploy
+          - name: pkg, s3, pgmq and edge
+            dirs: pkg pkg/provider/pulumi platform/s3 platform/pgmq platform/edge/cloudflare/deploy
     env:
       DIRS: ${{ matrix.group.dirs }}
     steps:
@@ -217,11 +217,11 @@ jobs:
         run: go generate -C platform/vps/provider ./...
 
       - name: go generate (the transform runner pkg embeds)
-        if: matrix.group.name == 'pkg, s3 and edge'
+        if: matrix.group.name == 'pkg, s3, pgmq and edge'
         run: go generate -C pkg/provider/transform ./...
 
       - name: go generate (the worker bundles the cloudflare edge embeds)
-        if: matrix.group.name == 'pkg, s3 and edge'
+        if: matrix.group.name == 'pkg, s3, pgmq and edge'
         run: go generate -C platform/edge/cloudflare/deploy ./...
 
       - name: go build
