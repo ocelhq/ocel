@@ -20,6 +20,7 @@ type Resource struct {
 	Postgres *PostgresSpec
 	Bucket   *BucketSpec
 	KV       *KVSpec
+	Topic    *TopicSpec
 }
 
 type PostgresSpec struct {
