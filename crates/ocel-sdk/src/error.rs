@@ -295,6 +295,7 @@ pub enum Error {
 
     /// A kv binding was delivered with a certificate authority that holds no PEM
     /// certificate, so no client could tell the store's certificate from a forged one.
+    #[cfg(feature = "kv")]
     #[error("{key} delivers a caPem for its kv store that holds no PEM certificate")]
     InvalidKvAuthority {
         /// The environment variable the binding arrived in.

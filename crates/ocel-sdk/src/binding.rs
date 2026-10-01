@@ -27,8 +27,12 @@ pub(crate) fn read_bucket(name: &str) -> Result<BucketProperties, Error> {
     }
 }
 
+pub(crate) fn kv_binding_key(name: &str) -> String {
+    format!("OCEL_RESOURCE_KV_{name}")
+}
+
 pub(crate) fn read_kv(name: &str) -> Result<KvProperties, Error> {
-    match read_binding(&format!("OCEL_RESOURCE_KV_{name}"), "KV")? {
+    match read_binding(&kv_binding_key(name), "KV")? {
         (Some(Properties::Kv(properties)), _) => Ok(*properties),
         (other, key) => Err(Error::WrongBindingType {
             key,

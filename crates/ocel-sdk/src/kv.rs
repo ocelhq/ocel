@@ -4,7 +4,7 @@
 #[cfg(feature = "kv")]
 mod entry;
 
-use crate::binding::{percent_encode, read_kv};
+use crate::binding::{kv_binding_key, percent_encode, read_kv};
 use crate::declare::is_discovering;
 use crate::proto::app::resources::v1::KvShape;
 use crate::proto::common::bindings::v1::KvProperties;
@@ -109,7 +109,7 @@ impl Kv {
         match u16::try_from(properties.port) {
             Ok(port) if port > 0 => Ok(port),
             _ => Err(Error::InvalidKvPort {
-                key: format!("OCEL_RESOURCE_KV_{}", self.name),
+                key: kv_binding_key(&self.name),
                 port: properties.port,
             }),
         }
