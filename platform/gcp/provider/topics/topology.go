@@ -168,6 +168,18 @@ func ensureSubscription(ctx context.Context, service *pubsub.Service, path strin
 	if !isAnswered(err, http.StatusConflict) {
 		return fmt.Errorf("create Pub/Sub subscription %s: %w", path, err)
 	}
+	var current *pubsub.Subscription
+	err = retried(ctx, func() error {
+		var readErr error
+		current, readErr = service.Projects.Subscriptions.Get(path).Context(ctx).Do()
+		return readErr
+	})
+	if err != nil {
+		return fmt.Errorf("read Pub/Sub subscription %s: %w", path, err)
+	}
+	if current.EnableMessageOrdering != desired.EnableMessageOrdering {
+		return fmt.Errorf("subscription %s has message ordering %t and its topic now declares %t, and Pub/Sub cannot change ordering on a subscription that exists: rename the consumer to start a new subscription", path, current.EnableMessageOrdering, desired.EnableMessageOrdering)
+	}
 	err = retried(ctx, func() error {
 		_, err := service.Projects.Subscriptions.Patch(path, &pubsub.UpdateSubscriptionRequest{Subscription: desired, UpdateMask: mutableSubscription}).Context(ctx).Do()
 		return err
