@@ -7,9 +7,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,6 +33,7 @@ type harness struct {
 	t      *testing.T
 	key    ed25519.PrivateKey
 	server *httptest.Server
+	client *http.Client
 	clock  atomic.Int64
 }
 
@@ -38,7 +41,72 @@ func (h *harness) now() time.Time { return time.Unix(h.clock.Load(), 0) }
 
 func (h *harness) advance(by time.Duration) { h.clock.Add(int64(by / time.Second)) }
 
+type pipeListener struct {
+	accepted chan net.Conn
+	closed   chan struct{}
+	once     sync.Once
+}
+
+func newPipeListener() *pipeListener {
+	return &pipeListener{accepted: make(chan net.Conn), closed: make(chan struct{})}
+}
+
+func (l *pipeListener) Accept() (net.Conn, error) {
+	select {
+	case conn := <-l.accepted:
+		return conn, nil
+	case <-l.closed:
+		return nil, net.ErrClosed
+	}
+}
+
+func (l *pipeListener) Close() error {
+	l.once.Do(func() { close(l.closed) })
+	return nil
+}
+
+func (l *pipeListener) Addr() net.Addr { return pipeAddr{} }
+
+func (l *pipeListener) DialContext(ctx context.Context, _, _ string) (net.Conn, error) {
+	server, client := net.Pipe()
+	select {
+	case l.accepted <- server:
+		return client, nil
+	case <-l.closed:
+		return nil, net.ErrClosed
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+type pipeAddr struct{}
+
+func (pipeAddr) Network() string { return "pipe" }
+
+func (pipeAddr) String() string { return "pipe" }
+
 func newHarness(t *testing.T, configure ...func(*gateway.Config)) *harness {
+	t.Helper()
+	h := newUnstartedHarness(t, configure...)
+	h.client = http.DefaultClient
+	h.server.Start()
+	return h
+}
+
+func newUnbufferedHarness(t *testing.T, configure ...func(*gateway.Config)) *harness {
+	t.Helper()
+	h := newUnstartedHarness(t, configure...)
+	listener := newPipeListener()
+	_ = h.server.Listener.Close()
+	h.server.Listener = listener
+	transport := &http.Transport{DialContext: listener.DialContext}
+	t.Cleanup(transport.CloseIdleConnections)
+	h.client = &http.Client{Transport: transport}
+	h.server.Start()
+	return h
+}
+
+func newUnstartedHarness(t *testing.T, configure ...func(*gateway.Config)) *harness {
 	t.Helper()
 	public, private, err := ed25519.GenerateKey(nil)
 	if err != nil {
@@ -57,7 +125,7 @@ func newHarness(t *testing.T, configure ...func(*gateway.Config)) *harness {
 	for _, change := range configure {
 		change(&cfg)
 	}
-	h.server = httptest.NewServer(gateway.New(cfg))
+	h.server = httptest.NewUnstartedServer(gateway.New(cfg))
 	t.Cleanup(h.server.Close)
 	return h
 }
@@ -95,6 +163,7 @@ func (h *harness) dial(connectToken string) (*client, *http.Response, error) {
 	conn, resp, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(h.server.URL, "http")+"/event/realtime", &websocket.DialOptions{
 		Subprotocols: []string{"aws-appsync-event-ws", authorization(h.t, connectToken)},
 		HTTPHeader:   http.Header{"Origin": {appOrigin}},
+		HTTPClient:   h.client,
 	})
 	if err != nil {
 		return nil, resp, err
@@ -173,13 +242,15 @@ func (h *harness) publish(tok, channel string, events ...string) (*http.Response
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	req, err := http.NewRequest(http.MethodPost, h.server.URL+"/event", bytes.NewReader(body))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.server.URL+"/event", bytes.NewReader(body))
 	if err != nil {
 		h.t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", tok)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := h.client.Do(req)
 	if err != nil {
 		h.t.Fatalf("publish: %v", err)
 	}
@@ -214,30 +285,41 @@ func TestAServerPublishReachesASubscriberAsTheEventItSent(t *testing.T) {
 func TestASubscriberThatStopsReadingIsDisconnectedWithoutHoldingUpThePublisher(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t)
-	c := h.connect()
+	const budgetBytes = 4 << 10
+	h := newUnbufferedHarness(t, func(cfg *gateway.Config) { cfg.QueueBudgetBytes = budgetBytes })
 	channel := "/app/feed"
-	c.subscribe("s-1", channel, h.mint(token.Subscribe, channel))
+	stalled := h.connect()
+	stalled.subscribe("s-1", channel, h.mint(token.Subscribe, channel))
+	healthy := h.connect()
+	healthy.subscribe("s-2", channel, h.mint(token.Subscribe, channel))
 
-	large := event(t, strings.Repeat("x", 200<<10))
-	started := time.Now()
-	for range 40 {
-		if resp, answer := h.publish(h.mint(token.Publish, channel), channel, large, large, large, large, large); resp.StatusCode != http.StatusOK {
-			t.Fatalf("publish answered %s %v, want 200", resp.Status, answer)
+	sent := event(t, strings.Repeat("x", 1<<10))
+	published := 4 * budgetBytes / len(sent)
+	for i := range published {
+		if resp, answer := h.publish(h.mint(token.Publish, channel), channel, sent); resp.StatusCode != http.StatusOK {
+			t.Fatalf("publish %d answered %s %v while a subscriber stopped reading, want 200", i, resp.Status, answer)
+		}
+		if got := healthy.read(); got["type"] != "data" || got["id"] != "s-2" || got["event"] != sent {
+			t.Fatalf("after publish %d the subscriber still reading got %v, want a data frame for s-2", i, got)
 		}
 	}
-	if took := time.Since(started); took > 10*time.Second {
-		t.Fatalf("40 MB of publishes to a subscriber that stopped reading took %s, want the publisher never to wait on it", took)
-	}
 
-	deadline := time.Now().Add(30 * time.Second)
+	delivered := 0
 	for {
-		if _, err := c.next(time.Until(deadline)); err != nil {
-			if time.Now().After(deadline) {
-				t.Fatal("the subscriber that stopped reading is still connected")
+		frame, err := stalled.next(5 * time.Second)
+		if err != nil {
+			if status := websocket.CloseStatus(err); status != websocket.StatusTryAgainLater {
+				t.Fatalf("the subscriber that stopped reading ended with %v (status %d), want close status %d", err, status, websocket.StatusTryAgainLater)
 			}
-			return
+			break
 		}
+		if frame["type"] != "data" {
+			t.Fatalf("the subscriber that stopped reading got %v, want only data frames before its close", frame)
+		}
+		delivered++
+	}
+	if delivered >= published {
+		t.Fatalf("the subscriber that stopped reading was delivered all %d events, want the overflow past its %d byte budget dropped", published, budgetBytes)
 	}
 }
 
