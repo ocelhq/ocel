@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Phase } from "../matrix/types";
 import type { CheckContext, Fetch } from "./context";
-import { kvPersistenceCheck } from "./kv";
+import { kvJsonInvalidStoredCheck, kvPersistenceCheck } from "./kv";
 
 const BASE = "https://web-j-1-kv-node.journey.test";
 
@@ -71,4 +71,70 @@ describe("kvPersistenceCheck", () => {
     const said = await failure(kvPersistenceCheck.run(context(store().fetch, "redeploy", notes)));
     expect(said).toContain("the read after the redeploy answered 404");
   });
+});
+
+type Reading = "valid" | "unparseable" | "schema-invalid";
+
+function readingOf(raw: string): Reading {
+  try {
+    return typeof (JSON.parse(raw) as { name?: unknown }).name === "string"
+      ? "valid"
+      : "schema-invalid";
+  } catch {
+    return "unparseable";
+  }
+}
+
+function jsonEntries(refuses: Record<"json" | "lenient", Reading[]>): Fetch {
+  const raws = new Map<string, string>();
+  return async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    const written = /^\/api\/kv\/raw\/(json|lenient)\/(.+)$/.exec(path);
+    if (written && init?.method === "PUT") {
+      raws.set(
+        `${written[1]}/${written[2]}`,
+        (JSON.parse(String(init.body)) as { raw: string }).raw,
+      );
+      return new Response(null, { status: 204 });
+    }
+    const read = /^\/api\/kv\/(json|lenient)\/(.+)$/.exec(path);
+    const entry = read?.[1] as "json" | "lenient";
+    const raw = raws.get(`${entry}/${read?.[2]}`);
+    if (raw === undefined) {
+      return Response.json({ error: "no such key" }, { status: 404 });
+    }
+    if (!refuses[entry].includes(readingOf(raw))) {
+      return Response.json({ value: raw });
+    }
+    return entry === "json"
+      ? Response.json({ error: "InvalidKVValueError" }, { status: 422 })
+      : Response.json({ error: "no such key" }, { status: 404 });
+  };
+}
+
+describe("kvJsonInvalidStoredCheck", () => {
+  const BOTH: Reading[] = ["unparseable", "schema-invalid"];
+
+  it("passes entries that refuse an unparseable and a schema-invalid value alike", async () => {
+    const fetch = jsonEntries({ json: BOTH, lenient: BOTH });
+    expect(await failure(kvJsonInvalidStoredCheck.run(context(fetch, "verify", new Map())))).toBe(
+      "",
+    );
+  });
+
+  for (const [entry, missed] of [
+    ["json", "schema-invalid"],
+    ["json", "unparseable"],
+    ["lenient", "schema-invalid"],
+    ["lenient", "unparseable"],
+  ] as const) {
+    it(`fails a ${entry} entry that reads a ${missed} stored value as valid`, async () => {
+      const refuses = { json: BOTH, lenient: BOTH, [entry]: BOTH.filter((one) => one !== missed) };
+      const said = await failure(
+        kvJsonInvalidStoredCheck.run(context(jsonEntries(refuses), "verify", new Map())),
+      );
+      expect(said).toContain(`${missed} value`);
+      expect(said).toContain("200");
+    });
+  }
 });
