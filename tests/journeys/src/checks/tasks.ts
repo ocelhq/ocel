@@ -699,23 +699,23 @@ export const consumerMaxDurationCheck: Check = {
 const CRON_WITHIN_MS = 75_000;
 
 export const cronCheck: Check = {
-  title: "a task with a cron is triggered on its schedule",
+  title: "a task with a cron is triggered on its schedule, by a run this check sees it start",
   run: async (ctx) => {
+    const since = Date.now();
     const run = await waitFor(
-      "a heartbeat run",
+      "a heartbeat scheduled and created after the check started",
       async () => {
-        const [found] = await listRuns(ctx, {
-          task: "heartbeat",
-          status: "COMPLETED",
-          limit: "1",
+        const heartbeats = await listRuns(ctx, { task: "heartbeat", status: "COMPLETED" });
+        return heartbeats.find((heartbeat) => {
+          const { timestamp } = heartbeat.output as { timestamp: string };
+          return (heartbeat.createdAt ?? 0) >= since && Date.parse(timestamp) >= since;
         });
-        return found;
       },
       CRON_WITHIN_MS,
     );
     const { timestamp } = run.output as { timestamp: string };
-    assert.ok(!Number.isNaN(Date.parse(timestamp)), `the cron payload is ${timestamp}`);
     assert.equal(new Date(Date.parse(timestamp)).getUTCSeconds(), 0);
+    assert.deepEqual(run.payload, { timestamp });
   },
 };
 
