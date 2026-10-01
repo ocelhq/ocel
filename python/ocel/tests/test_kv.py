@@ -191,7 +191,7 @@ def test_a_tls_store_is_reached_by_clients_that_check_its_hostname(monkeypatch):
 
 
 def test_a_tls_store_is_reached_trusting_only_the_authority_the_binding_delivers(monkeypatch):
-    authority = "-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n"
+    authority = _fixture_authority()
     monkeypatch.setenv(
         "OCEL_RESOURCE_KV_private",
         json.dumps(
@@ -211,6 +211,57 @@ def test_a_tls_store_is_reached_trusting_only_the_authority_the_binding_delivers
 
     for client in (cache.sync_client(), cache.client()):
         assert client.connection_pool.connection_kwargs["ssl_ca_data"] == authority
+
+
+@pytest.mark.parametrize(
+    "ca_pem",
+    [
+        "not a certificate",
+        "-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n",
+        "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n",
+    ],
+)
+def test_a_client_is_refused_when_the_delivered_authority_holds_no_certificate(monkeypatch, ca_pem):
+    monkeypatch.setenv(
+        "OCEL_RESOURCE_KV_garbled",
+        json.dumps(
+            {
+                "name": "kv--garbled",
+                "kv": {
+                    "host": "10.240.0.5",
+                    "port": 6378,
+                    "password": "pw",
+                    "tls": True,
+                    "caPem": ca_pem,
+                },
+            }
+        ),
+    )
+    cache = kv("garbled")
+
+    for open_client in (cache.sync_client, cache.client):
+        with pytest.raises(
+            ValueError,
+            match="OCEL_RESOURCE_KV_garbled delivers a caPem .* holds no PEM certificate",
+        ):
+            open_client()
+
+
+def _fixture_authority() -> str:
+    fixture = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "..",
+        "proto",
+        "common",
+        "bindings",
+        "v1",
+        "fixtures",
+        "kv.json",
+    )
+    with open(fixture) as read:
+        return json.load(read)["kv"]["caPem"]
 
 
 def test_the_kv_binding_fixture_decodes_as_the_other_sdks_decode_it(monkeypatch):

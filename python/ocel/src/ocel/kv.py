@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import re
+import ssl
 from collections.abc import Callable, Iterable, Mapping
 from datetime import timedelta
 from enum import Enum
@@ -168,6 +169,17 @@ def _decode(value: Any) -> Any:
     return value.decode("utf-8") if isinstance(value, bytes) else value
 
 
+def _read_authority(store: str, pem: str) -> str:
+    try:
+        ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).load_verify_locations(cadata=pem)
+    except ssl.SSLError:
+        raise ValueError(
+            f"OCEL_RESOURCE_KV_{store} delivers a caPem for its kv store "
+            "that holds no PEM certificate"
+        ) from None
+    return pem
+
+
 class KV:
     """A key-value store an app declares, one Valkey instance of its own, reached through
     its typed entries or its own redis-py clients."""
@@ -254,13 +266,14 @@ class KV:
         if properties.tls:
             options.update(ssl=True, ssl_cert_reqs="required", ssl_check_hostname=True)
             if properties.ca_pem:
-                options["ssl_ca_data"] = properties.ca_pem
+                options["ssl_ca_data"] = _read_authority(self.name, properties.ca_pem)
         return options
 
     def client(self):
         """The ``redis.asyncio.Redis`` client connected to the store, opened on the first
         call and returned unchanged on every one after. Over TLS it trusts only the store's
-        own certificate authority when the provider names one. redis-py is imported here, from the
+        own certificate authority when the provider names one, and raises ``ValueError`` when
+        the delivered authority holds no PEM certificate. redis-py is imported here, from the
         ``ocel[kv]`` extra."""
         if self._client is None:
             options = self._client_options("client")
@@ -272,7 +285,7 @@ class KV:
 
     def sync_client(self):
         """The ``redis.Redis`` client connected to the store, opened on the first call and
-        returned unchanged on every one after."""
+        returned unchanged on every one after. It raises as :meth:`client` does."""
         if self._sync_client is None:
             options = self._client_options("sync_client")
             redis = _import_redis()

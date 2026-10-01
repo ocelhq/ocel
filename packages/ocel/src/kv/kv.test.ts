@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
@@ -20,6 +21,11 @@ const { kv, UnprovisionedResourceError } = await import("./index.js");
 const Session = z.object({ user: z.string(), visits: z.number().int() });
 
 let port = 7000;
+
+function fixtureAuthority(): string {
+  const fixture = new URL("../../../../proto/common/bindings/v1/fixtures/kv.json", import.meta.url);
+  return JSON.parse(readFileSync(fixture, "utf8")).kv.caPem;
+}
 
 function deliver(name: string, properties: Record<string, unknown> = {}) {
   port += 1;
@@ -203,10 +209,25 @@ describe("kv at runtime", () => {
   });
 
   it("trusts only the certificate authority the binding delivers", () => {
-    const ca = "-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n";
+    const ca = fixtureAuthority();
     deliver("private", { tls: true, caPem: ca });
 
     expect(kv("private").client.options.tls).toEqual({ ca });
+  });
+
+  it.each([
+    ["no PEM block", "not a certificate"],
+    [
+      "a block that is not base64",
+      "-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n",
+    ],
+    ["a private key", "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n"],
+  ])("refuses a caPem holding %s, naming the key it arrived in", (_, caPem) => {
+    deliver("garbled", { tls: true, caPem });
+
+    expect(() => kv("garbled").client).toThrow(
+      /OCEL_RESOURCE_KV_garbled delivers a caPem for its kv store that holds no PEM certificate/,
+    );
   });
 
   it("names the store's URL redis:// when it takes no TLS", () => {

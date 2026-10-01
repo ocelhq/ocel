@@ -1,12 +1,12 @@
 import type { ConnectionOptions } from "node:tls";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { Redis } from "ioredis";
-import { getConfig } from "../binding/binding.js";
+import { bindingKey, getConfig } from "../binding/binding.js";
 import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
 import { declarationSite } from "../declaration/callsite.js";
 import { defer } from "../declaration/defer.js";
 import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
-import type { KvProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
+import { BindingType, type KvProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import { rpc } from "../runtime/rpc.js";
 import {
   type DeclaredEntry,
@@ -75,6 +75,7 @@ export type KVStore<TEntries extends KVEntries> = {
   /**
    * The ioredis client connected to the store, opened on first use and shared after. Over
    * TLS it trusts only the store's own certificate authority when the provider names one.
+   * Reading it throws when the delivered authority holds no PEM certificate.
    */
   readonly client: Redis;
   /** The store's URL, `redis://` or `rediss://` when it requires TLS, for tools that take one. */
@@ -118,7 +119,7 @@ function declareStore<TEntries extends KVEntries = Record<never, never>>(
     if (unprovisionedPhase()) {
       throw unprovisioned(`kv("${name}")`, access);
     }
-    client ??= newRedis(clientOptions(getConfig(name, "kv")));
+    client ??= newRedis(clientOptions(name, getConfig(name, "kv")));
     return client;
   };
 
@@ -160,22 +161,40 @@ function refuseEntries(store: string, entries: [string, DeclaredEntry][]) {
   }
 }
 
-function clientOptions(properties: KvProperties) {
+function clientOptions(store: string, properties: KvProperties) {
   const { host, port, username, password, tls, caPem } = properties;
   return {
     host,
     port,
     username: username || undefined,
     password: password || undefined,
-    tls: tls ? tlsOptions(host, caPem) : undefined,
+    tls: tls ? tlsOptions(store, host, caPem) : undefined,
   };
 }
 
-function tlsOptions(host: string, caPem: string): ConnectionOptions {
+function tlsOptions(store: string, host: string, caPem: string): ConnectionOptions {
+  if (caPem && !holdsCertificates(caPem)) {
+    throw new Error(
+      `${bindingKey(store, BindingType.KV)} delivers a caPem for its kv store that holds no PEM certificate`,
+    );
+  }
   return {
     ...(isAddress(host) ? {} : { servername: host }),
     ...(caPem ? { ca: caPem } : {}),
   };
+}
+
+const pemBlock = /-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----/g;
+
+function holdsCertificates(pem: string): boolean {
+  const certificates = [...pem.matchAll(pemBlock)].filter(([, label]) => label === "CERTIFICATE");
+  return certificates.length > 0 && certificates.every(([, , body]) => isDER(body ?? ""));
+}
+
+function isDER(body: string): boolean {
+  const encoded = body.replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0) return false;
+  return atob(encoded).charCodeAt(0) === 0x30;
 }
 
 function isAddress(host: string): boolean {
