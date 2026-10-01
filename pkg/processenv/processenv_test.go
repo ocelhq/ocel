@@ -12,6 +12,7 @@ func TestProcessEnvironmentNames(t *testing.T) {
 		"app folder":       "OCEL_APP_FOLDER",
 		"app URL":          "OCEL_URL",
 		"runtime address":  "OCEL_RUNTIME_ADDRESS",
+		"worker":           "OCEL_WORKER",
 	}
 	got := map[string]string{
 		"phase":            PhaseEnvVar,
@@ -20,6 +21,7 @@ func TestProcessEnvironmentNames(t *testing.T) {
 		"app folder":       AppFolderEnvVar,
 		"app URL":          AppURLEnvVar,
 		"runtime address":  RuntimeAddressEnvVar,
+		"worker":           WorkerEnvVar,
 	}
 	for name, value := range got {
 		if value != want[name] {

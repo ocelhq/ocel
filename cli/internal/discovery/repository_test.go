@@ -164,6 +164,9 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		"tests/fixtures/sdk/python",
 		"tests/fixtures/sdk/with-transforms",
 		"tests/fixtures/sdk/workspace",
+		"tests/fixtures/worker/go",
+		"tests/fixtures/worker/node",
+		"tests/fixtures/worker/python",
 	}
 	for _, root := range fixtureRoots {
 		if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(root), DefaultRootDirName)); err != nil {

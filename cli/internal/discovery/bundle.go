@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,21 +47,28 @@ func importsOf(files []string) string {
 }
 
 func Bundle(configDir string, files []string) (string, error) {
+	var entry strings.Builder
+	entry.WriteString(protocolBanner)
+	entry.WriteString(importsOf(files))
+	outfile, err := bundleEntry(configDir, configDir, "entry.mjs", "ocel-discovery-entry.ts", entry.String())
+	if err != nil {
+		return "", fmt.Errorf("bundle discovery entry failed:\n%w", err)
+	}
+	return outfile, nil
+}
+
+func bundleEntry(configDir, resolveDir, name, sourcefile, source string) (string, error) {
 	outDir := filepath.Join(configDir, statedir.Name)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return "", fmt.Errorf("create %s: %w", statedir.Name, err)
 	}
-	outfile := filepath.Join(outDir, "entry.mjs")
-
-	var entry strings.Builder
-	entry.WriteString(protocolBanner)
-	entry.WriteString(importsOf(files))
+	outfile := filepath.Join(outDir, name)
 
 	result := api.Build(api.BuildOptions{
 		Stdin: &api.StdinOptions{
-			Contents:   entry.String(),
-			ResolveDir: configDir,
-			Sourcefile: "ocel-discovery-entry.ts",
+			Contents:   source,
+			ResolveDir: resolveDir,
+			Sourcefile: sourcefile,
 			Loader:     api.LoaderTS,
 		},
 		Bundle:    true,
@@ -75,7 +83,7 @@ func Bundle(configDir string, files []string) (string, error) {
 	})
 	if len(result.Errors) > 0 {
 		msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{Color: false})
-		return "", fmt.Errorf("bundle discovery entry failed:\n%s", strings.Join(msgs, "\n"))
+		return "", errors.New(strings.Join(msgs, "\n"))
 	}
 
 	return outfile, nil

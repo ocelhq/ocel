@@ -11,6 +11,7 @@ on:
       - "packages/ocel/**"
       - "tests/fixtures/sdk/go/**"
       - "tests/fixtures/deploy/go/**"
+      - "tests/fixtures/worker/**"
       - "tests/fixtures/sdk/python/**"
       - "tests/fixtures/sdk/rust/**"
       - "tests/fixtures/sdk/rust-workspace/**"
@@ -97,7 +98,7 @@ jobs:
       matrix:
         group:
           - name: cli
-            dirs: cli sdk tests/fixtures/sdk/go tests/fixtures/deploy/go/server scripts/redactvet
+            dirs: cli sdk tests/fixtures/sdk/go tests/fixtures/deploy/go/server tests/fixtures/worker/go scripts/redactvet
           - name: aws
             dirs: platform/aws/provider platform/aws/runtime platform/aws/connector
           - name: gcp
