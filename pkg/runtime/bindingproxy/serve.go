@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
-	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 )
 
 type Served struct {
@@ -25,7 +24,7 @@ func (s Served) Close() error {
 	return s.server.Close()
 }
 
-func Serve(svc bucketv1connect.BucketServiceHandler) (Served, error) {
+func Serve(services Services) (Served, error) {
 	token, err := mintToken()
 	if err != nil {
 		return Served{}, err
@@ -36,7 +35,7 @@ func Serve(svc bucketv1connect.BucketServiceHandler) (Served, error) {
 		return Served{}, fmt.Errorf("bind the proxy listener: %w", err)
 	}
 
-	srv := &http.Server{Handler: NewMux(token, svc)}
+	srv := &http.Server{Handler: NewMux(token, services)}
 	errs := make(chan error, 1)
 	go func() { errs <- srv.Serve(ln) }()
 

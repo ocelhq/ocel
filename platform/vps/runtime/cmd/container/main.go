@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +18,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
@@ -166,12 +171,32 @@ func proxying(manifest variables.Manifest, values *live.Values, socket, app stri
 	if values == nil {
 		return bindingproxy.Served{}, nil
 	}
+	buckets, err := bucketsFor(manifest, values, socket, app)
+	if err != nil {
+		return bindingproxy.Served{}, err
+	}
+	services := bindingproxy.Services{Buckets: buckets}
+	if manifest.Queue != "" {
+		agent := source.Client(socket)
+		services.Tasks = taskv1connect.NewTaskServiceClient(agent, source.AgentURL)
+		services.Topics = topicv1connect.NewTopicServiceClient(agent, source.AgentURL)
+	}
+	if services.Empty() {
+		return bindingproxy.Served{}, nil
+	}
+	return bindingproxy.Serve(services)
+}
+
+func bucketsFor(manifest variables.Manifest, values *live.Values, socket, app string) (bucketv1connect.BucketServiceHandler, error) {
 	if manifest.Store == nil {
-		return s3store.ServeBound(values, app)
+		if !slices.ContainsFunc(values.Bindings(), func(binding live.Binding) bool { return naming.Proxied(binding.Type) }) {
+			return nil, nil
+		}
+		return s3store.NewDispatch(nil, values, s3store.HTTPPoster{App: app}), nil
 	}
 	secret := values.Value(variables.StoreSecretKey)
 	if secret == "" {
-		return bindingproxy.Served{}, fmt.Errorf("this deployment binds a bucket but has no credential for the store at %s", manifest.Store.Endpoint)
+		return nil, fmt.Errorf("this deployment binds a bucket but has no credential for the store at %s", manifest.Store.Endpoint)
 	}
 	internal := s3store.Store{
 		Endpoint:        manifest.Store.Endpoint,
@@ -193,7 +218,7 @@ func proxying(manifest variables.Manifest, values *live.Values, socket, app stri
 	if manifest.Store.Volume != "" {
 		cfg.Volume = source.FreeSpace(socket)
 	}
-	return bindingproxy.Serve(s3store.NewDispatch(s3store.New(cfg), values, cfg.Callbacks))
+	return s3store.NewDispatch(s3store.New(cfg), values, cfg.Callbacks), nil
 }
 
 const unclaimedWindow = 10 * time.Second

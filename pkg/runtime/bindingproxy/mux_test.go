@@ -56,7 +56,7 @@ func (b bearer) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.
 func serveBuckets(t *testing.T) (bucketv1connect.BucketServiceClient, *recordingBuckets) {
 	t.Helper()
 	svc := &recordingBuckets{}
-	ts := httptest.NewServer(NewMux(testToken, svc))
+	ts := httptest.NewServer(NewMux(testToken, Services{Buckets: svc}))
 	t.Cleanup(ts.Close)
 	return bucketv1connect.NewBucketServiceClient(http.DefaultClient, ts.URL,
 		connect.WithInterceptors(bearer{token: testToken})), svc
@@ -154,7 +154,7 @@ func TestTheProxyAnswersForEveryBindingTypeAnAppReachesThroughIt(t *testing.T) {
 	services := map[bindingsv1.BindingType]string{
 		bindingsv1.BindingType_BINDING_TYPE_BUCKET: bucketv1connect.BucketServiceName,
 	}
-	mux := NewMux(testToken, &recordingBuckets{})
+	mux := NewMux(testToken, Services{Buckets: &recordingBuckets{}})
 	for wire := range bindingsv1.BindingType_name {
 		kind := bindingsv1.BindingType(wire)
 		if !naming.Proxied(kind) {

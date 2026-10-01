@@ -21,7 +21,7 @@ type socketSource struct {
 }
 
 func (f *socketSource) Fetch(ctx context.Context) (map[string]string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ocel-live"+variables.ValuesPath, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, AgentURL+variables.ValuesPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func (f *socketSource) Fetch(ctx context.Context) (map[string]string, error) {
 func (f *socketSource) FreeSpace() (uint64, uint64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), live.FetchBudget)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ocel-live"+variables.SpacePath, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, AgentURL+variables.SpacePath, nil)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -89,10 +89,16 @@ func Over(manifest variables.Manifest, socket string) *live.Values {
 	return live.New(over(socket), live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil)
 }
 
+const AgentURL = "http://ocel-live"
+
 func over(socket string) *socketSource {
-	return &socketSource{socket: socket, client: &http.Client{Transport: &http.Transport{
+	return &socketSource{socket: socket, client: Client(socket)}
+}
+
+func Client(socket string) *http.Client {
+	return &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 		},
-	}}}
+	}}
 }

@@ -82,7 +82,7 @@ func serveProxy(ctx context.Context, values s3store.Records, table, sessionPrefi
 		Granted:          grantedBuckets(values),
 	})
 
-	served, err := bindingproxy.Serve(s3store.NewDispatch(svc, values, s3store.HTTPPoster{}))
+	served, err := bindingproxy.Serve(bindingproxy.Services{Buckets: s3store.NewDispatch(svc, values, s3store.HTTPPoster{})})
 	if err != nil {
 		return nil, nil, err
 	}
