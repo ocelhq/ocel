@@ -1705,6 +1705,19 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  tests/fixtures/worker/node:
+    dependencies:
+      ocel:
+        specifier: workspace:^
+        version: link:../../../../packages/ocel
+    devDependencies:
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   tests/journeys:
     dependencies:
       '@ocel-tests/shared':

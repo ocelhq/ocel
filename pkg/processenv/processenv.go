@@ -12,6 +12,8 @@ const AppURLEnvVar = "OCEL_URL"
 
 const RuntimeAddressEnvVar = "OCEL_RUNTIME_ADDRESS"
 
+const WorkerEnvVar = "OCEL_WORKER"
+
 const LiveKeysEnvVar = "OCEL_LIVE_KEYS"
 
 const ResourceEnvVarPrefix = "OCEL_RESOURCE_"

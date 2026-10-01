@@ -14,32 +14,47 @@ import (
 const goEntryDir = statedir.Name + "/discovery"
 
 func goCommand(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error) {
-	moduleRoot, modulePath, err := goModule(configDir, root.Dir)
+	moduleRoot, pkg, err := goPackage(configDir, root)
 	if err != nil {
 		return nil, err
 	}
-	rel, err := filepath.Rel(moduleRoot, root.Dir)
-	if err != nil {
-		return nil, fmt.Errorf("discovery: %s is not inside the module at %s", root.Dir, moduleRoot)
-	}
-
-	pkg := modulePath
-	if rel != "." {
-		pkg += "/" + filepath.ToSlash(rel)
-	}
-	entry := filepath.Join(moduleRoot, filepath.FromSlash(goEntryDir), "main.go")
-	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
-		return nil, fmt.Errorf("discovery: %w", err)
-	}
 	source := fmt.Sprintf("package main\n\nimport _ %q\n\nfunc main() {}\n", pkg)
-	if err := os.WriteFile(entry, []byte(source), 0o644); err != nil {
-		return nil, fmt.Errorf("discovery: %w", err)
+	if err := writeGoEntry(moduleRoot, goEntryDir, source); err != nil {
+		return nil, err
 	}
 
 	cmd := exec.CommandContext(ctx, "go", "run", "-trimpath=false", "./"+goEntryDir)
 	cmd.Dir = moduleRoot
 	cmd.Env = append(os.Environ(), server.Env()...)
 	return cmd, nil
+}
+
+func goPackage(configDir string, root Root) (string, string, error) {
+	moduleRoot, modulePath, err := goModule(configDir, root.Dir)
+	if err != nil {
+		return "", "", err
+	}
+	rel, err := filepath.Rel(moduleRoot, root.Dir)
+	if err != nil {
+		return "", "", fmt.Errorf("discovery: %s is not inside the module at %s", root.Dir, moduleRoot)
+	}
+
+	pkg := modulePath
+	if rel != "." {
+		pkg += "/" + filepath.ToSlash(rel)
+	}
+	return moduleRoot, pkg, nil
+}
+
+func writeGoEntry(moduleRoot, dir, source string) error {
+	entry := filepath.Join(moduleRoot, filepath.FromSlash(dir), "main.go")
+	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
+		return fmt.Errorf("discovery: %w", err)
+	}
+	if err := os.WriteFile(entry, []byte(source), 0o644); err != nil {
+		return fmt.Errorf("discovery: %w", err)
+	}
+	return nil
 }
 
 var goModulePathRE = regexp.MustCompile(`(?m)^\s*module\s+(\S+)`)

@@ -20,4 +20,5 @@ use (
 	./sdk
 	./tests/fixtures/deploy/go/server
 	./tests/fixtures/sdk/go
+	./tests/fixtures/worker/go
 )
