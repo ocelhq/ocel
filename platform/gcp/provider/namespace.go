@@ -27,12 +27,12 @@ const (
 )
 
 const (
-	maxBucketName  = 63
-	maxAccountID   = 30
-	minDatabaseID  = 4
-	maxServiceName = 49
-	serviceHashLen = 6
-	accountHashLen = 10
+	maxBucketName        = 63
+	maxAccountID         = 30
+	minDatabaseID        = 4
+	maxServiceNameLength = 49
+	serviceHashLength    = 6
+	accountHashLen       = 10
 )
 
 const longestTier = environment.TierProduction
@@ -76,13 +76,13 @@ func (n Names) Service(project, env, app, function string) (string, error) {
 		parts = append(parts, images.FunctionRoute(app, function))
 	}
 	service := strings.Join(parts, "-") + "-" + serviceHash(string(n.namespace), project, env, app, function)
-	if len(service) > maxServiceName {
+	if len(service) > maxServiceNameLength {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"the Cloud Run service %s would be named %s, which is %d characters and Cloud Run builds a url from %d: "+
 				"a service is named for the namespace, the project, the environment and the app it serves, "+
 				"and ends in %d characters of a hash of the four, because every one of them may contain a dash and a name joined by dashes alone would read two ways.\n"+
 				"Name a shorter namespace in %s, a shorter project slug, or a shorter app",
-			app, service, len(service), maxServiceName, serviceHashLen, provider.NamespaceEnvVar)
+			app, service, len(service), maxServiceNameLength, serviceHashLength, provider.NamespaceEnvVar)
 	}
 	return service, nil
 }
@@ -97,7 +97,7 @@ func (n Names) PreviewService(label, app, function string) (string, error) {
 		suffix = naming.FieldSeparator + images.FunctionRoute(app, function) + naming.FieldSeparator + functionSuffix
 		service += suffix
 	}
-	if len(service) <= maxServiceName && cloudRunService.MatchString(service) {
+	if len(service) <= maxServiceNameLength && cloudRunService.MatchString(service) {
 		return service, nil
 	}
 	slug := edge.PreviewHost{Hostname: label}.ReadPrefix()
@@ -111,10 +111,10 @@ func (n Names) PreviewService(label, app, function string) (string, error) {
 			"On a shared preview wildcard the load balancer hands Cloud Run the label a hostname begins with as the service name, "+
 			"and that label is %s.\n"+
 			"Use a project slug that starts with a letter and leaves the name within %d characters, and deploy again",
-		app, service, len(service), maxServiceName, shape, maxServiceName)
+		app, service, len(service), maxServiceNameLength, shape, maxServiceNameLength)
 }
 
-func serviceHash(parts ...string) string { return truncatedHash(serviceHashLen, parts...) }
+func serviceHash(parts ...string) string { return truncatedHash(serviceHashLength, parts...) }
 
 func truncatedHash(length int, parts ...string) string {
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))

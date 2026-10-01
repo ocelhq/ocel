@@ -37,8 +37,8 @@ func TestTheSyncAccountFitsTheLongestNamespaceTheWorkloadAccountLeavesRoomFor(t 
 		if !strings.HasPrefix(account, string(names.namespace)+"-") {
 			t.Errorf("%s does not start with the namespace, so two namespaces in one project would share it", account)
 		}
-		if service := names.EnvSourceSync(tier); len(service) > maxServiceName {
-			t.Errorf("%s is %d characters and Cloud Run takes %d", service, len(service), maxServiceName)
+		if service := names.EnvSourceSync(tier); len(service) > maxServiceNameLength {
+			t.Errorf("%s is %d characters and Cloud Run takes %d", service, len(service), maxServiceNameLength)
 		}
 	}
 }
