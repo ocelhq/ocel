@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -691,5 +692,64 @@ func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "Good to go.") {
 		t.Fatalf("doctor did not pass on a Go project with no node:\n%s", stdout.String())
+	}
+}
+
+func TestDoctorPrintsALineForEachStepOfItsCheckAsTheStepEnds(t *testing.T) {
+	project := healthyProject(t)
+	clitest.Bootstrap(t, project.Provider, environment.TierProduction)
+
+	invocation := clitest.NewInvocation()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, project.Root, &stdout); err != nil {
+		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var steps []string
+	for _, line := range strings.Split(stderr.String(), "\n") {
+		if _, done, ok := strings.Cut(line, "[check] ✓ fake: "); ok {
+			step, _, _ := strings.Cut(done, " in ")
+			steps = append(steps, step)
+		}
+	}
+	want := []string{
+		"Loaded the provider",
+		"Checked your credentials and the production bootstrap for my-shop",
+		"Read what production has set up",
+		"Checked the production hostnames",
+		"Checked your credentials and the preview bootstrap for my-shop",
+		"Read what preview has set up",
+	}
+	if !slices.Equal(steps, want) {
+		t.Errorf("steps = %q, want %q; stderr:\n%s", steps, want, stderr.String())
+	}
+}
+
+func TestDoctorPrintsTheStepThatFailedAndBeginsNoOther(t *testing.T) {
+	project := healthyProject(t)
+	project.Provider.WithFacts(func(facts *provider.Facts) {
+		facts.Computes = []provider.Compute{provider.ComputeServerless}
+	})
+	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `
+export default {
+  slug: "my-shop",
+  provider: { fake: {} },
+  apps: [{ name: "api", path: "apps/api" }],
+};
+`)
+	clitest.WriteFile(t, filepath.Join(project.Root, "apps", "api", "main.rb"), "puts 1\n")
+
+	invocation := clitest.NewInvocation()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	_ = Run(context.Background(), invocation, project.Root, &stdout)
+
+	got := stderr.String()
+	if !strings.Contains(got, "[check] ✗ fake: Checking your credentials and the production bootstrap for my-shop failed") {
+		t.Errorf("stderr = %s, want the production check named as the step that failed", got)
+	}
+	if strings.Contains(got, "preview") {
+		t.Errorf("stderr = %s, want no step begun after the one that failed", got)
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -163,7 +164,7 @@ func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) r
 		return found
 	}
 
-	answers := gather(ctx, invocation, cfg)
+	answers := gather(ctx, invocation, cfg, descriptor.ID)
 	found.add(credentialSections(cfg, answers)...)
 	for _, tier := range checkedTiers() {
 		found.add(tierSection(tier, hosts[tier], answers))
@@ -325,15 +326,15 @@ func hostCheckDomains(asking bool, cfg *project.Project) []string {
 	return named
 }
 
-func gather(ctx context.Context, invocation commands.Invocation, cfg *project.Project) *answers {
+func gather(ctx context.Context, invocation commands.Invocation, cfg *project.Project, providerID string) *answers {
 	got := &answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
-	if err := checkSetup(ctx, invocation, cfg, got); err != nil && got.problem == "" {
+	if err := checkSetup(ctx, invocation, cfg, providerID, got); err != nil && got.problem == "" {
 		got.problem = strings.TrimSpace(err.Error())
 	}
 	return got
 }
 
-func checkSetup(ctx context.Context, invocation commands.Invocation, cfg *project.Project, got *answers) error {
+func checkSetup(ctx context.Context, invocation commands.Invocation, cfg *project.Project, providerID string, got *answers) error {
 	ctx, run, err := invocation.Events.Begin(ctx, "ocel doctor", cfg.Dir)
 	if err != nil {
 		return err
@@ -344,14 +345,11 @@ func checkSetup(ctx context.Context, invocation commands.Invocation, cfg *projec
 	}()
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	span := check.Child(cfg.Slug, progress.Checking.Title("your setup"))
-	err = askProvider(ctx, invocation, cfg, span, got)
-	span.End(err)
-	return err
-}
-
-func askProvider(ctx context.Context, invocation commands.Invocation, cfg *project.Project, span *run.Span, got *answers) error {
-	provider, _, err := invocation.OpenProvider(ctx, span, cfg, commands.OpenOptions{})
+	var provider *providerprocess.Provider
+	err = runStep(check, providerID, progress.Loading.Title("the provider"), func() (err error) {
+		provider, _, err = invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -359,44 +357,67 @@ func askProvider(ctx context.Context, invocation commands.Invocation, cfg *proje
 	got.providerName = provider.Name()
 
 	for _, tier := range checkedTiers() {
-		checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
-		read, err := readiness.Read(ctx, provider, cfg, readiness.Request{
+		if err := askAboutTier(ctx, check, provider, cfg, tier, got); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runStep(check *run.Span, subject string, title progress.Title, work func() error) error {
+	span := check.Child(subject, title)
+	err := work()
+	span.End(err)
+	return err
+}
+
+func askAboutTier(ctx context.Context, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier, got *answers) error {
+	name := readiness.TierName(tier)
+	checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
+	var read readiness.Preflight
+	err := runStep(check, provider.Name(), readiness.CheckingTitle(tier, cfg.Slug), func() (err error) {
+		read, err = readiness.Read(ctx, provider, cfg, readiness.Request{
 			Tier:             tier,
 			Slug:             cfg.Slug,
 			Domains:          cfg.HostnameNames(tier),
 			CheckHosts:       checkHosts,
 			HostCheckDomains: hostCheckDomains(checkHosts, cfg),
 		})
-		if err != nil {
-			return err
-		}
-		if got.identity == nil {
-			got.identity = read.Response.GetIdentity()
-		}
-		got.keep(read.Response.GetCredentialProblems())
-		got.addHostChecks(read.Response.GetHostChecks())
-		if tier == environmentv1.Tier_TIER_PREVIEW {
-			got.wildcard = read.Response.GetPreviewWildcard()
-		}
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	if got.identity == nil {
+		got.identity = read.Response.GetIdentity()
+	}
+	got.keep(read.Response.GetCredentialProblems())
+	got.addHostChecks(read.Response.GetHostChecks())
+	if tier == environmentv1.Tier_TIER_PREVIEW {
+		got.wildcard = read.Response.GetPreviewWildcard()
+	}
 
-		var planned *contractv1.DescribeBootstrapResponse
-		err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	var planned *contractv1.DescribeBootstrapResponse
+	err = runStep(check, provider.Name(), progress.Reading.Title("what "+name+" has set up"), func() error {
+		return provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 			planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: cfg.EdgeSelection()})
 			return err
 		})
-		if err != nil {
-			return err
-		}
-		got.tiers[tier] = &tierAnswer{status: planned.GetBootstrap()}
-		if tier != environmentv1.Tier_TIER_PRODUCTION || !planned.GetBootstrap().GetPresent() {
-			continue
-		}
-		configured := cfg.ConfiguredHostnames(tier)
-		if len(configured) == 0 {
-			continue
-		}
-		var bound *contractv1.GetHostnameStatusResponse
-		err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	})
+	if err != nil {
+		return err
+	}
+	got.tiers[tier] = &tierAnswer{status: planned.GetBootstrap()}
+	if tier != environmentv1.Tier_TIER_PRODUCTION || !planned.GetBootstrap().GetPresent() {
+		return nil
+	}
+	configured := cfg.ConfiguredHostnames(tier)
+	if len(configured) == 0 {
+		return nil
+	}
+	var bound *contractv1.GetHostnameStatusResponse
+	err = runStep(check, provider.Name(), progress.Checking.Title("the "+name+" hostnames"), func() error {
+		return provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 			bound, err = client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
 				Slug:       cfg.Slug,
 				Configured: configured,
@@ -404,11 +425,11 @@ func askProvider(ctx context.Context, invocation commands.Invocation, cfg *proje
 			})
 			return err
 		})
-		if err != nil {
-			return err
-		}
-		got.hostnames = bound.GetHostnames()
+	})
+	if err != nil {
+		return err
 	}
+	got.hostnames = bound.GetHostnames()
 	return nil
 }
 
