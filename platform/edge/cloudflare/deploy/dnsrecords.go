@@ -3,6 +3,9 @@ package cloudflare
 import (
 	"context"
 	"fmt"
+	"os"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,9 +34,8 @@ type zoneAPI interface {
 }
 
 type dnsRecords struct {
-	records  recordAPI
-	zones    zoneAPI
-	accounts accountAPI
+	records recordAPI
+	zones   zoneAPI
 
 	accountID string
 	named     string
@@ -47,7 +49,6 @@ func NewDNS(zone string) edge.DNSRecords {
 	return &dnsRecords{
 		records:   client.DNS.Records,
 		zones:     client.Zones,
-		accounts:  client.Accounts,
 		accountID: readAccountID(),
 		named:     zone,
 	}
@@ -58,8 +59,27 @@ func (w *dnsRecords) TTL() time.Duration {
 }
 
 func (w *dnsRecords) VerifyCredentials(ctx context.Context) error {
-	_, err := verifyAccount(ctx, w.accounts, w.accountID)
-	return err
+	if w.accountID == "" {
+		return fmt.Errorf("%s is not set", envAccountID)
+	}
+	if os.Getenv(envAPIToken) == "" {
+		return fmt.Errorf("%s is not set", envAPIToken)
+	}
+	params := zones.ZoneListParams{
+		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(w.accountID)}),
+		PerPage: cf.F(float64(1)),
+	}
+	if w.named != "" {
+		params.Name = cf.F(strings.ToLower(w.named))
+	}
+	res, err := w.zones.List(ctx, params)
+	if err != nil {
+		return fmt.Errorf("%s was rejected by Cloudflare for account %s: %w", envAPIToken, w.accountID, err)
+	}
+	if w.named != "" && !slices.ContainsFunc(res.Result, func(z zones.Zone) bool { return strings.EqualFold(z.Name, w.named) }) {
+		return fmt.Errorf("no zone named %q is reachable with %s in account %s", w.named, envAPIToken, w.accountID)
+	}
+	return nil
 }
 
 func (w *dnsRecords) Ensure(ctx context.Context, records []edge.Record, say func(string)) ([]edge.Record, error) {
