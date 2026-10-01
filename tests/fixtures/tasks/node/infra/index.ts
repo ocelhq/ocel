@@ -113,6 +113,23 @@ export const beta = task("beta", {
   run: runPaced,
 });
 
+type Ticking = { probe: string; ms: number };
+
+const TICK_MS = 200;
+
+export const ticking = task("ticking", {
+  run: async ({ probe, ms }: Ticking, { signal }) => {
+    const until = Date.now() + ms;
+    let ticks = 0;
+    while (Date.now() < until && !signal.aborted) {
+      ticks += 1;
+      await receipt.trigger({ probe, tick: ticks }, { tags: [probe] });
+      await sleep(TICK_MS);
+    }
+    return { ticks, stopped: signal.aborted };
+  },
+});
+
 export const outlives = task("outlives", {
   maxDuration: "1s",
   retry: { maxAttempts: 3, minDelay: "1s", maxDelay: "1s" },
@@ -172,6 +189,7 @@ export const tasks = {
   limited,
   alpha,
   beta,
+  ticking,
   outlives,
   heartbeat,
   receipt,

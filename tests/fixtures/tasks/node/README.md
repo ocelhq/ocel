@@ -6,9 +6,10 @@ besides the default one with `worker()` from `ocel/worker`: `ledger`, which serv
 two consumers of `orders`, and `capped`, which serves `alpha` and `beta` two runs at a time.
 Each task takes one behaviour: retries and aborts (`flaky`), ordering per key (`sequence`),
 batches (`tally`), lanes and expiry (`laned`), concurrency (`limited`, `alpha`, `beta`),
-`maxDuration` (`outlives`) and `cron` (`heartbeat`). A consumer records what it received by
-triggering `receipt`, tagged with the probe it was sent, so the suite reads deliveries back
-through `runs.list`. `echo-name` holds a hyphen in its name.
+cancellation (`ticking`), `maxDuration` (`outlives`) and `cron` (`heartbeat`). A consumer
+records what it received by triggering `receipt`, tagged with the probe it was sent, so the
+suite reads deliveries back through `runs.list`; `tally` records each batch it is delivered
+and `ticking` each tick until its run is aborted the same way. `echo-name` holds a hyphen in its name.
 
 The routes trigger and batch-trigger any task by name, read, list, cancel, replay and
 reschedule runs, send to any topic, and list, redrive and purge a consumer's dead letters.
