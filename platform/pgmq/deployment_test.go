@@ -1,8 +1,10 @@
 package pgmq
 
 import (
+	"context"
 	"maps"
 	"slices"
+	"strings"
 	"testing"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -14,6 +16,7 @@ func TestADeploymentTakesTheManifestsTopicsAndTheWorkersThatHaveAnAddress(t *tes
 	orders := aTopic(&contractv1.ManifestConsumer{Name: "email", Worker: "mail"})
 	resize := aTask(named("resize"))
 	manifest := &contractv1.Manifest{
+		Slug: "shop",
 		Resources: []*contractv1.ManifestResource{
 			{LogicalName: "orders", Config: &contractv1.ManifestResource_Topic{Topic: orders}},
 			{LogicalName: "resize", Config: &contractv1.ManifestResource_Topic{Topic: resize}},
@@ -26,6 +29,9 @@ func TestADeploymentTakesTheManifestsTopicsAndTheWorkersThatHaveAnAddress(t *tes
 
 	if names := slices.Sorted(maps.Keys(got.Topics)); !slices.Equal(names, []string{"orders", "resize"}) || got.Topics["orders"] != orders {
 		t.Errorf("topics = %v, want orders and resize as declared", names)
+	}
+	if got.Slug != "shop" {
+		t.Errorf("slug = %q, want the manifest's shop", got.Slug)
 	}
 	want := map[string]Worker{"mail": {URL: "http://127.0.0.1:4001", Concurrency: 4}, "worker": {URL: "http://127.0.0.1:4002"}}
 	if !maps.Equal(got.Workers, want) {
@@ -47,4 +53,38 @@ func TestAQueueNameFitsPgmqsLimitAndStaysDistinctForLongNames(t *testing.T) {
 	if got := queueName("orders", "send-email"); got != "orders__send_email" {
 		t.Errorf("queueName(orders, send-email) = %q, want orders__send_email", got)
 	}
+}
+
+func TestADatabaseServesOnlyTheDeploymentFirstAppliedToIt(t *testing.T) {
+	ctx := context.Background()
+	cfg := aDatabase(t)
+	shop, blog := openedOn(t, cfg), openedOn(t, cfg)
+	orders := map[string]*contractv1.ManifestTopic{"orders": aTopic(&contractv1.ManifestConsumer{Name: "email", Worker: "mail"})}
+
+	if err := shop.Apply(ctx, Deployment{Slug: "shop", Topics: orders}); err != nil {
+		t.Fatalf("Apply(shop): %v", err)
+	}
+	err := blog.Apply(ctx, Deployment{Slug: "blog", Topics: orders})
+	if err == nil || !strings.Contains(err.Error(), "shop") || !strings.Contains(err.Error(), "blog") {
+		t.Errorf("Apply(blog) on shop's database = %v, want a refusal naming both", err)
+	}
+	if err := shop.Apply(ctx, Deployment{Slug: "shop", Topics: orders}); err != nil {
+		t.Errorf("Apply(shop) again: %v", err)
+	}
+}
+
+func TestADeploymentWithoutASlugIsRefused(t *testing.T) {
+	if err := anEngine(t).Apply(context.Background(), Deployment{}); err == nil {
+		t.Error("Apply took a deployment that names no app")
+	}
+}
+
+func openedOn(t *testing.T, cfg Config) *Engine {
+	t.Helper()
+	engine, err := Open(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(engine.Close)
+	return engine
 }

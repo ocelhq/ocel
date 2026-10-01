@@ -65,14 +65,14 @@ func TestAScheduleKeepsItsTimeWhenReappliedAndGoesWhenItsCronDoes(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	if err := engine.Apply(context.Background(), Deployment{Topics: map[string]*contractv1.ManifestTopic{"report": aTask(nightly, named("report"))}}); err != nil {
+	if err := engine.Apply(context.Background(), Deployment{Slug: "app", Topics: map[string]*contractv1.ManifestTopic{"report": aTask(nightly, named("report"))}}); err != nil {
 		t.Fatal(err)
 	}
 	if next, _ := scheduledAt(t, engine, "report"); !next.Equal(pinned) {
 		t.Errorf("reapplying the same cron moved the schedule to %v, want it kept at %v", next, pinned)
 	}
 
-	if err := engine.Apply(context.Background(), Deployment{Topics: map[string]*contractv1.ManifestTopic{"report": aTask(named("report"))}}); err != nil {
+	if err := engine.Apply(context.Background(), Deployment{Slug: "app", Topics: map[string]*contractv1.ManifestTopic{"report": aTask(named("report"))}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, found := scheduledAt(t, engine, "report"); found {
