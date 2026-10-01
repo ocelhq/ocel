@@ -29,6 +29,20 @@ func TestATriggerWithAKnownIdempotencyKeyReturnsTheExistingRun(t *testing.T) {
 	}
 }
 
+func TestADebouncedTriggerWithAKnownIdempotencyKeyReturnsTheRunItFoldedInto(t *testing.T) {
+	engine, _ := aServedTask(t, succeeding)
+	debounce := &taskv1.Debounce{Key: "user-7", Delay: durationpb.New(time.Hour)}
+
+	pending := trigger(t, engine, "resize", `{"n":1}`, &taskv1.TriggerOptions{Debounce: debounce})
+	folded := trigger(t, engine, "resize", `{"n":2}`, &taskv1.TriggerOptions{IdempotencyKey: "order-1", Debounce: debounce})
+	again := trigger(t, engine, "resize", `{"n":3}`, &taskv1.TriggerOptions{IdempotencyKey: "order-1", Debounce: debounce})
+
+	if folded != pending || again != pending {
+		t.Errorf("the triggers answered %s and %s, want the pending run %s", folded, again, pending)
+	}
+	retrieve(t, engine, again)
+}
+
 func TestAnIdempotencyKeyIsFreeAgainOnceItsTTLPasses(t *testing.T) {
 	engine, _ := aServedTask(t, succeeding)
 	options := &taskv1.TriggerOptions{IdempotencyKey: "order-1", IdempotencyKeyTtl: durationpb.New(200 * time.Millisecond)}
