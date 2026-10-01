@@ -424,3 +424,22 @@ func TestAServerPublishRelaysAnyJSONEventAndRefusesOneOverTheSizeLimitOrNotJSON(
 		t.Fatalf("subscriber got %v, want %s as published", got, bare)
 	}
 }
+
+func TestUnsubscribingAnUnknownIDAnswersTheErrorAppSyncSends(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	c := h.connect()
+
+	c.send(map[string]any{"type": "unsubscribe", "id": "s-9"})
+
+	got := c.read()
+	errs, _ := got["errors"].([]any)
+	if got["type"] != "unsubscribe_error" || got["id"] != "s-9" || len(errs) != 1 {
+		t.Fatalf("unsubscribe answered %v, want one unsubscribe_error for s-9", got)
+	}
+	want := map[string]any{"errorType": "UnknownOperationError", "message": "Unknown operation id s-9"}
+	if first, _ := errs[0].(map[string]any); first["errorType"] != want["errorType"] || first["message"] != want["message"] {
+		t.Fatalf("unsubscribe_error carried %v, want %v", errs[0], want)
+	}
+}
