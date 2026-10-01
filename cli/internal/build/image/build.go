@@ -44,6 +44,10 @@ func Build(ctx context.Context, app App, arch string, progress io.Writer) (Image
 		return Image{}, err
 	}
 
+	if progress != nil {
+		progress = &lockedWriter{w: progress}
+	}
+	defer railpackLogsTo(progress)()
 	opt, done, err := recipe.solve(arch)
 	if err != nil {
 		return Image{}, err
