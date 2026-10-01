@@ -13,6 +13,7 @@ import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func aServedTask(t *testing.T, respond func(*topicv1.Envelope) reply, mods ...func(*contractv1.ManifestTopic)) (*Engine, *aWorker) {
@@ -72,6 +73,31 @@ func TestARunThatHasStartedCannotBeRescheduled(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("RescheduleRun of a completed run = %v, want FailedPrecondition", err)
 	}
+}
+
+func storedRun(t *testing.T, engine *Engine, run provider.Run) {
+	t.Helper()
+	run.Topic, run.Consumer, run.CreatedAt = "resize", "resize", time.Now()
+	if _, err := engine.Store().WriteRun(context.Background(), run); err != nil {
+		t.Fatalf("WriteRun: %v", err)
+	}
+}
+
+func TestARunTheStoreWroteWithoutAQueueMessageCannotBeRescheduled(t *testing.T) {
+	engine, _ := aServedTask(t, succeeding)
+	storedRun(t, engine, provider.Run{Execution: "stored", Status: provider.RunDelayed, DueAt: time.Now().Add(time.Hour)})
+
+	_, err := engine.Tasks().RescheduleRun(context.Background(), &taskv1.RescheduleRunRequest{Id: "stored", DueAt: timestamppb.New(time.Now())})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("RescheduleRun of a run on no queue = %v, want FailedPrecondition", err)
+	}
+}
+
+func TestARunTheStoreWroteWithoutAQueueMessageExpiresOnceItsTTLPasses(t *testing.T) {
+	engine, _ := aServedTask(t, succeeding)
+	storedRun(t, engine, provider.Run{Execution: "stored", Status: provider.RunQueued, ExpiresAt: time.Now().Add(-time.Second)})
+
+	awaitRun(t, engine, "stored", taskv1.RunStatus_RUN_STATUS_EXPIRED)
 }
 
 func TestACanceledRunThatHasNotStartedNeverRuns(t *testing.T) {

@@ -121,6 +121,9 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 		if run.status != provider.RunDelayed && run.status != provider.RunQueued {
 			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q is %s, and only a run that has not started can be rescheduled", req.GetId(), run.status))
 		}
+		if run.message == nil {
+			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q is on no queue, so nothing would run it at a new time", req.GetId()))
+		}
 		status := provider.RunQueued
 		if due.After(time.Now()) {
 			status = provider.RunDelayed

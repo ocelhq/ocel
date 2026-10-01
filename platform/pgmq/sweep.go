@@ -36,7 +36,7 @@ func (e *Engine) sweepOnce(ctx context.Context) error {
 				WHERE status IN ('queued', 'delayed') AND attempts = 0 AND expires_at <= clock_timestamp()
 				RETURNING queue, queue_message
 			)
-			SELECT pgmq.delete(queue, queue_message) FROM expired`); err != nil {
+			SELECT pgmq.delete(queue, queue_message) FROM expired WHERE queue_message IS NOT NULL`); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, "DELETE FROM ocel.records WHERE expires_at <= clock_timestamp()"); err != nil {
