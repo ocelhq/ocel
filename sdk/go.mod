@@ -8,6 +8,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/redis/go-redis/v9 v9.22.0
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	google.golang.org/protobuf v1.36.12
 )
 

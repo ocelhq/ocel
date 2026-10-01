@@ -96,6 +96,8 @@ func typeOf(delivered *bindingsv1.Binding) bindingsv1.BindingType {
 		return bindingsv1.BindingType_BINDING_TYPE_TASK
 	case *bindingsv1.Binding_Kv:
 		return bindingsv1.BindingType_BINDING_TYPE_KV
+	case *bindingsv1.Binding_Realtime:
+		return bindingsv1.BindingType_BINDING_TYPE_REALTIME
 	}
 	return bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED
 }
