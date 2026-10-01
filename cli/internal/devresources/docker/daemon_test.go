@@ -287,3 +287,55 @@ func TestWipeTakesEveryContainerAndVolumeEvenWhenOneWillNotStop(t *testing.T) {
 		}
 	}
 }
+
+var argued = docker.Spec{
+	Name:   "ocel-dev-shop-kv-cache-9",
+	Image:  "valkey/valkey:9@sha256:abc",
+	Args:   []string{"valkey-server", "--maxmemory", "268435456"},
+	User:   "valkey:valkey",
+	Port:   5432,
+	Labels: docker.Labels("shop", "kv"),
+}
+
+func TestRunHandsTheContainerItsArgsAndUser(t *testing.T) {
+	daemon := &fakeDaemon{}
+	engine := openFake(t, daemon)
+
+	if _, err := engine.Run(context.Background(), argued); err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+	created := daemon.created[0]
+	cmd, _ := json.Marshal(created["Cmd"])
+	if string(cmd) != `["valkey-server","--maxmemory","268435456"]` || created["User"] != "valkey:valkey" {
+		t.Errorf("created Cmd %s as %v, want the spec's args run as its user", cmd, created["User"])
+	}
+}
+
+func TestRunReplacesARunningContainerOfTheSameImageWhoseArgsChanged(t *testing.T) {
+	daemon := &fakeDaemon{inspected: map[string]map[string]any{
+		argued.Name: inspected("stale", true, map[string]any{
+			"Image": argued.Image, "Labels": argued.Labels, "Cmd": []string{"valkey-server", "--maxmemory", "33554432"},
+		}),
+	}}
+	engine := openFake(t, daemon)
+
+	running, err := engine.Run(context.Background(), argued)
+	if err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+	if running.ID != "created" || !daemon.saw("DELETE /containers/stale") {
+		t.Fatalf("Run = %+v after %v, want the container started with the old args replaced", running, daemon.calls)
+	}
+}
+
+func TestRunAdoptsARunningContainerWhoseArgsAreTheSpecs(t *testing.T) {
+	daemon := &fakeDaemon{inspected: map[string]map[string]any{
+		argued.Name: inspected("theirs", true, map[string]any{"Image": argued.Image, "Labels": argued.Labels, "Cmd": argued.Args}),
+	}}
+	engine := openFake(t, daemon)
+
+	running, err := engine.Run(context.Background(), argued)
+	if err != nil || running.ID != "theirs" {
+		t.Fatalf("Run = %+v, %v, want the running container adopted", running, err)
+	}
+}
