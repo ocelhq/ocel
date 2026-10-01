@@ -110,7 +110,7 @@ func (b bootstrap) ensureSubnetwork(ctx context.Context, engine *compute.Service
 }
 
 func (b bootstrap) grantSubnetworkUse(ctx context.Context, engine *compute.Service, tier environment.Tier) error {
-	agent, err := b.serviceAgent(ctx)
+	agent, err := b.readServiceAgent(ctx)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (b bootstrap) grantSubnetworkUse(ctx context.Context, engine *compute.Servi
 	return nil
 }
 
-func (b bootstrap) serviceAgent(ctx context.Context) (string, error) {
+func (b bootstrap) readServiceAgent(ctx context.Context) (string, error) {
 	service, err := b.clients.Projects()
 	if err != nil {
 		return "", err
