@@ -1,7 +1,6 @@
 package envsource
 
 import (
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"path"
@@ -28,12 +27,12 @@ var _ = register(Kind{
 	Deployed: &Config{
 		Doc:     "Infisical, read as the machine identity auth names and synced every minute.",
 		Options: InfisicalOptions{},
-		decode:  decodeDeployedInfisical,
+		decode:  decodeAs(decodeDeployedInfisical),
 	},
 	Dev: &Config{
 		Doc:     "Infisical, read as you: from INFISICAL_TOKEN, or else the infisical CLI you are logged in to.",
 		Options: InfisicalOptions{},
-		decode:  decodeDevInfisical,
+		decode:  decodeAs(decodeDevInfisical),
 	},
 })
 
@@ -120,26 +119,21 @@ var (
 	variableNameText = regexp.MustCompile(`^[^#[:cntrl:]]*$`)
 )
 
-func readInfisicalOptions(raw json.RawMessage) (InfisicalOptions, error) {
-	var options InfisicalOptions
-	if err := decodeStrictly(raw, &options); err != nil {
-		return InfisicalOptions{}, err
-	}
+func refuseMalformedInfisical(options InfisicalOptions) error {
 	if err := requireText("project", options.Project, "the id of the Infisical project this tier reads"); err != nil {
-		return InfisicalOptions{}, err
+		return err
 	}
 	if err := requireText("environment", options.Environment, "the slug of the Infisical environment this tier reads"); err != nil {
-		return InfisicalOptions{}, err
+		return err
 	}
 	if !infisicalHost.MatchString(options.Host) {
-		return InfisicalOptions{}, &OptionError{Field: "host", Reason: "must be the http or https URL of an Infisical"}
+		return &OptionError{Field: "host", Reason: "must be the http or https URL of an Infisical"}
 	}
-	return options, nil
+	return nil
 }
 
-func decodeDevInfisical(raw json.RawMessage) (decodedOptions, error) {
-	options, err := readInfisicalOptions(raw)
-	if err != nil {
+func decodeDevInfisical(options InfisicalOptions) (decodedOptions, error) {
+	if err := refuseMalformedInfisical(options); err != nil {
 		return decodedOptions{}, err
 	}
 	switch {
@@ -157,9 +151,8 @@ func decodeDevInfisical(raw json.RawMessage) (decodedOptions, error) {
 	}, nil
 }
 
-func decodeDeployedInfisical(raw json.RawMessage) (decodedOptions, error) {
-	options, err := readInfisicalOptions(raw)
-	if err != nil {
+func decodeDeployedInfisical(options InfisicalOptions) (decodedOptions, error) {
+	if err := refuseMalformedInfisical(options); err != nil {
 		return decodedOptions{}, err
 	}
 	if options.Auth == nil {

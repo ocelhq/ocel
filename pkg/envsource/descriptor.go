@@ -28,11 +28,11 @@ func newDescriptor(kind string, options json.RawMessage, reader string, configOf
 	if config == nil {
 		return Descriptor{}, fmt.Errorf("%q is no env source %s reads", kind, reader)
 	}
-	decoded, err := config.decode(options)
+	canonical, decoded, err := config.decode(options)
 	if err != nil {
 		return Descriptor{}, fmt.Errorf("the %s env source's options: %w", kind, err)
 	}
-	return Descriptor{kind: kind, options: options, decoded: decoded}, nil
+	return Descriptor{kind: kind, options: canonical, decoded: decoded}, nil
 }
 
 func mustDescriptor(descriptor Descriptor, err error) Descriptor {

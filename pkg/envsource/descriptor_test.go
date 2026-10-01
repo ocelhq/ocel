@@ -60,6 +60,8 @@ func TestMalformedOptionsAreRefusedNamingTheFieldAtFault(t *testing.T) {
 	}{
 		{"not JSON", "infisical", `{"project":`, ""},
 		{"not an object", "infisical", `["p"]`, ""},
+		{"data after the options", "exec", `{"command":["a"],"format":"json"}garbage`, ""},
+		{"a second object after the options", "exec", `{"command":["a"],"format":"json"} {}`, ""},
 		{"an unknown field", "infisical", `{"project":"p","environment":"e","auth":{"identity":{"identityId":"i"}},"region":"eu"}`, "region"},
 		{"no project", "infisical", `{"environment":"prod","auth":{"identity":{"identityId":"i"}}}`, "project"},
 		{"a blank project", "infisical", `{"project":"  ","environment":"prod","auth":{"identity":{"identityId":"i"}}}`, "project"},
@@ -196,6 +198,18 @@ func TestADescriptorTravelsAsItsKindAndOptionsAndDecodesAgainOnArrival(t *testin
 	}
 	if err := json.Unmarshal([]byte(`{"kind":"infisical","options":{"project":"p"}}`), &arrived); err == nil {
 		t.Error("a stored descriptor with malformed options decoded, want it refused")
+	}
+}
+
+func TestADescriptorKeepsItsOptionsAsOcelSpellsThem(t *testing.T) {
+	for sent, want := range map[string]string{
+		`{"Command":["a"],"FORMAT":"json"}`:                     `{"command":["a"],"format":"json"}`,
+		`{"command":["a"],"command":["b"],"format":"json"}`:     `{"command":["b"],"format":"json"}`,
+		`{ "format" : "dotenv", "command" : [ "op", "read" ] }`: `{"command":["op","read"],"format":"dotenv"}`,
+	} {
+		if got := string(deployed(t, "exec", sent).Options()); got != want {
+			t.Errorf("Options() of %s = %s, want %s", sent, got, want)
+		}
 	}
 }
 
