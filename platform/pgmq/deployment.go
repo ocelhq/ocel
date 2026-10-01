@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 const maxQueueNameLength = 47
 
 type Deployment struct {
+	Slug    string
 	Topics  map[string]*contractv1.ManifestTopic
 	Workers map[string]Worker
 }
@@ -23,7 +25,7 @@ type Worker struct {
 }
 
 func DeploymentOf(manifest *contractv1.Manifest, workerURLs map[string]string) Deployment {
-	deployment := Deployment{Topics: map[string]*contractv1.ManifestTopic{}, Workers: map[string]Worker{}}
+	deployment := Deployment{Slug: manifest.GetSlug(), Topics: map[string]*contractv1.ManifestTopic{}, Workers: map[string]Worker{}}
 	for _, resource := range manifest.GetResources() {
 		if topic := resource.GetTopic(); topic != nil {
 			deployment.Topics[resource.GetLogicalName()] = topic
@@ -70,6 +72,9 @@ func queueName(topic, consumer string) string {
 }
 
 func (e *Engine) Apply(ctx context.Context, deployment Deployment) error {
+	if err := e.claimDatabase(ctx, deployment.Slug); err != nil {
+		return err
+	}
 	for queue, deployed := range deployment.consumers() {
 		if _, err := e.pool.Exec(ctx, "SELECT pgmq.create($1)", queue); err != nil {
 			return fmt.Errorf("create queue %s: %w", queue, err)
@@ -108,4 +113,23 @@ func (e *Engine) workerSlotsOf(worker string) *slots {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.workerSlots[worker]
+}
+
+func (e *Engine) claimDatabase(ctx context.Context, slug string) error {
+	if slug == "" {
+		return errors.New("the deployment names no app slug, and the engine's database serves one app")
+	}
+	var owner string
+	err := e.pool.QueryRow(ctx, `
+		WITH claimed AS (
+			INSERT INTO ocel.deployment (slug) VALUES ($1) ON CONFLICT DO NOTHING RETURNING slug
+		)
+		SELECT slug FROM claimed UNION ALL SELECT slug FROM ocel.deployment LIMIT 1`, slug).Scan(&owner)
+	if err != nil {
+		return fmt.Errorf("record the app the engine's database serves: %w", err)
+	}
+	if owner != slug {
+		return fmt.Errorf("the engine's database serves app %s, and app %s cannot share it: give %s its own database", owner, slug, slug)
+	}
+	return nil
 }

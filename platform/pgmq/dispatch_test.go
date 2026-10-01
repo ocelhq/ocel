@@ -123,7 +123,7 @@ func applied(t *testing.T, topics map[string]*contractv1.ManifestTopic, workers 
 			topic.Consumers[0].Name = name
 		}
 	}
-	if err := engine.Apply(context.Background(), Deployment{Topics: topics, Workers: workers}); err != nil {
+	if err := engine.Apply(context.Background(), Deployment{Slug: "app", Topics: topics, Workers: workers}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	return engine
@@ -220,7 +220,7 @@ func dispatchingWithLease(t *testing.T, lease time.Duration, topics map[string]*
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(engine.Close)
-	if err := engine.Apply(context.Background(), Deployment{Topics: topics, Workers: workers}); err != nil {
+	if err := engine.Apply(context.Background(), Deployment{Slug: "app", Topics: topics, Workers: workers}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	startDispatch(t, engine)
@@ -276,7 +276,7 @@ func TestARunWaitingOnAnUnservedWorkerRunsOnceALaterDeploymentServesIt(t *testin
 	time.Sleep(500 * time.Millisecond)
 
 	served := map[string]Worker{"other": {URL: worker.server.URL}, "worker": {URL: worker.server.URL}}
-	if err := engine.Apply(context.Background(), Deployment{Topics: topics, Workers: served}); err != nil {
+	if err := engine.Apply(context.Background(), Deployment{Slug: "app", Topics: topics, Workers: served}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_COMPLETED)
