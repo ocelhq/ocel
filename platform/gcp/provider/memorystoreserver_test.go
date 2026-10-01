@@ -25,12 +25,14 @@ type memorystoreServer struct {
 	patched   []string
 	deleted   []string
 	polls     int
+	reads     int
 	throttles int
 	failed    string
 
 	throttledWrites int
 	writeIDs        []string
 	settling        map[string]int
+	states          map[string]string
 }
 
 func servingMemorystore(t *testing.T) (*Provider, *memorystoreServer) {
@@ -78,6 +80,7 @@ func (s *memorystoreServer) serve(t *testing.T) http.HandlerFunc {
 				map[string]any{"name": name + "/adding", "token": "adding-token", "state": "CREATING", "createTime": "2026-10-01T11:00:00Z"},
 			}})
 		case r.Method == http.MethodGet:
+			s.reads++
 			instance, found := s.instances[name]
 			if !found {
 				w.WriteHeader(http.StatusNotFound)
@@ -87,6 +90,10 @@ func (s *memorystoreServer) serve(t *testing.T) http.HandlerFunc {
 			if s.settling[name] > 0 {
 				s.settling[name]--
 				writeBody(w, &memorystoreInstance{Name: name, State: "CREATING"})
+				return
+			}
+			if state, held := s.states[name]; held {
+				writeBody(w, &memorystoreInstance{Name: name, State: state})
 				return
 			}
 			writeBody(w, instance)
@@ -137,6 +144,21 @@ func (s *memorystoreServer) stillCreating(name string, reads int) {
 		s.settling = map[string]int{}
 	}
 	s.settling[name] = reads
+}
+
+func (s *memorystoreServer) heldIn(name, state string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.states == nil {
+		s.states = map[string]string{}
+	}
+	s.states[name] = state
+}
+
+func (s *memorystoreServer) instanceReads() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reads
 }
 
 func (s *memorystoreServer) requestIDs() []string {

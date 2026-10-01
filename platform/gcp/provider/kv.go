@@ -175,10 +175,14 @@ func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionReques
 		current, err = createStore(ctx, service, clients, instance, desired, in.Resource.Name, progress)
 	case err != nil:
 		return provider.Binding{}, fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)
-	case current.State != instanceActive:
-		if current, err = service.readActiveInstance(ctx, instance.path, in.Resource.Name); err == nil {
-			current, err = reshapeStore(ctx, service, instance, store, current, in.Resource.Name, progress)
+	case isSettling(current.State):
+		if current, err = service.readSettledInstance(ctx, instance.path, in.Resource.Name); err == nil {
+			if err = refuseInactiveStore(current, instance, clients.region, in.Resource.Name); err == nil {
+				current, err = reshapeStore(ctx, service, instance, store, current, in.Resource.Name, progress)
+			}
 		}
+	case current.State != instanceActive:
+		err = refuseInactiveStore(current, instance, clients.region, in.Resource.Name)
 	default:
 		current, err = reshapeStore(ctx, service, instance, store, current, in.Resource.Name, progress)
 	}
@@ -240,6 +244,18 @@ func reshapeStore(
 		return nil, err
 	}
 	return service.readInstance(ctx, instance.path)
+}
+
+func refuseInactiveStore(current *memorystoreInstance, instance kvInstance, region, store string) error {
+	if current.State == instanceActive {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"kv %s runs on the Memorystore instance %s, which is %s, and only an instance Memorystore is creating or updating becomes %s by itself: "+
+			"a store is bound and reshaped only once it is %s.\n"+
+			"If it is being deleted, deploy again once it is gone. Otherwise delete it with `gcloud memorystore instances delete %s --location %s`, "+
+			"which deletes the data it holds, and deploy again to create it afresh",
+		store, instance.id, current.State, instanceActive, instanceActive, instance.id, region)
 }
 
 func readBinding(ctx context.Context, service memorystore, instance kvInstance, current *memorystoreInstance, resource provider.Resource) (provider.Binding, error) {
