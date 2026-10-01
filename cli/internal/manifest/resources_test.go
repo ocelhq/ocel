@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -58,4 +59,26 @@ func TestADeclaredResourceCarriesItsFieldsAndWhereItWasDeclared(t *testing.T) {
 			t.Errorf("Source = %q, want %q", decls[0].Source, "shared/db.ts:3")
 		}
 	})
+}
+
+func TestANameThatIsNotLowercaseWordsJoinedByHyphensIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for name, declared := range map[string]declaredResource{
+		"topic":    topic("Orders", "src/orders.ts:1", nil),
+		"task":     task("-resize", "src/resize.ts:1", nil),
+		"worker":   worker("media--jobs", "src/media.ts:1", nil),
+		"consumer": consumer("email_x", "src/email.ts:1", &resourcesv1.ConsumerConfig{Topic: "orders"}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			declarations := []declaredResource{topic("orders", "src/o.ts:1", nil), declared}
+			if declared.Type == resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC {
+				declarations = []declaredResource{declared}
+			}
+			_, err := assembleWorkers([]app{{Name: "web"}}, declarations, nil)
+			refusedAt(t, err, declared.Source, fmt.Sprintf("%q", declared.Name))
+		})
+	}
 }

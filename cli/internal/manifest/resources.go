@@ -2,6 +2,7 @@ package manifest
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -24,6 +25,47 @@ type declaredResource struct {
 	Source   string
 }
 
+type declarationKind struct {
+	namespace     string
+	declaresTopic bool
+	consumer      func(d declaredResource) *contractv1.ManifestConsumer
+	refuseLimits  func(d declaredResource) error
+}
+
+var kinds = map[resourcesv1.ResourceType]declarationKind{
+	resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC: {
+		namespace: "topic", declaresTopic: true, refuseLimits: refuseTopicLimits,
+	},
+	resourcesv1.ResourceType_RESOURCE_TYPE_TASK: {
+		namespace: "topic", declaresTopic: true, consumer: taskConsumer, refuseLimits: refuseTaskLimits,
+	},
+	resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER: {
+		namespace: "consumer", consumer: topicConsumer, refuseLimits: refuseConsumerLimits,
+	},
+	resourcesv1.ResourceType_RESOURCE_TYPE_WORKER: {
+		namespace: "worker", refuseLimits: refuseWorkerLimits,
+	},
+}
+
+type namespacedName struct {
+	namespace string
+	name      string
+}
+
+func (d declaredResource) label() string {
+	if d.Type == resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER {
+		return fmt.Sprintf("consumer %q of topic %q", d.Name, d.Consumer.GetTopic())
+	}
+	return fmt.Sprintf("%s %q", naming.ResourceTypeName(d.Type), d.Name)
+}
+
+func (d declaredResource) namespaced(kind declarationKind) namespacedName {
+	if d.Type == resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER {
+		return namespacedName{kind.namespace, d.Consumer.GetTopic() + "/" + d.Name}
+	}
+	return namespacedName{kind.namespace, d.Name}
+}
+
 type identity struct {
 	typ  resourcesv1.ResourceType
 	name string
@@ -41,6 +83,52 @@ func (e *DuplicateError) Error() string {
 		"duplicate resource declaration for type=%s name=%q: declared at %s and %s",
 		e.TypeToken, e.Name, sourceOrUnknown(e.FirstSource), sourceOrUnknown(e.SecondSource),
 	)
+}
+
+type InvalidDeclarationError struct {
+	Source string
+	Reason string
+}
+
+func (e *InvalidDeclarationError) Error() string {
+	return sourceOrUnknown(e.Source) + ": " + e.Reason
+}
+
+const maxNameBytes = 63
+
+var namePattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+func refuseInvalidName(d declaredResource, name string) error {
+	if len(name) <= maxNameBytes && namePattern.MatchString(name) {
+		return nil
+	}
+	return refuse(d, "is named %q, and a name is lowercase letters and digits in words joined by single hyphens, at most %d characters", name, maxNameBytes)
+}
+
+func refuseDuplicate(prior, d declaredResource, key namespacedName) error {
+	if first, second := prior.consumer(), d.consumer(); first != nil && prior.Type == d.Type && first.GetWorker() != second.GetWorker() {
+		return &ServedTwiceError{
+			Subject:      d.label(),
+			FirstSource:  prior.Source,
+			FirstWorker:  first.GetWorker(),
+			SecondSource: d.Source,
+			SecondWorker: second.GetWorker(),
+		}
+	}
+	return &DuplicateError{TypeToken: key.namespace, Name: key.name, FirstSource: prior.Source, SecondSource: d.Source}
+}
+
+func refuse(d declaredResource, format string, args ...any) error {
+	return &InvalidDeclarationError{Source: d.Source, Reason: d.label() + " " + fmt.Sprintf(format, args...)}
+}
+
+func firstRefusal(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func declaredResources(configDir string, resources []declaration.Resource) []declaredResource {
@@ -69,8 +157,8 @@ func manifestResources(declarations []declaredResource, topics map[string]*contr
 	seen := make(map[identity]declaredResource, len(declarations))
 	resources := make([]*contractv1.ManifestResource, 0, len(declarations))
 	for _, d := range declarations {
-		declaredKind, topicTaskOrWorker := topicTaskAndWorkerKinds[d.Type]
-		if topicTaskOrWorker && !declaredKind.declaresTopic {
+		declaredKind, listed := kinds[d.Type]
+		if listed && !declaredKind.declaresTopic {
 			continue
 		}
 		if d.Name == "" {
