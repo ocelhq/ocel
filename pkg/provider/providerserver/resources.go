@@ -1,8 +1,6 @@
 package providerserver
 
 import (
-	"cmp"
-
 	"github.com/ocelhq/ocel/pkg/kvstore"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -64,18 +62,9 @@ func manifestResource(message *contractv1.ManifestResource) (provider.Resource, 
 }
 
 func kvSpec(config *resourcesv1.KvConfig) (*provider.KVSpec, error) {
-	version := cmp.Or(config.GetVersion(), kvstore.DefaultVersion)
-	if err := kvstore.RefuseVersion(version); err != nil {
-		return nil, err
-	}
-	if eviction := config.GetEviction(); eviction != "" {
-		if err := kvstore.RefuseEviction(eviction); err != nil {
-			return nil, err
-		}
-	}
-	memory, err := kvstore.ParseMemory(cmp.Or(config.GetMemory(), kvstore.DefaultMemory))
+	settings, err := kvstore.ReadSettings(config)
 	if err != nil {
 		return nil, err
 	}
-	return &provider.KVSpec{Version: version, Eviction: config.GetEviction(), MemoryBytes: memory}, nil
+	return &provider.KVSpec{Version: settings.Version, Eviction: settings.Eviction, MemoryBytes: settings.MemoryBytes}, nil
 }

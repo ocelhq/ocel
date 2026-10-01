@@ -59,7 +59,7 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 		{name: "variablestoreserver", pattern: "./variablestoreserver/...", open: providerBuildsOn},
 		{name: "images", pattern: "./images/...", open: providerBuildsOn},
 		{name: "keyvalue", pattern: "./keyvalue/...", open: providerBuildsOn},
-		{name: "kvstore", pattern: "./kvstore/...", open: []string{"github.com/ocelhq/ocel/pkg/kvstore"}},
+		{name: "kvstore", pattern: "./kvstore/...", open: []string{"github.com/ocelhq/ocel/pkg/kvstore", "github.com/ocelhq/ocel/pkg/proto"}},
 		{name: "refusal", pattern: "./refusal/...", open: providerBuildsOn},
 		{name: "router", pattern: "./router/...", open: []string{
 			"github.com/ocelhq/ocel/pkg/edge",
