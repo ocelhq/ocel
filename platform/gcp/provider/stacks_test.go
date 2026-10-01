@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	run "google.golang.org/api/run/v2"
+
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -303,5 +305,52 @@ func TestAContainerThatNamesNoHealthPathIsProbedAtTheRoot(t *testing.T) {
 		if env.Name == originguard.HealthPathVar && env.Value != "/" {
 			t.Errorf("%s = %q, want /: the runtime answers the probe the service sends", originguard.HealthPathVar, env.Value)
 		}
+	}
+}
+
+func boundToAStore(spec provider.StackSpec) provider.StackSpec {
+	spec.App.Values.Bindings = []provider.Binding{{Type: provider.BindingKV, Name: "cache"}}
+	return spec
+}
+
+func egressOf(service *run.GoogleCloudRunV2Service) string {
+	access := service.Template.VpcAccess
+	if access == nil || len(access.NetworkInterfaces) != 1 {
+		return ""
+	}
+	return access.Egress + " " + access.NetworkInterfaces[0].Network + " " + access.NetworkInterfaces[0].Subnetwork
+}
+
+func TestAnAppBoundToAStoreReachesPrivateRangesOverTheTiersSubnetwork(t *testing.T) {
+	want := "PRIVATE_RANGES_ONLY projects/acme-prod/global/networks/ocel-preview projects/acme-prod/regions/europe-west1/subnetworks/ocel-preview"
+	server := &runServer{}
+	p := server.open(t)
+
+	if _, err := p.ProvisionContainers(context.Background(), boundToAStore(previewSpec(sharedPreviewLabel)), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	if _, err := p.ProvisionFunctions(context.Background(), boundToAStore(previewSpec(sharedPreviewLabel)), nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+	released := slices.Concat(server.created, server.patched)
+	if len(released) != 2 {
+		t.Fatalf("released %d services, want the container and the function", len(released))
+	}
+	for _, created := range released {
+		if got := egressOf(created); got != want {
+			t.Errorf("a service bound to a store has egress %q, want %q", got, want)
+		}
+	}
+}
+
+func TestAnAppBoundToNoStoreHasNoNetworkInterface(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+
+	if _, err := p.ProvisionContainers(context.Background(), previewSpec(sharedPreviewLabel), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	if got := egressOf(server.created[0]); got != "" {
+		t.Errorf("a service bound to no store has egress %q, want none", got)
 	}
 }

@@ -153,7 +153,7 @@ func (b bootstrap) described(ctx context.Context, read survey) (provider.Bootstr
 		WrittenBy:     read.Stamp.Writer,
 	}}
 	for _, feature := range read.Stamp.Features {
-		installed, err := b.frontInstalled(ctx, read.Tier, feature)
+		installed, err := b.featureInstalled(ctx, read.Tier, feature)
 		if err != nil {
 			return provider.BootstrapDescription{}, err
 		}
@@ -251,7 +251,7 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err := b.provision(ctx, read, stampItem(items, stampBucket), progress); err != nil {
 		return err
 	}
-	if err := b.dropFronts(ctx, read, req, progress); err != nil {
+	if err := b.dropFeatures(ctx, read, req, progress); err != nil {
 		return err
 	}
 
@@ -273,7 +273,7 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 			return err
 		}
 	}
-	if err := b.raiseFronts(ctx, req, progress); err != nil {
+	if err := b.raiseFeatures(ctx, req, progress); err != nil {
 		return err
 	}
 	written.State = stateComplete
@@ -907,7 +907,7 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 			return err
 		}
 	}
-	if err := b.tearFronts(ctx, tier, read.Stamp.Features); err != nil {
+	if err := b.tearFeatures(ctx, tier, read.Stamp.Features); err != nil {
 		return err
 	}
 	for _, taking := range removals(read) {

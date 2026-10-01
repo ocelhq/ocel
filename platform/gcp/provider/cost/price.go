@@ -55,23 +55,27 @@ var (
 )
 
 var formulas = pricing.Table{
-	"google_cloud_run_v2_service":                      cloudRunService,
-	"google_cloud_scheduler_job":                       schedulerJob,
-	"google_firestore_database":                        firestoreDatabase,
-	"google_storage_bucket":                            storageBucket,
-	"google_kms_key_ring":                              free,
-	"google_kms_crypto_key":                            cryptoKey,
-	"google_service_account":                           free,
-	"google_artifact_registry_repository":              artifactRepository,
-	"google_secret_manager_secret":                     secret,
-	"google_compute_global_address":                    free,
-	"google_compute_backend_service":                   backendService,
-	"google_certificate_manager_certificate_map":       free,
-	"google_certificate_manager_certificate_map_entry": free,
-	"google_compute_url_map":                           free,
-	"google_compute_target_https_proxy":                free,
-	"google_compute_global_forwarding_rule":            forwardingRule,
-	"google_compute_region_network_endpoint_group":     free,
+	"google_cloud_run_v2_service":                           cloudRunService,
+	"google_cloud_scheduler_job":                            schedulerJob,
+	"google_firestore_database":                             firestoreDatabase,
+	"google_storage_bucket":                                 storageBucket,
+	"google_kms_key_ring":                                   free,
+	"google_kms_crypto_key":                                 cryptoKey,
+	"google_service_account":                                free,
+	"google_artifact_registry_repository":                   artifactRepository,
+	"google_secret_manager_secret":                          secret,
+	"google_compute_global_address":                         free,
+	"google_compute_backend_service":                        backendService,
+	"google_certificate_manager_certificate_map":            free,
+	"google_certificate_manager_certificate_map_entry":      free,
+	"google_compute_url_map":                                free,
+	"google_compute_target_https_proxy":                     free,
+	"google_compute_global_forwarding_rule":                 forwardingRule,
+	"google_compute_region_network_endpoint_group":          free,
+	"google_memorystore_instance":                           memorystoreInstance,
+	"google_compute_network":                                free,
+	"google_compute_subnetwork":                             free,
+	"google_network_connectivity_service_connection_policy": free,
 }
 
 func Price(req *costv1.PriceRequest) (*costv1.Estimate, error) {
@@ -182,6 +186,15 @@ func backendService(r *pricing.Subject) {
 		return
 	}
 	r.Add(pricing.Component{Name: "Cache egress", Unit: "GiB", Rate: "gcp/cdn/cache-egress", Quantity: r.Usage(usageDataOut, egressBand), UsageBased: true})
+}
+
+func memorystoreInstance(r *pricing.Subject) {
+	nodes := r.Number("replica_count").Add(decimal.NewFromInt(1))
+	r.Add(pricing.Component{Name: "Node", Unit: "node-hours", Rate: "gcp/memorystore/" + r.String("node_type"), Quantity: pricing.MonthlyHours.Mul(nodes)})
+	if r.String("persistence_config.mode") == "AOF" {
+		r.Add(pricing.Component{Name: "Append-only persistence", Unit: "GB-hours", Rate: "gcp/memorystore/aof",
+			Quantity: r.Number("node_capacity_gb").Mul(nodes).Mul(pricing.MonthlyHours)})
+	}
 }
 
 func forwardingRule(r *pricing.Subject) {

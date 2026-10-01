@@ -214,12 +214,12 @@ func TestSealingAValueThatNamesNoTierIsTheCallersMistake(t *testing.T) {
 	}
 }
 
-func TestServesNothingUntilAResourcePrimitiveExists(t *testing.T) {
+func TestServesKVStoresAloneAmongTheResourcePrimitives(t *testing.T) {
 	t.Parallel()
 
 	p := testProvider(t)
-	if got := p.Facts().Bindings; len(got) != 0 {
-		t.Errorf("Serves() = %v, want nothing until this provider provisions bindings of its own", got)
+	if got := p.Facts().Bindings; len(got) != 1 || got[0] != provider.BindingKV {
+		t.Errorf("Facts().Bindings = %v, want kv alone: it is the one resource primitive this provider provisions", got)
 	}
 	want := []provider.Compute{provider.ComputeServerless, provider.ComputeContainer}
 	got := p.Facts().Computes

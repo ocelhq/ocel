@@ -89,6 +89,7 @@ var deployRoles = []string{
 	"roles/artifactregistry.writer",
 	"roles/iam.serviceAccountUser",
 	"roles/run.admin",
+	"roles/memorystore.admin",
 }
 
 func rolesFor(purpose edge.CredentialPurpose) []string {
@@ -115,23 +116,31 @@ func (b bootstrap) preflight(ctx context.Context, read survey, features []string
 }
 
 func permissionsFor(features []string) []string {
+	permissions := slices.Clone(bootstrapPermissions)
 	switch {
 	case slices.Contains(features, albShieldedFeature):
-		return slices.Concat(bootstrapPermissions, alb.ShieldedPermissions)
+		permissions = joined(permissions, alb.ShieldedPermissions)
 	case slices.Contains(features, albFeature):
-		return slices.Concat(bootstrapPermissions, alb.Permissions)
+		permissions = joined(permissions, alb.Permissions)
 	}
-	return slices.Clone(bootstrapPermissions)
+	if slices.Contains(features, kvFeature) {
+		permissions = joined(permissions, kvPermissions)
+	}
+	return permissions
 }
 
 func rolesCovering(features []string) []string {
+	roles := rolesFor(edge.PurposeBootstrap)
 	switch {
 	case slices.Contains(features, albShieldedFeature):
-		return slices.Concat(rolesFor(edge.PurposeBootstrap), alb.ShieldedRoles())
+		roles = joined(roles, alb.ShieldedRoles())
 	case slices.Contains(features, albFeature):
-		return slices.Concat(rolesFor(edge.PurposeBootstrap), alb.Roles())
+		roles = joined(roles, alb.Roles())
 	}
-	return rolesFor(edge.PurposeBootstrap)
+	if slices.Contains(features, kvFeature) {
+		roles = joined(roles, kvRoles)
+	}
+	return roles
 }
 
 func (b bootstrap) servicesOn(ctx context.Context, features []string) error {

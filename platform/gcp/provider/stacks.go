@@ -79,6 +79,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			public:  true,
 			ingress: ingressFor(factsOf(spec.Edge)),
 			memory:  fn.Memory,
+			egress:  p.egressFor(names, spec),
 		}, progress)
 		if err != nil {
 			return nil, err
@@ -174,6 +175,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		instances: app.Instances,
 		public:    true,
 		ingress:   ingressFor(factsOf(spec.Edge)),
+		egress:    p.egressFor(names, spec),
 	}, progress)
 	if err != nil {
 		return nil, err
@@ -252,6 +254,13 @@ func (p *Provider) removeRevisions(ctx context.Context, going []serviceRevision,
 		}
 	}
 	return kept, nil
+}
+
+func (p *Provider) egressFor(names Names, spec provider.StackSpec) *privateEgress {
+	if !slices.ContainsFunc(spec.App.Values.Bindings, func(binding provider.Binding) bool { return binding.Type == provider.BindingKV }) {
+		return nil
+	}
+	return &privateEgress{network: names.NetworkPath(spec.Ref.Tier), subnetwork: names.SubnetworkPath(p.options.Region, spec.Ref.Tier)}
 }
 
 func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec) (map[string]string, error) {

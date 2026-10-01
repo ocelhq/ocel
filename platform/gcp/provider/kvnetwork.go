@@ -1,0 +1,280 @@
+package gcp
+
+import (
+	"context"
+	"fmt"
+	"slices"
+
+	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
+	"google.golang.org/api/networkconnectivity/v1"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/refusal"
+)
+
+const (
+	memorystoreServiceClass = "gcp-memorystore"
+	networkUserRole         = "roles/compute.networkUser"
+	regionalRouting         = "REGIONAL"
+	serviceAgentDomain      = "@serverless-robot-prod.iam.gserviceaccount.com"
+)
+
+var kvAPIs = []string{
+	"compute.googleapis.com",
+	"memorystore.googleapis.com",
+	"networkconnectivity.googleapis.com",
+	"serviceconsumermanagement.googleapis.com",
+}
+
+var kvPermissions = []string{
+	"compute.networks.create",
+	"compute.networks.get",
+	"compute.networks.delete",
+	"compute.subnetworks.create",
+	"compute.subnetworks.get",
+	"compute.subnetworks.delete",
+	"compute.subnetworks.getIamPolicy",
+	"compute.subnetworks.setIamPolicy",
+	"compute.globalOperations.get",
+	"compute.regionOperations.get",
+	"networkconnectivity.serviceConnectionPolicies.create",
+	"networkconnectivity.serviceConnectionPolicies.get",
+	"networkconnectivity.serviceConnectionPolicies.delete",
+	"networkconnectivity.operations.get",
+	"resourcemanager.projects.get",
+}
+
+var kvRoles = []string{"roles/compute.networkAdmin"}
+
+func (b bootstrap) raiseNetwork(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+	engine, err := b.clients.Compute()
+	if err != nil {
+		return err
+	}
+	if err := b.ensureNetwork(ctx, engine, tier); err != nil {
+		return err
+	}
+	if err := b.ensureSubnetwork(ctx, engine, tier); err != nil {
+		return err
+	}
+	if err := b.grantSubnetworkUse(ctx, engine, tier); err != nil {
+		return err
+	}
+	if err := b.ensureConnectionPolicy(ctx, tier); err != nil {
+		return err
+	}
+	ensureProgress(progress).Debug("The " + string(tier) + " network " + b.clients.Network(tier) + " connects Memorystore through " + kvSubnetRange)
+	return nil
+}
+
+func (b bootstrap) ensureNetwork(ctx context.Context, engine *compute.Service, tier environment.Tier) error {
+	name := b.clients.Network(tier)
+	_, err := attempted(ctx, engine.Networks.Get(b.clients.project, name).Context(ctx).Do)
+	if err == nil {
+		return nil
+	}
+	if !absent(err) {
+		return fmt.Errorf("read the %s network: %w", name, err)
+	}
+	return b.computeAwaited(ctx, engine, "", "create the "+name+" network", func(call ...googleapi.CallOption) (*compute.Operation, error) {
+		return engine.Networks.Insert(b.clients.project, &compute.Network{
+			Name:                  name,
+			Description:           "the network ocel's " + string(tier) + " kv stores are reached over",
+			AutoCreateSubnetworks: false,
+			RoutingConfig:         &compute.NetworkRoutingConfig{RoutingMode: regionalRouting},
+			ForceSendFields:       []string{"AutoCreateSubnetworks"},
+		}).Context(ctx).Do(call...)
+	})
+}
+
+func (b bootstrap) ensureSubnetwork(ctx context.Context, engine *compute.Service, tier environment.Tier) error {
+	name := b.clients.Subnetwork(tier)
+	_, err := attempted(ctx, engine.Subnetworks.Get(b.clients.project, b.clients.region, name).Context(ctx).Do)
+	if err == nil {
+		return nil
+	}
+	if !absent(err) {
+		return fmt.Errorf("read the %s subnetwork: %w", name, err)
+	}
+	return b.computeAwaited(ctx, engine, b.clients.region, "create the "+name+" subnetwork", func(call ...googleapi.CallOption) (*compute.Operation, error) {
+		return engine.Subnetworks.Insert(b.clients.project, b.clients.region, &compute.Subnetwork{
+			Name:        name,
+			Description: "the subnetwork Cloud Run reaches ocel's " + string(tier) + " kv stores from",
+			Network:     b.clients.NetworkPath(tier),
+			Region:      b.clients.region,
+			IpCidrRange: kvSubnetRange,
+		}).Context(ctx).Do(call...)
+	})
+}
+
+func (b bootstrap) grantSubnetworkUse(ctx context.Context, engine *compute.Service, tier environment.Tier) error {
+	agent, err := b.serviceAgent(ctx)
+	if err != nil {
+		return err
+	}
+	name := b.clients.Subnetwork(tier)
+	var refused error
+	for attempt := range bindAttempts {
+		if attempt > 0 && !waited(ctx, attempt) {
+			return ctx.Err()
+		}
+		policy, err := attempted(ctx, engine.Subnetworks.GetIamPolicy(b.clients.project, b.clients.region, name).Context(ctx).Do)
+		if err != nil {
+			return fmt.Errorf("read who may attach services to the %s subnetwork: %w", name, err)
+		}
+		if slices.ContainsFunc(policy.Bindings, func(binding *compute.Binding) bool {
+			return binding.Role == networkUserRole && binding.Condition == nil && slices.Contains(binding.Members, agent)
+		}) {
+			return nil
+		}
+		policy.Bindings = append(policy.Bindings, &compute.Binding{Role: networkUserRole, Members: []string{agent}})
+		_, refused = attempted(ctx, engine.Subnetworks.SetIamPolicy(b.clients.project, b.clients.region, name,
+			&compute.RegionSetPolicyRequest{Policy: policy}).Context(ctx).Do)
+		if refused == nil || !stale(refused) {
+			break
+		}
+	}
+	if refused != nil {
+		return fmt.Errorf("let Cloud Run attach services to the %s subnetwork: %w", name, refused)
+	}
+	return nil
+}
+
+func (b bootstrap) serviceAgent(ctx context.Context) (string, error) {
+	service, err := b.clients.Projects()
+	if err != nil {
+		return "", err
+	}
+	project, err := attempted(ctx, service.Projects.Get(b.clients.project).Context(ctx).Do)
+	if err != nil {
+		return "", fmt.Errorf("read project %s's number, which names the Cloud Run service agent: %w", b.clients.project, err)
+	}
+	return fmt.Sprintf("serviceAccount:service-%d%s", project.ProjectNumber, serviceAgentDomain), nil
+}
+
+func (b bootstrap) connectionPolicyPath(tier environment.Tier) string {
+	return b.clients.location() + "/serviceConnectionPolicies/" + b.clients.ConnectionPolicy(tier)
+}
+
+func (b bootstrap) ensureConnectionPolicy(ctx context.Context, tier environment.Tier) error {
+	service, err := b.clients.Connectivity()
+	if err != nil {
+		return err
+	}
+	policies := service.Projects.Locations.ServiceConnectionPolicies
+	_, err = attempted(ctx, policies.Get(b.connectionPolicyPath(tier)).Context(ctx).Do)
+	if err == nil {
+		return nil
+	}
+	if !absent(err) {
+		return fmt.Errorf("read the %s service connection policy: %w", b.clients.ConnectionPolicy(tier), err)
+	}
+	started, err := attempted(ctx, policies.Create(b.clients.location(), &networkconnectivity.ServiceConnectionPolicy{
+		Description:  "lets Memorystore connect ocel's " + string(tier) + " kv stores into " + b.clients.Network(tier),
+		Network:      b.clients.NetworkPath(tier),
+		ServiceClass: memorystoreServiceClass,
+		PscConfig:    &networkconnectivity.PscConfig{Subnetworks: []string{b.clients.SubnetworkPath(b.clients.region, tier)}},
+	}).ServiceConnectionPolicyId(b.clients.ConnectionPolicy(tier)).Context(ctx).Do)
+	if taken(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("create the %s service connection policy: %w", b.clients.ConnectionPolicy(tier), err)
+	}
+	return b.connectivityAwaited(ctx, service, "creating the "+b.clients.ConnectionPolicy(tier)+" service connection policy", started)
+}
+
+func (b bootstrap) tearNetwork(ctx context.Context, tier environment.Tier) error {
+	service, err := b.clients.Connectivity()
+	if err != nil {
+		return err
+	}
+	deleting, err := attempted(ctx, service.Projects.Locations.ServiceConnectionPolicies.Delete(b.connectionPolicyPath(tier)).Context(ctx).Do)
+	switch {
+	case absent(err):
+	case err != nil:
+		return fmt.Errorf("delete the %s service connection policy: %w", b.clients.ConnectionPolicy(tier), err)
+	default:
+		if err := b.connectivityAwaited(ctx, service, "deleting the "+b.clients.ConnectionPolicy(tier)+" service connection policy", deleting); err != nil {
+			return err
+		}
+	}
+	engine, err := b.clients.Compute()
+	if err != nil {
+		return err
+	}
+	subnetwork := b.clients.Subnetwork(tier)
+	if err := b.computeAwaited(ctx, engine, b.clients.region, "delete the "+subnetwork+" subnetwork", func(call ...googleapi.CallOption) (*compute.Operation, error) {
+		return engine.Subnetworks.Delete(b.clients.project, b.clients.region, subnetwork).Context(ctx).Do(call...)
+	}); err != nil && !absent(err) {
+		return err
+	}
+	network := b.clients.Network(tier)
+	if err := b.computeAwaited(ctx, engine, "", "delete the "+network+" network", func(call ...googleapi.CallOption) (*compute.Operation, error) {
+		return engine.Networks.Delete(b.clients.project, network).Context(ctx).Do(call...)
+	}); err != nil && !absent(err) {
+		return err
+	}
+	return nil
+}
+
+func (b bootstrap) networkInstalled(ctx context.Context, tier environment.Tier) (bool, error) {
+	service, err := b.clients.Connectivity()
+	if err != nil {
+		return false, err
+	}
+	_, err = attempted(ctx, service.Projects.Locations.ServiceConnectionPolicies.Get(b.connectionPolicyPath(tier)).Context(ctx).Do)
+	if absent(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read the %s service connection policy: %w", b.clients.ConnectionPolicy(tier), err)
+	}
+	return true, nil
+}
+
+func (b bootstrap) computeAwaited(
+	ctx context.Context,
+	engine *compute.Service,
+	region, doing string,
+	call func(...googleapi.CallOption) (*compute.Operation, error),
+) error {
+	started, err := attempted(ctx, call)
+	if err != nil {
+		return fmt.Errorf("%s: %w", doing, err)
+	}
+	finished, err := until(ctx, "Compute Engine to "+doing, func() (*compute.Operation, error) {
+		if started.Status == operationDone {
+			return started, nil
+		}
+		if region == "" {
+			return attempted(ctx, engine.GlobalOperations.Get(b.clients.project, started.Name).Context(ctx).Do)
+		}
+		return attempted(ctx, engine.RegionOperations.Get(b.clients.project, region, started.Name).Context(ctx).Do)
+	}, func(op *compute.Operation) bool { return op != nil && op.Status == operationDone })
+	if err != nil {
+		return err
+	}
+	if finished.Error != nil && len(finished.Error.Errors) > 0 {
+		return refusal.Refuse(refusal.CodeNotReady, "Compute Engine refused to %s: %s", doing, finished.Error.Errors[0].Message)
+	}
+	return nil
+}
+
+func (b bootstrap) connectivityAwaited(ctx context.Context, service *networkconnectivity.Service, doing string, started *networkconnectivity.GoogleLongrunningOperation) error {
+	finished, err := until(ctx, doing, func() (*networkconnectivity.GoogleLongrunningOperation, error) {
+		if started.Done || started.Name == "" {
+			return started, nil
+		}
+		return attempted(ctx, service.Projects.Locations.Operations.Get(started.Name).Context(ctx).Do)
+	}, func(op *networkconnectivity.GoogleLongrunningOperation) bool { return op.Done || op.Name == "" })
+	if err != nil {
+		return err
+	}
+	if finished.Error != nil {
+		return refusal.Refuse(refusal.CodeNotReady, "Network Connectivity refused %s: %s", doing, finished.Error.Message)
+	}
+	return nil
+}

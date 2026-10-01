@@ -29,7 +29,12 @@ var update = flag.Bool("update", false, "rewrite the golden files")
 
 func costServed(t *testing.T) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	return costServedIn(t, "europe-west1")
+}
+
+func costServedIn(t *testing.T, region string) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
+	t.Helper()
+	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: region})
 	config := providerserver.Config{
 		Version: "test",
 		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },

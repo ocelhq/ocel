@@ -24,6 +24,10 @@ const (
 	tfArtifactRepository  = "google_artifact_registry_repository"
 	tfSecretManagerSecret = "google_secret_manager_secret"
 	tfSchedulerJob        = "google_cloud_scheduler_job"
+	tfMemorystoreInstance = "google_memorystore_instance"
+	tfNetwork             = "google_compute_network"
+	tfSubnetwork          = "google_compute_subnetwork"
+	tfConnectionPolicy    = "google_network_connectivity_service_connection_policy"
 )
 
 var itemTypes = map[Kind]string{
@@ -96,7 +100,37 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		}
 		tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
 	}
+	if err := shapeStores(tree, names, req, region, shared, environment); err != nil {
+		return nil, err
+	}
 	return tree.Set(provider.CostSource)
+}
+
+func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, shared, environment string) error {
+	declared := false
+	for _, resource := range req.Resources {
+		if resource.Type != provider.BindingKV {
+			continue
+		}
+		store, err := readKVStore(resource)
+		if err != nil {
+			return err
+		}
+		instance, err := names.KVInstance(req.Deploy.Slug, req.Deploy.Env, resource.Name)
+		if err != nil {
+			return err
+		}
+		tree.Add(environment, string(Vendor), tfMemorystoreInstance, instance, region, store.shapeProperties(region))
+		declared = true
+	}
+	if !declared {
+		return nil
+	}
+	tier := req.Deploy.Tier
+	tree.Add(shared, string(Vendor), tfNetwork, names.Network(tier), region, map[string]any{"auto_create_subnetworks": false})
+	tree.Add(shared, string(Vendor), tfSubnetwork, names.Subnetwork(tier), region, map[string]any{"region": region, "ip_cidr_range": kvSubnetRange})
+	tree.Add(shared, string(Vendor), tfConnectionPolicy, names.ConnectionPolicy(tier), region, map[string]any{"location": region, "service_class": memorystoreServiceClass})
+	return nil
 }
 
 func itemProperties(item item, region string) map[string]any {

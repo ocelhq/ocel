@@ -121,6 +121,45 @@ func truncatedHash(length int, parts ...string) string {
 	return hex.EncodeToString(sum[:])[:length]
 }
 
+const (
+	maxInstanceName   = 63
+	instanceHashLen   = 6
+	kvSubnetRange     = "10.240.0.0/20"
+	memorystorePolicy = "memorystore"
+)
+
+func (n Names) KVInstance(project, env, store string) (string, error) {
+	parts := []string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), naming.Sanitize(store)}
+	instance := strings.Join(parts, "-") + "-" + truncatedHash(instanceHashLen, string(n.namespace), project, env, store)
+	if len(instance) > maxInstanceName {
+		return "", refusal.Refuse(refusal.CodeInvalid,
+			"kv %s would be the Memorystore instance %s, which is %d characters and Memorystore takes %d: "+
+				"an instance is named for the namespace, the project, the environment and the store, "+
+				"and ends in %d characters of a hash of the four.\n"+
+				"Name a shorter namespace in %s, a shorter project slug, or a shorter store",
+			store, instance, len(instance), maxInstanceName, instanceHashLen, provider.NamespaceEnvVar)
+	}
+	return instance, nil
+}
+
+func (n Names) Network(tier environment.Tier) string {
+	return string(n.namespace) + "-" + string(tier)
+}
+
+func (n Names) NetworkPath(tier environment.Tier) string {
+	return "projects/" + n.project + "/global/networks/" + n.Network(tier)
+}
+
+func (n Names) Subnetwork(tier environment.Tier) string { return n.Network(tier) }
+
+func (n Names) SubnetworkPath(region string, tier environment.Tier) string {
+	return "projects/" + n.project + "/regions/" + region + "/subnetworks/" + n.Subnetwork(tier)
+}
+
+func (n Names) ConnectionPolicy(tier environment.Tier) string {
+	return n.Network(tier) + "-" + memorystorePolicy
+}
+
 const envSourceSyncName = "envsourcesync"
 
 func (n Names) EnvSourceSync(tier environment.Tier) string {

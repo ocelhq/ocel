@@ -100,6 +100,7 @@ func (p *Provider) Facts() provider.Facts {
 
 func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
+		PreflightDeploy:     p.PreflightDeploy,
 		EnsureImageRegistry: p.EnsureImageRegistry,
 		OpenDirectImages:    p.OpenDirectImages,
 		CheckBucket:         s3store.Check,
@@ -111,6 +112,8 @@ func (p *Provider) Hooks() provider.Hooks {
 
 func (p *Provider) resourceHooks() resources.Hooks {
 	return resources.Hooks{
+		ProvisionKV:    p.ProvisionKV,
+		RemoveResource: p.RemoveResource,
 		Functions: &resources.FunctionHooks{
 			Provision: p.ProvisionFunctions,
 			Remove:    p.RemoveFunctions,
