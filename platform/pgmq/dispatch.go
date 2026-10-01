@@ -60,7 +60,6 @@ func (loop *queueLoop) heldIDs() []int64 {
 func (e *Engine) Dispatch(ctx context.Context) error {
 	var wg sync.WaitGroup
 	loops := map[string]context.CancelFunc{}
-	workers := map[string]*slots{}
 	background := func(fn func(ctx context.Context)) {
 		wg.Go(func() { fn(ctx) })
 	}
@@ -75,20 +74,13 @@ func (e *Engine) Dispatch(ctx context.Context) error {
 				delete(loops, queue)
 			}
 		}
-		for name, worker := range deployment.Workers {
-			if existing, found := workers[name]; found {
-				existing.setLimit(worker.Concurrency)
-			} else {
-				workers[name] = newSlots(worker.Concurrency)
-			}
-		}
 		for queue := range deployedConsumers {
 			if _, running := loops[queue]; running {
 				continue
 			}
 			queueCtx, stop := context.WithCancel(ctx)
 			loops[queue] = stop
-			wg.Go(func() { e.serveQueue(queueCtx, queue, workers) })
+			wg.Go(func() { e.serveQueue(queueCtx, queue) })
 		}
 		select {
 		case <-ctx.Done():
@@ -102,7 +94,7 @@ func (e *Engine) Dispatch(ctx context.Context) error {
 	}
 }
 
-func (e *Engine) serveQueue(ctx context.Context, queue string, workers map[string]*slots) {
+func (e *Engine) serveQueue(ctx context.Context, queue string) {
 	loop := &queueLoop{name: queue, consumers: newSlots(maxInFlight), held: map[int64]bool{}}
 	var running sync.WaitGroup
 	defer running.Wait()
@@ -115,7 +107,7 @@ func (e *Engine) serveQueue(ctx context.Context, queue string, workers map[strin
 			return
 		}
 		worker, served := deployment.Workers[deployed.consumer.GetWorker()]
-		workerSlots := workers[deployed.consumer.GetWorker()]
+		workerSlots := e.workerSlotsOf(deployed.consumer.GetWorker())
 		if !served || workerSlots == nil {
 			wait(ctx, wake, nil, nil)
 			continue

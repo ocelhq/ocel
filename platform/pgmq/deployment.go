@@ -86,6 +86,13 @@ func (e *Engine) Apply(ctx context.Context, deployment Deployment) error {
 	}
 	e.mu.Lock()
 	e.deployment = deployment
+	for name, worker := range deployment.Workers {
+		if existing, found := e.workerSlots[name]; found {
+			existing.setLimit(worker.Concurrency)
+		} else {
+			e.workerSlots[name] = newSlots(worker.Concurrency)
+		}
+	}
 	e.mu.Unlock()
 	e.signalApplied()
 	return nil
@@ -95,4 +102,10 @@ func (e *Engine) current() Deployment {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.deployment
+}
+
+func (e *Engine) workerSlotsOf(worker string) *slots {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.workerSlots[worker]
 }
