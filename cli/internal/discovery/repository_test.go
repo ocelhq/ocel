@@ -87,6 +87,9 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		"platform/aws/provider/deploy_awslive_test.go": {
 			DefaultRootDirName: true,
 		},
+		"tests/fixtures/realtime/go/server/main.go": {
+			"example.com/realtime/" + DefaultRootDirName: true,
+		},
 		"tests/fixtures/sdk/go/server/main.go": {
 			"example.com/web/" + DefaultRootDirName: true,
 		},
@@ -162,6 +165,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		"tests/fixtures/kv/node",
 		"tests/fixtures/kv/node-overlap",
 		"tests/fixtures/lifecycle/next",
+		"tests/fixtures/realtime/go",
 		"tests/fixtures/realtime/node",
 		"tests/fixtures/sdk/go",
 		"tests/fixtures/sdk/next",

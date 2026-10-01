@@ -227,6 +227,12 @@ export const realtime = {
     checks: REALTIME_CHECKS,
     on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
   }),
+  go: fixture("realtime/go", {
+    apps: ["web"],
+    devCommands: { web: ["go", "run", "./server"] },
+    checks: REALTIME_CHECKS,
+    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
+  }),
 };
 
 export const iac = {
