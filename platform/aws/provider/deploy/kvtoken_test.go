@@ -3,6 +3,8 @@ package deploy
 import (
 	"context"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -15,11 +17,12 @@ import (
 )
 
 type fakeParameters struct {
-	mu      sync.Mutex
-	values  map[string]string
-	types   map[string]ssmtypes.ParameterType
-	puts    int
-	deleted []string
+	mu       sync.Mutex
+	values   map[string]string
+	types    map[string]ssmtypes.ParameterType
+	puts     int
+	listings int
+	deleted  []string
 
 	beforePut func(name string)
 }
@@ -64,6 +67,37 @@ func (f *fakeParameters) DeleteParameter(_ context.Context, in *ssm.DeleteParame
 	delete(f.values, name)
 	f.deleted = append(f.deleted, name)
 	return &ssm.DeleteParameterOutput{}, nil
+}
+
+func (f *fakeParameters) GetParametersByPath(_ context.Context, in *ssm.GetParametersByPathInput, _ ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.listings++
+	path := strings.TrimSuffix(aws.ToString(in.Path), "/") + "/"
+	var names []string
+	for name := range f.values {
+		if rest, under := strings.CutPrefix(name, path); under && rest != "" && !strings.Contains(rest, "/") {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	page := int(aws.ToInt32(in.MaxResults))
+	if page == 0 || page > 10 {
+		page = 10
+	}
+	start := 0
+	if in.NextToken != nil {
+		start, _ = strconv.Atoi(*in.NextToken)
+	}
+	end := min(start+page, len(names))
+	out := &ssm.GetParametersByPathOutput{}
+	for _, name := range names[start:end] {
+		out.Parameters = append(out.Parameters, ssmtypes.Parameter{Name: aws.String(name)})
+	}
+	if end < len(names) {
+		out.NextToken = aws.String(strconv.Itoa(end))
+	}
+	return out, nil
 }
 
 var mintedToken = regexp.MustCompile(`^[A-Za-z0-9]{64}$`)
