@@ -5,7 +5,12 @@ from ocel.gen.common.bindings.v1.bindings_pb import (
     Binding,
     BucketProperties,
     PostgresProperties,
+    TaskProperties,
+    TopicProperties,
 )
+
+_RUNTIME_ADDRESS_ENV = "OCEL_RUNTIME_ADDRESS"
+_SESSION_TOKEN_ENV = "OCEL_SESSION_TOKEN"
 
 
 class UnprovisionedResourceError(RuntimeError):
@@ -15,22 +20,48 @@ class UnprovisionedResourceError(RuntimeError):
     from the same call means the resource exists and is genuinely broken."""
 
 
-def unprovisioned(what: str, access: str) -> UnprovisionedResourceError:
+def refuse_unprovisioned(what: str, access: str) -> UnprovisionedResourceError:
     return UnprovisionedResourceError(
         f"'{what}' cannot be used during discovery: "
         f"tried to access '{access}' before the resource was provisioned"
     )
 
 
-def postgres_binding(name: str) -> PostgresProperties:
-    return _properties(name, "postgres")
+def read_postgres_binding(name: str) -> PostgresProperties:
+    return _read_properties(name, "postgres")
 
 
-def bucket_binding(name: str) -> BucketProperties:
-    return _properties(name, "bucket")
+def read_bucket_binding(name: str) -> BucketProperties:
+    return _read_properties(name, "bucket")
 
 
-def _properties(name: str, kind: str):
+def read_topic_binding(name: str) -> TopicProperties:
+    return _read_properties(name, "topic")
+
+
+def read_task_binding(name: str) -> TaskProperties:
+    return _read_properties(name, "task")
+
+
+def read_runtime() -> tuple[str, dict[str, str]]:
+    address = os.environ.get(_RUNTIME_ADDRESS_ENV)
+    if not address:
+        raise RuntimeError(
+            f"{_RUNTIME_ADDRESS_ENV} is not defined, so no resource the ocel runtime "
+            f"serves can be reached. Run `ocel dev` to serve it locally, or "
+            f"`ocel deploy` to have the deployed runtime's address delivered."
+        )
+    token = os.environ.get(_SESSION_TOKEN_ENV)
+    if not token:
+        raise RuntimeError(
+            f"{_SESSION_TOKEN_ENV} is not defined, so the ocel runtime at {address} "
+            f"would refuse every call. It is delivered beside {_RUNTIME_ADDRESS_ENV} by "
+            f"`ocel dev` and by the deployed runtime, never set by hand."
+        )
+    return address.rstrip("/"), {"Authorization": f"Bearer {token}"}
+
+
+def _read_properties(name: str, kind: str):
     key = f"OCEL_RESOURCE_{kind.upper()}_{name}"
     raw = os.environ.get(key) or live_value(key)
     if not raw:

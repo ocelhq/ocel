@@ -5,8 +5,8 @@ from urllib.parse import quote
 
 from protobuf import Oneof
 
-from ocel._binding import postgres_binding, unprovisioned
-from ocel._declare import declare, discovering
+from ocel._binding import read_postgres_binding, refuse_unprovisioned
+from ocel._declare import declare, is_discovering
 from ocel.gen.app.resources.v1.resources_pb import (
     DeclareRequest,
     PostgresConfig,
@@ -38,7 +38,7 @@ class Postgres:
         """The postgres URL of the delivered binding: the record's url verbatim when it
         has one, and otherwise one built from its host, port, database and credentials,
         percent-encoded, with its tls mode as ``sslmode``."""
-        properties = postgres_binding(self.name)
+        properties = read_postgres_binding(self.name)
         if properties.url:
             return properties.url
         user = quote(properties.username, safe="")
@@ -58,7 +58,7 @@ class Postgres:
                     import asyncpg
 
                     options = {}
-                    properties = postgres_binding(self.name)
+                    properties = read_postgres_binding(self.name)
                     if properties.tls_mode == PostgresTlsMode.VERIFY_FULL and properties.tls_ca:
                         context = ssl.create_default_context()
                         context.load_verify_locations(cadata=properties.tls_ca)
@@ -76,7 +76,7 @@ class _Unprovisioned(Postgres):
     def __getattribute__(self, access: str):
         if access == "name" or (access.startswith("__") and access.endswith("__")):
             return object.__getattribute__(self, access)
-        raise unprovisioned(f'postgres("{object.__getattribute__(self, "name")}")', access)
+        raise refuse_unprovisioned(f'postgres("{object.__getattribute__(self, "name")}")', access)
 
 
 def postgres(name: str, *, version: str | None = None) -> Postgres:
@@ -84,7 +84,7 @@ def postgres(name: str, *, version: str | None = None) -> Postgres:
     through. Call it from a file under the project's discovery folder: during discovery the
     call is the declaration, and at runtime it reads the binding the deploy delivered for
     that name."""
-    if not discovering():
+    if not is_discovering():
         return Postgres(name)
     caller = inspect.stack(0)[1]
     declare(

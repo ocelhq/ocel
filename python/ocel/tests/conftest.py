@@ -4,6 +4,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
+import ocel._registry
 import ocel.env
 from ocel.gen.app.resources.v1.resources_pb import DeclareRequest, DeclareResponse
 from ocel.gen.app.resources.v1.variables_pb import (
@@ -126,5 +127,9 @@ def owners(monkeypatch):
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.delenv("OCEL_APP_FOLDER", raising=False)
     ocel.env._owner.clear()
+    ocel._registry.registrations.clear()
+    ocel._registry.workers.clear()
     yield
     ocel.env._owner.clear()
+    ocel._registry.registrations.clear()
+    ocel._registry.workers.clear()

@@ -261,8 +261,8 @@ def test_an_object_opened_for_writing_lands_when_it_is_closed(uploads):
 
 def test_an_object_opened_for_writing_lands_nothing_when_the_body_raises(uploads):
     store = bucket("uploads")
-    store._single_ceiling = 8
-    store._part_size = 4
+    store._single_request_limit_bytes = 8
+    store._part_size_bytes = 4
 
     with pytest.raises(RuntimeError, match="the caller gave up"):
         with store.open("a.txt", "wb") as handle:
@@ -278,8 +278,8 @@ async def test_an_object_opened_for_writing_asynchronously_lands_nothing_when_th
     uploads,
 ):
     store = bucket("uploads")
-    store._single_ceiling = 8
-    store._part_size = 4
+    store._single_request_limit_bytes = 8
+    store._part_size_bytes = 4
 
     with pytest.raises(RuntimeError, match="the caller gave up"):
         async with store.open_async("a.txt", "wb") as handle:
@@ -292,8 +292,8 @@ async def test_an_object_opened_for_writing_asynchronously_lands_nothing_when_th
 
 def test_a_body_too_big_for_one_request_goes_up_in_parts(uploads):
     store = bucket("uploads")
-    store._single_ceiling = 8
-    store._part_size = 4
+    store._single_request_limit_bytes = 8
+    store._part_size_bytes = 4
 
     landed = store.put("a.txt", b"0123456789abcde", content_type="text/plain")
 
@@ -306,8 +306,8 @@ def test_a_body_too_big_for_one_request_goes_up_in_parts(uploads):
 def test_a_part_the_store_refuses_abandons_the_whole_write(uploads):
     uploads.store.refuse_part = 2
     store = bucket("uploads")
-    store._single_ceiling = 8
-    store._part_size = 4
+    store._single_request_limit_bytes = 8
+    store._part_size_bytes = 4
 
     with pytest.raises(RuntimeError) as raised:
         store.put("a.txt", b"0123456789abcde")
@@ -318,8 +318,8 @@ def test_a_part_the_store_refuses_abandons_the_whole_write(uploads):
 
 def test_a_write_in_parts_that_must_not_replace_is_refused(uploads):
     store = bucket("uploads")
-    store._single_ceiling = 8
-    store._part_size = 4
+    store._single_request_limit_bytes = 8
+    store._part_size_bytes = 4
     store.put("a.txt", b"first")
 
     with pytest.raises(PreconditionFailed):
@@ -445,8 +445,8 @@ async def test_an_async_read_of_a_key_the_bucket_does_not_have_names_what_was_mi
 @pytest.mark.asyncio
 async def test_an_async_body_too_big_for_one_request_goes_up_in_parts(uploads):
     store = bucket("uploads")
-    store._single_ceiling = 8
-    store._part_size = 4
+    store._single_request_limit_bytes = 8
+    store._part_size_bytes = 4
 
     await store.put_async("a.txt", b"0123456789abcde")
 
@@ -458,8 +458,8 @@ async def test_an_async_body_too_big_for_one_request_goes_up_in_parts(uploads):
 async def test_an_async_part_the_store_refuses_abandons_the_whole_write(uploads):
     uploads.store.refuse_part = 2
     store = bucket("uploads")
-    store._single_ceiling = 8
-    store._part_size = 4
+    store._single_request_limit_bytes = 8
+    store._part_size_bytes = 4
 
     with pytest.raises(RuntimeError):
         await store.put_async("a.txt", b"0123456789abcde")
