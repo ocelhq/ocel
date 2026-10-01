@@ -115,6 +115,22 @@ describe("the steps a cell walks through", () => {
     expect(cellsOf(planOf([one("deploy/node")], { releaseCycle: false }))).toEqual(["deploy/node"]);
   });
 
+  it("redeploys a cell that asks to only where the lane's target keeps releases", () => {
+    const kept = one("kv/node", { redeploys: "where-releases-are-kept" });
+    expect(planOf([kept]).cells[0]?.phases).toEqual([
+      "deploy",
+      "verify",
+      "redeploy",
+      "rollback",
+      "destroy",
+    ]);
+    expect(planOf([kept], { releaseCycle: false }).cells[0]?.phases).toEqual([
+      "deploy",
+      "verify",
+      "destroy",
+    ]);
+  });
+
   it("refuses a cell that redeploys only on the targets that cannot, not on the lane's", () => {
     const living = one("lifecycle/next", { redeploys: true, on: { vps: [defaults] } });
     expect(() => planOf([one("deploy/node"), living], { releaseCycle: false })).not.toThrow();

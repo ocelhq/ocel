@@ -34,9 +34,9 @@ export function laneNamed(name: string): Lane {
   return name as Lane;
 }
 
-export type Concern = "deploy" | "lifecycle" | "sdk" | "iac";
+export type Concern = "deploy" | "lifecycle" | "sdk" | "kv" | "iac";
 
-export const CONCERNS: Concern[] = ["deploy", "lifecycle", "sdk", "iac"];
+export const CONCERNS: Concern[] = ["deploy", "lifecycle", "sdk", "kv", "iac"];
 
 const NAMED_ONLY: Concern[] = ["iac"];
 
@@ -55,7 +55,7 @@ const COMPUTE_WHEN_NONE_IS_NAMED: Record<TargetName, Compute> = {
   gcp: "serverless",
 };
 
-export type Phase = "deploy" | "verify" | "redeploy" | "rollback" | "destroy";
+export type Phase = "deploy" | "verify" | "restart" | "redeploy" | "rollback" | "destroy";
 
 export const DEFAULT_VARIANT = "default";
 
@@ -87,12 +87,19 @@ export function sampleGroupOf(fixture: Pick<Fixture, "concern" | "sample">): str
   return fixture.sample === undefined ? undefined : `${fixture.concern}/${fixture.sample.group}`;
 }
 
+export type Refusal = {
+  title: string;
+  run: (said: string) => Promise<void>;
+};
+
 export type Fixture = {
   name: string;
   concern: Concern;
   apps: string[];
-  redeploys?: true;
+  restarts?: true;
+  redeploys?: true | "where-releases-are-kept";
   checks: Check[];
+  refusal?: Refusal;
   stack?: ExternalStack;
   on: Partial<Record<TargetName, Variant[]>>;
   sample?: Sample;

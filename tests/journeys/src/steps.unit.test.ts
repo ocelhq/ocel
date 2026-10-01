@@ -116,6 +116,155 @@ describe("the phases a target drives", () => {
   });
 });
 
+describe("a fixture whose resources restart", () => {
+  const restarting = fixture("kv/node", {
+    apps: ["web"],
+    restarts: true,
+    redeploys: true,
+    checks: [ping],
+    on: { vps: [defaults] },
+  });
+  const restarted = async (): Promise<Deployment> => ({
+    baseUrl: () => "",
+    fetch: async () => new Response(),
+  });
+
+  it("restarts them after the first checks, and checks again before any redeploy", () => {
+    const phases = phasesOf(restarting, false);
+    expect(phases).toEqual(["deploy", "verify", "restart", "redeploy", "rollback", "destroy"]);
+    const titles = stepsOf(
+      { name: "kv/node", fixture: restarting, variant: defaults, cacheLayer: "origin" },
+      phases,
+    ).map((step) => step.title);
+    expect(titles).toEqual([
+      "deploy",
+      "ping",
+      "restart",
+      "restart · ping",
+      "redeploy",
+      "redeploy · ping",
+      "rollback",
+      "rollback · ping",
+      "destroy",
+    ]);
+  });
+
+  it("fails its restart step, and only that step, on a target with nothing to restart them", async () => {
+    const target: Target = {
+      name: "aws",
+      workers: 1,
+      maxRequestBodyBytes: 1,
+      stepTimeoutMs: 1,
+      sweeper: {
+        list: async () => [],
+        exists: async () => false,
+        sweepStale: async () => {},
+        sweepRun: async () => {},
+      },
+      detectLane: async () => "aws",
+      prepareLane: async () => ({}),
+      prepareProcess: async () => {},
+      deploy: restarted,
+      destroy: async () => {},
+    };
+    const cell: Cell = {
+      name: "kv/node",
+      fixture: restarting,
+      variant: defaults,
+      cacheLayer: "origin",
+    };
+    const run = new CellRun({
+      cell,
+      target,
+      runId: "1",
+      keep: false,
+      evidence: { dir: "", write: async () => {}, append: async () => {} },
+    });
+    const [restart] = stepsOf(cell, ["restart"]);
+    await expect(restart?.run(run) ?? Promise.resolve()).rejects.toThrow(
+      /aws has nothing to restart what an app declared/,
+    );
+  });
+});
+
+describe("a fixture whose build is refused", () => {
+  const seen: string[] = [];
+  const refused = fixture("kv/node-overlap", {
+    apps: ["web"],
+    checks: [ping],
+    refusal: {
+      title: "the build names both entries",
+      run: async (said) => {
+        seen.push(said);
+        if (!said.includes("overlaps")) {
+          throw new Error("the refusal names no overlap");
+        }
+      },
+    },
+    on: { dev: [defaults] },
+  });
+  const cell: Cell = {
+    name: "kv/node-overlap",
+    fixture: refused,
+    variant: defaults,
+    cacheLayer: "edge",
+  };
+  const runOn = (deploy: Target["deploy"]) =>
+    new CellRun({
+      cell,
+      target: {
+        name: "dev",
+        workers: 1,
+        maxRequestBodyBytes: 1,
+        stepTimeoutMs: 1,
+        sweeper: {
+          list: async () => [],
+          exists: async () => false,
+          sweepStale: async () => {},
+          sweepRun: async () => {},
+        },
+        detectLane: async () => "dev",
+        prepareLane: async () => ({}),
+        prepareProcess: async () => {},
+        deploy,
+        destroy: async () => {},
+      },
+      runId: "1",
+      keep: false,
+      evidence: { dir: "", write: async () => {}, append: async () => {} },
+    });
+
+  it("walks its refusal in place of the deploy, then destroys, and checks nothing", () => {
+    const phases = phasesOf(refused, false);
+    expect(phases).toEqual(["deploy", "destroy"]);
+    expect(stepsOf(cell, phases).map((step) => [step.title, step.phase])).toEqual([
+      ["the build names both entries", "deploy"],
+      ["destroy", "destroy"],
+    ]);
+  });
+
+  it("passes when the deploy fails with what the refusal looks for", async () => {
+    const [refusal] = stepsOf(cell, ["deploy"]);
+    const run = runOn(async () => {
+      throw new Error('entry "b" has pattern "a/:x", which overlaps pattern ":y/b"');
+    });
+    await refusal?.run(run);
+    expect(seen.at(-1)).toContain("overlaps");
+  });
+
+  it("fails when the deploy succeeds, or fails for another reason", async () => {
+    const [refusal] = stepsOf(cell, ["deploy"]);
+    const deployed = runOn(async () => ({ baseUrl: () => "", fetch: async () => new Response() }));
+    await expect(refusal?.run(deployed) ?? Promise.resolve()).rejects.toThrow(
+      /dev deployed kv\/node-overlap, whose build is refused/,
+    );
+    const otherwise = runOn(async () => {
+      throw new Error("no docker daemon answers");
+    });
+    await expect(refusal?.run(otherwise) ?? Promise.resolve()).rejects.toThrow(/names no overlap/);
+  });
+});
+
 describe("a test a gap names", () => {
   it("is built by the lifecycle, never spelled inline", () => {
     type Accepts<T, U> = [U] extends [T] ? true : false;

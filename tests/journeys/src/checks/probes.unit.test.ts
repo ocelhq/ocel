@@ -22,6 +22,7 @@ function context(fetch: Fetch, baseUrl = BASE): CheckContext {
     phase: "verify",
     notes: new Map(),
     fetch,
+    readExposed: async () => "",
   };
 }
 

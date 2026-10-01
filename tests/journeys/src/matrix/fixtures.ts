@@ -12,6 +12,7 @@ import {
   nextRoutingChecks,
   nextStateChecks,
   nodeRuntimeChecks,
+  overlapRefusal,
   staticChecks,
   todoAndDocumentChecks,
   vendoredDependencyChecks,
@@ -169,16 +170,27 @@ export const sdk = {
     },
     sample: { group: "node-http", representative: true },
   }),
-  kv: fixture("sdk/kv", {
-    apps: ["web"],
-    checks: KV_CHECKS,
-    on: { dev: [defaults], vps: [defaults] },
-  }),
   withTransforms: fixture("sdk/with-transforms", {
     apps: ["web"],
     redeploys: true,
     checks: BINDING_CHECKS,
     on: { aws: [container, apiGateway], vps: [defaults] },
+  }),
+};
+
+export const kv = {
+  node: fixture("kv/node", {
+    apps: ["web"],
+    restarts: true,
+    redeploys: "where-releases-are-kept",
+    checks: KV_CHECKS,
+    on: { dev: [defaults], vps: [defaults], aws: [container], gcp: [defaults] },
+  }),
+  nodeOverlap: fixture("kv/node-overlap", {
+    apps: ["web"],
+    checks: [],
+    refusal: overlapRefusal("kv/node-overlap", ["notes/:id", ":kind/latest"]),
+    on: { dev: [defaults], vps: [defaults] },
   }),
 };
 
@@ -203,5 +215,6 @@ export const fixtures: Fixture[] = [
   ...Object.values(deploy),
   ...Object.values(lifecycle),
   ...Object.values(sdk),
+  ...Object.values(kv),
   ...Object.values(iac),
 ];

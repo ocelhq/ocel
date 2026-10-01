@@ -6,6 +6,7 @@ import {
   emptyBodyCheck,
   encodedSlashCheck,
   inflateCheck,
+  kvPasswordOutOfEnvironmentCheck,
   malformedQueryCheck,
   nextCacheChecks,
   nextDataCacheChecks,
@@ -19,7 +20,7 @@ import {
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
-import { deploy, iac, lifecycle, sdk } from "./fixtures";
+import { deploy, iac, kv, lifecycle, sdk } from "./fixtures";
 import type { Gap } from "./types";
 import {
   apiGateway,
@@ -389,6 +390,41 @@ export const gaps: Gap[] = [
         on: ["aws"],
         variants: [cloudflareInFrontOfContainers, cloudflareInFrontOfMixedComputes],
         whileUnset: ["OCEL_JOURNEY_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+    ],
+  },
+  {
+    id: "dev-binds-through-the-environment",
+    reason:
+      "ocel dev hands each binding to the app it runs as an environment variable, a kv store's password in clear among it",
+    issue: 1522,
+    where: [{ on: ["dev"], fixtures: [kv.node], fails: [check(kvPasswordOutOfEnvironmentCheck)] }],
+  },
+  {
+    id: "aws-refuses-kv",
+    reason:
+      "the aws provider refuses a deploy that declares a store at preflight: kv stores are unsupported on aws, so it provisions none",
+    issue: 1479,
+    where: [
+      {
+        on: ["aws", "aws.floci"],
+        fixtures: [kv.node],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+    ],
+  },
+  {
+    id: "gcp-refuses-kv",
+    reason:
+      "the gcp provider refuses a deploy that declares a store at preflight: kv stores are unsupported on gcp, so it provisions none",
+    issue: 1480,
+    where: [
+      {
+        on: ["gcp", "gcp.floci"],
+        fixtures: [kv.node],
         fails: [step.deploy],
         skipsCell: true,
       },

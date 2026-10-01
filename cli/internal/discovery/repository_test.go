@@ -156,9 +156,10 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 	fixtureRoots := []string{
 		"tests/fixtures/iac/with-pulumi",
 		"tests/fixtures/iac/with-sst",
+		"tests/fixtures/kv/node",
+		"tests/fixtures/kv/node-overlap",
 		"tests/fixtures/lifecycle/next",
 		"tests/fixtures/sdk/go",
-		"tests/fixtures/sdk/kv",
 		"tests/fixtures/sdk/next",
 		"tests/fixtures/sdk/node",
 		"tests/fixtures/sdk/python",

@@ -1,5 +1,28 @@
 import { describe, expect, it } from "bun:test";
-import { devProject, startedResources, volumesIn } from "./dev";
+import { devProject, keptRunning, startedResources, volumesIn } from "./dev";
+
+describe("the containers a restart kept running", () => {
+  it("names each container whose start time did not move", () => {
+    const before = new Map([
+      ["/dev-kv-cache", "2026-10-01T10:00:00Z"],
+      ["/dev-kv-bounded", "2026-10-01T10:00:01Z"],
+    ]);
+    const after = new Map([
+      ["/dev-kv-cache", "2026-10-01T10:05:00Z"],
+      ["/dev-kv-bounded", "2026-10-01T10:00:01Z"],
+    ]);
+    expect(keptRunning(before, after)).toEqual(["/dev-kv-bounded"]);
+  });
+
+  it("names none when every container started again or is new", () => {
+    const before = new Map([["/dev-kv-cache", "2026-10-01T10:00:00Z"]]);
+    const after = new Map([
+      ["/dev-kv-cache", "2026-10-01T10:05:00Z"],
+      ["/dev-kv-evicting", "2026-10-01T10:05:01Z"],
+    ]);
+    expect(keptRunning(before, after)).toEqual([]);
+  });
+});
 
 describe("the project a dev stack is labelled with", () => {
   it("is the name ocel dev derives from the directory, so the harness can find what it started", () => {

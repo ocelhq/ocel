@@ -23,6 +23,7 @@ export type CheckContext = {
   phase: Phase;
   notes: Map<string, string>;
   fetch: Fetch;
+  readExposed: () => Promise<string>;
 };
 
 export type Check = {

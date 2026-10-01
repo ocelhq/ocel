@@ -7,11 +7,17 @@ import {
 } from "../checks/context";
 import type { Evidence } from "../evidence";
 import { projectSlug } from "../identity";
-import type { Cell, Fixture, Phase, Variant } from "../matrix/types";
+import type { Cell, Fixture, Phase, Refusal, Variant } from "../matrix/types";
 import { fixtureDir } from "../paths";
 import type { StackCheck } from "../stacks";
 import { namespaceOfSlug } from "../targets/aws/namespace";
-import { type Deployment, hasReleaseCycle, type Target } from "../targets/types";
+import {
+  type Deployment,
+  hasExposure,
+  hasReleaseCycle,
+  hasRestart,
+  type Target,
+} from "../targets/types";
 
 export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -91,6 +97,25 @@ export class CellRun {
     });
   }
 
+  async refusedDeploy(refusal: Refusal): Promise<void> {
+    this.ready();
+    const failure = await this.target.deploy(this).then(
+      () => undefined,
+      (error: unknown) => ({ error }),
+    );
+    assert.ok(failure, `${this.target.name} deployed ${this.name}, whose build is refused`);
+    await refusal.run(messageOf(failure.error));
+  }
+
+  async restart(): Promise<void> {
+    await this.deploy();
+    await this.once("restart", async () => {
+      const target = this.target;
+      assert.ok(hasRestart(target), `${target.name} has nothing to restart what an app declared`);
+      this.deployment = await target.restart(this);
+    });
+  }
+
   async redeploy(): Promise<void> {
     await this.deploy();
     await this.once("redeploy", async () => {
@@ -140,6 +165,7 @@ export class CellRun {
       phase,
       notes: this.notes,
       fetch: guard.fetch,
+      readExposed: () => this.readExposed(),
     }).then(
       () => undefined,
       (error: unknown) => ({ error }),
@@ -157,6 +183,15 @@ export class CellRun {
     if (failure) {
       throw failure.error;
     }
+  }
+
+  private async readExposed(): Promise<string> {
+    const target = this.target;
+    assert.ok(
+      hasExposure(target),
+      `${target.name} has no way to read what it exposes of a cell outside its apps`,
+    );
+    return target.readExposed(this);
   }
 
   async finish(phases: Phase[]): Promise<void> {
