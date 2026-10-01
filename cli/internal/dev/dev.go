@@ -144,11 +144,15 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	if err != nil {
 		return err
 	}
+	workers := newWorkerProcesses(opts, host.resources)
+	defer workers.stop(ctx)
+	workers.restart(ctx, resolved)
 	for {
 		select {
 		case err := <-child.Exited():
 			return exitError(ctx, err)
 		case env := <-updates:
+			workers.restart(ctx, env)
 			if maps.Equal(env, resolved) {
 				continue
 			}

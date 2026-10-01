@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
@@ -128,6 +129,34 @@ func servedFixture(t *testing.T, fixture string) string {
 		t.Fatalf("WorkerCommand: %v", err)
 	}
 	return startWorker(t, cmd, "worker")
+}
+
+func TestAWorkerIsServedFromTheRootItsTasksAndConsumersAreDeclaredIn(t *testing.T) {
+	t.Parallel()
+	configDir := t.TempDir()
+	node := Root{Dir: filepath.Join(configDir, "web"), Language: language.JS}
+	python := Root{Dir: filepath.Join(configDir, "jobs", "py"), Language: language.Python}
+	crate := Root{Dir: configDir, Language: language.Rust}
+	roots := []Root{node, python, crate}
+
+	for _, tc := range []struct {
+		sources []string
+		want    Root
+	}{
+		{[]string{filepath.Join(configDir, "web", "tasks", "greet.ts") + ":3"}, node},
+		{[]string{"jobs/py/__init__.py:12", filepath.Join(configDir, "jobs", "py", "audit.py") + ":4"}, python},
+		{[]string{"src/main.rs:30"}, crate},
+	} {
+		got, err := WorkerRoot(configDir, roots, "worker", tc.sources)
+		if err != nil || got != tc.want {
+			t.Errorf("WorkerRoot(%q) = %+v, %v, want %+v", tc.sources, got, err, tc.want)
+		}
+	}
+
+	_, err := WorkerRoot(configDir, roots, "media", []string{"web/greet.ts:3", "jobs/py/audit.py:4"})
+	if err == nil || !strings.Contains(err.Error(), `worker "media"`) || !strings.Contains(err.Error(), "web/greet.ts:3") || !strings.Contains(err.Error(), "jobs/py/audit.py:4") {
+		t.Errorf("WorkerRoot across a JS and a Python root = %v, want a refusal naming the worker and both declarations", err)
+	}
 }
 
 func TestTheGeneratedNodeWorkerServesATaskWithItsWorkersOnStartAndMiddleware(t *testing.T) {

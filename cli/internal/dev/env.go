@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	hostEnv     = "HOST"
 	portEnv     = "PORT"
 	defaultPort = "3000"
 )
