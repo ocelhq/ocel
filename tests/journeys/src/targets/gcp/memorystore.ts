@@ -1,6 +1,6 @@
 import { HARNESS_PREFIX } from "../../identity";
 import { sanitize } from "../../naming";
-import type { Where } from "./store";
+import { bearer, type Where } from "./store";
 
 export const KV_FEATURE = "kv-network";
 
@@ -18,8 +18,8 @@ export type CreateTime = {
 
 const CREATED = /^Created kv (\S+): its create operation (\S+) created (\S+) and ended (\S+)$/;
 
-export function createTimesIn(said: string): CreateTime[] {
-  return said.split("\n").flatMap((line) => {
+export function createTimesIn(output: string): CreateTime[] {
+  return output.split("\n").flatMap((line) => {
     const matched = line.trim().match(CREATED);
     if (!matched) {
       return [];
@@ -49,10 +49,6 @@ export function strayStores(stores: Store[], mine: string[]): string[] {
   return stores
     .filter((store) => store.project.startsWith(HARNESS_PREFIX) && !mine.includes(store.project))
     .map((store) => store.name);
-}
-
-function bearer(where: Where): Record<string, string> {
-  return where.token ? { authorization: `Bearer ${where.token}` } : {};
 }
 
 async function answered(at: string, init: RequestInit): Promise<unknown> {

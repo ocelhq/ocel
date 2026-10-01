@@ -101,7 +101,7 @@ function servicesUrl(where: Where): string {
   return `${host}/v2/projects/${where.project}/locations/${where.region}/services`;
 }
 
-function bearer(where: Where): Record<string, string> {
+export function bearer(where: Where): Record<string, string> {
   return where.token ? { authorization: `Bearer ${where.token}` } : {};
 }
 
