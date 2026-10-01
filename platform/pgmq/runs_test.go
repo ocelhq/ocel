@@ -192,3 +192,22 @@ func TestATaskTTLAppliesToARunThatSetsNone(t *testing.T) {
 	id := trigger(t, engine, "resize", `{}`, nil)
 	awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_EXPIRED)
 }
+
+func TestListingRunsWithACursorNoListingReturnedIsAnInvalidArgument(t *testing.T) {
+	engine := applied(t, map[string]*contractv1.ManifestTopic{"resize": aTask()}, nil)
+
+	_, err := engine.Tasks().ListRuns(context.Background(), &taskv1.ListRunsRequest{Task: "resize", Cursor: "not a cursor"})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("ListRuns with a made-up cursor = %v, want InvalidArgument", err)
+	}
+}
+
+func TestListingRunsWhenTheDatabaseIsUnreachableIsNotTheCallersFault(t *testing.T) {
+	engine := applied(t, map[string]*contractv1.ManifestTopic{"resize": aTask()}, nil)
+	engine.Close()
+
+	_, err := engine.Tasks().ListRuns(context.Background(), &taskv1.ListRunsRequest{Task: "resize"})
+	if err == nil || connect.CodeOf(err) == connect.CodeInvalidArgument {
+		t.Errorf("ListRuns on a closed engine = %v, want an error that does not blame the request", err)
+	}
+}

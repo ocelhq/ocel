@@ -22,6 +22,8 @@ const (
 	maxRunPage     = 1000
 )
 
+var errUnknownCursor = errors.New("the cursor is not one a listing returned")
+
 type querier interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -202,7 +204,7 @@ func parseCursor(cursor string) (time.Time, string, error) {
 			return created, execution, nil
 		}
 	}
-	return time.Time{}, "", fmt.Errorf("cursor %q is not one a run listing returned", cursor)
+	return time.Time{}, "", fmt.Errorf("cursor %q: %w", cursor, errUnknownCursor)
 }
 
 func jsonOrNull(value json.RawMessage) any {
