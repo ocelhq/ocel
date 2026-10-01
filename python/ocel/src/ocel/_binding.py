@@ -6,6 +6,7 @@ from ocel.gen.common.bindings.v1.bindings_pb import (
     BucketProperties,
     KvProperties,
     PostgresProperties,
+    RealtimeProperties,
 )
 
 _RUNTIME_ADDRESS_ENV = "OCEL_RUNTIME_ADDRESS"
@@ -36,6 +37,10 @@ def read_bucket_binding(name: str) -> BucketProperties:
 
 def read_kv_binding(name: str) -> KvProperties:
     return _read_properties(name, "kv")
+
+
+def read_realtime_binding(name: str) -> RealtimeProperties:
+    return _read_properties(name, "realtime")
 
 
 def refuse_unbound(name: str, kind: str) -> RuntimeError | None:

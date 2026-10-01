@@ -24,6 +24,14 @@ from ocel.env import (
 )
 from ocel.kv import KV, InvalidKVValueError, kv
 from ocel.postgres import Postgres, postgres
+from ocel.realtime import (
+    Channel,
+    Realtime,
+    RealtimePublishError,
+    RealtimeRequest,
+    RuleContext,
+    realtime,
+)
 from ocel.run import (
     AbortTaskRunError,
     CatchErrorResult,
@@ -49,6 +57,7 @@ __all__ = [
     "Batch",
     "Bucket",
     "CatchErrorResult",
+    "Channel",
     "Consumer",
     "DeadLetter",
     "DeadLetterPage",
@@ -67,6 +76,9 @@ __all__ = [
     "ObjectNotFound",
     "Postgres",
     "PreconditionFailed",
+    "Realtime",
+    "RealtimePublishError",
+    "RealtimeRequest",
     "Retry",
     "Run",
     "RunAttempt",
@@ -75,6 +87,7 @@ __all__ = [
     "RunMessage",
     "RunPage",
     "RunResult",
+    "RuleContext",
     "RunStatus",
     "Runs",
     "Secret",
@@ -90,6 +103,7 @@ __all__ = [
     "group",
     "kv",
     "postgres",
+    "realtime",
     "runs",
     "task",
     "topic",
