@@ -1,4 +1,5 @@
 use serde_json::{json, Value};
+use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, UNIX_EPOCH};
@@ -685,8 +686,17 @@ async fn ended_on_complete(
     on_complete = ended_on_complete
 )]
 async fn ends_after_cancel(image: Image, run: &ocel::Run) -> Result<(), ocel::RunError> {
-    ENDED_STARTED.notify_one();
-    run.cancelled().await;
+    let mut cancelled = std::pin::pin!(run.cancelled());
+    let mut parked = false;
+    std::future::poll_fn(|cx| {
+        let polled = cancelled.as_mut().poll(cx);
+        if polled.is_pending() && !parked {
+            parked = true;
+            ENDED_STARTED.notify_one();
+        }
+        polled
+    })
+    .await;
     record(&ENDED, format!("returned {}", image.url));
     match image.url.as_str() {
         "abort" => Err(ocel::RunError::abort("the image is gone")),
