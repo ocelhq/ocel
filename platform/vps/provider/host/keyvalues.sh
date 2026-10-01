@@ -12,6 +12,18 @@ abort() {
 	exit 2
 }
 
+reached() {
+	local p
+	p=$1
+	while [ "${p%/*}" != "$p" ]; do
+		p=${p%/*}
+		[ -n "$p" ] || return 0
+		if [ -d "$p" ] && [ ! -x "$p" ]; then
+			abort "$p: Permission denied to $(id -un)"
+		fi
+	done
+}
+
 [ $# -ge 2 ] || usage
 tier=$1
 verb=$2
@@ -23,6 +35,7 @@ esac
 
 dir="${OCEL_STATE_ROOT:-/var/lib/ocel}/$tier/keyvalues"
 [ ! -L "$dir" ] || abort "$dir is a symlink to $(readlink "$dir"), not the directory ocel bootstrap made"
+reached "$dir"
 [ -d "$dir" ] || abort "$dir is missing; run ocel bootstrap"
 
 ours() {
