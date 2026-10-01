@@ -281,3 +281,38 @@ func TestAWorkerIsDeliveredToOnlyOnceItsContainerAnswers(t *testing.T) {
 		t.Errorf("once it answers the engine was applied %+v, want worker delivered to", applied)
 	}
 }
+
+func TestAWorkerContainerStartedAgainUnderARetiredNameIsAskedAgainBeforeItIsDeliveredTo(t *testing.T) {
+	t.Parallel()
+
+	store := fake.NewKeyValues()
+	aQueue(t, store)
+	opened := &engines{}
+	host := aHost(store, opened)
+	var answers sync.Map
+	answers.Store("http://10.0.0.3:8080", true)
+	host.IsAnswering = func(_ context.Context, url string) bool {
+		_, answering := answers.Load(url)
+		return answering
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	if err := host.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := keyvalue.Forget(ctx, store, live.QueueWorkerKey(tier, "shop", "prod", "worker")); err != nil {
+		t.Fatal(err)
+	}
+	if err := host.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	answers.Delete("http://10.0.0.3:8080")
+	record(t, store, live.QueueWorkerKey(tier, "shop", "prod", "worker"), live.QueueWorker{App: "web", Stack: "prod--web--r1", Container: "shop-worker", Concurrency: 3})
+	if err := host.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	applied := opened.opened[0].deployments()
+	if _, delivered := applied[len(applied)-1].Workers["worker"]; delivered {
+		t.Errorf("the engine was applied %+v: a worker container started again under a name the agent once heard answer is delivered to before it answers", applied[len(applied)-1])
+	}
+}
