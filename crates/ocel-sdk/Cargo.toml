@@ -26,6 +26,8 @@ futures-core = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 http = "1"
 http-body-util = "0.1"
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 inventory = "0.3"
 redis = { version = "1.7", default-features = false, features = ["tokio-comp", "tokio-rustls-comp"], optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring"], optional = true }
@@ -34,7 +36,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 thiserror = "2"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "tls-rustls"], optional = true }
-tokio = { version = "1", default-features = false, features = ["io-util", "rt", "sync"] }
+tokio = { version = "1", default-features = false, features = ["io-util", "net", "rt", "rt-multi-thread", "sync", "time"] }
 tokio-util = { version = "0.7", default-features = false, features = ["io"] }
 
 [dev-dependencies]

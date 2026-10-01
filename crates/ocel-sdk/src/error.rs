@@ -65,6 +65,17 @@ pub enum Error {
         said: String,
     },
 
+    /// The process was run as a worker and could not listen for its deliveries.
+    #[error("ocel: worker '{worker}' cannot listen on {address}: {said}")]
+    Listen {
+        /// The worker the process was run as.
+        worker: String,
+        /// The address it was told to listen on.
+        address: String,
+        /// Why it could not.
+        said: String,
+    },
+
     /// Discovery could not tell the CLI about the variables a struct declares.
     #[error("ocel: declare env: {said}")]
     DeclareEnv {
