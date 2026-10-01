@@ -1,19 +1,33 @@
-package pgmq
+package envelope
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"time"
 )
 
 const crockford = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
-func newMessageID(at time.Time) string {
+func NewMessageID(at time.Time) string {
+	var entropy [10]byte
+	_, _ = rand.Read(entropy[:])
+	return encodeMessageID(at, entropy)
+}
+
+func MessageIDFrom(at time.Time, seed string) string {
+	sum := sha256.Sum256([]byte(seed))
+	var entropy [10]byte
+	copy(entropy[:], sum[:])
+	return encodeMessageID(at, entropy)
+}
+
+func encodeMessageID(at time.Time, entropy [10]byte) string {
 	var id [16]byte
 	ms := uint64(at.UnixMilli())
 	for i := range 6 {
 		id[i] = byte(ms >> (40 - 8*i))
 	}
-	_, _ = rand.Read(id[6:])
+	copy(id[6:], entropy[:])
 	var text [26]byte
 	text[0] = crockford[id[0]>>5]
 	bits, held, written := uint32(id[0]&0x1f), 5, 1

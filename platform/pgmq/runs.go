@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/ocelhq/ocel/pkg/envelope"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -172,7 +173,7 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 	toPublish := publication{
 		topicName:   task,
 		topic:       topic,
-		messageID:   newMessageID(now),
+		messageID:   envelope.NewMessageID(now),
 		publishedAt: now,
 		dueAt:       now,
 		payload:     json.RawMessage(payload),

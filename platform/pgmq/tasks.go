@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -56,7 +57,7 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 	toPublish := publication{
 		topicName:   name,
 		topic:       topic,
-		messageID:   newMessageID(now),
+		messageID:   envelope.NewMessageID(now),
 		publishedAt: now,
 		dueAt:       now,
 		payload:     payload,
