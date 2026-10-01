@@ -39,6 +39,7 @@ func TestAKVBindingReadBackFromItsRecordIsTheSameRecord(t *testing.T) {
 
 	record := &bindingsv1.Binding{Name: "kv--cache", Properties: &bindingsv1.Binding_Kv{Kv: &bindingsv1.KvProperties{
 		Host: "cache.internal", Port: 6380, Username: "app", Password: "fixture-password", Tls: true,
+		CaPem: "-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n",
 	}}}
 	binding := provider.BindingOf(record)
 	if binding.Type != provider.BindingKV {
@@ -50,8 +51,8 @@ func TestAKVBindingReadBackFromItsRecordIsTheSameRecord(t *testing.T) {
 	}
 	if !proto.Equal(message, record) {
 		got := message.GetKv()
-		t.Errorf("BindingMessage(BindingOf(record)) = %s on %s:%d as %q (tls %v), want the kv record it was read from",
-			message.GetName(), got.GetHost(), got.GetPort(), got.GetUsername(), got.GetTls())
+		t.Errorf("BindingMessage(BindingOf(record)) = %s on %s:%d as %q (tls %v, ca %q), want the kv record it was read from",
+			message.GetName(), got.GetHost(), got.GetPort(), got.GetUsername(), got.GetTls(), got.GetCaPem())
 	}
 }
 

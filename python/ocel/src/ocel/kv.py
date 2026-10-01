@@ -253,11 +253,14 @@ class KV:
             options["password"] = properties.password
         if properties.tls:
             options.update(ssl=True, ssl_cert_reqs="required", ssl_check_hostname=True)
+            if properties.ca_pem:
+                options["ssl_ca_data"] = properties.ca_pem
         return options
 
     def client(self):
         """The ``redis.asyncio.Redis`` client connected to the store, opened on the first
-        call and returned unchanged on every one after. redis-py is imported here, from the
+        call and returned unchanged on every one after. Over TLS it trusts only the store's
+        own certificate authority when the provider names one. redis-py is imported here, from the
         ``ocel[kv]`` extra."""
         if self._client is None:
             options = self._client_options("client")

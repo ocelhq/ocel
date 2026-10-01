@@ -190,17 +190,44 @@ def test_a_tls_store_is_reached_by_clients_that_check_its_hostname(monkeypatch):
         assert options["ssl_cert_reqs"] == "required"
 
 
+def test_a_tls_store_is_reached_trusting_only_the_authority_the_binding_delivers(monkeypatch):
+    authority = "-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n"
+    monkeypatch.setenv(
+        "OCEL_RESOURCE_KV_private",
+        json.dumps(
+            {
+                "name": "kv--private",
+                "kv": {
+                    "host": "10.240.0.5",
+                    "port": 6378,
+                    "password": "pw",
+                    "tls": True,
+                    "caPem": authority,
+                },
+            }
+        ),
+    )
+    cache = kv("private")
+
+    for client in (cache.sync_client(), cache.client()):
+        assert client.connection_pool.connection_kwargs["ssl_ca_data"] == authority
+
+
 def test_the_kv_binding_fixture_decodes_as_the_other_sdks_decode_it(monkeypatch):
     fixtures = os.path.join(
         os.path.dirname(__file__), "..", "..", "..", "proto", "common", "bindings", "v1", "fixtures"
     )
     with open(os.path.join(fixtures, "kv.json")) as delivered:
-        monkeypatch.setenv("OCEL_RESOURCE_KV_cache", delivered.read())
+        body = delivered.read()
+    monkeypatch.setenv("OCEL_RESOURCE_KV_cache", body)
+    cache = kv("cache")
 
-    assert kv("cache").connection_string == (
+    assert cache.connection_string == (
         "rediss://fixture_operator:fixture-password-not-a-secret@"
         "shop-prod-cache-h4j5k6l7.ab12cd.ng.0001.use1.cache.amazonaws.com:6380"
     )
+    options = cache.sync_client().connection_pool.connection_kwargs
+    assert options["ssl_ca_data"] == json.loads(body)["kv"]["caPem"]
 
 
 def test_a_text_entry_reads_what_was_written_and_misses_as_none(valkey):

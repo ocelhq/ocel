@@ -470,3 +470,35 @@ async fn a_write_shorter_than_a_millisecond_is_refused() {
         .expect_err("a ttl under 1ms");
     assert!(matches!(err, Error::InvalidKvTtl { .. }), "{err}");
 }
+
+#[test]
+fn a_client_opens_trusting_the_authority_the_kv_binding_fixture_delivers() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../proto/common/bindings/v1/fixtures/kv.json");
+    std::env::remove_var("OCEL_PHASE");
+    std::env::set_var(
+        "OCEL_RESOURCE_KV_trusted",
+        std::fs::read_to_string(fixture)
+            .expect("the kv binding fixture")
+            .replace("kv--cache", "kv--trusted"),
+    );
+
+    Kv::new("trusted")
+        .client()
+        .expect("a client trusting the fixture's caPem");
+}
+
+#[test]
+fn a_client_is_refused_when_the_delivered_authority_holds_no_certificate() {
+    std::env::remove_var("OCEL_PHASE");
+    std::env::set_var(
+        "OCEL_RESOURCE_KV_garbled",
+        r#"{"name":"kv--garbled","kv":{"host":"10.240.0.5","port":6378,"password":"pw","tls":true,"caPem":"not a certificate"}}"#,
+    );
+
+    let err = Kv::new("garbled").client().unwrap_err();
+    assert!(
+        matches!(err, Error::InvalidKvAuthority { ref key } if key == "OCEL_RESOURCE_KV_garbled"),
+        "{err}"
+    );
+}

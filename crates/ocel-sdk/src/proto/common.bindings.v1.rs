@@ -2086,6 +2086,14 @@ pub struct KvProperties {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
     )]
     pub tls: bool,
+    /// Field 6: `ca_pem`
+    #[serde(
+        rename = "caPem",
+        alias = "ca_pem",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub ca_pem: ::buffa::alloc::string::String,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -2098,6 +2106,7 @@ impl ::core::fmt::Debug for KvProperties {
             .field("username", &self.username)
             .field("password", &::core::format_args!("[REDACTED]"))
             .field("tls", &self.tls)
+            .field("ca_pem", &self.ca_pem)
             .finish()
     }
 }
@@ -2143,6 +2152,9 @@ impl ::buffa::Message for KvProperties {
         if self.tls {
             size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
         }
+        if !self.ca_pem.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.ca_pem) as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -2167,6 +2179,9 @@ impl ::buffa::Message for KvProperties {
         }
         if self.tls {
             ::buffa::types::put_bool_field(5u32, self.tls, buf);
+        }
+        if !self.ca_pem.is_empty() {
+            ::buffa::types::put_string_field(6u32, &self.ca_pem, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -2216,6 +2231,13 @@ impl ::buffa::Message for KvProperties {
                 )?;
                 self.tls = ::buffa::types::decode_bool(buf)?;
             }
+            6u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.ca_pem, buf)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -2229,6 +2251,7 @@ impl ::buffa::Message for KvProperties {
         self.username.clear();
         self.password.clear();
         self.tls = false;
+        self.ca_pem.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -5172,6 +5195,8 @@ pub mod __buffa {
             pub password: &'a str,
             /// Field 5: `tls`
             pub tls: bool,
+            /// Field 6: `ca_pem`
+            pub ca_pem: &'a str,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::core::fmt::Debug for KvPropertiesView<'a> {
@@ -5182,6 +5207,7 @@ pub mod __buffa {
                     .field("username", &self.username)
                     .field("password", &::core::format_args!("[REDACTED]"))
                     .field("tls", &self.tls)
+                    .field("ca_pem", &self.ca_pem)
                     .finish()
             }
         }
@@ -5256,6 +5282,13 @@ pub mod __buffa {
                         )?;
                         view.tls = ::buffa::types::decode_bool(&mut cur)?;
                     }
+                    6u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.ca_pem = ::buffa::types::borrow_str(&mut cur)?;
+                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                         let span_len = before_tag.len() - cur.len();
@@ -5290,6 +5323,7 @@ pub mod __buffa {
                     username: self.username.to_string(),
                     password: self.password.to_string(),
                     tls: self.tls,
+                    ca_pem: self.ca_pem.to_string(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -5323,6 +5357,11 @@ pub mod __buffa {
                 if self.tls {
                     size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
                 }
+                if !self.ca_pem.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.ca_pem) as u64;
+                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -5348,6 +5387,9 @@ pub mod __buffa {
                 }
                 if self.tls {
                     ::buffa::types::put_bool_field(5u32, self.tls, buf);
+                }
+                if !self.ca_pem.is_empty() {
+                    ::buffa::types::put_string_field(6u32, &self.ca_pem, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -5388,6 +5430,9 @@ pub mod __buffa {
                 }
                 if self.tls {
                     __map.serialize_entry("tls", &self.tls)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.ca_pem) {
+                    __map.serialize_entry("caPem", self.ca_pem)?;
                 }
                 __map.end()
             }
@@ -5506,6 +5551,11 @@ pub mod __buffa {
             #[must_use]
             pub fn tls(&self) -> bool {
                 self.0.reborrow().tls
+            }
+            /// Field 6: `ca_pem`
+            #[must_use]
+            pub fn ca_pem(&self) -> &'_ str {
+                self.0.reborrow().ca_pem
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<KvPropertiesView<'static>>>

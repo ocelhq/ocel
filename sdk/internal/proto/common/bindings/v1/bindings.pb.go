@@ -657,6 +657,7 @@ type KvProperties struct {
 	Username      string                 `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
 	Password      string                 `protobuf:"bytes,4,opt,name=password,proto3" json:"password,omitempty"`
 	Tls           bool                   `protobuf:"varint,5,opt,name=tls,proto3" json:"tls,omitempty"`
+	CaPem         string                 `protobuf:"bytes,6,opt,name=ca_pem,json=caPem,proto3" json:"ca_pem,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -724,6 +725,13 @@ func (x *KvProperties) GetTls() bool {
 		return x.Tls
 	}
 	return false
+}
+
+func (x *KvProperties) GetCaPem() string {
+	if x != nil {
+		return x.CaPem
+	}
+	return ""
 }
 
 type RealtimeProperties struct {
@@ -970,13 +978,14 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\raccess_key_id\x18\b \x01(\tR\vaccessKeyId\x12/\n" +
 	"\x11secret_access_key\x18\t \x01(\tB\x03\x80\x01\x01R\x0fsecretAccessKey\"\x11\n" +
 	"\x0fTopicProperties\"\x10\n" +
-	"\x0eTaskProperties\"\x85\x01\n" +
+	"\x0eTaskProperties\"\x9c\x01\n" +
 	"\fKvProperties\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
 	"\busername\x18\x03 \x01(\tR\busername\x12\x1f\n" +
 	"\bpassword\x18\x04 \x01(\tB\x03\x80\x01\x01R\bpassword\x12\x10\n" +
-	"\x03tls\x18\x05 \x01(\bR\x03tls\"\xc4\x01\n" +
+	"\x03tls\x18\x05 \x01(\bR\x03tls\x12\x15\n" +
+	"\x06ca_pem\x18\x06 \x01(\tR\x05caPem\"\xc4\x01\n" +
 	"\x12RealtimeProperties\x12C\n" +
 	"\ttransport\x18\x01 \x01(\x0e2%.common.bindings.v1.RealtimeTransportR\ttransport\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x12\n" +

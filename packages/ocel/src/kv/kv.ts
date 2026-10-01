@@ -1,3 +1,4 @@
+import type { ConnectionOptions } from "node:tls";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { Redis } from "ioredis";
 import { getConfig } from "../binding/binding.js";
@@ -71,7 +72,10 @@ const entryName = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
 export type KVStore<TEntries extends KVEntries> = {
   readonly [Name in keyof TEntries]: EntryOf<TEntries[Name]>;
 } & {
-  /** The ioredis client connected to the store, opened on first use and shared after. */
+  /**
+   * The ioredis client connected to the store, opened on first use and shared after. Over
+   * TLS it trusts only the store's own certificate authority when the provider names one.
+   */
   readonly client: Redis;
   /** The store's URL, `redis://` or `rediss://` when it requires TLS, for tools that take one. */
   readonly connectionString: string;
@@ -157,14 +161,25 @@ function refuseEntries(store: string, entries: [string, DeclaredEntry][]) {
 }
 
 function clientOptions(properties: KvProperties) {
-  const { host, port, username, password, tls } = properties;
+  const { host, port, username, password, tls, caPem } = properties;
   return {
     host,
     port,
     username: username || undefined,
     password: password || undefined,
-    tls: tls ? { servername: host } : undefined,
+    tls: tls ? tlsOptions(host, caPem) : undefined,
   };
+}
+
+function tlsOptions(host: string, caPem: string): ConnectionOptions {
+  return {
+    ...(isAddress(host) ? {} : { servername: host }),
+    ...(caPem ? { ca: caPem } : {}),
+  };
+}
+
+function isAddress(host: string): boolean {
+  return /^[\d.]+$/.test(host) || host.includes(":");
 }
 
 function connectionStringOf(properties: KvProperties): string {

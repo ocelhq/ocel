@@ -1,5 +1,6 @@
 use super::{Counter, Json, Kv, KvEntryDeclaration, KvKey, List, Set, Shape, Text};
 use crate::declare::is_discovering;
+use crate::proto::common::bindings::v1::KvProperties;
 use crate::Error;
 use redis::aio::MultiplexedConnection;
 use redis::{Cmd, FromRedisValue, Pipeline};
@@ -15,9 +16,10 @@ type ResultFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send 
 
 impl Kv {
     /// The redis-rs client for the store over the delivered binding, encrypted when the
-    /// binding requires TLS. It is built on the first call and the same client is returned
-    /// on every one after. It fails when no binding was delivered for the name, and during
-    /// discovery.
+    /// binding requires TLS, and trusting only the binding's certificate authority when it
+    /// delivers one. It is built on the first call and the same client is returned on every
+    /// one after. It fails when no binding was delivered for the name, when the delivered
+    /// authority holds no PEM certificate, and during discovery.
     pub fn client(&self) -> Result<redis::Client, Error> {
         self.open_client("client")
     }
@@ -45,10 +47,32 @@ impl Kv {
         if !properties.password.is_empty() {
             settings = settings.set_password(properties.password.clone());
         }
-        let client = redis::Client::open(
-            redis::IntoConnectionInfo::into_connection_info(address)?.set_redis_settings(settings),
-        )?;
+        let info =
+            redis::IntoConnectionInfo::into_connection_info(address)?.set_redis_settings(settings);
+        let client = if properties.tls && !properties.ca_pem.is_empty() {
+            redis::Client::build_with_tls(
+                info,
+                redis::TlsCertificates {
+                    client_tls: None,
+                    root_cert: Some(self.read_authority(&properties)?),
+                },
+            )?
+        } else {
+            redis::Client::open(info)?
+        };
         Ok(self.client.get_or_init(|| client).clone())
+    }
+
+    fn read_authority(&self, properties: &KvProperties) -> Result<Vec<u8>, Error> {
+        use rustls::pki_types::{pem::PemObject, CertificateDer};
+        let pem = properties.ca_pem.as_bytes();
+        let mut certificates = CertificateDer::pem_slice_iter(pem);
+        match certificates.next() {
+            Some(Ok(_)) if certificates.all(|parsed| parsed.is_ok()) => Ok(pem.to_vec()),
+            _ => Err(Error::InvalidKvAuthority {
+                key: format!("OCEL_RESOURCE_KV_{}", self.name),
+            }),
+        }
     }
 
     /// The multiplexed connection every operation on the store shares, opened on the first
