@@ -51,7 +51,7 @@ func newHarness(t *testing.T, configure ...func(*gateway.Config)) *harness {
 		Keys: func(ns string) (ed25519.PublicKey, bool) {
 			return public, ns == namespace
 		},
-		AllowedOrigins: []string{appOrigin},
+		AllowedOrigins: func() []string { return []string{appOrigin} },
 		Now:            h.now,
 	}
 	for _, change := range configure {

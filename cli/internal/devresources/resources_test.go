@@ -287,12 +287,21 @@ func TestDevRunsAKVStoreAndPrintsWhereItAnswers(t *testing.T) {
 	}
 }
 
-func TestDevRefusesARealtimeResourceNamingWhatWasDeclared(t *testing.T) {
+func TestDevBindsARealtimeResourceToItsGatewayWithoutDocker(t *testing.T) {
 	t.Parallel()
 
-	stack := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir()})
-	_, err := stack.Resolve(context.Background(), []declaration.Resource{{Name: "app", Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME}})
-	if err == nil || !strings.Contains(err.Error(), `realtime "app"`) || !strings.Contains(err.Error(), "does not run realtime channels") {
-		t.Errorf("Resolve(realtime) = %v, want realtime app refused by name", err)
+	engine := &dockertest.Engine{}
+	stack := devresources.New("shop", devresources.Options{Open: engine.OpenFunc(), StateDir: t.TempDir()})
+	t.Cleanup(func() { _ = stack.Close(context.Background()) })
+
+	resolved, err := stack.Resolve(context.Background(), []declaration.Resource{{Name: "app", Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME}})
+	if err != nil {
+		t.Fatalf("Resolve(realtime) = %v", err)
+	}
+	if len(resolved) != 1 || resolved[0].Env["OCEL_RESOURCE_REALTIME_app"] == "" {
+		t.Errorf("Resolve(realtime) = %+v, want app bound under OCEL_RESOURCE_REALTIME_app", resolved)
+	}
+	if len(engine.Specs) != 0 {
+		t.Errorf("ran %d containers, want the gateway in-process", len(engine.Specs))
 	}
 }

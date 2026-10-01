@@ -10,6 +10,7 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/charmbracelet/log v1.0.0
 	github.com/charmbracelet/x/ansi v0.11.8
+	github.com/coder/websocket v1.8.15
 	github.com/containerd/errdefs v1.0.0
 	github.com/creack/pty v1.1.24
 	github.com/evanw/esbuild v0.28.1
@@ -23,6 +24,7 @@ require (
 	github.com/moby/patternmatcher v0.6.1
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/pgmq v0.0.0
+	github.com/ocelhq/ocel/platform/realtime v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
 	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
@@ -248,6 +250,8 @@ tool (
 )
 
 replace github.com/ocelhq/ocel/platform/pgmq => ../platform/pgmq
+
+replace github.com/ocelhq/ocel/platform/realtime => ../platform/realtime
 
 replace github.com/ocelhq/ocel/platform/s3 => ../platform/s3
 
