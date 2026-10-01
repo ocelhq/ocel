@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const (
@@ -97,11 +98,30 @@ func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployed
 		e.track(claims[0].execution, cancel)
 		defer e.untrack(claims[0].execution)
 	}
+	posted := time.Now()
 	res := e.post(ctx, attemptCtx, worker.URL, envelopeOf(deployed, claims, deployed.consumer.GetBatch().GetSize() > 0))
+	took := time.Since(posted)
 	for _, claimed := range claims {
 		loop.drop(claimed.msg.id)
-		if err := e.finish(ctx, loop, deployed, claimed, res); err != nil && ctx.Err() == nil {
-			slog.Warn("record an attempt's outcome", "queue", loop.name, "execution", claimed.execution, "error", err)
+		status, err := e.finish(ctx, loop, deployed, claimed, res)
+		if err != nil {
+			if ctx.Err() == nil {
+				slog.Warn("record an attempt's outcome", "queue", loop.name, "execution", claimed.execution, "error", err)
+			}
+			continue
+		}
+		if status != "" {
+			e.reportAttempt(Attempt{
+				Topic:     deployed.topicName,
+				Consumer:  deployed.consumer.GetName(),
+				Task:      isTask(deployed.topic),
+				Execution: claimed.execution,
+				Number:    claimed.attempt,
+				Of:        claimed.maxAttempts,
+				Status:    status,
+				Took:      took,
+				Reason:    res.reason,
+			})
 		}
 	}
 }
@@ -298,24 +318,24 @@ func classifyInterruption(ctx, attemptCtx context.Context, err error) result {
 	return result{outcome: failed, reason: fmt.Sprintf("reach the worker: %v", err)}
 }
 
-func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedConsumer, claimed claim, res result) error {
+func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedConsumer, claimed claim, res result) (provider.RunStatus, error) {
 	switch res.outcome {
 	case canceled, interrupted:
-		return nil
+		return "", nil
 	case succeeded:
-		return e.settle(ctx, loop.name, claimed, "completed", res.output, "")
+		return provider.RunCompleted, e.settle(ctx, loop.name, claimed, provider.RunCompleted, res.output, "")
 	case aborted, refused:
-		return e.settle(ctx, loop.name, claimed, "failed", nil, res.reason)
+		return provider.RunFailed, e.settle(ctx, loop.name, claimed, provider.RunFailed, nil, res.reason)
 	case timedOut:
 		if isTask(deployed.topic) {
-			return e.settle(ctx, loop.name, claimed, "timed-out", nil, res.reason)
+			return provider.RunTimedOut, e.settle(ctx, loop.name, claimed, provider.RunTimedOut, nil, res.reason)
 		}
 	}
 	if claimed.attempt >= claimed.maxAttempts {
-		return e.settle(ctx, loop.name, claimed, "failed", nil, res.reason)
+		return provider.RunFailed, e.settle(ctx, loop.name, claimed, provider.RunFailed, nil, res.reason)
 	}
 	retryAt := time.Now().Add(retryPolicyOf(deployed).backoff(claimed.attempt, jitter()))
-	return e.inTx(ctx, func(tx pgx.Tx) error {
+	return provider.RunQueued, e.inTx(ctx, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = 'queued', error = $2, revision = `+newRevisionSQL+`
 			WHERE execution = $1 AND status = 'executing'`, claimed.execution, res.reason)
 		if err != nil || tag.RowsAffected() == 0 {
@@ -326,10 +346,10 @@ func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedC
 	})
 }
 
-func (e *Engine) settle(ctx context.Context, queue string, claimed claim, status string, output json.RawMessage, reason string) error {
+func (e *Engine) settle(ctx context.Context, queue string, claimed claim, status provider.RunStatus, output json.RawMessage, reason string) error {
 	return e.inTx(ctx, func(tx pgx.Tx) error {
 		payload := "payload"
-		if status != "completed" {
+		if status != provider.RunCompleted {
 			payload = "COALESCE(payload, " + stagedPayloadSQL + ")"
 		}
 		if _, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = $2, output = $3, error = $4, payload = `+payload+`,
