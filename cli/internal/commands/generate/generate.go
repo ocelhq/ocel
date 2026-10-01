@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/realtimetypes"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/node"
@@ -28,8 +29,11 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		Short: "Generate the app-side files ocel derives from your declarations",
 		Long: "Generate the app-side files ocel derives from your declarations.\n\n" +
 			"Writes each app's client accessor and points that app's 'ocel/env/client' imports at it, " +
-			"which `ocel dev` and `ocel deploy` also do. It reads declarations only — no login, no provider " +
-			"and no network — so it can run in CI before a typecheck, or from a postinstall on a fresh clone.",
+			"which `ocel dev` and `ocel deploy` also do. When the project declares realtime resources, it also writes " +
+			realtimetypes.FileName + " beside your ocel config: the channel types a browser's realtime client is typed " +
+			"from, for a backend in any language; check it in, and run this again when your channels change. It reads " +
+			"declarations only — no login, no provider and no network — so it can run in CI before a typecheck, or " +
+			"from a postinstall on a fresh clone.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
@@ -53,7 +57,8 @@ func runGenerate(ctx context.Context, dependencies Dependencies, cwd string, std
 	}
 
 	declarations := variables.NewDeclarations(noValues{}, variables.Scope{Apps: variablescope.Apps(cfg)})
-	if _, err := dependencies.CollectDeclarations(ctx, cfg, declarations, stderr, stderr); err != nil {
+	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, stderr, stderr)
+	if err != nil {
 		return err
 	}
 
@@ -71,6 +76,14 @@ func runGenerate(ctx context.Context, dependencies Dependencies, cwd string, std
 		noun = "variable"
 	}
 	fmt.Fprintf(stdout, "Generated the client accessor for %d client-accessible %s\n", named, noun)
+
+	wroteRealtime, err := realtimetypes.Generate(cfg.Dir, resources)
+	if err != nil {
+		return err
+	}
+	if wroteRealtime {
+		fmt.Fprintf(stdout, "Generated the realtime channel types in %s\n", realtimetypes.FileName)
+	}
 	return nil
 }
 

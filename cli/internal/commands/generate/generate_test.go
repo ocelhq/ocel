@@ -182,3 +182,36 @@ export default {
 		}
 	})
 }
+
+func TestGenerateWritesTheRealtimeChannelTypesBesideTheConfig(t *testing.T) {
+	root := setUpGenerateFixture(t, generateSoloConfig, "")
+
+	dependencies := newTestDependencies()
+	dependencies.CollectDeclarations = func(context.Context, *project.Project, *variables.Declarations, io.Writer, io.Writer) ([]declaration.Resource, error) {
+		return []declaration.Resource{{
+			Name: "app",
+			Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME,
+			Realtime: &resourcesv1.RealtimeConfig{Channels: []*resourcesv1.RealtimeChannel{{
+				Pattern: "orders/:orderId",
+				Schema:  `{"type":"object","properties":{"status":{"type":"string"}},"required":["status"]}`,
+				Publish: resourcesv1.RealtimePublish_REALTIME_PUBLISH_SERVER,
+			}}},
+		}}, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := runGenerate(context.Background(), dependencies, root, &stdout, &stderr); err != nil {
+		t.Fatalf("runGenerate: %v", err)
+	}
+
+	types, err := os.ReadFile(filepath.Join(root, "ocel-realtime.d.ts"))
+	if err != nil {
+		t.Fatalf("runGenerate wrote no realtime types: %v", err)
+	}
+	if want := `"orders/:orderId": { event: { status: string } };`; !strings.Contains(string(types), want) {
+		t.Errorf("ocel-realtime.d.ts = %s, want it to type %s", types, want)
+	}
+	if want := "Generated the realtime channel types in ocel-realtime.d.ts\n"; !strings.Contains(stdout.String(), want) {
+		t.Errorf("stdout = %q, want it to say %q", stdout.String(), want)
+	}
+}
