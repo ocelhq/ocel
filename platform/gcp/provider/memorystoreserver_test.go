@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -23,17 +24,18 @@ const (
 )
 
 type memorystoreServer struct {
-	mu        sync.Mutex
-	instances map[string]*memorystoreInstance
-	created   []*memorystoreInstance
-	patched   []string
-	deleted   []string
-	polls     int
-	reads     int
-	unnamed   bool
-	listed    []string
-	throttles int
-	failed    string
+	mu         sync.Mutex
+	instances  map[string]*memorystoreInstance
+	created    []*memorystoreInstance
+	patched    []string
+	deleted    []string
+	polls      int
+	reads      int
+	unnamed    bool
+	listed     []string
+	throttles  int
+	emptyPages int
+	failed     string
 
 	throttledWrites int
 	writeIDs        []string
@@ -164,6 +166,11 @@ var labelFilter = regexp.MustCompile(`labels\.([a-z-]+)="([^"]*)"`)
 
 func (s *memorystoreServer) list(w http.ResponseWriter, query url.Values) {
 	s.listed = append(s.listed, query.Get("filter"))
+	page, _ := strconv.Atoi(strings.TrimPrefix(query.Get("pageToken"), "page-"))
+	if page < s.emptyPages {
+		writeBody(w, map[string]any{"instances": []any{}, "nextPageToken": "page-" + strconv.Itoa(page+1)})
+		return
+	}
 	var matching []*memorystoreInstance
 	for _, name := range slices.Sorted(maps.Keys(s.instances)) {
 		instance := s.instances[name]
