@@ -48,8 +48,8 @@ func newHarness(t *testing.T, configure ...func(*gateway.Config)) *harness {
 	h.clock.Store(1_790_000_000)
 	cfg := gateway.Config{
 		Host: host,
-		Keys: func(ns string) (ed25519.PublicKey, bool) {
-			return public, ns == namespace
+		Keys: func(requested string) (ed25519.PublicKey, bool) {
+			return public, requested == namespace
 		},
 		AllowedOrigins: func() []string { return []string{appOrigin} },
 		Now:            h.now,
@@ -62,7 +62,7 @@ func newHarness(t *testing.T, configure ...func(*gateway.Config)) *harness {
 	return h
 }
 
-func (h *harness) mint(op token.Operation, channel string) string {
+func (h *harness) mint(operation token.Operation, channel string) string {
 	return tokentest.Sign(h.t, h.key, token.Claims{
 		Audience:  host,
 		ExpiresAt: h.now().Add(time.Minute).Unix(),
@@ -70,7 +70,7 @@ func (h *harness) mint(op token.Operation, channel string) string {
 		Issuer:    "ocel:rt:" + namespace,
 		ID:        "jti-1",
 		Subject:   "user-1",
-		Ocel:      token.Grant{Channel: channel, Namespace: namespace, Operation: op},
+		Ocel:      token.Grant{Channel: channel, Namespace: namespace, Operation: operation},
 	})
 }
 
@@ -441,5 +441,23 @@ func TestUnsubscribingAnUnknownIDAnswersTheErrorAppSyncSends(t *testing.T) {
 	want := map[string]any{"errorType": "UnknownOperationError", "message": "Unknown operation id s-9"}
 	if first, _ := errs[0].(map[string]any); first["errorType"] != want["errorType"] || first["message"] != want["message"] {
 		t.Fatalf("unsubscribe_error carried %v, want %v", errs[0], want)
+	}
+}
+
+func TestAWildcardSubscriptionOnANamespaceReceivesAPublishBelowIt(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	c := h.connect()
+	if got := c.subscribe("s-1", "/app/*", h.mint(token.Subscribe, "/app/*")); got["type"] != "subscribe_success" {
+		t.Fatalf("subscribe answered %v, want subscribe_success", got)
+	}
+
+	channel := "/app/orders/o-1"
+	sent := event(t, "shipped")
+	h.publish(h.mint(token.Publish, channel), channel, sent)
+
+	if got := c.read(); got["type"] != "data" || got["id"] != "s-1" || got["event"] != sent {
+		t.Fatalf("subscriber got %v, want a data frame for s-1 carrying %s", got, sent)
 	}
 }

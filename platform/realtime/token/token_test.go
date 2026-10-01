@@ -18,9 +18,9 @@ type tokenVectors struct {
 	VerifyKey  []byte `json:"verifyKey"`
 	Now        int64  `json:"now"`
 	Expect     struct {
-		Aud string `json:"aud"`
-		Ns  string `json:"ns"`
-		Ch  string `json:"ch"`
+		Audience  string `json:"aud"`
+		Namespace string `json:"ns"`
+		Channel   string `json:"ch"`
 	} `json:"expect"`
 	Cases []struct {
 		Name   string `json:"name"`
@@ -51,7 +51,7 @@ func readTokenVectors(t *testing.T) tokenVectors {
 }
 
 func (v tokenVectors) expected() token.Expected {
-	return token.Expected{Audience: v.Expect.Aud, Namespace: v.Expect.Ns, Operation: token.Subscribe, Channel: v.Expect.Ch}
+	return token.Expected{Audience: v.Expect.Audience, Namespace: v.Expect.Namespace, Operation: token.Subscribe, Channel: v.Expect.Channel}
 }
 
 func TestEveryTokenVectorIsAcceptedOrRefusedForTheReasonItNames(t *testing.T) {

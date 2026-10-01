@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	authorizationPrefix = "header-"
-	maxClientFrameBytes = 64 << 10
-	writeTimeout        = 10 * time.Second
-	connectionTimeouts  = 5
+	authorizationPrefix            = "header-"
+	maxClientFrameBytes            = 64 << 10
+	writeTimeout                   = 10 * time.Second
+	keepAlivesPerConnectionTimeout = 5
 )
 
 var subscriptionID = regexp.MustCompile(`^[a-zA-Z0-9_+-]{1,128}$`)
@@ -61,7 +61,7 @@ func (g *Gateway) serveSocket(w http.ResponseWriter, r *http.Request) {
 		g:             g,
 		conn:          conn,
 		namespace:     namespace,
-		queue:         NewQueue(g.cfg.QueueBudget),
+		queue:         NewQueue(g.cfg.QueueBudgetBytes),
 		subscriptions: map[string]func(){},
 	}
 	c.serve()
@@ -102,7 +102,7 @@ func offeredSubprotocols(r *http.Request) []string {
 	return offered
 }
 
-func (g *Gateway) verify(raw, namespace string, op token.Operation, channel string) (token.Claims, error) {
+func (g *Gateway) verify(raw, namespace string, operation token.Operation, channel string) (token.Claims, error) {
 	key, known := g.cfg.Keys(namespace)
 	if !known {
 		return token.Claims{}, &token.Refusal{Reason: token.ReasonNamespace}
@@ -110,7 +110,7 @@ func (g *Gateway) verify(raw, namespace string, op token.Operation, channel stri
 	return token.Verify(raw, key, g.cfg.Now(), token.Expected{
 		Audience:  g.cfg.Host,
 		Namespace: namespace,
-		Operation: op,
+		Operation: operation,
 		Channel:   channel,
 	})
 }
@@ -187,15 +187,15 @@ func (c *connection) read(ctx context.Context) {
 		}
 		switch frame.Type {
 		case frameConnectionInit:
-			c.reply(ackFrame{Type: frameConnectionAck, ConnectionTimeoutMs: (connectionTimeouts * c.g.cfg.KeepAlive).Milliseconds()})
+			c.reply(ackFrame{Type: frameConnectionAck, ConnectionTimeoutMs: (keepAlivesPerConnectionTimeout * c.g.cfg.KeepAlive).Milliseconds()})
 		case frameSubscribe:
 			c.subscribe(frame)
 		case frameUnsubscribe:
 			c.unsubscribe(frame)
 		case framePublish:
-			c.reply(errorFrame{Type: framePublishError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorUnsupportedOp, Message: "a browser publishes through the app's realtime handler, which publishes from the server"}}})
+			c.reply(errorFrame{Type: framePublishError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorUnsupportedOperation, Message: "a browser publishes through the app's realtime handler, which publishes from the server"}}})
 		default:
-			c.reply(errorFrame{Type: frameError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorUnknownOp, Message: "unknown frame type " + frame.Type}}})
+			c.reply(errorFrame{Type: frameError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorUnknownOperation, Message: "unknown frame type " + frame.Type}}})
 		}
 	}
 }
@@ -204,7 +204,7 @@ func (c *connection) subscribe(frame clientFrame) {
 	refuse := func(errorType, message string) {
 		c.reply(errorFrame{Type: frameSubscribeError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorType, Message: message}}})
 	}
-	namespace, isChannel := namespaceOf(frame.Channel, true)
+	namespace, isChannel := readSubscribeNamespace(frame.Channel)
 	switch {
 	case !subscriptionID.MatchString(frame.ID):
 		refuse(errorBadRequest, "a subscription id is 1 to 128 letters, digits, _, + or -")
@@ -230,7 +230,7 @@ func (c *connection) subscribe(frame clientFrame) {
 func (c *connection) unsubscribe(frame clientFrame) {
 	unsubscribe, subscribed := c.subscriptions[frame.ID]
 	if !subscribed {
-		c.reply(errorFrame{Type: frameUnsubscribeError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorUnknownOp, Message: "Unknown operation id " + frame.ID}}})
+		c.reply(errorFrame{Type: frameUnsubscribeError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorUnknownOperation, Message: "Unknown operation id " + frame.ID}}})
 		return
 	}
 	unsubscribe()

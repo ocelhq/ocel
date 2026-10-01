@@ -57,9 +57,9 @@ type dataFrame struct {
 }
 
 const (
-	errorUnauthorized  = "UnauthorizedException"
-	errorBadRequest    = "BadRequestException"
-	errorLimitExceeded = "LimitExceededException"
-	errorUnknownOp     = "UnknownOperationError"
-	errorUnsupportedOp = "UnsupportedOperation"
+	errorUnauthorized         = "UnauthorizedException"
+	errorBadRequest           = "BadRequestException"
+	errorLimitExceeded        = "LimitExceededException"
+	errorUnknownOperation     = "UnknownOperationError"
+	errorUnsupportedOperation = "UnsupportedOperation"
 )

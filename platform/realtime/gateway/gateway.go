@@ -5,9 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"net/http"
-	"regexp"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 )
@@ -21,17 +19,17 @@ const (
 	MaxEventBytes       = 240 * 1024
 	MaxEventsPerPublish = 5
 
-	DefaultKeepAlive   = 60 * time.Second
-	DefaultQueueBudget = 1 << 20
+	DefaultKeepAlive        = 60 * time.Second
+	DefaultQueueBudgetBytes = 1 << 20
 )
 
 type Config struct {
-	Host           string
-	Keys           func(namespace string) (ed25519.PublicKey, bool)
-	AllowedOrigins func() []string
-	KeepAlive      time.Duration
-	QueueBudget    int
-	Now            func() time.Time
+	Host             string
+	Keys             func(namespace string) (ed25519.PublicKey, bool)
+	AllowedOrigins   func() []string
+	KeepAlive        time.Duration
+	QueueBudgetBytes int
+	Now              func() time.Time
 }
 
 type Gateway struct {
@@ -48,7 +46,7 @@ type Gateway struct {
 
 func New(cfg Config) *Gateway {
 	cfg.KeepAlive = cmp.Or(cfg.KeepAlive, DefaultKeepAlive)
-	cfg.QueueBudget = cmp.Or(cfg.QueueBudget, DefaultQueueBudget)
+	cfg.QueueBudgetBytes = cmp.Or(cfg.QueueBudgetBytes, DefaultQueueBudgetBytes)
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
@@ -102,29 +100,4 @@ func (g *Gateway) trackSocket() bool {
 func (g *Gateway) isAllowedOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	return origin == "" || slices.Contains(g.cfg.AllowedOrigins(), origin)
-}
-
-var channelSegment = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$`)
-
-const maxChannelSegments = 5
-
-func namespaceOf(channel string, isWildcardAllowed bool) (string, bool) {
-	rest, rooted := strings.CutPrefix(channel, "/")
-	if !rooted {
-		return "", false
-	}
-	segments := strings.Split(rest, "/")
-	if len(segments) < 2 || len(segments) > maxChannelSegments {
-		return "", false
-	}
-	for i, segment := range segments {
-		isLast := i == len(segments)-1
-		if isLast && isWildcardAllowed && segment == "*" && i > 0 {
-			continue
-		}
-		if !channelSegment.MatchString(segment) {
-			return "", false
-		}
-	}
-	return segments[0], true
 }

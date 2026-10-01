@@ -100,7 +100,7 @@ func (b *Backend) verifyKey(namespace string) (ed25519.PublicKey, bool) {
 func (b *Backend) Close(ctx context.Context, _ bool) error {
 	b.mu.Lock()
 	b.keys = map[string]ed25519.PrivateKey{}
-	server, open := b.server, b.gateway
+	server, realtimeGateway := b.server, b.gateway
 	b.server, b.gateway, b.host = nil, nil, ""
 	b.mu.Unlock()
 	if server == nil {
@@ -109,7 +109,7 @@ func (b *Backend) Close(ctx context.Context, _ bool) error {
 	if err := server.Close(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("stop the realtime gateway: %w", err)
 	}
-	if err := open.Close(ctx); err != nil {
+	if err := realtimeGateway.Close(ctx); err != nil {
 		return fmt.Errorf("close the realtime gateway's open sockets: %w", err)
 	}
 	return nil
