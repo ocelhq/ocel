@@ -29,6 +29,11 @@ class Codec:
             return value
         return self._adapter.validate_python(value)
 
+    def to_jsonable(self, value: Any) -> Any:
+        if self._adapter is None:
+            return json.loads(encode_json(value))
+        return self._adapter.dump_python(value, mode="json")
+
     def encode(self, payload: Any) -> bytes:
         if self._adapter is None:
             encoded = encode_json(payload)
