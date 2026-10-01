@@ -3,7 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 const SUBPROTOCOL = "aws-appsync-event-ws";
 const ANSWER_WITHIN_MS = 10_000;
 
-export type SocketFrame = {
+type SocketFrame = {
   type: string;
   id?: string;
   event?: string;
@@ -63,7 +63,7 @@ export class EventSocket {
         () => reject(new Error(`${url} closed before it opened`)),
         { once: true },
       );
-    }).catch(async (error: unknown) => {
+    }).catch((error: unknown) => {
       const refused = socket.#frames.find((frame) => frame.type === "connection_error");
       throw refused ? new SocketRefusal(refused) : error;
     });
@@ -77,10 +77,6 @@ export class EventSocket {
       throw new SocketRefusal(answer);
     }
     return socket;
-  }
-
-  get isClosed(): boolean {
-    return this.#closed;
   }
 
   async subscribe(id: string, channel: string, token: string): Promise<void> {
