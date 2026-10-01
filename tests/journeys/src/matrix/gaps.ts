@@ -461,8 +461,9 @@ export const gaps: Gap[] = [
   {
     id: "sdk-server-publish-misses-gateway",
     reason:
-      "every SDK posts a server publish to the gateway's /publish with a Bearer token and the bare envelope, and the gateway serves AppSync's POST /event with the bare token and { channel, events }, so a publish from the server is answered 404 and reaches no subscriber",
+      "every SDK posts a server publish to the gateway's /publish with a Bearer token and the bare envelope, and the gateway serves AppSync's POST /event with the bare token and { channel, events }, so a publish from the server is answered 404 and reaches no subscriber, and a browser publish the handler relays is denied publish-failed",
     issue: 1540,
+    failsWith: /the gateway refused a publish on \S+ with status 404|"code":"publish-failed"/,
     where: [
       {
         on: ["dev"],

@@ -407,7 +407,7 @@ export const realtimeRelayedPublishCheck: Check = {
         { ops: [buildPublish("rooms/:roomId", { roomId }, { text: "relayed" })] },
         { user: "grace", publish: true },
       );
-      assert.deepEqual(relayed.denied, []);
+      assertDenied(relayed, {});
       assert.deepEqual(relayed.grants, [{ i: 0, wire: grant.wire }]);
       assert.equal(relayed.connect, undefined, "a publish alone was minted a connect token");
       const event = await socket.readNextEvent("room");
