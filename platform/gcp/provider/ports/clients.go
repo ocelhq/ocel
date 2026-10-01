@@ -11,6 +11,7 @@ import (
 	kms "cloud.google.com/go/kms/apiv1"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
+	pubsub "google.golang.org/api/pubsub/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -51,6 +52,7 @@ type Clients struct {
 
 	firestore memo[*firestore.Client]
 	kms       memo[*kms.KeyManagementClient]
+	pubsub    memo[*pubsub.Service]
 }
 
 func (c *Clients) Emulated() bool { return c.Endpoint != "" }
@@ -102,6 +104,12 @@ func (c *Clients) Firestore() (*firestore.Client, error) {
 func (c *Clients) KMS() (*kms.KeyManagementClient, error) {
 	return Opened(c, &c.kms, "Cloud KMS", func() (*kms.KeyManagementClient, error) {
 		return kms.NewKeyManagementClient(context.Background(), EmulatorGRPC(c.Endpoint)...)
+	})
+}
+
+func (c *Clients) PubSub() (*pubsub.Service, error) {
+	return Opened(c, &c.pubsub, "Pub/Sub", func() (*pubsub.Service, error) {
+		return pubsub.NewService(context.Background(), EmulatorREST(c.Endpoint)...)
 	})
 }
 
