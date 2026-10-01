@@ -2,6 +2,7 @@ import ocel
 
 starts = 0
 wrapped_by = ""
+audited = ""
 
 
 def count_start() -> None:
@@ -20,4 +21,18 @@ background = ocel.worker("worker", on_start=count_start, middleware=record_wrapp
 
 @ocel.task("greet", worker=background)
 async def greet(payload: dict, ctx: ocel.RunContext) -> dict:
-    return {"greeting": f"hello {payload['name']}", "starts": starts, "wrappedBy": wrapped_by}
+    return {
+        "greeting": f"hello {payload['name']}",
+        "starts": starts,
+        "wrappedBy": wrapped_by,
+        "audited": audited,
+    }
+
+
+orders = ocel.topic("orders")
+
+
+@orders.consumer("audit", worker=background)
+async def audit(payload: dict, ctx: ocel.RunContext) -> None:
+    global audited
+    audited = f"{wrapped_by} {payload['name']}"

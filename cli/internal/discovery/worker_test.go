@@ -25,6 +25,9 @@ import (
 const greetEnvelope = `{"v":1,"topic":"greet","consumer":"greet","execution":"01JZ8X6Q3V5W7Y9A1C3E5G7J9K-greet",` +
 	`"message":{"id":"01JZ8X6Q3V5W7Y9A1C3E5G7J9K"},"attempt":{"number":1,"of":3},"payload":{"name":"ada"}}`
 
+const auditEnvelope = `{"v":1,"topic":"orders","consumer":"audit","execution":"01JZ8X6Q3V5W7Y9A1C3E5G7J9M-audit",` +
+	`"message":{"id":"01JZ8X6Q3V5W7Y9A1C3E5G7J9M"},"attempt":{"number":1,"of":3},"payload":{"name":"grace"}}`
+
 type workerAnswer struct {
 	status int
 	body   string
@@ -113,6 +116,23 @@ func wantGreeted(t *testing.T, answer workerAnswer, wantStarts int) {
 	}
 }
 
+func wantAudited(t *testing.T, url string) {
+	t.Helper()
+	if answer := deliverTo(t, url, auditEnvelope); answer.status != http.StatusOK {
+		t.Fatalf("consumer answer = %d %s, want 200", answer.status, answer.body)
+	}
+	answer := deliverTo(t, url, greetEnvelope)
+	var output struct {
+		Audited string `json:"audited"`
+	}
+	if err := json.Unmarshal([]byte(answer.body), &output); err != nil {
+		t.Fatalf("answer body %q is not the run's JSON output: %v", answer.body, err)
+	}
+	if want := "consumer:audit grace"; output.Audited != want {
+		t.Errorf("audited = %q, want %q: the consumer ran on the message, inside the worker's middleware", output.Audited, want)
+	}
+}
+
 func servedFixture(t *testing.T, fixture string) string {
 	t.Helper()
 	configDir := repoFixture(t, filepath.Join("worker", fixture))
@@ -170,32 +190,36 @@ func TestAWorkerDeclaredOutsideEveryRootIsNamedByItsPathInTheProjectEvenUnderAFo
 	}
 }
 
-func TestTheGeneratedNodeWorkerServesATaskWithItsWorkersOnStartAndMiddleware(t *testing.T) {
+func TestTheGeneratedNodeWorkerServesATaskAndAConsumerWithItsWorkersOnStartAndMiddleware(t *testing.T) {
 	url := servedFixture(t, "node")
 
 	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
 	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
+	wantAudited(t, url)
 }
 
-func TestTheGeneratedGoWorkerServesATaskWithItsWorkersOnStartAndMiddleware(t *testing.T) {
+func TestTheGeneratedGoWorkerServesATaskAndAConsumerWithItsWorkersOnStartAndMiddleware(t *testing.T) {
 	url := servedFixture(t, "go")
 
 	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
 	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
+	wantAudited(t, url)
 }
 
-func TestARustBinaryInTheWorkerRoleServesATaskWithItsWorkersOnStartAndMiddlewareAndNeverEntersMain(t *testing.T) {
+func TestARustBinaryInTheWorkerRoleServesATaskAndAConsumerWithItsWorkersOnStartAndMiddlewareAndNeverEntersMain(t *testing.T) {
 	needsCargo(t)
 	url := servedFixture(t, "rust")
 
 	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
 	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
+	wantAudited(t, url)
 }
 
-func TestTheGeneratedPythonWorkerServesATaskWithItsWorkersOnStartAndMiddleware(t *testing.T) {
+func TestTheGeneratedPythonWorkerServesATaskAndAConsumerWithItsWorkersOnStartAndMiddleware(t *testing.T) {
 	t.Setenv("PATH", pythonSDKEnvironment(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	url := servedFixture(t, "python")
 
 	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
 	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
+	wantAudited(t, url)
 }

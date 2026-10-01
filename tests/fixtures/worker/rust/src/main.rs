@@ -3,6 +3,7 @@ use std::sync::Mutex;
 
 static STARTS: AtomicU32 = AtomicU32::new(0);
 static WRAPPED_BY: Mutex<String> = Mutex::new(String::new());
+static AUDITED: Mutex<String> = Mutex::new(String::new());
 
 #[derive(Clone, serde::Deserialize)]
 struct Greeting {
@@ -28,6 +29,7 @@ async fn record_wrapper(run: &ocel::Run, next: ocel::Next<'_>) -> Result<(), oce
 struct Infra {
     #[ocel(name = "worker", on_start = count_start, middleware = record_wrapper)]
     background: ocel::Worker,
+    orders: ocel::Topic<Greeting>,
 }
 
 #[ocel::task(worker = "worker")]
@@ -36,7 +38,15 @@ async fn greet(payload: Greeting, _run: &ocel::Run) -> Result<serde_json::Value,
         "greeting": format!("hello {}", payload.name),
         "starts": STARTS.load(Ordering::SeqCst),
         "wrappedBy": WRAPPED_BY.lock().expect("the wrapper record").clone(),
+        "audited": AUDITED.lock().expect("the audit record").clone(),
     }))
+}
+
+#[ocel::consumer(topic = Infra::ORDERS, worker = "worker")]
+async fn audit(payload: Greeting, _run: &ocel::Run) -> Result<(), ocel::RunError> {
+    let wrapped = WRAPPED_BY.lock().expect("the wrapper record").clone();
+    *AUDITED.lock().expect("the audit record") = format!("{wrapped} {}", payload.name);
+    Ok(())
 }
 
 #[ocel::main]
