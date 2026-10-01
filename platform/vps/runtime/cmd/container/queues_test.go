@@ -102,3 +102,14 @@ func TestTheRuntimeFrontsTheBoxsQueueForAnAppThatBindsATask(t *testing.T) {
 		t.Errorf("Trigger() = %v reaching %v, want the box's agent to take send-email", triggered, tasks.triggered)
 	}
 }
+
+func TestAWorkerContainerRunsTheWorkerEntryItsImageCarriesInsteadOfTheApp(t *testing.T) {
+	image := []string{"pnpm", "start"}
+	nodeEntry := func(path string) bool { return path == "/ocel/worker/worker.mjs" }
+	if got := commandFor([]string{processenv.WorkerEnvVar + "=ledger"}, image, nodeEntry); strings.Join(got, " ") != "node /ocel/worker/worker.mjs" {
+		t.Errorf("a worker container runs %q, want the node worker entry", got)
+	}
+	if got := commandFor([]string{"PORT=8080"}, image, nodeEntry); strings.Join(got, " ") != "pnpm start" {
+		t.Errorf("the app's own container runs %q, want the image's command", got)
+	}
+}

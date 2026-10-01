@@ -27,10 +27,6 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 			"app %s names no image", app.App)
 	}
 	physical := host.ContainerName(spec.Ref.Name.String(), app.App, app.Deployment, app.Image)
-	command, err := workerCommand(app)
-	if err != nil {
-		return nil, err
-	}
 	store, err := p.storeSection(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("pin the store %s writes through: %w", app.App, err)
@@ -81,7 +77,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err := p.host.Promote(ctx, spec.Ref.Tier, spec.Ref.Project, app.App, app.Image); err != nil {
 		return nil, err
 	}
-	if err := p.runWorkers(ctx, spec, command, manifest, progress); err != nil {
+	if err := p.runWorkers(ctx, spec, manifest, progress); err != nil {
 		return nil, err
 	}
 	return []provider.AppContainer{{

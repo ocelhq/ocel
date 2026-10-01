@@ -6,29 +6,14 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
-
-func workerCommand(app *provider.AppSpec) ([]string, error) {
-	if len(app.Workers) == 0 {
-		return nil, nil
-	}
-	command, runs := containerimage.WorkerCommand(app.Framework)
-	if !runs {
-		return nil, refusal.Refuse(refusal.CodeUnsupported,
-			"worker %q joins app %s, a %s app, and ocel builds no worker entry into a %s image: give the worker an app of a framework that runs one (node, next, go or rust)",
-			app.Workers[0].Name, app.App, app.Framework, app.Framework)
-	}
-	return command, nil
-}
 
 func hasQueue(app *provider.AppSpec) bool {
 	return len(app.Workers) > 0 || slices.ContainsFunc(app.Values.Bindings, func(binding provider.Binding) bool {
@@ -47,7 +32,7 @@ func workerEnv(app *provider.AppSpec, worker string) map[string]string {
 	return env
 }
 
-func (p *Provider) runWorkers(ctx context.Context, spec provider.StackSpec, command []string, manifest []byte, progress progress.Log) error {
+func (p *Provider) runWorkers(ctx context.Context, spec provider.StackSpec, manifest []byte, progress progress.Log) error {
 	app, ref := spec.App, spec.Ref
 	declared := make([]string, 0, len(app.Workers))
 	for _, worker := range app.Workers {
@@ -58,7 +43,7 @@ func (p *Provider) runWorkers(ctx context.Context, spec provider.StackSpec, comm
 		}
 		if err := p.host.RunContainer(ctx, host.Container{
 			Name: name, Project: ref.Project, App: app.App, Image: app.Image, Tier: ref.Tier,
-			Env: workerEnv(app, worker.Name), Manifest: manifest, Resolved: true, Command: command,
+			Env: workerEnv(app, worker.Name), Manifest: manifest, Resolved: true,
 		}); err != nil {
 			return err
 		}

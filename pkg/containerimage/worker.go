@@ -7,14 +7,12 @@ const (
 	NodeWorkerEntry = "worker.mjs"
 )
 
-func WorkerCommand(framework string) ([]string, bool) {
-	switch framework {
-	case buildoutput.FrameworkNode, buildoutput.FrameworkNext:
-		return []string{"node", WorkerDir + "/" + NodeWorkerEntry}, true
-	case buildoutput.FrameworkGo:
-		return []string{WorkerDir + "/" + buildoutput.GoWorkerBinary}, true
-	case buildoutput.FrameworkRust:
-		return nil, true
+func WorkerCommand(present func(path string) bool, imageCommand []string) []string {
+	if binary := WorkerDir + "/" + buildoutput.GoWorkerBinary; present(binary) {
+		return []string{binary}
 	}
-	return nil, false
+	if entry := WorkerDir + "/" + NodeWorkerEntry; present(entry) {
+		return []string{"node", entry}
+	}
+	return imageCommand
 }
