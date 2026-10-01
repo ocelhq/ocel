@@ -18,8 +18,10 @@ func TestATopicCarriesEveryConsumerDeclaredOnIt(t *testing.T) {
 	m, err := assembleWorkers([]app{{Name: "web"}, {Name: "media"}}, []declaredResource{
 		worker("media", "src/media.ts:1", nil),
 		topic("orders", "src/orders.ts:1", &resourcesv1.TopicConfig{Ordered: true}),
-		consumer("email", "src/email.ts:4", &resourcesv1.ConsumerConfig{Topic: "orders", Worker: "media", Concurrency: 3, Lanes: []topicv1.Lane{topicv1.Lane_LANE_HIGH}}),
+		consumer("email", "src/email.ts:4", &resourcesv1.ConsumerConfig{Topic: "orders", Worker: "media", Concurrency: 3}),
 		consumer("audit", "src/audit.ts:4", &resourcesv1.ConsumerConfig{Topic: "orders", Worker: "media"}),
+		topic("signups", "src/signups.ts:1", nil),
+		consumer("welcome", "src/welcome.ts:4", &resourcesv1.ConsumerConfig{Topic: "signups", Worker: "media", Lanes: []topicv1.Lane{topicv1.Lane_LANE_HIGH}}),
 	}, nil)
 	if err != nil {
 		t.Fatalf("assemble() = %v", err)
@@ -33,8 +35,11 @@ func TestATopicCarriesEveryConsumerDeclaredOnIt(t *testing.T) {
 		t.Fatalf("consumers = %v, want audit and email, in name order", consumers)
 	}
 	email := consumers[1]
-	if email.GetWorker() != "media" || email.GetConcurrency() != 3 || email.GetExclusive() || len(email.GetLanes()) != 1 {
-		t.Errorf("email = %v, want its worker, concurrency and lanes, and not exclusive", email)
+	if email.GetWorker() != "media" || email.GetConcurrency() != 3 || email.GetExclusive() {
+		t.Errorf("email = %v, want its worker and concurrency, and not exclusive", email)
+	}
+	if welcome := findTopic(m, "topic--signups").GetConsumers(); len(welcome) != 1 || len(welcome[0].GetLanes()) != 1 {
+		t.Errorf("signups' consumers = %v, want welcome with its lane", welcome)
 	}
 }
 
@@ -132,6 +137,7 @@ func TestEveryLimitIsRefusedAtTheDeclaringLine(t *testing.T) {
 		"batch timeout above 300s":             {[]declaredResource{task("t", "src/t.ts:1", &resourcesv1.TaskConfig{Batch: &resourcesv1.BatchPolicy{Size: 10, Timeout: seconds(301)}})}, []string{"batch", "5m"}},
 		"a batched ordered task":               {[]declaredResource{task("t", "src/t.ts:1", &resourcesv1.TaskConfig{Ordered: true, Batch: &resourcesv1.BatchPolicy{Size: 10}})}, []string{"ordered", "batch"}},
 		"a batch above 10 on an ordered topic": {[]declaredResource{orderedTopic, consumer("t", "src/t.ts:1", &resourcesv1.ConsumerConfig{Topic: "orders", Batch: &resourcesv1.BatchPolicy{Size: 11}})}, []string{"ordered", "10"}},
+		"lanes on an ordered topic":            {[]declaredResource{orderedTopic, consumer("t", "src/t.ts:1", &resourcesv1.ConsumerConfig{Topic: "orders", Lanes: []topicv1.Lane{topicv1.Lane_LANE_HIGH}})}, []string{"ordered", "lanes"}},
 		"a consumer's batch above 1000":        {[]declaredResource{plainTopic, consumer("t", "src/t.ts:1", &resourcesv1.ConsumerConfig{Topic: "orders", Batch: &resourcesv1.BatchPolicy{Size: 1001}})}, []string{"1000"}},
 		"a consumer's retry":                   {[]declaredResource{plainTopic, consumer("t", "src/t.ts:1", &resourcesv1.ConsumerConfig{Topic: "orders", Retry: &resourcesv1.RetryPolicy{MaxAttempts: 101}})}, []string{"maxAttempts"}},
 		"101 consumers of an ordered topic":    {append([]declaredResource{orderedTopic}, consumersOf("orders", 101)...), []string{"100", "ordered"}},

@@ -123,6 +123,9 @@ func attachConsumers(topics map[string]declaredResource, declarations []declared
 			if size := d.Consumer.GetBatch().GetSize(); size > maxOrderedBatchSize {
 				return nil, refuse(d, "has batch size %d, and a consumer of an ordered topic batches at most %d", size, maxOrderedBatchSize)
 			}
+			if len(d.Consumer.GetLanes()) > 0 {
+				return nil, refuse(d, "reads lanes, and a consumer of an ordered topic reads each key in send order whatever its lane: drop lanes or ordered")
+			}
 		}
 		if len(consumers[name]) == limit {
 			return nil, refuse(d, "is one consumer too many: %s takes at most %d consumers%s", topic.label(), limit, orderedSuffix(topic.Topic.GetOrdered()))
