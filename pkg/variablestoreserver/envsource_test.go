@@ -840,6 +840,7 @@ func TestAnEnvSourceTheCallerNamesIsDecodedBeforeAnythingIsRegistered(t *testing
 		source *variablestorev1.EnvSource
 		want   string
 	}{
+		"no kind":                      {&variablestorev1.EnvSource{Options: []byte(`{}`)}, "kind"},
 		"a kind ocel does not know":    {&variablestorev1.EnvSource{Kind: "vault", Options: []byte(`{}`)}, `"vault"`},
 		"dotenv, which only dev reads": {&variablestorev1.EnvSource{Kind: envsource.Dotenv}, "dotenv"},
 		"options that are no JSON":     {&variablestorev1.EnvSource{Kind: "infisical", Options: []byte(`{"project":`)}, "infisical"},
