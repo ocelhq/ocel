@@ -34,7 +34,7 @@ func TestACronTaskIsScheduledForTheNextTimeItsExpressionMatches(t *testing.T) {
 	}
 }
 
-func TestADueScheduleTriggersOneRunForEveryTimeItMissedAndMovesToItsNextTime(t *testing.T) {
+func TestADueScheduleTriggersOneRunForAllTheTimesItMissedAndMovesToItsNextTime(t *testing.T) {
 	worker := newWorker(t, succeeding)
 	engine := applied(t, map[string]*contractv1.ManifestTopic{"report": aTask(nightly)}, map[string]Worker{"worker": {URL: worker.server.URL}})
 	missed := time.Now().Add(-72 * time.Hour).UTC().Truncate(time.Minute)
