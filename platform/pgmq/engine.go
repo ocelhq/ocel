@@ -26,14 +26,16 @@ const (
 )
 
 type Config struct {
-	ServerURL string
-	Database  string
-	Lease     time.Duration
+	ServerURL     string
+	Database      string
+	Lease         time.Duration
+	ReportAttempt func(Attempt)
 }
 
 type Engine struct {
-	pool  *pgxpool.Pool
-	lease time.Duration
+	pool          *pgxpool.Pool
+	lease         time.Duration
+	reportAttempt func(Attempt)
 
 	mu          sync.Mutex
 	deployment  Deployment
@@ -49,6 +51,9 @@ func Open(ctx context.Context, cfg Config) (*Engine, error) {
 	}
 	if cfg.Lease <= 0 {
 		cfg.Lease = defaultLease
+	}
+	if cfg.ReportAttempt == nil {
+		cfg.ReportAttempt = func(Attempt) {}
 	}
 	if err := ensureDatabase(ctx, cfg); err != nil {
 		return nil, err
@@ -67,12 +72,13 @@ func Open(ctx context.Context, cfg Config) (*Engine, error) {
 		return nil, err
 	}
 	return &Engine{
-		pool:        pool,
-		lease:       cfg.Lease,
-		workerSlots: map[string]*slots{},
-		applied:     make(chan struct{}, 1),
-		wakes:       map[string]chan struct{}{},
-		inFlight:    map[string]context.CancelFunc{},
+		pool:          pool,
+		lease:         cfg.Lease,
+		reportAttempt: cfg.ReportAttempt,
+		workerSlots:   map[string]*slots{},
+		applied:       make(chan struct{}, 1),
+		wakes:         map[string]chan struct{}{},
+		inFlight:      map[string]context.CancelFunc{},
 	}, nil
 }
 
