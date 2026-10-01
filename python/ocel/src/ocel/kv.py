@@ -169,15 +169,16 @@ def _decode(value: Any) -> Any:
     return value.decode("utf-8") if isinstance(value, bytes) else value
 
 
-def _read_authority(store: str, pem: str) -> str:
+def _trust_only(store: str, pem: str) -> ssl.SSLContext:
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     try:
-        ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).load_verify_locations(cadata=pem)
+        context.load_verify_locations(cadata=pem)
     except ssl.SSLError:
         raise ValueError(
             f"OCEL_RESOURCE_KV_{store} delivers a caPem for its kv store "
             "that holds no PEM certificate"
         ) from None
-    return pem
+    return context
 
 
 class KV:
@@ -263,10 +264,10 @@ class KV:
             options["username"] = properties.username
         if properties.password:
             options["password"] = properties.password
-        if properties.tls:
+        if properties.tls and properties.ca_pem:
+            options["ssl_authority"] = _trust_only(self.name, properties.ca_pem)
+        elif properties.tls:
             options.update(ssl=True, ssl_cert_reqs="required", ssl_check_hostname=True)
-            if properties.ca_pem:
-                options["ssl_ca_data"] = _read_authority(self.name, properties.ca_pem)
         return options
 
     def client(self):
@@ -280,7 +281,15 @@ class KV:
             _import_redis()
             import redis.asyncio
 
-            self._client = redis.asyncio.Redis(**options)
+            if "ssl_authority" in options:
+                from ocel._kv_authority import AsyncAuthorityConnection
+
+                pool = redis.asyncio.ConnectionPool(
+                    connection_class=AsyncAuthorityConnection, **options
+                )
+                self._client = redis.asyncio.Redis.from_pool(pool)
+            else:
+                self._client = redis.asyncio.Redis(**options)
         return self._client
 
     def sync_client(self):
@@ -289,7 +298,13 @@ class KV:
         if self._sync_client is None:
             options = self._client_options("sync_client")
             redis = _import_redis()
-            self._sync_client = redis.Redis(**options)
+            if "ssl_authority" in options:
+                from ocel._kv_authority import AuthorityConnection
+
+                pool = redis.ConnectionPool(connection_class=AuthorityConnection, **options)
+                self._sync_client = redis.Redis.from_pool(pool)
+            else:
+                self._sync_client = redis.Redis(**options)
         return self._sync_client
 
     def text(self, name: str, pattern: str, *, ttl: str | timedelta | None = None) -> Text:
