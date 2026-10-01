@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"slices"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
@@ -78,6 +80,24 @@ func TestLiveATriggerWithALiveIdempotencyKeyAnswersTheFirstRun(t *testing.T) {
 	}
 	if pulled := p.pull("resize", "resize"); len(pulled) != 1 {
 		t.Errorf("the task's subscription holds %d messages, want only the first", len(pulled))
+	}
+}
+
+func TestLiveATriggerThatFailsToStartLeavesItsIdempotencyKeyFree(t *testing.T) {
+	p := newPublished(t)
+	options := &taskv1.TriggerOptions{IdempotencyKey: "image-7", DueAt: timestamppb.New(time.Now().Add(time.Hour))}
+
+	if resp, err := p.deployment.Tasks().Trigger(context.Background(), &taskv1.TriggerRequest{Task: "resize", Payload: []byte(`{}`), Options: options}); err == nil {
+		t.Fatalf("Trigger() with no delay queue answered %s, want it to fail", resp.GetId())
+	}
+
+	p = p.withDelays()
+	id := p.trigger("resize", `{}`, options)
+	if run := p.retrieve(id); run.GetStatus() != taskv1.RunStatus_RUN_STATUS_DELAYED {
+		t.Errorf("the retried trigger answered a run that is %s, want a delayed run of its own", run.GetStatus())
+	}
+	if tasks := p.delayTasks(); len(tasks) != 1 {
+		t.Errorf("the delay queue holds %d tasks, want the retried trigger's", len(tasks))
 	}
 }
 
