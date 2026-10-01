@@ -21,11 +21,11 @@ import (
 )
 
 const (
-	envelopeVersion  = 1
-	maxAnswerBytes   = 1 << 20
-	maxErrorExcerpt  = 512
-	newRevisionSQL   = "md5(random()::text || clock_timestamp()::text)"
-	stagedPayloadSQL = "(SELECT value FROM ocel.records WHERE purpose = 'staged-payload' AND topic = ocel.runs.topic AND key = ocel.runs.message_id)"
+	envelopeVersion      = 1
+	maxAnswerBytes       = 1 << 20
+	maxErrorExcerptBytes = 512
+	newRevisionSQL       = "md5(random()::text || clock_timestamp()::text)"
+	stagedPayloadSQL     = "(SELECT value FROM ocel.records WHERE purpose = 'staged-payload' AND topic = ocel.runs.topic AND key = ocel.runs.message_id)"
 )
 
 var (
@@ -218,12 +218,12 @@ func (e *Engine) post(ctx, attemptCtx context.Context, url string, envelope *top
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return interruption(ctx, attemptCtx, err)
+		return classifyInterruption(ctx, attemptCtx, err)
 	}
 	defer resp.Body.Close()
 	answer, err := io.ReadAll(io.LimitReader(resp.Body, maxAnswerBytes))
 	if err != nil {
-		return interruption(ctx, attemptCtx, err)
+		return classifyInterruption(ctx, attemptCtx, err)
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		if !json.Valid(answer) {
@@ -236,13 +236,13 @@ func (e *Engine) post(ctx, attemptCtx context.Context, url string, envelope *top
 		return result{outcome: aborted, reason: abort.Abort.Reason}
 	}
 	excerpt := answer
-	if len(excerpt) > maxErrorExcerpt {
-		excerpt = excerpt[:maxErrorExcerpt]
+	if len(excerpt) > maxErrorExcerptBytes {
+		excerpt = excerpt[:maxErrorExcerptBytes]
 	}
 	return result{outcome: failed, reason: fmt.Sprintf("the worker answered %s: %s", resp.Status, bytes.TrimSpace(excerpt))}
 }
 
-func interruption(ctx, attemptCtx context.Context, err error) result {
+func classifyInterruption(ctx, attemptCtx context.Context, err error) result {
 	switch cause := context.Cause(attemptCtx); {
 	case errors.Is(cause, errTimedOut):
 		return result{outcome: timedOut, reason: cause.Error()}
