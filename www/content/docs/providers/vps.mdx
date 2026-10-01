@@ -536,6 +536,38 @@ a proxy doesn't read yet. Running bootstrap again with the same `proxy` finishes
 another `proxy` it moves the box there instead, and removes what the stopped move left of the
 proxy it started from.
 
+## Health checks
+
+Before a deploy switches the proxy to a new container, the container has to answer 2xx on
+its health path. Set the path with [`health.path`](/docs/configuration#health) and that
+path is the one checked.
+
+With no `health.path`, the first deploy of an app finds one. Once the container starts, and
+before the proxy sends it any traffic, the deploy waits for the app to answer HTTP and then asks
+it for these paths in turn:
+
+1. `/up`
+2. `/health`
+3. `/healthz`
+4. `/`
+
+A 404 or 405 means the app has no such path, and the deploy asks for the next one. Any
+other answer means the path exists, and it becomes the health path, even when the answer
+is an error. An app whose `/health` answers 503 has a health check that says it is
+unhealthy, so the deploy waits for a 2xx there and fails if none comes; it never falls
+through to `/`. The deploy says which path it chose:
+
+```
+api answers its health check on /health (found by probing /up, /health)
+```
+
+If every path answers 404 or 405, the deploy fails, lists what each one answered, and asks
+you to set `health.path`.
+
+The path found is kept with the release. Later deploys of the app check that path without
+probing again, so adding an `/up` route later does not change it. To use a different
+path, set `health.path`.
+
 ## Images
 
 With no `registry` in `ocel.json`, a deploy sends each app's image straight to the box over
