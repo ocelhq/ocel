@@ -24,34 +24,37 @@ const (
 	serverAuthentication  = "SERVER_AUTHENTICATION"
 	maxMemoryConfig       = "maxmemory"
 	maxMemoryPolicyConfig = "maxmemory-policy"
-	engineEviction        = "noeviction"
+	defaultEviction       = "noeviction"
 	defaultValkeyPort     = 6379
 )
 
 type memorystoreNode struct {
-	nodeType string
-	shape    string
-	keyspace int64
-	capacity string
+	nodeType      string
+	keyspaceBytes int64
+	capacityGB    float64
+}
+
+func (n memorystoreNode) terraformNodeType() string {
+	return strings.ToLower(strings.ReplaceAll(n.nodeType, "_", "-"))
 }
 
 var memorystoreNodes = []memorystoreNode{
-	{nodeType: "CUSTOM_PICO", shape: "custom-pico", keyspace: 1_080_000_000, capacity: "1.25"},
-	{nodeType: "CUSTOM_MICRO", shape: "custom-micro", keyspace: 2_000_000_000, capacity: "2.5"},
-	{nodeType: "CUSTOM_MINI", shape: "custom-mini", keyspace: 3_000_000_000, capacity: "3.75"},
-	{nodeType: "STANDARD_SMALL", shape: "standard-small", keyspace: 5_200_000_000, capacity: "6.5"},
-	{nodeType: "HIGHMEM_MEDIUM", shape: "highmem-medium", keyspace: 10_400_000_000, capacity: "13"},
-	{nodeType: "STANDARD_LARGE", shape: "standard-large", keyspace: 20_800_000_000, capacity: "26"},
-	{nodeType: "HIGHMEM_XLARGE", shape: "highmem-xlarge", keyspace: 46_400_000_000, capacity: "58"},
+	{nodeType: "CUSTOM_PICO", keyspaceBytes: 1_080_000_000, capacityGB: 1.25},
+	{nodeType: "CUSTOM_MICRO", keyspaceBytes: 2_000_000_000, capacityGB: 2.5},
+	{nodeType: "CUSTOM_MINI", keyspaceBytes: 3_000_000_000, capacityGB: 3.75},
+	{nodeType: "STANDARD_SMALL", keyspaceBytes: 5_200_000_000, capacityGB: 6.5},
+	{nodeType: "HIGHMEM_MEDIUM", keyspaceBytes: 10_400_000_000, capacityGB: 13},
+	{nodeType: "STANDARD_LARGE", keyspaceBytes: 20_800_000_000, capacityGB: 26},
+	{nodeType: "HIGHMEM_XLARGE", keyspaceBytes: 46_400_000_000, capacityGB: 58},
 }
 
 var engineVersions = map[string]string{"8": "VALKEY_8_0", "9": "VALKEY_9_1"}
 
 type kvStore struct {
-	version  string
-	node     memorystoreNode
-	memory   int64
-	eviction string
+	version     string
+	node        memorystoreNode
+	memoryBytes int64
+	eviction    string
 }
 
 func readKVStore(resource provider.Resource) (kvStore, error) {
@@ -73,13 +76,13 @@ func readKVStore(resource provider.Resource) (kvStore, error) {
 			"kv %s declares %d bytes of memory, and a store holds at most %dgb, on one Memorystore node: declare %dgb or less",
 			resource.Name, spec.MemoryBytes, kvstore.MaxMemoryBytes>>30, kvstore.MaxMemoryBytes>>30)
 	}
-	at := slices.IndexFunc(memorystoreNodes, func(node memorystoreNode) bool { return node.keyspace >= spec.MemoryBytes })
-	return kvStore{version: engine, node: memorystoreNodes[at], memory: spec.MemoryBytes, eviction: cmp.Or(spec.Eviction, engineEviction)}, nil
+	at := slices.IndexFunc(memorystoreNodes, func(node memorystoreNode) bool { return node.keyspaceBytes >= spec.MemoryBytes })
+	return kvStore{version: engine, node: memorystoreNodes[at], memoryBytes: spec.MemoryBytes, eviction: cmp.Or(spec.Eviction, defaultEviction)}, nil
 }
 
 func (s kvStore) engineConfigs() map[string]string {
 	return map[string]string{
-		maxMemoryConfig:       strconv.FormatInt(s.memory, 10),
+		maxMemoryConfig:       strconv.FormatInt(s.memoryBytes, 10),
 		maxMemoryPolicyConfig: s.eviction,
 	}
 }
@@ -108,8 +111,8 @@ func (s kvStore) shapeProperties(region string) map[string]any {
 	return map[string]any{
 		"location":           region,
 		"mode":               clusterModeOff,
-		"node_type":          s.node.shape,
-		"node_capacity_gb":   s.node.capacity,
+		"node_type":          s.node.terraformNodeType(),
+		"node_capacity_gb":   s.node.capacityGB,
 		"shard_count":        1,
 		"replica_count":      0,
 		"persistence_config": map[string]any{"mode": appendOnly, "aof_config": map[string]any{"append_fsync": fsyncEverySecond}},
@@ -142,11 +145,13 @@ func labelsFor(names Names, ref provider.StackRef, store string) map[string]stri
 }
 
 type kvInstance struct {
-	id   string
-	path string
+	id        string
+	path      string
+	storeName string
+	service   memorystore
 }
 
-func (p *Provider) kvInstanceOf(ctx context.Context, ref provider.StackRef, store string) (*clients, kvInstance, error) {
+func (p *Provider) openKVInstance(ctx context.Context, ref provider.StackRef, store string) (*clients, kvInstance, error) {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return nil, kvInstance{}, err
@@ -155,7 +160,7 @@ func (p *Provider) kvInstanceOf(ctx context.Context, ref provider.StackRef, stor
 	if err != nil {
 		return nil, kvInstance{}, err
 	}
-	return clients, kvInstance{id: id, path: clients.location() + "/instances/" + id}, nil
+	return clients, kvInstance{id: id, path: clients.location() + "/instances/" + id, storeName: store, service: p.memorystore()}, nil
 }
 
 func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
@@ -163,107 +168,90 @@ func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionReques
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	clients, instance, err := p.kvInstanceOf(ctx, in.Ref, in.Resource.Name)
+	clients, instance, err := p.openKVInstance(ctx, in.Ref, in.Resource.Name)
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	service := p.memorystore()
-	current, err := service.readInstance(ctx, instance.path)
+	current, err := instance.service.readInstance(ctx, instance.path)
 	switch {
 	case absent(err):
 		desired := store.instance(clients.project, clients.NetworkPath(in.Ref.Tier), labelsFor(clients.Names, in.Ref, in.Resource.Name))
-		current, err = createStore(ctx, service, clients, instance, desired, in.Resource.Name, progress)
+		current, err = instance.create(ctx, clients, desired, progress)
 	case err != nil:
 		return provider.Binding{}, fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)
 	case isSettling(current.State):
-		if current, err = service.readSettledInstance(ctx, instance.path, in.Resource.Name); err == nil {
-			if err = refuseInactiveStore(current, instance, clients.region, in.Resource.Name); err == nil {
-				current, err = reshapeStore(ctx, service, instance, store, current, in.Resource.Name, progress)
+		if current, err = instance.service.readSettledInstance(ctx, instance.path, in.Resource.Name); err == nil {
+			if err = instance.refuseInactive(current, clients.region); err == nil {
+				current, err = instance.update(ctx, store, current, progress)
 			}
 		}
 	case current.State != instanceActive:
-		err = refuseInactiveStore(current, instance, clients.region, in.Resource.Name)
+		err = instance.refuseInactive(current, clients.region)
 	default:
-		current, err = reshapeStore(ctx, service, instance, store, current, in.Resource.Name, progress)
+		current, err = instance.update(ctx, store, current, progress)
 	}
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	return readBinding(ctx, service, instance, current, in.Resource)
+	return instance.readBinding(ctx, current, in.Resource)
 }
 
-func createStore(
-	ctx context.Context,
-	service memorystore,
-	clients *clients,
-	instance kvInstance,
-	desired *memorystoreInstance,
-	store string,
-	progress progress.Log,
-) (*memorystoreInstance, error) {
-	ensureProgress(progress).Say("Creating kv " + store + " as Memorystore instance " + instance.id + " in " + clients.region +
+func (i kvInstance) create(ctx context.Context, clients *clients, desired *memorystoreInstance, progress progress.Log) (*memorystoreInstance, error) {
+	ensureProgress(progress).Say("Creating kv " + i.storeName + " as Memorystore instance " + i.id + " in " + clients.region +
 		": a new instance takes several minutes")
-	started, err := service.createInstance(ctx, clients.location(), instance.id, desired)
+	started, err := i.service.createInstance(ctx, clients.location(), i.id, desired)
 	if err != nil {
-		return nil, fmt.Errorf("create the Memorystore instance kv %s runs on: %w", store, err)
+		return nil, fmt.Errorf("create the Memorystore instance kv %s runs on: %w", i.storeName, err)
 	}
-	finished, err := service.awaited(ctx, "creating kv "+store, started)
+	finished, err := i.service.awaited(ctx, "creating kv "+i.storeName, started)
 	if err != nil {
 		return nil, err
 	}
 	if timed := finished.Metadata; timed != nil {
-		ensureProgress(progress).Say("Created kv " + store + ": its create operation " + finished.Name +
+		ensureProgress(progress).Say("Created kv " + i.storeName + ": its create operation " + finished.Name +
 			" created " + timed.CreateTime + " and ended " + timed.EndTime)
 	}
-	return service.readInstance(ctx, instance.path)
+	return i.service.readInstance(ctx, i.path)
 }
 
-func reshapeStore(
-	ctx context.Context,
-	service memorystore,
-	instance kvInstance,
-	store kvStore,
-	current *memorystoreInstance,
-	name string,
-	progress progress.Log,
-) (*memorystoreInstance, error) {
+func (i kvInstance) update(ctx context.Context, store kvStore, current *memorystoreInstance, progress progress.Log) (*memorystoreInstance, error) {
 	mask := store.changes(current)
 	if len(mask) == 0 {
 		return current, nil
 	}
-	ensureProgress(progress).Say("Updating kv " + name + "'s " + strings.Join(mask, ", ") + " on Memorystore instance " + instance.id)
-	started, err := service.updateInstance(ctx, instance.path, mask, &memorystoreInstance{
+	ensureProgress(progress).Say("Updating kv " + i.storeName + "'s " + strings.Join(mask, ", ") + " on Memorystore instance " + i.id)
+	started, err := i.service.updateInstance(ctx, i.path, mask, &memorystoreInstance{
 		NodeType:      store.node.nodeType,
 		EngineVersion: store.version,
 		EngineConfigs: store.engineConfigs(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("update the Memorystore instance kv %s runs on: %w", name, err)
+		return nil, fmt.Errorf("update the Memorystore instance kv %s runs on: %w", i.storeName, err)
 	}
-	if _, err := service.awaited(ctx, "updating kv "+name, started); err != nil {
+	if _, err := i.service.awaited(ctx, "updating kv "+i.storeName, started); err != nil {
 		return nil, err
 	}
-	return service.readInstance(ctx, instance.path)
+	return i.service.readInstance(ctx, i.path)
 }
 
-func refuseInactiveStore(current *memorystoreInstance, instance kvInstance, region, store string) error {
+func (i kvInstance) refuseInactive(current *memorystoreInstance, region string) error {
 	if current.State == instanceActive {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"kv %s runs on the Memorystore instance %s, which is %s, and only an instance Memorystore is creating or updating becomes %s by itself: "+
-			"a store is bound and reshaped only once it is %s.\n"+
+			"a store is bound and updated only once it is %s.\n"+
 			"If it is being deleted, deploy again once it is gone. Otherwise delete it with `gcloud memorystore instances delete %s --location %s`, "+
 			"which deletes the data it holds, and deploy again to create it afresh",
-		store, instance.id, current.State, instanceActive, instanceActive, instance.id, region)
+		i.storeName, i.id, current.State, instanceActive, instanceActive, i.id, region)
 }
 
-func readBinding(ctx context.Context, service memorystore, instance kvInstance, current *memorystoreInstance, resource provider.Resource) (provider.Binding, error) {
+func (i kvInstance) readBinding(ctx context.Context, current *memorystoreInstance, resource provider.Resource) (provider.Binding, error) {
 	host, port, err := primaryAddressOf(current, resource.Name)
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	tokens, err := service.listDefaultTokens(ctx, instance.path)
+	tokens, err := i.service.listDefaultTokens(ctx, i.path)
 	if err != nil {
 		return provider.Binding{}, fmt.Errorf("read the token kv %s authenticates with: %w", resource.Name, err)
 	}
@@ -271,7 +259,7 @@ func readBinding(ctx context.Context, service memorystore, instance kvInstance, 
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	authority, err := service.readCertificateAuthority(ctx, instance.path)
+	authority, err := i.service.readCertificateAuthority(ctx, i.path)
 	if err != nil {
 		return provider.Binding{}, fmt.Errorf("read the certificate authority kv %s serves TLS under: %w", resource.Name, err)
 	}
@@ -342,19 +330,18 @@ func authorityPEMOf(authority *certificateAuthority, store string) (string, erro
 }
 
 func (p *Provider) removeKV(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
-	_, instance, err := p.kvInstanceOf(ctx, ref, binding.Name)
+	_, instance, err := p.openKVInstance(ctx, ref, binding.Name)
 	if err != nil {
 		return err
 	}
-	service := p.memorystore()
 	ensureProgress(progress).Say("Removing kv " + binding.Name + ", its Memorystore instance " + instance.id + " and its data")
-	started, err := service.deleteInstance(ctx, instance.path)
+	started, err := instance.service.deleteInstance(ctx, instance.path)
 	if absent(err) {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("delete the Memorystore instance kv %s runs on: %w", binding.Name, err)
 	}
-	_, err = service.awaited(ctx, "deleting kv "+binding.Name, started)
+	_, err = instance.service.awaited(ctx, "deleting kv "+binding.Name, started)
 	return err
 }

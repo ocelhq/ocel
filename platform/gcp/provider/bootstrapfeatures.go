@@ -224,17 +224,17 @@ func apisFor(features []string) []string {
 	apis := slices.Clone(BootstrapAPIs)
 	switch {
 	case slices.Contains(features, albShieldedFeature):
-		apis = joined(apis, albShieldedAPIs)
+		apis = appendMissing(apis, albShieldedAPIs)
 	case slices.Contains(features, albFeature):
-		apis = joined(apis, albAPIs)
+		apis = appendMissing(apis, albAPIs)
 	}
 	if slices.Contains(features, kvFeature) {
-		apis = joined(apis, kvAPIs)
+		apis = appendMissing(apis, kvAPIs)
 	}
 	return apis
 }
 
-func joined(listed, more []string) []string {
+func appendMissing(listed, more []string) []string {
 	for _, name := range more {
 		if !slices.Contains(listed, name) {
 			listed = append(listed, name)

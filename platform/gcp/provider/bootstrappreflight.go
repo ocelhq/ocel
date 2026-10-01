@@ -119,12 +119,12 @@ func permissionsFor(features []string) []string {
 	permissions := slices.Clone(bootstrapPermissions)
 	switch {
 	case slices.Contains(features, albShieldedFeature):
-		permissions = joined(permissions, alb.ShieldedPermissions)
+		permissions = appendMissing(permissions, alb.ShieldedPermissions)
 	case slices.Contains(features, albFeature):
-		permissions = joined(permissions, alb.Permissions)
+		permissions = appendMissing(permissions, alb.Permissions)
 	}
 	if slices.Contains(features, kvFeature) {
-		permissions = joined(permissions, kvPermissions)
+		permissions = appendMissing(permissions, kvPermissions)
 	}
 	return permissions
 }
@@ -133,12 +133,12 @@ func rolesCovering(features []string) []string {
 	roles := rolesFor(edge.PurposeBootstrap)
 	switch {
 	case slices.Contains(features, albShieldedFeature):
-		roles = joined(roles, alb.ShieldedRoles())
+		roles = appendMissing(roles, alb.ShieldedRoles())
 	case slices.Contains(features, albFeature):
-		roles = joined(roles, alb.Roles())
+		roles = appendMissing(roles, alb.Roles())
 	}
 	if slices.Contains(features, kvFeature) {
-		roles = joined(roles, kvRoles)
+		roles = appendMissing(roles, kvRoles)
 	}
 	return roles
 }

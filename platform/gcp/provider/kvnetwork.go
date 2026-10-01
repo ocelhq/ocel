@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	kvSubnetRange           = "10.240.0.0/20"
 	memorystoreServiceClass = "gcp-memorystore"
 	networkUserRole         = "roles/compute.networkUser"
 	regionalRouting         = "REGIONAL"
