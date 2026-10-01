@@ -58,6 +58,9 @@ which are tooling.
   and tasks: the queues, runs and records in a dedicated Ocel database on a pgmq Postgres,
   and the dispatcher that delivers them to workers. Like `platform/s3/`, every vendor may
   import it, and it imports none of them.
+- **`platform/realtime/`** — the realtime gateway `ocel dev`, GCP and the VPS box run for
+  realtime channels, and the token verifier it shares with the AWS authorizer. Like
+  `platform/s3/`, every vendor may import it, and it imports none of them.
 - **`frameworks/<name>/`** — framework support, containing only what is **not** a branch of
   some host: shared protocol, the build-time adapter, and the host-neutral serving
   runtime a host drives through ports. Host-specific glue lives with the host.
