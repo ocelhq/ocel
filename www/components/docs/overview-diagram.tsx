@@ -3,17 +3,17 @@ import {
   AwsLogo,
   DigitaloceanLogo,
   DjangoLogo,
-  ExpressLogo,
   GcloudLogo,
   GoLogo,
   NextLogo,
+  RustLogo,
 } from "@/components/docs/logos";
 
 type Node = { label: string; Logo: ComponentType<SVGProps<SVGSVGElement>>; ratio: number };
 
 const frameworks: Node[] = [
   { label: "Next.js", Logo: NextLogo, ratio: 1 },
-  { label: "Express", Logo: ExpressLogo, ratio: 1 },
+  { label: "Rust", Logo: RustLogo, ratio: 1 },
   { label: "Django", Logo: DjangoLogo, ratio: 1 },
   { label: "Go", Logo: GoLogo, ratio: 207 / 78 },
 ];
