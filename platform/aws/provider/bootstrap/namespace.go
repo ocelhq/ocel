@@ -50,6 +50,8 @@ func (n Namespace) PassphraseParamName() string { return n.paramRoot() + "/pulum
 
 func (n Namespace) stackRecordRoot() string { return n.paramRoot() + "/rootstack" }
 
+func (n Namespace) KVTokenRoot() string { return n.paramRoot() + "/kv" }
+
 func (n Namespace) EdgeUserNameFor(tier environment.Tier) (string, error) {
 	switch tier {
 	case environment.TierProduction, environment.TierPreview:

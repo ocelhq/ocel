@@ -110,6 +110,52 @@ describe("evaluate", () => {
     },
   );
 
+  it("drops a kv store to one node", () => {
+    const modules = [
+      module(
+        "./single.transform.ts",
+        defineTransform({
+          aws: {
+            kv: {
+              replicationGroup: {
+                numCacheClusters: 1,
+                automaticFailoverEnabled: false,
+                multiAzEnabled: false,
+              },
+            },
+          },
+        }),
+      ),
+    ];
+
+    expect(
+      evaluate(request({ resources: [{ type: "kv", name: "cache" }] }), modules).resources[0]
+        ?.patches,
+    ).toEqual({
+      replicationGroup: {
+        numCacheClusters: 1,
+        automaticFailoverEnabled: false,
+        multiAzEnabled: false,
+      },
+    });
+  });
+
+  it.each(["authToken", "transitEncryptionEnabled", "port", "engineVersion", "userGroupIds"])(
+    "refuses %s on a kv store's replication group, which its binding is made from",
+    (field) => {
+      const modules = [
+        module(
+          "./kv.transform.ts",
+          defineTransform({ aws: { kv: { replicationGroup: { [field]: "whatever" } } } } as never),
+        ),
+      ];
+
+      expect(() =>
+        evaluate(request({ resources: [{ type: "kv", name: "cache" }] }), modules),
+      ).toThrow(new RegExp(`aws\\.kv\\.replicationGroup\\.${field}`));
+    },
+  );
+
   it("returns a patch for every resource the aws provider constructs", () => {
     const modules = [
       module(

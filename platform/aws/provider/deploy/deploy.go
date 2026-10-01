@@ -26,6 +26,8 @@ type Config struct {
 	Passphrase    string
 	PulumiProject string
 	Secrets       SecretsAPI
+	Parameters    ParametersAPI
+	KVTokenRoot   string
 
 	Tags      TagClock
 	KeyValues keyvalue.Store

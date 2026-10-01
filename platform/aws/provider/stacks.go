@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -61,6 +62,8 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		Passphrase:    params.Passphrase,
 		PulumiProject: naming.PulumiProject(scope.Slug),
 		Secrets:       secretsmanager.NewFromConfig(p.aws),
+		Parameters:    ssm.NewFromConfig(p.aws),
+		KVTokenRoot:   p.namespace.KVTokenRoot(),
 
 		Tags:      &tagclock.Table{Dynamo: dynamodb.NewFromConfig(p.aws), Table: deployed.StateTable},
 		KeyValues: p.KeyValues(),

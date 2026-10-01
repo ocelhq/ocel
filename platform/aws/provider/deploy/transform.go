@@ -272,6 +272,7 @@ const (
 	transformTypeContainer = "container"
 	transformTypeBucket    = "bucket"
 	transformTypePostgres  = "postgres"
+	transformTypeKV        = "kv"
 )
 
 func functionResourceNames(project string, stack naming.StackName, logicalName string) map[string]resourceRef {
@@ -310,6 +311,16 @@ func bucketResourceNames(project, env, logicalName string) map[string]resourceRe
 		"uploadCompleter":               {Token: tokenLambdaFunction, Name: naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName)},
 		"uploadCompleterPermission":     {Token: tokenLambdaPermission, Name: naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-permission")},
 		"notification":                  {Token: tokenS3Notification, Name: naming.ResourceID(at.Kind, at.Name, "notification")},
+	}
+}
+
+func kvResourceNames(project, env, logicalName string) map[string]resourceRef {
+	at := resourceCoordinate(project, env, logicalName, naming.KindKV)
+	return map[string]resourceRef{
+		"securityGroup":    {Token: tokenEC2SecurityGroup, Name: naming.ResourceID(at.Kind, at.Name, "security-group")},
+		"subnetGroup":      {Token: tokenElastiCacheSubnetGroup, Name: naming.ResourceID(at.Kind, at.Name, "subnet-group")},
+		"parameterGroup":   {Token: tokenElastiCacheParameterGroup, Name: naming.ResourceID(at.Kind, at.Name, "parameters")},
+		"replicationGroup": {Token: tokenElastiCacheReplicationGroup, Name: naming.ResourceID(at.Kind, at.Name)},
 	}
 }
 

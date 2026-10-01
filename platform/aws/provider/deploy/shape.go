@@ -213,6 +213,9 @@ func shapeTransforms(ctx context.Context, pass transform.Pass, project string, r
 		case provider.BindingBucket:
 			request.Resources = append(request.Resources, transform.Resource{Type: transformTypeBucket, Name: resource.Name})
 			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeBucket, Name: resource.Name}, names: bucketResourceNames(project, req.Deploy.Env, resource.Name)})
+		case provider.BindingKV:
+			request.Resources = append(request.Resources, transform.Resource{Type: transformTypeKV, Name: resource.Name})
+			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeKV, Name: resource.Name}, names: kvResourceNames(project, req.Deploy.Env, resource.Name)})
 		}
 	}
 	for _, app := range req.Deploy.Apps {
