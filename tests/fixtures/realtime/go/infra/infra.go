@@ -11,10 +11,10 @@ import (
 )
 
 type Caller struct {
-	ID         string `json:"id"`
-	Orders     []string
-	Projects   []string
-	MayPublish bool
+	ID         string   `json:"id"`
+	Orders     []string `json:"orders"`
+	Projects   []string `json:"projects"`
+	MayPublish bool     `json:"mayPublish"`
 }
 
 func readList(value string) []string {
