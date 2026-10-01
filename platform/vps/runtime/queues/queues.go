@@ -62,7 +62,12 @@ type Engines struct {
 
 	mu       sync.Mutex
 	served   map[queueID]*served
-	answered map[string]bool
+	answered map[workerAddress]bool
+}
+
+type workerAddress struct {
+	container string
+	url       string
 }
 
 type queueID struct {
@@ -113,6 +118,7 @@ func (e *Engines) Served(tier environment.Tier, project, env string) (taskv1conn
 func (e *Engines) Reconcile(ctx context.Context) error {
 	var failed []error
 	recorded := map[queueID]bool{}
+	running := map[string]bool{}
 	for _, tier := range e.Tiers {
 		queues, err := live.ReadQueues(ctx, e.Records, tier)
 		if err != nil {
@@ -122,6 +128,9 @@ func (e *Engines) Reconcile(ctx context.Context) error {
 		for _, queue := range queues {
 			id := queueID{tier: queue.Tier, project: queue.Project, env: queue.Env}
 			recorded[id] = true
+			for _, worker := range queue.Workers {
+				running[worker.Container] = true
+			}
 			if err := e.serve(ctx, id, queue); err != nil {
 				failed = append(failed, fmt.Errorf("serve %s's %s queue: %w", queue.Project, queue.Env, err))
 			}
@@ -132,6 +141,11 @@ func (e *Engines) Reconcile(ctx context.Context) error {
 		if !recorded[id] {
 			delete(e.served, id)
 			queue.close()
+		}
+	}
+	for address := range e.answered {
+		if !running[address.container] {
+			delete(e.answered, address)
 		}
 	}
 	e.mu.Unlock()
@@ -241,7 +255,7 @@ func (e *Engines) readDeployment(ctx context.Context, queue live.Queue) (pgmq.De
 }
 
 func (e *Engines) isWorkerAnswering(ctx context.Context, container, url string) bool {
-	key := container + " " + url
+	key := workerAddress{container: container, url: url}
 	e.mu.Lock()
 	answered := e.answered[key]
 	e.mu.Unlock()
@@ -253,7 +267,7 @@ func (e *Engines) isWorkerAnswering(ctx context.Context, container, url string) 
 	}
 	e.mu.Lock()
 	if e.answered == nil {
-		e.answered = map[string]bool{}
+		e.answered = map[workerAddress]bool{}
 	}
 	e.answered[key] = true
 	e.mu.Unlock()
