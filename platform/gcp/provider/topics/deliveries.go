@@ -113,8 +113,9 @@ func (d Deliveries) consumerOf(topicName, consumerName string) (*contractv1.Mani
 func pushedRunOf(topicName string, topic *contractv1.ManifestTopic, consumer *contractv1.ManifestConsumer, pushed pushRequest) pushedRun {
 	attributes := pushed.Message.Attributes
 	publishTime, err := time.Parse(time.RFC3339Nano, pushed.Message.PublishTime)
+	idTime := publishTime
 	if err != nil {
-		publishTime = time.Now()
+		idTime, publishTime = time.Unix(0, 0), time.Now()
 	}
 	delivered := pushedRun{
 		topicName:   topicName,
@@ -138,7 +139,7 @@ func pushedRunOf(topicName string, topic *contractv1.ManifestTopic, consumer *co
 		delivered.payload = scheduledPayloadOf(publishTime)
 	}
 	if delivered.messageID == "" {
-		delivered.messageID = envelope.MessageIDFrom(publishTime, pushed.Message.MessageID)
+		delivered.messageID = envelope.MessageIDFrom(idTime, pushed.Message.MessageID)
 	}
 	requested, _ := strconv.Atoi(attributes[MaxAttemptsAttribute])
 	delivered.maxAttempts = retryPolicyOf(topic, consumer).attemptsFor(int32(requested))
