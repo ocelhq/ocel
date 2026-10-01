@@ -56,13 +56,16 @@ Store under `/<namespace>/kv/`.
 
 `memory` picks the cheapest node that holds it: `cache.t4g.micro` up to 256mb, then
 `t4g.small`, `t4g.medium`, `m7g.large`, `r7g.large`, `r7g.xlarge` and `r7g.2xlarge` up to
-32gb. The rest of the node is reserved, so the store holds what it declares and no more. Leave
+32gb. The rest of the node is reserved, so the store holds what it declares and no more. To
+change the node, change `memory`; a transform cannot set the node type. Leave
 `eviction` out and the store never evicts, as on every other provider; ElastiCache's own default
 is `volatile-lru`. Version 8 runs ElastiCache 8.1 and version 9 runs 9.1. ElastiCache takes a
 snapshot once a day and keeps it for a day.
 
 **One node.** A [transform](/docs/transforms) can drop a store to a single node and halve its
-cost, for an environment that can afford to lose its data:
+cost, for an environment that can afford to lose its data. ElastiCache runs neither failover nor
+Multi-AZ without a replica, so the patch turns both off, and a deploy refuses one that leaves
+either on:
 
 ```ts title="transforms/kv.transform.ts"
 import { defineTransform } from "@ocel/transforms";

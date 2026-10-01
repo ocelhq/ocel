@@ -140,8 +140,15 @@ describe("evaluate", () => {
     });
   });
 
-  it.each(["authToken", "transitEncryptionEnabled", "port", "engineVersion", "userGroupIds"])(
-    "refuses %s on a kv store's replication group, which its binding is made from",
+  it.each([
+    "authToken",
+    "transitEncryptionEnabled",
+    "port",
+    "engineVersion",
+    "userGroupIds",
+    "nodeType",
+  ])(
+    "refuses %s on a kv store's replication group, which ocel fills from the store's declaration",
     (field) => {
       const modules = [
         module(
