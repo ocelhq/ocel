@@ -608,3 +608,100 @@ func TestPreflightSaysWhetherTheTierNeedsAHostnameToServeOn(t *testing.T) {
 		}
 	})
 }
+
+func dnsSelection(kind provider.DNSKind) *contractv1.EdgeSelection {
+	return &contractv1.EdgeSelection{Dns: &contractv1.Dns{Kind: string(kind), Zone: "acme.com"}}
+}
+
+func TestPreflightReportsDNSCredentialsThatWouldNotAnswer(t *testing.T) {
+	t.Parallel()
+
+	client, vendor := contractServed(t, "1.2.3")
+	vendor.DNS().(*fake.DNS).Verifies(errors.New("token revoked"))
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Edge:         dnsSelection(fake.KindZone),
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v, want the DNS refusal reported beside the rest of the run", err)
+	}
+	problems := resp.GetCredentialProblems()
+	if len(problems) != 1 {
+		t.Fatalf("Preflight() reported %v, want the DNS writer's own credential problem", problems)
+	}
+	if problems[0].GetProvider() != string(fake.KindZone) {
+		t.Errorf("credential problem names %q, want the DNS writer whose credentials were refused", problems[0].GetProvider())
+	}
+	if !strings.Contains(problems[0].GetMessage(), "could not authenticate: token revoked") {
+		t.Errorf("credential problem message = %q, want the DNS writer's own wording", problems[0].GetMessage())
+	}
+	if resp.GetIdentity().GetAccount() == "" {
+		t.Error("Preflight() dropped the origin identity over DNS credentials that would not authenticate")
+	}
+}
+
+func TestPreflightChecksNoDNSCredentialsWhenTheProjectSelectsNoDNS(t *testing.T) {
+	t.Parallel()
+
+	client, vendor := contractServed(t, "1.2.3")
+	vendor.DNS().(*fake.DNS).Verifies(errors.New("token revoked"))
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if len(resp.GetCredentialProblems()) != 0 {
+		t.Errorf("Preflight() reported %v, want no DNS check for a project that writes no records", resp.GetCredentialProblems())
+	}
+}
+
+func TestPreflightRefusesADNSWriterTheProviderDoesNotHave(t *testing.T) {
+	t.Parallel()
+
+	client, _ := contractServed(t, "1.2.3")
+
+	_, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Edge:         dnsSelection("no-such-dns"),
+	})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("Preflight() error = %v, want the unknown DNS writer refused as invalid", err)
+	}
+}
+
+type edgeVendorDNS struct {
+	*fake.Provider
+	dns *fake.DNS
+}
+
+func (v edgeVendorDNS) DNS() provider.DNS { return v }
+
+func (v edgeVendorDNS) Open(_ provider.DNSKind, zone string, front edge.Kind) (edge.DNSRecords, error) {
+	return v.dns.Open(fake.KindZone, zone, front)
+}
+
+func TestPreflightReportsCredentialsTheEdgeAndItsDNSShareOnce(t *testing.T) {
+	t.Parallel()
+
+	dns := fake.NewDNS()
+	dns.Verifies(errors.New("token revoked"))
+	vendor := edgeVendorDNS{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)), dns: dns}
+	vendor.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{}, errors.New("token revoked"))
+	client := servedProvider(t, "1.2.3", vendor)
+
+	selection := dnsSelection(provider.DNSKind(fake.KindRelay))
+	selection.Kind = string(fake.KindRelay)
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Edge:         selection,
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if problems := resp.GetCredentialProblems(); len(problems) != 1 {
+		t.Errorf("Preflight() reported %v, want the one problem the edge and its DNS writer share", problems)
+	}
+}

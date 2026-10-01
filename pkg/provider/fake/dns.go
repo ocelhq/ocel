@@ -12,9 +12,10 @@ import (
 )
 
 type DNS struct {
-	mu      sync.Mutex
-	writers map[string]*DNSRecords
-	fronts  []edge.Kind
+	mu          sync.Mutex
+	writers     map[string]*DNSRecords
+	fronts      []edge.Kind
+	credentials error
 }
 
 const KindZone provider.DNSKind = "zone"
@@ -31,7 +32,7 @@ func (d *DNS) Open(kind provider.DNSKind, zone string, front edge.Kind) (edge.DN
 	d.fronts = append(d.fronts, front)
 	writer, open := d.writers[zone]
 	if !open {
-		writer = &DNSRecords{zone: zone}
+		writer = &DNSRecords{dns: d, zone: zone}
 		d.writers[zone] = writer
 	}
 	return writer, nil
@@ -43,6 +44,12 @@ func (d *DNS) Fronts() []edge.Kind {
 	return slices.Clone(d.fronts)
 }
 
+func (d *DNS) Verifies(err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.credentials = err
+}
+
 func (d *DNS) Zone(zone string) *DNSRecords {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -51,6 +58,7 @@ func (d *DNS) Zone(zone string) *DNSRecords {
 
 type DNSRecords struct {
 	mu      sync.Mutex
+	dns     *DNS
 	zone    string
 	records []edge.Record
 	refusal error
@@ -69,6 +77,12 @@ func (w *DNSRecords) Records() []edge.Record {
 }
 
 func (w *DNSRecords) TTL() time.Duration { return 60 * time.Second }
+
+func (w *DNSRecords) VerifyCredentials(context.Context) error {
+	w.dns.mu.Lock()
+	defer w.dns.mu.Unlock()
+	return w.dns.credentials
+}
 
 func (w *DNSRecords) Ensure(_ context.Context, records []edge.Record, say func(string)) ([]edge.Record, error) {
 	w.mu.Lock()

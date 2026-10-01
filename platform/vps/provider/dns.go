@@ -18,9 +18,5 @@ func (dns) Open(kind provider.DNSKind, zone string, _ edge.Kind) (edge.DNSRecord
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"dns %q is not supported; use %s", kind, dnsCloudflare)
 	}
-	writer, err := cloudflare.NewDNS(zone)
-	if err != nil {
-		return nil, refusal.Refuse(refusal.CodeInvalid, "%s", err)
-	}
-	return writer, nil
+	return cloudflare.NewDNS(zone), nil
 }

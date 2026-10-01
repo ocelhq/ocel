@@ -73,6 +73,8 @@ type DNSRecords interface {
 	Delete(ctx context.Context, records []Record) error
 
 	TTL() time.Duration
+
+	VerifyCredentials(ctx context.Context) error
 }
 
 type DNSTarget struct {

@@ -38,6 +38,10 @@ func (w *route53Records) TTL() time.Duration {
 	return recordTTL * time.Second
 }
 
+func (w *route53Records) VerifyCredentials(context.Context) error {
+	return nil
+}
+
 func (w *route53Records) Ensure(ctx context.Context, records []edge.Record, _ func(string)) ([]edge.Record, error) {
 	written := make([]edge.Record, 0, len(records))
 	for _, want := range records {

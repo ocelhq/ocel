@@ -27,7 +27,7 @@ var constructors = map[string]func(Deps, string) (edge.DNSRecords, error){
 		return NewRoute53(route53.NewFromConfig(deps.AWS), zone), nil
 	},
 	KindCloudflare: func(_ Deps, zone string) (edge.DNSRecords, error) {
-		return cloudflare.NewDNS(zone)
+		return cloudflare.NewDNS(zone), nil
 	},
 }
 
