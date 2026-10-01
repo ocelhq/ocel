@@ -47,7 +47,16 @@ func manifestResource(message *contractv1.ManifestResource) (provider.Resource, 
 		return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "resource %s declares no type, so nothing knows what to provision for it", name)
 	}
 	resource := provider.Resource{Name: name, Declared: declared, Type: kind, Binding: message.GetBinding()}
+	if message.GetTopic() != nil && kind != provider.BindingTopic && kind != provider.BindingTask {
+		return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "%s %s carries a topic's config, and only a topic or a task takes one", kind, declared)
+	}
 	switch {
+	case kind == provider.BindingTopic || kind == provider.BindingTask:
+		spec, err := topicSpec(kind, message.GetTopic())
+		if err != nil {
+			return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "%s %s: %s", kind, declared, err)
+		}
+		resource.Topic = spec
 	case message.GetPostgres() != nil:
 		resource.Postgres = &provider.PostgresSpec{Version: message.GetPostgres().GetVersion()}
 	case message.GetBucket() != nil:
