@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	pollInterval   = 200 * time.Millisecond
-	maxReadPerPoll = 100
-	maxInFlight    = 1000
+	pollInterval    = 200 * time.Millisecond
+	maxPollInterval = 2 * time.Second
+	maxReadPerPoll  = 100
+	maxInFlight     = 1000
 )
 
 type message struct {
@@ -102,6 +103,14 @@ func (e *Engine) serveQueue(ctx context.Context, queue string) {
 	defer running.Wait()
 	running.Go(func() { e.renewLeases(ctx, loop) })
 	wake := e.ensureWakeChannel(queue)
+	idle := pollInterval
+	waitIdle := func(consumerChanged, workerChanged <-chan struct{}) {
+		if wait(ctx, idle, wake, consumerChanged, workerChanged) {
+			idle = pollInterval
+		} else {
+			idle = lengthenPollInterval(idle)
+		}
+	}
 	for ctx.Err() == nil {
 		deployment := e.current()
 		deployed, found := deployment.consumers()[queue]
@@ -111,7 +120,7 @@ func (e *Engine) serveQueue(ctx context.Context, queue string) {
 		worker, served := deployment.Workers[deployed.consumer.GetWorker()]
 		workerSlots := e.workerSlotsOf(deployed.consumer.GetWorker())
 		if !served || workerSlots == nil {
-			wait(ctx, wake, nil, nil)
+			waitIdle(nil, nil)
 			continue
 		}
 		loop.consumers.setLimit(concurrencyOf(deployed))
@@ -121,7 +130,7 @@ func (e *Engine) serveQueue(ctx context.Context, queue string) {
 		}
 		n, changed := reserveBoth(loop.consumers, workerSlots, want)
 		if n == 0 {
-			wait(ctx, wake, changed[0], changed[1])
+			waitIdle(changed[0], changed[1])
 			continue
 		}
 		messages, err := e.read(ctx, loop, deployed, n)
@@ -131,9 +140,10 @@ func (e *Engine) serveQueue(ctx context.Context, queue string) {
 		if len(messages) == 0 {
 			loop.consumers.unreserve(n)
 			workerSlots.unreserve(n)
-			wait(ctx, wake, nil, nil)
+			waitIdle(nil, nil)
 			continue
 		}
+		idle = pollInterval
 		loop.hold(messages)
 		deliveries := [][]message{messages}
 		if deployed.consumer.GetBatch().GetSize() == 0 {
@@ -176,16 +186,24 @@ func concurrencyOf(deployed deployedConsumer) int {
 	return maxInFlight
 }
 
-func wait(ctx context.Context, wake <-chan struct{}, consumerChanged, workerChanged <-chan struct{}) {
-	timer := time.NewTimer(pollInterval)
+func wait(ctx context.Context, interval time.Duration, wake <-chan struct{}, consumerChanged, workerChanged <-chan struct{}) bool {
+	timer := time.NewTimer(interval)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 	case <-wake:
+		return true
 	case <-consumerChanged:
+		return true
 	case <-workerChanged:
+		return true
 	case <-timer.C:
 	}
+	return false
+}
+
+func lengthenPollInterval(interval time.Duration) time.Duration {
+	return min(interval*2, maxPollInterval)
 }
 
 func (e *Engine) renewLeases(ctx context.Context, loop *queueLoop) {

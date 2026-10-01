@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -280,4 +281,30 @@ func TestARunWaitingOnAnUnservedWorkerRunsOnceALaterDeploymentServesIt(t *testin
 		t.Fatalf("Apply: %v", err)
 	}
 	awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_COMPLETED)
+}
+
+func TestAnIdleQueuePollsHalfAsOftenAfterEachEmptyReadDownToOnceEveryTwoSeconds(t *testing.T) {
+	t.Parallel()
+
+	interval := pollInterval
+	var got []time.Duration
+	for range 6 {
+		interval = lengthenPollInterval(interval)
+		got = append(got, interval)
+	}
+	want := []time.Duration{400 * time.Millisecond, 800 * time.Millisecond, 1600 * time.Millisecond, 2 * time.Second, 2 * time.Second, 2 * time.Second}
+	if !slices.Equal(got, want) {
+		t.Errorf("poll intervals after each empty read = %v, want %v", got, want)
+	}
+}
+
+func TestATriggerOnAQueueIdleLongEnoughToPollRarelyIsDeliveredAtOnce(t *testing.T) {
+	engine, worker := aServedTask(t, succeeding)
+	time.Sleep(4 * time.Second)
+
+	triggered := time.Now()
+	trigger(t, engine, "resize", `{}`, nil)
+	if got := awaitDelivered(t, worker, 1); got[0].at.Sub(triggered) > time.Second {
+		t.Errorf("the run reached the worker %v after its trigger, want the wake to cut the idle wait short", got[0].at.Sub(triggered))
+	}
 }
