@@ -23,6 +23,7 @@ var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/variablestoreserver",
 	"github.com/ocelhq/ocel/pkg/images",
 	"github.com/ocelhq/ocel/pkg/keyvalue",
+	"github.com/ocelhq/ocel/pkg/kvstore",
 	"github.com/ocelhq/ocel/pkg/localrpc",
 	"github.com/ocelhq/ocel/pkg/naming",
 	"github.com/ocelhq/ocel/pkg/pricing",
@@ -58,6 +59,7 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 		{name: "variablestoreserver", pattern: "./variablestoreserver/...", open: providerBuildsOn},
 		{name: "images", pattern: "./images/...", open: providerBuildsOn},
 		{name: "keyvalue", pattern: "./keyvalue/...", open: providerBuildsOn},
+		{name: "kvstore", pattern: "./kvstore/...", open: []string{"github.com/ocelhq/ocel/pkg/kvstore"}},
 		{name: "refusal", pattern: "./refusal/...", open: providerBuildsOn},
 		{name: "router", pattern: "./router/...", open: []string{
 			"github.com/ocelhq/ocel/pkg/edge",
