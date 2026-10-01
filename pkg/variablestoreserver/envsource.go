@@ -65,6 +65,9 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *variablestorev1.SyncEn
 		folders = append(slices.Clone(folders), "")
 	}
 	previous, wasRegistered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
+	if isUndecodable(err) {
+		wasRegistered, err = false, nil
+	}
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -119,7 +122,7 @@ func readBy(descriptor envsource.Descriptor) string {
 
 func switchToBuiltin(ctx context.Context, store variablestore.Store, scope variablestore.Scope) error {
 	_, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
-	if err != nil || !registered {
+	if (err != nil && !isUndecodable(err)) || !registered {
 		return err
 	}
 	if err := envsource.ClearProvenance(ctx, store, scope); err != nil {
@@ -131,7 +134,7 @@ func switchToBuiltin(ctx context.Context, store variablestore.Store, scope varia
 func (h *Service) syncRegistered(ctx context.Context, store variablestore.Store, scope variablestore.Scope) (*variablestorev1.SyncEnvSourceResponse, error) {
 	registration, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
 	if err != nil {
-		return nil, provider.RefusalError(err)
+		return nil, registrationError(err)
 	}
 	if !registered {
 		return &variablestorev1.SyncEnvSourceResponse{Status: &variablestorev1.EnvSourceStatus{EnvSource: envsource.Builtin}}, nil
@@ -179,6 +182,10 @@ func (h *Service) DescribeEnvSource(ctx context.Context, req *variablestorev1.De
 		return nil, err
 	}
 	registration, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
+	var undecodable *envsource.UndecodableRegistrationError
+	if errors.As(err, &undecodable) {
+		return &variablestorev1.DescribeEnvSourceResponse{Status: &variablestorev1.EnvSourceStatus{EnvSource: undecodable.Kind, LastError: undecodable.Error()}}, nil
+	}
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -205,7 +212,7 @@ func (h *Service) SetEnvSourceValue(ctx context.Context, req *variablestorev1.Se
 	}
 	registration, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
 	if err != nil {
-		return nil, provider.RefusalError(err)
+		return nil, registrationError(err)
 	}
 	if !registered || !registration.Descriptor.CanCreate() {
 		current := envsource.Builtin
@@ -351,7 +358,7 @@ func refuseEnvSourceOwned(ctx context.Context, store variablestore.Store, scope 
 	}
 	registration, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
 	if err != nil {
-		return provider.RefusalError(err)
+		return registrationError(err)
 	}
 	if !registered || slices.Contains(registration.Credentials(), at.Cell) {
 		return nil
@@ -384,6 +391,18 @@ func refuseEnvSourceOwned(ctx context.Context, store variablestore.Store, scope 
 	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 		"%s is read from %s, which owns every value %s sets for all of %s: change it there%s, and ocel copies it on %s.%s",
 		at, owner, scope.Project, scope.Tier, parenthesized(status.URLs[at.Folder]), copiedOn, perEnvironment))
+}
+
+func isUndecodable(err error) bool {
+	var undecodable *envsource.UndecodableRegistrationError
+	return errors.As(err, &undecodable)
+}
+
+func registrationError(err error) error {
+	if isUndecodable(err) {
+		return connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return provider.RefusalError(err)
 }
 
 func refuseLogin(descriptor envsource.Descriptor, login envsource.Login) error {

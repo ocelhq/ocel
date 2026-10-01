@@ -23,6 +23,30 @@ type Registration struct {
 	DedupeKey  string     `json:"dedupeKey"`
 }
 
+type recordedRegistration struct {
+	Project    string          `json:"project"`
+	Descriptor json.RawMessage `json:"descriptor"`
+	Folders    []string        `json:"folders"`
+	DedupeKey  string          `json:"dedupeKey"`
+}
+
+type UndecodableRegistrationError struct {
+	Project string
+	Kind    string
+	Err     error
+}
+
+func (e *UndecodableRegistrationError) Error() string {
+	return fmt.Sprintf("the %s env source a deploy registered for %s no longer decodes, so nothing reads it until %s deploys again and registers it anew: %v", e.Kind, e.Project, e.Project, e.Err)
+}
+
+func (e *UndecodableRegistrationError) Unwrap() error { return e.Err }
+
+func isUndecodable(err error) bool {
+	var undecodable *UndecodableRegistrationError
+	return errors.As(err, &undecodable)
+}
+
 func (r Registration) Credentials() []variablestore.Cell {
 	var out []variablestore.Cell
 	for _, name := range r.Descriptor.CredentialVariables() {
@@ -57,7 +81,7 @@ func Register(ctx context.Context, store variablestore.Store, tier environment.T
 			return Registration{}, err
 		}
 		previous, err := registrationOf(recorded)
-		if err != nil {
+		if err != nil && !isUndecodable(err) {
 			return Registration{}, err
 		}
 		recorded.Value = encoded
@@ -118,6 +142,9 @@ func rekey(ctx context.Context, store variablestore.Store, tier environment.Tier
 		return err
 	}
 	current, err := registrationOf(recorded)
+	if isUndecodable(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -141,12 +168,21 @@ func rekey(ctx context.Context, store variablestore.Store, tier environment.Tier
 }
 
 func registrationOf(recorded keyvalue.Entry) (Registration, error) {
-	var out Registration
 	if len(recorded.Value) == 0 {
-		return out, nil
+		return Registration{}, nil
 	}
-	if err := json.Unmarshal(recorded.Value, &out); err != nil {
+	var envelope recordedRegistration
+	if err := json.Unmarshal(recorded.Value, &envelope); err != nil {
 		return Registration{}, fmt.Errorf("read %s: %w", recorded.Key, err)
+	}
+	out := Registration{Project: envelope.Project, Folders: envelope.Folders, DedupeKey: envelope.DedupeKey}
+	var stored storedDescriptor
+	err := json.Unmarshal(envelope.Descriptor, &stored)
+	if err == nil {
+		out.Descriptor, err = NewDescriptor(stored.Kind, stored.Options)
+	}
+	if err != nil {
+		return out, &UndecodableRegistrationError{Project: envelope.Project, Kind: stored.Kind, Err: err}
 	}
 	return out, nil
 }
@@ -160,10 +196,10 @@ func Registered(ctx context.Context, store keyvalue.Store, tier environment.Tier
 		return Registration{}, false, err
 	}
 	out, err := registrationOf(recorded)
-	if err != nil {
+	if err != nil && !isUndecodable(err) {
 		return Registration{}, false, err
 	}
-	return out, true, nil
+	return out, true, err
 }
 
 func Registrations(ctx context.Context, store keyvalue.Store, tier environment.Tier) ([]Registration, error) {
@@ -172,13 +208,18 @@ func Registrations(ctx context.Context, store keyvalue.Store, tier environment.T
 		return nil, fmt.Errorf("read the %s env source registrations: %w", tier, err)
 	}
 	out := make([]Registration, 0, len(recorded))
+	var undecodable []error
 	for _, entry := range recorded {
-		var registration Registration
-		if err := json.Unmarshal(entry.Value, &registration); err != nil {
-			return nil, fmt.Errorf("read %s: %w", entry.Key, err)
+		registration, err := registrationOf(entry)
+		if isUndecodable(err) {
+			undecodable = append(undecodable, err)
+			continue
+		}
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, registration)
 	}
 	slices.SortFunc(out, func(a, b Registration) int { return strings.Compare(a.Project, b.Project) })
-	return out, nil
+	return out, errors.Join(undecodable...)
 }
