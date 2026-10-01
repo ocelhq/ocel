@@ -136,7 +136,7 @@ func apiFunction() []build.Function {
 }
 
 func stubBuild(dependencies *Dependencies, functions []build.Function) {
-	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
 		return build.Output{Functions: functions}, writeArtifacts(cfg.Dir, functions)
 	}
 	dependencies.ReadPrebuilt = func(_ context.Context, cfg *project.Project, _ map[string]string) (build.Output, error) {
@@ -171,8 +171,8 @@ func stubAppImages(dependencies *Dependencies, apps ...string) {
 		return nil
 	}
 	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, log build.Log) (build.Output, error) {
-		built, err := buildApps(ctx, cfg, env, archs, log)
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, log build.Log) (build.Output, error) {
+		built, err := buildApps(ctx, cfg, env, archs, workers, log)
 		built.Images = refs
 		return built, err
 	}

@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 )
 
-func (t tools) images(ctx context.Context, cfg *project.Project, archs map[string]string, log Log) (map[string]string, error) {
+func (t tools) images(ctx context.Context, cfg *project.Project, archs map[string]string, workers HostedWorkers, log Log) (map[string]string, error) {
 	var refs map[string]string
 	for _, app := range ImageApps(cfg.Apps) {
 		described, err := image.Describe(cfg, app)
@@ -30,6 +30,9 @@ func (t tools) images(ctx context.Context, cfg *project.Project, archs map[strin
 		}
 		appLog, ended := log.App(app.Name)
 		built, err := t.image(ctx, described, archs[app.Name], appLog)
+		if sources, hosts := workers[app.Name]; hosts && err == nil {
+			built, err = t.addWorkerEntry(ctx, cfg, app, built, archs[app.Name], sources, appLog)
+		}
 		ended(err)
 		if err != nil {
 			return nil, err

@@ -125,6 +125,19 @@ func WorkerCommand(ctx context.Context, configDir string, roots []Root, served R
 }
 
 func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Root) (*exec.Cmd, error) {
+	entry := filepath.Join(configDir, statedir.Name, nodeWorkerEntryFile)
+	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
+		return nil, fmt.Errorf("create %s: %w", statedir.Name, err)
+	}
+	if err := BundleNodeWorker(configDir, roots, entry); err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entry)
+	cmd.Env = os.Environ()
+	return cmd, nil
+}
+
+func BundleNodeWorker(configDir string, roots []Root, outfile string) error {
 	var files []string
 	resolveDir := ""
 	for _, root := range roots {
@@ -136,37 +149,44 @@ func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Ro
 		}
 		found, err := walkSourceFiles(root.Dir)
 		if err != nil {
-			return nil, fmt.Errorf("discover resources: %w", err)
+			return fmt.Errorf("discover resources: %w", err)
 		}
 		files = append(files, found...)
+	}
+	if resolveDir == "" {
+		resolveDir = configDir
 	}
 
 	var imports strings.Builder
 	for _, file := range files {
 		fmt.Fprintf(&imports, "await import(%q);\n", file)
 	}
-	entry, err := bundleEntry(configDir, resolveDir, nodeWorkerEntryFile, "ocel-worker-entry.ts", fmt.Sprintf(nodeWorkerServer, imports.String()))
-	if err != nil {
-		return nil, fmt.Errorf("bundle the worker entry:\n%w", err)
+	if err := bundleTo(resolveDir, outfile, "ocel-worker-entry.ts", fmt.Sprintf(nodeWorkerServer, imports.String())); err != nil {
+		return fmt.Errorf("bundle the worker entry:\n%w", err)
 	}
+	return nil
+}
 
-	cmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entry)
+func goWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error) {
+	moduleRoot, pkg, err := WriteGoWorkerEntry(configDir, roots, served)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, "go", "run", pkg)
+	cmd.Dir = moduleRoot
 	cmd.Env = os.Environ()
 	return cmd, nil
 }
 
-func goWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error) {
+func WriteGoWorkerEntry(configDir string, roots []Root, served Root) (string, string, error) {
 	moduleRoot, _, err := goPackage(configDir, served)
 	if err != nil {
-		return nil, err
+		return "", "", err
 	}
 	if _, err := writeGoWorkerEntry(configDir, roots, moduleRoot); err != nil {
-		return nil, err
+		return "", "", err
 	}
-	cmd := exec.CommandContext(ctx, "go", "run", "./"+goWorkerEntryDir)
-	cmd.Dir = moduleRoot
-	cmd.Env = os.Environ()
-	return cmd, nil
+	return moduleRoot, "./" + goWorkerEntryDir, nil
 }
 
 func rustWorkerCommand(ctx context.Context, _ string, _ []Root, served Root) (*exec.Cmd, error) {

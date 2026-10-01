@@ -3,6 +3,8 @@ package image_test
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -99,5 +101,34 @@ func TestLiveADockerfileBuildLandsTheSameCoordinateAsARailpackOne(t *testing.T) 
 
 	if said := serves(t, vm, built, 18081); said != "dockerfile" {
 		t.Errorf("the running image answered %q: the app's Dockerfile is what sets that, so %q was built by railpack instead", said, built.Ref)
+	}
+}
+
+func TestLiveAnImageGainsFilesOverWhatItWasBuiltFromAndStillServes(t *testing.T) {
+	vm := incustest.Require(t)
+	vm.Engine(t)
+	vm.Forward(t)
+
+	built, err := image.Build(context.Background(), image.App{Slug: "Shop Live", Name: "Worker Host", Workspace: located(t, "testdata/dockerfileapp")}, "", incustest.Progress{T: t})
+	if err != nil {
+		t.Fatalf("Build() = %v", err)
+	}
+	files := t.TempDir()
+	if err := os.WriteFile(filepath.Join(files, "entry.txt"), []byte("the worker entry"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	extended, err := image.AddFiles(context.Background(), built, "Shop Live", "Worker Host", files, "/ocel/worker", "", incustest.Progress{T: t})
+	if err != nil {
+		t.Fatalf("AddFiles() = %v", err)
+	}
+	if extended.Digest == built.Digest {
+		t.Fatalf("AddFiles() answered the image it was handed, %s", built.Ref)
+	}
+	addresses(t, vm, extended, "ocel/shop-live/worker-host")
+	if said := vm.SSH(t, "docker run --rm --entrypoint cat "+extended.Ref+" /ocel/worker/entry.txt"); strings.TrimSpace(said) != "the worker entry" {
+		t.Errorf("the extended image holds %q at /ocel/worker/entry.txt", said)
+	}
+	if said := serves(t, vm, extended, 18082); said != "dockerfile" {
+		t.Errorf("the extended image answered %q, want what the app it was built from serves", said)
 	}
 }

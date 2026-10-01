@@ -41,15 +41,28 @@ func (c Compilation) compileGo(ctx context.Context) error {
 }
 
 func (c Compilation) buildGo(ctx context.Context, goarch, dir, pkg, binary string) error {
-	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", filepath.Join(c.FunctionDir, binary), pkg)
+	said, err := compileGo(ctx, c.App, dir, pkg, filepath.Join(c.FunctionDir, binary), goarch)
+	if err != nil {
+		return err
+	}
+	c.report("compiling", said)
+	return nil
+}
+
+func CompileGo(ctx context.Context, app, dir, pkg, out, goarch string) error {
+	_, err := compileGo(ctx, app, dir, pkg, out, goarch)
+	return err
+}
+
+func compileGo(ctx context.Context, app, dir, pkg, out, goarch string) (string, error) {
+	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", out, pkg)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off", "GOOS=linux", "GOARCH="+goarch)
 	var said bytes.Buffer
 	cmd.Stdout = &said
 	cmd.Stderr = &said
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("compile %s of app %q in %s for linux/%s (%w):\n%s", pkg, c.App, dir, goarch, err, said.String())
+		return "", fmt.Errorf("compile %s of app %q in %s for linux/%s (%w):\n%s", pkg, app, dir, goarch, err, said.String())
 	}
-	c.report("compiling", said.String())
-	return nil
+	return said.String(), nil
 }

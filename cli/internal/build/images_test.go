@@ -169,7 +169,7 @@ func TestAContainerAppIsBuiltIntoAnImageForTheArchitectureItIsAskedAndNeverHande
 			asked = arch
 			return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:0"}, nil
 		},
-	}.apps(context.Background(), cfg, nil, map[string]string{"web": "arm64"}, Log{})
+	}.apps(context.Background(), cfg, nil, map[string]string{"web": "arm64"}, nil, Log{})
 	if err != nil {
 		t.Fatalf("apps() = %v", err)
 	}
@@ -190,7 +190,7 @@ func builtImage(t *testing.T, cfg *project.Project) Output {
 		image: func(_ context.Context, app image.App, _ string, _ io.Writer) (image.Image, error) {
 			return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:" + strings.Repeat("a", 64)}, nil
 		},
-	}.apps(context.Background(), cfg, nil, nil, Log{})
+	}.apps(context.Background(), cfg, nil, nil, nil, Log{})
 	if err != nil {
 		t.Fatalf("apps() = %v", err)
 	}

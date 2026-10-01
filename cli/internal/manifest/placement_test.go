@@ -34,6 +34,27 @@ func TestPlaceConsumersPutsATaskWithNoWorkerOnTheDefaultWorkerInTheProjectsOneAp
 	}
 }
 
+func TestAnAppHostsTheWorkersJoinedToItWithWhatTheyServe(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &project.Project{Dir: dir, Apps: []project.App{{Name: "web", Path: "web"}, {Name: "media", Path: "media"}, {Name: "docs", Path: "docs"}}}
+
+	greet := filepath.Join(dir, "web", "jobs", "greet.ts") + ":3"
+	resize := filepath.Join(dir, "media", "jobs", "resize.ts") + ":7"
+	placement, err := PlaceConsumers(cfg, []declaration.Resource{
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_WORKER, Name: "worker", Worker: &resourcesv1.WorkerConfig{}, Source: greet},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: "greet", Task: &resourcesv1.TaskConfig{}, Source: greet},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_WORKER, Name: "media", Worker: &resourcesv1.WorkerConfig{}, Source: resize},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: "resize", Task: &resourcesv1.TaskConfig{Worker: "media"}, Source: resize},
+	})
+	if err != nil {
+		t.Fatalf("PlaceConsumers: %v", err)
+	}
+	hosted := placement.HostedWorkers()
+	if len(hosted) != 2 || len(hosted["web"]) != 1 || hosted["web"][0] != greet || len(hosted["media"]) != 1 || hosted["media"][0] != resize {
+		t.Errorf("HostedWorkers() = %v, want web hosting what greet's worker serves and media what resize's does, and docs nothing", hosted)
+	}
+}
+
 func TestPlaceConsumersRecordsNoSourcesForAWorkerThatServesNothing(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &project.Project{Dir: dir, Apps: []project.App{{Name: "web", Path: "."}}}
