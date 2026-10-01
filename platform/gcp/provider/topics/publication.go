@@ -33,6 +33,7 @@ func (p publication) message() *pubsub.PubsubMessage {
 	attributes := map[string]string{
 		MessageAttribute:     p.messageID,
 		PublishedAtAttribute: p.publishedAt.UTC().Format(time.RFC3339Nano),
+		DueAtAttribute:       p.dueAt.UTC().Format(time.RFC3339Nano),
 		LaneAttribute:        p.lane,
 	}
 	if p.maxAttempts > 0 {
