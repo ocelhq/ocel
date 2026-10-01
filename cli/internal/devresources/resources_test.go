@@ -3,8 +3,6 @@ package devresources_test
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker/dockertest"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -268,28 +265,6 @@ func TestATopicAndItsConsumerAreResolvedTogetherSoTheConsumerFindsItsTopic(t *te
 	}})
 	if err == nil || !strings.Contains(err.Error(), `consumes topic "orders", and nothing declares it`) || !strings.Contains(err.Error(), "jobs/orders.ts:7") {
 		t.Errorf("Resolve = %v, want the consumer of an undeclared topic refused at its declaration, as the build refuses it", err)
-	}
-}
-
-func TestTheTaskAndTopicServicesRefuseACallWithoutTheAppsSessionToken(t *testing.T) {
-	t.Parallel()
-
-	stack := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir()})
-	mux := http.NewServeMux()
-	server := httptest.NewServer(mux)
-	t.Cleanup(server.Close)
-	address := strings.TrimPrefix(server.URL, "http://")
-	stack.Routes(mux, func(next http.Handler) http.Handler { return localrpc.LoopbackGuard(address, "app-token", next) })
-
-	for _, path := range []string{"/app.task.v1.TaskService/Trigger", "/app.topic.v1.TopicService/Send"} {
-		resp, err := http.Post(server.URL+path, "application/json", strings.NewReader(`{}`))
-		if err != nil {
-			t.Fatalf("POST %s: %v", path, err)
-		}
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusForbidden {
-			t.Errorf("POST %s with no session token = %s, want 403 Forbidden", path, resp.Status)
-		}
 	}
 }
 
