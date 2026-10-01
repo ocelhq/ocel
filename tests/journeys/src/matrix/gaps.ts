@@ -5,6 +5,7 @@ import {
   corsCheck,
   emptyBodyCheck,
   encodedSlashCheck,
+  hyphenatedTaskCheck,
   kvPasswordOutOfEnvironmentCheck,
   malformedQueryCheck,
   nextCacheChecks,
@@ -19,7 +20,7 @@ import {
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
-import { deploy, iac, kv, lifecycle, sdk } from "./fixtures";
+import { deploy, iac, kv, lifecycle, sdk, tasks } from "./fixtures";
 import type { Gap } from "./types";
 import {
   apiGateway,
@@ -414,4 +415,25 @@ export const gaps: Gap[] = [
       },
     ],
   },
+  {
+    id: "hyphenated-binding-key-dropped-by-sh",
+    reason:
+      "a binding's env key holds the declared name, hyphen and all, and the sh that runs the app's dev script drops a variable whose name holds a hyphen",
+    issue: 1526,
+    where: [{ on: ["dev"], fixtures: [tasks.node], fails: [check(hyphenatedTaskCheck)] }],
+  },
+  ...(
+    [
+      { target: "aws", lanes: ["aws", "aws.floci"], issue: 1469 },
+      { target: "gcp", lanes: ["gcp", "gcp.floci"], issue: 1470 },
+      { target: "vps", lanes: ["vps", "vps.incus"], issue: 1471 },
+    ] as const
+  ).map(
+    ({ target, lanes, issue }): Gap => ({
+      id: `${target}-refuses-tasks`,
+      reason: `the ${target} provider refuses a deploy that declares a topic, task or worker at preflight: topics, tasks and workers are unsupported on ${target}, as it names no compute a worker runs on`,
+      issue,
+      where: [{ on: [...lanes], fixtures: [tasks.node], fails: [step.deploy], skipsCell: true }],
+    }),
+  ),
 ];

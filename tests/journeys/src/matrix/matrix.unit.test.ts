@@ -242,3 +242,32 @@ describe("the kv concern", () => {
     }
   });
 });
+
+describe("the tasks concern", () => {
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+
+  it("runs the behavioural suite on dev", () => {
+    expect(planOn("dev").cells.map((cell) => cell.name)).toContain("tasks/node");
+  });
+
+  it("skips the suite on aws, gcp and a box with the provider's refusal, under each target's ticket", () => {
+    const tickets = {
+      aws: 1469,
+      "aws.floci": 1469,
+      gcp: 1470,
+      "gcp.floci": 1470,
+      vps: 1471,
+      "vps.incus": 1471,
+    } as const;
+    for (const [lane, issue] of Object.entries(tickets) as [Lane, number][]) {
+      const planned = planOn(lane);
+      const skipped = Object.keys(planned.skipped).filter((cell) => cell.startsWith("tasks/"));
+      expect(skipped).toContain("tasks/node");
+      for (const cell of skipped) {
+        const refusal = planned.skipped[cell]?.find((gap) => gap.issue === issue);
+        expect(refusal?.reason).toMatch(/topics, tasks and workers are unsupported/);
+      }
+      expect(planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name)).toContain("tasks/node");
+    }
+  });
+});

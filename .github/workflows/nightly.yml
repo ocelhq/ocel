@@ -31,7 +31,7 @@ jobs:
     env:
       FORCE_COLOR: "1"
       OCEL_TARGET: vps
-      OCEL_JOURNEY_CONCERN: deploy lifecycle sdk kv
+      OCEL_JOURNEY_CONCERN: deploy lifecycle sdk kv tasks
       OCEL_JOURNEY_COVERAGE: every-cell
       OCEL_GCE_ZONE: ${{ vars.GCP_VPS_ZONE || 'europe-west1-b' }}
       BOX: nightly-${{ github.run_id }}-${{ github.run_attempt }}

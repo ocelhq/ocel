@@ -165,6 +165,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		"tests/fixtures/sdk/python",
 		"tests/fixtures/sdk/with-transforms",
 		"tests/fixtures/sdk/workspace",
+		"tests/fixtures/tasks/node",
 		"tests/fixtures/worker/go",
 		"tests/fixtures/worker/node",
 		"tests/fixtures/worker/python",
