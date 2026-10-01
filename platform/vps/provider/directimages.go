@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
@@ -17,10 +18,11 @@ import (
 type loaded struct {
 	host *host.Host
 	at   string
+	now  func() time.Time
 }
 
 func (p *Provider) OpenDirectImages(context.Context) (provider.ImageStore, error) {
-	return loaded{host: p.host, at: p.options.SSH.session().Destination()}, nil
+	return loaded{host: p.host, at: p.options.SSH.session().Destination(), now: p.now}, nil
 }
 
 func (l loaded) String() string { return "images loaded onto " + l.at }
@@ -48,11 +50,36 @@ func (l loaded) load(ctx context.Context, push provider.ImagePush, progress prog
 	}
 	stream, writer := io.Pipe()
 	go func() { writer.CloseWithError(tarball.Write(ref, push.Built, writer)) }()
-	said, err := l.host.LoadImage(ctx, push.ImageRef, stream)
+	sent := &counted{from: stream}
+	began := l.now()
+	said, err := l.host.LoadImage(ctx, push.ImageRef, sent)
+	took := l.now().Sub(began)
 	_ = stream.Close()
 	if err != nil {
 		return err
 	}
 	echo(progress, said)
+	if progress != nil && (took >= slowTransfer || sent.bytes >= largeTransfer) {
+		progress.Warn(fmt.Sprintf(
+			"Sending %s's image to %s took %s for %d MB. With no registry every deploy sends the whole image over SSH: name a `registry` and the box pulls only the layers that changed. %s",
+			push.App, l.at, took.Round(time.Second), sent.bytes/1_000_000, registryDocs))
+	}
 	return nil
+}
+
+const (
+	slowTransfer  = 30 * time.Second
+	largeTransfer = 300_000_000
+	registryDocs  = "https://ocel.dev/docs/providers/vps#images"
+)
+
+type counted struct {
+	from  io.Reader
+	bytes int64
+}
+
+func (c *counted) Read(p []byte) (int, error) {
+	n, err := c.from.Read(p)
+	c.bytes += int64(n)
+	return n, err
 }

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -34,6 +35,7 @@ type Provider struct {
 	transform transform.Pass
 	resolve   Lookup
 	reaches   Reach
+	now       func() time.Time
 
 	stores liveStores
 
@@ -66,12 +68,12 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 }
 
 func NewProvider(options Options) *Provider {
-	p := &Provider{options: options}
+	p := &Provider{options: options, now: time.Now}
 	return p.onHost(p.conn)
 }
 
 func newProvider(options Options, dial host.Dial) *Provider {
-	return (&Provider{options: options}).onHost(dial)
+	return (&Provider{options: options, now: time.Now}).onHost(dial)
 }
 
 func (p *Provider) Facts() provider.Facts {

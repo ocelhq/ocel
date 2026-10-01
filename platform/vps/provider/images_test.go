@@ -40,6 +40,7 @@ type box struct {
 	fed        []string
 	hasImage   bool
 	unsocket   bool
+	drains     bool
 	serves     map[string]string
 	images     map[string]string
 	reads      map[string]string
@@ -51,7 +52,11 @@ type box struct {
 
 func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
 	var input string
-	if stdin != nil {
+	if stdin != nil && b.drains {
+		if _, err := io.Copy(io.Discard, stdin); err != nil {
+			return session.Result{}, err
+		}
+	} else if stdin != nil {
 		raw, err := io.ReadAll(stdin)
 		if err != nil {
 			return session.Result{}, err

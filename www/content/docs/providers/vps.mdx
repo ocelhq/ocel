@@ -536,6 +536,33 @@ a proxy doesn't read yet. Running bootstrap again with the same `proxy` finishes
 another `proxy` it moves the box there instead, and removes what the stopped move left of the
 proxy it started from.
 
+## Images
+
+With no `registry` in `ocel.json`, a deploy sends each app's image straight to the box over
+SSH. That needs nothing else to run, but it sends the whole image every time the app
+changes, base layers included. When a transfer is slow or large, the deploy warns and
+links here.
+
+Name a registry and the deploy pushes the image there instead, and the box pulls it by
+digest. The push and the pull each skip the layers already there, so a deploy moves only
+what changed:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "registry": {
+    "server": "ghcr.io/acme",
+    "username": "acme-bot",
+    "password": "${REGISTRY_TOKEN}"
+  }
+}
+```
+
+The box needs `username` beside `password` to log in. It logs in for the pull and logs out
+in the same session, so no credential is left on the machine. `password` names an
+environment variable, never the token itself: see [Configuration](/docs/configuration).
+
 ## Caching
 
 Nothing ocel runs on a box caches your app's responses. Its proxy and the switchboard forward

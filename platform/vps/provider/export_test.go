@@ -2,6 +2,7 @@ package vps
 
 import (
 	"context"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -10,6 +11,10 @@ import (
 )
 
 var ProviderOver = newProvider
+
+func (p *Provider) Timing(now func() time.Time) { p.now = now }
+
+func (p *Provider) Clock() func() time.Time { return p.now }
 
 var MintStoreSecret = mintStoreSecret
 
