@@ -57,12 +57,12 @@ func run(argv []string, errs *os.File) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
-	queued := &queues.Host{
-		Records: live.KeyValues{Root: *stateRoot},
-		Tiers:   []environment.Tier{environment.TierProduction, environment.TierPreview},
-		Cipher:  live.Cipher{Root: *tierRoot},
-		Locate:  inspect,
-		Open:    queues.OpenPgmq,
+	queued := &queues.Engines{
+		Records:   live.KeyValues{Root: *stateRoot},
+		Tiers:     []environment.Tier{environment.TierProduction, environment.TierPreview},
+		Cipher:    live.Cipher{Root: *tierRoot},
+		Addresses: inspect,
+		Open:      queues.OpenPgmq,
 	}
 	go queued.Run(ctx)
 	server := &agent.Server{

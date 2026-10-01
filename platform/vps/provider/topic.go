@@ -36,8 +36,6 @@ type queueDatabases struct {
 	ensured map[string]bool
 }
 
-var workerCeilings = []provider.WorkerCeiling{{Compute: provider.ComputeContainer, Unbounded: true}}
-
 func queueContainer(ref provider.StackRef) host.ResourceContainer {
 	return host.ResourceContainer{
 		Name:     host.ResourceName(ref.Project, ref.Name.String(), live.QueueResource, queueKind),

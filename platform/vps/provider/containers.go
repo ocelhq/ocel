@@ -43,7 +43,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		Bindings:    liveBindings(app.Values),
 		Store:       store,
 	}
-	if usesQueue(app) {
+	if hasQueue(app) {
 		pinned.Queue = spec.Ref.Name.Env
 	}
 	manifest, err := variables.Render(pinned)

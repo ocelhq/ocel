@@ -40,21 +40,21 @@ type Engine interface {
 	Handlers() (taskv1connect.TaskServiceHandler, topicv1connect.TopicServiceHandler)
 }
 
-type Opener interface {
+type Cipher interface {
 	Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error)
 }
 
-type Locator interface {
+type Addresses interface {
 	Address(ctx context.Context, container string) (string, error)
 }
 
-type Host struct {
-	Records  keyvalue.Store
-	Tiers    []environment.Tier
-	Cipher   Opener
-	Locate   Locator
-	Open     func(ctx context.Context, cfg pgmq.Config) (Engine, error)
-	Interval time.Duration
+type Engines struct {
+	Records   keyvalue.Store
+	Tiers     []environment.Tier
+	Cipher    Cipher
+	Addresses Addresses
+	Open      func(ctx context.Context, cfg pgmq.Config) (Engine, error)
+	Interval  time.Duration
 
 	mu     sync.Mutex
 	served map[queueID]*served
@@ -74,7 +74,7 @@ type served struct {
 	done      chan struct{}
 }
 
-func (h *Host) Run(ctx context.Context) {
+func (h *Engines) Run(ctx context.Context) {
 	interval := h.Interval
 	if interval <= 0 {
 		interval = DefaultInterval
@@ -94,7 +94,7 @@ func (h *Host) Run(ctx context.Context) {
 	}
 }
 
-func (h *Host) Served(tier environment.Tier, project, env string) (taskv1connect.TaskServiceHandler, topicv1connect.TopicServiceHandler, bool) {
+func (h *Engines) Served(tier environment.Tier, project, env string) (taskv1connect.TaskServiceHandler, topicv1connect.TopicServiceHandler, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	queue, found := h.served[queueID{tier: tier, project: project, env: env}]
@@ -105,7 +105,7 @@ func (h *Host) Served(tier environment.Tier, project, env string) (taskv1connect
 	return tasks, topics, true
 }
 
-func (h *Host) Reconcile(ctx context.Context) error {
+func (h *Engines) Reconcile(ctx context.Context) error {
 	var failed []error
 	recorded := map[queueID]bool{}
 	for _, tier := range h.Tiers {
@@ -133,7 +133,7 @@ func (h *Host) Reconcile(ctx context.Context) error {
 	return errors.Join(failed...)
 }
 
-func (h *Host) serve(ctx context.Context, id queueID, queue live.Queue) error {
+func (h *Engines) serve(ctx context.Context, id queueID, queue live.Queue) error {
 	serverURL, err := h.serverURL(ctx, queue)
 	if err != nil {
 		h.forget(id)
@@ -185,8 +185,8 @@ func (h *Host) serve(ctx context.Context, id queueID, queue live.Queue) error {
 	return nil
 }
 
-func (h *Host) serverURL(ctx context.Context, queue live.Queue) (string, error) {
-	address, err := h.Locate.Address(ctx, queue.Database.Container)
+func (h *Engines) serverURL(ctx context.Context, queue live.Queue) (string, error) {
+	address, err := h.Addresses.Address(ctx, queue.Database.Container)
 	if err != nil {
 		return "", fmt.Errorf("find the queue database %s: %w", queue.Database.Container, err)
 	}
@@ -211,7 +211,7 @@ func (h *Host) serverURL(ctx context.Context, queue live.Queue) (string, error) 
 	}).String(), nil
 }
 
-func (h *Host) deployment(ctx context.Context, queue live.Queue) (pgmq.Deployment, error) {
+func (h *Engines) deployment(ctx context.Context, queue live.Queue) (pgmq.Deployment, error) {
 	deployment := pgmq.Deployment{Slug: queue.Project, Topics: map[string]*contractv1.ManifestTopic{}, Workers: map[string]pgmq.Worker{}}
 	for name, raw := range queue.Topics {
 		topic := &contractv1.ManifestTopic{}
@@ -228,7 +228,7 @@ func (h *Host) deployment(ctx context.Context, queue live.Queue) (pgmq.Deploymen
 		}
 	}) {
 		worker := queue.Workers[name]
-		address, err := h.Locate.Address(ctx, worker.Container)
+		address, err := h.Addresses.Address(ctx, worker.Container)
 		if err != nil {
 			continue
 		}
@@ -240,7 +240,7 @@ func (h *Host) deployment(ctx context.Context, queue live.Queue) (pgmq.Deploymen
 	return deployment, nil
 }
 
-func (h *Host) forget(id queueID) {
+func (h *Engines) forget(id queueID) {
 	h.mu.Lock()
 	queue, found := h.served[id]
 	delete(h.served, id)
@@ -250,7 +250,7 @@ func (h *Host) forget(id queueID) {
 	}
 }
 
-func (h *Host) closeAll() {
+func (h *Engines) closeAll() {
 	h.mu.Lock()
 	served := h.served
 	h.served = nil
