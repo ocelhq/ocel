@@ -85,7 +85,7 @@ type deliveryFields struct {
 	DelayTask   string     `firestore:"delayTask"`
 }
 
-type runRecord struct {
+type storedRun struct {
 	provider.Run
 	delivery deliveryFields
 }
@@ -209,7 +209,7 @@ func (s Store) extendRecordHolding(ctx context.Context, record provider.Expiring
 	return nil
 }
 
-func (s Store) ensureDebouncedRun(ctx context.Context, record provider.ExpiringRecord, run runRecord) (string, error) {
+func (s Store) ensureDebouncedRun(ctx context.Context, record provider.ExpiringRecord, run storedRun) (string, error) {
 	recordDoc, err := s.recordDocument(record)
 	if err != nil {
 		return "", err
@@ -266,7 +266,7 @@ func readPendingRun(tx *firestore.Transaction, recordDoc *firestore.DocumentRef,
 	if err != nil || !found {
 		return "", err
 	}
-	pending, err := recordOf(runSnapshot)
+	pending, err := storedRunOf(runSnapshot)
 	if err != nil || refuseUnreschedulable(pending, now) != nil {
 		return "", err
 	}
@@ -287,7 +287,7 @@ func (s Store) pointRecordAt(ctx context.Context, record provider.ExpiringRecord
 	if record.Key == "" {
 		return nil
 	}
-	return s.writeRecord(ctx, newRunRecord(record.Purpose, record.Topic, record.Key, execution, record.ExpiresAt))
+	return s.writeRecord(ctx, newRecordNamingRun(record.Purpose, record.Topic, record.Key, execution, record.ExpiresAt))
 }
 
 func readInTransaction(tx *firestore.Transaction, doc *firestore.DocumentRef) (*firestore.DocumentSnapshot, bool, error) {
@@ -302,23 +302,23 @@ func readInTransaction(tx *firestore.Transaction, doc *firestore.DocumentRef) (*
 }
 
 func (s Store) ReadRun(ctx context.Context, execution string) (provider.Run, error) {
-	record, err := s.readRecord(ctx, execution)
-	return record.Run, err
+	run, err := s.readStoredRun(ctx, execution)
+	return run.Run, err
 }
 
 func isNotFound(err error) bool { return status.Code(err) == codes.NotFound }
 
 func runOf(snapshot *firestore.DocumentSnapshot) (provider.Run, error) {
-	record, err := recordOf(snapshot)
-	return record.Run, err
+	run, err := storedRunOf(snapshot)
+	return run.Run, err
 }
 
-func recordOf(snapshot *firestore.DocumentSnapshot) (runRecord, error) {
+func storedRunOf(snapshot *firestore.DocumentSnapshot) (storedRun, error) {
 	var doc runDocument
 	if err := snapshot.DataTo(&doc); err != nil {
-		return runRecord{}, fmt.Errorf("decode run %s: %w", snapshot.Ref.ID, err)
+		return storedRun{}, fmt.Errorf("decode run %s: %w", snapshot.Ref.ID, err)
 	}
-	return runRecord{delivery: doc.Delivery, Run: provider.Run{
+	return storedRun{delivery: doc.Delivery, Run: provider.Run{
 		Execution:  snapshot.Ref.ID,
 		Topic:      doc.Topic,
 		Consumer:   doc.Consumer,
@@ -391,7 +391,7 @@ func (s Store) WriteRun(ctx context.Context, run provider.Run) (keyvalue.Revisio
 			}
 			return tx.Create(doc, documentOf(run, deliveryFields{}, next))
 		}
-		current, err := recordOf(snapshot)
+		current, err := storedRunOf(snapshot)
 		if err != nil {
 			return err
 		}
@@ -411,25 +411,25 @@ func (s Store) WriteRun(ctx context.Context, run provider.Run) (keyvalue.Revisio
 
 var errRunUnchanged = errors.New("the run is left as it was")
 
-func (s Store) changeRun(ctx context.Context, execution string, change func(record *runRecord, found bool) error) (runRecord, error) {
+func (s Store) changeRun(ctx context.Context, execution string, change func(run *storedRun, found bool) error) (storedRun, error) {
 	runs, err := s.runs()
 	if err != nil {
-		return runRecord{}, err
+		return storedRun{}, err
 	}
 	client, err := s.Clients.Firestore()
 	if err != nil {
-		return runRecord{}, err
+		return storedRun{}, err
 	}
 	doc := runs.Doc(execution)
-	var changed runRecord
+	var changed storedRun
 	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snapshot, found, err := readInTransaction(tx, doc)
 		if err != nil {
 			return err
 		}
-		changed = runRecord{Run: provider.Run{Execution: execution}}
+		changed = storedRun{Run: provider.Run{Execution: execution}}
 		if found {
-			if changed, err = recordOf(snapshot); err != nil {
+			if changed, err = storedRunOf(snapshot); err != nil {
 				return err
 			}
 		}
@@ -451,16 +451,16 @@ func (s Store) changeRun(ctx context.Context, execution string, change func(reco
 
 var errRunExists = errors.New("a run with this execution is already recorded")
 
-func (s Store) createRun(ctx context.Context, record runRecord) error {
-	_, err := s.changeRun(ctx, record.Execution, func(current *runRecord, found bool) error {
+func (s Store) createRun(ctx context.Context, run storedRun) error {
+	_, err := s.changeRun(ctx, run.Execution, func(current *storedRun, found bool) error {
 		if found {
 			return errRunExists
 		}
-		*current = record
+		*current = run
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("record run %s: %w", record.Execution, err)
+		return fmt.Errorf("record run %s: %w", run.Execution, err)
 	}
 	return nil
 }

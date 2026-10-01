@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	cloudscheduler "google.golang.org/api/cloudscheduler/v1"
 	pubsub "google.golang.org/api/pubsub/v1"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -23,7 +22,6 @@ const (
 	maxBackoff              = 600 * time.Second
 	deadLetterDeliveryLimit = 100
 	mutableSubscription     = "pushConfig,retryPolicy,deadLetterPolicy,ackDeadlineSeconds"
-	scheduleTimeZone        = "Etc/UTC"
 )
 
 type Push struct {
@@ -76,48 +74,6 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 				return err
 			}
 		}
-	}
-	return nil
-}
-
-func (t Topology) jobPath(clients *ports.Clients, task string) string {
-	return "projects/" + clients.Project + "/locations/" + clients.Region + "/jobs/" + t.Names.ScheduleJob(task)
-}
-
-func (t Topology) ensureSchedule(ctx context.Context, clients *ports.Clients, task, cron string) error {
-	service, err := clients.Scheduler()
-	if err != nil {
-		return err
-	}
-	path := t.jobPath(clients, task)
-	desired := &cloudscheduler.Job{
-		Name:     path,
-		Schedule: cron,
-		TimeZone: scheduleTimeZone,
-		PubsubTarget: &cloudscheduler.PubsubTarget{
-			TopicName:  topicPath(clients.Project, t.Names.Topic(task)),
-			Data:       base64Of([]byte("{}")),
-			Attributes: map[string]string{ScheduleAttribute: "true"},
-		},
-	}
-	parent := "projects/" + clients.Project + "/locations/" + clients.Region
-	err = retried(ctx, func() error {
-		_, err := service.Projects.Locations.Jobs.Create(parent, desired).Context(ctx).Do()
-		return err
-	})
-	if err == nil {
-		return nil
-	}
-	if !isAnswered(err, http.StatusConflict) {
-		return fmt.Errorf("create Cloud Scheduler job %s: %w", path, err)
-	}
-	desired.Name = ""
-	err = retried(ctx, func() error {
-		_, err := service.Projects.Locations.Jobs.Patch(path, desired).UpdateMask("schedule,timeZone,pubsubTarget").Context(ctx).Do()
-		return err
-	})
-	if err != nil {
-		return fmt.Errorf("update Cloud Scheduler job %s: %w", path, err)
 	}
 	return nil
 }
@@ -198,14 +154,14 @@ func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
 		for _, consumer := range t.Topics[name].GetConsumers() {
 			subscription := subscriptionPath(clients.Project, t.Names.Subscription(name, consumer.GetName()))
-			if err := removed(ctx, "subscription "+subscription, func() error {
+			if err := deleteIgnoringMissing(ctx, "subscription "+subscription, func() error {
 				_, err := service.Projects.Subscriptions.Delete(subscription).Context(ctx).Do()
 				return err
 			}); err != nil {
 				return err
 			}
 			deadLetters := topicPath(clients.Project, t.Names.DeadLetterTopic(name, consumer.GetName()))
-			if err := removed(ctx, "topic "+deadLetters, func() error {
+			if err := deleteIgnoringMissing(ctx, "topic "+deadLetters, func() error {
 				_, err := service.Projects.Topics.Delete(deadLetters).Context(ctx).Do()
 				return err
 			}); err != nil {
@@ -218,7 +174,7 @@ func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 			}
 		}
 		topic := topicPath(clients.Project, t.Names.Topic(name))
-		if err := removed(ctx, "topic "+topic, func() error {
+		if err := deleteIgnoringMissing(ctx, "topic "+topic, func() error {
 			_, err := service.Projects.Topics.Delete(topic).Context(ctx).Do()
 			return err
 		}); err != nil {
@@ -228,22 +184,7 @@ func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 	return nil
 }
 
-func (t Topology) removeSchedule(ctx context.Context, clients *ports.Clients, task string) error {
-	service, err := clients.Scheduler()
-	if err != nil {
-		return err
-	}
-	path := t.jobPath(clients, task)
-	if err := retried(ctx, func() error {
-		_, err := service.Projects.Locations.Jobs.Delete(path).Context(ctx).Do()
-		return err
-	}); err != nil && !isAnswered(err, http.StatusNotFound) {
-		return fmt.Errorf("delete Cloud Scheduler job %s: %w", path, err)
-	}
-	return nil
-}
-
-func removed(ctx context.Context, what string, call func() error) error {
+func deleteIgnoringMissing(ctx context.Context, what string, call func() error) error {
 	if err := retried(ctx, call); err != nil && !isAnswered(err, http.StatusNotFound) {
 		return fmt.Errorf("delete Pub/Sub %s: %w", what, err)
 	}

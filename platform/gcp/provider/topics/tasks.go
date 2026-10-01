@@ -25,7 +25,7 @@ type recordedRun struct {
 	Run string `json:"run"`
 }
 
-func (t Tasks) task(name string) (*contractv1.ManifestTopic, error) {
+func (t Tasks) declared(name string) (*contractv1.ManifestTopic, error) {
 	topic, found := t.deployment.Declared[name]
 	if !found || !isTask(topic) {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no task named %q is deployed", name))
@@ -34,7 +34,7 @@ func (t Tasks) task(name string) (*contractv1.ManifestTopic, error) {
 }
 
 func (t Tasks) Trigger(ctx context.Context, req *taskv1.TriggerRequest) (*taskv1.TriggerResponse, error) {
-	topic, err := t.task(req.GetTask())
+	topic, err := t.declared(req.GetTask())
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 		if options.GetIdempotencyKeyTtl() != nil {
 			life = options.GetIdempotencyKeyTtl().AsDuration()
 		}
-		idempotency = newRunRecord(provider.RecordIdempotency, name, key, execution, now.Add(life))
+		idempotency = newRecordNamingRun(provider.RecordIdempotency, name, key, execution, now.Add(life))
 		existing, created, err := t.deployment.Store().EnsureRecord(ctx, idempotency)
 		if err != nil {
 			return "", err
@@ -101,7 +101,7 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 	run := t.deployment.newStoredRun(toPublish, now, ttl, options.GetTags(), metadata)
 	store := t.deployment.Store()
 	if debounce := options.GetDebounce(); debounce != nil {
-		debounced := newRunRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt)
+		debounced := newRecordNamingRun(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt)
 		pending, err := t.debounce(ctx, debounced, run)
 		if err != nil {
 			return "", errors.Join(err, store.deleteRecordsHolding(ctx, idempotency))
@@ -120,14 +120,14 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 	return execution, nil
 }
 
-func (d Deployment) newStoredRun(toPublish publication, now time.Time, ttl time.Duration, tags []string, metadata []byte) runRecord {
+func (d Deployment) newStoredRun(toPublish publication, now time.Time, ttl time.Duration, tags []string, metadata []byte) storedRun {
 	consumer := toPublish.topic.GetConsumers()[0]
 	delayTask := d.delayTaskOf(toPublish)
 	status := provider.RunQueued
 	if delayTask != "" {
 		status = provider.RunDelayed
 	}
-	run := runRecord{
+	run := storedRun{
 		Run: provider.Run{
 			Execution: executionOf(toPublish.messageID, consumer.GetName()),
 			Topic:     toPublish.topicName,
@@ -154,21 +154,21 @@ func (d Deployment) newStoredRun(toPublish publication, now time.Time, ttl time.
 	return run
 }
 
-func (t Tasks) start(ctx context.Context, toPublish publication, run runRecord) error {
+func (t Tasks) start(ctx context.Context, toPublish publication, run storedRun) error {
 	if err := t.deployment.Store().createRun(ctx, run); err != nil {
 		return err
 	}
 	return t.deployment.publishRun(ctx, toPublish, run)
 }
 
-func (d Deployment) publishRun(ctx context.Context, toPublish publication, run runRecord) error {
+func (d Deployment) publishRun(ctx context.Context, toPublish publication, run storedRun) error {
 	if err := d.publish(ctx, toPublish, run.delivery.DelayTask); err != nil {
 		return d.failUnpublished(ctx, run.Execution, err)
 	}
 	return nil
 }
 
-func (t Tasks) debounce(ctx context.Context, record provider.ExpiringRecord, run runRecord) (string, error) {
+func (t Tasks) debounce(ctx context.Context, record provider.ExpiringRecord, run storedRun) (string, error) {
 	store := t.deployment.Store()
 	var err error
 	for range debounceAttempts {
@@ -179,7 +179,7 @@ func (t Tasks) debounce(ctx context.Context, record provider.ExpiringRecord, run
 		}
 		err = t.move(ctx, pending, record.ExpiresAt, true)
 		if err == nil {
-			return pending, store.extendRecordHolding(ctx, newRunRecord(record.Purpose, record.Topic, record.Key, pending, record.ExpiresAt))
+			return pending, store.extendRecordHolding(ctx, newRecordNamingRun(record.Purpose, record.Topic, record.Key, pending, record.ExpiresAt))
 		}
 		if code := connect.CodeOf(err); code != connect.CodeFailedPrecondition && code != connect.CodeNotFound {
 			return "", err
@@ -189,11 +189,11 @@ func (t Tasks) debounce(ctx context.Context, record provider.ExpiringRecord, run
 }
 
 func (d Deployment) failUnpublished(ctx context.Context, execution string, cause error) error {
-	_, err := d.Store().changeRun(ctx, execution, func(record *runRecord, found bool) error {
-		if !found || isFinished(record.Status) {
+	_, err := d.Store().changeRun(ctx, execution, func(run *storedRun, found bool) error {
+		if !found || isFinished(run.Status) {
 			return errRunUnchanged
 		}
-		record.Status, record.Error, record.FinishedAt = provider.RunFailed, cause.Error(), time.Now()
+		run.Status, run.Error, run.FinishedAt = provider.RunFailed, cause.Error(), time.Now()
 		return nil
 	})
 	if err != nil && !errors.Is(err, errRunUnchanged) {
@@ -202,7 +202,7 @@ func (d Deployment) failUnpublished(ctx context.Context, execution string, cause
 	return cause
 }
 
-func newRunRecord(purpose provider.RecordPurpose, task, key, execution string, expires time.Time) provider.ExpiringRecord {
+func newRecordNamingRun(purpose provider.RecordPurpose, task, key, execution string, expires time.Time) provider.ExpiringRecord {
 	value, _ := json.Marshal(recordedRun{Run: execution})
 	return provider.ExpiringRecord{Purpose: purpose, Topic: task, Key: key, Value: value, ExpiresAt: expires}
 }
@@ -224,7 +224,7 @@ func refuseNonObject(metadata []byte) error {
 }
 
 func (t Tasks) BatchTrigger(ctx context.Context, req *taskv1.BatchTriggerRequest) (*taskv1.BatchTriggerResponse, error) {
-	topic, err := t.task(req.GetTask())
+	topic, err := t.declared(req.GetTask())
 	if err != nil {
 		return nil, err
 	}

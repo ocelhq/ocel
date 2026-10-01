@@ -20,23 +20,23 @@ const (
 	debounceAttempts = 5
 )
 
-func noRun(id string) error {
+func refuseMissingRun(id string) error {
 	return connect.NewError(connect.CodeNotFound, fmt.Errorf("no run %q", id))
 }
 
-func (s Store) readRecord(ctx context.Context, execution string) (runRecord, error) {
+func (s Store) readStoredRun(ctx context.Context, execution string) (storedRun, error) {
 	runs, err := s.runs()
 	if err != nil {
-		return runRecord{}, err
+		return storedRun{}, err
 	}
 	snapshot, err := runs.Doc(execution).Get(ctx)
 	if err == nil && snapshot.Exists() {
-		return recordOf(snapshot)
+		return storedRunOf(snapshot)
 	}
 	if err == nil || isNotFound(err) {
-		return runRecord{}, keyvalue.ErrNotFound
+		return storedRun{}, keyvalue.ErrNotFound
 	}
-	return runRecord{}, fmt.Errorf("read run %s: %w", execution, err)
+	return storedRun{}, fmt.Errorf("read run %s: %w", execution, err)
 }
 
 func isUnfinished(status provider.RunStatus) bool {
@@ -45,15 +45,15 @@ func isUnfinished(status provider.RunStatus) bool {
 
 func (t Tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*taskv1.CancelRunResponse, error) {
 	var delayTask string
-	_, err := t.deployment.Store().changeRun(ctx, req.GetId(), func(record *runRecord, found bool) error {
+	_, err := t.deployment.Store().changeRun(ctx, req.GetId(), func(run *storedRun, found bool) error {
 		if !found {
-			return noRun(req.GetId())
+			return refuseMissingRun(req.GetId())
 		}
-		if !isUnfinished(record.Status) {
+		if !isUnfinished(run.Status) {
 			return errRunUnchanged
 		}
-		delayTask = record.delivery.DelayTask
-		record.Status, record.FinishedAt, record.delivery.DelayTask = provider.RunCanceled, time.Now(), ""
+		delayTask = run.delivery.DelayTask
+		run.Status, run.FinishedAt, run.delivery.DelayTask = provider.RunCanceled, time.Now(), ""
 		return nil
 	})
 	if err != nil && !errors.Is(err, errRunUnchanged) {
@@ -91,14 +91,14 @@ func (t Tasks) move(ctx context.Context, id string, due time.Time, keepTTL bool)
 }
 
 func (t Tasks) moveOnce(ctx context.Context, id string, due time.Time, keepTTL bool) error {
-	current, err := t.deployment.Store().readRecord(ctx, id)
+	current, err := t.deployment.Store().readStoredRun(ctx, id)
 	if errors.Is(err, keyvalue.ErrNotFound) {
-		return noRun(id)
+		return refuseMissingRun(id)
 	}
 	if err != nil {
 		return err
 	}
-	topic, err := t.task(current.Topic)
+	topic, err := t.declared(current.Topic)
 	if err != nil {
 		return err
 	}
@@ -111,19 +111,19 @@ func (t Tasks) moveOnce(ctx context.Context, id string, due time.Time, keepTTL b
 	if err := t.deployment.publish(ctx, moved, delayTask); err != nil {
 		return err
 	}
-	_, err = t.deployment.Store().changeRun(ctx, id, func(record *runRecord, found bool) error {
-		if !found || record.delivery.DelayTask != current.delivery.DelayTask {
+	_, err = t.deployment.Store().changeRun(ctx, id, func(run *storedRun, found bool) error {
+		if !found || run.delivery.DelayTask != current.delivery.DelayTask {
 			return connect.NewError(connect.CodeAborted, fmt.Errorf("run %q changed while it was rescheduled", id))
 		}
-		if err := refuseUnreschedulable(*record, time.Now()); err != nil {
+		if err := refuseUnreschedulable(*run, time.Now()); err != nil {
 			return err
 		}
-		if keepTTL && !record.ExpiresAt.IsZero() {
-			record.ExpiresAt = record.ExpiresAt.Add(due.Sub(record.DueAt))
+		if keepTTL && !run.ExpiresAt.IsZero() {
+			run.ExpiresAt = run.ExpiresAt.Add(due.Sub(run.DueAt))
 		}
-		record.DueAt, record.delivery.DelayTask, record.Status = due, delayTask, provider.RunDelayed
+		run.DueAt, run.delivery.DelayTask, run.Status = due, delayTask, provider.RunDelayed
 		if delayTask == "" {
-			record.Status = provider.RunQueued
+			run.Status = provider.RunQueued
 		}
 		return nil
 	})
@@ -134,14 +134,14 @@ func (t Tasks) moveOnce(ctx context.Context, id string, due time.Time, keepTTL b
 }
 
 func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*taskv1.ReplayRunResponse, error) {
-	original, err := t.deployment.Store().readRecord(ctx, req.GetId())
+	original, err := t.deployment.Store().readStoredRun(ctx, req.GetId())
 	if errors.Is(err, keyvalue.ErrNotFound) {
-		return nil, noRun(req.GetId())
+		return nil, refuseMissingRun(req.GetId())
 	}
 	if err != nil {
 		return nil, err
 	}
-	topic, err := t.task(original.Topic)
+	topic, err := t.declared(original.Topic)
 	if err != nil {
 		return nil, err
 	}
@@ -159,29 +159,29 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 	return &taskv1.ReplayRunResponse{Id: run.Execution}, nil
 }
 
-func refuseUnreschedulable(record runRecord, now time.Time) error {
-	if status := statusAt(record.Run, now); status != provider.RunDelayed {
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q is %s, and only a delayed run can be rescheduled", record.Execution, status))
+func refuseUnreschedulable(run storedRun, now time.Time) error {
+	if status := statusAt(run.Run, now); status != provider.RunDelayed {
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q is %s, and only a delayed run can be rescheduled", run.Execution, status))
 	}
-	if record.delivery.DelayTask == "" {
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q waits on no delay task, so nothing would run it at a new time", record.Execution))
+	if run.delivery.DelayTask == "" {
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %q waits on no delay task, so nothing would run it at a new time", run.Execution))
 	}
 	return nil
 }
 
-func publicationOf(record runRecord, topic *contractv1.ManifestTopic) publication {
+func publicationOf(run storedRun, topic *contractv1.ManifestTopic) publication {
 	published := publication{
-		topicName:   record.Topic,
+		topicName:   run.Topic,
 		topic:       topic,
-		messageID:   record.delivery.MessageID,
-		dueAt:       record.DueAt,
-		payload:     record.Payload,
-		key:         record.delivery.Key,
-		lane:        record.delivery.Lane,
-		maxAttempts: int32(record.delivery.MaxAttempts),
+		messageID:   run.delivery.MessageID,
+		dueAt:       run.DueAt,
+		payload:     run.Payload,
+		key:         run.delivery.Key,
+		lane:        run.delivery.Lane,
+		maxAttempts: int32(run.delivery.MaxAttempts),
 	}
-	if record.delivery.PublishedAt != nil {
-		published.publishedAt = *record.delivery.PublishedAt
+	if run.delivery.PublishedAt != nil {
+		published.publishedAt = *run.delivery.PublishedAt
 	}
 	return published
 }
