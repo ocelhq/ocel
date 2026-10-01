@@ -272,14 +272,34 @@ describe("the tasks concern", () => {
     expect(issuesOf("tasks/go/web")).toEqual({});
   });
 
-  it("skips the suite on aws, gcp and a box with the provider's refusal, under each target's ticket", () => {
+  it("runs the behavioural suite on a box, with only the TypeScript SDK's payload checks red on tasks/node", () => {
+    for (const lane of ["vps", "vps.incus"] as const) {
+      const planned = planOn(lane, {}, EVERY_CELL);
+      const names = planned.cells.map((cell) => cell.name);
+      expect(names).toContain("tasks/node");
+      expect(names).toContain("tasks/go");
+      expect(Object.keys(planned.skipped).filter((cell) => cell.startsWith("tasks/"))).toEqual([]);
+      const issuesOf = (cell: string) =>
+        Object.fromEntries(
+          Object.entries(planned.expectedFailures[cell] ?? {}).map(([title, listed]) => [
+            title,
+            listed.map((gap) => gap.issue),
+          ]),
+        );
+      expect(issuesOf("tasks/node/web")).toEqual({
+        [exactTaskPayloadCheck.title]: [1528],
+        [exactTopicPayloadCheck.title]: [1528],
+      });
+      expect(issuesOf("tasks/go/web")).toEqual({});
+    }
+  });
+
+  it("skips the suite on aws and gcp with the provider's refusal, under each target's ticket", () => {
     const tickets = {
       aws: 1469,
       "aws.floci": 1469,
       gcp: 1470,
       "gcp.floci": 1470,
-      vps: 1471,
-      "vps.incus": 1471,
     } as const;
     for (const [lane, issue] of Object.entries(tickets) as [Lane, number][]) {
       const planned = planOn(lane);
