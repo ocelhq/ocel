@@ -9,12 +9,12 @@ import { readFileSync } from "node:fs";
 import express from "express";
 import { RealtimePublishError } from "ocel/realtime";
 import { createRealtimeHandler } from "ocel/realtime/express";
-import { rt } from "../infra/index";
+import { live } from "../infra/index";
 import { env } from "../infra/variables";
 
 const APP_NAME = "web";
 const PORT = Number(process.env.PORT ?? 3113);
-const BINDING_KEY = `OCEL_RESOURCE_REALTIME_${rt.name}`;
+const BINDING_KEY = `OCEL_RESOURCE_REALTIME_${live.name}`;
 const PKCS8_ED25519_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
 
 type Signer = "binding" | "another-key" | "nobody";
@@ -25,12 +25,12 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, app: APP_NAME });
 });
 
-app.all("/api/realtime", createRealtimeHandler(rt));
+app.all("/api/realtime", createRealtimeHandler(live));
 
 app.post("/api/publish", express.json({ limit: "1mb" }), async (req, res) => {
   const { pattern, params, body } = req.body;
   try {
-    await rt.publish(pattern, { params, body });
+    await live.publish(pattern, { params, body });
     res.status(204).end();
   } catch (error) {
     if (error instanceof RealtimePublishError) {
