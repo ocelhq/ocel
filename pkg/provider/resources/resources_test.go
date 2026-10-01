@@ -96,6 +96,10 @@ func TestServesNamesEveryResourceTheHooksProvision(t *testing.T) {
 	if !slices.Equal(served, []provider.BindingType{provider.BindingPostgres, provider.BindingBucket}) {
 		t.Fatalf("ServedBindingTypes() = %v, want the Postgres and the bucket the hooks provision", served)
 	}
+	stores := resources.Hooks{ProvisionKV: (&buckets{}).ProvisionBucket}
+	if served := resources.ServedBindingTypes(stores); !slices.Equal(served, []provider.BindingType{provider.BindingKV}) {
+		t.Fatalf("ServedBindingTypes() = %v, want the kv stores the hooks provision", served)
+	}
 	removing := resources.Hooks{RemoveResource: (&buckets{}).RemoveResource}
 	if served := resources.ServedBindingTypes(removing); len(served) != 0 {
 		t.Fatalf("ServedBindingTypes() = %v for hooks that only remove, want nothing: a resource nothing can provision is not served", served)

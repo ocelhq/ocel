@@ -126,6 +126,8 @@ type Volume struct {
 	Driver     string
 	Options    map[string]string
 	Generation string
+
+	CopyOnUpgrade bool
 }
 
 type Credential struct {
@@ -141,6 +143,7 @@ type ResourceContainer struct {
 
 	Image        string
 	Args         []string
+	User         string
 	Env          map[string]string
 	Labels       map[string]string
 	Capabilities []string
@@ -232,6 +235,9 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 	}
 	argv = append(argv, logging()...)
 	argv = append(argv, confined(spec.Capabilities, false)...)
+	if spec.User != "" {
+		argv = append(argv, "--user", spec.User)
+	}
 	for _, limit := range [][2]string{{"--memory", spec.Memory}, {"--cpus", spec.CPUs}, {"--shm-size", spec.ShmSize}} {
 		if limit[1] != "" {
 			argv = append(argv, limit[0], limit[1])
@@ -262,9 +268,15 @@ func (h *Host) initialisedUnder(ctx context.Context, spec ResourceContainer, ele
 	return generations[0], nil
 }
 
-func swapCommand(spec ResourceContainer, from, digest, envFile, dump string) string {
+func swapCommand(spec ResourceContainer, from, digest, envFile string, steps upgradeSteps, secret string) (command, stdin string) {
 	name, retired := quoted(spec.Name), quoted(spec.Name+retiredSuffix)
 	fresh, stale := quoted(spec.volume()), quoted(volumeName(spec.Name, from))
+	authenticated := ""
+	if spec.Credential.Reassert != nil {
+		var argv []string
+		argv, stdin = spec.Credential.Reassert(secret)
+		authenticated = reassertCommand(spec.Name, argv) + "\n"
+	}
 	return "set -eu\n" +
 		"swapped=0\n" +
 		"back() {\n" +
@@ -280,17 +292,51 @@ func swapCommand(spec ResourceContainer, from, digest, envFile, dump string) str
 		"docker stop " + name + " >/dev/null\n" +
 		"docker rename " + name + " " + retired + "\n" +
 		volumeCreating(spec) + "\n" +
+		steps.before +
 		words(resourceRun(spec, digest, envFile)) + " >/dev/null\n" +
 		readyCommand(spec) + "\n" +
-		restoreCommand(spec.Tier, spec.Name, spec.Database, dump) + "\n" +
+		steps.after +
+		authenticated +
 		"swapped=1\n" +
 		"docker rm --force " + retired + " >/dev/null\n" +
-		"docker volume rm " + stale + " >/dev/null"
+		"docker volume rm " + stale + " >/dev/null", stdin
+}
+
+func reassertCommand(name string, argv []string) string {
+	return words(append([]string{"docker", "exec", "--interactive", name}, argv...)) + " >/dev/null 2>&1"
+}
+
+type upgradeSteps struct {
+	before string
+	after  string
+}
+
+func volumeCopy(spec ResourceContainer, from string) upgradeSteps {
+	argv := []string{"docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL"}
+	if spec.User != "" {
+		argv = append(argv, "--user", spec.User)
+	}
+	argv = append(argv,
+		"--mount", "type=volume,src="+volumeName(spec.Name, from)+",dst=/from,readonly",
+		"--mount", "type=volume,src="+spec.volume()+",dst="+spec.Volume.Path,
+		"--entrypoint", "cp", spec.Image, "-a", "/from/.", spec.Volume.Path+"/")
+	return upgradeSteps{before: words(argv) + "\n"}
+}
+
+func (h *Host) prepareUpgrade(ctx context.Context, spec ResourceContainer, from, elevation string) (upgradeSteps, error) {
+	if spec.Volume.CopyOnUpgrade {
+		return volumeCopy(spec, from), nil
+	}
+	dumped, err := h.ran(ctx, "dump "+spec.Resource+" while version "+from+" still serves it",
+		dumpCommand(spec.Tier, spec.Name, spec.Database), nil, elevation)
+	if err != nil {
+		return upgradeSteps{}, err
+	}
+	return upgradeSteps{after: restoreCommand(spec.Tier, spec.Name, spec.Database, strings.TrimSpace(dumped)) + "\n"}, nil
 }
 
 func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest, secret, elevation string) (err error) {
-	dumped, err := h.ran(ctx, "dump "+spec.Resource+" while version "+from+" still serves it",
-		dumpCommand(spec.Tier, spec.Name, spec.Database), nil, elevation)
+	steps, err := h.prepareUpgrade(ctx, spec, from, elevation)
 	if err != nil {
 		return err
 	}
@@ -299,8 +345,9 @@ func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest
 		return err
 	}
 	defer func() { err = errors.Join(err, h.unhand(ctx, delivery)) }()
+	swap, stdin := swapCommand(spec, from, digest, delivery.path, steps, secret)
 	if _, err := h.ran(ctx, "move "+spec.Resource+" from version "+from+" to "+spec.Volume.Generation,
-		swapCommand(spec, from, digest, delivery.path, strings.TrimSpace(dumped)), nil, elevation); err != nil {
+		swap, strings.NewReader(stdin), elevation); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s could not move from version %s to %s and is back on %s, data intact: %v",
 			spec.Resource, from, spec.Volume.Generation, from, err)
@@ -313,7 +360,9 @@ func (h *Host) handResource(ctx context.Context, spec ResourceContainer, secret 
 	if env == nil {
 		env = map[string]string{}
 	}
-	env[spec.Credential.Env] = secret
+	if spec.Credential.Env != "" {
+		env[spec.Credential.Env] = secret
+	}
 	rendered, err := RenderEnvFile(env)
 	if err != nil {
 		return handoff{}, err
@@ -359,7 +408,7 @@ func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret s
 		return err
 	}
 	if from != "" {
-		if !strings.HasPrefix(said, "running ") {
+		if !spec.Volume.CopyOnUpgrade && !strings.HasPrefix(said, "running ") {
 			return refusal.Refuse(refusal.CodeNotReady,
 				"%s has version %s data, this deploy declares %s, and %s is not running to dump it\n"+
 					"Run `docker start %s` or set the version back to %s",
@@ -395,8 +444,7 @@ func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret s
 	if spec.Credential.Reassert != nil {
 		argv, stdin := spec.Credential.Reassert(secret)
 		if _, err := h.ran(ctx, "reassert "+spec.Resource+"'s credential",
-			words(append([]string{"docker", "exec", "--interactive", spec.Name}, argv...))+" >/dev/null 2>&1",
-			strings.NewReader(stdin), elevation); err != nil {
+			reassertCommand(spec.Name, argv), strings.NewReader(stdin), elevation); err != nil {
 			return err
 		}
 	}
