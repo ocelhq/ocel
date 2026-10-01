@@ -1,0 +1,391 @@
+{
+  "tokens": {
+    "cases": [
+      {
+        "name": "valid",
+        "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJyZWFsdGltZS5zaG9wLmV4YW1wbGUiLCJleHAiOjE3OTAwMDAwNTAsImlhdCI6MTc4OTk5OTk5MCwiaXNzIjoib2NlbDpydDphcHAiLCJqdGkiOiIwMUpaOFE0VjZUM1cyWDlZNVI3TjBNMUsyUCIsIm9jZWwiOnsiY2giOiIvYXBwL29yZGVycy9vLTEiLCJucyI6ImFwcCIsIm9wIjoic3Vic2NyaWJlIn0sInN1YiI6InVzZXItMSJ9.PWsMvC9Xrd3GyyZk63PhdPytTh9GVJPRAyQ5cdAR6vg996cX0KexfVKUKDvHyXNBY2yg0UnVXEAjvNTI-vggAw",
+        "valid": true
+      },
+      {
+        "name": "expired",
+        "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJyZWFsdGltZS5zaG9wLmV4YW1wbGUiLCJleHAiOjE3ODk5OTk5OTAsImlhdCI6MTc4OTk5OTkzMCwiaXNzIjoib2NlbDpydDphcHAiLCJqdGkiOiIwMUpaOFE0VjZUM1cyWDlZNVI3TjBNMUsyUCIsIm9jZWwiOnsiY2giOiIvYXBwL29yZGVycy9vLTEiLCJucyI6ImFwcCIsIm9wIjoic3Vic2NyaWJlIn0sInN1YiI6InVzZXItMSJ9.0wGL_xHJLt8BlkXRJ9Rp90eaYfka07Gi-ntVNIHbO3Ly033zktYje39Go3BqnNbtfwQIB3MEFIOQGQInLXrrAA",
+        "valid": false,
+        "reason": "expired"
+      },
+      {
+        "name": "expiring at now",
+        "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJyZWFsdGltZS5zaG9wLmV4YW1wbGUiLCJleHAiOjE3OTAwMDAwMDAsImlhdCI6MTc4OTk5OTk0MCwiaXNzIjoib2NlbDpydDphcHAiLCJqdGkiOiIwMUpaOFE0VjZUM1cyWDlZNVI3TjBNMUsyUCIsIm9jZWwiOnsiY2giOiIvYXBwL29yZGVycy9vLTEiLCJucyI6ImFwcCIsIm9wIjoic3Vic2NyaWJlIn0sInN1YiI6InVzZXItMSJ9.MzYRAsO5B2GIPG7Evq0-ElpwgnTS4nHLwzp0bb9fpypU8vc8ZZBDMauPi0L2F_NuKRnduv6WSMNklW6bHsuyBQ",
+        "valid": false,
+        "reason": "expired"
+      },
+      {
+        "name": "wrong aud",
+        "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJyZWFsdGltZS5vdGhlci5leGFtcGxlIiwiZXhwIjoxNzkwMDAwMDUwLCJpYXQiOjE3ODk5OTk5OTAsImlzcyI6Im9jZWw6cnQ6YXBwIiwianRpIjoiMDFKWjhRNFY2VDNXMlg5WTVSN04wTTFLMlAiLCJvY2VsIjp7ImNoIjoiL2FwcC9vcmRlcnMvby0xIiwibnMiOiJhcHAiLCJvcCI6InN1YnNjcmliZSJ9LCJzdWIiOiJ1c2VyLTEifQ.cH9RuoR_OKwFYEO4m36j-T_eLDB_R3F2LZbYBiOPr5gwidtaduS_BA19s3xagrE1nyUqotxXD0zhNPWMO5N8Bg",
+        "valid": false,
+        "reason": "audience"
+      },
+      {
+        "name": "wrong ns",
+        "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJyZWFsdGltZS5zaG9wLmV4YW1wbGUiLCJleHAiOjE3OTAwMDAwNTAsImlhdCI6MTc4OTk5OTk5MCwiaXNzIjoib2NlbDpydDphcHAiLCJqdGkiOiIwMUpaOFE0VjZUM1cyWDlZNVI3TjBNMUsyUCIsIm9jZWwiOnsiY2giOiIvYXBwL29yZGVycy9vLTEiLCJucyI6ImNoYXQiLCJvcCI6InN1YnNjcmliZSJ9LCJzdWIiOiJ1c2VyLTEifQ.C2q2ho5gh706g2ZWXABAm_yqxhBQsB8SiXILGy-r-j1P4dRKFXX67wihZwlUgi7duzB8rgt9vWPN6nk_StH3Aw",
+        "valid": false,
+        "reason": "namespace"
+      },
+      {
+        "name": "channel off by one character",
+        "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJyZWFsdGltZS5zaG9wLmV4YW1wbGUiLCJleHAiOjE3OTAwMDAwNTAsImlhdCI6MTc4OTk5OTk5MCwiaXNzIjoib2NlbDpydDphcHAiLCJqdGkiOiIwMUpaOFE0VjZUM1cyWDlZNVI3TjBNMUsyUCIsIm9jZWwiOnsiY2giOiIvYXBwL29yZGVycy9vLTIiLCJucyI6ImFwcCIsIm9wIjoic3Vic2NyaWJlIn0sInN1YiI6InVzZXItMSJ9.WfjJ4ibc3N2PFbR1O1qZekQlBVX-0DZXUeUDPTyWm1FE3IUI4ddJUf8cqmBu0JeJTNxSnUhFDDD7rHxfYE_jCQ",
+        "valid": false,
+        "reason": "channel"
+      },
+      {
+        "name": "channel one character longer",
+        "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJyZWFsdGltZS5zaG9wLmV4YW1wbGUiLCJleHAiOjE3OTAwMDAwNTAsImlhdCI6MTc4OTk5OTk5MCwiaXNzIjoib2NlbDpydDphcHAiLCJqdGkiOiIwMUpaOFE0VjZUM1cyWDlZNVI3TjBNMUsyUCIsIm9jZWwiOnsiY2giOiIvYXBwL29yZGVycy9vLTEwIiwibnMiOiJhcHAiLCJvcCI6InN1YnNjcmliZSJ9LCJzdWIiOiJ1c2VyLTEifQ.mkk0ChFy15M3gRPaPlvketqG1fV4bHalWMQE9Xwn6XLOO1ogaDEhEL0utoWtKxWLbXR1DQdHP7KNrDgJjOaYBQ",
+        "valid": false,
+        "reason": "channel"
+      },
+      {
+        "name": "wrong key",
+        "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJyZWFsdGltZS5zaG9wLmV4YW1wbGUiLCJleHAiOjE3OTAwMDAwNTAsImlhdCI6MTc4OTk5OTk5MCwiaXNzIjoib2NlbDpydDphcHAiLCJqdGkiOiIwMUpaOFE0VjZUM1cyWDlZNVI3TjBNMUsyUCIsIm9jZWwiOnsiY2giOiIvYXBwL29yZGVycy9vLTEiLCJucyI6ImFwcCIsIm9wIjoic3Vic2NyaWJlIn0sInN1YiI6InVzZXItMSJ9.4zSsnCBTPEz1TE0Hm6pQ4sW1EexBLJxiSD2M55dzJDEw8bLLQRrAv65CQozwZHUL_q4ZbTtNfb9RuId1IlveDA",
+        "valid": false,
+        "reason": "signature"
+      },
+      {
+        "name": "alg none",
+        "token": "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJhdWQiOiJyZWFsdGltZS5zaG9wLmV4YW1wbGUiLCJleHAiOjE3OTAwMDAwNTAsImlhdCI6MTc4OTk5OTk5MCwiaXNzIjoib2NlbDpydDphcHAiLCJqdGkiOiIwMUpaOFE0VjZUM1cyWDlZNVI3TjBNMUsyUCIsIm9jZWwiOnsiY2giOiIvYXBwL29yZGVycy9vLTEiLCJucyI6ImFwcCIsIm9wIjoic3Vic2NyaWJlIn0sInN1YiI6InVzZXItMSJ9.",
+        "valid": false,
+        "reason": "algorithm"
+      }
+    ],
+    "encoding": "A minter serializes the header and the claims each as JSON with object keys in lexicographic order at every depth, no whitespace, and strings as raw UTF-8 escaping only what JSON requires, then joins their unpadded base64url with a dot and signs that with Ed25519. Ed25519 signatures are deterministic, so every minter produces each mint case's token exactly.",
+    "expect": {
+      "aud": "realtime.shop.example",
+      "ch": "/app/orders/o-1",
+      "ns": "app"
+    },
+    "mint": [
+      {
+        "name": "a subscribe token",
+        "header": {
+          "alg": "EdDSA",
+          "typ": "JWT"
+        },
+        "claims": {
+          "aud": "realtime.shop.example",
+          "exp": 1790000050,
+          "iat": 1789999990,
+          "iss": "ocel:rt:app",
+          "jti": "01JZ8Q4V6T3W2X9Y5R7N0M1K2P",
+          "ocel": {
+            "ch": "/app/orders/o-1",
+            "ns": "app",
+            "op": "subscribe"
+          },
+          "sub": "user-1"
+        },
+        "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJyZWFsdGltZS5zaG9wLmV4YW1wbGUiLCJleHAiOjE3OTAwMDAwNTAsImlhdCI6MTc4OTk5OTk5MCwiaXNzIjoib2NlbDpydDphcHAiLCJqdGkiOiIwMUpaOFE0VjZUM1cyWDlZNVI3TjBNMUsyUCIsIm9jZWwiOnsiY2giOiIvYXBwL29yZGVycy9vLTEiLCJucyI6ImFwcCIsIm9wIjoic3Vic2NyaWJlIn0sInN1YiI6InVzZXItMSJ9.PWsMvC9Xrd3GyyZk63PhdPytTh9GVJPRAyQ5cdAR6vg996cX0KexfVKUKDvHyXNBY2yg0UnVXEAjvNTI-vggAw"
+      },
+      {
+        "name": "keys out of order, a wildcard channel and a subject of non-ASCII and HTML characters",
+        "header": {
+          "typ": "JWT",
+          "alg": "EdDSA"
+        },
+        "claims": {
+          "sub": "usér <ü> & 2",
+          "ocel": {
+            "op": "subscribe",
+            "ns": "app",
+            "ch": "/app/projects/0zobptc/deploys/*"
+          },
+          "jti": "01JZ8Q4V6T3W2X9Y5R7N0M1K2Q",
+          "iss": "ocel:rt:app",
+          "iat": 1789999990,
+          "exp": 1790000050,
+          "aud": "realtime.shop.example"
+        },
+        "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJyZWFsdGltZS5zaG9wLmV4YW1wbGUiLCJleHAiOjE3OTAwMDAwNTAsImlhdCI6MTc4OTk5OTk5MCwiaXNzIjoib2NlbDpydDphcHAiLCJqdGkiOiIwMUpaOFE0VjZUM1cyWDlZNVI3TjBNMUsyUSIsIm9jZWwiOnsiY2giOiIvYXBwL3Byb2plY3RzLzB6b2JwdGMvZGVwbG95cy8qIiwibnMiOiJhcHAiLCJvcCI6InN1YnNjcmliZSJ9LCJzdWIiOiJ1c8OpciA8w7w-ICYgMiJ9.DXchq1nSTwjqigjbybdzyxiKWyhKludeJkEXhrKhxnhX2fNDGOyrHYAuhGf1yX5pKoYPJw3ZXc_ZnkTyIGEDDg"
+      }
+    ],
+    "now": 1790000000,
+    "signingKey": "Dz7/MDQ0hY/ciyup8vE6eE631B0GCzE0T6sKmokL8XQ=",
+    "verifyKey": "R7qnLMQ18iF3/y2chKstzN5a5yaRGK0qQF/aQ/bnuOM="
+  },
+  "wire": [
+    {
+      "name": "a legal value passes through",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "o-1"
+      },
+      "channel": "/app/orders/o-1"
+    },
+    {
+      "name": "letters keep their case",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "Order42"
+      },
+      "channel": "/app/orders/Order42"
+    },
+    {
+      "name": "a single character passes through",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "7"
+      },
+      "channel": "/app/orders/7"
+    },
+    {
+      "name": "a legal value of 30 bytes passes through",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "abcdefghijklmnopqrstuvwxyz0123"
+      },
+      "channel": "/app/orders/abcdefghijklmnopqrstuvwxyz0123"
+    },
+    {
+      "name": "an underscore is encoded",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "o_1"
+      },
+      "channel": "/app/orders/0zn5ptc"
+    },
+    {
+      "name": "a leading hyphen is encoded",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "-o1"
+      },
+      "channel": "/app/orders/0zfvxtc"
+    },
+    {
+      "name": "a trailing hyphen is encoded",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "o1-"
+      },
+      "channel": "/app/orders/0zn4ys2"
+    },
+    {
+      "name": "a slash is encoded",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "a/b"
+      },
+      "channel": "/app/orders/0zmexwe"
+    },
+    {
+      "name": "a star is encoded",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "*"
+      },
+      "channel": "/app/orders/0zfi"
+    },
+    {
+      "name": "a value starting 0z is encoded",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "0zebra"
+      },
+      "channel": "/app/orders/0zgb5gkytsme"
+    },
+    {
+      "name": "a value starting 0Z passes through",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "0Zebra"
+      },
+      "channel": "/app/orders/0Zebra"
+    },
+    {
+      "name": "non-ASCII is encoded from its UTF-8 bytes",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "café"
+      },
+      "channel": "/app/orders/0zmnqwnq5j"
+    },
+    {
+      "name": "30 bytes that must be encoded fill a 50-character segment",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "______________________________"
+      },
+      "channel": "/app/orders/0zl5pv6x27l5pv6x27l5pv6x27l5pv6x27l5pv6x27l5pv6x27"
+    },
+    {
+      "name": "30 bytes of two-byte characters are encoded",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "ééééééééééééééé"
+      },
+      "channel": "/app/orders/0zyou4hkodvhb2tq5jyou4hkodvhb2tq5jyou4hkodvhb2tq5j"
+    },
+    {
+      "name": "31 bytes are refused",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "abcdefghijklmnopqrstuvwxyz01234"
+      },
+      "error": "value-too-long"
+    },
+    {
+      "name": "the limit counts bytes, not characters",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "éééééééééééééééé"
+      },
+      "error": "value-too-long"
+    },
+    {
+      "name": "an empty value is refused",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": ""
+      },
+      "error": "empty-value"
+    },
+    {
+      "name": "a pattern of literals is its own channel",
+      "namespace": "app",
+      "pattern": "status",
+      "wildcard": false,
+      "params": {},
+      "channel": "/app/status"
+    },
+    {
+      "name": "each segment is encoded on its own",
+      "namespace": "app",
+      "pattern": "projects/:projectId/deploys/:deployId",
+      "wildcard": false,
+      "params": {
+        "deployId": "d_2",
+        "projectId": "p1"
+      },
+      "channel": "/app/projects/p1/deploys/0zmrpte"
+    },
+    {
+      "name": "a missing param is refused without wildcard",
+      "namespace": "app",
+      "pattern": "projects/:projectId/deploys/:deployId",
+      "wildcard": false,
+      "params": {
+        "projectId": "p1"
+      },
+      "error": "missing-param"
+    },
+    {
+      "name": "a param the pattern does not name is refused",
+      "namespace": "app",
+      "pattern": "orders/:orderId",
+      "wildcard": false,
+      "params": {
+        "orderId": "o-1",
+        "userId": "u1"
+      },
+      "error": "unknown-param"
+    },
+    {
+      "name": "a wildcard with every param is the exact channel",
+      "namespace": "app",
+      "pattern": "projects/:projectId/deploys/:deployId",
+      "wildcard": true,
+      "params": {
+        "deployId": "d2",
+        "projectId": "p1"
+      },
+      "channel": "/app/projects/p1/deploys/d2"
+    },
+    {
+      "name": "a wildcard leaving off the last param is its prefix",
+      "namespace": "app",
+      "pattern": "projects/:projectId/deploys/:deployId",
+      "wildcard": true,
+      "params": {
+        "projectId": "p1"
+      },
+      "channel": "/app/projects/p1/deploys/*"
+    },
+    {
+      "name": "a wildcard leaving off every param stops at the first",
+      "namespace": "app",
+      "pattern": "projects/:projectId/deploys/:deployId",
+      "wildcard": true,
+      "params": {},
+      "channel": "/app/projects/*"
+    },
+    {
+      "name": "a wildcard prefix keeps an encoded param",
+      "namespace": "app",
+      "pattern": "projects/:projectId/deploys/:deployId",
+      "wildcard": true,
+      "params": {
+        "projectId": "p_1"
+      },
+      "channel": "/app/projects/0zobptc/deploys/*"
+    },
+    {
+      "name": "a wildcard leaves off only trailing params",
+      "namespace": "app",
+      "pattern": "projects/:projectId/deploys/:deployId",
+      "wildcard": true,
+      "params": {
+        "deployId": "d2"
+      },
+      "error": "missing-param"
+    },
+    {
+      "name": "a wildcard leaves off only trailing params, even an empty one",
+      "namespace": "app",
+      "pattern": "projects/:projectId/deploys/:deployId",
+      "wildcard": true,
+      "params": {
+        "deployId": ""
+      },
+      "error": "missing-param"
+    },
+    {
+      "name": "a wildcard on a leading param covers the namespace",
+      "namespace": "app",
+      "pattern": ":roomId",
+      "wildcard": true,
+      "params": {},
+      "channel": "/app/*"
+    }
+  ]
+}
