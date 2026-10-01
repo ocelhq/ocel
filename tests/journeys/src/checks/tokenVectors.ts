@@ -29,7 +29,13 @@ export type TokenVectors = {
 
 export type Signer = "binding" | "another-key" | "nobody";
 
-export type Forgery = DecodedToken & { name: string; reason: string; signedBy: Signer };
+export type Forgery = {
+  name: string;
+  reason: string;
+  header: Record<string, unknown>;
+  claimsAt: (sentAt: number) => TokenClaims;
+  signedBy: Signer;
+};
 
 export function readTokenVectors(): TokenVectors {
   return JSON.parse(readFileSync(VECTORS_FILE, "utf8")) as TokenVectors;
@@ -60,11 +66,17 @@ function applyEditAtEnd(live: string, valid: string, changed: string): string {
   return live.slice(0, live.length - (valid.length - kept)) + changed.slice(kept);
 }
 
-function forgeClaims(live: TokenClaims, valid: TokenClaims, changed: TokenClaims, now: number) {
+function forgeClaims(
+  live: TokenClaims,
+  valid: TokenClaims,
+  changed: TokenClaims,
+  now: number,
+  sentAt: number,
+) {
   const claims: TokenClaims = { ...live, ocel: { ...live.ocel } };
   for (const [name, value] of Object.entries(changed)) {
     if (name === "ocel" || JSON.stringify(value) === JSON.stringify(valid[name])) continue;
-    claims[name] = TIME_CLAIMS.has(name) ? live.iat + (value as number) - now : value;
+    claims[name] = TIME_CLAIMS.has(name) ? sentAt + (value as number) - now : value;
   }
   const { ocel } = changed;
   if (ocel.op !== valid.ocel.op) claims.ocel.op = ocel.op;
@@ -100,7 +112,8 @@ export function forgeRefusedCases(vectors: TokenVectors, live: DecodedToken): Fo
         name: one.name,
         reason: one.reason ?? "",
         header,
-        claims: forgeClaims(live.claims, measured.claims, changed.claims, now),
+        claimsAt: (sentAt: number) =>
+          forgeClaims(live.claims, measured.claims, changed.claims, now, sentAt),
         signedBy: readSigner(one, changed.header, verifyKey),
       };
     });

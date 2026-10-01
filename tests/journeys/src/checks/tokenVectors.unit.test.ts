@@ -29,26 +29,35 @@ describe("the bad-token vectors replayed against a live token", () => {
     );
   });
 
-  it("keeps a case's distance from now against the live token's issue time", () => {
-    expect(forged("expired").claims.exp).toBe(1_800_000_000 - 10);
-    expect(forged("expiring at now").claims.exp).toBe(1_800_000_000);
+  it("puts a changed time claim at the case's distance from the second the token is sent", () => {
+    const sentAt = 1_800_000_100;
+    expect(forged("expired").claimsAt(sentAt)).toMatchObject({
+      iat: 1_800_000_030,
+      exp: 1_800_000_090,
+    });
+    expect(forged("expiring at now").claimsAt(sentAt)).toMatchObject({
+      iat: 1_800_000_040,
+      exp: sentAt,
+    });
   });
 
   it("makes a channel case's edit at the end of the live channel", () => {
-    expect(forged("channel off by one character").claims.ocel).toEqual({
+    expect(forged("channel off by one character").claimsAt(connect.claims.iat).ocel).toEqual({
       op: "connect",
       ch: "/ap2",
       ns: "app",
     });
-    expect(forged("channel one character longer").claims.ocel.ch).toBe("/app0");
+    expect(forged("channel one character longer").claimsAt(connect.claims.iat).ocel.ch).toBe(
+      "/app0",
+    );
   });
 
   it("changes only what the case changed, keeping every other live claim", () => {
-    expect(forged("wrong aud").claims).toEqual({
+    expect(forged("wrong aud").claimsAt(1_800_000_100)).toEqual({
       ...connect.claims,
       aud: "realtime.other.example",
     });
-    expect(forged("wrong ns").claims).toEqual({
+    expect(forged("wrong ns").claimsAt(1_800_000_100)).toEqual({
       ...connect.claims,
       ocel: { ...connect.claims.ocel, ns: "chat" },
     });

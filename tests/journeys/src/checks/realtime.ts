@@ -16,6 +16,7 @@ import {
   type Forgery,
   forgeRefusedCases,
   readTokenVectors,
+  type Signer,
 } from "./tokenVectors";
 
 const HANDLER_PATH = "/api/realtime";
@@ -265,22 +266,35 @@ export const realtimeWildcardCheck: Check = {
   },
 };
 
-async function signForgery(ctx: CheckContext, forgery: Forgery): Promise<string> {
+type ServerClock = () => number;
+
+function newServerClock(live: DecodedToken): ServerClock {
+  const receivedAt = performance.now();
+  return () => live.claims.iat + Math.floor((performance.now() - receivedAt) / 1000);
+}
+
+type TokenToSign = DecodedToken & { signedBy: Signer };
+
+async function signToken(ctx: CheckContext, name: string, token: TokenToSign): Promise<string> {
   const sent = await json(ctx, "/api/tokens", {
     method: "POST",
     headers: { "content-type": "application/json", [JOURNEY_NONCE_HEADER]: ctx.journeyNonce },
-    body: JSON.stringify({
-      header: forgery.header,
-      claims: forgery.claims,
-      signedBy: forgery.signedBy,
-    }),
+    body: JSON.stringify(token),
   });
   assert.equal(
     sent.res.status,
     200,
-    `signing ${forgery.name} answered ${describeResponse(sent.res, sent.text)}`,
+    `signing ${name} answered ${describeResponse(sent.res, sent.text)}`,
   );
   return (sent.body as { token: string }).token;
+}
+
+function signForgery(ctx: CheckContext, forgery: Forgery, serverSecond: ServerClock) {
+  return signToken(ctx, forgery.name, {
+    header: forgery.header,
+    claims: forgery.claimsAt(serverSecond()),
+    signedBy: forgery.signedBy,
+  });
 }
 
 async function readRefusal(attempt: Promise<unknown>): Promise<string | undefined> {
@@ -309,12 +323,7 @@ async function requestVectorGrants(ctx: CheckContext): Promise<Answer> {
 }
 
 function signUnchanged(ctx: CheckContext, live: DecodedToken): Promise<string> {
-  return signForgery(ctx, {
-    ...live,
-    name: "the live token re-signed",
-    reason: "",
-    signedBy: "binding",
-  });
+  return signToken(ctx, "the live token re-signed", { ...live, signedBy: "binding" });
 }
 
 function describeAccepted(forgery: Forgery, refusal: string | undefined): string[] {
@@ -329,6 +338,7 @@ export const realtimeConnectTokenVectorsCheck: Check = {
   run: async (ctx) => {
     const answer = await requestVectorGrants(ctx);
     const live = decodeToken(readConnectToken(answer));
+    const serverSecond = newServerClock(live);
     const open = (token: string) =>
       readRefusal(
         EventSocket.open(answer.url, answer.host, token).then((socket) => socket.close()),
@@ -340,7 +350,9 @@ export const realtimeConnectTokenVectorsCheck: Check = {
     );
     const wrong: string[] = [];
     for (const forgery of forgeRefusedCases(readTokenVectors(), live)) {
-      wrong.push(...describeAccepted(forgery, await open(await signForgery(ctx, forgery))));
+      wrong.push(
+        ...describeAccepted(forgery, await open(await signForgery(ctx, forgery, serverSecond))),
+      );
     }
     assert.deepEqual(wrong, [], "the transport did not refuse a bad connect token as unauthorized");
   },
@@ -354,10 +366,11 @@ export const realtimeSubscribeTokenVectorsCheck: Check = {
     const answer = await requestVectorGrants(ctx);
     const grant = readGrant(answer, 0);
     const live = decodeToken(grant.token);
+    const serverSecond = newServerClock(live);
     await runWithSocket(answer, async (socket) => {
       const wrong: string[] = [];
       for (const [n, forgery] of forgeRefusedCases(readTokenVectors(), live).entries()) {
-        const token = await signForgery(ctx, forgery);
+        const token = await signForgery(ctx, forgery, serverSecond);
         wrong.push(
           ...describeAccepted(
             forgery,
