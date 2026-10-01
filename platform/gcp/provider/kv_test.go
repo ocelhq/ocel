@@ -119,15 +119,14 @@ func TestAStoreRunsOnTheSmallestNodeWhoseKeyspaceHoldsItsMemory(t *testing.T) {
 	t.Parallel()
 
 	for memory, want := range map[int64]string{
-		32 << 20:       "CUSTOM_PICO",
-		256 << 20:      "CUSTOM_PICO",
-		1 << 30:        "CUSTOM_PICO",
-		2 << 30:        "CUSTOM_MINI",
-		3 << 30:        "STANDARD_SMALL",
-		8 << 30:        "HIGHMEM_MEDIUM",
-		16 << 30:       "STANDARD_LARGE",
-		32 << 30:       "HIGHMEM_XLARGE",
-		46_400_000_000: "HIGHMEM_XLARGE",
+		32 << 20:  "CUSTOM_PICO",
+		256 << 20: "CUSTOM_PICO",
+		1 << 30:   "CUSTOM_PICO",
+		2 << 30:   "CUSTOM_MINI",
+		3 << 30:   "STANDARD_SMALL",
+		8 << 30:   "HIGHMEM_MEDIUM",
+		16 << 30:  "STANDARD_LARGE",
+		32 << 30:  "HIGHMEM_XLARGE",
 	} {
 		store, err := readKVStore(provider.Resource{Name: "cache", KV: &provider.KVSpec{MemoryBytes: memory}})
 		if err != nil {
@@ -162,12 +161,12 @@ func TestTheStoreShapeMatchesTheInstanceProvisionSends(t *testing.T) {
 	}
 }
 
-func TestAStoreLargerThanEveryNodeIsRefusedNamingTheLargest(t *testing.T) {
+func TestAStoreLargerThan32GBIsRefusedThoughALargerNodeExists(t *testing.T) {
 	t.Parallel()
 
-	_, err := readKVStore(provider.Resource{Name: "cache", KV: &provider.KVSpec{MemoryBytes: 46_400_000_001}})
-	if err == nil || !strings.Contains(err.Error(), "highmem-xlarge") || !strings.Contains(err.Error(), "cache") {
-		t.Errorf("readKVStore() = %v, want the store refused naming the largest node", err)
+	_, err := readKVStore(provider.Resource{Name: "cache", KV: &provider.KVSpec{MemoryBytes: 32<<30 + 1}})
+	if err == nil || !strings.Contains(err.Error(), "32gb") || !strings.Contains(err.Error(), "cache") {
+		t.Errorf("readKVStore() = %v, want a store above 32gb refused naming the limit", err)
 	}
 }
 
