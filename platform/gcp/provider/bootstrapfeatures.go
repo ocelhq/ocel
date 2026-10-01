@@ -17,6 +17,7 @@ import (
 const (
 	albFeature         = "alb-edge"
 	albShieldedFeature = "alb-cloudflare-origin"
+	kvFeature          = "kv-network"
 )
 
 var (
@@ -35,6 +36,10 @@ func (bootstrap) Catalogue() []provider.Feature {
 		Summary: "a global external Application Load Balancer that Cloudflare forwards to and that refuses any client without the certificate the zone presents — " +
 			"a recurring cost, about $18 a month plus egress",
 		Edges: []edge.Kind{cloudflare.Kind},
+	}, {
+		Name: kvFeature,
+		Summary: "a network of the tier's own with one subnetwork, " + kvSubnetRange + ", and the service connection policy Memorystore reaches it through: " +
+			"what kv stores and the apps bound to them are connected over, with no recurring cost of its own",
 	}}
 }
 
@@ -82,6 +87,26 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 	return nil
 }
 
+func (b bootstrap) raiseFeatures(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
+	if err := b.raiseFronts(ctx, req, progress); err != nil {
+		return err
+	}
+	if !slices.Contains(req.Features, kvFeature) {
+		return nil
+	}
+	ensureProgress(progress).Say("Installing feature " + kvFeature + " for " + string(req.Tier) + ": " + b.summaryOf(kvFeature))
+	return b.raiseNetwork(ctx, req.Tier, progress)
+}
+
+func (b bootstrap) summaryOf(name string) string {
+	for _, feature := range b.Catalogue() {
+		if feature.Name == name {
+			return feature.Summary
+		}
+	}
+	return ""
+}
+
 func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	return b.eachFront(req.Features, func(feature provider.Feature, front edge.Edge) error {
 		ensureProgress(progress).Say("Installing feature " + feature.Name + " for " + string(req.Tier) + ": " + feature.Summary)
@@ -115,6 +140,34 @@ func (b bootstrap) dropFronts(
 			": this bootstrap no longer requests feature " + feature.Name)
 		return front.Teardown(ctx, req.Tier)
 	})
+}
+
+func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.BootstrapRequest, progress progress.Log) error {
+	if err := b.dropFronts(ctx, read, req, progress); err != nil {
+		return err
+	}
+	if !slices.Contains(droppedFeatures(read.Stamp.Features, req), kvFeature) {
+		return nil
+	}
+	ensureProgress(progress).Say("Taking down the " + string(req.Tier) + " kv network: this bootstrap no longer requests feature " + kvFeature)
+	return b.tearNetwork(ctx, req.Tier)
+}
+
+func (b bootstrap) tearFeatures(ctx context.Context, tier environment.Tier, features []string) error {
+	if err := b.tearFronts(ctx, tier, features); err != nil {
+		return err
+	}
+	if !slices.Contains(features, kvFeature) {
+		return nil
+	}
+	return b.tearNetwork(ctx, tier)
+}
+
+func (b bootstrap) featureInstalled(ctx context.Context, tier environment.Tier, feature string) (bool, error) {
+	if feature == kvFeature {
+		return b.networkInstalled(ctx, tier)
+	}
+	return b.frontInstalled(ctx, tier, feature)
 }
 
 func (b bootstrap) tearFronts(ctx context.Context, tier environment.Tier, features []string) error {
@@ -158,11 +211,24 @@ func (b bootstrap) frontsFree(ctx context.Context, tier environment.Tier, featur
 }
 
 func apisFor(features []string) []string {
+	apis := slices.Clone(BootstrapAPIs)
 	switch {
 	case slices.Contains(features, albShieldedFeature):
-		return slices.Concat(BootstrapAPIs, albShieldedAPIs)
+		apis = joined(apis, albShieldedAPIs)
 	case slices.Contains(features, albFeature):
-		return slices.Concat(BootstrapAPIs, albAPIs)
+		apis = joined(apis, albAPIs)
 	}
-	return slices.Clone(BootstrapAPIs)
+	if slices.Contains(features, kvFeature) {
+		apis = joined(apis, kvAPIs)
+	}
+	return apis
+}
+
+func joined(listed, more []string) []string {
+	for _, name := range more {
+		if !slices.Contains(listed, name) {
+			listed = append(listed, name)
+		}
+	}
+	return listed
 }

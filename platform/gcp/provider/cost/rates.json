@@ -741,6 +741,110 @@
         "service": "152E-C115-5142",
         "description": "Cloud Run Network Internet Egress Europe to Europe"
       }
+    },
+    {
+      "id": "gcp/memorystore/custom-pico",
+      "region": "us-central1",
+      "unit": "node-hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0308"
+        }
+      ],
+      "source": "https://cloud.google.com/memorystore/valkey/pricing",
+      "verified": "2026-10-01"
+    },
+    {
+      "id": "gcp/memorystore/custom-micro",
+      "region": "us-central1",
+      "unit": "node-hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0616"
+        }
+      ],
+      "source": "https://cloud.google.com/memorystore/valkey/pricing",
+      "verified": "2026-10-01"
+    },
+    {
+      "id": "gcp/memorystore/custom-mini",
+      "region": "us-central1",
+      "unit": "node-hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0924"
+        }
+      ],
+      "source": "https://cloud.google.com/memorystore/valkey/pricing",
+      "verified": "2026-10-01"
+    },
+    {
+      "id": "gcp/memorystore/standard-small",
+      "region": "us-central1",
+      "unit": "node-hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.1425"
+        }
+      ],
+      "source": "https://cloud.google.com/memorystore/valkey/pricing",
+      "verified": "2026-10-01"
+    },
+    {
+      "id": "gcp/memorystore/highmem-medium",
+      "region": "us-central1",
+      "unit": "node-hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.1923"
+        }
+      ],
+      "source": "https://cloud.google.com/memorystore/valkey/pricing",
+      "verified": "2026-10-01"
+    },
+    {
+      "id": "gcp/memorystore/standard-large",
+      "region": "us-central1",
+      "unit": "node-hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.5698"
+        }
+      ],
+      "source": "https://cloud.google.com/memorystore/valkey/pricing",
+      "verified": "2026-10-01"
+    },
+    {
+      "id": "gcp/memorystore/highmem-xlarge",
+      "region": "us-central1",
+      "unit": "node-hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.8581"
+        }
+      ],
+      "source": "https://cloud.google.com/memorystore/valkey/pricing",
+      "verified": "2026-10-01"
+    },
+    {
+      "id": "gcp/memorystore/aof",
+      "region": "us-central1",
+      "unit": "GB-hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.00054795"
+        }
+      ],
+      "source": "https://cloud.google.com/memorystore/valkey/pricing",
+      "verified": "2026-10-01"
     }
   ]
 }

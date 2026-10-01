@@ -134,9 +134,12 @@ func TestTopicsTasksAndWorkersAreRefusedAtPreflightAsUnsupported(t *testing.T) {
 	conformance.RunWorkers(t, p.Facts())
 }
 
-func TestKVStoresAreRefusedAtPreflightAsUnsupported(t *testing.T) {
+func TestKVStoresPassTheConformanceSuite(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	if served := p.Facts().Bindings; !slices.Contains(served, provider.BindingKV) {
+		t.Errorf("Facts().Bindings = %v, and a project declaring a kv store is refused at deploy on gcp", served)
+	}
 	conformance.RunKVStores(t, p.Facts())
 }
 

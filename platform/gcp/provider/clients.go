@@ -18,6 +18,7 @@ import (
 	"google.golang.org/api/compute/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/api/iam/v1"
+	"google.golang.org/api/networkconnectivity/v1"
 	run "google.golang.org/api/run/v2"
 	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/api/serviceusage/v1"
@@ -53,6 +54,7 @@ type clients struct {
 	schedules memo[*cloudscheduler.Service]
 	compute   memo[*compute.Service]
 	certs     memo[*certmanager.Service]
+	links     memo[*networkconnectivity.Service]
 	principal memo[string]
 	projects  memo[*cloudresourcemanager.Service]
 }
@@ -129,6 +131,12 @@ func (c *clients) Compute() (*compute.Service, error) {
 func (c *clients) Certificates() (*certmanager.Service, error) {
 	return opened(c, &c.certs, "Certificate Manager", func() (*certmanager.Service, error) {
 		return certmanager.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) Connectivity() (*networkconnectivity.Service, error) {
+	return opened(c, &c.links, "Network Connectivity", func() (*networkconnectivity.Service, error) {
+		return networkconnectivity.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 

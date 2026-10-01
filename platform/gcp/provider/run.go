@@ -53,7 +53,15 @@ type serving struct {
 	timeout     time.Duration
 	ingress     string
 	mounts      []secretMount
+	egress      *privateEgress
 }
+
+type privateEgress struct {
+	network    string
+	subnetwork string
+}
+
+const privateRangesOnly = "PRIVATE_RANGES_ONLY"
 
 type secretMount struct {
 	name   string
@@ -135,6 +143,12 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 		Volumes:                       volumes,
 		MaxInstanceRequestConcurrency: int64(s.concurrency),
 		ExecutionEnvironment:          s.generation,
+	}
+	if s.egress != nil {
+		template.VpcAccess = &run.GoogleCloudRunV2VpcAccess{
+			Egress:            privateRangesOnly,
+			NetworkInterfaces: []*run.GoogleCloudRunV2NetworkInterface{{Network: s.egress.network, Subnetwork: s.egress.subnetwork}},
+		}
 	}
 	if s.timeout > 0 {
 		if s.timeout > maxRequestTimeout {
