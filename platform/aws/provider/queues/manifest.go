@@ -8,7 +8,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
-const FilePath = statedir.Name + "/queues.json"
+const (
+	FilePath = statedir.Name + "/queues.json"
+
+	WorkerConcurrencyEnv = "OCEL_WORKER_CONCURRENCY"
+)
 
 type Manifest struct {
 	Table     string            `json:"table"`

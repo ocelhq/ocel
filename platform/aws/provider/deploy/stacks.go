@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
+	scheduler "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/scheduler"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
 type Scope struct {
@@ -125,7 +127,7 @@ func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) 
 }
 
 func Serves() []provider.BindingType {
-	return []provider.BindingType{provider.BindingPostgres, provider.BindingBucket, provider.BindingKV}
+	return []provider.BindingType{provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTask, provider.BindingTopic}
 }
 
 const skipTeardownRefreshEnv = "OCEL_SKIP_TEARDOWN_REFRESH"
@@ -176,6 +178,8 @@ func (r *release) Run(pctx *sdk.Context, spec provider.StackSpec) error {
 		return work.run(pctx)
 	case *containerInfraWork:
 		return work.run(pctx)
+	case *workersWork:
+		return work.run(pctx)
 	case *infraWork:
 		if err := work.transformed.install(pctx); err != nil {
 			return err
@@ -222,12 +226,33 @@ func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraW
 			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, work.completer)
 		case provider.BindingKV:
 			err = r.declareKV(pctx, project, env, resource, work, vpc.Id, vpc.CidrBlock, subnets.Ids)
+		case provider.BindingTask, provider.BindingTopic:
+			continue
 		default:
 			return refusal.Refuse(refusal.CodeInvalid,
-				"this provider provisions no %s; it provisions %s, %s and %s", resource.Type, provider.BindingPostgres, provider.BindingBucket, provider.BindingKV)
+				"this provider provisions no %s; it provisions %s, %s, %s, %s and %s", resource.Type,
+				provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTask, provider.BindingTopic)
 		}
 		if err != nil {
 			return fmt.Errorf("declare %s: %w", resource.Name, err)
+		}
+	}
+	return r.declareTopics(pctx, project, env, spec.Resources)
+}
+
+func (r *release) declareTopics(pctx *sdk.Context, project, env string, resources []provider.Resource) error {
+	topics := topicsOf(project, env, resources)
+	if scheduleGroupNeeded(topics) {
+		if _, err := scheduler.NewScheduleGroup(pctx, naming.ResourceID(naming.KindWorker, "cron"), &scheduler.ScheduleGroupArgs{
+			Name: sdk.String(queues.ScheduleGroupName(project, env)),
+		}); err != nil {
+			return err
+		}
+	}
+	visibility := func(worker string) int { return queueVisibilitySeconds(topics, worker) }
+	for _, topic := range topics {
+		if err := registerTopic(pctx, topic, visibility, resourceTags(naming.KindTopic, "", map[string]string{tagResource: topic.resource.Declared})); err != nil {
+			return fmt.Errorf("declare %s: %w", topic.resource.Declared, err)
 		}
 	}
 	return nil
@@ -271,6 +296,10 @@ func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs a
 		work.outputs = outputs
 		return provider.StackResult{}, nil
 	}
+	if work, ok := spec.VendorState.(*workersWork); ok {
+		work.outputs = outputs
+		return provider.StackResult{}, nil
+	}
 	if work, ok := spec.VendorState.(*containerWork); ok {
 		return r.decodeContainer(work, outputs)
 	}
@@ -281,6 +310,16 @@ func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs a
 	result := provider.StackResult{}
 	for _, resource := range spec.Resources {
 		if resource.Binding != "" {
+			continue
+		}
+		if resource.Type == provider.BindingTask || resource.Type == provider.BindingTopic {
+			binding, err := collectTopicBinding(r.cfg, naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env, resource)
+			if err != nil {
+				return provider.StackResult{}, err
+			}
+			collected := bindingOf(resource.Type, binding)
+			collected.Resource = resource.Declared
+			result.Bindings = append(result.Bindings, collected)
 			continue
 		}
 		raw, produced := outputs[resource.Name]
@@ -376,6 +415,13 @@ func (r *Stacks) PackApp(ctx context.Context, req provider.PackAppRequest, _ pro
 	if err != nil {
 		return provider.PackAppResult{}, err
 	}
+	manifest, err := queueManifest(opened.cfg, naming.Sanitize(req.Ref.Project), req.Ref.Name.Env, req.Topics, nil)
+	if err != nil {
+		return provider.PackAppResult{}, err
+	}
+	if bundle.Queues, err = queues.Render(manifest); err != nil {
+		return provider.PackAppResult{}, err
+	}
 	return provider.PackAppResult{Overlay: bundle.overlay(), VendorState: bundle}, nil
 }
 
@@ -433,6 +479,9 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 		return provider.StackResult{}, err
 	}
 	if err := writeOriginRecord(ctx, r.cfg, spec.Ref.Name.App, work, result); err != nil {
+		return provider.StackResult{}, err
+	}
+	if err := r.provisionWorkers(ctx, prepared, work, progress); err != nil {
 		return provider.StackResult{}, err
 	}
 	return result, nil
@@ -509,6 +558,9 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	opened, err := r.at(ctx, ref, "")
 	if err != nil {
+		return err
+	}
+	if err := r.destroyWorkers(ctx, opened, ref, progress); err != nil {
 		return err
 	}
 	if err := opened.automation.Destroy(ctx, ref, progress); err != nil {

@@ -522,6 +522,67 @@
       }
     },
     {
+      "id": "aws/sns/requests",
+      "region": "us-east-1",
+      "unit": "Requests",
+      "allowance": "account",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "1000000",
+          "price": "0.0000005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSNS/20260915151944/us-east-1/index.json#QDX8G2WMY9NPXXPG",
+      "verified": "2026-10-02",
+      "query": {
+        "service": "AmazonSNS",
+        "usagetype": "Requests-Tier1"
+      }
+    },
+    {
+      "id": "aws/sns/requests-fifo",
+      "region": "us-east-1",
+      "unit": "Requests",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000003"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSNS/20260915151944/us-east-1/index.json#GXS664ADCBPVT6BA",
+      "verified": "2026-10-02",
+      "query": {
+        "service": "AmazonSNS",
+        "usagetype": "F-Request-Tier1"
+      }
+    },
+    {
+      "id": "aws/scheduler/invocations",
+      "region": "us-east-1",
+      "unit": "Invocations",
+      "allowance": "account",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "14000000",
+          "price": "0.000001"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSEvents/20260924163903/us-east-1/index.json#UYXR5PNB8BYSVPGV",
+      "verified": "2026-10-02",
+      "query": {
+        "service": "AWSEvents",
+        "usagetype": "USE1-ScheduledInvocation"
+      }
+    },
+    {
       "id": "aws/apigateway/rest-requests",
       "region": "us-east-1",
       "unit": "Requests",

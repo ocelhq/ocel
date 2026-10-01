@@ -355,16 +355,22 @@ func TestTheBootstrapCredentialReachesTheEnvSourceSyncScheduleThroughItsGroupAnd
 		if !strings.HasPrefix(g.action, "scheduler:") {
 			continue
 		}
+		if g.resource == appScheduleGroupARN || g.resource == appScheduleARN {
+			continue
+		}
 		if !strings.HasPrefix(g.resource, "arn:aws:scheduler:*:*:schedule-group/"+core) && !strings.HasPrefix(g.resource, "arn:aws:scheduler:*:*:schedule/"+core) {
-			t.Errorf("the bootstrap credential grants %s on %s, beyond the schedule groups a bootstrap names", g.action, g.resource)
+			t.Errorf("the bootstrap credential grants %s on %s, beyond the schedule groups a bootstrap or an app names", g.action, g.resource)
 		}
 	}
 	passed := false
 	for g := range bootstrapGrants {
 		if g.action == "iam:PassRole" && strings.Contains(g.condition, `"iam:PassedToService":"scheduler.amazonaws.com"`) {
+			if g.resource == appRoleARN && strings.Contains(g.condition, `"aws:ResourceTag/ocel:managed-by":"ocel"`) {
+				continue
+			}
 			passed = g.resource == defaultNamespace.ScopedARNs().bootstrapRole
 			if !passed {
-				t.Errorf("the bootstrap credential passes %s to Scheduler, want only the roles a bootstrap stack makes", g.resource)
+				t.Errorf("the bootstrap credential passes %s to Scheduler, want only the roles a bootstrap stack makes or an app role Ocel tagged", g.resource)
 			}
 		}
 	}
@@ -372,8 +378,8 @@ func TestTheBootstrapCredentialReachesTheEnvSourceSyncScheduleThroughItsGroupAnd
 		t.Error("the bootstrap credential passes no role to Scheduler, so the schedule cannot name the role it invokes through")
 	}
 	for g := range grantsOf(t, mustRender(t, DeployCredentialPermissions)) {
-		if strings.HasPrefix(g.action, "scheduler:") {
-			t.Errorf("the deploy credential grants %s on %s; a deploy never makes a schedule", g.action, g.resource)
+		if strings.HasPrefix(g.action, "scheduler:") && g.resource != appScheduleGroupARN && g.resource != appScheduleARN {
+			t.Errorf("the deploy credential grants %s on %s; a deploy makes schedules only in an app's own group", g.action, g.resource)
 		}
 	}
 }

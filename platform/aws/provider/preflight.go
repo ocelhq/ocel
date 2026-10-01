@@ -23,6 +23,9 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := refuseKVOnServerlessApps(pre); err != nil {
 		return err
 	}
+	if err := refuseTasksWhereNothingRunsThem(pre); err != nil {
+		return err
+	}
 	if err := p.nagStaleEdgeKey(ctx, pre); err != nil {
 		return err
 	}
@@ -133,6 +136,48 @@ func refuseKVOnServerlessApps(pre provider.DeployPreflight) error {
 		}
 	}
 	return nil
+}
+
+func isTopicOrTask(kind provider.BindingType) bool {
+	return kind == provider.BindingTask || kind == provider.BindingTopic
+}
+
+func refuseTasksWhereNothingRunsThem(pre provider.DeployPreflight) error {
+	if pre.Deploy.Infra.IsZero() {
+		for _, resource := range pre.Resources {
+			if isTopicOrTask(resource.Type) && resource.Binding == "" {
+				return refusal.Refuse(refusal.CodeUnsupported,
+					"this ephemeral preview declares %s %s, and an ephemeral preview on this provider provisions no infrastructure of its own, so no queue or worker would run it: deploy it to a persistent environment",
+					resource.Type, resource.Declared)
+			}
+		}
+	}
+	container := map[string]bool{}
+	for _, app := range pre.Deploy.Apps {
+		container[app.App] = app.Compute() == provider.ComputeContainer
+	}
+	for _, usage := range pre.Apps {
+		if !container[usage.App] {
+			continue
+		}
+		for _, resource := range usage.Resources {
+			if isTopicOrTask(resource.Type) {
+				return refuseContainerSender(usage.App, resource.Type, resource.Declared)
+			}
+		}
+		for _, binding := range usage.Grants {
+			if isTopicOrTask(binding.Type) {
+				return refuseContainerSender(usage.App, binding.Type, binding.Name)
+			}
+		}
+	}
+	return nil
+}
+
+func refuseContainerSender(app string, kind provider.BindingType, name string) error {
+	return refusal.Refuse(refusal.CodeUnsupported,
+		"app %s binds %s %s, and a container app on this provider has no runtime that sends or triggers through its binding proxy yet: send to it from a serverless app",
+		app, kind, name)
 }
 
 func refuseContainersScaledToZero(pre provider.DeployPreflight) error {

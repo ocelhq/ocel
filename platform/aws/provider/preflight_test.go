@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/router"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -92,6 +93,43 @@ func TestAServerlessAppUsingAKVStoreIsRefusedUntilFunctionsJoinTheVPC(t *testing
 	pre.Apps = pre.Apps[:1]
 	if err := refuseKVOnServerlessApps(pre); err != nil {
 		t.Fatalf("preflight of a container app using a kv store = %v, want it to pass", err)
+	}
+}
+
+func TestAContainerAppSendingToATaskOrTopicIsRefusedUntilItsRuntimeServesThem(t *testing.T) {
+	t.Parallel()
+
+	container := &contractv1.ManifestApp{Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}
+	resize := provider.Resource{Name: "topic--resize", Declared: "resize", Type: provider.BindingTask}
+	pre := provider.DeployPreflight{
+		Deploy: provider.DeploySpec{Infra: naming.InfraStack("production"), Apps: []provider.AppEntry{
+			{App: "web", Manifest: &contractv1.ManifestApp{}},
+			{App: "api", Manifest: container, Instances: provider.Instances{Min: 1, Max: 2}},
+		}},
+		Resources: []provider.Resource{resize},
+		Apps:      []provider.AppUsage{{App: "web", Resources: []provider.Resource{resize}}},
+	}
+	if err := refuseTasksWhereNothingRunsThem(pre); err != nil {
+		t.Fatalf("preflight of a function app triggering a task = %v, want it to pass", err)
+	}
+
+	pre.Apps = append(pre.Apps, provider.AppUsage{App: "api", Grants: []provider.Binding{{Name: "resize", Type: provider.BindingTask}}})
+	err := refuseTasksWhereNothingRunsThem(pre)
+	if err == nil || !strings.Contains(err.Error(), "api") || !strings.Contains(err.Error(), "resize") {
+		t.Fatalf("preflight of a container app triggering a task = %v, want a refusal naming the app and the task", err)
+	}
+}
+
+func TestAnEphemeralPreviewDeclaringATaskIsRefusedSinceItProvisionsNoQueues(t *testing.T) {
+	t.Parallel()
+
+	pre := provider.DeployPreflight{
+		Deploy:    provider.DeploySpec{Env: "pr-7", Apps: []provider.AppEntry{{App: "web", Manifest: &contractv1.ManifestApp{}}}},
+		Resources: []provider.Resource{{Name: "topic--resize", Declared: "resize", Type: provider.BindingTask}},
+	}
+	err := refuseTasksWhereNothingRunsThem(pre)
+	if err == nil || !strings.Contains(err.Error(), "resize") || !strings.Contains(err.Error(), "preview") {
+		t.Fatalf("preflight of an ephemeral preview declaring a task = %v, want a refusal naming the task and the preview", err)
 	}
 }
 

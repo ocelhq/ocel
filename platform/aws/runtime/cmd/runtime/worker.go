@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	process "github.com/ocelhq/ocel/pkg/runtime/child"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/runtime/tasks"
 )
 
@@ -40,6 +41,16 @@ func runWorker(ctx context.Context, worker string, served buildoutput.FunctionDe
 	}
 	if cfg.queues == nil {
 		fatalInit(fmt.Sprintf("this function runs worker %q, and its code carries no queue manifest naming what it serves", worker))
+	}
+	if declared := os.Getenv(queues.WorkerConcurrencyEnv); declared != "" {
+		concurrency, err := strconv.Atoi(declared)
+		if err != nil || concurrency < 1 {
+			fatalInit(fmt.Sprintf("%s=%q is not a concurrency of at least 1", queues.WorkerConcurrencyEnv, declared))
+		}
+		if cfg.queues.Workers == nil {
+			cfg.queues.Workers = map[string]queues.Worker{}
+		}
+		cfg.queues.Workers[worker] = queues.Worker{Concurrency: concurrency}
 	}
 	port, err := process.FreePort()
 	if err != nil {
