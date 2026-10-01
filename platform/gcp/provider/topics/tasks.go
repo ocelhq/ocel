@@ -45,16 +45,21 @@ func (t Tasks) Trigger(ctx context.Context, req *taskv1.TriggerRequest) (*taskv1
 	return &taskv1.TriggerResponse{Id: id}, nil
 }
 
-func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.ManifestTopic, payload []byte, options *taskv1.TriggerOptions) (string, error) {
+func refuseInvalidTrigger(payload []byte, options *taskv1.TriggerOptions) error {
 	if err := refuseNonJSON(payload); err != nil {
+		return err
+	}
+	if metadata := options.GetMetadata(); len(metadata) > 0 {
+		return refuseNonObject(metadata)
+	}
+	return nil
+}
+
+func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.ManifestTopic, payload []byte, options *taskv1.TriggerOptions) (string, error) {
+	if err := refuseInvalidTrigger(payload, options); err != nil {
 		return "", err
 	}
 	metadata := options.GetMetadata()
-	if len(metadata) > 0 {
-		if err := refuseNonObject(metadata); err != nil {
-			return "", err
-		}
-	}
 	now := time.Now()
 	toPublish := publication{
 		topicName:   name,
@@ -223,11 +228,16 @@ func (t Tasks) BatchTrigger(ctx context.Context, req *taskv1.BatchTriggerRequest
 	if err != nil {
 		return nil, err
 	}
+	for i, item := range req.GetItems() {
+		if err := refuseInvalidTrigger(item.GetPayload(), item.GetOptions()); err != nil {
+			return nil, connect.NewError(connect.CodeOf(err), fmt.Errorf("item %d: %w", i, err))
+		}
+	}
 	ids := make([]string, 0, len(req.GetItems()))
-	for _, item := range req.GetItems() {
+	for i, item := range req.GetItems() {
 		id, err := t.trigger(ctx, req.GetTask(), topic, item.GetPayload(), item.GetOptions())
 		if err != nil {
-			return nil, err
+			return &taskv1.BatchTriggerResponse{Ids: ids}, connect.NewError(connect.CodeOf(err), fmt.Errorf("item %d failed after runs %v were triggered: %w", i, ids, err))
 		}
 		ids = append(ids, id)
 	}

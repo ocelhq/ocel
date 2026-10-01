@@ -4,12 +4,14 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 )
@@ -117,6 +119,37 @@ func TestLiveBatchTriggerAnswersARunForEachItemInOrder(t *testing.T) {
 		if run := p.retrieve(id); string(run.GetPayload()) != `{"n":`+string(rune('1'+i))+`}` {
 			t.Errorf("run %d holds %s, want item %d's payload", i, run.GetPayload(), i)
 		}
+	}
+}
+
+func TestLiveABatchWithAnInvalidItemTriggersNone(t *testing.T) {
+	p := newPublished(t)
+
+	_, err := p.deployment.Tasks().BatchTrigger(context.Background(), &taskv1.BatchTriggerRequest{Task: "resize", Items: []*taskv1.BatchTriggerItem{
+		{Payload: []byte(`{"n":1}`)}, {Payload: []byte(`{`)},
+	}})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("BatchTrigger() with a payload that is not JSON = %v, want %s", err, connect.CodeInvalidArgument)
+	}
+	if pulled := p.pull("resize", "resize"); len(pulled) != 0 {
+		t.Errorf("a refused batch published %d messages, want none", len(pulled))
+	}
+}
+
+func TestLiveABatchThatFailsPartWayAnswersTheRunsItTriggered(t *testing.T) {
+	p := newPublished(t)
+
+	resp, err := p.deployment.Tasks().BatchTrigger(context.Background(), &taskv1.BatchTriggerRequest{Task: "resize", Items: []*taskv1.BatchTriggerItem{
+		{Payload: []byte(`{"n":1}`)}, {Payload: []byte(`{"n":2}`), Options: &taskv1.TriggerOptions{DueAt: timestamppb.New(time.Now().Add(time.Hour))}},
+	}})
+	if err == nil {
+		t.Fatal("BatchTrigger() of a delayed item with no delay queue answered no error")
+	}
+	if len(resp.GetIds()) != 1 || !strings.Contains(err.Error(), resp.GetIds()[0]) {
+		t.Fatalf("BatchTrigger() answered runs %v and %v, want the first item's run in both", resp.GetIds(), err)
+	}
+	if run := p.retrieve(resp.GetIds()[0]); string(run.GetPayload()) != `{"n":1}` {
+		t.Errorf("the triggered run holds %s, want the first item's payload", run.GetPayload())
 	}
 }
 
