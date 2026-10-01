@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
+	"net/http"
 	"net/url"
 	"slices"
 	"sync"
@@ -21,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/pgmq"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -54,10 +57,12 @@ type Engines struct {
 	Cipher    Cipher
 	Addresses Addresses
 	Open      func(ctx context.Context, cfg pgmq.Config) (Engine, error)
+	Answers   func(ctx context.Context, url string) bool
 	Interval  time.Duration
 
-	mu     sync.Mutex
-	served map[queueID]*served
+	mu       sync.Mutex
+	served   map[queueID]*served
+	answered map[string]bool
 }
 
 type queueID struct {
@@ -220,24 +225,39 @@ func (h *Engines) deployment(ctx context.Context, queue live.Queue) (pgmq.Deploy
 		}
 		deployment.Topics[name] = topic
 	}
-	for _, name := range slices.Sorted(func(yield func(string) bool) {
-		for name := range queue.Workers {
-			if !yield(name) {
-				return
-			}
-		}
-	}) {
+	for _, name := range slices.Sorted(maps.Keys(queue.Workers)) {
 		worker := queue.Workers[name]
 		address, err := h.Addresses.Address(ctx, worker.Container)
 		if err != nil {
 			continue
 		}
-		deployment.Workers[name] = pgmq.Worker{
-			URL:         "http://" + net.JoinHostPort(address, containerimage.PortText),
-			Concurrency: worker.Concurrency,
+		url := "http://" + net.JoinHostPort(address, containerimage.PortText)
+		if !h.answers(ctx, worker.Container, url) {
+			continue
 		}
+		deployment.Workers[name] = pgmq.Worker{URL: url, Concurrency: worker.Concurrency}
 	}
 	return deployment, nil
+}
+
+func (h *Engines) answers(ctx context.Context, container, url string) bool {
+	key := container + " " + url
+	h.mu.Lock()
+	answered := h.answered[key]
+	h.mu.Unlock()
+	if answered {
+		return true
+	}
+	if !h.Answers(ctx, url) {
+		return false
+	}
+	h.mu.Lock()
+	if h.answered == nil {
+		h.answered = map[string]bool{}
+	}
+	h.answered[key] = true
+	h.mu.Unlock()
+	return true
 }
 
 func (h *Engines) forget(id queueID) {
@@ -270,6 +290,23 @@ type pgmqEngine struct{ *pgmq.Engine }
 
 func (e pgmqEngine) Handlers() (taskv1connect.TaskServiceHandler, topicv1connect.TopicServiceHandler) {
 	return e.Tasks(), e.Topics()
+}
+
+const answerWindow = 2 * time.Second
+
+func WorkerAnswers(ctx context.Context, url string) bool {
+	asking, cancel := context.WithTimeout(ctx, answerWindow)
+	defer cancel()
+	req, err := http.NewRequestWithContext(asking, http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.Header.Get(originguard.AppUnansweredHeader) == ""
 }
 
 func OpenPgmq(ctx context.Context, cfg pgmq.Config) (Engine, error) {

@@ -118,6 +118,7 @@ func aQueue(t *testing.T, store keyvalue.Store) {
 
 func aHost(store keyvalue.Store, opened *engines) *queues.Engines {
 	return &queues.Engines{
+		Answers:   func(context.Context, string) bool { return true },
 		Records:   store,
 		Tiers:     []environment.Tier{tier},
 		Cipher:    cipher{},
@@ -248,5 +249,35 @@ func TestAQueueWhoseDatabaseIsNotRunningIsLeftUnservedAndTheOthersStillServe(t *
 	}
 	if _, _, found := host.Served(tier, "blog", "prod"); found {
 		t.Error("blog's queue is served with no database")
+	}
+}
+
+func TestAWorkerIsDeliveredToOnlyOnceItsContainerAnswers(t *testing.T) {
+	t.Parallel()
+
+	store := fake.NewKeyValues()
+	aQueue(t, store)
+	opened := &engines{}
+	host := aHost(store, opened)
+	var answering sync.Map
+	host.Answers = func(_ context.Context, url string) bool {
+		_, answers := answering.Load(url)
+		return answers
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	if err := host.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if applied := opened.opened[0].deployments(); len(applied) != 1 || len(applied[0].Workers) != 0 {
+		t.Fatalf("a worker still starting was applied as %+v, and every delivery to it would be spent as a failed attempt", applied)
+	}
+	answering.Store("http://10.0.0.3:8080", true)
+	if err := host.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	applied := opened.opened[0].deployments()
+	if len(applied) != 2 || applied[1].Workers["worker"].URL != "http://10.0.0.3:8080" {
+		t.Errorf("once it answers the engine was applied %+v, want worker delivered to", applied)
 	}
 }
