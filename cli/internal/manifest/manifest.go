@@ -67,12 +67,12 @@ type assembly struct {
 }
 
 func assemble(a assembly) (*contractv1.Manifest, error) {
-	resolved, err := resolveTopicsAndWorkers(a.apps, a.declarations, a.ceilings)
+	topics, workers, err := placeConsumers(a.apps, a.declarations, a.ceilings)
 	if err != nil {
 		return nil, err
 	}
 	named := make(map[string]string, len(a.declarations)+len(a.functions))
-	resources, seen, err := manifestResources(a.declarations, resolved.topics, named)
+	resources, seen, err := manifestResources(a.declarations, topics, named)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func assemble(a assembly) (*contractv1.Manifest, error) {
 		Domains:   tierDomains(a.domains),
 		Apps:      manifestApps,
 		Usages:    usages,
-		Workers:   resolved.workers,
+		Workers:   workers,
 	}, nil
 }
 

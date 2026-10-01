@@ -11,47 +11,66 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const defaultWorker = "worker"
+const (
+	defaultWorker  = "worker"
+	maxConcurrency = 1000
+)
 
-func (r *topicsAndWorkers) joinWorkers(apps []app, ceilings []provider.WorkerCeiling) error {
+type ServedTwiceError struct {
+	Subject      string
+	FirstSource  string
+	FirstWorker  string
+	SecondSource string
+	SecondWorker string
+}
+
+func (e *ServedTwiceError) Error() string {
+	return fmt.Sprintf(
+		"%s is declared at %s served by worker %q and at %s served by worker %q: it runs on one worker, so declare it once",
+		e.Subject, sourceOrUnknown(e.FirstSource), e.FirstWorker, sourceOrUnknown(e.SecondSource), e.SecondWorker,
+	)
+}
+
+func joinWorkers(apps []app, ceilings []provider.WorkerCeiling, served []declaredResource, declaredWorkers map[string]declaredResource) ([]*contractv1.ManifestWorker, error) {
 	firstServed := map[string]declaredResource{}
-	for _, d := range r.served {
+	for _, d := range served {
 		name := d.consumer().GetWorker()
 		if err := refuseInvalidName(d, name); err != nil {
-			return err
+			return nil, err
 		}
-		if _, declared := r.declared[name]; !declared && name != defaultWorker {
-			return refuse(d, "names worker %q, and no worker(%q) is declared, so no worker serves it", name, name)
+		if _, declared := declaredWorkers[name]; !declared && name != defaultWorker {
+			return nil, refuse(d, "names worker %q, and no worker(%q) is declared, so no worker serves it", name, name)
 		}
 		if _, seen := firstServed[name]; !seen {
 			firstServed[name] = d
 		}
 	}
 
+	var workers []*contractv1.ManifestWorker
 	computes := map[string]provider.Compute{}
 	names := slices.Sorted(func(yield func(string) bool) {
-		for name := range r.declared {
+		for name := range declaredWorkers {
 			if !yield(name) {
 				return
 			}
 		}
 		if _, served := firstServed[defaultWorker]; served {
-			if _, declared := r.declared[defaultWorker]; !declared {
+			if _, declared := declaredWorkers[defaultWorker]; !declared {
 				yield(defaultWorker)
 			}
 		}
 	})
 	for _, name := range names {
-		declaration, declared := r.declared[name]
+		declaration, declared := declaredWorkers[name]
 		if !declared {
 			declaration = firstServed[name]
 		}
 		joined, err := workerApp(apps, name, declaration, declared)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		computes[name] = joined.Compute
-		r.workers = append(r.workers, &contractv1.ManifestWorker{
+		workers = append(workers, &contractv1.ManifestWorker{
 			Name:        name,
 			Concurrency: declaration.Worker.GetConcurrency(),
 			App:         joined.Name,
@@ -60,12 +79,12 @@ func (r *topicsAndWorkers) joinWorkers(apps []app, ceilings []provider.WorkerCei
 		})
 	}
 
-	for _, d := range r.served {
+	for _, d := range served {
 		if err := refuseAboveCeiling(d, computes[d.consumer().GetWorker()], ceilings); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return workers, nil
 }
 
 func workerApp(apps []app, name string, declaration declaredResource, declared bool) (app, error) {
@@ -130,4 +149,15 @@ func refuseAboveCeiling(d declaredResource, compute provider.Compute, ceilings [
 		return nil
 	}
 	return refuse(d, "asks for maxDuration %v, and a worker on %s compute runs at most %v", requested.AsDuration(), compute, ceilings[i].MaxDuration)
+}
+
+func refuseWorkerLimits(d declaredResource) error {
+	return refuseConcurrency(d, d.Worker.GetConcurrency())
+}
+
+func refuseConcurrency(d declaredResource, concurrency int32) error {
+	if concurrency != 0 && (concurrency < 1 || concurrency > maxConcurrency) {
+		return refuse(d, "has concurrency %d, and concurrency is 1 to %d", concurrency, maxConcurrency)
+	}
+	return nil
 }
