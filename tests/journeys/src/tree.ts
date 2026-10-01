@@ -7,6 +7,9 @@ const NEVER_COPIED = [".git", ".next", ".ocel", "dist", "node_modules", "output"
 const NEVER_COPIED_FROM_A_PACKAGE = NEVER_COPIED.filter((name) => name !== "dist");
 
 const WORKSPACE_FILE = "pnpm-workspace.yaml";
+const GO_MODULE_FILE = "go.mod";
+const GO_WORKSPACE_FILE = "go.work";
+const GO_SDK_DIR = "sdk";
 const LOCKFILE = "pnpm-lock.yaml";
 const MANIFEST = "package.json";
 const DEPENDENCY_FIELDS = [
@@ -236,6 +239,36 @@ export async function copyTree(source: string, dest: string): Promise<string> {
   return copyInto(source, dest, NEVER_COPIED);
 }
 
+export function formatGoWork(modules: string[], firstGoMod: string): string {
+  const version = /^go\s+(\S+)\s*$/m.exec(firstGoMod)?.[1];
+  if (!version) {
+    throw new Error(`${modules[0]}/${GO_MODULE_FILE} names no go version`);
+  }
+  const used = modules.map((dir) => `\t./${dir}\n`).join("");
+  return `go ${version}\n\nuse (\n${used})\n`;
+}
+
+async function writeGoWorkspace(root: string, apps: string[]): Promise<void> {
+  const modules: string[] = [];
+  for (const app of apps) {
+    if (
+      await access(path.join(root, app, GO_MODULE_FILE)).then(
+        () => true,
+        () => false,
+      )
+    ) {
+      modules.push(app);
+    }
+  }
+  const [first] = modules;
+  if (first === undefined) {
+    return;
+  }
+  const goMod = await readFile(path.join(root, first, GO_MODULE_FILE), "utf8");
+  await writeFile(path.join(root, GO_WORKSPACE_FILE), formatGoWork(modules, goMod));
+  await symlink(path.join(repoRoot, GO_SDK_DIR), path.join(root, GO_SDK_DIR), "dir");
+}
+
 export async function plantWorkspace(
   root: string,
   name: string,
@@ -259,5 +292,6 @@ export async function plantWorkspace(
   }
   await writeWorkspace(root, name, [...apps, ...nested, ...packages]);
   await writeLockfile(root);
+  await writeGoWorkspace(root, apps);
   return packages;
 }

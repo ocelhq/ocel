@@ -25,7 +25,8 @@ workers behave as the map in #1463 says on a target, from `fixtures/tasks/`; `ia
 provisions beside it, from `fixtures/iac/`, and runs only when a run names it. The harness
 starts nothing but the `ocel` binary; bring up what the target needs first. For `dev` that
 is a docker daemon, which `ocel dev` runs each declared postgres, bucket and kv store, and the
-database topics and tasks run on, in:
+database topics and tasks run on, in, and for a go fixture such as `tasks/go` the go that
+`go.work` pins, which runs its app and its workers:
 
 ```
 node scripts/snapshot.mjs

@@ -565,6 +565,9 @@ jobs:
       - name: The node bundle the fixtures import
         run: pnpm turbo run build --filter=ocel
 
+      - name: The go a go fixture's app and worker run on
+        uses: ./.github/actions/go
+
       - name: Take the binaries this lane drives
         uses: ./.github/actions/journey-binaries
 

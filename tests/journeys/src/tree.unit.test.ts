@@ -8,6 +8,7 @@ import { appDirs, configTree, treeRoot } from "./ocel";
 import { outputRoot } from "./paths";
 import type { CellUnderTest } from "./run/cellRun";
 import {
+  formatGoWork,
   lockfileInstallArgs,
   nestedMembers,
   rootManifest,
@@ -215,5 +216,16 @@ describe("the pnpm resolution that writes a tree's lockfile", () => {
     }
     const argv = (await readFile(said, "utf8")).trim().split("\n");
     expect(argv).toEqual(lockfileInstallArgs(process.pid));
+  });
+});
+
+describe("the go workspace a tree gets", () => {
+  it("uses each go module of the tree at the go version the first one names, and nothing above the tree", () => {
+    expect(
+      formatGoWork(
+        ["tests/fixtures/tasks/go"],
+        "module example.com/tasks\n\ngo 1.27.0\n\nrequire ocel.dev v0.0.0\n",
+      ),
+    ).toBe("go 1.27.0\n\nuse (\n\t./tests/fixtures/tasks/go\n)\n");
   });
 });

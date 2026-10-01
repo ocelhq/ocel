@@ -8,3 +8,4 @@ export * from "./probes";
 export * from "./product";
 export * from "./static";
 export * from "./tasks";
+export * from "./wire";

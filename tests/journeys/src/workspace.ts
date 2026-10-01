@@ -14,7 +14,7 @@ export function appHomes(fixture: Fixture): string[] {
 }
 
 export function appCommand(fixture: Fixture, app: string): string[] {
-  return ["pnpm", "--dir", appPath(fixture, app), "run", "dev"];
+  return fixture.devCommands?.[app] ?? ["pnpm", "--dir", appPath(fixture, app), "run", "dev"];
 }
 
 export function migrateCommand(): string[] {

@@ -246,8 +246,10 @@ describe("the kv concern", () => {
 describe("the tasks concern", () => {
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
 
-  it("runs the behavioural suite on dev", () => {
-    expect(planOn("dev").cells.map((cell) => cell.name)).toContain("tasks/node");
+  it("runs the behavioural suite and the wire checks on dev", () => {
+    const planned = planOn("dev").cells.map((cell) => cell.name);
+    expect(planned).toContain("tasks/node");
+    expect(planned).toContain("tasks/go");
   });
 
   it("skips the suite on aws, gcp and a box with the provider's refusal, under each target's ticket", () => {
@@ -262,7 +264,7 @@ describe("the tasks concern", () => {
     for (const [lane, issue] of Object.entries(tickets) as [Lane, number][]) {
       const planned = planOn(lane);
       const skipped = Object.keys(planned.skipped).filter((cell) => cell.startsWith("tasks/"));
-      expect(skipped).toContain("tasks/node");
+      expect(skipped).toEqual(["tasks/node", "tasks/go"]);
       for (const cell of skipped) {
         const refusal = planned.skipped[cell]?.find((gap) => gap.issue === issue);
         expect(refusal?.reason).toMatch(/topics, tasks and workers are unsupported/);
