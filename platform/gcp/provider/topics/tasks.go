@@ -68,6 +68,9 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 		lane:        laneName(options.GetLane()),
 		maxAttempts: options.GetMaxAttempts(),
 	}
+	if options.GetDueAt() != nil {
+		toPublish.dueAt = options.GetDueAt().AsTime()
+	}
 	execution := executionOf(toPublish.messageID, consumer.GetName())
 	if key := options.GetIdempotencyKey(); key != "" {
 		life := provider.DefaultIdempotencyKeyLife
@@ -86,12 +89,17 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 	if options.GetTtl() != nil {
 		ttl = options.GetTtl().AsDuration()
 	}
+	delayTask := t.deployment.delayTaskOf(toPublish)
+	status := provider.RunQueued
+	if delayTask != "" {
+		status = provider.RunDelayed
+	}
 	record := runRecord{
 		Run: provider.Run{
 			Execution: execution,
 			Topic:     name,
 			Consumer:  consumer.GetName(),
-			Status:    provider.RunQueued,
+			Status:    status,
 			Payload:   payload,
 			Tags:      options.GetTags(),
 			Metadata:  metadata,
@@ -104,6 +112,7 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 			MaxAttempts: retryPolicyOf(topic, consumer).attemptsFor(options.GetMaxAttempts()),
 			Key:         toPublish.key,
 			Lane:        toPublish.lane,
+			DelayTask:   delayTask,
 		},
 	}
 	if ttl > 0 {
@@ -112,7 +121,7 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 	if err := t.deployment.Store().createRun(ctx, record); err != nil {
 		return "", err
 	}
-	if err := t.deployment.publishNow(ctx, toPublish); err != nil {
+	if err := t.deployment.publish(ctx, toPublish, delayTask); err != nil {
 		return "", t.deployment.failUnpublished(ctx, execution, err)
 	}
 	return execution, nil

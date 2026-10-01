@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	cloud.google.com/go/auth v0.23.2
+	cloud.google.com/go/cloudtasks v1.20.0
 	cloud.google.com/go/firestore v1.24.0
 	cloud.google.com/go/iam v1.12.0
 	cloud.google.com/go/kms v1.33.0

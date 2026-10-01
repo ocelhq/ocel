@@ -147,7 +147,7 @@ func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord)
 
 func readInTransaction(tx *firestore.Transaction, doc *firestore.DocumentRef) (*firestore.DocumentSnapshot, bool, error) {
 	snapshot, err := tx.Get(doc)
-	if status.Code(err) == codes.NotFound {
+	if isNotFound(err) {
 		return nil, false, nil
 	}
 	if err != nil {
@@ -157,19 +157,11 @@ func readInTransaction(tx *firestore.Transaction, doc *firestore.DocumentRef) (*
 }
 
 func (s Store) ReadRun(ctx context.Context, execution string) (provider.Run, error) {
-	runs, err := s.runs()
-	if err != nil {
-		return provider.Run{}, err
-	}
-	snapshot, err := runs.Doc(execution).Get(ctx)
-	if status.Code(err) == codes.NotFound || (err == nil && !snapshot.Exists()) {
-		return provider.Run{}, keyvalue.ErrNotFound
-	}
-	if err != nil {
-		return provider.Run{}, fmt.Errorf("read run %s: %w", execution, err)
-	}
-	return runOf(snapshot)
+	record, err := s.readRecord(ctx, execution)
+	return record.Run, err
 }
+
+func isNotFound(err error) bool { return status.Code(err) == codes.NotFound }
 
 func runOf(snapshot *firestore.DocumentSnapshot) (provider.Run, error) {
 	record, err := recordOf(snapshot)
