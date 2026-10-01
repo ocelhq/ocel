@@ -100,3 +100,10 @@ func TestKVStoresAreRefusedAtPreflightAsUnsupported(t *testing.T) {
 	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	conformance.RunKVStores(t, p.Facts())
 }
+
+func TestRealtimeIsRefusedAtPreflightAsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	conformance.RunRealtime(t, p.Facts())
+}

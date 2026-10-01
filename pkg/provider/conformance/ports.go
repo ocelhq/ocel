@@ -56,6 +56,7 @@ func RunPorts(t *testing.T, p provider.Provider) {
 	t.Run("DNS", func(t *testing.T) { RunDNS(t, facts, p.DNS()) })
 	t.Run("Workers", func(t *testing.T) { RunWorkers(t, facts) })
 	t.Run("KVStores", func(t *testing.T) { RunKVStores(t, facts) })
+	t.Run("Realtime", func(t *testing.T) { RunRealtime(t, facts) })
 }
 
 func bootstrapOf(t *testing.T, p provider.Provider) provider.Bootstrap {
