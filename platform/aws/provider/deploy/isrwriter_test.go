@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -237,6 +239,30 @@ func TestISRWriterRequest(t *testing.T) {
 		err := initializeISRWriter(context.Background(), writerAccess(srv.URL), testPrefix, "s")
 		if err == nil {
 			t.Fatal("a 401 from the writer must not be swallowed")
+		}
+	})
+
+	t.Run("keeps its connection when the default transport drops idle ones", func(t *testing.T) {
+		var dialed atomic.Int32
+		srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		srv.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+			if state == http.StateNew {
+				dialed.Add(1)
+			}
+		}
+		srv.Start()
+		t.Cleanup(srv.Close)
+
+		for i := range 3 {
+			if err := initializeISRWriter(context.Background(), writerAccess(srv.URL), testPrefix, "s"); err != nil {
+				t.Fatalf("call %d: %v", i, err)
+			}
+			http.DefaultTransport.(*http.Transport).CloseIdleConnections()
+		}
+		if got := dialed.Load(); got != 1 {
+			t.Errorf("writer saw %d connections, want 1: another client closing the default transport's idle connections reached the writer's", got)
 		}
 	})
 }

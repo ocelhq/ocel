@@ -15,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
+var isrWriterClient = &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()}
+
 func isrWriteSecret(seed, isrPrefix string) string {
 	mac := hmac.New(sha256.New, []byte(seed))
 	mac.Write([]byte(isrPrefix))
@@ -88,7 +90,7 @@ func isrWriterRequest(ctx context.Context, w ISRWriterAccess, isrPrefix, op stri
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := isrWriterClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("call isr writer %s for %s: %w", op, isrPrefix, err)
 	}
