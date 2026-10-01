@@ -11,7 +11,7 @@ app.use(express.json());
 
 type Served = (req: Request, res: Response) => Promise<unknown>;
 
-function answer(serve: Served) {
+function serveJSON(serve: Served) {
   return (req: Request, res: Response, next: NextFunction) => {
     serve(req, res).then((body) => res.json(body), next);
   };
@@ -58,7 +58,7 @@ app.get("/health", (_req, res) => {
 
 app.post(
   "/api/tasks/:task/trigger",
-  answer(async (req) =>
+  serveJSON(async (req) =>
     findTask(String(req.params.task)).trigger(
       req.body.payload,
       readTriggerOptions(req.body.options),
@@ -68,7 +68,7 @@ app.post(
 
 app.post(
   "/api/tasks/:task/batch-trigger",
-  answer(async (req) => ({
+  serveJSON(async (req) => ({
     ids: (
       await findTask(String(req.params.task)).batchTrigger(
         (req.body.items as { payload: unknown; options?: Record<string, unknown> }[]).map(
@@ -81,18 +81,18 @@ app.post(
 
 app.get(
   "/api/runs/:id",
-  answer(async (req) => showRun(await runs.retrieve(String(req.params.id)))),
+  serveJSON(async (req) => showRun(await runs.retrieve(String(req.params.id)))),
 );
 
 app.get(
   "/api/runs",
-  answer(async (req) => {
-    const listed = (name: string) =>
+  serveJSON(async (req) => {
+    const readQueryList = (name: string) =>
       typeof req.query[name] === "string" ? String(req.query[name]).split(",") : undefined;
     const page = await runs.list({
       task: typeof req.query.task === "string" ? req.query.task : undefined,
-      status: listed("status") as RunStatus[] | undefined,
-      tags: listed("tags"),
+      status: readQueryList("status") as RunStatus[] | undefined,
+      tags: readQueryList("tags"),
       limit: req.query.limit === undefined ? undefined : Number(req.query.limit),
     });
     return { runs: page.runs.map(showRun), nextCursor: page.nextCursor };
@@ -101,17 +101,17 @@ app.get(
 
 app.post(
   "/api/runs/:id/cancel",
-  answer(async (req) => showRun(await runs.cancel(String(req.params.id)))),
+  serveJSON(async (req) => showRun(await runs.cancel(String(req.params.id)))),
 );
 
 app.post(
   "/api/runs/:id/replay",
-  answer(async (req) => runs.replay(String(req.params.id))),
+  serveJSON(async (req) => runs.replay(String(req.params.id))),
 );
 
 app.post(
   "/api/runs/:id/reschedule",
-  answer(async (req) =>
+  serveJSON(async (req) =>
     showRun(
       await runs.reschedule(String(req.params.id), { delay: new Date(String(req.body.dueAt)) }),
     ),
@@ -120,7 +120,7 @@ app.post(
 
 app.post(
   "/api/topics/:topic/send",
-  answer(async (req) => ({
+  serveJSON(async (req) => ({
     messageId: await findTopic(String(req.params.topic)).send(
       req.body.payload,
       (req.body.options ?? {}) as SendOptions,
@@ -130,7 +130,7 @@ app.post(
 
 app.get(
   "/api/topics/:topic/dead-letters/:consumer",
-  answer(async (req) => {
+  serveJSON(async (req) => {
     const letters = findTopic(String(req.params.topic)).deadLetter(String(req.params.consumer));
     const page = await letters.list();
     return { count: await letters.count(), deadLetters: page.deadLetters };
@@ -139,7 +139,7 @@ app.get(
 
 app.post(
   "/api/topics/:topic/dead-letters/:consumer/redrive",
-  answer(async (req) => ({
+  serveJSON(async (req) => ({
     redriven: await findTopic(String(req.params.topic))
       .deadLetter(String(req.params.consumer))
       .redrive(req.body.executions ?? []),
@@ -148,7 +148,7 @@ app.post(
 
 app.post(
   "/api/topics/:topic/dead-letters/:consumer/purge",
-  answer(async (req) => ({
+  serveJSON(async (req) => ({
     purged: await findTopic(String(req.params.topic))
       .deadLetter(String(req.params.consumer))
       .purge(req.body.executions ?? []),
