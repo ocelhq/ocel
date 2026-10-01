@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -70,8 +71,14 @@ func TestLiveCredentials(t *testing.T) {
 
 func TestLiveStacks(t *testing.T) {
 	p := live(t)
+	facts := p.Facts()
+	if emulated() {
+		facts.Bindings = slices.DeleteFunc(slices.Clone(facts.Bindings), func(b provider.BindingType) bool { return b == provider.BindingKV })
+	} else {
+		bootstrapped(t, p, environment.TierPreview, gcp.KVFeature)
+	}
 
-	conformance.RunStacks(t, p.Facts(), p.Stacks(), p.Artifacts(), p.KeyValues())
+	conformance.RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues())
 }
 
 func TestLiveTheKeyValueStoreConformsAsEveryStoreMust(t *testing.T) {
