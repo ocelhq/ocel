@@ -34,10 +34,14 @@ const (
 	tokenRDSSubnetGroup    = "aws:rds/subnetGroup:SubnetGroup"
 	tokenRDSCluster        = "aws:rds/cluster:Cluster"
 	tokenRDSClusterMember  = "aws:rds/clusterInstance:ClusterInstance"
-	tokenECSTaskDefinition = "aws:ecs/taskDefinition:TaskDefinition"
-	tokenECSService        = "aws:ecs/service:Service"
-	tokenLBTargetGroup     = "aws:lb/targetGroup:TargetGroup"
-	tokenLBListenerRule    = "aws:lb/listenerRule:ListenerRule"
+
+	tokenElastiCacheSubnetGroup      = "aws:elasticache/subnetGroup:SubnetGroup"
+	tokenElastiCacheParameterGroup   = "aws:elasticache/parameterGroup:ParameterGroup"
+	tokenElastiCacheReplicationGroup = "aws:elasticache/replicationGroup:ReplicationGroup"
+	tokenECSTaskDefinition           = "aws:ecs/taskDefinition:TaskDefinition"
+	tokenECSService                  = "aws:ecs/service:Service"
+	tokenLBTargetGroup               = "aws:lb/targetGroup:TargetGroup"
+	tokenLBListenerRule              = "aws:lb/listenerRule:ListenerRule"
 )
 
 type resourceKey struct {
