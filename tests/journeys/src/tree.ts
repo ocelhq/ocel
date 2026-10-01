@@ -269,11 +269,7 @@ async function writeGoWorkspace(root: string, apps: string[]): Promise<void> {
   await symlink(path.join(repoRoot, GO_SDK_DIR), path.join(root, GO_SDK_DIR), "dir");
 }
 
-export async function plantWorkspace(
-  root: string,
-  name: string,
-  apps: string[],
-): Promise<string[]> {
+export async function writeTree(root: string, name: string, apps: string[]): Promise<string[]> {
   await rm(root, { recursive: true, force: true });
   for (const app of apps) {
     await copyTree(path.join(repoRoot, app), path.join(root, app));
