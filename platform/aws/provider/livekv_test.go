@@ -20,7 +20,16 @@ import (
 
 const liveKVTokenRoot = "/ocel-live/kv"
 
-func commandStore(t *testing.T, binding provider.Binding, token string, command string) string {
+func writeRESP(conn net.Conn, args ...string) {
+	var command strings.Builder
+	fmt.Fprintf(&command, "*%d\r\n", len(args))
+	for _, arg := range args {
+		fmt.Fprintf(&command, "$%d\r\n%s\r\n", len(arg), arg)
+	}
+	_, _ = conn.Write([]byte(command.String()))
+}
+
+func (a account) commandStore(t *testing.T, binding provider.Binding, token string, command string) string {
 	t.Helper()
 	props := binding.Properties
 	address := net.JoinHostPort(props[provider.PropertyHost], props[provider.PropertyPort])
@@ -29,13 +38,13 @@ func commandStore(t *testing.T, binding provider.Binding, token string, command 
 		conn net.Conn
 		err  error
 	)
-	if props[provider.PropertyTLS] == "true" {
+	if props[provider.PropertyTLS] == "true" && !a.emulated() {
 		conn, err = tls.DialWithDialer(dialer, "tcp", address, &tls.Config{ServerName: props[provider.PropertyHost], InsecureSkipVerify: true})
 	} else {
 		conn, err = dialer.Dial("tcp", address)
 	}
 	if err != nil {
-		t.Fatalf("dial %s (tls %s): %v", address, props[provider.PropertyTLS], err)
+		t.Fatalf("dial %s (binding tls %s, emulated %t): %v", address, props[provider.PropertyTLS], a.emulated(), err)
 	}
 	defer conn.Close()
 	if err := conn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
@@ -43,12 +52,12 @@ func commandStore(t *testing.T, binding provider.Binding, token string, command 
 	}
 	reader := bufio.NewReader(conn)
 	if token != "" {
-		fmt.Fprintf(conn, "AUTH %s\r\n", token)
+		writeRESP(conn, "AUTH", token)
 		if said, _ := reader.ReadString('\n'); !strings.HasPrefix(said, "+OK") {
 			return strings.TrimSpace(said)
 		}
 	}
-	fmt.Fprintf(conn, "%s\r\n", command)
+	writeRESP(conn, command)
 	said, err := reader.ReadString('\n')
 	if err != nil {
 		t.Fatalf("read the answer to %s: %v", command, err)
@@ -104,13 +113,13 @@ func TestLiveAKVStoreAnswersItsTokenAloneAndItsTokenGoesWithIt(t *testing.T) {
 		t.Errorf("no parameter %s holds the store's token", parameter)
 	}
 
-	if said := commandStore(t, binding, "", "PING"); !strings.HasPrefix(said, "-NOAUTH") {
+	if said := a.commandStore(t, binding, "", "PING"); !strings.HasPrefix(said, "-NOAUTH") {
 		t.Errorf("a PING without the token was answered %q, want NOAUTH", said)
 	}
-	if said := commandStore(t, binding, "not-the-token", "PING"); !strings.HasPrefix(said, "-WRONGPASS") && !strings.HasPrefix(said, "-ERR") {
+	if said := a.commandStore(t, binding, "not-the-token", "PING"); !strings.HasPrefix(said, "-WRONGPASS") && !strings.HasPrefix(said, "-ERR") {
 		t.Errorf("a PING with another token was answered %q, want it refused", said)
 	}
-	if said := commandStore(t, binding, token, "PING"); said != "+PONG" {
+	if said := a.commandStore(t, binding, token, "PING"); said != "+PONG" {
 		t.Errorf("a PING with the store's token was answered %q, want PONG", said)
 	}
 

@@ -46,6 +46,8 @@ func live(t *testing.T) account {
 	return account{endpoint: endpoint, aws: cfg}
 }
 
+func (a account) emulated() bool { return a.endpoint != "" }
+
 func (a account) boot(t *testing.T) provider.Bootstrap {
 	t.Helper()
 	p, err := aws.New(context.Background(), provider.Settings{Options: provider.Options{"region": liveRegion}})
