@@ -82,9 +82,9 @@ func (r *Refusal) Error() string {
 func refuse(reason Reason) error { return &Refusal{Reason: reason} }
 
 func Verify(raw string, key ed25519.PublicKey, now time.Time, want Expected) (Claims, error) {
-	parts := strings.Split(raw, ".")
-	if len(parts) != 3 {
-		return Claims{}, refuse(ReasonMalformed)
+	parts, err := splitToken(raw)
+	if err != nil {
+		return Claims{}, err
 	}
 	var header Header
 	if err := decodeSegment(parts[0], &header); err != nil {
@@ -97,9 +97,9 @@ func Verify(raw string, key ed25519.PublicKey, now time.Time, want Expected) (Cl
 	if err != nil || len(key) != ed25519.PublicKeySize || !ed25519.Verify(key, []byte(parts[0]+"."+parts[1]), signature) {
 		return Claims{}, refuse(ReasonSignature)
 	}
-	var claims Claims
-	if err := decodeSegment(parts[1], &claims); err != nil {
-		return Claims{}, refuse(ReasonMalformed)
+	claims, err := decodeClaims(parts[1])
+	if err != nil {
+		return Claims{}, err
 	}
 	switch {
 	case now.Unix() >= claims.ExpiresAt:
@@ -117,15 +117,31 @@ func Verify(raw string, key ed25519.PublicKey, now time.Time, want Expected) (Cl
 }
 
 func ReadUnverifiedNamespace(raw string) (string, error) {
-	parts := strings.Split(raw, ".")
-	if len(parts) != 3 {
-		return "", refuse(ReasonMalformed)
+	parts, err := splitToken(raw)
+	if err != nil {
+		return "", err
 	}
-	var claims Claims
-	if err := decodeSegment(parts[1], &claims); err != nil {
-		return "", refuse(ReasonMalformed)
+	claims, err := decodeClaims(parts[1])
+	if err != nil {
+		return "", err
 	}
 	return claims.Ocel.Namespace, nil
+}
+
+func splitToken(raw string) ([]string, error) {
+	parts := strings.Split(raw, ".")
+	if len(parts) != 3 {
+		return nil, refuse(ReasonMalformed)
+	}
+	return parts, nil
+}
+
+func decodeClaims(segment string) (Claims, error) {
+	var claims Claims
+	if err := decodeSegment(segment, &claims); err != nil {
+		return Claims{}, refuse(ReasonMalformed)
+	}
+	return claims, nil
 }
 
 func decodeSegment(segment string, into any) error {

@@ -28,7 +28,7 @@ type connection struct {
 	g         *Gateway
 	conn      *websocket.Conn
 	namespace string
-	queue     *Queue
+	queue     *queue
 
 	subscriptions map[string]func()
 }
@@ -61,7 +61,7 @@ func (g *Gateway) serveSocket(w http.ResponseWriter, r *http.Request) {
 		g:             g,
 		conn:          conn,
 		namespace:     namespace,
-		queue:         NewQueue(g.cfg.QueueBudgetBytes),
+		queue:         newQueue(g.cfg.QueueBudgetBytes),
 		subscriptions: map[string]func(){},
 	}
 	c.serve()
@@ -118,7 +118,7 @@ func (g *Gateway) verify(raw, namespace string, operation token.Operation, chann
 func (g *Gateway) refuseConnection(conn *websocket.Conn, reason error) {
 	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()
-	_ = writeJSON(ctx, conn, errorFrame{Type: frameConnectionError, Errors: []errorMessage{{ErrorType: errorUnauthorized, Message: reason.Error()}}})
+	_ = writeJSON(ctx, conn, newErrorFrame(frameConnectionError, "", errorUnauthorized, reason.Error()))
 	_ = conn.Close(websocket.StatusPolicyViolation, "unauthorized")
 }
 
@@ -182,7 +182,7 @@ func (c *connection) read(ctx context.Context) {
 		}
 		var frame clientFrame
 		if err := json.Unmarshal(raw, &frame); err != nil {
-			c.reply(errorFrame{Type: frameError, Errors: []errorMessage{{ErrorType: errorBadRequest, Message: "a frame is a JSON object with a type"}}})
+			c.replyError(frameError, "", errorBadRequest, "a frame is a JSON object with a type")
 			continue
 		}
 		switch frame.Type {
@@ -193,34 +193,31 @@ func (c *connection) read(ctx context.Context) {
 		case frameUnsubscribe:
 			c.unsubscribe(frame)
 		case framePublish:
-			c.reply(errorFrame{Type: framePublishError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorUnsupportedOperation, Message: "a browser publishes through the app's realtime handler, which publishes from the server"}}})
+			c.replyError(framePublishError, frame.ID, errorUnsupportedOperation, "a browser publishes through the app's realtime handler, which publishes from the server")
 		default:
-			c.reply(errorFrame{Type: frameError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorUnknownOperation, Message: "unknown frame type " + frame.Type}}})
+			c.replyError(frameError, frame.ID, errorUnknownOperation, "unknown frame type "+string(frame.Type))
 		}
 	}
 }
 
 func (c *connection) subscribe(frame clientFrame) {
-	refuse := func(errorType, message string) {
-		c.reply(errorFrame{Type: frameSubscribeError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorType, Message: message}}})
-	}
 	namespace, isChannel := readSubscribeNamespace(frame.Channel)
 	switch {
 	case !subscriptionID.MatchString(frame.ID):
-		refuse(errorBadRequest, "a subscription id is 1 to 128 letters, digits, _, + or -")
+		c.replyError(frameSubscribeError, frame.ID, errorBadRequest, "a subscription id is 1 to 128 letters, digits, _, + or -")
 		return
 	case c.subscriptions[frame.ID] != nil:
-		refuse(errorBadRequest, "subscription id "+frame.ID+" is already in use on this connection")
+		c.replyError(frameSubscribeError, frame.ID, errorBadRequest, "subscription id "+frame.ID+" is already in use on this connection")
 		return
-	case len(c.subscriptions) >= MaxSubscriptions:
-		refuse(errorLimitExceeded, "a connection holds at most 200 subscriptions")
+	case len(c.subscriptions) >= maxSubscriptions:
+		c.replyError(frameSubscribeError, frame.ID, errorLimitExceeded, "a connection holds at most 200 subscriptions")
 		return
 	case !isChannel || namespace != c.namespace:
-		refuse(errorBadRequest, "channel "+frame.Channel+" is not a channel of /"+c.namespace)
+		c.replyError(frameSubscribeError, frame.ID, errorBadRequest, "channel "+frame.Channel+" is not a channel of /"+c.namespace)
 		return
 	}
 	if _, err := c.g.verify(frame.Authorization.Token, namespace, token.Subscribe, frame.Channel); err != nil {
-		refuse(errorUnauthorized, err.Error())
+		c.replyError(frameSubscribeError, frame.ID, errorUnauthorized, err.Error())
 		return
 	}
 	c.reply(idFrame{Type: frameSubscribeSuccess, ID: frame.ID})
@@ -230,7 +227,7 @@ func (c *connection) subscribe(frame clientFrame) {
 func (c *connection) unsubscribe(frame clientFrame) {
 	unsubscribe, subscribed := c.subscriptions[frame.ID]
 	if !subscribed {
-		c.reply(errorFrame{Type: frameUnsubscribeError, ID: frame.ID, Errors: []errorMessage{{ErrorType: errorUnknownOperation, Message: "Unknown operation id " + frame.ID}}})
+		c.replyError(frameUnsubscribeError, frame.ID, errorUnknownOperation, "Unknown operation id "+frame.ID)
 		return
 	}
 	unsubscribe()
@@ -240,6 +237,10 @@ func (c *connection) unsubscribe(frame clientFrame) {
 
 func (c *connection) reply(frame any) {
 	c.queue.Offer(mustEncode(frame))
+}
+
+func (c *connection) replyError(of frameType, id string, kind errorType, message string) {
+	c.reply(newErrorFrame(of, id, kind, message))
 }
 
 func writeJSON(ctx context.Context, conn *websocket.Conn, frame any) error {

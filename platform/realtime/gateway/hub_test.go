@@ -1,22 +1,14 @@
-package gateway_test
+package gateway
 
 import (
 	"encoding/json"
 	"testing"
-
-	"github.com/ocelhq/ocel/platform/realtime/gateway"
 )
 
-type dataFrame struct {
-	Type  string `json:"type"`
-	ID    string `json:"id"`
-	Event string `json:"event"`
-}
-
-func takeData(t *testing.T, queue *gateway.Queue) []dataFrame {
+func takeData(t *testing.T, subscribed *queue) []dataFrame {
 	t.Helper()
 	var out []dataFrame
-	for _, frame := range queue.Take() {
+	for _, frame := range subscribed.Take() {
 		var data dataFrame
 		if err := json.Unmarshal(frame, &data); err != nil {
 			t.Fatalf("decode frame %s: %v", frame, err)
@@ -29,13 +21,13 @@ func takeData(t *testing.T, queue *gateway.Queue) []dataFrame {
 func TestAPublishReachesEverySubscriptionOnItsChannelAndNoOther(t *testing.T) {
 	t.Parallel()
 
-	hub := gateway.NewHub()
-	mine, theirs := gateway.NewQueue(1<<20), gateway.NewQueue(1<<20)
-	hub.Subscribe("/app/orders/o-1", "a", mine)
-	hub.Subscribe("/app/orders/o-1", "b", mine)
-	hub.Subscribe("/app/orders/o-2", "c", theirs)
+	subscriptions := newHub()
+	mine, theirs := newQueue(1<<20), newQueue(1<<20)
+	subscriptions.Subscribe("/app/orders/o-1", "a", mine)
+	subscriptions.Subscribe("/app/orders/o-1", "b", mine)
+	subscriptions.Subscribe("/app/orders/o-2", "c", theirs)
 
-	hub.Publish("/app/orders/o-1", `{"n":1}`)
+	subscriptions.Publish("/app/orders/o-1", `{"n":1}`)
 
 	got := takeData(t, mine)
 	if len(got) != 2 || got[0].Type != "data" || got[0].Event != `{"n":1}` || got[0].ID == got[1].ID {
@@ -49,13 +41,13 @@ func TestAPublishReachesEverySubscriptionOnItsChannelAndNoOther(t *testing.T) {
 func TestASubscriberThatFallsBehindItsBudgetOverflowsWithoutHoldingUpAnother(t *testing.T) {
 	t.Parallel()
 
-	hub := gateway.NewHub()
-	slow, fast := gateway.NewQueue(200), gateway.NewQueue(1<<20)
-	hub.Subscribe("/app/status", "slow", slow)
-	hub.Subscribe("/app/status", "fast", fast)
+	subscriptions := newHub()
+	slow, fast := newQueue(200), newQueue(1<<20)
+	subscriptions.Subscribe("/app/status", "slow", slow)
+	subscriptions.Subscribe("/app/status", "fast", fast)
 
 	for range 10 {
-		hub.Publish("/app/status", `{"status":"a fifty byte event, give or take"}`)
+		subscriptions.Publish("/app/status", `{"status":"a fifty byte event, give or take"}`)
 	}
 
 	select {
@@ -74,16 +66,16 @@ func TestASubscriberThatFallsBehindItsBudgetOverflowsWithoutHoldingUpAnother(t *
 func TestAWildcardSubscriptionReceivesEveryChannelBelowItsPrefixAndNotThePrefixItself(t *testing.T) {
 	t.Parallel()
 
-	hub := gateway.NewHub()
-	queue := gateway.NewQueue(1 << 20)
-	hub.Subscribe("/app/projects/p-1/deploys/*", "w", queue)
+	subscriptions := newHub()
+	subscribed := newQueue(1 << 20)
+	subscriptions.Subscribe("/app/projects/p-1/deploys/*", "w", subscribed)
 
-	hub.Publish("/app/projects/p-1/deploys/d-1", `"below"`)
-	hub.Publish("/app/projects/p-1/deploys/d-1/logs", `"deeper"`)
-	hub.Publish("/app/projects/p-1/deploys", `"prefix"`)
-	hub.Publish("/app/projects/p-2/deploys/d-1", `"another project"`)
+	subscriptions.Publish("/app/projects/p-1/deploys/d-1", `"below"`)
+	subscriptions.Publish("/app/projects/p-1/deploys/d-1/logs", `"deeper"`)
+	subscriptions.Publish("/app/projects/p-1/deploys", `"prefix"`)
+	subscriptions.Publish("/app/projects/p-2/deploys/d-1", `"another project"`)
 
-	got := takeData(t, queue)
+	got := takeData(t, subscribed)
 	if len(got) != 2 || got[0].Event != `"below"` || got[1].Event != `"deeper"` {
 		t.Fatalf("frames = %+v, want the two events below the prefix", got)
 	}

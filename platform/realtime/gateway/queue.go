@@ -2,7 +2,7 @@ package gateway
 
 import "sync"
 
-type Queue struct {
+type queue struct {
 	budgetBytes int
 
 	mu          sync.Mutex
@@ -13,11 +13,11 @@ type Queue struct {
 	overflowed  chan struct{}
 }
 
-func NewQueue(budgetBytes int) *Queue {
-	return &Queue{budgetBytes: budgetBytes, ready: make(chan struct{}, 1), overflowed: make(chan struct{})}
+func newQueue(budgetBytes int) *queue {
+	return &queue{budgetBytes: budgetBytes, ready: make(chan struct{}, 1), overflowed: make(chan struct{})}
 }
 
-func (q *Queue) Offer(frame []byte) {
+func (q *queue) Offer(frame []byte) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.isOverflow {
@@ -37,7 +37,7 @@ func (q *Queue) Offer(frame []byte) {
 	}
 }
 
-func (q *Queue) Take() [][]byte {
+func (q *queue) Take() [][]byte {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	frames := q.frames
@@ -45,6 +45,6 @@ func (q *Queue) Take() [][]byte {
 	return frames
 }
 
-func (q *Queue) Ready() <-chan struct{} { return q.ready }
+func (q *queue) Ready() <-chan struct{} { return q.ready }
 
-func (q *Queue) Overflowed() <-chan struct{} { return q.overflowed }
+func (q *queue) Overflowed() <-chan struct{} { return q.overflowed }

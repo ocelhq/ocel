@@ -314,7 +314,7 @@ func TestTheTwoHundredAndFirstSubscriptionOnAConnectionIsRefused(t *testing.T) {
 	h := newHarness(t)
 	c := h.connect()
 	channel := "/app/status"
-	for i := range gateway.MaxSubscriptions {
+	for i := range 200 {
 		if got := c.subscribe(fmt.Sprintf("s-%d", i), channel, h.mint(token.Subscribe, channel)); got["type"] != "subscribe_success" {
 			t.Fatalf("subscription %d answered %v, want subscribe_success", i, got)
 		}
