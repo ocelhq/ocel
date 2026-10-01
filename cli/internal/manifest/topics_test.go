@@ -78,6 +78,44 @@ func TestATaskIsATopicWithOneExclusiveConsumer(t *testing.T) {
 	}
 }
 
+func TestEveryConsumerCarriesItsWholeRetryPolicyWithTheDefaultsFilledIn(t *testing.T) {
+	t.Parallel()
+
+	seconds := func(n int64) *durationpb.Duration { return durationpb.New(time.Duration(n) * time.Second) }
+	m, err := assembleWorkers([]app{{Name: "web"}}, []declaredResource{
+		task("plain", "src/plain.ts:1", nil),
+		task("tried", "src/tried.ts:1", &resourcesv1.TaskConfig{Retry: &resourcesv1.RetryPolicy{MaxAttempts: 5}}),
+		task("slow", "src/slow.ts:1", &resourcesv1.TaskConfig{Retry: &resourcesv1.RetryPolicy{MinDelay: seconds(120)}}),
+		topic("orders", "src/orders.ts:1", &resourcesv1.TopicConfig{Retry: &resourcesv1.RetryPolicy{MinDelay: seconds(2)}}),
+		consumer("email", "src/email.ts:4", &resourcesv1.ConsumerConfig{Topic: "orders", Retry: &resourcesv1.RetryPolicy{MaxAttempts: 7}}),
+		consumer("audit", "src/audit.ts:4", &resourcesv1.ConsumerConfig{Topic: "orders"}),
+	}, nil)
+	if err != nil {
+		t.Fatalf("assemble() = %v", err)
+	}
+	for _, tc := range []struct {
+		topic, consumer    string
+		attempts           int32
+		minDelay, maxDelay time.Duration
+	}{
+		{"topic--plain", "plain", 3, time.Second, time.Minute},
+		{"topic--tried", "tried", 5, time.Second, time.Minute},
+		{"topic--slow", "slow", 3, 2 * time.Minute, 2 * time.Minute},
+		{"topic--orders", "email", 7, 2 * time.Second, time.Minute},
+		{"topic--orders", "audit", 3, 2 * time.Second, time.Minute},
+	} {
+		var retry *resourcesv1.RetryPolicy
+		for _, c := range findTopic(m, tc.topic).GetConsumers() {
+			if c.GetName() == tc.consumer {
+				retry = c.GetRetry()
+			}
+		}
+		if retry.GetMaxAttempts() != tc.attempts || retry.GetMinDelay().AsDuration() != tc.minDelay || retry.GetMaxDelay().AsDuration() != tc.maxDelay {
+			t.Errorf("%s's retry = %v, want %d attempts from %v to %v", tc.consumer, retry, tc.attempts, tc.minDelay, tc.maxDelay)
+		}
+	}
+}
+
 func TestATaskAndATopicOfOneNameAreADuplicateDeclaration(t *testing.T) {
 	t.Parallel()
 

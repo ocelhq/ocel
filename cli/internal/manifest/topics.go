@@ -151,15 +151,39 @@ func manifestTopic(d declaredResource, consumers []declaredResource) *contractv1
 			Retry:     task.GetRetry(),
 			Ttl:       task.GetTtl(),
 			Cron:      task.GetCron(),
-			Consumers: []*contractv1.ManifestConsumer{taskConsumer(d)},
+			Consumers: []*contractv1.ManifestConsumer{withRetry(taskConsumer(d), task.GetRetry())},
 		}
 	}
 	topic := &contractv1.ManifestTopic{Schema: d.Topic.GetSchema(), Ordered: d.Topic.GetOrdered(), Retry: d.Topic.GetRetry()}
 	for _, c := range consumers {
-		topic.Consumers = append(topic.Consumers, topicConsumer(c))
+		topic.Consumers = append(topic.Consumers, withRetry(topicConsumer(c), d.Topic.GetRetry()))
 	}
 	slices.SortFunc(topic.Consumers, func(a, b *contractv1.ManifestConsumer) int { return strings.Compare(a.GetName(), b.GetName()) })
 	return topic
+}
+
+func withRetry(consumer *contractv1.ManifestConsumer, declared *resourcesv1.RetryPolicy) *contractv1.ManifestConsumer {
+	resolved := &resourcesv1.RetryPolicy{
+		MaxAttempts: provider.DefaultRetryMaxAttempts,
+		MinDelay:    durationpb.New(provider.DefaultRetryMinDelay),
+		MaxDelay:    durationpb.New(provider.DefaultRetryMaxDelay),
+	}
+	for _, retry := range []*resourcesv1.RetryPolicy{declared, consumer.GetRetry()} {
+		if retry.GetMaxAttempts() > 0 {
+			resolved.MaxAttempts = retry.GetMaxAttempts()
+		}
+		if retry.GetMinDelay() != nil {
+			resolved.MinDelay = retry.GetMinDelay()
+		}
+		if retry.GetMaxDelay() != nil {
+			resolved.MaxDelay = retry.GetMaxDelay()
+		}
+	}
+	if resolved.GetMinDelay().AsDuration() > resolved.GetMaxDelay().AsDuration() {
+		resolved.MaxDelay = resolved.GetMinDelay()
+	}
+	consumer.Retry = resolved
+	return consumer
 }
 
 func refuseTopicLimits(d declaredResource) error {

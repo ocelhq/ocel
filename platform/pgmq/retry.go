@@ -5,12 +5,7 @@ import (
 	"time"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-)
-
-const (
-	defaultMaxAttempts = 3
-	defaultMinDelay    = time.Second
-	defaultMaxDelay    = time.Minute
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type retryPolicy struct {
@@ -19,7 +14,7 @@ type retryPolicy struct {
 }
 
 func retryPolicyOf(deployed deployedConsumer) retryPolicy {
-	policy := retryPolicy{maxAttempts: defaultMaxAttempts, minDelay: defaultMinDelay, maxDelay: defaultMaxDelay}
+	policy := retryPolicy{maxAttempts: provider.DefaultRetryMaxAttempts, minDelay: provider.DefaultRetryMinDelay, maxDelay: provider.DefaultRetryMaxDelay}
 	for _, declared := range []*resourcesv1.RetryPolicy{deployed.topic.GetRetry(), deployed.consumer.GetRetry()} {
 		if declared == nil {
 			continue

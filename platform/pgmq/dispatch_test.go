@@ -18,6 +18,7 @@ import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type reply struct {
@@ -198,8 +199,8 @@ func TestATriggeredRunIsPostedToItsWorkerAsAnEnvelopeAndCompletesWithTheWorkersA
 	if envelope.GetMessage().GetPublishedAt() == nil {
 		t.Error("the envelope has no publishedAt")
 	}
-	if a := envelope.GetAttempt(); a.GetNumber() != 1 || a.GetOf() != defaultMaxAttempts || a.GetFirstAttemptedAt() == nil {
-		t.Errorf("attempt = %v, want 1 of %d with when it was first attempted", a, defaultMaxAttempts)
+	if a := envelope.GetAttempt(); a.GetNumber() != 1 || a.GetOf() != provider.DefaultRetryMaxAttempts || a.GetFirstAttemptedAt() == nil {
+		t.Errorf("attempt = %v, want 1 of %d with when it was first attempted", a, provider.DefaultRetryMaxAttempts)
 	}
 	if image := envelope.GetPayload().GetStructValue().GetFields()["image"].GetStringValue(); image != "cat.png" {
 		t.Errorf("payload = %v, want the triggered one", envelope.GetPayload())
