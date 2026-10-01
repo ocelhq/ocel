@@ -199,6 +199,10 @@ func indexPatches(candidates []transformCandidate, results []transform.Result) (
 			if _, bound := result.Patches["lambda"][lambdaVPCConfigField]; bound {
 				indexed.vpcBound[candidate.key.Name] = true
 			}
+		case transformTypeKV:
+			if err := checkKVNodeCount(candidate.key.Name, result.Patches["replicationGroup"]); err != nil {
+				return nil, err
+			}
 		case transformTypeBucket:
 			if len(result.Patches["cors"]) > 0 {
 				indexed.corsBind[candidate.key.Name] = true
@@ -252,6 +256,19 @@ func checkVPCConfig(logicalName string, patch map[string]any) error {
 			logicalName, subnets)
 	}
 	return nil
+}
+
+func checkKVNodeCount(logicalName string, patch map[string]any) error {
+	nodes, counted := patch["numCacheClusters"].(float64)
+	if !counted || nodes >= kvNodeCount {
+		return nil
+	}
+	if patch["automaticFailoverEnabled"] == false && patch["multiAzEnabled"] == false {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"a transform runs %s on %v node, and ElastiCache refuses automaticFailoverEnabled and multiAzEnabled without a replica; set both to false in the same patch",
+		logicalName, nodes)
 }
 
 func namedCount(value any) int {
