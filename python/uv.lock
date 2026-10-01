@@ -289,7 +289,7 @@ requires-dist = [
     { name = "protobuf-py", specifier = ">=0.4,<0.5" },
     { name = "pydantic", marker = "extra == 'pydantic'", specifier = ">=2.7,<3" },
     { name = "pyqwest", specifier = ">=0.10,<0.11" },
-    { name = "redis", marker = "extra == 'kv'", specifier = ">=5" },
+    { name = "redis", marker = "extra == 'kv'", specifier = ">=5.0.1" },
 ]
 provides-extras = ["postgres", "pydantic", "kv", "realtime"]
 
