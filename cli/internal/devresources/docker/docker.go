@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +37,8 @@ const (
 type Spec struct {
 	Name       string
 	Image      string
+	Args       []string
+	User       string
 	Env        []string
 	Port       int
 	Volume     string
@@ -162,7 +165,7 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 	case cerrdefs.IsNotFound(err):
 	case err != nil:
 		return Container{}, fmt.Errorf("look for the container %s: %w", spec.Name, err)
-	case existing.Container.State != nil && existing.Container.State.Running:
+	case existing.Container.State != nil && existing.Container.State.Running && !isRunWithOtherArgs(existing.Container, spec):
 		if !isFromSpec(existing.Container, spec) {
 			return Container{}, fmt.Errorf("a container named %s is running and is not the %s this project asks for, so it may be in use: stop what started it, or remove it with `docker rm -f %s`", spec.Name, spec.Image, spec.Name)
 		}
@@ -188,6 +191,8 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 		Name: spec.Name,
 		Config: &container.Config{
 			Image:        spec.Image,
+			Cmd:          spec.Args,
+			User:         spec.User,
 			Env:          spec.Env,
 			Labels:       spec.Labels,
 			ExposedPorts: network.PortSet{port: {}},
@@ -245,6 +250,10 @@ func isFromSpec(inspected container.InspectResponse, spec Spec) bool {
 		}
 	}
 	return true
+}
+
+func isRunWithOtherArgs(inspected container.InspectResponse, spec Spec) bool {
+	return len(spec.Args) > 0 && isFromSpec(inspected, spec) && !slices.Equal(inspected.Config.Cmd, spec.Args)
 }
 
 func readPublishedAddress(inspected container.InspectResponse, name string, port network.Port) (Container, error) {

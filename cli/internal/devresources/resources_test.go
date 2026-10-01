@@ -226,12 +226,21 @@ func TestDevRefusesTopicsTasksConsumersAndWorkersNamingWhatWasDeclared(t *testin
 	}
 }
 
-func TestDevRefusesAKVStoreNamingWhatWasDeclared(t *testing.T) {
+func TestDevRunsAKVStoreAndPrintsWhereItAnswers(t *testing.T) {
 	t.Parallel()
 
-	stack := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir()})
-	_, err := stack.Resolve(context.Background(), []declaration.Resource{{Name: "cache", Type: resourcesv1.ResourceType_RESOURCE_TYPE_KV}})
-	if err == nil || !strings.Contains(err.Error(), `kv "cache"`) || !strings.Contains(err.Error(), "does not run kv stores") {
-		t.Errorf("Resolve(kv) = %v, want kv store cache refused by name", err)
+	var announced []string
+	stack := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir(), Announce: func(line string) {
+		announced = append(announced, line)
+	}})
+	resolved, err := stack.Resolve(context.Background(), []declaration.Resource{{Name: "cache", Type: resourcesv1.ResourceType_RESOURCE_TYPE_KV, KV: &resourcesv1.KvConfig{}}})
+	if err != nil {
+		t.Fatalf("Resolve(kv) = %v", err)
+	}
+	if len(resolved) != 1 || resolved[0].Env["OCEL_RESOURCE_KV_cache"] == "" {
+		t.Errorf("Resolve(kv) = %+v, want the store bound under OCEL_RESOURCE_KV_cache", resolved)
+	}
+	if want := `kv "cache" → valkey:9 @ 127.0.0.1:54001`; len(announced) != 1 || announced[0] != want {
+		t.Errorf("announced %q, want %q", announced, want)
 	}
 }

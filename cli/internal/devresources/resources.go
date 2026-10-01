@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/devresources/bucket"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/cli/internal/devresources/kv"
 	"github.com/ocelhq/ocel/cli/internal/devresources/postgres"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -43,6 +44,10 @@ var backends = map[resourcesv1.ResourceType]func(Options) Backend{
 	resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES: func(opts Options) Backend {
 		servers := postgres.New(opts.Open, filepath.Join(opts.StateDir, secretsDir))
 		return Backend{Resolve: servers.Resolve, Close: servers.Close}
+	},
+	resourcesv1.ResourceType_RESOURCE_TYPE_KV: func(opts Options) Backend {
+		stores := kv.New(opts.Open, filepath.Join(opts.StateDir, secretsDir))
+		return Backend{Resolve: stores.Resolve, Close: stores.Close}
 	},
 	resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET: func(opts Options) Backend {
 		buckets := bucket.New(opts.Open, filepath.Join(opts.StateDir, secretsDir), opts.AppOrigins)
@@ -170,8 +175,6 @@ var refusedInDev = map[resourcesv1.ResourceType]string{
 	resourcesv1.ResourceType_RESOURCE_TYPE_TASK:     topicsTasksAndWorkers,
 	resourcesv1.ResourceType_RESOURCE_TYPE_CONSUMER: topicsTasksAndWorkers,
 	resourcesv1.ResourceType_RESOURCE_TYPE_WORKER:   topicsTasksAndWorkers,
-	// TODO(#1476): ocel dev runs a kv store in a pinned Valkey container; until then it refuses one.
-	resourcesv1.ResourceType_RESOURCE_TYPE_KV: "kv stores",
 }
 
 func label(kind resourcesv1.ResourceType) string {
