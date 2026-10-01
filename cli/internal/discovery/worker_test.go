@@ -159,6 +159,17 @@ func TestAWorkerIsServedFromTheRootItsTasksAndConsumersAreDeclaredIn(t *testing.
 	}
 }
 
+func TestAWorkerDeclaredOutsideEveryRootIsNamedByItsPathInTheProjectEvenUnderAFolderStartingWithTwoDots(t *testing.T) {
+	t.Parallel()
+	configDir := t.TempDir()
+	roots := []Root{{Dir: filepath.Join(configDir, DefaultRootDirName), Language: language.JS}, {Dir: filepath.Join(configDir, "jobs"), Language: language.Python}}
+
+	_, err := WorkerRoot(configDir, roots, "worker", []string{filepath.Join(configDir, "..jobs", "greet.ts") + ":3"})
+	if err == nil || !strings.Contains(err.Error(), "serves ..jobs/greet.ts:3,") {
+		t.Errorf("WorkerRoot = %v, want a refusal naming ..jobs/greet.ts:3, the declaration's path in the project", err)
+	}
+}
+
 func TestTheGeneratedNodeWorkerServesATaskWithItsWorkersOnStartAndMiddleware(t *testing.T) {
 	url := servedFixture(t, "node")
 

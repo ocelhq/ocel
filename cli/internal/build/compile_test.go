@@ -116,6 +116,33 @@ func TestAGoAppWhoseModuleDeclaresTasksCarriesTheWorkerAsASecondBinary(t *testin
 	}
 }
 
+func TestAGoAppWhoseDiscoveryFolderIsAModuleOfItsOwnCarriesNoWorkerAndGetsNothingWrittenIntoThatModule(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeBuildScript(t, root)
+	writeGoApp(t, root, ".")
+	writeFile(t, filepath.Join(root, discovery.DefaultRootDirName, "go.mod"), "module fixture/infra\n\ngo 1.24\n")
+	writeFile(t, filepath.Join(root, discovery.DefaultRootDirName, "infra.go"), "package infra\n")
+	cfg := &project.Project{
+		Dir:  root,
+		Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
+	}
+
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
+	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(root, discovery.DefaultRootDirName, statedir.Name)); !os.IsNotExist(err) {
+		t.Errorf("the build wrote a worker main into %s, a module the app's binary does not compile: %v", discovery.DefaultRootDirName, err)
+	}
+	binary := filepath.Join(root, statedir.Name, "output", "apps", "api", "functions", "index.func", buildoutput.GoWorkerBinary)
+	if _, err := os.Stat(binary); !os.IsNotExist(err) {
+		t.Errorf("the artifact carries %s, and nothing in the app's module declares through ocel: %v", buildoutput.GoWorkerBinary, err)
+	}
+}
+
 func writePythonApp(t *testing.T, root, path string) {
 	t.Helper()
 	dir := filepath.Join(root, path)

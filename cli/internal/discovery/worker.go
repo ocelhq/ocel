@@ -17,7 +17,7 @@ import (
 const (
 	nodeWorkerEntryFile   = "worker.mjs"
 	pythonWorkerEntryFile = statedir.Name + "/worker.py"
-	GoWorkerEntryDir      = statedir.Name + "/worker"
+	goWorkerEntryDir      = statedir.Name + "/worker"
 )
 
 const goWorkerMain = `package main
@@ -107,33 +107,24 @@ __ocelCreateServer(async (req, res) => {
 }).listen(Number(process.env.PORT), process.env.HOST || "127.0.0.1");
 `
 
-func WorkerCommand(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error) {
-	switch served.Language {
-	case language.JS:
-		return nodeWorkerCommand(ctx, configDir, roots)
-	case language.Go:
-		moduleRoot, err := WriteGoWorkerEntry(configDir, roots, served)
-		if err != nil {
-			return nil, err
-		}
-		cmd := exec.CommandContext(ctx, "go", "run", "./"+GoWorkerEntryDir)
-		cmd.Dir = moduleRoot
-		cmd.Env = os.Environ()
-		return cmd, nil
-	case language.Python:
-		return pythonWorkerCommand(ctx, configDir, roots, served)
-	case language.Rust:
-		cmd, _, err := cargoRunCommand(ctx, served)
-		if err != nil {
-			return nil, err
-		}
-		cmd.Env = os.Environ()
-		return cmd, nil
-	}
-	return nil, fmt.Errorf("discovery: %s is a %s folder, and ocel runs no worker from one", served.Dir, served.Language)
+type workerCommand func(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error)
+
+var workerCommands = map[language.Language]workerCommand{
+	language.JS:     nodeWorkerCommand,
+	language.Go:     goWorkerCommand,
+	language.Python: pythonWorkerCommand,
+	language.Rust:   rustWorkerCommand,
 }
 
-func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root) (*exec.Cmd, error) {
+func WorkerCommand(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error) {
+	command, ok := workerCommands[served.Language]
+	if !ok {
+		return nil, fmt.Errorf("discovery: %s is a %s folder, and ocel runs no worker from one", served.Dir, served.Language)
+	}
+	return command(ctx, configDir, roots, served)
+}
+
+func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Root) (*exec.Cmd, error) {
 	var files []string
 	resolveDir := ""
 	for _, root := range roots {
@@ -164,11 +155,42 @@ func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root) (*ex
 	return cmd, nil
 }
 
-func WriteGoWorkerEntry(configDir string, roots []Root, served Root) (string, error) {
+func goWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error) {
 	moduleRoot, _, err := goPackage(configDir, served)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := writeGoWorkerEntry(configDir, roots, moduleRoot); err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, "go", "run", "./"+goWorkerEntryDir)
+	cmd.Dir = moduleRoot
+	cmd.Env = os.Environ()
+	return cmd, nil
+}
+
+func rustWorkerCommand(ctx context.Context, _ string, _ []Root, served Root) (*exec.Cmd, error) {
+	cmd, _, err := cargoRunCommand(ctx, served)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Env = os.Environ()
+	return cmd, nil
+}
+
+func GoWorkerPackage(configDir string, roots []Root, moduleDir string) (string, error) {
+	moduleRoot, err := filepath.Abs(moduleDir)
 	if err != nil {
 		return "", err
 	}
+	written, err := writeGoWorkerEntry(configDir, roots, moduleRoot)
+	if err != nil || !written {
+		return "", err
+	}
+	return "./" + goWorkerEntryDir, nil
+}
+
+func writeGoWorkerEntry(configDir string, roots []Root, moduleRoot string) (bool, error) {
 	var imports strings.Builder
 	for _, root := range roots {
 		if root.Language != language.Go {
@@ -176,16 +198,19 @@ func WriteGoWorkerEntry(configDir string, roots []Root, served Root) (string, er
 		}
 		rootModule, pkg, err := goPackage(configDir, root)
 		if err != nil {
-			return "", err
+			return false, err
 		}
 		if rootModule == moduleRoot {
 			fmt.Fprintf(&imports, "\n\t_ %q\n", pkg)
 		}
 	}
-	if err := writeGoEntry(moduleRoot, GoWorkerEntryDir, fmt.Sprintf(goWorkerMain, imports.String())); err != nil {
-		return "", err
+	if imports.Len() == 0 {
+		return false, nil
 	}
-	return moduleRoot, nil
+	if err := writeGoEntry(moduleRoot, goWorkerEntryDir, fmt.Sprintf(goWorkerMain, imports.String())); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func pythonWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root) (*exec.Cmd, error) {
@@ -261,7 +286,8 @@ func WorkerRoot(configDir string, roots []Root, worker string, sources []string)
 }
 
 func displayedSite(configDir, file, line string) string {
-	if rel, err := filepath.Rel(configDir, file); err == nil && !strings.HasPrefix(rel, "..") {
+	if isWithin(configDir, file) {
+		rel, _ := filepath.Rel(configDir, file)
 		file = filepath.ToSlash(rel)
 	}
 	return file + ":" + line
@@ -271,8 +297,7 @@ func rootContaining(roots []Root, file string) (Root, bool) {
 	var deepest Root
 	found := false
 	for _, root := range roots {
-		rel, err := filepath.Rel(root.Dir, file)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		if !isWithin(root.Dir, file) {
 			continue
 		}
 		if !found || len(root.Dir) > len(deepest.Dir) {
@@ -280,4 +305,9 @@ func rootContaining(roots []Root, file string) (Root, bool) {
 		}
 	}
 	return deepest, found
+}
+
+func isWithin(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

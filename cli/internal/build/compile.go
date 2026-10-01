@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"path/filepath"
-	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -66,18 +65,5 @@ func goWorkerPackage(cfg *project.Project, framework, source string) (string, er
 	if err != nil {
 		return "", err
 	}
-	for _, root := range roots {
-		rel, err := filepath.Rel(source, root.Dir)
-		if root.Language != language.Go || err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			continue
-		}
-		moduleRoot, err := discovery.WriteGoWorkerEntry(cfg.Dir, roots, root)
-		if err != nil {
-			return "", err
-		}
-		if moduleRoot == source {
-			return "./" + discovery.GoWorkerEntryDir, nil
-		}
-	}
-	return "", nil
+	return discovery.GoWorkerPackage(cfg.Dir, roots, source)
 }
