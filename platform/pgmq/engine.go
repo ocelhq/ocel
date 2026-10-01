@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,16 +17,20 @@ import (
 const (
 	Database = "ocel"
 
+	defaultLease = 60 * time.Second
+
 	minimumPgmq = "1.11.1"
 )
 
 type Config struct {
 	ServerURL string
 	Database  string
+	Lease     time.Duration
 }
 
 type Engine struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	lease time.Duration
 
 	mu          sync.Mutex
 	deployment  Deployment
@@ -38,6 +43,9 @@ type Engine struct {
 func Open(ctx context.Context, cfg Config) (*Engine, error) {
 	if cfg.Database == "" {
 		cfg.Database = Database
+	}
+	if cfg.Lease <= 0 {
+		cfg.Lease = defaultLease
 	}
 	if err := ensureDatabase(ctx, cfg); err != nil {
 		return nil, err
@@ -57,6 +65,7 @@ func Open(ctx context.Context, cfg Config) (*Engine, error) {
 	}
 	return &Engine{
 		pool:        pool,
+		lease:       cfg.Lease,
 		workerSlots: map[string]*slots{},
 		applied:     make(chan struct{}, 1),
 		wakes:       map[string]chan struct{}{},

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -12,8 +13,6 @@ import (
 )
 
 const (
-	lease          = 60 * time.Second
-	leaseRenewal   = 20 * time.Second
 	pollInterval   = 200 * time.Millisecond
 	maxReadPerPoll = 100
 	maxInFlight    = 1000
@@ -47,14 +46,17 @@ func (loop *queueLoop) drop(id int64) {
 	delete(loop.held, id)
 }
 
-func (loop *queueLoop) heldIDs() []int64 {
+func (loop *queueLoop) renewHeld(renew func(ids []int64) error) error {
 	loop.mu.Lock()
 	defer loop.mu.Unlock()
+	if len(loop.held) == 0 {
+		return nil
+	}
 	ids := make([]int64, 0, len(loop.held))
 	for id := range loop.held {
 		ids = append(ids, id)
 	}
-	return ids
+	return renew(ids)
 }
 
 func (e *Engine) Dispatch(ctx context.Context) error {
@@ -187,7 +189,7 @@ func wait(ctx context.Context, wake <-chan struct{}, consumerChanged, workerChan
 }
 
 func (e *Engine) renewLeases(ctx context.Context, loop *queueLoop) {
-	ticker := time.NewTicker(leaseRenewal)
+	ticker := time.NewTicker(e.lease / 3)
 	defer ticker.Stop()
 	for {
 		select {
@@ -195,16 +197,22 @@ func (e *Engine) renewLeases(ctx context.Context, loop *queueLoop) {
 			return
 		case <-ticker.C:
 		}
-		if ids := loop.heldIDs(); len(ids) > 0 {
-			if _, err := e.pool.Exec(ctx, "SELECT pgmq.set_vt($1, $2::bigint[], clock_timestamp() + make_interval(secs => $3))", loop.name, ids, lease.Seconds()); err != nil && ctx.Err() == nil {
-				slog.Warn("renew the leases of a queue's messages", "queue", loop.name, "error", err)
-			}
+		err := loop.renewHeld(func(ids []int64) error {
+			_, err := e.pool.Exec(ctx, "SELECT pgmq.set_vt($1, $2::bigint[], clock_timestamp() + make_interval(secs => $3))", loop.name, ids, e.leaseSeconds())
+			return err
+		})
+		if err != nil && ctx.Err() == nil {
+			slog.Warn("renew the leases of a queue's messages", "queue", loop.name, "error", err)
 		}
 	}
 }
 
+func (e *Engine) leaseSeconds() int {
+	return max(int(math.Ceil(e.lease.Seconds())), 1)
+}
+
 func (e *Engine) read(ctx context.Context, loop *queueLoop, deployed deployedConsumer, n int) ([]message, error) {
-	leaseSeconds := int(lease.Seconds())
+	leaseSeconds := e.leaseSeconds()
 	size := int(deployed.consumer.GetBatch().GetSize())
 	switch {
 	case deployed.topic.GetOrdered() && size > 0:
@@ -247,7 +255,7 @@ func (e *Engine) collectBatch(ctx context.Context, loop *queueLoop, deployed dep
 }
 
 func (e *Engine) readLanes(ctx context.Context, loop *queueLoop, deployed deployedConsumer, n int) ([]message, error) {
-	leaseSeconds := int(lease.Seconds())
+	leaseSeconds := e.leaseSeconds()
 	var read []message
 	for lane, share := range loop.lanes.share(lanesOf(deployed.consumer), n) {
 		condition, err := json.Marshal(map[string]string{"lane": laneName(lane)})

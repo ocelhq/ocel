@@ -211,6 +211,63 @@ func TestATriggeredRunIsPostedToItsWorkerAsAnEnvelopeAndCompletesWithTheWorkersA
 	}
 }
 
+func dispatchingWithLease(t *testing.T, lease time.Duration, topics map[string]*contractv1.ManifestTopic, workers map[string]Worker) *Engine {
+	t.Helper()
+	cfg := aDatabase(t)
+	cfg.Lease = lease
+	engine, err := Open(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(engine.Close)
+	if err := engine.Apply(context.Background(), Deployment{Topics: topics, Workers: workers}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	startDispatch(t, engine)
+	return engine
+}
+
+func TestAnAttemptThatOutlivesItsLeaseIsNotDeliveredAgain(t *testing.T) {
+	worker := newWorker(t, func(*topicv1.Envelope) reply { return reply{status: http.StatusOK, hold: 3 * time.Second} })
+	engine := dispatchingWithLease(t, time.Second, map[string]*contractv1.ManifestTopic{"resize": aTask(named("resize"))}, map[string]Worker{"worker": {URL: worker.server.URL}})
+
+	id := trigger(t, engine, "resize", `{}`, nil)
+	awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_COMPLETED)
+
+	if got := len(worker.received()); got != 1 {
+		t.Errorf("the worker received %d deliveries of a run whose attempt outlived its 1s lease, want 1", got)
+	}
+}
+
+func TestAMessageInABatchBeingCollectedPastItsLeaseIsCollectedOnce(t *testing.T) {
+	worker := newWorker(t, succeeding)
+	engine := dispatchingWithLease(t, time.Second, map[string]*contractv1.ManifestTopic{"orders": aTopic(batching(10, 2500*time.Millisecond))}, map[string]Worker{"worker": {URL: worker.server.URL}})
+
+	send(t, engine, "orders", `{"n":1}`, nil)
+	got := awaitDelivered(t, worker, 1)
+	time.Sleep(time.Second)
+
+	if batches := batchesOf(worker.received()); len(batches) != 1 || len(got[0].envelope.GetMessages()) != 1 {
+		t.Errorf("batches = %v, want the one message once in one batch", batches)
+	}
+}
+
+func TestARetryKeepsItsBackoffWhenTheBackoffIsLongerThanTheLease(t *testing.T) {
+	worker := newWorker(t, failingUntil(2))
+	engine := dispatchingWithLease(t, time.Second, map[string]*contractv1.ManifestTopic{"resize": aTask(named("resize"), retrying(3, 4*time.Second, 4*time.Second))}, map[string]Worker{"worker": {URL: worker.server.URL}})
+
+	id := trigger(t, engine, "resize", `{}`, nil)
+	awaitRun(t, engine, id, taskv1.RunStatus_RUN_STATUS_COMPLETED)
+
+	got := worker.received()
+	if len(got) != 2 {
+		t.Fatalf("the worker received %d attempts, want 2", len(got))
+	}
+	if gap := got[1].at.Sub(got[0].at); gap < 2*time.Second {
+		t.Errorf("the retry came %v after the failure, want at least half its 4s backoff, not the 1s lease", gap)
+	}
+}
+
 func TestARunWaitingOnAnUnservedWorkerRunsOnceALaterDeploymentServesIt(t *testing.T) {
 	worker := newWorker(t, succeeding)
 	topics := map[string]*contractv1.ManifestTopic{"resize": aTask()}
