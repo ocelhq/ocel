@@ -1,0 +1,59 @@
+package queues
+
+import (
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ocelhq/ocel/pkg/provider"
+)
+
+func TestAQueueNameFitsSQSAndEndsInFIFOOnlyForAnOrderedConsumer(t *testing.T) {
+	t.Parallel()
+
+	long := strings.Repeat("a", 63)
+	for _, fifo := range []bool{false, true} {
+		name := QueueName("shop", "production", long, long, fifo)
+		if len(name) > 80 {
+			t.Errorf("QueueName(fifo %v) = %q, %d characters, want at most SQS's 80", fifo, name, len(name))
+		}
+		if IsFIFO(name) != fifo || IsFIFO(DeadLetterQueueName("shop", "production", long, long, fifo)) != fifo {
+			t.Errorf("QueueName(fifo %v) = %q, want the .fifo suffix exactly when ordered", fifo, name)
+		}
+		if !strings.HasPrefix(name, "ocel-app-shop-production-") {
+			t.Errorf("QueueName = %q, want it under the app scope, project and environment", name)
+		}
+	}
+}
+
+func TestTwoConsumersWhoseNamesJoinTheSameWayGetTheirOwnQueues(t *testing.T) {
+	t.Parallel()
+
+	if QueueName("shop", "prod", "a-b", "c", false) == QueueName("shop", "prod", "a", "b-c", false) {
+		t.Error("topic a-b's consumer c and topic a's consumer b-c share a queue name")
+	}
+	if QueueName("shop", "prod", "orders", "audit", false) == DeadLetterQueueName("shop", "prod", "orders", "audit", false) {
+		t.Error("a consumer's queue and its dead-letter queue share a name")
+	}
+}
+
+func TestAManifestKeepsEachTopicsDeclarationThroughItsFile(t *testing.T) {
+	t.Parallel()
+
+	declared := &provider.TopicSpec{Ordered: true, TTL: time.Hour, Consumers: []provider.ConsumerSpec{{Name: "resize", Worker: "media", Exclusive: true, Retry: provider.RetryPolicy{MaxAttempts: 4, MinDelay: time.Second, MaxDelay: time.Minute}, Lanes: []provider.Lane{provider.LaneHigh}}}}
+	rendered, err := Render(Manifest{Table: "state", KeyPrefix: "PROJECT#shop#", Topics: map[string]Topic{"resize": {Declared: declared, Queues: map[string]string{"resize": "q.fifo"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := Parse(rendered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := parsed.Topics["resize"]; !reflect.DeepEqual(got.Declared, declared) || got.Queues["resize"] != "q.fifo" {
+		t.Errorf("Parse(Render()) = %+v, want the declaration and queue it was rendered with", got)
+	}
+	if empty, err := Render(Manifest{}); err != nil || empty != nil {
+		t.Errorf("Render of a deploy with no topic = %q, %v, want no file", empty, err)
+	}
+}
