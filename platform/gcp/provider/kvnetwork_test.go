@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -146,7 +148,7 @@ func TestTheKVNetworkIsReportedInstalledOnlyOnceItsPolicyExists(t *testing.T) {
 }
 
 func TestABootstrapRequestingTheKVNetworkRaisesItAndDroppingItTakesItDown(t *testing.T) {
-	b, server := servingNetworks(t)
+	b, server, _ := servingNetworksAndStores(t)
 	req := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{kvFeature}}
 
 	if err := b.raiseFeatures(context.Background(), req, nil); err != nil {
@@ -180,5 +182,49 @@ func TestAConnectionPolicyCreateAnsweredWithAnUnnamedUnfinishedOperationIsAnErro
 	err := b.raiseNetwork(context.Background(), environment.TierProduction, nil)
 	if err == nil || !strings.Contains(err.Error(), "no name") {
 		t.Errorf("raiseNetwork() = %v, want an operation nothing can poll named as an error rather than taken as done", err)
+	}
+}
+
+const heldStore = "projects/acme-prod/locations/europe-west1/instances/ocel-shop-prod-cache-abc123"
+
+func storeLabels(tier environment.Tier) map[string]string {
+	return map[string]string{"ocel-namespace": "ocel", "ocel-tier": string(tier), "ocel-project": "shop", "ocel-environment": "prod", "ocel-kv": "cache"}
+}
+
+func TestDroppingTheKVNetworkWhileAStoreIsOnItIsRefusedNamingTheStore(t *testing.T) {
+	b, networks, stores := servingNetworksAndStores(t)
+	networks.installed()
+	stores.holding(heldStore, storeLabels(environment.TierProduction))
+
+	drop := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{kvFeature}}
+	err := b.dropFeatures(context.Background(), surveyed(kvFeature), drop, nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "kv cache") || !strings.Contains(refused.Message, "shop") ||
+		!strings.Contains(refused.Message, "ocel-shop-prod-cache-abc123") {
+		t.Errorf("dropFeatures() with a store on the network = %v, want a refusal naming the store", err)
+	}
+	if got := networks.wrote(); len(got) != 0 {
+		t.Errorf("a refused drop wrote %v, want the network left in place", got)
+	}
+	if err := b.featuresFree(context.Background(), environment.TierProduction, []string{kvFeature}); err == nil {
+		t.Error("featuresFree() with a store on the network = nil, want removing the bootstrap refused at plan time too")
+	}
+	if filters := stores.filters(); len(filters) == 0 || !strings.Contains(filters[0], `labels.ocel-namespace="ocel"`) ||
+		!strings.Contains(filters[0], `labels.ocel-tier="production"`) {
+		t.Errorf("the stores were listed with filters %q, want one bounded to this namespace's tier", filters)
+	}
+}
+
+func TestDroppingTheKVNetworkIgnoresAStoreOnAnotherTiersNetwork(t *testing.T) {
+	b, networks, stores := servingNetworksAndStores(t)
+	networks.installed()
+	stores.holding(heldStore, storeLabels(environment.TierPreview))
+
+	drop := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{kvFeature}}
+	if err := b.dropFeatures(context.Background(), surveyed(kvFeature), drop, nil); err != nil {
+		t.Fatalf("dropFeatures() with a store on another tier = %v, want the network taken down", err)
+	}
+	if len(networks.networks) != 0 {
+		t.Errorf("dropping the kv network left %v", networks.networks)
 	}
 }

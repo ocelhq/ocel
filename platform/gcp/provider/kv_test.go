@@ -70,6 +70,9 @@ func TestAStoreIsOneMemorystoreNodeWithAppendOnlyPersistenceAndTokenAuthOverTLS(
 	if sent.EngineConfigs["maxmemory"] != "268435456" || sent.EngineConfigs["maxmemory-policy"] != "noeviction" {
 		t.Errorf("created engine configs %v, want maxmemory at the declared memory and noeviction when no eviction is declared", sent.EngineConfigs)
 	}
+	if sent.Labels["ocel-tier"] != "production" || sent.Labels["ocel-namespace"] != "ocel" {
+		t.Errorf("created labels %v, want the namespace and tier whose network the store is on", sent.Labels)
+	}
 	if sent.DeletionProtectionEnabled == nil || *sent.DeletionProtectionEnabled {
 		t.Errorf("created deletion protection %v, want it off so a destroy can take the store down", sent.DeletionProtectionEnabled)
 	}
