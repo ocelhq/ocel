@@ -267,6 +267,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err := b.write(ctx, served, BackupItems(), progress); err != nil {
 		return err
 	}
+	b.host.warnOfKernelSettings(ctx, progress)
 	stamp.State, stamp.Seal = StateComplete, minted.Seal
 	return b.host.Stamp(ctx, req.Tier, stamp)
 }
