@@ -25,13 +25,13 @@ type recordedMessage struct {
 	Message string `json:"message"`
 }
 
-func (t Topics) consumerOf(topicName, consumer string) (consumerRef, error) {
-	for _, ref := range t.engine.current().consumers() {
-		if ref.topicName == topicName && ref.consumer.GetName() == consumer && !isTask(ref.topic) {
-			return ref, nil
+func (t Topics) consumerOf(topicName, consumer string) (deployedConsumer, error) {
+	for _, deployed := range t.engine.current().consumers() {
+		if deployed.topicName == topicName && deployed.consumer.GetName() == consumer && !isTask(deployed.topic) {
+			return deployed, nil
 		}
 	}
-	return consumerRef{}, connect.NewError(connect.CodeNotFound, fmt.Errorf("topic %q has no consumer %q deployed", topicName, consumer))
+	return deployedConsumer{}, connect.NewError(connect.CodeNotFound, fmt.Errorf("topic %q has no consumer %q deployed", topicName, consumer))
 }
 
 func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.SendResponse, error) {
@@ -43,7 +43,7 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 		return nil, err
 	}
 	now := time.Now()
-	p := publication{
+	toPublish := publication{
 		topicName:   req.GetTopic(),
 		topic:       topic,
 		messageID:   newMessageID(now),
@@ -54,12 +54,12 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 		lane:        req.GetLane(),
 	}
 	if req.GetDueAt() != nil {
-		p.dueAt = req.GetDueAt().AsTime()
+		toPublish.dueAt = req.GetDueAt().AsTime()
 	}
-	id := p.messageID
+	id := toPublish.messageID
 	err := t.engine.inTx(ctx, func(tx pgx.Tx) error {
 		if key := req.GetIdempotencyKey(); key != "" {
-			value, err := json.Marshal(recordedMessage{Message: p.messageID})
+			value, err := json.Marshal(recordedMessage{Message: toPublish.messageID})
 			if err != nil {
 				return err
 			}
@@ -76,7 +76,7 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 				return nil
 			}
 		}
-		_, err := t.engine.publish(ctx, tx, p)
+		_, err := t.engine.publish(ctx, tx, toPublish)
 		return err
 	})
 	if err != nil {
@@ -106,19 +106,19 @@ func (t Topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLetter
 	if err != nil {
 		return nil, fmt.Errorf("list dead letters: %w", err)
 	}
-	type row struct {
+	type listedLetter struct {
 		letter   *topicv1.DeadLetter
 		finished time.Time
 	}
-	letters, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
+	letters, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (listedLetter, error) {
 		var execution, messageID, reason string
 		var published, finished time.Time
 		var payload []byte
 		var attempts int32
-		if err := r.Scan(&execution, &messageID, &published, &payload, &attempts, &reason, &finished); err != nil {
-			return row{}, err
+		if err := row.Scan(&execution, &messageID, &published, &payload, &attempts, &reason, &finished); err != nil {
+			return listedLetter{}, err
 		}
-		return row{finished: finished, letter: &topicv1.DeadLetter{
+		return listedLetter{finished: finished, letter: &topicv1.DeadLetter{
 			Execution: execution,
 			Message:   &topicv1.Message{Id: messageID, PublishedAt: timestampOf(published)},
 			Payload:   valueOf(payload),
@@ -136,14 +136,14 @@ func (t Topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLetter
 		last := letters[limit-1]
 		resp.NextCursor = cursorOf(last.finished, last.letter.GetExecution())
 	}
-	for _, l := range letters {
-		resp.DeadLetters = append(resp.DeadLetters, l.letter)
+	for _, listed := range letters {
+		resp.DeadLetters = append(resp.DeadLetters, listed.letter)
 	}
 	return resp, nil
 }
 
 func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDeadLettersRequest) (*topicv1.RedriveDeadLettersResponse, error) {
-	ref, err := t.consumerOf(req.GetTopic(), req.GetConsumer())
+	deployed, err := t.consumerOf(req.GetTopic(), req.GetConsumer())
 	if err != nil {
 		return nil, err
 	}
@@ -155,23 +155,23 @@ func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDead
 		if err != nil {
 			return err
 		}
-		type letter struct{ execution, key, lane string }
-		letters, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (letter, error) {
-			var l letter
-			return l, r.Scan(&l.execution, &l.key, &l.lane)
+		type deadLetter struct{ execution, key, lane string }
+		letters, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (deadLetter, error) {
+			var letter deadLetter
+			return letter, row.Scan(&letter.execution, &letter.key, &letter.lane)
 		})
 		if err != nil {
 			return err
 		}
 		now := time.Now()
-		for _, l := range letters {
-			msgID, err := sendToQueue(ctx, tx, ref, l.execution, l.key, l.lane, now)
+		for _, letter := range letters {
+			msgID, err := sendToQueue(ctx, tx, deployed, letter.execution, letter.key, letter.lane, now)
 			if err != nil {
 				return err
 			}
 			if _, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = 'queued', attempts = 0, error = '', due_at = $2,
 				started_at = NULL, finished_at = NULL, queue_message = $3, revision = `+newRevisionSQL+` WHERE execution = $1`,
-				l.execution, now, msgID); err != nil {
+				letter.execution, now, msgID); err != nil {
 				return err
 			}
 		}
@@ -181,7 +181,7 @@ func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDead
 	if err != nil {
 		return nil, err
 	}
-	t.engine.signal(ref.queue)
+	t.engine.signal(deployed.queue)
 	return &topicv1.RedriveDeadLettersResponse{Redriven: redriven}, nil
 }
 
