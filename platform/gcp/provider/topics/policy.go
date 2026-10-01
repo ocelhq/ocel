@@ -32,3 +32,14 @@ func retryPolicyOf(topic *contractv1.ManifestTopic, consumer *contractv1.Manifes
 	policy.maxDelay = max(policy.maxDelay, policy.minDelay)
 	return policy
 }
+
+func (p retryPolicy) attemptsFor(requested int32) int {
+	if requested > 0 && int(requested) < p.maxAttempts {
+		return int(requested)
+	}
+	return p.maxAttempts
+}
+
+func isTask(topic *contractv1.ManifestTopic) bool {
+	return len(topic.GetConsumers()) == 1 && topic.GetConsumers()[0].GetExclusive()
+}
