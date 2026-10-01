@@ -7,6 +7,10 @@ and `evicting`, which evicts by lru. Each route reaches one of them through its 
 or its native client. The declarations sit in the default discovery directory and are the
 provisioning step.
 
+`/api/kv/password-report` answers with the `cache` password in clear, so it answers only a
+request whose `x-password-report-nonce` header matches the `PASSWORD_REPORT_NONCE` variable;
+the journey sets a fresh one for each run.
+
 ## Run it
 
 ```bash

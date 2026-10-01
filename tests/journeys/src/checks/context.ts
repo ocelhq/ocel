@@ -8,6 +8,8 @@ export const INITIAL_GREETING = "journey-hello";
 export const REDEPLOY_GREETING = "redeployed";
 export const SECRET_TOKEN = "journey-secret-never-in-a-body";
 export const REDACTED = "<redacted>";
+export const PASSWORD_REPORT_NONCE_ENV = "PASSWORD_REPORT_NONCE";
+export const PASSWORD_REPORT_NONCE_HEADER = "x-password-report-nonce";
 
 export const OCEL_SVG_BYTES = 365;
 export const LARGE_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -24,6 +26,7 @@ export type CheckContext = {
   notes: Map<string, string>;
   fetch: Fetch;
   readExposed: () => Promise<string>;
+  passwordReportNonce: string;
 };
 
 export type Check = {

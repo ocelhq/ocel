@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import express, { type Response } from "express";
 import { Redis } from "ioredis";
 import { InvalidKVValueError } from "ocel/kv";
@@ -255,7 +255,22 @@ app.get("/api/kv/unauthenticated", async (_req, res) => {
   }
 });
 
-app.get("/api/kv/exposure", (_req, res) => {
+function isReportNonce(given: string | undefined): boolean {
+  const expected = process.env.PASSWORD_REPORT_NONCE;
+  if (!expected || given === undefined) {
+    return false;
+  }
+  const [givenBytes, expectedBytes] = [Buffer.from(given), Buffer.from(expected)];
+  return (
+    givenBytes.byteLength === expectedBytes.byteLength && timingSafeEqual(givenBytes, expectedBytes)
+  );
+}
+
+app.get("/api/kv/password-report", (req, res) => {
+  if (!isReportNonce(req.get("x-password-report-nonce"))) {
+    res.status(403).json({ error: "the password report needs the nonce the harness set" });
+    return;
+  }
   const { password } = new URL(cache.connectionString);
   const secret = decodeURIComponent(password);
   const environment = Object.entries(process.env)
