@@ -88,6 +88,18 @@ func TestADeadLetterKeepsItsPayloadsJSONText(t *testing.T) {
 	}
 }
 
+func TestAMessageKeepsItsJSONTextInTheEnvelope(t *testing.T) {
+	worker := newWorker(t, succeeding)
+	engine := dispatching(t, map[string]*contractv1.ManifestTopic{"orders": aTopic(&contractv1.ManifestConsumer{Name: "email", Worker: "worker"})}, map[string]Worker{"worker": {URL: worker.server.URL}})
+
+	send(t, engine, "orders", exactJSON, nil)
+
+	got := awaitDelivered(t, worker, 1)
+	if payload := rawFieldOf(t, got[0].body, "payload"); payload != exactJSON {
+		t.Errorf("the envelope's payload = %s, want the sent JSON %s inline and unchanged", payload, exactJSON)
+	}
+}
+
 func TestABatchedMessageKeepsItsJSONTextInTheEnvelope(t *testing.T) {
 	worker := newWorker(t, succeeding)
 	engine := dispatching(t, map[string]*contractv1.ManifestTopic{"orders": aTopic(batching(1, time.Second))}, map[string]Worker{"worker": {URL: worker.server.URL}})
