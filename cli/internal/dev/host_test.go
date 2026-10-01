@@ -12,7 +12,7 @@ import (
 
 func TestTheAppsOriginsFollowThePortInTheDotfile(t *testing.T) {
 	root := t.TempDir()
-	origins := appOrigins(root, valueSource{id: "dotenv"})
+	origins := appOrigins(root, valueSource{id: "dotenv", ownStore: true})
 
 	clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "PORT=4100\n")
 	if got := origins(); !slices.Contains(got, "http://localhost:4100") || !slices.Contains(got, "http://127.0.0.1:4100") {
