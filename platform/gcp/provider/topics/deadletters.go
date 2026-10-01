@@ -173,15 +173,33 @@ func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDead
 		if err != nil {
 			return err
 		}
-		redriven++
 		again := publicationOf(letter, topic)
 		again.dueAt, again.consumer = now, req.GetConsumer()
-		return t.deployment.publishNow(ctx, again)
+		if err := t.deployment.publishNow(ctx, again); err != nil {
+			return errors.Join(err, store.restoreDeadLetter(ctx, letter))
+		}
+		redriven++
+		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &topicv1.RedriveDeadLettersResponse{Redriven: redriven}, nil
+}
+
+func (s Store) restoreDeadLetter(ctx context.Context, letter runRecord) error {
+	_, err := s.changeRun(ctx, letter.Execution, func(record *runRecord, found bool) error {
+		if !found || record.Status != provider.RunQueued || record.Attempts != 0 {
+			return errRunUnchanged
+		}
+		record.Status, record.Attempts, record.Error, record.DueAt = provider.RunFailed, letter.Attempts, letter.Error, letter.DueAt
+		record.StartedAt, record.FinishedAt = letter.StartedAt, letter.FinishedAt
+		return nil
+	})
+	if err != nil && !errors.Is(err, errRunUnchanged) {
+		return fmt.Errorf("restore dead letter %s: %w", letter.Execution, err)
+	}
+	return nil
 }
 
 func (t Topics) PurgeDeadLetters(ctx context.Context, req *topicv1.PurgeDeadLettersRequest) (*topicv1.PurgeDeadLettersResponse, error) {

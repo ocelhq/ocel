@@ -106,6 +106,32 @@ func TestLiveARedrivenDeadLetterReachesItsConsumerAloneAndRunsAgain(t *testing.T
 	}
 }
 
+func TestLiveARedriveThatFailsToPublishLeavesTheDeadLetterAsItWas(t *testing.T) {
+	p := newPublished(t)
+	execution := p.deadLetter(exactJSON)
+	before, err := p.deployment.Store().ReadRun(context.Background(), execution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest(http.MethodDelete, p.endpoint+"/v1/projects/"+p.deployment.Clients.Project+"/topics/"+p.deployment.Names.Topic("orders"), nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+
+	if _, err := p.deployment.Topics().RedriveDeadLetters(context.Background(), &topicv1.RedriveDeadLettersRequest{Topic: "orders", Consumer: "ship"}); err == nil {
+		t.Fatal("RedriveDeadLetters() to a topic that is gone answered no error")
+	}
+	after, err := p.deployment.Store().ReadRun(context.Background(), execution)
+	if err != nil || after.Status != provider.RunFailed || after.Attempts != before.Attempts || after.Error != before.Error || !after.FinishedAt.Equal(before.FinishedAt) {
+		t.Errorf("the dead letter after a failed redrive = %+v, %v, want it failed as before: %+v", after, err, before)
+	}
+	if count := p.countDeadLetters(); count != 1 {
+		t.Errorf("CountDeadLetters() after a failed redrive = %d, want the 1 still there", count)
+	}
+}
+
 func TestLiveAPurgedDeadLetterIsGone(t *testing.T) {
 	p := newPublished(t)
 	kept := p.deadLetter(`{"n":1}`)
