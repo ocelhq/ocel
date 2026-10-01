@@ -578,6 +578,72 @@ func TestEveryCredentialReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppSc
 	}
 }
 
+func TestEveryCredentialProvisionsKVStoresOnlyUnderTheAppScope(t *testing.T) {
+	group, member := "arn:aws:elasticache:*:*:replicationgroup:ocel-app-*", "arn:aws:elasticache:*:*:cluster:ocel-app-*"
+	parameters, subnets := "arn:aws:elasticache:*:*:parametergroup:ocel-app-*", "arn:aws:elasticache:*:*:subnetgroup:ocel-app-*"
+	on := map[string][]string{
+		"elasticache:CreateReplicationGroup":       {group, member, parameters, subnets},
+		"elasticache:ModifyReplicationGroup":       {group, parameters},
+		"elasticache:DeleteReplicationGroup":       {group},
+		"elasticache:DescribeReplicationGroups":    {group},
+		"elasticache:DescribeCacheClusters":        {member},
+		"elasticache:CreateCacheParameterGroup":    {parameters},
+		"elasticache:ModifyCacheParameterGroup":    {parameters},
+		"elasticache:DeleteCacheParameterGroup":    {parameters},
+		"elasticache:DescribeCacheParameterGroups": {parameters},
+		"elasticache:DescribeCacheParameters":      {parameters},
+		"elasticache:CreateCacheSubnetGroup":       {subnets},
+		"elasticache:ModifyCacheSubnetGroup":       {subnets},
+		"elasticache:DeleteCacheSubnetGroup":       {subnets},
+		"elasticache:DescribeCacheSubnetGroups":    {subnets},
+		"elasticache:AddTagsToResource":            {group, member, parameters, subnets},
+		"elasticache:ListTagsForResource":          {group, member, parameters, subnets},
+		"elasticache:RemoveTagsFromResource":       {group, member, parameters, subnets},
+	}
+	want := map[grant]bool{}
+	for action, resources := range on {
+		for _, resource := range resources {
+			want[grant{action: action, resource: resource, condition: conditionJSON(t, nil)}] = true
+		}
+	}
+	for purpose, document := range bothCredentials(t) {
+		granted := map[grant]bool{}
+		for g := range grantsOf(t, document) {
+			if strings.HasPrefix(g.action, "elasticache:") {
+				granted[g] = true
+			}
+		}
+		if !maps.Equal(granted, want) {
+			t.Errorf("the %s credential grants elasticache %v, want exactly %v: a store's replication group, members, parameter group and subnet group, each named under the app scope", purpose, granted, want)
+		}
+	}
+}
+
+func TestEveryCredentialMayCreateElastiCachesLinkedRole(t *testing.T) {
+	want := grant{
+		action:    "iam:CreateServiceLinkedRole",
+		resource:  "arn:aws:iam::*:role/aws-service-role/elasticache.amazonaws.com/*",
+		condition: conditionJSON(t, linkedRoleFor("elasticache.amazonaws.com")),
+	}
+	for purpose, document := range bothCredentials(t) {
+		if !grantsOf(t, document)[want] {
+			t.Errorf("the %s credential cannot create ElastiCache's service-linked role, which the first store in an account needs to place its nodes in the VPC", purpose)
+		}
+	}
+}
+
+func TestEveryCredentialReadsWritesAndDeletesTheKVTokensAndNoOtherParameterThatWay(t *testing.T) {
+	tokens := parameterARNPrefix + defaultNamespace.KVTokenRoot() + "/*"
+	for purpose, document := range bothCredentials(t) {
+		granted := grantsOf(t, document)
+		for _, action := range []string{"ssm:GetParameter", "ssm:PutParameter", "ssm:DeleteParameter"} {
+			if !granted[grant{action: action, resource: tokens, condition: conditionJSON(t, nil)}] {
+				t.Errorf("the %s credential does not grant %s on %s, where a deploy keeps each store's AUTH token", purpose, action, tokens)
+			}
+		}
+	}
+}
+
 func TestTheBootstrapCredentialTouchesOnlyEventSourceMappingsOfItsOwnFunctions(t *testing.T) {
 	r := defaultNamespace.ScopedARNs()
 	want := conditionJSON(t, map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction}})

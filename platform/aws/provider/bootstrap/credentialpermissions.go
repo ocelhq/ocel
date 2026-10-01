@@ -40,6 +40,12 @@ const (
 	appInstanceARN    = "arn:aws:rds:*:*:db:" + appScopePrefix + "*"
 	appSubnetGroupARN = "arn:aws:rds:*:*:subgrp:" + appScopePrefix + "*"
 
+	appReplicationGroupARN   = "arn:aws:elasticache:*:*:replicationgroup:" + appScopePrefix + "*"
+	appCacheClusterARN       = "arn:aws:elasticache:*:*:cluster:" + appScopePrefix + "*"
+	appCacheParameterARN     = "arn:aws:elasticache:*:*:parametergroup:" + appScopePrefix + "*"
+	appCacheSubnetGroupARN   = "arn:aws:elasticache:*:*:subnetgroup:" + appScopePrefix + "*"
+	elastiCacheLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/elasticache.amazonaws.com/*"
+
 	appSecurityGroupARN  = "arn:aws:ec2:*:*:security-group/*"
 	appVPCARN            = "arn:aws:ec2:*:*:vpc/*"
 	appRepositoryARN     = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
@@ -97,6 +103,7 @@ type ScopedARNs struct {
 	stackRecordTree     string
 	stackRecord         string
 	anyParam            string
+	kvToken             string
 }
 
 func (n Namespace) ScopedARNs() ScopedARNs {
@@ -123,6 +130,7 @@ func (n Namespace) ScopedARNs() ScopedARNs {
 		originParam:        parameterARNPrefix + n.paramRoot() + "/origin/*",
 		stackRecordTree:    parameterARNPrefix + n.stackRecordRoot() + "*",
 		anyParam:           parameterARNPrefix + n.paramRoot() + "/*",
+		kvToken:            parameterARNPrefix + n.KVTokenRoot() + "/*",
 	}
 	a.bootstrapObject = a.bootstrapBucket + "/*"
 	a.runtimeLayerVersion = a.runtimeLayer + ":*"
@@ -393,6 +401,11 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Condition: linkedRoleFor("vpcorigin.cloudfront.amazonaws.com"),
 		},
 		{
+			Actions:   []string{"iam:CreateServiceLinkedRole"},
+			Resources: []string{elastiCacheLinkedRoleARN},
+			Condition: linkedRoleFor("elasticache.amazonaws.com"),
+		},
+		{
 			Actions:   []string{"cloudfront:CreateVpcOrigin"},
 			Resources: []string{containerVPCOriginARN},
 			Condition: taggedOnCreate(),
@@ -650,6 +663,50 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			},
 			Resources: []string{appClusterARN, appInstanceARN, appSubnetGroupARN},
 			Condition: taggedByOcel(),
+		},
+		{
+			Actions: []string{
+				"elasticache:AddTagsToResource",
+				"elasticache:CreateReplicationGroup",
+				"elasticache:ListTagsForResource",
+				"elasticache:RemoveTagsFromResource",
+			},
+			Resources: []string{appReplicationGroupARN, appCacheClusterARN, appCacheParameterARN, appCacheSubnetGroupARN},
+		},
+		{
+			Actions:   []string{"elasticache:ModifyReplicationGroup"},
+			Resources: []string{appReplicationGroupARN, appCacheParameterARN},
+		},
+		{
+			Actions:   []string{"elasticache:DeleteReplicationGroup", "elasticache:DescribeReplicationGroups"},
+			Resources: []string{appReplicationGroupARN},
+		},
+		{
+			Actions:   []string{"elasticache:DescribeCacheClusters"},
+			Resources: []string{appCacheClusterARN},
+		},
+		{
+			Actions: []string{
+				"elasticache:CreateCacheParameterGroup",
+				"elasticache:DeleteCacheParameterGroup",
+				"elasticache:DescribeCacheParameterGroups",
+				"elasticache:DescribeCacheParameters",
+				"elasticache:ModifyCacheParameterGroup",
+			},
+			Resources: []string{appCacheParameterARN},
+		},
+		{
+			Actions: []string{
+				"elasticache:CreateCacheSubnetGroup",
+				"elasticache:DeleteCacheSubnetGroup",
+				"elasticache:DescribeCacheSubnetGroups",
+				"elasticache:ModifyCacheSubnetGroup",
+			},
+			Resources: []string{appCacheSubnetGroupARN},
+		},
+		{
+			Actions:   []string{"ssm:DeleteParameter", "ssm:GetParameter", "ssm:PutParameter"},
+			Resources: []string{r.kvToken},
 		},
 		{
 			Actions: []string{
