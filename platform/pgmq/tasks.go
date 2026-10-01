@@ -19,6 +19,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
+const defaultIdempotencyKeyLife = 30 * 24 * time.Hour
+
 type Tasks struct {
 	engine *Engine
 }
@@ -81,11 +83,69 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 		}
 		p.metadata = metadata
 	}
-	executions, err := t.engine.publish(ctx, tx, p)
-	if err != nil {
+	execution := executionOf(p.messageID, topic.GetConsumers()[0].GetName())
+	if key := options.GetIdempotencyKey(); key != "" {
+		life := defaultIdempotencyKeyLife
+		if options.GetIdempotencyKeyTtl() != nil {
+			life = options.GetIdempotencyKeyTtl().AsDuration()
+		}
+		existing, created, err := ensureRecord(ctx, tx, runRecord(provider.RecordIdempotency, name, key, execution, now.Add(life)))
+		if err != nil || !created {
+			return runIn(existing), err
+		}
+	}
+	if debounce := options.GetDebounce(); debounce != nil {
+		p.dueAt = now.Add(debounce.GetDelay().AsDuration())
+		pending, err := t.debounce(ctx, tx, runRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, p.dueAt))
+		if err != nil || pending != "" {
+			return pending, err
+		}
+	}
+	if _, err := t.engine.publish(ctx, tx, p); err != nil {
 		return "", err
 	}
-	return executions[0], nil
+	return execution, nil
+}
+
+type recordedRun struct {
+	Run string `json:"run"`
+}
+
+func runRecord(purpose provider.RecordPurpose, task, key, execution string, expires time.Time) provider.ExpiringRecord {
+	value, _ := json.Marshal(recordedRun{Run: execution})
+	return provider.ExpiringRecord{Purpose: purpose, Topic: task, Key: key, Value: value, ExpiresAt: expires}
+}
+
+func runIn(record provider.ExpiringRecord) string {
+	var recorded recordedRun
+	_ = json.Unmarshal(record.Value, &recorded)
+	return recorded.Run
+}
+
+func (t Tasks) debounce(ctx context.Context, tx pgx.Tx, record provider.ExpiringRecord) (string, error) {
+	existing, created, err := ensureRecord(ctx, tx, record)
+	if err != nil || created {
+		return "", err
+	}
+	pending := runIn(existing)
+	run, err := lockRun(ctx, tx, pending)
+	if err != nil && connect.CodeOf(err) != connect.CodeNotFound {
+		return "", err
+	}
+	if err == nil && run.status == provider.RunDelayed && run.message != nil {
+		if _, err := tx.Exec(ctx, `UPDATE ocel.runs SET due_at = $2, revision = `+newRevisionSQL+` WHERE execution = $1`, pending, record.ExpiresAt); err != nil {
+			return "", err
+		}
+		if _, err := tx.Exec(ctx, "SELECT pgmq.set_vt($1, $2::bigint, $3::timestamptz)", run.queue, *run.message, record.ExpiresAt); err != nil {
+			return "", err
+		}
+		_, err := tx.Exec(ctx, `UPDATE ocel.records SET expires_at = $4 WHERE purpose = $1 AND topic = $2 AND key = $3`,
+			string(record.Purpose), record.Topic, record.Key, record.ExpiresAt)
+		return pending, err
+	}
+	_, err = tx.Exec(ctx, `UPDATE ocel.records SET value = $4, expires_at = $5 WHERE purpose = $1 AND topic = $2 AND key = $3`,
+		string(record.Purpose), record.Topic, record.Key, string(record.Value), record.ExpiresAt)
+	return "", err
 }
 
 func refuseNonJSON(payload []byte) error {
