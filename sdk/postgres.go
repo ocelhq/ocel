@@ -31,9 +31,8 @@ func PostgresVersion(v string) PostgresOption {
 type PostgresDB struct {
 	name string
 
-	once sync.Once
+	mu   sync.Mutex
 	pool *pgxpool.Pool
-	err  error
 }
 
 // Postgres declares a postgres database named name and returns the handle an app
@@ -108,24 +107,28 @@ func (p *PostgresDB) Pool(ctx context.Context) (*pgxpool.Pool, error) {
 	if discovering() {
 		return nil, &UnprovisionedError{Resource: p.resource(), Access: "Pool"}
 	}
-	p.once.Do(func() {
-		properties, err := p.properties("Pool")
-		if err != nil {
-			p.err = err
-			return
-		}
-		config, err := pgxpool.ParseConfig(connectionString(properties))
-		if err != nil {
-			p.err = err
-			return
-		}
-		if err := trustCA(config, properties.GetTlsCa()); err != nil {
-			p.err = err
-			return
-		}
-		p.pool, p.err = pgxpool.NewWithConfig(ctx, config)
-	})
-	return p.pool, p.err
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.pool != nil {
+		return p.pool, nil
+	}
+	properties, err := p.properties("Pool")
+	if err != nil {
+		return nil, err
+	}
+	config, err := pgxpool.ParseConfig(connectionString(properties))
+	if err != nil {
+		return nil, err
+	}
+	if err := trustCA(config, properties.GetTlsCa()); err != nil {
+		return nil, err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	p.pool = pool
+	return pool, nil
 }
 
 func trustCA(config *pgxpool.Config, ca string) error {

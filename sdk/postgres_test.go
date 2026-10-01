@@ -234,3 +234,19 @@ func TestAMissingBindingIsAMissingBindingError(t *testing.T) {
 		t.Errorf("Key = %q, want the env var the binding arrives in", missing.Key)
 	}
 }
+
+func TestPoolOpensOnceTheBindingArrivesAfterAFailedOpen(t *testing.T) {
+	db := ocel.Postgres("late")
+
+	var missing *ocel.MissingBindingError
+	if _, err := db.Pool(t.Context()); !errors.As(err, &missing) {
+		t.Fatalf("Pool() before the binding err = %v, want a *ocel.MissingBindingError", err)
+	}
+	t.Setenv("OCEL_RESOURCE_POSTGRES_late", `{"name":"late","postgres":{"host":"127.0.0.1","port":5432,"database":"d","username":"u","password":"p"}}`)
+
+	pool, err := db.Pool(t.Context())
+	if err != nil {
+		t.Fatalf("Pool() after the binding arrived = %v, want the pool opened", err)
+	}
+	t.Cleanup(pool.Close)
+}
