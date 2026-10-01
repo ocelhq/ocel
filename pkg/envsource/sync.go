@@ -247,7 +247,7 @@ func (s *Sync) open(ctx context.Context, key string, registration Registration) 
 	if current, found := s.opened[key]; found && slices.Equal(current.credentials, credentials) {
 		return current.source, nil
 	}
-	source := registration.Descriptor.decoded.schedule.open(credentials, s.Login)
+	source := registration.Descriptor.openScheduled(credentials, s.Login)
 	if s.opened == nil {
 		s.opened = map[string]openedSource{}
 	}

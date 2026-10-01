@@ -12,11 +12,11 @@ import (
 const dedupeKeySeparator = "\x00"
 
 func DedupeKey(ctx context.Context, store variablestore.Store, scope variablestore.Scope, descriptor Descriptor) (string, error) {
-	schedule := descriptor.decoded.schedule
-	if schedule == nil {
+	location, scheduled := descriptor.scheduleLocation()
+	if !scheduled {
 		return descriptor.Kind() + dedupeKeySeparator + scope.Project, nil
 	}
-	parts := []string{descriptor.Kind(), schedule.location}
+	parts := []string{descriptor.Kind(), location}
 	for _, name := range descriptor.CredentialVariables() {
 		found, err := store.GetDereferenced(ctx, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: name}}, false)
 		switch {

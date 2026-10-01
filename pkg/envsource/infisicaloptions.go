@@ -120,10 +120,10 @@ var (
 )
 
 func refuseMalformedInfisical(options InfisicalOptions) error {
-	if err := requireText("project", options.Project, "the id of the Infisical project this tier reads"); err != nil {
+	if err := refuseBlank("project", options.Project, "the id of the Infisical project this tier reads"); err != nil {
 		return err
 	}
-	if err := requireText("environment", options.Environment, "the slug of the Infisical environment this tier reads"); err != nil {
+	if err := refuseBlank("environment", options.Environment, "the slug of the Infisical environment this tier reads"); err != nil {
 		return err
 	}
 	if options.Path != "" && !strings.HasPrefix(options.Path, "/") {
@@ -135,18 +135,18 @@ func refuseMalformedInfisical(options InfisicalOptions) error {
 	return nil
 }
 
-func decodeDevInfisical(options InfisicalOptions) (decodedOptions, error) {
+func decodeDevInfisical(options InfisicalOptions) (behaviour, error) {
 	if err := refuseMalformedInfisical(options); err != nil {
-		return decodedOptions{}, err
+		return behaviour{}, err
 	}
 	switch {
 	case options.Auth != nil:
-		return decodedOptions{}, &OptionError{Field: "auth", Reason: "is for production and preview: ocel dev reads Infisical as you, from INFISICAL_TOKEN or else the infisical CLI you are logged in to — drop it"}
+		return behaviour{}, &OptionError{Field: "auth", Reason: "is for production and preview: ocel dev reads Infisical as you, from INFISICAL_TOKEN or else the infisical CLI you are logged in to — drop it"}
 	case options.Write != "":
-		return decodedOptions{}, &OptionError{Field: "write", Reason: "is for production and preview: ocel dev only reads Infisical — drop it"}
+		return behaviour{}, &OptionError{Field: "write", Reason: "is for production and preview: ocel dev only reads Infisical — drop it"}
 	}
 	options = options.Normalize()
-	return decodedOptions{
+	return behaviour{
 		id: options.ID(),
 		open: func(dir string, lookupEnv func(string) (string, bool)) (Source, error) {
 			return openInfisicalAsDeveloper(options, dir, lookupEnv)
@@ -154,27 +154,27 @@ func decodeDevInfisical(options InfisicalOptions) (decodedOptions, error) {
 	}, nil
 }
 
-func decodeDeployedInfisical(options InfisicalOptions) (decodedOptions, error) {
+func decodeDeployedInfisical(options InfisicalOptions) (behaviour, error) {
 	if err := refuseMalformedInfisical(options); err != nil {
-		return decodedOptions{}, err
+		return behaviour{}, err
 	}
 	if options.Auth == nil {
-		return decodedOptions{}, &OptionError{Field: "auth", Reason: "is required: production and preview read Infisical as a machine identity, keyed by one of universal, identity"}
+		return behaviour{}, &OptionError{Field: "auth", Reason: "is required: production and preview read Infisical as a machine identity, keyed by one of universal, identity"}
 	}
 	if options.Write != "" {
-		if err := requireOneOf("write", options.Write, WriteNever, WriteMissing, WriteValues); err != nil {
-			return decodedOptions{}, err
+		if err := refuseNotOneOf("write", options.Write, WriteNever, WriteMissing, WriteValues); err != nil {
+			return behaviour{}, err
 		}
 	}
-	if err := checkInfisicalAuth(options.Auth); err != nil {
-		return decodedOptions{}, err
+	if err := refuseMalformedAuth(options.Auth); err != nil {
+		return behaviour{}, err
 	}
 	options = options.Normalize()
 	location := []string{options.Host, options.Project, options.Environment, options.Path, options.Auth.method()}
 	if options.Auth.Identity != nil {
 		location = append(location, options.Auth.Identity.IdentityID)
 	}
-	return decodedOptions{
+	return behaviour{
 		id:                  options.ID(),
 		canCreate:           options.Write == WriteMissing || options.Write == WriteValues,
 		canUpdate:           options.Write == WriteValues,
@@ -194,12 +194,12 @@ func decodeDeployedInfisical(options InfisicalOptions) (decodedOptions, error) {
 	}, nil
 }
 
-func checkInfisicalAuth(auth *InfisicalAuth) error {
+func refuseMalformedAuth(auth *InfisicalAuth) error {
 	if (auth.Universal == nil) == (auth.Identity == nil) {
 		return &OptionError{Field: "auth", Reason: "must set exactly one of the keys universal, identity"}
 	}
 	if auth.Identity != nil {
-		return requireText("auth.identity.identityId", auth.Identity.IdentityID, "the id of the Infisical machine identity to sign in as")
+		return refuseBlank("auth.identity.identityId", auth.Identity.IdentityID, "the id of the Infisical machine identity to sign in as")
 	}
 	for _, field := range []struct {
 		name     string

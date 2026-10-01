@@ -48,7 +48,7 @@ func tiersReading(id string) []string {
 func (t envSourceTier) namedAlone() []string {
 	var out []string
 	for _, kind := range envsource.Kinds() {
-		if config := t.configOf(kind); config != nil && config.Options == nil {
+		if config := t.configOf(kind); config != nil && config.NamedAlone() {
 			out = append(out, kind.Name)
 		}
 	}
@@ -58,7 +58,7 @@ func (t envSourceTier) namedAlone() []string {
 func (t envSourceTier) keyed() []envsource.Kind {
 	var out []envsource.Kind
 	for _, kind := range envsource.Kinds() {
-		if config := t.configOf(kind); config != nil && config.Options != nil {
+		if config := t.configOf(kind); config != nil && !config.NamedAlone() {
 			out = append(out, kind)
 		}
 	}

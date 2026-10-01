@@ -6,9 +6,9 @@ import (
 )
 
 type Descriptor struct {
-	kind    string
-	options json.RawMessage
-	decoded decodedOptions
+	kind      string
+	options   json.RawMessage
+	behaviour behaviour
 }
 
 func NewDescriptor(kind string, options json.RawMessage) (Descriptor, error) {
@@ -32,7 +32,7 @@ func newDescriptor(kind string, options json.RawMessage, reader string, configOf
 	if err != nil {
 		return Descriptor{}, fmt.Errorf("the %s env source's options: %w", kind, err)
 	}
-	return Descriptor{kind: kind, options: canonical, decoded: decoded}, nil
+	return Descriptor{kind: kind, options: canonical, behaviour: decoded}, nil
 }
 
 func mustDescriptor(descriptor Descriptor, err error) Descriptor {
@@ -46,36 +46,47 @@ func (d Descriptor) Kind() string { return d.kind }
 
 func (d Descriptor) Options() json.RawMessage { return d.options }
 
-func (d Descriptor) ID() string { return d.decoded.id }
+func (d Descriptor) ID() string { return d.behaviour.id }
 
 func (d Descriptor) Reading() Reading {
 	switch {
-	case d.decoded.schedule != nil:
+	case d.behaviour.schedule != nil:
 		return ReadingOnSchedule
-	case d.decoded.open != nil:
+	case d.behaviour.open != nil:
 		return ReadingWhereOcelRuns
 	}
 	return ReadingOwnStore
 }
 
-func (d Descriptor) CanCreate() bool { return d.decoded.canCreate }
+func (d Descriptor) CanCreate() bool { return d.behaviour.canCreate }
 
-func (d Descriptor) CanUpdate() bool { return d.decoded.canUpdate }
+func (d Descriptor) CanUpdate() bool { return d.behaviour.canUpdate }
 
-func (d Descriptor) CredentialVariables() []string { return d.decoded.credentialVariables }
+func (d Descriptor) CredentialVariables() []string { return d.behaviour.credentialVariables }
 
 func (d Descriptor) Open(dir string, lookupEnv func(string) (string, bool)) (Source, error) {
-	if d.decoded.open == nil {
+	if d.behaviour.open == nil {
 		return nil, fmt.Errorf("a %s env source is ocel's own to read, never a command or service to open", d.kind)
 	}
-	return d.decoded.open(dir, lookupEnv)
+	return d.behaviour.open(dir, lookupEnv)
 }
 
 func (d Descriptor) RefuseLogin(login Login) error {
-	if d.decoded.schedule == nil || d.decoded.schedule.refuseLogin == nil {
+	if d.behaviour.schedule == nil || d.behaviour.schedule.refuseLogin == nil {
 		return nil
 	}
-	return d.decoded.schedule.refuseLogin(login)
+	return d.behaviour.schedule.refuseLogin(login)
+}
+
+func (d Descriptor) scheduleLocation() (string, bool) {
+	if d.behaviour.schedule == nil {
+		return "", false
+	}
+	return d.behaviour.schedule.location, true
+}
+
+func (d Descriptor) openScheduled(credentials []string, login Login) Source {
+	return d.behaviour.schedule.open(credentials, login)
 }
 
 type storedDescriptor struct {

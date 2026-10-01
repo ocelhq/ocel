@@ -54,17 +54,17 @@ func (ExecOptions) Doc() string {
 	return "A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev."
 }
 
-func decodeExec(options ExecOptions) (decodedOptions, error) {
+func decodeExec(options ExecOptions) (behaviour, error) {
 	if len(options.Command) == 0 {
-		return decodedOptions{}, &OptionError{Field: "command", Reason: "is required: the command to run and its arguments, such as [\"op\", \"inject\"]"}
+		return behaviour{}, &OptionError{Field: "command", Reason: "is required: the command to run and its arguments, such as [\"op\", \"inject\"]"}
 	}
 	if options.Format == "" {
-		return decodedOptions{}, &OptionError{Field: "format", Reason: "is required: one of json, dotenv"}
+		return behaviour{}, &OptionError{Field: "format", Reason: "is required: one of json, dotenv"}
 	}
-	if err := requireOneOf("format", options.Format, FormatJSON, FormatDotenv); err != nil {
-		return decodedOptions{}, err
+	if err := refuseNotOneOf("format", options.Format, FormatJSON, FormatDotenv); err != nil {
+		return behaviour{}, err
 	}
-	return decodedOptions{
+	return behaviour{
 		id: execKind,
 		open: func(dir string, _ func(string) (string, bool)) (Source, error) {
 			return execSource{options: options, dir: dir}, nil
