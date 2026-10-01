@@ -138,14 +138,3 @@ func TestARunWhoseOutputIsOver256KiBFailsOnceWithoutARetry(t *testing.T) {
 		t.Errorf("run output %d bytes, error %q, want no output and an error naming the 256 KiB limit", len(run.GetOutput()), run.GetError())
 	}
 }
-
-func TestAnEnvelopeThatCannotBeEncodedIsRefusedWithoutAnAttemptAtTheWorker(t *testing.T) {
-	worker := newWorker(t, succeeding)
-	engine := anEngine(t)
-
-	res := engine.post(context.Background(), context.Background(), worker.server.URL, &topicv1.Envelope{V: envelopeVersion, Topic: "orders", Consumer: "email", Payload: []byte(`{`)})
-
-	if res.outcome != refused || len(worker.received()) != 0 {
-		t.Errorf("post = %+v with %d envelopes at the worker, want a refusal that reaches no worker", res, len(worker.received()))
-	}
-}

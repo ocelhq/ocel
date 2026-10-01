@@ -1,41 +1,22 @@
 package pgmq
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 
+	"github.com/ocelhq/ocel/pkg/envelope"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const (
-	envelopeVersion      = 1
-	maxAnswerBytes       = 1 << 20
-	maxOutputBytes       = 256 << 10
-	maxErrorExcerptBytes = 512
-	newRevisionSQL       = "md5(random()::text || clock_timestamp()::text)"
-	stagedPayloadSQL     = "(SELECT value FROM ocel.records WHERE purpose = 'staged-payload' AND topic = ocel.runs.topic AND key = ocel.runs.message_id)"
-)
-
-var (
-	errTimedOut    = errors.New("the attempt ran past its maxDuration")
-	errRunCanceled = errors.New("the run was canceled")
-
-	schemaDigest = regexp.MustCompile(`^sha256-[0-9a-f]{64}$`)
+	newRevisionSQL   = "md5(random()::text || clock_timestamp()::text)"
+	stagedPayloadSQL = "(SELECT value FROM ocel.records WHERE purpose = 'staged-payload' AND topic = ocel.runs.topic AND key = ocel.runs.message_id)"
 )
 
 type claim struct {
@@ -47,24 +28,6 @@ type claim struct {
 	maxAttempts      int
 	firstAttemptedAt time.Time
 	payload          json.RawMessage
-}
-
-type outcome int
-
-const (
-	succeeded outcome = iota
-	aborted
-	timedOut
-	failed
-	canceled
-	interrupted
-	refused
-)
-
-type result struct {
-	outcome outcome
-	output  json.RawMessage
-	reason  string
 }
 
 func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployedConsumer, worker Worker, messages []message) {
@@ -91,7 +54,7 @@ func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployed
 	defer cancel(nil)
 	if maxDuration := deployed.consumer.GetMaxDuration().AsDuration(); maxDuration > 0 {
 		var stop context.CancelFunc
-		attemptCtx, stop = context.WithTimeoutCause(attemptCtx, maxDuration, errTimedOut)
+		attemptCtx, stop = context.WithTimeoutCause(attemptCtx, maxDuration, envelope.ErrTimedOut)
 		defer stop()
 	}
 	if len(claims) == 1 {
@@ -99,7 +62,7 @@ func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployed
 		defer e.untrack(claims[0].execution)
 	}
 	posted := time.Now()
-	res := e.post(ctx, attemptCtx, worker.URL, envelopeOf(deployed, claims, deployed.consumer.GetBatch().GetSize() > 0))
+	res := envelope.Post(ctx, attemptCtx, worker.URL, envelopeOf(deployed, claims, deployed.consumer.GetBatch().GetSize() > 0))
 	took := time.Since(posted)
 	for _, claimed := range claims {
 		loop.drop(claimed.msg.id)
@@ -120,7 +83,7 @@ func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployed
 				MaxAttempts: claimed.maxAttempts,
 				Status:      status,
 				Took:        took,
-				Reason:      res.reason,
+				Reason:      res.Reason,
 			})
 		}
 	}
@@ -129,7 +92,7 @@ func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployed
 func (e *Engine) track(execution string, cancel context.CancelCauseFunc) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.inFlight[execution] = func() { cancel(errRunCanceled) }
+	e.inFlight[execution] = func() { cancel(envelope.ErrCanceled) }
 }
 
 func (e *Engine) untrack(execution string) {
@@ -182,29 +145,29 @@ func (e *Engine) discard(ctx context.Context, queue string, msg message) error {
 }
 
 func envelopeOf(deployed deployedConsumer, claims []claim, batch bool) *topicv1.Envelope {
-	envelope := &topicv1.Envelope{
-		V:        envelopeVersion,
+	delivered := &topicv1.Envelope{
+		V:        envelope.Version,
 		Topic:    deployed.topicName,
 		Consumer: deployed.consumer.GetName(),
-		Schema:   schemaOf(deployed.topic.GetSchema()),
+		Schema:   envelope.SchemaOf(deployed.topic.GetSchema()),
 	}
 	if !batch {
 		claimed := claims[0]
-		envelope.Execution = claimed.execution
-		envelope.Message = messageOf(claimed)
-		envelope.Attempt = attemptOf(claimed)
-		envelope.Payload = claimed.payload
-		return envelope
+		delivered.Execution = claimed.execution
+		delivered.Message = messageOf(claimed)
+		delivered.Attempt = attemptOf(claimed)
+		delivered.Payload = claimed.payload
+		return delivered
 	}
 	for _, claimed := range claims {
-		envelope.Messages = append(envelope.Messages, &topicv1.Delivery{
+		delivered.Messages = append(delivered.Messages, &topicv1.Delivery{
 			Execution: claimed.execution,
 			Message:   messageOf(claimed),
 			Attempt:   attemptOf(claimed),
 			Payload:   claimed.payload,
 		})
 	}
-	return envelope
+	return delivered
 }
 
 func messageOf(claimed claim) *topicv1.Message {
@@ -215,129 +178,26 @@ func attemptOf(claimed claim) *topicv1.Attempt {
 	return &topicv1.Attempt{Number: int32(claimed.attempt), Of: int32(claimed.maxAttempts), FirstAttemptedAt: timestampOf(claimed.firstAttemptedAt)}
 }
 
-func schemaOf(schema string) string {
-	if schema == "" || schemaDigest.MatchString(schema) {
-		return schema
-	}
-	sum := sha256.Sum256([]byte(schema))
-	return "sha256-" + hex.EncodeToString(sum[:])
-}
-
-func encodeEnvelope(envelope *topicv1.Envelope) ([]byte, error) {
-	bare := proto.CloneOf(envelope)
-	bare.Payload = nil
-	for _, delivery := range bare.GetMessages() {
-		delivery.Payload = nil
-	}
-	encoded, err := protojson.Marshal(bare)
-	if err != nil {
-		return nil, err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(encoded, &fields); err != nil {
-		return nil, err
-	}
-	if len(envelope.GetPayload()) > 0 {
-		fields["payload"] = envelope.GetPayload()
-	}
-	if len(envelope.GetMessages()) > 0 {
-		var deliveries []map[string]json.RawMessage
-		if err := json.Unmarshal(fields["messages"], &deliveries); err != nil {
-			return nil, err
-		}
-		for i, delivery := range envelope.GetMessages() {
-			if len(delivery.GetPayload()) > 0 {
-				deliveries[i]["payload"] = delivery.GetPayload()
-			}
-		}
-		if fields["messages"], err = encodeJSONVerbatim(deliveries); err != nil {
-			return nil, err
-		}
-	}
-	return encodeJSONVerbatim(fields)
-}
-
-func encodeJSONVerbatim(value any) ([]byte, error) {
-	var buf bytes.Buffer
-	encoder := json.NewEncoder(&buf)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(value); err != nil {
-		return nil, err
-	}
-	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
-}
-
-func (e *Engine) post(ctx, attemptCtx context.Context, url string, envelope *topicv1.Envelope) result {
-	body, err := encodeEnvelope(envelope)
-	if err != nil {
-		return result{outcome: refused, reason: fmt.Sprintf("encode the envelope: %v", err)}
-	}
-	req, err := http.NewRequestWithContext(attemptCtx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return result{outcome: failed, reason: fmt.Sprintf("address the worker: %v", err)}
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return classifyInterruption(ctx, attemptCtx, err)
-	}
-	defer resp.Body.Close()
-	answer, err := io.ReadAll(io.LimitReader(resp.Body, maxAnswerBytes))
-	if err != nil {
-		return classifyInterruption(ctx, attemptCtx, err)
-	}
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		if len(answer) > maxOutputBytes {
-			return result{outcome: refused, reason: "the worker answered an output over the 256 KiB a run may store"}
-		}
-		if !json.Valid(answer) {
-			answer = nil
-		}
-		return result{outcome: succeeded, output: answer}
-	}
-	var decoded topicv1.Answer
-	if protojson.Unmarshal(answer, &decoded) == nil && decoded.GetAbort() != nil {
-		return result{outcome: aborted, reason: decoded.GetAbort().GetReason()}
-	}
-	excerpt := answer
-	if len(excerpt) > maxErrorExcerptBytes {
-		excerpt = excerpt[:maxErrorExcerptBytes]
-	}
-	return result{outcome: failed, reason: fmt.Sprintf("the worker answered %s: %s", resp.Status, bytes.TrimSpace(excerpt))}
-}
-
-func classifyInterruption(ctx, attemptCtx context.Context, err error) result {
-	switch cause := context.Cause(attemptCtx); {
-	case errors.Is(cause, errTimedOut):
-		return result{outcome: timedOut, reason: cause.Error()}
-	case errors.Is(cause, errRunCanceled):
-		return result{outcome: canceled}
-	case ctx.Err() != nil:
-		return result{outcome: interrupted}
-	}
-	return result{outcome: failed, reason: fmt.Sprintf("reach the worker: %v", err)}
-}
-
-func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedConsumer, claimed claim, res result) (provider.RunStatus, error) {
-	switch res.outcome {
-	case canceled, interrupted:
+func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedConsumer, claimed claim, res envelope.Result) (provider.RunStatus, error) {
+	switch res.Outcome {
+	case envelope.Canceled, envelope.Interrupted:
 		return "", nil
-	case succeeded:
-		return provider.RunCompleted, e.settle(ctx, loop.name, claimed, provider.RunCompleted, res.output, "")
-	case aborted, refused:
-		return provider.RunFailed, e.settle(ctx, loop.name, claimed, provider.RunFailed, nil, res.reason)
-	case timedOut:
+	case envelope.Succeeded:
+		return provider.RunCompleted, e.settle(ctx, loop.name, claimed, provider.RunCompleted, res.Output, "")
+	case envelope.Aborted, envelope.Refused:
+		return provider.RunFailed, e.settle(ctx, loop.name, claimed, provider.RunFailed, nil, res.Reason)
+	case envelope.TimedOut:
 		if isTask(deployed.topic) {
-			return provider.RunTimedOut, e.settle(ctx, loop.name, claimed, provider.RunTimedOut, nil, res.reason)
+			return provider.RunTimedOut, e.settle(ctx, loop.name, claimed, provider.RunTimedOut, nil, res.Reason)
 		}
 	}
 	if claimed.attempt >= claimed.maxAttempts {
-		return provider.RunFailed, e.settle(ctx, loop.name, claimed, provider.RunFailed, nil, res.reason)
+		return provider.RunFailed, e.settle(ctx, loop.name, claimed, provider.RunFailed, nil, res.Reason)
 	}
 	retryAt := time.Now().Add(backoff(retryPolicyOf(deployed), claimed.attempt, jitter()))
 	return provider.RunQueued, e.inTx(ctx, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = 'queued', error = $2, revision = `+newRevisionSQL+`
-			WHERE execution = $1 AND status = 'executing'`, claimed.execution, res.reason)
+			WHERE execution = $1 AND status = 'executing'`, claimed.execution, res.Reason)
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}
