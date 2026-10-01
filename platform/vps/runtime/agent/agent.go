@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -103,6 +104,7 @@ type Server struct {
 	Inspect Inspector
 	Resolve Resolver
 	Space   Measurer
+	Queues  Queues
 }
 
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
@@ -135,41 +137,54 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(http.MethodGet+" "+variables.ValuesPath, s.answer)
 	mux.HandleFunc(http.MethodGet+" "+variables.SpacePath, s.measure)
+	if s.Queues != nil {
+		s.mountQueues(mux)
+	}
 	return mux
 }
 
 func (s *Server) manifestOf(w http.ResponseWriter, r *http.Request) (variables.Manifest, bool) {
-	caller, _ := r.Context().Value(peerKey{}).(peer)
-	if caller.err != nil {
-		http.Error(w, "the caller could not be identified: "+caller.err.Error(), http.StatusForbidden)
-		return variables.Manifest{}, false
-	}
-	container, err := s.containerOf(caller.pid)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
-		return variables.Manifest{}, false
-	}
-	inspecting, cancel := context.WithTimeout(r.Context(), inspectWindow)
-	defer cancel()
-	raw, err := s.Inspect.Manifest(inspecting, container)
-	if err != nil {
-		http.Error(w, "read the caller's container: "+err.Error(), http.StatusBadGateway)
-		return variables.Manifest{}, false
-	}
-	if raw == "" {
-		http.Error(w, "the caller's container has no live-value manifest", http.StatusNotFound)
-		return variables.Manifest{}, false
-	}
-	manifest, err := variables.Parse([]byte(raw))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return variables.Manifest{}, false
-	}
-	if !manifest.Live() {
-		http.Error(w, "the caller's manifest names nothing live", http.StatusNotFound)
+	manifest, refused := s.callerManifest(r.Context())
+	if refused != nil {
+		http.Error(w, refused.Error(), refused.status)
 		return variables.Manifest{}, false
 	}
 	return manifest, true
+}
+
+type callerRefusal struct {
+	status int
+	reason string
+}
+
+func (c *callerRefusal) Error() string { return c.reason }
+
+func (s *Server) callerManifest(ctx context.Context) (variables.Manifest, *callerRefusal) {
+	caller, _ := ctx.Value(peerKey{}).(peer)
+	if caller.err != nil {
+		return variables.Manifest{}, &callerRefusal{http.StatusForbidden, "the caller could not be identified: " + caller.err.Error()}
+	}
+	container, err := s.containerOf(caller.pid)
+	if err != nil {
+		return variables.Manifest{}, &callerRefusal{http.StatusForbidden, err.Error()}
+	}
+	inspecting, cancel := context.WithTimeout(ctx, inspectWindow)
+	defer cancel()
+	raw, err := s.Inspect.Manifest(inspecting, container)
+	if err != nil {
+		return variables.Manifest{}, &callerRefusal{http.StatusBadGateway, "read the caller's container: " + err.Error()}
+	}
+	if raw == "" {
+		return variables.Manifest{}, &callerRefusal{http.StatusNotFound, "the caller's container has no live-value manifest"}
+	}
+	manifest, err := variables.Parse([]byte(raw))
+	if err != nil {
+		return variables.Manifest{}, &callerRefusal{http.StatusBadGateway, err.Error()}
+	}
+	if !manifest.Live() {
+		return variables.Manifest{}, &callerRefusal{http.StatusNotFound, "the caller's manifest names nothing live"}
+	}
+	return manifest, nil
 }
 
 func (s *Server) measure(w http.ResponseWriter, r *http.Request) {
@@ -259,6 +274,44 @@ func (d *Docker) Manifest(ctx context.Context, container string) (string, error)
 		return "", fmt.Errorf("read what the daemon says about the container: %w", err)
 	}
 	return ManifestIn(inspected.Config.Env), nil
+}
+
+func (d *Docker) Address(ctx context.Context, container string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+url.PathEscape(container)+"/json", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := (&http.Client{Transport: d.transport}).Do(req)
+	if err != nil {
+		return "", fmt.Errorf("ask the daemon at %s about %s: %w", d.host.Address, container, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		said, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", fmt.Errorf("the daemon at %s answered %q about %s: %s", d.host.Address, resp.Status, container, strings.TrimSpace(string(said)))
+	}
+	var inspected struct {
+		State struct {
+			Running bool `json:"Running"`
+		} `json:"State"`
+		NetworkSettings struct {
+			Networks map[string]struct {
+				IPAddress string `json:"IPAddress"`
+			} `json:"Networks"`
+		} `json:"NetworkSettings"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, inspectLimit)).Decode(&inspected); err != nil {
+		return "", fmt.Errorf("read what the daemon says about %s: %w", container, err)
+	}
+	if !inspected.State.Running {
+		return "", fmt.Errorf("%s is not running", container)
+	}
+	for _, network := range slices.Sorted(maps.Keys(inspected.NetworkSettings.Networks)) {
+		if address := inspected.NetworkSettings.Networks[network].IPAddress; address != "" {
+			return address, nil
+		}
+	}
+	return "", fmt.Errorf("%s holds no address on any network", container)
 }
 
 func (d *Docker) Space(ctx context.Context, volume string) (uint64, uint64, error) {

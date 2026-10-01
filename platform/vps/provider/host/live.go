@@ -48,7 +48,7 @@ func liveSocketUnit() []byte {
 func liveServiceUnit() []byte {
 	return []byte(strings.Join([]string{
 		"[Unit]",
-		"Description=the agent that opens each app container's live values on this host",
+		"Description=the agent that opens each app container's live values and runs its topics and tasks on this host",
 		"Requires=" + LiveSocketUnit,
 		"After=" + LiveSocketUnit,
 		"",
@@ -94,7 +94,7 @@ func LiveItems(architecture string) []Item {
 	socket, service, agent := liveSocketUnit(), liveServiceUnit(), liveAgent(architecture)
 	return []Item{
 		{Kind: KindFile, Name: LiveBinary, Mode: 0o755, Owner: rootOwner, Content: agent,
-			Note: "serves apps their secret values"},
+			Note: "serves apps their secret values and runs their topics and tasks"},
 		{Kind: KindFile, Name: liveSocketFile, Mode: 0o644, Owner: rootOwner, Content: socket},
 		{Kind: KindFile, Name: liveUnitFile, Mode: 0o644, Owner: rootOwner, Content: service},
 		{Kind: KindUnit, Name: LiveSocketUnit, Owner: rootOwner, Content: unitWatchFacts(socket),
