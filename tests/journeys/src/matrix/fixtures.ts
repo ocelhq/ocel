@@ -59,8 +59,15 @@ const NEXT_STATE_AND_DATA_CACHE_CHECKS = [
 ];
 const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
 const KV_CHECKS = [...healthChecks, ...staticChecks, ...kvChecks];
-const TASKS_CHECKS = [...healthChecks, ...tasksChecks, ...tasksWireChecks];
-const TASKS_WIRE_CHECKS = [...healthChecks, ...tasksWireChecks];
+const TASKS_NODE_CHECKS = [
+  ...healthChecks,
+  ...tasksChecks,
+  ...tasksWireChecks({ task: "verbatim", topic: "notices", consumer: "notice-log" }),
+];
+const TASKS_GO_CHECKS = [
+  ...healthChecks,
+  ...tasksWireChecks({ task: "exact-echo", topic: "exact-orders", consumer: "exact-audit" }),
+];
 
 export const deploy = {
   node: fixture("deploy/node", {
@@ -201,13 +208,13 @@ export const kv = {
 export const tasks = {
   node: fixture("tasks/node", {
     apps: ["web"],
-    checks: TASKS_CHECKS,
+    checks: TASKS_NODE_CHECKS,
     on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
   }),
   go: fixture("tasks/go", {
     apps: ["web"],
     devCommands: { web: ["go", "run", "./server"] },
-    checks: TASKS_WIRE_CHECKS,
+    checks: TASKS_GO_CHECKS,
     on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
   }),
 };
