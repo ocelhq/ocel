@@ -13,6 +13,7 @@ import {
   nextStateChecks,
   nodeRuntimeChecks,
   overlapRefusal,
+  realtimeChecks,
   staticChecks,
   tasksChecks,
   tasksWireChecks,
@@ -64,6 +65,7 @@ const TASKS_NODE_CHECKS = [
   ...tasksChecks,
   ...tasksWireChecks({ task: "verbatim", topic: "notices", consumer: "notice-log" }),
 ];
+const REALTIME_CHECKS = [...healthChecks, ...realtimeChecks];
 const TASKS_GO_CHECKS = [
   ...healthChecks,
   ...tasksWireChecks({ task: "exact-echo", topic: "exact-orders", consumer: "exact-audit" }),
@@ -219,6 +221,14 @@ export const tasks = {
   }),
 };
 
+export const realtime = {
+  node: fixture("realtime/node", {
+    apps: ["web"],
+    checks: REALTIME_CHECKS,
+    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
+  }),
+};
+
 export const iac = {
   withSst: fixture("iac/with-sst", {
     apps: ["web"],
@@ -242,5 +252,6 @@ export const fixtures: Fixture[] = [
   ...Object.values(sdk),
   ...Object.values(kv),
   ...Object.values(tasks),
+  ...Object.values(realtime),
   ...Object.values(iac),
 ];

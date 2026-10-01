@@ -1514,6 +1514,31 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  tests/fixtures/realtime/node:
+    dependencies:
+      express:
+        specifier: ~5.0.0
+        version: 5.0.1
+      ocel:
+        specifier: workspace:^
+        version: link:../../../../packages/ocel
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/express':
+        specifier: ~5.0.0
+        version: 5.0.6
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.0
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   tests/fixtures/sdk/next:
     dependencies:
       better-sqlite3:

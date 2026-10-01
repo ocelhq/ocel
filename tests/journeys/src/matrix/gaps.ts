@@ -15,6 +15,12 @@ import {
   nextOriginDataCacheChecks,
   nodeRuntimeChecks,
   publicOriginCheck,
+  realtimeEventSizeCheck,
+  realtimePublicCheck,
+  realtimeReauthorizeCheck,
+  realtimeRelayedPublishCheck,
+  realtimeRuleAllowsCheck,
+  realtimeWildcardCheck,
   rewrittenQueryCheck,
   sseCheck,
   sseSilenceCheck,
@@ -22,7 +28,7 @@ import {
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
-import { deploy, iac, kv, lifecycle, sdk, tasks } from "./fixtures";
+import { deploy, iac, kv, lifecycle, realtime, sdk, tasks } from "./fixtures";
 import type { Gap } from "./types";
 import {
   apiGateway,
@@ -450,6 +456,40 @@ export const gaps: Gap[] = [
       where: [
         { on: [...lanes], fixtures: [tasks.node, tasks.go], fails: [step.deploy], skipsCell: true },
       ],
+    }),
+  ),
+  {
+    id: "sdk-server-publish-misses-gateway",
+    reason:
+      "every SDK posts a server publish to the gateway's /publish with a Bearer token and the bare envelope, and the gateway serves AppSync's POST /event with the bare token and { channel, events }, so a publish from the server is answered 404 and reaches no subscriber",
+    issue: 1540,
+    where: [
+      {
+        on: ["dev"],
+        fixtures: [realtime.node],
+        fails: [
+          check(realtimeRuleAllowsCheck),
+          check(realtimePublicCheck),
+          check(realtimeWildcardCheck),
+          check(realtimeRelayedPublishCheck),
+          check(realtimeReauthorizeCheck),
+          check(realtimeEventSizeCheck),
+        ],
+      },
+    ],
+  },
+  ...(
+    [
+      { target: "aws", lanes: ["aws", "aws.floci"], issue: 1514 },
+      { target: "gcp", lanes: ["gcp", "gcp.floci"], issue: 1515 },
+      { target: "vps", lanes: ["vps", "vps.incus"], issue: 1516 },
+    ] as const
+  ).map(
+    ({ target, lanes, issue }): Gap => ({
+      id: `${target}-refuses-realtime`,
+      reason: `the ${target} provider refuses a deploy that declares a realtime resource at preflight: realtime is unsupported on ${target}, as it runs no transport for channels`,
+      issue,
+      where: [{ on: [...lanes], fixtures: [realtime.node], fails: [step.deploy], skipsCell: true }],
     }),
   ),
 ];
