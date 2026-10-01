@@ -216,8 +216,21 @@ describe("the kv concern", () => {
     }
   });
 
-  it("skips the suite on aws and gcp with the provider's refusal, under each target's ticket", () => {
-    const tickets = { aws: 1479, "aws.floci": 1479, gcp: 1480, "gcp.floci": 1480 } as const;
+  it("runs the behavioural suite in a container on aws", () => {
+    expect(planOn("aws", {}, EVERY_CELL).cells.map((cell) => cell.name)).toContain(
+      "kv/node-container",
+    );
+    const skippedBy = planOn("aws").skipped["kv/node-container"] ?? [];
+    expect(skippedBy.filter((gap) => /kv/.test(gap.reason))).toEqual([]);
+  });
+
+  it("skips the suite on floci's aws, which runs no container behind a load balancer", () => {
+    const planned = planOn("aws.floci");
+    expect(planned.skipped["kv/node-container"]?.map((gap) => gap.issue)).toEqual([995]);
+  });
+
+  it("skips the suite on gcp with the provider's refusal, under its ticket", () => {
+    const tickets = { gcp: 1480, "gcp.floci": 1480 } as const;
     for (const [lane, issue] of Object.entries(tickets) as [Lane, number][]) {
       const planned = planOn(lane);
       const skipped = Object.keys(planned.skipped).filter((cell) => cell.startsWith("kv/"));
