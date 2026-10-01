@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "express": "~5.0.0",
-    "ioredis": "^5.11.1",
     "ocel": "workspace:^"
   },
   "devDependencies": {
