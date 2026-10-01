@@ -123,28 +123,14 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 	tags := resourceTags(at.Kind, "", args.Tags)
 	tags[tagResource] = pulumi.String(at.Name)
 
-	sg, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(at.Kind, at.Name, "security-group"), &ec2.SecurityGroupArgs{
-		Description: capDescription(at.Description("security group for the "+at.Name+" kv store"), maxSecurityGroupDescriptionLen),
-		VpcId:       pulumi.String(vpcID),
-		Ingress: ec2.SecurityGroupIngressArray{
-			&ec2.SecurityGroupIngressArgs{
-				Protocol:    pulumi.String("tcp"),
-				FromPort:    pulumi.Int(args.Port),
-				ToPort:      pulumi.Int(args.Port),
-				CidrBlocks:  pulumi.StringArray{pulumi.String(vpcCIDR)},
-				Description: capDescription(at.Description("Valkey access to the "+at.Name+" kv store from within the VPC"), maxSecurityGroupDescriptionLen),
-			},
-		},
-		Egress: ec2.SecurityGroupEgressArray{
-			&ec2.SecurityGroupEgressArgs{
-				Protocol:    pulumi.String("-1"),
-				FromPort:    pulumi.Int(0),
-				ToPort:      pulumi.Int(0),
-				CidrBlocks:  pulumi.StringArray{pulumi.String("0.0.0.0/0")},
-				Description: capDescription(at.Description("outbound access for the "+at.Name+" kv store"), maxSecurityGroupDescriptionLen),
-			},
-		},
-		Tags: tags,
+	securityGroup, err := newVPCSecurityGroup(ctx, at, vpcSecurityGroup{
+		Subject: "the " + at.Name + " kv store",
+		Engine:  "Valkey",
+		Port:    args.Port,
+		VPCID:   vpcID,
+		VPCCIDR: vpcCIDR,
+		Egress:  ec2.SecurityGroupEgressArray{},
+		Tags:    tags,
 	})
 	if err != nil {
 		return err
@@ -190,7 +176,7 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 		SnapshotRetentionLimit:   pulumi.Int(args.SnapshotRetentionLimit),
 		ParameterGroupName:       parameters.Name,
 		SubnetGroupName:          subnetGroup.Name,
-		SecurityGroupIds:         pulumi.StringArray{sg.ID()},
+		SecurityGroupIds:         pulumi.StringArray{securityGroup.ID()},
 		ApplyImmediately:         pulumi.Bool(true),
 		Tags:                     tags,
 	}, pulumi.DeleteBeforeReplace(true))

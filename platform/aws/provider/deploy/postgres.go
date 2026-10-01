@@ -80,18 +80,12 @@ func rdsIdentifierPrefix(at naming.Coordinate, role string) string {
 func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, args postgresArgs, vpcID, vpcCIDR string, subnetIDs []string) error {
 	at := resourceCoordinate(project, env, logicalName, naming.KindDatabase)
 
-	sg, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(at.Kind, at.Name, "security-group"), &ec2.SecurityGroupArgs{
-		Description: capDescription(at.Description("security group for the "+at.Name+" database"), maxSecurityGroupDescriptionLen),
-		VpcId:       pulumi.String(vpcID),
-		Ingress: ec2.SecurityGroupIngressArray{
-			&ec2.SecurityGroupIngressArgs{
-				Protocol:    pulumi.String("tcp"),
-				FromPort:    pulumi.Int(args.Port),
-				ToPort:      pulumi.Int(args.Port),
-				CidrBlocks:  pulumi.StringArray{pulumi.String(vpcCIDR)},
-				Description: capDescription(at.Description("Postgres access to the "+at.Name+" database from within the VPC"), maxSecurityGroupDescriptionLen),
-			},
-		},
+	securityGroup, err := newVPCSecurityGroup(ctx, at, vpcSecurityGroup{
+		Subject: "the " + at.Name + " database",
+		Engine:  "Postgres",
+		Port:    args.Port,
+		VPCID:   vpcID,
+		VPCCIDR: vpcCIDR,
 		Egress: ec2.SecurityGroupEgressArray{
 			&ec2.SecurityGroupEgressArgs{
 				Protocol:    pulumi.String("-1"),
@@ -126,7 +120,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 		MasterUsername:           pulumi.String(args.MasterUsername),
 		ManageMasterUserPassword: pulumi.Bool(args.ManageMasterPassword),
 		DbSubnetGroupName:        subnetGroup.Name,
-		VpcSecurityGroupIds:      pulumi.StringArray{sg.ID()},
+		VpcSecurityGroupIds:      pulumi.StringArray{securityGroup.ID()},
 		DeletionProtection:       pulumi.Bool(args.DeletionProtection),
 		SkipFinalSnapshot:        pulumi.Bool(args.SkipFinalSnapshot),
 		Serverlessv2ScalingConfiguration: &rds.ClusterServerlessv2ScalingConfigurationArgs{
