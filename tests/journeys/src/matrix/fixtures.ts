@@ -190,7 +190,7 @@ export const kv = {
     apps: ["web"],
     checks: [],
     refusal: overlapRefusal("kv/node-overlap", ["notes/:id", ":kind/latest"]),
-    on: { dev: [defaults], vps: [defaults] },
+    on: { dev: [defaults], vps: [defaults], aws: [container], gcp: [defaults] },
   }),
 };
 
