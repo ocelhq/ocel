@@ -1,6 +1,6 @@
 use super::{
-    object, refusal, refused, send, signed_request, Bucket, Object, Reached, Thresholds, Written,
-    PARTS_IN_FLIGHT,
+    build_signed_request, check_status, convert_object_info, refuse_access, send_request, Bucket,
+    Connection, Object, Thresholds, WriteOptions, PARTS_IN_FLIGHT,
 };
 use crate::proto::app::bucket::v1::{
     AbortMultipartRequest, CompleteMultipartRequest, CompletedPart, CreateMultipartRequest,
@@ -18,17 +18,17 @@ use std::task::{Context, Poll};
 /// shutting the writer down completes and dropping it aborts. Nothing is stored until
 /// the shutdown returns without an error.
 pub struct Writer {
-    state: State,
-    leash: Arc<Leash>,
+    state: WriterState,
+    multipart: Arc<MultipartUpload>,
 }
 
-struct Leash {
-    reached: Reached,
+struct MultipartUpload {
+    connection: Connection,
     key: String,
     upload_id: Mutex<String>,
 }
 
-impl Leash {
+impl MultipartUpload {
     fn upload_id(&self) -> String {
         self.locked_upload_id().clone()
     }
@@ -40,28 +40,29 @@ impl Leash {
     }
 }
 
-enum State {
-    Ready(Box<Core>),
-    Draining(Working),
-    Finishing(Working),
+enum WriterState {
+    Ready(Box<Upload>),
+    Draining(UploadFuture),
+    Finishing(UploadFuture),
     Spent,
 }
 
-type Working = Pin<Box<dyn Future<Output = (Box<Core>, Result<Option<Object>, Error>)> + Send>>;
+type UploadFuture =
+    Pin<Box<dyn Future<Output = (Box<Upload>, Result<Option<Object>, Error>)> + Send>>;
 
-struct Core {
-    reached: Reached,
+struct Upload {
+    connection: Connection,
     key: String,
-    options: Written,
+    options: WriteOptions,
     thresholds: Thresholds,
     buffered: Vec<u8>,
-    leash: Arc<Leash>,
+    multipart: Arc<MultipartUpload>,
     next_part: i32,
     pending: Vec<(i32, Bytes)>,
     completed: Vec<CompletedPart>,
 }
 
-fn finished() -> Error {
+fn refuse_finished_writer() -> Error {
     Error::Refused {
         key: String::new(),
         said: "this writer has already finished".to_string(),
@@ -69,33 +70,37 @@ fn finished() -> Error {
 }
 
 impl Writer {
-    pub(super) async fn open(bucket: &Bucket, key: &str, options: Written) -> Result<Self, Error> {
-        let reached = bucket.reached("writer")?.clone();
-        let leash = Arc::new(Leash {
-            reached: reached.clone(),
+    pub(super) async fn open(
+        bucket: &Bucket,
+        key: &str,
+        options: WriteOptions,
+    ) -> Result<Self, Error> {
+        let connection = bucket.ensure_connection("writer")?.clone();
+        let multipart = Arc::new(MultipartUpload {
+            connection: connection.clone(),
             key: key.to_string(),
             upload_id: Mutex::new(String::new()),
         });
         Ok(Self {
-            state: State::Ready(Box::new(Core {
-                reached,
+            state: WriterState::Ready(Box::new(Upload {
+                connection,
                 key: key.to_string(),
                 options,
                 thresholds: bucket.thresholds,
                 buffered: Vec::new(),
-                leash: leash.clone(),
+                multipart: multipart.clone(),
                 next_part: 1,
                 pending: Vec::new(),
                 completed: Vec::new(),
             })),
-            leash,
+            multipart,
         })
     }
 
     pub(super) async fn put(&mut self, body: Bytes) -> Result<(), Error> {
         let outcome = {
-            let State::Ready(core) = &mut self.state else {
-                return Err(finished());
+            let WriterState::Ready(core) = &mut self.state else {
+                return Err(refuse_finished_writer());
             };
             core.buffered.extend_from_slice(&body);
             core.drain(false).await
@@ -103,20 +108,21 @@ impl Writer {
         let Err(err) = outcome else {
             return Ok(());
         };
-        if let State::Ready(core) = &mut self.state {
+        if let WriterState::Ready(core) = &mut self.state {
             core.abort().await;
         }
-        self.state = State::Spent;
+        self.state = WriterState::Spent;
         Err(err)
     }
 
     pub(super) async fn finish(mut self) -> Result<Object, Error> {
-        let State::Ready(mut core) = std::mem::replace(&mut self.state, State::Spent) else {
-            return Err(finished());
+        let WriterState::Ready(mut core) = std::mem::replace(&mut self.state, WriterState::Spent)
+        else {
+            return Err(refuse_finished_writer());
         };
         match core.finish().await {
             Ok(Some(written)) => Ok(written),
-            Ok(None) => head(&core.reached, &core.key).await,
+            Ok(None) => head_object(&core.connection, &core.key).await,
             Err(err) => {
                 core.abort().await;
                 Err(err)
@@ -125,29 +131,29 @@ impl Writer {
     }
 }
 
-async fn head(reached: &Reached, key: &str) -> Result<Object, Error> {
-    let response = reached
+async fn head_object(connection: &Connection, key: &str) -> Result<Object, Error> {
+    let response = connection
         .client
         .head(HeadRequest {
-            bucket: reached.bucket.clone(),
+            bucket: connection.bucket.clone(),
             key: key.to_string(),
             ..Default::default()
         })
         .await
-        .map_err(|err| refused(key, &err))?;
+        .map_err(|err| refuse_access(key, &err))?;
     response
         .into_owned()
         .object
         .into_option()
-        .map(object)
+        .map(convert_object_info)
         .ok_or_else(|| Error::NotFound {
             key: key.to_string(),
         })
 }
 
-impl Core {
+impl Upload {
     async fn drain(&mut self, last: bool) -> Result<(), Error> {
-        if self.leash.upload_id().is_empty() {
+        if self.multipart.upload_id().is_empty() {
             if last || self.buffered.len() <= self.thresholds.single_ceiling {
                 return Ok(());
             }
@@ -172,7 +178,7 @@ impl Core {
     }
 
     async fn finish(&mut self) -> Result<Option<Object>, Error> {
-        if self.leash.upload_id().is_empty()
+        if self.multipart.upload_id().is_empty()
             && self.buffered.len() <= self.thresholds.single_ceiling
         {
             self.put_whole().await?;
@@ -189,10 +195,10 @@ impl Core {
 
     async fn begin(&mut self) -> Result<(), Error> {
         let response = self
-            .reached
+            .connection
             .client
             .create_multipart(CreateMultipartRequest {
-                bucket: self.reached.bucket.clone(),
+                bucket: self.connection.bucket.clone(),
                 key: self.key.clone(),
                 content_type: self.options.content_type.clone(),
                 cache_control: self.options.cache_control.clone(),
@@ -205,8 +211,8 @@ impl Core {
                 ..Default::default()
             })
             .await
-            .map_err(|err| refused(&self.key, &err))?;
-        *self.leash.locked_upload_id() = response.into_owned().upload_id;
+            .map_err(|err| refuse_access(&self.key, &err))?;
+        *self.multipart.locked_upload_id() = response.into_owned().upload_id;
         Ok(())
     }
 
@@ -216,21 +222,21 @@ impl Core {
             return Ok(());
         }
         let response = self
-            .reached
+            .connection
             .client
             .sign_parts(SignPartsRequest {
-                bucket: self.reached.bucket.clone(),
+                bucket: self.connection.bucket.clone(),
                 key: self.key.clone(),
-                upload_id: self.leash.upload_id(),
+                upload_id: self.multipart.upload_id(),
                 part_numbers: staged.iter().map(|(number, _)| *number).collect(),
                 audience: SignedAudience::Internal.into(),
                 ..Default::default()
             })
             .await
-            .map_err(|err| refused(&self.key, &err))?;
+            .map_err(|err| refuse_access(&self.key, &err))?;
         let targets = response.into_owned().parts;
 
-        let (reached, key) = (&self.reached, self.key.as_str());
+        let (connection, key) = (&self.connection, self.key.as_str());
         let sending = staged.into_iter().map(|(number, part)| {
             let target = targets.iter().find(|target| target.part_number == number);
             async move {
@@ -242,8 +248,8 @@ impl Core {
                 for (name, value) in &target.headers {
                     request = request.header(name, value);
                 }
-                let response = send(reached, request, part).await?;
-                refusal(key, response.status().as_u16())?;
+                let response = send_request(connection, request, part).await?;
+                check_status(key, response.status().as_u16())?;
                 Ok::<_, Error>(CompletedPart {
                     part_number: number,
                     etag: response
@@ -264,26 +270,26 @@ impl Core {
     async fn complete(&mut self) -> Result<Object, Error> {
         self.completed.sort_by_key(|part| part.part_number);
         let response = self
-            .reached
+            .connection
             .client
             .complete_multipart(CompleteMultipartRequest {
-                bucket: self.reached.bucket.clone(),
+                bucket: self.connection.bucket.clone(),
                 key: self.key.clone(),
-                upload_id: self.leash.upload_id(),
+                upload_id: self.multipart.upload_id(),
                 parts: self.completed.clone(),
                 if_none_match: self.options.if_none_match.clone(),
                 if_match: self.options.if_match.clone(),
                 ..Default::default()
             })
             .await
-            .map_err(|err| refused(&self.key, &err))?;
-        self.leash.locked_upload_id().clear();
+            .map_err(|err| refuse_access(&self.key, &err))?;
+        self.multipart.locked_upload_id().clear();
         self.completed.clear();
         response
             .into_owned()
             .object
             .into_option()
-            .map(object)
+            .map(convert_object_info)
             .ok_or_else(|| Error::NotFound {
                 key: self.key.clone(),
             })
@@ -291,10 +297,10 @@ impl Core {
 
     async fn put_whole(&mut self) -> Result<(), Error> {
         let response = self
-            .reached
+            .connection
             .client
             .sign(SignRequest {
-                bucket: self.reached.bucket.clone(),
+                bucket: self.connection.bucket.clone(),
                 key: self.key.clone(),
                 operation: SignedOperation::Put.into(),
                 audience: SignedAudience::Internal.into(),
@@ -315,7 +321,7 @@ impl Core {
                 ..Default::default()
             })
             .await
-            .map_err(|err| refused(&self.key, &err))?;
+            .map_err(|err| refuse_access(&self.key, &err))?;
         let target = response
             .into_owned()
             .target
@@ -324,7 +330,7 @@ impl Core {
                 key: self.key.clone(),
                 said: "the runtime signed nothing".to_string(),
             })?;
-        let mut request = signed_request(&target, "PUT");
+        let mut request = build_signed_request(&target, "PUT");
         for (name, value) in [
             ("content-type", &self.options.content_type),
             ("cache-control", &self.options.cache_control),
@@ -336,20 +342,20 @@ impl Core {
             }
         }
         let body = Bytes::from(std::mem::take(&mut self.buffered));
-        let response = send(&self.reached, request, body).await?;
-        refusal(&self.key, response.status().as_u16())
+        let response = send_request(&self.connection, request, body).await?;
+        check_status(&self.key, response.status().as_u16())
     }
 
     async fn abort(&mut self) {
-        let upload_id = std::mem::take(&mut *self.leash.locked_upload_id());
+        let upload_id = std::mem::take(&mut *self.multipart.locked_upload_id());
         if upload_id.is_empty() {
             return;
         }
         let _ = self
-            .reached
+            .connection
             .client
             .abort_multipart(AbortMultipartRequest {
-                bucket: self.reached.bucket.clone(),
+                bucket: self.connection.bucket.clone(),
                 key: self.key.clone(),
                 upload_id,
                 ..Default::default()
@@ -358,24 +364,27 @@ impl Core {
     }
 }
 
-fn drive(working: &mut Working, context: &mut Context<'_>) -> Poll<(Box<Core>, Option<Error>)> {
+fn poll_upload(
+    working: &mut UploadFuture,
+    context: &mut Context<'_>,
+) -> Poll<(Box<Upload>, Option<Error>)> {
     let (core, outcome) = std::task::ready!(working.as_mut().poll(context));
     Poll::Ready((core, outcome.err()))
 }
 
 impl Writer {
     fn poll_drain(&mut self, context: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        let State::Draining(working) = &mut self.state else {
+        let WriterState::Draining(working) = &mut self.state else {
             return Poll::Ready(Ok(()));
         };
-        let (core, failure) = std::task::ready!(drive(working, context));
+        let (core, failure) = std::task::ready!(poll_upload(working, context));
         match failure {
             None => {
-                self.state = State::Ready(core);
+                self.state = WriterState::Ready(core);
                 Poll::Ready(Ok(()))
             }
             Some(err) => {
-                self.state = State::Spent;
+                self.state = WriterState::Spent;
                 Poll::Ready(Err(std::io::Error::other(err.to_string())))
             }
         }
@@ -389,17 +398,19 @@ impl tokio::io::AsyncWrite for Writer {
         buffer: &[u8],
     ) -> Poll<std::io::Result<usize>> {
         std::task::ready!(self.poll_drain(context))?;
-        let State::Ready(core) = &mut self.state else {
+        let WriterState::Ready(core) = &mut self.state else {
             return Poll::Ready(Err(std::io::Error::other(
                 "this writer has already finished",
             )));
         };
         core.buffered.extend_from_slice(buffer);
         if core.buffered.len() > core.thresholds.single_ceiling {
-            let State::Ready(mut core) = std::mem::replace(&mut self.state, State::Spent) else {
+            let WriterState::Ready(mut core) =
+                std::mem::replace(&mut self.state, WriterState::Spent)
+            else {
                 unreachable!("the state was just read as ready")
             };
-            self.state = State::Draining(Box::pin(async move {
+            self.state = WriterState::Draining(Box::pin(async move {
                 let outcome = core.drain(false).await;
                 if outcome.is_err() {
                     core.abort().await;
@@ -421,17 +432,19 @@ impl tokio::io::AsyncWrite for Writer {
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,
     ) -> Poll<std::io::Result<()>> {
-        if matches!(self.state, State::Spent) {
+        if matches!(self.state, WriterState::Spent) {
             return Poll::Ready(Ok(()));
         }
-        if !matches!(self.state, State::Finishing(_)) {
+        if !matches!(self.state, WriterState::Finishing(_)) {
             std::task::ready!(self.poll_drain(context))?;
-            let State::Ready(mut core) = std::mem::replace(&mut self.state, State::Spent) else {
+            let WriterState::Ready(mut core) =
+                std::mem::replace(&mut self.state, WriterState::Spent)
+            else {
                 return Poll::Ready(Err(std::io::Error::other(
                     "this writer has already finished",
                 )));
             };
-            self.state = State::Finishing(Box::pin(async move {
+            self.state = WriterState::Finishing(Box::pin(async move {
                 let outcome = core.finish().await;
                 if outcome.is_err() {
                     core.abort().await;
@@ -439,11 +452,11 @@ impl tokio::io::AsyncWrite for Writer {
                 (core, outcome)
             }));
         }
-        let State::Finishing(working) = &mut self.state else {
+        let WriterState::Finishing(working) = &mut self.state else {
             unreachable!("the state was just set to finishing")
         };
-        let (_, failure) = std::task::ready!(drive(working, context));
-        self.state = State::Spent;
+        let (_, failure) = std::task::ready!(poll_upload(working, context));
+        self.state = WriterState::Spent;
         match failure {
             None => Poll::Ready(Ok(())),
             Some(err) => Poll::Ready(Err(std::io::Error::other(err.to_string()))),
@@ -453,22 +466,22 @@ impl tokio::io::AsyncWrite for Writer {
 
 impl Drop for Writer {
     fn drop(&mut self) {
-        let upload_id = std::mem::take(&mut *self.leash.locked_upload_id());
+        let upload_id = std::mem::take(&mut *self.multipart.locked_upload_id());
         if upload_id.is_empty() {
             return;
         }
         let Ok(handle) = tokio::runtime::Handle::try_current() else {
             return;
         };
-        let reached = self.leash.reached.clone();
+        let connection = self.multipart.connection.clone();
         let request = AbortMultipartRequest {
-            bucket: reached.bucket.clone(),
-            key: self.leash.key.clone(),
+            bucket: connection.bucket.clone(),
+            key: self.multipart.key.clone(),
             upload_id,
             ..Default::default()
         };
         handle.spawn(async move {
-            let _ = reached.client.abort_multipart(request).await;
+            let _ = connection.client.abort_multipart(request).await;
         });
     }
 }

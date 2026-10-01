@@ -1,0 +1,5 @@
+error: 'lanes' names "urgent", and a lane is "high", "default" or "low".
+ --> tests/ui/unknown_lane.rs:6:41
+  |
+6 | #[ocel::consumer(topic = Infra::ORDERS, lanes = ["urgent"])]
+  |                                         ^^^^^

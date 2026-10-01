@@ -1,0 +1,5 @@
+error: a task with batch(...) takes its payloads as a Vec<P>, and triggers each P.
+ --> tests/ui/batch_task_without_vec.rs:2:25
+  |
+2 | async fn resize(_image: String, _run: &ocel::Run) -> Result<(), ocel::RunError> {
+  |                         ^^^^^^

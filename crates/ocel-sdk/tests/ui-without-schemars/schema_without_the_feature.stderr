@@ -1,0 +1,7 @@
+error: `schema` declares the JSON Schema of the payload, which ocel derives with schemars: enable the `schemars` feature of the ocel-sdk dependency, and derive schemars::JsonSchema on the payload type
+ --> tests/ui-without-schemars/schema_without_the_feature.rs:1:14
+  |
+1 | #[ocel::task(schema)]
+  |              ^^^^^^
+  |
+  = note: this error originates in the macro `::ocel::__json_schema` (in Nightly builds, run with -Z macro-backtrace for more info)

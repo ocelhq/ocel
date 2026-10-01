@@ -1,0 +1,11 @@
+error[E0277]: the trait bound `Image: Clone` is not satisfied
+  --> tests/ui/task_hook_without_clone.rs:11:25
+   |
+11 | async fn resize(_image: Image, _run: &ocel::Run) -> Result<(), ocel::RunError> {
+   |                         ^^^^^ the trait `Clone` is not implemented for `Image`
+   |
+help: consider annotating `Image` with `#[derive(Clone)]`
+   |
+ 2 + #[derive(Clone)]
+ 3 | struct Image {
+   |

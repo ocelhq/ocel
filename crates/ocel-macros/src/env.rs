@@ -1,4 +1,4 @@
-use crate::attribute::entries;
+use crate::attribute::parse_entries;
 use crate::source::source;
 use crate::variable::{description, is_bool, refused, variable, Class, Shape, Variable};
 use proc_macro2::{Span, TokenStream};
@@ -251,7 +251,7 @@ fn named<'a>(
 }
 
 fn grouped(field: &syn::Field) -> syn::Result<bool> {
-    Ok(entries(&field.attrs)?
+    Ok(parse_entries(&field.attrs)?
         .iter()
         .any(|entry| entry.name == "group"))
 }
@@ -295,7 +295,7 @@ fn groups(input: &DeriveInput, label: &str) -> syn::Result<Vec<Group>> {
         })?;
         let key = ident.to_string();
         let span = ident.span();
-        if entries(&field.attrs)?.len() != 1 {
+        if parse_entries(&field.attrs)?.len() != 1 {
             return Err(refused(
                 span,
                 &key,

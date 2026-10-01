@@ -1,0 +1,7 @@
+error: #[ocel::consumer] names the topic it consumes by the constant its struct holds for it: #[ocel::consumer(topic = Infra::ORDERS)].
+ --> tests/ui/consumer_without_topic.rs:1:1
+  |
+1 | #[ocel::consumer(name = "email")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `ocel::consumer` (in Nightly builds, run with -Z macro-backtrace for more info)
