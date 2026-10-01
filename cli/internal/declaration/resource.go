@@ -18,6 +18,7 @@ type Resource struct {
 	Task     *resourcesv1.TaskConfig
 	Consumer *resourcesv1.ConsumerConfig
 	Worker   *resourcesv1.WorkerConfig
+	KV       *resourcesv1.KvConfig
 	Source   string
 }
 
@@ -41,6 +42,7 @@ func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
 		Task:     req.GetTask(),
 		Consumer: req.GetConsumer(),
 		Worker:   req.GetWorker(),
+		KV:       req.GetKv(),
 		Source:   req.GetSource(),
 	}, nil
 }
