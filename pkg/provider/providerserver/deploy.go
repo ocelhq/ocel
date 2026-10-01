@@ -840,6 +840,9 @@ func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error 
 	if err := RefuseUnsupportedKVStores(r.provider.Facts(), r.manifest); err != nil {
 		return err
 	}
+	if err := RefuseUnsupportedRealtime(r.provider.Facts(), r.manifest); err != nil {
+		return err
+	}
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
