@@ -228,3 +228,37 @@ func TestDroppingTheKVNetworkIgnoresAStoreOnAnotherTiersNetwork(t *testing.T) {
 		t.Errorf("dropping the kv network left %v", networks.networks)
 	}
 }
+
+func TestDroppingTheKVNetworkReadsPastEmptyPagesToTheStoreOnIt(t *testing.T) {
+	b, networks, stores := servingNetworksAndStores(t)
+	networks.installed()
+	stores.holding(heldStore, storeLabels(environment.TierProduction))
+	stores.emptyPages = 2
+
+	drop := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{kvFeature}}
+	err := b.dropFeatures(context.Background(), surveyed(kvFeature), drop, nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "ocel-shop-prod-cache-abc123") {
+		t.Errorf("dropFeatures() with the store behind two empty pages = %v, want a refusal naming the store", err)
+	}
+	if filters := stores.filters(); len(filters) != 3 || filters[2] != filters[0] {
+		t.Errorf("the stores were listed with filters %q, want three pages read under one filter", filters)
+	}
+}
+
+func TestDroppingTheKVNetworkIsAnErrorWhenEveryPageReadIsEmptyAndNamesAnother(t *testing.T) {
+	b, networks, stores := servingNetworksAndStores(t)
+	networks.installed()
+	stores.emptyPages = storePagesRead + 1
+
+	drop := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{kvFeature}}
+	if err := b.dropFeatures(context.Background(), surveyed(kvFeature), drop, nil); err == nil {
+		t.Error("dropFeatures() with only empty pages that name another = nil, want an error that leaves the network up")
+	}
+	if got := networks.wrote(); len(got) != 0 {
+		t.Errorf("an unread listing let the drop write %v, want the network left in place", got)
+	}
+	if got := len(stores.filters()); got != storePagesRead {
+		t.Errorf("the stores were listed %d times, want %d", got, storePagesRead)
+	}
+}

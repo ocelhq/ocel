@@ -156,14 +156,17 @@ func (m memorystore) readSettledInstance(ctx context.Context, name, store string
 
 func isSettling(state string) bool { return state == instanceCreating || state == instanceUpdating }
 
-func (m memorystore) listInstances(ctx context.Context, location, filter string, pageSize int) ([]memorystoreInstance, bool, error) {
+func (m memorystore) listInstances(ctx context.Context, location, filter string, pageSize int, pageToken string) ([]memorystoreInstance, string, error) {
 	var listed struct {
 		Instances     []memorystoreInstance `json:"instances"`
 		NextPageToken string                `json:"nextPageToken"`
 	}
 	query := url.Values{"filter": {filter}, "pageSize": {strconv.Itoa(pageSize)}}
+	if pageToken != "" {
+		query.Set("pageToken", pageToken)
+	}
 	err := m.call(ctx, http.MethodGet, location+"/instances", query, nil, &listed)
-	return listed.Instances, listed.NextPageToken != "", err
+	return listed.Instances, listed.NextPageToken, err
 }
 
 func (m memorystore) readOperation(ctx context.Context, name string) (*memorystoreOperation, error) {

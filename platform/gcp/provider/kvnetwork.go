@@ -191,14 +191,23 @@ func (b bootstrap) ensureConnectionPolicy(ctx context.Context, tier environment.
 	return b.connectivityAwaited(ctx, service, "creating the "+b.clients.ConnectionPolicy(tier)+" service connection policy", started)
 }
 
-const heldStoresNamed = 10
+const (
+	heldStoresNamed = 10
+	storePagesRead  = 10
+)
 
 func (b bootstrap) networkFree(ctx context.Context, tier environment.Tier, features []string) error {
 	if !slices.Contains(features, kvFeature) {
 		return nil
 	}
 	filter := fmt.Sprintf(`labels.ocel-namespace=%q AND labels.ocel-tier=%q`, naming.Sanitize(string(b.clients.namespace)), string(tier))
-	held, more, err := b.stores.listInstances(ctx, b.clients.location(), filter, heldStoresNamed)
+	held, next, err := b.stores.listInstances(ctx, b.clients.location(), filter, heldStoresNamed, "")
+	for page := 1; err == nil && len(held) == 0 && next != ""; page++ {
+		if page == storePagesRead {
+			return fmt.Errorf("read which kv stores are on the %s network: Memorystore answered %d pages with no store and named another, so nothing says the network is free", b.clients.Network(tier), storePagesRead)
+		}
+		held, next, err = b.stores.listInstances(ctx, b.clients.location(), filter, heldStoresNamed, next)
+	}
 	if err != nil {
 		return fmt.Errorf("read which kv stores are on the %s network: %w", b.clients.Network(tier), err)
 	}
@@ -210,7 +219,7 @@ func (b bootstrap) networkFree(ctx context.Context, tier environment.Tier, featu
 		named = append(named, fmt.Sprintf("kv %s of project %s environment %s (Memorystore instance %s)",
 			instance.Labels["ocel-kv"], instance.Labels["ocel-project"], instance.Labels["ocel-environment"], path.Base(instance.Name)))
 	}
-	if more {
+	if next != "" {
 		named = append(named, "and more")
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
