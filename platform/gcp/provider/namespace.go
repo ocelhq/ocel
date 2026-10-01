@@ -122,22 +122,21 @@ func truncatedHash(length int, parts ...string) string {
 }
 
 const (
-	maxInstanceName   = 63
-	instanceHashLen   = 6
-	kvSubnetRange     = "10.240.0.0/20"
-	memorystorePolicy = "memorystore"
+	maxInstanceNameLength = 63
+	instanceHashLength    = 6
+	memorystorePolicy     = "memorystore"
 )
 
 func (n Names) KVInstance(project, env, store string) (string, error) {
 	parts := []string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), naming.Sanitize(store)}
-	instance := strings.Join(parts, "-") + "-" + truncatedHash(instanceHashLen, string(n.namespace), project, env, store)
-	if len(instance) > maxInstanceName {
+	instance := strings.Join(parts, "-") + "-" + truncatedHash(instanceHashLength, string(n.namespace), project, env, store)
+	if len(instance) > maxInstanceNameLength {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"kv %s would be the Memorystore instance %s, which is %d characters and Memorystore takes %d: "+
 				"an instance is named for the namespace, the project, the environment and the store, "+
 				"and ends in %d characters of a hash of the four.\n"+
 				"Name a shorter namespace in %s, a shorter project slug, or a shorter store",
-			store, instance, len(instance), maxInstanceName, instanceHashLen, provider.NamespaceEnvVar)
+			store, instance, len(instance), maxInstanceNameLength, instanceHashLength, provider.NamespaceEnvVar)
 	}
 	return instance, nil
 }

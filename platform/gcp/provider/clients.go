@@ -43,20 +43,20 @@ type clients struct {
 	region   string
 	endpoint string
 
-	workload  memo[*ports.Clients]
-	storage   memo[*storage.Client]
-	databases memo[*firestoreadmin.Service]
-	secrets   memo[*secretmanager.Service]
-	services  memo[*serviceusage.Service]
-	images    memo[*artifactregistry.Service]
-	accounts  memo[*iam.Service]
-	runs      memo[*run.Service]
-	schedules memo[*cloudscheduler.Service]
-	compute   memo[*compute.Service]
-	certs     memo[*certmanager.Service]
-	links     memo[*networkconnectivity.Service]
-	principal memo[string]
-	projects  memo[*cloudresourcemanager.Service]
+	workload     memo[*ports.Clients]
+	storage      memo[*storage.Client]
+	databases    memo[*firestoreadmin.Service]
+	secrets      memo[*secretmanager.Service]
+	services     memo[*serviceusage.Service]
+	images       memo[*artifactregistry.Service]
+	accounts     memo[*iam.Service]
+	runs         memo[*run.Service]
+	schedules    memo[*cloudscheduler.Service]
+	compute      memo[*compute.Service]
+	certs        memo[*certmanager.Service]
+	connectivity memo[*networkconnectivity.Service]
+	principal    memo[string]
+	projects     memo[*cloudresourcemanager.Service]
 }
 
 func opened[T any](c *clients, cache *memo[T], doing string, open func() (T, error)) (T, error) {
@@ -135,7 +135,7 @@ func (c *clients) Certificates() (*certmanager.Service, error) {
 }
 
 func (c *clients) Connectivity() (*networkconnectivity.Service, error) {
-	return opened(c, &c.links, "Network Connectivity", func() (*networkconnectivity.Service, error) {
+	return opened(c, &c.connectivity, "Network Connectivity", func() (*networkconnectivity.Service, error) {
 		return networkconnectivity.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }

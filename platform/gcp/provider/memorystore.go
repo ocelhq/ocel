@@ -237,20 +237,20 @@ func (m memorystore) send(ctx context.Context, method, target string, body []byt
 		return nil, 0, err
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, resp.StatusCode, memorystoreRefusal(resp.StatusCode, answer)
+		return nil, resp.StatusCode, newMemorystoreError(resp.StatusCode, answer)
 	}
 	return answer, resp.StatusCode, nil
 }
 
-func memorystoreRefusal(code int, answer []byte) error {
-	var said struct {
+func newMemorystoreError(code int, answer []byte) error {
+	var answered struct {
 		Error struct {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
 	message := strings.TrimSpace(string(answer))
-	if json.Unmarshal(answer, &said) == nil && said.Error.Message != "" {
-		message = said.Error.Message
+	if json.Unmarshal(answer, &answered) == nil && answered.Error.Message != "" {
+		message = answered.Error.Message
 	}
 	return &googleapi.Error{Code: code, Message: message}
 }
