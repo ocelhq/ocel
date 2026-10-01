@@ -3,6 +3,7 @@ package devresources_test
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -173,6 +174,45 @@ func TestReset(t *testing.T) {
 		}
 		if first[0].Env["OCEL_RESOURCE_POSTGRES_main"] == again[0].Env["OCEL_RESOURCE_POSTGRES_main"] {
 			t.Fatal("the password kept for the wiped database outlived the reset")
+		}
+	})
+
+	t.Run("wipes a kv store's container and volume, and forgets its password", func(t *testing.T) {
+		t.Parallel()
+
+		state := t.TempDir()
+		engine := &dockertest.Engine{}
+		cache := []declaration.Resource{{Name: "cache", Type: resourcesv1.ResourceType_RESOURCE_TYPE_KV, KV: &resourcesv1.KvConfig{}}}
+		stack := devresources.New("shop-1a2b", devresources.Options{Open: engine.OpenFunc(), StateDir: state})
+		first, err := stack.Resolve(context.Background(), cache)
+		if err != nil {
+			t.Fatalf("Resolve = %v", err)
+		}
+		if err := stack.Close(context.Background()); err != nil {
+			t.Fatalf("Close = %v", err)
+		}
+
+		if err := devresources.Reset(context.Background(), engine.OpenFunc(), state, "shop-1a2b"); err != nil {
+			t.Fatalf("Reset = %v", err)
+		}
+		if len(engine.Wiped) != 1 {
+			t.Fatalf("wiped %v, want this project's resources wiped once", engine.Wiped)
+		}
+		for key, value := range engine.Wiped[0] {
+			if engine.Specs[0].Labels[key] != value {
+				t.Errorf("the store's container and volume are labelled %v, and a wipe of %v leaves them behind", engine.Specs[0].Labels, engine.Wiped[0])
+			}
+		}
+		if passwords, _ := filepath.Glob(filepath.Join(state, "secrets", "kv-*-password")); len(passwords) != 0 {
+			t.Errorf("the reset left %v behind", passwords)
+		}
+
+		again, err := devresources.New("shop-1a2b", devresources.Options{Open: engine.OpenFunc(), StateDir: state}).Resolve(context.Background(), cache)
+		if err != nil {
+			t.Fatalf("Resolve after Reset = %v", err)
+		}
+		if first[0].Env["OCEL_RESOURCE_KV_cache"] == again[0].Env["OCEL_RESOURCE_KV_cache"] {
+			t.Fatal("the password kept for the wiped store outlived the reset")
 		}
 	})
 
