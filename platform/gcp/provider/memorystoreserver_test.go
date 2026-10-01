@@ -2,8 +2,12 @@ package gcp
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -27,6 +31,7 @@ type memorystoreServer struct {
 	polls     int
 	reads     int
 	unnamed   bool
+	listed    []string
 	throttles int
 	failed    string
 
@@ -38,10 +43,16 @@ type memorystoreServer struct {
 
 func servingMemorystore(t *testing.T) (*Provider, *memorystoreServer) {
 	t.Helper()
+	server, url := startMemorystore(t)
+	return pushing(t, url), server
+}
+
+func startMemorystore(t *testing.T) (*memorystoreServer, string) {
+	t.Helper()
 	server := &memorystoreServer{instances: map[string]*memorystoreInstance{}}
 	served := httptest.NewServer(server.serve(t))
 	t.Cleanup(served.Close)
-	return pushing(t, served.URL), server
+	return server, served.URL
 }
 
 func (s *memorystoreServer) serve(t *testing.T) http.HandlerFunc {
@@ -80,6 +91,8 @@ func (s *memorystoreServer) serve(t *testing.T) http.HandlerFunc {
 				map[string]any{"name": name + "/newer", "token": storeToken, "state": "ACTIVE", "createTime": endedAt},
 				map[string]any{"name": name + "/adding", "token": "adding-token", "state": "CREATING", "createTime": "2026-10-01T11:00:00Z"},
 			}})
+		case r.Method == http.MethodGet && strings.HasSuffix(name, "/instances"):
+			s.list(w, r.URL.Query())
 		case r.Method == http.MethodGet:
 			s.reads++
 			instance, found := s.instances[name]
@@ -145,6 +158,34 @@ func (s *memorystoreServer) stillCreating(name string, reads int) {
 		s.settling = map[string]int{}
 	}
 	s.settling[name] = reads
+}
+
+var labelFilter = regexp.MustCompile(`labels\.([a-z-]+)="([^"]*)"`)
+
+func (s *memorystoreServer) list(w http.ResponseWriter, query url.Values) {
+	s.listed = append(s.listed, query.Get("filter"))
+	var matching []*memorystoreInstance
+	for _, name := range slices.Sorted(maps.Keys(s.instances)) {
+		instance := s.instances[name]
+		if !slices.ContainsFunc(labelFilter.FindAllStringSubmatch(query.Get("filter"), -1), func(label []string) bool {
+			return instance.Labels[label[1]] != label[2]
+		}) {
+			matching = append(matching, instance)
+		}
+	}
+	writeBody(w, map[string]any{"instances": matching})
+}
+
+func (s *memorystoreServer) holding(name string, labels map[string]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.instances[name] = &memorystoreInstance{Name: name, State: instanceActive, Labels: labels}
+}
+
+func (s *memorystoreServer) filters() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.listed...)
 }
 
 func (s *memorystoreServer) heldIn(name, state string) {

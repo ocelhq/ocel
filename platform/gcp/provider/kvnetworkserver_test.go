@@ -25,6 +25,14 @@ type networkServer struct {
 	unnamed  bool
 }
 
+func servingNetworksAndStores(t *testing.T) (bootstrap, *networkServer, *memorystoreServer) {
+	t.Helper()
+	b, networks := servingNetworks(t)
+	stores, url := startMemorystore(t)
+	b.stores = memorystore{base: url, client: http.DefaultClient}
+	return b, networks, stores
+}
+
 func servingNetworks(t *testing.T) (bootstrap, *networkServer) {
 	t.Helper()
 	server := &networkServer{

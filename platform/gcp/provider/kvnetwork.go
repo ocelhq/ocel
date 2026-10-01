@@ -3,13 +3,16 @@ package gcp
 import (
 	"context"
 	"fmt"
+	"path"
 	"slices"
+	"strings"
 
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/networkconnectivity/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -43,6 +46,7 @@ var kvPermissions = []string{
 	"networkconnectivity.serviceConnectionPolicies.get",
 	"networkconnectivity.serviceConnectionPolicies.delete",
 	"networkconnectivity.operations.get",
+	"memorystore.instances.list",
 	"resourcemanager.projects.get",
 }
 
@@ -184,6 +188,34 @@ func (b bootstrap) ensureConnectionPolicy(ctx context.Context, tier environment.
 		return fmt.Errorf("create the %s service connection policy: %w", b.clients.ConnectionPolicy(tier), err)
 	}
 	return b.connectivityAwaited(ctx, service, "creating the "+b.clients.ConnectionPolicy(tier)+" service connection policy", started)
+}
+
+const heldStoresNamed = 10
+
+func (b bootstrap) networkFree(ctx context.Context, tier environment.Tier, features []string) error {
+	if !slices.Contains(features, kvFeature) {
+		return nil
+	}
+	filter := fmt.Sprintf(`labels.ocel-namespace=%q AND labels.ocel-tier=%q`, naming.Sanitize(string(b.clients.namespace)), string(tier))
+	held, more, err := b.stores.listInstances(ctx, b.clients.location(), filter, heldStoresNamed)
+	if err != nil {
+		return fmt.Errorf("read which kv stores are on the %s network: %w", b.clients.Network(tier), err)
+	}
+	if len(held) == 0 {
+		return nil
+	}
+	named := make([]string, 0, len(held))
+	for _, instance := range held {
+		named = append(named, fmt.Sprintf("kv %s of project %s environment %s (Memorystore instance %s)",
+			instance.Labels["ocel-kv"], instance.Labels["ocel-project"], instance.Labels["ocel-environment"], path.Base(instance.Name)))
+	}
+	if more {
+		named = append(named, "and more")
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"the %s network of tier %s still carries %s, and taking the network down cuts every app off from those stores.\n"+
+			"Remove those stores from their projects and deploy them, or destroy their environments, then remove feature %s again",
+		b.clients.Network(tier), tier, strings.Join(named, ", "), kvFeature)
 }
 
 func (b bootstrap) tearNetwork(ctx context.Context, tier environment.Tier) error {

@@ -143,6 +143,9 @@ func (b bootstrap) dropFronts(
 }
 
 func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.BootstrapRequest, progress progress.Log) error {
+	if err := b.networkFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
+		return err
+	}
 	if err := b.dropFronts(ctx, read, req, progress); err != nil {
 		return err
 	}
@@ -208,6 +211,13 @@ func (b bootstrap) frontsFree(ctx context.Context, tier environment.Tier, featur
 				"which Google will not delete while it contains any.\nRelease them with `ocel domain remove` in the projects that bound them, then remove this bootstrap",
 			strings.Join(bound, ", "), front.Kind(), tier)
 	})
+}
+
+func (b bootstrap) featuresFree(ctx context.Context, tier environment.Tier, features []string) error {
+	if err := b.networkFree(ctx, tier, features); err != nil {
+		return err
+	}
+	return b.frontsFree(ctx, tier, features)
 }
 
 func apisFor(features []string) []string {

@@ -135,6 +135,7 @@ func (s kvStore) changes(current *memorystoreInstance) []string {
 func labelsFor(names Names, ref provider.StackRef, store string) map[string]string {
 	return map[string]string{
 		"ocel-namespace":   naming.Sanitize(string(names.namespace)),
+		"ocel-tier":        string(ref.Tier),
 		"ocel-project":     naming.Sanitize(ref.Project),
 		"ocel-environment": naming.Sanitize(ref.Name.Env),
 		"ocel-kv":          naming.Sanitize(store),

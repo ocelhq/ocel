@@ -81,6 +81,7 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap, error) {
 	return bootstrap{
 		clients:       opened,
 		fronts:        g.p.Edges(),
+		stores:        g.p.memorystore(),
 		pushBinary:    g.p.pushBinary,
 		deployService: g.p.deployService,
 		tearDown:      g.p.tearDown,
@@ -130,6 +131,7 @@ func (g bootstrapGate) Remove(ctx context.Context, tier environment.Tier, progre
 type bootstrap struct {
 	clients *clients
 	fronts  provider.Edges
+	stores  memorystore
 
 	pushBinary    func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
 	deployService func(ctx context.Context, s serving, progress progress.Log) (release, error)
@@ -189,7 +191,7 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err := b.preflight(ctx, read, req.Features); err != nil {
 		return provider.Plan{}, err
 	}
-	if err := b.frontsFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
+	if err := b.featuresFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
 		return provider.Plan{}, err
 	}
 	current, err := b.described(ctx, read)
@@ -811,7 +813,7 @@ func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if err := b.frontsFree(ctx, tier, read.Stamp.Features); err != nil {
+	if err := b.featuresFree(ctx, tier, read.Stamp.Features); err != nil {
 		return provider.Plan{}, err
 	}
 	stack, params := provider.ChangeGroup{
@@ -897,7 +899,7 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 				"Run `%s` in every project deployed here first",
 			read.Names.StateBucket(tier), read.stateOf, destroyIn(tier))
 	}
-	if err := b.frontsFree(ctx, tier, read.Stamp.Features); err != nil {
+	if err := b.featuresFree(ctx, tier, read.Stamp.Features); err != nil {
 		return err
 	}
 	if read.Present {
