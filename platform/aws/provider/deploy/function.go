@@ -46,6 +46,7 @@ const (
 
 	tagComponent = "ocel:component"
 	tagRoute     = "ocel:route"
+	tagResource  = "ocel:resource"
 
 	tagImageOptimizer = "image-optimizer"
 

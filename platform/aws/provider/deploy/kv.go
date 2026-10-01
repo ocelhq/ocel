@@ -120,6 +120,8 @@ func kvGroupID(at naming.Coordinate) string {
 func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvArgs, vpcID, vpcCIDR string, subnetIDs []string) error {
 	at := resourceCoordinate(project, env, logicalName, naming.KindKV)
 	groupID := kvGroupID(at)
+	tags := resourceTags(at.Kind, "", args.Tags)
+	tags[tagResource] = pulumi.String(at.Name)
 
 	sg, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(at.Kind, at.Name, "security-group"), &ec2.SecurityGroupArgs{
 		Description: capDescription(at.Description("security group for the "+at.Name+" kv store"), maxSecurityGroupDescriptionLen),
@@ -142,7 +144,7 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 				Description: capDescription(at.Description("outbound access for the "+at.Name+" kv store"), maxSecurityGroupDescriptionLen),
 			},
 		},
-		Tags: resourceTags(at.Kind, "", args.Tags),
+		Tags: tags,
 	})
 	if err != nil {
 		return err
@@ -152,7 +154,7 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 		Name:        pulumi.String(groupID + naming.WordSeparator + "subnets"),
 		Description: capDescription(at.Description("subnet group placing the "+at.Name+" kv store in the VPC's subnets"), maxSubnetGroupDescriptionLen),
 		SubnetIds:   pulumi.ToStringArray(subnetIDs),
-		Tags:        resourceTags(at.Kind, "", args.Tags),
+		Tags:        tags,
 	})
 	if err != nil {
 		return err
@@ -166,7 +168,7 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 			&elasticache.ParameterGroupParameterArgs{Name: pulumi.String("maxmemory-policy"), Value: pulumi.String(args.MaxMemoryPolicy)},
 			&elasticache.ParameterGroupParameterArgs{Name: pulumi.String("reserved-memory-percent"), Value: pulumi.String(strconv.Itoa(args.ReservedMemoryPercent))},
 		},
-		Tags: resourceTags(at.Kind, "", args.Tags),
+		Tags: tags,
 	})
 	if err != nil {
 		return err
@@ -190,7 +192,7 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 		SubnetGroupName:          subnetGroup.Name,
 		SecurityGroupIds:         pulumi.StringArray{sg.ID()},
 		ApplyImmediately:         pulumi.Bool(true),
-		Tags:                     resourceTags(at.Kind, "", args.Tags),
+		Tags:                     tags,
 	}, pulumi.DeleteBeforeReplace(true))
 	if err != nil {
 		return err

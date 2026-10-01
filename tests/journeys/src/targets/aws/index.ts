@@ -12,7 +12,7 @@ import { migrateCommand } from "../../workspace";
 import type { Deployment, Exposure, ReleaseCycle, Restart, Target } from "../types";
 import { AwsBootstrap } from "./bootstrap";
 import { AwsDispatch } from "./dispatch";
-import { exposedOf, failOver, persistedGroups, taggedGroups } from "./kv";
+import { describeExposed, failOver, keepPersistedGroups, listTaggedGroups } from "./kv";
 import { ocelEnvIn } from "./namespace";
 import { awaitServing } from "./serving";
 import { cliAt } from "./store";
@@ -180,10 +180,10 @@ export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
 
   async restart(cell: CellUnderTest): Promise<Deployment> {
     const cli = cliAt(await this.world.endpoint());
-    const groups = persistedGroups(await taggedGroups(cli, sanitize(cell.slug)));
+    const groups = keepPersistedGroups(await listTaggedGroups(cli, sanitize(cell.slug)));
     if (groups.length === 0) {
       throw new Error(
-        `no replication group tagged ocel:project=${sanitize(cell.slug)} holds a store the persistence check reads, so nothing ${cell.name} declared was restarted`,
+        `no replication group tagged ocel:project=${sanitize(cell.slug)} has an ocel:resource tag naming a store the persistence check reads, so nothing ${cell.name} declared was restarted`,
       );
     }
     const failedOver: string[] = [];
@@ -202,7 +202,7 @@ export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
   }
 
   async readExposed(cell: CellUnderTest): Promise<string> {
-    const shown = await exposedOf(cliAt(await this.world.endpoint()), sanitize(cell.slug));
+    const shown = await describeExposed(cliAt(await this.world.endpoint()), sanitize(cell.slug));
     return [...(this.said.get(cell.slug) ?? []), shown].join("\n");
   }
 
