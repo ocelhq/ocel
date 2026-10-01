@@ -49,6 +49,26 @@ func TestOpeningCreatesTheDedicatedDatabaseWithPgmqAndOpeningAgainKeepsIt(t *tes
 	}
 }
 
+func TestEnginesOpeningANewDatabaseAtOnceAllOpenIt(t *testing.T) {
+	cfg := aDatabase(t)
+
+	errs := make(chan error, 8)
+	for range cap(errs) {
+		go func() {
+			engine, err := Open(context.Background(), cfg)
+			if err == nil {
+				engine.Close()
+			}
+			errs <- err
+		}()
+	}
+	for range cap(errs) {
+		if err := <-errs; err != nil {
+			t.Errorf("Open alongside other Opens: %v", err)
+		}
+	}
+}
+
 func TestOpeningRefusesADatabaseWhosePgmqReadsNoHeadPerGroup(t *testing.T) {
 	ctx := context.Background()
 	cfg := aDatabase(t)
