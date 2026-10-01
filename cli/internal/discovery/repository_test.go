@@ -93,9 +93,6 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		"tests/fixtures/tasks/go/server/main.go": {
 			"example.com/tasks/" + DefaultRootDirName: true,
 		},
-		"tests/fixtures/tasks/go/" + DefaultRootDirName + "/requests.go": {
-			processenv.RuntimeAddressEnvVar: true,
-		},
 	}
 	segments := []*regexp.Regexp{
 		regexp.MustCompile(`(?:^|[/\\"'])` + regexp.QuoteMeta(DefaultRootDirName) + `(?:$|[/\\"'])`),

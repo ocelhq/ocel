@@ -1,64 +1,35 @@
 import express, { Router } from "express";
 import { runs } from "ocel/task";
-import {
-  countRequests,
-  envelope,
-  listRequestsSince,
-  notices,
-  type RecordedEnvelope,
-  readNames,
-  type Sighting,
-  sighting,
-  verbatim,
-} from "../infra/wire";
+import { notices, type Sighting, sighting, verbatim } from "../infra/wire";
 import { serveJSON } from "./serve";
 
-type ExactJSON = { rawJSON(text: string): unknown };
+type RawJSON = { rawJSON(text: string): unknown };
 
 type SourceReviver = (key: string, value: unknown, context: { source: string }) => unknown;
 
-function parseExactly(text: string): unknown {
+function parseKeepingNumberText(text: string): unknown {
   const keepSource: SourceReviver = (_key, value, { source }) =>
-    typeof value === "number" ? (JSON as unknown as ExactJSON).rawJSON(source) : value;
+    typeof value === "number" ? (JSON as unknown as RawJSON).rawJSON(source) : value;
   return JSON.parse(text, keepSource as Parameters<typeof JSON.parse>[1]);
-}
-
-function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export const wire = Router();
 
 wire.use(express.text({ type: () => true }));
 
-wire.get(
-  "/names",
-  serveJSON(async () => readNames()),
-);
-
 wire.post(
   "/trigger",
   serveJSON(async (req) => {
-    const since = countRequests();
-    try {
-      const { id } = await verbatim.trigger(parseExactly(String(req.body)));
-      return { id, error: "", requests: listRequestsSince(since) };
-    } catch (error) {
-      return { id: "", error: describeError(error), requests: listRequestsSince(since) };
-    }
+    const { id } = await verbatim.trigger(parseKeepingNumberText(String(req.body)));
+    return { id };
   }),
 );
 
 wire.post(
   "/send",
   serveJSON(async (req) => {
-    const since = countRequests();
-    try {
-      const messageId = await notices.send(parseExactly(String(req.body)));
-      return { messageId, error: "", requests: listRequestsSince(since) };
-    } catch (error) {
-      return { messageId: "", error: describeError(error), requests: listRequestsSince(since) };
-    }
+    const messageId = await notices.send(parseKeepingNumberText(String(req.body)));
+    return { messageId };
   }),
 );
 
@@ -86,17 +57,5 @@ wire.get(
       status: "COMPLETED",
     });
     return page.runs.map((run) => run.output as Sighting);
-  }),
-);
-
-wire.get(
-  "/envelopes/:tag",
-  serveJSON(async (req) => {
-    const page = await runs.list({
-      task: envelope,
-      tags: [String(req.params.tag)],
-      status: "COMPLETED",
-    });
-    return page.runs.map((run) => (run.output as RecordedEnvelope).recordedEnvelope);
   }),
 );

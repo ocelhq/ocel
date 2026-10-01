@@ -14,15 +14,13 @@ and `ticking` each tick until its run is aborted the same way. `echo-name` holds
 The routes trigger and batch-trigger any task by name, read, list, cancel, replay and
 reschedule runs, send to any topic, and list, redrive and purge a consumer's dead letters.
 
-`wire.ts`, beside the other declarations, is what the wire checks read, as in `tasks/go`:
-the task `verbatim` and the topic `notices` with its consumer `notice-log`, whose bindings
-are rewritten to name `physical-verbatim` and `physical-notices`; a proxy in front of the
-runtime address that records each `Trigger` and `Send` it passes on; and, in a worker, a
-proxy on the worker's port that records each envelope as an `envelope` run before passing it
-on. The routes under `/api/wire` take the request body as the payload, parsing it with each
-number kept as its source text, and answer the requests the SDK sent, the names, a run's
-payload and output as JSON text, and what was recorded under a tag. Their names hold no
-hyphen, since the app runs through `pnpm dev` (#1526).
+`wire.ts`, beside the other declarations, is what the wire checks read, as in `tasks/go`: the
+task `verbatim` and the topic `notices` with its consumer `notice-log`, whose handlers trigger
+`sighting` with the kind, name and topic their run context reports and the payload as JSON
+text. The routes under `/api/wire` take the request body as the payload, parsing it with each
+number kept as its source text, and answer the run's or message's id, a run's payload and
+output as JSON text, and what a handler recorded under a tag. Their names hold no hyphen,
+since the app runs through `pnpm dev` (#1526).
 
 ## Run it
 
