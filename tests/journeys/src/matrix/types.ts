@@ -141,5 +141,6 @@ export type Gap = {
   id: string;
   reason: string;
   issue?: number;
+  failsWith?: RegExp;
   where: GapScope[];
 };

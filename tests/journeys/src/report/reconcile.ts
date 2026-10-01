@@ -65,22 +65,28 @@ function key(cell: string, title: string): string {
 
 type Blocking = "none" | "deploy-failed" | "deploy-listed";
 
-function verdictFor(result: TestResult | undefined, gaps: number, blocking: Blocking): Verdict {
-  const listed = blocking === "deploy-listed";
+function isFailureListed(result: TestResult, listed: GapRef[]): boolean {
+  return listed.some(
+    (gap) => gap.failsWith === undefined || new RegExp(gap.failsWith).test(result.error ?? ""),
+  );
+}
+
+function verdictFor(result: TestResult | undefined, listed: GapRef[], blocking: Blocking): Verdict {
+  const isBehindListedDeploy = blocking === "deploy-listed";
   if (!result) {
-    return listed ? "blocked" : "never-ran";
+    return isBehindListedDeploy ? "blocked" : "never-ran";
   }
   if (DISABLED.has(result.outcome)) {
     return "disabled";
   }
   if (result.outcome === "failed") {
-    if (gaps > 0) {
+    if (isFailureListed(result, listed)) {
       return "expected-failure";
     }
     return blocking === "none" ? "unexpected-failure" : "blocked";
   }
-  if (gaps > 0) {
-    return listed ? "ok" : "listed-and-passed";
+  if (listed.length > 0) {
+    return isBehindListedDeploy ? "ok" : "listed-and-passed";
   }
   return "ok";
 }
@@ -154,7 +160,7 @@ export function reconcile(input: {
       cell: entry.cell,
       title: entry.title,
       phase: entry.phase,
-      verdict: verdictFor(result, listed.length, downstream),
+      verdict: verdictFor(result, listed, downstream),
       listed,
       error: result?.error,
     };

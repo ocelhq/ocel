@@ -276,6 +276,20 @@ describe("the gaps a lane expects", () => {
     ]);
   });
 
+  it("carries the failure a gap says its tests fail with", () => {
+    const planned = planOf(matrix, {
+      gaps: [
+        {
+          ...gap("one", [{ on: ["aws"], fixtures: [node], fails: [step.deploy] }]),
+          failsWith: /with status 404/,
+        },
+      ],
+    });
+    expect(planned.expectedFailures["deploy/node/web"]?.deploy).toEqual([
+      { id: "one", reason: "reason for one", failsWith: "with status 404" },
+    ]);
+  });
+
   it("lists a test once under a gap whose scopes overlap", () => {
     const planned = planOf(matrix, {
       gaps: [
