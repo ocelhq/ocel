@@ -48,8 +48,11 @@ func (t Tasks) ListRuns(ctx context.Context, req *taskv1.ListRunsRequest) (*task
 		}
 	}
 	page, err := listRuns(ctx, t.engine.pool, filter)
-	if err != nil {
+	if errors.Is(err, errUnknownCursor) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if err != nil {
+		return nil, err
 	}
 	resp := &taskv1.ListRunsResponse{NextCursor: page.NextCursor}
 	for _, run := range page.Runs {
