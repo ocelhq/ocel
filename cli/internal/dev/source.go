@@ -18,10 +18,10 @@ type valueSource struct {
 
 func readValueSource(ctx context.Context, cfg *project.Project) (valueSource, error) {
 	descriptor := cfg.EnvSource.Dev
-	if descriptor.Kind == envsource.Dotenv {
+	if descriptor.Reading() == envsource.ReadingOwnStore {
 		return valueSource{id: descriptor.ID()}, nil
 	}
-	source, err := envsource.Open(descriptor, cfg.Dir, os.LookupEnv)
+	source, err := descriptor.Open(cfg.Dir, os.LookupEnv)
 	if err != nil {
 		return valueSource{}, err
 	}
@@ -44,7 +44,7 @@ func readValueSource(ctx context.Context, cfg *project.Project) (valueSource, er
 	return valueSource{id: descriptor.ID(), values: values}, nil
 }
 
-func (s valueSource) isDotenv() bool { return s.id == string(envsource.Dotenv) }
+func (s valueSource) isDotenv() bool { return s.id == envsource.Dotenv }
 
 func (s valueSource) files() []string {
 	if s.isDotenv() {

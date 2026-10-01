@@ -320,14 +320,17 @@ func infisicalAt(server *httptest.Server, path string, write envsource.WritePoli
 		Path:        path,
 		Host:        server.URL,
 		Write:       write,
-		Auth:        envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: "ID", ClientSecretVariable: "SECRET"},
+		Auth: &envsource.InfisicalAuth{Universal: &envsource.UniversalAuth{
+			ClientID:     envsource.Variable{Name: "ID"},
+			ClientSecret: envsource.Variable{Name: "SECRET"},
+		}},
 	}.Normalize()
 }
 
 func cell(folder, key string) variablestore.Cell { return variablestore.Cell{Folder: folder, Key: key} }
 
 func signedIn(server *httptest.Server, path string, write envsource.WritePolicy) envsource.Source {
-	return envsource.NewInfisical(infisicalAt(server, path, write), envsource.UniversalAuth("client-id", "client-secret"), server.Client())
+	return envsource.NewInfisical(infisicalAt(server, path, write), envsource.UniversalCredential("client-id", "client-secret"), server.Client())
 }
 
 func TestInfisicalReadsEachFolderUnderItsPathWithImportsBeneathItsOwnValues(t *testing.T) {
@@ -453,7 +456,7 @@ func TestInfisicalLogsInAgainWhenItsTokenIsRefused(t *testing.T) {
 func TestInfisicalRefusesCredentialsItRejectsWithoutRepeatingThem(t *testing.T) {
 	t.Parallel()
 	_, server := newFakeInfisical(t)
-	source := envsource.NewInfisical(infisicalAt(server, "/", envsource.WriteNever), envsource.UniversalAuth("client-id", "wrong-secret"), server.Client())
+	source := envsource.NewInfisical(infisicalAt(server, "/", envsource.WriteNever), envsource.UniversalCredential("client-id", "wrong-secret"), server.Client())
 	_, err := source.Read(context.Background(), []string{""})
 	if err == nil || !strings.Contains(err.Error(), "Invalid credentials") || strings.Contains(err.Error(), "wrong-secret") {
 		t.Fatalf("Read() with a rejected secret = %v, want Infisical's refusal and never the secret", err)
@@ -650,7 +653,7 @@ func TestAnIdentityProvedByASignedRequestLogsInWithInfisicalsAWSAuth(t *testing.
 	t.Parallel()
 	fake, server := newFakeInfisical(t)
 	fake.put("/", fakeSecret{id: "s1", key: "A", value: "a", version: 1})
-	source := envsource.NewInfisical(infisicalAt(server, "/", envsource.WriteNever), envsource.IdentityAuth("identity-1", proveBySignedRequest), server.Client())
+	source := envsource.NewInfisical(infisicalAt(server, "/", envsource.WriteNever), envsource.IdentityCredential("identity-1", proveBySignedRequest), server.Client())
 	if _, err := source.Read(context.Background(), []string{""}); err != nil {
 		t.Fatalf("Read() = %v", err)
 	}
@@ -699,7 +702,7 @@ func TestAnIdentityProvedByAnIDTokenForTheIdentityLogsInWithInfisicalsGCPAuth(t 
 		audience = requested
 		return envsource.IdentityProof{IDToken: "jwt-for-" + requested}, nil
 	}
-	source := envsource.NewInfisical(infisicalAt(server, "/", envsource.WriteNever), envsource.IdentityAuth("identity-2", prove), server.Client())
+	source := envsource.NewInfisical(infisicalAt(server, "/", envsource.WriteNever), envsource.IdentityCredential("identity-2", prove), server.Client())
 	if _, err := source.Read(context.Background(), []string{""}); err != nil {
 		t.Fatalf("Read() = %v", err)
 	}
@@ -733,7 +736,7 @@ func TestAnIdentityThisTargetCannotProveIsRefusedBeforeAnyLogin(t *testing.T) {
 			return envsource.IdentityProof{}, errors.New("no credentials")
 		},
 	} {
-		source := envsource.NewInfisical(infisicalAt(server, "/", envsource.WriteNever), envsource.IdentityAuth("identity-1", prove), server.Client())
+		source := envsource.NewInfisical(infisicalAt(server, "/", envsource.WriteNever), envsource.IdentityCredential("identity-1", prove), server.Client())
 		if _, err := source.Read(context.Background(), []string{""}); err == nil {
 			t.Errorf("Read() with %s = nil, want a refusal", name)
 		}

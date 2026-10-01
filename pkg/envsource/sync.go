@@ -33,8 +33,8 @@ type Sync struct {
 }
 
 type openedSource struct {
-	source     Source
-	credential Credential
+	source      Source
+	credentials []string
 }
 
 func (s *Sync) now() time.Time {
@@ -84,7 +84,7 @@ func (s *Sync) CopyScheduled(ctx context.Context) error {
 	groups := map[string][]Registration{}
 	var failed []error
 	for _, registration := range registrations {
-		if !registration.Descriptor.IsScheduled() {
+		if registration.Descriptor.Reading() != ReadingOnSchedule {
 			continue
 		}
 		key, err := s.keyOf(ctx, registration)
@@ -235,20 +235,20 @@ func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration
 }
 
 func (s *Sync) open(ctx context.Context, key string, registration Registration) (Source, error) {
-	credential, err := ReadCredential(ctx, s.Store, s.scope(registration), registration.Descriptor, s.Login)
+	credentials, err := ReadCredentials(ctx, s.Store, s.scope(registration), registration.Descriptor)
 	if err != nil {
 		return nil, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if current, found := s.opened[key]; found && current.credential.sameAs(credential) {
+	if current, found := s.opened[key]; found && slices.Equal(current.credentials, credentials) {
 		return current.source, nil
 	}
-	source := NewInfisical(*registration.Descriptor.Infisical, credential, s.Login.Client)
+	source := registration.Descriptor.decoded.schedule.open(credentials, s.Login)
 	if s.opened == nil {
 		s.opened = map[string]openedSource{}
 	}
-	s.opened[key] = openedSource{source: source, credential: credential}
+	s.opened[key] = openedSource{source: source, credentials: credentials}
 	return source, nil
 }
 

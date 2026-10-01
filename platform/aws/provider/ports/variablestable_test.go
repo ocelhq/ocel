@@ -56,7 +56,7 @@ func TestASetValueOnlyEverTouchesTheVariablesTable(t *testing.T) {
 func TestAnEnvSourceRegistrationItsSyncStatusAndItsDigestKeyLiveBesideTheValues(t *testing.T) {
 	table, ddb := newSplitRecords()
 	ctx := context.Background()
-	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
+	registration := envsource.Registration{Project: "shop", Descriptor: execDescriptor(t), Folders: []string{""}}
 	registration, err := envsource.Register(ctx, variablestore.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}, environment.TierProduction, registration)
 	if err != nil {
 		t.Fatalf("Register err = %v", err)
@@ -145,4 +145,13 @@ func TestTheDigestKeyIsSealedUnderAnEncryptionContextNamingEveryProjectItsClassA
 	if len(crypto.contexts) == 0 || !maps.Equal(crypto.contexts[0], want) {
 		t.Fatalf("encryption contexts = %v, want the digest key sealed under %v: every digest key already stored is bound to it", crypto.contexts, want)
 	}
+}
+
+func execDescriptor(t *testing.T) envsource.Descriptor {
+	t.Helper()
+	descriptor, err := envsource.NewDescriptor("exec", []byte(`{"command":["op"],"format":"json"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return descriptor
 }

@@ -176,7 +176,7 @@ func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {
 	client, vendor := deployedProject(t)
 	ctx := context.Background()
 	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
-	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
+	registration := envsource.Registration{Project: "shop", Descriptor: execDescriptor(t), Folders: []string{""}}
 	if _, err := envsource.Register(ctx, store, environment.TierProduction, registration); err != nil {
 		t.Fatal(err)
 	}
@@ -557,4 +557,13 @@ func TestRemoveProjectRemovesAServiceWhoseHolderLostItsStackRecord(t *testing.T)
 	if left, err := vendor.KeyValues().List(ctx, shared); err != nil || len(left) != 0 {
 		t.Errorf("the removal left %v, %v behind, want nothing: a removed project leaves no bytes", left, err)
 	}
+}
+
+func execDescriptor(t *testing.T) envsource.Descriptor {
+	t.Helper()
+	descriptor, err := envsource.NewDescriptor("exec", []byte(`{"command":["op"],"format":"json"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return descriptor
 }

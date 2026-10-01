@@ -2,6 +2,7 @@ package envsource_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,7 +13,28 @@ import (
 )
 
 func execDescriptor(format envsource.Format, command ...string) envsource.Descriptor {
-	return envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: command, Format: format}}
+	encoded, err := json.Marshal(envsource.ExecOptions{Command: command, Format: format})
+	if err != nil {
+		panic(err)
+	}
+	descriptor, err := envsource.NewDescriptor("exec", encoded)
+	if err != nil {
+		panic(err)
+	}
+	return descriptor
+}
+
+func devInfisical(t *testing.T, options envsource.InfisicalOptions) envsource.Descriptor {
+	t.Helper()
+	encoded, err := json.Marshal(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := envsource.NewDevDescriptor("infisical", encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return descriptor
 }
 
 func noEnv(string) (string, bool) { return "", false }
@@ -24,7 +46,7 @@ esac`
 
 func TestAnExecEnvSourceRunsItsCommandOncePerFolderWithTheFolderSubstituted(t *testing.T) {
 	t.Parallel()
-	source, err := envsource.Open(execDescriptor(envsource.FormatJSON, "sh", "-c", printByFolder, "sh", envsource.FolderPlaceholder), t.TempDir(), noEnv)
+	source, err := execDescriptor(envsource.FormatJSON, "sh", "-c", printByFolder, "sh", envsource.FolderPlaceholder).Open(t.TempDir(), noEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +76,7 @@ func TestAnExecEnvSourceReadsDotenvInTheDirectoryItIsGiven(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "values.env"), []byte("export API_KEY=\"k # kept\"\nOCEL_RESERVED=x\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	source, err := envsource.Open(execDescriptor(envsource.FormatDotenv, "cat", "values.env"), dir, noEnv)
+	source, err := execDescriptor(envsource.FormatDotenv, "cat", "values.env").Open(dir, noEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +91,7 @@ func TestAnExecEnvSourceReadsDotenvInTheDirectoryItIsGiven(t *testing.T) {
 
 func TestAnExecEnvSourceThatFailsNamesItsCommandAndNeverWhatItPrinted(t *testing.T) {
 	t.Parallel()
-	source, err := envsource.Open(execDescriptor(envsource.FormatJSON, "sh", "-xc", "API_KEY=sk-live-secret; echo \"$API_KEY\"; exit 3"), t.TempDir(), noEnv)
+	source, err := execDescriptor(envsource.FormatJSON, "sh", "-xc", "API_KEY=sk-live-secret; echo \"$API_KEY\"; exit 3").Open(t.TempDir(), noEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +107,7 @@ func TestAnExecEnvSourceThatFailsNamesItsCommandAndNeverWhatItPrinted(t *testing
 func TestAnExecEnvSourceRefusesJSONThatIsNotNamesToText(t *testing.T) {
 	t.Parallel()
 	for _, printed := range []string{`[1,2]`, `{"PORT":3000}`} {
-		source, err := envsource.Open(execDescriptor(envsource.FormatJSON, "printf", printed), t.TempDir(), noEnv)
+		source, err := execDescriptor(envsource.FormatJSON, "printf", printed).Open(t.TempDir(), noEnv)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -106,8 +128,8 @@ func TestADevInfisicalEnvSourceReadsWithTheTokenInTheShell(t *testing.T) {
 		}
 		return "", false
 	}
-	descriptor := envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Project: "p-1", Environment: "prod", Path: "/acme", Host: server.URL}}
-	source, err := envsource.Open(descriptor, t.TempDir(), lookupEnv)
+	descriptor := devInfisical(t, envsource.InfisicalOptions{Project: "p-1", Environment: "prod", Path: "/acme", Host: server.URL})
+	source, err := descriptor.Open(t.TempDir(), lookupEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,9 +152,9 @@ printf '[{"key":"WEB","value":"w","_id":"s1","secretPath":"/acme/web"},{"key":"E
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	descriptor := envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Project: "p-1", Environment: "dev", Path: "/acme", Host: "https://infisical.example.com/"}}
+	descriptor := devInfisical(t, envsource.InfisicalOptions{Project: "p-1", Environment: "dev", Path: "/acme", Host: "https://infisical.example.com/"})
 
-	source, err := envsource.Open(descriptor, t.TempDir(), noEnv)
+	source, err := descriptor.Open(t.TempDir(), noEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,9 +199,9 @@ printf '[{"key":"ROOT","value":"r"}]'
 
 func TestADevInfisicalEnvSourceExportedThroughTheCLIReadsAMissingAppFolderAsEmpty(t *testing.T) {
 	installInfisicalWithoutFolder(t, "/acme/web")
-	descriptor := envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Project: "p-1", Environment: "dev", Path: "/acme"}}
+	descriptor := devInfisical(t, envsource.InfisicalOptions{Project: "p-1", Environment: "dev", Path: "/acme"})
 
-	source, err := envsource.Open(descriptor, t.TempDir(), noEnv)
+	source, err := descriptor.Open(t.TempDir(), noEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,9 +213,9 @@ func TestADevInfisicalEnvSourceExportedThroughTheCLIReadsAMissingAppFolderAsEmpt
 
 func TestADevInfisicalEnvSourceExportedThroughTheCLIFailsOnAMissingRoot(t *testing.T) {
 	installInfisicalWithoutFolder(t, "/acme")
-	descriptor := envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Project: "p-1", Environment: "dev", Path: "/acme"}}
+	descriptor := devInfisical(t, envsource.InfisicalOptions{Project: "p-1", Environment: "dev", Path: "/acme"})
 
-	source, err := envsource.Open(descriptor, t.TempDir(), noEnv)
+	source, err := descriptor.Open(t.TempDir(), noEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,8 +226,8 @@ func TestADevInfisicalEnvSourceExportedThroughTheCLIFailsOnAMissingRoot(t *testi
 
 func TestADevInfisicalEnvSourceWithNoWayInSaysHowToGetOne(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	descriptor := envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Project: "p-1", Environment: "dev"}}
-	_, err := envsource.Open(descriptor, t.TempDir(), noEnv)
+	descriptor := devInfisical(t, envsource.InfisicalOptions{Project: "p-1", Environment: "dev"})
+	_, err := descriptor.Open(t.TempDir(), noEnv)
 	if err == nil || !strings.Contains(err.Error(), "INFISICAL_TOKEN") || !strings.Contains(err.Error(), "infisical login") {
 		t.Fatalf("Open() = %v, want the token and the CLI login both offered", err)
 	}
@@ -213,9 +235,10 @@ func TestADevInfisicalEnvSourceWithNoWayInSaysHowToGetOne(t *testing.T) {
 
 func TestOnlyACommandOrAServiceIsOpenedAsAnEnvSource(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []envsource.Kind{envsource.Builtin, envsource.Dotenv} {
-		if _, err := envsource.Open(envsource.Descriptor{Kind: kind}, t.TempDir(), noEnv); err == nil {
-			t.Errorf("Open(%s) = nil, want a refusal", kind)
+	defaults := envsource.DefaultTiers()
+	for _, descriptor := range []envsource.Descriptor{defaults.Production, defaults.Dev} {
+		if _, err := descriptor.Open(t.TempDir(), noEnv); err == nil {
+			t.Errorf("Open(%s) = nil, want a refusal", descriptor.Kind())
 		}
 	}
 }

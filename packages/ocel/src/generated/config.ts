@@ -259,15 +259,23 @@ export interface EnvSourceConfig {
 export type DevEnvSourceDescriptor =
   | "dotenv"
   | {
-      /** Infisical, read as you: from INFISICAL_TOKEN, or else the infisical CLI you are logged in to. */
-      infisical: InfisicalOptions;
-      exec?: never;
-    }
-  | {
       /** A command run on your machine, whose output is the values. */
       exec: ExecOptions;
       infisical?: never;
+    }
+  | {
+      /** Infisical, read as you: from INFISICAL_TOKEN, or else the infisical CLI you are logged in to. */
+      infisical: InfisicalOptions;
+      exec?: never;
     };
+
+/** A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev. */
+export interface ExecOptions {
+  /** The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read. */
+  command: string[];
+  /** What the command prints: a JSON object of names to values, or KEY=VALUE lines. */
+  format: "json" | "dotenv";
+}
 
 /** The Infisical project and environment a tier reads its values from. Production and preview read it as the machine identity auth names; dev reads it as you. */
 export interface InfisicalOptions {
@@ -312,26 +320,18 @@ export interface IdentityAuth {
   identityId: string;
 }
 
-/** A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev. */
-export interface ExecOptions {
-  /** The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read. */
-  command: string[];
-  /** What the command prints: a JSON object of names to values, or KEY=VALUE lines. */
-  format: "json" | "dotenv";
-}
-
 /** Where production or preview reads its values from: ocel's own store in your account ("builtin"), or an env source keyed by its identifier with its options as the value. */
 export type EnvSourceDescriptor =
   | "builtin"
   | {
-      /** Infisical, read as the machine identity auth names and synced every minute. */
-      infisical: InfisicalOptions;
-      exec?: never;
-    }
-  | {
       /** A command run on the machine that deploys, whose output is the tier's values. It runs at each deploy and on no schedule. */
       exec: ExecOptions;
       infisical?: never;
+    }
+  | {
+      /** Infisical, read as the machine identity auth names and synced every minute. */
+      infisical: InfisicalOptions;
+      exec?: never;
     };
 
 /** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. A provider that needs no options may be named alone. */

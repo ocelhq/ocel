@@ -52,6 +52,7 @@ func checkValue(path string, target reflect.Type, value any) error {
 	for target.Kind() == reflect.Pointer {
 		target = target.Elem()
 	}
+	target = spelledAs(target)
 	if target == rawMessageType {
 		return nil
 	}

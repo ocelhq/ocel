@@ -26,7 +26,6 @@ var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/pkg/edge":                true,
 	"github.com/ocelhq/ocel/pkg/environment":         true,
 	"github.com/ocelhq/ocel/pkg/envsource":           true,
-	"github.com/ocelhq/ocel/pkg/envsourceproto":      true,
 	"github.com/ocelhq/ocel/pkg/variablestore":       true,
 	"github.com/ocelhq/ocel/pkg/variablestoreserver": true,
 	"github.com/ocelhq/ocel/pkg/images":              true,

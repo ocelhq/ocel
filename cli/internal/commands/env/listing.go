@@ -109,7 +109,7 @@ func valueRow(v *variablestorev1.ValueMetadata, lead string, descriptions map[st
 	size := fmt.Sprint(v.GetSize())
 	source := v.GetEnvSource()
 	if source == "" {
-		source = string(envsource.Builtin)
+		source = envsource.Builtin
 	}
 	if target := v.GetTarget(); target != nil {
 		size, source = "—", describeCoordinate(target)

@@ -19,7 +19,6 @@ import (
 
 type Credential interface {
 	logIn(ctx context.Context, client *infisicalClient) (session, error)
-	sameAs(other Credential) bool
 }
 
 type CredentialError struct {
@@ -30,34 +29,27 @@ type CredentialError struct {
 
 func (e *CredentialError) Error() string { return e.Variable + " " + e.Reason }
 
-func ReadCredential(ctx context.Context, store variablestore.Store, scope variablestore.Scope, descriptor Descriptor, login Login) (Credential, error) {
-	if descriptor.Kind != Infisical || descriptor.Infisical == nil {
-		return nil, fmt.Errorf("a %s env source is read where ocel runs, never with a credential a target stores", descriptor.Kind)
+func ReadCredentials(ctx context.Context, store variablestore.Store, scope variablestore.Scope, descriptor Descriptor) ([]string, error) {
+	if descriptor.Reading() != ReadingOnSchedule {
+		return nil, fmt.Errorf("a %s env source is read where ocel runs, never with a credential a target stores", descriptor.Kind())
 	}
-	auth := descriptor.Infisical.Auth
-	switch auth.Method {
-	case AuthIdentity:
-		return IdentityAuth(auth.IdentityID, login.ProveIdentity), nil
-	case AuthUniversal:
-		plaintexts := make([]string, 0, 2)
-		var refused []error
-		for _, name := range auth.Variables() {
-			plaintext, err := readCredentialValue(ctx, store, scope, name)
-			var credential *CredentialError
-			switch {
-			case errors.As(err, &credential):
-				refused = append(refused, err)
-			case err != nil:
-				return nil, err
-			}
-			plaintexts = append(plaintexts, plaintext)
+	plaintexts := make([]string, 0, len(descriptor.CredentialVariables()))
+	var refused []error
+	for _, name := range descriptor.CredentialVariables() {
+		plaintext, err := readCredentialValue(ctx, store, scope, name)
+		var credential *CredentialError
+		switch {
+		case errors.As(err, &credential):
+			refused = append(refused, err)
+		case err != nil:
+			return nil, err
 		}
-		if len(refused) > 0 {
-			return nil, errors.Join(refused...)
-		}
-		return UniversalAuth(plaintexts[0], plaintexts[1]), nil
+		plaintexts = append(plaintexts, plaintext)
 	}
-	return nil, fmt.Errorf("%s names no identity to log in to Infisical as", descriptor.ID())
+	if len(refused) > 0 {
+		return nil, errors.Join(refused...)
+	}
+	return plaintexts, nil
 }
 
 func readCredentialValue(ctx context.Context, store variablestore.Store, scope variablestore.Scope, name string) (string, error) {
@@ -107,13 +99,8 @@ type SignedRequest struct {
 
 type universalAuth struct{ clientID, clientSecret string }
 
-func UniversalAuth(clientID, clientSecret string) Credential {
+func UniversalCredential(clientID, clientSecret string) Credential {
 	return universalAuth{clientID: clientID, clientSecret: clientSecret}
-}
-
-func (u universalAuth) sameAs(other Credential) bool {
-	same, ok := other.(universalAuth)
-	return ok && same == u
 }
 
 func (u universalAuth) logIn(ctx context.Context, client *infisicalClient) (session, error) {
@@ -130,13 +117,8 @@ type identityAuth struct {
 	prove      func(ctx context.Context, audience string) (IdentityProof, error)
 }
 
-func IdentityAuth(identityID string, proveIdentity func(ctx context.Context, audience string) (IdentityProof, error)) Credential {
+func IdentityCredential(identityID string, proveIdentity func(ctx context.Context, audience string) (IdentityProof, error)) Credential {
 	return identityAuth{identityID: identityID, prove: proveIdentity}
-}
-
-func (a identityAuth) sameAs(other Credential) bool {
-	same, ok := other.(identityAuth)
-	return ok && same.identityID == a.identityID
 }
 
 func (a identityAuth) logIn(ctx context.Context, client *infisicalClient) (session, error) {
@@ -185,11 +167,6 @@ func logInWithSignedRequest(ctx context.Context, client *infisicalClient, identi
 type accessToken string
 
 func AccessToken(token string) Credential { return accessToken(token) }
-
-func (a accessToken) sameAs(other Credential) bool {
-	same, ok := other.(accessToken)
-	return ok && same == a
-}
 
 func (a accessToken) logIn(context.Context, *infisicalClient) (session, error) {
 	return session{token: string(a), fixed: true}, nil

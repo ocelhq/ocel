@@ -119,10 +119,21 @@ func (p *infisicalProject) writes() (created, updated []string) {
 }
 
 func (p *infisicalProject) at(write envsource.WritePolicy) envsource.Descriptor {
-	return envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{
+	options, err := json.Marshal(envsource.InfisicalOptions{
 		Project: "p-1", Environment: "prod", Path: "/", Host: p.URL, Write: write,
-		Auth: envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: "INFISICAL_CLIENT_ID", ClientSecretVariable: "INFISICAL_CLIENT_SECRET"},
-	}}
+		Auth: &envsource.InfisicalAuth{Universal: &envsource.UniversalAuth{
+			ClientID:     envsource.Variable{Name: "INFISICAL_CLIENT_ID"},
+			ClientSecret: envsource.Variable{Name: "INFISICAL_CLIENT_SECRET"},
+		}},
+	})
+	if err != nil {
+		panic(err)
+	}
+	descriptor, err := envsource.NewDescriptor("infisical", options)
+	if err != nil {
+		panic(err)
+	}
+	return descriptor
 }
 
 func setUpEnvSourceFixture(t *testing.T) clitest.FakeProject {
@@ -241,7 +252,7 @@ func TestEnvSyncReReadsTheEnvSourceADeployRegistered(t *testing.T) {
 	t.Run("a registered exec source is re-read only by a deploy", func(t *testing.T) {
 		project := setUpEnvSourceFixture(t)
 		clitest.Bootstrap(t, project.Provider, environment.TierPreview)
-		registerEnvSource(t, project, environment.TierPreview, envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"sh"}}})
+		registerEnvSource(t, project, environment.TierPreview, execDescriptor(t))
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSync(context.Background(), newStreamedDependencies(&stderr), project.Root, envOptions{preview: true}, &stdout, &stderr)
@@ -380,4 +391,13 @@ func TestTheSourceColumnNamesWhereEachValueComesFrom(t *testing.T) {
 			t.Errorf("SOURCE of %s = %q, want %q; ls:\n%s", key, sources[key], want, stdout.String())
 		}
 	}
+}
+
+func execDescriptor(t *testing.T) envsource.Descriptor {
+	t.Helper()
+	descriptor, err := envsource.NewDescriptor("exec", []byte(`{"command":["sh"],"format":"json"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return descriptor
 }

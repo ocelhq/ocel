@@ -209,7 +209,7 @@ func TestTheEnvSourceTriedLongestAgoIsReadFirst(t *testing.T) {
 	sync, store, fake, host, at := syncFixture(t)
 	fake.put("/api")
 	fake.put("/web")
-	admin := infisicalRegistration("admin", host, envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: "identity-2"}, "/api")
+	admin := infisicalRegistration("admin", host, identityAuth("identity-2"), "/api")
 	register(t, store, admin)
 	register(t, store, infisicalRegistration("shop", host, cloudIdentity, "/web"))
 	ctx := context.Background()
@@ -363,8 +363,7 @@ func TestACopyOfScheduledEnvSourcesSkipsOneThatIsNotScheduled(t *testing.T) {
 func TestOpenGivesTheSourceAWriteGoesThrough(t *testing.T) {
 	t.Parallel()
 	sync, store, fake, host, _ := syncFixture(t)
-	registration := infisicalRegistration("shop", host, cloudIdentity, "")
-	registration.Descriptor.Infisical.Write = envsource.WriteMissing
+	registration := infisicalWriting("shop", host, cloudIdentity, envsource.WriteMissing, "")
 	register(t, store, registration)
 
 	source, err := sync.Open(context.Background(), registration)

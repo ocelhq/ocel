@@ -121,11 +121,12 @@ func TestLiveTheEnvSourceSyncKeepsATiersValuesInStepWithItsEnvSourceAndGoesWithT
 	registration := envsource.Registration{
 		Project: "shop",
 		Folders: []string{""},
-		Descriptor: envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{
-			Project: "p-1", Environment: "prod", Path: "/", Host: fakeInfisicalHost, Write: envsource.WriteNever,
-			Auth: envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: "INFISICAL_CLIENT_ID", ClientSecretVariable: "INFISICAL_CLIENT_SECRET"},
-		}},
 	}
+	descriptor, err := envsource.NewDescriptor("infisical", []byte(`{"project":"p-1","environment":"prod","path":"/","host":"`+fakeInfisicalHost+`","write":"never","auth":{"universal":{"clientId":{"$env":"INFISICAL_CLIENT_ID"},"clientSecret":{"$env":"INFISICAL_CLIENT_SECRET"}}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	registration.Descriptor = descriptor
 	if _, err := envsource.Register(ctx, store, tier, registration); err != nil {
 		t.Fatalf("Register() = %v", err)
 	}

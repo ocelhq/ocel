@@ -3,6 +3,7 @@ package valuestore
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"slices"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envsourceproto"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -34,8 +34,8 @@ func (s Store) SyncEnvSource(ctx context.Context) (variables.EnvSource, error) {
 	descriptor := variablescope.EnvSourceDescriptor(s.Project, s.Tier)
 	folders := syncedFolders(s.Project)
 	var read map[variablestore.Cell]envsource.Value
-	if descriptor.Kind == envsource.Exec {
-		source, err := envsource.Open(descriptor, s.Project.Dir, os.LookupEnv)
+	if descriptor.Reading() == envsource.ReadingWhereOcelRuns {
+		source, err := descriptor.Open(s.Project.Dir, os.LookupEnv)
 		if err != nil {
 			return variables.EnvSource{}, err
 		}
@@ -50,13 +50,24 @@ func (s Store) SyncEnvSource(ctx context.Context) (variables.EnvSource, error) {
 	resp, err := variableStore.SyncEnvSource(ctx, &variablestorev1.SyncEnvSourceRequest{
 		Tier:    s.Tier,
 		Slug:    s.Project.Slug,
-		From:    &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: envsourceproto.Encode(descriptor, read)},
+		From:    &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: envSourceMessage(descriptor, read)},
 		Folders: folders,
 	})
 	if err != nil {
 		return variables.EnvSource{}, err
 	}
 	return envSourceOf(resp), nil
+}
+
+func envSourceMessage(descriptor envsource.Descriptor, read map[variablestore.Cell]envsource.Value) *variablestorev1.EnvSource {
+	sent := &variablestorev1.EnvSource{Kind: descriptor.Kind(), Options: descriptor.Options()}
+	for _, at := range slices.SortedFunc(maps.Keys(read), variablestore.Cell.Compare) {
+		sent.Values = append(sent.Values, &variablestorev1.EnvSourceValue{
+			Cell:  &variablestorev1.Cell{Folder: at.Folder, Key: at.Key},
+			Value: string(read[at].Plaintext),
+		})
+	}
+	return sent
 }
 
 func syncedFolders(cfg *project.Project) []string {

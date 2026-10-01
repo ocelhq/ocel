@@ -13,7 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
-	"github.com/ocelhq/ocel/pkg/envsourceproto"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -43,8 +42,11 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *variablestorev1.SyncEn
 	if req.GetRegistered() != nil {
 		return h.syncRegistered(ctx, store, scope)
 	}
-	descriptor, read := envsourceproto.Decode(req.GetEnvSource())
-	if descriptor.Kind == envsource.Builtin {
+	descriptor, read, err := decodeEnvSource(req.GetEnvSource())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if descriptor.Reading() == envsource.ReadingOwnStore {
 		if err := switchToBuiltin(ctx, store, scope); err != nil {
 			return nil, provider.RefusalError(err)
 		}
@@ -54,7 +56,7 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *variablestorev1.SyncEn
 	if err != nil {
 		return nil, err
 	}
-	if err := refuseAuthWithoutLogin(descriptor, envSync.Login); err != nil {
+	if err := refuseLogin(descriptor, envSync.Login); err != nil {
 		return nil, err
 	}
 
@@ -72,7 +74,7 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *variablestorev1.SyncEn
 	}
 
 	var copied envsource.CopyResult
-	if descriptor.Kind == envsource.Exec {
+	if descriptor.Reading() == envsource.ReadingWhereOcelRuns {
 		copied, err = envSync.CopyProjectFrom(ctx, registration, envsource.NewFixed(descriptor.ID(), read))
 	} else {
 		copied, err = envSync.CopyProject(ctx, registration)
@@ -92,6 +94,29 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *variablestorev1.SyncEn
 	return syncResponse(ctx, store, scope, registration, copied)
 }
 
+func decodeEnvSource(sent *variablestorev1.EnvSource) (envsource.Descriptor, map[variablestore.Cell]envsource.Value, error) {
+	descriptor, err := envsource.NewDescriptor(sent.GetKind(), sent.GetOptions())
+	if err != nil {
+		return envsource.Descriptor{}, nil, err
+	}
+	if len(sent.GetValues()) > 0 && descriptor.Reading() != envsource.ReadingWhereOcelRuns {
+		return envsource.Descriptor{}, nil, fmt.Errorf("%s is read %s, so a caller sends it no values it read itself", descriptor.ID(), readBy(descriptor))
+	}
+	read := make(map[variablestore.Cell]envsource.Value, len(sent.GetValues()))
+	for _, value := range sent.GetValues() {
+		at := variablestore.Cell{Folder: value.GetCell().GetFolder(), Key: value.GetCell().GetKey()}
+		read[at] = envsource.Value{Plaintext: []byte(value.GetValue())}
+	}
+	return descriptor, read, nil
+}
+
+func readBy(descriptor envsource.Descriptor) string {
+	if descriptor.Reading() == envsource.ReadingOnSchedule {
+		return "by this target on a schedule"
+	}
+	return "from ocel's own store"
+}
+
 func switchToBuiltin(ctx context.Context, store variablestore.Store, scope variablestore.Scope) error {
 	_, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
 	if err != nil || !registered {
@@ -109,18 +134,17 @@ func (h *Service) syncRegistered(ctx context.Context, store variablestore.Store,
 		return nil, provider.RefusalError(err)
 	}
 	if !registered {
-		builtin := envsource.Descriptor{Kind: envsource.Builtin}
-		return &variablestorev1.SyncEnvSourceResponse{Status: &variablestorev1.EnvSourceStatus{EnvSource: builtin.ID()}}, nil
+		return &variablestorev1.SyncEnvSourceResponse{Status: &variablestorev1.EnvSourceStatus{EnvSource: envsource.Builtin}}, nil
 	}
-	if registration.Descriptor.Kind == envsource.Exec {
+	if registration.Descriptor.Reading() != envsource.ReadingOnSchedule {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"%s in %s reads from exec, whose command runs where ocel deploys: deploy again to read it", scope.Project, scope.Tier))
+			"%s in %s reads from %s, which is read where ocel deploys: deploy again to read it", scope.Project, scope.Tier, registration.Descriptor.ID()))
 	}
 	envSync, err := h.envSourceSync(store, scope.Tier)
 	if err != nil {
 		return nil, err
 	}
-	if err := refuseAuthWithoutLogin(registration.Descriptor, envSync.Login); err != nil {
+	if err := refuseLogin(registration.Descriptor, envSync.Login); err != nil {
 		return nil, err
 	}
 	copied, err := envSync.CopyProject(ctx, registration)
@@ -159,8 +183,7 @@ func (h *Service) DescribeEnvSource(ctx context.Context, req *variablestorev1.De
 		return nil, provider.RefusalError(err)
 	}
 	if !registered {
-		builtin := envsource.Descriptor{Kind: envsource.Builtin}
-		return &variablestorev1.DescribeEnvSourceResponse{Status: &variablestorev1.EnvSourceStatus{EnvSource: builtin.ID()}}, nil
+		return &variablestorev1.DescribeEnvSourceResponse{Status: &variablestorev1.EnvSourceStatus{EnvSource: envsource.Builtin}}, nil
 	}
 	status, err := envSourceStatus(ctx, store, scope, registration)
 	if err != nil {
@@ -185,13 +208,13 @@ func (h *Service) SetEnvSourceValue(ctx context.Context, req *variablestorev1.Se
 		return nil, provider.RefusalError(err)
 	}
 	if !registered || !registration.Descriptor.CanCreate() {
-		current := envsource.Descriptor{Kind: envsource.Builtin}
+		current := envsource.Builtin
 		if registered {
-			current = registration.Descriptor
+			current = registration.Descriptor.ID()
 		}
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"%s in %s reads from %s, which ocel may not write into: set write to \"values\" on the tier's env source to let ocel create and update its values, or to \"missing\" to let it create a key it lacks",
-			at.GetKey(), scope.Tier, current.ID()))
+			at.GetKey(), scope.Tier, current))
 	}
 	cell := variablestore.Cell{Folder: at.GetFolder(), Key: at.GetKey()}
 	if !slices.Contains(registration.Folders, cell.Folder) {
@@ -212,7 +235,7 @@ func (h *Service) SetEnvSourceValue(ctx context.Context, req *variablestorev1.Se
 	if err != nil {
 		return nil, err
 	}
-	if err := refuseAuthWithoutLogin(registration.Descriptor, envSync.Login); err != nil {
+	if err := refuseLogin(registration.Descriptor, envSync.Login); err != nil {
 		return nil, err
 	}
 	source, err := envSync.Open(ctx, registration)
@@ -306,7 +329,7 @@ func envSourceStatus(ctx context.Context, store variablestore.Store, scope varia
 	}
 	out := &variablestorev1.EnvSourceStatus{
 		EnvSource:     registration.Descriptor.ID(),
-		Scheduled:     registration.Descriptor.IsScheduled(),
+		Scheduled:     registration.Descriptor.Reading() == envsource.ReadingOnSchedule,
 		CanCreate:     registration.Descriptor.CanCreate(),
 		CanUpdate:     registration.Descriptor.CanUpdate(),
 		LastAttemptAt: unixSeconds(status.LastAttemptAt),
@@ -351,7 +374,7 @@ func refuseEnvSourceOwned(ctx context.Context, store variablestore.Store, scope 
 		return provider.RefusalError(err)
 	}
 	copiedOn := "the next deploy"
-	if registration.Descriptor.IsScheduled() {
+	if registration.Descriptor.Reading() == envsource.ReadingOnSchedule {
 		copiedOn = "its next sync, within a minute"
 	}
 	perEnvironment := ""
@@ -363,13 +386,11 @@ func refuseEnvSourceOwned(ctx context.Context, store variablestore.Store, scope 
 		at, owner, scope.Project, scope.Tier, parenthesized(status.URLs[at.Folder]), copiedOn, perEnvironment))
 }
 
-func refuseAuthWithoutLogin(descriptor envsource.Descriptor, login envsource.Login) error {
-	if descriptor.Infisical == nil || descriptor.Infisical.Auth.Method != envsource.AuthIdentity || login.ProveIdentity != nil {
-		return nil
+func refuseLogin(descriptor envsource.Descriptor, login envsource.Login) error {
+	if err := descriptor.RefuseLogin(login); err != nil {
+		return connect.NewError(connect.CodeFailedPrecondition, err)
 	}
-	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-		"%s logs in with identity auth, which proves this target's cloud identity, and this target has none: log in with universal auth (clientId and clientSecret) instead",
-		descriptor.ID()))
+	return nil
 }
 
 func envSourceError(descriptor envsource.Descriptor, err error) error {

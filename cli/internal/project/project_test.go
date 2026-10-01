@@ -1972,8 +1972,7 @@ func TestLoadReadsEachTiersEnvSourceFromTheConfig(t *testing.T) {
 		"dev":{"exec":{"command":["op","run"],"format":"json"}}
 	}}`)
 
-	preview := cfg.EnvSource.Preview.Infisical
-	if cfg.EnvSource.Production.Kind != envsource.Builtin || preview == nil || preview.Project != "p-1" || preview.Environment != "staging" || cfg.EnvSource.Dev.Kind != envsource.Exec {
+	if cfg.EnvSource.Production.Kind() != envsource.Builtin || cfg.EnvSource.Preview.ID() != "infisical:p-1/staging" || cfg.EnvSource.Dev.Kind() != "exec" {
 		t.Fatalf("envSource = %+v, want production on builtin, preview on its Infisical project and dev on exec", cfg.EnvSource)
 	}
 }

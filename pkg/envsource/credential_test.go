@@ -29,10 +29,10 @@ func TestAnUnsetCredentialIsRefusedWithTheCommandThatSetsIt(t *testing.T) {
 	store, _ := storeFixture()
 	descriptor := infisicalRegistration("shop", "https://infisical.example.com", universal, "").Descriptor
 	for tier, flag := range map[environment.Tier]string{environment.TierProduction: "", environment.TierPreview: " --preview"} {
-		_, err := envsource.ReadCredential(context.Background(), store, variablestore.Scope{Project: "shop", Tier: tier}, descriptor, envsource.Login{})
+		_, err := envsource.ReadCredentials(context.Background(), store, variablestore.Scope{Project: "shop", Tier: tier}, descriptor)
 		var refused *envsource.CredentialError
 		if !errors.As(err, &refused) || refused.Variable != "INFISICAL_CLIENT_ID" || !strings.Contains(err.Error(), "ocel env set INFISICAL_CLIENT_ID=<VALUE>"+flag+"`") {
-			t.Errorf("ReadCredential() in %s = %v, want INFISICAL_CLIENT_ID refused with the command that sets it", tier, err)
+			t.Errorf("ReadCredentials() in %s = %v, want INFISICAL_CLIENT_ID refused with the command that sets it", tier, err)
 		}
 	}
 }
@@ -43,16 +43,16 @@ func TestACredentialAnEnvSourceWroteIsRefused(t *testing.T) {
 	ctx := context.Background()
 	descriptor := infisicalRegistration("shop", "https://infisical.example.com", universal, "").Descriptor
 	setCredentials(t, store, "shop", "id", "secret")
-	if _, err := envsource.ReadCredential(ctx, store, scope, descriptor, envsource.Login{}); err != nil {
-		t.Fatalf("ReadCredential() with both set = %v", err)
+	if _, err := envsource.ReadCredentials(ctx, store, scope, descriptor); err != nil {
+		t.Fatalf("ReadCredentials() with both set = %v", err)
 	}
 
 	if _, err := store.SetFromEnvSource(ctx, scope, tierWide("", "INFISICAL_CLIENT_SECRET"), "cached", variablestore.Provenance{EnvSource: "infisical:p-1/prod", Version: "s9@1"}, 1); err != nil {
 		t.Fatal(err)
 	}
-	_, err := envsource.ReadCredential(ctx, store, scope, descriptor, envsource.Login{})
+	_, err := envsource.ReadCredentials(ctx, store, scope, descriptor)
 	if err == nil || !strings.Contains(err.Error(), "INFISICAL_CLIENT_SECRET") || !strings.Contains(err.Error(), "infisical:p-1/prod") {
-		t.Fatalf("ReadCredential() with a credential an env source wrote = %v, want it refused naming both", err)
+		t.Fatalf("ReadCredentials() with a credential an env source wrote = %v, want it refused naming both", err)
 	}
 }
 
@@ -72,31 +72,31 @@ func TestACredentialReferencedFromAProjectMustBeOneThatProjectStoresItself(t *te
 		}
 	}
 	descriptor := infisicalRegistration("shop", "https://infisical.example.com", universal, "").Descriptor
-	if _, err := envsource.ReadCredential(ctx, store, scope, descriptor, envsource.Login{}); err != nil {
-		t.Fatalf("ReadCredential() borrowing from a project on ocel's own store = %v", err)
+	if _, err := envsource.ReadCredentials(ctx, store, scope, descriptor); err != nil {
+		t.Fatalf("ReadCredentials() borrowing from a project on ocel's own store = %v", err)
 	}
 
 	if _, err := envsource.Register(ctx, store, environment.TierProduction, infisicalRegistration("shared", "https://infisical.example.com", universal, "")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := envsource.ReadCredential(ctx, store, scope, descriptor, envsource.Login{}); err != nil {
-		t.Fatalf("ReadCredential() borrowing the credentials of a project on an env source = %v, want them its own", err)
+	if _, err := envsource.ReadCredentials(ctx, store, scope, descriptor); err != nil {
+		t.Fatalf("ReadCredentials() borrowing the credentials of a project on an env source = %v, want them its own", err)
 	}
 
 	if _, err := store.SetReference(ctx, scope, tierWide("", "INFISICAL_CLIENT_SECRET"), variablestore.Target{Project: "shared", Cell: variablestore.Cell{Key: "OTHER"}}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := envsource.ReadCredential(ctx, store, scope, descriptor, envsource.Login{})
+	_, err := envsource.ReadCredentials(ctx, store, scope, descriptor)
 	if err == nil || !strings.Contains(err.Error(), "INFISICAL_CLIENT_SECRET") || !strings.Contains(err.Error(), "shared") {
-		t.Fatalf("ReadCredential() borrowing a value an env source owns = %v, want it refused", err)
+		t.Fatalf("ReadCredentials() borrowing a value an env source owns = %v, want it refused", err)
 	}
 }
 
 func TestOnlyAnInfisicalEnvSourceHasACredential(t *testing.T) {
 	t.Parallel()
 	store, scope := storeFixture()
-	if _, err := envsource.ReadCredential(context.Background(), store, scope, envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{}}, envsource.Login{}); err == nil {
-		t.Fatal("ReadCredential() of an exec env source = nil, want a refusal")
+	if _, err := envsource.ReadCredentials(context.Background(), store, scope, execDescriptor(envsource.FormatJSON, "vault")); err == nil {
+		t.Fatal("ReadCredentials() of an exec env source = nil, want a refusal")
 	}
 }
 
@@ -134,7 +134,7 @@ func TestProjectsReadingOneSourceWithOneCredentialShareADedupeKey(t *testing.T) 
 	if key("shop", identity) != key("admin", identity) {
 		t.Error("two projects signing in as one cloud identity have different keys")
 	}
-	other := infisicalRegistration("", "https://infisical.example.com", envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: "identity-2"}, "").Descriptor
+	other := infisicalRegistration("", "https://infisical.example.com", identityAuth("identity-2"), "").Descriptor
 	if key("shop", identity) == key("shop", other) {
 		t.Error("two cloud identities share a key")
 	}

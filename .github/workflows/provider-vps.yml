@@ -14,7 +14,6 @@ on:
       - "pkg/edge/**"
       - "pkg/environment/**"
       - "pkg/envsource/**"
-      - "pkg/envsourceproto/**"
       - "pkg/envvars/**"
       - "pkg/envvarsserver/**"
       - "pkg/images/**"

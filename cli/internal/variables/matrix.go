@@ -88,7 +88,7 @@ func (d *Declarations) Matrix(environments []string) Matrix {
 	references := maps.Clone(d.references)
 	copied := map[Cell]string{}
 	for _, stored := range d.cells {
-		if stored.EnvSource != "" && stored.EnvSource != string(envsource.Builtin) {
+		if stored.EnvSource != "" && stored.EnvSource != envsource.Builtin {
 			copied[stored.Cell] = stored.EnvSource
 		}
 	}

@@ -56,7 +56,7 @@ func TestEveryProcedureTheServiceDeclaresMapsToAScope(t *testing.T) {
 func TestSyncingAnEnvSourceAsksForWriteWhateverItNames(t *testing.T) {
 	for name, req := range map[string]*variablestorev1.SyncEnvSourceRequest{
 		"registered": {From: &variablestorev1.SyncEnvSourceRequest_Registered{Registered: &variablestorev1.RegisteredEnvSource{}}},
-		"infisical":  {From: &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: &variablestorev1.EnvSource{Kind: &variablestorev1.EnvSource_Infisical{Infisical: &variablestorev1.InfisicalEnvSource{}}}}},
+		"infisical":  {From: &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: &variablestorev1.EnvSource{Kind: "infisical"}}},
 	} {
 		got, mapped := scopeOf(variablestorev1connect.VariableStoreServiceSyncEnvSourceProcedure, req)
 		if !mapped || got != CapabilityVariablesWrite {

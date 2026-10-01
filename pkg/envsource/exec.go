@@ -15,18 +15,73 @@ import (
 )
 
 const (
+	execKind           = "exec"
 	commandTimeout     = 2 * time.Minute
 	commandOutputBytes = 1 << 20
 	commandStderrBytes = 2048
 	rootFolderArgument = "/"
 )
 
+type Format string
+
+const (
+	FormatJSON   Format = "json"
+	FormatDotenv Format = "dotenv"
+)
+
+const FolderPlaceholder = "{folder}"
+
+var _ = register(Kind{
+	Name: execKind,
+	Deployed: &Config{
+		Doc:     "A command run on the machine that deploys, whose output is the tier's values. It runs at each deploy and on no schedule.",
+		Options: ExecOptions{},
+		decode:  decodeExec,
+	},
+	Dev: &Config{
+		Doc:     "A command run on your machine, whose output is the values.",
+		Options: ExecOptions{},
+		decode:  decodeExec,
+	},
+})
+
+type ExecOptions struct {
+	Command []string `json:"command" doc:"The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read."`
+	Format  Format   `json:"format" enum:"json,dotenv" doc:"What the command prints: a JSON object of names to values, or KEY=VALUE lines."`
+}
+
+func (ExecOptions) Doc() string {
+	return "A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev."
+}
+
+func decodeExec(raw json.RawMessage) (decodedOptions, error) {
+	var options ExecOptions
+	if err := decodeStrictly(raw, &options); err != nil {
+		return decodedOptions{}, err
+	}
+	if len(options.Command) == 0 {
+		return decodedOptions{}, &OptionError{Field: "command", Reason: "is required: the command to run and its arguments, such as [\"op\", \"inject\"]"}
+	}
+	if options.Format == "" {
+		return decodedOptions{}, &OptionError{Field: "format", Reason: "is required: one of json, dotenv"}
+	}
+	if err := requireOneOf("format", options.Format, FormatJSON, FormatDotenv); err != nil {
+		return decodedOptions{}, err
+	}
+	return decodedOptions{
+		id: execKind,
+		open: func(dir string, _ func(string) (string, bool)) (Source, error) {
+			return execSource{options: options, dir: dir}, nil
+		},
+	}, nil
+}
+
 type execSource struct {
 	options ExecOptions
 	dir     string
 }
 
-func (execSource) ID() string { return string(Exec) }
+func (execSource) ID() string { return execKind }
 
 func (s execSource) Read(ctx context.Context, folders []string) (map[variablestore.Cell]Value, error) {
 	out := map[variablestore.Cell]Value{}
