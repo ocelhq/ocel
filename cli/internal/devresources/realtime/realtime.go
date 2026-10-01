@@ -18,10 +18,11 @@ import (
 type Backend struct {
 	appOrigins func() []string
 
-	mu     sync.Mutex
-	server *http.Server
-	host   string
-	keys   map[string]ed25519.PrivateKey
+	mu      sync.Mutex
+	server  *http.Server
+	gateway *gateway.Gateway
+	host    string
+	keys    map[string]ed25519.PrivateKey
 }
 
 func New(appOrigins func() []string) *Backend {
@@ -75,11 +76,12 @@ func (b *Backend) listen() error {
 		return fmt.Errorf("start the realtime gateway: %w", err)
 	}
 	b.host = listener.Addr().String()
-	server := &http.Server{Handler: gateway.New(gateway.Config{
+	b.gateway = gateway.New(gateway.Config{
 		Host:           b.host,
 		Keys:           b.verifyKey,
 		AllowedOrigins: b.appOrigins,
-	})}
+	})
+	server := &http.Server{Handler: b.gateway}
 	b.server = server
 	go func() { _ = server.Serve(listener) }()
 	return nil
@@ -95,17 +97,20 @@ func (b *Backend) verifyKey(namespace string) (ed25519.PublicKey, bool) {
 	return key.Public().(ed25519.PublicKey), true
 }
 
-func (b *Backend) Close(context.Context, bool) error {
+func (b *Backend) Close(ctx context.Context, _ bool) error {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.keys = map[string]ed25519.PrivateKey{}
-	if b.server == nil {
+	server, open := b.server, b.gateway
+	b.server, b.gateway, b.host = nil, nil, ""
+	b.mu.Unlock()
+	if server == nil {
 		return nil
 	}
-	server := b.server
-	b.server, b.host = nil, ""
 	if err := server.Close(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("stop the realtime gateway: %w", err)
+	}
+	if err := open.Close(ctx); err != nil {
+		return fmt.Errorf("close the realtime gateway's open sockets: %w", err)
 	}
 	return nil
 }

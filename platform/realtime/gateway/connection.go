@@ -34,6 +34,11 @@ type connection struct {
 }
 
 func (g *Gateway) serveSocket(w http.ResponseWriter, r *http.Request) {
+	if !g.trackSocket() {
+		http.Error(w, "the realtime gateway is shutting down", http.StatusServiceUnavailable)
+		return
+	}
+	defer g.openSockets.Done()
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		Subprotocols:       []string{Subprotocol},
 		InsecureSkipVerify: true,
@@ -120,6 +125,10 @@ func (g *Gateway) refuseConnection(conn *websocket.Conn, reason error) {
 func (c *connection) serve() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	stopWatchingShutdown := context.AfterFunc(c.g.shutdown, func() {
+		_ = c.conn.Close(websocket.StatusGoingAway, "the realtime gateway is shutting down")
+	})
+	defer stopWatchingShutdown()
 	written := make(chan struct{})
 	go func() {
 		defer close(written)

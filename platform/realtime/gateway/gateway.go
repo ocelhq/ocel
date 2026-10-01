@@ -2,11 +2,13 @@ package gateway
 
 import (
 	"cmp"
+	"context"
 	"crypto/ed25519"
 	"net/http"
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -36,6 +38,12 @@ type Gateway struct {
 	cfg Config
 	hub *Hub
 	mux *http.ServeMux
+
+	shutdown    context.Context
+	stop        context.CancelFunc
+	mu          sync.Mutex
+	isClosed    bool
+	openSockets sync.WaitGroup
 }
 
 func New(cfg Config) *Gateway {
@@ -48,6 +56,7 @@ func New(cfg Config) *Gateway {
 		cfg.AllowedOrigins = func() []string { return nil }
 	}
 	g := &Gateway{cfg: cfg, hub: NewHub(), mux: http.NewServeMux()}
+	g.shutdown, g.stop = context.WithCancel(context.Background())
 	g.mux.HandleFunc("GET "+SocketPath, g.serveSocket)
 	g.mux.HandleFunc("POST "+PublishPath, g.servePublish)
 	return g
@@ -59,6 +68,35 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.mux.ServeHTTP(w, r)
+}
+
+func (g *Gateway) Close(ctx context.Context) error {
+	g.mu.Lock()
+	g.isClosed = true
+	g.mu.Unlock()
+	g.stop()
+
+	closed := make(chan struct{})
+	go func() {
+		g.openSockets.Wait()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (g *Gateway) trackSocket() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.isClosed {
+		return false
+	}
+	g.openSockets.Add(1)
+	return true
 }
 
 func (g *Gateway) isAllowedOrigin(r *http.Request) bool {
