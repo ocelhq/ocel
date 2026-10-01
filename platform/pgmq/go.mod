@@ -3,13 +3,14 @@ module github.com/ocelhq/ocel/platform/pgmq
 go 1.27.0
 
 require (
+	connectrpc.com/connect v1.20.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/ocelhq/ocel/pkg v0.0.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260709200747-435963d16310.1 // indirect
-	connectrpc.com/connect v1.20.0 // indirect
 	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
@@ -41,7 +42,6 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 )
 
 replace github.com/ocelhq/ocel/pkg => ../../pkg
