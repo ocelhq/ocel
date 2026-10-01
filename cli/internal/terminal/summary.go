@@ -203,7 +203,7 @@ func detailLines(detail string) []string {
 
 func relLog(logPath string) string {
 	if wd, err := os.Getwd(); err == nil {
-		if rel, err := filepath.Rel(wd, logPath); err == nil && !strings.HasPrefix(rel, "..") {
+		if rel, err := filepath.Rel(wd, logPath); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return rel
 		}
 	}

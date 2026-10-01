@@ -142,6 +142,19 @@ func TestAContainerAppsWorkspaceMembersAreReadRatherThanAssumedInstalled(t *test
 	})
 }
 
+func TestADeclarationUnderAFolderStartingWithTwoDotsIsInsideTheProject(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+
+	site, inside := DeclaringSite(root, filepath.Join(root, "..jobs", "greet.ts")+":3")
+	if !inside || site.String() != "..jobs/greet.ts:3" {
+		t.Errorf("DeclaringSite = %v, %v, want ..jobs/greet.ts:3 inside the project", site, inside)
+	}
+	if _, inside := DeclaringSite(root, filepath.Join(root, "..", "greet.ts")+":3"); inside {
+		t.Error("DeclaringSite took a file above the project for one inside it")
+	}
+}
+
 func TestFindUsages(t *testing.T) {
 	t.Run("the fixture monorepo's edges match its declared ground truth", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")

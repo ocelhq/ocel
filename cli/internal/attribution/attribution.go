@@ -196,7 +196,7 @@ func DeclaringSite(root, source string) (Site, bool) {
 
 func relativeToRoot(root, path string) (string, bool) {
 	rel, err := filepath.Rel(root, path)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", false
 	}
 	return filepath.ToSlash(rel), true
