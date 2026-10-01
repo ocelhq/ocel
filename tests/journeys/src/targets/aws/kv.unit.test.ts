@@ -1,6 +1,6 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import { exposedOf, failOver, persistedGroups, taggedGroups } from "./kv";
+import { describeExposed, failOver, keepPersistedGroups, listTaggedGroups } from "./kv";
 import type { Cli } from "./store";
 
 type Answer = string | ((args: string[]) => string);
@@ -31,61 +31,64 @@ function clock() {
   };
 }
 
+function taggedGroup(id: string, store: string) {
+  return {
+    ResourceARN: `arn:aws:elasticache:us-east-1:111122223333:replicationgroup:${id}`,
+    Tags: [
+      { Key: "ocel:project", Value: "kv" },
+      { Key: "ocel:resource", Value: store },
+    ],
+  };
+}
+
 const TAGGED = JSON.stringify({
   ResourceTagMappingList: [
-    {
-      ResourceARN:
-        "arn:aws:elasticache:us-east-1:111122223333:replicationgroup:ocel-app-kv-production-cache",
-    },
-    {
-      ResourceARN:
-        "arn:aws:elasticache:us-east-1:111122223333:replicationgroup:ocel-app-kv-production-bounded",
-    },
+    taggedGroup("ocel-app-ocj-run-kv-production-c-1a2b3c4d", "cache"),
+    taggedGroup("ocel-app-ocj-run-kv-production-b-5e6f7a8b", "bounded"),
   ],
 });
 
 function described(args: string[]): string {
   const id = args[args.indexOf("--replication-group-id") + 1];
-  const name = id?.split("-").pop();
   return JSON.stringify({
     ReplicationGroups: [
       {
         ReplicationGroupId: id,
-        Description: `kv / production / infra - the ${name} kv store`,
+        Description: "kv / production / infra - a kv store",
         Status: "available",
       },
     ],
   });
 }
 
-describe("taggedGroups", () => {
-  it("finds the replication groups tagged with the cell's project", async () => {
+describe("listTaggedGroups", () => {
+  it("finds the replication groups tagged with the cell's project and the store each holds", async () => {
     const { cli, asked } = cliAnswering({
       "resourcegroupstaggingapi get-resources": TAGGED,
-      "elasticache describe-replication-groups": described,
     });
 
-    const groups = await taggedGroups(cli, "kv");
+    const groups = await listTaggedGroups(cli, "kv");
 
-    assert.deepEqual(
-      groups.map((group) => group.id),
-      ["ocel-app-kv-production-cache", "ocel-app-kv-production-bounded"],
-    );
+    assert.deepEqual(groups, [
+      { id: "ocel-app-ocj-run-kv-production-c-1a2b3c4d", store: "cache" },
+      { id: "ocel-app-ocj-run-kv-production-b-5e6f7a8b", store: "bounded" },
+    ]);
     const tagged = asked.find((args) => args[0] === "resourcegroupstaggingapi") ?? [];
     assert.ok(tagged.includes("elasticache:replicationgroup"));
     assert.ok(tagged.includes("Key=ocel:project,Values=kv"));
   });
 });
 
-describe("persistedGroups", () => {
-  it("keeps only the stores the persistence check reads", () => {
+describe("keepPersistedGroups", () => {
+  it("keeps only the stores the persistence check reads, by the store tag rather than the id", () => {
     const groups = [
-      { id: "a", description: "kv / production / infra - the cache kv store" },
-      { id: "b", description: "kv / production / infra - the bounded kv store" },
-      { id: "c", description: "kv / production / infra - the evicting kv store" },
+      { id: "a", store: "cache" },
+      { id: "b", store: "bounded" },
+      { id: "c", store: "evicting" },
+      { id: "ocel-app-x-production-cache", store: "my-cache" },
     ];
     assert.deepEqual(
-      persistedGroups(groups).map((group) => group.id),
+      keepPersistedGroups(groups).map((group) => group.id),
       ["a"],
     );
   });
@@ -152,7 +155,7 @@ describe("failOver", () => {
   });
 });
 
-describe("exposedOf", () => {
+describe("describeExposed", () => {
   it("reads the cell's task definitions and replication groups", async () => {
     const { cli, asked } = cliAnswering({
       "resourcegroupstaggingapi get-resources": (args) =>
@@ -176,11 +179,11 @@ describe("exposedOf", () => {
       "elasticache describe-replication-groups": described,
     });
 
-    const exposed = await exposedOf(cli, "kv");
+    const exposed = await describeExposed(cli, "kv");
 
     assert.match(exposed, /PORT/);
     assert.match(exposed, /OCEL_VARIABLES/);
-    assert.match(exposed, /the cache kv store/);
+    assert.match(exposed, /"ReplicationGroupId":"ocel-app-ocj-run-kv-production-c-1a2b3c4d"/);
     assert.ok(
       asked.some((args) =>
         args.includes("arn:aws:ecs:us-east-1:111122223333:task-definition/kv-web:3"),

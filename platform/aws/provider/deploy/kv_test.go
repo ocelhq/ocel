@@ -246,3 +246,22 @@ func TestEveryResourceOfAStoreIsTaggedAsAKVStore(t *testing.T) {
 		}
 	}
 }
+
+func TestEveryResourceOfAStoreIsTaggedWithTheStoresDeclaredName(t *testing.T) {
+	t.Parallel()
+
+	rec := registeredKV(t, strings.Repeat("a-long-project-slug-", 3))
+	for typeToken, name := range map[string]string{
+		tokenEC2SecurityGroup:            "kv-cache-security-group",
+		tokenElastiCacheSubnetGroup:      "kv-cache-subnet-group",
+		tokenElastiCacheParameterGroup:   "kv-cache-parameters",
+		tokenElastiCacheReplicationGroup: "kv-cache",
+	} {
+		rec.mu.Lock()
+		got := rec.tags[typeToken+"::"+name][tagResource]
+		rec.mu.Unlock()
+		if got != "cache" {
+			t.Errorf("%s on %s = %q, want cache: a long project slug compresses the store's name out of its ids, and this tag still finds it", tagResource, name, got)
+		}
+	}
+}

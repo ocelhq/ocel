@@ -2,13 +2,15 @@ import type { Cli } from "./store";
 
 const PROJECT_TAG = "ocel:project";
 
+const STORE_TAG = "ocel:resource";
+
 const PERSISTED_STORES = ["cache"];
 
 const NODE_GROUP = "0001";
 
 const FAILOVER_COMPLETED = /^Failover from .* to replica node .* completed/i;
 
-export type Group = { id: string; description: string };
+export type Group = { id: string; store: string };
 
 export type FailoverWait = {
   timeoutMs: number;
@@ -17,17 +19,19 @@ export type FailoverWait = {
   sleep: (ms: number) => Promise<void>;
 };
 
+type Tagged = { ResourceARN?: string; Tags?: Array<{ Key?: string; Value?: string }> };
+
 type TaggedPage = {
-  ResourceTagMappingList?: Array<{ ResourceARN?: string }>;
+  ResourceTagMappingList?: Tagged[];
   PaginationToken?: string;
 };
 
 type DescribedGroups = {
-  ReplicationGroups?: Array<{ ReplicationGroupId?: string; Description?: string; Status?: string }>;
+  ReplicationGroups?: Array<{ ReplicationGroupId?: string; Status?: string }>;
 };
 
-async function taggedARNs(cli: Cli, resourceType: string, project: string): Promise<string[]> {
-  const found: string[] = [];
+async function listTagged(cli: Cli, resourceType: string, project: string): Promise<Tagged[]> {
+  const found: Tagged[] = [];
   let token = "";
   do {
     const page = JSON.parse(
@@ -43,11 +47,7 @@ async function taggedARNs(cli: Cli, resourceType: string, project: string): Prom
         "json",
       ]),
     ) as TaggedPage;
-    for (const resource of page.ResourceTagMappingList ?? []) {
-      if (resource.ResourceARN) {
-        found.push(resource.ResourceARN);
-      }
-    }
+    found.push(...(page.ResourceTagMappingList ?? []).filter((resource) => resource.ResourceARN));
     token = page.PaginationToken ?? "";
   } while (token);
   return found;
@@ -64,20 +64,18 @@ async function describeGroup(cli: Cli, id: string): Promise<string> {
   ]);
 }
 
-export async function taggedGroups(cli: Cli, project: string): Promise<Group[]> {
-  const groups: Group[] = [];
-  for (const arn of await taggedARNs(cli, "elasticache:replicationgroup", project)) {
-    const id = arn.slice(arn.lastIndexOf(":") + 1);
-    const described = JSON.parse(await describeGroup(cli, id)) as DescribedGroups;
-    groups.push({ id, description: described.ReplicationGroups?.[0]?.Description ?? "" });
-  }
-  return groups;
+export async function listTaggedGroups(cli: Cli, project: string): Promise<Group[]> {
+  return (await listTagged(cli, "elasticache:replicationgroup", project)).map((resource) => {
+    const arn = resource.ResourceARN ?? "";
+    return {
+      id: arn.slice(arn.lastIndexOf(":") + 1),
+      store: resource.Tags?.find((tag) => tag.Key === STORE_TAG)?.Value ?? "",
+    };
+  });
 }
 
-export function persistedGroups(groups: Group[]): Group[] {
-  return groups.filter((group) =>
-    PERSISTED_STORES.some((store) => group.description.endsWith(` the ${store} kv store`)),
-  );
+export function keepPersistedGroups(groups: Group[]): Group[] {
+  return groups.filter((group) => PERSISTED_STORES.includes(group.store));
 }
 
 export async function failOver(cli: Cli, id: string, wait: FailoverWait): Promise<string> {
@@ -124,9 +122,9 @@ export async function failOver(cli: Cli, id: string, wait: FailoverWait): Promis
   );
 }
 
-export async function exposedOf(cli: Cli, project: string): Promise<string> {
+export async function describeExposed(cli: Cli, project: string): Promise<string> {
   const shown: string[] = [];
-  for (const arn of await taggedARNs(cli, "ecs:task-definition", project)) {
+  for (const { ResourceARN: arn = "" } of await listTagged(cli, "ecs:task-definition", project)) {
     const described = JSON.parse(
       await cli(["ecs", "describe-task-definition", "--task-definition", arn, "--output", "json"]),
     ) as {
@@ -140,7 +138,7 @@ export async function exposedOf(cli: Cli, project: string): Promise<string> {
       );
     }
   }
-  for (const group of await taggedGroups(cli, project)) {
+  for (const group of await listTaggedGroups(cli, project)) {
     shown.push(await describeGroup(cli, group.id));
   }
   return shown.join("\n");
