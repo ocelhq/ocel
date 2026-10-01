@@ -27,7 +27,7 @@ const DOTFILE = ".env";
 const PROJECT_LABEL = "dev.ocel.project";
 
 const START_DOCKER =
-  "ocel dev runs a declared postgres and bucket in containers, and the journey harness never starts a daemon. Start docker, or point DOCKER_HOST at one that is running";
+  "ocel dev runs each declared postgres, bucket and kv store in a container, and the journey harness never starts a daemon. Start docker, or point DOCKER_HOST at one that is running";
 
 const run = promisify(execFile);
 
@@ -123,8 +123,32 @@ async function labelled(kind: "container" | "volume", project: string): Promise<
   return stdout.split("\n").filter((line) => line.trim() !== "");
 }
 
-async function removeStack(project: string): Promise<void> {
+export function volumesIn(inspected: string): string[] {
+  return [...new Set(inspected.split(/\s+/).filter((name) => name !== ""))];
+}
+
+async function mountedVolumes(containers: string[]): Promise<string[]> {
+  if (containers.length === 0) {
+    return [];
+  }
+  const { stdout } = await run("docker", [
+    "inspect",
+    "--format",
+    '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}',
+    ...containers,
+  ]);
+  return volumesIn(stdout);
+}
+
+async function existingVolumes(names: string[]): Promise<string[]> {
+  const { stdout } = await run("docker", ["volume", "ls", "--quiet"]);
+  const listed = new Set(volumesIn(stdout));
+  return names.filter((name) => listed.has(name));
+}
+
+async function removeStack(project: string): Promise<string[]> {
   const containers = await labelled("container", project);
+  const mounted = await mountedVolumes(containers);
   if (containers.length > 0) {
     await run("docker", ["rm", "--force", "--volumes", ...containers]);
   }
@@ -132,6 +156,11 @@ async function removeStack(project: string): Promise<void> {
   if (volumes.length > 0) {
     await run("docker", ["volume", "rm", "--force", ...volumes]);
   }
+  const unlabelled = await existingVolumes(mounted);
+  if (unlabelled.length > 0) {
+    await run("docker", ["volume", "rm", "--force", ...unlabelled]);
+  }
+  return unlabelled;
 }
 
 async function writeDotfile(cell: CellUnderTest, dir: string): Promise<void> {
@@ -226,8 +255,14 @@ export class DevTarget implements Target {
       await cell.evidence.write("destroy", `dev-${one.app}.log`, one.output());
     }
     this.served.delete(cell.slug);
-    await removeStack(devProject(configTree(cell, this.name)));
+    const project = devProject(configTree(cell, this.name));
+    const unlabelled = await removeStack(project);
     await rm(treeRoot(cell, this.name), { recursive: true, force: true });
+    if (unlabelled.length > 0) {
+      throw new Error(
+        `ocel dev mounted ${unlabelled.join(", ")} into the containers labelled ${PROJECT_LABEL}=${project} without labelling the volume itself, so removing the project's labelled resources leaves its data behind.`,
+      );
+    }
   }
 
   private ocelEnv(dir: string): NodeJS.ProcessEnv {

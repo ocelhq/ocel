@@ -6,6 +6,7 @@ import {
   entryFile,
   heldProbe,
   hostnamesWithoutUrl,
+  projectLeftovers,
   projectListing,
   slugsOf,
   ssh,
@@ -100,6 +101,15 @@ describe("heldProbe", () => {
   it("names what a path ocel should have removed still holds", () => {
     expect(heldProbe("/var/lib/ocel")).toBe(
       "sudo test -e '/var/lib/ocel' && echo \"/var/lib/ocel$(sudo find '/var/lib/ocel' -mindepth 1 -maxdepth 3 -printf ' %P' 2>/dev/null | head -c 400)\"",
+    );
+  });
+});
+
+describe("projectLeftovers", () => {
+  it("names every container and volume still labelled with the project", () => {
+    expect(projectLeftovers("j-kv")).toBe(
+      "sudo docker ps -a --filter label=ocel.project=j-kv --format 'the container {{.Names}}'; " +
+        "sudo docker volume ls --filter label=ocel.project=j-kv --format 'the volume {{.Name}}'",
     );
   });
 });

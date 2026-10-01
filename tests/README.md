@@ -21,7 +21,7 @@ resources; `lifecycle` asks whether a release can be replaced and rolled back th
 usable, from `fixtures/sdk/`; `iac` asks whether an app binds to what an SST or Pulumi stack
 provisions beside it, from `fixtures/iac/`, and runs only when a run names it. The harness
 starts nothing but the `ocel` binary; bring up what the target needs first. For `dev` that
-is a docker daemon, which `ocel dev` runs a declared postgres and bucket in:
+is a docker daemon, which `ocel dev` runs each declared postgres, bucket and kv store in:
 
 ```
 node scripts/snapshot.mjs

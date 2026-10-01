@@ -158,6 +158,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		"tests/fixtures/iac/with-sst",
 		"tests/fixtures/lifecycle/next",
 		"tests/fixtures/sdk/go",
+		"tests/fixtures/sdk/kv",
 		"tests/fixtures/sdk/next",
 		"tests/fixtures/sdk/node",
 		"tests/fixtures/sdk/python",

@@ -1,6 +1,7 @@
 export * from "./bindings";
 export * from "./env";
 export * from "./health";
+export * from "./kv";
 export * from "./nextCache";
 export * from "./nextRouting";
 export * from "./probes";

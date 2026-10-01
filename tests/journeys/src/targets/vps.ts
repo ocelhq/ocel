@@ -135,6 +135,14 @@ export function heldProbe(held: string): string {
   return `sudo test -e '${held}' && echo "${held}$(sudo find '${held}' -mindepth 1 -maxdepth 3 -printf ' %P' 2>/dev/null | head -c 400)"`;
 }
 
+export function projectLeftovers(slug: string): string {
+  const filter = `--filter label=ocel.project=${slug}`;
+  return [
+    `sudo docker ps -a ${filter} --format 'the container {{.Names}}'`,
+    `sudo docker volume ls ${filter} --format 'the volume {{.Name}}'`,
+  ].join("; ");
+}
+
 export function projectListing(prefix: string): string {
   return `test -d '${KEYVALUES_TIER}' && { ls -1d '${PROJECT_ENTRIES}'/${prefix}*${ENTRY_SUFFIX} 2>/dev/null || true; } || echo ${NO_KEYVALUES_TIER}`;
 }
@@ -529,6 +537,17 @@ export class VpsTarget implements Target, ReleaseCycle {
       }
     } finally {
       await session.gateway.close();
+    }
+    const target = this.box();
+    const said = await ssh(target, target.user, projectLeftovers(cell.slug));
+    const left = said
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (left.length > 0) {
+      throw new Error(
+        `the box still holds ${left.join(", ")} after \`ocel destroy production\` took ${cell.slug} down, and a destroy reclaims everything the project's deploys wrote`,
+      );
     }
   }
 
