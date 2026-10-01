@@ -75,10 +75,7 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 		}
 	}
 	if err := t.deployment.publish(ctx, toPublish, t.deployment.delayTaskOf(toPublish)); err != nil {
-		if idempotency.Key != "" {
-			err = errors.Join(err, t.deployment.Store().deleteRecordHolding(ctx, idempotency))
-		}
-		return nil, err
+		return nil, errors.Join(err, t.deployment.Store().deleteRecordsHolding(ctx, idempotency))
 	}
 	return &topicv1.SendResponse{MessageId: toPublish.messageID}, nil
 }

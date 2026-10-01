@@ -89,10 +89,12 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 			return readRecordedRun(existing)
 		}
 	}
+	var debounced provider.ExpiringRecord
 	if debounce := options.GetDebounce(); debounce != nil {
-		pending, err := t.debounce(ctx, newRunRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt))
+		debounced = newRunRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt)
+		pending, err := t.debounce(ctx, debounced)
 		if err != nil {
-			return "", err
+			return "", errors.Join(err, t.deployment.Store().deleteRecordsHolding(ctx, idempotency))
 		}
 		if pending != "" {
 			return pending, t.deployment.Store().pointRecordAt(ctx, idempotency, pending)
@@ -102,7 +104,10 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 	if options.GetTtl() != nil {
 		ttl = options.GetTtl().AsDuration()
 	}
-	return execution, t.start(ctx, toPublish, now, ttl, options.GetTags(), metadata)
+	if err := t.start(ctx, toPublish, now, ttl, options.GetTags(), metadata); err != nil {
+		return "", errors.Join(err, t.deployment.Store().deleteRecordsHolding(ctx, idempotency, debounced))
+	}
+	return execution, nil
 }
 
 func (t Tasks) start(ctx context.Context, toPublish publication, now time.Time, ttl time.Duration, tags []string, metadata []byte) error {

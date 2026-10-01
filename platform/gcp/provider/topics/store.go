@@ -192,6 +192,16 @@ func (s Store) deleteRecordHolding(ctx context.Context, record provider.Expiring
 	return nil
 }
 
+func (s Store) deleteRecordsHolding(ctx context.Context, records ...provider.ExpiringRecord) error {
+	var errs []error
+	for _, record := range records {
+		if record.Key != "" {
+			errs = append(errs, s.deleteRecordHolding(ctx, record))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 func (s Store) pointRecordAt(ctx context.Context, record provider.ExpiringRecord, execution string) error {
 	if record.Key == "" {
 		return nil
