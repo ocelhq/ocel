@@ -479,33 +479,33 @@ class ResourceType(Enum):
             ```
         TOPIC:
             ```proto
-            RESOURCE_TYPE_TOPIC = 4
+            RESOURCE_TYPE_TOPIC = 3
             ```
         TASK:
             ```proto
-            RESOURCE_TYPE_TASK = 5
+            RESOURCE_TYPE_TASK = 4
             ```
         WORKER:
             ```proto
-            RESOURCE_TYPE_WORKER = 6
+            RESOURCE_TYPE_WORKER = 5
             ```
         CONSUMER:
             ```proto
-            RESOURCE_TYPE_CONSUMER = 7
+            RESOURCE_TYPE_CONSUMER = 6
             ```
     """
 
     UNSPECIFIED = 0
     POSTGRES = 1
     BUCKET = 2
-    TOPIC = 4
-    TASK = 5
-    WORKER = 6
-    CONSUMER = 7
+    TOPIC = 3
+    TASK = 4
+    WORKER = 5
+    CONSUMER = 6
 
 
 _DESC = file_desc(
-    b'\n app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\x1a\x18app/topic/v1/topic.proto\x1a\x1egoogle/protobuf/duration.proto"\\\n\x12ResourceIdentifier\x122\n\x04type\x18\x01 \x01(\x0e2\x1e.app.resources.v1.ResourceTypeR\x04type\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name"\x11\n\x0fDeclareResponse"\xd3\x03\n\x0eDeclareRequest\x12@\n\x08resource\x18\x01 \x01(\x0b2$.app.resources.v1.ResourceIdentifierR\x08resource\x12>\n\x08postgres\x18\x02 \x01(\x0b2 .app.resources.v1.PostgresConfigH\x00R\x08postgres\x128\n\x06bucket\x18\x03 \x01(\x0b2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x125\n\x05topic\x18\x05 \x01(\x0b2\x1d.app.resources.v1.TopicConfigH\x00R\x05topic\x122\n\x04task\x18\x06 \x01(\x0b2\x1c.app.resources.v1.TaskConfigH\x00R\x04task\x128\n\x06worker\x18\x07 \x01(\x0b2\x1e.app.resources.v1.WorkerConfigH\x00R\x06worker\x12>\n\x08consumer\x18\x08 \x01(\x0b2 .app.resources.v1.ConsumerConfigH\x00R\x08consumer\x12\x16\n\x06source\x18\x04 \x01(\tR\x06sourceB\x08\n\x06config"*\n\x0ePostgresConfig\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version"O\n\x0cBucketConfig\x12\'\n\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins\x12\x16\n\x06public\x18\x02 \x01(\x08R\x06public"\xa0\x01\n\x0bRetryPolicy\x12!\n\x0cmax_attempts\x18\x01 \x01(\x05R\x0bmaxAttempts\x126\n\tmin_delay\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x08minDelay\x126\n\tmax_delay\x18\x03 \x01(\x0b2\x19.google.protobuf.DurationR\x08maxDelay"V\n\x0bBatchPolicy\x12\x12\n\x04size\x18\x01 \x01(\x05R\x04size\x123\n\x07timeout\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x07timeout"t\n\x0bTopicConfig\x12\x16\n\x06schema\x18\x01 \x01(\tR\x06schema\x12\x18\n\x07ordered\x18\x02 \x01(\x08R\x07ordered\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry"\xb2\x02\n\x0eConsumerConfig\x12\x14\n\x05topic\x18\x01 \x01(\tR\x05topic\x12\x16\n\x06worker\x18\x02 \x01(\tR\x06worker\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry\x12 \n\x0bconcurrency\x18\x04 \x01(\x05R\x0bconcurrency\x12<\n\x0cmax_duration\x18\x05 \x01(\x0b2\x19.google.protobuf.DurationR\x0bmaxDuration\x12(\n\x05lanes\x18\x06 \x03(\x0e2\x12.app.topic.v1.LaneR\x05lanes\x123\n\x05batch\x18\x07 \x01(\x0b2\x1d.app.resources.v1.BatchPolicyR\x05batch"\xe1\x02\n\nTaskConfig\x12\x16\n\x06schema\x18\x01 \x01(\tR\x06schema\x12\x18\n\x07ordered\x18\x02 \x01(\x08R\x07ordered\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry\x12 \n\x0bconcurrency\x18\x04 \x01(\x05R\x0bconcurrency\x12<\n\x0cmax_duration\x18\x05 \x01(\x0b2\x19.google.protobuf.DurationR\x0bmaxDuration\x12+\n\x03ttl\x18\x06 \x01(\x0b2\x19.google.protobuf.DurationR\x03ttl\x123\n\x05batch\x18\x07 \x01(\x0b2\x1d.app.resources.v1.BatchPolicyR\x05batch\x12\x16\n\x06worker\x18\x08 \x01(\tR\x06worker\x12\x12\n\x04cron\x18\t \x01(\tR\x04cron"0\n\x0cWorkerConfig\x12 \n\x0bconcurrency\x18\x01 \x01(\x05R\x0bconcurrency*\xe9\x01\n\x0cResourceType\x12\x1d\n\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x17\n\x13RESOURCE_TYPE_TOPIC\x10\x04\x12\x16\n\x12RESOURCE_TYPE_TASK\x10\x05\x12\x18\n\x14RESOURCE_TYPE_WORKER\x10\x06\x12\x1a\n\x16RESOURCE_TYPE_CONSUMER\x10\x07"\x04\x08\x03\x10\x03*\x17RESOURCE_TYPE_CONTAINER2\xa8\x02\n\x0fResourceService\x12N\n\x07Declare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n\nDeclareEnv\x12#.app.resources.v1.DeclareEnvRequest\x1a$.app.resources.v1.DeclareEnvResponse\x12l\n\x11ReportEnvProblems\x12*.app.resources.v1.ReportEnvProblemsRequest\x1a+.app.resources.v1.ReportEnvProblemsResponseB?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
+    b'\n app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\x1a\x18app/topic/v1/topic.proto\x1a\x1egoogle/protobuf/duration.proto"\\\n\x12ResourceIdentifier\x122\n\x04type\x18\x01 \x01(\x0e2\x1e.app.resources.v1.ResourceTypeR\x04type\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name"\x11\n\x0fDeclareResponse"\xd3\x03\n\x0eDeclareRequest\x12@\n\x08resource\x18\x01 \x01(\x0b2$.app.resources.v1.ResourceIdentifierR\x08resource\x12>\n\x08postgres\x18\x02 \x01(\x0b2 .app.resources.v1.PostgresConfigH\x00R\x08postgres\x128\n\x06bucket\x18\x03 \x01(\x0b2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x125\n\x05topic\x18\x05 \x01(\x0b2\x1d.app.resources.v1.TopicConfigH\x00R\x05topic\x122\n\x04task\x18\x06 \x01(\x0b2\x1c.app.resources.v1.TaskConfigH\x00R\x04task\x128\n\x06worker\x18\x07 \x01(\x0b2\x1e.app.resources.v1.WorkerConfigH\x00R\x06worker\x12>\n\x08consumer\x18\x08 \x01(\x0b2 .app.resources.v1.ConsumerConfigH\x00R\x08consumer\x12\x16\n\x06source\x18\x04 \x01(\tR\x06sourceB\x08\n\x06config"*\n\x0ePostgresConfig\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version"O\n\x0cBucketConfig\x12\'\n\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins\x12\x16\n\x06public\x18\x02 \x01(\x08R\x06public"\xa0\x01\n\x0bRetryPolicy\x12!\n\x0cmax_attempts\x18\x01 \x01(\x05R\x0bmaxAttempts\x126\n\tmin_delay\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x08minDelay\x126\n\tmax_delay\x18\x03 \x01(\x0b2\x19.google.protobuf.DurationR\x08maxDelay"V\n\x0bBatchPolicy\x12\x12\n\x04size\x18\x01 \x01(\x05R\x04size\x123\n\x07timeout\x18\x02 \x01(\x0b2\x19.google.protobuf.DurationR\x07timeout"t\n\x0bTopicConfig\x12\x16\n\x06schema\x18\x01 \x01(\tR\x06schema\x12\x18\n\x07ordered\x18\x02 \x01(\x08R\x07ordered\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry"\xb2\x02\n\x0eConsumerConfig\x12\x14\n\x05topic\x18\x01 \x01(\tR\x05topic\x12\x16\n\x06worker\x18\x02 \x01(\tR\x06worker\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry\x12 \n\x0bconcurrency\x18\x04 \x01(\x05R\x0bconcurrency\x12<\n\x0cmax_duration\x18\x05 \x01(\x0b2\x19.google.protobuf.DurationR\x0bmaxDuration\x12(\n\x05lanes\x18\x06 \x03(\x0e2\x12.app.topic.v1.LaneR\x05lanes\x123\n\x05batch\x18\x07 \x01(\x0b2\x1d.app.resources.v1.BatchPolicyR\x05batch"\xe1\x02\n\nTaskConfig\x12\x16\n\x06schema\x18\x01 \x01(\tR\x06schema\x12\x18\n\x07ordered\x18\x02 \x01(\x08R\x07ordered\x123\n\x05retry\x18\x03 \x01(\x0b2\x1d.app.resources.v1.RetryPolicyR\x05retry\x12 \n\x0bconcurrency\x18\x04 \x01(\x05R\x0bconcurrency\x12<\n\x0cmax_duration\x18\x05 \x01(\x0b2\x19.google.protobuf.DurationR\x0bmaxDuration\x12+\n\x03ttl\x18\x06 \x01(\x0b2\x19.google.protobuf.DurationR\x03ttl\x123\n\x05batch\x18\x07 \x01(\x0b2\x1d.app.resources.v1.BatchPolicyR\x05batch\x12\x16\n\x06worker\x18\x08 \x01(\tR\x06worker\x12\x12\n\x04cron\x18\t \x01(\tR\x04cron"0\n\x0cWorkerConfig\x12 \n\x0bconcurrency\x18\x01 \x01(\x05R\x0bconcurrency*\xca\x01\n\x0cResourceType\x12\x1d\n\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x17\n\x13RESOURCE_TYPE_TOPIC\x10\x03\x12\x16\n\x12RESOURCE_TYPE_TASK\x10\x04\x12\x18\n\x14RESOURCE_TYPE_WORKER\x10\x05\x12\x1a\n\x16RESOURCE_TYPE_CONSUMER\x10\x062\xa8\x02\n\x0fResourceService\x12N\n\x07Declare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n\nDeclareEnv\x12#.app.resources.v1.DeclareEnvRequest\x1a$.app.resources.v1.DeclareEnvResponse\x12l\n\x11ReportEnvProblems\x12*.app.resources.v1.ReportEnvProblemsRequest\x1a+.app.resources.v1.ReportEnvProblemsResponseB?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
     [
         variables_pb.desc(),
         topic_pb.desc(),

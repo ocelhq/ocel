@@ -29,10 +29,10 @@ const (
 	ResourceType_RESOURCE_TYPE_UNSPECIFIED ResourceType = 0
 	ResourceType_RESOURCE_TYPE_POSTGRES    ResourceType = 1
 	ResourceType_RESOURCE_TYPE_BUCKET      ResourceType = 2
-	ResourceType_RESOURCE_TYPE_TOPIC       ResourceType = 4
-	ResourceType_RESOURCE_TYPE_TASK        ResourceType = 5
-	ResourceType_RESOURCE_TYPE_WORKER      ResourceType = 6
-	ResourceType_RESOURCE_TYPE_CONSUMER    ResourceType = 7
+	ResourceType_RESOURCE_TYPE_TOPIC       ResourceType = 3
+	ResourceType_RESOURCE_TYPE_TASK        ResourceType = 4
+	ResourceType_RESOURCE_TYPE_WORKER      ResourceType = 5
+	ResourceType_RESOURCE_TYPE_CONSUMER    ResourceType = 6
 )
 
 // Enum value maps for ResourceType.
@@ -41,19 +41,19 @@ var (
 		0: "RESOURCE_TYPE_UNSPECIFIED",
 		1: "RESOURCE_TYPE_POSTGRES",
 		2: "RESOURCE_TYPE_BUCKET",
-		4: "RESOURCE_TYPE_TOPIC",
-		5: "RESOURCE_TYPE_TASK",
-		6: "RESOURCE_TYPE_WORKER",
-		7: "RESOURCE_TYPE_CONSUMER",
+		3: "RESOURCE_TYPE_TOPIC",
+		4: "RESOURCE_TYPE_TASK",
+		5: "RESOURCE_TYPE_WORKER",
+		6: "RESOURCE_TYPE_CONSUMER",
 	}
 	ResourceType_value = map[string]int32{
 		"RESOURCE_TYPE_UNSPECIFIED": 0,
 		"RESOURCE_TYPE_POSTGRES":    1,
 		"RESOURCE_TYPE_BUCKET":      2,
-		"RESOURCE_TYPE_TOPIC":       4,
-		"RESOURCE_TYPE_TASK":        5,
-		"RESOURCE_TYPE_WORKER":      6,
-		"RESOURCE_TYPE_CONSUMER":    7,
+		"RESOURCE_TYPE_TOPIC":       3,
+		"RESOURCE_TYPE_TASK":        4,
+		"RESOURCE_TYPE_WORKER":      5,
+		"RESOURCE_TYPE_CONSUMER":    6,
 	}
 )
 
@@ -901,15 +901,15 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\x06worker\x18\b \x01(\tR\x06worker\x12\x12\n" +
 	"\x04cron\x18\t \x01(\tR\x04cron\"0\n" +
 	"\fWorkerConfig\x12 \n" +
-	"\vconcurrency\x18\x01 \x01(\x05R\vconcurrency*\xe9\x01\n" +
+	"\vconcurrency\x18\x01 \x01(\x05R\vconcurrency*\xca\x01\n" +
 	"\fResourceType\x12\x1d\n" +
 	"\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n" +
 	"\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x17\n" +
-	"\x13RESOURCE_TYPE_TOPIC\x10\x04\x12\x16\n" +
-	"\x12RESOURCE_TYPE_TASK\x10\x05\x12\x18\n" +
-	"\x14RESOURCE_TYPE_WORKER\x10\x06\x12\x1a\n" +
-	"\x16RESOURCE_TYPE_CONSUMER\x10\a\"\x04\b\x03\x10\x03*\x17RESOURCE_TYPE_CONTAINER2\xa8\x02\n" +
+	"\x13RESOURCE_TYPE_TOPIC\x10\x03\x12\x16\n" +
+	"\x12RESOURCE_TYPE_TASK\x10\x04\x12\x18\n" +
+	"\x14RESOURCE_TYPE_WORKER\x10\x05\x12\x1a\n" +
+	"\x16RESOURCE_TYPE_CONSUMER\x10\x062\xa8\x02\n" +
 	"\x0fResourceService\x12N\n" +
 	"\aDeclare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n" +
 	"\n" +
