@@ -4,6 +4,7 @@ from ocel._live import live_value
 from ocel.gen.common.bindings.v1.bindings_pb import (
     Binding,
     BucketProperties,
+    KvProperties,
     PostgresProperties,
     TaskProperties,
     TopicProperties,
@@ -33,6 +34,10 @@ def read_postgres_binding(name: str) -> PostgresProperties:
 
 def read_bucket_binding(name: str) -> BucketProperties:
     return _read_properties(name, "bucket")
+
+
+def read_kv_binding(name: str) -> KvProperties:
+    return _read_properties(name, "kv")
 
 
 def read_topic_binding(name: str) -> TopicProperties:
