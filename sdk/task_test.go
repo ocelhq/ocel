@@ -2,6 +2,7 @@ package ocel_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"runtime"
@@ -115,6 +116,20 @@ func TestTriggerStartsARunOfTheTaskByItsDeclaredName(t *testing.T) {
 	req := only[*taskv1.TriggerRequest](t, runtime)
 	if run != (ocel.RunHandle{ID: "run-1"}) || req.GetTask() != "resize-trigger" || string(req.GetPayload()) != `{"key":"a.png"}` {
 		t.Errorf("Trigger() = %+v after %v", run, req)
+	}
+}
+
+func TestTriggerNamesTheDeclaredTaskWhenItsBindingNamesAnotherAndSendsTheJSONTextUnchanged(t *testing.T) {
+	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TASK_measure-trigger": `{"name":"physical-measure-trigger","task":{}}`})
+	task := ocel.Task("measure-trigger", func(_ context.Context, in json.RawMessage) (json.RawMessage, error) { return in, nil })
+
+	if _, err := task.Trigger(t.Context(), json.RawMessage(exactJSON)); err != nil {
+		t.Fatalf("Trigger() error = %v", err)
+	}
+
+	req := only[*taskv1.TriggerRequest](t, runtime)
+	if req.GetTask() != "measure-trigger" || string(req.GetPayload()) != exactJSON {
+		t.Errorf("request = task %q payload %s, want the declared measure-trigger and %s", req.GetTask(), req.GetPayload(), exactJSON)
 	}
 }
 

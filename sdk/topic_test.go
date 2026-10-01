@@ -2,6 +2,7 @@ package ocel_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"runtime"
@@ -174,6 +175,19 @@ func TestSendPublishesTheJSONPayloadToTheTopicByItsDeclaredName(t *testing.T) {
 	}
 	if req.GetDueAt() != nil || req.GetLane() != topicv1.Lane_LANE_UNSPECIFIED || req.GetKey() != "" {
 		t.Errorf("request = %v, want no option set", req)
+	}
+}
+
+func TestSendNamesTheDeclaredTopicWhenItsBindingNamesAnotherAndSendsTheJSONTextUnchanged(t *testing.T) {
+	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_measures": `{"name":"physical-measures","topic":{}}`})
+
+	if _, err := ocel.Topic[json.RawMessage]("measures").Send(t.Context(), json.RawMessage(exactJSON)); err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+
+	req := only[*topicv1.SendRequest](t, runtime)
+	if req.GetTopic() != "measures" || string(req.GetPayload()) != exactJSON {
+		t.Errorf("request = topic %q payload %s, want the declared measures and %s", req.GetTopic(), req.GetPayload(), exactJSON)
 	}
 }
 
