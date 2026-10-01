@@ -163,6 +163,35 @@ func (s Store) writeRecord(ctx context.Context, record provider.ExpiringRecord) 
 	return nil
 }
 
+func (s Store) deleteRecordHolding(ctx context.Context, record provider.ExpiringRecord) error {
+	doc, err := s.recordDocument(record)
+	if err != nil {
+		return err
+	}
+	client, err := s.Clients.Firestore()
+	if err != nil {
+		return err
+	}
+	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snapshot, found, err := readInTransaction(tx, doc)
+		if err != nil || !found {
+			return err
+		}
+		var current recordDocument
+		if err := snapshot.DataTo(&current); err != nil {
+			return err
+		}
+		if current.Value != string(record.Value) {
+			return nil
+		}
+		return tx.Delete(doc)
+	})
+	if err != nil {
+		return fmt.Errorf("delete the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
+	}
+	return nil
+}
+
 func (s Store) pointRecordAt(ctx context.Context, record provider.ExpiringRecord, execution string) error {
 	if record.Key == "" {
 		return nil

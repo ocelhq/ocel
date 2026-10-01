@@ -3,6 +3,7 @@ package topics
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -52,24 +53,31 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 	if req.GetDueAt() != nil {
 		toPublish.dueAt = req.GetDueAt().AsTime()
 	}
+	var idempotency provider.ExpiringRecord
 	if key := req.GetIdempotencyKey(); key != "" {
 		value, err := json.Marshal(recordedMessage{Message: toPublish.messageID})
 		if err != nil {
 			return nil, err
 		}
-		existing, created, err := t.deployment.Store().EnsureRecord(ctx, provider.ExpiringRecord{
+		idempotency = provider.ExpiringRecord{
 			Purpose: provider.RecordIdempotency, Topic: req.GetTopic(), Key: key, Value: value, ExpiresAt: now.Add(provider.DefaultIdempotencyKeyLife),
-		})
+		}
+		existing, created, err := t.deployment.Store().EnsureRecord(ctx, idempotency)
 		if err != nil {
 			return nil, err
 		}
 		if !created {
 			var recorded recordedMessage
-			_ = json.Unmarshal(existing.Value, &recorded)
+			if err := json.Unmarshal(existing.Value, &recorded); err != nil {
+				return nil, fmt.Errorf("read the message idempotency key %q names: %w", key, err)
+			}
 			return &topicv1.SendResponse{MessageId: recorded.Message}, nil
 		}
 	}
 	if err := t.deployment.publish(ctx, toPublish, t.deployment.delayTaskOf(toPublish)); err != nil {
+		if idempotency.Key != "" {
+			err = errors.Join(err, t.deployment.Store().deleteRecordHolding(ctx, idempotency))
+		}
 		return nil, err
 	}
 	return &topicv1.SendResponse{MessageId: toPublish.messageID}, nil

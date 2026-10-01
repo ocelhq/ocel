@@ -24,14 +24,18 @@ const publisher = "ocel-preview@floci-local.iam.gserviceaccount.com"
 
 func newDelayed(t *testing.T) published {
 	t.Helper()
-	p := newPublished(t)
+	return newPublished(t).withDelays()
+}
+
+func (p published) withDelays() published {
+	p.t.Helper()
 	p.deployment.Delays = topics.Delays{
 		Queue:      "projects/" + p.deployment.Clients.Project + "/locations/" + p.deployment.Clients.Region + "/queues/" + strings.ReplaceAll(p.deployment.Names.Scope.Environment, ".", "-"),
 		Account:    publisher,
 		PublishURL: "https://pubsub.googleapis.com",
 	}
 	if err := p.deployment.Delays.Ensure(context.Background(), p.deployment.Clients); err != nil {
-		t.Fatalf("Ensure() of the delay queue = %v", err)
+		p.t.Fatalf("Ensure() of the delay queue = %v", err)
 	}
 	return p
 }
