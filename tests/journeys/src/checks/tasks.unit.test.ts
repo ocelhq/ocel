@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { findMostAtOnce } from "./tasks";
+import { countStartedBeforeLast, findMostAtOnce } from "./tasks";
 
 const span = (n: number, startedAt: number, finishedAt: number) => ({ n, startedAt, finishedAt });
 
@@ -16,5 +16,17 @@ describe("the most runs in progress at once", () => {
 
   it("is zero for no runs", () => {
     expect(findMostAtOnce([])).toBe(0);
+  });
+});
+
+describe("the runs of one group that start before the last run of another", () => {
+  it("is none when the other group all starts first", () => {
+    const spans = [span(3, 0, 1), span(4, 1, 2), span(1, 2, 3), span(2, 3, 4)];
+    expect(countStartedBeforeLast(spans, [1, 2], [3, 4])).toBe(0);
+  });
+
+  it("counts every run of the group that starts before the other's last, wherever it starts", () => {
+    const spans = [span(1, 0, 1), span(3, 1, 2), span(2, 2, 3), span(4, 3, 4), span(5, 4, 5)];
+    expect(countStartedBeforeLast(spans, [1, 2, 5], [3, 4])).toBe(2);
   });
 });
