@@ -171,7 +171,7 @@ func (s *KVStore) ConnectionString() (string, error) {
 // encrypted when the binding requires TLS, and trusting only the binding's certificate
 // authority when it delivers one. It is opened on the first call and the same
 // client is returned on every one after. It fails when no binding was delivered for the
-// name, and during discovery.
+// name, when the delivered authority holds no PEM certificate, and during discovery.
 func (s *KVStore) Client(ctx context.Context) (*redis.Client, error) {
 	return s.open("Client")
 }

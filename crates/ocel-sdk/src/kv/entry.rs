@@ -1,4 +1,5 @@
 use super::{Counter, Json, Kv, KvEntryDeclaration, KvKey, List, Set, Shape, Text};
+use crate::binding::kv_binding_key;
 use crate::declare::is_discovering;
 use crate::proto::common::bindings::v1::KvProperties;
 use crate::Error;
@@ -70,7 +71,7 @@ impl Kv {
         match certificates.next() {
             Some(Ok(_)) if certificates.all(|parsed| parsed.is_ok()) => Ok(pem.to_vec()),
             _ => Err(Error::InvalidKvAuthority {
-                key: format!("OCEL_RESOURCE_KV_{}", self.name),
+                key: kv_binding_key(&self.name),
             }),
         }
     }
