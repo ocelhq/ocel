@@ -89,38 +89,42 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 			return readRecordedRun(existing)
 		}
 	}
-	var debounced provider.ExpiringRecord
-	if debounce := options.GetDebounce(); debounce != nil {
-		debounced = newRunRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt)
-		pending, err := t.debounce(ctx, debounced)
-		if err != nil {
-			return "", errors.Join(err, t.deployment.Store().deleteRecordsHolding(ctx, idempotency))
-		}
-		if pending != "" {
-			return pending, t.deployment.Store().pointRecordAt(ctx, idempotency, pending)
-		}
-	}
 	ttl := topic.GetTtl().AsDuration()
 	if options.GetTtl() != nil {
 		ttl = options.GetTtl().AsDuration()
 	}
-	if err := t.start(ctx, toPublish, now, ttl, options.GetTags(), metadata); err != nil {
-		return "", errors.Join(err, t.deployment.Store().deleteRecordsHolding(ctx, idempotency, debounced))
+	run := t.deployment.newStoredRun(toPublish, now, ttl, options.GetTags(), metadata)
+	store := t.deployment.Store()
+	if debounce := options.GetDebounce(); debounce != nil {
+		debounced := newRunRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt)
+		pending, err := t.debounce(ctx, debounced, run)
+		if err != nil {
+			return "", errors.Join(err, store.deleteRecordsHolding(ctx, idempotency))
+		}
+		if pending != execution {
+			return pending, store.pointRecordAt(ctx, idempotency, pending)
+		}
+		if err := t.deployment.publishRun(ctx, toPublish, run); err != nil {
+			return "", errors.Join(err, store.deleteRecordsHolding(ctx, idempotency, debounced))
+		}
+		return execution, nil
+	}
+	if err := t.start(ctx, toPublish, run); err != nil {
+		return "", errors.Join(err, store.deleteRecordsHolding(ctx, idempotency))
 	}
 	return execution, nil
 }
 
-func (t Tasks) start(ctx context.Context, toPublish publication, now time.Time, ttl time.Duration, tags []string, metadata []byte) error {
+func (d Deployment) newStoredRun(toPublish publication, now time.Time, ttl time.Duration, tags []string, metadata []byte) runRecord {
 	consumer := toPublish.topic.GetConsumers()[0]
-	execution := executionOf(toPublish.messageID, consumer.GetName())
-	delayTask := t.deployment.delayTaskOf(toPublish)
+	delayTask := d.delayTaskOf(toPublish)
 	status := provider.RunQueued
 	if delayTask != "" {
 		status = provider.RunDelayed
 	}
-	record := runRecord{
+	run := runRecord{
 		Run: provider.Run{
-			Execution: execution,
+			Execution: executionOf(toPublish.messageID, consumer.GetName()),
 			Topic:     toPublish.topicName,
 			Consumer:  consumer.GetName(),
 			Status:    status,
@@ -140,36 +144,43 @@ func (t Tasks) start(ctx context.Context, toPublish publication, now time.Time, 
 		},
 	}
 	if ttl > 0 {
-		record.ExpiresAt = toPublish.dueAt.Add(ttl)
+		run.ExpiresAt = toPublish.dueAt.Add(ttl)
 	}
-	if err := t.deployment.Store().createRun(ctx, record); err != nil {
+	return run
+}
+
+func (t Tasks) start(ctx context.Context, toPublish publication, run runRecord) error {
+	if err := t.deployment.Store().createRun(ctx, run); err != nil {
 		return err
 	}
-	if err := t.deployment.publish(ctx, toPublish, delayTask); err != nil {
-		return t.deployment.failUnpublished(ctx, execution, err)
+	return t.deployment.publishRun(ctx, toPublish, run)
+}
+
+func (d Deployment) publishRun(ctx context.Context, toPublish publication, run runRecord) error {
+	if err := d.publish(ctx, toPublish, run.delivery.DelayTask); err != nil {
+		return d.failUnpublished(ctx, run.Execution, err)
 	}
 	return nil
 }
 
-func (t Tasks) debounce(ctx context.Context, record provider.ExpiringRecord) (string, error) {
+func (t Tasks) debounce(ctx context.Context, record provider.ExpiringRecord, run runRecord) (string, error) {
 	store := t.deployment.Store()
-	existing, created, err := store.EnsureRecord(ctx, record)
-	if err != nil || created {
-		return "", err
+	var err error
+	for range debounceAttempts {
+		var pending string
+		pending, err = store.ensureDebouncedRun(ctx, record, run)
+		if err != nil || pending == run.Execution {
+			return pending, err
+		}
+		err = t.move(ctx, pending, record.ExpiresAt, true)
+		if err == nil {
+			return pending, store.extendRecordHolding(ctx, newRunRecord(record.Purpose, record.Topic, record.Key, pending, record.ExpiresAt))
+		}
+		if code := connect.CodeOf(err); code != connect.CodeFailedPrecondition && code != connect.CodeNotFound {
+			return "", err
+		}
 	}
-	pending, err := readRecordedRun(existing)
-	if err != nil {
-		return "", err
-	}
-	err = t.move(ctx, pending, record.ExpiresAt, true)
-	if err == nil {
-		existing.ExpiresAt = record.ExpiresAt
-		return pending, store.writeRecord(ctx, existing)
-	}
-	if connect.CodeOf(err) != connect.CodeFailedPrecondition && connect.CodeOf(err) != connect.CodeNotFound {
-		return "", err
-	}
-	return "", store.writeRecord(ctx, record)
+	return "", err
 }
 
 func (d Deployment) failUnpublished(ctx context.Context, execution string, cause error) error {

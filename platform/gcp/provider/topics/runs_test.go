@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,6 +42,35 @@ func TestLiveDebouncedTriggersFoldIntoOnePendingRunThatRunsTheFirstPayload(t *te
 	}
 	if third := p.trigger("resize", `{"n":3}`, debounce); third == first {
 		t.Errorf("a debounced trigger after the pending run was canceled answered %s again, want a new run", third)
+	}
+}
+
+func TestLiveConcurrentDebouncedTriggersAllAnswerTheOnePendingRun(t *testing.T) {
+	p := newDelayed(t)
+	debounce := &taskv1.TriggerOptions{Debounce: &taskv1.Debounce{Key: "user-7", Delay: durationpb.New(time.Hour)}}
+	const triggers = 32
+
+	ids := make([]string, triggers)
+	errs := make([]error, triggers)
+	var wg sync.WaitGroup
+	for i := range triggers {
+		wg.Go(func() {
+			resp, err := p.deployment.Tasks().Trigger(context.Background(), &taskv1.TriggerRequest{Task: "resize", Payload: []byte(`{}`), Options: debounce})
+			ids[i], errs[i] = resp.GetId(), err
+		})
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("debounced trigger %d = %v, want it folded into the pending run", i, err)
+		}
+	}
+	if distinct := slices.Compact(slices.Sorted(slices.Values(ids))); len(distinct) != 1 {
+		t.Errorf("%d concurrent debounced triggers answered runs %v, want one pending run", triggers, distinct)
+	}
+	if tasks := p.delayTasks(); len(tasks) != 1 {
+		t.Errorf("the delay queue holds %d tasks, want only the pending run's", len(tasks))
 	}
 }
 

@@ -163,7 +163,7 @@ func (s Store) writeRecord(ctx context.Context, record provider.ExpiringRecord) 
 	return nil
 }
 
-func (s Store) deleteRecordHolding(ctx context.Context, record provider.ExpiringRecord) error {
+func (s Store) changeRecordHolding(ctx context.Context, record provider.ExpiringRecord, change func(*firestore.Transaction, *firestore.DocumentRef) error) error {
 	doc, err := s.recordDocument(record)
 	if err != nil {
 		return err
@@ -172,7 +172,7 @@ func (s Store) deleteRecordHolding(ctx context.Context, record provider.Expiring
 	if err != nil {
 		return err
 	}
-	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+	return client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snapshot, found, err := readInTransaction(tx, doc)
 		if err != nil || !found {
 			return err
@@ -184,12 +184,92 @@ func (s Store) deleteRecordHolding(ctx context.Context, record provider.Expiring
 		if current.Value != string(record.Value) {
 			return nil
 		}
+		return change(tx, doc)
+	})
+}
+
+func (s Store) deleteRecordHolding(ctx context.Context, record provider.ExpiringRecord) error {
+	err := s.changeRecordHolding(ctx, record, func(tx *firestore.Transaction, doc *firestore.DocumentRef) error {
 		return tx.Delete(doc)
 	})
 	if err != nil {
 		return fmt.Errorf("delete the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
 	}
 	return nil
+}
+
+func (s Store) extendRecordHolding(ctx context.Context, record provider.ExpiringRecord) error {
+	err := s.changeRecordHolding(ctx, record, func(tx *firestore.Transaction, doc *firestore.DocumentRef) error {
+		return tx.Update(doc, []firestore.Update{{Path: "expiresAt", Value: record.ExpiresAt}})
+	})
+	if err != nil {
+		return fmt.Errorf("extend the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
+	}
+	return nil
+}
+
+func (s Store) ensureDebouncedRun(ctx context.Context, record provider.ExpiringRecord, run runRecord) (string, error) {
+	recordDoc, err := s.recordDocument(record)
+	if err != nil {
+		return "", err
+	}
+	runs, err := s.runs()
+	if err != nil {
+		return "", err
+	}
+	client, err := s.Clients.Firestore()
+	if err != nil {
+		return "", err
+	}
+	next, err := keyvalue.NewRevision()
+	if err != nil {
+		return "", err
+	}
+	var pending string
+	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		recorded, err := readPendingRun(tx, recordDoc, runs)
+		if err != nil || recorded != "" {
+			pending = recorded
+			return err
+		}
+		pending = run.Execution
+		if err := tx.Set(recordDoc, recordDocument{Value: string(record.Value), ExpiresAt: record.ExpiresAt}); err != nil {
+			return err
+		}
+		return tx.Create(runs.Doc(run.Execution), documentOf(run.Run, run.delivery, next))
+	})
+	if err != nil {
+		return "", fmt.Errorf("record the debounced run %s under %q of %s: %w", run.Execution, record.Key, record.Topic, err)
+	}
+	return pending, nil
+}
+
+func readPendingRun(tx *firestore.Transaction, recordDoc *firestore.DocumentRef, runs *firestore.CollectionRef) (string, error) {
+	snapshot, found, err := readInTransaction(tx, recordDoc)
+	if err != nil || !found {
+		return "", err
+	}
+	var current recordDocument
+	if err := snapshot.DataTo(&current); err != nil {
+		return "", err
+	}
+	now := time.Now()
+	if !current.ExpiresAt.After(now) {
+		return "", nil
+	}
+	recorded, err := readRecordedRun(provider.ExpiringRecord{Value: json.RawMessage(current.Value)})
+	if err != nil {
+		return "", err
+	}
+	runSnapshot, found, err := readInTransaction(tx, runs.Doc(recorded))
+	if err != nil || !found {
+		return "", err
+	}
+	pending, err := recordOf(runSnapshot)
+	if err != nil || refuseUnreschedulable(pending, now) != nil {
+		return "", err
+	}
+	return recorded, nil
 }
 
 func (s Store) deleteRecordsHolding(ctx context.Context, records ...provider.ExpiringRecord) error {
