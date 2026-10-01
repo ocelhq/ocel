@@ -36,7 +36,7 @@ type Request struct {
 }
 
 func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {
-	child := span.Child(provider.Name(), checkingTitle(req.Tier, cfg.Slug))
+	child := span.Child(provider.Name(), CheckingTitle(req.Tier, cfg.Slug))
 	read, err := Read(ctx, provider, cfg, req)
 	if err == nil {
 		span.Identity(identityEvent(cfg, req.Tier, read.Response.GetIdentity()))
@@ -123,7 +123,7 @@ func BootstrapCommand(tier environmentv1.Tier) string {
 	return "ocel bootstrap " + TierName(tier)
 }
 
-func checkingTitle(tier environmentv1.Tier, slug string) progress.Title {
+func CheckingTitle(tier environmentv1.Tier, slug string) progress.Title {
 	if tier == environmentv1.Tier_TIER_UNSPECIFIED {
 		return progress.Checking.Title("your credentials")
 	}
