@@ -1,12 +1,14 @@
 package pgmq
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func TestATriggerWithAKnownIdempotencyKeyReturnsTheExistingRun(t *testing.T) {
@@ -83,5 +85,43 @@ func TestTriggersWithOneDebounceKeyFoldIntoOneRunDueADelayAfterTheLast(t *testin
 
 	if after := trigger(t, engine, "resize", `{"n":3}`, debounce); after == first {
 		t.Error("a trigger after the run started joined it, want a new run")
+	}
+}
+
+func TestADebouncedRunsExpiryMovesWithItsDueTime(t *testing.T) {
+	engine, _ := aServedTask(t, succeeding, func(topic *contractv1.ManifestTopic) {
+		topic.Consumers[0].Worker = "elsewhere"
+	})
+	options := &taskv1.TriggerOptions{Ttl: durationpb.New(300 * time.Millisecond), Debounce: &taskv1.Debounce{Key: "user-7", Delay: durationpb.New(time.Hour)}}
+
+	id := trigger(t, engine, "resize", `{}`, options)
+	time.Sleep(100 * time.Millisecond)
+	trigger(t, engine, "resize", `{}`, options)
+
+	run := retrieve(t, engine, id)
+	if ttl := run.GetExpiresAt().AsTime().Sub(run.GetDueAt().AsTime()); ttl != 300*time.Millisecond {
+		t.Errorf("the debounced run expires %v after it is due, want its ttl of 300ms", ttl)
+	}
+}
+
+func TestAReplayOfADebouncedRunKeepsItsTTL(t *testing.T) {
+	engine, _ := aServedTask(t, succeeding, func(topic *contractv1.ManifestTopic) {
+		topic.Consumers[0].Worker = "elsewhere"
+	})
+	options := &taskv1.TriggerOptions{Ttl: durationpb.New(300 * time.Millisecond), Debounce: &taskv1.Debounce{Key: "user-7", Delay: durationpb.New(time.Hour)}}
+	id := trigger(t, engine, "resize", `{}`, options)
+	time.Sleep(400 * time.Millisecond)
+	trigger(t, engine, "resize", `{}`, options)
+	if _, err := engine.Tasks().CancelRun(context.Background(), &taskv1.CancelRunRequest{Id: id}); err != nil {
+		t.Fatalf("CancelRun: %v", err)
+	}
+
+	resp, err := engine.Tasks().ReplayRun(context.Background(), &taskv1.ReplayRunRequest{Id: id})
+	if err != nil {
+		t.Fatalf("ReplayRun: %v", err)
+	}
+	replayed := retrieve(t, engine, resp.GetId())
+	if replayed.GetExpiresAt() == nil || replayed.GetExpiresAt().AsTime().Sub(replayed.GetDueAt().AsTime()) != 300*time.Millisecond {
+		t.Errorf("replayed run = %v, want it to expire 300ms after it is due", replayed)
 	}
 }
