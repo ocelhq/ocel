@@ -23,6 +23,7 @@ const (
 	MessageAttribute     = "ocel-message"
 	PublishedAtAttribute = "ocel-published-at"
 	DueAtAttribute       = "ocel-due-at"
+	DelayTaskAttribute   = "ocel-delay-task"
 	MaxAttemptsAttribute = "ocel-max-attempts"
 	LaneAttribute        = "ocel-lane"
 	ScheduleAttribute    = "ocel-schedule"
@@ -58,6 +59,7 @@ type pushedRun struct {
 	key         string
 	lane        string
 	maxAttempts int
+	delayTask   string
 }
 
 func (d Deliveries) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -123,6 +125,7 @@ func pushedRunOf(topicName string, topic *contractv1.ManifestTopic, consumer *co
 		payload:     pushed.Message.Data,
 		key:         pushed.Message.OrderingKey,
 		lane:        attributes[LaneAttribute],
+		delayTask:   attributes[DelayTaskAttribute],
 	}
 	if at, err := time.Parse(time.RFC3339Nano, attributes[PublishedAtAttribute]); err == nil {
 		delivered.publishedAt = at
@@ -201,7 +204,7 @@ func (d Deliveries) claim(ctx context.Context, delivered pushedRun) (runRecord, 
 		if record.delivery.MaxAttempts == 0 {
 			record.delivery.MaxAttempts = delivered.maxAttempts
 		}
-		if isFinished(record.Status) {
+		if isFinished(record.Status) || isSuperseded(*record, delivered) {
 			return errRunUnchanged
 		}
 		if record.Attempts == 0 && !record.ExpiresAt.IsZero() && !record.ExpiresAt.After(now) {
@@ -217,6 +220,10 @@ func (d Deliveries) claim(ctx context.Context, delivered pushedRun) (runRecord, 
 	})
 }
 
+func isSuperseded(record runRecord, delivered pushedRun) bool {
+	return delivered.delayTask != "" && delivered.delayTask != record.delivery.DelayTask
+}
+
 func startRecord(record *runRecord, delivered pushedRun) {
 	publishedAt := delivered.publishedAt
 	record.Topic, record.Consumer = delivered.topicName, delivered.consumer.GetName()
@@ -227,6 +234,7 @@ func startRecord(record *runRecord, delivered pushedRun) {
 		MaxAttempts: delivered.maxAttempts,
 		Key:         delivered.key,
 		Lane:        delivered.lane,
+		DelayTask:   delivered.delayTask,
 	}
 	if ttl := delivered.topic.GetTtl().AsDuration(); ttl > 0 {
 		record.ExpiresAt = delivered.dueAt.Add(ttl)

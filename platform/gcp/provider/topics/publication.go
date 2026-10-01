@@ -27,6 +27,7 @@ type publication struct {
 	lane        string
 	maxAttempts int32
 	consumer    string
+	delayTask   string
 }
 
 func (p publication) message() *pubsub.PubsubMessage {
@@ -41,6 +42,9 @@ func (p publication) message() *pubsub.PubsubMessage {
 	}
 	if p.consumer != "" {
 		attributes[ConsumerAttribute] = p.consumer
+	}
+	if p.delayTask != "" {
+		attributes[DelayTaskAttribute] = p.delayTask
 	}
 	message := &pubsub.PubsubMessage{Data: base64Of(p.payload), Attributes: attributes}
 	if p.topic.GetOrdered() {

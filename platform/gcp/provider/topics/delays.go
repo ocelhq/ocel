@@ -53,6 +53,7 @@ func (d Deployment) schedule(ctx context.Context, p publication, name string) er
 	if err != nil {
 		return err
 	}
+	p.delayTask = name
 	body, err := json.Marshal(&pubsub.PublishRequest{Messages: []*pubsub.PubsubMessage{p.message()}})
 	if err != nil {
 		return err

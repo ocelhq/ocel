@@ -166,6 +166,36 @@ func TestLiveRescheduleMovesADelayedRunsTaskAndRefusesARunNoLongerDelayed(t *tes
 	}
 }
 
+func TestLiveADelayTaskARescheduleSupersededDoesNotRunTheRun(t *testing.T) {
+	p := newDelayed(t)
+	worker := newFakeWorker(t, always(http.StatusOK, `{}`))
+	id := p.trigger("resize", `{}`, &taskv1.TriggerOptions{DueAt: timestamppb.New(time.Now().Add(time.Hour))})
+	superseded := p.delayTasks()
+	if len(superseded) != 1 {
+		t.Fatalf("the delay queue holds %d tasks, want 1", len(superseded))
+	}
+	if _, err := p.deployment.Tasks().RescheduleRun(context.Background(), &taskv1.RescheduleRunRequest{Id: id, DueAt: timestamppb.New(time.Now().Add(2 * time.Hour))}); err != nil {
+		t.Fatal(err)
+	}
+
+	p.dispatch(superseded[0])
+	if codes := p.deliverPulled(worker, "resize", "resize"); len(codes) != 1 || !acked(codes[0]) {
+		t.Fatalf("the superseded task's message delivered %v, want one acked push", codes)
+	}
+	if len(worker.received()) != 0 {
+		t.Error("a delay task the reschedule superseded ran the run early")
+	}
+	if run := p.retrieve(id); run.GetStatus() != taskv1.RunStatus_RUN_STATUS_DELAYED {
+		t.Errorf("the run is %s after its superseded task fired, want it still delayed", run.GetStatus())
+	}
+
+	p.dispatch(p.delayTasks()[0])
+	p.deliverPulled(worker, "resize", "resize")
+	if run := p.retrieve(id); run.GetStatus() != taskv1.RunStatus_RUN_STATUS_COMPLETED {
+		t.Errorf("the run is %s after its current task fired, want completed", run.GetStatus())
+	}
+}
+
 func TestLiveACanceledRunIsNeverAttempted(t *testing.T) {
 	p := newDelayed(t)
 	ctx := context.Background()
