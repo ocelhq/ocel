@@ -248,7 +248,7 @@ func TestDockerAWorkerStoppedForTheNextPassNeverReportsThatItExited(t *testing.T
 	var stdout, stderr syncBuffer
 	opts := workerOptions(t, &stdout, &stderr)
 	opts.Project = cfg
-	workers := newWorkerProcesses(opts, resources)
+	workers := newWorkerProcesses(opts, resources.Queue())
 	slowToExit := exec.CommandContext(ctx, "sh", "-c", "setsid sh -c 'echo detached; sleep 3' & exec sleep 60")
 	slowToExit.Env = os.Environ()
 	process, err := workers.start(ctx, slowToExit, "worker", 4000, map[string]string{})

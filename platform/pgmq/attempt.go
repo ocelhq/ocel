@@ -7,13 +7,13 @@ import (
 )
 
 type Attempt struct {
-	Topic     string
-	Consumer  string
-	Task      bool
-	Execution string
-	Number    int
-	Of        int
-	Status    provider.RunStatus
-	Took      time.Duration
-	Reason    string
+	Topic       string
+	Consumer    string
+	IsTask      bool
+	Execution   string
+	Number      int
+	MaxAttempts int
+	Status      provider.RunStatus
+	Took        time.Duration
+	Reason      string
 }

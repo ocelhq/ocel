@@ -1,4 +1,4 @@
-package topic
+package queue
 
 import (
 	"testing"
@@ -10,8 +10,8 @@ import (
 
 func TestAnAttemptIsDescribedByWhatItRanAndWhatBecameOfTheRun(t *testing.T) {
 	t.Parallel()
-	task := pgmq.Attempt{Topic: "greet", Consumer: "greet", Task: true, Execution: "01JZ-greet", Number: 1, Of: 3, Took: 12 * time.Millisecond}
-	consumer := pgmq.Attempt{Topic: "orders", Consumer: "audit", Execution: "01JZ-audit", Number: 3, Of: 3, Took: 1500 * time.Millisecond}
+	task := pgmq.Attempt{Topic: "greet", Consumer: "greet", IsTask: true, Execution: "01JZ-greet", Number: 1, MaxAttempts: 3, Took: 12 * time.Millisecond}
+	consumer := pgmq.Attempt{Topic: "orders", Consumer: "audit", Execution: "01JZ-audit", Number: 3, MaxAttempts: 3, Took: 1500 * time.Millisecond}
 	for _, tc := range []struct {
 		attempt pgmq.Attempt
 		status  provider.RunStatus

@@ -52,8 +52,8 @@ func TestEveryAttemptIsReportedWithWhatItLeftTheRunIn(t *testing.T) {
 		t.Fatalf("reported %d attempts (%+v), want the failed first and the completed second", len(got), got)
 	}
 	for i, want := range []Attempt{
-		{Topic: "resize", Consumer: "resize", Task: true, Execution: id, Number: 1, Of: 3, Status: provider.RunQueued, Reason: "the worker answered 500 Internal Server Error: the disk is full"},
-		{Topic: "resize", Consumer: "resize", Task: true, Execution: id, Number: 2, Of: 3, Status: provider.RunCompleted},
+		{Topic: "resize", Consumer: "resize", IsTask: true, Execution: id, Number: 1, MaxAttempts: 3, Status: provider.RunQueued, Reason: "the worker answered 500 Internal Server Error: the disk is full"},
+		{Topic: "resize", Consumer: "resize", IsTask: true, Execution: id, Number: 2, MaxAttempts: 3, Status: provider.RunCompleted},
 	} {
 		attempt := got[i]
 		if attempt.Took <= 0 {

@@ -1,4 +1,4 @@
-package topic
+package queue
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 
 func describeAttempt(attempt pgmq.Attempt) string {
 	subject := fmt.Sprintf("consumer %q of topic %q execution %s", attempt.Consumer, attempt.Topic, attempt.Execution)
-	if attempt.Task {
+	if attempt.IsTask {
 		subject = fmt.Sprintf("task %q run %s", attempt.Topic, attempt.Execution)
 	}
 	verb := "failed"
@@ -20,7 +20,7 @@ func describeAttempt(attempt pgmq.Attempt) string {
 	case provider.RunTimedOut:
 		verb = "timed out"
 	}
-	line := fmt.Sprintf("%s %s in %s (attempt %d of %d)", subject, verb, attempt.Took.Round(time.Millisecond), attempt.Number, attempt.Of)
+	line := fmt.Sprintf("%s %s in %s (attempt %d of %d)", subject, verb, attempt.Took.Round(time.Millisecond), attempt.Number, attempt.MaxAttempts)
 	if attempt.Status == provider.RunQueued {
 		line += ", and is retried"
 	}

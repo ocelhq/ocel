@@ -144,7 +144,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	if err != nil {
 		return err
 	}
-	workers := newWorkerProcesses(opts, host.resources)
+	workers := newWorkerProcesses(opts, host.resources.Queue())
 	defer workers.stop(ctx)
 	workers.restart(ctx, resolved)
 	for {

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
-	"github.com/ocelhq/ocel/cli/internal/devresources"
+	"github.com/ocelhq/ocel/cli/internal/devresources/queue"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
@@ -32,9 +32,9 @@ type workerProcess struct {
 }
 
 type workerProcesses struct {
-	opts      Options
-	resources *devresources.Resources
-	ports     map[string]int
+	opts  Options
+	queue *queue.Backend
+	ports map[string]int
 
 	running     []*workerProcess
 	stopWaiting context.CancelFunc
@@ -44,13 +44,13 @@ type workerProcesses struct {
 	served map[string]string
 }
 
-func newWorkerProcesses(opts Options, resources *devresources.Resources) *workerProcesses {
-	return &workerProcesses{opts: opts, resources: resources, ports: map[string]int{}}
+func newWorkerProcesses(opts Options, backend *queue.Backend) *workerProcesses {
+	return &workerProcesses{opts: opts, queue: backend, ports: map[string]int{}}
 }
 
 func (w *workerProcesses) restart(ctx context.Context, env map[string]string) {
 	w.stop(ctx)
-	workers := w.resources.Workers()
+	workers := w.queue.Workers()
 	if len(workers) == 0 {
 		return
 	}
@@ -139,7 +139,7 @@ func (w *workerProcesses) serveOnceListening(ctx context.Context, process *worke
 		return
 	}
 	w.served[process.name] = "http://" + address
-	if err := w.resources.ServeWorkers(ctx, maps.Clone(w.served)); err != nil && ctx.Err() == nil {
+	if err := w.queue.DeliverTo(ctx, maps.Clone(w.served)); err != nil && ctx.Err() == nil {
 		w.warn(process.name, err)
 	}
 }
@@ -168,7 +168,7 @@ func (w *workerProcesses) stop(ctx context.Context) {
 	w.served = map[string]string{}
 	w.mu.Unlock()
 	if len(w.running) > 0 {
-		if err := w.resources.ServeWorkers(context.WithoutCancel(ctx), nil); err != nil {
+		if err := w.queue.DeliverTo(context.WithoutCancel(ctx), nil); err != nil {
 			w.warnAll(err)
 		}
 	}
