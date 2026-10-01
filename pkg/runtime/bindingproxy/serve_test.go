@@ -48,7 +48,7 @@ func TestServe(t *testing.T) {
 	t.Parallel()
 
 	svc := &silentBuckets{}
-	served, err := bindingproxy.Serve(svc)
+	served, err := bindingproxy.Serve(bindingproxy.Services{Buckets: svc})
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
@@ -91,12 +91,12 @@ func TestServe(t *testing.T) {
 func TestServeMintsAFreshTokenEachTime(t *testing.T) {
 	t.Parallel()
 
-	first, err := bindingproxy.Serve(&silentBuckets{})
+	first, err := bindingproxy.Serve(bindingproxy.Services{Buckets: &silentBuckets{}})
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
 	t.Cleanup(func() { first.Close() })
-	second, err := bindingproxy.Serve(&silentBuckets{})
+	second, err := bindingproxy.Serve(bindingproxy.Services{Buckets: &silentBuckets{}})
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
