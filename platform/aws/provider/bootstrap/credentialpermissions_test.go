@@ -586,7 +586,9 @@ func TestEveryCredentialProvisionsKVStoresOnlyUnderTheAppScope(t *testing.T) {
 		"elasticache:ModifyReplicationGroup":       {group, parameters},
 		"elasticache:DeleteReplicationGroup":       {group},
 		"elasticache:DescribeReplicationGroups":    {group},
-		"elasticache:DescribeCacheClusters":        {member},
+		"elasticache:IncreaseReplicaCount":         {group},
+		"elasticache:DecreaseReplicaCount":         {group},
+		"elasticache:DescribeCacheClusters":        {"arn:aws:elasticache:*:*:cluster:*"},
 		"elasticache:CreateCacheParameterGroup":    {parameters},
 		"elasticache:ModifyCacheParameterGroup":    {parameters},
 		"elasticache:DeleteCacheParameterGroup":    {parameters},
@@ -636,7 +638,7 @@ func TestEveryCredentialReadsWritesAndDeletesTheKVTokensAndNoOtherParameterThatW
 	tokens := parameterARNPrefix + defaultNamespace.KVTokenRoot() + "/*"
 	for purpose, document := range bothCredentials(t) {
 		granted := grantsOf(t, document)
-		for _, action := range []string{"ssm:GetParameter", "ssm:PutParameter", "ssm:DeleteParameter"} {
+		for _, action := range []string{"ssm:GetParameter", "ssm:GetParametersByPath", "ssm:PutParameter", "ssm:DeleteParameter"} {
 			if !granted[grant{action: action, resource: tokens, condition: conditionJSON(t, nil)}] {
 				t.Errorf("the %s credential does not grant %s on %s, where a deploy keeps each store's AUTH token", purpose, action, tokens)
 			}

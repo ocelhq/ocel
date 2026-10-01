@@ -42,6 +42,7 @@ const (
 
 	appReplicationGroupARN   = "arn:aws:elasticache:*:*:replicationgroup:" + appScopePrefix + "*"
 	appCacheClusterARN       = "arn:aws:elasticache:*:*:cluster:" + appScopePrefix + "*"
+	anyCacheClusterARN       = "arn:aws:elasticache:*:*:cluster:*"
 	appCacheParameterARN     = "arn:aws:elasticache:*:*:parametergroup:" + appScopePrefix + "*"
 	appCacheSubnetGroupARN   = "arn:aws:elasticache:*:*:subnetgroup:" + appScopePrefix + "*"
 	elastiCacheLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/elasticache.amazonaws.com/*"
@@ -678,12 +679,17 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Resources: []string{appReplicationGroupARN, appCacheParameterARN},
 		},
 		{
-			Actions:   []string{"elasticache:DeleteReplicationGroup", "elasticache:DescribeReplicationGroups"},
+			Actions: []string{
+				"elasticache:DecreaseReplicaCount",
+				"elasticache:DeleteReplicationGroup",
+				"elasticache:DescribeReplicationGroups",
+				"elasticache:IncreaseReplicaCount",
+			},
 			Resources: []string{appReplicationGroupARN},
 		},
 		{
 			Actions:   []string{"elasticache:DescribeCacheClusters"},
-			Resources: []string{appCacheClusterARN},
+			Resources: []string{anyCacheClusterARN},
 		},
 		{
 			Actions: []string{
@@ -705,7 +711,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Resources: []string{appCacheSubnetGroupARN},
 		},
 		{
-			Actions:   []string{"ssm:DeleteParameter", "ssm:GetParameter", "ssm:PutParameter"},
+			Actions:   []string{"ssm:DeleteParameter", "ssm:GetParameter", "ssm:GetParametersByPath", "ssm:PutParameter"},
 			Resources: []string{r.kvToken},
 		},
 		{
