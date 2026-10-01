@@ -19,22 +19,22 @@ func realtimeResource(name string, channels ...*resourcesv1.RealtimeChannel) dec
 }
 
 func channel(pattern, schema string, configure ...func(*resourcesv1.RealtimeChannel)) *resourcesv1.RealtimeChannel {
-	c := &resourcesv1.RealtimeChannel{
+	realtimeChannel := &resourcesv1.RealtimeChannel{
 		Pattern:   pattern,
 		Schema:    schema,
 		Subscribe: resourcesv1.RealtimeSubscribe_REALTIME_SUBSCRIBE_RULE,
 		Publish:   resourcesv1.RealtimePublish_REALTIME_PUBLISH_SERVER,
 	}
 	for _, change := range configure {
-		change(c)
+		change(realtimeChannel)
 	}
-	return c
+	return realtimeChannel
 }
 
-func wildcard(c *resourcesv1.RealtimeChannel) { c.Wildcard = true }
+func wildcard(realtimeChannel *resourcesv1.RealtimeChannel) { realtimeChannel.Wildcard = true }
 
-func browserPublish(c *resourcesv1.RealtimeChannel) {
-	c.Publish = resourcesv1.RealtimePublish_REALTIME_PUBLISH_RULE
+func browserPublish(realtimeChannel *resourcesv1.RealtimeChannel) {
+	realtimeChannel.Publish = resourcesv1.RealtimePublish_REALTIME_PUBLISH_RULE
 }
 
 func TestRenderKeysEachResourceByNameAndEachChannelByPattern(t *testing.T) {
@@ -67,7 +67,7 @@ export type RealtimeResources = {
 }
 
 func TestRenderTypesEachJSONSchemaConstruct(t *testing.T) {
-	for _, tc := range []struct {
+	for _, test := range []struct {
 		name   string
 		schema string
 		want   string
@@ -87,17 +87,21 @@ func TestRenderTypesEachJSONSchemaConstruct(t *testing.T) {
 		{"a map", `{"type":"object","additionalProperties":{"type":"integer"}}`, `Record<string, number>`},
 		{"an open object", `{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":true}`, `{ a: string; [key: string]: unknown }`},
 		{"an object with no properties", `{"type":"object"}`, `Record<string, unknown>`},
+		{"a closed object with no properties", `{"type":"object","additionalProperties":false}`, `Record<string, never>`},
+		{"a tuple open after its prefix", `{"type":"array","prefixItems":[{"type":"string"}]}`, `[string, ...unknown[]]`},
+		{"an array of literals holding brackets", `{"type":"array","items":{"enum":["(","a"]}}`, `("(" | "a")[]`},
+		{"a union of literals holding operators", `{"type":"array","items":{"const":"a|b"}}`, `"a|b"[]`},
 		{"a $defs reference", `{"$defs":{"Item":{"type":"object","properties":{"sku":{"type":"string"}},"required":["sku"]}},"type":"array","items":{"$ref":"#/$defs/Item"}}`, `{ sku: string }[]`},
 		{"a definitions reference", `{"definitions":{"Id":{"type":"string"}},"$ref":"#/definitions/Id"}`, `string`},
 		{"a recursive reference", `{"$defs":{"Node":{"type":"object","properties":{"next":{"$ref":"#/$defs/Node"}}}},"$ref":"#/$defs/Node"}`, `{ next?: unknown }`},
 		{"properties without a type", `{"properties":{"a":{"type":"string"}}}`, `{ a?: string }`},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := Render([]declaration.Resource{realtimeResource("app", channel("status", tc.schema))})
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render([]declaration.Resource{realtimeResource("app", channel("status", test.schema))})
 			if err != nil {
 				t.Fatalf("Render: %v", err)
 			}
-			want := `"status": { event: ` + tc.want + ` };`
+			want := `"status": { event: ` + test.want + ` };`
 			if !strings.Contains(got, want) {
 				t.Fatalf("Render =\n%s\nwant a line %s", got, want)
 			}
