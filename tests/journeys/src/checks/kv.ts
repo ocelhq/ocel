@@ -348,8 +348,7 @@ export const kvPersistenceCheck: Check = {
   title: "what a store held before a restart or redeploy is still there after",
   run: async (ctx) => {
     await storeAnswers(ctx);
-    const kept = ctx.notes.get(PERSISTED_NOTE);
-    if (ctx.phase === "verify" || kept === undefined) {
+    if (ctx.phase === "verify") {
       const written = key("persisted");
       answered(
         await send(ctx, "PUT", `/api/kv/text/${written}`, { value: written }),
@@ -359,6 +358,8 @@ export const kvPersistenceCheck: Check = {
       ctx.notes.set(PERSISTED_NOTE, written);
       return;
     }
+    const kept = ctx.notes.get(PERSISTED_NOTE);
+    assert.ok(kept, `nothing was written before the ${ctx.phase} to read back`);
     const read = await send(ctx, "GET", `/api/kv/text/${kept}`);
     answered(read, 200, `the read after the ${ctx.phase}`);
     assert.deepEqual(read.body, { value: kept });
