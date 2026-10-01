@@ -76,6 +76,7 @@ message KvProperties {
   string username = 3;
   string password = 4 [debug_redact = true];
   bool tls = 5;
+  string ca_pem = 6;
 }
 
 enum RealtimeTransport {

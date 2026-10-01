@@ -5,6 +5,7 @@
     "port": 6380,
     "username": "fixture_operator",
     "password": "fixture-password-not-a-secret",
-    "tls": true
+    "tls": true,
+    "caPem": "-----BEGIN CERTIFICATE-----\nMIIBsTCCAVegAwIBAgIUavHaXhpVZPcuflnQyQneiRKIf3cwCgYIKoZIzj0EAwIw\nJTEjMCEGA1UEAwwab2NlbCBrdiBiaW5kaW5nIGZpeHR1cmUgQ0EwIBcNMjYxMDAx\nMTY1MzA4WhgPMjEyNjA5MDcxNjUzMDhaMCUxIzAhBgNVBAMMGm9jZWwga3YgYmlu\nZGluZyBmaXh0dXJlIENBMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEVxJW1Xyx\nO94sKarli1A8c8tb5u+ltwtVcaI/Ms+aOg1cG+YPdLYuD1gemSMgpHCIfBygNB0l\notZuQDls8U/l16NjMGEwHQYDVR0OBBYEFDhl+BrLwZWk0tGLpfwv/ypGh87tMB8G\nA1UdIwQYMBaAFDhl+BrLwZWk0tGLpfwv/ypGh87tMA8GA1UdEwEB/wQFMAMBAf8w\nDgYDVR0PAQH/BAQDAgIEMAoGCCqGSM49BAMCA0gAMEUCIQD7nDERBr8YvRYORxmU\nbq8XuDQBCmrhQXnm+LPEkEdjBwIgVNi7y4ggD/rWEYv1DYNYmBzBE+XtKXc5FJBW\n3nThmJw=\n-----END CERTIFICATE-----\n"
   }
 }

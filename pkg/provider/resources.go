@@ -58,6 +58,7 @@ const (
 	PropertyPublic        = "public"
 	PropertyEndpoint      = "endpoint"
 	PropertyTLS           = "tls"
+	PropertyCAPEM         = "caPem"
 	PropertyTransport     = "transport"
 	PropertyURL           = "url"
 	PropertySigningKey    = "signingKey"
@@ -134,6 +135,7 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 			Username: binding.Properties[PropertyUsername],
 			Password: binding.Properties[PropertyPassword],
 			Tls:      binding.Properties[PropertyTLS] == "true",
+			CaPem:    binding.Properties[PropertyCAPEM],
 		}}
 	case BindingRealtime:
 		message.Properties = &bindingsv1.Binding_Realtime{Realtime: realtimeProperties(binding)}

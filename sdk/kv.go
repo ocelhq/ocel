@@ -3,6 +3,7 @@ package ocel
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -167,7 +168,8 @@ func (s *KVStore) ConnectionString() (string, error) {
 }
 
 // Client is the go-redis client connected to the store over the delivered binding,
-// encrypted when the binding requires TLS. It is opened on the first call and the same
+// encrypted when the binding requires TLS, and trusting only the binding's certificate
+// authority when it delivers one. It is opened on the first call and the same
 // client is returned on every one after. It fails when no binding was delivered for the
 // name, and during discovery.
 func (s *KVStore) Client(ctx context.Context) (*redis.Client, error) {
@@ -191,6 +193,13 @@ func (s *KVStore) open(access string) (*redis.Client, error) {
 	}
 	if properties.GetTls() {
 		options.TLSConfig = &tls.Config{ServerName: properties.GetHost(), MinVersion: tls.VersionTLS12}
+		if authority := properties.GetCaPem(); authority != "" {
+			trusted := x509.NewCertPool()
+			if !trusted.AppendCertsFromPEM([]byte(authority)) {
+				return nil, fmt.Errorf("ocel: kv %q: the binding's caPem holds no PEM certificate, so nothing says which authority signs the store's certificate", s.name)
+			}
+			options.TLSConfig.RootCAs = trusted
+		}
 	}
 	s.client = redis.NewClient(options)
 	return s.client, nil

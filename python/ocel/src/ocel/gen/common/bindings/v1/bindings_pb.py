@@ -245,7 +245,7 @@ class TaskProperties(Message[_TaskPropertiesFields]):
         ) -> None:
             pass
 
-_KvPropertiesFields: TypeAlias = Literal["host", "port", "username", "password", "tls"]
+_KvPropertiesFields: TypeAlias = Literal["host", "port", "username", "password", "tls", "ca_pem"]
 
 class KvProperties(Message[_KvPropertiesFields]):
     """
@@ -274,9 +274,13 @@ class KvProperties(Message[_KvPropertiesFields]):
             ```proto
             bool tls = 5;
             ```
+        ca_pem:
+            ```proto
+            string ca_pem = 6;
+            ```
     """
 
-    __slots__ = ("host", "port", "username", "password", "tls")
+    __slots__ = ("host", "port", "username", "password", "tls", "ca_pem")
 
     if TYPE_CHECKING:
 
@@ -288,6 +292,7 @@ class KvProperties(Message[_KvPropertiesFields]):
             username: str = "",
             password: str = "",
             tls: bool = False,
+            ca_pem: str = "",
         ) -> None:
             pass
 
@@ -296,6 +301,7 @@ class KvProperties(Message[_KvPropertiesFields]):
         username: str
         password: str
         tls: bool
+        ca_pem: str
 
 _RealtimePropertiesFields: TypeAlias = Literal["transport", "url", "host", "signing_key", "verify_key"]
 
@@ -537,7 +543,7 @@ class RealtimeTransport(Enum):
 
 
 _DESC = file_desc(
-    b'\n!common/bindings/v1/bindings.proto\x12\x12common.bindings.v1\x1a\x1cgoogle/protobuf/struct.proto"\xa0\x04\n\x07Binding\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12D\n\x08postgres\x18\x02 \x01(\x0b2&.common.bindings.v1.PostgresPropertiesH\x00R\x08postgres\x12>\n\x06bucket\x18\x03 \x01(\x0b2$.common.bindings.v1.BucketPropertiesH\x00R\x06bucket\x121\n\x06custom\x18\x06 \x01(\x0b2\x17.google.protobuf.StructH\x00R\x06custom\x12;\n\x05topic\x18\x07 \x01(\x0b2#.common.bindings.v1.TopicPropertiesH\x00R\x05topic\x128\n\x04task\x18\x08 \x01(\x0b2".common.bindings.v1.TaskPropertiesH\x00R\x04task\x122\n\x02kv\x18\t \x01(\x0b2 .common.bindings.v1.KvPropertiesH\x00R\x02kv\x12D\n\x08realtime\x18\n \x01(\x0b2&.common.bindings.v1.RealtimePropertiesH\x00R\x08realtime\x121\n\x06grants\x18\x04 \x03(\x0b2\x19.common.bindings.v1.GrantR\x06grants\x12\x16\n\x06source\x18\x05 \x01(\tR\x06sourceB\x0c\n\nproperties"\x83\x02\n\x12PostgresProperties\x12\x12\n\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n\x08database\x18\x03 \x01(\tR\x08database\x12\x1a\n\x08username\x18\x04 \x01(\tR\x08username\x12\x1f\n\x08password\x18\x05 \x01(\tR\x08passwordB\x03\x80\x01\x01\x12\x15\n\x03url\x18\x06 \x01(\tR\x03urlB\x03\x80\x01\x01\x12>\n\x08tls_mode\x18\x07 \x01(\x0e2#.common.bindings.v1.PostgresTlsModeR\x07tlsMode\x12\x15\n\x06tls_ca\x18\x08 \x01(\tR\x05tlsCa"\xaa\x02\n\x10BucketProperties\x12\x16\n\x06bucket\x18\x01 \x01(\tR\x06bucket\x12&\n\x0fpublic_base_url\x18\x02 \x01(\tR\rpublicBaseUrl\x12\x16\n\x06public\x18\x03 \x01(\x08R\x06public\x12\x1a\n\x08endpoint\x18\x04 \x01(\tR\x08endpoint\x12\x16\n\x06region\x18\x05 \x01(\tR\x06region\x12\x1d\n\npath_style\x18\x06 \x01(\x08R\tpathStyle\x12\x16\n\x06prefix\x18\x07 \x01(\tR\x06prefix\x12"\n\raccess_key_id\x18\x08 \x01(\tR\x0baccessKeyId\x12/\n\x11secret_access_key\x18\t \x01(\tR\x0fsecretAccessKeyB\x03\x80\x01\x01"\x11\n\x0fTopicProperties"\x10\n\x0eTaskProperties"\x85\x01\n\x0cKvProperties\x12\x12\n\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n\x08username\x18\x03 \x01(\tR\x08username\x12\x1f\n\x08password\x18\x04 \x01(\tR\x08passwordB\x03\x80\x01\x01\x12\x10\n\x03tls\x18\x05 \x01(\x08R\x03tls"\xc4\x01\n\x12RealtimeProperties\x12C\n\ttransport\x18\x01 \x01(\x0e2%.common.bindings.v1.RealtimeTransportR\ttransport\x12\x10\n\x03url\x18\x02 \x01(\tR\x03url\x12\x12\n\x04host\x18\x03 \x01(\tR\x04host\x12$\n\x0bsigning_key\x18\x04 \x01(\x0cR\nsigningKeyB\x03\x80\x01\x01\x12\x1d\n\nverify_key\x18\x05 \x01(\x0cR\tverifyKey"\x99\x01\n\x05Grant\x12\x18\n\x07actions\x18\x01 \x03(\tR\x07actions\x12\x1c\n\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n\x05label\x18\x03 \x01(\tR\x05label\x12B\n\nconditions\x18\x04 \x03(\x0b2".common.bindings.v1.GrantConditionR\nconditions"V\n\x0eGrantCondition\x12\x1a\n\x08operator\x18\x01 \x01(\tR\x08operator\x12\x10\n\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n\x06values\x18\x03 \x03(\tR\x06values*\xd7\x01\n\x0bBindingType\x12\x1c\n\x18BINDING_TYPE_UNSPECIFIED\x10\x00\x12\x19\n\x15BINDING_TYPE_POSTGRES\x10\x01\x12\x17\n\x13BINDING_TYPE_BUCKET\x10\x02\x12\x17\n\x13BINDING_TYPE_CUSTOM\x10\x03\x12\x16\n\x12BINDING_TYPE_TOPIC\x10\x04\x12\x15\n\x11BINDING_TYPE_TASK\x10\x05\x12\x13\n\x0fBINDING_TYPE_KV\x10\x06\x12\x19\n\x15BINDING_TYPE_REALTIME\x10\x07*v\n\x0fPostgresTlsMode\x12!\n\x1dPOSTGRES_TLS_MODE_UNSPECIFIED\x10\x00\x12\x1d\n\x19POSTGRES_TLS_MODE_REQUIRE\x10\x01\x12!\n\x1dPOSTGRES_TLS_MODE_VERIFY_FULL\x10\x02*\x83\x01\n\x11RealtimeTransport\x12"\n\x1eREALTIME_TRANSPORT_UNSPECIFIED\x10\x00\x12%\n!REALTIME_TRANSPORT_APPSYNC_EVENTS\x10\x01\x12#\n\x1fREALTIME_TRANSPORT_OCEL_GATEWAY\x10\x02B@Z>github.com/ocelhq/ocel/pkg/proto/common/bindings/v1;bindingsv1b\x06proto3',
+    b'\n!common/bindings/v1/bindings.proto\x12\x12common.bindings.v1\x1a\x1cgoogle/protobuf/struct.proto"\xa0\x04\n\x07Binding\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12D\n\x08postgres\x18\x02 \x01(\x0b2&.common.bindings.v1.PostgresPropertiesH\x00R\x08postgres\x12>\n\x06bucket\x18\x03 \x01(\x0b2$.common.bindings.v1.BucketPropertiesH\x00R\x06bucket\x121\n\x06custom\x18\x06 \x01(\x0b2\x17.google.protobuf.StructH\x00R\x06custom\x12;\n\x05topic\x18\x07 \x01(\x0b2#.common.bindings.v1.TopicPropertiesH\x00R\x05topic\x128\n\x04task\x18\x08 \x01(\x0b2".common.bindings.v1.TaskPropertiesH\x00R\x04task\x122\n\x02kv\x18\t \x01(\x0b2 .common.bindings.v1.KvPropertiesH\x00R\x02kv\x12D\n\x08realtime\x18\n \x01(\x0b2&.common.bindings.v1.RealtimePropertiesH\x00R\x08realtime\x121\n\x06grants\x18\x04 \x03(\x0b2\x19.common.bindings.v1.GrantR\x06grants\x12\x16\n\x06source\x18\x05 \x01(\tR\x06sourceB\x0c\n\nproperties"\x83\x02\n\x12PostgresProperties\x12\x12\n\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n\x08database\x18\x03 \x01(\tR\x08database\x12\x1a\n\x08username\x18\x04 \x01(\tR\x08username\x12\x1f\n\x08password\x18\x05 \x01(\tR\x08passwordB\x03\x80\x01\x01\x12\x15\n\x03url\x18\x06 \x01(\tR\x03urlB\x03\x80\x01\x01\x12>\n\x08tls_mode\x18\x07 \x01(\x0e2#.common.bindings.v1.PostgresTlsModeR\x07tlsMode\x12\x15\n\x06tls_ca\x18\x08 \x01(\tR\x05tlsCa"\xaa\x02\n\x10BucketProperties\x12\x16\n\x06bucket\x18\x01 \x01(\tR\x06bucket\x12&\n\x0fpublic_base_url\x18\x02 \x01(\tR\rpublicBaseUrl\x12\x16\n\x06public\x18\x03 \x01(\x08R\x06public\x12\x1a\n\x08endpoint\x18\x04 \x01(\tR\x08endpoint\x12\x16\n\x06region\x18\x05 \x01(\tR\x06region\x12\x1d\n\npath_style\x18\x06 \x01(\x08R\tpathStyle\x12\x16\n\x06prefix\x18\x07 \x01(\tR\x06prefix\x12"\n\raccess_key_id\x18\x08 \x01(\tR\x0baccessKeyId\x12/\n\x11secret_access_key\x18\t \x01(\tR\x0fsecretAccessKeyB\x03\x80\x01\x01"\x11\n\x0fTopicProperties"\x10\n\x0eTaskProperties"\x9c\x01\n\x0cKvProperties\x12\x12\n\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n\x08username\x18\x03 \x01(\tR\x08username\x12\x1f\n\x08password\x18\x04 \x01(\tR\x08passwordB\x03\x80\x01\x01\x12\x10\n\x03tls\x18\x05 \x01(\x08R\x03tls\x12\x15\n\x06ca_pem\x18\x06 \x01(\tR\x05caPem"\xc4\x01\n\x12RealtimeProperties\x12C\n\ttransport\x18\x01 \x01(\x0e2%.common.bindings.v1.RealtimeTransportR\ttransport\x12\x10\n\x03url\x18\x02 \x01(\tR\x03url\x12\x12\n\x04host\x18\x03 \x01(\tR\x04host\x12$\n\x0bsigning_key\x18\x04 \x01(\x0cR\nsigningKeyB\x03\x80\x01\x01\x12\x1d\n\nverify_key\x18\x05 \x01(\x0cR\tverifyKey"\x99\x01\n\x05Grant\x12\x18\n\x07actions\x18\x01 \x03(\tR\x07actions\x12\x1c\n\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n\x05label\x18\x03 \x01(\tR\x05label\x12B\n\nconditions\x18\x04 \x03(\x0b2".common.bindings.v1.GrantConditionR\nconditions"V\n\x0eGrantCondition\x12\x1a\n\x08operator\x18\x01 \x01(\tR\x08operator\x12\x10\n\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n\x06values\x18\x03 \x03(\tR\x06values*\xd7\x01\n\x0bBindingType\x12\x1c\n\x18BINDING_TYPE_UNSPECIFIED\x10\x00\x12\x19\n\x15BINDING_TYPE_POSTGRES\x10\x01\x12\x17\n\x13BINDING_TYPE_BUCKET\x10\x02\x12\x17\n\x13BINDING_TYPE_CUSTOM\x10\x03\x12\x16\n\x12BINDING_TYPE_TOPIC\x10\x04\x12\x15\n\x11BINDING_TYPE_TASK\x10\x05\x12\x13\n\x0fBINDING_TYPE_KV\x10\x06\x12\x19\n\x15BINDING_TYPE_REALTIME\x10\x07*v\n\x0fPostgresTlsMode\x12!\n\x1dPOSTGRES_TLS_MODE_UNSPECIFIED\x10\x00\x12\x1d\n\x19POSTGRES_TLS_MODE_REQUIRE\x10\x01\x12!\n\x1dPOSTGRES_TLS_MODE_VERIFY_FULL\x10\x02*\x83\x01\n\x11RealtimeTransport\x12"\n\x1eREALTIME_TRANSPORT_UNSPECIFIED\x10\x00\x12%\n!REALTIME_TRANSPORT_APPSYNC_EVENTS\x10\x01\x12#\n\x1fREALTIME_TRANSPORT_OCEL_GATEWAY\x10\x02B@Z>github.com/ocelhq/ocel/pkg/proto/common/bindings/v1;bindingsv1b\x06proto3',
     [
         struct_pb.desc(),
     ],

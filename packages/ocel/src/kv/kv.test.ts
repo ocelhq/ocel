@@ -190,9 +190,23 @@ describe("kv at runtime", () => {
       port,
       username: "app",
       password: "p@ss/word",
-      tls: { servername: "127.0.0.1" },
+      tls: {},
     });
+    expect(cache.client.options.tls).not.toHaveProperty("servername");
     expect(cache.connectionString).toBe(`rediss://app:p%40ss%2Fword@127.0.0.1:${port}`);
+  });
+
+  it("names the store's host as the TLS server name when the host is a name", () => {
+    deliver("named", { host: "cache.internal", tls: true });
+
+    expect(kv("named").client.options.tls).toEqual({ servername: "cache.internal" });
+  });
+
+  it("trusts only the certificate authority the binding delivers", () => {
+    const ca = "-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n";
+    deliver("private", { tls: true, caPem: ca });
+
+    expect(kv("private").client.options.tls).toEqual({ ca });
   });
 
   it("names the store's URL redis:// when it takes no TLS", () => {

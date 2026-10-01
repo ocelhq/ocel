@@ -108,7 +108,7 @@ describe("the binding conformance fixtures", () => {
       port: want.port,
       username: want.username,
       password: want.password,
-      tls: { servername: want.host },
+      tls: { servername: want.host, ca: want.caPem },
     });
     expect(cache.connectionString).toBe(
       `rediss://${want.username}:${want.password}@${want.host}:${want.port}`,

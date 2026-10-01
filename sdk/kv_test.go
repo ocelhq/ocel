@@ -294,6 +294,10 @@ func TestTheKVBindingFixtureDecodesAsTheOtherSDKsDecodeIt(t *testing.T) {
 	if err != nil || got != "rediss://fixture_operator:fixture-password-not-a-secret@shop-prod-cache-h4j5k6l7.ab12cd.ng.0001.use1.cache.amazonaws.com:6380" {
 		t.Errorf("ConnectionString() = %q, %v, want the fixture's host, port, credentials and TLS", got, err)
 	}
+	client, err := ocel.KV("cache").Client(context.Background())
+	if err != nil || client.Options().TLSConfig.RootCAs == nil {
+		t.Errorf("Client() = %v, want a client trusting the fixture's caPem", err)
+	}
 }
 
 func TestAnOperationWithoutABindingNamesTheKeyItWaitedOn(t *testing.T) {
