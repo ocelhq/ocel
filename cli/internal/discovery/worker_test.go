@@ -50,8 +50,12 @@ func startWorker(t *testing.T, cmd *exec.Cmd, worker string) string {
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start the worker: %v", err)
 	}
-	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
+	exited := make(chan struct{})
+	var waited error
+	go func() {
+		waited = cmd.Wait()
+		close(exited)
+	}()
 	t.Cleanup(func() {
 		_ = childprocess.KillGroup(cmd)
 		<-exited
@@ -61,8 +65,8 @@ func startWorker(t *testing.T, cmd *exec.Cmd, worker string) string {
 	deadline := time.Now().Add(3 * time.Minute)
 	for time.Now().Before(deadline) {
 		select {
-		case err := <-exited:
-			t.Fatalf("the worker exited before it listened: %v\n%s", err, output.String())
+		case <-exited:
+			t.Fatalf("the worker exited before it listened: %v\n%s", waited, output.String())
 		default:
 		}
 		if conn, err := net.DialTimeout("tcp", address, 200*time.Millisecond); err == nil {
@@ -135,6 +139,14 @@ func TestTheGeneratedNodeWorkerServesATaskWithItsWorkersOnStartAndMiddleware(t *
 
 func TestTheGeneratedGoWorkerServesATaskWithItsWorkersOnStartAndMiddleware(t *testing.T) {
 	url := servedFixture(t, "go")
+
+	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
+	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
+}
+
+func TestARustBinaryInTheWorkerRoleServesATaskWithItsWorkersOnStartAndMiddlewareAndNeverEntersMain(t *testing.T) {
+	needsCargo(t)
+	url := servedFixture(t, "rust")
 
 	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
 	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
