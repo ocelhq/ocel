@@ -11,7 +11,7 @@ import (
 	"ocel.dev"
 )
 
-type shownRun struct {
+type runText struct {
 	ID      string `json:"id"`
 	Task    string `json:"task"`
 	Status  string `json:"status"`
@@ -74,7 +74,7 @@ func main() {
 			writeRefusal(w, err)
 			return
 		}
-		writeAnswer(w, http.StatusOK, shownRun{
+		writeAnswer(w, http.StatusOK, runText{
 			ID: run.ID, Task: run.Task, Status: string(run.Status),
 			Payload: string(run.Payload), Output: string(run.Output), Error: run.Error,
 		})
@@ -86,9 +86,9 @@ func main() {
 			writeRefusal(w, err)
 			return
 		}
-		seen := []infra.Seen{}
+		seen := []infra.Sighting{}
 		for _, run := range page.Runs {
-			var one infra.Seen
+			var one infra.Sighting
 			if err := json.Unmarshal(run.Output, &one); err != nil {
 				writeRefusal(w, err)
 				return

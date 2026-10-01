@@ -8,7 +8,7 @@ import (
 	"ocel.dev"
 )
 
-type Seen struct {
+type Sighting struct {
 	Kind    string `json:"kind"`
 	Name    string `json:"name"`
 	Topic   string `json:"topic"`
@@ -17,7 +17,7 @@ type Seen struct {
 
 var errNoRun = errors.New("the handler was handed a context without a run")
 
-var SeenTask = ocel.Task("seen", func(_ context.Context, seen Seen) (Seen, error) {
+var SeenTask = ocel.Task("seen", func(_ context.Context, seen Sighting) (Sighting, error) {
 	return seen, nil
 })
 
@@ -29,7 +29,7 @@ func recordSeen(ctx context.Context, tag string, payload json.RawMessage) error 
 	if tag == "" {
 		tag = run.ID
 	}
-	seen := Seen{Kind: string(run.Kind), Name: run.Name, Topic: run.Topic, Payload: string(payload)}
+	seen := Sighting{Kind: string(run.Kind), Name: run.Name, Topic: run.Topic, Payload: string(payload)}
 	_, err := SeenTask.Trigger(ctx, seen, ocel.Tags(tag))
 	return err
 }
