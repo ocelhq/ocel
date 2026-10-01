@@ -46,7 +46,10 @@ aws)
     ENDPOINT_VAR=OCEL_FLOCI_ENDPOINT
     MOUNTS_DOCKER=yes
     READY_PATH=/_localstack/health
-    READY_BODY='"(cloudformation|s3|dynamodb|ssm|iam)":'
+    READY_BODIES=()
+    for service in cloudformation s3 dynamodb ssm iam lambda sqs sns scheduler; do
+        READY_BODIES+=("\"$service\": *\"running\"")
+    done
     EXTRA_ARGS=(-p "127.0.0.1:6379-6399:6379-6399" -e FLOCI_HOSTNAME=localhost)
     ;;
 gcp)
@@ -55,7 +58,7 @@ gcp)
     ENDPOINT_VAR=OCEL_FLOCI_GCP_ENDPOINT
     MOUNTS_DOCKER=yes
     READY_PATH="/storage/v1/b?project=$GCP_PROJECT"
-    READY_BODY='"kind": *"storage#buckets"'
+    READY_BODIES=('"kind": *"storage#buckets"')
     EXTRA_ARGS=()
     ;;
 *) die "unknown cloud: $CLOUD (expected aws or gcp)" ;;
@@ -72,7 +75,10 @@ endpoint_of() {
 answering() {
     local body
     body=$(curl -sf --max-time 5 "$1$READY_PATH") || return 1
-    grep -qE "$READY_BODY" <<<"$body"
+    local pattern
+    for pattern in "${READY_BODIES[@]}"; do
+        grep -qE "$pattern" <<<"$body" || return 1
+    done
 }
 
 wait_ready() {
