@@ -16,13 +16,19 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
+	"github.com/ocelhq/ocel/cli/internal/devresources/docker/dockertest"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
+	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
+	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 )
 
 type fakeResources struct {
@@ -212,6 +218,33 @@ func TestAnAppRouteAnswersOnlyTheAppTokenTheChildWasHanded(t *testing.T) {
 			t.Fatalf("env SECRET = %q, want %q", got, "hunter2")
 		}
 	})
+}
+
+func TestTheTaskAndTopicServicesOfTheDevResourcesAnswerOnlyTheAppToken(t *testing.T) {
+	t.Parallel()
+
+	resources := devresources.New("shop", devresources.Options{Open: (&dockertest.Engine{}).OpenFunc(), StateDir: t.TempDir()})
+	url := serve(t, New("http://127.0.0.1:0", resources))
+
+	for name, client := range map[string]*http.Client{"no token": bareClient, "the discovery token": testClient} {
+		_, err := taskv1connect.NewTaskServiceClient(client, url).Trigger(context.Background(), &taskv1.TriggerRequest{Task: "greet"})
+		if connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Errorf("Trigger with %s = %v, want permission denied", name, err)
+		}
+		_, err = topicv1connect.NewTopicServiceClient(client, url).Send(context.Background(), &topicv1.SendRequest{Topic: "orders"})
+		if connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Errorf("Send with %s = %v, want permission denied", name, err)
+		}
+	}
+
+	_, err := taskv1connect.NewTaskServiceClient(appClient, url).Trigger(context.Background(), &taskv1.TriggerRequest{Task: "greet"})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("Trigger with the app token = %v, want it past the guard and refused for want of a declared task", err)
+	}
+	_, err = topicv1connect.NewTopicServiceClient(appClient, url).Send(context.Background(), &topicv1.SendRequest{Topic: "orders"})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("Send with the app token = %v, want it past the guard and refused for want of a declared topic", err)
+	}
 }
 
 func TestTheSyncResultIncludesTheTokenTheAppReachesTheDevServerWith(t *testing.T) {
