@@ -37,22 +37,22 @@ func DeploymentOf(manifest *contractv1.Manifest, workerURLs map[string]string) D
 	return deployment
 }
 
-type consumerRef struct {
+type deployedConsumer struct {
 	topicName string
 	topic     *contractv1.ManifestTopic
 	consumer  *contractv1.ManifestConsumer
 	queue     string
 }
 
-func (d Deployment) consumers() map[string]consumerRef {
-	refs := map[string]consumerRef{}
+func (d Deployment) consumers() map[string]deployedConsumer {
+	deployedConsumers := map[string]deployedConsumer{}
 	for name, topic := range d.Topics {
 		for _, consumer := range topic.GetConsumers() {
 			queue := queueName(name, consumer.GetName())
-			refs[queue] = consumerRef{topicName: name, topic: topic, consumer: consumer, queue: queue}
+			deployedConsumers[queue] = deployedConsumer{topicName: name, topic: topic, consumer: consumer, queue: queue}
 		}
 	}
-	return refs
+	return deployedConsumers
 }
 
 func isTask(topic *contractv1.ManifestTopic) bool {
@@ -70,11 +70,11 @@ func queueName(topic, consumer string) string {
 }
 
 func (e *Engine) Apply(ctx context.Context, deployment Deployment) error {
-	for queue, ref := range deployment.consumers() {
+	for queue, deployed := range deployment.consumers() {
 		if _, err := e.pool.Exec(ctx, "SELECT pgmq.create($1)", queue); err != nil {
 			return fmt.Errorf("create queue %s: %w", queue, err)
 		}
-		if !ref.topic.GetOrdered() {
+		if !deployed.topic.GetOrdered() {
 			continue
 		}
 		if _, err := e.pool.Exec(ctx, "SELECT pgmq.create_fifo_index($1)", queue); err != nil {

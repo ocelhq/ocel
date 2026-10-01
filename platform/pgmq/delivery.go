@@ -63,29 +63,29 @@ type result struct {
 	reason  string
 }
 
-func (e *Engine) deliver(ctx context.Context, q *queueState, ref consumerRef, worker Worker, messages []message) {
+func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployedConsumer, worker Worker, messages []message) {
 	var claims []claim
-	for _, m := range messages {
-		c, ok, err := e.claim(ctx, q, m)
+	for _, msg := range messages {
+		claimed, ok, err := e.claim(ctx, loop, msg)
 		if err != nil {
 			if ctx.Err() == nil {
-				slog.Warn("claim a run", "queue", q.name, "execution", m.body.Execution, "error", err)
+				slog.Warn("claim a run", "queue", loop.name, "execution", msg.body.Execution, "error", err)
 			}
-			q.drop(m.id)
+			loop.drop(msg.id)
 			continue
 		}
 		if !ok {
-			q.drop(m.id)
+			loop.drop(msg.id)
 			continue
 		}
-		claims = append(claims, c)
+		claims = append(claims, claimed)
 	}
 	if len(claims) == 0 {
 		return
 	}
 	attemptCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
-	if maxDuration := ref.consumer.GetMaxDuration().AsDuration(); maxDuration > 0 {
+	if maxDuration := deployed.consumer.GetMaxDuration().AsDuration(); maxDuration > 0 {
 		var stop context.CancelFunc
 		attemptCtx, stop = context.WithTimeoutCause(attemptCtx, maxDuration, errTimedOut)
 		defer stop()
@@ -94,12 +94,12 @@ func (e *Engine) deliver(ctx context.Context, q *queueState, ref consumerRef, wo
 		e.track(claims[0].execution, cancel)
 		defer e.untrack(claims[0].execution)
 	}
-	res := e.post(ctx, attemptCtx, worker.URL, envelopeOf(ref, claims, ref.consumer.GetBatch().GetSize() > 0))
-	for _, c := range claims {
-		if err := e.finish(ctx, q, ref, c, res); err != nil && ctx.Err() == nil {
-			slog.Warn("record an attempt's outcome", "queue", q.name, "execution", c.execution, "error", err)
+	res := e.post(ctx, attemptCtx, worker.URL, envelopeOf(deployed, claims, deployed.consumer.GetBatch().GetSize() > 0))
+	for _, claimed := range claims {
+		loop.drop(claimed.msg.id)
+		if err := e.finish(ctx, loop, deployed, claimed, res); err != nil && ctx.Err() == nil {
+			slog.Warn("record an attempt's outcome", "queue", loop.name, "execution", claimed.execution, "error", err)
 		}
-		q.drop(c.msg.id)
 	}
 }
 
@@ -124,8 +124,8 @@ func (e *Engine) stopInFlight(execution string) {
 	}
 }
 
-func (e *Engine) claim(ctx context.Context, q *queueState, m message) (claim, bool, error) {
-	c := claim{msg: m, execution: m.body.Execution}
+func (e *Engine) claim(ctx context.Context, loop *queueLoop, msg message) (claim, bool, error) {
+	claimed := claim{msg: msg, execution: msg.body.Execution}
 	var first *time.Time
 	err := e.pool.QueryRow(ctx, `
 		UPDATE ocel.runs SET status = 'executing', attempts = attempts + 1, error = '',
@@ -133,63 +133,63 @@ func (e *Engine) claim(ctx context.Context, q *queueState, m message) (claim, bo
 		WHERE execution = $1 AND status IN ('queued', 'delayed', 'executing')
 			AND (expires_at IS NULL OR expires_at > clock_timestamp() OR attempts > 0)
 		RETURNING message_id, published_at, attempts, max_attempts, started_at, COALESCE(payload, `+stagedPayloadSQL+`)`,
-		c.execution,
-	).Scan(&c.messageID, &c.publishedAt, &c.attempt, &c.maxAttempts, &first, &c.payload)
+		claimed.execution,
+	).Scan(&claimed.messageID, &claimed.publishedAt, &claimed.attempt, &claimed.maxAttempts, &first, &claimed.payload)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return claim{}, false, e.release(ctx, q.name, m)
+		return claim{}, false, e.discard(ctx, loop.name, msg)
 	}
 	if err != nil {
 		return claim{}, false, err
 	}
-	c.firstAttemptedAt = timeOf(first)
-	return c, true, nil
+	claimed.firstAttemptedAt = timeOf(first)
+	return claimed, true, nil
 }
 
-func (e *Engine) release(ctx context.Context, queue string, m message) error {
+func (e *Engine) discard(ctx context.Context, queue string, msg message) error {
 	return e.inTx(ctx, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `
 			UPDATE ocel.runs SET status = 'expired', finished_at = clock_timestamp(), revision = `+newRevisionSQL+`
 			WHERE execution = $1 AND status IN ('queued', 'delayed') AND attempts = 0 AND expires_at <= clock_timestamp()`,
-			m.body.Execution); err != nil {
+			msg.body.Execution); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, "SELECT pgmq.delete($1, $2::bigint)", queue, m.id)
+		_, err := tx.Exec(ctx, "SELECT pgmq.delete($1, $2::bigint)", queue, msg.id)
 		return err
 	})
 }
 
-func envelopeOf(ref consumerRef, claims []claim, batch bool) *topicv1.Envelope {
+func envelopeOf(deployed deployedConsumer, claims []claim, batch bool) *topicv1.Envelope {
 	envelope := &topicv1.Envelope{
 		V:        envelopeVersion,
-		Topic:    ref.topicName,
-		Consumer: ref.consumer.GetName(),
-		Schema:   schemaOf(ref.topic.GetSchema()),
+		Topic:    deployed.topicName,
+		Consumer: deployed.consumer.GetName(),
+		Schema:   schemaOf(deployed.topic.GetSchema()),
 	}
 	if !batch {
-		c := claims[0]
-		envelope.Execution = c.execution
-		envelope.Message = messageOf(c)
-		envelope.Attempt = attemptOf(c)
-		envelope.Payload = valueOf(c.payload)
+		claimed := claims[0]
+		envelope.Execution = claimed.execution
+		envelope.Message = messageOf(claimed)
+		envelope.Attempt = attemptOf(claimed)
+		envelope.Payload = valueOf(claimed.payload)
 		return envelope
 	}
-	for _, c := range claims {
+	for _, claimed := range claims {
 		envelope.Messages = append(envelope.Messages, &topicv1.Delivery{
-			Execution: c.execution,
-			Message:   messageOf(c),
-			Attempt:   attemptOf(c),
-			Payload:   valueOf(c.payload),
+			Execution: claimed.execution,
+			Message:   messageOf(claimed),
+			Attempt:   attemptOf(claimed),
+			Payload:   valueOf(claimed.payload),
 		})
 	}
 	return envelope
 }
 
-func messageOf(c claim) *topicv1.Message {
-	return &topicv1.Message{Id: c.messageID, PublishedAt: timestampOf(c.publishedAt)}
+func messageOf(claimed claim) *topicv1.Message {
+	return &topicv1.Message{Id: claimed.messageID, PublishedAt: timestampOf(claimed.publishedAt)}
 }
 
-func attemptOf(c claim) *topicv1.Attempt {
-	return &topicv1.Attempt{Number: int32(c.attempt), Of: int32(c.maxAttempts), FirstAttemptedAt: timestampOf(c.firstAttemptedAt)}
+func attemptOf(claimed claim) *topicv1.Attempt {
+	return &topicv1.Attempt{Number: int32(claimed.attempt), Of: int32(claimed.maxAttempts), FirstAttemptedAt: timestampOf(claimed.firstAttemptedAt)}
 }
 
 func schemaOf(schema string) string {
@@ -254,33 +254,33 @@ func interruption(ctx, attemptCtx context.Context, err error) result {
 	return result{outcome: failed, reason: fmt.Sprintf("reach the worker: %v", err)}
 }
 
-func (e *Engine) finish(ctx context.Context, q *queueState, ref consumerRef, c claim, res result) error {
+func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedConsumer, claimed claim, res result) error {
 	switch res.outcome {
 	case canceled, interrupted:
 		return nil
 	case succeeded:
-		return e.settle(ctx, q.name, c, "completed", res.output, "")
+		return e.settle(ctx, loop.name, claimed, "completed", res.output, "")
 	case aborted:
-		return e.settle(ctx, q.name, c, "failed", nil, res.reason)
+		return e.settle(ctx, loop.name, claimed, "failed", nil, res.reason)
 	case timedOut:
-		return e.settle(ctx, q.name, c, "timed-out", nil, res.reason)
+		return e.settle(ctx, loop.name, claimed, "timed-out", nil, res.reason)
 	}
-	if c.attempt >= c.maxAttempts {
-		return e.settle(ctx, q.name, c, "failed", nil, res.reason)
+	if claimed.attempt >= claimed.maxAttempts {
+		return e.settle(ctx, loop.name, claimed, "failed", nil, res.reason)
 	}
-	retryAt := time.Now().Add(retryPolicyOf(ref).backoff(c.attempt, jitter()))
+	retryAt := time.Now().Add(retryPolicyOf(deployed).backoff(claimed.attempt, jitter()))
 	return e.inTx(ctx, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = 'queued', error = $2, revision = `+newRevisionSQL+`
-			WHERE execution = $1 AND status = 'executing'`, c.execution, res.reason)
+			WHERE execution = $1 AND status = 'executing'`, claimed.execution, res.reason)
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}
-		_, err = tx.Exec(ctx, "SELECT pgmq.set_vt($1, $2::bigint, $3::timestamptz)", q.name, c.msg.id, retryAt)
+		_, err = tx.Exec(ctx, "SELECT pgmq.set_vt($1, $2::bigint, $3::timestamptz)", loop.name, claimed.msg.id, retryAt)
 		return err
 	})
 }
 
-func (e *Engine) settle(ctx context.Context, queue string, c claim, status string, output json.RawMessage, reason string) error {
+func (e *Engine) settle(ctx context.Context, queue string, claimed claim, status string, output json.RawMessage, reason string) error {
 	return e.inTx(ctx, func(tx pgx.Tx) error {
 		payload := "payload"
 		if status != "completed" {
@@ -288,10 +288,10 @@ func (e *Engine) settle(ctx context.Context, queue string, c claim, status strin
 		}
 		if _, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = $2, output = $3, error = $4, payload = `+payload+`,
 			finished_at = clock_timestamp(), revision = `+newRevisionSQL+`
-			WHERE execution = $1 AND status = 'executing'`, c.execution, status, jsonOrNull(output), reason); err != nil {
+			WHERE execution = $1 AND status = 'executing'`, claimed.execution, status, jsonOrNull(output), reason); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, "SELECT pgmq.delete($1, $2::bigint)", queue, c.msg.id)
+		_, err := tx.Exec(ctx, "SELECT pgmq.delete($1, $2::bigint)", queue, claimed.msg.id)
 		return err
 	})
 }

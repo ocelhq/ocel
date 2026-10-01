@@ -67,26 +67,26 @@ func (e *Engine) fireDueSchedules(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		type due struct {
+		type dueSchedule struct {
 			topic, cron string
 			at          time.Time
 		}
-		schedules, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (due, error) {
-			var d due
-			return d, r.Scan(&d.topic, &d.cron, &d.at)
+		schedules, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (dueSchedule, error) {
+			var entry dueSchedule
+			return entry, row.Scan(&entry.topic, &entry.cron, &entry.at)
 		})
 		if err != nil {
 			return err
 		}
-		for _, d := range schedules {
-			topic, deployed := deployment.Topics[d.topic]
+		for _, entry := range schedules {
+			topic, deployed := deployment.Topics[entry.topic]
 			if !deployed {
 				continue
 			}
-			if err := e.fireSchedule(ctx, tx, d.topic, topic, d.cron, d.at); err != nil {
+			if err := e.fireSchedule(ctx, tx, entry.topic, topic, entry.cron, entry.at); err != nil {
 				return err
 			}
-			fired = append(fired, d.topic)
+			fired = append(fired, entry.topic)
 		}
 		return nil
 	})

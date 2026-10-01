@@ -18,9 +18,9 @@ type retryPolicy struct {
 	minDelay, maxDelay time.Duration
 }
 
-func retryPolicyOf(ref consumerRef) retryPolicy {
+func retryPolicyOf(deployed deployedConsumer) retryPolicy {
 	policy := retryPolicy{maxAttempts: defaultMaxAttempts, minDelay: defaultMinDelay, maxDelay: defaultMaxDelay}
-	for _, declared := range []*resourcesv1.RetryPolicy{ref.topic.GetRetry(), ref.consumer.GetRetry()} {
+	for _, declared := range []*resourcesv1.RetryPolicy{deployed.topic.GetRetry(), deployed.consumer.GetRetry()} {
 		if declared == nil {
 			continue
 		}
@@ -38,19 +38,19 @@ func retryPolicyOf(ref consumerRef) retryPolicy {
 	return policy
 }
 
-func (p retryPolicy) attemptsFor(requested int32) int {
-	if requested > 0 && int(requested) < p.maxAttempts {
+func (toPublish retryPolicy) attemptsFor(requested int32) int {
+	if requested > 0 && int(requested) < toPublish.maxAttempts {
 		return int(requested)
 	}
-	return p.maxAttempts
+	return toPublish.maxAttempts
 }
 
-func (p retryPolicy) backoff(attempt int, random float64) time.Duration {
-	delay := p.minDelay
-	for i := 1; i < attempt && delay < p.maxDelay; i++ {
+func (toPublish retryPolicy) backoff(attempt int, random float64) time.Duration {
+	delay := toPublish.minDelay
+	for i := 1; i < attempt && delay < toPublish.maxDelay; i++ {
 		delay *= 2
 	}
-	delay = min(delay, p.maxDelay)
+	delay = min(delay, toPublish.maxDelay)
 	return delay/2 + time.Duration(random*float64(delay/2))
 }
 

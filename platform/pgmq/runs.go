@@ -161,7 +161,7 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 		return nil, err
 	}
 	now := time.Now()
-	p := publication{
+	toPublish := publication{
 		topicName:   task,
 		topic:       topic,
 		messageID:   newMessageID(now),
@@ -176,7 +176,7 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 	}
 	var executions []string
 	err = t.engine.inTx(ctx, func(tx pgx.Tx) error {
-		executions, err = t.engine.publish(ctx, tx, p)
+		executions, err = t.engine.publish(ctx, tx, toPublish)
 		return err
 	})
 	if err != nil {

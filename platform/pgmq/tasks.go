@@ -57,7 +57,7 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 	if err := refuseNonJSON(payload); err != nil {
 		return "", err
 	}
-	p := publication{
+	toPublish := publication{
 		topicName:   name,
 		topic:       topic,
 		messageID:   newMessageID(now),
@@ -71,19 +71,19 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 		ttl:         topic.GetTtl().AsDuration(),
 	}
 	if options.GetDueAt() != nil {
-		p.dueAt = options.GetDueAt().AsTime()
+		toPublish.dueAt = options.GetDueAt().AsTime()
 	}
 	if options.GetTtl() != nil {
-		p.ttl = options.GetTtl().AsDuration()
+		toPublish.ttl = options.GetTtl().AsDuration()
 	}
 	if options.GetMetadata() != nil {
 		metadata, err := protojson.Marshal(options.GetMetadata())
 		if err != nil {
 			return "", err
 		}
-		p.metadata = metadata
+		toPublish.metadata = metadata
 	}
-	execution := executionOf(p.messageID, topic.GetConsumers()[0].GetName())
+	execution := executionOf(toPublish.messageID, topic.GetConsumers()[0].GetName())
 	if key := options.GetIdempotencyKey(); key != "" {
 		life := defaultIdempotencyKeyLife
 		if options.GetIdempotencyKeyTtl() != nil {
@@ -95,13 +95,13 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 		}
 	}
 	if debounce := options.GetDebounce(); debounce != nil {
-		p.dueAt = now.Add(debounce.GetDelay().AsDuration())
-		pending, err := t.debounce(ctx, tx, runRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, p.dueAt))
+		toPublish.dueAt = now.Add(debounce.GetDelay().AsDuration())
+		pending, err := t.debounce(ctx, tx, runRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt))
 		if err != nil || pending != "" {
 			return pending, err
 		}
 	}
-	if _, err := t.engine.publish(ctx, tx, p); err != nil {
+	if _, err := t.engine.publish(ctx, tx, toPublish); err != nil {
 		return "", err
 	}
 	return execution, nil
