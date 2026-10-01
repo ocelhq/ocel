@@ -13,6 +13,7 @@ import (
 // DeadLetters are the messages one consumer of a topic gave up on, kept until
 // they are redriven or purged.
 type DeadLetters struct {
+	topic    string
 	consumer string
 	connect  func(access string) (*boundResource[topicv1connect.TopicServiceClient], error)
 }
@@ -63,7 +64,7 @@ func (d *DeadLetters) List(ctx context.Context, opts ...DeadLetterListOption) (*
 		opt.applyDeadLetterList(&settings)
 	}
 	res, err := topic.client.ListDeadLetters(ctx, &topicv1.ListDeadLettersRequest{
-		Topic:    topic.name,
+		Topic:    d.topic,
 		Consumer: d.consumer,
 		Cursor:   settings.cursor,
 		Limit:    settings.limit,
@@ -90,7 +91,7 @@ func (d *DeadLetters) Redrive(ctx context.Context, executions ...string) (int64,
 		return 0, err
 	}
 	res, err := topic.client.RedriveDeadLetters(ctx, &topicv1.RedriveDeadLettersRequest{
-		Topic:      topic.name,
+		Topic:      d.topic,
 		Consumer:   d.consumer,
 		Executions: executions,
 	})
@@ -108,7 +109,7 @@ func (d *DeadLetters) Purge(ctx context.Context, executions ...string) (int64, e
 		return 0, err
 	}
 	res, err := topic.client.PurgeDeadLetters(ctx, &topicv1.PurgeDeadLettersRequest{
-		Topic:      topic.name,
+		Topic:      d.topic,
 		Consumer:   d.consumer,
 		Executions: executions,
 	})
@@ -125,7 +126,7 @@ func (d *DeadLetters) Count(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	res, err := topic.client.CountDeadLetters(ctx, &topicv1.CountDeadLettersRequest{
-		Topic:    topic.name,
+		Topic:    d.topic,
 		Consumer: d.consumer,
 	})
 	if err != nil {

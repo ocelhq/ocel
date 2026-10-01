@@ -16,10 +16,7 @@ describe("a consumer's dead letters", () => {
 
   beforeEach(async () => {
     vi.stubEnv("OCEL_PHASE", "");
-    vi.stubEnv(
-      "OCEL_RESOURCE_TOPIC_orders",
-      JSON.stringify({ name: "orders", topic: { topic: "shop-prod-orders" } }),
-    );
+    vi.stubEnv("OCEL_RESOURCE_TOPIC_orders", JSON.stringify({ name: "orders", topic: {} }));
     requests.length = 0;
     proxy = await serveRuntimeProxy((router) =>
       router.service(TopicService, {
@@ -63,7 +60,7 @@ describe("a consumer's dead letters", () => {
     await proxy.close();
   });
 
-  it("lists a page of dead letters of the consumer on the bound topic", async () => {
+  it("lists a page of dead letters of the consumer on the topic by its declared name", async () => {
     const page = await topic("orders").deadLetter("bill").list({ cursor: "c", limit: 10 });
 
     expect(page).toEqual({
@@ -80,7 +77,7 @@ describe("a consumer's dead letters", () => {
       ],
       nextCursor: "",
     });
-    expect(requests).toEqual([["list", "shop-prod-orders", "bill", "c", 10]]);
+    expect(requests).toEqual([["list", "orders", "bill", "c", 10]]);
   });
 
   it("redrives, purges and counts, answering how many", async () => {
@@ -92,9 +89,9 @@ describe("a consumer's dead letters", () => {
     expect(await letters.purge(["e1"])).toBe(1);
     expect(await letters.count()).toBe(4);
     expect(requests).toEqual([
-      ["redrive", "shop-prod-orders", "bill", []],
-      ["purge", "shop-prod-orders", "bill", ["e1"]],
-      ["count", "shop-prod-orders", "bill"],
+      ["redrive", "orders", "bill", []],
+      ["purge", "orders", "bill", ["e1"]],
+      ["count", "orders", "bill"],
     ]);
   });
 });

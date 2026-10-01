@@ -512,7 +512,6 @@ func (x *BucketProperties) GetSecretAccessKey() string {
 
 type TopicProperties struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -547,16 +546,8 @@ func (*TopicProperties) Descriptor() ([]byte, []int) {
 	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *TopicProperties) GetTopic() string {
-	if x != nil {
-		return x.Topic
-	}
-	return ""
-}
-
 type TaskProperties struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Task          string                 `protobuf:"bytes,1,opt,name=task,proto3" json:"task,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -589,13 +580,6 @@ func (x *TaskProperties) ProtoReflect() protoreflect.Message {
 // Deprecated: Use TaskProperties.ProtoReflect.Descriptor instead.
 func (*TaskProperties) Descriptor() ([]byte, []int) {
 	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *TaskProperties) GetTask() string {
-	if x != nil {
-		return x.Task
-	}
-	return ""
 }
 
 type KvProperties struct {
@@ -838,11 +822,9 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"path_style\x18\x06 \x01(\bR\tpathStyle\x12\x16\n" +
 	"\x06prefix\x18\a \x01(\tR\x06prefix\x12\"\n" +
 	"\raccess_key_id\x18\b \x01(\tR\vaccessKeyId\x12/\n" +
-	"\x11secret_access_key\x18\t \x01(\tB\x03\x80\x01\x01R\x0fsecretAccessKey\"'\n" +
-	"\x0fTopicProperties\x12\x14\n" +
-	"\x05topic\x18\x01 \x01(\tR\x05topic\"$\n" +
-	"\x0eTaskProperties\x12\x12\n" +
-	"\x04task\x18\x01 \x01(\tR\x04task\"\x85\x01\n" +
+	"\x11secret_access_key\x18\t \x01(\tB\x03\x80\x01\x01R\x0fsecretAccessKey\"\x11\n" +
+	"\x0fTopicProperties\"\x10\n" +
+	"\x0eTaskProperties\"\x85\x01\n" +
 	"\fKvProperties\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +

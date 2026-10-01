@@ -1620,20 +1620,13 @@ pub const __BUCKET_PROPERTIES_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = :
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(default)]
 pub struct TopicProperties {
-    /// Field 1: `topic`
-    #[serde(
-        rename = "topic",
-        with = "::buffa::json_helpers::proto_string",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
-    )]
-    pub topic: ::buffa::alloc::string::String,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
 }
 impl ::core::fmt::Debug for TopicProperties {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        f.debug_struct("TopicProperties").field("topic", &self.topic).finish()
+        f.debug_struct("TopicProperties").finish()
     }
 }
 impl TopicProperties {
@@ -1663,9 +1656,6 @@ impl ::buffa::Message for TopicProperties {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
         let mut size = 0u64;
-        if !self.topic.is_empty() {
-            size += 1u64 + ::buffa::types::string_encoded_len(&self.topic) as u64;
-        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -1676,9 +1666,6 @@ impl ::buffa::Message for TopicProperties {
     ) {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
-        if !self.topic.is_empty() {
-            ::buffa::types::put_string_field(1u32, &self.topic, buf);
-        }
         self.__buffa_unknown_fields.write_to(buf);
     }
     fn merge_field(
@@ -1692,13 +1679,6 @@ impl ::buffa::Message for TopicProperties {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
         match tag.field_number() {
-            1u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                ::buffa::types::merge_string(&mut self.topic, buf)?;
-            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -1707,7 +1687,6 @@ impl ::buffa::Message for TopicProperties {
         ::core::result::Result::Ok(())
     }
     fn clear(&mut self) {
-        self.topic.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -1744,20 +1723,13 @@ pub const __TOPIC_PROPERTIES_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(default)]
 pub struct TaskProperties {
-    /// Field 1: `task`
-    #[serde(
-        rename = "task",
-        with = "::buffa::json_helpers::proto_string",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
-    )]
-    pub task: ::buffa::alloc::string::String,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
 }
 impl ::core::fmt::Debug for TaskProperties {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        f.debug_struct("TaskProperties").field("task", &self.task).finish()
+        f.debug_struct("TaskProperties").finish()
     }
 }
 impl TaskProperties {
@@ -1787,9 +1759,6 @@ impl ::buffa::Message for TaskProperties {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
         let mut size = 0u64;
-        if !self.task.is_empty() {
-            size += 1u64 + ::buffa::types::string_encoded_len(&self.task) as u64;
-        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -1800,9 +1769,6 @@ impl ::buffa::Message for TaskProperties {
     ) {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
-        if !self.task.is_empty() {
-            ::buffa::types::put_string_field(1u32, &self.task, buf);
-        }
         self.__buffa_unknown_fields.write_to(buf);
     }
     fn merge_field(
@@ -1816,13 +1782,6 @@ impl ::buffa::Message for TaskProperties {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
         match tag.field_number() {
-            1u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                ::buffa::types::merge_string(&mut self.task, buf)?;
-            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -1831,7 +1790,6 @@ impl ::buffa::Message for TaskProperties {
         ::core::result::Result::Ok(())
     }
     fn clear(&mut self) {
-        self.task.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -4208,8 +4166,6 @@ pub mod __buffa {
         }
         #[derive(Clone, Debug, Default)]
         pub struct TopicPropertiesView<'a> {
-            /// Field 1: `topic`
-            pub topic: &'a str,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::buffa::MessageView<'a> for TopicPropertiesView<'a> {
@@ -4248,13 +4204,6 @@ pub mod __buffa {
                 let view = self;
                 let mut cur = cur;
                 match tag.field_number() {
-                    1u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::LengthDelimited,
-                        )?;
-                        view.topic = ::buffa::types::borrow_str(&mut cur)?;
-                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                         let span_len = before_tag.len() - cur.len();
@@ -4284,7 +4233,6 @@ pub mod __buffa {
                 use ::buffa::alloc::string::ToString as _;
                 let _ = __buffa_src;
                 ::core::result::Result::Ok(super::super::TopicProperties {
-                    topic: self.topic.to_string(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -4299,10 +4247,6 @@ pub mod __buffa {
                 #[allow(unused_imports)]
                 use ::buffa::Enumeration as _;
                 let mut size = 0u64;
-                if !self.topic.is_empty() {
-                    size
-                        += 1u64 + ::buffa::types::string_encoded_len(&self.topic) as u64;
-                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -4314,9 +4258,6 @@ pub mod __buffa {
             ) {
                 #[allow(unused_imports)]
                 use ::buffa::Enumeration as _;
-                if !self.topic.is_empty() {
-                    ::buffa::types::put_string_field(1u32, &self.topic, buf);
-                }
                 self.__buffa_unknown_fields.write_to(buf);
             }
         }
@@ -4338,9 +4279,6 @@ pub mod __buffa {
             ) -> ::core::result::Result<__S::Ok, __S::Error> {
                 use ::serde::ser::SerializeMap as _;
                 let mut __map = __s.serialize_map(::core::option::Option::None)?;
-                if !::buffa::json_helpers::skip_if::is_empty_str(self.topic) {
-                    __map.serialize_entry("topic", self.topic)?;
-                }
                 __map.end()
             }
         }
@@ -4436,11 +4374,6 @@ pub mod __buffa {
             pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
                 self.0.into_bytes()
             }
-            /// Field 1: `topic`
-            #[must_use]
-            pub fn topic(&self) -> &'_ str {
-                self.0.reborrow().topic
-            }
         }
         impl ::core::convert::From<::buffa::OwnedView<TopicPropertiesView<'static>>>
         for TopicPropertiesOwnedView {
@@ -4474,8 +4407,6 @@ pub mod __buffa {
         }
         #[derive(Clone, Debug, Default)]
         pub struct TaskPropertiesView<'a> {
-            /// Field 1: `task`
-            pub task: &'a str,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::buffa::MessageView<'a> for TaskPropertiesView<'a> {
@@ -4514,13 +4445,6 @@ pub mod __buffa {
                 let view = self;
                 let mut cur = cur;
                 match tag.field_number() {
-                    1u32 => {
-                        ::buffa::encoding::check_wire_type(
-                            tag,
-                            ::buffa::encoding::WireType::LengthDelimited,
-                        )?;
-                        view.task = ::buffa::types::borrow_str(&mut cur)?;
-                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                         let span_len = before_tag.len() - cur.len();
@@ -4550,7 +4474,6 @@ pub mod __buffa {
                 use ::buffa::alloc::string::ToString as _;
                 let _ = __buffa_src;
                 ::core::result::Result::Ok(super::super::TaskProperties {
-                    task: self.task.to_string(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -4565,9 +4488,6 @@ pub mod __buffa {
                 #[allow(unused_imports)]
                 use ::buffa::Enumeration as _;
                 let mut size = 0u64;
-                if !self.task.is_empty() {
-                    size += 1u64 + ::buffa::types::string_encoded_len(&self.task) as u64;
-                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -4579,9 +4499,6 @@ pub mod __buffa {
             ) {
                 #[allow(unused_imports)]
                 use ::buffa::Enumeration as _;
-                if !self.task.is_empty() {
-                    ::buffa::types::put_string_field(1u32, &self.task, buf);
-                }
                 self.__buffa_unknown_fields.write_to(buf);
             }
         }
@@ -4603,9 +4520,6 @@ pub mod __buffa {
             ) -> ::core::result::Result<__S::Ok, __S::Error> {
                 use ::serde::ser::SerializeMap as _;
                 let mut __map = __s.serialize_map(::core::option::Option::None)?;
-                if !::buffa::json_helpers::skip_if::is_empty_str(self.task) {
-                    __map.serialize_entry("task", self.task)?;
-                }
                 __map.end()
             }
         }
@@ -4700,11 +4614,6 @@ pub mod __buffa {
             #[must_use]
             pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
                 self.0.into_bytes()
-            }
-            /// Field 1: `task`
-            #[must_use]
-            pub fn task(&self) -> &'_ str {
-                self.0.reborrow().task
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<TaskPropertiesView<'static>>>

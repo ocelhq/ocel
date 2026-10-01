@@ -64,13 +64,9 @@ message BucketProperties {
   string secret_access_key = 9 [debug_redact = true];
 }
 
-message TopicProperties {
-  string topic = 1;
-}
+message TopicProperties {}
 
-message TaskProperties {
-  string task = 1;
-}
+message TaskProperties {}
 
 message KvProperties {
   string host = 1;

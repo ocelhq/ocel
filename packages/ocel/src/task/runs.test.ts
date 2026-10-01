@@ -23,7 +23,7 @@ const { runs, task } = await import("./index.js");
 
 const storedRun = create(RunSchema, {
   id: "run_1",
-  task: "shop-prod-resize-image",
+  task: "resize-image",
   status: RunStatus.COMPLETED,
   payload: create(ValueSchema, {
     kind: {
@@ -49,7 +49,7 @@ describe("runs", () => {
     vi.stubEnv("OCEL_PHASE", "");
     vi.stubEnv(
       "OCEL_RESOURCE_TASK_resize-image",
-      JSON.stringify({ name: "resize-image", task: { task: "shop-prod-resize-image" } }),
+      JSON.stringify({ name: "resize-image", task: {} }),
     );
     lists.length = 0;
     reschedules.length = 0;
@@ -88,7 +88,7 @@ describe("runs", () => {
   it("retrieves a run as a record with its JSON decoded and its times as dates", async () => {
     expect(await runs.retrieve("run_1")).toEqual({
       id: "run_1",
-      task: "shop-prod-resize-image",
+      task: "resize-image",
       status: "COMPLETED",
       payload: { url: "a.png" },
       output: 3,
@@ -106,7 +106,7 @@ describe("runs", () => {
     expect(proxy.authorizations).toEqual(["Bearer session-token"]);
   });
 
-  it("lists the runs of a task handle by its bound name, with statuses, tags and paging", async () => {
+  it("lists the runs of a task handle by its declared name, with statuses, tags and paging", async () => {
     const resize = task("resize-image", { run: async () => {} });
 
     const page = await runs.list({
@@ -120,7 +120,7 @@ describe("runs", () => {
     expect(page.nextCursor).toBe("next");
     expect(page.runs.map((run) => run.id)).toEqual(["run_1"]);
     expect(lists[0]).toMatchObject({
-      task: "shop-prod-resize-image",
+      task: "resize-image",
       statuses: [RunStatus.FAILED, RunStatus.TIMED_OUT],
       tags: ["user:1"],
       cursor: "c",
@@ -132,7 +132,7 @@ describe("runs", () => {
     await runs.list({ task: "resize-image", status: "QUEUED" });
 
     expect(lists[0]).toMatchObject({
-      task: "shop-prod-resize-image",
+      task: "resize-image",
       statuses: [RunStatus.QUEUED],
     });
   });

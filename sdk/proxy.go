@@ -13,7 +13,6 @@ import (
 
 type boundResource[C any] struct {
 	client C
-	name   string
 }
 
 type boundResourceConnection[C any] struct {
@@ -40,16 +39,15 @@ func (c *boundResourceConnection[C]) connect(resource, access string, dial func(
 	return dialed, nil
 }
 
-func dialBoundResource[C any](name string, bindingType bindingsv1.BindingType, readBoundName func(*bindingsv1.Binding) string, newClient serviceClientConstructor[C]) (*boundResource[C], error) {
-	delivered, err := binding(name, bindingType)
-	if err != nil {
+func dialBoundResource[C any](name string, bindingType bindingsv1.BindingType, newClient serviceClientConstructor[C]) (*boundResource[C], error) {
+	if err := refuseUnbound(name, bindingType); err != nil {
 		return nil, err
 	}
 	address, authorized, err := readRuntimeConnection()
 	if err != nil {
 		return nil, err
 	}
-	return &boundResource[C]{client: newClient(http.DefaultClient, address, authorized), name: readBoundName(delivered)}, nil
+	return &boundResource[C]{client: newClient(http.DefaultClient, address, authorized)}, nil
 }
 
 func readRuntimeConnection() (string, connect.ClientOption, error) {

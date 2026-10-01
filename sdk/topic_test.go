@@ -151,10 +151,10 @@ func TestABatchOptionOnAConsumerOfSingleMessagesPanics(t *testing.T) {
 	orders.Consumer("single", func(context.Context, order) error { return nil }, ocel.BatchTimeout(time.Second))
 }
 
-const boundTopic = `{"name":"orders","topic":{"topic":"project-env-orders"}}`
+const deliveredTopic = `{"name":"orders","topic":{}}`
 
-func TestSendPublishesTheJSONPayloadToTheTopicItsBindingNames(t *testing.T) {
-	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": boundTopic})
+func TestSendPublishesTheJSONPayloadToTheTopicByItsDeclaredName(t *testing.T) {
+	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": deliveredTopic})
 	orders := ocel.Topic[order]("orders")
 
 	id, err := orders.Send(t.Context(), order{ID: "o-1", Total: 30})
@@ -166,8 +166,8 @@ func TestSendPublishesTheJSONPayloadToTheTopicItsBindingNames(t *testing.T) {
 		t.Errorf("Send() = %q, want the message id the runtime answered", id)
 	}
 	req := only[*topicv1.SendRequest](t, runtime)
-	if req.GetTopic() != "project-env-orders" {
-		t.Errorf("topic = %q, want the bound name", req.GetTopic())
+	if req.GetTopic() != "orders" {
+		t.Errorf("topic = %q, want the declared name", req.GetTopic())
 	}
 	if string(req.GetPayload()) != `{"id":"o-1","total":30}` {
 		t.Errorf("payload = %s", req.GetPayload())
@@ -178,7 +178,7 @@ func TestSendPublishesTheJSONPayloadToTheTopicItsBindingNames(t *testing.T) {
 }
 
 func TestSendCarriesItsDelayIdempotencyKeyKeyAndLane(t *testing.T) {
-	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": boundTopic})
+	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": deliveredTopic})
 	orders := ocel.Topic[order]("orders")
 
 	before := time.Now()
@@ -198,7 +198,7 @@ func TestSendCarriesItsDelayIdempotencyKeyKeyAndLane(t *testing.T) {
 }
 
 func TestSendDueAtATimeCarriesThatTime(t *testing.T) {
-	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": boundTopic})
+	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": deliveredTopic})
 	orders := ocel.Topic[order]("orders")
 	at := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
 
@@ -212,7 +212,7 @@ func TestSendDueAtATimeCarriesThatTime(t *testing.T) {
 }
 
 func TestSendRefusesAPayloadOver256KiBBeforeReachingTheRuntime(t *testing.T) {
-	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_notes": `{"name":"notes","topic":{"topic":"project-env-notes"}}`})
+	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_notes": `{"name":"notes","topic":{}}`})
 	notes := ocel.Topic[string]("notes")
 
 	_, err := notes.Send(t.Context(), strings.Repeat("a", 256<<10))
@@ -254,7 +254,7 @@ func TestSendConnectsOnceTheBindingArrivesAfterAFailedSend(t *testing.T) {
 	if _, err := orders.Send(t.Context(), order{ID: "o-1"}); !errors.As(err, &missing) {
 		t.Fatalf("Send() before the binding err = %v, want a *ocel.MissingBindingError", err)
 	}
-	serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": boundTopic})
+	serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": deliveredTopic})
 
 	if _, err := orders.Send(t.Context(), order{ID: "o-1"}); err != nil {
 		t.Errorf("Send() after the binding arrived = %v, want the topic connected", err)

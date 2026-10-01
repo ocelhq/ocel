@@ -1,7 +1,7 @@
 import type { JsonObject } from "@bufbuild/protobuf";
 import { type Client, createClient } from "@connectrpc/connect";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { getConfig } from "../binding/binding.js";
+import { refuseUnbound } from "../binding/binding.js";
 import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
 import { declarationSite } from "../declaration/callsite.js";
 import { defer } from "../declaration/defer.js";
@@ -95,12 +95,6 @@ export interface RunHandle {
   id: string;
 }
 
-/** The binding fields a task resolves at runtime. */
-export interface ResolvedTaskConfig {
-  /** The name the task is bound under. */
-  task: string;
-}
-
 function encodeTriggerOptions(options: TriggerOptions = {}) {
   return {
     dueAt: encodeDueAt(options.delay),
@@ -166,17 +160,13 @@ export class Task<TInput = unknown, TOutput = unknown> {
     }
   }
 
-  /** The binding delivered for this task. */
-  __config(): ResolvedTaskConfig {
-    if (unprovisionedPhase()) {
-      throw unprovisioned(`task("${this.name}")`, "__config");
-    }
-    return getConfig(this.name, "task");
-  }
-
   private ensureClient(operation: string): Client<typeof TaskService> {
     if (unprovisionedPhase()) {
       throw unprovisioned(`task("${this.name}")`, operation);
+    }
+    const refusal = refuseUnbound(this.name, "task");
+    if (refusal) {
+      throw refusal;
     }
     return (this.client ??= createClient(TaskService, createRuntimeTransport()));
   }
@@ -185,7 +175,7 @@ export class Task<TInput = unknown, TOutput = unknown> {
   async trigger(payload: TInput, options?: TriggerOptions): Promise<RunHandle> {
     const client = this.ensureClient("trigger");
     const { id } = await client.trigger({
-      task: this.__config().task,
+      task: this.name,
       payload: encodePayload(payload),
       options: encodeTriggerOptions(options),
     });
@@ -196,7 +186,7 @@ export class Task<TInput = unknown, TOutput = unknown> {
   async batchTrigger(items: BatchTriggerItem<TInput>[]): Promise<RunHandle[]> {
     const client = this.ensureClient("batchTrigger");
     const { ids } = await client.batchTrigger({
-      task: this.__config().task,
+      task: this.name,
       items: items.map((item) => ({
         payload: encodePayload(item.payload),
         options: encodeTriggerOptions(item.options),

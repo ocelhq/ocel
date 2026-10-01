@@ -8,7 +8,7 @@ from typing import Any, Generic, Literal, TypeVar, overload
 from protobuf import Oneof
 
 from ocel import _registry
-from ocel._binding import read_runtime, read_topic_binding, refuse_unprovisioned
+from ocel._binding import read_runtime, refuse_unbound, refuse_unprovisioned
 from ocel._declare import declare, find_caller_source, is_discovering
 from ocel._payload import Codec, find_payload_type
 from ocel._wire import (
@@ -135,9 +135,9 @@ class DeadLetters:
     def list(self, *, cursor: str | None = None, limit: int | None = None) -> DeadLetterPage:
         """Read one page of dead letters, from ``cursor`` when given, of at most ``limit``
         entries."""
-        client, bound, headers = self._topic._ensure_connection("dead_letter.list")
+        client, headers = self._topic._ensure_connection("dead_letter.list")
         request = ListDeadLettersRequest(
-            topic=bound, consumer=self._consumer, cursor=cursor or "", limit=limit or 0
+            topic=self._topic.name, consumer=self._consumer, cursor=cursor or "", limit=limit or 0
         )
         return _build_dead_letter_page(client.list_dead_letters(request, headers=headers))
 
@@ -145,56 +145,56 @@ class DeadLetters:
         self, *, cursor: str | None = None, limit: int | None = None
     ) -> DeadLetterPage:
         """Read one page of dead letters, as :meth:`list` does."""
-        client, bound, headers = self._topic._ensure_async_connection("dead_letter.list_async")
+        client, headers = self._topic._ensure_async_connection("dead_letter.list_async")
         request = ListDeadLettersRequest(
-            topic=bound, consumer=self._consumer, cursor=cursor or "", limit=limit or 0
+            topic=self._topic.name, consumer=self._consumer, cursor=cursor or "", limit=limit or 0
         )
         return _build_dead_letter_page(await client.list_dead_letters(request, headers=headers))
 
     def redrive(self, executions: Iterable[str] | None = None) -> int:
         """Send the dead letters named by ``executions``, or all of them, back to the
         consumer, and return how many were sent."""
-        client, bound, headers = self._topic._ensure_connection("dead_letter.redrive")
+        client, headers = self._topic._ensure_connection("dead_letter.redrive")
         request = RedriveDeadLettersRequest(
-            topic=bound, consumer=self._consumer, executions=list(executions or ())
+            topic=self._topic.name, consumer=self._consumer, executions=list(executions or ())
         )
         return client.redrive_dead_letters(request, headers=headers).redriven
 
     async def redrive_async(self, executions: Iterable[str] | None = None) -> int:
         """Send dead letters back to the consumer, as :meth:`redrive` does."""
-        client, bound, headers = self._topic._ensure_async_connection("dead_letter.redrive_async")
+        client, headers = self._topic._ensure_async_connection("dead_letter.redrive_async")
         request = RedriveDeadLettersRequest(
-            topic=bound, consumer=self._consumer, executions=list(executions or ())
+            topic=self._topic.name, consumer=self._consumer, executions=list(executions or ())
         )
         return (await client.redrive_dead_letters(request, headers=headers)).redriven
 
     def purge(self, executions: Iterable[str] | None = None) -> int:
         """Delete the dead letters named by ``executions``, or all of them, and return how
         many were deleted."""
-        client, bound, headers = self._topic._ensure_connection("dead_letter.purge")
+        client, headers = self._topic._ensure_connection("dead_letter.purge")
         request = PurgeDeadLettersRequest(
-            topic=bound, consumer=self._consumer, executions=list(executions or ())
+            topic=self._topic.name, consumer=self._consumer, executions=list(executions or ())
         )
         return client.purge_dead_letters(request, headers=headers).purged
 
     async def purge_async(self, executions: Iterable[str] | None = None) -> int:
         """Delete dead letters, as :meth:`purge` does."""
-        client, bound, headers = self._topic._ensure_async_connection("dead_letter.purge_async")
+        client, headers = self._topic._ensure_async_connection("dead_letter.purge_async")
         request = PurgeDeadLettersRequest(
-            topic=bound, consumer=self._consumer, executions=list(executions or ())
+            topic=self._topic.name, consumer=self._consumer, executions=list(executions or ())
         )
         return (await client.purge_dead_letters(request, headers=headers)).purged
 
     def count(self) -> int:
         """How many dead letters the consumer has."""
-        client, bound, headers = self._topic._ensure_connection("dead_letter.count")
-        request = CountDeadLettersRequest(topic=bound, consumer=self._consumer)
+        client, headers = self._topic._ensure_connection("dead_letter.count")
+        request = CountDeadLettersRequest(topic=self._topic.name, consumer=self._consumer)
         return client.count_dead_letters(request, headers=headers).count
 
     async def count_async(self) -> int:
         """How many dead letters the consumer has, as :meth:`count` answers."""
-        client, bound, headers = self._topic._ensure_async_connection("dead_letter.count_async")
-        request = CountDeadLettersRequest(topic=bound, consumer=self._consumer)
+        client, headers = self._topic._ensure_async_connection("dead_letter.count_async")
+        request = CountDeadLettersRequest(topic=self._topic.name, consumer=self._consumer)
         return (await client.count_dead_letters(request, headers=headers)).count
 
 
@@ -211,8 +211,8 @@ class Topic(Generic[P]):
         declares the topic as well as handing back its handle."""
         self.name = name
         self._codec = codec
-        self._connection: tuple[Any, str, dict[str, str]] | None = None
-        self._async_connection: tuple[Any, str, dict[str, str]] | None = None
+        self._connection: tuple[Any, dict[str, str]] | None = None
+        self._async_connection: tuple[Any, dict[str, str]] | None = None
 
     def __repr__(self) -> str:
         return f"Topic({self.name!r})"
@@ -274,8 +274,8 @@ class Topic(Generic[P]):
         ``idempotency_key`` publishes nothing new; ``key`` orders the messages of an ordered
         topic; ``lane`` is the lane it is read from. A payload whose JSON exceeds 256 KiB
         is refused before anything is sent."""
-        client, bound, headers = self._ensure_connection("send")
-        request = self._build_send_request(bound, payload, delay, idempotency_key, key, lane)
+        client, headers = self._ensure_connection("send")
+        request = self._build_send_request(payload, delay, idempotency_key, key, lane)
         return client.send(request, headers=headers).message_id
 
     async def send_async(
@@ -288,8 +288,8 @@ class Topic(Generic[P]):
         lane: Lane | Literal["high", "default", "low"] | None = None,
     ) -> str:
         """Publish ``payload`` to every consumer, as :meth:`send` does."""
-        client, bound, headers = self._ensure_async_connection("send_async")
-        request = self._build_send_request(bound, payload, delay, idempotency_key, key, lane)
+        client, headers = self._ensure_async_connection("send_async")
+        request = self._build_send_request(payload, delay, idempotency_key, key, lane)
         return (await client.send(request, headers=headers)).message_id
 
     def dead_letter(self, consumer: "Consumer[P] | str") -> DeadLetters:
@@ -346,7 +346,6 @@ class Topic(Generic[P]):
 
     def _build_send_request(
         self,
-        bound: str,
         payload: P,
         delay: Seconds | datetime | None,
         idempotency_key: str | None,
@@ -354,7 +353,7 @@ class Topic(Generic[P]):
         lane: Lane | str | None,
     ) -> SendRequest:
         return SendRequest(
-            topic=bound,
+            topic=self.name,
             payload=self._codec.encode(payload),
             due_at=encode_due_at(delay),
             idempotency_key=idempotency_key or "",
@@ -362,22 +361,26 @@ class Topic(Generic[P]):
             lane=encode_lane(lane),
         )
 
-    def _ensure_connection(self, access: str) -> tuple[Any, str, dict[str, str]]:
+    def _ensure_connection(self, access: str) -> tuple[Any, dict[str, str]]:
         if is_discovering():
             raise refuse_unprovisioned(f'topic("{self.name}")', access)
         if self._connection is None:
             address, headers = read_runtime()
             client = TopicServiceClientSync(address, send_compression=None)
-            self._connection = (client, read_topic_binding(self.name).topic, headers)
+            if refusal := refuse_unbound(self.name, "topic"):
+                raise refusal
+            self._connection = (client, headers)
         return self._connection
 
-    def _ensure_async_connection(self, access: str) -> tuple[Any, str, dict[str, str]]:
+    def _ensure_async_connection(self, access: str) -> tuple[Any, dict[str, str]]:
         if is_discovering():
             raise refuse_unprovisioned(f'topic("{self.name}")', access)
         if self._async_connection is None:
             address, headers = read_runtime()
             client = TopicServiceClient(address, send_compression=None)
-            self._async_connection = (client, read_topic_binding(self.name).topic, headers)
+            if refusal := refuse_unbound(self.name, "topic"):
+                raise refusal
+            self._async_connection = (client, headers)
         return self._async_connection
 
 

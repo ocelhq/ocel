@@ -33,7 +33,7 @@ TOKEN = "letmein"
 _AT = Timestamp(seconds=1_700_000_000, nanos=0)
 
 
-def stored_run(id: str, task: str = "shop-prod-resize-image") -> Run:
+def stored_run(id: str, task: str = "resize-image") -> Run:
     return Run(
         id=id,
         task=task,

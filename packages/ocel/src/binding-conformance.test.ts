@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { bindingKey } from "./binding/binding.js";
+import { bindingKey, getConfig } from "./binding/binding.js";
 import { BindingType } from "./gen/proto/common/bindings/v1/bindings_pb.js";
 
 vi.mock("./runtime/rpc", () => ({
@@ -14,8 +14,6 @@ vi.mock("ioredis", async () => {
 
 const { postgres } = await import("./postgres/index.js");
 const { bucket } = await import("./bucket/bucket.js");
-const { task } = await import("./task/index.js");
-const { topic } = await import("./topic/index.js");
 const { kv } = await import("./kv/index.js");
 
 function repoRoot() {
@@ -84,20 +82,18 @@ describe("the binding conformance fixtures", () => {
     expect(bucket("uploads", { uploaders: {} }).__config()).toMatchObject(JSON.parse(body).bucket);
   });
 
-  it("reach task() through its live key", () => {
+  it("resolve a task binding through its live key", () => {
     const body = raw(BindingType.TASK);
     vi.stubEnv(bindingKey("resize-image", BindingType.TASK), body);
 
-    expect(task("resize-image", { run: async () => {} }).__config()).toMatchObject(
-      JSON.parse(body).task,
-    );
+    expect(getConfig("resize-image", "task")).toMatchObject(JSON.parse(body).task);
   });
 
-  it("reach topic() through its live key", () => {
+  it("resolve a topic binding through its live key", () => {
     const body = raw(BindingType.TOPIC);
     vi.stubEnv(bindingKey("orders", BindingType.TOPIC), body);
 
-    expect(topic("orders").__config()).toMatchObject(JSON.parse(body).topic);
+    expect(getConfig("orders", "topic")).toMatchObject(JSON.parse(body).topic);
   });
 
   it("reach kv() through its live key", () => {

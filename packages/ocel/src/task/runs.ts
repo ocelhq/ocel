@@ -1,7 +1,6 @@
 import { type JsonObject, toJson } from "@bufbuild/protobuf";
 import { type Timestamp, timestampDate, ValueSchema } from "@bufbuild/protobuf/wkt";
 import { type Client, createClient } from "@connectrpc/connect";
-import { getConfig } from "../binding/binding.js";
 import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
 import { type Duration, encodeDueAt } from "../delivery/duration.js";
 import {
@@ -27,7 +26,7 @@ export type RunStatus =
 export interface Run {
   /** The run's id. */
   id: string;
-  /** The task the run belongs to. */
+  /** The name the task the run belongs to was declared under. */
   task: string;
   /** Where the run is in its life. */
   status: RunStatus;
@@ -121,11 +120,6 @@ function createTaskClient(operation: string): Client<typeof TaskService> {
   return createClient(TaskService, createRuntimeTransport());
 }
 
-function getBoundTaskName(task: Task | string | undefined): string {
-  if (task === undefined) return "";
-  return getConfig(typeof task === "string" ? task : task.name, "task").task;
-}
-
 /** Reads and acts on the runs of this app's tasks. */
 export const runs = {
   /** The run with this id. */
@@ -142,7 +136,7 @@ export const runs = {
         ? []
         : (Array.isArray(options.status) ? options.status : [options.status]).map(encodeRunStatus);
     const page = await client.listRuns({
-      task: getBoundTaskName(options.task),
+      task: typeof options.task === "string" ? options.task : (options.task?.name ?? ""),
       statuses,
       tags: options.tags ?? [],
       cursor: options.cursor ?? "",

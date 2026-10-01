@@ -21,13 +21,13 @@ struct Infra {
 fn orders() -> ocel::Topic<Order> {
     std::env::set_var(
         "OCEL_RESOURCE_TOPIC_orders",
-        r#"{"name":"orders","topic":{"topic":"orders-91c2"}}"#,
+        r#"{"name":"orders","topic":{}}"#,
     );
     Infra::load().expect("the struct loads").orders
 }
 
 #[tokio::test]
-async fn a_send_carries_the_payload_as_json_to_the_bound_topic_with_its_options() {
+async fn a_send_carries_the_payload_as_json_to_the_topic_by_its_declared_name_with_its_options() {
     let runtime = runtime();
     runtime.answer(
         "Send",
@@ -51,7 +51,7 @@ async fn a_send_carries_the_payload_as_json_to_the_bound_topic_with_its_options(
     assert_eq!(calls[0].path, "/app.topic.v1.TopicService/Send");
     assert_eq!(calls[0].authorization, Some(format!("Bearer {TOKEN}")));
     let sent: SendRequest = calls[0].decode();
-    assert_eq!(sent.topic, "orders-91c2");
+    assert_eq!(sent.topic, "orders");
     assert_eq!(sent.payload, br#"{"id":7}"#);
     let due = sent.due_at.as_option().expect("a due time").seconds;
     let since = |at: SystemTime| at.duration_since(UNIX_EPOCH).expect("time").as_secs() as i64;
@@ -168,7 +168,7 @@ async fn a_consumers_dead_letters_are_listed_redriven_purged_and_counted() {
             list.cursor.as_str(),
             list.limit
         ),
-        ("orders-91c2", "email", "c1", 10)
+        ("orders", "email", "c1", 10)
     );
     let redrives = runtime.only("RedriveDeadLetters");
     assert_eq!(redrives.len(), 1);
@@ -179,7 +179,7 @@ async fn a_consumers_dead_letters_are_listed_redriven_purged_and_counted() {
     let count: CountDeadLettersRequest = runtime.only("CountDeadLetters")[0].decode();
     assert_eq!(
         (count.topic.as_str(), count.consumer.as_str()),
-        ("orders-91c2", "email")
+        ("orders", "email")
     );
 }
 

@@ -8,7 +8,7 @@ from protobuf import Oneof
 from protobuf.wkt import Struct
 
 from ocel import _registry
-from ocel._binding import read_runtime, read_task_binding, refuse_unprovisioned
+from ocel._binding import read_runtime, refuse_unbound, refuse_unprovisioned
 from ocel._declare import declare, find_caller_source, is_discovering
 from ocel._payload import Codec, find_payload_type
 from ocel._wire import Seconds, encode_due_at, encode_duration, encode_lane, encode_retry_policy
@@ -101,8 +101,8 @@ class Task(Generic[P, R]):
         self.name = name
         self._run = run
         self._codec = codec
-        self._connection: tuple[Any, str, dict[str, str]] | None = None
-        self._async_connection: tuple[Any, str, dict[str, str]] | None = None
+        self._connection: tuple[Any, dict[str, str]] | None = None
+        self._async_connection: tuple[Any, dict[str, str]] | None = None
         functools.update_wrapper(self, run)
 
     def __call__(self, *arguments: Any, **keyword_arguments: Any) -> Any:
@@ -144,7 +144,7 @@ class Task(Generic[P, R]):
             tags=tags,
             metadata=metadata,
         )
-        client, _, headers = self._ensure_connection("trigger")
+        client, headers = self._ensure_connection("trigger")
         return RunHandle(client.trigger(request, headers=headers).id)
 
     async def trigger_async(
@@ -177,27 +177,27 @@ class Task(Generic[P, R]):
             tags=tags,
             metadata=metadata,
         )
-        client, _, headers = self._ensure_async_connection("trigger_async")
+        client, headers = self._ensure_async_connection("trigger_async")
         return RunHandle((await client.trigger(request, headers=headers)).id)
 
     def batch_trigger(self, items: Iterable[Trigger[P] | P]) -> list[RunHandle]:
         """Start one run per item, up to 1,000, and return their handles in the same order.
         An item is a payload, or a :class:`Trigger` carrying a payload with its options."""
         request = self._build_batch_trigger_request("batch_trigger", items)
-        client, _, headers = self._ensure_connection("batch_trigger")
+        client, headers = self._ensure_connection("batch_trigger")
         return [RunHandle(id) for id in client.batch_trigger(request, headers=headers).ids]
 
     async def batch_trigger_async(self, items: Iterable[Trigger[P] | P]) -> list[RunHandle]:
         """Start one run per item, as :meth:`batch_trigger` does."""
         request = self._build_batch_trigger_request("batch_trigger_async", items)
-        client, _, headers = self._ensure_async_connection("batch_trigger_async")
+        client, headers = self._ensure_async_connection("batch_trigger_async")
         response = await client.batch_trigger(request, headers=headers)
         return [RunHandle(id) for id in response.ids]
 
     def _build_trigger_request(self, access: str, payload: P, **options: Any) -> TriggerRequest:
-        _, bound, _ = self._ensure_connection(access)
+        self._ensure_connection(access)
         return TriggerRequest(
-            task=bound,
+            task=self.name,
             payload=self._codec.encode(payload),
             options=_build_trigger_options(Trigger(payload, **options)),
         )
@@ -205,10 +205,10 @@ class Task(Generic[P, R]):
     def _build_batch_trigger_request(
         self, access: str, items: Iterable[Trigger[P] | P]
     ) -> BatchTriggerRequest:
-        _, bound, _ = self._ensure_connection(access)
+        self._ensure_connection(access)
         triggers = [item if isinstance(item, Trigger) else Trigger(item) for item in items]
         return BatchTriggerRequest(
-            task=bound,
+            task=self.name,
             items=[
                 BatchTriggerItem(
                     payload=self._codec.encode(trigger.payload),
@@ -218,22 +218,26 @@ class Task(Generic[P, R]):
             ],
         )
 
-    def _ensure_connection(self, access: str) -> tuple[Any, str, dict[str, str]]:
+    def _ensure_connection(self, access: str) -> tuple[Any, dict[str, str]]:
         if is_discovering():
             raise refuse_unprovisioned(f'task("{self.name}")', access)
         if self._connection is None:
             address, headers = read_runtime()
             client = TaskServiceClientSync(address, send_compression=None)
-            self._connection = (client, read_task_binding(self.name).task, headers)
+            if refusal := refuse_unbound(self.name, "task"):
+                raise refusal
+            self._connection = (client, headers)
         return self._connection
 
-    def _ensure_async_connection(self, access: str) -> tuple[Any, str, dict[str, str]]:
+    def _ensure_async_connection(self, access: str) -> tuple[Any, dict[str, str]]:
         if is_discovering():
             raise refuse_unprovisioned(f'task("{self.name}")', access)
         if self._async_connection is None:
             address, headers = read_runtime()
             client = TaskServiceClient(address, send_compression=None)
-            self._async_connection = (client, read_task_binding(self.name).task, headers)
+            if refusal := refuse_unbound(self.name, "task"):
+                raise refusal
+            self._async_connection = (client, headers)
         return self._async_connection
 
 

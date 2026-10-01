@@ -99,12 +99,12 @@ func TestATaskGivenAHookOfAnotherPayloadTypePanicsNamingTheTypeItTakes(t *testin
 	ocel.Task("resize-mistyped", resize, ocel.OnSuccess(func(context.Context, order, thumbnail) error { return nil }))
 }
 
-func boundTask(name string) map[string]string {
-	return map[string]string{"OCEL_RESOURCE_TASK_" + name: fmt.Sprintf(`{"name":%q,"task":{"task":"project-env-resize"}}`, name)}
+func deliveredTask(name string) map[string]string {
+	return map[string]string{"OCEL_RESOURCE_TASK_" + name: fmt.Sprintf(`{"name":%q,"task":{}}`, name)}
 }
 
-func TestTriggerStartsARunOfTheTaskItsBindingNames(t *testing.T) {
-	runtime := serveRuntime(t, boundTask("resize-trigger"))
+func TestTriggerStartsARunOfTheTaskByItsDeclaredName(t *testing.T) {
+	runtime := serveRuntime(t, deliveredTask("resize-trigger"))
 	task := ocel.Task("resize-trigger", resize)
 
 	run, err := task.Trigger(t.Context(), image{Key: "a.png"})
@@ -113,13 +113,13 @@ func TestTriggerStartsARunOfTheTaskItsBindingNames(t *testing.T) {
 	}
 
 	req := only[*taskv1.TriggerRequest](t, runtime)
-	if run != (ocel.RunHandle{ID: "run-1"}) || req.GetTask() != "project-env-resize" || string(req.GetPayload()) != `{"key":"a.png"}` {
+	if run != (ocel.RunHandle{ID: "run-1"}) || req.GetTask() != "resize-trigger" || string(req.GetPayload()) != `{"key":"a.png"}` {
 		t.Errorf("Trigger() = %+v after %v", run, req)
 	}
 }
 
 func TestTriggerCarriesEveryOptionItIsGiven(t *testing.T) {
-	runtime := serveRuntime(t, boundTask("resize-options"))
+	runtime := serveRuntime(t, deliveredTask("resize-options"))
 	task := ocel.Task("resize-options", resize)
 	at := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
 
@@ -152,7 +152,7 @@ func TestTriggerCarriesEveryOptionItIsGiven(t *testing.T) {
 }
 
 func TestBatchTriggerStartsOneRunPerTriggerAndReturnsTheirHandlesInOrder(t *testing.T) {
-	runtime := serveRuntime(t, boundTask("resize-batch-trigger"))
+	runtime := serveRuntime(t, deliveredTask("resize-batch-trigger"))
 	task := ocel.Task("resize-batch-trigger", resize)
 
 	runs, err := task.BatchTrigger(t.Context(),
@@ -164,7 +164,7 @@ func TestBatchTriggerStartsOneRunPerTriggerAndReturnsTheirHandlesInOrder(t *test
 	}
 
 	req := only[*taskv1.BatchTriggerRequest](t, runtime)
-	if !slices.Equal(runs, []ocel.RunHandle{{ID: "run-1"}, {ID: "run-2"}}) || req.GetTask() != "project-env-resize" || len(req.GetItems()) != 2 {
+	if !slices.Equal(runs, []ocel.RunHandle{{ID: "run-1"}, {ID: "run-2"}}) || req.GetTask() != "resize-batch-trigger" || len(req.GetItems()) != 2 {
 		t.Fatalf("BatchTrigger() = %v after %v", runs, req)
 	}
 	if string(req.GetItems()[0].GetPayload()) != `{"key":"a"}` || req.GetItems()[1].GetOptions().GetKey() != "k" {
@@ -188,7 +188,7 @@ func TestTaskOperationsRefuseDuringDiscovery(t *testing.T) {
 }
 
 func TestATaskBindingDeliveredForATopicIsRefusedNamingBothKinds(t *testing.T) {
-	serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_resize": boundTask("resize")["OCEL_RESOURCE_TASK_resize"]})
+	serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_resize": deliveredTask("resize")["OCEL_RESOURCE_TASK_resize"]})
 
 	_, err := ocel.Topic[image]("resize").Send(t.Context(), image{})
 

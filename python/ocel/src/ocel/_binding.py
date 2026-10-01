@@ -6,8 +6,6 @@ from ocel.gen.common.bindings.v1.bindings_pb import (
     BucketProperties,
     KvProperties,
     PostgresProperties,
-    TaskProperties,
-    TopicProperties,
 )
 
 _RUNTIME_ADDRESS_ENV = "OCEL_RUNTIME_ADDRESS"
@@ -40,12 +38,9 @@ def read_kv_binding(name: str) -> KvProperties:
     return _read_properties(name, "kv")
 
 
-def read_topic_binding(name: str) -> TopicProperties:
-    return _read_properties(name, "topic")
-
-
-def read_task_binding(name: str) -> TaskProperties:
-    return _read_properties(name, "task")
+def refuse_unbound(name: str, kind: str) -> RuntimeError | None:
+    found = _find_properties(name, kind)
+    return found if isinstance(found, RuntimeError) else None
 
 
 def read_runtime() -> tuple[str, dict[str, str]]:
@@ -67,24 +62,31 @@ def read_runtime() -> tuple[str, dict[str, str]]:
 
 
 def _read_properties(name: str, kind: str):
+    found = _find_properties(name, kind)
+    if isinstance(found, RuntimeError):
+        raise found
+    return found
+
+
+def _find_properties(name: str, kind: str):
     key = f"OCEL_RESOURCE_{kind.upper()}_{name}"
     raw = os.environ.get(key) or live_value(key)
     if not raw:
-        raise RuntimeError(
+        return RuntimeError(
             f"Value for {key} is not defined. Run `ocel dev` to resolve it locally, "
             f"or `ocel deploy` to have it delivered from the resource this app binds."
         )
     try:
         delivered = Binding.from_json(raw, ignore_unknown_fields=True)
     except Exception:
-        raise RuntimeError(
+        return RuntimeError(
             f"{key} does not contain a binding record, "
             f"so this app cannot read it as a {kind.upper()}"
-        ) from None
+        )
     properties = delivered.properties
     if properties is None or properties.field != kind:
         found = properties.field.upper() if properties else "UNSPECIFIED"
-        raise RuntimeError(
+        return RuntimeError(
             f"{key} contains a {found} binding, and this app reads it as a {kind.upper()}"
         )
     return properties.value

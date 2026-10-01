@@ -70,6 +70,11 @@ func binding(name string, typ bindingsv1.BindingType) (*bindingsv1.Binding, erro
 	return record, nil
 }
 
+func refuseUnbound(name string, typ bindingsv1.BindingType) error {
+	_, err := binding(name, typ)
+	return err
+}
+
 func readBinding(key string) (string, bool) {
 	if value, ok := os.LookupEnv(key); ok {
 		return value, true

@@ -12,7 +12,7 @@ import (
 )
 
 func TestDeadLetterListReadsAPageOfTheConsumersDeadLetters(t *testing.T) {
-	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": boundTopic})
+	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": deliveredTopic})
 	failedAt := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
 	runtime.letters = []*topicv1.DeadLetter{{
 		Execution: "01HZY4B6Q0Z0Z0Z0Z0Z0Z0Z0Z0-audit",
@@ -29,7 +29,7 @@ func TestDeadLetterListReadsAPageOfTheConsumersDeadLetters(t *testing.T) {
 	}
 
 	req := only[*topicv1.ListDeadLettersRequest](t, runtime)
-	if req.GetTopic() != "project-env-orders" || req.GetConsumer() != "audit" || req.GetCursor() != "c-1" || req.GetLimit() != 20 {
+	if req.GetTopic() != "orders" || req.GetConsumer() != "audit" || req.GetCursor() != "c-1" || req.GetLimit() != 20 {
 		t.Errorf("request = %v", req)
 	}
 	if page.NextCursor != "after-letters" || len(page.DeadLetters) != 1 {
@@ -44,7 +44,7 @@ func TestDeadLetterListReadsAPageOfTheConsumersDeadLetters(t *testing.T) {
 }
 
 func TestDeadLetterRedriveSendsTheNamedExecutionsBack(t *testing.T) {
-	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": boundTopic})
+	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": deliveredTopic})
 
 	redriven, err := ocel.Topic[order]("orders").DeadLetter("audit").Redrive(t.Context(), "e-1", "e-2")
 	if err != nil {
@@ -52,14 +52,14 @@ func TestDeadLetterRedriveSendsTheNamedExecutionsBack(t *testing.T) {
 	}
 
 	req := only[*topicv1.RedriveDeadLettersRequest](t, runtime)
-	if redriven != 3 || req.GetTopic() != "project-env-orders" || req.GetConsumer() != "audit" ||
+	if redriven != 3 || req.GetTopic() != "orders" || req.GetConsumer() != "audit" ||
 		!slices.Equal(req.GetExecutions(), []string{"e-1", "e-2"}) {
 		t.Errorf("Redrive() = %d after %v", redriven, req)
 	}
 }
 
 func TestDeadLetterPurgeWithNoExecutionsPurgesEveryOne(t *testing.T) {
-	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": boundTopic})
+	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": deliveredTopic})
 
 	purged, err := ocel.Topic[order]("orders").DeadLetter("audit").Purge(t.Context())
 	if err != nil {
@@ -73,7 +73,7 @@ func TestDeadLetterPurgeWithNoExecutionsPurgesEveryOne(t *testing.T) {
 }
 
 func TestDeadLetterCountAsksTheRuntimeForTheConsumersCount(t *testing.T) {
-	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": boundTopic})
+	runtime := serveRuntime(t, map[string]string{"OCEL_RESOURCE_TOPIC_orders": deliveredTopic})
 
 	count, err := ocel.Topic[order]("orders").DeadLetter("audit").Count(t.Context())
 	if err != nil {
@@ -81,7 +81,7 @@ func TestDeadLetterCountAsksTheRuntimeForTheConsumersCount(t *testing.T) {
 	}
 
 	req := only[*topicv1.CountDeadLettersRequest](t, runtime)
-	if count != 7 || req.GetTopic() != "project-env-orders" || req.GetConsumer() != "audit" {
+	if count != 7 || req.GetTopic() != "orders" || req.GetConsumer() != "audit" {
 		t.Errorf("Count() = %d after %v", count, req)
 	}
 }

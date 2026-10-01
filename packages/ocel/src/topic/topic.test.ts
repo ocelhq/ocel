@@ -127,10 +127,7 @@ describe("a topic at runtime", () => {
 
   beforeEach(async () => {
     vi.stubEnv("OCEL_PHASE", "");
-    vi.stubEnv(
-      "OCEL_RESOURCE_TOPIC_orders",
-      JSON.stringify({ name: "orders", topic: { topic: "shop-prod-orders" } }),
-    );
+    vi.stubEnv("OCEL_RESOURCE_TOPIC_orders", JSON.stringify({ name: "orders", topic: {} }));
     sends.length = 0;
     proxy = await serveRuntimeProxy((router) =>
       router.service(TopicService, {
@@ -147,11 +144,11 @@ describe("a topic at runtime", () => {
     await proxy.close();
   });
 
-  it("sends the payload as JSON to its bound topic, and answers the message id", async () => {
+  it("sends the payload as JSON to the topic by its declared name, and answers the message id", async () => {
     const orders = topic<{ id: string }>("orders");
 
     expect(await orders.send({ id: "o1" })).toBe("01J00000000000000000000000");
-    expect(sends[0]?.topic).toBe("shop-prod-orders");
+    expect(sends[0]?.topic).toBe("orders");
     expect(new TextDecoder().decode(sends[0]?.payload)).toBe('{"id":"o1"}');
     expect(proxy.authorizations).toEqual(["Bearer session-token"]);
   });

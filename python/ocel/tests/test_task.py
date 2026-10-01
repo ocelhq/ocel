@@ -175,7 +175,7 @@ def runtime(monkeypatch):
     fake = fakeruntime.Runtime()
     monkeypatch.setenv(
         "OCEL_RESOURCE_TASK_resize-image",
-        json.dumps({"name": "resize-image", "task": {"task": "shop-prod-resize-image"}}),
+        json.dumps({"name": "resize-image", "task": {}}),
     )
     monkeypatch.setenv("OCEL_RUNTIME_ADDRESS", fake.url)
     monkeypatch.setenv("OCEL_SESSION_TOKEN", fakeruntime.TOKEN)
@@ -191,12 +191,12 @@ def _resize():
     return resize
 
 
-def test_a_trigger_sends_the_payload_as_json_to_the_bound_task(runtime):
+def test_a_trigger_sends_the_payload_as_json_to_the_task_by_its_declared_name(runtime):
     run = _resize().trigger(Image(url="a.png", width=100))
 
     assert run.id == "run_1"
     [request] = runtime.requests("Trigger")
-    assert request.task == "shop-prod-resize-image"
+    assert request.task == "resize-image"
     assert json.loads(request.payload) == {"url": "a.png", "width": 100}
     assert request.options is None
     assert runtime.authorizations == ["Bearer letmein"]
@@ -262,7 +262,7 @@ def test_a_batch_trigger_sends_every_payload_with_its_own_options_and_answers_id
 
     assert [run.id for run in runs] == ["run_1", "run_2"]
     [request] = runtime.requests("BatchTrigger")
-    assert request.task == "shop-prod-resize-image"
+    assert request.task == "resize-image"
     assert [json.loads(item.payload)["url"] for item in request.items] == ["a.png", "b.png"]
     assert request.items[0].options is None
     assert request.items[1].options.key == "user-2"

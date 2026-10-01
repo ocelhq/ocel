@@ -115,7 +115,7 @@ func (t *TaskDefinition[P, R]) Trigger(ctx context.Context, payload P, opts ...T
 	if err != nil {
 		return RunHandle{}, err
 	}
-	res, err := task.client.Trigger(ctx, &taskv1.TriggerRequest{Task: task.name, Payload: body, Options: options})
+	res, err := task.client.Trigger(ctx, &taskv1.TriggerRequest{Task: t.name, Payload: body, Options: options})
 	if err != nil {
 		return RunHandle{}, err
 	}
@@ -129,7 +129,7 @@ func (t *TaskDefinition[P, R]) BatchTrigger(ctx context.Context, triggers ...Tri
 	if err != nil {
 		return nil, err
 	}
-	req := &taskv1.BatchTriggerRequest{Task: task.name}
+	req := &taskv1.BatchTriggerRequest{Task: t.name}
 	for i, trigger := range triggers {
 		body, err := encodePayload(trigger.Payload)
 		if err != nil {
@@ -154,14 +154,8 @@ func (t *TaskDefinition[P, R]) BatchTrigger(ctx context.Context, triggers ...Tri
 
 func (t *TaskDefinition[P, R]) connect(access string) (*boundResource[taskv1connect.TaskServiceClient], error) {
 	return t.connection.connect(fmt.Sprintf("task(%q)", t.name), access, func() (*boundResource[taskv1connect.TaskServiceClient], error) {
-		return dialTask(t.name)
+		return dialBoundResource(t.name, bindingsv1.BindingType_BINDING_TYPE_TASK, taskv1connect.NewTaskServiceClient)
 	})
-}
-
-func dialTask(name string) (*boundResource[taskv1connect.TaskServiceClient], error) {
-	return dialBoundResource(name, bindingsv1.BindingType_BINDING_TYPE_TASK,
-		func(delivered *bindingsv1.Binding) string { return delivered.GetTask().GetTask() },
-		taskv1connect.NewTaskServiceClient)
 }
 
 func newTaskClient() (taskv1connect.TaskServiceClient, error) {

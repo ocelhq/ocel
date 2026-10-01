@@ -46,12 +46,29 @@ export function getConfig<TCase extends BindingCase>(
   name: string,
   kind: TCase,
 ): BindingProperties<TCase> {
+  const found = findBinding(name, kind);
+  if (found instanceof Error) {
+    throw found;
+  }
+  return found.properties.value as BindingProperties<TCase>;
+}
+
+/**
+ * The error for a resource whose binding of the given type was not delivered,
+ * is not a binding record, or is of another type; undefined when it was delivered.
+ */
+export function refuseUnbound(name: string, kind: BindingCase): Error | undefined {
+  const found = findBinding(name, kind);
+  return found instanceof Error ? found : undefined;
+}
+
+function findBinding(name: string, kind: BindingCase): Binding | Error {
   const type = typeOfCase[kind];
   const key = bindingKey(name, type);
   const raw = readLive(key) ?? readLiveFile(key) ?? process.env[key];
 
   if (!raw) {
-    throw new Error(
+    return new Error(
       `Value for ${key} is not defined. Run \`ocel dev\` to resolve it locally, or \`ocel deploy\` to have it delivered from the resource this app binds.`,
     );
   }
@@ -60,16 +77,16 @@ export function getConfig<TCase extends BindingCase>(
   try {
     binding = fromJson(BindingSchema, JSON.parse(raw));
   } catch (cause) {
-    throw new Error(
+    return new Error(
       `${key} does not contain a binding record, so this app cannot read it as a ${BindingType[type]}`,
       { cause },
     );
   }
 
   if (binding.properties.case !== kind) {
-    throw new Error(
+    return new Error(
       `${key} contains a ${BindingType[bindingTypeOf(binding)]} binding, and this app reads it as a ${BindingType[type]}`,
     );
   }
-  return binding.properties.value as BindingProperties<TCase>;
+  return binding;
 }
