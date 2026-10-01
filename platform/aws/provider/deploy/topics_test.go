@@ -106,32 +106,44 @@ func mapKeys[V any](m map[string]V) func(func(string) bool) {
 	}
 }
 
-func TestATasksBindingGrantsSendingToItsQueueAndItsRunsUnderTheDeploymentsKeys(t *testing.T) {
+func TestAnAppReachingTasksMaySendToEveryQueuePublishToEveryTopicAndKeepRunsUnderTheDeploymentsKeys(t *testing.T) {
 	t.Parallel()
 
-	cfg := Config{Region: "us-east-1", StateTableARN: testStateTableARN}
-	binding, err := collectTopicBinding(cfg, "shop", "prod", topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}))
+	topics := topicsOf("shop", "prod", []provider.Resource{
+		taskResource("resize", provider.ConsumerSpec{Worker: "worker"}),
+		topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}),
+	})
+	policy, err := tasksPolicy("us-east-1", mockAccount, testStateTableARN, "shop", "prod", topics)
 	if err != nil {
-		t.Fatalf("collectTopicBinding: %v", err)
+		t.Fatal(err)
 	}
-	if binding.GetTopic() == nil {
-		t.Fatalf("binding = %v, want a topic binding", binding)
+	var document struct {
+		Statement []struct {
+			Action    any            `json:"Action"`
+			Resource  any            `json:"Resource"`
+			Condition map[string]any `json:"Condition"`
+		} `json:"Statement"`
 	}
-	granted := map[string][]string{}
-	for _, grant := range binding.GetGrants() {
-		granted[grant.GetLabel()] = grant.GetResources()
-		if grant.GetLabel() == "runs" && grant.GetConditions()[0].GetValues()[0] != naming.TaskKeyPrefix("shop", "prod")+"*" {
-			t.Errorf("the runs grant reaches %v, want only the deployment's task keys", grant.GetConditions())
+	if err := json.Unmarshal([]byte(policy), &document); err != nil {
+		t.Fatalf("the policy %s is not JSON: %v", policy, err)
+	}
+	for _, want := range []string{
+		sqsQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", "resize", "resize", false)),
+		sqsQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", "orders", "audit-log", false)),
+		snsTopicARN("us-east-1", mockAccount, queues.TopicName("shop", "prod", "orders", false)),
+		testStateTableARN,
+		naming.TaskKeyPrefix("shop", "prod") + "*",
+	} {
+		if !strings.Contains(policy, want) {
+			t.Errorf("the tasks policy %s names no %s", policy, want)
 		}
 	}
-	if !slices.Equal(granted["topic"], []string{snsTopicARN("us-east-1", mockAccount, queues.TopicName("shop", "prod", "orders", false))}) {
-		t.Errorf("topic grant = %v, want the orders topic alone", granted["topic"])
+	if strings.Contains(policy, `"*"`) {
+		t.Errorf("the tasks policy %s grants a wildcard resource", policy)
 	}
-	if !slices.Equal(granted["queues"], []string{sqsQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", "orders", "audit-log", false))}) {
-		t.Errorf("queue grant = %v, want the consumer's queue, which a redrive sends to", granted["queues"])
-	}
-	if !slices.Equal(granted["runs"], []string{testStateTableARN}) {
-		t.Errorf("runs grant = %v, want the state table", granted["runs"])
+	binding, err := collectTopicBinding(Config{Region: "us-east-1", StateTableARN: testStateTableARN}, "shop", "prod", topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}))
+	if err != nil || binding.GetTopic() == nil {
+		t.Fatalf("collectTopicBinding = %v, %v, want a topic binding", binding, err)
 	}
 }
 

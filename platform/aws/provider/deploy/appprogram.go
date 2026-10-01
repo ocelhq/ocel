@@ -126,6 +126,12 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		VariablesKeyARN: r.cfg.VariablesKeyARN, Boundary: r.cfg.AppBoundaryARN,
 		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch,
 	}
+	if reachesTasks(app) {
+		topics := topicsOf(project, stack.Env, app.Topics)
+		if role.TasksPolicy, err = tasksPolicy(r.cfg.Region, accountOfARN(r.cfg.StateTableARN), r.cfg.StateTableARN, project, stack.Env, topics); err != nil {
+			return nil, err
+		}
+	}
 	if bundle.hasLive() {
 		role.ValuesTableARN = r.cfg.VariablesTableARN
 		role.VariablesReferenced = bundle.Referenced
@@ -165,6 +171,18 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 			Layers:    layers,
 		},
 	}, nil
+}
+
+func reachesTasks(app *provider.AppSpec) bool {
+	if len(app.Workers) > 0 {
+		return true
+	}
+	for _, binding := range app.Grants {
+		if binding.Type == provider.BindingTask || binding.Type == provider.BindingTopic {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *release) artifactAt(ref provider.ArtifactRef) (artifactRef, error) {

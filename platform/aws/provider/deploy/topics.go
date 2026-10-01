@@ -214,33 +214,36 @@ func snsDeliveryPolicy(queueARN, topicARN string) (string, error) {
 	return string(encoded), err
 }
 
-func topicGrants(cfg Config, project, env string, topic deployedTopic) []*bindingsv1.Grant {
-	account := accountOfARN(cfg.StateTableARN)
-	var queueARNs []string
-	for _, queue := range topic.queues {
-		queueARNs = append(queueARNs, sqsQueueARN(cfg.Region, account, queue.name))
+func tasksPolicy(region, account, tableARN, project, env string, topics []deployedTopic) (string, error) {
+	var queueARNs, topicARNs []string
+	for _, topic := range topics {
+		if topic.sns != "" {
+			topicARNs = append(topicARNs, snsTopicARN(region, account, topic.sns))
+		}
+		for _, queue := range topic.queues {
+			queueARNs = append(queueARNs, sqsQueueARN(region, account, queue.name))
+		}
 	}
-	grants := []*bindingsv1.Grant{
-		{
-			Label:     "queues",
-			Actions:   []string{"sqs:GetQueueUrl", "sqs:SendMessage"},
-			Resources: queueARNs,
+	statements := []any{
+		map[string]any{
+			"Effect":   "Allow",
+			"Action":   []string{"dynamodb:DeleteItem", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:UpdateItem"},
+			"Resource": tableARN,
+			"Condition": map[string]any{
+				"ForAllValues:StringLike": map[string]any{"dynamodb:LeadingKeys": []string{naming.TaskKeyPrefix(project, env) + "*"}},
+			},
 		},
-		{
-			Label:     "runs",
-			Actions:   []string{"dynamodb:DeleteItem", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:UpdateItem"},
-			Resources: []string{cfg.StateTableARN},
-			Conditions: []*bindingsv1.GrantCondition{{
-				Operator: "ForAllValues:StringLike",
-				Key:      "dynamodb:LeadingKeys",
-				Values:   []string{naming.TaskKeyPrefix(project, env) + "*"},
-			}},
+		map[string]any{
+			"Effect":   "Allow",
+			"Action":   []string{"sqs:GetQueueUrl", "sqs:SendMessage"},
+			"Resource": queueARNs,
 		},
 	}
-	if topic.sns != "" {
-		grants = append(grants, &bindingsv1.Grant{Label: "topic", Actions: []string{"sns:Publish"}, Resources: []string{snsTopicARN(cfg.Region, account, topic.sns)}})
+	if len(topicARNs) > 0 {
+		statements = append(statements, map[string]any{"Effect": "Allow", "Action": "sns:Publish", "Resource": topicARNs})
 	}
-	return grants
+	encoded, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": statements})
+	return string(encoded), err
 }
 
 func collectTopicBinding(cfg Config, project, env string, resource provider.Resource) (*bindingsv1.Binding, error) {
@@ -251,7 +254,7 @@ func collectTopicBinding(cfg Config, project, env string, resource provider.Reso
 	if len(topics) != 1 {
 		return nil, fmt.Errorf("%s declares no consumers, so nothing runs what it is sent", resource.Declared)
 	}
-	binding := &bindingsv1.Binding{Name: resource.Name, Grants: topicGrants(cfg, project, env, topics[0])}
+	binding := &bindingsv1.Binding{Name: resource.Name}
 	if topics[0].isTask() {
 		binding.Properties = &bindingsv1.Binding_Task{Task: &bindingsv1.TaskProperties{}}
 	} else {
