@@ -84,12 +84,14 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 		toPublish.metadata = metadata
 	}
 	execution := executionOf(toPublish.messageID, topic.GetConsumers()[0].GetName())
+	var idempotency provider.ExpiringRecord
 	if key := options.GetIdempotencyKey(); key != "" {
 		life := defaultIdempotencyKeyLife
 		if options.GetIdempotencyKeyTtl() != nil {
 			life = options.GetIdempotencyKeyTtl().AsDuration()
 		}
-		existing, created, err := ensureRecord(ctx, tx, newRunRecord(provider.RecordIdempotency, name, key, execution, now.Add(life)))
+		idempotency = newRunRecord(provider.RecordIdempotency, name, key, execution, now.Add(life))
+		existing, created, err := ensureRecord(ctx, tx, idempotency)
 		if err != nil || !created {
 			return readRecordedRun(existing), err
 		}
@@ -97,8 +99,11 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 	if debounce := options.GetDebounce(); debounce != nil {
 		toPublish.dueAt = now.Add(debounce.GetDelay().AsDuration())
 		pending, err := t.debounce(ctx, tx, newRunRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt))
-		if err != nil || pending != "" {
-			return pending, err
+		if err != nil {
+			return "", err
+		}
+		if pending != "" {
+			return pending, pointIdempotencyAt(ctx, tx, idempotency, pending)
 		}
 	}
 	if _, err := t.engine.publish(ctx, tx, toPublish); err != nil {
@@ -120,6 +125,16 @@ func readRecordedRun(record provider.ExpiringRecord) string {
 	var recorded recordedRun
 	_ = json.Unmarshal(record.Value, &recorded)
 	return recorded.Run
+}
+
+func pointIdempotencyAt(ctx context.Context, tx pgx.Tx, idempotency provider.ExpiringRecord, execution string) error {
+	if idempotency.Key == "" {
+		return nil
+	}
+	pointed := newRunRecord(idempotency.Purpose, idempotency.Topic, idempotency.Key, execution, idempotency.ExpiresAt)
+	_, err := tx.Exec(ctx, `UPDATE ocel.records SET value = $4 WHERE purpose = $1 AND topic = $2 AND key = $3`,
+		string(pointed.Purpose), pointed.Topic, pointed.Key, string(pointed.Value))
+	return err
 }
 
 func (t Tasks) debounce(ctx context.Context, tx pgx.Tx, record provider.ExpiringRecord) (string, error) {
