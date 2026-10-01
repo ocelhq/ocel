@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	"cloud.google.com/go/firestore"
 	kms "cloud.google.com/go/kms/apiv1"
 	"golang.org/x/oauth2/google"
@@ -53,6 +54,7 @@ type Clients struct {
 	firestore memo[*firestore.Client]
 	kms       memo[*kms.KeyManagementClient]
 	pubsub    memo[*pubsub.Service]
+	tasks     memo[*cloudtasks.Client]
 }
 
 func (c *Clients) Emulated() bool { return c.Endpoint != "" }
@@ -110,6 +112,12 @@ func (c *Clients) KMS() (*kms.KeyManagementClient, error) {
 func (c *Clients) PubSub() (*pubsub.Service, error) {
 	return Opened(c, &c.pubsub, "Pub/Sub", func() (*pubsub.Service, error) {
 		return pubsub.NewService(context.Background(), EmulatorREST(c.Endpoint)...)
+	})
+}
+
+func (c *Clients) CloudTasks() (*cloudtasks.Client, error) {
+	return Opened(c, &c.tasks, "Cloud Tasks", func() (*cloudtasks.Client, error) {
+		return cloudtasks.NewClient(context.Background(), EmulatorGRPC(c.Endpoint)...)
 	})
 }
 

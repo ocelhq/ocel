@@ -9,6 +9,7 @@ type Deployment struct {
 	Clients  *ports.Clients
 	Names    Names
 	Declared map[string]*contractv1.ManifestTopic
+	Delays   Delays
 }
 
 func (d Deployment) Store() Store { return Store{Clients: d.Clients, Scope: d.Names.Scope} }

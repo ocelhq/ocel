@@ -49,6 +49,9 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 		key:         req.GetKey(),
 		lane:        laneName(req.GetLane()),
 	}
+	if req.GetDueAt() != nil {
+		toPublish.dueAt = req.GetDueAt().AsTime()
+	}
 	if key := req.GetIdempotencyKey(); key != "" {
 		value, err := json.Marshal(recordedMessage{Message: toPublish.messageID})
 		if err != nil {
@@ -66,7 +69,7 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 			return &topicv1.SendResponse{MessageId: recorded.Message}, nil
 		}
 	}
-	if err := t.deployment.publishNow(ctx, toPublish); err != nil {
+	if err := t.deployment.publish(ctx, toPublish, t.deployment.delayTaskOf(toPublish)); err != nil {
 		return nil, err
 	}
 	return &topicv1.SendResponse{MessageId: toPublish.messageID}, nil
