@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
@@ -100,8 +101,12 @@ func TestATriggerCannotRaiseTheTasksMaxAttempts(t *testing.T) {
 }
 
 func TestAnAbortFailsTheRunWithoutRetrying(t *testing.T) {
+	answer, err := protojson.Marshal(&topicv1.Answer{Outcome: &topicv1.Answer_Abort{Abort: &topicv1.Abort{Reason: "no such image"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	worker := newWorker(t, func(*topicv1.Envelope) reply {
-		return reply{status: http.StatusUnprocessableEntity, body: `{"abort":{"reason":"no such image"}}`}
+		return reply{status: http.StatusUnprocessableEntity, body: string(answer)}
 	})
 	engine := dispatching(t, map[string]*contractv1.ManifestTopic{"resize": aTask(retrying(5, 50*time.Millisecond, 50*time.Millisecond))}, map[string]Worker{"worker": {URL: worker.server.URL}})
 

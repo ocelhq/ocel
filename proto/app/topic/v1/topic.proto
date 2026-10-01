@@ -96,6 +96,12 @@ message Abort {
   string reason = 1;
 }
 
+message Answer {
+  oneof outcome {
+    Abort abort = 1;
+  }
+}
+
 message DeadLetter {
   string execution = 1;
 

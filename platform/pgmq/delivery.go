@@ -200,12 +200,6 @@ func schemaOf(schema string) string {
 	return "sha256-" + hex.EncodeToString(sum[:])
 }
 
-type abortAnswer struct {
-	Abort *struct {
-		Reason string `json:"reason"`
-	} `json:"abort"`
-}
-
 func (e *Engine) post(ctx, attemptCtx context.Context, url string, envelope *topicv1.Envelope) result {
 	body, err := protojson.Marshal(envelope)
 	if err != nil {
@@ -231,9 +225,9 @@ func (e *Engine) post(ctx, attemptCtx context.Context, url string, envelope *top
 		}
 		return result{outcome: succeeded, output: answer}
 	}
-	var abort abortAnswer
-	if json.Unmarshal(answer, &abort) == nil && abort.Abort != nil {
-		return result{outcome: aborted, reason: abort.Abort.Reason}
+	var decoded topicv1.Answer
+	if protojson.Unmarshal(answer, &decoded) == nil && decoded.GetAbort() != nil {
+		return result{outcome: aborted, reason: decoded.GetAbort().GetReason()}
 	}
 	excerpt := answer
 	if len(excerpt) > maxErrorExcerptBytes {
