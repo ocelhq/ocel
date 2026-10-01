@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"net/http"
 
@@ -31,20 +32,6 @@ type failedEvent struct {
 	Message    string `json:"message"`
 }
 
-type envelope struct {
-	Version int             `json:"v"`
-	ID      string          `json:"id"`
-	Channel string          `json:"ch"`
-	Time    int64           `json:"ts"`
-	Kind    string          `json:"kind"`
-	Data    json.RawMessage `json:"data"`
-}
-
-const (
-	envelopeVersion = 1
-	kindLive        = "live"
-)
-
 func (g *Gateway) servePublish(w http.ResponseWriter, r *http.Request) {
 	var req publishRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPublishBytes)).Decode(&req); err != nil {
@@ -70,19 +57,14 @@ func (g *Gateway) servePublish(w http.ResponseWriter, r *http.Request) {
 			answer.Failed = append(answer.Failed, failedEvent{Index: i, Code: errorLimitExceeded, Message: "an event is at most 240 KB"})
 			continue
 		}
-		var published envelope
-		if err := json.Unmarshal([]byte(event), &published); err != nil || !published.isLiveOn(req.Channel) {
-			answer.Failed = append(answer.Failed, failedEvent{Index: i, Code: errorBadRequest, Message: "an event is a version 1 live envelope of v, id, ch, ts, kind and data, its ch the channel published on"})
+		if !json.Valid([]byte(event)) {
+			answer.Failed = append(answer.Failed, failedEvent{Index: i, Code: errorBadRequest, Message: "an event is a stringified JSON value"})
 			continue
 		}
 		g.hub.Publish(req.Channel, event)
-		answer.Successful = append(answer.Successful, publishedEvent{Identifier: published.ID, Index: i})
+		answer.Successful = append(answer.Successful, publishedEvent{Identifier: rand.Text(), Index: i})
 	}
 	writeAnswer(w, http.StatusOK, answer)
-}
-
-func (e envelope) isLiveOn(channel string) bool {
-	return e.Version == envelopeVersion && e.ID != "" && e.Channel == channel && e.Time > 0 && e.Kind == kindLive && len(e.Data) > 0
 }
 
 func answerError(w http.ResponseWriter, status int, errorType, message string) {
