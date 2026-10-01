@@ -551,13 +551,28 @@ export const cancelDelayedCheck: Check = {
   },
 };
 
+const STOPPED_WITHIN_MS = 1_000;
+const STILL_STOPPED_AFTER_MS = 2_000;
+
 export const cancelExecutingCheck: Check = {
-  title: "canceling an executing run stops it, and it makes no further attempt",
+  title:
+    "canceling an executing run aborts its handler, which records nothing after, and it makes no further attempt",
   run: async (ctx) => {
-    const id = await trigger(ctx, "limited", { n: 1, ms: 4_000 });
-    await waitForRun(ctx, id, ["EXECUTING", ...ENDED]);
+    const probe = newProbe("ticking");
+    const id = await trigger(ctx, "ticking", { probe, ms: 8_000 });
+    await waitFor("the handler's second tick", async () =>
+      (await listReceipts(ctx, probe)).length >= 2 ? true : undefined,
+    );
     assert.equal((await cancel(ctx, id)).status, "CANCELED");
-    await delay(5_000);
+    await delay(STOPPED_WITHIN_MS);
+    const ticked = (await listReceipts(ctx, probe)).length;
+    await delay(STILL_STOPPED_AFTER_MS);
+    const later = (await listReceipts(ctx, probe)).length;
+    assert.equal(
+      later,
+      ticked,
+      `the handler ticked ${later - ticked} more times after its run was canceled`,
+    );
     const run = await retrieve(ctx, id);
     assert.equal(run.status, "CANCELED");
     assert.equal(run.attempts, 1);
