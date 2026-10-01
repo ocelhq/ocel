@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const (
@@ -23,6 +26,12 @@ type Config struct {
 
 type Engine struct {
 	pool *pgxpool.Pool
+
+	mu         sync.Mutex
+	deployment Deployment
+	applied    chan struct{}
+	wakes      map[string]chan struct{}
+	inFlight   map[string]context.CancelFunc
 }
 
 func Open(ctx context.Context, cfg Config) (*Engine, error) {
@@ -45,10 +54,50 @@ func Open(ctx context.Context, cfg Config) (*Engine, error) {
 		pool.Close()
 		return nil, err
 	}
-	return &Engine{pool: pool}, nil
+	return &Engine{
+		pool:     pool,
+		applied:  make(chan struct{}, 1),
+		wakes:    map[string]chan struct{}{},
+		inFlight: map[string]context.CancelFunc{},
+	}, nil
 }
 
 func (e *Engine) Close() { e.pool.Close() }
+
+func (e *Engine) inTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	return pgx.BeginFunc(ctx, e.pool, fn)
+}
+
+func (e *Engine) signalTopic(name string, topic *contractv1.ManifestTopic) {
+	for _, consumer := range topic.GetConsumers() {
+		e.signal(queueName(name, consumer.GetName()))
+	}
+}
+
+func (e *Engine) signalApplied() {
+	select {
+	case e.applied <- struct{}{}:
+	default:
+	}
+}
+
+func (e *Engine) wake(queue string) chan struct{} {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	wake, found := e.wakes[queue]
+	if !found {
+		wake = make(chan struct{}, 1)
+		e.wakes[queue] = wake
+	}
+	return wake
+}
+
+func (e *Engine) signal(queue string) {
+	select {
+	case e.wake(queue) <- struct{}{}:
+	default:
+	}
+}
 
 func ensureDatabase(ctx context.Context, cfg Config) error {
 	conn, err := pgx.Connect(ctx, cfg.ServerURL)
