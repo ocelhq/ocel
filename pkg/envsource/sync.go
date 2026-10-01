@@ -77,12 +77,15 @@ func (s *Sync) CopyScheduled(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, s.budget())
 	defer cancel()
 	registrations, err := Registrations(ctx, s.Store.KeyValues, s.Tier)
-	if err != nil {
+	if err != nil && !isUndecodable(err) {
 		return err
 	}
 	var keys []string
 	groups := map[string][]Registration{}
 	var failed []error
+	if err != nil {
+		failed = append(failed, err)
+	}
 	for _, registration := range registrations {
 		if registration.Descriptor.Reading() != ReadingOnSchedule {
 			continue

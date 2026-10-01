@@ -13,7 +13,9 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
@@ -381,6 +383,75 @@ func TestATierSwitchedBackToBuiltinKeepsEachCopiedValueAsOcelsOwn(t *testing.T) 
 	got, err := variables.GetValue(context.Background(), &variablestorev1.GetValueRequest{Tier: production, Coordinate: cell("DATABASE_URL"), Reveal: true})
 	if err != nil || got.GetValue() != "postgres://prod" || got.GetMetadata().GetEnvSource() != "" {
 		t.Fatalf("GetValue(DATABASE_URL) after the switch back = %q from %q, %v, want the value kept and named as ocel's own", got.GetValue(), got.GetMetadata().GetEnvSource(), err)
+	}
+}
+
+func registeredThenUndecodable(t *testing.T) (variablestorev1connect.VariableStoreServiceClient, *fake.Provider) {
+	t.Helper()
+	variables, provider := served(t)
+	ctx := context.Background()
+	production := environmentv1.Tier_TIER_PRODUCTION
+	if _, err := syncEnvSource(variables, production, execSource(t, &variablestorev1.EnvSourceValue{Cell: &variablestorev1.Cell{Key: "TOKEN"}, Value: "t"})); err != nil {
+		t.Fatal(err)
+	}
+	store := provider.KeyValues()
+	recorded, err := store.List(ctx, keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootEnvSources})
+	if err != nil || len(recorded) != 1 {
+		t.Fatalf("registrations = %v, %v, want the one the deploy made", recorded, err)
+	}
+	var registration map[string]json.RawMessage
+	if err := json.Unmarshal(recorded[0].Value, &registration); err != nil {
+		t.Fatal(err)
+	}
+	registration["descriptor"] = json.RawMessage(`{"kind":"exec","exec":{"command":["op","inject"],"format":"json"}}`)
+	if recorded[0].Value, err = json.Marshal(registration); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Write(ctx, recorded[0]); err != nil {
+		t.Fatal(err)
+	}
+	return variables, provider
+}
+
+func TestADeployOverARegistrationThatNoLongerDecodesRegistersItsOwn(t *testing.T) {
+	variables, _ := registeredThenUndecodable(t)
+	production := environmentv1.Tier_TIER_PRODUCTION
+
+	synced, err := syncEnvSource(variables, production, execSource(t, &variablestorev1.EnvSourceValue{Cell: &variablestorev1.Cell{Key: "TOKEN"}, Value: "rotated"}))
+	if err != nil || synced.GetStatus().GetEnvSource() != "exec" {
+		t.Fatalf("SyncEnvSource() over a registration that no longer decodes = %+v, %v, want the deploy's env source registered", synced, err)
+	}
+	described, err := variables.DescribeEnvSource(context.Background(), &variablestorev1.DescribeEnvSourceRequest{Tier: production, Slug: slug})
+	if err != nil || described.GetStatus().GetEnvSource() != "exec" || described.GetStatus().GetLastError() != "" {
+		t.Fatalf("DescribeEnvSource() = %+v, %v, want the new exec registration", described, err)
+	}
+}
+
+func TestADeploySwitchingToBuiltinClearsARegistrationThatNoLongerDecodes(t *testing.T) {
+	variables, _ := registeredThenUndecodable(t)
+	production := environmentv1.Tier_TIER_PRODUCTION
+
+	if _, err := syncEnvSource(variables, production, builtin); err != nil {
+		t.Fatalf("SyncEnvSource(builtin) over a registration that no longer decodes = %v", err)
+	}
+	described, err := variables.DescribeEnvSource(context.Background(), &variablestorev1.DescribeEnvSourceRequest{Tier: production, Slug: slug})
+	if err != nil || described.GetStatus().GetEnvSource() != "builtin" {
+		t.Fatalf("DescribeEnvSource() = %+v, %v, want builtin", described, err)
+	}
+	if err := setValue(t, variables, production, cell("TOKEN"), "by-hand"); err != nil {
+		t.Fatalf("SetValue() once builtin = %v, want ocel's own value taken", err)
+	}
+}
+
+func TestARegistrationThatNoLongerDecodesIsDescribedAsNeedingADeploy(t *testing.T) {
+	variables, _ := registeredThenUndecodable(t)
+
+	described, err := variables.DescribeEnvSource(context.Background(), &variablestorev1.DescribeEnvSourceRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Slug: slug})
+	if err != nil {
+		t.Fatalf("DescribeEnvSource() = %v, want the registration described", err)
+	}
+	if status := described.GetStatus(); status.GetEnvSource() != "exec" || !strings.Contains(status.GetLastError(), "deploys again") {
+		t.Fatalf("DescribeEnvSource() = %+v, want exec described with a last error saying to deploy again", status)
 	}
 }
 

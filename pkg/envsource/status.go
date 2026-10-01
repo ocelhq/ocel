@@ -101,7 +101,7 @@ func writeStatus(ctx context.Context, store keyvalue.Store, tier environment.Tie
 
 func ForgetProject(ctx context.Context, store variablestore.Store, tier environment.Tier, project string) error {
 	registration, registered, err := Registered(ctx, store.KeyValues, tier, project)
-	if err != nil || !registered {
+	if (err != nil && !isUndecodable(err)) || !registered {
 		return err
 	}
 	if err := release(ctx, store.KeyValues, tier, registration.DedupeKey, project); err != nil {

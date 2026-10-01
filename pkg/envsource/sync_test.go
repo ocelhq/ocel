@@ -100,6 +100,22 @@ func TestProjectsSharingOneSourceCoordinateCostOneReadAPoll(t *testing.T) {
 	}
 }
 
+func TestAScheduledSyncCopiesEveryOtherProjectPastOneWhoseRegistrationNoLongerDecodes(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	register(t, store, infisicalRegistration("admin", host, cloudIdentity, ""))
+	recordUndecodable(t, store.KeyValues, environment.TierProduction, "shop")
+
+	err := sync.CopyScheduled(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "shop") {
+		t.Fatalf("CopyScheduled() = %v, want shop's registration reported", err)
+	}
+	if k := reveal(t, store, scopeOf("admin"), tierWide("", "K")); k.Plaintext != "v" {
+		t.Fatalf("admin K = %q, want it copied despite shop", k.Plaintext)
+	}
+}
+
 func TestAFailingSourceKeepsItsValuesAndIsReadAgainOnlyAfterABackoff(t *testing.T) {
 	t.Parallel()
 	sync, store, fake, host, at := syncFixture(t)
