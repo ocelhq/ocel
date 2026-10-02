@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/arch"
@@ -90,11 +91,32 @@ func ContainerRuntime(architecture string) ([]byte, error) {
 	return embedded(runtimeName, named), nil
 }
 
+func (h *Host) IsAgentCurrent(ctx context.Context) (bool, error) {
+	arch, err := h.arch(ctx)
+	if err != nil {
+		return false, err
+	}
+	agent := newAgentItem(liveAgent(arch))
+	rendered, err := h.run(ctx, "survey the box agent", survey([]Item{agent}), nil)
+	if err != nil {
+		return false, err
+	}
+	observed, _, err := readSurvey(rendered)
+	if err != nil {
+		return false, err
+	}
+	return observed[agent.ID()] == agent.Digest(), nil
+}
+
+func newAgentItem(agent []byte) Item {
+	return Item{Kind: KindFile, Name: LiveBinary, Mode: 0o755, Owner: rootOwner, Content: agent,
+		Note: "serves apps their secret values and runs their topics and tasks"}
+}
+
 func LiveItems(architecture string) []Item {
 	socket, service, agent := liveSocketUnit(), liveServiceUnit(), liveAgent(architecture)
 	return []Item{
-		{Kind: KindFile, Name: LiveBinary, Mode: 0o755, Owner: rootOwner, Content: agent,
-			Note: "serves apps their secret values and runs their topics and tasks"},
+		newAgentItem(agent),
 		{Kind: KindFile, Name: liveSocketFile, Mode: 0o644, Owner: rootOwner, Content: socket},
 		{Kind: KindFile, Name: liveUnitFile, Mode: 0o644, Owner: rootOwner, Content: service},
 		{Kind: KindUnit, Name: LiveSocketUnit, Owner: rootOwner, Content: unitWatchFacts(socket),
