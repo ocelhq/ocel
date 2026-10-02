@@ -285,6 +285,17 @@ func (t Tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*ta
 	return &taskv1.CancelRunResponse{Run: runs.NewRunMessage(item.run())}, nil
 }
 
+func (e *Engine) restoreUnsent(ctx context.Context, item runItem, token string, was map[string]any) {
+	_, err := e.store.updateRun(context.WithoutCancel(ctx), item.Topic, item.SK, change{
+		set:        was,
+		condition:  "#delivery = :token",
+		conditions: map[string]any{":token": token},
+	})
+	if err != nil && !errors.Is(err, errConditionFailed) {
+		slog.Warn("restore a run whose message was never sent", "execution", item.SK, "error", err)
+	}
+}
+
 func (e *Engine) releaseCanceled(ctx context.Context, item runItem) {
 	if provider.RunStatus(item.Status) != provider.RunDelayed || item.Receipt == "" {
 		return
@@ -343,6 +354,11 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 			}
 		}
 	} else if err := t.engine.enqueue(ctx, deployed, queueMessage{Execution: item.SK, Delivery: token, Key: item.Key}, due.Sub(now)); err != nil {
+		was := map[string]any{"status": item.Status, "due_at": item.DueAtMicros, "expires_at": item.ExpiresAtUnix, "delivery": item.Delivery}
+		if item.RunExpiresAtMicros > 0 {
+			was["run_expires_at"] = item.RunExpiresAtMicros
+		}
+		t.engine.restoreUnsent(ctx, item, token, was)
 		return nil, err
 	}
 	return &taskv1.RescheduleRunResponse{Run: runs.NewRunMessage(moved.run())}, nil

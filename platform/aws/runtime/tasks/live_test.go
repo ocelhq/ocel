@@ -183,6 +183,16 @@ func (d *deployment) engine(worker *fakeWorker) *Engine {
 	return New(cfg)
 }
 
+type unsendable struct{ queueService }
+
+func (unsendable) SendMessage(context.Context, *sqs.SendMessageInput, ...func(*sqs.Options)) (*sqs.SendMessageOutput, error) {
+	return nil, fmt.Errorf("the queue refused the message")
+}
+
+func (d *deployment) engineThatCannotSend() *Engine {
+	return New(Config{Topology: d.topology, Table: d.em.db, Queues: unsendable{d.em.sqs}, Topics: d.em.sns})
+}
+
 func (d *deployment) queueOf(topic, consumer string) string {
 	return d.topology.Topics[topic].Queues[consumer]
 }
