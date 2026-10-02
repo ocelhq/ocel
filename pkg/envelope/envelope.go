@@ -93,6 +93,46 @@ func Encode(envelope *topicv1.Envelope) ([]byte, error) {
 	return encodeJSONVerbatim(fields)
 }
 
+func Decode(body []byte) (*topicv1.Envelope, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return nil, err
+	}
+	payload := fields["payload"]
+	delete(fields, "payload")
+	var deliveries []map[string]json.RawMessage
+	if raw, found := fields["messages"]; found {
+		if err := json.Unmarshal(raw, &deliveries); err != nil {
+			return nil, err
+		}
+	}
+	payloads := make([]json.RawMessage, len(deliveries))
+	for i, delivery := range deliveries {
+		payloads[i] = delivery["payload"]
+		delete(delivery, "payload")
+	}
+	if deliveries != nil {
+		raw, err := json.Marshal(deliveries)
+		if err != nil {
+			return nil, err
+		}
+		fields["messages"] = raw
+	}
+	bare, err := json.Marshal(fields)
+	if err != nil {
+		return nil, err
+	}
+	decoded := &topicv1.Envelope{}
+	if err := protojson.Unmarshal(bare, decoded); err != nil {
+		return nil, err
+	}
+	decoded.Payload = payload
+	for i, delivery := range decoded.GetMessages() {
+		delivery.Payload = payloads[i]
+	}
+	return decoded, nil
+}
+
 func encodeJSONVerbatim(value any) ([]byte, error) {
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
