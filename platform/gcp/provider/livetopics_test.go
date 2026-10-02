@@ -66,8 +66,8 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 		t.Fatalf("ProvisionTopic() = %v", err)
 	}
 	t.Cleanup(func() { _ = p.RemoveResource(ctx, ref, binding, nil) })
-	if binding.Type != provider.BindingTopic || binding.Name != "topic-orders" {
-		t.Errorf("ProvisionTopic() = %+v, want the topic binding named for its resource", binding)
+	if binding.Type != provider.BindingTopic || binding.Name != "topic-orders" || binding.Resource != "orders" {
+		t.Errorf("ProvisionTopic() = %+v, want the topic binding named for its resource, of the topic an app reaches by its declared name", binding)
 	}
 	if err := provider.VerifyProperties(binding); err != nil {
 		t.Errorf("VerifyProperties(%+v) = %v", binding, err)
