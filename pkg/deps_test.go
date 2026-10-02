@@ -32,6 +32,7 @@ var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/progress",
 	"github.com/ocelhq/ocel/pkg/progressproto",
 	"github.com/ocelhq/ocel/pkg/proto",
+	"github.com/ocelhq/ocel/pkg/realtime",
 	"github.com/ocelhq/ocel/pkg/refusal",
 	"github.com/ocelhq/ocel/pkg/router",
 	"github.com/ocelhq/ocel/pkg/seal",
@@ -62,7 +63,7 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 		{name: "images", pattern: "./images/...", open: providerBuildsOn},
 		{name: "keyvalue", pattern: "./keyvalue/...", open: providerBuildsOn},
 		{name: "kvstore", pattern: "./kvstore/...", open: []string{"github.com/ocelhq/ocel/pkg/kvstore", "github.com/ocelhq/ocel/pkg/proto"}},
-		{name: "realtime", pattern: "./realtime/...", open: []string{"github.com/ocelhq/ocel/pkg/realtime"}},
+		{name: "realtime", pattern: "./realtime/...", open: []string{"github.com/ocelhq/ocel/pkg/proto", "github.com/ocelhq/ocel/pkg/realtime"}},
 		{name: "refusal", pattern: "./refusal/...", open: providerBuildsOn},
 		{name: "router", pattern: "./router/...", open: []string{
 			"github.com/ocelhq/ocel/pkg/edge",
