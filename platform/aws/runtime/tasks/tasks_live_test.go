@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -423,5 +424,28 @@ func TestLiveEveryRunExpiresFromTheTableEvenIfItNeverFinishes(t *testing.T) {
 	item, _, _ = e.store.readRun(context.Background(), "resize", id, true)
 	if until := time.Unix(item.Retention, 0); until.Before(moved.Add(runRetention - time.Minute)) {
 		t.Errorf("a rescheduled run expires at %v, want its expiry moved with its due time", until)
+	}
+}
+
+func TestLiveAnOrderedRunStillWaitingForASlotOnItsMessagesLastDeliveryEndsFailedNotStrandedInTheDeadLetterQueue(t *testing.T) {
+	em := live(t)
+	d := em.deploy(t, map[string]*provider.TopicSpec{"sequence": aTask("sequence", ordered)}, map[string]queues.Worker{"worker": {Concurrency: 1}})
+	e := d.engine(newFakeWorker(t, func(*topicv1.Envelope) answer { return answer{status: http.StatusOK, body: `{}`} }))
+	if _, taken, err := e.store.takeSlot(context.Background(), slotSet{name: "worker#worker", limit: 1}, "another-run", time.Now().Add(time.Minute)); err != nil || !taken {
+		t.Fatalf("hold the worker's only slot: %v, %v", taken, err)
+	}
+
+	id := trigger(t, e, "sequence", `{}`, &taskv1.TriggerOptions{Key: "k"})
+	record := d.receive(t, "sequence", "sequence", 10*time.Second)
+	record.Attributes = map[string]string{"ApproximateReceiveCount": "1"}
+	if retained := deliver(t, d, e, "sequence", "sequence", record); len(retained) != 1 {
+		t.Fatalf("a first delivery while the worker is full retained %v, want its message held in place", retained)
+	}
+	record.Attributes["ApproximateReceiveCount"] = strconv.Itoa(queues.MaxReceiveCount)
+	if retained := deliver(t, d, e, "sequence", "sequence", record); len(retained) != 0 {
+		t.Errorf("the last delivery before the redrive retained %v, want the message acknowledged", retained)
+	}
+	if run := retrieve(t, e, id); run.GetStatus() != taskv1.RunStatus_RUN_STATUS_FAILED || run.GetAttempts() != 0 || run.GetError() == "" {
+		t.Errorf("a run whose message ran out of deliveries waiting = %v, want it failed without an attempt, saying why", run)
 	}
 }

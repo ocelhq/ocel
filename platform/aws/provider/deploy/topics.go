@@ -21,7 +21,6 @@ const (
 	workerCeiling        = 15 * time.Minute
 	workerSettleMargin   = 30 * time.Second
 	queueRetentionSecs   = 14 * 24 * 60 * 60
-	maxReceiveCount      = 1000
 	snsServicePrincipal  = "sns.amazonaws.com"
 	outputKeyTopicQueues = "queues"
 	outputKeyTopicARN    = "topic"
@@ -155,7 +154,7 @@ func registerTopic(ctx *pulumi.Context, topic deployedTopic, visibility func(wor
 			return err
 		}
 		redrive := deadLetter.Arn.ApplyT(func(arn string) (string, error) {
-			encoded, err := json.Marshal(map[string]any{"deadLetterTargetArn": arn, "maxReceiveCount": maxReceiveCount})
+			encoded, err := json.Marshal(map[string]any{"deadLetterTargetArn": arn, "maxReceiveCount": queues.MaxReceiveCount})
 			return string(encoded), err
 		}).(pulumi.StringOutput)
 		created, err := sqs.NewQueue(ctx, naming.ResourceID(naming.KindTopic, at, consumer), &sqs.QueueArgs{

@@ -103,7 +103,10 @@ provider.
 A worker is a Lambda function built from its app's code. It has no URL: each queue it serves
 invokes it, one run at a time, or a batch consumer's batch. A worker's concurrency, and a
 concurrency of 1, are held in the state table, so a run that arrives when the worker is full
-waits a second or two on its queue. Runs, idempotency keys and debounce records live in the
+waits a second or two on its queue, and longer each time it finds the worker still full, up
+to five minutes. On a FIFO queue every wait is a delivery of the same message, and SQS
+dead-letters a message after 1,000 deliveries, so a run still waiting then ends failed and is
+listed with the dead letters. Runs, idempotency keys and debounce records live in the
 account's state table under the deployment's own keys.
 
 `maxDuration` can be at most 15 minutes. A worker on container compute is refused.
