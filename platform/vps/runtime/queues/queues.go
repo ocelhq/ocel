@@ -288,7 +288,11 @@ func (e *Engines) isWorkerAnswering(ctx context.Context, container, url string) 
 	if answered {
 		return true
 	}
-	if !e.IsAnswering(ctx, url) {
+	probe := e.IsAnswering
+	if probe == nil {
+		probe = IsWorkerAnswering
+	}
+	if !probe(ctx, url) {
 		return false
 	}
 	e.mu.Lock()
