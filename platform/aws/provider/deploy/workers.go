@@ -277,19 +277,20 @@ func (w *workersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerS
 	}
 	for _, queue := range w.served(worker.Name) {
 		if _, err := lambda.NewEventSourceMapping(ctx, naming.ResourceID(naming.KindWorker, worker.Name, queue.topic, queue.consumer.Name),
-			eventSourceMapping(queue, worker, fn, w.region, w.account), pulumi.DependsOn([]pulumi.Resource{consuming})); err != nil {
+			eventSourceMapping(queue, worker, fn, w.region, w.account, resourceTags(at.Kind, "", args.Tags)), pulumi.DependsOn([]pulumi.Resource{consuming})); err != nil {
 			return nil, err
 		}
 	}
 	return fn, nil
 }
 
-func eventSourceMapping(queue consumerQueue, worker provider.WorkerSpec, fn *lambda.Function, region, account string) *lambda.EventSourceMappingArgs {
+func eventSourceMapping(queue consumerQueue, worker provider.WorkerSpec, fn *lambda.Function, region, account string, tags pulumi.StringMap) *lambda.EventSourceMappingArgs {
 	args := &lambda.EventSourceMappingArgs{
 		EventSourceArn:        pulumi.String(sqsQueueARN(region, account, queue.name)),
 		FunctionName:          fn.Arn,
 		BatchSize:             pulumi.Int(1),
 		FunctionResponseTypes: pulumi.StringArray{pulumi.String(reportBatchItemFailures)},
+		Tags:                  tags,
 	}
 	if batch := queue.consumer.Batch; batch != nil && batch.Size > 0 {
 		args.BatchSize = pulumi.Int(batch.Size)
