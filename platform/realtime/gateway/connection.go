@@ -86,7 +86,7 @@ func (g *Gateway) verifyConnect(r *http.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, err := g.verify(auth.Token, namespace, token.Connect, "/"+namespace); err != nil {
+	if _, err := g.verify(auth.Token, token.Expected{Namespace: namespace, Operation: token.Connect, Channel: "/" + namespace}); err != nil {
 		return "", err
 	}
 	return namespace, nil
@@ -102,17 +102,13 @@ func offeredSubprotocols(r *http.Request) []string {
 	return offered
 }
 
-func (g *Gateway) verify(raw, namespace string, operation token.Operation, channel string) (token.Claims, error) {
-	key, known := g.cfg.Keys(namespace)
+func (g *Gateway) verify(raw string, want token.Expected) (token.Claims, error) {
+	key, known := g.cfg.Keys(want.Namespace)
 	if !known {
 		return token.Claims{}, &token.Refusal{Reason: token.ReasonNamespace}
 	}
-	return token.Verify(raw, key, g.cfg.Now(), token.Expected{
-		Audience:  g.cfg.Host,
-		Namespace: namespace,
-		Operation: operation,
-		Channel:   channel,
-	})
+	want.Audience = g.cfg.Host
+	return token.Verify(raw, key, g.cfg.Now(), want)
 }
 
 func (g *Gateway) refuseConnection(conn *websocket.Conn, reason error) {
@@ -216,7 +212,7 @@ func (c *connection) subscribe(frame clientFrame) {
 		c.replyError(frameSubscribeError, frame.ID, errorBadRequest, "channel "+frame.Channel+" is not a channel of /"+c.namespace)
 		return
 	}
-	if _, err := c.g.verify(frame.Authorization.Token, namespace, token.Subscribe, frame.Channel); err != nil {
+	if _, err := c.g.verify(frame.Authorization.Token, token.Expected{Namespace: namespace, Operation: token.Subscribe, Channel: frame.Channel}); err != nil {
 		c.replyError(frameSubscribeError, frame.ID, errorUnauthorized, err.Error())
 		return
 	}

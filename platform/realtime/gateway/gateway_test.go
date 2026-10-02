@@ -130,13 +130,17 @@ func newUnstartedHarness(t *testing.T, configure ...func(*gateway.Config)) *harn
 }
 
 func (h *harness) mint(operation token.Operation, channel string) string {
+	return h.mintFor("user-1", operation, channel)
+}
+
+func (h *harness) mintFor(subject string, operation token.Operation, channel string) string {
 	return tokentest.Sign(h.t, h.key, token.Claims{
 		Audience:  host,
 		ExpiresAt: h.now().Add(time.Minute).Unix(),
 		IssuedAt:  h.now().Unix(),
 		Issuer:    "ocel:rt:" + namespace,
 		ID:        "jti-1",
-		Subject:   "user-1",
+		Subject:   subject,
 		Ocel:      token.Grant{Channel: channel, Namespace: namespace, Operation: operation},
 	})
 }
@@ -254,9 +258,14 @@ func (h *harness) publish(authorization, body string) *http.Response {
 	return resp
 }
 
-func (h *harness) publishAs(operation token.Operation, channel string, data any) *http.Response {
+func (h *harness) serverAuthorization(channel string) string {
+	return "Bearer " + h.mintFor("server", token.Publish, channel)
+}
+
+func (h *harness) serverPublish(channel string, data any) (*http.Response, string) {
 	h.t.Helper()
-	return h.publish("Bearer "+h.mint(operation, channel), envelope(h.t, channel, data))
+	sent := envelope(h.t, channel, data)
+	return h.publish(h.serverAuthorization(channel), sent), sent
 }
 
 func TestAServerPublishReachesASubscriberAsTheEventItSent(t *testing.T) {
@@ -269,8 +278,8 @@ func TestAServerPublishReachesASubscriberAsTheEventItSent(t *testing.T) {
 		t.Fatalf("subscribe answered %v, want subscribe_success for s-1", got)
 	}
 
-	sent := envelope(t, channel, map[string]string{"status": "shipped"})
-	if resp := h.publish("Bearer "+h.mint(token.Publish, channel), sent); resp.StatusCode != http.StatusNoContent {
+	resp, sent := h.serverPublish(channel, map[string]string{"status": "shipped"})
+	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("publish answered %s, want 204", resp.Status)
 	}
 
@@ -291,10 +300,10 @@ func TestASubscriberThatStopsReadingIsDisconnectedWithoutHoldingUpThePublisher(t
 	healthy := h.connect()
 	healthy.subscribe("s-2", channel, h.mint(token.Subscribe, channel))
 
-	sent := envelope(t, channel, strings.Repeat("x", 1<<10))
-	published := 4 * budgetBytes / len(sent)
+	published := 4 * budgetBytes / len(envelope(t, channel, strings.Repeat("x", 1<<10)))
 	for i := range published {
-		if resp := h.publish("Bearer "+h.mint(token.Publish, channel), sent); resp.StatusCode != http.StatusNoContent {
+		resp, sent := h.serverPublish(channel, strings.Repeat("x", 1<<10))
+		if resp.StatusCode != http.StatusNoContent {
 			t.Fatalf("publish %d answered %s while a subscriber stopped reading, want 204", i, resp.Status)
 		}
 		if got := healthy.read(); got["type"] != "data" || got["id"] != "s-2" || got["event"] != sent {
@@ -354,7 +363,7 @@ func TestASubscribeTokenIsRefusedOnAnyChannelButTheOneItNames(t *testing.T) {
 		t.Fatalf("subscribe answered %v, want subscribe_error for s-1", got)
 	}
 
-	h.publishAs(token.Publish, "/app/orders/o-2", "secret")
+	h.serverPublish("/app/orders/o-2", "secret")
 	if frame, err := c.next(200 * time.Millisecond); err == nil {
 		t.Fatalf("a refused subscription received %v", frame)
 	}
@@ -438,7 +447,7 @@ func TestAnUnsubscribedChannelDeliversNothingMore(t *testing.T) {
 		t.Fatalf("unsubscribe answered %v, want unsubscribe_success for s-1", got)
 	}
 
-	h.publishAs(token.Publish, channel, "late")
+	h.serverPublish(channel, "late")
 	if frame, err := c.next(200 * time.Millisecond); err == nil {
 		t.Fatalf("an unsubscribed connection received %v", frame)
 	}
@@ -466,10 +475,12 @@ func TestAServerPublishIsUnauthorizedWithoutABearerPublishTokenForItsChannel(t *
 	sent := envelope(t, channel, "forged")
 
 	for name, authorization := range map[string]string{
-		"a subscribe token":       "Bearer " + h.mint(token.Subscribe, channel),
-		"another channel's token": "Bearer " + h.mint(token.Publish, "/app/orders/o-2"),
-		"a token with no Bearer":  h.mint(token.Publish, channel),
-		"no authorization":        "",
+		"a subscribe token":                 "Bearer " + h.mintFor("server", token.Subscribe, channel),
+		"another channel's token":           h.serverAuthorization("/app/orders/o-2"),
+		"a publish token minted for a user": "Bearer " + h.mint(token.Publish, channel),
+		"a token with no Bearer":            h.mintFor("server", token.Publish, channel),
+		"a Bearer with no token":            "Bearer ",
+		"no authorization":                  "",
 	} {
 		if resp := h.publish(authorization, sent); resp.StatusCode != http.StatusUnauthorized {
 			t.Errorf("publish with %s answered %s, want 401", name, resp.Status)
@@ -484,16 +495,16 @@ func TestAServerPublishRefusesAnEnvelopeOverTheSizeLimitOrNamingNoChannel(t *tes
 	c := h.connect()
 	channel := "/app/orders/o-1"
 	c.subscribe("s-1", channel, h.mint(token.Subscribe, channel))
-	authorization := "Bearer " + h.mint(token.Publish, channel)
+	authorization := h.serverAuthorization(channel)
 
 	refused := map[string]struct {
 		body   string
 		status int
 	}{
-		"an envelope past 240 KB": {envelope(t, channel, strings.Repeat("x", gateway.MaxEventBytes)), http.StatusRequestEntityTooLarge},
-		"no JSON":                 {"not json", http.StatusBadRequest},
-		"no channel":              {`{"v":1,"data":"x"}`, http.StatusBadRequest},
-		"no channel to publish":   {envelope(t, "/app/orders/*", "x"), http.StatusBadRequest},
+		"an envelope past 240 KiB": {envelope(t, channel, strings.Repeat("x", gateway.MaxEventBytes)), http.StatusRequestEntityTooLarge},
+		"no JSON":                  {"not json", http.StatusBadRequest},
+		"no channel":               {`{"v":1,"data":"x"}`, http.StatusBadRequest},
+		"no channel to publish":    {envelope(t, "/app/orders/*", "x"), http.StatusBadRequest},
 	}
 	for name, sent := range refused {
 		if resp := h.publish(authorization, sent.body); resp.StatusCode != sent.status {
@@ -504,10 +515,10 @@ func TestAServerPublishRefusesAnEnvelopeOverTheSizeLimitOrNamingNoChannel(t *tes
 	largest := envelope(t, channel, "")
 	largest = envelope(t, channel, strings.Repeat("x", gateway.MaxEventBytes-len(largest)))
 	if resp := h.publish(authorization, largest); resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("publish of an envelope of exactly 240 KB answered %s, want 204", resp.Status)
+		t.Fatalf("publish of an envelope of exactly 240 KiB answered %s, want 204", resp.Status)
 	}
 	if got := c.read(); got["event"] != largest {
-		t.Fatalf("subscriber got %.200v, want the envelope of exactly 240 KB as the first event", got)
+		t.Fatalf("subscriber got %.200v, want the envelope of exactly 240 KiB as the first event", got)
 	}
 }
 
@@ -540,10 +551,68 @@ func TestAWildcardSubscriptionOnANamespaceReceivesAPublishBelowIt(t *testing.T) 
 	}
 
 	channel := "/app/orders/o-1"
-	sent := envelope(t, channel, "shipped")
-	h.publish("Bearer "+h.mint(token.Publish, channel), sent)
+	_, sent := h.serverPublish(channel, "shipped")
 
 	if got := c.read(); got["type"] != "data" || got["id"] != "s-1" || got["event"] != sent {
 		t.Fatalf("subscriber got %v, want a data frame for s-1 carrying %s", got, sent)
+	}
+}
+
+func TestAServerPublishAcceptsTheBearerSchemeInAnyCase(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	channel := "/app/orders/o-1"
+	credential := h.mintFor("server", token.Publish, channel)
+
+	for _, scheme := range []string{"bearer", "BEARER", "bEaReR"} {
+		if resp := h.publish(scheme+" "+credential, envelope(t, channel, "x")); resp.StatusCode != http.StatusNoContent {
+			t.Errorf("publish with scheme %q answered %s, want 204", scheme, resp.Status)
+		}
+	}
+}
+
+func TestAServerPublishWithoutABearerIsUnauthorizedWhateverItsBody(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	channel := "/app/orders/o-1"
+
+	for name, body := range map[string]string{
+		"an envelope past 240 KiB": envelope(t, channel, strings.Repeat("x", gateway.MaxEventBytes)),
+		"no JSON":                  "not json",
+	} {
+		if resp := h.publish("", body); resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("publish of %s with no Bearer answered %s, want 401", name, resp.Status)
+		}
+	}
+}
+
+func TestAServerPublishRefusesAnEnvelopeOfAnotherShape(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	channel := "/app/orders/o-1"
+	authorization := h.serverAuthorization(channel)
+	id := strings.Repeat("0", 32)
+
+	for name, body := range map[string]string{
+		"another version":    `{"v":2,"id":"` + id + `","ch":"` + channel + `","ts":1790000000000,"kind":"live","data":"x"}`,
+		"no version":         `{"id":"` + id + `","ch":"` + channel + `","ts":1790000000000,"kind":"live","data":"x"}`,
+		"no id":              `{"v":1,"ch":"` + channel + `","ts":1790000000000,"kind":"live","data":"x"}`,
+		"a short id":         `{"v":1,"id":"abc","ch":"` + channel + `","ts":1790000000000,"kind":"live","data":"x"}`,
+		"an uppercase id":    `{"v":1,"id":"` + strings.Repeat("A", 32) + `","ch":"` + channel + `","ts":1790000000000,"kind":"live","data":"x"}`,
+		"no timestamp":       `{"v":1,"id":"` + id + `","ch":"` + channel + `","kind":"live","data":"x"}`,
+		"a string timestamp": `{"v":1,"id":"` + id + `","ch":"` + channel + `","ts":"now","kind":"live","data":"x"}`,
+		"another kind":       `{"v":1,"id":"` + id + `","ch":"` + channel + `","ts":1790000000000,"kind":"history","data":"x"}`,
+		"no data":            `{"v":1,"id":"` + id + `","ch":"` + channel + `","ts":1790000000000,"kind":"live"}`,
+		"an array":           `[]`,
+	} {
+		if resp := h.publish(authorization, body); resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("publish of an envelope with %s answered %s, want 400", name, resp.Status)
+		}
+	}
+	if resp := h.publish(authorization, `{"v":1,"id":"`+id+`","ch":"`+channel+`","ts":1790000000000,"kind":"live","data":null}`); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("publish of an envelope with null data answered %s, want 204", resp.Status)
 	}
 }

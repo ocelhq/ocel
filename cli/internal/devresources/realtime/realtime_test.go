@@ -61,6 +61,7 @@ func mint(t *testing.T, bound *bindingsv1.RealtimeProperties, namespace string, 
 	return tokentest.Sign(t, ed25519.NewKeyFromSeed(bound.GetSigningKey()), token.Claims{
 		Audience:  bound.GetHost(),
 		ExpiresAt: time.Now().Add(time.Minute).Unix(),
+		Subject:   "server",
 		Ocel:      token.Grant{Channel: channel, Namespace: namespace, Operation: operation},
 	})
 }
@@ -155,7 +156,7 @@ func TestTheBindingCarriesAGatewayOnLoopbackThatAcceptsTheTokensItsKeySigns(t *t
 		t.Fatalf("got %v, want subscribe_success", got)
 	}
 
-	event := `{"v":1,"id":"e-1","ch":"/app/orders/o-1","ts":1790000000000,"kind":"live","data":{"status":"shipped"}}`
+	event := `{"v":1,"id":"0123456789abcdef0123456789abcdef","ch":"/app/orders/o-1","ts":1790000000000,"kind":"live","data":{"status":"shipped"}}`
 	req, _ := http.NewRequest(http.MethodPost, "http://"+bound.GetHost()+"/publish", strings.NewReader(event))
 	req.Header.Set("Authorization", "Bearer "+mint(t, bound, "app", token.Publish, channel))
 	resp, err := http.DefaultClient.Do(req)

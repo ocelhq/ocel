@@ -45,6 +45,7 @@ type Expected struct {
 	Namespace string
 	Operation Operation
 	Channel   string
+	Subject   string
 }
 
 type Reason string
@@ -58,6 +59,7 @@ const (
 	ReasonNamespace Reason = "namespace"
 	ReasonOperation Reason = "operation"
 	ReasonChannel   Reason = "channel"
+	ReasonSubject   Reason = "subject"
 )
 
 type Refusal struct {
@@ -112,6 +114,8 @@ func Verify(raw string, key ed25519.PublicKey, now time.Time, want Expected) (Cl
 		return Claims{}, refuse(ReasonOperation)
 	case claims.Ocel.Channel != want.Channel:
 		return Claims{}, refuse(ReasonChannel)
+	case want.Subject != "" && claims.Subject != want.Subject:
+		return Claims{}, refuse(ReasonSubject)
 	}
 	return claims, nil
 }
