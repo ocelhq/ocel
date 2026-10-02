@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { deploy, sdk } from "./matrix/fixtures";
@@ -8,6 +8,7 @@ import { appDirs, configTree, treeRoot } from "./ocel";
 import { outputRoot } from "./paths";
 import type { CellUnderTest } from "./run/cellRun";
 import {
+  copyTree,
   formatGoWork,
   lockfileInstallArgs,
   nestedMembers,
@@ -248,5 +249,30 @@ describe("the SDKs a tree links beside an app", () => {
 
   it("links none for an app of node alone", async () => {
     expect(await readSdkDirs(await appWith(["package.json"]))).toEqual([]);
+  });
+});
+
+describe("what a tree copies of an app", () => {
+  async function copied(files: string[]): Promise<string> {
+    const source = await mkdtemp(path.join(tmpdir(), "journey-copy-"));
+    for (const file of files) {
+      await mkdir(path.dirname(path.join(source, file)), { recursive: true });
+      await writeFile(path.join(source, file), "");
+    }
+    const dest = path.join(await mkdtemp(path.join(tmpdir(), "journey-copied-")), "app");
+    await copyTree(source, dest);
+    return dest;
+  }
+
+  it("keeps a route directory named target, as a Next app's app/routing/target", async () => {
+    const dest = await copied(["package.json", "app/routing/target/page.tsx"]);
+    expect(await readdir(path.join(dest, "app/routing/target"))).toEqual(["page.tsx"]);
+  });
+
+  it("leaves out the build output beside a Cargo.toml and the environment beside a pyproject.toml", async () => {
+    const rust = await copied(["Cargo.toml", "src/main.rs", "target/debug/web"]);
+    expect((await readdir(rust)).sort()).toEqual(["Cargo.toml", "src"]);
+    const python = await copied(["pyproject.toml", "main.py", ".venv/bin/python"]);
+    expect((await readdir(python)).sort()).toEqual(["main.py", "pyproject.toml"]);
   });
 });
