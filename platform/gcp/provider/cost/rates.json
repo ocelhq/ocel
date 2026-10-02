@@ -866,6 +866,43 @@
       ],
       "source": "https://cloud.google.com/vpc/pricing#psc-consumer-data-processing",
       "verified": "2026-10-01"
+    },
+    {
+      "id": "gcp/pubsub/throughput",
+      "region": "",
+      "unit": "GiB",
+      "allowance": "account",
+      "note": "a message is billed at least 1 KiB, so the throughput is shaped as each message's minimum",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "10",
+          "price": "0.0390625"
+        }
+      ],
+      "source": "https://cloud.google.com/pubsub/pricing",
+      "verified": "2026-10-02"
+    },
+    {
+      "id": "gcp/tasks/operations",
+      "region": "",
+      "unit": "operations",
+      "allowance": "account",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "1000000",
+          "price": "0.0000004"
+        }
+      ],
+      "source": "https://cloud.google.com/tasks/pricing",
+      "verified": "2026-10-02"
     }
   ]
 }

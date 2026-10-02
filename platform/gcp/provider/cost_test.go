@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"maps"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -250,5 +251,97 @@ func TestPriceOfAStoreBillsItsNodeAndItsAppendOnlyFileEveryHourAndTrafficFromOth
 		if got := estimateOfType(t, est, set, typ, "project:shop/shared:production").GetStatus(); got != costv1.ResourceEstimate_STATUS_FREE {
 			t.Errorf("the %s is priced %s, want free", typ, got)
 		}
+	}
+}
+
+func topicsManifest() *contractv1.Manifest {
+	manifest := shopManifest()
+	manifest.Workers = []*contractv1.ManifestWorker{{Name: "media", App: "web", Compute: string(provider.ComputeServerless), Concurrency: 4}}
+	manifest.Resources = append(manifest.Resources,
+		&contractv1.ManifestResource{
+			LogicalName: "task--resize",
+			Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: "resize"},
+			Config: &contractv1.ManifestResource_Topic{Topic: &contractv1.ManifestTopic{
+				Cron:      "*/5 * * * *",
+				Consumers: []*contractv1.ManifestConsumer{{Name: "resize", Worker: "media", Exclusive: true}},
+			}},
+		},
+		&contractv1.ManifestResource{
+			LogicalName: "topic--orders",
+			Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC, Name: "orders"},
+			Config: &contractv1.ManifestResource_Topic{Topic: &contractv1.ManifestTopic{
+				Consumers: []*contractv1.ManifestConsumer{{Name: "ship", Worker: "media"}, {Name: "bill", Worker: "media"}},
+			}},
+		},
+	)
+	return manifest
+}
+
+func TestShapeOfTopicsAndTasksIsTheirPubSubTopologyTheTiersQueueAndDatabaseAndEachWorker(t *testing.T) {
+	client, costs := costServed(t)
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    topicsManifest(),
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+	counts := typeCounts(set)
+	for typ, want := range map[string]int{
+		"google_pubsub_topic":         5,
+		"google_pubsub_subscription":  3,
+		"google_cloud_tasks_queue":    1,
+		"google_firestore_database":   2,
+		"google_cloud_run_v2_service": 4,
+		"google_cloud_scheduler_job":  2,
+	} {
+		if counts[typ] != want {
+			t.Errorf("the shape lists %d %s, want %d: %v", counts[typ], typ, want, counts)
+		}
+	}
+	for _, r := range set.GetResources() {
+		switch {
+		case r.GetType() == "google_pubsub_topic" || r.GetType() == "google_pubsub_subscription":
+			if r.GetScope() != "project:shop/environment:prod" {
+				t.Errorf("%s is shaped under %s, want the environment that declares it", r.GetName(), r.GetScope())
+			}
+		case r.GetType() == "google_cloud_tasks_queue":
+			if r.GetScope() != "project:shop/shared:production" {
+				t.Errorf("the delay queue is shaped under %s, want the tier it is bootstrapped for", r.GetScope())
+			}
+		case r.GetType() == "google_cloud_run_v2_service" && r.GetScope() == "project:shop/environment:prod/app:web" && r.GetProperties().AsMap()["ingress"] == "INGRESS_TRAFFIC_INTERNAL_ONLY":
+			template := r.GetProperties().AsMap()["template"].(map[string]any)
+			if template["scaling"].(map[string]any)["min_instance_count"] != float64(0) {
+				t.Errorf("the worker %s keeps instances warm, want it scaled from zero", r.GetName())
+			}
+		}
+	}
+
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: costv1.Profile_PROFILE_HEAVY}})
+	if err != nil {
+		t.Fatalf("Price() = %v", err)
+	}
+	for _, typ := range []string{"google_pubsub_topic", "google_pubsub_subscription"} {
+		if r := estimateOfType(t, est, set, typ, "project:shop/environment:prod"); r.GetStatus() != costv1.ResourceEstimate_STATUS_PRICED {
+			t.Errorf("a %s is priced %s, want priced by its throughput", typ, r.GetStatus())
+		}
+	}
+	statuses := map[costv1.ResourceEstimate_Status]int{}
+	for _, resource := range set.GetResources() {
+		if resource.GetType() != "google_pubsub_topic" {
+			continue
+		}
+		for _, r := range est.GetResources() {
+			if r.GetResource() == resource.GetId() {
+				statuses[r.GetStatus()]++
+			}
+		}
+	}
+	if want := map[costv1.ResourceEstimate_Status]int{costv1.ResourceEstimate_STATUS_PRICED: 2, costv1.ResourceEstimate_STATUS_FREE: 3}; !maps.Equal(statuses, want) {
+		t.Errorf("the topics are priced %v, want the two live topics priced by throughput and the three dead-letter topics free", statuses)
+	}
+	if r := estimateOfType(t, est, set, "google_cloud_tasks_queue", "project:shop/shared:production"); r.GetStatus() != costv1.ResourceEstimate_STATUS_PRICED {
+		t.Errorf("the delay queue is priced %s, want priced by its operations", r.GetStatus())
 	}
 }

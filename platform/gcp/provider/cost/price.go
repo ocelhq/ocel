@@ -29,11 +29,14 @@ const (
 	usageDataProcessed   = "monthly_ingress_data_processed_gb"
 	usageDataOut         = "monthly_data_transfer_to_internet_gb"
 	usageVersions        = "active_secret_versions"
+	usageMessages        = "monthly_messages"
+	usageTaskOperations  = "monthly_task_operations"
 
 	ingressEverywhere = "INGRESS_TRAFFIC_ALL"
 	cpuIdle           = "template.containers.0.resources.cpu_idle"
 	scheduledRequests = "requests_per_hour"
 	billedSecondsEach = "billed_seconds_per_request"
+	deadLetter        = "dead_letter"
 	mebibytesPerGiB   = 1024
 	secondsPerHour    = 3600
 )
@@ -51,7 +54,10 @@ var (
 	egressBand   = pricing.Band{Light: 1, Moderate: 10, Heavy: 100}
 	imagesBand   = pricing.Band{Light: 1, Moderate: 5, Heavy: 50}
 	versionsBand = pricing.Band{Light: 1, Moderate: 1, Heavy: 3}
+	messagesBand = pricing.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
+	taskOpsBand  = pricing.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
 	thousand     = decimal.NewFromInt(1000)
+	kibPerGiB    = decimal.NewFromInt(1 << 20)
 )
 
 var formulas = pricing.Table{
@@ -76,6 +82,9 @@ var formulas = pricing.Table{
 	"google_compute_network":                                free,
 	"google_compute_subnetwork":                             free,
 	"google_network_connectivity_service_connection_policy": free,
+	"google_pubsub_topic":                                   pubSubThroughput("Publish throughput"),
+	"google_pubsub_subscription":                            pubSubThroughput("Delivery throughput"),
+	"google_cloud_tasks_queue":                              tasksQueue,
 }
 
 func Price(req *costv1.PriceRequest) (*costv1.Estimate, error) {
@@ -134,6 +143,22 @@ func cloudRunService(r *pricing.Subject) {
 	if r.String("ingress") == ingressEverywhere {
 		r.Add(pricing.Component{Name: "Data transfer out to internet", Unit: "GiB", Rate: "gcp/network/premium-egress", Quantity: r.Usage(usageDataOut, egressBand), UsageBased: true})
 	}
+}
+
+func pubSubThroughput(name string) func(*pricing.Subject) {
+	return func(r *pricing.Subject) {
+		if r.Bool(deadLetter) {
+			r.Free()
+			return
+		}
+		r.Add(pricing.Component{Name: name, Unit: "GiB", Rate: "gcp/pubsub/throughput", UsageBased: true,
+			Quantity: r.Usage(usageMessages, messagesBand).Div(kibPerGiB)})
+	}
+}
+
+func tasksQueue(r *pricing.Subject) {
+	r.Add(pricing.Component{Name: "Operations", Unit: "operations", Rate: "gcp/tasks/operations", UsageBased: true,
+		Quantity: r.Usage(usageTaskOperations, taskOpsBand)})
 }
 
 func schedulerJob(r *pricing.Subject) {
