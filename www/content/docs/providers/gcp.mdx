@@ -158,6 +158,33 @@ of their traffic leaves as before.
 a bootstrap, or removing the bootstrap, is refused while any store is still on the tier's
 network, naming those stores.
 
+## Topics, tasks and workers
+
+Each topic and task is a Pub/Sub topic, and each of its consumers gets a push subscription and
+a dead-letter topic of its own. A task with a `cron` is a Cloud Scheduler job publishing to its
+topic. Runs are kept in a Firestore database of the tier's own, and a delayed send or trigger
+waits in the tier's Cloud Tasks queue until it is due.
+
+Each worker runs as a second Cloud Run service from its app's image, scaled from zero, reached
+by Pub/Sub alone: its ingress is internal, and only the tier's push account may invoke it. A run
+gets at most 600 seconds, the longest a push subscription waits for an answer.
+
+Topics and tasks need a feature of the tier's bootstrap, installed once:
+
+```bash
+gcloud services enable pubsub.googleapis.com cloudtasks.googleapis.com --project my-project
+ocel bootstrap production --features tasks
+```
+
+That is the tier's task database, its delay queue and its push account. None of it bills while
+idle. The bootstrap credential also needs `roles/cloudtasks.admin`. A deploy declaring a topic or
+task on a tier without it is refused, naming that command, and an ephemeral preview declaring one
+is refused.
+
+What differs from `ocel dev`: lanes are recorded but not weighted, a batch consumer receives
+batches of one, a canceled run's attempt already in flight runs to its end, and a batch trigger
+is not atomic.
+
 ## What to grant
 
 Turn the services on once:
@@ -170,8 +197,8 @@ gcloud services enable firestore.googleapis.com storage.googleapis.com \
 
 A deploy needs `roles/datastore.user`, `roles/storage.objectAdmin`,
 `roles/cloudkms.cryptoKeyEncrypterDecrypter`, `roles/secretmanager.secretAccessor`,
-`roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`, `roles/run.admin` and
-`roles/memorystore.admin`.
+`roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`, `roles/run.admin`,
+`roles/memorystore.admin`, `roles/pubsub.admin` and `roles/cloudscheduler.admin`.
 A bootstrap needs those plus `roles/datastore.owner`, `roles/storage.admin`,
 `roles/cloudkms.admin`, `roles/secretmanager.admin`, `roles/artifactregistry.admin`,
 `roles/iam.serviceAccountAdmin`, `roles/resourcemanager.projectIamAdmin` and
