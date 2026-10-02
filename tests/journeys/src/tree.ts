@@ -1,24 +1,20 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { access, cp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { outputRoot, repoRoot } from "./paths";
 
-const NEVER_COPIED = [
-  ".git",
-  ".next",
-  ".ocel",
-  ".venv",
-  "dist",
-  "node_modules",
-  "output",
-  "target",
-];
+const NEVER_COPIED = [".git", ".next", ".ocel", "dist", "node_modules", "output"];
 const NEVER_COPIED_FROM_A_PACKAGE = NEVER_COPIED.filter((name) => name !== "dist");
 
 const WORKSPACE_FILE = "pnpm-workspace.yaml";
 const GO_MODULE_FILE = "go.mod";
 const GO_WORKSPACE_FILE = "go.work";
 const PYTHON_PROJECT_FILE = "pyproject.toml";
+const PROJECT_FILE_OF_BUILD_OUTPUT: Record<string, string> = {
+  target: "Cargo.toml",
+  ".venv": PYTHON_PROJECT_FILE,
+};
 const SDK_DIR_OF_PROJECT_FILE: [string, string][] = [
   [GO_MODULE_FILE, "sdk"],
   ["Cargo.toml", "crates"],
@@ -218,12 +214,17 @@ async function linkVendored(source: string, dest: string): Promise<void> {
   }
 }
 
+function isBuildOutput(from: string): boolean {
+  const projectFile = PROJECT_FILE_OF_BUILD_OUTPUT[path.basename(from)];
+  return projectFile !== undefined && existsSync(path.join(path.dirname(from), projectFile));
+}
+
 async function copyInto(source: string, dest: string, never: string[]): Promise<string> {
   const skipped = new Set(never);
   await rm(dest, { recursive: true, force: true });
   await cp(source, dest, {
     recursive: true,
-    filter: (from) => !skipped.has(path.basename(from)),
+    filter: (from) => !skipped.has(path.basename(from)) && !isBuildOutput(from),
   });
   await linkVendored(source, dest);
   return dest;
