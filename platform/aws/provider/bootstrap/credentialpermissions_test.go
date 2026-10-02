@@ -644,12 +644,19 @@ func TestEveryCredentialReadsWritesAndDeletesTheKVTokensAndNoOtherParameterThatW
 	}
 }
 
-func TestEveryCredentialTouchesOnlyEventSourceMappingsOfTheBootstrapsFunctionsOrOnesOcelTagged(t *testing.T) {
+func TestEveryCredentialTouchesOnlyEventSourceMappingsOfTheBootstrapsFunctionsOrOcelTaggedOnesOfAppWorkers(t *testing.T) {
 	r := defaultNamespace.ScopedARNs()
+	ofAppWorkers := map[string]any{"lambda:FunctionArn": "arn:aws:lambda:*:*:function:ocel-app-*"}
 	allowed := map[string]bool{
 		conditionJSON(t, map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction}}): true,
-		conditionJSON(t, taggedOnCreate()): true,
-		conditionJSON(t, taggedByOcel()):   true,
+		conditionJSON(t, map[string]any{
+			"StringEquals": map[string]any{"aws:RequestTag/ocel:managed-by": "ocel"},
+			"ArnLike":      ofAppWorkers,
+		}): true,
+		conditionJSON(t, map[string]any{
+			"StringEquals": map[string]any{"aws:ResourceTag/ocel:managed-by": "ocel"},
+			"ArnLike":      ofAppWorkers,
+		}): true,
 	}
 	for purpose, document := range bothCredentials(t) {
 		for g := range grantsOf(t, document) {
@@ -657,7 +664,7 @@ func TestEveryCredentialTouchesOnlyEventSourceMappingsOfTheBootstrapsFunctionsOr
 				continue
 			}
 			if !allowed[g.condition] {
-				t.Errorf("the %s credential grants %s on %s under %s, want it pinned to the bootstrap's own functions or to mappings Ocel tagged", purpose, g.action, g.resource, g.condition)
+				t.Errorf("the %s credential grants %s on %s under %s, want it pinned to the bootstrap's own functions or to Ocel-tagged mappings of app worker functions", purpose, g.action, g.resource, g.condition)
 			}
 		}
 	}

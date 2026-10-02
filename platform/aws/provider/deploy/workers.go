@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
@@ -240,7 +241,8 @@ func (w *workersWork) consumptionPolicy() (string, error) {
 
 func (w *workersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, roleARN pulumi.StringInput, consuming pulumi.Resource) (*lambda.Function, error) {
 	at := w.coordinate(naming.KindWorker, worker.Name)
-	name := at.PhysicalName(maxLambdaNameLen)
+	scope := awsports.AppScope + naming.WordSeparator
+	name := scope + at.PhysicalName(maxLambdaNameLen-len(scope))
 	env := pulumi.StringMap{}
 	args := w.args
 	args.TimeoutSeconds = int(workerTimeout(w.topics, worker.Name) / time.Second)

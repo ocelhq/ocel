@@ -211,6 +211,9 @@ func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFa
 		inputs := rec.inputs("aws:lambda/function:Function", name)
 		env := inputs["environment"].ObjectValue()["variables"].ObjectValue()
 		worker := env["OCEL_WORKER"].StringValue()
+		if fn := inputs["name"].StringValue(); !strings.HasPrefix(fn, "ocel-app-") {
+			t.Errorf("worker function %s is named %q, want it under ocel-app-, the only functions the deploy credential may map a queue to", name, fn)
+		}
 		if worker == "" || env["APP_VAR"].StringValue() != "1" {
 			t.Errorf("worker function %s env = %v, want the app's env and the worker it runs", name, env)
 		}

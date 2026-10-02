@@ -32,13 +32,14 @@ const (
 
 	appScopePrefix = awsports.AppScope + "-"
 
-	appBucketARN      = "arn:aws:s3:::" + appScopePrefix + "*"
-	appFunctionARN    = "arn:aws:lambda:*:*:function:*"
-	appRoleARN        = "arn:aws:iam::*:role/*"
-	appSecretARN      = "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
-	appClusterARN     = "arn:aws:rds:*:*:cluster:" + appScopePrefix + "*"
-	appInstanceARN    = "arn:aws:rds:*:*:db:" + appScopePrefix + "*"
-	appSubnetGroupARN = "arn:aws:rds:*:*:subgrp:" + appScopePrefix + "*"
+	appBucketARN         = "arn:aws:s3:::" + appScopePrefix + "*"
+	appFunctionARN       = "arn:aws:lambda:*:*:function:*"
+	appWorkerFunctionARN = "arn:aws:lambda:*:*:function:" + appScopePrefix + "*"
+	appRoleARN           = "arn:aws:iam::*:role/*"
+	appSecretARN         = "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
+	appClusterARN        = "arn:aws:rds:*:*:cluster:" + appScopePrefix + "*"
+	appInstanceARN       = "arn:aws:rds:*:*:db:" + appScopePrefix + "*"
+	appSubnetGroupARN    = "arn:aws:rds:*:*:subgrp:" + appScopePrefix + "*"
 
 	appQueueARN         = "arn:aws:sqs:*:*:" + appScopePrefix + "*"
 	appTopicARN         = "arn:aws:sns:*:*:" + appScopePrefix + "*"
@@ -162,6 +163,10 @@ func taggedOnCreate() map[string]any {
 
 func taggedByOcel() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagValue}}
+}
+
+func ofAppWorker() map[string]any {
+	return map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": appWorkerFunctionARN}}
 }
 
 func keyPairSuppliedByCaller() map[string]any {
@@ -429,16 +434,22 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"lambda:CreateEventSourceMapping"},
 			Resources: []string{UnscopedResource},
-			Condition: taggedOnCreate(),
+			Condition: mergeConditions(taggedOnCreate(), ofAppWorker()),
 		},
 		{
 			Actions: []string{
 				"lambda:DeleteEventSourceMapping",
 				"lambda:GetEventSourceMapping",
+				"lambda:UpdateEventSourceMapping",
+			},
+			Resources: []string{bootstrapEventSourceARN},
+			Condition: mergeConditions(taggedByOcel(), ofAppWorker()),
+		},
+		{
+			Actions: []string{
 				"lambda:ListTags",
 				"lambda:TagResource",
 				"lambda:UntagResource",
-				"lambda:UpdateEventSourceMapping",
 			},
 			Resources: []string{bootstrapEventSourceARN},
 			Condition: taggedByOcel(),
