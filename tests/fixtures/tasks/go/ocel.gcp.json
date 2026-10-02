@@ -4,5 +4,5 @@
   "provider": {
     "gcp": { "project": "${OCEL_GCP_PROJECT}", "region": "${OCEL_GCP_REGION}" }
   },
-  "apps": [{ "name": "web", "path": "./server" }]
+  "apps": [{ "name": "web", "path": ".", "entrypoint": "./server" }]
 }

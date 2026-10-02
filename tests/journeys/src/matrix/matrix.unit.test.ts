@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  batchCheck,
   exactTaskPayloadCheck,
   exactTopicPayloadCheck,
   hyphenatedTaskCheck,
@@ -297,20 +298,28 @@ describe("the tasks concern", () => {
     }
   });
 
-  it("skips the suite on gcp with the provider's refusal, under its ticket", () => {
-    const tickets = {
-      gcp: 1470,
-      "gcp.floci": 1470,
-    } as const;
-    for (const [lane, issue] of Object.entries(tickets) as [Lane, number][]) {
+  it("runs the behavioural suite on gcp, with lanes, batches, task concurrency and the TypeScript SDK's payload checks red on tasks/node", () => {
+    for (const lane of ["gcp", "gcp.floci"] as const) {
       const planned = planOn(lane);
-      const skipped = Object.keys(planned.skipped).filter((cell) => cell.startsWith("tasks/"));
-      expect(skipped).toEqual(["tasks/node", "tasks/go"]);
-      for (const cell of skipped) {
-        const refusal = planned.skipped[cell]?.find((gap) => gap.issue === issue);
-        expect(refusal?.reason).toMatch(/topics, tasks and workers are unsupported/);
-      }
-      expect(planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name)).toContain("tasks/node");
+      expect(Object.keys(planned.skipped).filter((cell) => cell.startsWith("tasks/"))).toEqual([]);
+      expect(planned.cells.map((cell) => cell.name)).toEqual(
+        expect.arrayContaining(["tasks/node", "tasks/go"]),
+      );
+      const issuesOf = (cell: string) =>
+        Object.fromEntries(
+          Object.entries(planned.expectedFailures[cell] ?? {}).map(([title, listed]) => [
+            title,
+            listed.map((gap) => gap.issue),
+          ]),
+        );
+      expect(issuesOf("tasks/node/web")).toEqual({
+        [lanesCheck.title]: [1562],
+        [batchCheck.title]: [1563],
+        [taskConcurrencyCheck.title]: [1564],
+        [exactTaskPayloadCheck.title]: [1528],
+        [exactTopicPayloadCheck.title]: [1528],
+      });
+      expect(issuesOf("tasks/go/web")).toEqual({});
     }
   });
 

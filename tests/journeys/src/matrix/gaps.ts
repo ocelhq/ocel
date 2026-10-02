@@ -1,4 +1,5 @@
 import {
+  batchCheck,
   bindingCheck,
   bindingQueryCheck,
   clientAddressCheck,
@@ -439,7 +440,7 @@ export const gaps: Gap[] = [
     issue: 1528,
     where: [
       {
-        on: ["dev", "vps", "vps.incus", "aws", "aws.floci"],
+        on: ["dev", "vps", "vps.incus", "aws", "aws.floci", "gcp", "gcp.floci"],
         fixtures: [tasks.node],
         fails: [check(exactTaskPayloadCheck), check(exactTopicPayloadCheck)],
       },
@@ -474,16 +475,29 @@ export const gaps: Gap[] = [
       },
     ],
   },
-  ...([{ target: "gcp", lanes: ["gcp", "gcp.floci"], issue: 1470 }] as const).map(
-    ({ target, lanes, issue }): Gap => ({
-      id: `${target}-refuses-tasks`,
-      reason: `the ${target} provider refuses a deploy that declares a topic, task or worker at preflight: topics, tasks and workers are unsupported on ${target}, as it names no compute a worker runs on`,
-      issue,
-      where: [
-        { on: [...lanes], fixtures: [tasks.node, tasks.go], fails: [step.deploy], skipsCell: true },
-      ],
-    }),
-  ),
+  {
+    id: "gcp-delivers-lanes-unweighted",
+    reason:
+      "a gcp consumer is one Pub/Sub push subscription, and Pub/Sub has no priority, so a run's lane is recorded and takes no share of the deliveries",
+    issue: 1562,
+    where: [{ on: ["gcp", "gcp.floci"], fixtures: [tasks.node], fails: [check(lanesCheck)] }],
+  },
+  {
+    id: "gcp-pushes-batches-of-one",
+    reason:
+      "a gcp consumer is a Pub/Sub push subscription, which pushes one message per request, so a batch consumer is handed batches of one",
+    issue: 1563,
+    where: [{ on: ["gcp", "gcp.floci"], fixtures: [tasks.node], fails: [check(batchCheck)] }],
+  },
+  {
+    id: "gcp-runs-tasks-unbounded",
+    reason:
+      "a gcp worker bounds its runs by its Cloud Run concurrency alone, and nothing holds one task's runs below it, so a task's own concurrency is not enforced",
+    issue: 1564,
+    where: [
+      { on: ["gcp", "gcp.floci"], fixtures: [tasks.node], fails: [check(taskConcurrencyCheck)] },
+    ],
+  },
   {
     id: "sdk-server-publish-misses-gateway",
     reason:

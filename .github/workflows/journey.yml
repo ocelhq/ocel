@@ -193,7 +193,7 @@ jobs:
             touched=$(printf '%s\n' "$files" | sed -n 's|^tests/fixtures/\([^/]*\)/\([^/]*\)/.*|\1/\2|p' | sort -u | paste -sd, -)
             dev=$(hit "$shared"'|^platform/aws/runtime/bucket/')
             aws=$(hit "$shared"'|^platform/(aws|edge)/|^scripts/floci\.sh$')
-            gcp=$(hit "$shared"'|^platform/gcp/|^scripts/floci\.sh$')
+            gcp=$(hit "$shared"'|^platform/gcp/|^scripts/floci\.sh$|^scripts/flocidispatch/')
             vps=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$')
             front=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$|^tests/fronts/')
             engine=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2|vps-docker)\.sh$')
@@ -628,6 +628,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: ./.github/actions/go
 
       - uses: ./.github/actions/node-workspace
         with:
