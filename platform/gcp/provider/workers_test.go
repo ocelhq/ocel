@@ -63,19 +63,15 @@ func TestAWorkerIsNamedApartFromItsAppAndEveryOtherWorker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	media, err := names.WorkerService("shop", stackrecords.ProductionEnv, "web", "media")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ledger, err := names.WorkerService("shop", stackrecords.ProductionEnv, "web", "ledger")
-	if err != nil {
-		t.Fatal(err)
-	}
+	media := names.WorkerService("shop", stackrecords.ProductionEnv, "web", "media")
+	ledger := names.WorkerService("shop", stackrecords.ProductionEnv, "web", "ledger")
 	if media == app || media == ledger || !strings.Contains(media, "media") || len(media) > maxServiceNameLength {
 		t.Errorf("WorkerService() = %q and %q beside the app's %q, want a service of each worker's own in %d characters", media, ledger, app, maxServiceNameLength)
 	}
-	if _, err := names.WorkerService("shop", stackrecords.ProductionEnv, "web", strings.Repeat("w", 40)); err == nil {
-		t.Error("WorkerService() of a worker too long for Cloud Run = nil error, want it refused")
+	long := names.WorkerService("shop", stackrecords.ProductionEnv, "web", strings.Repeat("w", 40))
+	longer := names.WorkerService("shop", stackrecords.ProductionEnv, "web", strings.Repeat("w", 41))
+	if len(long) > maxServiceNameLength || long == longer || !cloudRunService.MatchString(long) {
+		t.Errorf("WorkerService() of workers too long to spell out = %q and %q, want each cut to %d characters and kept apart by its hash", long, longer, maxServiceNameLength)
 	}
 }
 

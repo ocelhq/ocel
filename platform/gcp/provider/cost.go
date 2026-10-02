@@ -104,10 +104,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		}
 		tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
 		for _, worker := range app.Workers {
-			service, err := names.WorkerService(req.Deploy.Slug, req.Deploy.Env, app.App, worker.Name)
-			if err != nil {
-				return nil, err
-			}
+			service := names.WorkerService(req.Deploy.Slug, req.Deploy.Env, app.App, worker.Name)
 			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(provider.ComputeServerless, 0, ingressInternal))
 		}
 	}
