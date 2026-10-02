@@ -95,6 +95,7 @@ func (p *Provider) Facts() provider.Facts {
 		},
 		DNSKinds:        []provider.DNSKind{dnsCloudflare},
 		StoresArtifacts: true,
+		WorkerCeilings:  slices.Clone(workerCeilings),
 	}
 }
 
@@ -113,6 +114,7 @@ func (p *Provider) Hooks() provider.Hooks {
 func (p *Provider) resourceHooks() resources.Hooks {
 	return resources.Hooks{
 		ProvisionKV:    p.ProvisionKV,
+		ProvisionTopic: p.ProvisionTopic,
 		RemoveResource: p.RemoveResource,
 		Functions: &resources.FunctionHooks{
 			Provision: p.ProvisionFunctions,

@@ -57,6 +57,7 @@ type clients struct {
 	connectivity memo[*networkconnectivity.Service]
 	principal    memo[string]
 	projects     memo[*cloudresourcemanager.Service]
+	number       memo[int64]
 }
 
 func opened[T any](c *clients, cache *memo[T], doing string, open func() (T, error)) (T, error) {
@@ -163,6 +164,24 @@ func (c *clients) Projects() (*cloudresourcemanager.Service, error) {
 	return opened(c, &c.projects, "Resource Manager", func() (*cloudresourcemanager.Service, error) {
 		return cloudresourcemanager.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
+}
+
+func (c *clients) ServiceAgent(ctx context.Context, domain string) (string, error) {
+	number, err := c.number.get(func() (int64, error) {
+		service, err := c.Projects()
+		if err != nil {
+			return 0, err
+		}
+		project, err := attempted(ctx, service.Projects.Get(c.project).Context(ctx).Do)
+		if err != nil {
+			return 0, fmt.Errorf("read project %s's number, which names its service agents: %w", c.project, err)
+		}
+		return project.ProjectNumber, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("serviceAccount:service-%d%s", number, domain), nil
 }
 
 func (c *clients) emulated() bool { return c.endpoint != "" }

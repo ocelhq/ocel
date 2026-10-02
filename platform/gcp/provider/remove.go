@@ -8,8 +8,11 @@ import (
 )
 
 func (p *Provider) RemoveResource(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
-	if binding.Type != provider.BindingKV {
-		return nil
+	switch binding.Type {
+	case provider.BindingKV:
+		return p.removeKV(ctx, ref, binding, progress)
+	case provider.BindingTopic, provider.BindingTask:
+		return p.removeTopic(ctx, ref, binding, progress)
 	}
-	return p.removeKV(ctx, ref, binding, progress)
+	return nil
 }

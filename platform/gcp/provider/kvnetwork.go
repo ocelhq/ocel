@@ -148,15 +148,7 @@ func (b bootstrap) grantSubnetworkUse(ctx context.Context, engine *compute.Servi
 }
 
 func (b bootstrap) readServiceAgent(ctx context.Context, domain string) (string, error) {
-	service, err := b.clients.Projects()
-	if err != nil {
-		return "", err
-	}
-	project, err := attempted(ctx, service.Projects.Get(b.clients.project).Context(ctx).Do)
-	if err != nil {
-		return "", fmt.Errorf("read project %s's number, which names its service agents: %w", b.clients.project, err)
-	}
-	return fmt.Sprintf("serviceAccount:service-%d%s", project.ProjectNumber, domain), nil
+	return b.clients.ServiceAgent(ctx, domain)
 }
 
 func (b bootstrap) connectionPolicyPath(tier environment.Tier) string {
