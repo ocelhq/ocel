@@ -97,7 +97,7 @@ func (e *Engine) Deliver(ctx context.Context, event events.SQSEvent) events.SQSE
 	return resp
 }
 
-func (e *Engine) receive(ctx context.Context, deployed deployedConsumer, record events.SQSMessage) (received, error) {
+func (e *Engine) recordArrival(ctx context.Context, deployed deployedConsumer, record events.SQSMessage) (received, error) {
 	var msg queueMessage
 	if err := json.Unmarshal([]byte(record.Body), &msg); err != nil {
 		return received{}, fmt.Errorf("message %s is not one this engine sent: %w", record.MessageId, err)
@@ -168,7 +168,7 @@ func readinessOf(got received, now time.Time) (readiness, time.Duration) {
 	return runnable, 0
 }
 
-func (e *Engine) admit(ctx context.Context, deployed deployedConsumer, got received) (bool, disposition) {
+func (e *Engine) setAsideUnlessRunnable(ctx context.Context, deployed deployedConsumer, got received) (bool, disposition) {
 	readiness, wait := readinessOf(got, time.Now())
 	switch readiness {
 	case stale:
@@ -298,7 +298,7 @@ func (e *Engine) claim(ctx context.Context, deployed deployedConsumer, got recei
 }
 
 func (e *Engine) deliverOne(ctx context.Context, deployed deployedConsumer, record events.SQSMessage) disposition {
-	got, err := e.receive(ctx, deployed, record)
+	got, err := e.recordArrival(ctx, deployed, record)
 	if errors.Is(err, errRunGone) {
 		return acknowledged
 	}
@@ -306,7 +306,7 @@ func (e *Engine) deliverOne(ctx context.Context, deployed deployedConsumer, reco
 		slog.Warn("read a delivered message", "queue", deployed.queue, "error", err)
 		return retained
 	}
-	if ready, disposition := e.admit(ctx, deployed, got); !ready {
+	if ready, disposition := e.setAsideUnlessRunnable(ctx, deployed, got); !ready {
 		return disposition
 	}
 	slots, taken, err := e.takeSlots(ctx, deployed, got.execution, invocationDeadline(ctx).Add(leaseMargin))
@@ -525,7 +525,7 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 	var retainedIDs []string
 	var admitted []received
 	for _, record := range records {
-		got, err := e.receive(ctx, deployed, record)
+		got, err := e.recordArrival(ctx, deployed, record)
 		if errors.Is(err, errRunGone) {
 			continue
 		}
@@ -534,7 +534,7 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 			retainedIDs = append(retainedIDs, record.MessageId)
 			continue
 		}
-		if ready, disposition := e.admit(ctx, deployed, got); !ready {
+		if ready, disposition := e.setAsideUnlessRunnable(ctx, deployed, got); !ready {
 			if disposition == retained {
 				retainedIDs = append(retainedIDs, record.MessageId)
 			}
