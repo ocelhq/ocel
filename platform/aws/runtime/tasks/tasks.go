@@ -30,14 +30,14 @@ type recordedRun struct {
 	Run string `json:"run"`
 }
 
-func runRecord(execution string) string {
+func runRecord(execution string) json.RawMessage {
 	encoded, _ := json.Marshal(recordedRun{Run: execution})
-	return string(encoded)
+	return encoded
 }
 
-func readRecordedRun(value string) string {
+func readRecordedRun(value json.RawMessage) string {
 	var recorded recordedRun
-	_ = json.Unmarshal([]byte(value), &recorded)
+	_ = json.Unmarshal(value, &recorded)
 	return recorded.Run
 }
 
@@ -123,12 +123,12 @@ func (t Tasks) trigger(ctx context.Context, deployed deployedConsumer, payload [
 		if options.GetIdempotencyKeyTtl() != nil {
 			life = options.GetIdempotencyKeyTtl().AsDuration()
 		}
-		held, created, err := store.ensureRecord(ctx, provider.RecordIdempotency, deployed.topicName, idempotencyKey, runRecord(execution), now.Add(life))
+		held, created, err := store.EnsureRecord(ctx, provider.ExpiringRecord{Purpose: provider.RecordIdempotency, Topic: deployed.topicName, Key: idempotencyKey, Value: runRecord(execution), ExpiresAt: now.Add(life)})
 		if err != nil {
 			return "", err
 		}
 		if !created {
-			return readRecordedRun(held), nil
+			return readRecordedRun(held.Value), nil
 		}
 	}
 	if debounce := options.GetDebounce(); debounce != nil {
@@ -139,7 +139,7 @@ func (t Tasks) trigger(ctx context.Context, deployed deployedConsumer, payload [
 		}
 		if pending != "" {
 			if idempotencyKey != "" {
-				if err := store.rewriteRecord(ctx, provider.RecordIdempotency, deployed.topicName, idempotencyKey, runRecord(pending), now.Add(provider.DefaultIdempotencyKeyLife)); err != nil {
+				if err := store.rewriteRecord(ctx, provider.ExpiringRecord{Purpose: provider.RecordIdempotency, Topic: deployed.topicName, Key: idempotencyKey, Value: runRecord(pending), ExpiresAt: now.Add(provider.DefaultIdempotencyKeyLife)}); err != nil {
 					return "", err
 				}
 			}
@@ -148,7 +148,7 @@ func (t Tasks) trigger(ctx context.Context, deployed deployedConsumer, payload [
 	}
 	if err := t.engine.startRun(ctx, deployed, messageID, now, execution, run); err != nil {
 		if idempotencyKey != "" {
-			_ = store.forgetRecord(ctx, provider.RecordIdempotency, deployed.topicName, idempotencyKey)
+			_ = store.deleteRecord(ctx, provider.RecordIdempotency, deployed.topicName, idempotencyKey)
 		}
 		return "", err
 	}
@@ -194,11 +194,12 @@ func (e *Engine) startRun(ctx context.Context, deployed deployedConsumer, messag
 
 func (t Tasks) debounce(ctx context.Context, deployed deployedConsumer, key, execution string, due time.Time) (string, error) {
 	store := t.engine.store
-	held, created, err := store.ensureRecord(ctx, provider.RecordDebounce, deployed.topicName, key, runRecord(execution), due)
+	record := provider.ExpiringRecord{Purpose: provider.RecordDebounce, Topic: deployed.topicName, Key: key, Value: runRecord(execution), ExpiresAt: due}
+	held, created, err := store.EnsureRecord(ctx, record)
 	if err != nil || created {
 		return "", err
 	}
-	pending := readRecordedRun(held)
+	pending := readRecordedRun(held.Value)
 	item, err := store.updateRun(ctx, deployed.topicName, pending, change{
 		set:        map[string]any{"due_at": due.UnixMicro(), "expires_at": retentionAfter(due.UnixMicro())},
 		condition:  "#status = :delayed",
@@ -213,12 +214,13 @@ func (t Tasks) debounce(ctx context.Context, deployed deployedConsumer, key, exe
 				}
 			}
 		}
-		return pending, store.rewriteRecord(ctx, provider.RecordDebounce, deployed.topicName, key, runRecord(pending), due)
+		record.Value = runRecord(pending)
+		return pending, store.rewriteRecord(ctx, record)
 	}
 	if !errors.Is(err, errConditionFailed) {
 		return "", err
 	}
-	return "", store.rewriteRecord(ctx, provider.RecordDebounce, deployed.topicName, key, runRecord(execution), due)
+	return "", store.rewriteRecord(ctx, record)
 }
 
 var messageIDLength = len(envelope.NewMessageID(time.Time{}))

@@ -2,7 +2,6 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -12,16 +11,6 @@ import (
 )
 
 func (e *Engine) Store() provider.TaskStore { return e.store }
-
-func (s store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord) (provider.ExpiringRecord, bool, error) {
-	held, created, err := s.holdRecord(ctx, record.Purpose, record.Topic, record.Key, string(record.Value), record.ExpiresAt)
-	if err != nil {
-		return provider.ExpiringRecord{}, false, err
-	}
-	record.Value = json.RawMessage(held.Value)
-	record.ExpiresAt = time.UnixMilli(held.Until)
-	return record, created, nil
-}
 
 func (s store) ReadRun(ctx context.Context, execution string) (provider.Run, error) {
 	topic, found, err := s.topicOf(ctx, execution)

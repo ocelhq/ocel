@@ -42,13 +42,13 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 		if err != nil {
 			return nil, err
 		}
-		held, created, err := t.engine.store.ensureRecord(ctx, provider.RecordIdempotency, req.GetTopic(), key, string(encoded), now.Add(provider.DefaultIdempotencyKeyLife))
+		held, created, err := t.engine.store.EnsureRecord(ctx, provider.ExpiringRecord{Purpose: provider.RecordIdempotency, Topic: req.GetTopic(), Key: key, Value: encoded, ExpiresAt: now.Add(provider.DefaultIdempotencyKeyLife)})
 		if err != nil {
 			return nil, err
 		}
 		if !created {
 			var recorded recordedMessage
-			_ = json.Unmarshal([]byte(held), &recorded)
+			_ = json.Unmarshal(held.Value, &recorded)
 			return &topicv1.SendResponse{MessageId: recorded.Message}, nil
 		}
 	}
@@ -68,7 +68,7 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 	}
 	if err := t.engine.publish(ctx, req.GetTopic(), topic.SNS, topic.Declared.Ordered, msg); err != nil {
 		if key := req.GetIdempotencyKey(); key != "" {
-			_ = t.engine.store.forgetRecord(ctx, provider.RecordIdempotency, req.GetTopic(), key)
+			_ = t.engine.store.deleteRecord(ctx, provider.RecordIdempotency, req.GetTopic(), key)
 		}
 		return nil, err
 	}
