@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/firestore"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/taskstoretest"
@@ -51,6 +52,40 @@ func TestLiveFirestoreStoreKeepsRunsAndRecordsAsEveryTaskStoreMust(t *testing.T)
 	taskstoretest.Run(t, func(t *testing.T) provider.TaskStore {
 		return topics.Store{Clients: clients, Scope: scopeOf(t)}
 	})
+}
+
+func TestLiveATiersRunsAreKeptInItsOwnTaskDatabaseApartFromTheNamespaceRecords(t *testing.T) {
+	clients := liveClients(t)
+	scope := scopeOf(t)
+	store := topics.Store{Clients: clients, Scope: scope}
+	ctx := context.Background()
+	if _, err := store.WriteRun(ctx, provider.Run{Execution: "kept", Topic: "resize", Consumer: "resize", Status: provider.RunQueued, CreatedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+
+	path := "taskstores/" + string(scope.Tier) + "~" + scope.Slug + "~" + scope.Environment + "/runs/kept"
+	for database, want := range map[string]bool{
+		ports.TaskDatabase(clients.Namespace, scope.Tier): true,
+		clients.Database(): false,
+	} {
+		client, err := firestore.NewClientWithDatabase(ctx, clients.Project, database, ports.EmulatorGRPC(clients.Endpoint)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshot, err := client.Doc(path).Get(ctx)
+		if found := err == nil && snapshot.Exists(); found != want {
+			t.Errorf("database %s holds the run: %v (%v), want %v", database, found, err, want)
+		}
+		_ = client.Close()
+	}
+}
+
+func TestATaskDatabaseIsNamedForItsNamespaceAndTier(t *testing.T) {
+	t.Parallel()
+
+	if got := ports.TaskDatabase("ocel", environment.TierProduction); got != "ocel-production-tasks" {
+		t.Errorf("TaskDatabase(ocel, production) = %q, want ocel-production-tasks", got)
+	}
 }
 
 func TestLiveAListingByManyTagsReadsABoundedPageAndCarriesOnFromItsCursor(t *testing.T) {

@@ -87,7 +87,7 @@ type storedRun struct {
 }
 
 func (s Store) scopeDocument() (*firestore.DocumentRef, error) {
-	client, err := s.Clients.Firestore()
+	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord)
 	if err != nil {
 		return provider.ExpiringRecord{}, false, err
 	}
-	client, err := s.Clients.Firestore()
+	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
 	if err != nil {
 		return provider.ExpiringRecord{}, false, err
 	}
@@ -165,7 +165,7 @@ func (s Store) changeRecordHolding(ctx context.Context, record provider.Expiring
 	if err != nil {
 		return err
 	}
-	client, err := s.Clients.Firestore()
+	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
 	if err != nil {
 		return err
 	}
@@ -214,7 +214,7 @@ func (s Store) ensureDebouncedRun(ctx context.Context, record provider.ExpiringR
 	if err != nil {
 		return "", err
 	}
-	client, err := s.Clients.Firestore()
+	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
 	if err != nil {
 		return "", err
 	}
@@ -367,7 +367,7 @@ func (s Store) WriteRun(ctx context.Context, run provider.Run) (keyvalue.Revisio
 	if err != nil {
 		return "", err
 	}
-	client, err := s.Clients.Firestore()
+	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
 	if err != nil {
 		return "", err
 	}
@@ -412,7 +412,7 @@ func (s Store) changeRun(ctx context.Context, execution string, change func(run 
 	if err != nil {
 		return storedRun{}, err
 	}
-	client, err := s.Clients.Firestore()
+	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
 	if err != nil {
 		return storedRun{}, err
 	}

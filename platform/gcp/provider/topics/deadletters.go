@@ -72,7 +72,7 @@ func (s Store) eachNamedDeadLetter(ctx context.Context, topic, consumer string, 
 	if err != nil {
 		return err
 	}
-	client, err := s.Clients.Firestore()
+	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func (s Store) removeDeadLetter(ctx context.Context, execution string) (bool, er
 	if err != nil {
 		return false, err
 	}
-	client, err := s.Clients.Firestore()
+	client, err := s.Clients.TaskFirestore(s.Scope.Tier)
 	if err != nil {
 		return false, err
 	}
