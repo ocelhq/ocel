@@ -143,7 +143,7 @@ func encodeJSONVerbatim(value any) ([]byte, error) {
 	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
-func Post(ctx, attemptCtx context.Context, url string, envelope *topicv1.Envelope) Result {
+func Post(ctx, attemptCtx context.Context, client *http.Client, url string, envelope *topicv1.Envelope) Result {
 	body, err := Encode(envelope)
 	if err != nil {
 		return Result{Outcome: Refused, Reason: fmt.Sprintf("encode the envelope: %v", err)}
@@ -153,7 +153,7 @@ func Post(ctx, attemptCtx context.Context, url string, envelope *topicv1.Envelop
 		return Result{Outcome: Failed, Reason: fmt.Sprintf("address the worker: %v", err)}
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return classifyInterruption(ctx, attemptCtx, err)
 	}

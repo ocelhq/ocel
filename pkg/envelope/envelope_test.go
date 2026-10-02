@@ -43,13 +43,37 @@ func TestAnEnvelopeCarriesItsPayloadInlineAndByteForByte(t *testing.T) {
 	var seen string
 	url := answering(t, http.StatusOK, exactJSON, &received, &seen)
 
-	res := envelope.Post(context.Background(), context.Background(), url, anEnvelope(exactJSON))
+	res := envelope.Post(context.Background(), context.Background(), http.DefaultClient, url, anEnvelope(exactJSON))
 
 	if res.Outcome != envelope.Succeeded || string(res.Output) != exactJSON {
 		t.Fatalf("Post = %+v, want success with the worker's output %s unchanged", res, exactJSON)
 	}
 	if !strings.Contains(seen, `"payload":`+exactJSON) {
 		t.Errorf("the worker read %s, want the payload %s inline and unchanged", seen, exactJSON)
+	}
+}
+
+type signing struct{ header, value string }
+
+func (s signing) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set(s.header, s.value)
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func TestAnEnvelopeIsPostedThroughTheClientTheEngineHandsIt(t *testing.T) {
+	var signed atomic.Value
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		signed.Store(r.Header.Get("X-Delivery-Secret"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+	client := &http.Client{Transport: signing{header: "X-Delivery-Secret", value: "s3cret"}}
+
+	res := envelope.Post(context.Background(), context.Background(), client, server.URL, anEnvelope(`{}`))
+
+	if res.Outcome != envelope.Succeeded || signed.Load() != "s3cret" {
+		t.Errorf("Post through a signing client = %+v with header %v, want success carrying the client's header", res, signed.Load())
 	}
 }
 
@@ -91,7 +115,7 @@ func TestAnEnvelopeThatCannotBeEncodedIsRefusedWithoutAnAttemptAtTheWorker(t *te
 	var received atomic.Int32
 	url := answering(t, http.StatusOK, "", &received, nil)
 
-	res := envelope.Post(context.Background(), context.Background(), url, anEnvelope(`{`))
+	res := envelope.Post(context.Background(), context.Background(), http.DefaultClient, url, anEnvelope(`{`))
 
 	if res.Outcome != envelope.Refused || received.Load() != 0 {
 		t.Errorf("Post = %+v with %d envelopes at the worker, want a refusal that reaches no worker", res, received.Load())
@@ -116,7 +140,7 @@ func TestAWorkersAnswerIsReadAsSuccessAbortOrFailure(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var received atomic.Int32
-			res := envelope.Post(context.Background(), context.Background(), answering(t, tc.status, tc.body, &received, nil), anEnvelope(`{}`))
+			res := envelope.Post(context.Background(), context.Background(), http.DefaultClient, answering(t, tc.status, tc.body, &received, nil), anEnvelope(`{}`))
 			if res.Outcome != tc.want || !strings.Contains(res.Reason, tc.reason) {
 				t.Errorf("Post = %+v, want outcome %v naming %q", res, tc.want, tc.reason)
 			}
@@ -133,7 +157,7 @@ func TestAnAttemptPastItsMaxDurationTimesOut(t *testing.T) {
 	attempt, cancel := context.WithTimeoutCause(context.Background(), 50*time.Millisecond, envelope.ErrTimedOut)
 	defer cancel()
 
-	if res := envelope.Post(context.Background(), attempt, server.URL, anEnvelope(`{}`)); res.Outcome != envelope.TimedOut {
+	if res := envelope.Post(context.Background(), attempt, http.DefaultClient, server.URL, anEnvelope(`{}`)); res.Outcome != envelope.TimedOut {
 		t.Errorf("Post past its maxDuration = %+v, want it timed out", res)
 	}
 }

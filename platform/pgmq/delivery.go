@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -63,7 +64,7 @@ func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployed
 		defer e.untrack(claims[0].execution)
 	}
 	posted := time.Now()
-	res := envelope.Post(ctx, attemptCtx, worker.URL, envelopeOf(deployed, claims, deployed.consumer.GetBatch().GetSize() > 0))
+	res := envelope.Post(ctx, attemptCtx, http.DefaultClient, worker.URL, envelopeOf(deployed, claims, deployed.consumer.GetBatch().GetSize() > 0))
 	took := time.Since(posted)
 	for _, claimed := range claims {
 		loop.drop(claimed.msg.id)
