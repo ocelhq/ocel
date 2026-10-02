@@ -442,6 +442,15 @@ export const gaps: Gap[] = [
       },
     ],
   },
+  {
+    id: "go-image-built-from-the-app-path-alone",
+    reason:
+      "a container app's image is built from its path alone, and tasks/go's module is rooted above ./server and replaces ocel.dev with the repository's sdk, so go build in the image finds no go.mod",
+    issue: 1550,
+    where: [
+      { on: ["vps", "vps.incus"], fixtures: [tasks.go], fails: [step.deploy], skipsCell: true },
+    ],
+  },
   ...(
     [
       { target: "aws", lanes: ["aws", "aws.floci"], issue: 1469 },
