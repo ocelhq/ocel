@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -28,6 +29,9 @@ const (
 	tfNetwork             = "google_compute_network"
 	tfSubnetwork          = "google_compute_subnetwork"
 	tfConnectionPolicy    = "google_network_connectivity_service_connection_policy"
+	tfPubSubTopic         = "google_pubsub_topic"
+	tfPubSubSubscription  = "google_pubsub_subscription"
+	tfCloudTasksQueue     = "google_cloud_tasks_queue"
 )
 
 var itemTypes = map[Kind]string{
@@ -99,10 +103,18 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 			}
 		}
 		tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
+		for _, worker := range app.Workers {
+			service, err := names.WorkerService(req.Deploy.Slug, req.Deploy.Env, app.App, worker.Name)
+			if err != nil {
+				return nil, err
+			}
+			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(provider.ComputeServerless, 0, ingressInternal))
+		}
 	}
 	if err := shapeStores(tree, names, req, region, shared, environment); err != nil {
 		return nil, err
 	}
+	shapeTopics(tree, names, req, region, shared, environment)
 	return tree.Set(provider.CostSource)
 }
 
@@ -131,6 +143,34 @@ func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 	tree.Add(shared, string(Vendor), tfSubnetwork, names.Subnetwork(tier), region, map[string]any{"region": region, "ip_cidr_range": kvSubnetRange})
 	tree.Add(shared, string(Vendor), tfConnectionPolicy, names.ConnectionPolicy(tier), region, map[string]any{"location": region, "service_class": memorystoreServiceClass})
 	return nil
+}
+
+func shapeTopics(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, shared, environment string) {
+	scope := taskNames(names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
+	declared := false
+	for _, resource := range req.Resources {
+		if resource.Type != provider.BindingTopic && resource.Type != provider.BindingTask {
+			continue
+		}
+		declared = true
+		topic := declaredTopicOf(resource)
+		tree.Add(environment, string(Vendor), tfPubSubTopic, scope.Topic(topic.declared), region, map[string]any{})
+		for _, consumer := range topic.spec.Consumers {
+			tree.Add(environment, string(Vendor), tfPubSubSubscription, scope.Subscription(topic.declared, consumer.Name), region,
+				map[string]any{"ack_deadline_seconds": int(pushCeiling.Seconds()), "enable_message_ordering": topic.spec.Ordered})
+			tree.Add(environment, string(Vendor), tfPubSubTopic, scope.DeadLetterTopic(topic.declared, consumer.Name), region, map[string]any{"dead_letter": true})
+		}
+		if topic.spec.Cron != "" {
+			tree.Add(environment, string(Vendor), tfSchedulerJob, scope.ScheduleJob(topic.declared), region, map[string]any{"region": region, "schedule": topic.spec.Cron})
+		}
+	}
+	if !declared {
+		return
+	}
+	tier := req.Deploy.Tier
+	tree.Add(shared, string(Vendor), tfFirestoreDatabase, names.TaskDatabase(tier), region, map[string]any{"location_id": region, "type": nativeFirestore})
+	tree.Add(shared, string(Vendor), tfCloudTasksQueue, names.DelayQueue(tier), region, map[string]any{"location": region})
+	tree.Add(shared, string(Vendor), tfServiceAccount, names.PushAccount(tier), region, map[string]any{})
 }
 
 func itemProperties(item item, region string) map[string]any {
