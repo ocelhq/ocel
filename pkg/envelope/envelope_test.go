@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/envelope"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
@@ -49,6 +50,40 @@ func TestAnEnvelopeCarriesItsPayloadInlineAndByteForByte(t *testing.T) {
 	}
 	if !strings.Contains(seen, `"payload":`+exactJSON) {
 		t.Errorf("the worker read %s, want the payload %s inline and unchanged", seen, exactJSON)
+	}
+}
+
+func TestAnEnvelopeDecodesBackWithEachPayloadAsTheJSONTextItWasSentAs(t *testing.T) {
+	t.Parallel()
+
+	for name, sent := range map[string]*topicv1.Envelope{
+		"single": anEnvelope(exactJSON),
+		"batch": {V: envelope.Version, Topic: "orders", Consumer: "email", Messages: []*topicv1.Delivery{
+			{Execution: "a-email", Payload: []byte(exactJSON)},
+			{Execution: "b-email", Payload: []byte(`[1,"two"]`)},
+		}},
+	} {
+		encoded, err := envelope.Encode(sent)
+		if err != nil {
+			t.Fatalf("%s: Encode() = %v", name, err)
+		}
+		decoded, err := envelope.Decode(encoded)
+		if err != nil {
+			t.Fatalf("%s: Decode(%s) = %v", name, encoded, err)
+		}
+		if !proto.Equal(decoded, sent) {
+			t.Errorf("%s: Decode(Encode()) = %v, want %v", name, decoded, sent)
+		}
+	}
+}
+
+func TestABodyThatIsNoJSONObjectDoesNotDecode(t *testing.T) {
+	t.Parallel()
+
+	for _, body := range []string{"", "[]", `{"topic":`} {
+		if _, err := envelope.Decode([]byte(body)); err == nil {
+			t.Errorf("Decode(%q) = nil error, want it refused", body)
+		}
 	}
 }
 

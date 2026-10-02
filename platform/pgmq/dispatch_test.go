@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/ocelhq/ocel/pkg/envelope"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
@@ -60,13 +60,13 @@ func (w *aWorker) serve(rw http.ResponseWriter, req *http.Request) {
 		http.Error(rw, "want a JSON POST", http.StatusBadRequest)
 		return
 	}
-	envelope, err := decodeEnvelope(body)
+	posted, err := envelope.Decode(body)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
 	w.mu.Lock()
-	w.envelopes = append(w.envelopes, delivered{envelope: envelope, body: body, at: time.Now()})
+	w.envelopes = append(w.envelopes, delivered{envelope: posted, body: body, at: time.Now()})
 	w.inFlight++
 	w.peak = max(w.peak, w.inFlight)
 	w.mu.Unlock()
@@ -75,7 +75,7 @@ func (w *aWorker) serve(rw http.ResponseWriter, req *http.Request) {
 		w.inFlight--
 		w.mu.Unlock()
 	}()
-	answer := w.respond(envelope)
+	answer := w.respond(posted)
 	if answer.hold > 0 {
 		select {
 		case <-time.After(answer.hold):
@@ -85,46 +85,6 @@ func (w *aWorker) serve(rw http.ResponseWriter, req *http.Request) {
 	}
 	rw.WriteHeader(answer.status)
 	_, _ = io.WriteString(rw, answer.body)
-}
-
-func decodeEnvelope(body []byte) (*topicv1.Envelope, error) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(body, &fields); err != nil {
-		return nil, err
-	}
-	payload := fields["payload"]
-	delete(fields, "payload")
-	var deliveries []map[string]json.RawMessage
-	if raw, found := fields["messages"]; found {
-		if err := json.Unmarshal(raw, &deliveries); err != nil {
-			return nil, err
-		}
-	}
-	payloads := make([][]byte, len(deliveries))
-	for i, delivery := range deliveries {
-		payloads[i] = delivery["payload"]
-		delete(delivery, "payload")
-	}
-	if deliveries != nil {
-		raw, err := json.Marshal(deliveries)
-		if err != nil {
-			return nil, err
-		}
-		fields["messages"] = raw
-	}
-	bare, err := json.Marshal(fields)
-	if err != nil {
-		return nil, err
-	}
-	envelope := &topicv1.Envelope{}
-	if err := protojson.Unmarshal(bare, envelope); err != nil {
-		return nil, err
-	}
-	envelope.Payload = payload
-	for i, delivery := range envelope.GetMessages() {
-		delivery.Payload = payloads[i]
-	}
-	return envelope, nil
 }
 
 func fieldOf(raw []byte, name string) any {
