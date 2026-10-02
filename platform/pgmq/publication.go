@@ -82,9 +82,9 @@ func (e *Engine) publish(ctx context.Context, tx pgx.Tx, toPublish publication) 
 func laneFor(consumer *contractv1.ManifestConsumer, lane topicv1.Lane) string {
 	reads := make([]provider.Lane, 0, len(consumer.GetLanes()))
 	for _, read := range consumer.GetLanes() {
-		reads = append(reads, provider.Lane(runs.LaneName(read)))
+		reads = append(reads, runs.LaneOf(read))
 	}
-	return runs.LaneFor(reads, lane)
+	return string(runs.LaneFor(reads, lane))
 }
 
 type enqueuedRun struct {

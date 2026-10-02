@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
 )
 
@@ -277,7 +278,7 @@ func (e *Engine) readLanes(ctx context.Context, loop *queueLoop, deployed deploy
 	leaseSeconds := e.leaseSeconds()
 	var read []message
 	for lane, share := range loop.lanes.share(lanesOf(deployed.consumer), n) {
-		condition, err := json.Marshal(map[string]string{"lane": runs.LaneName(lane)})
+		condition, err := json.Marshal(map[string]provider.Lane{"lane": runs.LaneOf(lane)})
 		if err != nil {
 			return nil, err
 		}
