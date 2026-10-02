@@ -243,6 +243,7 @@ func (e *Engines) readDeployment(ctx context.Context, queue live.Queue) (pgmq.De
 		worker := queue.Workers[name]
 		address, err := e.Addresses.Address(ctx, worker.Container)
 		if err != nil {
+			slog.Warn("find a worker container, so nothing is delivered to it yet", "project", queue.Project, "env", queue.Env, "worker", name, "container", worker.Container, "error", err)
 			continue
 		}
 		url := "http://" + net.JoinHostPort(address, containerimage.PortText)
