@@ -94,8 +94,9 @@ func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionReq
 		return provider.Binding{}, err
 	}
 	return provider.Binding{
-		Type: in.Resource.Type,
-		Name: in.Resource.Name,
+		Type:     in.Resource.Type,
+		Name:     in.Resource.Name,
+		Resource: topic.declared,
 		Properties: map[string]string{
 			topicPathProperty:     path,
 			topicDeclaredProperty: topic.declared,
