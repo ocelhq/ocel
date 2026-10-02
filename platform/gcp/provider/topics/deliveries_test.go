@@ -334,6 +334,40 @@ func TestLiveACanceledOrExpiredRunIsAckedWithoutReachingTheWorker(t *testing.T) 
 	}
 }
 
+func TestLiveCancelingAnExecutingRunAbortsItsAttemptAndAcksItWithoutARetry(t *testing.T) {
+	worker := newFakeWorker(t, func(int) answer { return answer{status: http.StatusOK, wait: time.Minute} })
+	d := newDelivering(t, worker)
+	message := aMessage(`{}`)
+	execution := message.messageID + "-resize"
+
+	pushed := make(chan int, 1)
+	go func() { pushed <- d.push("resize", "resize", message) }()
+	deadline := time.Now().Add(10 * time.Second)
+	for len(worker.received()) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the attempt never reached the worker")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	run := d.run(execution)
+	run.Status, run.FinishedAt = provider.RunCanceled, time.Now()
+	if _, err := d.store.WriteRun(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case code := <-pushed:
+		if !acked(code) {
+			t.Errorf("the canceled attempt answered %d, want it acked so it is not retried", code)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the attempt still runs 10s after its run was canceled, want it aborted")
+	}
+	if run := d.run(execution); run.Status != provider.RunCanceled || run.Attempts != 1 {
+		t.Errorf("the run is %s after %d attempts, want left canceled after one", run.Status, run.Attempts)
+	}
+}
+
 func TestLiveAMessageWithNoOcelIDTakesOneDrawnFromItsPubSubID(t *testing.T) {
 	worker := newFakeWorker(t, always(http.StatusOK, `{}`))
 	d := newDelivering(t, worker)
