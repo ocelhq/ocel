@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 const byteExactPayload = `{"ratio":2.0,"id":9007199254740993,"count":2}`
@@ -202,8 +203,8 @@ func Run(t *testing.T, open func(t *testing.T) provider.TaskStore) {
 	})
 
 	t.Run("a cursor no listing returned is refused", func(t *testing.T) {
-		if _, err := open(t).ListRuns(ctx, provider.RunFilter{Cursor: "not-a-cursor"}); err == nil {
-			t.Error("ListRuns with a made-up cursor = nil error, want it refused")
+		if _, err := open(t).ListRuns(ctx, provider.RunFilter{Cursor: "not-a-cursor"}); !errors.Is(err, runs.ErrUnknownCursor) {
+			t.Errorf("ListRuns with a made-up cursor = %v, want %v", err, runs.ErrUnknownCursor)
 		}
 	})
 }
