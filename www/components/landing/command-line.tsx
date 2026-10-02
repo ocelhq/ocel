@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckIcon, CopyIcon } from "@phosphor-icons/react";
+import posthog from "posthog-js";
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
@@ -10,6 +11,9 @@ export function CommandLine({ command, className }: { command: string; className
 
   function copy() {
     navigator.clipboard.writeText(command).then(() => {
+      if (process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST) {
+        posthog.capture("cli_install_command_copied");
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });
