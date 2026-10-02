@@ -197,6 +197,31 @@ func (n Names) Database() string { return ports.Database(n.namespace) }
 
 func (n Names) KeyRing() string { return ports.KeyRing(n.namespace) }
 
+const (
+	delayQueueSuffix = "-delays"
+	pushAccountName  = "push"
+)
+
+func (n Names) TaskDatabase(tier environment.Tier) string {
+	return ports.TaskDatabase(n.namespace, tier)
+}
+
+func (n Names) DelayQueue(tier environment.Tier) string {
+	return string(n.namespace) + "-" + string(tier) + delayQueueSuffix
+}
+
+func (n Names) DelayQueuePath(region string, tier environment.Tier) string {
+	return "projects/" + n.project + "/locations/" + region + "/queues/" + n.DelayQueue(tier)
+}
+
+func (n Names) PushAccount(tier environment.Tier) string {
+	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), pushAccountName)
+}
+
+func (n Names) PushAccountEmail(tier environment.Tier) string {
+	return n.PushAccount(tier) + "@" + n.project + accountDomain
+}
+
 func (n Names) PassphraseSecret(tier environment.Tier) string {
 	return string(n.namespace) + "-" + string(tier) + passphraseSuffix
 }
