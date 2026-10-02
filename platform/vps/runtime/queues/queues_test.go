@@ -5,11 +5,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net"
+	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
@@ -341,5 +345,42 @@ func TestEveryDeliveryToAWorkerCarriesTheEnvironmentsDeliverySecretAsItsOriginSe
 	applied := opened.opened[0].deployments()
 	if secret := applied[0].Workers["worker"].Header.Get(originguard.OriginSecretHeader); secret != "delivery:ds" {
 		t.Errorf("deliveries to worker carry origin secret %q, want the delivery secret opened from the queue's record: a worker container admits nothing else", secret)
+	}
+}
+
+func listenOnTheWorkerPort(t *testing.T) (string, net.Listener) {
+	t.Helper()
+	for last := 2; last < 255; last++ {
+		address := "127.0.0." + strconv.Itoa(last)
+		ln, err := net.Listen("tcp", net.JoinHostPort(address, containerimage.PortText))
+		if err == nil {
+			t.Cleanup(func() { ln.Close() })
+			return address, ln
+		}
+	}
+	t.Skip("no loopback address has the worker port free")
+	return "", nil
+}
+
+func TestAHostThatNamesNoProbeAsksAWorkerOverHTTPWhetherItAnswersBeforeDeliveringToIt(t *testing.T) {
+	t.Parallel()
+
+	address, ln := listenOnTheWorkerPort(t)
+	go func() { _ = http.Serve(ln, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})) }()
+	store := fake.NewKeyValues()
+	aQueue(t, store)
+	opened := &engines{}
+	host := aHost(store, opened)
+	host.IsAnswering = nil
+	host.Addresses = located{"shop-prod-infra-ocel-queue": "10.0.0.2", "shop-worker": address}
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	if err := host.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	applied := opened.opened[0].deployments()
+	want := "http://" + net.JoinHostPort(address, containerimage.PortText)
+	if len(applied) != 1 || applied[0].Workers["worker"].URL != want {
+		t.Errorf("the engine was applied %+v, want worker delivered to at %s once it answers", applied, want)
 	}
 }
