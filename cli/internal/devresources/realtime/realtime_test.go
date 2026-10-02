@@ -156,16 +156,15 @@ func TestTheBindingCarriesAGatewayOnLoopbackThatAcceptsTheTokensItsKeySigns(t *t
 	}
 
 	event := `{"v":1,"id":"e-1","ch":"/app/orders/o-1","ts":1790000000000,"kind":"live","data":{"status":"shipped"}}`
-	body, _ := json.Marshal(map[string]any{"channel": channel, "events": []string{event}})
-	req, _ := http.NewRequest(http.MethodPost, "http://"+bound.GetHost()+"/event", bytes.NewReader(body))
-	req.Header.Set("Authorization", mint(t, bound, "app", token.Publish, channel))
+	req, _ := http.NewRequest(http.MethodPost, "http://"+bound.GetHost()+"/publish", strings.NewReader(event))
+	req.Header.Set("Authorization", "Bearer "+mint(t, bound, "app", token.Publish, channel))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("publish answered %s, want 200", resp.Status)
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("publish answered %s, want 204", resp.Status)
 	}
 	if got := exchange(t, conn, nil); got["type"] != "data" || got["event"] != event {
 		t.Fatalf("got %v, want the published event", got)
