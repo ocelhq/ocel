@@ -11,6 +11,7 @@ import {
   formatGoWork,
   lockfileInstallArgs,
   nestedMembers,
+  readSdkDirs,
   rootManifest,
   splitWorkspaceFile,
   workspaceClosure,
@@ -227,5 +228,25 @@ describe("the go workspace a tree gets", () => {
         "module example.com/tasks\n\ngo 1.27.0\n\nrequire ocel.dev v0.0.0\n",
       ),
     ).toBe("go 1.27.0\n\nuse (\n\t./tests/fixtures/tasks/go\n)\n");
+  });
+});
+
+describe("the SDKs a tree links beside an app", () => {
+  async function appWith(files: string[]): Promise<string> {
+    const dir = await mkdtemp(path.join(tmpdir(), "journey-sdks-"));
+    for (const file of files) {
+      await writeFile(path.join(dir, file), "");
+    }
+    return dir;
+  }
+
+  it("links the SDK of each language whose project file the app holds", async () => {
+    expect(await readSdkDirs(await appWith(["go.mod"]))).toEqual(["sdk"]);
+    expect(await readSdkDirs(await appWith(["Cargo.toml"]))).toEqual(["crates"]);
+    expect(await readSdkDirs(await appWith(["pyproject.toml", "main.py"]))).toEqual(["python"]);
+  });
+
+  it("links none for an app of node alone", async () => {
+    expect(await readSdkDirs(await appWith(["package.json"]))).toEqual([]);
   });
 });

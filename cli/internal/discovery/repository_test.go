@@ -167,6 +167,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		"tests/fixtures/lifecycle/next",
 		"tests/fixtures/realtime/go",
 		"tests/fixtures/realtime/node",
+		"tests/fixtures/realtime/python",
 		"tests/fixtures/sdk/go",
 		"tests/fixtures/sdk/next",
 		"tests/fixtures/sdk/node",

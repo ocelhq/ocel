@@ -1,0 +1,17 @@
+[package]
+name = "web"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+base64 = "0.22"
+form_urlencoded = "1"
+ocel-sdk = { path = "../../../../crates/ocel-sdk", features = ["axum", "realtime", "schemars"] }
+ring = "0.17"
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }

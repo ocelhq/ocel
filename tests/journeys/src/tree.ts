@@ -3,13 +3,27 @@ import { access, cp, readdir, readFile, rm, symlink, writeFile } from "node:fs/p
 import path from "node:path";
 import { outputRoot, repoRoot } from "./paths";
 
-const NEVER_COPIED = [".git", ".next", ".ocel", "dist", "node_modules", "output"];
+const NEVER_COPIED = [
+  ".git",
+  ".next",
+  ".ocel",
+  ".venv",
+  "dist",
+  "node_modules",
+  "output",
+  "target",
+];
 const NEVER_COPIED_FROM_A_PACKAGE = NEVER_COPIED.filter((name) => name !== "dist");
 
 const WORKSPACE_FILE = "pnpm-workspace.yaml";
 const GO_MODULE_FILE = "go.mod";
 const GO_WORKSPACE_FILE = "go.work";
-const GO_SDK_DIR = "sdk";
+const PYTHON_PROJECT_FILE = "pyproject.toml";
+const SDK_DIR_OF_PROJECT_FILE: [string, string][] = [
+  [GO_MODULE_FILE, "sdk"],
+  ["Cargo.toml", "crates"],
+  [PYTHON_PROJECT_FILE, "python"],
+];
 const LOCKFILE = "pnpm-lock.yaml";
 const MANIFEST = "package.json";
 const DEPENDENCY_FIELDS = [
@@ -194,32 +208,12 @@ export function lockfileInstallArgs(pid: number): string[] {
 
 export async function writeLockfile(root: string): Promise<void> {
   await cp(path.join(repoRoot, LOCKFILE), path.join(root, LOCKFILE));
-  const args = lockfileInstallArgs(process.pid);
-  const said = await new Promise<{ code: number | null; output: string }>((resolve, reject) => {
-    const child = spawn("pnpm", args, { cwd: root, env: process.env });
-    let output = "";
-    child.stdout.on("data", (chunk) => {
-      output += String(chunk);
-    });
-    child.stderr.on("data", (chunk) => {
-      output += String(chunk);
-    });
-    child.on("error", reject);
-    child.on("close", (code) => resolve({ code, output }));
-  });
-  if (said.code !== 0) {
-    throw new Error(`pnpm ${args.join(" ")} in ${root} exited ${said.code}\n${said.output}`);
-  }
+  await run("pnpm", lockfileInstallArgs(process.pid), root);
 }
 
 async function linkVendored(source: string, dest: string): Promise<void> {
   const vendored = path.join(source, "node_modules");
-  if (
-    await access(vendored).then(
-      () => true,
-      () => false,
-    )
-  ) {
+  if (await exists(vendored)) {
     await symlink(vendored, path.join(dest, "node_modules"), "dir");
   }
 }
@@ -251,12 +245,7 @@ export function formatGoWork(modules: string[], firstGoMod: string): string {
 async function writeGoWorkspace(root: string, apps: string[]): Promise<void> {
   const modules: string[] = [];
   for (const app of apps) {
-    if (
-      await access(path.join(root, app, GO_MODULE_FILE)).then(
-        () => true,
-        () => false,
-      )
-    ) {
+    if (await exists(path.join(root, app, GO_MODULE_FILE))) {
       modules.push(app);
     }
   }
@@ -266,7 +255,61 @@ async function writeGoWorkspace(root: string, apps: string[]): Promise<void> {
   }
   const goMod = await readFile(path.join(root, first, GO_MODULE_FILE), "utf8");
   await writeFile(path.join(root, GO_WORKSPACE_FILE), formatGoWork(modules, goMod));
-  await symlink(path.join(repoRoot, GO_SDK_DIR), path.join(root, GO_SDK_DIR), "dir");
+}
+
+function exists(file: string): Promise<boolean> {
+  return access(file).then(
+    () => true,
+    () => false,
+  );
+}
+
+export async function readSdkDirs(appDir: string): Promise<string[]> {
+  const dirs: string[] = [];
+  for (const [projectFile, sdkDir] of SDK_DIR_OF_PROJECT_FILE) {
+    if (await exists(path.join(appDir, projectFile))) {
+      dirs.push(sdkDir);
+    }
+  }
+  return dirs;
+}
+
+async function linkSdks(root: string, apps: string[]): Promise<void> {
+  const linked = new Set<string>();
+  for (const app of apps) {
+    for (const sdkDir of await readSdkDirs(path.join(root, app))) {
+      if (!linked.has(sdkDir)) {
+        linked.add(sdkDir);
+        await symlink(path.join(repoRoot, sdkDir), path.join(root, sdkDir), "dir");
+      }
+    }
+  }
+}
+
+async function run(command: string, args: string[], cwd: string): Promise<void> {
+  const said = await new Promise<{ code: number | null; output: string }>((resolve, reject) => {
+    const child = spawn(command, args, { cwd, env: process.env });
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += String(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      output += String(chunk);
+    });
+    child.on("error", reject);
+    child.on("close", (code) => resolve({ code, output }));
+  });
+  if (said.code !== 0) {
+    throw new Error(`${command} ${args.join(" ")} in ${cwd} exited ${said.code}\n${said.output}`);
+  }
+}
+
+async function writePythonEnvironments(root: string, apps: string[]): Promise<void> {
+  for (const app of apps) {
+    if (await exists(path.join(root, app, PYTHON_PROJECT_FILE))) {
+      await run("uv", ["sync", "--quiet"], path.join(root, app));
+    }
+  }
 }
 
 export async function writeTree(root: string, name: string, apps: string[]): Promise<string[]> {
@@ -289,5 +332,7 @@ export async function writeTree(root: string, name: string, apps: string[]): Pro
   await writeWorkspace(root, name, [...apps, ...nested, ...packages]);
   await writeLockfile(root);
   await writeGoWorkspace(root, apps);
+  await linkSdks(root, apps);
+  await writePythonEnvironments(root, apps);
   return packages;
 }

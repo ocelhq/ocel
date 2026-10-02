@@ -1,0 +1,11 @@
+[project]
+name = "realtime-python"
+version = "0.0.0"
+requires-python = ">=3.12"
+dependencies = ["ocel[realtime,pydantic]"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+ocel = { path = "../../../../python/ocel", editable = true }

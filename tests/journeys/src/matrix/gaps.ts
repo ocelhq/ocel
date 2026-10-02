@@ -506,7 +506,7 @@ export const gaps: Gap[] = [
       where: [
         {
           on: [...lanes],
-          fixtures: [realtime.node, realtime.go],
+          fixtures: Object.values(realtime),
           fails: [step.deploy],
           skipsCell: true,
         },
