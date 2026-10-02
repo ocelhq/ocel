@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/cron"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 const scheduleInterval = time.Second
@@ -26,7 +25,7 @@ func (e *Engine) applySchedules(ctx context.Context, deployment Deployment) erro
 	scheduled := []string{}
 	return e.inTx(ctx, func(tx pgx.Tx) error {
 		for name, topic := range deployment.Topics {
-			if topic.GetCron() == "" || !runs.IsTask(topic) {
+			if topic.GetCron() == "" || !isTask(topic) {
 				continue
 			}
 			schedule, err := cron.Parse(topic.GetCron())

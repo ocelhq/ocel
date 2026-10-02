@@ -25,7 +25,7 @@ func (e *Engine) Tasks() Tasks { return Tasks{engine: e} }
 
 func (t Tasks) task(name string) (*contractv1.ManifestTopic, error) {
 	topic, found := t.engine.current().Topics[name]
-	if !found || !runs.IsTask(topic) {
+	if !found || !isTask(topic) {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no task named %q is deployed", name))
 	}
 	return topic, nil
@@ -158,4 +158,8 @@ func (t Tasks) RetrieveRun(ctx context.Context, req *taskv1.RetrieveRunRequest) 
 		return nil, err
 	}
 	return &taskv1.RetrieveRunResponse{Run: runs.NewRunMessage(run)}, nil
+}
+
+func isTask(topic *contractv1.ManifestTopic) bool {
+	return len(topic.GetConsumers()) == 1 && topic.GetConsumers()[0].GetExclusive()
 }

@@ -29,7 +29,7 @@ type recordedMessage struct {
 
 func (t Topics) consumerOf(topicName, consumer string) (deployedConsumer, error) {
 	for _, deployed := range t.engine.current().consumers() {
-		if deployed.topicName == topicName && deployed.consumer.GetName() == consumer && !runs.IsTask(deployed.topic) {
+		if deployed.topicName == topicName && deployed.consumer.GetName() == consumer && !isTask(deployed.topic) {
 			return deployed, nil
 		}
 	}
@@ -38,7 +38,7 @@ func (t Topics) consumerOf(topicName, consumer string) (deployedConsumer, error)
 
 func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.SendResponse, error) {
 	topic, found := t.engine.current().Topics[req.GetTopic()]
-	if !found || runs.IsTask(topic) {
+	if !found || isTask(topic) {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no topic named %q is deployed", req.GetTopic()))
 	}
 	if err := runs.RefuseNonJSON(req.GetPayload()); err != nil {

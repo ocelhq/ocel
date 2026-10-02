@@ -79,7 +79,7 @@ func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployed
 			e.reportAttempt(Attempt{
 				Topic:       deployed.topicName,
 				Consumer:    deployed.consumer.GetName(),
-				IsTask:      runs.IsTask(deployed.topic),
+				IsTask:      isTask(deployed.topic),
 				Execution:   claimed.execution,
 				Number:      claimed.attempt,
 				MaxAttempts: claimed.maxAttempts,
@@ -189,7 +189,7 @@ func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedC
 	case envelope.Aborted, envelope.Refused:
 		return provider.RunFailed, e.settle(ctx, loop.name, claimed, provider.RunFailed, nil, res.Reason)
 	case envelope.TimedOut:
-		if runs.IsTask(deployed.topic) {
+		if isTask(deployed.topic) {
 			return provider.RunTimedOut, e.settle(ctx, loop.name, claimed, provider.RunTimedOut, nil, res.Reason)
 		}
 	}
