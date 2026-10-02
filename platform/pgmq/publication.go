@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -81,11 +80,11 @@ func (e *Engine) publish(ctx context.Context, tx pgx.Tx, toPublish publication) 
 }
 
 func laneFor(consumer *contractv1.ManifestConsumer, lane topicv1.Lane) string {
-	lanes := consumer.GetLanes()
-	if lane == topicv1.Lane_LANE_UNSPECIFIED || (len(lanes) > 0 && !slices.Contains(lanes, lane)) {
-		return taskruns.LaneName(topicv1.Lane_LANE_DEFAULT)
+	reads := make([]provider.Lane, 0, len(consumer.GetLanes()))
+	for _, read := range consumer.GetLanes() {
+		reads = append(reads, provider.Lane(taskruns.LaneName(read)))
 	}
-	return taskruns.LaneName(lane)
+	return taskruns.LaneFor(reads, lane)
 }
 
 type enqueuedRun struct {
