@@ -58,10 +58,7 @@ func newPublished(t *testing.T) published {
 		Names:    topics.Names{Namespace: "ocel", Scope: scopeOf(t)},
 		Declared: deployedTopics(),
 	}
-	topology := topics.Topology{Names: deployment.Names, Topics: deployment.Declared, Pushes: map[string]topics.Push{"worker": {URL: "https://worker.run.app", ServiceAccount: invoker}}}
-	if err := topology.Ensure(context.Background(), clients); err != nil {
-		t.Fatal(err)
-	}
+	topology, _ := deployedTopology(t, clients, deployment.Names, deployment.Declared)
 	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
 	return published{t: t, endpoint: endpoint, deployment: deployment}
 }

@@ -21,6 +21,10 @@ const (
 	maxBackoff              = 600 * time.Second
 	deadLetterDeliveryLimit = 100
 	mutableSubscription     = "pushConfig,retryPolicy,deadLetterPolicy,ackDeadlineSeconds"
+
+	publisherRole  = "roles/pubsub.publisher"
+	subscriberRole = "roles/pubsub.subscriber"
+	grantAttempts  = 4
 )
 
 type Push struct {
@@ -29,9 +33,17 @@ type Push struct {
 }
 
 type Topology struct {
+	Names     Names
+	Topics    map[string]*provider.TopicSpec
+	Publisher string
+	Agent     string
+}
+
+type Subscriptions struct {
 	Names  Names
 	Topics map[string]*provider.TopicSpec
 	Pushes map[string]Push
+	Agent  string
 }
 
 func PushPath(topic, consumer string) string {
@@ -51,20 +63,19 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 	}
 	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
 		topic := t.Topics[name]
-		if err := ensureTopic(ctx, service, topicPath(clients.Project, t.Names.Topic(name))); err != nil {
+		path := topicPath(clients.Project, t.Names.Topic(name))
+		if err := ensureTopic(ctx, service, path); err != nil {
+			return err
+		}
+		if err := grantOnTopic(ctx, service, path, publisherRole, t.Publisher); err != nil {
 			return err
 		}
 		for _, consumer := range topic.Consumers {
-			push, placed := t.Pushes[consumer.Worker]
-			if !placed {
-				return fmt.Errorf("consumer %s of %s runs on worker %s, and no push address was given for it", consumer.Name, name, consumer.Worker)
-			}
 			deadLetters := topicPath(clients.Project, t.Names.DeadLetterTopic(name, consumer.Name))
 			if err := ensureTopic(ctx, service, deadLetters); err != nil {
 				return err
 			}
-			subscription := t.subscription(clients.Project, name, topic, consumer, push, deadLetters)
-			if err := ensureSubscription(ctx, service, subscriptionPath(clients.Project, t.Names.Subscription(name, consumer.Name)), subscription); err != nil {
+			if err := grantOnTopic(ctx, service, deadLetters, publisherRole, t.Agent); err != nil {
 				return err
 			}
 		}
@@ -77,10 +88,34 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 	return nil
 }
 
-func (t Topology) subscription(project, name string, topic *provider.TopicSpec, consumer provider.ConsumerSpec, push Push, deadLetters string) *pubsub.Subscription {
-	policy := consumer.Retry
+func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error {
+	service, err := clients.PubSub()
+	if err != nil {
+		return err
+	}
+	for _, name := range slices.Sorted(maps.Keys(s.Topics)) {
+		topic := s.Topics[name]
+		for _, consumer := range topic.Consumers {
+			push, hosted := s.Pushes[consumer.Worker]
+			if !hosted {
+				continue
+			}
+			deadLetters := topicPath(clients.Project, s.Names.DeadLetterTopic(name, consumer.Name))
+			path := subscriptionPath(clients.Project, s.Names.Subscription(name, consumer.Name))
+			if err := ensureSubscription(ctx, service, path, s.subscription(clients.Project, name, topic, consumer, push, deadLetters)); err != nil {
+				return err
+			}
+			if err := grantOnSubscription(ctx, service, path, subscriberRole, s.Agent); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s Subscriptions) subscription(project, name string, topic *provider.TopicSpec, consumer provider.ConsumerSpec, push Push, deadLetters string) *pubsub.Subscription {
 	return &pubsub.Subscription{
-		Topic:                 topicPath(project, t.Names.Topic(name)),
+		Topic:                 topicPath(project, s.Names.Topic(name)),
 		AckDeadlineSeconds:    int64(pushAckDeadline / time.Second),
 		EnableMessageOrdering: topic.Ordered,
 		Filter:                fmt.Sprintf(`NOT attributes:%s OR attributes.%s = %q`, ConsumerAttribute, ConsumerAttribute, consumer.Name),
@@ -89,8 +124,8 @@ func (t Topology) subscription(project, name string, topic *provider.TopicSpec, 
 			OidcToken:    &pubsub.OidcToken{ServiceAccountEmail: push.ServiceAccount, Audience: push.URL},
 		},
 		RetryPolicy: &pubsub.RetryPolicy{
-			MinimumBackoff: durationText(min(policy.MinDelay, maxBackoff)),
-			MaximumBackoff: durationText(min(policy.MaxDelay, maxBackoff)),
+			MinimumBackoff: durationText(min(consumer.Retry.MinDelay, maxBackoff)),
+			MaximumBackoff: durationText(min(consumer.Retry.MaxDelay, maxBackoff)),
 		},
 		DeadLetterPolicy: &pubsub.DeadLetterPolicy{DeadLetterTopic: deadLetters, MaxDeliveryAttempts: deadLetterDeliveryLimit},
 		ExpirationPolicy: &pubsub.ExpirationPolicy{},
@@ -145,27 +180,117 @@ func ensureSubscription(ctx context.Context, service *pubsub.Service, path strin
 	return nil
 }
 
+type iamPolicyCalls struct {
+	read  func() (*pubsub.Policy, error)
+	write func(*pubsub.Policy) error
+}
+
+func grantOnTopic(ctx context.Context, service *pubsub.Service, path, role, member string) error {
+	return grantPubSubRole(ctx, path, role, member, iamPolicyCalls{
+		read: func() (*pubsub.Policy, error) { return service.Projects.Topics.GetIamPolicy(path).Context(ctx).Do() },
+		write: func(policy *pubsub.Policy) error {
+			_, err := service.Projects.Topics.SetIamPolicy(path, &pubsub.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do()
+			return err
+		},
+	})
+}
+
+func grantOnSubscription(ctx context.Context, service *pubsub.Service, path, role, member string) error {
+	return grantPubSubRole(ctx, path, role, member, iamPolicyCalls{
+		read: func() (*pubsub.Policy, error) {
+			return service.Projects.Subscriptions.GetIamPolicy(path).Context(ctx).Do()
+		},
+		write: func(policy *pubsub.Policy) error {
+			_, err := service.Projects.Subscriptions.SetIamPolicy(path, &pubsub.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do()
+			return err
+		},
+	})
+}
+
+func grantPubSubRole(ctx context.Context, path, role, member string, calls iamPolicyCalls) error {
+	if member == "" {
+		return nil
+	}
+	var refused error
+	for attempt := range grantAttempts {
+		if attempt > 0 && !waited(ctx, attempt) {
+			return ctx.Err()
+		}
+		var policy *pubsub.Policy
+		if err := retried(ctx, func() error {
+			var readErr error
+			policy, readErr = calls.read()
+			return readErr
+		}); err != nil {
+			return fmt.Errorf("read who may reach %s: %w", path, err)
+		}
+		if holdsRole(policy, role, member) {
+			return nil
+		}
+		policy.Bindings = withMember(policy.Bindings, role, member)
+		refused = retried(ctx, func() error { return calls.write(policy) })
+		if refused == nil || !isAnswered(refused, http.StatusConflict) {
+			break
+		}
+	}
+	if refused != nil {
+		return fmt.Errorf("grant %s %s on %s: %w", member, role, path, refused)
+	}
+	return nil
+}
+
+func holdsRole(policy *pubsub.Policy, role, member string) bool {
+	return slices.ContainsFunc(policy.Bindings, func(binding *pubsub.Binding) bool {
+		return binding.Role == role && binding.Condition == nil && slices.Contains(binding.Members, member)
+	})
+}
+
+func withMember(bindings []*pubsub.Binding, role, member string) []*pubsub.Binding {
+	for _, binding := range bindings {
+		if binding.Role == role && binding.Condition == nil {
+			binding.Members = append(binding.Members, member)
+			return bindings
+		}
+	}
+	return append(bindings, &pubsub.Binding{Role: role, Members: []string{member}})
+}
+
+func (t Topology) RemoveConsumers(ctx context.Context, clients *ports.Clients, topic string, consumers []string) error {
+	service, err := clients.PubSub()
+	if err != nil {
+		return err
+	}
+	for _, consumer := range consumers {
+		subscription := subscriptionPath(clients.Project, t.Names.Subscription(topic, consumer))
+		if err := deleteIgnoringMissing(ctx, "subscription "+subscription, func() error {
+			_, err := service.Projects.Subscriptions.Delete(subscription).Context(ctx).Do()
+			return err
+		}); err != nil {
+			return err
+		}
+		deadLetters := topicPath(clients.Project, t.Names.DeadLetterTopic(topic, consumer))
+		if err := deleteIgnoringMissing(ctx, "topic "+deadLetters, func() error {
+			_, err := service.Projects.Topics.Delete(deadLetters).Context(ctx).Do()
+			return err
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 	service, err := clients.PubSub()
 	if err != nil {
 		return err
 	}
 	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
+		consumers := make([]string, 0, len(t.Topics[name].Consumers))
 		for _, consumer := range t.Topics[name].Consumers {
-			subscription := subscriptionPath(clients.Project, t.Names.Subscription(name, consumer.Name))
-			if err := deleteIgnoringMissing(ctx, "subscription "+subscription, func() error {
-				_, err := service.Projects.Subscriptions.Delete(subscription).Context(ctx).Do()
-				return err
-			}); err != nil {
-				return err
-			}
-			deadLetters := topicPath(clients.Project, t.Names.DeadLetterTopic(name, consumer.Name))
-			if err := deleteIgnoringMissing(ctx, "topic "+deadLetters, func() error {
-				_, err := service.Projects.Topics.Delete(deadLetters).Context(ctx).Do()
-				return err
-			}); err != nil {
-				return err
-			}
+			consumers = append(consumers, consumer.Name)
+		}
+		if err := t.RemoveConsumers(ctx, clients, name, consumers); err != nil {
+			return err
 		}
 		if t.Topics[name].Cron != "" {
 			if err := t.removeSchedule(ctx, clients, name); err != nil {

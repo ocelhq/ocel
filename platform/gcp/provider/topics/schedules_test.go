@@ -40,7 +40,7 @@ func TestLiveACronTaskIsACloudSchedulerJobPublishingToItsTopic(t *testing.T) {
 	declared := map[string]*provider.TopicSpec{
 		"digest": {Cron: "*/5 * * * *", Consumers: []provider.ConsumerSpec{{Name: "digest", Worker: "worker", Exclusive: true, Retry: defaultRetry}}},
 	}
-	topology := topics.Topology{Names: names, Topics: declared, Pushes: map[string]topics.Push{"worker": {URL: "https://worker.run.app", ServiceAccount: invoker}}}
+	topology := topics.Topology{Names: names, Topics: declared, Publisher: appsMember, Agent: agent}
 
 	if err := topology.Ensure(context.Background(), clients); err != nil {
 		t.Fatalf("Ensure() = %v", err)
