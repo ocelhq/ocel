@@ -272,6 +272,7 @@ func (t Tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*ta
 		})
 		switch {
 		case err == nil:
+			t.engine.releaseCanceled(ctx, item)
 			item = canceled
 		case errors.Is(err, errConditionFailed):
 			if item, err = t.readTaskRun(ctx, req.GetId()); err != nil {
@@ -282,6 +283,19 @@ func (t Tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*ta
 		}
 	}
 	return &taskv1.CancelRunResponse{Run: runs.NewRunMessage(item.run())}, nil
+}
+
+func (e *Engine) releaseCanceled(ctx context.Context, item runItem) {
+	if provider.RunStatus(item.Status) != provider.RunDelayed || item.Receipt == "" {
+		return
+	}
+	deployed, err := Tasks{engine: e}.task(item.Topic)
+	if err != nil || !deployed.fifo() {
+		return
+	}
+	if err := e.releaseHeld(ctx, deployed, item.Receipt); err != nil {
+		slog.Warn("release the held message of a canceled run", "execution", item.SK, "error", err)
+	}
 }
 
 func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunRequest) (*taskv1.RescheduleRunResponse, error) {
