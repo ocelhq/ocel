@@ -258,8 +258,12 @@ func TestLiveRemovingAConsumerTakesItsSubscriptionAndDeadLetterTopicAndNoOther(t
 	topology, _ := deployedTopology(t, clients, names, ordersAndResize())
 	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
 
-	if err := topology.RemoveConsumers(context.Background(), clients, "orders", []string{"bill"}); err != nil {
-		t.Fatalf("RemoveConsumers(orders, bill) = %v", err)
+	previous := ordersAndResize()
+	shipping := ordersAndResize()
+	shipping["orders"].Consumers = shipping["orders"].Consumers[:1]
+	topology.Topics = shipping
+	if err := topology.RemoveDropped(context.Background(), clients, previous); err != nil {
+		t.Fatalf("RemoveDropped() after bill stopped consuming orders = %v", err)
 	}
 	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "bill")); status != http.StatusNotFound {
 		t.Errorf("orders/bill answered %d, want it gone", status)
@@ -270,9 +274,10 @@ func TestLiveRemovingAConsumerTakesItsSubscriptionAndDeadLetterTopicAndNoOther(t
 	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship")); status != http.StatusOK {
 		t.Errorf("orders/ship answered %d, want it kept", status)
 	}
-	if err := topology.RemoveConsumers(context.Background(), clients, "orders", []string{"bill"}); err != nil {
-		t.Errorf("RemoveConsumers() of a consumer already gone = %v, want nothing to do", err)
+	if err := topology.RemoveDropped(context.Background(), clients, previous); err != nil {
+		t.Errorf("RemoveDropped() of a consumer already gone = %v, want nothing to do", err)
 	}
+	topology.Topics = ordersAndResize()
 }
 
 func TestLiveATopicWhoseOrderingChangedIsRefusedAndItsSubscriptionsKept(t *testing.T) {
