@@ -91,6 +91,38 @@ older major.
 **Removing it.** `ocel destroy` takes the replication group with its snapshots, its parameter
 and subnet groups, its security group and its token.
 
+## Topics, tasks and workers
+
+A task is sent to an SQS queue of its own. A topic publishes to an SNS topic, which delivers
+to one SQS queue for each consumer, so a consumer can be added without changing anything
+that sends. An `ordered` task or topic uses FIFO queues, with the `key` as the message group.
+Each queue has a dead-letter queue for messages a worker could never take. The dead letters
+that `deadLetter(consumer)` lists, redrives and purges are failed runs, as on every other
+provider.
+
+A worker is a Lambda function built from its app's code. It has no URL: each queue it serves
+invokes it, one run at a time, or a batch consumer's batch. A worker's concurrency, and a
+concurrency of 1, are held in the state table, so a run that arrives when the worker is full
+waits a second or two on its queue. Runs, idempotency keys and debounce records live in the
+account's state table under the deployment's own keys.
+
+`maxDuration` can be at most 15 minutes. A worker on container compute is refused.
+
+A delay of up to 15 minutes is the queue's own message delay. A longer delay goes back on the
+queue every 15 minutes until the run is due. A `cron` task is started by an EventBridge
+Scheduler schedule. Queues, topics and schedules bill by the request.
+
+Lanes are recorded on a run but don't change the order runs start in, because SQS has no
+priority. An app on container compute can't send to a task or topic yet, and an ephemeral
+preview, which provisions nothing of its own, refuses to declare one.
+
+**Rolling back.** Workers run the most recently deployed code. Rolling an app back changes
+what its routes serve, not its workers; deploy again to change them.
+
+**Removing it.** `ocel destroy` takes the workers, the queues, the topics and the schedules.
+Runs and keys expire from the state table on their own: a run 30 days after it finishes, or
+after it was due if it never finished.
+
 ## Edge
 
 Leave `edge` out and the deployment is fronted by CloudFront. Name an edge to choose it —
