@@ -26,10 +26,10 @@ func IsUnfinished(status provider.RunStatus) bool {
 
 func StatusesOf(wire []taskv1.RunStatus) []provider.RunStatus {
 	var stored []provider.RunStatus
-	for _, status := range wire {
-		for run, answered := range wireStatuses {
-			if answered == status {
-				stored = append(stored, run)
+	for _, asked := range wire {
+		for status, wired := range wireStatuses {
+			if wired == asked {
+				stored = append(stored, status)
 			}
 		}
 	}
