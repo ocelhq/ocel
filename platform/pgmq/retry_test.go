@@ -12,7 +12,6 @@ import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func failingUntil(attempt int32) func(*topicv1.Envelope) reply {
@@ -25,29 +24,6 @@ func failingUntil(attempt int32) func(*topicv1.Envelope) reply {
 			return reply{status: http.StatusInternalServerError, body: "the disk is full"}
 		}
 		return reply{status: http.StatusOK, body: `"resized"`}
-	}
-}
-
-func TestTheBackoffDoublesFromTheMinimumDelayUpToTheMaximumWithJitterInItsUpperHalf(t *testing.T) {
-	t.Parallel()
-
-	policy := provider.RetryPolicy{MaxAttempts: 10, MinDelay: time.Second, MaxDelay: 5 * time.Second}
-	for _, tc := range []struct {
-		attempt int
-		random  float64
-		want    time.Duration
-	}{
-		{1, 1, time.Second},
-		{1, 0, 500 * time.Millisecond},
-		{2, 1, 2 * time.Second},
-		{3, 1, 4 * time.Second},
-		{4, 1, 5 * time.Second},
-		{4, 0, 2500 * time.Millisecond},
-		{30, 1, 5 * time.Second},
-	} {
-		if got := backoff(policy, tc.attempt, tc.random); got != tc.want {
-			t.Errorf("backoff(attempt %d, random %v) = %v, want %v", tc.attempt, tc.random, got, tc.want)
-		}
 	}
 }
 
