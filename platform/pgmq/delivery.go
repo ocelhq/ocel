@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envelope"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/taskruns"
 )
 
 const (
@@ -77,7 +78,7 @@ func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployed
 			e.reportAttempt(Attempt{
 				Topic:       deployed.topicName,
 				Consumer:    deployed.consumer.GetName(),
-				IsTask:      isTask(deployed.topic),
+				IsTask:      taskruns.IsTask(deployed.topic),
 				Execution:   claimed.execution,
 				Number:      claimed.attempt,
 				MaxAttempts: claimed.maxAttempts,
@@ -171,11 +172,11 @@ func envelopeOf(deployed deployedConsumer, claims []claim, batch bool) *topicv1.
 }
 
 func messageOf(claimed claim) *topicv1.Message {
-	return &topicv1.Message{Id: claimed.messageID, PublishedAt: timestampOf(claimed.publishedAt)}
+	return &topicv1.Message{Id: claimed.messageID, PublishedAt: taskruns.TimestampOf(claimed.publishedAt)}
 }
 
 func attemptOf(claimed claim) *topicv1.Attempt {
-	return &topicv1.Attempt{Number: int32(claimed.attempt), Of: int32(claimed.maxAttempts), FirstAttemptedAt: timestampOf(claimed.firstAttemptedAt)}
+	return &topicv1.Attempt{Number: int32(claimed.attempt), Of: int32(claimed.maxAttempts), FirstAttemptedAt: taskruns.TimestampOf(claimed.firstAttemptedAt)}
 }
 
 func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedConsumer, claimed claim, res envelope.Result) (provider.RunStatus, error) {
@@ -187,7 +188,7 @@ func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedC
 	case envelope.Aborted, envelope.Refused:
 		return provider.RunFailed, e.settle(ctx, loop.name, claimed, provider.RunFailed, nil, res.Reason)
 	case envelope.TimedOut:
-		if isTask(deployed.topic) {
+		if taskruns.IsTask(deployed.topic) {
 			return provider.RunTimedOut, e.settle(ctx, loop.name, claimed, provider.RunTimedOut, nil, res.Reason)
 		}
 	}

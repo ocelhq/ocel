@@ -14,6 +14,7 @@ import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/taskruns"
 )
 
 func (t Tasks) BatchTrigger(ctx context.Context, req *taskv1.BatchTriggerRequest) (*taskv1.BatchTriggerResponse, error) {
@@ -40,16 +41,9 @@ func (t Tasks) BatchTrigger(ctx context.Context, req *taskv1.BatchTriggerRequest
 }
 
 func (t Tasks) ListRuns(ctx context.Context, req *taskv1.ListRunsRequest) (*taskv1.ListRunsResponse, error) {
-	filter := provider.RunFilter{Topic: req.GetTask(), Tags: req.GetTags(), Cursor: req.GetCursor(), Limit: int(req.GetLimit())}
-	for _, status := range req.GetStatuses() {
-		for stored, wire := range runStatuses {
-			if wire == status {
-				filter.Statuses = append(filter.Statuses, stored)
-			}
-		}
-	}
+	filter := provider.RunFilter{Topic: req.GetTask(), Statuses: taskruns.StatusesOf(req.GetStatuses()), Tags: req.GetTags(), Cursor: req.GetCursor(), Limit: int(req.GetLimit())}
 	page, err := listRuns(ctx, t.engine.pool, filter)
-	if errors.Is(err, errUnknownCursor) {
+	if errors.Is(err, taskruns.ErrUnknownCursor) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if err != nil {
@@ -57,7 +51,7 @@ func (t Tasks) ListRuns(ctx context.Context, req *taskv1.ListRunsRequest) (*task
 	}
 	resp := &taskv1.ListRunsResponse{NextCursor: page.NextCursor}
 	for _, run := range page.Runs {
-		resp.Runs = append(resp.Runs, newRunMessage(run))
+		resp.Runs = append(resp.Runs, taskruns.NewRunMessage(run))
 	}
 	return resp, nil
 }
@@ -79,15 +73,11 @@ func lockRun(ctx context.Context, tx pgx.Tx, id string) (queuedRun, error) {
 	return run, err
 }
 
-func isUnfinished(status provider.RunStatus) bool {
-	return status == provider.RunDelayed || status == provider.RunQueued || status == provider.RunExecuting
-}
-
 func (t Tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*taskv1.CancelRunResponse, error) {
 	var stop bool
 	err := t.engine.inTx(ctx, func(tx pgx.Tx) error {
 		run, err := lockRun(ctx, tx, req.GetId())
-		if err != nil || !isUnfinished(run.status) {
+		if err != nil || !taskruns.IsUnfinished(run.status) {
 			return err
 		}
 		stop = run.status == provider.RunExecuting
@@ -201,7 +191,7 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 
 func laneOf(name string) topicv1.Lane {
 	for _, lane := range allLanes {
-		if laneName(lane) == name {
+		if taskruns.LaneName(lane) == name {
 			return lane
 		}
 	}

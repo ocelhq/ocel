@@ -3,7 +3,6 @@ package pgmq
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,14 +14,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/taskruns"
 )
-
-const (
-	defaultRunPage = 100
-	maxRunPage     = 1000
-)
-
-var errUnknownCursor = errors.New("the cursor is not one a listing returned")
 
 type querier interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
@@ -136,7 +129,7 @@ func (s Store) ListRuns(ctx context.Context, filter provider.RunFilter) (provide
 }
 
 func listRuns(ctx context.Context, db querier, filter provider.RunFilter) (provider.RunPage, error) {
-	limit := pageLimit(filter.Limit)
+	limit := taskruns.PageLimit(filter.Limit)
 	var where []string
 	var args []any
 	arg := func(value any) string {
@@ -157,7 +150,7 @@ func listRuns(ctx context.Context, db querier, filter provider.RunFilter) (provi
 		where = append(where, "tags @> "+arg(filter.Tags))
 	}
 	if filter.Cursor != "" {
-		created, execution, err := parseCursor(filter.Cursor)
+		created, execution, err := taskruns.ParseCursor(filter.Cursor)
 		if err != nil {
 			return provider.RunPage{}, err
 		}
@@ -180,31 +173,9 @@ func listRuns(ctx context.Context, db querier, filter provider.RunFilter) (provi
 	if len(runs) > limit {
 		page.Runs = runs[:limit]
 		last := page.Runs[limit-1]
-		page.NextCursor = cursorOf(last.CreatedAt, last.Execution)
+		page.NextCursor = taskruns.CursorOf(last.CreatedAt, last.Execution)
 	}
 	return page, nil
-}
-
-func pageLimit(requested int) int {
-	if requested <= 0 {
-		return defaultRunPage
-	}
-	return min(requested, maxRunPage)
-}
-
-func cursorOf(created time.Time, execution string) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(created.UTC().Format(time.RFC3339Nano) + "/" + execution))
-}
-
-func parseCursor(cursor string) (time.Time, string, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(cursor)
-	if err == nil {
-		at, execution, cut := strings.Cut(string(raw), "/")
-		if created, parseErr := time.Parse(time.RFC3339Nano, at); cut && parseErr == nil {
-			return created, execution, nil
-		}
-	}
-	return time.Time{}, "", fmt.Errorf("cursor %q: %w", cursor, errUnknownCursor)
 }
 
 func jsonOrNull(value json.RawMessage) any {

@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envelope"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/taskruns"
 )
 
 const deadLetterStatuses = "('failed')"
@@ -28,7 +29,7 @@ type recordedMessage struct {
 
 func (t Topics) consumerOf(topicName, consumer string) (deployedConsumer, error) {
 	for _, deployed := range t.engine.current().consumers() {
-		if deployed.topicName == topicName && deployed.consumer.GetName() == consumer && !isTask(deployed.topic) {
+		if deployed.topicName == topicName && deployed.consumer.GetName() == consumer && !taskruns.IsTask(deployed.topic) {
 			return deployed, nil
 		}
 	}
@@ -37,10 +38,10 @@ func (t Topics) consumerOf(topicName, consumer string) (deployedConsumer, error)
 
 func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.SendResponse, error) {
 	topic, found := t.engine.current().Topics[req.GetTopic()]
-	if !found || isTask(topic) {
+	if !found || taskruns.IsTask(topic) {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no topic named %q is deployed", req.GetTopic()))
 	}
-	if err := refuseNonJSON(req.GetPayload()); err != nil {
+	if err := taskruns.RefuseNonJSON(req.GetPayload()); err != nil {
 		return nil, err
 	}
 	now := time.Now()
@@ -88,12 +89,12 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 }
 
 func (t Topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLettersRequest) (*topicv1.ListDeadLettersResponse, error) {
-	limit := pageLimit(int(req.GetLimit()))
+	limit := taskruns.PageLimit(int(req.GetLimit()))
 	args := []any{req.GetTopic(), req.GetConsumer(), limit + 1}
 	query := `SELECT execution, message_id, published_at, payload, attempts, error, finished_at FROM ocel.runs
 		WHERE topic = $1 AND consumer = $2 AND status IN ` + deadLetterStatuses
 	if req.GetCursor() != "" {
-		finished, execution, err := parseCursor(req.GetCursor())
+		finished, execution, err := taskruns.ParseCursor(req.GetCursor())
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
@@ -118,11 +119,11 @@ func (t Topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLetter
 		}
 		return listedLetter{finished: finished, letter: &topicv1.DeadLetter{
 			Execution: execution,
-			Message:   &topicv1.Message{Id: messageID, PublishedAt: timestampOf(published)},
+			Message:   &topicv1.Message{Id: messageID, PublishedAt: taskruns.TimestampOf(published)},
 			Payload:   compactJSON(payload),
 			Attempts:  attempts,
 			Error:     reason,
-			FailedAt:  timestampOf(finished),
+			FailedAt:  taskruns.TimestampOf(finished),
 		}}, nil
 	})
 	if err != nil {
@@ -132,7 +133,7 @@ func (t Topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLetter
 	if len(letters) > limit {
 		letters = letters[:limit]
 		last := letters[limit-1]
-		resp.NextCursor = cursorOf(last.finished, last.letter.GetExecution())
+		resp.NextCursor = taskruns.CursorOf(last.finished, last.letter.GetExecution())
 	}
 	for _, listed := range letters {
 		resp.DeadLetters = append(resp.DeadLetters, listed.letter)
