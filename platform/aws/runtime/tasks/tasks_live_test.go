@@ -257,6 +257,23 @@ func TestLiveTriggersSharingADebounceKeyFoldIntoTheFirstRunDueAfterTheLast(t *te
 	}
 }
 
+func TestLiveAnIdempotencyKeyOfATriggerADebounceFoldsKeepsItsOwnTTL(t *testing.T) {
+	em := live(t)
+	d := em.deploy(t, map[string]*provider.TopicSpec{"resize": aTask("resize")}, nil)
+	e := d.engine(nil)
+
+	debounce := &taskv1.Debounce{Key: "k", Delay: durationpb.New(time.Minute)}
+	first := trigger(t, e, "resize", `{}`, &taskv1.TriggerOptions{Debounce: debounce})
+	brief := &taskv1.TriggerOptions{IdempotencyKey: "order-1", IdempotencyKeyTtl: durationpb.New(time.Second), Debounce: debounce}
+	if folded := trigger(t, e, "resize", `{}`, brief); folded != first {
+		t.Fatalf("the keyed trigger started %s, want it folded into %s", folded, first)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	if again := trigger(t, e, "resize", `{}`, &taskv1.TriggerOptions{IdempotencyKey: "order-1"}); again == first {
+		t.Errorf("the key returned the folded run %s past its 1s ttl, want a new run", first)
+	}
+}
+
 func TestLiveACanceledRunIsNeverAttemptedAndAnExecutingOneIsAborted(t *testing.T) {
 	em := live(t)
 	d := em.deploy(t, map[string]*provider.TopicSpec{"resize": aTask("resize")}, nil)

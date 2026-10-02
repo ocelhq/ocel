@@ -118,11 +118,11 @@ func (t Tasks) trigger(ctx context.Context, deployed deployedConsumer, payload [
 	execution := runs.ExecutionOf(messageID, deployed.consumer.Name)
 	store := t.engine.store
 	idempotencyKey := options.GetIdempotencyKey()
+	life := provider.DefaultIdempotencyKeyLife
+	if options.GetIdempotencyKeyTtl() != nil {
+		life = options.GetIdempotencyKeyTtl().AsDuration()
+	}
 	if idempotencyKey != "" {
-		life := provider.DefaultIdempotencyKeyLife
-		if options.GetIdempotencyKeyTtl() != nil {
-			life = options.GetIdempotencyKeyTtl().AsDuration()
-		}
 		held, created, err := store.EnsureRecord(ctx, provider.ExpiringRecord{Purpose: provider.RecordIdempotency, Topic: deployed.topicName, Key: idempotencyKey, Value: runRecord(execution), ExpiresAt: now.Add(life)})
 		if err != nil {
 			return "", err
@@ -139,7 +139,7 @@ func (t Tasks) trigger(ctx context.Context, deployed deployedConsumer, payload [
 		}
 		if pending != "" {
 			if idempotencyKey != "" {
-				if err := store.rewriteRecord(ctx, provider.ExpiringRecord{Purpose: provider.RecordIdempotency, Topic: deployed.topicName, Key: idempotencyKey, Value: runRecord(pending), ExpiresAt: now.Add(provider.DefaultIdempotencyKeyLife)}); err != nil {
+				if err := store.rewriteRecord(ctx, provider.ExpiringRecord{Purpose: provider.RecordIdempotency, Topic: deployed.topicName, Key: idempotencyKey, Value: runRecord(pending), ExpiresAt: now.Add(life)}); err != nil {
 					return "", err
 				}
 			}
