@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	moveAttempts     = 5
+	moveAttempts     = 8
 	debounceAttempts = 5
 )
 
@@ -78,7 +78,10 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 
 func (t Tasks) move(ctx context.Context, id string, due time.Time, keepTTL bool) error {
 	var err error
-	for range moveAttempts {
+	for attempt := range moveAttempts {
+		if attempt > 0 && !waited(ctx, attempt) {
+			return ctx.Err()
+		}
 		if err = t.moveOnce(ctx, id, due, keepTTL); connect.CodeOf(err) != connect.CodeAborted {
 			return err
 		}
