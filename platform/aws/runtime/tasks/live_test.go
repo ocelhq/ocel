@@ -210,6 +210,31 @@ func (d *deployment) receive(t *testing.T, topic, consumer string, within time.D
 	return events.SQSMessage{}
 }
 
+func (d *deployment) receiveBatch(t *testing.T, topic, consumer string, n int, within time.Duration) []events.SQSMessage {
+	t.Helper()
+	queue := d.queueOf(topic, consumer)
+	deadline := time.Now().Add(within)
+	var records []events.SQSMessage
+	for len(records) < n && time.Now().Before(deadline) {
+		out, err := d.em.sqs.ReceiveMessage(context.Background(), &sqs.ReceiveMessageInput{
+			QueueUrl:            aws.String(d.urls[queue]),
+			MaxNumberOfMessages: int32(n - len(records)),
+			WaitTimeSeconds:     1,
+			VisibilityTimeout:   30,
+		})
+		if err != nil {
+			t.Fatalf("receive from %s: %v", queue, err)
+		}
+		for _, msg := range out.Messages {
+			records = append(records, events.SQSMessage{MessageId: *msg.MessageId, ReceiptHandle: *msg.ReceiptHandle, Body: *msg.Body, EventSourceARN: d.arns[queue], EventSource: "aws:sqs"})
+		}
+	}
+	if len(records) < n {
+		t.Fatalf("%d of %d messages reached %s within %v", len(records), n, queue, within)
+	}
+	return records
+}
+
 func (d *deployment) quiet(t *testing.T, topic, consumer string, within time.Duration) {
 	t.Helper()
 	queue := d.queueOf(topic, consumer)
