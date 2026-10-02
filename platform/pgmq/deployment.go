@@ -57,10 +57,6 @@ func (d Deployment) consumers() map[string]deployedConsumer {
 	return deployedConsumers
 }
 
-func isTask(topic *contractv1.ManifestTopic) bool {
-	return len(topic.GetConsumers()) == 1 && topic.GetConsumers()[0].GetExclusive()
-}
-
 func queueName(topic, consumer string) string {
 	name := strings.ReplaceAll(topic+"__"+consumer, "-", "_")
 	if len(name) <= maxQueueNameLength {

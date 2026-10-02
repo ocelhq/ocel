@@ -13,6 +13,7 @@ import (
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/taskruns"
 )
 
 const (
@@ -41,21 +42,8 @@ type queueMessage struct {
 	Lane      string `json:"lane"`
 }
 
-func executionOf(messageID, consumer string) string { return messageID + "-" + consumer }
-
-func laneName(lane topicv1.Lane) string {
-	switch lane {
-	case topicv1.Lane_LANE_HIGH:
-		return "high"
-	case topicv1.Lane_LANE_LOW:
-		return "low"
-	default:
-		return "default"
-	}
-}
-
 func (e *Engine) publish(ctx context.Context, tx pgx.Tx, toPublish publication) ([]string, error) {
-	task := isTask(toPublish.topic)
+	task := taskruns.IsTask(toPublish.topic)
 	if !task {
 		staged := provider.ExpiringRecord{Purpose: provider.RecordStagedPayload, Topic: toPublish.topicName, Key: toPublish.messageID, Value: toPublish.payload, ExpiresAt: toPublish.dueAt.Add(stagedPayloadLife)}
 		if _, _, err := ensureRecord(ctx, tx, staged); err != nil {
@@ -65,7 +53,7 @@ func (e *Engine) publish(ctx context.Context, tx pgx.Tx, toPublish publication) 
 	var executions []string
 	for _, consumer := range toPublish.topic.GetConsumers() {
 		deployed := deployedConsumer{topicName: toPublish.topicName, topic: toPublish.topic, consumer: consumer, queue: queueName(toPublish.topicName, consumer.GetName())}
-		execution := executionOf(toPublish.messageID, consumer.GetName())
+		execution := taskruns.ExecutionOf(toPublish.messageID, consumer.GetName())
 		run := enqueuedRun{
 			execution:   execution,
 			deployed:    deployed,
@@ -74,7 +62,7 @@ func (e *Engine) publish(ctx context.Context, tx pgx.Tx, toPublish publication) 
 			dueAt:       toPublish.dueAt,
 			key:         toPublish.key,
 			lane:        laneFor(consumer, toPublish.lane),
-			maxAttempts: attemptsFor(retryPolicyOf(deployed), toPublish.maxAttempts),
+			maxAttempts: taskruns.AttemptsFor(retryPolicyOf(deployed), toPublish.maxAttempts),
 			tags:        toPublish.tags,
 			metadata:    toPublish.metadata,
 		}
@@ -95,9 +83,9 @@ func (e *Engine) publish(ctx context.Context, tx pgx.Tx, toPublish publication) 
 func laneFor(consumer *contractv1.ManifestConsumer, lane topicv1.Lane) string {
 	lanes := consumer.GetLanes()
 	if lane == topicv1.Lane_LANE_UNSPECIFIED || (len(lanes) > 0 && !slices.Contains(lanes, lane)) {
-		return laneName(topicv1.Lane_LANE_DEFAULT)
+		return taskruns.LaneName(topicv1.Lane_LANE_DEFAULT)
 	}
-	return laneName(lane)
+	return taskruns.LaneName(lane)
 }
 
 type enqueuedRun struct {

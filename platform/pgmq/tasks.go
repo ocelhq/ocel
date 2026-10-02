@@ -2,20 +2,19 @@ package pgmq
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/taskruns"
 )
 
 type Tasks struct {
@@ -26,7 +25,7 @@ func (e *Engine) Tasks() Tasks { return Tasks{engine: e} }
 
 func (t Tasks) task(name string) (*contractv1.ManifestTopic, error) {
 	topic, found := t.engine.current().Topics[name]
-	if !found || !isTask(topic) {
+	if !found || !taskruns.IsTask(topic) {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no task named %q is deployed", name))
 	}
 	return topic, nil
@@ -51,7 +50,7 @@ func (t Tasks) Trigger(ctx context.Context, req *taskv1.TriggerRequest) (*taskv1
 
 func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contractv1.ManifestTopic, payload []byte, options *taskv1.TriggerOptions) (string, error) {
 	now := time.Now()
-	if err := refuseNonJSON(payload); err != nil {
+	if err := taskruns.RefuseNonJSON(payload); err != nil {
 		return "", err
 	}
 	toPublish := publication{
@@ -74,27 +73,30 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 		toPublish.ttl = options.GetTtl().AsDuration()
 	}
 	if metadata := options.GetMetadata(); len(metadata) > 0 {
-		if err := refuseNonObject(metadata); err != nil {
+		if err := taskruns.RefuseNonObject(metadata); err != nil {
 			return "", err
 		}
 		toPublish.metadata = metadata
 	}
-	execution := executionOf(toPublish.messageID, topic.GetConsumers()[0].GetName())
+	execution := taskruns.ExecutionOf(toPublish.messageID, topic.GetConsumers()[0].GetName())
 	var idempotency provider.ExpiringRecord
 	if key := options.GetIdempotencyKey(); key != "" {
 		life := provider.DefaultIdempotencyKeyLife
 		if options.GetIdempotencyKeyTtl() != nil {
 			life = options.GetIdempotencyKeyTtl().AsDuration()
 		}
-		idempotency = newRunRecord(provider.RecordIdempotency, name, key, execution, now.Add(life))
+		idempotency = taskruns.NewRecordNamingRun(provider.RecordIdempotency, name, key, execution, now.Add(life))
 		existing, created, err := ensureRecord(ctx, tx, idempotency)
-		if err != nil || !created {
-			return readRecordedRun(existing), err
+		if err != nil {
+			return "", err
+		}
+		if !created {
+			return taskruns.ReadRecordedRun(existing)
 		}
 	}
 	if debounce := options.GetDebounce(); debounce != nil {
 		toPublish.dueAt = now.Add(debounce.GetDelay().AsDuration())
-		pending, err := t.debounce(ctx, tx, newRunRecord(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt))
+		pending, err := t.debounce(ctx, tx, taskruns.NewRecordNamingRun(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt))
 		if err != nil {
 			return "", err
 		}
@@ -108,26 +110,11 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 	return execution, nil
 }
 
-type recordedRun struct {
-	Run string `json:"run"`
-}
-
-func newRunRecord(purpose provider.RecordPurpose, task, key, execution string, expires time.Time) provider.ExpiringRecord {
-	value, _ := json.Marshal(recordedRun{Run: execution})
-	return provider.ExpiringRecord{Purpose: purpose, Topic: task, Key: key, Value: value, ExpiresAt: expires}
-}
-
-func readRecordedRun(record provider.ExpiringRecord) string {
-	var recorded recordedRun
-	_ = json.Unmarshal(record.Value, &recorded)
-	return recorded.Run
-}
-
 func pointIdempotencyAt(ctx context.Context, tx pgx.Tx, idempotency provider.ExpiringRecord, execution string) error {
 	if idempotency.Key == "" {
 		return nil
 	}
-	pointed := newRunRecord(idempotency.Purpose, idempotency.Topic, idempotency.Key, execution, idempotency.ExpiresAt)
+	pointed := taskruns.NewRecordNamingRun(idempotency.Purpose, idempotency.Topic, idempotency.Key, execution, idempotency.ExpiresAt)
 	_, err := tx.Exec(ctx, `UPDATE ocel.records SET value = $4 WHERE purpose = $1 AND topic = $2 AND key = $3`,
 		string(pointed.Purpose), pointed.Topic, pointed.Key, string(pointed.Value))
 	return err
@@ -138,7 +125,10 @@ func (t Tasks) debounce(ctx context.Context, tx pgx.Tx, record provider.Expiring
 	if err != nil || created {
 		return "", err
 	}
-	pending := readRecordedRun(existing)
+	pending, err := taskruns.ReadRecordedRun(existing)
+	if err != nil {
+		return "", err
+	}
 	run, err := lockRun(ctx, tx, pending)
 	if err != nil && connect.CodeOf(err) != connect.CodeNotFound {
 		return "", err
@@ -159,21 +149,6 @@ func (t Tasks) debounce(ctx context.Context, tx pgx.Tx, record provider.Expiring
 	return "", err
 }
 
-func refuseNonJSON(payload []byte) error {
-	if len(payload) > 0 && !json.Valid(payload) {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("the payload is not JSON"))
-	}
-	return nil
-}
-
-func refuseNonObject(metadata []byte) error {
-	var object map[string]json.RawMessage
-	if err := json.Unmarshal(metadata, &object); err != nil || object == nil {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("the metadata is not a JSON object"))
-	}
-	return nil
-}
-
 func (t Tasks) RetrieveRun(ctx context.Context, req *taskv1.RetrieveRunRequest) (*taskv1.RetrieveRunResponse, error) {
 	run, err := readRun(ctx, t.engine.pool, req.GetId())
 	if errors.Is(err, keyvalue.ErrNotFound) {
@@ -182,42 +157,5 @@ func (t Tasks) RetrieveRun(ctx context.Context, req *taskv1.RetrieveRunRequest) 
 	if err != nil {
 		return nil, err
 	}
-	return &taskv1.RetrieveRunResponse{Run: newRunMessage(run)}, nil
-}
-
-var runStatuses = map[provider.RunStatus]taskv1.RunStatus{
-	provider.RunDelayed:   taskv1.RunStatus_RUN_STATUS_DELAYED,
-	provider.RunQueued:    taskv1.RunStatus_RUN_STATUS_QUEUED,
-	provider.RunExecuting: taskv1.RunStatus_RUN_STATUS_EXECUTING,
-	provider.RunCompleted: taskv1.RunStatus_RUN_STATUS_COMPLETED,
-	provider.RunFailed:    taskv1.RunStatus_RUN_STATUS_FAILED,
-	provider.RunCanceled:  taskv1.RunStatus_RUN_STATUS_CANCELED,
-	provider.RunExpired:   taskv1.RunStatus_RUN_STATUS_EXPIRED,
-	provider.RunTimedOut:  taskv1.RunStatus_RUN_STATUS_TIMED_OUT,
-}
-
-func newRunMessage(run provider.Run) *taskv1.Run {
-	return &taskv1.Run{
-		Id:         run.Execution,
-		Task:       run.Topic,
-		Status:     runStatuses[run.Status],
-		Payload:    run.Payload,
-		Output:     run.Output,
-		Metadata:   run.Metadata,
-		Error:      run.Error,
-		Attempts:   int32(run.Attempts),
-		Tags:       run.Tags,
-		CreatedAt:  timestampOf(run.CreatedAt),
-		DueAt:      timestampOf(run.DueAt),
-		StartedAt:  timestampOf(run.StartedAt),
-		FinishedAt: timestampOf(run.FinishedAt),
-		ExpiresAt:  timestampOf(run.ExpiresAt),
-	}
-}
-
-func timestampOf(t time.Time) *timestamppb.Timestamp {
-	if t.IsZero() {
-		return nil
-	}
-	return timestamppb.New(t)
+	return &taskv1.RetrieveRunResponse{Run: taskruns.NewRunMessage(run)}, nil
 }

@@ -11,13 +11,6 @@ func retryPolicyOf(deployed deployedConsumer) provider.RetryPolicy {
 	return provider.ResolveRetryPolicy(deployed.topic.GetRetry(), deployed.consumer.GetRetry())
 }
 
-func attemptsFor(policy provider.RetryPolicy, requested int32) int {
-	if requested > 0 && int(requested) < policy.MaxAttempts {
-		return int(requested)
-	}
-	return policy.MaxAttempts
-}
-
 func backoff(policy provider.RetryPolicy, attempt int, random float64) time.Duration {
 	delay := policy.MinDelay
 	for i := 1; i < attempt && delay < policy.MaxDelay; i++ {
