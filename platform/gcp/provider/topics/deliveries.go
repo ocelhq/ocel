@@ -15,7 +15,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/envelope"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
 )
@@ -36,7 +35,7 @@ const (
 
 type Deliveries struct {
 	Store  Store
-	Topics map[string]*contractv1.ManifestTopic
+	Topics map[string]*provider.TopicSpec
 	Worker string
 }
 
@@ -52,8 +51,8 @@ type pushRequest struct {
 
 type pushedRun struct {
 	topicName   string
-	topic       *contractv1.ManifestTopic
-	consumer    *contractv1.ManifestConsumer
+	topic       *provider.TopicSpec
+	consumer    provider.ConsumerSpec
 	messageID   string
 	publishedAt time.Time
 	dueAt       time.Time
@@ -99,20 +98,20 @@ func pushedTo(r *http.Request) (string, string, bool) {
 	return topic, consumer, found && topic != "" && consumer != "" && !strings.Contains(consumer, "/")
 }
 
-func (d Deliveries) consumerOf(topicName, consumerName string) (*contractv1.ManifestTopic, *contractv1.ManifestConsumer, bool) {
+func (d Deliveries) consumerOf(topicName, consumerName string) (*provider.TopicSpec, provider.ConsumerSpec, bool) {
 	topic, found := d.Topics[topicName]
 	if !found {
-		return nil, nil, false
+		return nil, provider.ConsumerSpec{}, false
 	}
-	for _, consumer := range topic.GetConsumers() {
-		if consumer.GetName() == consumerName {
+	for _, consumer := range topic.Consumers {
+		if consumer.Name == consumerName {
 			return topic, consumer, true
 		}
 	}
-	return nil, nil, false
+	return nil, provider.ConsumerSpec{}, false
 }
 
-func pushedRunOf(topicName string, topic *contractv1.ManifestTopic, consumer *contractv1.ManifestConsumer, pushed pushRequest) pushedRun {
+func pushedRunOf(topicName string, topic *provider.TopicSpec, consumer provider.ConsumerSpec, pushed pushRequest) pushedRun {
 	attributes := pushed.Message.Attributes
 	publishTime, err := time.Parse(time.RFC3339Nano, pushed.Message.PublishTime)
 	idTime := publishTime
@@ -144,11 +143,11 @@ func pushedRunOf(topicName string, topic *contractv1.ManifestTopic, consumer *co
 		delivered.messageID = envelope.MessageIDFrom(idTime, pushed.Message.MessageID)
 	}
 	requested, _ := strconv.Atoi(attributes[MaxAttemptsAttribute])
-	delivered.maxAttempts = runs.AttemptsFor(provider.ResolveRetryPolicy(topic.GetRetry(), consumer.GetRetry()), int32(requested))
+	delivered.maxAttempts = runs.AttemptsFor(consumer.Retry, int32(requested))
 	return delivered
 }
 
-func (p pushedRun) execution() string { return runs.ExecutionOf(p.messageID, p.consumer.GetName()) }
+func (p pushedRun) execution() string { return runs.ExecutionOf(p.messageID, p.consumer.Name) }
 
 func (d Deliveries) deliver(ctx context.Context, delivered pushedRun) error {
 	claimed, err := d.claim(ctx, delivered)
@@ -163,7 +162,7 @@ func (d Deliveries) deliver(ctx context.Context, delivered pushedRun) error {
 	}
 	attemptCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
-	if maxDuration := delivered.consumer.GetMaxDuration().AsDuration(); maxDuration > 0 {
+	if maxDuration := delivered.consumer.MaxDuration; maxDuration > 0 {
 		var stop context.CancelFunc
 		attemptCtx, stop = context.WithTimeoutCause(attemptCtx, maxDuration, envelope.ErrTimedOut)
 		defer stop()
@@ -210,7 +209,7 @@ func isSuperseded(run storedRun, delivered pushedRun) bool {
 
 func startStoredRun(run *storedRun, delivered pushedRun) {
 	publishedAt := delivered.publishedAt
-	run.Topic, run.Consumer = delivered.topicName, delivered.consumer.GetName()
+	run.Topic, run.Consumer = delivered.topicName, delivered.consumer.Name
 	run.Status, run.CreatedAt, run.DueAt = provider.RunQueued, publishedAt, delivered.dueAt
 	run.delivery = deliveryFields{
 		MessageID:   delivered.messageID,
@@ -220,10 +219,10 @@ func startStoredRun(run *storedRun, delivered pushedRun) {
 		Lane:        delivered.lane,
 		DelayTask:   delivered.delayTask,
 	}
-	if ttl := delivered.topic.GetTtl().AsDuration(); ttl > 0 {
+	if ttl := delivered.topic.TTL; ttl > 0 {
 		run.ExpiresAt = delivered.dueAt.Add(ttl)
 	}
-	if isTask(delivered.topic) {
+	if runs.IsTask(delivered.topic) {
 		run.Payload = delivered.payload
 	}
 }
@@ -238,10 +237,10 @@ func envelopeOf(delivered pushedRun, claimed storedRun) *topicv1.Envelope {
 	posted := &topicv1.Envelope{
 		V:        envelope.Version,
 		Topic:    delivered.topicName,
-		Consumer: delivered.consumer.GetName(),
-		Schema:   envelope.SchemaOf(delivered.topic.GetSchema()),
+		Consumer: delivered.consumer.Name,
+		Schema:   envelope.SchemaOf(delivered.topic.Schema),
 	}
-	if delivered.consumer.GetBatch().GetSize() > 0 {
+	if delivered.consumer.Batch != nil {
 		posted.Messages = []*topicv1.Delivery{{Execution: delivered.execution(), Message: message, Attempt: attempt, Payload: delivered.payload}}
 		return posted
 	}
@@ -273,7 +272,7 @@ func (d Deliveries) finish(ctx context.Context, delivered pushedRun, res envelop
 			settle(provider.RunFailed, nil, res.Reason)
 			return nil
 		case envelope.TimedOut:
-			if isTask(delivered.topic) {
+			if runs.IsTask(delivered.topic) {
 				settle(provider.RunTimedOut, nil, res.Reason)
 				return nil
 			}

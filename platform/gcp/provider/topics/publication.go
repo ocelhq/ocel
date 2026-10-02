@@ -8,14 +8,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/provider"
 	pubsub "google.golang.org/api/pubsub/v1"
-
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type publication struct {
 	topicName   string
-	topic       *contractv1.ManifestTopic
+	topic       *provider.TopicSpec
 	messageID   string
 	publishedAt time.Time
 	dueAt       time.Time
@@ -44,7 +43,7 @@ func (p publication) message() *pubsub.PubsubMessage {
 		attributes[DelayTaskAttribute] = p.delayTask
 	}
 	message := &pubsub.PubsubMessage{Data: base64Of(p.payload), Attributes: attributes}
-	if p.topic.GetOrdered() {
+	if p.topic.Ordered {
 		message.OrderingKey = p.key
 	}
 	return message

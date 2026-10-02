@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
 )
@@ -20,9 +19,9 @@ type Tasks struct {
 	deployment Deployment
 }
 
-func (t Tasks) declared(name string) (*contractv1.ManifestTopic, error) {
+func (t Tasks) declared(name string) (*provider.TopicSpec, error) {
 	topic, found := t.deployment.Declared[name]
-	if !found || !isTask(topic) {
+	if !found || !runs.IsTask(topic) {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no task named %q is deployed", name))
 	}
 	return topic, nil
@@ -50,7 +49,7 @@ func refuseInvalidTrigger(payload []byte, options *taskv1.TriggerOptions) error 
 	return nil
 }
 
-func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.ManifestTopic, payload []byte, options *taskv1.TriggerOptions) (string, error) {
+func (t Tasks) trigger(ctx context.Context, name string, topic *provider.TopicSpec, payload []byte, options *taskv1.TriggerOptions) (string, error) {
 	if err := refuseInvalidTrigger(payload, options); err != nil {
 		return "", err
 	}
@@ -73,7 +72,7 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 	if debounce := options.GetDebounce(); debounce != nil {
 		toPublish.dueAt = now.Add(debounce.GetDelay().AsDuration())
 	}
-	execution := runs.ExecutionOf(toPublish.messageID, topic.GetConsumers()[0].GetName())
+	execution := runs.ExecutionOf(toPublish.messageID, topic.Consumers[0].Name)
 	var idempotency provider.ExpiringRecord
 	if key := options.GetIdempotencyKey(); key != "" {
 		life := provider.DefaultIdempotencyKeyLife
@@ -89,7 +88,7 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 			return runs.ReadRecordedRun(existing)
 		}
 	}
-	ttl := topic.GetTtl().AsDuration()
+	ttl := topic.TTL
 	if options.GetTtl() != nil {
 		ttl = options.GetTtl().AsDuration()
 	}
@@ -116,7 +115,7 @@ func (t Tasks) trigger(ctx context.Context, name string, topic *contractv1.Manif
 }
 
 func (d Deployment) newStoredRun(toPublish publication, now time.Time, ttl time.Duration, tags []string, metadata []byte) storedRun {
-	consumer := toPublish.topic.GetConsumers()[0]
+	consumer := toPublish.topic.Consumers[0]
 	delayTask := d.delayTaskOf(toPublish)
 	status := provider.RunQueued
 	if delayTask != "" {
@@ -124,9 +123,9 @@ func (d Deployment) newStoredRun(toPublish publication, now time.Time, ttl time.
 	}
 	run := storedRun{
 		Run: provider.Run{
-			Execution: runs.ExecutionOf(toPublish.messageID, consumer.GetName()),
+			Execution: runs.ExecutionOf(toPublish.messageID, consumer.Name),
 			Topic:     toPublish.topicName,
-			Consumer:  consumer.GetName(),
+			Consumer:  consumer.Name,
 			Status:    status,
 			Payload:   toPublish.payload,
 			Tags:      tags,
@@ -137,7 +136,7 @@ func (d Deployment) newStoredRun(toPublish publication, now time.Time, ttl time.
 		delivery: deliveryFields{
 			MessageID:   toPublish.messageID,
 			PublishedAt: &now,
-			MaxAttempts: runs.AttemptsFor(provider.ResolveRetryPolicy(toPublish.topic.GetRetry(), consumer.GetRetry()), toPublish.maxAttempts),
+			MaxAttempts: runs.AttemptsFor(consumer.Retry, toPublish.maxAttempts),
 			Key:         toPublish.key,
 			Lane:        toPublish.lane,
 			DelayTask:   delayTask,

@@ -12,27 +12,23 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/protobuf/types/known/durationpb"
-
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
 const invoker = "ocel-production@floci-local.iam.gserviceaccount.com"
 
-func ordersAndResize() map[string]*contractv1.ManifestTopic {
-	return map[string]*contractv1.ManifestTopic{
+func ordersAndResize() map[string]*provider.TopicSpec {
+	return map[string]*provider.TopicSpec{
 		"orders": {
 			Ordered: true,
-			Retry:   &resourcesv1.RetryPolicy{MaxAttempts: 3, MinDelay: durationpb.New(2 * time.Second), MaxDelay: durationpb.New(90 * time.Second)},
-			Consumers: []*contractv1.ManifestConsumer{
-				{Name: "ship", Worker: "worker"},
-				{Name: "bill", Worker: "billing", Retry: &resourcesv1.RetryPolicy{MinDelay: durationpb.New(5 * time.Second)}},
+			Consumers: []provider.ConsumerSpec{
+				{Name: "ship", Worker: "worker", Retry: provider.RetryPolicy{MaxAttempts: 3, MinDelay: 2 * time.Second, MaxDelay: 90 * time.Second}},
+				{Name: "bill", Worker: "billing", Retry: provider.RetryPolicy{MaxAttempts: 3, MinDelay: 5 * time.Second, MaxDelay: 90 * time.Second}},
 			},
 		},
-		"resize": {Consumers: []*contractv1.ManifestConsumer{{Name: "resize", Worker: "worker", Exclusive: true}}},
+		"resize": {Consumers: []provider.ConsumerSpec{{Name: "resize", Worker: "worker", Exclusive: true, Retry: defaultRetry}}},
 	}
 }
 

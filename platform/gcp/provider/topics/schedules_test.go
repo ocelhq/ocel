@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/envelope"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -38,8 +37,8 @@ func TestLiveACronTaskIsACloudSchedulerJobPublishingToItsTopic(t *testing.T) {
 	endpoint := emulatedEndpoint(t)
 	clients := liveClients(t)
 	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
-	declared := map[string]*contractv1.ManifestTopic{
-		"digest": {Cron: "*/5 * * * *", Consumers: []*contractv1.ManifestConsumer{{Name: "digest", Worker: "worker", Exclusive: true}}},
+	declared := map[string]*provider.TopicSpec{
+		"digest": {Cron: "*/5 * * * *", Consumers: []provider.ConsumerSpec{{Name: "digest", Worker: "worker", Exclusive: true, Retry: defaultRetry}}},
 	}
 	topology := topics.Topology{Names: names, Topics: declared, Pushes: map[string]topics.Push{"worker": {URL: "https://worker.run.app", ServiceAccount: invoker}}}
 

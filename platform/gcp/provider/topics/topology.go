@@ -11,8 +11,8 @@ import (
 
 	pubsub "google.golang.org/api/pubsub/v1"
 
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -30,7 +30,7 @@ type Push struct {
 
 type Topology struct {
 	Names  Names
-	Topics map[string]*contractv1.ManifestTopic
+	Topics map[string]*provider.TopicSpec
 	Pushes map[string]Push
 }
 
@@ -54,22 +54,22 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 		if err := ensureTopic(ctx, service, topicPath(clients.Project, t.Names.Topic(name))); err != nil {
 			return err
 		}
-		for _, consumer := range topic.GetConsumers() {
-			push, placed := t.Pushes[consumer.GetWorker()]
+		for _, consumer := range topic.Consumers {
+			push, placed := t.Pushes[consumer.Worker]
 			if !placed {
-				return fmt.Errorf("consumer %s of %s runs on worker %s, and no push address was given for it", consumer.GetName(), name, consumer.GetWorker())
+				return fmt.Errorf("consumer %s of %s runs on worker %s, and no push address was given for it", consumer.Name, name, consumer.Worker)
 			}
-			deadLetters := topicPath(clients.Project, t.Names.DeadLetterTopic(name, consumer.GetName()))
+			deadLetters := topicPath(clients.Project, t.Names.DeadLetterTopic(name, consumer.Name))
 			if err := ensureTopic(ctx, service, deadLetters); err != nil {
 				return err
 			}
 			subscription := t.subscription(clients.Project, name, topic, consumer, push, deadLetters)
-			if err := ensureSubscription(ctx, service, subscriptionPath(clients.Project, t.Names.Subscription(name, consumer.GetName())), subscription); err != nil {
+			if err := ensureSubscription(ctx, service, subscriptionPath(clients.Project, t.Names.Subscription(name, consumer.Name)), subscription); err != nil {
 				return err
 			}
 		}
-		if topic.GetCron() != "" && isTask(topic) {
-			if err := t.ensureSchedule(ctx, clients, name, topic.GetCron()); err != nil {
+		if topic.Cron != "" && runs.IsTask(topic) {
+			if err := t.ensureSchedule(ctx, clients, name, topic.Cron); err != nil {
 				return err
 			}
 		}
@@ -77,15 +77,15 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 	return nil
 }
 
-func (t Topology) subscription(project, name string, topic *contractv1.ManifestTopic, consumer *contractv1.ManifestConsumer, push Push, deadLetters string) *pubsub.Subscription {
-	policy := provider.ResolveRetryPolicy(topic.GetRetry(), consumer.GetRetry())
+func (t Topology) subscription(project, name string, topic *provider.TopicSpec, consumer provider.ConsumerSpec, push Push, deadLetters string) *pubsub.Subscription {
+	policy := consumer.Retry
 	return &pubsub.Subscription{
 		Topic:                 topicPath(project, t.Names.Topic(name)),
 		AckDeadlineSeconds:    int64(pushAckDeadline / time.Second),
-		EnableMessageOrdering: topic.GetOrdered(),
-		Filter:                fmt.Sprintf(`NOT attributes:%s OR attributes.%s = %q`, ConsumerAttribute, ConsumerAttribute, consumer.GetName()),
+		EnableMessageOrdering: topic.Ordered,
+		Filter:                fmt.Sprintf(`NOT attributes:%s OR attributes.%s = %q`, ConsumerAttribute, ConsumerAttribute, consumer.Name),
 		PushConfig: &pubsub.PushConfig{
-			PushEndpoint: push.URL + PushPath(name, consumer.GetName()),
+			PushEndpoint: push.URL + PushPath(name, consumer.Name),
 			OidcToken:    &pubsub.OidcToken{ServiceAccountEmail: push.ServiceAccount, Audience: push.URL},
 		},
 		RetryPolicy: &pubsub.RetryPolicy{
@@ -151,15 +151,15 @@ func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 		return err
 	}
 	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
-		for _, consumer := range t.Topics[name].GetConsumers() {
-			subscription := subscriptionPath(clients.Project, t.Names.Subscription(name, consumer.GetName()))
+		for _, consumer := range t.Topics[name].Consumers {
+			subscription := subscriptionPath(clients.Project, t.Names.Subscription(name, consumer.Name))
 			if err := deleteIgnoringMissing(ctx, "subscription "+subscription, func() error {
 				_, err := service.Projects.Subscriptions.Delete(subscription).Context(ctx).Do()
 				return err
 			}); err != nil {
 				return err
 			}
-			deadLetters := topicPath(clients.Project, t.Names.DeadLetterTopic(name, consumer.GetName()))
+			deadLetters := topicPath(clients.Project, t.Names.DeadLetterTopic(name, consumer.Name))
 			if err := deleteIgnoringMissing(ctx, "topic "+deadLetters, func() error {
 				_, err := service.Projects.Topics.Delete(deadLetters).Context(ctx).Do()
 				return err
@@ -167,7 +167,7 @@ func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 				return err
 			}
 		}
-		if t.Topics[name].GetCron() != "" {
+		if t.Topics[name].Cron != "" {
 			if err := t.removeSchedule(ctx, clients, name); err != nil {
 				return err
 			}

@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/envelope"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
 )
@@ -145,7 +144,7 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 	now := time.Now()
 	replay := publicationOf(original, topic)
 	replay.messageID, replay.publishedAt, replay.dueAt = envelope.NewMessageID(now), now, now
-	ttl := topic.GetTtl().AsDuration()
+	ttl := topic.TTL
 	if !original.ExpiresAt.IsZero() && !original.DueAt.IsZero() {
 		ttl = original.ExpiresAt.Sub(original.DueAt)
 	}
@@ -166,7 +165,7 @@ func refuseUnreschedulable(run storedRun, now time.Time) error {
 	return nil
 }
 
-func publicationOf(run storedRun, topic *contractv1.ManifestTopic) publication {
+func publicationOf(run storedRun, topic *provider.TopicSpec) publication {
 	published := publication{
 		topicName:   run.Topic,
 		topic:       topic,

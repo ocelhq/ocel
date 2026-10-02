@@ -11,7 +11,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/envelope"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
 )
@@ -24,9 +23,9 @@ type recordedMessage struct {
 	Message string `json:"message"`
 }
 
-func (t Topics) declared(name string) (*contractv1.ManifestTopic, error) {
+func (t Topics) declared(name string) (*provider.TopicSpec, error) {
 	topic, found := t.deployment.Declared[name]
-	if !found || isTask(topic) {
+	if !found || runs.IsTask(topic) {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no topic named %q is deployed", name))
 	}
 	return topic, nil

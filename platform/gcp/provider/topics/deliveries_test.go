@@ -14,12 +14,9 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/ocelhq/ocel/pkg/envelope"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -75,20 +72,21 @@ func always(status int, body string) func(int) answer {
 	return func(int) answer { return answer{status: status, body: body} }
 }
 
-func deployedTopics() map[string]*contractv1.ManifestTopic {
-	return map[string]*contractv1.ManifestTopic{
+var defaultRetry = provider.RetryPolicy{MaxAttempts: provider.DefaultRetryMaxAttempts, MinDelay: provider.DefaultRetryMinDelay, MaxDelay: provider.DefaultRetryMaxDelay}
+
+func deployedTopics() map[string]*provider.TopicSpec {
+	twice := provider.RetryPolicy{MaxAttempts: 2, MinDelay: provider.DefaultRetryMinDelay, MaxDelay: provider.DefaultRetryMaxDelay}
+	return map[string]*provider.TopicSpec{
 		"resize": {
 			Schema:    "{}",
-			Retry:     &resourcesv1.RetryPolicy{MaxAttempts: 3},
-			Consumers: []*contractv1.ManifestConsumer{{Name: "resize", Worker: "worker", Exclusive: true}},
+			Consumers: []provider.ConsumerSpec{{Name: "resize", Worker: "worker", Exclusive: true, Retry: defaultRetry}},
 		},
-		"slow": {Consumers: []*contractv1.ManifestConsumer{{Name: "slow", Worker: "worker", Exclusive: true, MaxDuration: durationpb.New(200 * time.Millisecond)}}},
+		"slow": {Consumers: []provider.ConsumerSpec{{Name: "slow", Worker: "worker", Exclusive: true, Retry: defaultRetry, MaxDuration: 200 * time.Millisecond}}},
 		"orders": {
-			Ttl:   durationpb.New(24 * time.Hour),
-			Retry: &resourcesv1.RetryPolicy{MaxAttempts: 2},
-			Consumers: []*contractv1.ManifestConsumer{
-				{Name: "ship", Worker: "worker", MaxDuration: durationpb.New(200 * time.Millisecond)},
-				{Name: "digest", Worker: "worker", Batch: &resourcesv1.BatchPolicy{Size: 10}},
+			TTL: 24 * time.Hour,
+			Consumers: []provider.ConsumerSpec{
+				{Name: "ship", Worker: "worker", Retry: twice, MaxDuration: 200 * time.Millisecond},
+				{Name: "digest", Worker: "worker", Retry: twice, Batch: &provider.BatchPolicy{Size: 10}},
 			},
 		},
 	}
