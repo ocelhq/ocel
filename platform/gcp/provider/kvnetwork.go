@@ -22,7 +22,7 @@ const (
 	memorystoreServiceClass = "gcp-memorystore"
 	networkUserRole         = "roles/compute.networkUser"
 	regionalRouting         = "REGIONAL"
-	serviceAgentDomain      = "@serverless-robot-prod.iam.gserviceaccount.com"
+	runAgentDomain          = "@serverless-robot-prod.iam.gserviceaccount.com"
 )
 
 var kvAPIs = []string{
@@ -115,7 +115,7 @@ func (b bootstrap) ensureSubnetwork(ctx context.Context, engine *compute.Service
 }
 
 func (b bootstrap) grantSubnetworkUse(ctx context.Context, engine *compute.Service, tier environment.Tier) error {
-	agent, err := b.readServiceAgent(ctx)
+	agent, err := b.readServiceAgent(ctx, runAgentDomain)
 	if err != nil {
 		return err
 	}
@@ -147,16 +147,16 @@ func (b bootstrap) grantSubnetworkUse(ctx context.Context, engine *compute.Servi
 	return nil
 }
 
-func (b bootstrap) readServiceAgent(ctx context.Context) (string, error) {
+func (b bootstrap) readServiceAgent(ctx context.Context, domain string) (string, error) {
 	service, err := b.clients.Projects()
 	if err != nil {
 		return "", err
 	}
 	project, err := attempted(ctx, service.Projects.Get(b.clients.project).Context(ctx).Do)
 	if err != nil {
-		return "", fmt.Errorf("read project %s's number, which names the Cloud Run service agent: %w", b.clients.project, err)
+		return "", fmt.Errorf("read project %s's number, which names its service agents: %w", b.clients.project, err)
 	}
-	return fmt.Sprintf("serviceAccount:service-%d%s", project.ProjectNumber, serviceAgentDomain), nil
+	return fmt.Sprintf("serviceAccount:service-%d%s", project.ProjectNumber, domain), nil
 }
 
 func (b bootstrap) connectionPolicyPath(tier environment.Tier) string {

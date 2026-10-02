@@ -8,6 +8,7 @@ import (
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"google.golang.org/api/cloudresourcemanager/v1"
+	"google.golang.org/api/iam/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -200,4 +201,70 @@ func boundKeyMember(bindings []*iampb.Binding, role, member string, granting boo
 		return bindings, false
 	}
 	return append(bindings, &iampb.Binding{Role: role, Members: []string{member}}), true
+}
+
+func (c *clients) accountRoleGranted(ctx context.Context, account, role, member string) (bool, error) {
+	service, err := c.Accounts()
+	if err != nil {
+		return false, err
+	}
+	policy, err := attempted(ctx, service.Projects.ServiceAccounts.GetIamPolicy(accountPath(c, account)).Context(ctx).Do)
+	if absent(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read who may act as the %s service account: %w", account, err)
+	}
+	return slices.ContainsFunc(policy.Bindings, func(binding *iam.Binding) bool {
+		return binding.Role == role && binding.Condition == nil && slices.Contains(binding.Members, member)
+	}), nil
+}
+
+func (c *clients) bindAccountRole(ctx context.Context, account, role, member string, granting bool) error {
+	service, err := c.Accounts()
+	if err != nil {
+		return err
+	}
+	var refused error
+	for attempt := range bindAttempts {
+		if attempt > 0 && !waited(ctx, attempt) {
+			return ctx.Err()
+		}
+		policy, err := attempted(ctx, service.Projects.ServiceAccounts.GetIamPolicy(accountPath(c, account)).Context(ctx).Do)
+		if absent(err) && !granting {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read who may act as the %s service account: %w", account, err)
+		}
+		bindings, changed := boundAccountMember(policy.Bindings, role, member, granting)
+		if !changed {
+			return nil
+		}
+		policy.Bindings = bindings
+		_, refused = attempted(ctx, service.Projects.ServiceAccounts.SetIamPolicy(accountPath(c, account),
+			&iam.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
+		if refused == nil || !stale(refused) {
+			break
+		}
+	}
+	if refused != nil {
+		return fmt.Errorf("update the %s binding of %s on the %s service account: %w", role, member, account, refused)
+	}
+	return nil
+}
+
+func boundAccountMember(bindings []*iam.Binding, role, member string, granting bool) ([]*iam.Binding, bool) {
+	for _, binding := range bindings {
+		if binding.Role != role || binding.Condition != nil {
+			continue
+		}
+		members, changed := boundMembers(binding.Members, member, granting)
+		binding.Members = members
+		return bindings, changed
+	}
+	if !granting {
+		return bindings, false
+	}
+	return append(bindings, &iam.Binding{Role: role, Members: []string{member}}), true
 }

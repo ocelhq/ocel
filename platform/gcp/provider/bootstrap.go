@@ -312,7 +312,7 @@ func (b bootstrap) provision(ctx context.Context, read survey, target item, prog
 func (b bootstrap) mend(ctx context.Context, read survey, target item) error {
 	switch target.Kind {
 	case KindDatabase:
-		return b.protectDatabase(ctx)
+		return b.protectDatabase(ctx, b.clients.Database())
 	case KindRepository:
 		return b.pruneRepository(ctx, target.Name)
 	case KindBucket:
@@ -325,7 +325,7 @@ func (b bootstrap) mend(ctx context.Context, read survey, target item) error {
 func (b bootstrap) make(ctx context.Context, read survey, target item) error {
 	switch target.Kind {
 	case KindDatabase:
-		return b.makeDatabase(ctx, read)
+		return b.makeDatabase(ctx, read, b.clients.Database())
 	case KindBucket:
 		return b.makeBucket(ctx, read, target)
 	case KindKeyRing:
@@ -552,8 +552,11 @@ type accountPurpose struct {
 }
 
 func (b bootstrap) purposeOf(tier environment.Tier, name string) accountPurpose {
-	if name == b.clients.EnvSourceSyncAccount(tier) {
+	switch name {
+	case b.clients.EnvSourceSyncAccount(tier):
 		return b.syncPurpose(tier)
+	case b.clients.PushAccount(tier):
+		return b.pushPurpose(tier)
 	}
 	return accountPurpose{
 		displayName: "ocel " + string(tier) + " apps",
@@ -725,7 +728,7 @@ func repositoryFailed(doing string, operation *artifactregistry.Operation) error
 	return fmt.Errorf("%s: %s", doing, operation.Error.Message)
 }
 
-func (b bootstrap) makeDatabase(ctx context.Context, read survey) error {
+func (b bootstrap) makeDatabase(ctx context.Context, read survey, id string) error {
 	service, err := b.clients.Databases()
 	if err != nil {
 		return err
@@ -734,47 +737,47 @@ func (b bootstrap) makeDatabase(ctx context.Context, read survey) error {
 		LocationId:            read.Region,
 		Type:                  nativeFirestore,
 		DeleteProtectionState: protectionOn,
-	}).DatabaseId(b.clients.Database()).Context(ctx).Do)
+	}).DatabaseId(id).Context(ctx).Do)
 	if taken(err) {
-		return b.databaseServesThisRegion(ctx, read)
+		return b.databaseServesThisRegion(ctx, read, id)
 	}
 	if err != nil {
-		return fmt.Errorf("create the %q Firestore database: %w", b.clients.Database(), err)
+		return fmt.Errorf("create the %q Firestore database: %w", id, err)
 	}
-	return b.awaited(ctx, fmt.Sprintf("creating the %q Firestore database", b.clients.Database()), operation)
+	return b.awaited(ctx, fmt.Sprintf("creating the %q Firestore database", id), operation)
 }
 
-func (b bootstrap) databaseServesThisRegion(ctx context.Context, read survey) error {
+func (b bootstrap) databaseServesThisRegion(ctx context.Context, read survey, id string) error {
 	service, err := b.clients.Databases()
 	if err != nil {
 		return err
 	}
-	database, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients)).Context(ctx).Do)
+	database, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients, id)).Context(ctx).Do)
 	if err != nil {
-		return fmt.Errorf("read the %q Firestore database that already exists: %w", b.clients.Database(), err)
+		return fmt.Errorf("read the %q Firestore database that already exists: %w", id, err)
 	}
 	if database.LocationId == read.Region {
-		return b.protectDatabase(ctx)
+		return b.protectDatabase(ctx, id)
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"project %s already has the %q Firestore database in %s and Firestore never moves one, "+
 			"so the records this bootstrap writes would sit a continent away from the buckets and keys it names %s for.\n"+
 			"Bootstrap this project in %s, or deploy into a project with no %q database",
-		read.Project, b.clients.Database(), database.LocationId, read.Region, database.LocationId, b.clients.Database())
+		read.Project, id, database.LocationId, read.Region, database.LocationId, id)
 }
 
-func (b bootstrap) protectDatabase(ctx context.Context) error {
+func (b bootstrap) protectDatabase(ctx context.Context, id string) error {
 	service, err := b.clients.Databases()
 	if err != nil {
 		return err
 	}
-	operation, err := attempted(ctx, service.Projects.Databases.Patch(databasePath(b.clients),
+	operation, err := attempted(ctx, service.Projects.Databases.Patch(databasePath(b.clients, id),
 		&firestoreadmin.GoogleFirestoreAdminV1Database{DeleteProtectionState: protectionOn}).
 		UpdateMask("deleteProtectionState").Context(ctx).Do)
 	if err != nil {
-		return fmt.Errorf("turn on delete protection for the %q Firestore database: %w", b.clients.Database(), err)
+		return fmt.Errorf("turn on delete protection for the %q Firestore database: %w", id, err)
 	}
-	return b.awaited(ctx, fmt.Sprintf("turning on delete protection for the %q Firestore database", b.clients.Database()), operation)
+	return b.awaited(ctx, fmt.Sprintf("turning on delete protection for the %q Firestore database", id), operation)
 }
 
 func (b bootstrap) awaited(ctx context.Context, doing string, operation *firestoreadmin.GoogleLongrunningOperation) error {
@@ -959,7 +962,7 @@ func (b bootstrap) take(ctx context.Context, read survey, target item) (destroyA
 	case KindKey:
 		return b.takeKey(ctx, target.Name)
 	case KindDatabase:
-		return 0, b.takeDatabase(ctx, read)
+		return 0, b.takeDatabase(ctx, b.clients.Database())
 	case KindBucket:
 		return 0, b.takeBucket(ctx, target.Name)
 	case KindRepository:
@@ -1047,12 +1050,12 @@ func destroyable(versions []*kmspb.CryptoKeyVersion) []string {
 	return named
 }
 
-func (b bootstrap) takeDatabase(ctx context.Context, read survey) error {
+func (b bootstrap) takeDatabase(ctx context.Context, id string) error {
 	service, err := b.clients.Databases()
 	if err != nil {
 		return err
 	}
-	path := databasePath(b.clients)
+	path := databasePath(b.clients, id)
 	lifting, err := attempted(ctx, service.Projects.Databases.Patch(path, &firestoreadmin.GoogleFirestoreAdminV1Database{
 		DeleteProtectionState: protectionOff,
 	}).UpdateMask("deleteProtectionState").Context(ctx).Do)
@@ -1060,9 +1063,9 @@ func (b bootstrap) takeDatabase(ctx context.Context, read survey) error {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("lift delete protection from the %q Firestore database: %w", b.clients.Database(), err)
+		return fmt.Errorf("lift delete protection from the %q Firestore database: %w", id, err)
 	}
-	lifted := fmt.Sprintf("lifting delete protection from the %q Firestore database", b.clients.Database())
+	lifted := fmt.Sprintf("lifting delete protection from the %q Firestore database", id)
 	if err := b.awaited(ctx, lifted, lifting); err != nil {
 		return err
 	}
@@ -1072,9 +1075,9 @@ func (b bootstrap) takeDatabase(ctx context.Context, read survey) error {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("delete the %q Firestore database: %w", b.clients.Database(), err)
+		return fmt.Errorf("delete the %q Firestore database: %w", id, err)
 	}
-	return b.awaited(ctx, fmt.Sprintf("deleting the %q Firestore database", b.clients.Database()), deleting)
+	return b.awaited(ctx, fmt.Sprintf("deleting the %q Firestore database", id), deleting)
 }
 
 func (b bootstrap) takeKeyValues(ctx context.Context, tier environment.Tier) error {
