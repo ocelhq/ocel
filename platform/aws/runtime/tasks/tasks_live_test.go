@@ -467,6 +467,27 @@ func TestLiveAnOrderedRunStillWaitingForASlotOnItsMessagesLastDeliveryEndsFailed
 	}
 }
 
+func TestLiveCancelingADelayedOrderedRunReleasesItsHeldMessageSoItsKeysNextRunIsNotBlocked(t *testing.T) {
+	em := live(t)
+	d := em.deploy(t, map[string]*provider.TopicSpec{"sequence": aTask("sequence", ordered)}, nil)
+	worker := newFakeWorker(t, succeeding)
+	e := d.engine(worker)
+
+	delayed := trigger(t, e, "sequence", `{}`, &taskv1.TriggerOptions{Key: "k", DueAt: timestamppb.New(time.Now().Add(time.Hour))})
+	if retained := deliver(t, d, e, "sequence", "sequence", d.receive(t, "sequence", "sequence", 5*time.Second)); len(retained) != 1 {
+		t.Fatalf("an early message on a FIFO queue retained %v, want it held on the queue until due", retained)
+	}
+	next := trigger(t, e, "sequence", `{}`, &taskv1.TriggerOptions{Key: "k"})
+	if _, err := e.Tasks().CancelRun(context.Background(), &taskv1.CancelRunRequest{Id: delayed}); err != nil {
+		t.Fatalf("CancelRun: %v", err)
+	}
+	deliver(t, d, e, "sequence", "sequence", d.receive(t, "sequence", "sequence", 10*time.Second))
+	deliver(t, d, e, "sequence", "sequence", d.receive(t, "sequence", "sequence", 10*time.Second))
+	if run := retrieve(t, e, next); run.GetStatus() != taskv1.RunStatus_RUN_STATUS_COMPLETED {
+		t.Errorf("the key's next run = %v, want it completed without waiting out the canceled run's due time", run)
+	}
+}
+
 func TestLiveAnOrderedRunRescheduledSoonerRunsAtItsNewTimeThoughItsMessageWasHeldUntilTheOldOne(t *testing.T) {
 	em := live(t)
 	d := em.deploy(t, map[string]*provider.TopicSpec{"sequence": aTask("sequence", ordered)}, nil)
