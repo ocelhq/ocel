@@ -180,15 +180,16 @@ func dockerAnswering(t *testing.T, answers map[string]string) *Docker {
 func TestAContainerIsReachedAtTheAddressItHoldsOnItsProjectNetwork(t *testing.T) {
 	t.Parallel()
 	docker := dockerAnswering(t, map[string]string{
-		"/containers/shop-worker/json":  `{"State":{"Running":true},"NetworkSettings":{"Networks":{"ocel-production-shop":{"IPAddress":"172.20.0.5"}}}}`,
+		"/containers/shop-worker/json":  `{"State":{"Running":true},"NetworkSettings":{"Networks":{"bridge":{"IPAddress":"172.17.0.9"},"ocel-production-shop":{"IPAddress":"172.20.0.5"}}}}`,
 		"/containers/shop-stopped/json": `{"State":{"Running":false},"NetworkSettings":{"Networks":{"ocel-production-shop":{"IPAddress":""}}}}`,
+		"/containers/blog-worker/json":  `{"State":{"Running":true},"NetworkSettings":{"Networks":{"ocel-production-blog":{"IPAddress":"172.21.0.5"}}}}`,
 	})
-	address, err := docker.Address(context.Background(), "shop-worker")
+	address, err := docker.Address(context.Background(), "ocel-production-shop", "shop-worker")
 	if err != nil || address != "172.20.0.5" {
 		t.Errorf("Address(shop-worker) = %q, %v, want 172.20.0.5", address, err)
 	}
-	for _, container := range []string{"shop-stopped", "shop-gone"} {
-		if address, err := docker.Address(context.Background(), container); err == nil {
+	for _, container := range []string{"shop-stopped", "shop-gone", "blog-worker"} {
+		if address, err := docker.Address(context.Background(), "ocel-production-shop", container); err == nil {
 			t.Errorf("Address(%s) = %q, want it refused: nothing answers there", container, address)
 		}
 	}

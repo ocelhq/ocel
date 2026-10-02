@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -61,7 +62,7 @@ func TestAReleaseRunsOneLabelledContainerOnTheOneNetworkTargetsResolveAcross(t *
 	for what, wanted := range map[string]string{
 		"the name the drain attributes its in-flight count to": quoted("--name") + " " + quoted(physical),
 		"a reboot that does not take the app down":             quoted("--restart") + " " + quoted(appRestart),
-		"the network the proxy reaches it over":                quoted("--network") + " " + quoted(AppNetwork(aContainer().Tier, "shop")),
+		"the network the proxy reaches it over":                quoted("--network") + " " + quoted(live.AppNetwork(aContainer().Tier, "shop")),
 		"the app label retention reads":                        quoted("--label") + " " + quoted(LabelApp+"=web"),
 		"the project label retention reads":                    quoted("--label") + " " + quoted(LabelProject+"=shop"),
 		"the ref label retention reads":                        quoted("--label") + " " + quoted(LabelRef+"="+appImage),

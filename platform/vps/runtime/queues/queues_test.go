@@ -36,7 +36,10 @@ func (cipher) Open(_ context.Context, _ environment.Tier, bound seal.AssociatedD
 
 type located map[string]string
 
-func (l located) Address(_ context.Context, container string) (string, error) {
+func (l located) Address(_ context.Context, network, container string) (string, error) {
+	if network != live.AppNetwork(tier, "shop") && network != live.AppNetwork(tier, "blog") {
+		return "", errors.New("not on " + network)
+	}
 	if address, found := l[container]; found {
 		return address, nil
 	}

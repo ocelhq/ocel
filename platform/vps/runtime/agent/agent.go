@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -276,7 +275,7 @@ func (d *Docker) Manifest(ctx context.Context, container string) (string, error)
 	return ManifestIn(inspected.Config.Env), nil
 }
 
-func (d *Docker) Address(ctx context.Context, container string) (string, error) {
+func (d *Docker) Address(ctx context.Context, network, container string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+url.PathEscape(container)+"/json", nil)
 	if err != nil {
 		return "", err
@@ -306,12 +305,10 @@ func (d *Docker) Address(ctx context.Context, container string) (string, error) 
 	if !inspected.State.Running {
 		return "", fmt.Errorf("%s is not running", container)
 	}
-	for _, network := range slices.Sorted(maps.Keys(inspected.NetworkSettings.Networks)) {
-		if address := inspected.NetworkSettings.Networks[network].IPAddress; address != "" {
-			return address, nil
-		}
+	if address := inspected.NetworkSettings.Networks[network].IPAddress; address != "" {
+		return address, nil
 	}
-	return "", fmt.Errorf("%s holds no address on any network", container)
+	return "", fmt.Errorf("%s holds no address on %s", container, network)
 }
 
 func (d *Docker) Space(ctx context.Context, volume string) (uint64, uint64, error) {
