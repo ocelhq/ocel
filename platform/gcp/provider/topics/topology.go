@@ -50,7 +50,7 @@ func PushPath(topic, consumer string) string {
 	return pushPrefix + topic + consumerInfix + consumer
 }
 
-func topicPath(project, topic string) string { return "projects/" + project + "/topics/" + topic }
+func TopicPath(project, topic string) string { return "projects/" + project + "/topics/" + topic }
 
 func subscriptionPath(project, subscription string) string {
 	return "projects/" + project + "/subscriptions/" + subscription
@@ -63,7 +63,7 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 	}
 	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
 		topic := t.Topics[name]
-		path := topicPath(clients.Project, t.Names.Topic(name))
+		path := TopicPath(clients.Project, t.Names.Topic(name))
 		if err := ensureTopic(ctx, service, path); err != nil {
 			return err
 		}
@@ -71,7 +71,7 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 			return err
 		}
 		for _, consumer := range topic.Consumers {
-			deadLetters := topicPath(clients.Project, t.Names.DeadLetterTopic(name, consumer.Name))
+			deadLetters := TopicPath(clients.Project, t.Names.DeadLetterTopic(name, consumer.Name))
 			if err := ensureTopic(ctx, service, deadLetters); err != nil {
 				return err
 			}
@@ -100,7 +100,7 @@ func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error
 			if !hosted {
 				continue
 			}
-			deadLetters := topicPath(clients.Project, s.Names.DeadLetterTopic(name, consumer.Name))
+			deadLetters := TopicPath(clients.Project, s.Names.DeadLetterTopic(name, consumer.Name))
 			path := subscriptionPath(clients.Project, s.Names.Subscription(name, consumer.Name))
 			if err := ensureSubscription(ctx, service, path, s.subscription(clients.Project, name, topic, consumer, push, deadLetters)); err != nil {
 				return err
@@ -115,7 +115,7 @@ func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error
 
 func (s Subscriptions) subscription(project, name string, topic *provider.TopicSpec, consumer provider.ConsumerSpec, push Push, deadLetters string) *pubsub.Subscription {
 	return &pubsub.Subscription{
-		Topic:                 topicPath(project, s.Names.Topic(name)),
+		Topic:                 TopicPath(project, s.Names.Topic(name)),
 		AckDeadlineSeconds:    int64(pushAckDeadline / time.Second),
 		EnableMessageOrdering: topic.Ordered,
 		Filter:                fmt.Sprintf(`NOT attributes:%s OR attributes.%s = %q`, ConsumerAttribute, ConsumerAttribute, consumer.Name),
@@ -268,7 +268,7 @@ func (t Topology) removeConsumers(ctx context.Context, clients *ports.Clients, t
 		}); err != nil {
 			return err
 		}
-		deadLetters := topicPath(clients.Project, t.Names.DeadLetterTopic(topic, consumer))
+		deadLetters := TopicPath(clients.Project, t.Names.DeadLetterTopic(topic, consumer))
 		if err := deleteIgnoringMissing(ctx, "topic "+deadLetters, func() error {
 			_, err := service.Projects.Topics.Delete(deadLetters).Context(ctx).Do()
 			return err
@@ -321,7 +321,7 @@ func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 				return err
 			}
 		}
-		topic := topicPath(clients.Project, t.Names.Topic(name))
+		topic := TopicPath(clients.Project, t.Names.Topic(name))
 		if err := deleteIgnoringMissing(ctx, "topic "+topic, func() error {
 			_, err := service.Projects.Topics.Delete(topic).Context(ctx).Do()
 			return err

@@ -62,7 +62,7 @@ func (d Deployment) schedule(ctx context.Context, p publication, name string) er
 		Name:         name,
 		ScheduleTime: timestamppb.New(p.dueAt),
 		MessageType: &cloudtaskspb.Task_HttpRequest{HttpRequest: &cloudtaskspb.HttpRequest{
-			Url:        d.Delays.PublishURL + "/v1/" + topicPath(d.Clients.Project, d.Names.Topic(p.topicName)) + ":publish",
+			Url:        d.Delays.PublishURL + "/v1/" + TopicPath(d.Clients.Project, d.Names.Topic(p.topicName)) + ":publish",
 			HttpMethod: cloudtaskspb.HttpMethod_POST,
 			Headers:    map[string]string{"Content-Type": "application/json"},
 			Body:       body,

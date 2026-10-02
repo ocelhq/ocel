@@ -3,19 +3,11 @@ package gcp
 import (
 	"context"
 	"slices"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
-
-const pushCeiling = 600 * time.Second
-
-var workerCeilings = []provider.WorkerCeiling{
-	{Compute: provider.ComputeServerless, MaxDuration: pushCeiling},
-	{Compute: provider.ComputeContainer, MaxDuration: pushCeiling},
-}
 
 type featureNeed struct {
 	feature  string

@@ -15,12 +15,11 @@ import (
 func TestAWorkerIsAServiceOnlyPubSubReachesThatScalesToNothing(t *testing.T) {
 	t.Parallel()
 
-	worker := workerServing(workerPlacement{
+	worker := workerServing(provider.WorkerSpec{Name: "media", Concurrency: 4}, serving{
 		service: "ocel-shop-prod-web-w-media-a1b2c3",
 		image:   "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
 		env:     map[string]string{"REGION": "eu"},
 		account: "ocel-production@acme-prod.iam.gserviceaccount.com",
-		worker:  provider.WorkerSpec{Name: "media", Concurrency: 4},
 	})
 	desired := desiredOf(t, worker)
 

@@ -29,7 +29,7 @@ func (t Topology) ensureSchedule(ctx context.Context, clients *ports.Clients, ta
 		Schedule: cron,
 		TimeZone: scheduleTimeZone,
 		PubsubTarget: &cloudscheduler.PubsubTarget{
-			TopicName:  topicPath(clients.Project, t.Names.Topic(task)),
+			TopicName:  TopicPath(clients.Project, t.Names.Topic(task)),
 			Data:       base64Of([]byte("{}")),
 			Attributes: map[string]string{ScheduleAttribute: "true"},
 		},

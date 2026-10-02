@@ -138,7 +138,7 @@ func (p *Provider) NameFunctions(ctx context.Context, spec provider.StackSpec) (
 		}
 		functions = append(functions, provider.Function{Name: fn.Name, Physical: service})
 	}
-	return append(functions, workerFunctions(p.nameWorkers(&clients{Names: names}, spec))...), nil
+	return append(functions, workerFunctions(nameWorkers(names, spec))...), nil
 }
 
 func (p *Provider) RemoveFunctionRevisions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Log) ([]provider.Function, error) {
@@ -238,7 +238,7 @@ func (p *Provider) NameContainers(ctx context.Context, spec provider.StackSpec) 
 	if err != nil {
 		return nil, err
 	}
-	workers := workerContainers(p.nameWorkers(&clients{Names: names}, spec), spec.App.Image)
+	workers := workerContainers(nameWorkers(names, spec), spec.App.Image)
 	return append([]provider.AppContainer{{Name: spec.App.App, Physical: service, Image: spec.App.Image}}, workers...), nil
 }
 

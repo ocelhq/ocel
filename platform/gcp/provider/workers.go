@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
@@ -21,32 +22,22 @@ import (
 
 const invokerRole = "roles/run.invoker"
 
-type workerPlacement struct {
-	service string
-	image   string
-	env     map[string]string
-	account string
-	worker  provider.WorkerSpec
-	egress  *privateEgress
+const pushCeiling = 600 * time.Second
+
+var workerCeilings = []provider.WorkerCeiling{
+	{Compute: provider.ComputeServerless, MaxDuration: pushCeiling},
+	{Compute: provider.ComputeContainer, MaxDuration: pushCeiling},
 }
 
-func workerServing(placed workerPlacement) serving {
+func workerServing(worker provider.WorkerSpec, placed serving) serving {
 	env := maps.Clone(placed.env)
 	if env == nil {
 		env = map[string]string{}
 	}
-	env[processenv.WorkerEnvVar] = placed.worker.Name
-	return serving{
-		service:     placed.service,
-		image:       placed.image,
-		env:         env,
-		account:     placed.account,
-		compute:     provider.ComputeServerless,
-		ingress:     ingressInternal,
-		timeout:     pushCeiling,
-		concurrency: placed.worker.Concurrency,
-		egress:      placed.egress,
-	}
+	env[processenv.WorkerEnvVar] = worker.Name
+	placed.env = env
+	placed.compute, placed.ingress, placed.timeout, placed.concurrency = provider.ComputeServerless, ingressInternal, pushCeiling, worker.Concurrency
+	return placed
 }
 
 func publishURL(c *clients) string {
@@ -88,11 +79,12 @@ func (p *Provider) declaredTopics(ctx context.Context, ref provider.StackRef) (m
 	return declared, nil
 }
 
+func runsTopics(app *provider.AppSpec) bool {
+	return app.PreviewLabel == ""
+}
+
 func reachesTopics(app *provider.AppSpec) bool {
-	if app.PreviewLabel != "" {
-		return false
-	}
-	return len(app.Workers) > 0 || slices.ContainsFunc(app.Values.Bindings, func(binding provider.Binding) bool {
+	return hostsWorkers(app) || runsTopics(app) && slices.ContainsFunc(app.Values.Bindings, func(binding provider.Binding) bool {
 		return binding.Type == provider.BindingTopic || binding.Type == provider.BindingTask
 	})
 }
@@ -116,16 +108,16 @@ type deployedWorker struct {
 }
 
 func hostsWorkers(app *provider.AppSpec) bool {
-	return len(app.Workers) > 0 && app.PreviewLabel == ""
+	return len(app.Workers) > 0 && runsTopics(app)
 }
 
-func (p *Provider) nameWorkers(c *clients, spec provider.StackSpec) []deployedWorker {
+func nameWorkers(names Names, spec provider.StackSpec) []deployedWorker {
 	if !hostsWorkers(spec.App) {
 		return nil
 	}
 	named := make([]deployedWorker, 0, len(spec.App.Workers))
 	for _, worker := range spec.App.Workers {
-		named = append(named, deployedWorker{name: worker.Name, service: c.WorkerService(spec.Ref.Project, spec.Ref.Name.Env, spec.App.App, worker.Name)})
+		named = append(named, deployedWorker{name: worker.Name, service: names.WorkerService(spec.Ref.Project, spec.Ref.Name.Env, spec.App.App, worker.Name)})
 	}
 	return named
 }
@@ -133,7 +125,7 @@ func (p *Provider) nameWorkers(c *clients, spec provider.StackSpec) []deployedWo
 func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provider.StackSpec, image string, env map[string]string,
 	declared map[string]*provider.TopicSpec, progress progress.Log,
 ) ([]deployedWorker, error) {
-	named := p.nameWorkers(c, spec)
+	named := nameWorkers(c.Names, spec)
 	if len(named) == 0 {
 		return nil, nil
 	}
@@ -141,12 +133,11 @@ func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provid
 	pushes := map[string]topics.Push{}
 	deployed := make([]deployedWorker, 0, len(named))
 	for at, worker := range named {
-		ran, err := p.deployService(ctx, workerServing(workerPlacement{
+		ran, err := p.deployService(ctx, workerServing(spec.App.Workers[at], serving{
 			service: worker.service,
 			image:   image,
 			env:     env,
 			account: c.WorkloadAccountEmail(spec.Ref.Tier),
-			worker:  spec.App.Workers[at],
 			egress:  p.egressFor(c.Names, spec),
 		}), progress)
 		if err != nil {
@@ -162,7 +153,7 @@ func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provid
 		worker.url, worker.revision = ran.url, ran.revision
 		deployed = append(deployed, worker)
 	}
-	agent, err := c.ServiceAgent(ctx, pubSubAgentDomain)
+	agent, err := c.ReadServiceAgent(ctx, pubSubAgentDomain)
 	if err != nil {
 		return nil, err
 	}

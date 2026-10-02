@@ -43,21 +43,22 @@ type clients struct {
 	region   string
 	endpoint string
 
-	workload     memo[*ports.Clients]
-	storage      memo[*storage.Client]
-	databases    memo[*firestoreadmin.Service]
-	secrets      memo[*secretmanager.Service]
-	services     memo[*serviceusage.Service]
-	images       memo[*artifactregistry.Service]
-	accounts     memo[*iam.Service]
-	runs         memo[*run.Service]
-	schedules    memo[*cloudscheduler.Service]
-	compute      memo[*compute.Service]
-	certs        memo[*certmanager.Service]
-	connectivity memo[*networkconnectivity.Service]
-	principal    memo[string]
-	projects     memo[*cloudresourcemanager.Service]
-	number       memo[int64]
+	workload      memo[*ports.Clients]
+	storage       memo[*storage.Client]
+	databases     memo[*firestoreadmin.Service]
+	secrets       memo[*secretmanager.Service]
+	services      memo[*serviceusage.Service]
+	images        memo[*artifactregistry.Service]
+	accounts      memo[*iam.Service]
+	runs          memo[*run.Service]
+	schedules     memo[*cloudscheduler.Service]
+	compute       memo[*compute.Service]
+	certs         memo[*certmanager.Service]
+	connectivity  memo[*networkconnectivity.Service]
+	principal     memo[string]
+	projects      memo[*cloudresourcemanager.Service]
+	numberLock    sync.Mutex
+	projectNumber int64
 }
 
 func opened[T any](c *clients, cache *memo[T], doing string, open func() (T, error)) (T, error) {
@@ -166,22 +167,21 @@ func (c *clients) Projects() (*cloudresourcemanager.Service, error) {
 	})
 }
 
-func (c *clients) ServiceAgent(ctx context.Context, domain string) (string, error) {
-	number, err := c.number.get(func() (int64, error) {
+func (c *clients) ReadServiceAgent(ctx context.Context, domain string) (string, error) {
+	c.numberLock.Lock()
+	defer c.numberLock.Unlock()
+	if c.projectNumber == 0 {
 		service, err := c.Projects()
 		if err != nil {
-			return 0, err
+			return "", err
 		}
 		project, err := attempted(ctx, service.Projects.Get(c.project).Context(ctx).Do)
 		if err != nil {
-			return 0, fmt.Errorf("read project %s's number, which names its service agents: %w", c.project, err)
+			return "", fmt.Errorf("read project %s's number, which names its service agents: %w", c.project, err)
 		}
-		return project.ProjectNumber, nil
-	})
-	if err != nil {
-		return "", err
+		c.projectNumber = project.ProjectNumber
 	}
-	return fmt.Sprintf("serviceAccount:service-%d%s", number, domain), nil
+	return fmt.Sprintf("serviceAccount:service-%d%s", c.projectNumber, domain), nil
 }
 
 func (c *clients) emulated() bool { return c.endpoint != "" }
