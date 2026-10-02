@@ -30,6 +30,7 @@ type Hooks struct {
 	Functions         *FunctionHooks
 	Containers        *ContainerHooks
 	Retention         *ImageRetentionHooks
+	RecordsWorkers    bool
 }
 
 type FunctionHooks struct {
@@ -97,7 +98,7 @@ func (f *hookStacks) Plan(ctx context.Context, spec provider.StackSpec, _ progre
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return SynthesizedPlan(ctx, f.artifacts, spec, recordedResult(recorded))
+	return synthesizedPlan(ctx, f.artifacts, spec, recordedResult(recorded), f.hooks.RecordsWorkers)
 }
 
 func (f *hookStacks) PlanDestroy(ctx context.Context, ref provider.StackRef, _ progress.Log) (provider.Plan, error) {
@@ -343,7 +344,7 @@ func (f *hookStacks) removeOrphans(ctx context.Context, spec provider.StackSpec,
 }
 
 func (f *hookStacks) removeOrphanFunctions(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress progress.Log) error {
-	declared := DeclaredFunctions(spec)
+	declared := DeclaredFunctions(spec, f.hooks.RecordsWorkers)
 	var orphans []provider.Function
 	for _, function := range recorded.Functions {
 		if slices.Contains(declared, function.Name) {
@@ -356,7 +357,7 @@ func (f *hookStacks) removeOrphanFunctions(ctx context.Context, spec provider.St
 }
 
 func (f *hookStacks) removeOrphanContainers(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress progress.Log) error {
-	declared := DeclaredContainers(spec)
+	declared := DeclaredContainers(spec, f.hooks.RecordsWorkers)
 	var orphans []provider.AppContainer
 	for _, container := range recorded.Containers {
 		if slices.Contains(declared, container.Name) {
