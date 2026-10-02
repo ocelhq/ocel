@@ -7,23 +7,27 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
 	"github.com/ocelhq/ocel/pkg/envelope"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
 const (
 	dueSlack        = 250 * time.Millisecond
 	slotWait        = time.Second
+	maxSlotHold     = 5 * time.Minute
 	cancelPoll      = 500 * time.Millisecond
 	leaseMargin     = 30 * time.Second
 	settleMargin    = 3 * time.Second
@@ -186,7 +190,7 @@ func (e *Engine) setAsideUnlessRunnable(ctx context.Context, deployed deployedCo
 		}
 		return false, acknowledged
 	case held:
-		return false, e.holdInQueue(ctx, deployed, got.record, wait)
+		return false, e.holdInQueue(ctx, deployed, got, wait)
 	case early:
 		return false, e.deferMessage(ctx, deployed, got, wait)
 	}
@@ -195,7 +199,7 @@ func (e *Engine) setAsideUnlessRunnable(ctx context.Context, deployed deployedCo
 
 func (e *Engine) deferMessage(ctx context.Context, deployed deployedConsumer, got received, wait time.Duration) disposition {
 	if deployed.fifo() {
-		return e.holdInQueue(ctx, deployed, got.record, wait)
+		return e.holdInQueue(ctx, deployed, got, wait)
 	}
 	if err := e.enqueue(ctx, deployed, got.msg, wait); err != nil {
 		slog.Warn("put a message back on its queue until it is due", "execution", got.execution, "error", err)
@@ -204,12 +208,15 @@ func (e *Engine) deferMessage(ctx context.Context, deployed deployedConsumer, go
 	return acknowledged
 }
 
-func (e *Engine) holdInQueue(ctx context.Context, deployed deployedConsumer, record events.SQSMessage, wait time.Duration) disposition {
+func (e *Engine) holdInQueue(ctx context.Context, deployed deployedConsumer, got received, wait time.Duration) disposition {
+	if receives := receiveCount(got.record); receives >= queues.MaxReceiveCount {
+		return e.failUndelivered(ctx, deployed, got, receives)
+	}
 	url, err := e.queueURL(ctx, deployed.queue)
 	if err == nil {
 		_, err = e.cfg.Queues.ChangeMessageVisibility(ctx, &sqs.ChangeMessageVisibilityInput{
 			QueueUrl:          aws.String(url),
-			ReceiptHandle:     aws.String(record.ReceiptHandle),
+			ReceiptHandle:     aws.String(got.record.ReceiptHandle),
 			VisibilityTimeout: delaySeconds(max(wait, time.Second), maxVisibilityDelay),
 		})
 	}
@@ -217,6 +224,45 @@ func (e *Engine) holdInQueue(ctx context.Context, deployed deployedConsumer, rec
 		slog.Warn("hold a message on its queue", "queue", deployed.queue, "error", err)
 	}
 	return retained
+}
+
+func receiveCount(record events.SQSMessage) int {
+	count, err := strconv.Atoi(record.Attributes[string(sqstypes.MessageSystemAttributeNameApproximateReceiveCount)])
+	if err != nil {
+		return 0
+	}
+	return count
+}
+
+func slotHold(receives int) time.Duration {
+	hold := slotWait + time.Duration(rand.Int64N(int64(slotWait)))
+	return min(max(hold, time.Duration(receives)*slotWait), maxSlotHold)
+}
+
+func (e *Engine) failUndelivered(ctx context.Context, deployed deployedConsumer, got received, receives int) disposition {
+	now := time.Now()
+	set := map[string]any{
+		"status":      string(provider.RunFailed),
+		"error":       fmt.Sprintf("its message was delivered %d times without the run starting, the most its queue allows before dead-lettering it", receives),
+		"finished_at": now.UnixMicro(),
+		"expires_at":  now.Add(runRetention).Unix(),
+		"lease_until": 0,
+	}
+	if got.run.Payload == "" && len(got.msg.Payload) > 0 {
+		set["payload"] = string(got.msg.Payload)
+	}
+	_, err := e.store.updateRun(context.WithoutCancel(ctx), deployed.topicName, got.execution, change{
+		set:        set,
+		condition:  "#status IN (:queued, :delayed) AND #delivery = :token",
+		conditions: map[string]any{":queued": string(provider.RunQueued), ":delayed": string(provider.RunDelayed), ":token": got.msg.Delivery},
+	})
+	if err != nil {
+		if !errors.Is(err, errConditionFailed) {
+			slog.Warn("fail a run its queue is about to dead-letter", "execution", got.execution, "error", err)
+		}
+		return retained
+	}
+	return acknowledged
 }
 
 func (e *Engine) slotSets(deployed deployedConsumer) []slotSet {
@@ -315,7 +361,7 @@ func (e *Engine) deliverOne(ctx context.Context, deployed deployedConsumer, reco
 		return retained
 	}
 	if !taken {
-		return e.deferMessage(ctx, deployed, got, slotWait+time.Duration(rand.Int64N(int64(slotWait))))
+		return e.deferMessage(ctx, deployed, got, slotHold(receiveCount(got.record)))
 	}
 	defer e.releaseSlots(ctx, slots, got.execution)
 	for {
@@ -334,7 +380,7 @@ func (e *Engine) deliverOne(ctx context.Context, deployed deployedConsumer, reco
 			return dispositionOf(next)
 		}
 		if remaining := time.Until(invocationDeadline(ctx)) - settleMargin; wait > inPlaceRetryCap || wait+attemptBudget(deployed) > remaining {
-			return e.holdInQueue(ctx, deployed, got.record, wait)
+			return e.holdInQueue(ctx, deployed, got, wait)
 		}
 		select {
 		case <-ctx.Done():
@@ -549,7 +595,7 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 	slots, taken, err := e.takeSlots(ctx, deployed, holder, invocationDeadline(ctx).Add(leaseMargin))
 	if err != nil || !taken {
 		for _, got := range admitted {
-			if e.deferMessage(ctx, deployed, got, slotWait+time.Duration(rand.Int64N(int64(slotWait)))) == retained {
+			if e.deferMessage(ctx, deployed, got, slotHold(receiveCount(got.record))) == retained {
 				retainedIDs = append(retainedIDs, got.record.MessageId)
 			}
 		}
@@ -577,7 +623,7 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 		next, wait := e.finish(ctx, deployed, got, answer)
 		retain := dispositionOf(next) == retained
 		if next == retryInPlace {
-			retain = e.holdInQueue(ctx, deployed, got.record, wait) == retained
+			retain = e.holdInQueue(ctx, deployed, got, wait) == retained
 		}
 		if retain {
 			retainedIDs = append(retainedIDs, got.record.MessageId)

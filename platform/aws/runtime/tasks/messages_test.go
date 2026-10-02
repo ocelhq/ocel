@@ -58,3 +58,17 @@ func TestADelayedMessageToAFIFOQueueCarriesNoPerMessageDelayWhichSQSRefusesThoug
 		}
 	}
 }
+
+func TestAMessageWaitingForASlotIsHeldLongerTheMoreTimesItWasDeliveredSoItsReceivesLastUpToTheCap(t *testing.T) {
+	t.Parallel()
+
+	for receives, want := range map[int]struct{ least, most time.Duration }{
+		1:    {time.Second, 2 * time.Second},
+		120:  {2 * time.Minute, 2 * time.Minute},
+		5000: {5 * time.Minute, 5 * time.Minute},
+	} {
+		if got := slotHold(receives); got < want.least || got > want.most {
+			t.Errorf("slotHold(%d) = %v, want between %v and %v", receives, got, want.least, want.most)
+		}
+	}
+}

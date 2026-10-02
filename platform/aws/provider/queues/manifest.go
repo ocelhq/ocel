@@ -12,6 +12,8 @@ const (
 	FilePath = statedir.Name + "/queues.json"
 
 	WorkerConcurrencyEnv = "OCEL_WORKER_CONCURRENCY"
+
+	MaxReceiveCount = 1000
 )
 
 type Manifest struct {
