@@ -65,6 +65,7 @@ type runItem struct {
 	Key         string   `dynamodbav:"key"`
 	Lane        string   `dynamodbav:"lane"`
 	Delivery    string   `dynamodbav:"delivery"`
+	Receipt     string   `dynamodbav:"receipt,omitempty"`
 	Lease       int64    `dynamodbav:"lease_until"`
 	Retention   int64    `dynamodbav:"expires_at,omitempty"`
 	Revision    string   `dynamodbav:"revision"`

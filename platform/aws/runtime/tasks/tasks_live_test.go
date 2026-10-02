@@ -449,3 +449,22 @@ func TestLiveAnOrderedRunStillWaitingForASlotOnItsMessagesLastDeliveryEndsFailed
 		t.Errorf("a run whose message ran out of deliveries waiting = %v, want it failed without an attempt, saying why", run)
 	}
 }
+
+func TestLiveAnOrderedRunRescheduledSoonerRunsAtItsNewTimeThoughItsMessageWasHeldUntilTheOldOne(t *testing.T) {
+	em := live(t)
+	d := em.deploy(t, map[string]*provider.TopicSpec{"sequence": aTask("sequence", ordered)}, nil)
+	worker := newFakeWorker(t, succeeding)
+	e := d.engine(worker)
+
+	id := trigger(t, e, "sequence", `{}`, &taskv1.TriggerOptions{Key: "k", DueAt: timestamppb.New(time.Now().Add(time.Hour))})
+	if retained := deliver(t, d, e, "sequence", "sequence", d.receive(t, "sequence", "sequence", 5*time.Second)); len(retained) != 1 {
+		t.Fatalf("an early message on a FIFO queue retained %v, want it held on the queue until due", retained)
+	}
+	if _, err := e.Tasks().RescheduleRun(context.Background(), &taskv1.RescheduleRunRequest{Id: id, DueAt: timestamppb.New(time.Now())}); err != nil {
+		t.Fatalf("RescheduleRun: %v", err)
+	}
+	deliver(t, d, e, "sequence", "sequence", d.receive(t, "sequence", "sequence", 10*time.Second))
+	if run := retrieve(t, e, id); run.GetStatus() != taskv1.RunStatus_RUN_STATUS_COMPLETED || run.GetAttempts() != 1 {
+		t.Errorf("an ordered run rescheduled to now = %v, want it completed without waiting out its old due time", run)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"connectrpc.com/connect"
@@ -299,8 +300,12 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 	if due.After(now) {
 		status = provider.RunDelayed
 	}
-	token := envelope.NewMessageID(now)
-	set := map[string]any{"status": string(status), "due_at": due.UnixMicro(), "delivery": token, "expires_at": retentionAfter(due.UnixMicro())}
+	set := map[string]any{"status": string(status), "due_at": due.UnixMicro(), "expires_at": retentionAfter(due.UnixMicro())}
+	token := item.Delivery
+	if !deployed.fifo() {
+		token = envelope.NewMessageID(now)
+		set["delivery"] = token
+	}
 	if item.RunExpires > 0 {
 		set["run_expires_at"] = item.RunExpires + due.UnixMicro() - item.DueAt
 	}
@@ -315,7 +320,13 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 	if err != nil {
 		return nil, err
 	}
-	if err := t.engine.enqueue(ctx, deployed, queueMessage{Execution: item.SK, Delivery: token, Key: item.Key}, due.Sub(now)); err != nil {
+	if deployed.fifo() {
+		if item.Receipt != "" {
+			if err := t.engine.releaseHeld(ctx, deployed, item.Receipt); err != nil {
+				slog.Warn("release the held message of a rescheduled run", "execution", item.SK, "error", err)
+			}
+		}
+	} else if err := t.engine.enqueue(ctx, deployed, queueMessage{Execution: item.SK, Delivery: token, Key: item.Key}, due.Sub(now)); err != nil {
 		return nil, err
 	}
 	return &taskv1.RescheduleRunResponse{Run: runs.NewRunMessage(moved.run())}, nil
