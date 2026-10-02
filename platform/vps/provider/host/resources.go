@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -226,7 +227,7 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
 		"--restart", appRestart,
-		"--network", AppNetwork(spec.Tier, spec.Project),
+		"--network", live.AppNetwork(spec.Tier, spec.Project),
 	}
 	argv = append(argv, spec.labels()...)
 	argv = append(argv, "--label", LabelRef+"="+spec.Image, "--label", LabelEnv+"="+digest)

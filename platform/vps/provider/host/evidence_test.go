@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -114,7 +115,7 @@ func TestEveryInspectThisPackageRunsIsOneOfTheFlavoursThoseRostersCover(t *testi
 func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 	t.Parallel()
 
-	project := AppNetwork(valued().Tier, valued().Project)
+	project := live.AppNetwork(valued().Tier, valued().Project)
 	networking := map[string]struct{ command, network string }{
 		"what a bootstrap creates the proxy network with":     {networkCommand(), ProxyNetwork},
 		"what a bootstrap probes the proxy network with":      {networkProbe(), ProxyNetwork},

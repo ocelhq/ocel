@@ -18,6 +18,12 @@ import (
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }
 
+type onDefaultBridge struct{ docker *agent.Docker }
+
+func (b onDefaultBridge) Address(ctx context.Context, _, container string) (string, error) {
+	return b.docker.Address(ctx, "bridge", container)
+}
+
 type probeSecret struct{}
 
 func (probeSecret) Open(context.Context, environment.Tier, seal.AssociatedData, []byte) ([]byte, error) {
@@ -42,7 +48,7 @@ func TestARecordedTaskIsTriggeredAndReadBackThroughTheEngineOnItsQueueDatabase(t
 		Records:     store,
 		Tiers:       []environment.Tier{tier},
 		Cipher:      probeSecret{},
-		Addresses:   docker,
+		Addresses:   onDefaultBridge{docker},
 		Open:        queues.OpenPgmq,
 		IsAnswering: queues.IsWorkerAnswering,
 	}

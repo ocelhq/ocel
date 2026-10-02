@@ -29,14 +29,9 @@ const (
 )
 
 const (
-	appNetworkPrefix = "ocel-"
-	poolExhausted    = "address pool"
-	membersFormat    = `{{range .Containers}}{{.Name}}{{"\n"}}{{end}}`
+	poolExhausted = "address pool"
+	membersFormat = `{{range .Containers}}{{.Name}}{{"\n"}}{{end}}`
 )
-
-func AppNetwork(tier environment.Tier, project string) string {
-	return appNetworkPrefix + string(tier) + "-" + naming.Sanitize(project)
-}
 
 func networkLabels(tier environment.Tier, project string) []string {
 	return []string{
@@ -46,7 +41,7 @@ func networkLabels(tier environment.Tier, project string) []string {
 }
 
 func networkCreating(tier environment.Tier, project string) string {
-	network := quoted(AppNetwork(tier, project))
+	network := quoted(live.AppNetwork(tier, project))
 	create := "docker network create " + words(networkLabels(tier, project)) + " " + network
 	return "set -e\n" +
 		"if ! docker network inspect " + network + " >/dev/null 2>&1; then\n" +
@@ -58,17 +53,17 @@ func networkCreating(tier environment.Tier, project string) string {
 }
 
 func joinNetworkScript(tier environment.Tier, project string) string {
-	network := quoted(AppNetwork(tier, project))
+	network := quoted(live.AppNetwork(tier, project))
 	return networkCreating(tier, project) + "\n" +
 		"if ! docker network connect " + network + " " + quoted(SwitchboardContainer) + " >/dev/null 2>&1 && " +
 		"! docker network inspect --format " + quoted(membersFormat) + " " + network + " | grep -qx " + quoted(SwitchboardContainer) + "; then\n" +
-		"printf '%s\\n' " + quoted(SwitchboardContainer+" could not join "+AppNetwork(tier, project)) + " >&2\n" +
+		"printf '%s\\n' " + quoted(SwitchboardContainer+" could not join "+live.AppNetwork(tier, project)) + " >&2\n" +
 		"exit 1\n" +
 		"fi"
 }
 
 func networkForgetting(tier environment.Tier, project string) string {
-	network := quoted(AppNetwork(tier, project))
+	network := quoted(live.AppNetwork(tier, project))
 	return "if docker network inspect " + network + " >/dev/null 2>&1; then\n" +
 		"if docker network inspect --format " + quoted(membersFormat) + " " + network +
 		" | grep -qvx " + quoted(SwitchboardContainer) + "; then printf '%s\\n' " + quoted(networkInUse) + "; exit 0; fi\n" +
@@ -82,12 +77,12 @@ func (h *Host) join(ctx context.Context, spec Container, elevation string) error
 }
 
 func (h *Host) joining(ctx context.Context, who string, tier environment.Tier, project, command, elevation string) error {
-	_, said, err := h.spoke(ctx, "put "+who+" on "+AppNetwork(tier, project), command, nil, elevation)
+	_, said, err := h.spoke(ctx, "put "+who+" on "+live.AppNetwork(tier, project), command, nil, elevation)
 	if err != nil && strings.Contains(said, poolExhausted) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s has no subnet left for %s: %s\n"+
 				"Add `\"default-address-pools\": [{\"base\": \"10.200.0.0/16\", \"size\": 24}]` to /etc/docker/daemon.json and restart docker",
-			h.named(), AppNetwork(tier, project), said)
+			h.named(), live.AppNetwork(tier, project), said)
 	}
 	return err
 }
@@ -97,7 +92,7 @@ func (h *Host) ForgetNetwork(ctx context.Context, tier environment.Tier, project
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "take "+AppNetwork(tier, project)+" down", networkForgetting(tier, project), nil, elevation)
+	_, err = h.ran(ctx, "take "+live.AppNetwork(tier, project)+" down", networkForgetting(tier, project), nil, elevation)
 	return err
 }
 
@@ -191,7 +186,7 @@ func containerRun(spec Container, env handoff) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
 		"--restart", appRestart,
-		"--network", AppNetwork(spec.Tier, spec.Project),
+		"--network", live.AppNetwork(spec.Tier, spec.Project),
 		"--label", LabelTier + "=" + string(spec.Tier),
 		"--label", LabelProject + "=" + naming.Sanitize(spec.Project),
 		"--label", LabelApp + "=" + spec.App,

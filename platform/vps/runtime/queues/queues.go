@@ -48,7 +48,7 @@ type Cipher interface {
 }
 
 type Addresses interface {
-	Address(ctx context.Context, container string) (string, error)
+	Address(ctx context.Context, network, container string) (string, error)
 }
 
 type Engines struct {
@@ -205,7 +205,7 @@ func (e *Engines) serve(ctx context.Context, id queueID, queue live.Queue) error
 }
 
 func (e *Engines) openServerURL(ctx context.Context, queue live.Queue) (string, error) {
-	address, err := e.Addresses.Address(ctx, queue.Database.Container)
+	address, err := e.Addresses.Address(ctx, live.AppNetwork(queue.Tier, queue.Project), queue.Database.Container)
 	if err != nil {
 		return "", fmt.Errorf("find the queue database %s: %w", queue.Database.Container, err)
 	}
@@ -241,7 +241,7 @@ func (e *Engines) readDeployment(ctx context.Context, queue live.Queue) (pgmq.De
 	}
 	for _, name := range slices.Sorted(maps.Keys(queue.Workers)) {
 		worker := queue.Workers[name]
-		address, err := e.Addresses.Address(ctx, worker.Container)
+		address, err := e.Addresses.Address(ctx, live.AppNetwork(queue.Tier, queue.Project), worker.Container)
 		if err != nil {
 			slog.Warn("find a worker container, so nothing is delivered to it yet", "project", queue.Project, "env", queue.Env, "worker", name, "container", worker.Container, "error", err)
 			continue

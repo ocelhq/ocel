@@ -8,13 +8,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func (vm machine) queries(t *testing.T, binding provider.Binding, statement string) string {
 	t.Helper()
 	props := binding.Properties
 	image := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.Config.Image}}' "+quote(props[provider.PropertyHost])))
-	return strings.TrimSpace(vm.ssh(t, "sudo docker run --rm --network "+quote(host.AppNetwork(environment.TierProduction, "shop"))+
+	return strings.TrimSpace(vm.ssh(t, "sudo docker run --rm --network "+quote(live.AppNetwork(environment.TierProduction, "shop"))+
 		" --env "+quote("PGPASSWORD="+props[provider.PropertyPassword])+" "+quote(image)+
 		" psql -h "+quote(props[provider.PropertyHost])+" -p "+quote(props[provider.PropertyPort])+
 		" -U "+quote(props[provider.PropertyUsername])+" -d "+quote(props[provider.PropertyDatabase])+

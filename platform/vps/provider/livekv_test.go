@@ -8,13 +8,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func (vm machine) commandsStore(t *testing.T, binding provider.Binding, password string, command ...string) string {
 	t.Helper()
 	props := binding.Properties
 	image := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.Config.Image}}' "+quote(props[provider.PropertyHost])))
-	argv := []string{"sudo", "docker", "run", "--rm", "--network", quote(host.AppNetwork(environment.TierProduction, "shop")),
+	argv := []string{"sudo", "docker", "run", "--rm", "--network", quote(live.AppNetwork(environment.TierProduction, "shop")),
 		"--entrypoint", "valkey-cli", quote(image),
 		"-h", quote(props[provider.PropertyHost]), "-p", quote(props[provider.PropertyPort]), "--no-auth-warning"}
 	if password != "" {

@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -37,8 +38,8 @@ func TestEveryAppContainerJoinsANetworkNamedForItsTierAndProjectAndNeverTheProxy
 		if argv[at+1] == ProxyNetwork {
 			t.Errorf("%s is run on %s, the network every other project's containers sit on, so any of them reaches its :%s", what, ProxyNetwork, containerimage.PortText)
 		}
-		if argv[at+1] != AppNetwork(spec.Tier, spec.Project) {
-			t.Errorf("%s is run on %q, want %q", what, argv[at+1], AppNetwork(spec.Tier, spec.Project))
+		if argv[at+1] != live.AppNetwork(spec.Tier, spec.Project) {
+			t.Errorf("%s is run on %q, want %q", what, argv[at+1], live.AppNetwork(spec.Tier, spec.Project))
 		}
 		if !slices.Contains(argv, LabelTier+"="+string(spec.Tier)) {
 			t.Errorf("%s has no %s label, and a tier destroy enumerates what it started by that label: %v", what, LabelTier, argv)
@@ -63,7 +64,7 @@ func TestRunningAContainerPutsItsNetworkAndTheProxyOnItBeforeTheRun(t *testing.T
 		t.Fatalf("the network was joined at %d and the container run at %d: a run onto a network that does not exist fails, and one the proxy is not on serves nothing", joined, ran)
 	}
 	script := joinNetworkScript(spec.Tier, spec.Project)
-	network := quoted(AppNetwork(spec.Tier, spec.Project))
+	network := quoted(live.AppNetwork(spec.Tier, spec.Project))
 	for what, wanted := range map[string]string{
 		"a create that sets the tier label":     quoted(LabelTier + "=" + string(spec.Tier)),
 		"a create that sets the project label":  quoted(LabelProject + "=shop"),
@@ -100,7 +101,7 @@ func TestAnEngineOutOfSubnetsIsRefusedWithTheDaemonSettingThatGivesItMore(t *tes
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("RunContainer() on an engine with no subnet left = %v, want a not-ready refusal", err)
 	}
-	for _, wanted := range []string{"default-address-pools", "/etc/docker/daemon.json", AppNetwork(spec.Tier, spec.Project)} {
+	for _, wanted := range []string{"default-address-pools", "/etc/docker/daemon.json", live.AppNetwork(spec.Tier, spec.Project)} {
 		if !strings.Contains(err.Error(), wanted) {
 			t.Errorf("the refusal reads %q and never names %q", err, wanted)
 		}
@@ -263,11 +264,11 @@ func TestRunningAResourcePutsTheProxyOnItsNetworkBeforeTheRun(t *testing.T) {
 	if err := box.host().RunResource(context.Background(), spec, "secret"); err != nil {
 		t.Fatalf("RunResource() = %v", err)
 	}
-	joined := box.at("docker network connect " + quoted(AppNetwork(spec.Tier, spec.Project)) + " " + quoted(SwitchboardContainer))
+	joined := box.at("docker network connect " + quoted(live.AppNetwork(spec.Tier, spec.Project)) + " " + quoted(SwitchboardContainer))
 	ran := box.at(quoted("run") + " " + quoted("--detach"))
 	if joined < 0 || ran < 0 || joined > ran {
 		t.Fatalf("the proxy joined %s at %d and %s ran at %d: a store is routed as soon as it runs, and a proxy off its network resolves no upstream until some app of the project deploys: %v",
-			AppNetwork(spec.Tier, spec.Project), joined, spec.Name, ran, box.commands())
+			live.AppNetwork(spec.Tier, spec.Project), joined, spec.Name, ran, box.commands())
 	}
 }
 
@@ -287,9 +288,9 @@ func TestAResourceAlreadyRunningStillPutsTheSwitchboardBackOnItsNetwork(t *testi
 	if box.at(quoted("run")+" "+quoted("--detach")) >= 0 {
 		t.Fatalf("a resource already serving its image was started again: %v", box.commands())
 	}
-	if box.at("docker network connect "+quoted(AppNetwork(spec.Tier, spec.Project))+" "+quoted(SwitchboardContainer)) < 0 {
+	if box.at("docker network connect "+quoted(live.AppNetwork(spec.Tier, spec.Project))+" "+quoted(SwitchboardContainer)) < 0 {
 		t.Errorf("a deploy over a resource already running never put %s on %s: a project with only resources is one no app deploy rejoins, so a switchboard left off it routes that project's store to nothing for good: %v",
-			SwitchboardContainer, AppNetwork(spec.Tier, spec.Project), box.commands())
+			SwitchboardContainer, live.AppNetwork(spec.Tier, spec.Project), box.commands())
 	}
 }
 
@@ -309,9 +310,9 @@ func TestAnAppAlreadyServingStillPutsTheSwitchboardBackOnItsNetwork(t *testing.T
 		if box.at(quoted("run")+" "+quoted("--detach")) >= 0 {
 			t.Fatalf("%s of an app already serving started it again: %v", what, box.commands())
 		}
-		if box.at("docker network connect "+quoted(AppNetwork(spec.Tier, spec.Project))+" "+quoted(SwitchboardContainer)) < 0 {
+		if box.at("docker network connect "+quoted(live.AppNetwork(spec.Tier, spec.Project))+" "+quoted(SwitchboardContainer)) < 0 {
 			t.Errorf("%s of an app already serving never put %s on %s, so a switchboard left off it is never repaired: %v",
-				what, SwitchboardContainer, AppNetwork(spec.Tier, spec.Project), box.commands())
+				what, SwitchboardContainer, live.AppNetwork(spec.Tier, spec.Project), box.commands())
 		}
 	}
 }
