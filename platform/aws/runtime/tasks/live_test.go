@@ -55,7 +55,12 @@ func live(t *testing.T) emulator {
 
 func uniqueName(t *testing.T) string {
 	sum := fmt.Sprintf("%x", time.Now().UnixNano())
-	name := strings.NewReplacer("/", "-", "_", "-").Replace(strings.ToLower(t.Name()))
+	name := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return '-'
+	}, strings.ToLower(t.Name()))
 	if len(name) > 40 {
 		name = name[len(name)-40:]
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -31,12 +32,14 @@ type table interface {
 	UpdateItem(ctx context.Context, in *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
 	DeleteItem(ctx context.Context, in *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
 	Query(ctx context.Context, in *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
+	TransactWriteItems(ctx context.Context, in *dynamodb.TransactWriteItemsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error)
 }
 
 type store struct {
 	db     table
 	table  string
 	prefix string
+	topics []string
 }
 
 type runItem struct {
@@ -64,6 +67,7 @@ type runItem struct {
 	Delivery    string   `dynamodbav:"delivery"`
 	Lease       int64    `dynamodbav:"lease_until"`
 	Retention   int64    `dynamodbav:"expires_at,omitempty"`
+	Revision    string   `dynamodbav:"revision"`
 }
 
 func (s store) runPartition(topic string) string { return s.prefix + "run#" + topic }
@@ -75,15 +79,49 @@ func (s store) runKey(topic, execution string) map[string]ddbtypes.AttributeValu
 	}
 }
 
-func retentionAfter(dueMillis int64) int64 {
-	return time.UnixMilli(dueMillis).Add(runRetention).Unix()
+func (s store) pointerKey(execution string) map[string]ddbtypes.AttributeValue {
+	return map[string]ddbtypes.AttributeValue{
+		keyPK: &ddbtypes.AttributeValueMemberS{Value: s.prefix + "exec#" + execution},
+		keySK: &ddbtypes.AttributeValueMemberS{Value: "topic"},
+	}
 }
 
-func timeOf(ms int64) time.Time {
-	if ms == 0 {
+func (s store) putPointer(execution, topic string, retention any) (ddbtypes.TransactWriteItem, error) {
+	expires, err := attributevalue.Marshal(retention)
+	if err != nil {
+		return ddbtypes.TransactWriteItem{}, err
+	}
+	item := s.pointerKey(execution)
+	item["topic"] = &ddbtypes.AttributeValueMemberS{Value: topic}
+	item["expires_at"] = expires
+	return ddbtypes.TransactWriteItem{Put: &ddbtypes.Put{TableName: aws.String(s.table), Item: item}}, nil
+}
+
+func (s store) topicOf(ctx context.Context, execution string) (string, bool, error) {
+	out, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName:      aws.String(s.table),
+		Key:            s.pointerKey(execution),
+		ConsistentRead: aws.Bool(true),
+	})
+	if err != nil {
+		return "", false, fmt.Errorf("find the topic of run %s: %w", execution, err)
+	}
+	topic, found := out.Item["topic"].(*ddbtypes.AttributeValueMemberS)
+	if !found {
+		return "", false, nil
+	}
+	return topic.Value, true, nil
+}
+
+func retentionAfter(dueMicros int64) int64 {
+	return time.UnixMicro(dueMicros).Add(runRetention).Unix()
+}
+
+func timeOf(us int64) time.Time {
+	if us == 0 {
 		return time.Time{}
 	}
-	return time.UnixMilli(ms)
+	return time.UnixMicro(us)
 }
 
 func (item runItem) run() provider.Run {
@@ -100,6 +138,7 @@ func (item runItem) run() provider.Run {
 		StartedAt:  timeOf(item.StartedAt),
 		FinishedAt: timeOf(item.FinishedAt),
 		ExpiresAt:  timeOf(item.RunExpires),
+		Revision:   keyvalue.Revision(item.Revision),
 	}
 	if item.Payload != "" {
 		run.Payload = json.RawMessage(item.Payload)
@@ -121,15 +160,25 @@ func (s store) putRun(ctx context.Context, item runItem) error {
 	if item.Tags == nil {
 		item.Tags = []string{}
 	}
+	if item.Revision == "" {
+		revision, err := keyvalue.NewRevision()
+		if err != nil {
+			return err
+		}
+		item.Revision = string(revision)
+	}
 	encoded, err := attributevalue.MarshalMap(item)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName:           aws.String(s.table),
-		Item:                encoded,
-		ConditionExpression: aws.String("attribute_not_exists(pk)"),
-	})
+	pointer, err := s.putPointer(item.SK, item.Topic, item.Retention)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []ddbtypes.TransactWriteItem{
+		{Put: &ddbtypes.Put{TableName: aws.String(s.table), Item: encoded, ConditionExpression: aws.String("attribute_not_exists(pk)")}},
+		pointer,
+	}})
 	if isConditionFailed(err) {
 		return errConditionFailed
 	}
@@ -201,9 +250,16 @@ func (s store) updateRun(ctx context.Context, topic, execution string, c change)
 		}
 		sets = append(sets, name(attribute)+" = "+name(attribute)+" + "+placeholder)
 	}
-	if len(sets) > 0 {
-		clauses = append(clauses, "SET "+joinComma(sets))
+	revision, err := keyvalue.NewRevision()
+	if err != nil {
+		return runItem{}, err
 	}
+	placeholder, err := value(string(revision))
+	if err != nil {
+		return runItem{}, err
+	}
+	sets = append(sets, name("revision")+" = "+placeholder)
+	clauses = append(clauses, "SET "+joinComma(sets))
 	var removes []string
 	for _, attribute := range c.remove {
 		removes = append(removes, name(attribute))
@@ -222,27 +278,60 @@ func (s store) updateRun(ctx context.Context, topic, execution string, c change)
 		}
 		values[placeholder] = encoded
 	}
-	for _, attribute := range []string{"status", "delivery", "lease_until", "attempts", "due_at", "consumer", "key", "error"} {
+	for _, attribute := range []string{"status", "delivery", "lease_until", "attempts", "due_at", "consumer", "key", "error", "revision"} {
 		names["#"+attribute] = attribute
 	}
-	out, err := s.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:                 aws.String(s.table),
-		Key:                       s.runKey(topic, execution),
-		UpdateExpression:          aws.String(joinSpace(clauses)),
-		ConditionExpression:       aws.String(condition),
-		ExpressionAttributeNames:  usedNames(names, joinSpace(clauses)+" "+condition),
-		ExpressionAttributeValues: values,
-		ReturnValues:              ddbtypes.ReturnValueAllNew,
-	})
+	expression, names := joinSpace(clauses), usedNames(names, joinSpace(clauses)+" "+condition)
+	retention, retained := c.set["expires_at"]
+	if !retained {
+		out, err := s.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+			TableName:                 aws.String(s.table),
+			Key:                       s.runKey(topic, execution),
+			UpdateExpression:          aws.String(expression),
+			ConditionExpression:       aws.String(condition),
+			ExpressionAttributeNames:  names,
+			ExpressionAttributeValues: values,
+			ReturnValues:              ddbtypes.ReturnValueAllNew,
+		})
+		if isConditionFailed(err) {
+			return runItem{}, errConditionFailed
+		}
+		if err != nil {
+			return runItem{}, fmt.Errorf("update run %s: %w", execution, err)
+		}
+		var item runItem
+		if err := attributevalue.UnmarshalMap(out.Attributes, &item); err != nil {
+			return runItem{}, fmt.Errorf("decode run %s: %w", execution, err)
+		}
+		return item, nil
+	}
+	pointer, err := s.putPointer(execution, topic, retention)
+	if err != nil {
+		return runItem{}, err
+	}
+	_, err = s.db.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []ddbtypes.TransactWriteItem{
+		{Update: &ddbtypes.Update{
+			TableName:                 aws.String(s.table),
+			Key:                       s.runKey(topic, execution),
+			UpdateExpression:          aws.String(expression),
+			ConditionExpression:       aws.String(condition),
+			ExpressionAttributeNames:  names,
+			ExpressionAttributeValues: values,
+		}},
+		pointer,
+	}})
 	if isConditionFailed(err) {
 		return runItem{}, errConditionFailed
 	}
 	if err != nil {
 		return runItem{}, fmt.Errorf("update run %s: %w", execution, err)
 	}
-	var item runItem
-	if err := attributevalue.UnmarshalMap(out.Attributes, &item); err != nil {
-		return runItem{}, fmt.Errorf("decode run %s: %w", execution, err)
+	item, found, err := s.readRun(ctx, topic, execution, true)
+	if err != nil {
+		return runItem{}, err
+	}
+	if !found {
+		return runItem{}, errConditionFailed
 	}
 	return item, nil
 }
@@ -256,16 +345,19 @@ func (s store) deleteRun(ctx context.Context, topic, execution, condition string
 		}
 		values[placeholder] = encoded
 	}
-	in := &dynamodb.DeleteItemInput{
+	deletion := &ddbtypes.Delete{
 		TableName: aws.String(s.table),
 		Key:       s.runKey(topic, execution),
 	}
 	if condition != "" {
-		in.ConditionExpression = aws.String(condition)
-		in.ExpressionAttributeNames = usedNames(map[string]string{"#status": "status", "#consumer": "consumer"}, condition)
-		in.ExpressionAttributeValues = values
+		deletion.ConditionExpression = aws.String(condition)
+		deletion.ExpressionAttributeNames = usedNames(map[string]string{"#status": "status", "#consumer": "consumer"}, condition)
+		deletion.ExpressionAttributeValues = values
 	}
-	_, err := s.db.DeleteItem(ctx, in)
+	_, err := s.db.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []ddbtypes.TransactWriteItem{
+		{Delete: deletion},
+		{Delete: &ddbtypes.Delete{TableName: aws.String(s.table), Key: s.pointerKey(execution)}},
+	}})
 	if isConditionFailed(err) {
 		return false, nil
 	}
@@ -325,7 +417,19 @@ func (s store) queryRuns(ctx context.Context, topic, before, filter string, filt
 
 func isConditionFailed(err error) bool {
 	var failed *ddbtypes.ConditionalCheckFailedException
-	return errors.As(err, &failed)
+	if errors.As(err, &failed) {
+		return true
+	}
+	var canceled *ddbtypes.TransactionCanceledException
+	if !errors.As(err, &canceled) {
+		return false
+	}
+	for _, reason := range canceled.CancellationReasons {
+		if aws.ToString(reason.Code) == "ConditionalCheckFailed" {
+			return true
+		}
+	}
+	return false
 }
 
 func joinComma(parts []string) string { return strings.Join(parts, ", ") }
