@@ -21,7 +21,7 @@ func hasQueue(app *provider.AppSpec) bool {
 	})
 }
 
-func workerEnv(app *provider.AppSpec, worker string) map[string]string {
+func newWorkerEnv(app *provider.AppSpec, worker string) map[string]string {
 	env := maps.Clone(app.Values.ContainerEnv)
 	if env == nil {
 		env = map[string]string{}
@@ -43,7 +43,7 @@ func (p *Provider) runWorkers(ctx context.Context, spec provider.StackSpec, mani
 		}
 		if err := p.host.RunContainer(ctx, host.Container{
 			Name: name, Project: ref.Project, App: app.App, Image: app.Image, Tier: ref.Tier,
-			Env: workerEnv(app, worker.Name), Manifest: manifest, Resolved: true,
+			Env: newWorkerEnv(app, worker.Name), Manifest: manifest, Resolved: true,
 		}); err != nil {
 			return err
 		}

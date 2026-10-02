@@ -27,7 +27,7 @@ const (
 
 var postgresCapabilities = []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"}
 
-func postgresContainer(in resources.ProvisionRequest) (host.ResourceContainer, error) {
+func resolvePostgresContainer(in resources.ProvisionRequest) (host.ResourceContainer, error) {
 	version := images.DefaultPostgresVersion
 	if in.Resource.Postgres != nil && in.Resource.Postgres.Version != "" {
 		version = in.Resource.Postgres.Version
@@ -38,17 +38,22 @@ func postgresContainer(in resources.ProvisionRequest) (host.ResourceContainer, e
 			"postgres %s asks for version %q; supported: %s",
 			in.Resource.Name, version, strings.Join(images.PostgresVersions(), ", "))
 	}
-	return host.ResourceContainer{
-		Name:     host.ResourceName(in.Ref.Project, in.Ref.Name.String(), in.Resource.Name, postgresKind),
-		Project:  in.Ref.Project,
-		Resource: in.Resource.Name,
-		Tier:     in.Ref.Tier,
+	return newPostgresContainer(in.Ref, in.Resource.Name, postgresKind, officialimages.QualifyImage(image),
+		host.Volume{Path: postgresData, Generation: version}), nil
+}
 
-		Image:        officialimages.QualifyImage(image),
-		Env:          map[string]string{"POSTGRES_DB": in.Resource.Name},
+func newPostgresContainer(ref provider.StackRef, database, kind, image string, volume host.Volume) host.ResourceContainer {
+	return host.ResourceContainer{
+		Name:     host.ResourceName(ref.Project, ref.Name.String(), database, kind),
+		Project:  ref.Project,
+		Resource: database,
+		Tier:     ref.Tier,
+
+		Image:        image,
+		Env:          map[string]string{"POSTGRES_DB": database},
 		Capabilities: postgresCapabilities,
 
-		Volume: host.Volume{Path: postgresData, Generation: version},
+		Volume: volume,
 		Credential: host.Credential{
 			Env: postgresSecretEnv,
 			Reassert: func(secret string) ([]string, string) {
@@ -58,12 +63,12 @@ func postgresContainer(in resources.ProvisionRequest) (host.ResourceContainer, e
 		},
 		Ready:    []string{"pg_isready", "-h", "127.0.0.1", "-U", postgresSuperuser},
 		Backup:   host.BackupPostgres,
-		Database: in.Resource.Name,
-	}, nil
+		Database: database,
+	}
 }
 
 func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
-	spec, err := postgresContainer(in)
+	spec, err := resolvePostgresContainer(in)
 	if err != nil {
 		return provider.Binding{}, err
 	}

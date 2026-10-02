@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
@@ -48,7 +47,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	if len(command) == 0 {
 		return fatal("the image has no ENTRYPOINT or CMD")
 	}
-	command = commandFor(environ, command, present)
+	command = chooseCommand(environ, command, isFile)
 	exposed := containerimage.PortText
 	env := make([]string, 0, len(environ))
 	manifest := ""
@@ -155,14 +154,14 @@ func run(ctx context.Context, command []string, environ []string) int {
 	}
 }
 
-func commandFor(environ, command []string, present func(path string) bool) []string {
+func chooseCommand(environ, command []string, present func(path string) bool) []string {
 	if !slices.ContainsFunc(environ, func(entry string) bool { return strings.HasPrefix(entry, processenv.WorkerEnvVar+"=") }) {
 		return command
 	}
 	return containerimage.WorkerCommand(present, command)
 }
 
-func present(path string) bool {
+func isFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
 }
@@ -185,7 +184,7 @@ func proxying(manifest variables.Manifest, values *live.Values, socket, app stri
 	if values == nil {
 		return bindingproxy.Served{}, nil
 	}
-	buckets, err := bucketsFor(manifest, values, socket, app)
+	buckets, err := newBuckets(manifest, values, socket, app)
 	if err != nil {
 		return bindingproxy.Served{}, err
 	}
@@ -201,12 +200,9 @@ func proxying(manifest variables.Manifest, values *live.Values, socket, app stri
 	return bindingproxy.Serve(services)
 }
 
-func bucketsFor(manifest variables.Manifest, values *live.Values, socket, app string) (bucketv1connect.BucketServiceHandler, error) {
+func newBuckets(manifest variables.Manifest, values *live.Values, socket, app string) (bucketv1connect.BucketServiceHandler, error) {
 	if manifest.Store == nil {
-		if !slices.ContainsFunc(values.Bindings(), func(binding live.Binding) bool { return naming.Proxied(binding.Type) }) {
-			return nil, nil
-		}
-		return s3store.NewDispatch(nil, values, s3store.HTTPPoster{App: app}), nil
+		return s3store.NewBoundDispatch(values, app), nil
 	}
 	secret := values.Value(variables.StoreSecretKey)
 	if secret == "" {

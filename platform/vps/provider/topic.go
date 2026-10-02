@@ -26,9 +26,8 @@ import (
 )
 
 const (
-	queueKind       = "queue"
-	queueData       = "/var/lib/postgresql"
-	queueGeneration = "18"
+	queueKind = "queue"
+	queueData = "/var/lib/postgresql"
 )
 
 type queueDatabases struct {
@@ -36,29 +35,9 @@ type queueDatabases struct {
 	ensured map[string]bool
 }
 
-func queueContainer(ref provider.StackRef) host.ResourceContainer {
-	return host.ResourceContainer{
-		Name:     host.ResourceName(ref.Project, ref.Name.String(), live.QueueResource, queueKind),
-		Project:  ref.Project,
-		Resource: live.QueueResource,
-		Tier:     ref.Tier,
-
-		Image:        images.QueueDatabase(),
-		Env:          map[string]string{"POSTGRES_DB": live.QueueResource},
-		Capabilities: postgresCapabilities,
-
-		Volume: host.Volume{Path: queueData, Generation: queueGeneration},
-		Credential: host.Credential{
-			Env: postgresSecretEnv,
-			Reassert: func(secret string) ([]string, string) {
-				return []string{"psql", "-U", postgresSuperuser, "-v", "ON_ERROR_STOP=1"},
-					"ALTER USER " + postgresSuperuser + " PASSWORD '" + secret + "';\n"
-			},
-		},
-		Ready:    []string{"pg_isready", "-h", "127.0.0.1", "-U", postgresSuperuser},
-		Backup:   host.BackupPostgres,
-		Database: live.QueueResource,
-	}
+func newQueueContainer(ref provider.StackRef) host.ResourceContainer {
+	return newPostgresContainer(ref, live.QueueDatabaseName, queueKind, images.QueueDatabase(),
+		host.Volume{Path: queueData, Generation: images.QueueDatabaseMajor()})
 }
 
 func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
@@ -69,11 +48,11 @@ func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionReq
 	if err := p.ensureQueue(ctx, in.Ref, progress); err != nil {
 		return provider.Binding{}, err
 	}
-	config, err := protojson.Marshal(manifestTopic(in.Resource.Topic))
+	config, err := protojson.Marshal(encodeManifestTopic(in.Resource.Topic))
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	key := live.QueueTopicKey(in.Ref.Tier, in.Ref.Project, in.Ref.Name.Env, declaredName(in.Resource))
+	key := live.QueueTopicKey(in.Ref.Tier, in.Ref.Project, in.Ref.Name.Env, chooseDeclaredName(in.Resource.Declared, in.Resource.Name))
 	if err := keyvalue.Change(ctx, p.keyValues, key, func(recorded keyvalue.Entry) ([]byte, bool, error) {
 		return config, string(recorded.Value) != string(config), nil
 	}); err != nil {
@@ -88,8 +67,8 @@ var laneMessages = map[provider.Lane]topicv1.Lane{
 	provider.LaneLow:     topicv1.Lane_LANE_LOW,
 }
 
-func manifestTopic(spec *provider.TopicSpec) *contractv1.ManifestTopic {
-	topic := &contractv1.ManifestTopic{Schema: spec.Schema, Ordered: spec.Ordered, Ttl: durationOrNil(spec.TTL), Cron: spec.Cron}
+func encodeManifestTopic(spec *provider.TopicSpec) *contractv1.ManifestTopic {
+	topic := &contractv1.ManifestTopic{Schema: spec.Schema, Ordered: spec.Ordered, Ttl: encodeDuration(spec.TTL), Cron: spec.Cron}
 	for _, consumer := range spec.Consumers {
 		message := &contractv1.ManifestConsumer{
 			Name:      consumer.Name,
@@ -101,35 +80,35 @@ func manifestTopic(spec *provider.TopicSpec) *contractv1.ManifestTopic {
 				MaxDelay:    durationpb.New(consumer.Retry.MaxDelay),
 			},
 			Concurrency: int32(consumer.Concurrency),
-			MaxDuration: durationOrNil(consumer.MaxDuration),
+			MaxDuration: encodeDuration(consumer.MaxDuration),
 		}
 		for _, lane := range consumer.Lanes {
 			message.Lanes = append(message.Lanes, laneMessages[lane])
 		}
 		if consumer.Batch != nil {
-			message.Batch = &resourcesv1.BatchPolicy{Size: int32(consumer.Batch.Size), Timeout: durationOrNil(consumer.Batch.Timeout)}
+			message.Batch = &resourcesv1.BatchPolicy{Size: int32(consumer.Batch.Size), Timeout: encodeDuration(consumer.Batch.Timeout)}
 		}
 		topic.Consumers = append(topic.Consumers, message)
 	}
 	return topic
 }
 
-func durationOrNil(d time.Duration) *durationpb.Duration {
+func encodeDuration(d time.Duration) *durationpb.Duration {
 	if d == 0 {
 		return nil
 	}
 	return durationpb.New(d)
 }
 
-func declaredName(resource provider.Resource) string {
-	if resource.Declared != "" {
-		return resource.Declared
+func chooseDeclaredName(declared, name string) string {
+	if declared != "" {
+		return declared
 	}
-	return resource.Name
+	return name
 }
 
 func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
-	spec := queueContainer(ref)
+	spec := newQueueContainer(ref)
 	p.queues.Lock()
 	defer p.queues.Unlock()
 	if p.queues.ensured[spec.Name] {
@@ -167,10 +146,7 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 }
 
 func (p *Provider) removeTopic(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
-	name := binding.Resource
-	if name == "" {
-		name = binding.Name
-	}
+	name := chooseDeclaredName(binding.Resource, binding.Name)
 	if err := keyvalue.Forget(ctx, p.keyValues, live.QueueTopicKey(ref.Tier, ref.Project, ref.Name.Env, name)); err != nil {
 		return err
 	}
@@ -182,7 +158,7 @@ func (p *Provider) removeTopic(ctx context.Context, ref provider.StackRef, bindi
 	if len(remaining) > 0 {
 		return nil
 	}
-	spec := queueContainer(ref)
+	spec := newQueueContainer(ref)
 	if progress != nil {
 		progress.Say("Removing the queue database " + spec.Name + " and its data: " + ref.Name.Env + " declares no topic or task any more")
 	}

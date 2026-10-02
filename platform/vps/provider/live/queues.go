@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	QueueResource   = "ocel"
-	QueueSecretName = "queue-password"
+	QueueDatabaseName = "ocel"
+	QueueSecretName   = "queue-password"
 
 	queueDatabaseEntry = "database"
 	queueTopicsEntry   = "topics"
@@ -66,7 +66,7 @@ func QueueWorkersUnder(tier environment.Tier, project, env string) (keyvalue.Par
 }
 
 func NewQueueSecretAssociatedData(project string, tier environment.Tier, stack string) (seal.AssociatedData, error) {
-	return NewSecretAssociatedData(project, tier, stack, StoreSecretFolder, QueueResource, QueueSecretName)
+	return NewSecretAssociatedData(project, tier, stack, StoreSecretFolder, QueueDatabaseName, QueueSecretName)
 }
 
 type queueKey struct{ project, env string }

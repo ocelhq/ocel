@@ -118,12 +118,12 @@ func aQueue(t *testing.T, store keyvalue.Store) {
 
 func aHost(store keyvalue.Store, opened *engines) *queues.Engines {
 	return &queues.Engines{
-		Answers:   func(context.Context, string) bool { return true },
-		Records:   store,
-		Tiers:     []environment.Tier{tier},
-		Cipher:    cipher{},
-		Addresses: located{"shop-prod-infra-ocel-queue": "10.0.0.2", "shop-worker": "10.0.0.3"},
-		Open:      opened.open,
+		IsAnswering: func(context.Context, string) bool { return true },
+		Records:     store,
+		Tiers:       []environment.Tier{tier},
+		Cipher:      cipher{},
+		Addresses:   located{"shop-prod-infra-ocel-queue": "10.0.0.2", "shop-worker": "10.0.0.3"},
+		Open:        opened.open,
 	}
 }
 
@@ -151,8 +151,8 @@ func TestARecordedQueueIsServedByAnEngineOnItsDatabaseDeliveringToTheWorkersThat
 	if password, _ := server.User.Password(); server.Host != "10.0.0.2:5432" || server.User.Username() != "postgres" || password != "opened:pw" {
 		t.Errorf("the engine opened %s, want the queue database's address with its opened password", served.config.ServerURL)
 	}
-	if served.config.Database != live.QueueResource {
-		t.Errorf("the engine uses database %q, want %q", served.config.Database, live.QueueResource)
+	if served.config.Database != live.QueueDatabaseName {
+		t.Errorf("the engine uses database %q, want %q", served.config.Database, live.QueueDatabaseName)
 	}
 	deployments := served.deployments()
 	if len(deployments) != 1 {
@@ -260,7 +260,7 @@ func TestAWorkerIsDeliveredToOnlyOnceItsContainerAnswers(t *testing.T) {
 	opened := &engines{}
 	host := aHost(store, opened)
 	var answering sync.Map
-	host.Answers = func(_ context.Context, url string) bool {
+	host.IsAnswering = func(_ context.Context, url string) bool {
 		_, answers := answering.Load(url)
 		return answers
 	}
