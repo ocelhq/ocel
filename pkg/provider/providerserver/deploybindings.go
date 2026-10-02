@@ -53,7 +53,7 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 		if resource.Binding == "" {
 			continue
 		}
-		if err := RefuseMismatchedBinding(published[resource.Binding], resource.Declared, resource.Type, proxied); err != nil {
+		if err := RefuseMismatchedBinding(published[resource.Binding], resource.Declared, resource.Type); err != nil {
 			return err
 		}
 	}
@@ -71,7 +71,7 @@ func (r *deployRun) refuseUncovered(resources []provider.Resource, published map
 			uncovered = append(uncovered, resource.Name)
 			continue
 		}
-		if err := RefuseMismatchedBinding(covering, resource.Declared, resource.Type, proxied); err != nil {
+		if err := RefuseMismatchedBinding(covering, resource.Declared, resource.Type); err != nil {
 			return err
 		}
 	}
@@ -96,7 +96,7 @@ func proxied(kind provider.BindingType) bool {
 	return naming.Proxied(provider.ProtoBindingType(kind))
 }
 
-func RefuseMismatchedBinding(binding provider.Binding, declaredName string, declared provider.BindingType, proxied func(provider.BindingType) bool) error {
+func RefuseMismatchedBinding(binding provider.Binding, declaredName string, declared provider.BindingType) error {
 	switch {
 	case binding.Type == provider.BindingCustom:
 		return refusal.Refuse(refusal.CodeInvalid,
@@ -110,7 +110,7 @@ func RefuseMismatchedBinding(binding provider.Binding, declaredName string, decl
 				"Every app that uses %s would fail at its first cold start, so this deploy stops here. "+
 				"Declare it as what was published, or republish %q as a %s",
 			declaredName, declared, binding.Name, binding.Type, declaredName, binding.Name, declared)
-	case binding.Source != "" && proxied(declared) && !binding.Endpointed():
+	case binding.Source != "" && declared == provider.BindingBucket && !binding.Endpointed():
 		return refusal.Refuse(refusal.CodeInvalid,
 			"`bindings` binds %s to the %s record %q published by %s, and the record names no store for ocel's %s client to reach it in. "+
 				"Bind it inline instead, with the store's endpoint and a key pair, or publish a record that contains them",
@@ -168,7 +168,7 @@ func (r *deployRun) warnShadowed(progress progress.Log, resources []provider.Res
 			continue
 		}
 		namesake, taken := published[resource.Declared]
-		if !taken || RefuseMismatchedBinding(namesake, resource.Declared, resource.Type, proxied) != nil {
+		if !taken || RefuseMismatchedBinding(namesake, resource.Declared, resource.Type) != nil {
 			continue
 		}
 		progress.Warn(fmt.Sprintf(
