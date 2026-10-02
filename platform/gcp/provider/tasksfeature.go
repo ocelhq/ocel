@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
 const (
@@ -206,11 +207,8 @@ func (b bootstrap) ensureDelayQueue(ctx context.Context, tier environment.Tier) 
 		return err
 	}
 	path := b.delayQueuePath(tier)
-	_, err = dialled(ctx, func() (*cloudtaskspb.Queue, error) {
-		return client.CreateQueue(ctx, &cloudtaskspb.CreateQueueRequest{Parent: b.clients.location(), Queue: &cloudtaskspb.Queue{Name: path}})
-	})
-	if err != nil && status.Code(err) != codes.AlreadyExists {
-		return fmt.Errorf("create the %s delay queue: %w", b.clients.DelayQueue(tier), err)
+	if err := (topics.Delays{Queue: path}).Ensure(ctx, b.clients.Workload()); err != nil {
+		return err
 	}
 	policy, err := dialled(ctx, func() (*iampb.Policy, error) {
 		return client.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: path})
