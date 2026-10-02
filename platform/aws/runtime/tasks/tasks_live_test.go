@@ -401,3 +401,27 @@ func TestLiveACronFiringTriggersOneRunPerScheduledMinute(t *testing.T) {
 		t.Errorf("payload = %s, want the scheduled minute's timestamp", resp.GetRuns()[0].GetPayload())
 	}
 }
+
+func TestLiveEveryRunExpiresFromTheTableEvenIfItNeverFinishes(t *testing.T) {
+	em := live(t)
+	d := em.deploy(t, map[string]*provider.TopicSpec{"resize": aTask("resize")}, nil)
+	e := d.engine(nil)
+
+	due := time.Now().Add(time.Hour)
+	id := trigger(t, e, "resize", `{}`, &taskv1.TriggerOptions{DueAt: timestamppb.New(due)})
+	item, found, err := e.store.readRun(context.Background(), "resize", id, true)
+	if err != nil || !found {
+		t.Fatalf("readRun = %v, %v", found, err)
+	}
+	if until := time.Unix(item.Retention, 0); until.Before(due.Add(runRetention - time.Minute)) {
+		t.Errorf("a delayed run expires from the table at %v, want no sooner than %v after it is due, and never left without an expiry", until, runRetention)
+	}
+	moved := time.Now().Add(2 * time.Hour)
+	if _, err := e.Tasks().RescheduleRun(context.Background(), &taskv1.RescheduleRunRequest{Id: id, DueAt: timestamppb.New(moved)}); err != nil {
+		t.Fatalf("RescheduleRun: %v", err)
+	}
+	item, _, _ = e.store.readRun(context.Background(), "resize", id, true)
+	if until := time.Unix(item.Retention, 0); until.Before(moved.Add(runRetention - time.Minute)) {
+		t.Errorf("a rescheduled run expires at %v, want its expiry moved with its due time", until)
+	}
+}

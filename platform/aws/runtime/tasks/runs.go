@@ -75,6 +75,10 @@ func (s store) runKey(topic, execution string) map[string]ddbtypes.AttributeValu
 	}
 }
 
+func retentionAfter(dueMillis int64) int64 {
+	return time.UnixMilli(dueMillis).Add(runRetention).Unix()
+}
+
 func timeOf(ms int64) time.Time {
 	if ms == 0 {
 		return time.Time{}
@@ -111,6 +115,9 @@ func (item runItem) run() provider.Run {
 
 func (s store) putRun(ctx context.Context, item runItem) error {
 	item.PK = s.runPartition(item.Topic)
+	if item.Retention == 0 {
+		item.Retention = retentionAfter(item.DueAt)
+	}
 	if item.Tags == nil {
 		item.Tags = []string{}
 	}

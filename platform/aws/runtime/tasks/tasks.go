@@ -199,7 +199,7 @@ func (t Tasks) debounce(ctx context.Context, deployed deployedConsumer, key, exe
 	}
 	pending := readRecordedRun(held)
 	item, err := store.updateRun(ctx, deployed.topicName, pending, change{
-		set:        map[string]any{"due_at": due.UnixMilli()},
+		set:        map[string]any{"due_at": due.UnixMilli(), "expires_at": retentionAfter(due.UnixMilli())},
 		condition:  "#status = :delayed",
 		conditions: map[string]any{":delayed": string(provider.RunDelayed)},
 	})
@@ -300,7 +300,7 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 		status = provider.RunDelayed
 	}
 	token := envelope.NewMessageID(now)
-	set := map[string]any{"status": string(status), "due_at": due.UnixMilli(), "delivery": token}
+	set := map[string]any{"status": string(status), "due_at": due.UnixMilli(), "delivery": token, "expires_at": retentionAfter(due.UnixMilli())}
 	if item.RunExpires > 0 {
 		set["run_expires_at"] = item.RunExpires + due.UnixMilli() - item.DueAt
 	}

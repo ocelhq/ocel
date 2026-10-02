@@ -150,8 +150,8 @@ func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDead
 		now := time.Now()
 		token := envelope.NewMessageID(now)
 		_, err := t.engine.store.updateRun(ctx, letter.Topic, letter.SK, change{
-			set:        map[string]any{"status": string(provider.RunQueued), "attempts": 0, "error": "", "due_at": now.UnixMilli(), "delivery": token},
-			remove:     []string{"started_at", "finished_at", "expires_at"},
+			set:        map[string]any{"status": string(provider.RunQueued), "attempts": 0, "error": "", "due_at": now.UnixMilli(), "delivery": token, "expires_at": retentionAfter(now.UnixMilli())},
+			remove:     []string{"started_at", "finished_at"},
 			condition:  "#status = :failed AND #delivery = :token",
 			conditions: map[string]any{":failed": string(provider.RunFailed), ":token": letter.Delivery},
 		})
