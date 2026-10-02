@@ -17,6 +17,9 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := refuseScaledContainers(pre.Deploy); err != nil {
 		return err
 	}
+	if err := refuseEphemeralQueues(pre); err != nil {
+		return err
+	}
 	if err := p.host.CheckEngine(ctx); err != nil {
 		return err
 	}
@@ -45,11 +48,26 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	return err
 }
 
+func isQueued(resource provider.Resource) bool {
+	return resource.Type == provider.BindingTopic || resource.Type == provider.BindingTask
+}
+
+func refuseEphemeralQueues(pre provider.DeployPreflight) error {
+	if !pre.Deploy.Infra.IsZero() {
+		return nil
+	}
+	at := slices.IndexFunc(pre.Resources, isQueued)
+	if at < 0 {
+		return nil
+	}
+	queued := pre.Resources[at]
+	return refusal.Refuse(refusal.CodeInvalid,
+		"this ephemeral preview declares %s %s, and a box runs topics and tasks only on the queue of an environment with an infra stack of its own: deploy it as a persistent preview, or leave the %s out of it",
+		queued.Type, chooseDeclaredName(queued.Declared, queued.Name), queued.Type)
+}
+
 func (p *Provider) refuseStaleAgent(ctx context.Context, pre provider.DeployPreflight) error {
-	queued := slices.ContainsFunc(pre.Resources, func(resource provider.Resource) bool {
-		return resource.Type == provider.BindingTopic || resource.Type == provider.BindingTask
-	})
-	if !queued {
+	if !slices.ContainsFunc(pre.Resources, isQueued) {
 		return nil
 	}
 	current, err := p.host.IsAgentCurrent(ctx)
