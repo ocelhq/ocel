@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -16,16 +17,19 @@ import (
 
 const maxRunPage = 1000
 
+const cursorMark = "before:"
+
 func cursorOf(execution string) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(execution))
+	return base64.RawURLEncoding.EncodeToString([]byte(cursorMark + execution))
 }
 
 func parseCursor(cursor string) (string, error) {
 	raw, err := base64.RawURLEncoding.DecodeString(cursor)
-	if err != nil || len(raw) <= messageIDLength {
+	execution, marked := strings.CutPrefix(string(raw), cursorMark)
+	if err != nil || !marked || execution == "" {
 		return "", fmt.Errorf("cursor %q: %w", cursor, runs.ErrUnknownCursor)
 	}
-	return string(raw), nil
+	return execution, nil
 }
 
 type runFilter struct {
@@ -85,16 +89,38 @@ func (s store) listMatching(ctx context.Context, topic, before string, filter ru
 	return matched, nil
 }
 
-func (t Tasks) ListRuns(ctx context.Context, req *taskv1.ListRunsRequest) (*taskv1.ListRunsResponse, error) {
-	limit := runs.PageLimit(int(req.GetLimit()))
+func (s store) listRuns(ctx context.Context, topics []string, filter provider.RunFilter) (provider.RunPage, error) {
+	limit := runs.PageLimit(filter.Limit)
 	before := ""
-	if req.GetCursor() != "" {
-		parsed, err := parseCursor(req.GetCursor())
+	if filter.Cursor != "" {
+		parsed, err := parseCursor(filter.Cursor)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			return provider.RunPage{}, err
 		}
 		before = parsed
 	}
+	matching := filterOf("", filter.Statuses, filter.Tags)
+	var found []runItem
+	for _, topic := range topics {
+		matched, err := s.listMatching(ctx, topic, before, matching, limit+1)
+		if err != nil {
+			return provider.RunPage{}, err
+		}
+		found = append(found, matched...)
+	}
+	slices.SortFunc(found, func(a, b runItem) int { return strings.Compare(b.SK, a.SK) })
+	var page provider.RunPage
+	if len(found) > limit {
+		found = found[:limit]
+		page.NextCursor = cursorOf(found[limit-1].SK)
+	}
+	for _, item := range found {
+		page.Runs = append(page.Runs, item.run())
+	}
+	return page, nil
+}
+
+func (t Tasks) ListRuns(ctx context.Context, req *taskv1.ListRunsRequest) (*taskv1.ListRunsResponse, error) {
 	var listed []string
 	if req.GetTask() != "" {
 		if _, err := t.task(req.GetTask()); err != nil {
@@ -108,23 +134,21 @@ func (t Tasks) ListRuns(ctx context.Context, req *taskv1.ListRunsRequest) (*task
 			}
 		}
 	}
-	filter := filterOf("", runs.StatusesOf(req.GetStatuses()), req.GetTags())
-	var found []runItem
-	for _, task := range listed {
-		matched, err := t.engine.store.listMatching(ctx, task, before, filter, limit+1)
-		if err != nil {
-			return nil, err
-		}
-		found = append(found, matched...)
+	page, err := t.engine.store.listRuns(ctx, listed, provider.RunFilter{
+		Statuses: runs.StatusesOf(req.GetStatuses()),
+		Tags:     req.GetTags(),
+		Cursor:   req.GetCursor(),
+		Limit:    int(req.GetLimit()),
+	})
+	if errors.Is(err, runs.ErrUnknownCursor) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	slices.SortFunc(found, func(a, b runItem) int { return strings.Compare(b.SK, a.SK) })
-	resp := &taskv1.ListRunsResponse{}
-	if len(found) > limit {
-		found = found[:limit]
-		resp.NextCursor = cursorOf(found[limit-1].SK)
+	if err != nil {
+		return nil, err
 	}
-	for _, item := range found {
-		resp.Runs = append(resp.Runs, runs.NewRunMessage(item.run()))
+	resp := &taskv1.ListRunsResponse{NextCursor: page.NextCursor}
+	for _, run := range page.Runs {
+		resp.Runs = append(resp.Runs, runs.NewRunMessage(run))
 	}
 	return resp, nil
 }

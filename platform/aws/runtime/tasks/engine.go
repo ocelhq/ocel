@@ -47,9 +47,15 @@ func New(cfg Config) *Engine {
 	if cfg.Client == nil {
 		cfg.Client = http.DefaultClient
 	}
+	var topics []string
+	for name, topic := range cfg.Manifest.Topics {
+		if topic.Declared != nil {
+			topics = append(topics, name)
+		}
+	}
 	return &Engine{
 		cfg:   cfg,
-		store: store{db: cfg.Table, table: cfg.Manifest.Table, prefix: cfg.Manifest.KeyPrefix},
+		store: store{db: cfg.Table, table: cfg.Manifest.Table, prefix: cfg.Manifest.KeyPrefix, topics: topics},
 		urls:  map[string]string{},
 	}
 }

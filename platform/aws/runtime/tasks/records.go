@@ -27,11 +27,16 @@ func (s store) recordPartition(purpose provider.RecordPurpose, topic string) str
 }
 
 func (s store) ensureRecord(ctx context.Context, purpose provider.RecordPurpose, topic, key, value string, until time.Time) (string, bool, error) {
+	held, created, err := s.holdRecord(ctx, purpose, topic, key, value, until)
+	return held.Value, created, err
+}
+
+func (s store) holdRecord(ctx context.Context, purpose provider.RecordPurpose, topic, key, value string, until time.Time) (recordItem, bool, error) {
 	now := time.Now()
 	item := recordItem{PK: s.recordPartition(purpose, topic), SK: key, Value: value, Until: until.UnixMilli(), Retention: until.Add(time.Hour).Unix()}
 	encoded, err := attributevalue.MarshalMap(item)
 	if err != nil {
-		return "", false, err
+		return recordItem{}, false, err
 	}
 	_, err = s.db.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName:                 aws.String(s.table),
@@ -40,10 +45,10 @@ func (s store) ensureRecord(ctx context.Context, purpose provider.RecordPurpose,
 		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":now": &ddbtypes.AttributeValueMemberN{Value: strconv.FormatInt(now.UnixMilli(), 10)}},
 	})
 	if err == nil {
-		return value, true, nil
+		return item, true, nil
 	}
 	if !isConditionFailed(err) {
-		return "", false, fmt.Errorf("record the %s key %q of %s: %w", purpose, key, topic, err)
+		return recordItem{}, false, fmt.Errorf("record the %s key %q of %s: %w", purpose, key, topic, err)
 	}
 	out, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName:      aws.String(s.table),
@@ -51,13 +56,13 @@ func (s store) ensureRecord(ctx context.Context, purpose provider.RecordPurpose,
 		ConsistentRead: aws.Bool(true),
 	})
 	if err != nil {
-		return "", false, fmt.Errorf("read the %s key %q of %s: %w", purpose, key, topic, err)
+		return recordItem{}, false, fmt.Errorf("read the %s key %q of %s: %w", purpose, key, topic, err)
 	}
 	var held recordItem
 	if err := attributevalue.UnmarshalMap(out.Item, &held); err != nil {
-		return "", false, err
+		return recordItem{}, false, err
 	}
-	return held.Value, false, nil
+	return held, false, nil
 }
 
 func (s store) rewriteRecord(ctx context.Context, purpose provider.RecordPurpose, topic, key, value string, until time.Time) error {

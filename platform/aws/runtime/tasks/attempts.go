@@ -124,7 +124,7 @@ var errRunGone = errors.New("the run this message carries no longer exists")
 func (e *Engine) recordConsumerRun(ctx context.Context, deployed deployedConsumer, msg queueMessage, execution string) error {
 	now := time.Now()
 	status := provider.RunQueued
-	if msg.DueAt > now.UnixMilli() {
+	if msg.DueAt > now.UnixMicro() {
 		status = provider.RunDelayed
 	}
 	return e.store.putRun(ctx, runItem{
@@ -158,12 +158,12 @@ func readinessOf(got received, now time.Time) (readiness, time.Duration) {
 	switch {
 	case !isUnfinished(status) || run.Delivery != got.msg.Delivery:
 		return stale, 0
-	case status == provider.RunExecuting && run.Lease >= now.UnixMilli():
-		return held, time.UnixMilli(run.Lease).Sub(now)
-	case status != provider.RunExecuting && run.Attempts == 0 && run.RunExpires > 0 && run.RunExpires <= now.UnixMilli():
+	case status == provider.RunExecuting && run.Lease >= now.UnixMicro():
+		return held, time.UnixMicro(run.Lease).Sub(now)
+	case status != provider.RunExecuting && run.Attempts == 0 && run.RunExpires > 0 && run.RunExpires <= now.UnixMicro():
 		return expired, 0
-	case status != provider.RunExecuting && run.DueAt > now.Add(dueSlack).UnixMilli():
-		return early, time.UnixMilli(run.DueAt).Sub(now)
+	case status != provider.RunExecuting && run.DueAt > now.Add(dueSlack).UnixMicro():
+		return early, time.UnixMicro(run.DueAt).Sub(now)
 	}
 	return runnable, 0
 }
@@ -176,7 +176,7 @@ func (e *Engine) setAsideUnlessRunnable(ctx context.Context, deployed deployedCo
 	case expired:
 		now := time.Now()
 		_, err := e.store.updateRun(ctx, deployed.topicName, got.execution, change{
-			set:        map[string]any{"status": string(provider.RunExpired), "finished_at": now.UnixMilli(), "expires_at": now.Add(runRetention).Unix()},
+			set:        map[string]any{"status": string(provider.RunExpired), "finished_at": now.UnixMicro(), "expires_at": now.Add(runRetention).Unix()},
 			condition:  "#status IN (:queued, :delayed) AND attempts = :none",
 			conditions: map[string]any{":queued": string(provider.RunQueued), ":delayed": string(provider.RunDelayed), ":none": 0},
 		})
@@ -264,7 +264,7 @@ func (e *Engine) claim(ctx context.Context, deployed deployedConsumer, got recei
 		set: map[string]any{
 			"status":      string(provider.RunExecuting),
 			"error":       "",
-			"lease_until": invocationDeadline(ctx).Add(leaseMargin).UnixMilli(),
+			"lease_until": invocationDeadline(ctx).Add(leaseMargin).UnixMicro(),
 		},
 		add:       map[string]int{"attempts": 1},
 		condition: "#delivery = :token AND (#status IN (:queued, :delayed) OR (#status = :executing AND #lease_until < :now))",
@@ -273,7 +273,7 @@ func (e *Engine) claim(ctx context.Context, deployed deployedConsumer, got recei
 			":queued":    string(provider.RunQueued),
 			":delayed":   string(provider.RunDelayed),
 			":executing": string(provider.RunExecuting),
-			":now":       now.UnixMilli(),
+			":now":       now.UnixMicro(),
 		},
 	})
 	if errors.Is(err, errConditionFailed) {
@@ -284,7 +284,7 @@ func (e *Engine) claim(ctx context.Context, deployed deployedConsumer, got recei
 	}
 	if item.StartedAt == 0 {
 		started, err := e.store.updateRun(ctx, deployed.topicName, got.execution, change{
-			set:        map[string]any{"started_at": now.UnixMilli()},
+			set:        map[string]any{"started_at": now.UnixMicro()},
 			condition:  "attribute_not_exists(started_at)",
 			conditions: map[string]any{},
 		})
@@ -502,7 +502,7 @@ func (e *Engine) settle(ctx context.Context, deployed deployedConsumer, got rece
 	set := map[string]any{
 		"status":      string(status),
 		"error":       reason,
-		"finished_at": now.UnixMilli(),
+		"finished_at": now.UnixMicro(),
 		"expires_at":  now.Add(runRetention).Unix(),
 		"lease_until": 0,
 	}
