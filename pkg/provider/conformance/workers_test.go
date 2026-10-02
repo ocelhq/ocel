@@ -14,6 +14,23 @@ func TestAProviderThatRunsNoWorkersPassesOnlyByRefusingEveryDeclarationAsUnsuppo
 	}
 }
 
+func TestEveryTopicOrTaskTheStacksSuiteProvisionsCarriesTheConfigADeployHandsIt(t *testing.T) {
+	for _, resource := range declared([]provider.BindingType{provider.BindingTopic, provider.BindingTask, provider.BindingKV}) {
+		queued := resource.Type == provider.BindingTopic || resource.Type == provider.BindingTask
+		if queued && resource.Topic == nil {
+			t.Errorf("declared() handed %s %s no topic config, and a deploy hands every topic and task one: a provider refusing it fails conformance for a resource no deploy sends", resource.Type, resource.Name)
+		}
+		if !queued && resource.Topic != nil {
+			t.Errorf("declared() handed %s %s a topic config, and only a topic or a task takes one", resource.Type, resource.Name)
+		}
+		if resource.Type == provider.BindingTask && resource.Topic != nil {
+			if consumers := resource.Topic.Consumers; len(consumers) != 1 || !consumers[0].Exclusive {
+				t.Errorf("declared() handed task %s consumers %v, want the one exclusive consumer every task runs on", resource.Name, consumers)
+			}
+		}
+	}
+}
+
 func TestAWorkerCeilingOnAComputeTheProviderDoesNotRunFails(t *testing.T) {
 	facts := provider.Facts{
 		Vendor:         "nowhere",
