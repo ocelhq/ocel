@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { type ChildProcess, execFile } from "node:child_process";
 import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -16,7 +16,7 @@ import { fixtures as matrix } from "../../matrix/fixtures";
 import type { Cell, Lane, Phase } from "../../matrix/types";
 import { sanitize } from "../../naming";
 import { configTree, ocel, type Ran, recordOutput, runOcel, treeRoot, workTree } from "../../ocel";
-import { fixtureDir, treeDir } from "../../paths";
+import { fixtureDir, laneDir, treeDir } from "../../paths";
 import { cellsOn, fixturesOn } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
 import type { CellUnderTest } from "../../run/cellRun";
@@ -24,6 +24,7 @@ import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
 import { cloudflareUrls } from "../cloudflare";
 import type { Deployment, Exposure, ReleaseCycle, Restart, Sweeper, Target } from "../types";
+import { startDispatch, stopDispatch } from "./dispatch";
 import {
   createTimesIn,
   deleteStore,
@@ -44,6 +45,7 @@ import {
   servedBy,
   strayServices,
   switchOn,
+  TASKS_FEATURE,
   type Where,
 } from "./store";
 
@@ -137,6 +139,8 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
 
   private minted: Promise<string | undefined> | undefined;
 
+  private dispatching: ChildProcess | undefined;
+
   private readonly output = new Map<string, string[]>();
 
   readonly sweeper: Sweeper = {
@@ -178,18 +182,31 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
         base: GCP_BASE,
         slug: projectSlug(path.posix.basename(first.name), runId),
       });
-      const bootstrap = ["bootstrap", "production", "--yes"];
+      const features = emulator ? [TASKS_FEATURE] : [KV_FEATURE, TASKS_FEATURE];
       await ocel(
         dir,
-        emulator ? bootstrap : [...bootstrap, "--features", KV_FEATURE],
+        ["bootstrap", "production", "--yes", "--features", features.join(",")],
         childEnv(dir),
       );
+      if (emulator) {
+        this.dispatching = await startDispatch(
+          emulator,
+          project(),
+          region(),
+          laneDir(runId, "gcp"),
+        );
+      }
     } catch (error) {
       return { lane: error instanceof Error ? error.message : String(error) };
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
     return {};
+  }
+
+  async finishLane(): Promise<void> {
+    await stopDispatch(this.dispatching);
+    this.dispatching = undefined;
   }
 
   async prepareProcess(): Promise<void> {

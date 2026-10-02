@@ -11,6 +11,8 @@ import {
   servedBy,
   servicesIn,
   strayServices,
+  TASKS_APIS,
+  TASKS_FEATURE,
 } from "./store";
 
 describe("the apis a bootstrap wants on", () => {
@@ -23,6 +25,20 @@ describe("the apis a bootstrap wants on", () => {
     expect(listed).not.toBeNull();
     const declared = [...(listed?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((one) => one[1]);
     expect(declared).toEqual(BOOTSTRAP_APIS);
+  });
+});
+
+describe("the topics and tasks feature", () => {
+  it("is the one the provider installs, with the apis it wants on", async () => {
+    const go = await readFile(
+      path.join(repoRoot, "platform", "gcp", "provider", "tasksfeature.go"),
+      "utf8",
+    );
+    expect(go).toContain(`tasksFeature = "${TASKS_FEATURE}"`);
+    const listed = go.match(/var TasksAPIs = \[\]string\{([^}]*)\}/);
+    expect(listed).not.toBeNull();
+    const declared = [...(listed?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((one) => one[1]);
+    expect(declared).toEqual(TASKS_APIS);
   });
 });
 
