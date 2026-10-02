@@ -173,6 +173,8 @@
         "$TURBO_ROOT$/proto/**",
         "$TURBO_ROOT$/packages/**",
         "$TURBO_ROOT$/platform/aws/runtime/bucket/**",
+        "$TURBO_ROOT$/python/**",
+        "$TURBO_ROOT$/crates/**",
         "$TURBO_ROOT$/frameworks/**",
         "$TURBO_ROOT$/tests/fixtures/**",
         "$TURBO_ROOT$/tests/shared/**",

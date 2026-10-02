@@ -12,6 +12,8 @@ on:
       - "frameworks/**"
       - "pkg/**"
       - "sdk/**"
+      - "python/**"
+      - "crates/**"
       - "proto/**"
       - "platform/**"
       - "tests/fixtures/**"
@@ -191,7 +193,7 @@ jobs:
             shared="$shared"'|^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$'
             seed=$PR
             touched=$(printf '%s\n' "$files" | sed -n 's|^tests/fixtures/\([^/]*\)/\([^/]*\)/.*|\1/\2|p' | sort -u | paste -sd, -)
-            dev=$(hit "$shared"'|^platform/aws/runtime/bucket/')
+            dev=$(hit "$shared"'|^platform/aws/runtime/bucket/|^(python|crates)/')
             aws=$(hit "$shared"'|^platform/(aws|edge)/|^scripts/floci\.sh$')
             gcp=$(hit "$shared"'|^platform/gcp/|^scripts/floci\.sh$|^scripts/flocidispatch/')
             vps=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$')
@@ -567,6 +569,9 @@ jobs:
 
       - name: The go a go fixture's app and worker run on
         uses: ./.github/actions/go
+
+      - name: The uv a python fixture's environment is synced with
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
 
       - name: Take the binaries this lane drives
         uses: ./.github/actions/journey-binaries
