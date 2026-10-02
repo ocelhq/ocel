@@ -66,8 +66,8 @@ func TestLiveARunTheEngineChangesIsReadByItsExecutionAtItsNewRevision(t *testing
 	var pointer struct {
 		Retention int64 `dynamodbav:"expires_at"`
 	}
-	if err := attributevalue.UnmarshalMap(out.Item, &pointer); err != nil || pointer.Retention != item.Retention {
-		t.Errorf("the run's pointer expires at %d, %v, want %d with the run it points to", pointer.Retention, err, item.Retention)
+	if err := attributevalue.UnmarshalMap(out.Item, &pointer); err != nil || pointer.Retention != item.ExpiresAtUnix {
+		t.Errorf("the run's pointer expires at %d, %v, want %d with the run it points to", pointer.Retention, err, item.ExpiresAtUnix)
 	}
 }
 

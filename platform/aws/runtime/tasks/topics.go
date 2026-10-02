@@ -53,18 +53,18 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 		}
 	}
 	msg := queueMessage{
-		Message:     messageID,
-		PublishedAt: now.UnixMicro(),
-		DueAt:       now.UnixMicro(),
-		Key:         req.GetKey(),
-		Lane:        string(runs.LaneOf(req.GetLane())),
-		Payload:     req.GetPayload(),
+		Message:           messageID,
+		PublishedAtMicros: now.UnixMicro(),
+		DueAtMicros:       now.UnixMicro(),
+		Key:               req.GetKey(),
+		Lane:              string(runs.LaneOf(req.GetLane())),
+		Payload:           req.GetPayload(),
 	}
 	if req.GetLane() == topicv1.Lane_LANE_UNSPECIFIED {
 		msg.Lane = ""
 	}
 	if req.GetDueAt() != nil {
-		msg.DueAt = req.GetDueAt().AsTime().UnixMicro()
+		msg.DueAtMicros = req.GetDueAt().AsTime().UnixMicro()
 	}
 	if err := t.engine.publish(ctx, req.GetTopic(), topic.SNS, topic.Declared.Ordered, msg); err != nil {
 		if key := req.GetIdempotencyKey(); key != "" {
@@ -109,11 +109,11 @@ func (t Topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLetter
 	for _, item := range items {
 		resp.DeadLetters = append(resp.DeadLetters, &topicv1.DeadLetter{
 			Execution: item.SK,
-			Message:   &topicv1.Message{Id: item.Message, PublishedAt: runs.TimestampOf(timeOf(item.PublishedAt))},
+			Message:   &topicv1.Message{Id: item.Message, PublishedAt: runs.TimestampOf(timeOfMicros(item.PublishedAtMicros))},
 			Payload:   json.RawMessage(item.Payload),
 			Attempts:  int32(item.Attempts),
 			Error:     item.Error,
-			FailedAt:  runs.TimestampOf(timeOf(item.FinishedAt)),
+			FailedAt:  runs.TimestampOf(timeOfMicros(item.FinishedAtMicros)),
 		})
 	}
 	return resp, nil
@@ -150,7 +150,7 @@ func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDead
 		now := time.Now()
 		token := envelope.NewMessageID(now)
 		_, err := t.engine.store.updateRun(ctx, letter.Topic, letter.SK, change{
-			set:        map[string]any{"status": string(provider.RunQueued), "attempts": 0, "error": "", "due_at": now.UnixMicro(), "delivery": token, "expires_at": retentionAfter(now.UnixMicro())},
+			set:        map[string]any{"status": string(provider.RunQueued), "attempts": 0, "error": "", "due_at": now.UnixMicro(), "delivery": token, "expires_at": expiresAtUnixAfter(now.UnixMicro())},
 			remove:     []string{"started_at", "finished_at"},
 			condition:  "#status = :failed AND #delivery = :token",
 			conditions: map[string]any{":failed": string(provider.RunFailed), ":token": letter.Delivery},
@@ -158,7 +158,7 @@ func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDead
 		if err != nil {
 			continue
 		}
-		msg := queueMessage{Execution: letter.SK, Delivery: token, Message: letter.Message, PublishedAt: letter.PublishedAt, Key: letter.Key, Lane: letter.Lane, Payload: json.RawMessage(letter.Payload)}
+		msg := queueMessage{Execution: letter.SK, Delivery: token, Message: letter.Message, PublishedAtMicros: letter.PublishedAtMicros, Key: letter.Key, Lane: letter.Lane, Payload: json.RawMessage(letter.Payload)}
 		if err := t.engine.enqueue(ctx, deployed, msg, 0); err != nil {
 			return nil, err
 		}
