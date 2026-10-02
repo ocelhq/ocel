@@ -113,7 +113,7 @@ func TestTheChecksReadWhetherTheAdminApiListensOnAPortInsideTheProxy(t *testing.
 func TestTheTroubleWithACertificateIsWhatTheProxyLogged(t *testing.T) {
 	t.Parallel()
 
-	limited := `2026-09-25T10:00:00.000000000Z {"level":"error","logger":"tls.obtain","msg":"could not get certificate from issuer","identifier":"shop.example.com","issuer":"acme-v02.api.letsencrypt.org-directory","error":"HTTP 429 urn:ietf:params:acme:error:rateLimited - too many certificates (50) already issued for \"example.com\" in the last 168h0m0s, retry after ` + time.Now().Add(24*time.Hour).UTC().Format("2006-01-02 15:04:05 MST") + `"}`
+	limited := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano) + ` {"level":"error","logger":"tls.obtain","msg":"could not get certificate from issuer","identifier":"shop.example.com","issuer":"acme-v02.api.letsencrypt.org-directory","error":"HTTP 429 urn:ietf:params:acme:error:rateLimited - too many certificates (50) already issued for \"example.com\" in the last 168h0m0s, retry after ` + time.Now().Add(24*time.Hour).UTC().Format("2006-01-02 15:04:05 MST") + `"}`
 	machine := &box{logs: limited}
 	certificate, err := (caddy.Builtin{Box: machine}).Certificate(context.Background(), "shop.example.com")
 	if err != nil {

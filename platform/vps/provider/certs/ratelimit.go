@@ -17,6 +17,8 @@ const (
 
 const retryAfterCeiling = 30 * 24 * time.Hour
 
+const boulderTimeLayout = "2006-01-02 15:04:05 MST"
+
 type Counted string
 
 const (
@@ -53,7 +55,7 @@ var ceilings = []struct {
 }
 
 var (
-	resetAtBy    = regexp.MustCompile(`(?i)retry after (\d{4}-\d{2}-\d{2}T[0-9:.]+(?:Z|[+-]\d{2}:\d{2}))`)
+	resetAtBy    = regexp.MustCompile(`(?i)retry after (\d{4}-\d{2}-\d{2}(?:T[0-9:.]+(?:Z|[+-]\d{2}:\d{2})| \d{2}:\d{2}:\d{2} UTC))`)
 	retryInBy    = regexp.MustCompile(`(?i)retry-after"?\s*[:=]\s*"?(\d+)`)
 	rateLimitURN = "urn:ietf:params:acme:error:ratelimited"
 )
@@ -89,8 +91,11 @@ func rateLimitedOn(line string) (RateLimit, bool) {
 			limit.Ceiling = stated
 		}
 		if at := resetAtBy.FindStringSubmatch(plain); at != nil {
-			if reset, err := time.Parse(time.RFC3339, at[1]); err == nil {
-				limit.ResetAt = reset
+			for _, layout := range []string{time.RFC3339, boulderTimeLayout} {
+				if reset, err := time.Parse(layout, at[1]); err == nil {
+					limit.ResetAt = reset
+					break
+				}
 			}
 		}
 		if in := retryInBy.FindStringSubmatch(plain); in != nil {

@@ -45,6 +45,20 @@ func TestACertificateAuthoritysRateLimitIsTranslatedRatherThanRelayed(t *testing
 	}
 }
 
+func TestTheResetIsReadOffTheTimeBoulderWritesAfterRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	said := `{"msg":"could not get certificate from issuer","error":"HTTP 429 urn:ietf:params:acme:error:rateLimited - ` +
+		`too many certificates (50) already issued for \"acme.com\" in the last 168h0m0s, retry after 2026-09-05 12:00:00 UTC: see https://letsencrypt.org/docs/rate-limits/"}`
+	limit, limited := RateLimited(said)
+	if !limited {
+		t.Fatal("a rate-limit response in Boulder's own wording was not read as one")
+	}
+	if want := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC); !limit.ResetAt.Equal(want) {
+		t.Errorf("the reset reads as %v, want %v", limit.ResetAt, want)
+	}
+}
+
 func TestTheResetIsReadOffARetryAfterWhenTheDetailHasNoTimestamp(t *testing.T) {
 	t.Parallel()
 
