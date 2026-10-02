@@ -54,7 +54,7 @@ func (d Deployment) publishNow(ctx context.Context, p publication) error {
 	if err != nil {
 		return err
 	}
-	topic := topicPath(d.Clients.Project, d.Names.Topic(p.topicName))
+	topic := TopicPath(d.Clients.Project, d.Names.Topic(p.topicName))
 	err = retried(ctx, func() error {
 		_, err := service.Projects.Topics.Publish(topic, &pubsub.PublishRequest{Messages: []*pubsub.PubsubMessage{p.message()}}).Context(ctx).Do()
 		return err

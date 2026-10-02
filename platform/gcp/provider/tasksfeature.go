@@ -176,7 +176,7 @@ func (b bootstrap) pushPurpose(tier environment.Tier) accountPurpose {
 }
 
 func (b bootstrap) grantPushSigning(ctx context.Context, tier environment.Tier) error {
-	agent, err := b.readServiceAgent(ctx, pubSubAgentDomain)
+	agent, err := b.clients.ReadServiceAgent(ctx, pubSubAgentDomain)
 	if err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func (b bootstrap) grantPushSigning(ctx context.Context, tier environment.Tier) 
 }
 
 func (b bootstrap) forgetPushSigning(ctx context.Context, tier environment.Tier) error {
-	agent, err := b.readServiceAgent(ctx, pubSubAgentDomain)
+	agent, err := b.clients.ReadServiceAgent(ctx, pubSubAgentDomain)
 	if err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func (b bootstrap) forgetPushSigning(ctx context.Context, tier environment.Tier)
 }
 
 func (b bootstrap) pushSigningGranted(ctx context.Context, tier environment.Tier) (bool, error) {
-	agent, err := b.readServiceAgent(ctx, pubSubAgentDomain)
+	agent, err := b.clients.ReadServiceAgent(ctx, pubSubAgentDomain)
 	if err != nil {
 		return false, err
 	}
@@ -212,7 +212,7 @@ func (b bootstrap) bindTaskWrites(ctx context.Context, tier environment.Tier, gr
 	if err := b.clients.bindProjectRole(ctx, member, taskRecordsRole, taskDatabaseCondition(b.clients, tier), granting); err != nil {
 		return fmt.Errorf("let %s read and write the runs in %s: %w", member, b.clients.TaskDatabase(tier), err)
 	}
-	agent, err := b.readServiceAgent(ctx, cloudTasksAgentDomain)
+	agent, err := b.clients.ReadServiceAgent(ctx, cloudTasksAgentDomain)
 	if err != nil {
 		return err
 	}

@@ -57,8 +57,8 @@ func taskNames(names Names, ref provider.StackRef) topics.Names {
 	}
 }
 
-func (p *Provider) topologyOf(ctx context.Context, c *clients, ref provider.StackRef, declared map[string]*provider.TopicSpec) (topics.Topology, error) {
-	agent, err := c.ServiceAgent(ctx, pubSubAgentDomain)
+func topologyOf(ctx context.Context, c *clients, ref provider.StackRef, declared map[string]*provider.TopicSpec) (topics.Topology, error) {
+	agent, err := c.ReadServiceAgent(ctx, pubSubAgentDomain)
 	if err != nil {
 		return topics.Topology{}, err
 	}
@@ -76,11 +76,11 @@ func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionReq
 		return provider.Binding{}, err
 	}
 	topic := declaredTopicOf(in.Resource)
-	topology, err := p.topologyOf(ctx, c, in.Ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
+	topology, err := topologyOf(ctx, c, in.Ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	path := "projects/" + c.project + "/topics/" + topology.Names.Topic(topic.declared)
+	path := topics.TopicPath(c.project, topology.Names.Topic(topic.declared))
 	ensureProgress(progress).Say(fmt.Sprintf("Provisioning %s %s as Pub/Sub topic %s with %d consumer(s)", in.Resource.Type, topic.declared, path, len(topic.spec.Consumers)))
 	if previous, recorded, err := p.recordedTopic(ctx, in.Ref, in.Resource); err != nil {
 		return provider.Binding{}, err
@@ -152,7 +152,7 @@ func (p *Provider) removeTopic(ctx context.Context, ref provider.StackRef, bindi
 	if err != nil {
 		return err
 	}
-	topology, err := p.topologyOf(ctx, c, ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
+	topology, err := topologyOf(ctx, c, ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
 	if err != nil {
 		return err
 	}

@@ -115,7 +115,7 @@ func (b bootstrap) ensureSubnetwork(ctx context.Context, engine *compute.Service
 }
 
 func (b bootstrap) grantSubnetworkUse(ctx context.Context, engine *compute.Service, tier environment.Tier) error {
-	agent, err := b.readServiceAgent(ctx, runAgentDomain)
+	agent, err := b.clients.ReadServiceAgent(ctx, runAgentDomain)
 	if err != nil {
 		return err
 	}
@@ -145,10 +145,6 @@ func (b bootstrap) grantSubnetworkUse(ctx context.Context, engine *compute.Servi
 		return fmt.Errorf("let Cloud Run attach services to the %s subnetwork: %w", name, refused)
 	}
 	return nil
-}
-
-func (b bootstrap) readServiceAgent(ctx context.Context, domain string) (string, error) {
-	return b.clients.ServiceAgent(ctx, domain)
 }
 
 func (b bootstrap) connectionPolicyPath(tier environment.Tier) string {
