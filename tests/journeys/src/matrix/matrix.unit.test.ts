@@ -272,7 +272,7 @@ describe("the tasks concern", () => {
     expect(issuesOf("tasks/go/web")).toEqual({});
   });
 
-  it("runs the behavioural suite on a box, with only the TypeScript SDK's payload checks red on tasks/node", () => {
+  it("runs the behavioural suite on a box, with the TypeScript SDK's payload checks red on tasks/node and tasks/go's image red under its own ticket", () => {
     for (const lane of ["vps", "vps.incus"] as const) {
       const planned = planOn(lane, {}, EVERY_CELL);
       const names = planned.cells.map((cell) => cell.name);
@@ -290,7 +290,7 @@ describe("the tasks concern", () => {
         [exactTaskPayloadCheck.title]: [1528],
         [exactTopicPayloadCheck.title]: [1528],
       });
-      expect(issuesOf("tasks/go/web")).toEqual({});
+      expect(issuesOf("tasks/go/web")).toEqual({ deploy: [1550] });
     }
   });
 
