@@ -74,7 +74,7 @@ func (e *Engine) publish(ctx context.Context, tx pgx.Tx, toPublish publication) 
 			dueAt:       toPublish.dueAt,
 			key:         toPublish.key,
 			lane:        laneFor(consumer, toPublish.lane),
-			maxAttempts: retryPolicyOf(deployed).attemptsFor(toPublish.maxAttempts),
+			maxAttempts: attemptsFor(retryPolicyOf(deployed), toPublish.maxAttempts),
 			tags:        toPublish.tags,
 			metadata:    toPublish.metadata,
 		}
