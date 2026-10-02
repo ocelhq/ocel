@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
 
@@ -20,12 +21,23 @@ type Manifest struct {
 	Endpoint    string         `json:"endpoint,omitempty"`
 	Keys        []live.Key     `json:"keys"`
 	Bindings    []live.Binding `json:"bindings,omitempty"`
+	Tasks       *Tasks         `json:"tasks,omitempty"`
+}
+
+type Tasks struct {
+	Environment  string                        `json:"environment"`
+	Topics       map[string]provider.TopicSpec `json:"topics"`
+	DelayQueue   string                        `json:"delayQueue"`
+	DelayAccount string                        `json:"delayAccount"`
+	PublishURL   string                        `json:"publishUrl"`
 }
 
 func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }
 
+func (m Manifest) pinned() bool { return m.Live() || m.Tasks != nil }
+
 func Render(m Manifest) ([]byte, error) {
-	if !m.Live() {
+	if !m.pinned() {
 		return nil, nil
 	}
 	for _, component := range []struct{ name, value string }{

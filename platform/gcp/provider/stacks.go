@@ -41,16 +41,21 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if app == nil {
 		return nil, nil
 	}
-	names, err := p.Names(ctx)
+	c, err := p.openClients(ctx)
 	if err != nil {
 		return nil, err
 	}
+	names := c.Names
 	account := names.WorkloadAccountEmail(spec.Ref.Tier)
-	own, err := p.runtimeEnv(names, spec)
+	tasks, declared, err := p.tasksFor(ctx, c, spec)
 	if err != nil {
 		return nil, err
 	}
-	deployed := make([]provider.Function, 0, len(app.Functions))
+	own, err := p.runtimeEnv(names, spec, tasks)
+	if err != nil {
+		return nil, err
+	}
+	deployed := make([]provider.Function, 0, len(app.Functions)+len(app.Workers))
 	for _, fn := range app.Functions {
 		if err := runsX8664(fn.Framework.Arch, "function "+fn.Name); err != nil {
 			return nil, err
@@ -89,7 +94,28 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			Name: fn.Name, Physical: service, URL: ran.url, Revision: ran.revision,
 		})
 	}
-	return deployed, nil
+	if !hostsWorkers(app) {
+		return deployed, nil
+	}
+	values, err := mergedValues(app.App, app.Values.ContainerEnv, own)
+	if err != nil {
+		return nil, err
+	}
+	workers, err := p.provisionWorkers(ctx, c, spec, workerImageOf(app), values, declared, progress)
+	if err != nil {
+		return nil, err
+	}
+	return append(deployed, workerFunctions(workers)...), nil
+}
+
+func workerImageOf(app *provider.AppSpec) string {
+	if at := slices.IndexFunc(app.Functions, func(fn provider.FunctionSpec) bool { return fn.Name == app.App }); at >= 0 {
+		return app.Functions[at].Image
+	}
+	if len(app.Functions) > 0 {
+		return app.Functions[0].Image
+	}
+	return app.Image
 }
 
 func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Log) error {
@@ -104,7 +130,7 @@ func (p *Provider) NameFunctions(ctx context.Context, spec provider.StackSpec) (
 	if err != nil {
 		return nil, err
 	}
-	functions := make([]provider.Function, 0, len(spec.App.Functions))
+	functions := make([]provider.Function, 0, len(spec.App.Functions)+len(spec.App.Workers))
 	for _, fn := range spec.App.Functions {
 		service, err := serviceFor(names, spec, spec.App, fn.Name)
 		if err != nil {
@@ -112,7 +138,11 @@ func (p *Provider) NameFunctions(ctx context.Context, spec provider.StackSpec) (
 		}
 		functions = append(functions, provider.Function{Name: fn.Name, Physical: service})
 	}
-	return functions, nil
+	workers, err := p.nameWorkers(&clients{Names: names}, spec)
+	if err != nil {
+		return nil, err
+	}
+	return append(functions, workerFunctions(workers)...), nil
 }
 
 func (p *Provider) RemoveFunctionRevisions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Log) ([]provider.Function, error) {
@@ -149,15 +179,20 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		probed.HealthCheckPath = rootHealthPath
 		spec.App, app = &probed, &probed
 	}
-	names, err := p.Names(ctx)
+	c, err := p.openClients(ctx)
 	if err != nil {
 		return nil, err
 	}
+	names := c.Names
 	service, err := serviceFor(names, spec, app, app.App)
 	if err != nil {
 		return nil, err
 	}
-	own, err := p.runtimeEnv(names, spec)
+	tasks, declared, err := p.tasksFor(ctx, c, spec)
+	if err != nil {
+		return nil, err
+	}
+	own, err := p.runtimeEnv(names, spec, tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -181,9 +216,14 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		return nil, err
 	}
 	warnPreviewOpen(spec, service, progress)
-	return []provider.AppContainer{{
+	deployed := []provider.AppContainer{{
 		Name: app.App, Physical: service, URL: ran.url, Image: app.Image, Revision: ran.revision,
-	}}, nil
+	}}
+	workers, err := p.provisionWorkers(ctx, c, spec, app.Image, values, declared, progress)
+	if err != nil {
+		return nil, err
+	}
+	return append(deployed, workerContainers(workers, app.Image)...), nil
 }
 
 func (p *Provider) RemoveContainers(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Log) error {
@@ -202,7 +242,11 @@ func (p *Provider) NameContainers(ctx context.Context, spec provider.StackSpec) 
 	if err != nil {
 		return nil, err
 	}
-	return []provider.AppContainer{{Name: spec.App.App, Physical: service, Image: spec.App.Image}}, nil
+	workers, err := p.nameWorkers(&clients{Names: names}, spec)
+	if err != nil {
+		return nil, err
+	}
+	return append([]provider.AppContainer{{Name: spec.App.App, Physical: service, Image: spec.App.Image}}, workerContainers(workers, spec.App.Image)...), nil
 }
 
 func (p *Provider) RemoveContainerRevisions(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Log) ([]provider.AppContainer, error) {
@@ -263,7 +307,7 @@ func (p *Provider) egressFor(names Names, spec provider.StackSpec) *privateEgres
 	return &privateEgress{network: names.NetworkPath(spec.Ref.Tier), subnetwork: names.SubnetworkPath(p.options.Region, spec.Ref.Tier)}
 }
 
-func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec) (map[string]string, error) {
+func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec, tasks *variables.Tasks) (map[string]string, error) {
 	app := spec.App
 	env := map[string]string{}
 	if app.HealthCheckPath != "" {
@@ -279,6 +323,7 @@ func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec) (map[string]
 		Endpoint:    p.endpoint,
 		Keys:        liveKeys(app.Values),
 		Bindings:    liveBindings(app.Values),
+		Tasks:       tasks,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("pin %s's live values: %w", app.App, err)

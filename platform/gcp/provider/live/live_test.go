@@ -1,9 +1,12 @@
 package live
 
 import (
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
 
@@ -11,6 +14,32 @@ func complete() Manifest {
 	return Manifest{
 		Project: "acme-prod", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Tier: "production",
 		Keys: []live.Key{{Key: "DATABASE_URL"}},
+	}
+}
+
+func TestAManifestPinningTopicsAndTasksRendersEvenWithNoValueLive(t *testing.T) {
+	t.Parallel()
+	manifest := complete()
+	manifest.Keys = nil
+	manifest.Tasks = &Tasks{
+		Environment: "production",
+		Topics: map[string]provider.TopicSpec{"resize": {TTL: time.Hour, Consumers: []provider.ConsumerSpec{
+			{Name: "resize", Worker: "media", Exclusive: true, Retry: provider.RetryPolicy{MaxAttempts: 3, MinDelay: time.Second, MaxDelay: time.Minute}},
+		}}},
+		DelayQueue:   "projects/acme-prod/locations/europe-west1/queues/ocel-production-delays",
+		DelayAccount: "ocel-production@acme-prod.iam.gserviceaccount.com",
+		PublishURL:   "https://pubsub.googleapis.com",
+	}
+	rendered, err := Render(manifest)
+	if err != nil || rendered == nil {
+		t.Fatalf("Render() = %q, %v, want the topics a worker and the binding proxy serve pinned", rendered, err)
+	}
+	parsed, err := Parse(rendered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Tasks == nil || !reflect.DeepEqual(*parsed.Tasks, *manifest.Tasks) {
+		t.Errorf("Parse(Render()).Tasks = %+v, want %+v", parsed.Tasks, manifest.Tasks)
 	}
 }
 
