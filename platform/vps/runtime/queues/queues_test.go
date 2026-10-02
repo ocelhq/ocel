@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/pgmq"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -26,12 +27,16 @@ const tier = environment.TierProduction
 type cipher struct{}
 
 func (cipher) Open(_ context.Context, _ environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
+	opened := "opened:"
 	for _, field := range bound {
 		if field.Name == "stack" && field.Value != "prod--infra" {
 			return nil, errors.New("sealed to another stack")
 		}
+		if field.Name == "name" && field.Value == live.QueueDeliverySecretName {
+			opened = "delivery:"
+		}
 	}
-	return []byte("opened:" + string(sealed)), nil
+	return []byte(opened + string(sealed)), nil
 }
 
 type located map[string]string
@@ -112,6 +117,7 @@ func aQueue(t *testing.T, store keyvalue.Store) {
 	t.Helper()
 	record(t, store, live.QueueDatabaseKey(tier, "shop", "prod"), live.QueueDatabase{
 		Container: "shop-prod-infra-ocel-queue", Stack: "prod--infra", Sealed: base64.StdEncoding.EncodeToString([]byte("pw")),
+		DeliverySealed: base64.StdEncoding.EncodeToString([]byte("ds")),
 	})
 	record(t, store, live.QueueTopicKey(tier, "shop", "prod", "send-email"),
 		[]byte(`{"consumers":[{"name":"send-email","worker":"worker","exclusive":true}]}`))
@@ -165,8 +171,8 @@ func TestARecordedQueueIsServedByAnEngineOnItsDatabaseDeliveringToTheWorkersThat
 	if applied.Slug != "shop" || len(applied.Topics) != 1 || applied.Topics["send-email"].GetConsumers()[0].GetWorker() != "worker" {
 		t.Errorf("the engine was applied %+v, want shop's send-email task", applied)
 	}
-	if want := (pgmq.Worker{URL: "http://10.0.0.3:8080", Concurrency: 3}); applied.Workers["worker"] != want {
-		t.Errorf("worker is delivered to as %+v, want %+v", applied.Workers["worker"], want)
+	if worker := applied.Workers["worker"]; worker.URL != "http://10.0.0.3:8080" || worker.Concurrency != 3 {
+		t.Errorf("worker is delivered to as %+v, want at http://10.0.0.3:8080 three at a time", worker)
 	}
 	if _, found := applied.Workers["ledger"]; found {
 		t.Error("ledger, whose container is not running, is delivered to")
@@ -317,5 +323,23 @@ func TestAWorkerContainerStartedAgainUnderARetiredNameIsAskedAgainBeforeItIsDeli
 	applied := opened.opened[0].deployments()
 	if _, delivered := applied[len(applied)-1].Workers["worker"]; delivered {
 		t.Errorf("the engine was applied %+v: a worker container started again under a name the agent once heard answer is delivered to before it answers", applied[len(applied)-1])
+	}
+}
+
+func TestEveryDeliveryToAWorkerCarriesTheEnvironmentsDeliverySecretAsItsOriginSecret(t *testing.T) {
+	t.Parallel()
+
+	store := fake.NewKeyValues()
+	aQueue(t, store)
+	opened := &engines{}
+	host := aHost(store, opened)
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	if err := host.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	applied := opened.opened[0].deployments()
+	if secret := applied[0].Workers["worker"].Header.Get(originguard.OriginSecretHeader); secret != "delivery:ds" {
+		t.Errorf("deliveries to worker carry origin secret %q, want the delivery secret opened from the queue's record: a worker container admits nothing else", secret)
 	}
 }

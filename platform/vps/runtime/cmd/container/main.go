@@ -48,25 +48,8 @@ func run(ctx context.Context, command []string, environ []string) int {
 		return fatal("the image has no ENTRYPOINT or CMD")
 	}
 	command = chooseCommand(environ, command, isFile)
-	exposed := containerimage.PortText
-	env := make([]string, 0, len(environ))
-	manifest := ""
-	healthPath := ""
-	for _, entry := range environ {
-		name, value, _ := strings.Cut(entry, "=")
-		switch name {
-		case containerimage.PortEnvVar:
-			exposed = value
-			continue
-		case variables.EnvVar:
-			manifest = value
-			continue
-		case originguard.HealthPathVar:
-			healthPath = value
-		}
-		env = append(env, entry)
-	}
-	guard, env := originguard.GuardFromEnv(env)
+	read, env := readFront(environ)
+	exposed, manifest, healthPath, guard := read.exposed, read.manifest, read.healthPath, read.guard
 
 	values, err := resolve(ctx, manifest, variables.SocketPath, containerimage.LivePath)
 	if err != nil {
@@ -152,6 +135,34 @@ func run(ctx context.Context, command []string, environ []string) int {
 			return exitCode(exit)
 		}
 	}
+}
+
+type front struct {
+	exposed    string
+	manifest   string
+	healthPath string
+	guard      *originguard.Guard
+}
+
+func readFront(environ []string) (front, []string) {
+	read := front{exposed: containerimage.PortText}
+	env := make([]string, 0, len(environ))
+	for _, entry := range environ {
+		name, value, _ := strings.Cut(entry, "=")
+		switch name {
+		case containerimage.PortEnvVar:
+			read.exposed = value
+			continue
+		case variables.EnvVar:
+			read.manifest = value
+			continue
+		case originguard.HealthPathVar:
+			read.healthPath = value
+		}
+		env = append(env, entry)
+	}
+	read.guard, env = originguard.GuardFromEnv(env)
+	return read, env
 }
 
 func chooseCommand(environ, command []string, present func(path string) bool) []string {

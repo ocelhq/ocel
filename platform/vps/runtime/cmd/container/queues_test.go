@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -111,5 +115,42 @@ func TestAWorkerContainerRunsTheWorkerEntryItsImageCarriesInsteadOfTheApp(t *tes
 	}
 	if got := chooseCommand([]string{"PORT=8080"}, image, nodeEntry); strings.Join(got, " ") != "pnpm start" {
 		t.Errorf("the app's own container runs %q, want the image's command", got)
+	}
+}
+
+func TestAWorkerContainersFrontRefusesADeliveryTheEngineDidNotSign(t *testing.T) {
+	worker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{}`)) }))
+	t.Cleanup(worker.Close)
+	upstream, err := url.Parse(worker.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, env := readFront([]string{processenv.WorkerEnvVar + "=ledger", originguard.OriginSecretVar + "=delivery-secret", "GREETING=hello"})
+	if slices.ContainsFunc(env, func(entry string) bool { return strings.Contains(entry, "delivery-secret") }) {
+		t.Errorf("the worker process is handed %q, want the delivery secret kept by its front", env)
+	}
+	front := httptest.NewServer(originguard.Handler(originguard.Options{Upstream: upstream, Guard: read.guard, Ready: func() bool { return true }}))
+	t.Cleanup(front.Close)
+
+	unsigned, err := http.Post(front.URL, "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unsigned.Body.Close()
+	if unsigned.StatusCode != http.StatusForbidden {
+		t.Errorf("a POST without the delivery secret is answered %d, want 403: any container on the project network could run the worker's code", unsigned.StatusCode)
+	}
+	req, err := http.NewRequest(http.MethodPost, front.URL, strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set(originguard.OriginSecretHeader, "delivery-secret")
+	signed, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed.Body.Close()
+	if signed.StatusCode != http.StatusOK {
+		t.Errorf("the engine's delivery is answered %d, want it through to the worker", signed.StatusCode)
 	}
 }

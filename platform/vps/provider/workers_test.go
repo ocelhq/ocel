@@ -2,6 +2,7 @@ package vps_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"slices"
 	"strings"
@@ -97,7 +98,7 @@ func TestAWorkerIsHandedItsNameAndTheAppsValuesButNeverTheEdgesSecret(t *testing
 			t.Errorf("ledger is handed %q, want %s in it", handed, want)
 		}
 	}
-	for _, refused := range []string{originguard.OriginSecretVar, originguard.HealthPathVar} {
+	for _, refused := range []string{"edge-only", originguard.HealthPathVar} {
 		if strings.Contains(handed, refused) {
 			t.Errorf("ledger is handed %s: the engine, not the edge, calls a worker, and it answers no health probe", refused)
 		}
@@ -211,5 +212,40 @@ func TestAnAppNoWorkerJoinsStartsNoWorker(t *testing.T) {
 	}
 	if runs != 1 {
 		t.Errorf("an app with no worker started %d containers, want its own alone", runs)
+	}
+}
+
+func TestAWorkerAdmitsOnlyDeliveriesSignedWithItsEnvironmentsDeliverySecret(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	p, store := recording(machine)
+	if _, err := p.ProvisionTopic(context.Background(), aTask(t, "receipt"), nil); err != nil {
+		t.Fatalf("ProvisionTopic() = %v", err)
+	}
+	entry, err := store.Read(context.Background(), live.QueueDatabaseKey(environment.TierProduction, "shop", "prod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var database live.QueueDatabase
+	if err := json.Unmarshal(entry.Value, &database); err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := base64.StdEncoding.DecodeString(database.DeliverySealed)
+	if err != nil || !strings.HasPrefix(string(sealed), fakeSeal) {
+		t.Fatalf("the queue records delivery secret %q, want it sealed by the box", database.DeliverySealed)
+	}
+	secret, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(string(sealed), fakeSeal))
+	if err != nil || len(secret) == 0 {
+		t.Fatalf("the sealed delivery secret %q opens to nothing", sealed)
+	}
+
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	ledger, _ := recordedWorker(t, store, "ledger")
+	handed := machine.fedTo("install -m 0600 /dev/stdin '" + host.EnvFile(environment.TierProduction, ledger.Container) + "'")
+	if !strings.Contains(handed, originguard.OriginSecretVar+"="+string(secret)) {
+		t.Errorf("ledger is handed %q, want %s set to the queue's delivery secret, so its front refuses a POST the engine did not send", handed, originguard.OriginSecretVar)
 	}
 }

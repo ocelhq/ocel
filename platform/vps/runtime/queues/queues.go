@@ -230,6 +230,22 @@ func (e *Engines) openServerURL(ctx context.Context, queue live.Queue) (string, 
 	}).String(), nil
 }
 
+func (e *Engines) openDeliverySecret(ctx context.Context, queue live.Queue) (string, error) {
+	sealed, err := base64.StdEncoding.DecodeString(queue.Database.DeliverySealed)
+	if err != nil || len(sealed) == 0 {
+		return "", fmt.Errorf("the queue database %s records no delivery secret its workers admit", queue.Database.Container)
+	}
+	bound, err := live.NewQueueDeliverySecretAssociatedData(queue.Project, queue.Tier, queue.Database.Stack)
+	if err != nil {
+		return "", err
+	}
+	secret, err := e.Cipher.Open(ctx, queue.Tier, bound, sealed)
+	if err != nil {
+		return "", fmt.Errorf("open the queue's delivery secret: %w", err)
+	}
+	return string(secret), nil
+}
+
 func (e *Engines) readDeployment(ctx context.Context, queue live.Queue) (pgmq.Deployment, error) {
 	deployment := pgmq.Deployment{Slug: queue.Project, Topics: map[string]*contractv1.ManifestTopic{}, Workers: map[string]pgmq.Worker{}}
 	for name, raw := range queue.Topics {
@@ -239,6 +255,15 @@ func (e *Engines) readDeployment(ctx context.Context, queue live.Queue) (pgmq.De
 		}
 		deployment.Topics[name] = topic
 	}
+	if len(queue.Workers) == 0 {
+		return deployment, nil
+	}
+	secret, err := e.openDeliverySecret(ctx, queue)
+	if err != nil {
+		return pgmq.Deployment{}, err
+	}
+	signed := http.Header{}
+	signed.Set(originguard.OriginSecretHeader, secret)
 	for _, name := range slices.Sorted(maps.Keys(queue.Workers)) {
 		worker := queue.Workers[name]
 		address, err := e.Addresses.Address(ctx, live.AppNetwork(queue.Tier, queue.Project), worker.Container)
@@ -250,7 +275,7 @@ func (e *Engines) readDeployment(ctx context.Context, queue live.Queue) (pgmq.De
 		if !e.isWorkerAnswering(ctx, worker.Container, url) {
 			continue
 		}
-		deployment.Workers[name] = pgmq.Worker{URL: url, Concurrency: worker.Concurrency}
+		deployment.Workers[name] = pgmq.Worker{URL: url, Concurrency: worker.Concurrency, Header: signed}
 	}
 	return deployment, nil
 }
