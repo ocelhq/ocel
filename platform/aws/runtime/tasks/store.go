@@ -20,7 +20,7 @@ func (s store) ReadRun(ctx context.Context, execution string) (provider.Run, err
 	if !found {
 		return provider.Run{}, fmt.Errorf("run %s: %w", execution, keyvalue.ErrNotFound)
 	}
-	item, found, err := s.readRun(ctx, topic, execution, true)
+	item, found, err := s.readRunItem(ctx, topic, execution, true)
 	if err != nil {
 		return provider.Run{}, err
 	}

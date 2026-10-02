@@ -410,9 +410,9 @@ func TestLiveEveryRunExpiresFromTheTableEvenIfItNeverFinishes(t *testing.T) {
 
 	due := time.Now().Add(time.Hour)
 	id := trigger(t, e, "resize", `{}`, &taskv1.TriggerOptions{DueAt: timestamppb.New(due)})
-	item, found, err := e.store.readRun(context.Background(), "resize", id, true)
+	item, found, err := e.store.readRunItem(context.Background(), "resize", id, true)
 	if err != nil || !found {
-		t.Fatalf("readRun = %v, %v", found, err)
+		t.Fatalf("readRunItem = %v, %v", found, err)
 	}
 	if until := time.Unix(item.ExpiresAtUnix, 0); until.Before(due.Add(runRetention - time.Minute)) {
 		t.Errorf("a delayed run expires from the table at %v, want no sooner than %v after it is due, and never left without an expiry", until, runRetention)
@@ -421,7 +421,7 @@ func TestLiveEveryRunExpiresFromTheTableEvenIfItNeverFinishes(t *testing.T) {
 	if _, err := e.Tasks().RescheduleRun(context.Background(), &taskv1.RescheduleRunRequest{Id: id, DueAt: timestamppb.New(moved)}); err != nil {
 		t.Fatalf("RescheduleRun: %v", err)
 	}
-	item, _, _ = e.store.readRun(context.Background(), "resize", id, true)
+	item, _, _ = e.store.readRunItem(context.Background(), "resize", id, true)
 	if until := time.Unix(item.ExpiresAtUnix, 0); until.Before(moved.Add(runRetention - time.Minute)) {
 		t.Errorf("a rescheduled run expires at %v, want its expiry moved with its due time", until)
 	}

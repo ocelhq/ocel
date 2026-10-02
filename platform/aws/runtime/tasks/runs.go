@@ -193,7 +193,7 @@ func (s store) putRun(ctx context.Context, item runItem) error {
 	return nil
 }
 
-func (s store) readRun(ctx context.Context, topic, execution string, consistent bool) (runItem, bool, error) {
+func (s store) readRunItem(ctx context.Context, topic, execution string, consistent bool) (runItem, bool, error) {
 	out, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName:      aws.String(s.table),
 		Key:            s.runKey(topic, execution),
@@ -264,13 +264,13 @@ func (s store) updateRun(ctx context.Context, topic, execution string, c change)
 		return runItem{}, err
 	}
 	sets = append(sets, name("revision")+" = "+placeholder)
-	clauses = append(clauses, "SET "+joinComma(sets))
+	clauses = append(clauses, "SET "+strings.Join(sets, ", "))
 	var removes []string
 	for _, attribute := range c.remove {
 		removes = append(removes, name(attribute))
 	}
 	if len(removes) > 0 {
-		clauses = append(clauses, "REMOVE "+joinComma(removes))
+		clauses = append(clauses, "REMOVE "+strings.Join(removes, ", "))
 	}
 	condition := "attribute_exists(pk)"
 	if c.condition != "" {
@@ -286,7 +286,8 @@ func (s store) updateRun(ctx context.Context, topic, execution string, c change)
 	for _, attribute := range []string{"status", "delivery", "lease_until", "attempts", "due_at", "consumer", "key", "error", "revision"} {
 		names["#"+attribute] = attribute
 	}
-	expression, names := joinSpace(clauses), usedNames(names, joinSpace(clauses)+" "+condition)
+	expression := strings.Join(clauses, " ")
+	names = usedNames(names, expression+" "+condition)
 	retention, retained := c.set["expires_at"]
 	if !retained {
 		out, err := s.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
@@ -505,10 +506,6 @@ func isConditionFailed(err error) bool {
 	}
 	return false
 }
-
-func joinComma(parts []string) string { return strings.Join(parts, ", ") }
-
-func joinSpace(parts []string) string { return strings.Join(parts, " ") }
 
 func usedNames(names map[string]string, expression string) map[string]string {
 	used := map[string]string{}
