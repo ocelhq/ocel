@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +24,8 @@ const (
 	keySK = "sk"
 
 	runRetention = 30 * 24 * time.Hour
+
+	maxRevisionRaces = 5
 )
 
 var errConditionFailed = errors.New("the run is not in the state this change needs")
@@ -310,31 +314,100 @@ func (s store) updateRun(ctx context.Context, topic, execution string, c change)
 	if err != nil {
 		return runItem{}, err
 	}
-	_, err = s.db.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []ddbtypes.TransactWriteItem{
-		{Update: &ddbtypes.Update{
-			TableName:                 aws.String(s.table),
-			Key:                       s.runKey(topic, execution),
-			UpdateExpression:          aws.String(expression),
-			ConditionExpression:       aws.String(condition),
-			ExpressionAttributeNames:  names,
-			ExpressionAttributeValues: values,
-		}},
-		pointer,
-	}})
-	if isConditionFailed(err) {
-		return runItem{}, errConditionFailed
+	names["#revision"] = "revision"
+	for range maxRevisionRaces {
+		read, err := s.runAttributes(ctx, topic, execution)
+		if err != nil {
+			return runItem{}, err
+		}
+		if read == nil {
+			return runItem{}, errConditionFailed
+		}
+		values[":read"] = read["revision"]
+		_, err = s.db.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []ddbtypes.TransactWriteItem{
+			{Update: &ddbtypes.Update{
+				TableName:                 aws.String(s.table),
+				Key:                       s.runKey(topic, execution),
+				UpdateExpression:          aws.String(expression),
+				ConditionExpression:       aws.String(condition + " AND #revision = :read"),
+				ExpressionAttributeNames:  names,
+				ExpressionAttributeValues: values,
+			}},
+			pointer,
+		}})
+		if isConditionFailed(err) {
+			now, err := s.runAttributes(ctx, topic, execution)
+			if err != nil {
+				return runItem{}, err
+			}
+			if now == nil || revisionOf(now) == revisionOf(read) {
+				return runItem{}, errConditionFailed
+			}
+			continue
+		}
+		if err != nil {
+			return runItem{}, fmt.Errorf("update run %s: %w", execution, err)
+		}
+		written, err := applyChange(read, c, string(revision))
+		if err != nil {
+			return runItem{}, err
+		}
+		var item runItem
+		if err := attributevalue.UnmarshalMap(written, &item); err != nil {
+			return runItem{}, fmt.Errorf("decode run %s: %w", execution, err)
+		}
+		return item, nil
 	}
+	return runItem{}, fmt.Errorf("update run %s: it changed under each of %d tries", execution, maxRevisionRaces)
+}
+
+func (s store) runAttributes(ctx context.Context, topic, execution string) (map[string]ddbtypes.AttributeValue, error) {
+	out, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName:      aws.String(s.table),
+		Key:            s.runKey(topic, execution),
+		ConsistentRead: aws.Bool(true),
+	})
 	if err != nil {
-		return runItem{}, fmt.Errorf("update run %s: %w", execution, err)
+		return nil, fmt.Errorf("read run %s: %w", execution, err)
 	}
-	item, found, err := s.readRun(ctx, topic, execution, true)
-	if err != nil {
-		return runItem{}, err
+	if len(out.Item) == 0 {
+		return nil, nil
 	}
-	if !found {
-		return runItem{}, errConditionFailed
+	return out.Item, nil
+}
+
+func revisionOf(item map[string]ddbtypes.AttributeValue) string {
+	if revision, ok := item["revision"].(*ddbtypes.AttributeValueMemberS); ok {
+		return revision.Value
 	}
-	return item, nil
+	return ""
+}
+
+func applyChange(read map[string]ddbtypes.AttributeValue, c change, revision string) (map[string]ddbtypes.AttributeValue, error) {
+	written := maps.Clone(read)
+	for attribute, v := range c.set {
+		encoded, err := attributevalue.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		written[attribute] = encoded
+	}
+	for attribute, by := range c.add {
+		var was int64
+		if number, ok := written[attribute].(*ddbtypes.AttributeValueMemberN); ok {
+			parsed, err := strconv.ParseInt(number.Value, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("add to %s: %w", attribute, err)
+			}
+			was = parsed
+		}
+		written[attribute] = &ddbtypes.AttributeValueMemberN{Value: strconv.FormatInt(was+int64(by), 10)}
+	}
+	for _, attribute := range c.remove {
+		delete(written, attribute)
+	}
+	written["revision"] = &ddbtypes.AttributeValueMemberS{Value: revision}
+	return written, nil
 }
 
 func (s store) deleteRun(ctx context.Context, topic, execution, condition string, conditions map[string]any) (bool, error) {
