@@ -12,12 +12,11 @@ import (
 	pubsub "google.golang.org/api/pubsub/v1"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const (
-	ConsumerAttribute = "ocel-consumer"
-
 	pushAckDeadline         = 600 * time.Second
 	maxBackoff              = 600 * time.Second
 	deadLetterDeliveryLimit = 100
@@ -36,7 +35,7 @@ type Topology struct {
 }
 
 func PushPath(topic, consumer string) string {
-	return "/topics/" + topic + "/consumers/" + consumer
+	return pushPrefix + topic + consumerInfix + consumer
 }
 
 func topicPath(project, topic string) string { return "projects/" + project + "/topics/" + topic }
@@ -79,7 +78,7 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 }
 
 func (t Topology) subscription(project, name string, topic *contractv1.ManifestTopic, consumer *contractv1.ManifestConsumer, push Push, deadLetters string) *pubsub.Subscription {
-	policy := retryPolicyOf(topic, consumer)
+	policy := provider.ResolveRetryPolicy(topic.GetRetry(), consumer.GetRetry())
 	return &pubsub.Subscription{
 		Topic:                 topicPath(project, t.Names.Topic(name)),
 		AckDeadlineSeconds:    int64(pushAckDeadline / time.Second),
@@ -90,8 +89,8 @@ func (t Topology) subscription(project, name string, topic *contractv1.ManifestT
 			OidcToken:    &pubsub.OidcToken{ServiceAccountEmail: push.ServiceAccount, Audience: push.URL},
 		},
 		RetryPolicy: &pubsub.RetryPolicy{
-			MinimumBackoff: durationText(min(policy.minDelay, maxBackoff)),
-			MaximumBackoff: durationText(min(policy.maxDelay, maxBackoff)),
+			MinimumBackoff: durationText(min(policy.MinDelay, maxBackoff)),
+			MaximumBackoff: durationText(min(policy.MaxDelay, maxBackoff)),
 		},
 		DeadLetterPolicy: &pubsub.DeadLetterPolicy{DeadLetterTopic: deadLetters, MaxDeliveryAttempts: deadLetterDeliveryLimit},
 		ExpirationPolicy: &pubsub.ExpirationPolicy{},

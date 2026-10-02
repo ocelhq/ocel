@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -18,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -26,14 +26,10 @@ const (
 	runsCollection    = "runs"
 	recordsCollection = "records"
 
-	defaultRunPage = 100
-	maxRunPage     = 1000
-	maxRunScan     = 1000
+	maxRunScan = 1000
 
 	RunRetention = 30 * 24 * time.Hour
 )
-
-var ErrUnknownCursor = errors.New("the cursor is not one a listing returned")
 
 type Scope struct {
 	Slug        string
@@ -98,7 +94,7 @@ func (s Store) scopeDocument() (*firestore.DocumentRef, error) {
 	return client.Collection(storeCollection).Doc(s.Scope.documentID()), nil
 }
 
-func (s Store) runs() (*firestore.CollectionRef, error) {
+func (s Store) runCollection() (*firestore.CollectionRef, error) {
 	scope, err := s.scopeDocument()
 	if err != nil {
 		return nil, err
@@ -214,7 +210,7 @@ func (s Store) ensureDebouncedRun(ctx context.Context, record provider.ExpiringR
 	if err != nil {
 		return "", err
 	}
-	runs, err := s.runs()
+	collection, err := s.runCollection()
 	if err != nil {
 		return "", err
 	}
@@ -228,7 +224,7 @@ func (s Store) ensureDebouncedRun(ctx context.Context, record provider.ExpiringR
 	}
 	var pending string
 	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		recorded, err := readPendingRun(tx, recordDoc, runs)
+		recorded, err := readPendingRun(tx, recordDoc, collection)
 		if err != nil || recorded != "" {
 			pending = recorded
 			return err
@@ -237,7 +233,7 @@ func (s Store) ensureDebouncedRun(ctx context.Context, record provider.ExpiringR
 		if err := tx.Set(recordDoc, recordDocument{Value: string(record.Value), ExpiresAt: record.ExpiresAt}); err != nil {
 			return err
 		}
-		return tx.Create(runs.Doc(run.Execution), documentOf(run.Run, run.delivery, next))
+		return tx.Create(collection.Doc(run.Execution), documentOf(run.Run, run.delivery, next))
 	})
 	if err != nil {
 		return "", fmt.Errorf("record the debounced run %s under %q of %s: %w", run.Execution, record.Key, record.Topic, err)
@@ -245,7 +241,7 @@ func (s Store) ensureDebouncedRun(ctx context.Context, record provider.ExpiringR
 	return pending, nil
 }
 
-func readPendingRun(tx *firestore.Transaction, recordDoc *firestore.DocumentRef, runs *firestore.CollectionRef) (string, error) {
+func readPendingRun(tx *firestore.Transaction, recordDoc *firestore.DocumentRef, collection *firestore.CollectionRef) (string, error) {
 	snapshot, found, err := readInTransaction(tx, recordDoc)
 	if err != nil || !found {
 		return "", err
@@ -258,11 +254,11 @@ func readPendingRun(tx *firestore.Transaction, recordDoc *firestore.DocumentRef,
 	if !current.ExpiresAt.After(now) {
 		return "", nil
 	}
-	recorded, err := readRecordedRun(provider.ExpiringRecord{Value: json.RawMessage(current.Value)})
+	recorded, err := runs.ReadRecordedRun(provider.ExpiringRecord{Value: json.RawMessage(current.Value)})
 	if err != nil {
 		return "", err
 	}
-	runSnapshot, found, err := readInTransaction(tx, runs.Doc(recorded))
+	runSnapshot, found, err := readInTransaction(tx, collection.Doc(recorded))
 	if err != nil || !found {
 		return "", err
 	}
@@ -287,7 +283,7 @@ func (s Store) pointRecordAt(ctx context.Context, record provider.ExpiringRecord
 	if record.Key == "" {
 		return nil
 	}
-	return s.writeRecord(ctx, newRecordNamingRun(record.Purpose, record.Topic, record.Key, execution, record.ExpiresAt))
+	return s.writeRecord(ctx, runs.NewRecordNamingRun(record.Purpose, record.Topic, record.Key, execution, record.ExpiresAt))
 }
 
 func readInTransaction(tx *firestore.Transaction, doc *firestore.DocumentRef) (*firestore.DocumentSnapshot, bool, error) {
@@ -367,7 +363,7 @@ func documentOf(run provider.Run, delivery deliveryFields, revision keyvalue.Rev
 }
 
 func (s Store) WriteRun(ctx context.Context, run provider.Run) (keyvalue.Revision, error) {
-	runs, err := s.runs()
+	collection, err := s.runCollection()
 	if err != nil {
 		return "", err
 	}
@@ -379,7 +375,7 @@ func (s Store) WriteRun(ctx context.Context, run provider.Run) (keyvalue.Revisio
 	if err != nil {
 		return "", err
 	}
-	doc := runs.Doc(run.Execution)
+	doc := collection.Doc(run.Execution)
 	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snapshot, found, err := readInTransaction(tx, doc)
 		if err != nil {
@@ -412,7 +408,7 @@ func (s Store) WriteRun(ctx context.Context, run provider.Run) (keyvalue.Revisio
 var errRunUnchanged = errors.New("the run is left as it was")
 
 func (s Store) changeRun(ctx context.Context, execution string, change func(run *storedRun, found bool) error) (storedRun, error) {
-	runs, err := s.runs()
+	collection, err := s.runCollection()
 	if err != nil {
 		return storedRun{}, err
 	}
@@ -420,7 +416,7 @@ func (s Store) changeRun(ctx context.Context, execution string, change func(run 
 	if err != nil {
 		return storedRun{}, err
 	}
-	doc := runs.Doc(execution)
+	doc := collection.Doc(execution)
 	var changed storedRun
 	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snapshot, found, err := readInTransaction(tx, doc)
@@ -466,12 +462,12 @@ func (s Store) createRun(ctx context.Context, run storedRun) error {
 }
 
 func (s Store) ListRuns(ctx context.Context, filter provider.RunFilter) (provider.RunPage, error) {
-	runs, err := s.runs()
+	collection, err := s.runCollection()
 	if err != nil {
 		return provider.RunPage{}, err
 	}
-	limit := pageLimit(filter.Limit)
-	query := runs.Query
+	limit := runs.PageLimit(filter.Limit)
+	query := collection.Query
 	if filter.Topic != "" {
 		query = query.Where("topic", "==", filter.Topic)
 	}
@@ -487,7 +483,7 @@ func (s Store) ListRuns(ctx context.Context, filter provider.RunFilter) (provide
 	}
 	query = query.OrderBy("createdAt", firestore.Desc).OrderBy(firestore.DocumentID, firestore.Desc)
 	if filter.Cursor != "" {
-		created, execution, err := parseCursor(filter.Cursor)
+		created, execution, err := parseRunCursor(filter.Cursor)
 		if err != nil {
 			return provider.RunPage{}, err
 		}
@@ -506,7 +502,7 @@ func (s Store) ListRuns(ctx context.Context, filter provider.RunFilter) (provide
 		snapshot, err := documents.Next()
 		if errors.Is(err, iterator.Done) {
 			if scanned == scanLimit {
-				page.NextCursor = cursorOf(last.CreatedAt, last.Execution)
+				page.NextCursor = runs.CursorOf(last.CreatedAt, last.Execution)
 			}
 			return page, nil
 		}
@@ -523,12 +519,20 @@ func (s Store) ListRuns(ctx context.Context, filter provider.RunFilter) (provide
 			continue
 		}
 		if len(page.Runs) == limit {
-			page.NextCursor = cursorOf(last.CreatedAt, last.Execution)
+			page.NextCursor = runs.CursorOf(last.CreatedAt, last.Execution)
 			return page, nil
 		}
 		page.Runs = append(page.Runs, run)
 		last = run
 	}
+}
+
+func parseRunCursor(cursor string) (time.Time, string, error) {
+	at, execution, err := runs.ParseCursor(cursor)
+	if err == nil && execution == "" {
+		return time.Time{}, "", fmt.Errorf("cursor %q names no run: %w", cursor, runs.ErrUnknownCursor)
+	}
+	return at, execution, err
 }
 
 func holdsEveryTag(tags, wanted []string) bool {
@@ -538,28 +542,6 @@ func holdsEveryTag(tags, wanted []string) bool {
 		}
 	}
 	return true
-}
-
-func pageLimit(requested int) int {
-	if requested <= 0 {
-		return defaultRunPage
-	}
-	return min(requested, maxRunPage)
-}
-
-func cursorOf(created time.Time, execution string) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(created.UTC().Format(time.RFC3339Nano) + "/" + execution))
-}
-
-func parseCursor(cursor string) (time.Time, string, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(cursor)
-	if err == nil {
-		at, execution, cut := strings.Cut(string(raw), "/")
-		if created, parseErr := time.Parse(time.RFC3339Nano, at); cut && parseErr == nil && execution != "" {
-			return created, execution, nil
-		}
-	}
-	return time.Time{}, "", fmt.Errorf("cursor %q: %w", cursor, ErrUnknownCursor)
 }
 
 func textOf(value json.RawMessage) *string {

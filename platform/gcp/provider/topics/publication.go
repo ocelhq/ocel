@@ -4,15 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
-	"connectrpc.com/connect"
 	pubsub "google.golang.org/api/pubsub/v1"
 
-	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -70,21 +67,3 @@ func (d Deployment) publishNow(ctx context.Context, p publication) error {
 }
 
 func base64Of(payload []byte) string { return base64.StdEncoding.EncodeToString(payload) }
-
-func laneName(lane topicv1.Lane) string {
-	switch lane {
-	case topicv1.Lane_LANE_HIGH:
-		return "high"
-	case topicv1.Lane_LANE_LOW:
-		return "low"
-	default:
-		return "default"
-	}
-}
-
-func refuseNonJSON(payload []byte) error {
-	if len(payload) > 0 && !json.Valid(payload) {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("the payload is not JSON"))
-	}
-	return nil
-}

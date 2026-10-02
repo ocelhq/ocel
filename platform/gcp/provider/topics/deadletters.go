@@ -16,6 +16,7 @@ import (
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 func (t Topics) topicDeclaring(topicName, consumerName string) (*contractv1.ManifestTopic, error) {
@@ -32,11 +33,11 @@ func (t Topics) topicDeclaring(topicName, consumerName string) (*contractv1.Mani
 }
 
 func (s Store) deadLetters(topic, consumer string) (firestore.Query, error) {
-	runs, err := s.runs()
+	collection, err := s.runCollection()
 	if err != nil {
 		return firestore.Query{}, err
 	}
-	return runs.Where("topic", "==", topic).Where("consumer", "==", consumer).Where("status", "==", string(provider.RunFailed)), nil
+	return collection.Where("topic", "==", topic).Where("consumer", "==", consumer).Where("status", "==", string(provider.RunFailed)), nil
 }
 
 func (s Store) eachDeadLetter(ctx context.Context, topic, consumer string, executions []string, each func(storedRun) error) error {
@@ -68,7 +69,7 @@ func (s Store) eachDeadLetter(ctx context.Context, topic, consumer string, execu
 }
 
 func (s Store) eachNamedDeadLetter(ctx context.Context, topic, consumer string, executions []string, each func(storedRun) error) error {
-	runs, err := s.runs()
+	collection, err := s.runCollection()
 	if err != nil {
 		return err
 	}
@@ -78,7 +79,7 @@ func (s Store) eachNamedDeadLetter(ctx context.Context, topic, consumer string, 
 	}
 	var docs []*firestore.DocumentRef
 	for _, execution := range slices.Compact(slices.Sorted(slices.Values(executions))) {
-		docs = append(docs, runs.Doc(execution))
+		docs = append(docs, collection.Doc(execution))
 	}
 	snapshots, err := client.GetAll(ctx, docs)
 	if err != nil {
@@ -103,7 +104,7 @@ func (s Store) eachNamedDeadLetter(ctx context.Context, topic, consumer string, 
 }
 
 func (s Store) removeDeadLetter(ctx context.Context, execution string) (bool, error) {
-	runs, err := s.runs()
+	collection, err := s.runCollection()
 	if err != nil {
 		return false, err
 	}
@@ -111,7 +112,7 @@ func (s Store) removeDeadLetter(ctx context.Context, execution string) (bool, er
 	if err != nil {
 		return false, err
 	}
-	doc := runs.Doc(execution)
+	doc := collection.Doc(execution)
 	removed := false
 	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snapshot, found, err := readInTransaction(tx, doc)
@@ -136,10 +137,10 @@ func (t Topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLetter
 	if err != nil {
 		return nil, err
 	}
-	limit := pageLimit(int(req.GetLimit()))
+	limit := runs.PageLimit(int(req.GetLimit()))
 	query = query.OrderBy("finishedAt", firestore.Asc).OrderBy(firestore.DocumentID, firestore.Asc)
 	if req.GetCursor() != "" {
-		finished, execution, err := parseCursor(req.GetCursor())
+		finished, execution, err := parseRunCursor(req.GetCursor())
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
@@ -158,7 +159,7 @@ func (t Topics) ListDeadLetters(ctx context.Context, req *topicv1.ListDeadLetter
 			return nil, fmt.Errorf("list dead letters: %w", err)
 		}
 		if len(resp.GetDeadLetters()) == limit {
-			resp.NextCursor = cursorOf(lastFinished, resp.GetDeadLetters()[limit-1].GetExecution())
+			resp.NextCursor = runs.CursorOf(lastFinished, resp.GetDeadLetters()[limit-1].GetExecution())
 			return resp, nil
 		}
 		run, err := storedRunOf(snapshot)
@@ -181,7 +182,7 @@ func deadLetterOf(run storedRun) *topicv1.DeadLetter {
 		Payload:   run.Payload,
 		Attempts:  int32(run.Attempts),
 		Error:     run.Error,
-		FailedAt:  timestampOf(run.FinishedAt),
+		FailedAt:  runs.TimestampOf(run.FinishedAt),
 	}
 }
 

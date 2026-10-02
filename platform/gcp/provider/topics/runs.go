@@ -13,6 +13,7 @@ import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 const (
@@ -25,11 +26,11 @@ func refuseMissingRun(id string) error {
 }
 
 func (s Store) readStoredRun(ctx context.Context, execution string) (storedRun, error) {
-	runs, err := s.runs()
+	collection, err := s.runCollection()
 	if err != nil {
 		return storedRun{}, err
 	}
-	snapshot, err := runs.Doc(execution).Get(ctx)
+	snapshot, err := collection.Doc(execution).Get(ctx)
 	if err == nil && snapshot.Exists() {
 		return storedRunOf(snapshot)
 	}
@@ -39,17 +40,13 @@ func (s Store) readStoredRun(ctx context.Context, execution string) (storedRun, 
 	return storedRun{}, fmt.Errorf("read run %s: %w", execution, err)
 }
 
-func isUnfinished(status provider.RunStatus) bool {
-	return status == provider.RunDelayed || status == provider.RunQueued || status == provider.RunExecuting
-}
-
 func (t Tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*taskv1.CancelRunResponse, error) {
 	var delayTask string
 	_, err := t.deployment.Store().changeRun(ctx, req.GetId(), func(run *storedRun, found bool) error {
 		if !found {
 			return refuseMissingRun(req.GetId())
 		}
-		if !isUnfinished(run.Status) {
+		if !runs.IsUnfinished(run.Status) {
 			return errRunUnchanged
 		}
 		delayTask = run.delivery.DelayTask
