@@ -233,6 +233,18 @@ export const realtime = {
     checks: REALTIME_CHECKS,
     on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
   }),
+  python: fixture("realtime/python", {
+    apps: ["web"],
+    devCommands: { web: [".venv/bin/python", "main.py"] },
+    checks: REALTIME_CHECKS,
+    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
+  }),
+  rust: fixture("realtime/rust", {
+    apps: ["web"],
+    devCommands: { web: ["cargo", "run", "--quiet"] },
+    checks: REALTIME_CHECKS,
+    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
+  }),
 };
 
 export const iac = {

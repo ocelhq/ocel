@@ -191,6 +191,7 @@ tests/fixtures/sdk/rust/target/
 tests/fixtures/sdk/rust-workspace/target/
 tests/fixtures/deploy/rust/server/target/
 tests/fixtures/worker/rust/target/
+tests/fixtures/realtime/rust/target/
 
 .workflow-data
 packages/cli-*/bin/

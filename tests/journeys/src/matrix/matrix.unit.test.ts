@@ -342,9 +342,9 @@ describe("the tasks concern", () => {
 
 describe("the realtime concern", () => {
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
-  const CELLS = ["realtime/node", "realtime/go"];
+  const CELLS = ["realtime/node", "realtime/go", "realtime/python", "realtime/rust"];
 
-  it("runs the behavioural suite on dev in TypeScript and Go, expecting nothing red", () => {
+  it("runs the behavioural suite on dev in TypeScript, Go, Python and Rust, expecting nothing red", () => {
     const planned = planOn("dev");
     expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(CELLS));
     for (const cell of CELLS) {
