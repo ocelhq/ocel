@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -67,5 +68,51 @@ func TestLiveARunTheEngineChangesIsReadByItsExecutionAtItsNewRevision(t *testing
 	}
 	if err := attributevalue.UnmarshalMap(out.Item, &pointer); err != nil || pointer.Retention != item.Retention {
 		t.Errorf("the run's pointer expires at %d, %v, want %d with the run it points to", pointer.Retention, err, item.Retention)
+	}
+}
+
+type racedTable struct {
+	table
+	race func()
+}
+
+func (r *racedTable) TransactWriteItems(ctx context.Context, in *dynamodb.TransactWriteItemsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
+	out, err := r.table.TransactWriteItems(ctx, in, optFns...)
+	if err == nil && r.race != nil {
+		race := r.race
+		r.race = nil
+		race()
+	}
+	return out, err
+}
+
+func TestLiveARescheduleAnswersWithTheRunItWroteThoughALaterWriteLandsBeforeItReadsBack(t *testing.T) {
+	ctx := context.Background()
+	em := live(t)
+	d := em.deploy(t, map[string]*provider.TopicSpec{"resize": aTask("resize")}, nil)
+	e := d.engine(nil)
+
+	id := trigger(t, e, "resize", `{}`, &taskv1.TriggerOptions{DueAt: timestamppb.New(time.Now().Add(time.Hour))})
+	raced := &racedTable{table: e.store.db}
+	raced.race = func() {
+		if _, err := em.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+			TableName:                 aws.String(d.manifest.Table),
+			Key:                       e.store.runKey("resize", id),
+			UpdateExpression:          aws.String("SET #status = :canceled"),
+			ExpressionAttributeNames:  map[string]string{"#status": "status"},
+			ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{":canceled": &ddbtypes.AttributeValueMemberS{Value: string(provider.RunCanceled)}},
+		}); err != nil {
+			t.Errorf("the later write: %v", err)
+		}
+	}
+	e.store.db = raced
+
+	due := time.Now().Add(2 * time.Hour).Truncate(time.Microsecond)
+	resp, err := e.Tasks().RescheduleRun(ctx, &taskv1.RescheduleRunRequest{Id: id, DueAt: timestamppb.New(due)})
+	if err != nil {
+		t.Fatalf("RescheduleRun: %v", err)
+	}
+	if run := resp.GetRun(); run.GetStatus() != taskv1.RunStatus_RUN_STATUS_DELAYED || !run.GetDueAt().AsTime().Equal(due) {
+		t.Errorf("RescheduleRun answered %v, want the delayed run due at %v that it wrote, not the later write", run, due)
 	}
 }
