@@ -10,12 +10,6 @@ import {
   nextOriginCacheChecks,
   nextOriginDataCacheChecks,
   orderedKeysInParallelCheck,
-  realtimeEventSizeCheck,
-  realtimePublicCheck,
-  realtimeReauthorizeCheck,
-  realtimeRelayedPublishCheck,
-  realtimeRuleAllowsCheck,
-  realtimeWildcardCheck,
   taskConcurrencyCheck,
 } from "../checks";
 import { NO_FILTER, plan, type RunFilter } from "../plan";
@@ -350,24 +344,11 @@ describe("the realtime concern", () => {
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
   const CELLS = ["realtime/node", "realtime/go"];
 
-  it("runs the behavioural suite on dev in TypeScript and Go, expecting red only what needs a server publish to reach the gateway", () => {
+  it("runs the behavioural suite on dev in TypeScript and Go, expecting nothing red", () => {
     const planned = planOn("dev");
     expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(CELLS));
-    const needsServerPublish = Object.fromEntries(
-      [
-        realtimeRuleAllowsCheck,
-        realtimePublicCheck,
-        realtimeWildcardCheck,
-        realtimeRelayedPublishCheck,
-        realtimeReauthorizeCheck,
-        realtimeEventSizeCheck,
-      ].map((one) => [one.title, [1540]]),
-    );
     for (const cell of CELLS) {
-      const listed = Object.entries(planned.expectedFailures[`${cell}/web`] ?? {}).map(
-        ([title, gaps]) => [title, gaps.map((gap) => gap.issue)],
-      );
-      expect(Object.fromEntries(listed)).toEqual(needsServerPublish);
+      expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
     }
   });
 

@@ -1,7 +1,6 @@
 package gateway_test
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
@@ -169,6 +168,7 @@ func (h *harness) dial(connectToken string) (*client, *http.Response, error) {
 		return nil, resp, err
 	}
 	h.t.Cleanup(func() { _ = conn.CloseNow() })
+	conn.SetReadLimit(1 << 20)
 	return &client{t: h.t, conn: conn}, resp, nil
 }
 
@@ -227,37 +227,36 @@ func (c *client) subscribe(id, channel, tok string) map[string]any {
 	return c.read()
 }
 
-func event(t *testing.T, data any) string {
+func envelope(t *testing.T, channel string, data any) string {
 	t.Helper()
-	raw, err := json.Marshal(data)
+	raw, err := json.Marshal(map[string]any{"v": 1, "id": strings.Repeat("0", 32), "ch": channel, "ts": 1_790_000_000_000, "kind": "live", "data": data})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return string(raw)
 }
 
-func (h *harness) publish(tok, channel string, events ...string) (*http.Response, map[string]any) {
+func (h *harness) publish(authorization, body string) *http.Response {
 	h.t.Helper()
-	body, err := json.Marshal(map[string]any{"channel": channel, "events": events})
-	if err != nil {
-		h.t.Fatal(err)
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.server.URL+"/event", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.server.URL+"/publish", strings.NewReader(body))
 	if err != nil {
 		h.t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", tok)
+	req.Header.Set("Authorization", authorization)
 	resp, err := h.client.Do(req)
 	if err != nil {
 		h.t.Fatalf("publish: %v", err)
 	}
-	defer resp.Body.Close()
-	var answer map[string]any
-	_ = json.NewDecoder(resp.Body).Decode(&answer)
-	return resp, answer
+	_ = resp.Body.Close()
+	return resp
+}
+
+func (h *harness) publishAs(operation token.Operation, channel string, data any) *http.Response {
+	h.t.Helper()
+	return h.publish("Bearer "+h.mint(operation, channel), envelope(h.t, channel, data))
 }
 
 func TestAServerPublishReachesASubscriberAsTheEventItSent(t *testing.T) {
@@ -270,10 +269,9 @@ func TestAServerPublishReachesASubscriberAsTheEventItSent(t *testing.T) {
 		t.Fatalf("subscribe answered %v, want subscribe_success for s-1", got)
 	}
 
-	sent := event(t, map[string]string{"status": "shipped"})
-	resp, answer := h.publish(h.mint(token.Publish, channel), channel, sent)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("publish answered %s %v, want 200", resp.Status, answer)
+	sent := envelope(t, channel, map[string]string{"status": "shipped"})
+	if resp := h.publish("Bearer "+h.mint(token.Publish, channel), sent); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("publish answered %s, want 204", resp.Status)
 	}
 
 	got := c.read()
@@ -293,11 +291,11 @@ func TestASubscriberThatStopsReadingIsDisconnectedWithoutHoldingUpThePublisher(t
 	healthy := h.connect()
 	healthy.subscribe("s-2", channel, h.mint(token.Subscribe, channel))
 
-	sent := event(t, strings.Repeat("x", 1<<10))
+	sent := envelope(t, channel, strings.Repeat("x", 1<<10))
 	published := 4 * budgetBytes / len(sent)
 	for i := range published {
-		if resp, answer := h.publish(h.mint(token.Publish, channel), channel, sent); resp.StatusCode != http.StatusOK {
-			t.Fatalf("publish %d answered %s %v while a subscriber stopped reading, want 200", i, resp.Status, answer)
+		if resp := h.publish("Bearer "+h.mint(token.Publish, channel), sent); resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("publish %d answered %s while a subscriber stopped reading, want 204", i, resp.Status)
 		}
 		if got := healthy.read(); got["type"] != "data" || got["id"] != "s-2" || got["event"] != sent {
 			t.Fatalf("after publish %d the subscriber still reading got %v, want a data frame for s-2", i, got)
@@ -356,7 +354,7 @@ func TestASubscribeTokenIsRefusedOnAnyChannelButTheOneItNames(t *testing.T) {
 		t.Fatalf("subscribe answered %v, want subscribe_error for s-1", got)
 	}
 
-	h.publish(h.mint(token.Publish, "/app/orders/o-2"), "/app/orders/o-2", event(t, "secret"))
+	h.publishAs(token.Publish, "/app/orders/o-2", "secret")
 	if frame, err := c.next(200 * time.Millisecond); err == nil {
 		t.Fatalf("a refused subscription received %v", frame)
 	}
@@ -440,7 +438,7 @@ func TestAnUnsubscribedChannelDeliversNothingMore(t *testing.T) {
 		t.Fatalf("unsubscribe answered %v, want unsubscribe_success for s-1", got)
 	}
 
-	h.publish(h.mint(token.Publish, channel), channel, event(t, "late"))
+	h.publishAs(token.Publish, channel, "late")
 	if frame, err := c.next(200 * time.Millisecond); err == nil {
 		t.Fatalf("an unsubscribed connection received %v", frame)
 	}
@@ -453,57 +451,63 @@ func TestABrowserCannotPublishOverTheSocket(t *testing.T) {
 	c := h.connect()
 	channel := "/app/rooms/r-1"
 
-	c.send(map[string]any{"type": "publish", "id": "p-1", "channel": channel, "events": []string{event(t, "hi")}, "authorization": map[string]string{"Authorization": h.mint(token.Publish, channel)}})
+	c.send(map[string]any{"type": "publish", "id": "p-1", "channel": channel, "events": []string{envelope(t, channel, "hi")}, "authorization": map[string]string{"Authorization": h.mint(token.Publish, channel)}})
 
 	if got := c.read(); got["type"] != "publish_error" || got["id"] != "p-1" {
 		t.Fatalf("publish answered %v, want publish_error for p-1", got)
 	}
 }
 
-func TestAServerPublishWithASubscribeTokenIsUnauthorized(t *testing.T) {
+func TestAServerPublishIsUnauthorizedWithoutABearerPublishTokenForItsChannel(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 	channel := "/app/orders/o-1"
+	sent := envelope(t, channel, "forged")
 
-	resp, answer := h.publish(h.mint(token.Subscribe, channel), channel, event(t, "forged"))
-
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("publish answered %s %v, want 401", resp.Status, answer)
+	for name, authorization := range map[string]string{
+		"a subscribe token":       "Bearer " + h.mint(token.Subscribe, channel),
+		"another channel's token": "Bearer " + h.mint(token.Publish, "/app/orders/o-2"),
+		"a token with no Bearer":  h.mint(token.Publish, channel),
+		"no authorization":        "",
+	} {
+		if resp := h.publish(authorization, sent); resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("publish with %s answered %s, want 401", name, resp.Status)
+		}
 	}
 }
 
-func TestAServerPublishRelaysAnyJSONEventAndRefusesOneOverTheSizeLimitOrNotJSON(t *testing.T) {
+func TestAServerPublishRefusesAnEnvelopeOverTheSizeLimitOrNamingNoChannel(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 	c := h.connect()
 	channel := "/app/orders/o-1"
 	c.subscribe("s-1", channel, h.mint(token.Subscribe, channel))
+	authorization := "Bearer " + h.mint(token.Publish, channel)
 
-	oversized := event(t, strings.Repeat("x", gateway.MaxEventBytes))
-	object := `{"ch":"/app/orders/o-2","anything":true}`
-	bare := `"bare"`
-	resp, answer := h.publish(h.mint(token.Publish, channel), channel, oversized, object, "not json", bare)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("publish answered %s %v, want 200", resp.Status, answer)
+	refused := map[string]struct {
+		body   string
+		status int
+	}{
+		"an envelope past 240 KB": {envelope(t, channel, strings.Repeat("x", gateway.MaxEventBytes)), http.StatusRequestEntityTooLarge},
+		"no JSON":                 {"not json", http.StatusBadRequest},
+		"no channel":              {`{"v":1,"data":"x"}`, http.StatusBadRequest},
+		"no channel to publish":   {envelope(t, "/app/orders/*", "x"), http.StatusBadRequest},
 	}
-
-	failed, _ := answer["failed"].([]any)
-	successful, _ := answer["successful"].([]any)
-	if len(failed) != 2 || len(successful) != 2 {
-		t.Fatalf("publish answered %v, want the oversized and the non-JSON event failed and the other two published", answer)
-	}
-	for _, published := range successful {
-		if identifier, _ := published.(map[string]any)["identifier"].(string); identifier == "" {
-			t.Fatalf("publish answered %v, want every published event given an identifier", answer)
+	for name, sent := range refused {
+		if resp := h.publish(authorization, sent.body); resp.StatusCode != sent.status {
+			t.Errorf("publish of %s answered %s, want %d", name, resp.Status, sent.status)
 		}
 	}
-	if got := c.read(); got["event"] != object {
-		t.Fatalf("subscriber got %v, want %s as published", got, object)
+
+	largest := envelope(t, channel, "")
+	largest = envelope(t, channel, strings.Repeat("x", gateway.MaxEventBytes-len(largest)))
+	if resp := h.publish(authorization, largest); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("publish of an envelope of exactly 240 KB answered %s, want 204", resp.Status)
 	}
-	if got := c.read(); got["event"] != bare {
-		t.Fatalf("subscriber got %v, want %s as published", got, bare)
+	if got := c.read(); got["event"] != largest {
+		t.Fatalf("subscriber got %.200v, want the envelope of exactly 240 KB as the first event", got)
 	}
 }
 
@@ -536,8 +540,8 @@ func TestAWildcardSubscriptionOnANamespaceReceivesAPublishBelowIt(t *testing.T) 
 	}
 
 	channel := "/app/orders/o-1"
-	sent := event(t, "shipped")
-	h.publish(h.mint(token.Publish, channel), channel, sent)
+	sent := envelope(t, channel, "shipped")
+	h.publish("Bearer "+h.mint(token.Publish, channel), sent)
 
 	if got := c.read(); got["type"] != "data" || got["id"] != "s-1" || got["event"] != sent {
 		t.Fatalf("subscriber got %v, want a data frame for s-1 carrying %s", got, sent)

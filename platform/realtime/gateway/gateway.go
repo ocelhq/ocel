@@ -15,10 +15,9 @@ const maxSubscriptions = 200
 const (
 	Subprotocol = "aws-appsync-event-ws"
 	SocketPath  = "/event/realtime"
-	PublishPath = "/event"
+	PublishPath = "/publish"
 
-	MaxEventBytes       = 240 * 1024
-	MaxEventsPerPublish = 5
+	MaxEventBytes = 240 * 1024
 
 	DefaultKeepAlive        = 60 * time.Second
 	DefaultQueueBudgetBytes = 1 << 20
