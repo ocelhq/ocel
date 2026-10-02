@@ -1,4 +1,4 @@
-package taskruns
+package runs
 
 import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"

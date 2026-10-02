@@ -1,10 +1,6 @@
-package taskruns
+package runs
 
 import (
-	"time"
-
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -26,11 +22,4 @@ func NewRunMessage(run provider.Run) *taskv1.Run {
 		FinishedAt: TimestampOf(run.FinishedAt),
 		ExpiresAt:  TimestampOf(run.ExpiresAt),
 	}
-}
-
-func TimestampOf(t time.Time) *timestamppb.Timestamp {
-	if t.IsZero() {
-		return nil
-	}
-	return timestamppb.New(t)
 }

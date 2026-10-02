@@ -1,4 +1,4 @@
-package taskruns
+package runs
 
 import (
 	"math/rand/v2"
