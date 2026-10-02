@@ -1,6 +1,8 @@
 package providerserver
 
 import (
+	"slices"
+
 	"github.com/ocelhq/ocel/pkg/kvstore"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -50,11 +52,8 @@ func manifestResource(message *contractv1.ManifestResource) (provider.Resource, 
 		return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "resource %s declares no type, so nothing knows what to provision for it", name)
 	}
 	resource := provider.Resource{Name: name, Declared: declared, Type: kind, Binding: message.GetBinding()}
-	if message.GetTopic() != nil && kind != provider.BindingTopic && kind != provider.BindingTask {
-		return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "%s %s carries a topic's config, and only a topic or a task takes one", kind, declared)
-	}
-	if message.GetRealtime() != nil && kind != provider.BindingRealtime {
-		return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "%s %s carries a realtime config, and only realtime takes one", kind, declared)
+	if err := refuseConfigOfAnotherType(kind, declared, message); err != nil {
+		return provider.Resource{}, err
 	}
 	switch {
 	case kind == provider.BindingRealtime:
@@ -81,6 +80,29 @@ func manifestResource(message *contractv1.ManifestResource) (provider.Resource, 
 		resource.KV = spec
 	}
 	return resource, nil
+}
+
+func refuseConfigOfAnotherType(kind provider.BindingType, declared string, message *contractv1.ManifestResource) error {
+	var config, takers string
+	var takenBy []provider.BindingType
+	switch message.GetConfig().(type) {
+	case nil:
+		return nil
+	case *contractv1.ManifestResource_Postgres:
+		config, takers, takenBy = "a postgres config", "postgres", []provider.BindingType{provider.BindingPostgres}
+	case *contractv1.ManifestResource_Bucket:
+		config, takers, takenBy = "a bucket config", "a bucket", []provider.BindingType{provider.BindingBucket}
+	case *contractv1.ManifestResource_Kv:
+		config, takers, takenBy = "a kv config", "a kv store", []provider.BindingType{provider.BindingKV}
+	case *contractv1.ManifestResource_Topic:
+		config, takers, takenBy = "a topic's config", "a topic or a task", []provider.BindingType{provider.BindingTopic, provider.BindingTask}
+	case *contractv1.ManifestResource_Realtime:
+		config, takers, takenBy = "a realtime config", "realtime", []provider.BindingType{provider.BindingRealtime}
+	}
+	if slices.Contains(takenBy, kind) {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid, "%s %s carries %s, and only %s takes one", kind, declared, config, takers)
 }
 
 func kvSpec(config *resourcesv1.KvConfig) (*provider.KVSpec, error) {
