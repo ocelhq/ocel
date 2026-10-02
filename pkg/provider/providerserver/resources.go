@@ -53,7 +53,16 @@ func manifestResource(message *contractv1.ManifestResource) (provider.Resource, 
 	if message.GetTopic() != nil && kind != provider.BindingTopic && kind != provider.BindingTask {
 		return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "%s %s carries a topic's config, and only a topic or a task takes one", kind, declared)
 	}
+	if message.GetRealtime() != nil && kind != provider.BindingRealtime {
+		return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "%s %s carries a realtime config, and only realtime takes one", kind, declared)
+	}
 	switch {
+	case kind == provider.BindingRealtime:
+		spec, err := readRealtimeSpec(declared, message.GetRealtime())
+		if err != nil {
+			return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "realtime %s: %s", declared, err)
+		}
+		resource.Realtime = spec
 	case kind == provider.BindingTopic || kind == provider.BindingTask:
 		spec, err := readTopicSpec(kind, message.GetTopic())
 		if err != nil {

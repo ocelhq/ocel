@@ -21,6 +21,7 @@ type Resource struct {
 	Bucket   *BucketSpec
 	KV       *KVSpec
 	Topic    *TopicSpec
+	Realtime *RealtimeSpec
 }
 
 type PostgresSpec struct {

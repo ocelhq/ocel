@@ -39,6 +39,7 @@ var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/pkg/keyvalue":            true,
 	"github.com/ocelhq/ocel/pkg/kvstore":             true,
 	"github.com/ocelhq/ocel/pkg/localrpc":            true,
+	"github.com/ocelhq/ocel/pkg/realtime":            true,
 	"github.com/ocelhq/ocel/pkg/refusal":             true,
 	"github.com/ocelhq/ocel/pkg/router":              true,
 	"github.com/ocelhq/ocel/pkg/runtime":             true,

@@ -7,8 +7,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -20,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/realtime"
 )
 
 type uncosted struct{ provider.Provider }
@@ -189,6 +192,41 @@ func TestShapeHandsTheProviderEachConsumerScheduleAndWorkerItWouldRun(t *testing
 	}
 	if want := []provider.WorkerSpec{{Name: "media"}}; !reflect.DeepEqual(workers["admin"], want) {
 		t.Errorf("shaped admin workers = %+v, want %+v", workers["admin"], want)
+	}
+}
+
+func TestShapeHandsTheProviderEachRealtimeChannelAndTheTokenTTL(t *testing.T) {
+	recorded := shapeRecorded{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), shaped: &provider.ShapeRequest{}}
+	client, _ := costServed(t, recorded)
+	req := shapeRequest()
+	req.Manifest.Resources = append(req.Manifest.Resources, &contractv1.ManifestResource{
+		LogicalName: "realtime--app",
+		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME, Name: "app"},
+		Config: &contractv1.ManifestResource_Realtime{Realtime: &resourcesv1.RealtimeConfig{
+			TokenTtl: durationpb.New(2 * time.Minute),
+			Channels: []*resourcesv1.RealtimeChannel{{
+				Pattern:   "orders/:orderId",
+				Subscribe: resourcesv1.RealtimeSubscribe_REALTIME_SUBSCRIBE_PUBLIC,
+				Publish:   resourcesv1.RealtimePublish_REALTIME_PUBLISH_SERVER,
+			}},
+		}},
+	})
+
+	if _, err := client.Shape(context.Background(), req); err != nil {
+		t.Fatalf("Shape() error = %v", err)
+	}
+	var shaped *provider.RealtimeSpec
+	for _, resource := range recorded.shaped.Resources {
+		if resource.Type == provider.BindingRealtime {
+			shaped = resource.Realtime
+		}
+	}
+	want := &provider.RealtimeSpec{
+		TokenTTL: 2 * time.Minute,
+		Channels: []provider.ChannelSpec{{Pattern: "orders/:orderId", Subscribe: realtime.ChannelAccessPublic, Publish: realtime.ChannelAccessServer}},
+	}
+	if !reflect.DeepEqual(shaped, want) {
+		t.Errorf("shaped realtime = %+v, want %+v", shaped, want)
 	}
 }
 
