@@ -1,9 +1,11 @@
 package gcp
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
 	"cloud.google.com/go/iam/apiv1/iampb"
@@ -14,6 +16,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
@@ -88,6 +93,45 @@ func (b bootstrap) raiseTasks(ctx context.Context, tier environment.Tier, progre
 	}
 	ensureProgress(progress).Debug("The " + string(tier) + " tier keeps its runs in " + b.clients.TaskDatabase(tier) + " and delays messages in " + b.clients.DelayQueue(tier))
 	return nil
+}
+
+func (b bootstrap) tasksFree(ctx context.Context, tier environment.Tier, features []string) error {
+	if !slices.Contains(features, tasksFeature) {
+		return nil
+	}
+	projects, err := b.records.List(ctx, stackrecords.ProjectsPartition(tier))
+	if err != nil {
+		return fmt.Errorf("read the projects deployed on tier %s: %w", tier, err)
+	}
+	var held []string
+	for _, project := range projects {
+		if len(project.Key.Path) != 1 {
+			continue
+		}
+		slug := project.Key.Path[0]
+		stacks, err := stackrecords.List(ctx, b.records, tier, slug)
+		if err != nil {
+			return err
+		}
+		for _, stack := range stacks {
+			for _, binding := range stack.Bindings {
+				if binding.Type != provider.BindingTopic && binding.Type != provider.BindingTask {
+					continue
+				}
+				named := fmt.Sprintf("%s %s of project %s environment %s", binding.Type, cmp.Or(binding.Properties[topicDeclaredProperty], binding.Name), slug, stack.Name.Env)
+				if !slices.Contains(held, named) {
+					held = append(held, named)
+				}
+			}
+		}
+	}
+	if len(held) == 0 {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"tier %s still runs %s, and taking feature %s down deletes the task database their runs are kept in and the account Pub/Sub pushes to their workers as.\n"+
+			"Remove those topics and tasks from their projects and deploy them, or destroy their environments, then remove feature %s again",
+		tier, strings.Join(held, ", "), tasksFeature, tasksFeature)
 }
 
 func (b bootstrap) tearTasks(ctx context.Context, tier environment.Tier) error {

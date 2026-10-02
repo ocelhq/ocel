@@ -1,14 +1,66 @@
 package gcp
 
 import (
+	"context"
+	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
+
+func recordingTopics(t *testing.T, tier environment.Tier, bindings ...provider.Binding) keyvalue.Store {
+	t.Helper()
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	if _, err := store.Write(ctx, keyvalue.Entry{Key: stackrecords.ProjectKey(tier, "shop"), Value: []byte(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := stackrecords.Write(ctx, store, tier, "shop", naming.InfraStack("prod"), stackrecords.Stack{Kind: provider.StackInfra, Bindings: bindings}); err != nil {
+		t.Fatal(err)
+	}
+	return store
+}
+
+func TestDroppingTasksWhileAnEnvironmentDeclaresATopicIsRefusedNamingIt(t *testing.T) {
+	t.Parallel()
+
+	b := bootstrap{records: recordingTopics(t, environment.TierProduction,
+		provider.Binding{Type: provider.BindingBucket, Name: "uploads"},
+		provider.Binding{Type: provider.BindingTask, Name: "task--resize", Properties: map[string]string{topicDeclaredProperty: "resize"}},
+	)}
+
+	drop := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{tasksFeature}}
+	err := b.dropFeatures(context.Background(), surveyed(tasksFeature), drop, nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "task resize of project shop environment prod") {
+		t.Fatalf("dropFeatures() while a task is declared = %v, want a refusal naming the task, its project and environment", err)
+	}
+	if strings.Contains(refused.Message, "uploads") {
+		t.Errorf("the refusal names %q, want only what runs on the feature", refused.Message)
+	}
+}
+
+func TestDroppingTasksIgnoresATopicOnAnotherTier(t *testing.T) {
+	t.Parallel()
+
+	b := bootstrap{records: recordingTopics(t, environment.TierPreview,
+		provider.Binding{Type: provider.BindingTopic, Name: "topic--orders", Properties: map[string]string{topicDeclaredProperty: "orders"}},
+	)}
+	if err := b.tasksFree(context.Background(), environment.TierProduction, []string{tasksFeature}); err != nil {
+		t.Errorf("tasksFree() with a topic only on another tier = %v, want the feature free", err)
+	}
+}
 
 func TestTopicsAndTasksAreAFeatureNoEdgePullsIn(t *testing.T) {
 	t.Parallel()
