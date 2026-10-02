@@ -49,7 +49,7 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 	if !ephemeral(env) {
 		spec.Infra = naming.InfraStack(name)
 	}
-	workers, err := workersByApp(manifest)
+	workers, err := readWorkersByApp(manifest)
 	if err != nil {
 		return provider.DeploySpec{}, err
 	}

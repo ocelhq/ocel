@@ -11,10 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const (
-	defaultWorker  = "worker"
-	maxConcurrency = 1000
-)
+const defaultWorker = "worker"
 
 type ServedTwiceError struct {
 	Subject      string
@@ -152,12 +149,5 @@ func refuseAboveCeiling(d declaredResource, compute provider.Compute, ceilings [
 }
 
 func refuseWorkerLimits(d declaredResource) error {
-	return refuseConcurrency(d, d.Worker.GetConcurrency())
-}
-
-func refuseConcurrency(d declaredResource, concurrency int32) error {
-	if concurrency != 0 && (concurrency < 1 || concurrency > maxConcurrency) {
-		return refuse(d, "has concurrency %d, and concurrency is 1 to %d", concurrency, maxConcurrency)
-	}
-	return nil
+	return refuseAtDeclaration(d, provider.RefuseConcurrency(d.Worker.GetConcurrency()))
 }

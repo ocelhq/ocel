@@ -127,6 +127,13 @@ func refuse(d declaredResource, format string, args ...any) error {
 	return &InvalidDeclarationError{Source: d.Source, Reason: d.label() + " " + fmt.Sprintf(format, args...)}
 }
 
+func refuseAtDeclaration(d declaredResource, err error) error {
+	if err == nil {
+		return nil
+	}
+	return refuse(d, "%v", err)
+}
+
 func firstRefusal(errs ...error) error {
 	for _, err := range errs {
 		if err != nil {

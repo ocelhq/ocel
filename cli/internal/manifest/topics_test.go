@@ -1,8 +1,11 @@
 package manifest
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -10,6 +13,13 @@ import (
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
 
 func TestATopicCarriesEveryConsumerDeclaredOnIt(t *testing.T) {
@@ -161,6 +171,8 @@ func TestEveryLimitIsRefusedAtTheDeclaringLine(t *testing.T) {
 		"retry attempts above 100":             {[]declaredResource{task("t", "src/t.ts:1", &resourcesv1.TaskConfig{Retry: &resourcesv1.RetryPolicy{MaxAttempts: 101}})}, []string{"maxAttempts", "100"}},
 		"retry attempts below 1":               {[]declaredResource{task("t", "src/t.ts:1", &resourcesv1.TaskConfig{Retry: &resourcesv1.RetryPolicy{MaxAttempts: -1}})}, []string{"maxAttempts"}},
 		"retry max delay above 600s":           {[]declaredResource{task("t", "src/t.ts:1", &resourcesv1.TaskConfig{Retry: &resourcesv1.RetryPolicy{MaxDelay: seconds(601)}})}, []string{"maxDelay", "10m"}},
+		"retry min delay above 600s":           {[]declaredResource{task("t", "src/t.ts:1", &resourcesv1.TaskConfig{Retry: &resourcesv1.RetryPolicy{MinDelay: seconds(601)}})}, []string{"minDelay", "10m"}},
+		"retry min delay below no time":        {[]declaredResource{task("t", "src/t.ts:1", &resourcesv1.TaskConfig{Retry: &resourcesv1.RetryPolicy{MinDelay: seconds(-1)}})}, []string{"minDelay", "negative"}},
 		"retry min delay above max delay":      {[]declaredResource{task("t", "src/t.ts:1", &resourcesv1.TaskConfig{Retry: &resourcesv1.RetryPolicy{MinDelay: seconds(60), MaxDelay: seconds(30)}})}, []string{"minDelay", "maxDelay"}},
 		"a topic's retry":                      {[]declaredResource{topic("t", "src/t.ts:1", &resourcesv1.TopicConfig{Retry: &resourcesv1.RetryPolicy{MaxAttempts: 101}})}, []string{"maxAttempts"}},
 		"task concurrency above 1000":          {[]declaredResource{task("t", "src/t.ts:1", &resourcesv1.TaskConfig{Concurrency: 1001})}, []string{"concurrency", "1000"}},
@@ -216,4 +228,91 @@ func consumersOf(topicName string, n int) []declaredResource {
 		out = append(out, consumer(fmt.Sprintf("c%d", i), fmt.Sprintf("src/c%d.ts:1", i), &resourcesv1.ConsumerConfig{Topic: topicName}))
 	}
 	return out
+}
+
+func TestAManifestTheBuildEmitsReachesTheProviderWithEveryTopicTaskAndWorker(t *testing.T) {
+	t.Parallel()
+
+	m, err := assembleWorkers([]app{{Name: "web"}}, []declaredResource{
+		task("nightly-report", "src/report.ts:1", &resourcesv1.TaskConfig{
+			Cron:  "0 3 * * *",
+			Ttl:   durationpb.New(time.Hour),
+			Retry: &resourcesv1.RetryPolicy{MaxAttempts: 5, MinDelay: durationpb.New(10 * time.Minute)},
+		}),
+		topic("orders", "src/orders.ts:1", &resourcesv1.TopicConfig{Retry: &resourcesv1.RetryPolicy{MaxDelay: durationpb.New(5 * time.Minute)}}),
+		consumer("email", "src/email.ts:4", &resourcesv1.ConsumerConfig{Topic: "orders", Concurrency: 20, Lanes: []topicv1.Lane{topicv1.Lane_LANE_HIGH}}),
+		consumer("ledger", "src/ledger.ts:4", &resourcesv1.ConsumerConfig{Topic: "orders", Batch: &resourcesv1.BatchPolicy{Size: 50}}),
+	}, nil)
+	if err != nil {
+		t.Fatalf("assemble() = %v", err)
+	}
+
+	recorded := &provider.ShapeRequest{}
+	client := shapeServed(t, shapeRecorded{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), shaped: recorded})
+	if _, err := client.Shape(t.Context(), &contractv1.ShapeRequest{
+		Manifest:    m,
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	}); err != nil {
+		t.Fatalf("Shape() = %v, want the provider to accept the manifest the build emits", err)
+	}
+
+	consumers := map[string]provider.ConsumerSpec{}
+	for _, resource := range recorded.Resources {
+		if resource.Topic == nil {
+			continue
+		}
+		for _, consumer := range resource.Topic.Consumers {
+			consumers[consumer.Name] = consumer
+		}
+	}
+	want := map[string]provider.RetryPolicy{
+		"nightly-report": {MaxAttempts: 5, MinDelay: 10 * time.Minute, MaxDelay: 10 * time.Minute},
+		"email":          {MaxAttempts: 3, MinDelay: time.Second, MaxDelay: 5 * time.Minute},
+		"ledger":         {MaxAttempts: 3, MinDelay: time.Second, MaxDelay: 5 * time.Minute},
+	}
+	for name, retry := range want {
+		consumer, found := consumers[name]
+		if !found || consumer.Worker != "worker" || consumer.Retry != retry {
+			t.Errorf("consumer %s = %+v (found %v), want it on the default worker retrying %+v", name, consumer, found, retry)
+		}
+	}
+	var workers []provider.WorkerSpec
+	for _, entry := range recorded.Deploy.Apps {
+		workers = append(workers, entry.Workers...)
+	}
+	if wantWorkers := []provider.WorkerSpec{{Name: "worker"}}; !slices.Equal(workers, wantWorkers) {
+		t.Errorf("workers = %+v, want %+v", workers, wantWorkers)
+	}
+}
+
+type shapeRecorded struct {
+	provider.Provider
+	shaped *provider.ShapeRequest
+}
+
+func (s shapeRecorded) Hooks() provider.Hooks {
+	hooks := s.Provider.Hooks()
+	shape := hooks.Cost.Shape
+	hooks.Cost = &provider.CostHooks{
+		Shape: func(ctx context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
+			*s.shaped = req
+			return shape(ctx, req)
+		},
+		Estimate: hooks.Cost.Estimate,
+	}
+	return hooks
+}
+
+func shapeServed(t *testing.T, p provider.Provider) contractv1connect.ProviderServiceClient {
+	t.Helper()
+	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
+		Version: "1.0.0",
+		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
+	}))
+	t.Cleanup(server.Close)
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+	if _, err := client.Configure(t.Context(), &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{ProjectDir: t.TempDir()}}); err != nil {
+		t.Fatalf("Configure() = %v", err)
+	}
+	return client
 }

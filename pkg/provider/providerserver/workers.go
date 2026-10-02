@@ -2,6 +2,7 @@ package providerserver
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -23,7 +24,7 @@ func RefuseUnsupportedTopicsTasksAndWorkers(facts provider.Facts, manifest *cont
 		declared, facts.Vendor)
 }
 
-func workersByApp(manifest *contractv1.Manifest) (map[string][]provider.WorkerSpec, error) {
+func readWorkersByApp(manifest *contractv1.Manifest) (map[string][]provider.WorkerSpec, error) {
 	computes := make(map[string]provider.Compute, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
 		computes[app.GetName()] = provider.ComputeOf(app)
@@ -47,12 +48,28 @@ func workersByApp(manifest *contractv1.Manifest) (map[string][]provider.WorkerSp
 			return nil, refusal.Refuse(refusal.CodeInvalid, "worker %q runs on %q compute, and its app %q runs on %q: a worker runs on its app's compute",
 				name, worker.GetCompute(), worker.GetApp(), compute)
 		}
-		if worker.GetConcurrency() < 0 {
-			return nil, refusal.Refuse(refusal.CodeInvalid, "worker %q has concurrency %d, and concurrency is never negative", name, worker.GetConcurrency())
+		if err := provider.RefuseConcurrency(worker.GetConcurrency()); err != nil {
+			return nil, refusal.Refuse(refusal.CodeInvalid, "worker %q %s", name, err)
 		}
 		byApp[worker.GetApp()] = append(byApp[worker.GetApp()], provider.WorkerSpec{Name: name, Concurrency: int(worker.GetConcurrency())})
 	}
 	return byApp, nil
+}
+
+func refuseConsumerOnUndeclaredWorker(manifest *contractv1.Manifest, resource provider.Resource) error {
+	if resource.Topic == nil {
+		return nil
+	}
+	for _, consumer := range resource.Topic.Consumers {
+		declared := slices.ContainsFunc(manifest.GetWorkers(), func(worker *contractv1.ManifestWorker) bool {
+			return worker.GetName() == consumer.Worker
+		})
+		if !declared {
+			return refusal.Refuse(refusal.CodeInvalid, "%s %s: consumer %q runs on worker %q, and this manifest declares no worker by that name",
+				resource.Type, resource.Declared, consumer.Name, consumer.Worker)
+		}
+	}
+	return nil
 }
 
 func findTopicTaskOrWorker(manifest *contractv1.Manifest) (string, bool) {

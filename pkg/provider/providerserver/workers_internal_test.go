@@ -86,6 +86,7 @@ func TestAWorkerNoAppCanRunIsRefusedAsInvalid(t *testing.T) {
 		{name: "joining no app in the manifest", workers: []*contractv1.ManifestWorker{{Name: "media", App: "jobs", Compute: "serverless"}}, says: `app "jobs"`},
 		{name: "on a compute its app does not run", workers: []*contractv1.ManifestWorker{{Name: "media", App: "web", Compute: "container"}}, says: "container"},
 		{name: "a negative concurrency", workers: []*contractv1.ManifestWorker{{Name: "media", App: "web", Compute: "serverless", Concurrency: -2}}, says: "concurrency -2"},
+		{name: "a concurrency above 1000", workers: []*contractv1.ManifestWorker{{Name: "media", App: "web", Compute: "serverless", Concurrency: 1001}}, says: "concurrency 1001"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
