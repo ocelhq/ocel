@@ -36,7 +36,8 @@ var (
 type Outcome int
 
 const (
-	Succeeded Outcome = iota
+	Unknown Outcome = iota
+	Succeeded
 	Aborted
 	TimedOut
 	Failed
