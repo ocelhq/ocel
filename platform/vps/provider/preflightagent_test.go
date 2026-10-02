@@ -33,6 +33,11 @@ func currentAgent(t *testing.T) []byte {
 
 func preflightingResources(t *testing.T, machine *scripted, declared ...provider.Resource) error {
 	t.Helper()
+	return preflightingIn(t, machine, naming.InfraStack("prod"), declared...)
+}
+
+func preflightingIn(t *testing.T, machine *scripted, infra naming.StackName, declared ...provider.Resource) error {
+	t.Helper()
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
 		func(context.Context) (host.Conn, error) { return machine, nil },
@@ -44,9 +49,10 @@ func preflightingResources(t *testing.T, machine *scripted, declared ...provider
 	}
 	return p.PreflightDeploy(context.Background(), provider.DeployPreflight{
 		Deploy: provider.DeploySpec{
-			Slug: "shop",
-			Tier: environment.TierProduction,
-			Apps: []provider.AppEntry{{App: "web", Stack: stack, Image: deployedRef}},
+			Slug:  "shop",
+			Tier:  environment.TierProduction,
+			Infra: infra,
+			Apps:  []provider.AppEntry{{App: "web", Stack: stack, Image: deployedRef}},
 		},
 		Resources: declared,
 	})
@@ -93,5 +99,26 @@ func TestADeployDeclaringNoTopicOrTaskNeverAsksAboutTheAgent(t *testing.T) {
 		if strings.Contains(command, host.LiveBinary) {
 			t.Errorf("a deploy with no topic or task asked about the agent: %q", command)
 		}
+	}
+}
+
+func TestAnEphemeralPreviewDeclaringATaskIsRefusedBeforeTheBoxIsAsked(t *testing.T) {
+	t.Parallel()
+
+	machine := boxSaying(map[string]answer{
+		"uname -m":      {stdout: "x86_64\n"},
+		host.LiveBinary: agentSurveyed(t, currentAgent(t)),
+	})
+	err := preflightingIn(t, machine, naming.StackName{}, aDeclaredTask)
+	if err == nil {
+		t.Fatal("PreflightDeploy() let an ephemeral preview declare a task, and it has no queue of its own, so every trigger would fail at runtime")
+	}
+	for _, want := range []string{"receipt", "ephemeral"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("PreflightDeploy() = %q, want it to name %s", err, want)
+		}
+	}
+	if len(machine.ran) != 0 {
+		t.Errorf("PreflightDeploy() ran %v on the box before refusing what the config asks for", machine.ran)
 	}
 }
