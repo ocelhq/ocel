@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/envelope"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
@@ -31,6 +32,8 @@ const (
 
 	pushPrefix    = "/topics/"
 	consumerInfix = "/consumers/"
+
+	cancelPoll = 500 * time.Millisecond
 )
 
 type Deliveries struct {
@@ -167,7 +170,10 @@ func (d Deliveries) deliver(ctx context.Context, delivered pushedRun) error {
 		attemptCtx, stop = context.WithTimeoutCause(attemptCtx, maxDuration, envelope.ErrTimedOut)
 		defer stop()
 	}
+	watching, stopWatching := context.WithCancel(attemptCtx)
+	go d.watchForCancel(watching, delivered.execution(), cancel)
 	res := envelope.Post(ctx, attemptCtx, http.DefaultClient, d.Worker, envelopeOf(delivered, claimed))
+	stopWatching()
 	retry, err := d.finish(ctx, delivered, res)
 	if err != nil && !errors.Is(err, errRunUnchanged) {
 		return err
@@ -176,6 +182,23 @@ func (d Deliveries) deliver(ctx context.Context, delivered pushedRun) error {
 		return fmt.Errorf("attempt %d of %s failed and is retried: %s", claimed.Attempts, delivered.execution(), res.Reason)
 	}
 	return nil
+}
+
+func (d Deliveries) watchForCancel(ctx context.Context, execution string, cancel context.CancelCauseFunc) {
+	ticker := time.NewTicker(cancelPoll)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		run, err := d.Store.readStoredRun(ctx, execution)
+		if errors.Is(err, keyvalue.ErrNotFound) || (err == nil && run.Status == provider.RunCanceled) {
+			cancel(envelope.ErrCanceled)
+			return
+		}
+	}
 }
 
 func (d Deliveries) claim(ctx context.Context, delivered pushedRun) (storedRun, error) {
