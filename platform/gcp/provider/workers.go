@@ -119,27 +119,23 @@ func hostsWorkers(app *provider.AppSpec) bool {
 	return len(app.Workers) > 0 && app.PreviewLabel == ""
 }
 
-func (p *Provider) nameWorkers(c *clients, spec provider.StackSpec) ([]deployedWorker, error) {
+func (p *Provider) nameWorkers(c *clients, spec provider.StackSpec) []deployedWorker {
 	if !hostsWorkers(spec.App) {
-		return nil, nil
+		return nil
 	}
 	named := make([]deployedWorker, 0, len(spec.App.Workers))
 	for _, worker := range spec.App.Workers {
-		service, err := c.WorkerService(spec.Ref.Project, spec.Ref.Name.Env, spec.App.App, worker.Name)
-		if err != nil {
-			return nil, err
-		}
-		named = append(named, deployedWorker{name: worker.Name, service: service})
+		named = append(named, deployedWorker{name: worker.Name, service: c.WorkerService(spec.Ref.Project, spec.Ref.Name.Env, spec.App.App, worker.Name)})
 	}
-	return named, nil
+	return named
 }
 
 func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provider.StackSpec, image string, env map[string]string,
 	declared map[string]*provider.TopicSpec, progress progress.Log,
 ) ([]deployedWorker, error) {
-	named, err := p.nameWorkers(c, spec)
-	if err != nil || len(named) == 0 {
-		return nil, err
+	named := p.nameWorkers(c, spec)
+	if len(named) == 0 {
+		return nil, nil
 	}
 	pushAccount := c.PushAccountEmail(spec.Ref.Tier)
 	pushes := map[string]topics.Push{}

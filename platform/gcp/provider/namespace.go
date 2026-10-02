@@ -89,17 +89,10 @@ func (n Names) Service(project, env, app, function string) (string, error) {
 
 const workerInfix = "w"
 
-func (n Names) WorkerService(project, env, app, worker string) (string, error) {
-	parts := []string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), naming.Sanitize(app), workerInfix, naming.Sanitize(worker)}
-	service := strings.Join(parts, "-") + "-" + serviceHash(string(n.namespace), project, env, app, workerInfix, worker)
-	if len(service) > maxServiceNameLength {
-		return "", refusal.Refuse(refusal.CodeInvalid,
-			"worker %s of app %s would be the Cloud Run service %s, which is %d characters and Cloud Run builds a url from %d: "+
-				"a worker's service is named for the namespace, the project, the environment, the app and the worker, and ends in %d characters of a hash of them.\n"+
-				"Name a shorter worker, app, project slug or namespace in %s",
-			worker, app, service, len(service), maxServiceNameLength, serviceHashLength, provider.NamespaceEnvVar)
-	}
-	return service, nil
+func (n Names) WorkerService(project, env, app, worker string) string {
+	readable := strings.Join([]string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), workerInfix, naming.Sanitize(worker)}, "-")
+	readable = strings.TrimRight(readable[:min(len(readable), maxServiceNameLength-serviceHashLength-1)], "-")
+	return readable + "-" + serviceHash(string(n.namespace), project, env, app, workerInfix, worker)
 }
 
 const functionSuffix = "fn"
