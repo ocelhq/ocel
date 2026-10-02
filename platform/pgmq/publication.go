@@ -12,7 +12,7 @@ import (
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/taskruns"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 const (
@@ -42,7 +42,7 @@ type queueMessage struct {
 }
 
 func (e *Engine) publish(ctx context.Context, tx pgx.Tx, toPublish publication) ([]string, error) {
-	task := taskruns.IsTask(toPublish.topic)
+	task := runs.IsTask(toPublish.topic)
 	if !task {
 		staged := provider.ExpiringRecord{Purpose: provider.RecordStagedPayload, Topic: toPublish.topicName, Key: toPublish.messageID, Value: toPublish.payload, ExpiresAt: toPublish.dueAt.Add(stagedPayloadLife)}
 		if _, _, err := ensureRecord(ctx, tx, staged); err != nil {
@@ -52,7 +52,7 @@ func (e *Engine) publish(ctx context.Context, tx pgx.Tx, toPublish publication) 
 	var executions []string
 	for _, consumer := range toPublish.topic.GetConsumers() {
 		deployed := deployedConsumer{topicName: toPublish.topicName, topic: toPublish.topic, consumer: consumer, queue: queueName(toPublish.topicName, consumer.GetName())}
-		execution := taskruns.ExecutionOf(toPublish.messageID, consumer.GetName())
+		execution := runs.ExecutionOf(toPublish.messageID, consumer.GetName())
 		run := enqueuedRun{
 			execution:   execution,
 			deployed:    deployed,
@@ -61,7 +61,7 @@ func (e *Engine) publish(ctx context.Context, tx pgx.Tx, toPublish publication) 
 			dueAt:       toPublish.dueAt,
 			key:         toPublish.key,
 			lane:        laneFor(consumer, toPublish.lane),
-			maxAttempts: taskruns.AttemptsFor(retryPolicyOf(deployed), toPublish.maxAttempts),
+			maxAttempts: runs.AttemptsFor(retryPolicyOf(deployed), toPublish.maxAttempts),
 			tags:        toPublish.tags,
 			metadata:    toPublish.metadata,
 		}
@@ -82,9 +82,9 @@ func (e *Engine) publish(ctx context.Context, tx pgx.Tx, toPublish publication) 
 func laneFor(consumer *contractv1.ManifestConsumer, lane topicv1.Lane) string {
 	reads := make([]provider.Lane, 0, len(consumer.GetLanes()))
 	for _, read := range consumer.GetLanes() {
-		reads = append(reads, provider.Lane(taskruns.LaneName(read)))
+		reads = append(reads, provider.Lane(runs.LaneName(read)))
 	}
-	return taskruns.LaneFor(reads, lane)
+	return runs.LaneFor(reads, lane)
 }
 
 type enqueuedRun struct {

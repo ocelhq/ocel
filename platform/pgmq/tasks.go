@@ -14,7 +14,7 @@ import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/taskruns"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 type Tasks struct {
@@ -25,7 +25,7 @@ func (e *Engine) Tasks() Tasks { return Tasks{engine: e} }
 
 func (t Tasks) task(name string) (*contractv1.ManifestTopic, error) {
 	topic, found := t.engine.current().Topics[name]
-	if !found || !taskruns.IsTask(topic) {
+	if !found || !runs.IsTask(topic) {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no task named %q is deployed", name))
 	}
 	return topic, nil
@@ -50,7 +50,7 @@ func (t Tasks) Trigger(ctx context.Context, req *taskv1.TriggerRequest) (*taskv1
 
 func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contractv1.ManifestTopic, payload []byte, options *taskv1.TriggerOptions) (string, error) {
 	now := time.Now()
-	if err := taskruns.RefuseNonJSON(payload); err != nil {
+	if err := runs.RefuseNonJSON(payload); err != nil {
 		return "", err
 	}
 	toPublish := publication{
@@ -73,30 +73,30 @@ func (t Tasks) trigger(ctx context.Context, tx pgx.Tx, name string, topic *contr
 		toPublish.ttl = options.GetTtl().AsDuration()
 	}
 	if metadata := options.GetMetadata(); len(metadata) > 0 {
-		if err := taskruns.RefuseNonObject(metadata); err != nil {
+		if err := runs.RefuseNonObject(metadata); err != nil {
 			return "", err
 		}
 		toPublish.metadata = metadata
 	}
-	execution := taskruns.ExecutionOf(toPublish.messageID, topic.GetConsumers()[0].GetName())
+	execution := runs.ExecutionOf(toPublish.messageID, topic.GetConsumers()[0].GetName())
 	var idempotency provider.ExpiringRecord
 	if key := options.GetIdempotencyKey(); key != "" {
 		life := provider.DefaultIdempotencyKeyLife
 		if options.GetIdempotencyKeyTtl() != nil {
 			life = options.GetIdempotencyKeyTtl().AsDuration()
 		}
-		idempotency = taskruns.NewRecordNamingRun(provider.RecordIdempotency, name, key, execution, now.Add(life))
+		idempotency = runs.NewRecordNamingRun(provider.RecordIdempotency, name, key, execution, now.Add(life))
 		existing, created, err := ensureRecord(ctx, tx, idempotency)
 		if err != nil {
 			return "", err
 		}
 		if !created {
-			return taskruns.ReadRecordedRun(existing)
+			return runs.ReadRecordedRun(existing)
 		}
 	}
 	if debounce := options.GetDebounce(); debounce != nil {
 		toPublish.dueAt = now.Add(debounce.GetDelay().AsDuration())
-		pending, err := t.debounce(ctx, tx, taskruns.NewRecordNamingRun(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt))
+		pending, err := t.debounce(ctx, tx, runs.NewRecordNamingRun(provider.RecordDebounce, name, debounce.GetKey(), execution, toPublish.dueAt))
 		if err != nil {
 			return "", err
 		}
@@ -114,7 +114,7 @@ func pointIdempotencyAt(ctx context.Context, tx pgx.Tx, idempotency provider.Exp
 	if idempotency.Key == "" {
 		return nil
 	}
-	pointed := taskruns.NewRecordNamingRun(idempotency.Purpose, idempotency.Topic, idempotency.Key, execution, idempotency.ExpiresAt)
+	pointed := runs.NewRecordNamingRun(idempotency.Purpose, idempotency.Topic, idempotency.Key, execution, idempotency.ExpiresAt)
 	_, err := tx.Exec(ctx, `UPDATE ocel.records SET value = $4 WHERE purpose = $1 AND topic = $2 AND key = $3`,
 		string(pointed.Purpose), pointed.Topic, pointed.Key, string(pointed.Value))
 	return err
@@ -125,7 +125,7 @@ func (t Tasks) debounce(ctx context.Context, tx pgx.Tx, record provider.Expiring
 	if err != nil || created {
 		return "", err
 	}
-	pending, err := taskruns.ReadRecordedRun(existing)
+	pending, err := runs.ReadRecordedRun(existing)
 	if err != nil {
 		return "", err
 	}
@@ -157,5 +157,5 @@ func (t Tasks) RetrieveRun(ctx context.Context, req *taskv1.RetrieveRunRequest) 
 	if err != nil {
 		return nil, err
 	}
-	return &taskv1.RetrieveRunResponse{Run: taskruns.NewRunMessage(run)}, nil
+	return &taskv1.RetrieveRunResponse{Run: runs.NewRunMessage(run)}, nil
 }

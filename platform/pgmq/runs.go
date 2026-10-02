@@ -14,7 +14,7 @@ import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/taskruns"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 func (t Tasks) BatchTrigger(ctx context.Context, req *taskv1.BatchTriggerRequest) (*taskv1.BatchTriggerResponse, error) {
@@ -41,9 +41,9 @@ func (t Tasks) BatchTrigger(ctx context.Context, req *taskv1.BatchTriggerRequest
 }
 
 func (t Tasks) ListRuns(ctx context.Context, req *taskv1.ListRunsRequest) (*taskv1.ListRunsResponse, error) {
-	filter := provider.RunFilter{Topic: req.GetTask(), Statuses: taskruns.StatusesOf(req.GetStatuses()), Tags: req.GetTags(), Cursor: req.GetCursor(), Limit: int(req.GetLimit())}
+	filter := provider.RunFilter{Topic: req.GetTask(), Statuses: runs.StatusesOf(req.GetStatuses()), Tags: req.GetTags(), Cursor: req.GetCursor(), Limit: int(req.GetLimit())}
 	page, err := listRuns(ctx, t.engine.pool, filter)
-	if errors.Is(err, taskruns.ErrUnknownCursor) {
+	if errors.Is(err, runs.ErrUnknownCursor) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if err != nil {
@@ -51,7 +51,7 @@ func (t Tasks) ListRuns(ctx context.Context, req *taskv1.ListRunsRequest) (*task
 	}
 	resp := &taskv1.ListRunsResponse{NextCursor: page.NextCursor}
 	for _, run := range page.Runs {
-		resp.Runs = append(resp.Runs, taskruns.NewRunMessage(run))
+		resp.Runs = append(resp.Runs, runs.NewRunMessage(run))
 	}
 	return resp, nil
 }
@@ -77,7 +77,7 @@ func (t Tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*ta
 	var stop bool
 	err := t.engine.inTx(ctx, func(tx pgx.Tx) error {
 		run, err := lockRun(ctx, tx, req.GetId())
-		if err != nil || !taskruns.IsUnfinished(run.status) {
+		if err != nil || !runs.IsUnfinished(run.status) {
 			return err
 		}
 		stop = run.status == provider.RunExecuting
@@ -191,7 +191,7 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 
 func laneOf(name string) topicv1.Lane {
 	for _, lane := range allLanes {
-		if taskruns.LaneName(lane) == name {
+		if runs.LaneName(lane) == name {
 			return lane
 		}
 	}

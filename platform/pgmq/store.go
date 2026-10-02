@@ -14,7 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/taskruns"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 type querier interface {
@@ -129,7 +129,7 @@ func (s Store) ListRuns(ctx context.Context, filter provider.RunFilter) (provide
 }
 
 func listRuns(ctx context.Context, db querier, filter provider.RunFilter) (provider.RunPage, error) {
-	limit := taskruns.PageLimit(filter.Limit)
+	limit := runs.PageLimit(filter.Limit)
 	var where []string
 	var args []any
 	arg := func(value any) string {
@@ -150,7 +150,7 @@ func listRuns(ctx context.Context, db querier, filter provider.RunFilter) (provi
 		where = append(where, "tags @> "+arg(filter.Tags))
 	}
 	if filter.Cursor != "" {
-		created, execution, err := taskruns.ParseCursor(filter.Cursor)
+		created, execution, err := runs.ParseCursor(filter.Cursor)
 		if err != nil {
 			return provider.RunPage{}, err
 		}
@@ -165,15 +165,15 @@ func listRuns(ctx context.Context, db querier, filter provider.RunFilter) (provi
 	if err != nil {
 		return provider.RunPage{}, fmt.Errorf("list runs: %w", err)
 	}
-	runs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (provider.Run, error) { return scanRun(row) })
+	listed, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (provider.Run, error) { return scanRun(row) })
 	if err != nil {
 		return provider.RunPage{}, fmt.Errorf("list runs: %w", err)
 	}
-	page := provider.RunPage{Runs: runs}
-	if len(runs) > limit {
-		page.Runs = runs[:limit]
+	page := provider.RunPage{Runs: listed}
+	if len(listed) > limit {
+		page.Runs = listed[:limit]
 		last := page.Runs[limit-1]
-		page.NextCursor = taskruns.CursorOf(last.CreatedAt, last.Execution)
+		page.NextCursor = runs.CursorOf(last.CreatedAt, last.Execution)
 	}
 	return page, nil
 }

@@ -1,4 +1,4 @@
-package taskruns
+package runs
 
 import (
 	"encoding/json"
