@@ -68,6 +68,34 @@ func TestLiveACronTaskIsACloudSchedulerJobPublishingToItsTopic(t *testing.T) {
 	}
 }
 
+func TestLiveATaskThatStopsRunningOnAScheduleLosesItsJob(t *testing.T) {
+	endpoint := emulatedEndpoint(t)
+	clients := liveClients(t)
+	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
+	scheduled := map[string]*provider.TopicSpec{
+		"digest": {Cron: "*/5 * * * *", Consumers: []provider.ConsumerSpec{{Name: "digest", Worker: "worker", Exclusive: true, Retry: defaultRetry}}},
+	}
+	topology := topics.Topology{Names: names, Topics: scheduled, Publisher: appsMember, Agent: agent}
+	if err := topology.Ensure(context.Background(), clients); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
+
+	unscheduled := topics.Topology{Names: names, Topics: map[string]*provider.TopicSpec{
+		"digest": {Consumers: []provider.ConsumerSpec{{Name: "digest", Worker: "worker", Exclusive: true, Retry: defaultRetry}}},
+	}, Publisher: appsMember, Agent: agent}
+	if err := unscheduled.RemoveDropped(context.Background(), clients, scheduled); err != nil {
+		t.Fatalf("RemoveDropped() after digest dropped its cron = %v", err)
+	}
+	path := "projects/" + clients.Project + "/locations/" + clients.Region + "/jobs/" + names.ScheduleJob("digest")
+	if _, status := readJob(t, endpoint, path); status != http.StatusNotFound {
+		t.Errorf("the schedule of digest answered %d after its cron was dropped, want it gone", status)
+	}
+	if status := readTopicStatus(t, endpoint, clients.Project, names.Topic("digest")); status != http.StatusOK {
+		t.Errorf("the digest topic answered %d, want it kept: the task is still declared", status)
+	}
+}
+
 func TestLiveAScheduledMessageRunsWithTheMinuteItWasDueAt(t *testing.T) {
 	worker := newFakeWorker(t, always(http.StatusOK, `{}`))
 	d := newDelivering(t, worker)

@@ -255,7 +255,7 @@ func withMember(bindings []*pubsub.Binding, role, member string) []*pubsub.Bindi
 	return append(bindings, &pubsub.Binding{Role: role, Members: []string{member}})
 }
 
-func (t Topology) RemoveConsumers(ctx context.Context, clients *ports.Clients, topic string, consumers []string) error {
+func (t Topology) removeConsumers(ctx context.Context, clients *ports.Clients, topic string, consumers []string) error {
 	service, err := clients.PubSub()
 	if err != nil {
 		return err
@@ -279,6 +279,30 @@ func (t Topology) RemoveConsumers(ctx context.Context, clients *ports.Clients, t
 	return nil
 }
 
+func (t Topology) RemoveDropped(ctx context.Context, clients *ports.Clients, previous map[string]*provider.TopicSpec) error {
+	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
+		before, declared := previous[name]
+		if !declared {
+			continue
+		}
+		var dropped []string
+		for _, consumer := range before.Consumers {
+			if !slices.ContainsFunc(t.Topics[name].Consumers, func(kept provider.ConsumerSpec) bool { return kept.Name == consumer.Name }) {
+				dropped = append(dropped, consumer.Name)
+			}
+		}
+		if err := t.removeConsumers(ctx, clients, name, dropped); err != nil {
+			return err
+		}
+		if before.Cron != "" && t.Topics[name].Cron == "" {
+			if err := t.removeSchedule(ctx, clients, name); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 	service, err := clients.PubSub()
 	if err != nil {
@@ -289,7 +313,7 @@ func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 		for _, consumer := range t.Topics[name].Consumers {
 			consumers = append(consumers, consumer.Name)
 		}
-		if err := t.RemoveConsumers(ctx, clients, name, consumers); err != nil {
+		if err := t.removeConsumers(ctx, clients, name, consumers); err != nil {
 			return err
 		}
 		if t.Topics[name].Cron != "" {
