@@ -64,7 +64,7 @@ func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployed
 		defer e.untrack(claims[0].execution)
 	}
 	posted := time.Now()
-	res := envelope.Post(ctx, attemptCtx, http.DefaultClient, worker.URL, envelopeOf(deployed, claims, deployed.consumer.GetBatch().GetSize() > 0))
+	res := envelope.Post(ctx, attemptCtx, clientFor(worker), worker.URL, envelopeOf(deployed, claims, deployed.consumer.GetBatch().GetSize() > 0))
 	took := time.Since(posted)
 	for _, claimed := range claims {
 		loop.drop(claimed.msg.id)
@@ -222,4 +222,26 @@ func (e *Engine) settle(ctx context.Context, queue string, claimed claim, status
 		_, err := tx.Exec(ctx, "SELECT pgmq.delete($1, $2::bigint)", queue, claimed.msg.id)
 		return err
 	})
+}
+
+func clientFor(worker Worker) *http.Client {
+	if len(worker.Header) == 0 {
+		return http.DefaultClient
+	}
+	return &http.Client{Transport: headerTransport{header: worker.Header, next: http.DefaultTransport}}
+}
+
+type headerTransport struct {
+	header http.Header
+	next   http.RoundTripper
+}
+
+func (t headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	for name, values := range t.header {
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
+	}
+	return t.next.RoundTrip(req)
 }
