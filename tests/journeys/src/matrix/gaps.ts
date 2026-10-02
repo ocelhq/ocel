@@ -458,12 +458,14 @@ export const gaps: Gap[] = [
     id: "aws-reads-lanes-unweighted",
     reason:
       "on aws each queue is read by its own event source mapping in the order SQS hands its messages out, and SQS has no priority, so a lane is recorded on the run but takes no share of the reads",
+    issue: 1559,
     where: [{ on: ["aws", "aws.floci"], fixtures: [tasks.node], fails: [check(lanesCheck)] }],
   },
   {
     id: "floci-polls-one-batch-per-mapping",
     reason:
       "floci's SQS event source poller holds one poll per mapping and waits out the invocation it starts, so a queue is delivered one batch at a time and no two runs of one task overlap, where AWS scales its pollers up to the mapping's maximum concurrency",
+    issue: 1558,
     where: [
       {
         on: ["aws.floci"],
