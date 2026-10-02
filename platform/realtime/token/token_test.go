@@ -112,3 +112,29 @@ func TestATokenMintedForOneOperationIsRefusedForAnother(t *testing.T) {
 		t.Fatalf("Verify = %v, want a subscribe token refused as a publish token", err)
 	}
 }
+
+func TestATokenMintedForAnotherSubjectIsRefusedWhereOneSubjectIsExpected(t *testing.T) {
+	t.Parallel()
+
+	vectors := readTokenVectors(t)
+	want := vectors.expected()
+	key := ed25519.NewKeyFromSeed(vectors.SigningKey)
+	mint := func(subject string) string {
+		return tokentest.Sign(t, key, token.Claims{
+			Audience:  want.Audience,
+			ExpiresAt: vectors.Now + 60,
+			Subject:   subject,
+			Ocel:      token.Grant{Channel: want.Channel, Namespace: want.Namespace, Operation: token.Subscribe},
+		})
+	}
+	want.Subject = "server"
+
+	if _, err := token.Verify(mint("server"), vectors.VerifyKey, time.Unix(vectors.Now, 0), want); err != nil {
+		t.Fatalf("Verify of a server token = %v, want accepted", err)
+	}
+	_, err := token.Verify(mint("user-1"), vectors.VerifyKey, time.Unix(vectors.Now, 0), want)
+	var refused *token.Refusal
+	if !errors.As(err, &refused) || refused.Reason != token.ReasonSubject {
+		t.Fatalf("Verify = %v, want a user's token refused where a server token is expected", err)
+	}
+}
