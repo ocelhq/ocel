@@ -192,9 +192,36 @@ func (e *Engine) setAsideUnlessRunnable(ctx context.Context, deployed deployedCo
 	case held:
 		return false, e.holdInQueue(ctx, deployed, got, wait)
 	case early:
+		if deployed.fifo() {
+			e.recordReceipt(ctx, deployed, got)
+		}
 		return false, e.deferMessage(ctx, deployed, got, wait)
 	}
 	return true, acknowledged
+}
+
+func (e *Engine) recordReceipt(ctx context.Context, deployed deployedConsumer, got received) {
+	_, err := e.store.updateRun(ctx, deployed.topicName, got.execution, change{
+		set:        map[string]any{"receipt": got.record.ReceiptHandle},
+		condition:  "#delivery = :token",
+		conditions: map[string]any{":token": got.msg.Delivery},
+	})
+	if err != nil && !errors.Is(err, errConditionFailed) {
+		slog.Warn("record the receipt of a message held until its run is due", "execution", got.execution, "error", err)
+	}
+}
+
+func (e *Engine) releaseHeld(ctx context.Context, deployed deployedConsumer, receipt string) error {
+	url, err := e.queueURL(ctx, deployed.queue)
+	if err != nil {
+		return err
+	}
+	_, err = e.cfg.Queues.ChangeMessageVisibility(ctx, &sqs.ChangeMessageVisibilityInput{
+		QueueUrl:          aws.String(url),
+		ReceiptHandle:     aws.String(receipt),
+		VisibilityTimeout: 0,
+	})
+	return err
 }
 
 func (e *Engine) deferMessage(ctx context.Context, deployed deployedConsumer, got received, wait time.Duration) disposition {
