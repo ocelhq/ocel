@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { AbortTaskRunError, type RunOptions, task } from "ocel/task";
+import { AbortTaskRunError, type RunOptions, runs, task } from "ocel/task";
 import { topic } from "ocel/topic";
 import { worker } from "ocel/worker";
 
@@ -66,21 +66,28 @@ export const sequence = task("sequence", {
 
 type TallyEntry = { n: number; probe?: string; poison?: boolean };
 
-const poisonFailed = new Set<string>();
+type Delivery = { probe: string; batch: number[]; failed: boolean };
+
+async function failedBefore({ n, probe }: TallyEntry): Promise<boolean> {
+  if (probe === undefined) {
+    return false;
+  }
+  const page = await runs.list({ task: "receipt", tags: [probe], limit: 100 });
+  return page.runs.some((run) => {
+    const delivery = run.payload as Delivery;
+    return delivery.failed && delivery.batch.includes(n);
+  });
+}
 
 export const tally = task("tally", {
   batch: { size: 5, timeout: "2s" },
   retry: { maxAttempts: 3, minDelay: "1s", maxDelay: "1s" },
   run: async (entries: TallyEntry[], { ctx }) => {
     const batch = entries.map((entry) => entry.n);
-    const poisoned = entries
-      .filter((entry) => entry.poison)
-      .map((entry) => `${entry.probe}/${entry.n}`)
-      .filter((key) => !poisonFailed.has(key));
-    for (const key of poisoned) {
-      poisonFailed.add(key);
+    let failed = false;
+    for (const entry of entries.filter((entry) => entry.poison)) {
+      failed ||= !(await failedBefore(entry));
     }
-    const failed = poisoned.length > 0;
     for (const probe of new Set(entries.flatMap((entry) => (entry.probe ? [entry.probe] : [])))) {
       await receipt.trigger({ probe, batch, failed }, { tags: [probe] });
     }

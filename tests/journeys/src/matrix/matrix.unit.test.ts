@@ -3,16 +3,19 @@ import {
   exactTaskPayloadCheck,
   exactTopicPayloadCheck,
   hyphenatedTaskCheck,
+  lanesCheck,
   nextCacheChecks,
   nextDataCacheChecks,
   nextOriginCacheChecks,
   nextOriginDataCacheChecks,
+  orderedKeysInParallelCheck,
   realtimeEventSizeCheck,
   realtimePublicCheck,
   realtimeReauthorizeCheck,
   realtimeRelayedPublishCheck,
   realtimeRuleAllowsCheck,
   realtimeWildcardCheck,
+  taskConcurrencyCheck,
 } from "../checks";
 import { NO_FILTER, plan, type RunFilter } from "../plan";
 import { filterFrom } from "../run/filter";
@@ -294,10 +297,8 @@ describe("the tasks concern", () => {
     }
   });
 
-  it("skips the suite on aws and gcp with the provider's refusal, under each target's ticket", () => {
+  it("skips the suite on gcp with the provider's refusal, under its ticket", () => {
     const tickets = {
-      aws: 1469,
-      "aws.floci": 1469,
       gcp: 1470,
       "gcp.floci": 1470,
     } as const;
@@ -310,6 +311,28 @@ describe("the tasks concern", () => {
         expect(refusal?.reason).toMatch(/topics, tasks and workers are unsupported/);
       }
       expect(planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name)).toContain("tasks/node");
+    }
+  });
+
+  it("runs the suite on aws behind api gateway, expecting lanes red there and floci's serial delivery red on floci", () => {
+    const red = (lane: Lane) =>
+      Object.keys(
+        planOn(lane, {}, EVERY_CELL).expectedFailures["tasks/node-api-gateway/web"] ?? {},
+      ).sort();
+    const payloads = [exactTaskPayloadCheck.title, exactTopicPayloadCheck.title];
+    expect(red("aws")).toEqual([lanesCheck.title, ...payloads].sort());
+    expect(red("aws.floci")).toEqual(
+      [
+        lanesCheck.title,
+        orderedKeysInParallelCheck.title,
+        taskConcurrencyCheck.title,
+        ...payloads,
+      ].sort(),
+    );
+    for (const lane of ["aws", "aws.floci"] as const) {
+      expect(Object.keys(planOn(lane).skipped).filter((cell) => cell.startsWith("tasks/"))).toEqual(
+        [],
+      );
     }
   });
 });
