@@ -179,11 +179,13 @@ ocel bootstrap production --features tasks
 That is the tier's task database, its delay queue and its push account. None of it bills while
 idle. The bootstrap credential also needs `roles/cloudtasks.admin`. A deploy declaring a topic or
 task on a tier without it is refused, naming that command, and an ephemeral preview declaring one
-is refused.
+is refused. Dropping `tasks` from a bootstrap is refused while any project on the tier still
+declares a topic or task.
 
 What differs from `ocel dev`: lanes are recorded but not weighted, a batch consumer receives
-batches of one, a canceled run's attempt already in flight runs to its end, and a batch trigger
-is not atomic.
+batches of one, a task's own `concurrency` is not enforced (its worker's is), and a batch trigger
+is not atomic. A deploy that changes a topic's `ordered` is refused while any of its consumers is
+kept, since Pub/Sub cannot change a subscription's ordering: rename the consumers to change it.
 
 ## What to grant
 
