@@ -1,8 +1,6 @@
 package providerserver
 
 import (
-	"slices"
-
 	"github.com/ocelhq/ocel/pkg/kvstore"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -35,22 +33,6 @@ func manifestResources(manifest *contractv1.Manifest) ([]provider.Resource, erro
 	return resources, nil
 }
 
-func refuseConsumerOnUndeclaredWorker(manifest *contractv1.Manifest, resource provider.Resource) error {
-	if resource.Topic == nil {
-		return nil
-	}
-	for _, consumer := range resource.Topic.Consumers {
-		declared := slices.ContainsFunc(manifest.GetWorkers(), func(worker *contractv1.ManifestWorker) bool {
-			return worker.GetName() == consumer.Worker
-		})
-		if !declared {
-			return refusal.Refuse(refusal.CodeInvalid, "%s %s: consumer %q runs on worker %q, and this manifest declares no worker by that name",
-				resource.Type, resource.Declared, consumer.Name, consumer.Worker)
-		}
-	}
-	return nil
-}
-
 func manifestResource(message *contractv1.ManifestResource) (provider.Resource, error) {
 	name := message.GetLogicalName()
 	declared := message.GetResource().GetName()
@@ -73,7 +55,7 @@ func manifestResource(message *contractv1.ManifestResource) (provider.Resource, 
 	}
 	switch {
 	case kind == provider.BindingTopic || kind == provider.BindingTask:
-		spec, err := topicSpec(kind, message.GetTopic())
+		spec, err := readTopicSpec(kind, message.GetTopic())
 		if err != nil {
 			return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "%s %s: %s", kind, declared, err)
 		}
