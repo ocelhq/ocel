@@ -47,32 +47,32 @@ type store struct {
 }
 
 type runItem struct {
-	PK          string   `dynamodbav:"pk"`
-	SK          string   `dynamodbav:"sk"`
-	Topic       string   `dynamodbav:"topic"`
-	Consumer    string   `dynamodbav:"consumer"`
-	Status      string   `dynamodbav:"status"`
-	Payload     string   `dynamodbav:"payload,omitempty"`
-	Output      string   `dynamodbav:"output,omitempty"`
-	Error       string   `dynamodbav:"error"`
-	Attempts    int      `dynamodbav:"attempts"`
-	MaxAttempts int      `dynamodbav:"max_attempts"`
-	Tags        []string `dynamodbav:"tags"`
-	Metadata    string   `dynamodbav:"metadata,omitempty"`
-	CreatedAt   int64    `dynamodbav:"created_at"`
-	DueAt       int64    `dynamodbav:"due_at"`
-	StartedAt   int64    `dynamodbav:"started_at,omitempty"`
-	FinishedAt  int64    `dynamodbav:"finished_at,omitempty"`
-	RunExpires  int64    `dynamodbav:"run_expires_at,omitempty"`
-	Message     string   `dynamodbav:"message"`
-	PublishedAt int64    `dynamodbav:"published_at"`
-	Key         string   `dynamodbav:"key"`
-	Lane        string   `dynamodbav:"lane"`
-	Delivery    string   `dynamodbav:"delivery"`
-	Receipt     string   `dynamodbav:"receipt,omitempty"`
-	Lease       int64    `dynamodbav:"lease_until"`
-	Retention   int64    `dynamodbav:"expires_at,omitempty"`
-	Revision    string   `dynamodbav:"revision"`
+	PK                 string   `dynamodbav:"pk"`
+	SK                 string   `dynamodbav:"sk"`
+	Topic              string   `dynamodbav:"topic"`
+	Consumer           string   `dynamodbav:"consumer"`
+	Status             string   `dynamodbav:"status"`
+	Payload            string   `dynamodbav:"payload,omitempty"`
+	Output             string   `dynamodbav:"output,omitempty"`
+	Error              string   `dynamodbav:"error"`
+	Attempts           int      `dynamodbav:"attempts"`
+	MaxAttempts        int      `dynamodbav:"max_attempts"`
+	Tags               []string `dynamodbav:"tags"`
+	Metadata           string   `dynamodbav:"metadata,omitempty"`
+	CreatedAtMicros    int64    `dynamodbav:"created_at"`
+	DueAtMicros        int64    `dynamodbav:"due_at"`
+	StartedAtMicros    int64    `dynamodbav:"started_at,omitempty"`
+	FinishedAtMicros   int64    `dynamodbav:"finished_at,omitempty"`
+	RunExpiresAtMicros int64    `dynamodbav:"run_expires_at,omitempty"`
+	Message            string   `dynamodbav:"message"`
+	PublishedAtMicros  int64    `dynamodbav:"published_at"`
+	Key                string   `dynamodbav:"key"`
+	Lane               string   `dynamodbav:"lane"`
+	Delivery           string   `dynamodbav:"delivery"`
+	Receipt            string   `dynamodbav:"receipt,omitempty"`
+	LeaseUntilMicros   int64    `dynamodbav:"lease_until"`
+	ExpiresAtUnix      int64    `dynamodbav:"expires_at,omitempty"`
+	Revision           string   `dynamodbav:"revision"`
 }
 
 func (s store) runPartition(topic string) string { return s.prefix + "run#" + topic }
@@ -118,15 +118,15 @@ func (s store) topicOf(ctx context.Context, execution string) (string, bool, err
 	return topic.Value, true, nil
 }
 
-func retentionAfter(dueMicros int64) int64 {
+func expiresAtUnixAfter(dueMicros int64) int64 {
 	return time.UnixMicro(dueMicros).Add(runRetention).Unix()
 }
 
-func timeOf(us int64) time.Time {
-	if us == 0 {
+func timeOfMicros(micros int64) time.Time {
+	if micros == 0 {
 		return time.Time{}
 	}
-	return time.UnixMicro(us)
+	return time.UnixMicro(micros)
 }
 
 func (item runItem) run() provider.Run {
@@ -138,11 +138,11 @@ func (item runItem) run() provider.Run {
 		Error:      item.Error,
 		Attempts:   item.Attempts,
 		Tags:       item.Tags,
-		CreatedAt:  timeOf(item.CreatedAt),
-		DueAt:      timeOf(item.DueAt),
-		StartedAt:  timeOf(item.StartedAt),
-		FinishedAt: timeOf(item.FinishedAt),
-		ExpiresAt:  timeOf(item.RunExpires),
+		CreatedAt:  timeOfMicros(item.CreatedAtMicros),
+		DueAt:      timeOfMicros(item.DueAtMicros),
+		StartedAt:  timeOfMicros(item.StartedAtMicros),
+		FinishedAt: timeOfMicros(item.FinishedAtMicros),
+		ExpiresAt:  timeOfMicros(item.RunExpiresAtMicros),
 		Revision:   keyvalue.Revision(item.Revision),
 	}
 	if item.Payload != "" {
@@ -159,8 +159,8 @@ func (item runItem) run() provider.Run {
 
 func (s store) putRun(ctx context.Context, item runItem) error {
 	item.PK = s.runPartition(item.Topic)
-	if item.Retention == 0 {
-		item.Retention = retentionAfter(item.DueAt)
+	if item.ExpiresAtUnix == 0 {
+		item.ExpiresAtUnix = expiresAtUnixAfter(item.DueAtMicros)
 	}
 	if item.Tags == nil {
 		item.Tags = []string{}
@@ -176,7 +176,7 @@ func (s store) putRun(ctx context.Context, item runItem) error {
 	if err != nil {
 		return err
 	}
-	pointer, err := s.putPointer(item.SK, item.Topic, item.Retention)
+	pointer, err := s.putPointer(item.SK, item.Topic, item.ExpiresAtUnix)
 	if err != nil {
 		return err
 	}

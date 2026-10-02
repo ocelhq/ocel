@@ -17,14 +17,14 @@ const (
 )
 
 type queueMessage struct {
-	Execution   string          `json:"execution,omitempty"`
-	Delivery    string          `json:"delivery,omitempty"`
-	Message     string          `json:"message,omitempty"`
-	PublishedAt int64           `json:"publishedAt,omitempty"`
-	DueAt       int64           `json:"dueAt,omitempty"`
-	Key         string          `json:"key,omitempty"`
-	Lane        string          `json:"lane,omitempty"`
-	Payload     json.RawMessage `json:"payload,omitempty"`
+	Execution         string          `json:"execution,omitempty"`
+	Delivery          string          `json:"delivery,omitempty"`
+	Message           string          `json:"message,omitempty"`
+	PublishedAtMicros int64           `json:"publishedAt,omitempty"`
+	DueAtMicros       int64           `json:"dueAt,omitempty"`
+	Key               string          `json:"key,omitempty"`
+	Lane              string          `json:"lane,omitempty"`
+	Payload           json.RawMessage `json:"payload,omitempty"`
 }
 
 func (m queueMessage) executionFor(consumer string) string {

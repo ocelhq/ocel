@@ -414,7 +414,7 @@ func TestLiveEveryRunExpiresFromTheTableEvenIfItNeverFinishes(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("readRun = %v, %v", found, err)
 	}
-	if until := time.Unix(item.Retention, 0); until.Before(due.Add(runRetention - time.Minute)) {
+	if until := time.Unix(item.ExpiresAtUnix, 0); until.Before(due.Add(runRetention - time.Minute)) {
 		t.Errorf("a delayed run expires from the table at %v, want no sooner than %v after it is due, and never left without an expiry", until, runRetention)
 	}
 	moved := time.Now().Add(2 * time.Hour)
@@ -422,7 +422,7 @@ func TestLiveEveryRunExpiresFromTheTableEvenIfItNeverFinishes(t *testing.T) {
 		t.Fatalf("RescheduleRun: %v", err)
 	}
 	item, _, _ = e.store.readRun(context.Background(), "resize", id, true)
-	if until := time.Unix(item.Retention, 0); until.Before(moved.Add(runRetention - time.Minute)) {
+	if until := time.Unix(item.ExpiresAtUnix, 0); until.Before(moved.Add(runRetention - time.Minute)) {
 		t.Errorf("a rescheduled run expires at %v, want its expiry moved with its due time", until)
 	}
 }

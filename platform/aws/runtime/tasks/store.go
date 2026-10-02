@@ -62,38 +62,38 @@ func (s store) ListRuns(ctx context.Context, filter provider.RunFilter) (provide
 	return s.listRuns(ctx, topics, filter)
 }
 
-func stampOf(at time.Time) int64 {
+func microsOf(at time.Time) int64 {
 	if at.IsZero() {
 		return 0
 	}
 	return at.UnixMicro()
 }
 
-func retentionOf(run provider.Run) int64 {
+func expiresAtUnixOf(run provider.Run) int64 {
 	if !run.FinishedAt.IsZero() {
 		return run.FinishedAt.Add(runRetention).Unix()
 	}
-	return retentionAfter(max(stampOf(run.DueAt), stampOf(run.CreatedAt)))
+	return expiresAtUnixAfter(max(microsOf(run.DueAt), microsOf(run.CreatedAt)))
 }
 
 func itemOf(run provider.Run) runItem {
 	return runItem{
-		SK:         run.Execution,
-		Topic:      run.Topic,
-		Consumer:   run.Consumer,
-		Status:     string(run.Status),
-		Payload:    string(run.Payload),
-		Output:     string(run.Output),
-		Error:      run.Error,
-		Attempts:   run.Attempts,
-		Tags:       run.Tags,
-		Metadata:   string(run.Metadata),
-		CreatedAt:  stampOf(run.CreatedAt),
-		DueAt:      stampOf(run.DueAt),
-		StartedAt:  stampOf(run.StartedAt),
-		FinishedAt: stampOf(run.FinishedAt),
-		RunExpires: stampOf(run.ExpiresAt),
-		Retention:  retentionOf(run),
+		SK:                 run.Execution,
+		Topic:              run.Topic,
+		Consumer:           run.Consumer,
+		Status:             string(run.Status),
+		Payload:            string(run.Payload),
+		Output:             string(run.Output),
+		Error:              run.Error,
+		Attempts:           run.Attempts,
+		Tags:               run.Tags,
+		Metadata:           string(run.Metadata),
+		CreatedAtMicros:    microsOf(run.CreatedAt),
+		DueAtMicros:        microsOf(run.DueAt),
+		StartedAtMicros:    microsOf(run.StartedAt),
+		FinishedAtMicros:   microsOf(run.FinishedAt),
+		RunExpiresAtMicros: microsOf(run.ExpiresAt),
+		ExpiresAtUnix:      expiresAtUnixOf(run),
 	}
 }
 
@@ -109,9 +109,9 @@ func changeOf(run provider.Run) change {
 			"error":      item.Error,
 			"attempts":   item.Attempts,
 			"tags":       item.Tags,
-			"created_at": item.CreatedAt,
-			"due_at":     item.DueAt,
-			"expires_at": item.Retention,
+			"created_at": item.CreatedAtMicros,
+			"due_at":     item.DueAtMicros,
+			"expires_at": item.ExpiresAtUnix,
 		},
 		condition:  "#revision = :revision",
 		conditions: map[string]any{":revision": string(run.Revision)},
@@ -123,7 +123,7 @@ func changeOf(run provider.Run) change {
 			c.set[attribute] = v
 		}
 	}
-	for attribute, v := range map[string]int64{"started_at": item.StartedAt, "finished_at": item.FinishedAt, "run_expires_at": item.RunExpires} {
+	for attribute, v := range map[string]int64{"started_at": item.StartedAtMicros, "finished_at": item.FinishedAtMicros, "run_expires_at": item.RunExpiresAtMicros} {
 		if v == 0 {
 			c.remove = append(c.remove, attribute)
 		} else {

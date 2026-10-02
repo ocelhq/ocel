@@ -128,21 +128,21 @@ var errRunGone = errors.New("the run this message carries no longer exists")
 func (e *Engine) recordConsumerRun(ctx context.Context, deployed deployedConsumer, msg queueMessage, execution string) error {
 	now := time.Now()
 	status := provider.RunQueued
-	if msg.DueAt > now.UnixMicro() {
+	if msg.DueAtMicros > now.UnixMicro() {
 		status = provider.RunDelayed
 	}
 	return e.store.putRun(ctx, runItem{
-		SK:          execution,
-		Topic:       deployed.topicName,
-		Consumer:    deployed.consumer.Name,
-		Status:      string(status),
-		MaxAttempts: deployed.retry().MaxAttempts,
-		CreatedAt:   msg.PublishedAt,
-		DueAt:       msg.DueAt,
-		Message:     msg.Message,
-		PublishedAt: msg.PublishedAt,
-		Key:         msg.Key,
-		Lane:        string(runs.LaneFor(deployed.consumer.Lanes, laneOf(msg.Lane))),
+		SK:                execution,
+		Topic:             deployed.topicName,
+		Consumer:          deployed.consumer.Name,
+		Status:            string(status),
+		MaxAttempts:       deployed.retry().MaxAttempts,
+		CreatedAtMicros:   msg.PublishedAtMicros,
+		DueAtMicros:       msg.DueAtMicros,
+		Message:           msg.Message,
+		PublishedAtMicros: msg.PublishedAtMicros,
+		Key:               msg.Key,
+		Lane:              string(runs.LaneFor(deployed.consumer.Lanes, laneOf(msg.Lane))),
 	})
 }
 
@@ -162,12 +162,12 @@ func readinessOf(got received, now time.Time) (readiness, time.Duration) {
 	switch {
 	case !isUnfinished(status) || run.Delivery != got.msg.Delivery:
 		return stale, 0
-	case status == provider.RunExecuting && run.Lease >= now.UnixMicro():
-		return held, time.UnixMicro(run.Lease).Sub(now)
-	case status != provider.RunExecuting && run.Attempts == 0 && run.RunExpires > 0 && run.RunExpires <= now.UnixMicro():
+	case status == provider.RunExecuting && run.LeaseUntilMicros >= now.UnixMicro():
+		return held, time.UnixMicro(run.LeaseUntilMicros).Sub(now)
+	case status != provider.RunExecuting && run.Attempts == 0 && run.RunExpiresAtMicros > 0 && run.RunExpiresAtMicros <= now.UnixMicro():
 		return expired, 0
-	case status != provider.RunExecuting && run.DueAt > now.Add(dueSlack).UnixMicro():
-		return early, time.UnixMicro(run.DueAt).Sub(now)
+	case status != provider.RunExecuting && run.DueAtMicros > now.Add(dueSlack).UnixMicro():
+		return early, time.UnixMicro(run.DueAtMicros).Sub(now)
 	}
 	return runnable, 0
 }
@@ -355,7 +355,7 @@ func (e *Engine) claim(ctx context.Context, deployed deployedConsumer, got recei
 	if err != nil {
 		return runItem{}, false, err
 	}
-	if item.StartedAt == 0 {
+	if item.StartedAtMicros == 0 {
 		started, err := e.store.updateRun(ctx, deployed.topicName, got.execution, change{
 			set:        map[string]any{"started_at": now.UnixMicro()},
 			condition:  "attribute_not_exists(started_at)",
@@ -451,8 +451,8 @@ func (e *Engine) envelopeOf(deployed deployedConsumer, claimed []received) *topi
 		}
 		deliveries = append(deliveries, &topicv1.Delivery{
 			Execution: got.execution,
-			Message:   &topicv1.Message{Id: got.run.Message, PublishedAt: runs.TimestampOf(timeOf(got.run.PublishedAt))},
-			Attempt:   &topicv1.Attempt{Number: int32(got.run.Attempts), Of: int32(got.run.MaxAttempts), FirstAttemptedAt: runs.TimestampOf(timeOf(got.run.StartedAt))},
+			Message:   &topicv1.Message{Id: got.run.Message, PublishedAt: runs.TimestampOf(timeOfMicros(got.run.PublishedAtMicros))},
+			Attempt:   &topicv1.Attempt{Number: int32(got.run.Attempts), Of: int32(got.run.MaxAttempts), FirstAttemptedAt: runs.TimestampOf(timeOfMicros(got.run.StartedAtMicros))},
 			Payload:   payload,
 		})
 	}

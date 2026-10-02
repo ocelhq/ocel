@@ -162,24 +162,24 @@ func (e *Engine) startRun(ctx context.Context, deployed deployedConsumer, messag
 		status = provider.RunDelayed
 	}
 	item := runItem{
-		SK:          execution,
-		Topic:       deployed.topicName,
-		Consumer:    deployed.consumer.Name,
-		Status:      string(status),
-		Payload:     string(run.payload),
-		MaxAttempts: runs.AttemptsFor(deployed.retry(), run.maxAttempts),
-		Tags:        run.tags,
-		Metadata:    string(run.metadata),
-		CreatedAt:   now.UnixMicro(),
-		DueAt:       run.dueAt.UnixMicro(),
-		Message:     messageID,
-		PublishedAt: now.UnixMicro(),
-		Key:         run.key,
-		Lane:        string(runs.LaneFor(deployed.consumer.Lanes, run.lane)),
-		Delivery:    token,
+		SK:                execution,
+		Topic:             deployed.topicName,
+		Consumer:          deployed.consumer.Name,
+		Status:            string(status),
+		Payload:           string(run.payload),
+		MaxAttempts:       runs.AttemptsFor(deployed.retry(), run.maxAttempts),
+		Tags:              run.tags,
+		Metadata:          string(run.metadata),
+		CreatedAtMicros:   now.UnixMicro(),
+		DueAtMicros:       run.dueAt.UnixMicro(),
+		Message:           messageID,
+		PublishedAtMicros: now.UnixMicro(),
+		Key:               run.key,
+		Lane:              string(runs.LaneFor(deployed.consumer.Lanes, run.lane)),
+		Delivery:          token,
 	}
 	if run.ttl > 0 {
-		item.RunExpires = run.dueAt.Add(run.ttl).UnixMicro()
+		item.RunExpiresAtMicros = run.dueAt.Add(run.ttl).UnixMicro()
 	}
 	if err := e.store.putRun(ctx, item); err != nil {
 		return err
@@ -201,12 +201,12 @@ func (t Tasks) debounce(ctx context.Context, deployed deployedConsumer, key, exe
 	}
 	pending := readRecordedRun(held.Value)
 	item, err := store.updateRun(ctx, deployed.topicName, pending, change{
-		set:        map[string]any{"due_at": due.UnixMicro(), "expires_at": retentionAfter(due.UnixMicro())},
+		set:        map[string]any{"due_at": due.UnixMicro(), "expires_at": expiresAtUnixAfter(due.UnixMicro())},
 		condition:  "#status = :delayed",
 		conditions: map[string]any{":delayed": string(provider.RunDelayed)},
 	})
 	if err == nil {
-		if item.RunExpires > 0 {
+		if item.RunExpiresAtMicros > 0 {
 			ttl := deployed.topic.TTL
 			if ttl > 0 {
 				if _, err := store.updateRun(ctx, deployed.topicName, pending, change{set: map[string]any{"run_expires_at": due.Add(ttl).UnixMicro()}}); err != nil {
@@ -302,14 +302,14 @@ func (t Tasks) RescheduleRun(ctx context.Context, req *taskv1.RescheduleRunReque
 	if due.After(now) {
 		status = provider.RunDelayed
 	}
-	set := map[string]any{"status": string(status), "due_at": due.UnixMicro(), "expires_at": retentionAfter(due.UnixMicro())}
+	set := map[string]any{"status": string(status), "due_at": due.UnixMicro(), "expires_at": expiresAtUnixAfter(due.UnixMicro())}
 	token := item.Delivery
 	if !deployed.fifo() {
 		token = envelope.NewMessageID(now)
 		set["delivery"] = token
 	}
-	if item.RunExpires > 0 {
-		set["run_expires_at"] = item.RunExpires + due.UnixMicro() - item.DueAt
+	if item.RunExpiresAtMicros > 0 {
+		set["run_expires_at"] = item.RunExpiresAtMicros + due.UnixMicro() - item.DueAtMicros
 	}
 	moved, err := t.engine.store.updateRun(ctx, item.Topic, item.SK, change{
 		set:        set,
@@ -354,8 +354,8 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 		tags:        item.Tags,
 		metadata:    json.RawMessage(item.Metadata),
 	}
-	if item.RunExpires > 0 && item.DueAt > 0 {
-		run.ttl = time.Duration(item.RunExpires-item.DueAt) * time.Microsecond
+	if item.RunExpiresAtMicros > 0 && item.DueAtMicros > 0 {
+		run.ttl = time.Duration(item.RunExpiresAtMicros-item.DueAtMicros) * time.Microsecond
 	}
 	messageID := envelope.NewMessageID(now)
 	execution := runs.ExecutionOf(messageID, deployed.consumer.Name)
