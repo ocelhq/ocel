@@ -496,6 +496,84 @@ func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing
 	}
 }
 
+func TestAWorkerAnAppStillHostsIsKeptAndOneItDroppedIsTakenDown(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	ref := appRef()
+	recordFunctions(t, store, ref, "web", resources.WorkerName("media"), resources.WorkerName("legacy"))
+
+	own := &withFunctions{buckets: &buckets{}}
+	hooks := own.hooks()
+	hooks.RecordsWorkers = true
+	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), hooks)
+	spec := provider.StackSpec{
+		Ref:  ref,
+		Kind: provider.StackApp,
+		App: &provider.AppSpec{
+			App:       "web",
+			Compute:   provider.ComputeServerless,
+			Functions: []provider.FunctionSpec{{Name: "web"}},
+			Workers:   []provider.WorkerSpec{{Name: "media"}},
+		},
+	}
+
+	shown, err := stacks.Plan(ctx, spec, nil)
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	rows := rowsOf(shown)
+	if rows[resources.WorkerName("media")] != provider.ActionKeep || rows[resources.WorkerName("legacy")] != provider.ActionDelete {
+		t.Fatalf("Plan() shows %v, want the media worker kept and the legacy worker the app no longer hosts going", rows)
+	}
+	if _, err := stacks.Provision(ctx, spec, nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(own.removed) != 1 || own.removed[0].Name != resources.WorkerName("legacy") {
+		t.Fatalf("the fan-out took down %v, want the legacy worker alone", own.removed)
+	}
+}
+
+func TestAVendorThatRecordsNoWorkersPlansNoWorkerRows(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	for _, compute := range []provider.Compute{provider.ComputeServerless, provider.ComputeContainer} {
+		store := fake.NewKeyValues()
+		ref := appRef()
+		recordFunctions(t, store, ref, "web")
+		own := &withFunctions{buckets: &buckets{}}
+		stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+		spec := provider.StackSpec{
+			Ref:  ref,
+			Kind: provider.StackApp,
+			App: &provider.AppSpec{
+				App:       "web",
+				Compute:   compute,
+				Functions: []provider.FunctionSpec{{Name: "web"}},
+				Workers:   []provider.WorkerSpec{{Name: "media"}},
+			},
+		}
+
+		shown, err := stacks.Plan(ctx, spec, nil)
+		if err != nil {
+			t.Fatalf("Plan() = %v", err)
+		}
+		if action, shownWorker := rowsOf(shown)[resources.WorkerName("media")]; shownWorker {
+			t.Errorf("a %s app's plan shows its worker %s, want no worker row from a vendor that records its workers elsewhere", compute, action)
+		}
+	}
+}
+
+func TestAWorkerIsNamedApartFromEveryFunction(t *testing.T) {
+	t.Parallel()
+
+	if name := resources.WorkerName("media"); name == "media" || !strings.Contains(name, "media") {
+		t.Errorf("WorkerName(media) = %q, want a name holding the worker's and no function's", name)
+	}
+}
+
 type withContainers struct {
 	*buckets
 	provisioned []provider.StackSpec
