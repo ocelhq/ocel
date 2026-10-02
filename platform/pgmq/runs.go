@@ -191,7 +191,7 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 
 func laneOf(name string) topicv1.Lane {
 	for _, lane := range allLanes {
-		if runs.LaneName(lane) == name {
+		if string(runs.LaneOf(lane)) == name {
 			return lane
 		}
 	}

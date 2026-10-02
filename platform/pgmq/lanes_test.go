@@ -48,7 +48,7 @@ func TestWaitingMessagesAreDeliveredFromEachLaneByWeightWithoutStarvingLow(t *te
 	}, map[string]Worker{"worker": {URL: worker.server.URL}})
 	for _, lane := range []topicv1.Lane{topicv1.Lane_LANE_LOW, topicv1.Lane_LANE_DEFAULT, topicv1.Lane_LANE_HIGH} {
 		for n := range 10 {
-			send(t, engine, "orders", fmt.Sprintf(`{"lane":%q,"n":%d}`, runs.LaneName(lane), n), &topicv1.SendRequest{Lane: lane})
+			send(t, engine, "orders", fmt.Sprintf(`{"lane":%q,"n":%d}`, runs.LaneOf(lane), n), &topicv1.SendRequest{Lane: lane})
 		}
 	}
 	startDispatch(t, engine)
