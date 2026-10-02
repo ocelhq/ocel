@@ -467,6 +467,22 @@ func TestLiveAnOrderedRunStillWaitingForASlotOnItsMessagesLastDeliveryEndsFailed
 	}
 }
 
+func TestLiveARescheduleWhoseMessageIsNotSentLeavesTheRunDueWhenItWas(t *testing.T) {
+	em := live(t)
+	d := em.deploy(t, map[string]*provider.TopicSpec{"resize": aTask("resize")}, nil)
+	worker := newFakeWorker(t, succeeding)
+	e := d.engine(worker)
+
+	id := trigger(t, e, "resize", `{}`, &taskv1.TriggerOptions{DueAt: timestamppb.New(time.Now().Add(2 * time.Second))})
+	if _, err := d.engineThatCannotSend().Tasks().RescheduleRun(context.Background(), &taskv1.RescheduleRunRequest{Id: id, DueAt: timestamppb.New(time.Now().Add(time.Hour))}); err == nil {
+		t.Fatal("RescheduleRun succeeded though its message was never sent")
+	}
+	deliver(t, d, e, "resize", "resize", d.receive(t, "resize", "resize", 10*time.Second))
+	if run := retrieve(t, e, id); run.GetStatus() != taskv1.RunStatus_RUN_STATUS_COMPLETED {
+		t.Errorf("run = %v, want it completed at its old due time by the message it already had", run)
+	}
+}
+
 func TestLiveCancelingADelayedOrderedRunReleasesItsHeldMessageSoItsKeysNextRunIsNotBlocked(t *testing.T) {
 	em := live(t)
 	d := em.deploy(t, map[string]*provider.TopicSpec{"sequence": aTask("sequence", ordered)}, nil)

@@ -75,6 +75,31 @@ func TestLiveAMessageSentToATopicReachesEachConsumerOnItsOwnQueue(t *testing.T) 
 	}
 }
 
+func TestLiveARedriveWhoseMessageIsNotSentLeavesTheDeadLetterWhereItWas(t *testing.T) {
+	em := live(t)
+	d := em.deploy(t, map[string]*provider.TopicSpec{"doomed": aTopic(provider.ConsumerSpec{
+		Name: "fails-once", Worker: "worker", Retry: provider.RetryPolicy{MaxAttempts: 1},
+	})}, nil)
+	worker := newFakeWorker(t, func(*topicv1.Envelope) answer {
+		return answer{status: http.StatusInternalServerError, body: "this consumer fails"}
+	})
+	e := d.engine(worker)
+	ctx := context.Background()
+
+	send(t, e, "doomed", `{}`, nil)
+	deliver(t, d, e, "doomed", "fails-once", d.receive(t, "doomed", "fails-once", 10*time.Second))
+	redrive := &topicv1.RedriveDeadLettersRequest{Topic: "doomed", Consumer: "fails-once"}
+	if _, err := d.engineThatCannotSend().Topics().RedriveDeadLetters(ctx, redrive); err == nil {
+		t.Fatal("RedriveDeadLetters succeeded though its message was never sent")
+	}
+	if left, err := e.Topics().ListDeadLetters(ctx, &topicv1.ListDeadLettersRequest{Topic: "doomed", Consumer: "fails-once"}); err != nil || len(left.GetDeadLetters()) != 1 {
+		t.Fatalf("dead letters after an unsent redrive = %v, %v, want the one it could not send", left, err)
+	}
+	if redriven, err := e.Topics().RedriveDeadLetters(ctx, redrive); err != nil || redriven.GetRedriven() != 1 {
+		t.Errorf("a second RedriveDeadLetters = %v, %v, want it to send the letter", redriven, err)
+	}
+}
+
 func TestLiveAMessageAConsumerFailsOnEveryAttemptIsDeadLetteredAndCanBeRedrivenAndPurged(t *testing.T) {
 	em := live(t)
 	d := em.deploy(t, map[string]*provider.TopicSpec{"doomed": aTopic(provider.ConsumerSpec{

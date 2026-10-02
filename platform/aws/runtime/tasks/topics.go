@@ -160,6 +160,14 @@ func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDead
 		}
 		msg := queueMessage{Execution: letter.SK, Delivery: token, Message: letter.Message, PublishedAtMicros: letter.PublishedAtMicros, Key: letter.Key, Lane: letter.Lane, Payload: json.RawMessage(letter.Payload)}
 		if err := t.engine.enqueue(ctx, deployed, msg, 0); err != nil {
+			was := map[string]any{"status": letter.Status, "attempts": letter.Attempts, "error": letter.Error, "due_at": letter.DueAtMicros, "delivery": letter.Delivery, "expires_at": letter.ExpiresAtUnix}
+			if letter.StartedAtMicros > 0 {
+				was["started_at"] = letter.StartedAtMicros
+			}
+			if letter.FinishedAtMicros > 0 {
+				was["finished_at"] = letter.FinishedAtMicros
+			}
+			t.engine.restoreUnsent(ctx, letter, token, was)
 			return nil, err
 		}
 		redriven++
