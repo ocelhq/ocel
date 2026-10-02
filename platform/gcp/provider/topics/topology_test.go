@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -92,17 +93,62 @@ func emulatedEndpoint(t *testing.T) string {
 	return endpoint
 }
 
+const (
+	appsMember = "serviceAccount:" + invoker
+	agent      = "serviceAccount:service-1@gcp-sa-pubsub.iam.gserviceaccount.com"
+)
+
+func deployedTopology(t *testing.T, clients *ports.Clients, names topics.Names, declared map[string]*provider.TopicSpec) (topics.Topology, topics.Subscriptions) {
+	t.Helper()
+	topology := topics.Topology{Names: names, Topics: declared, Publisher: appsMember, Agent: agent}
+	subscriptions := topics.Subscriptions{Names: names, Topics: declared, Pushes: pushesTo("https://worker.run.app"), Agent: agent}
+	if err := topology.Ensure(context.Background(), clients); err != nil {
+		t.Fatalf("Topology.Ensure() = %v", err)
+	}
+	if err := subscriptions.Ensure(context.Background(), clients); err != nil {
+		t.Fatalf("Subscriptions.Ensure() = %v", err)
+	}
+	return topology, subscriptions
+}
+
+type policyShape struct {
+	Bindings []struct {
+		Role    string   `json:"role"`
+		Members []string `json:"members"`
+	} `json:"bindings"`
+}
+
+func readPolicy(t *testing.T, endpoint, project, kind, name string) policyShape {
+	t.Helper()
+	resp, err := http.Get(endpoint + "/v1/projects/" + project + "/" + kind + "/" + name + ":getIamPolicy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var policy policyShape
+	_ = json.NewDecoder(resp.Body).Decode(&policy)
+	return policy
+}
+
+func (p policyShape) grants(role, member string) bool {
+	for _, binding := range p.Bindings {
+		if binding.Role == role && slices.Contains(binding.Members, member) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestLiveTopologyGivesEachConsumerASubscriptionAndDeadLetterTopicOfItsOwn(t *testing.T) {
 	endpoint := emulatedEndpoint(t)
 	clients := liveClients(t)
 	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
-	topology := topics.Topology{Names: names, Topics: ordersAndResize(), Pushes: pushesTo("https://worker.run.app")}
-
+	topology, subscriptions := deployedTopology(t, clients, names, ordersAndResize())
 	if err := topology.Ensure(context.Background(), clients); err != nil {
-		t.Fatalf("Ensure() = %v", err)
+		t.Fatalf("Topology.Ensure() over the topology it made = %v, want it kept", err)
 	}
-	if err := topology.Ensure(context.Background(), clients); err != nil {
-		t.Fatalf("Ensure() over the topology it made = %v, want it kept", err)
+	if err := subscriptions.Ensure(context.Background(), clients); err != nil {
+		t.Fatalf("Subscriptions.Ensure() over the subscriptions it made = %v, want them kept", err)
 	}
 
 	for _, topic := range []string{names.Topic("orders"), names.Topic("resize"), names.DeadLetterTopic("orders", "ship"), names.DeadLetterTopic("orders", "bill"), names.DeadLetterTopic("resize", "resize")} {
@@ -161,19 +207,84 @@ func TestLiveTopologyGivesEachConsumerASubscriptionAndDeadLetterTopicOfItsOwn(t 
 	}
 }
 
-func TestLiveATopicWhoseOrderingChangedIsRefusedAndItsSubscriptionsKept(t *testing.T) {
+func TestLiveTheAppsMayPublishToEachTopicAndPubSubMayDeadLetterEachConsumer(t *testing.T) {
 	endpoint := emulatedEndpoint(t)
 	clients := liveClients(t)
 	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
-	declared := ordersAndResize()
-	topology := topics.Topology{Names: names, Topics: declared, Pushes: pushesTo("https://worker.run.app")}
+	topology, _ := deployedTopology(t, clients, names, ordersAndResize())
+	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
+
+	for _, topic := range []string{"orders", "resize"} {
+		if !readPolicy(t, endpoint, clients.Project, "topics", names.Topic(topic)).grants("roles/pubsub.publisher", appsMember) {
+			t.Errorf("%s may not publish to %s, and every app and worker in the tier sends and triggers as it", appsMember, topic)
+		}
+	}
+	for _, consumer := range []struct{ topic, consumer string }{{"orders", "ship"}, {"orders", "bill"}, {"resize", "resize"}} {
+		if !readPolicy(t, endpoint, clients.Project, "topics", names.DeadLetterTopic(consumer.topic, consumer.consumer)).grants("roles/pubsub.publisher", agent) {
+			t.Errorf("Pub/Sub may not publish to the dead-letter topic of %s/%s, so it could never dead-letter a message", consumer.topic, consumer.consumer)
+		}
+		if !readPolicy(t, endpoint, clients.Project, "subscriptions", names.Subscription(consumer.topic, consumer.consumer)).grants("roles/pubsub.subscriber", agent) {
+			t.Errorf("Pub/Sub may not acknowledge on %s/%s, so a dead-lettered message would stay on the subscription", consumer.topic, consumer.consumer)
+		}
+	}
+}
+
+func TestLiveSubscriptionsAreMadeOnlyForTheWorkersAnAppHosts(t *testing.T) {
+	endpoint := emulatedEndpoint(t)
+	clients := liveClients(t)
+	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
+	topology := topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: appsMember, Agent: agent}
 	if err := topology.Ensure(context.Background(), clients); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
 
+	billing := topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: map[string]topics.Push{"billing": pushesTo("https://worker.run.app")["billing"]}, Agent: agent}
+	if err := billing.Ensure(context.Background(), clients); err != nil {
+		t.Fatalf("Ensure() for the app hosting billing alone = %v, want the consumers on other workers left to their apps", err)
+	}
+	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "bill")); status != http.StatusOK {
+		t.Errorf("orders/bill, on billing, answered %d, want it made", status)
+	}
+	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship")); status != http.StatusNotFound {
+		t.Errorf("orders/ship, on another app's worker, answered %d, want it left alone", status)
+	}
+}
+
+func TestLiveRemovingAConsumerTakesItsSubscriptionAndDeadLetterTopicAndNoOther(t *testing.T) {
+	endpoint := emulatedEndpoint(t)
+	clients := liveClients(t)
+	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
+	topology, _ := deployedTopology(t, clients, names, ordersAndResize())
+	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
+
+	if err := topology.RemoveConsumers(context.Background(), clients, "orders", []string{"bill"}); err != nil {
+		t.Fatalf("RemoveConsumers(orders, bill) = %v", err)
+	}
+	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "bill")); status != http.StatusNotFound {
+		t.Errorf("orders/bill answered %d, want it gone", status)
+	}
+	if status := readTopicStatus(t, endpoint, clients.Project, names.DeadLetterTopic("orders", "bill")); status != http.StatusNotFound {
+		t.Errorf("the dead-letter topic of orders/bill answered %d, want it gone", status)
+	}
+	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship")); status != http.StatusOK {
+		t.Errorf("orders/ship answered %d, want it kept", status)
+	}
+	if err := topology.RemoveConsumers(context.Background(), clients, "orders", []string{"bill"}); err != nil {
+		t.Errorf("RemoveConsumers() of a consumer already gone = %v, want nothing to do", err)
+	}
+}
+
+func TestLiveATopicWhoseOrderingChangedIsRefusedAndItsSubscriptionsKept(t *testing.T) {
+	endpoint := emulatedEndpoint(t)
+	clients := liveClients(t)
+	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
+	declared := ordersAndResize()
+	topology, subscriptions := deployedTopology(t, clients, names, declared)
+	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
+
 	declared["orders"].Ordered = false
-	err := topology.Ensure(context.Background(), clients)
+	err := subscriptions.Ensure(context.Background(), clients)
 	if err == nil || !strings.Contains(err.Error(), "ship") {
 		t.Fatalf("Ensure() after orders stopped being ordered = %v, want it refused naming the subscription: Pub/Sub cannot change a subscription's ordering", err)
 	}
@@ -186,10 +297,7 @@ func TestLiveFlociDropsAPushSubscriptionsOIDCToken(t *testing.T) {
 	endpoint := emulatedEndpoint(t)
 	clients := liveClients(t)
 	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
-	topology := topics.Topology{Names: names, Topics: ordersAndResize(), Pushes: pushesTo("https://worker.run.app")}
-	if err := topology.Ensure(context.Background(), clients); err != nil {
-		t.Fatal(err)
-	}
+	topology, _ := deployedTopology(t, clients, names, ordersAndResize())
 	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
 
 	ship, _ := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship"))
@@ -223,7 +331,7 @@ func TestEveryPushIsSignedAsTheInvokerForTheWorkerItReaches(t *testing.T) {
 	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: server.URL}
 	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
 
-	if err := (topics.Topology{Names: names, Topics: ordersAndResize(), Pushes: pushesTo("https://worker.run.app")}).Ensure(context.Background(), clients); err != nil {
+	if err := (topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: pushesTo("https://worker.run.app")}).Ensure(context.Background(), clients); err != nil {
 		t.Fatal(err)
 	}
 
