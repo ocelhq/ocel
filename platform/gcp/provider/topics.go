@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -82,6 +85,9 @@ func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionReq
 	if previous, recorded, err := p.recordedTopic(ctx, in.Ref, in.Resource); err != nil {
 		return provider.Binding{}, err
 	} else if recorded {
+		if err := refuseOrderingChange(previous, topic); err != nil {
+			return provider.Binding{}, err
+		}
 		if err := topology.RemoveDropped(ctx, c.Workload(), map[string]*provider.TopicSpec{previous.declared: previous.spec}); err != nil {
 			return provider.Binding{}, err
 		}
@@ -103,6 +109,25 @@ func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionReq
 			topicSpecProperty:     string(spec),
 		},
 	}, nil
+}
+
+func refuseOrderingChange(previous, topic declaredTopic) error {
+	if previous.spec.Ordered == topic.spec.Ordered {
+		return nil
+	}
+	var kept []string
+	for _, consumer := range topic.spec.Consumers {
+		if slices.ContainsFunc(previous.spec.Consumers, func(was provider.ConsumerSpec) bool { return was.Name == consumer.Name }) {
+			kept = append(kept, consumer.Name)
+		}
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"%s now declares ordered %t, and its consumers %s were subscribed with ordered %t, which Pub/Sub cannot change on a subscription that exists.\n"+
+			"Rename those consumers to start new subscriptions, or keep the topic's ordering",
+		topic.declared, topic.spec.Ordered, strings.Join(kept, ", "), previous.spec.Ordered)
 }
 
 func (p *Provider) recordedTopic(ctx context.Context, ref provider.StackRef, resource provider.Resource) (declaredTopic, bool, error) {

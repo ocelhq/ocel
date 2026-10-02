@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,6 +103,37 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 		if topicExists(t, topic) {
 			t.Errorf("the Pub/Sub topic %s outlived its binding", topic)
 		}
+	}
+}
+
+func TestLiveATopicWhoseOrderingChangedIsRefusedBeforeAnythingChanges(t *testing.T) {
+	p := live(t)
+	bootstrapped(t, p, environment.TierPreview, gcp.TasksFeature)
+	ctx := context.Background()
+	ref := infraRef(t)
+	names := taskNamesOf(t, ref)
+	ordered := ordersSpec("ship", "bill")
+	ordered.Ordered = true
+	orders := provider.Resource{Name: "topic-orders", Declared: "orders", Type: provider.BindingTopic, Topic: ordered}
+
+	binding, err := p.ProvisionTopic(ctx, resources.ProvisionRequest{Ref: ref, Resource: orders}, nil)
+	if err != nil {
+		t.Fatalf("ProvisionTopic() = %v", err)
+	}
+	t.Cleanup(func() { _ = p.RemoveResource(ctx, ref, binding, nil) })
+	if err := stackrecords.Write(ctx, p.KeyValues(), ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
+		Kind: provider.StackInfra, Bindings: []provider.Binding{binding},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	orders.Topic = ordersSpec("ship")
+	_, err = p.ProvisionTopic(ctx, resources.ProvisionRequest{Ref: ref, Resource: orders}, nil)
+	if err == nil || !strings.Contains(err.Error(), "ship") {
+		t.Fatalf("ProvisionTopic() after orders stopped being ordered = %v, want it refused naming the consumer it keeps", err)
+	}
+	if !topicExists(t, names.DeadLetterTopic("orders", "bill")) {
+		t.Error("the refused deploy removed bill's dead-letter topic, want nothing changed before the refusal")
 	}
 }
 
