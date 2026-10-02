@@ -15,7 +15,7 @@ import (
 func TestAWorkerReadsQueueRecordsCronFiringsAndWarmEventsAndRefusesAnythingElse(t *testing.T) {
 	t.Parallel()
 
-	engine := tasks.New(tasks.Config{Manifest: queues.Manifest{Topics: map[string]queues.Topic{}}})
+	engine := tasks.New(tasks.Config{Topology: queues.Topology{Topics: map[string]queues.Topic{}}})
 	ctx := context.Background()
 
 	if answer, err := workerAnswer(ctx, []byte(`{"ocel":{"warm":1}}`), engine); err != nil || string(answer) != `{}` {

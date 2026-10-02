@@ -143,17 +143,17 @@ func TestABucketBoundToAStoreIsSignedForThatStore(t *testing.T) {
 	}
 }
 
-func TestATaskIsServedThroughTheProxyOnlyWithTheQueueManifestBesideTheCode(t *testing.T) {
+func TestATaskIsServedThroughTheProxyOnlyWithTheQueueTopologyBesideTheCode(t *testing.T) {
 	t.Setenv("AWS_REGION", "us-east-1")
 	t.Setenv("AWS_ACCESS_KEY_ID", "test")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
 	values := binds(live.Binding{Name: "resize", Type: bindingsv1.BindingType_BINDING_TYPE_TASK})
 
 	if _, err := serveProxy(context.Background(), values, proxyConfig{}); err == nil || !strings.Contains(err.Error(), queues.FilePath) {
-		t.Fatalf("serveProxy with no queue manifest = %v, want an error naming %s", err, queues.FilePath)
+		t.Fatalf("serveProxy with no queue topology = %v, want an error naming %s", err, queues.FilePath)
 	}
-	manifest := &queues.Manifest{Table: "state", KeyPrefix: "PROJECT#shop#ENV#prod#TASKS#", Topics: map[string]queues.Topic{}}
-	served, err := serveProxy(context.Background(), values, proxyConfig{queues: manifest})
+	topology := &queues.Topology{Table: "state", KeyPrefix: "PROJECT#shop#ENV#prod#TASKS#", Topics: map[string]queues.Topic{}}
+	served, err := serveProxy(context.Background(), values, proxyConfig{queues: topology})
 	if err != nil {
 		t.Fatalf("serveProxy: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestATaskIsServedThroughTheProxyOnlyWithTheQueueManifestBesideTheCode(t *te
 	client := taskv1connect.NewTaskServiceClient(&http.Client{Transport: bearerToken(proxyEnvValue(t, served.env, localrpc.SessionTokenEnvVar))}, proxyEnvValue(t, served.env, processenv.RuntimeAddressEnvVar))
 	_, err = client.Trigger(context.Background(), &taskv1.TriggerRequest{Task: "resize"})
 	if connect.CodeOf(err) != connect.CodeNotFound {
-		t.Errorf("a trigger of a task the manifest does not declare = %v, want NotFound from the engine behind the proxy", err)
+		t.Errorf("a trigger of a task the topology does not declare = %v, want NotFound from the engine behind the proxy", err)
 	}
 }
 

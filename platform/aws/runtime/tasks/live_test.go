@@ -117,7 +117,7 @@ func (em emulator) queueARN(t *testing.T, url string) string {
 
 type deployment struct {
 	em       emulator
-	manifest queues.Manifest
+	topology queues.Topology
 	urls     map[string]string
 	arns     map[string]string
 }
@@ -125,7 +125,7 @@ type deployment struct {
 func (em emulator) deploy(t *testing.T, topics map[string]*provider.TopicSpec, workers map[string]queues.Worker) *deployment {
 	t.Helper()
 	ctx := context.Background()
-	d := &deployment{em: em, urls: map[string]string{}, arns: map[string]string{}, manifest: queues.Manifest{
+	d := &deployment{em: em, urls: map[string]string{}, arns: map[string]string{}, topology: queues.Topology{
 		Table:     em.table(t),
 		KeyPrefix: "PROJECT#live#ENV#" + uniqueName(t) + "#TASKS#",
 		Topics:    map[string]queues.Topic{},
@@ -170,13 +170,13 @@ func (em emulator) deploy(t *testing.T, topics map[string]*provider.TopicSpec, w
 				}
 			}
 		}
-		d.manifest.Topics[name] = topic
+		d.topology.Topics[name] = topic
 	}
 	return d
 }
 
 func (d *deployment) engine(worker *fakeWorker) *Engine {
-	cfg := Config{Manifest: d.manifest, Table: d.em.db, Queues: d.em.sqs, Topics: d.em.sns}
+	cfg := Config{Topology: d.topology, Table: d.em.db, Queues: d.em.sqs, Topics: d.em.sns}
 	if worker != nil {
 		cfg.WorkerURL = worker.server.URL
 	}
@@ -184,7 +184,7 @@ func (d *deployment) engine(worker *fakeWorker) *Engine {
 }
 
 func (d *deployment) queueOf(topic, consumer string) string {
-	return d.manifest.Topics[topic].Queues[consumer]
+	return d.topology.Topics[topic].Queues[consumer]
 }
 
 func (d *deployment) receive(t *testing.T, topic, consumer string, within time.Duration) events.SQSMessage {

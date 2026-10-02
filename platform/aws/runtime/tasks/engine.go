@@ -25,7 +25,7 @@ type topicService interface {
 }
 
 type Config struct {
-	Manifest queues.Manifest
+	Topology queues.Topology
 	Table    table
 	Queues   queueService
 	Topics   topicService
@@ -48,14 +48,14 @@ func New(cfg Config) *Engine {
 		cfg.Client = http.DefaultClient
 	}
 	var topics []string
-	for name, topic := range cfg.Manifest.Topics {
+	for name, topic := range cfg.Topology.Topics {
 		if topic.Declared != nil {
 			topics = append(topics, name)
 		}
 	}
 	return &Engine{
 		cfg:   cfg,
-		store: store{db: cfg.Table, table: cfg.Manifest.Table, prefix: cfg.Manifest.KeyPrefix, topics: topics},
+		store: store{db: cfg.Table, table: cfg.Topology.Table, prefix: cfg.Topology.KeyPrefix, topics: topics},
 		urls:  map[string]string{},
 	}
 }
@@ -76,7 +76,7 @@ func (d deployedConsumer) retry() provider.RetryPolicy {
 }
 
 func (e *Engine) topic(name string) (queues.Topic, bool) {
-	topic, found := e.cfg.Manifest.Topics[name]
+	topic, found := e.cfg.Topology.Topics[name]
 	return topic, found && topic.Declared != nil
 }
 
@@ -94,7 +94,7 @@ func (e *Engine) consumer(topicName, consumerName string) (deployedConsumer, boo
 }
 
 func (e *Engine) consumerOnQueue(queue string) (deployedConsumer, bool) {
-	for name, topic := range e.cfg.Manifest.Topics {
+	for name, topic := range e.cfg.Topology.Topics {
 		for consumer, held := range topic.Queues {
 			if held == queue {
 				return e.consumer(name, consumer)

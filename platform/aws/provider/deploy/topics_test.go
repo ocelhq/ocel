@@ -147,24 +147,24 @@ func TestAnAppReachingTasksMaySendToEveryQueuePublishToEveryTopicAndKeepRunsUnde
 	}
 }
 
-func TestTheQueueManifestNamesEachTopicsQueuesAndSNSTopic(t *testing.T) {
+func TestTheQueueTopologyNamesEachTopicsQueuesAndSNSTopic(t *testing.T) {
 	t.Parallel()
 
 	cfg := Config{Region: "us-east-1", StateTable: "ocel-state", StateTableARN: testStateTableARN}
-	manifest, err := queueManifest(cfg, "shop", "prod", []provider.Resource{
+	topology, err := queueTopology(cfg, "shop", "prod", []provider.Resource{
 		taskResource("resize", provider.ConsumerSpec{Worker: "worker"}),
 		topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}),
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.Table != "ocel-state" || manifest.KeyPrefix != naming.TaskKeyPrefix("shop", "prod") {
-		t.Errorf("manifest table %q prefix %q, want the state table and the deployment's task keys", manifest.Table, manifest.KeyPrefix)
+	if topology.Table != "ocel-state" || topology.KeyPrefix != naming.TaskKeyPrefix("shop", "prod") {
+		t.Errorf("topology table %q prefix %q, want the state table and the deployment's task keys", topology.Table, topology.KeyPrefix)
 	}
-	if got := manifest.Topics["resize"]; got.SNS != "" || got.Queues["resize"] != queues.QueueName("shop", "prod", "resize", "resize", false) {
+	if got := topology.Topics["resize"]; got.SNS != "" || got.Queues["resize"] != queues.QueueName("shop", "prod", "resize", "resize", false) {
 		t.Errorf("resize = %+v, want its queue and no SNS topic", got)
 	}
-	if got := manifest.Topics["orders"]; got.SNS != snsTopicARN("us-east-1", mockAccount, queues.TopicName("shop", "prod", "orders", false)) {
+	if got := topology.Topics["orders"]; got.SNS != snsTopicARN("us-east-1", mockAccount, queues.TopicName("shop", "prod", "orders", false)) {
 		t.Errorf("orders = %+v, want its SNS topic's ARN", got)
 	}
 }

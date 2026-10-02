@@ -104,15 +104,15 @@ func sqsQueueARN(region, account, name string) string {
 	return fmt.Sprintf("arn:aws:sqs:%s:%s:%s", region, account, name)
 }
 
-func queueManifest(cfg Config, project, env string, resources []provider.Resource, workers map[string]queues.Worker) (queues.Manifest, error) {
+func queueTopology(cfg Config, project, env string, resources []provider.Resource, workers map[string]queues.Worker) (queues.Topology, error) {
 	topics := topicsOf(project, env, resources)
-	manifest := queues.Manifest{Table: cfg.StateTable, KeyPrefix: naming.TaskKeyPrefix(project, env), Topics: map[string]queues.Topic{}, Workers: workers}
+	topology := queues.Topology{Table: cfg.StateTable, KeyPrefix: naming.TaskKeyPrefix(project, env), Topics: map[string]queues.Topic{}, Workers: workers}
 	if len(topics) == 0 {
-		return manifest, nil
+		return topology, nil
 	}
 	account := accountOfARN(cfg.StateTableARN)
 	if account == "" {
-		return queues.Manifest{}, fmt.Errorf("the state table ARN %q names no account, so the topics' ARNs cannot be written", cfg.StateTableARN)
+		return queues.Topology{}, fmt.Errorf("the state table ARN %q names no account, so the topics' ARNs cannot be written", cfg.StateTableARN)
 	}
 	for _, topic := range topics {
 		entry := queues.Topic{Declared: topic.declared, Queues: map[string]string{}}
@@ -122,9 +122,9 @@ func queueManifest(cfg Config, project, env string, resources []provider.Resourc
 		for _, queue := range topic.queues {
 			entry.Queues[queue.consumer.Name] = queue.name
 		}
-		manifest.Topics[topic.resource.Declared] = entry
+		topology.Topics[topic.resource.Declared] = entry
 	}
-	return manifest, nil
+	return topology, nil
 }
 
 func registerTopic(ctx *pulumi.Context, topic deployedTopic, visibility func(worker string) int, tags pulumi.StringMap) error {

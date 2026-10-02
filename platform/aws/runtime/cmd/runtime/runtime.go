@@ -52,11 +52,11 @@ func main() {
 		fatalInit(fmt.Sprintf("failed to open this deployment's encrypted variables: %v", err))
 	}
 
-	queueManifest, err := readQueueManifest(taskRoot())
+	queueTopology, err := readQueueTopology(taskRoot())
 	if err != nil {
 		fatalInit(err.Error())
 	}
-	proxyCfg := proxyConfig{table: os.Getenv(stateTableEnvVar), sessionPrefix: os.Getenv(sessionPrefixEnvVar), queues: queueManifest}
+	proxyCfg := proxyConfig{table: os.Getenv(stateTableEnvVar), sessionPrefix: os.Getenv(sessionPrefixEnvVar), queues: queueTopology}
 	if worker := os.Getenv(processenv.WorkerEnvVar); worker != "" {
 		runWorker(ctx, worker, served, resolved, prefetch, bakedEnv, proxyCfg)
 		return

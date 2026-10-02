@@ -298,7 +298,7 @@ func (e *Engine) slotSets(deployed deployedConsumer) []slotSet {
 	if deployed.consumer.Concurrency == 1 {
 		sets = append(sets, slotSet{name: "consumer#" + deployed.topicName + "#" + deployed.consumer.Name, limit: 1})
 	}
-	if worker := e.cfg.Manifest.Workers[deployed.consumer.Worker]; worker.Concurrency > 0 {
+	if worker := e.cfg.Topology.Workers[deployed.consumer.Worker]; worker.Concurrency > 0 {
 		sets = append(sets, slotSet{name: "worker#" + deployed.consumer.Worker, limit: worker.Concurrency})
 	}
 	return sets
