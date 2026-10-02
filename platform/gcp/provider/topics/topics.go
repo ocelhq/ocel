@@ -13,6 +13,7 @@ import (
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 type Topics struct {
@@ -36,7 +37,7 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 	if err != nil {
 		return nil, err
 	}
-	if err := refuseNonJSON(req.GetPayload()); err != nil {
+	if err := runs.RefuseNonJSON(req.GetPayload()); err != nil {
 		return nil, err
 	}
 	now := time.Now()
@@ -48,7 +49,7 @@ func (t Topics) Send(ctx context.Context, req *topicv1.SendRequest) (*topicv1.Se
 		dueAt:       now,
 		payload:     req.GetPayload(),
 		key:         req.GetKey(),
-		lane:        laneName(req.GetLane()),
+		lane:        string(runs.LaneOf(req.GetLane())),
 	}
 	if req.GetDueAt() != nil {
 		toPublish.dueAt = req.GetDueAt().AsTime()

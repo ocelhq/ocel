@@ -17,3 +17,7 @@ func (d Deployment) Store() Store { return Store{Clients: d.Clients, Scope: d.Na
 func (d Deployment) Topics() Topics { return Topics{deployment: d} }
 
 func (d Deployment) Tasks() Tasks { return Tasks{deployment: d} }
+
+func isTask(topic *contractv1.ManifestTopic) bool {
+	return len(topic.GetConsumers()) == 1 && topic.GetConsumers()[0].GetExclusive()
+}

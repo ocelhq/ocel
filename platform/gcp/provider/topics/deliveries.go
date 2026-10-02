@@ -17,6 +17,7 @@ import (
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 const (
@@ -27,6 +28,7 @@ const (
 	MaxAttemptsAttribute = "ocel-max-attempts"
 	LaneAttribute        = "ocel-lane"
 	ScheduleAttribute    = "ocel-schedule"
+	ConsumerAttribute    = "ocel-consumer"
 
 	pushPrefix    = "/topics/"
 	consumerInfix = "/consumers/"
@@ -142,21 +144,11 @@ func pushedRunOf(topicName string, topic *contractv1.ManifestTopic, consumer *co
 		delivered.messageID = envelope.MessageIDFrom(idTime, pushed.Message.MessageID)
 	}
 	requested, _ := strconv.Atoi(attributes[MaxAttemptsAttribute])
-	delivered.maxAttempts = retryPolicyOf(topic, consumer).attemptsFor(int32(requested))
+	delivered.maxAttempts = runs.AttemptsFor(provider.ResolveRetryPolicy(topic.GetRetry(), consumer.GetRetry()), int32(requested))
 	return delivered
 }
 
-func (p pushedRun) execution() string { return executionOf(p.messageID, p.consumer.GetName()) }
-
-func executionOf(messageID, consumer string) string { return messageID + "-" + consumer }
-
-func isFinished(status provider.RunStatus) bool {
-	switch status {
-	case provider.RunCompleted, provider.RunFailed, provider.RunCanceled, provider.RunExpired, provider.RunTimedOut:
-		return true
-	}
-	return false
-}
+func (p pushedRun) execution() string { return runs.ExecutionOf(p.messageID, p.consumer.GetName()) }
 
 func (d Deliveries) deliver(ctx context.Context, delivered pushedRun) error {
 	claimed, err := d.claim(ctx, delivered)
@@ -196,7 +188,7 @@ func (d Deliveries) claim(ctx context.Context, delivered pushedRun) (storedRun, 
 		if run.delivery.MaxAttempts == 0 {
 			run.delivery.MaxAttempts = delivered.maxAttempts
 		}
-		if isFinished(run.Status) || isSuperseded(*run, delivered) {
+		if !runs.IsUnfinished(run.Status) || isSuperseded(*run, delivered) {
 			return errRunUnchanged
 		}
 		if run.Attempts == 0 && !run.ExpiresAt.IsZero() && !run.ExpiresAt.After(now) {
