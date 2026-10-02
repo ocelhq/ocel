@@ -148,6 +148,15 @@ func TestAWorkersAnswerIsReadAsSuccessAbortOrFailure(t *testing.T) {
 	}
 }
 
+func TestAResultNobodyJudgedIsNoSuccess(t *testing.T) {
+	t.Parallel()
+
+	var unjudged envelope.Result
+	if unjudged.Outcome == envelope.Succeeded {
+		t.Error("the zero Result reads as a success, so an attempt whose answer was never read would settle its run as completed")
+	}
+}
+
 func TestAnAnswerReadWithoutHTTPIsJudgedAsAPostedOneIs(t *testing.T) {
 	t.Parallel()
 
