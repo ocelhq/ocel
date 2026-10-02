@@ -24,6 +24,7 @@ on:
       - "turbo.json"
       - "scripts/floci.sh"
       - "scripts/assert-ran.sh"
+      - "scripts/flocidispatch/**"
       - "scripts/redactvet/**"
       - ".golangci.yml"
       - ".github/workflows/go.yml"
@@ -104,7 +105,7 @@ jobs:
           - name: aws
             dirs: platform/aws/provider platform/aws/runtime platform/aws/connector
           - name: gcp
-            dirs: platform/gcp/provider platform/gcp/runtime platform/gcp/connector
+            dirs: platform/gcp/provider platform/gcp/runtime platform/gcp/connector scripts/flocidispatch
           - name: vps
             dirs: platform/vps/provider platform/vps/runtime platform/vps/connector
           - name: pkg, s3, pgmq, realtime and edge
@@ -274,7 +275,7 @@ jobs:
         if: matrix.group.name == 'gcp' && steps.gate-gcp-live.outputs.green != 'true'
         run: |
           set -euo pipefail
-          scripts/floci.sh --cloud gcp run "ocel-gcp-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -C platform/gcp/provider -race -count=1 -timeout 30m -run '^TestLive' -json ./... | tee live-gcp.json
+          scripts/floci.sh --cloud gcp run "ocel-gcp-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -race -count=1 -timeout 30m -run '^TestLive' -json ./platform/gcp/provider/... ./platform/gcp/runtime/... ./scripts/flocidispatch/... | tee live-gcp.json
 
       - name: Assert the gcp live suite ran
         if: matrix.group.name == 'gcp' && steps.gate-gcp-live.outputs.green != 'true'

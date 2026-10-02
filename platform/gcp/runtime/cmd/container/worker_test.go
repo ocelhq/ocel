@@ -64,7 +64,7 @@ func rendered(t *testing.T, manifest variables.Manifest) string {
 	return variables.EnvVar + "=" + string(raw)
 }
 
-func TestAWorkerAnswersEachPushByRunningItsConsumerAndRecordingTheRun(t *testing.T) {
+func TestLiveAWorkerAnswersEachPushByRunningItsConsumerAndRecordingTheRun(t *testing.T) {
 	endpoint := flociEndpoint(t)
 	manifest, store := pinned(t, endpoint)
 	r := launch(t, "worker", processenv.WorkerEnvVar+"=worker", rendered(t, manifest))
@@ -112,7 +112,7 @@ func TestAWorkerAnswersEachPushByRunningItsConsumerAndRecordingTheRun(t *testing
 	}
 }
 
-func TestAnAppPinnedTasksTriggersThemThroughItsBindingProxy(t *testing.T) {
+func TestLiveAnAppPinnedTasksTriggersThemThroughItsBindingProxy(t *testing.T) {
 	endpoint := flociEndpoint(t)
 	manifest, store := pinned(t, endpoint)
 	deployment := deploymentOf(manifest)
