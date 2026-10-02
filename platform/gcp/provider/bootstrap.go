@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -82,6 +83,7 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap, error) {
 		clients:       opened,
 		fronts:        g.p.Edges(),
 		stores:        g.p.memorystore(),
+		records:       g.p.KeyValues(),
 		pushBinary:    g.p.pushBinary,
 		deployService: g.p.deployService,
 		tearDown:      g.p.tearDown,
@@ -132,6 +134,7 @@ type bootstrap struct {
 	clients *clients
 	fronts  provider.Edges
 	stores  memorystore
+	records keyvalue.Store
 
 	pushBinary    func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
 	deployService func(ctx context.Context, s serving, progress progress.Log) (release, error)
@@ -192,6 +195,9 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 		return provider.Plan{}, err
 	}
 	if err := b.featuresFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
+		return provider.Plan{}, err
+	}
+	if err := b.tasksFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
 		return provider.Plan{}, err
 	}
 	current, err := b.described(ctx, read)

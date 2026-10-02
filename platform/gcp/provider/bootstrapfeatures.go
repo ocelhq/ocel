@@ -155,6 +155,9 @@ func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.B
 	if err := b.networkFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
 		return err
 	}
+	if err := b.tasksFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
+		return err
+	}
 	if err := b.dropFronts(ctx, read, req, progress); err != nil {
 		return err
 	}
