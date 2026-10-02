@@ -184,7 +184,7 @@ func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFa
 		stack:    workersStack("prod", "web"),
 		topics:   topics,
 		workers:  []provider.WorkerSpec{{Name: "worker"}, {Name: "capped", Concurrency: 2}},
-		args:     functionArgs{Runtime: defaultFunctionRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024},
+		args:     functionArgs{Runtime: defaultFunctionRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024, Tags: map[string]string{"ocel:managed-by": "ocel"}},
 		artifact: artifactRef{Bucket: "artifacts", Key: "web.zip"},
 		env:      map[string]string{"APP_VAR": "1"},
 		role:     executionRole{App: "web", Boundary: testBoundaryARN},
@@ -225,6 +225,9 @@ func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFa
 	for _, name := range rec.registered("aws:lambda/eventSourceMapping:EventSourceMapping") {
 		inputs := rec.inputs("aws:lambda/eventSourceMapping:EventSourceMapping", name)
 		mappings[inputs["eventSourceArn"].StringValue()] = inputs
+		if tags, ok := inputs["tags"]; !ok || tags.ObjectValue()["ocel:managed-by"].StringValue() != "ocel" {
+			t.Errorf("mapping %s tags = %v, want ocel:managed-by=ocel so the credential may create, update and delete it", name, inputs["tags"])
+		}
 	}
 	if len(mappings) != 5 {
 		t.Fatalf("event source mappings = %d, want one per queue the workers serve", len(mappings))
