@@ -225,10 +225,11 @@ func manifestResources(declarations []declaredResource, topics map[string]*contr
 			resource.Config = &contractv1.ManifestResource_Kv{Kv: manifestKV(d)}
 		}
 		if d.Realtime != nil {
-			if err := firstRefusal(refuseInvalidName(d, d.Name), refuseRealtime(d)); err != nil {
+			config := manifestRealtime(d)
+			if err := firstRefusal(refuseInvalidName(d, d.Name), refuseRealtime(d, config)); err != nil {
 				return nil, nil, err
 			}
-			resource.Config = &contractv1.ManifestResource_Realtime{Realtime: manifestRealtime(d)}
+			resource.Config = &contractv1.ManifestResource_Realtime{Realtime: config}
 		}
 		if topic, found := topics[d.Name]; found && declaredKind.declaresTopic {
 			resource.Config = &contractv1.ManifestResource_Topic{Topic: topic}

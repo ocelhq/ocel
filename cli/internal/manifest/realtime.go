@@ -2,6 +2,7 @@ package manifest
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -39,69 +40,19 @@ func declaredChannels(configDir string, config *resourcesv1.RealtimeConfig, reso
 	return channels
 }
 
-func refuseRealtime(d declaredResource) error {
-	if err := realtime.RefuseNamespace(d.Name); err != nil {
+func refuseRealtime(d declaredResource, config *resourcesv1.RealtimeConfig) error {
+	err := realtime.RefuseConfig(d.Name, config)
+	var channel *realtime.InvalidChannelError
+	if errors.As(err, &channel) {
+		return &InvalidDeclarationError{
+			Source: cmp.Or(channel.Source, d.Source),
+			Reason: fmt.Sprintf("channel %q of %s %s", channel.Pattern, d.label(), channel.Reason),
+		}
+	}
+	if err != nil {
 		return refuse(d, "%s", err)
 	}
-	if ttl := d.Realtime.GetTokenTtl(); ttl != nil {
-		if err := realtime.RefuseTokenTTL(ttl.AsDuration()); err != nil {
-			return refuse(d, "%s", err)
-		}
-	}
-	return refuseRealtimeChannels(d)
-}
-
-func refuseRealtimeChannels(d declaredResource) error {
-	type parsedChannel struct {
-		channel declaredChannel
-		pattern realtime.Pattern
-	}
-	parsed := make([]parsedChannel, 0, len(d.RealtimeChannels))
-	for _, channel := range d.RealtimeChannels {
-		pattern, err := realtime.ParsePattern(channel.Pattern)
-		if err != nil {
-			return refuseChannel(d, channel, "%s", err)
-		}
-		if channel.Wildcard && !pattern.HasParameters() {
-			return refuseChannel(d, channel, "sets wildcard, and a pattern with no params has no trailing param a subscriber could leave off")
-		}
-		if channel.Subscribe == resourcesv1.RealtimeSubscribe_REALTIME_SUBSCRIBE_UNSPECIFIED {
-			return refuseChannel(d, channel, "declares no subscribe: it is a rule or \"public\"")
-		}
-		if channel.Publish == resourcesv1.RealtimePublish_REALTIME_PUBLISH_UNSPECIFIED {
-			return refuseChannel(d, channel, "declares no publish: it is a rule, or the server alone publishes")
-		}
-		parsed = append(parsed, parsedChannel{channel, pattern})
-	}
-	for i, later := range parsed {
-		for _, prior := range parsed[:i] {
-			if prior.pattern.Overlaps(later.pattern) {
-				return refuseChannel(d, later.channel,
-					"overlaps pattern %q declared at %s: some channel would match both, so neither pattern's rules could tell its channels from the other's",
-					prior.channel.Pattern, sourceOrUnknown(prior.channel.Source))
-			}
-		}
-	}
-	for i, wildcard := range parsed {
-		if !wildcard.channel.Wildcard {
-			continue
-		}
-		for j, other := range parsed {
-			if i != j && wildcard.pattern.WildcardCovers(other.pattern) {
-				return refuseChannel(d, wildcard.channel,
-					"sets wildcard, and a subscriber leaving off its trailing params would also receive the channels of pattern %q declared at %s, which its rules never checked",
-					other.channel.Pattern, sourceOrUnknown(other.channel.Source))
-			}
-		}
-	}
 	return nil
-}
-
-func refuseChannel(d declaredResource, channel declaredChannel, format string, args ...any) error {
-	return &InvalidDeclarationError{
-		Source: cmp.Or(channel.Source, d.Source),
-		Reason: fmt.Sprintf("channel %q of %s ", channel.Pattern, d.label()) + fmt.Sprintf(format, args...),
-	}
 }
 
 func manifestRealtime(d declaredResource) *resourcesv1.RealtimeConfig {
