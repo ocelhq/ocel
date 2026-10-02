@@ -13,7 +13,7 @@ import (
 
 func RefuseUnsupportedTopicsTasksAndWorkers(facts provider.Facts, manifest *contractv1.Manifest) error {
 	if len(facts.WorkerCeilings) > 0 {
-		return nil
+		return refuseWorkersOnUnservedComputes(facts, manifest)
 	}
 	declared, found := findTopicTaskOrWorker(manifest)
 	if !found {
@@ -83,4 +83,30 @@ func findTopicTaskOrWorker(manifest *contractv1.Manifest) (string, bool) {
 		return fmt.Sprintf("worker %q", workers[0].GetName()), true
 	}
 	return "", false
+}
+
+func refuseWorkersOnUnservedComputes(facts provider.Facts, manifest *contractv1.Manifest) error {
+	for _, worker := range manifest.GetWorkers() {
+		compute := provider.Compute(worker.GetCompute())
+		if !slices.ContainsFunc(facts.WorkerCeilings, func(ceiling provider.WorkerCeiling) bool { return ceiling.Compute == compute }) {
+			return refusal.Refuse(refusal.CodeUnsupported,
+				"worker %q runs on app %q's %s compute, and %s runs no worker on %s compute",
+				worker.GetName(), worker.GetApp(), compute, facts.Vendor, compute)
+		}
+	}
+	return nil
+}
+
+func (r *deployRun) declaredTopics() ([]provider.Resource, error) {
+	resources, err := manifestResources(r.manifest)
+	if err != nil {
+		return nil, err
+	}
+	var topics []provider.Resource
+	for _, resource := range resources {
+		if resource.Topic != nil {
+			topics = append(topics, resource)
+		}
+	}
+	return topics, nil
 }
