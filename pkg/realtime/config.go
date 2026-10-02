@@ -46,13 +46,13 @@ func refuseChannels(channels []*resourcesv1.RealtimeChannel) error {
 		if channel.GetSubscribe() == resourcesv1.RealtimeSubscribe_REALTIME_SUBSCRIBE_UNSPECIFIED {
 			return refuseChannel(channel, "declares no subscribe: it is a rule or \"public\"")
 		}
-		if !isKnownSubscribe(channel.GetSubscribe()) {
+		if _, found := FindSubscribeAccess(channel.GetSubscribe()); !found {
 			return refuseChannel(channel, "declares subscribe %v, which no channel takes", channel.GetSubscribe())
 		}
 		if channel.GetPublish() == resourcesv1.RealtimePublish_REALTIME_PUBLISH_UNSPECIFIED {
 			return refuseChannel(channel, "declares no publish: it is a rule, or the server alone publishes")
 		}
-		if !isKnownPublish(channel.GetPublish()) {
+		if _, found := FindPublishAccess(channel.GetPublish()); !found {
 			return refuseChannel(channel, "declares publish %v, which no channel takes", channel.GetPublish())
 		}
 		parsed = append(parsed, parsedChannel{channel, pattern})
@@ -79,16 +79,6 @@ func refuseChannels(channels []*resourcesv1.RealtimeChannel) error {
 		}
 	}
 	return nil
-}
-
-func isKnownSubscribe(subscribe resourcesv1.RealtimeSubscribe) bool {
-	_, known := resourcesv1.RealtimeSubscribe_name[int32(subscribe)]
-	return known
-}
-
-func isKnownPublish(publish resourcesv1.RealtimePublish) bool {
-	_, known := resourcesv1.RealtimePublish_name[int32(publish)]
-	return known
 }
 
 func refuseChannel(channel *resourcesv1.RealtimeChannel, format string, args ...any) error {

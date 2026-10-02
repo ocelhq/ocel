@@ -2,10 +2,25 @@ package provider
 
 import (
 	"encoding/base64"
+	"time"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/realtime"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
+
+type RealtimeSpec struct {
+	Channels []ChannelSpec
+	TokenTTL time.Duration
+}
+
+type ChannelSpec struct {
+	Pattern   string
+	Wildcard  bool
+	Schema    string
+	Subscribe realtime.ChannelAccess
+	Publish   realtime.ChannelAccess
+}
 
 func verifyRealtimeProperties(binding Binding) error {
 	transport, known := bindingsv1.RealtimeTransport_value[binding.Properties[PropertyTransport]]
