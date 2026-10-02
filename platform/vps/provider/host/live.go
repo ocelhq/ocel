@@ -97,7 +97,7 @@ func (h *Host) IsAgentCurrent(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	agent := newAgentItem(liveAgent(arch))
-	rendered, err := h.run(ctx, "survey the box agent", survey([]Item{agent}), nil)
+	rendered, err := h.reach(ctx, "survey the box agent", survey([]Item{agent}), nil)
 	if err != nil {
 		return false, err
 	}

@@ -135,6 +135,17 @@ func TestALoginThatCannotElevateSeesTheBootstrapThisBuildWroteAsCurrent(t *testi
 	}
 }
 
+func TestALoginThatCannotElevateIsStillToldWhetherTheBoxsAgentIsThisBuilds(t *testing.T) {
+	conn := &sudoless{}
+
+	if _, err := hostFor(conn).IsAgentCurrent(context.Background()); err != nil {
+		t.Fatalf("IsAgentCurrent() = %v, want an answer read as the deploy login: the agent is world-readable, and a deploy declaring a topic or task under a login without sudo was refused before it began", err)
+	}
+	if over := conn.elevated(); len(over) != 0 {
+		t.Errorf("IsAgentCurrent() ran %q as root, want the agent surveyed as the login that asked", over)
+	}
+}
+
 func TestALoginThatCannotElevateStillSeesABootstrapAnotherBuildWrote(t *testing.T) {
 	conn := &sudoless{}
 	stampedBy(t, conn, func(written map[string]string) {
