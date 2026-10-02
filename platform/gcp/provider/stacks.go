@@ -313,7 +313,7 @@ func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec, tasks *varia
 		Slug:        spec.Ref.Project,
 		Tier:        string(spec.Ref.Tier),
 		Environment: liveEnvironment(spec.Ref),
-		Endpoint:    p.endpoint,
+		Endpoint:    p.containerEndpoint(),
 		Keys:        liveKeys(app.Values),
 		Bindings:    liveBindings(app.Values),
 		Tasks:       tasks,
