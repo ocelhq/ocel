@@ -20,8 +20,8 @@ func TestATaskIsATopicWithOneExclusiveConsumer(t *testing.T) {
 		{"two consumers", provider.TopicSpec{Consumers: []provider.ConsumerSpec{{Name: "ship", Exclusive: true}, {Name: "bill"}}}, false},
 		{"no consumer", provider.TopicSpec{}, false},
 	} {
-		if got := runs.IsTaskSpec(&tc.spec); got != tc.want {
-			t.Errorf("%s: IsTaskSpec() = %v, want %v", tc.name, got, tc.want)
+		if got := runs.IsTask(&tc.spec); got != tc.want {
+			t.Errorf("%s: IsTask() = %v, want %v", tc.name, got, tc.want)
 		}
 	}
 }

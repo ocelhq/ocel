@@ -42,7 +42,7 @@ type queueMessage struct {
 }
 
 func (e *Engine) publish(ctx context.Context, tx pgx.Tx, toPublish publication) ([]string, error) {
-	task := runs.IsTask(toPublish.topic)
+	task := isTask(toPublish.topic)
 	if !task {
 		staged := provider.ExpiringRecord{Purpose: provider.RecordStagedPayload, Topic: toPublish.topicName, Key: toPublish.messageID, Value: toPublish.payload, ExpiresAt: toPublish.dueAt.Add(stagedPayloadLife)}
 		if _, _, err := ensureRecord(ctx, tx, staged); err != nil {
