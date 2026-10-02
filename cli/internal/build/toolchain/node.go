@@ -10,11 +10,12 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 const (
 	handlerFile = "index.mjs"
-	workerFile  = "ocel-worker.mjs"
+	workerFile  = containerimage.NodeArtifactEntry
 )
 
 var engine = api.Engine{Name: api.EngineNode, Version: "24"}
