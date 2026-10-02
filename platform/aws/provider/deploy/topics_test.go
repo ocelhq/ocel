@@ -143,7 +143,7 @@ func TestAnAppReachingTasksMaySendToEveryQueuePublishToEveryTopicAndKeepRunsUnde
 	}
 	binding, err := collectTopicBinding(Config{Region: "us-east-1", StateTableARN: testStateTableARN}, "shop", "prod", topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}))
 	if err != nil || binding.GetTopic() == nil {
-		t.Fatalf("collectTopicBinding = %v, %v, want a topic binding", binding, err)
+		t.Fatalf("collectTopicBinding = %T, %v, want a topic binding", binding.GetProperties(), err)
 	}
 }
 
