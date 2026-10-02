@@ -21,3 +21,11 @@ func TestTheQueueDatabaseIsPinnedByDigestToAPgmqThatReadsOneHeadPerGroup(t *test
 		t.Errorf("QueueDatabase() runs pgmq %q, want 1.13.0, which has read_grouped_head (1.11.1 or later)", version)
 	}
 }
+
+func TestTheQueueDatabasesPostgresMajorIsTheOneItsPinnedImageRuns(t *testing.T) {
+	t.Parallel()
+
+	if major := QueueDatabaseMajor(); major != "18" {
+		t.Errorf("QueueDatabaseMajor() = %q, want 18, the postgres ghcr.io/pgmq/pg18-pgmq runs", major)
+	}
+}

@@ -26,7 +26,7 @@ func (probeSecret) Open(context.Context, environment.Tier, seal.AssociatedData, 
 
 func TestARecordedTaskIsTriggeredAndReadBackThroughTheEngineOnItsQueueDatabase(t *testing.T) {
 	server := enginetest.SharedQueueDatabase(t)
-	server.Claim(t, live.QueueResource)
+	server.Claim(t, live.QueueDatabaseName)
 	docker, err := agent.NewDocker()
 	if err != nil {
 		t.Fatal(err)
@@ -39,12 +39,12 @@ func TestARecordedTaskIsTriggeredAndReadBackThroughTheEngineOnItsQueueDatabase(t
 	record(t, store, live.QueueTopicKey(tier, "shop", "prod", "send-email"),
 		[]byte(`{"consumers":[{"name":"send-email","worker":"worker","exclusive":true}]}`))
 	engines := &queues.Engines{
-		Records:   store,
-		Tiers:     []environment.Tier{tier},
-		Cipher:    probeSecret{},
-		Addresses: docker,
-		Open:      queues.OpenPgmq,
-		Answers:   queues.WorkerAnswers,
+		Records:     store,
+		Tiers:       []environment.Tier{tier},
+		Cipher:      probeSecret{},
+		Addresses:   docker,
+		Open:        queues.OpenPgmq,
+		IsAnswering: queues.IsWorkerAnswering,
 	}
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
