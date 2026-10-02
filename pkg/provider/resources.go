@@ -140,6 +140,10 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 		}}
 	case BindingRealtime:
 		message.Properties = &bindingsv1.Binding_Realtime{Realtime: realtimeProperties(binding)}
+	case BindingTopic:
+		message.Properties = &bindingsv1.Binding_Topic{Topic: &bindingsv1.TopicProperties{}}
+	case BindingTask:
+		message.Properties = &bindingsv1.Binding_Task{Task: &bindingsv1.TaskProperties{}}
 	default:
 		fields := make(map[string]any, len(binding.Properties))
 		for name, value := range binding.Properties {

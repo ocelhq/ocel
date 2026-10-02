@@ -34,6 +34,23 @@ func TestABucketBindingIncludesThePublicAddressItWasPublishedUnder(t *testing.T)
 	}
 }
 
+func TestTopicAndTaskBindingsReadBackFromTheirRecordsAreTheSameRecords(t *testing.T) {
+	t.Parallel()
+
+	for _, record := range []*bindingsv1.Binding{
+		{Name: "orders", Properties: &bindingsv1.Binding_Topic{Topic: &bindingsv1.TopicProperties{}}},
+		{Name: "send-email", Properties: &bindingsv1.Binding_Task{Task: &bindingsv1.TaskProperties{}}},
+	} {
+		message, err := provider.BindingMessage(provider.BindingOf(record))
+		if err != nil {
+			t.Fatalf("BindingMessage(%s): %v", record.GetName(), err)
+		}
+		if !proto.Equal(message, record) {
+			t.Errorf("BindingMessage(BindingOf(%s)) is not the record it was read from: an app binds a task or topic by its type", record.GetName())
+		}
+	}
+}
+
 func TestAKVBindingReadBackFromItsRecordIsTheSameRecord(t *testing.T) {
 	t.Parallel()
 
