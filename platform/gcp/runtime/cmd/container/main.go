@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/processenv"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
@@ -180,19 +178,14 @@ func readManifest(raw string) (variables.Manifest, error) {
 
 func serveProxy(values *live.Values, manifest variables.Manifest, app string) (bindingproxy.Served, error) {
 	var services bindingproxy.Services
-	served := false
-	if values != nil && slices.ContainsFunc(values.Bindings(), func(binding live.Binding) bool {
-		return binding.Type == bindingsv1.BindingType_BINDING_TYPE_BUCKET
-	}) {
-		services.Buckets = s3store.NewDispatch(nil, values, s3store.HTTPPoster{App: app})
-		served = true
+	if values != nil {
+		services.Buckets = s3store.NewBoundDispatch(values, app)
 	}
 	if manifest.Tasks != nil {
 		deployment := deploymentOf(manifest)
 		services.Tasks, services.Topics = deployment.Tasks(), deployment.Topics()
-		served = true
 	}
-	if !served {
+	if services.Empty() {
 		return bindingproxy.Served{}, nil
 	}
 	return bindingproxy.Serve(services)

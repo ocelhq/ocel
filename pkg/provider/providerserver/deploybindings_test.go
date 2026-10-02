@@ -158,21 +158,21 @@ func TestDeployRefusesABindingTheRecordCannotSatisfy(t *testing.T) {
 
 func TestRefuseMismatchedBinding(t *testing.T) {
 	t.Run("refuses a custom record bound as a binding", func(t *testing.T) {
-		err := providerserver.RefuseMismatchedBinding(provider.Binding{Name: "flags", Type: provider.BindingCustom}, "settings", provider.BindingPostgres, proxied)
+		err := providerserver.RefuseMismatchedBinding(provider.Binding{Name: "flags", Type: provider.BindingCustom}, "settings", provider.BindingPostgres)
 		if err == nil || !strings.Contains(err.Error(), "`bindings.custom.flags.<property>`") {
 			t.Errorf("RefuseMismatchedBinding = %v, want a custom record sent to transforms by the key a transform reads it under", err)
 		}
 	})
 
 	t.Run("admits a record of the declared type ocel provisioned", func(t *testing.T) {
-		if err := providerserver.RefuseMismatchedBinding(provider.Binding{Name: "uploads", Type: provider.BindingBucket}, "uploads", provider.BindingBucket, proxied); err != nil {
+		if err := providerserver.RefuseMismatchedBinding(provider.Binding{Name: "uploads", Type: provider.BindingBucket}, "uploads", provider.BindingBucket); err != nil {
 			t.Errorf("RefuseMismatchedBinding = %v, want a record ocel published bound", err)
 		}
 	})
 
 	t.Run("refuses a published bucket the runtime has no store to reach it in", func(t *testing.T) {
 		published := provider.Binding{Name: "uploads", Type: provider.BindingBucket, Source: "terraform", Properties: map[string]string{provider.PropertyBucket: "acme"}}
-		if err := providerserver.RefuseMismatchedBinding(published, "uploads", provider.BindingBucket, proxied); err == nil {
+		if err := providerserver.RefuseMismatchedBinding(published, "uploads", provider.BindingBucket); err == nil {
 			t.Error("RefuseMismatchedBinding = nil, want a bucket ocel's backend cannot reach refused")
 		}
 	})
@@ -181,13 +181,22 @@ func TestRefuseMismatchedBinding(t *testing.T) {
 		bound := provider.Binding{Name: "ocel:bucket.uploads", Type: provider.BindingBucket, Source: "ocel.json", Properties: map[string]string{
 			provider.PropertyBucket: "acme", provider.PropertyEndpoint: "https://abc.r2.cloudflarestorage.com",
 		}}
-		if err := providerserver.RefuseMismatchedBinding(bound, "uploads", provider.BindingBucket, proxied); err != nil {
+		if err := providerserver.RefuseMismatchedBinding(bound, "uploads", provider.BindingBucket); err != nil {
 			t.Errorf("RefuseMismatchedBinding = %v, want a bucket the runtime serves from its record admitted", err)
 		}
 	})
 
+	t.Run("admits a published task or topic record, which names no store", func(t *testing.T) {
+		for _, kind := range []provider.BindingType{provider.BindingTask, provider.BindingTopic} {
+			published := provider.Binding{Name: "orders", Type: kind, Source: "terraform"}
+			if err := providerserver.RefuseMismatchedBinding(published, "orders", kind); err != nil {
+				t.Errorf("RefuseMismatchedBinding = %v, want a published %s admitted: only a bucket is reached in a store its record names", err, kind)
+			}
+		}
+	})
+
 	t.Run("a shape mismatch names the declared name and the external name apart", func(t *testing.T) {
-		err := providerserver.RefuseMismatchedBinding(provider.Binding{Name: "sst-pg-orders", Type: provider.BindingBucket}, "orders", provider.BindingPostgres, proxied)
+		err := providerserver.RefuseMismatchedBinding(provider.Binding{Name: "sst-pg-orders", Type: provider.BindingBucket}, "orders", provider.BindingPostgres)
 		if err == nil {
 			t.Fatal("RefuseMismatchedBinding = nil, want a bucket refused where a postgres was declared")
 		}
