@@ -18,12 +18,10 @@ func schedulerExpressions(expr string) ([]string, error) {
 		return nil, err
 	}
 	f := schedule.Fields()
-	minutes, hours, months := listOf(f.Minutes, 60), listOf(f.Hours, 24), listOf(f.Months, 12)
-	days, weekdays := listOf(f.Days, 31), weekdayList(f.Weekdays)
+	minutes, hours, months := cronField(f.Minutes, 60), cronField(f.Hours, 24), cronField(f.Months, 12)
+	days, weekdays := cronField(f.Days, 31), weekdayField(f.Weekdays)
 	var fields [][2]string
 	switch {
-	case f.AnyDay && f.AnyWeekday:
-		fields = [][2]string{{days, "?"}}
 	case f.AnyWeekday:
 		fields = [][2]string{{days, "?"}}
 	case f.AnyDay:
@@ -42,8 +40,8 @@ func schedulerExpressions(expr string) ([]string, error) {
 	return expressions, nil
 }
 
-func listOf(values []int, every int) string {
-	if len(values) == every {
+func cronField(values []int, possible int) string {
+	if len(values) == possible {
 		return "*"
 	}
 	parts := make([]string, len(values))
@@ -53,7 +51,7 @@ func listOf(values []int, every int) string {
 	return strings.Join(parts, ",")
 }
 
-func weekdayList(values []int) string {
+func weekdayField(values []int) string {
 	if len(values) == len(schedulerWeekdays) {
 		return "*"
 	}
