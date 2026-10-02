@@ -14,18 +14,17 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
 )
 
-func (t Topics) topicDeclaring(topicName, consumerName string) (*contractv1.ManifestTopic, error) {
+func (t Topics) topicDeclaring(topicName, consumerName string) (*provider.TopicSpec, error) {
 	topic, err := t.declared(topicName)
 	if err != nil {
 		return nil, err
 	}
-	for _, consumer := range topic.GetConsumers() {
-		if consumer.GetName() == consumerName {
+	for _, consumer := range topic.Consumers {
+		if consumer.Name == consumerName {
 			return topic, nil
 		}
 	}
