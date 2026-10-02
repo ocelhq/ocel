@@ -125,10 +125,22 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 	if err != nil {
 		return err
 	}
+	deliveryBound, err := live.NewQueueDeliverySecretAssociatedData(ref.Project, ref.Tier, ref.Name.String())
+	if err != nil {
+		return err
+	}
+	deliverySealed, _, err := p.keptSealed(ctx, ref.Tier, nameDeliverySecret(spec), spec.Resource, deliveryBound)
+	if err != nil {
+		return err
+	}
 	if err := p.host.RunResource(ctx, spec, secret); err != nil {
 		return err
 	}
-	record, err := json.Marshal(live.QueueDatabase{Container: spec.Name, Stack: ref.Name.String(), Sealed: base64.StdEncoding.EncodeToString(sealed)})
+	record, err := json.Marshal(live.QueueDatabase{
+		Container: spec.Name, Stack: ref.Name.String(),
+		Sealed:         base64.StdEncoding.EncodeToString(sealed),
+		DeliverySealed: base64.StdEncoding.EncodeToString(deliverySealed),
+	})
 	if err != nil {
 		return err
 	}
@@ -143,6 +155,10 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 	}
 	p.queues.ensured[spec.Name] = true
 	return nil
+}
+
+func nameDeliverySecret(queue host.ResourceContainer) string {
+	return queue.Name + "-" + live.QueueDeliverySecretName
 }
 
 func (p *Provider) removeTopic(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
@@ -163,6 +179,9 @@ func (p *Provider) removeTopic(ctx context.Context, ref provider.StackRef, bindi
 		progress.Say("Removing the queue database " + spec.Name + " and its data: " + ref.Name.Env + " declares no topic or task any more")
 	}
 	if err := p.host.RemoveResource(ctx, host.ResourceRef{Tier: ref.Tier, Project: ref.Project, Resource: spec.Resource, Name: spec.Name}); err != nil {
+		return err
+	}
+	if err := p.host.ForgetKept(ctx, ref.Tier, []string{nameDeliverySecret(spec)}); err != nil {
 		return err
 	}
 	p.queues.Lock()

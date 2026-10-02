@@ -14,15 +14,18 @@ const (
 	QueueDatabaseName = "ocel"
 	QueueSecretName   = "queue-password"
 
+	QueueDeliverySecretName = "delivery-secret"
+
 	queueDatabaseEntry = "database"
 	queueTopicsEntry   = "topics"
 	queueWorkersEntry  = "workers"
 )
 
 type QueueDatabase struct {
-	Container string `json:"container"`
-	Stack     string `json:"stack"`
-	Sealed    string `json:"sealed"`
+	Container      string `json:"container"`
+	Stack          string `json:"stack"`
+	Sealed         string `json:"sealed"`
+	DeliverySealed string `json:"deliverySealed"`
 }
 
 type QueueWorker struct {
@@ -67,6 +70,10 @@ func QueueWorkersUnder(tier environment.Tier, project, env string) (keyvalue.Par
 
 func NewQueueSecretAssociatedData(project string, tier environment.Tier, stack string) (seal.AssociatedData, error) {
 	return NewSecretAssociatedData(project, tier, stack, StoreSecretFolder, QueueDatabaseName, QueueSecretName)
+}
+
+func NewQueueDeliverySecretAssociatedData(project string, tier environment.Tier, stack string) (seal.AssociatedData, error) {
+	return NewSecretAssociatedData(project, tier, stack, StoreSecretFolder, QueueDatabaseName, QueueDeliverySecretName)
 }
 
 type queueKey struct{ project, env string }

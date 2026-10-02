@@ -2,7 +2,9 @@ package vps
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"slices"
 
@@ -21,19 +23,55 @@ func hasQueue(app *provider.AppSpec) bool {
 	})
 }
 
-func newWorkerEnv(app *provider.AppSpec, worker string) map[string]string {
+func newWorkerEnv(app *provider.AppSpec, worker, deliverySecret string) map[string]string {
 	env := maps.Clone(app.Values.ContainerEnv)
 	if env == nil {
 		env = map[string]string{}
 	}
-	delete(env, originguard.OriginSecretVar)
 	delete(env, originguard.OriginSecretPreviousVar)
+	env[originguard.OriginSecretVar] = deliverySecret
 	env[processenv.WorkerEnvVar] = worker
 	return env
 }
 
+func (p *Provider) openDeliverySecret(ctx context.Context, ref provider.StackRef) (string, error) {
+	recorded, err := keyvalue.ReadOrEmpty(ctx, p.keyValues, live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env))
+	if err != nil {
+		return "", err
+	}
+	var database live.QueueDatabase
+	if len(recorded.Value) > 0 {
+		if err := json.Unmarshal(recorded.Value, &database); err != nil {
+			return "", fmt.Errorf("read %s's queue database record: %w", ref.Name.Env, err)
+		}
+	}
+	if database.DeliverySealed == "" {
+		return mintResourceSecret()
+	}
+	sealed, err := base64.StdEncoding.DecodeString(database.DeliverySealed)
+	if err != nil {
+		return "", fmt.Errorf("the delivery secret recorded for %s's queue is not base64: %w", ref.Name.Env, err)
+	}
+	bound, err := live.NewQueueDeliverySecretAssociatedData(ref.Project, ref.Tier, database.Stack)
+	if err != nil {
+		return "", err
+	}
+	opened, err := p.cipher.Open(ctx, ref.Tier, bound, sealed)
+	if err != nil {
+		return "", fmt.Errorf("open the delivery secret of %s's queue: %w", ref.Name.Env, err)
+	}
+	return string(opened), nil
+}
+
 func (p *Provider) runWorkers(ctx context.Context, spec provider.StackSpec, manifest []byte, progress progress.Log) error {
 	app, ref := spec.App, spec.Ref
+	deliverySecret := ""
+	if len(app.Workers) > 0 {
+		var err error
+		if deliverySecret, err = p.openDeliverySecret(ctx, ref); err != nil {
+			return err
+		}
+	}
 	declared := make([]string, 0, len(app.Workers))
 	for _, worker := range app.Workers {
 		declared = append(declared, worker.Name)
@@ -43,7 +81,7 @@ func (p *Provider) runWorkers(ctx context.Context, spec provider.StackSpec, mani
 		}
 		if err := p.host.RunContainer(ctx, host.Container{
 			Name: name, Project: ref.Project, App: app.App, Image: app.Image, Tier: ref.Tier,
-			Env: newWorkerEnv(app, worker.Name), Manifest: manifest, Resolved: true,
+			Env: newWorkerEnv(app, worker.Name, deliverySecret), Manifest: manifest, Resolved: true,
 		}); err != nil {
 			return err
 		}
