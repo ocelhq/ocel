@@ -111,9 +111,12 @@ account's state table under the deployment's own keys.
 
 `maxDuration` can be at most 15 minutes. A worker on container compute is refused.
 
-A delay of up to 15 minutes is the queue's own message delay. A longer delay goes back on the
-queue every 15 minutes until the run is due. A `cron` task is started by an EventBridge
-Scheduler schedule. Queues, topics and schedules bill by the request.
+On a standard queue a delay of up to 15 minutes is the queue's own message delay, and a
+longer delay is sent again every 15 minutes until the run is due. A FIFO queue takes no
+per-message delay: an `ordered` run's message arrives at once and stays on the queue, hidden
+for up to 12 hours at a time until the run is due, and later runs with the same `key` wait
+behind it. A `cron` task is started by an EventBridge Scheduler schedule. Queues, topics and
+schedules bill by the request.
 
 Lanes are recorded on a run but don't change the order runs start in, because SQS has no
 priority. An app on container compute can't send to a task or topic yet, and an ephemeral
@@ -123,8 +126,10 @@ preview, which provisions nothing of its own, refuses to declare one.
 what its routes serve, not its workers; deploy again to change them.
 
 **Removing it.** `ocel destroy` takes the workers, the queues, the topics and the schedules.
-Runs and keys expire from the state table on their own: a run 30 days after it finishes, or
-after it was due if it never finished.
+Runs and keys expire from the state table on their own. A run expires 30 days after it
+finishes, or 30 days after it was due if it never finished. An idempotency key leaves the
+table an hour after its `idempotencyKeyTTL` ends, 30 days by default, and a debounce record an
+hour after the run it folds into is due.
 
 ## Edge
 
