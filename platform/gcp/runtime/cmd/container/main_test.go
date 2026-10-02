@@ -1,8 +1,10 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -14,6 +16,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/localrpc"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 )
 
@@ -24,9 +28,11 @@ const (
 )
 
 type served struct {
-	Port   string `json:"port"`
-	Secret string `json:"secret"`
-	Health string `json:"health"`
+	Port    string `json:"port"`
+	Secret  string `json:"secret"`
+	Health  string `json:"health"`
+	Runtime string `json:"runtime"`
+	Token   string `json:"token"`
 }
 
 func TestContainerHelper(t *testing.T) {
@@ -59,6 +65,22 @@ func TestContainerHelper(t *testing.T) {
 	}()
 
 	mux := http.NewServeMux()
+	if role == "worker" {
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.Copy(io.Discard, r.Body)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`"resized"`))
+			go func() {
+				time.Sleep(50 * time.Millisecond)
+				os.Exit(0)
+			}()
+		})
+		host := cmp.Or(os.Getenv("HOST"), "127.0.0.1")
+		if err := http.ListenAndServe(host+":"+os.Getenv(containerimage.PortEnvVar), mux); err != nil {
+			os.Exit(97)
+		}
+		return
+	}
 	mux.HandleFunc("/quit", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		go func() {
@@ -68,9 +90,11 @@ func TestContainerHelper(t *testing.T) {
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(served{
-			Port:   os.Getenv(containerimage.PortEnvVar),
-			Secret: os.Getenv(originguard.OriginSecretVar),
-			Health: os.Getenv(originguard.HealthPathVar),
+			Port:    os.Getenv(containerimage.PortEnvVar),
+			Secret:  os.Getenv(originguard.OriginSecretVar),
+			Health:  os.Getenv(originguard.HealthPathVar),
+			Runtime: os.Getenv(processenv.RuntimeAddressEnvVar),
+			Token:   os.Getenv(localrpc.SessionTokenEnvVar),
 		})
 	})
 	if err := http.ListenAndServe("127.0.0.1:"+os.Getenv(containerimage.PortEnvVar), mux); err != nil {

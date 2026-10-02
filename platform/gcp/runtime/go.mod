@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	cloud.google.com/go/firestore v1.24.0
 	cloud.google.com/go/kms v1.33.0
+	connectrpc.com/connect v1.20.0
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/gcp/provider v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
@@ -23,7 +24,6 @@ require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloud.google.com/go/iam v1.12.0 // indirect
 	cloud.google.com/go/longrunning v1.2.0 // indirect
-	connectrpc.com/connect v1.20.0 // indirect
 	connectrpc.com/validate v0.6.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.46.0 // indirect

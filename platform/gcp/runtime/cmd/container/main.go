@@ -9,12 +9,16 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/processenv"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
@@ -43,6 +47,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	env := make([]string, 0, len(environ))
 	manifest := ""
 	healthPath := ""
+	worker := ""
 	for _, entry := range environ {
 		name, value, _ := strings.Cut(entry, "=")
 		switch name {
@@ -54,21 +59,30 @@ func run(ctx context.Context, command []string, environ []string) int {
 			continue
 		case originguard.HealthPathVar:
 			healthPath = value
+		case processenv.WorkerEnvVar:
+			worker = value
 		}
 		env = append(env, entry)
 	}
 	guard, env := originguard.GuardFromEnv(env)
 
+	pinned, err := readManifest(manifest)
+	if err != nil {
+		return fatal(err.Error())
+	}
 	values, err := resolve(ctx, manifest)
 	if err != nil {
 		return fatal(err.Error())
+	}
+	if worker != "" {
+		command = containerimage.WorkerCommand(fileExists, command)
 	}
 
 	internal, err := child.FreePort()
 	if err != nil {
 		return fatal(fmt.Sprintf("find a loopback port for the app: %v", err))
 	}
-	fronting, err := s3store.ServeBound(values, "127.0.0.1:"+strconv.Itoa(internal))
+	fronting, err := serveProxy(values, pinned, "127.0.0.1:"+strconv.Itoa(internal))
 	if err != nil {
 		return fatal(err.Error())
 	}
@@ -85,6 +99,17 @@ func run(ctx context.Context, command []string, environ []string) int {
 
 	listening := child.WatchListening("127.0.0.1:"+strconv.Itoa(internal), nil)
 	upstream := &url.URL{Scheme: "http", Host: "127.0.0.1:" + strconv.Itoa(internal)}
+	front := originguard.Handler(originguard.Options{
+		Upstream:   upstream,
+		Guard:      guard,
+		HealthPath: healthPath,
+	})
+	if worker != "" {
+		if front, err = workerFront(pinned, worker, upstream.String()); err != nil {
+			_ = proc.Stop(stopGrace)
+			return fatal(err.Error())
+		}
+	}
 	var server *http.Server
 	served := make(chan error, 1)
 
@@ -113,11 +138,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 				_ = proc.Stop(stopGrace)
 				return fatal(fmt.Sprintf("listen on port %s: %v", exposed, err))
 			}
-			server = &http.Server{Handler: originguard.Handler(originguard.Options{
-				Upstream:   upstream,
-				Guard:      guard,
-				HealthPath: healthPath,
-			})}
+			server = &http.Server{Handler: front}
 			go func() { served <- server.Serve(ln) }()
 		case err := <-served:
 			if !errors.Is(err, http.ErrServerClosed) {
@@ -144,6 +165,37 @@ func exitCode(exit child.Exit) int {
 		return 1
 	}
 	return exit.Code
+}
+
+func readManifest(raw string) (variables.Manifest, error) {
+	if raw == "" {
+		return variables.Manifest{}, nil
+	}
+	manifest, err := variables.Parse([]byte(raw))
+	if err != nil {
+		return variables.Manifest{}, fmt.Errorf("read this deployment's manifest: %w", err)
+	}
+	return manifest, nil
+}
+
+func serveProxy(values *live.Values, manifest variables.Manifest, app string) (bindingproxy.Served, error) {
+	var services bindingproxy.Services
+	served := false
+	if values != nil && slices.ContainsFunc(values.Bindings(), func(binding live.Binding) bool {
+		return binding.Type == bindingsv1.BindingType_BINDING_TYPE_BUCKET
+	}) {
+		services.Buckets = s3store.NewDispatch(nil, values, s3store.HTTPPoster{App: app})
+		served = true
+	}
+	if manifest.Tasks != nil {
+		deployment := deploymentOf(manifest)
+		services.Tasks, services.Topics = deployment.Tasks(), deployment.Topics()
+		served = true
+	}
+	if !served {
+		return bindingproxy.Served{}, nil
+	}
+	return bindingproxy.Serve(services)
 }
 
 func resolve(ctx context.Context, manifest string) (*live.Values, error) {
