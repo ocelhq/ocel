@@ -211,13 +211,13 @@ export const tasks = {
   node: fixture("tasks/node", {
     apps: ["web"],
     checks: TASKS_NODE_CHECKS,
-    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
+    on: { dev: [defaults], vps: [defaults], aws: [apiGateway], gcp: [defaults] },
   }),
   go: fixture("tasks/go", {
     apps: ["web"],
     devCommands: { web: ["go", "run", "./server"] },
     checks: TASKS_GO_CHECKS,
-    on: { dev: [defaults], vps: [defaults], aws: [defaults], gcp: [defaults] },
+    on: { dev: [defaults], vps: [defaults], aws: [apiGateway], gcp: [defaults] },
   }),
 };
 

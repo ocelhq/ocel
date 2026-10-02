@@ -9,11 +9,13 @@ import {
   exactTopicPayloadCheck,
   hyphenatedTaskCheck,
   kvPasswordOutOfEnvironmentCheck,
+  lanesCheck,
   malformedQueryCheck,
   nextCacheChecks,
   nextDataCacheChecks,
   nextOriginDataCacheChecks,
   nodeRuntimeChecks,
+  orderedKeysInParallelCheck,
   publicOriginCheck,
   realtimeEventSizeCheck,
   realtimePublicCheck,
@@ -25,6 +27,7 @@ import {
   sseCheck,
   sseSilenceCheck,
   streamCheck,
+  taskConcurrencyCheck,
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
@@ -436,7 +439,7 @@ export const gaps: Gap[] = [
     issue: 1528,
     where: [
       {
-        on: ["dev", "vps", "vps.incus"],
+        on: ["dev", "vps", "vps.incus", "aws", "aws.floci"],
         fixtures: [tasks.node],
         fails: [check(exactTaskPayloadCheck), check(exactTopicPayloadCheck)],
       },
@@ -451,12 +454,25 @@ export const gaps: Gap[] = [
       { on: ["vps", "vps.incus"], fixtures: [tasks.go], fails: [step.deploy], skipsCell: true },
     ],
   },
-  ...(
-    [
-      { target: "aws", lanes: ["aws", "aws.floci"], issue: 1469 },
-      { target: "gcp", lanes: ["gcp", "gcp.floci"], issue: 1470 },
-    ] as const
-  ).map(
+  {
+    id: "aws-reads-lanes-unweighted",
+    reason:
+      "on aws each queue is read by its own event source mapping in the order SQS hands its messages out, and SQS has no priority, so a lane is recorded on the run but takes no share of the reads",
+    where: [{ on: ["aws", "aws.floci"], fixtures: [tasks.node], fails: [check(lanesCheck)] }],
+  },
+  {
+    id: "floci-polls-one-batch-per-mapping",
+    reason:
+      "floci's SQS event source poller holds one poll per mapping and waits out the invocation it starts, so a queue is delivered one batch at a time and no two runs of one task overlap, where AWS scales its pollers up to the mapping's maximum concurrency",
+    where: [
+      {
+        on: ["aws.floci"],
+        fixtures: [tasks.node],
+        fails: [check(orderedKeysInParallelCheck), check(taskConcurrencyCheck)],
+      },
+    ],
+  },
+  ...([{ target: "gcp", lanes: ["gcp", "gcp.floci"], issue: 1470 }] as const).map(
     ({ target, lanes, issue }): Gap => ({
       id: `${target}-refuses-tasks`,
       reason: `the ${target} provider refuses a deploy that declares a topic, task or worker at preflight: topics, tasks and workers are unsupported on ${target}, as it names no compute a worker runs on`,

@@ -17,7 +17,13 @@ import type { AwsWorld } from "./world";
 const DEFAULT_VPC_TRIES = 30;
 
 const EVERY_FEATURE = "all";
-const FLOCI_FEATURES = ["isr", "image-optimization", "cloudfront-edge", "apigateway-edge"];
+const FLOCI_FEATURES = [
+  "isr",
+  "image-optimization",
+  "cloudfront-edge",
+  "apigateway-edge",
+  "variables-key",
+];
 
 const CELL_BOOTSTRAP_ARGS = ["bootstrap", "production", "--yes", "--features", EVERY_FEATURE];
 export const BOOTSTRAP_DESTROY_ARGS = ["bootstrap", "destroy", "production", "--yes"];
