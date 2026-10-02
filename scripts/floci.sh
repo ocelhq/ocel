@@ -50,7 +50,7 @@ aws)
     for service in cloudformation s3 dynamodb ssm iam lambda sqs sns scheduler; do
         READY_BODIES+=("\"$service\": *\"running\"")
     done
-    EXTRA_ARGS=(-p "127.0.0.1:6379-6399:6379-6399" -e FLOCI_HOSTNAME=localhost)
+    EXTRA_ARGS=(-p "127.0.0.1:6379-6399:6379-6399" -e FLOCI_HOSTNAME=localhost.localstack.cloud)
     ;;
 gcp)
     IMAGE=$GCP_IMAGE
