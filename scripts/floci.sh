@@ -109,6 +109,17 @@ print_info() {
     printf '%s=%s\n' "$ENDPOINT_VAR" "$2"
 }
 
+published_to_containers() {
+    local gateway port
+    gateway=$(docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true)
+    if [ -z "$gateway" ]; then
+        echo "-p 127.0.0.1::$PORT"
+        return
+    fi
+    port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+    echo "-p 127.0.0.1:$port:$PORT -p $gateway:$port:$PORT"
+}
+
 cmd_create() {
     local name=$1
     trap 'discard_half_made "'"$name"'" $?' EXIT
@@ -118,7 +129,11 @@ cmd_create() {
     if [ "$MOUNTS_DOCKER" = yes ] && [ -S "$DOCKER_SOCK" ]; then
         mounts=(-v "$DOCKER_SOCK:/var/run/docker.sock")
     fi
-    docker run -d --name "$name" -p "127.0.0.1::$PORT" "${EXTRA_ARGS[@]}" "${mounts[@]}" "$IMAGE" >/dev/null
+    local published=(-p "127.0.0.1::$PORT")
+    if [ "$CLOUD" = gcp ]; then
+        read -ra published <<<"$(published_to_containers)"
+    fi
+    docker run -d --name "$name" "${published[@]}" "${EXTRA_ARGS[@]}" "${mounts[@]}" "$IMAGE" >/dev/null
     local endpoint
     endpoint=$(wait_ready "$name")
     trap - EXIT

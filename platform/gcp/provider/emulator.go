@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"net"
+	"net/url"
 	"os"
 	"strings"
 
@@ -9,7 +10,10 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
-const emulatorEndpointVariable = "OCEL_FLOCI_GCP_ENDPOINT"
+const (
+	emulatorEndpointVariable = "OCEL_FLOCI_GCP_ENDPOINT"
+	hostFromContainers       = "host.docker.internal"
+)
 
 func emulatorEndpoint() (string, error) {
 	endpoint := strings.TrimSpace(os.Getenv(emulatorEndpointVariable))
@@ -32,4 +36,13 @@ func loopback(endpoint string) bool {
 	}
 	address := net.ParseIP(host)
 	return address != nil && address.IsLoopback()
+}
+
+func (p *Provider) containerEndpoint() string {
+	at, err := url.Parse(p.endpoint)
+	if err != nil || at.Host == "" {
+		return p.endpoint
+	}
+	at.Host = net.JoinHostPort(hostFromContainers, at.Port())
+	return at.String()
 }
