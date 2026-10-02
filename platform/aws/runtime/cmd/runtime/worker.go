@@ -40,7 +40,7 @@ func runWorker(ctx context.Context, worker string, served buildoutput.FunctionDe
 		fatalInit(fmt.Sprintf("this function runs worker %q, and its app's build carries no worker entry to start", worker))
 	}
 	if cfg.queues == nil {
-		fatalInit(fmt.Sprintf("this function runs worker %q, and its code carries no queue manifest naming what it serves", worker))
+		fatalInit(fmt.Sprintf("this function runs worker %q, and its code carries no queue topology naming what it serves", worker))
 	}
 	if declared := os.Getenv(queues.WorkerConcurrencyEnv); declared != "" {
 		concurrency, err := strconv.Atoi(declared)

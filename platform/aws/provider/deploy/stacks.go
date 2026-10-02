@@ -415,11 +415,11 @@ func (r *Stacks) PackApp(ctx context.Context, req provider.PackAppRequest, _ pro
 	if err != nil {
 		return provider.PackAppResult{}, err
 	}
-	manifest, err := queueManifest(opened.cfg, naming.Sanitize(req.Ref.Project), req.Ref.Name.Env, req.Topics, nil)
+	topology, err := queueTopology(opened.cfg, naming.Sanitize(req.Ref.Project), req.Ref.Name.Env, req.Topics, nil)
 	if err != nil {
 		return provider.PackAppResult{}, err
 	}
-	if bundle.Queues, err = queues.Render(manifest); err != nil {
+	if bundle.Queues, err = queues.Render(topology); err != nil {
 		return provider.PackAppResult{}, err
 	}
 	return provider.PackAppResult{Overlay: bundle.overlay(), VendorState: bundle}, nil

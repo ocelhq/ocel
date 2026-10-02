@@ -22,7 +22,7 @@ import (
 func TestTheDynamoDBStoreKeepsRunsAndRecordsAsEveryTaskStoreMust(t *testing.T) {
 	taskstoretest.Run(t, func(t *testing.T) provider.TaskStore {
 		em := live(t)
-		return New(Config{Table: em.db, Manifest: queues.Manifest{
+		return New(Config{Table: em.db, Topology: queues.Topology{
 			Table:     em.table(t),
 			KeyPrefix: "PROJECT#live#ENV#" + uniqueName(t) + "#TASKS#",
 			Topics: map[string]queues.Topic{
@@ -59,7 +59,7 @@ func TestLiveARunTheEngineChangesIsReadByItsExecutionAtItsNewRevision(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := em.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: aws.String(d.manifest.Table), Key: e.store.pointerKey(id), ConsistentRead: aws.Bool(true)})
+	out, err := em.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: aws.String(d.topology.Table), Key: e.store.pointerKey(id), ConsistentRead: aws.Bool(true)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestLiveARescheduleAnswersWithTheRunItWroteThoughALaterWriteLandsBeforeItRe
 	raced := &racedTable{table: e.store.db}
 	raced.race = func() {
 		if _, err := em.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-			TableName:                 aws.String(d.manifest.Table),
+			TableName:                 aws.String(d.topology.Table),
 			Key:                       e.store.runKey("resize", id),
 			UpdateExpression:          aws.String("SET #status = :canceled"),
 			ExpressionAttributeNames:  map[string]string{"#status": "status"},

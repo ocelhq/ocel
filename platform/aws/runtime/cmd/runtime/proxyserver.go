@@ -34,7 +34,7 @@ const (
 type proxyConfig struct {
 	table         string
 	sessionPrefix string
-	queues        *queues.Manifest
+	queues        *queues.Topology
 	worker        string
 	workerURL     string
 }
@@ -80,7 +80,7 @@ func grantedBuckets(values s3store.Records) func() []string {
 	}
 }
 
-func readQueueManifest(root string) (*queues.Manifest, error) {
+func readQueueTopology(root string) (*queues.Topology, error) {
 	data, err := os.ReadFile(filepath.Join(root, queues.FilePath))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -88,11 +88,11 @@ func readQueueManifest(root string) (*queues.Manifest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", queues.FilePath, err)
 	}
-	manifest, err := queues.Parse(data)
+	topology, err := queues.Parse(data)
 	if err != nil {
 		return nil, err
 	}
-	return &manifest, nil
+	return &topology, nil
 }
 
 func serveProxy(ctx context.Context, values s3store.Records, cfg proxyConfig) (proxy, error) {
@@ -132,7 +132,7 @@ func serveProxy(ctx context.Context, values s3store.Records, cfg proxyConfig) (p
 	var engine *tasks.Engine
 	if servesTasks {
 		engine = tasks.New(tasks.Config{
-			Manifest:  *cfg.queues,
+			Topology:  *cfg.queues,
 			Table:     db,
 			Queues:    sqs.NewFromConfig(aws),
 			Topics:    sns.NewFromConfig(aws),

@@ -128,7 +128,7 @@ func (t Tasks) ListRuns(ctx context.Context, req *taskv1.ListRunsRequest) (*task
 		}
 		listed = []string{req.GetTask()}
 	} else {
-		for name := range t.engine.cfg.Manifest.Topics {
+		for name := range t.engine.cfg.Topology.Topics {
 			if _, isTask := t.engine.taskConsumer(name); isTask {
 				listed = append(listed, name)
 			}

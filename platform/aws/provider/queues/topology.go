@@ -16,7 +16,7 @@ const (
 	MaxReceiveCount = 1000
 )
 
-type Manifest struct {
+type Topology struct {
 	Table     string            `json:"table"`
 	KeyPrefix string            `json:"keyPrefix"`
 	Topics    map[string]Topic  `json:"topics"`
@@ -33,20 +33,20 @@ type Worker struct {
 	Concurrency int `json:"concurrency,omitempty"`
 }
 
-func Render(m Manifest) ([]byte, error) {
+func Render(m Topology) ([]byte, error) {
 	if len(m.Topics) == 0 {
 		return nil, nil
 	}
 	if m.Table == "" || m.KeyPrefix == "" {
-		return nil, fmt.Errorf("the queue manifest names %d topics and tasks but no table or key prefix to keep their runs under", len(m.Topics))
+		return nil, fmt.Errorf("the queue topology names %d topics and tasks but no table or key prefix to keep their runs under", len(m.Topics))
 	}
 	return json.Marshal(m)
 }
 
-func Parse(data []byte) (Manifest, error) {
-	var m Manifest
+func Parse(data []byte) (Topology, error) {
+	var m Topology
 	if err := json.Unmarshal(data, &m); err != nil {
-		return Manifest{}, fmt.Errorf("decode the queue manifest: %w", err)
+		return Topology{}, fmt.Errorf("decode the queue topology: %w", err)
 	}
 	return m, nil
 }
