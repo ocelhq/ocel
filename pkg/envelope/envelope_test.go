@@ -148,6 +148,35 @@ func TestAWorkersAnswerIsReadAsSuccessAbortOrFailure(t *testing.T) {
 	}
 }
 
+func TestAnAnswerReadWithoutHTTPIsJudgedAsAPostedOneIs(t *testing.T) {
+	t.Parallel()
+
+	abort, err := protojson.Marshal(&topicv1.Answer{Outcome: &topicv1.Answer_Abort{Abort: &topicv1.Abort{Reason: "no such image"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	long := strings.Repeat("x", 600)
+	for _, tc := range []struct {
+		name   string
+		status int
+		text   string
+		body   string
+		want   envelope.Result
+	}{
+		{"a success with JSON", 200, "200 OK", exactJSON, envelope.Result{Outcome: envelope.Succeeded, Output: []byte(exactJSON)}},
+		{"a success with no JSON", 204, "204 No Content", "", envelope.Result{Outcome: envelope.Succeeded}},
+		{"an output over the cap", 200, "200 OK", `"` + strings.Repeat("a", 256<<10) + `"`, envelope.Result{Outcome: envelope.Refused, Reason: "the worker answered an output over the 256 KiB a run may store"}},
+		{"an abort", 422, "422 Unprocessable Entity", string(abort), envelope.Result{Outcome: envelope.Aborted, Reason: "no such image"}},
+		{"a failure", 500, "500 Internal Server Error", " boom \n", envelope.Result{Outcome: envelope.Failed, Reason: "the worker answered 500 Internal Server Error: boom"}},
+		{"a long failure", 503, "503 Service Unavailable", long, envelope.Result{Outcome: envelope.Failed, Reason: "the worker answered 503 Service Unavailable: " + long[:512]}},
+	} {
+		got := envelope.AnswerOf(tc.status, tc.text, []byte(tc.body))
+		if got.Outcome != tc.want.Outcome || got.Reason != tc.want.Reason || string(got.Output) != string(tc.want.Output) {
+			t.Errorf("%s: AnswerOf(%d) = %+v, want %+v", tc.name, tc.status, got, tc.want)
+		}
+	}
+}
+
 func TestAnAttemptPastItsMaxDurationTimesOut(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)

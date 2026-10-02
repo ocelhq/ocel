@@ -162,24 +162,28 @@ func Post(ctx, attemptCtx context.Context, client *http.Client, url string, enve
 	if err != nil {
 		return classifyInterruption(ctx, attemptCtx, err)
 	}
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		if len(answer) > maxOutputBytes {
-			return Result{Outcome: Refused, Reason: "the worker answered an output over the 256 KiB a run may store"}
+	return AnswerOf(resp.StatusCode, resp.Status, answer)
+}
+
+func AnswerOf(status int, statusText string, body []byte) Result {
+	if status >= 200 && status < 300 {
+		if len(body) > maxOutputBytes {
+			return Result{Outcome: Refused, Reason: fmt.Sprintf("the worker answered an output over the %d KiB a run may store", maxOutputBytes>>10)}
 		}
-		if !json.Valid(answer) {
-			answer = nil
+		if !json.Valid(body) {
+			body = nil
 		}
-		return Result{Outcome: Succeeded, Output: answer}
+		return Result{Outcome: Succeeded, Output: body}
 	}
 	var decoded topicv1.Answer
-	if protojson.Unmarshal(answer, &decoded) == nil && decoded.GetAbort() != nil {
+	if protojson.Unmarshal(body, &decoded) == nil && decoded.GetAbort() != nil {
 		return Result{Outcome: Aborted, Reason: decoded.GetAbort().GetReason()}
 	}
-	excerpt := answer
+	excerpt := body
 	if len(excerpt) > maxErrorExcerptBytes {
 		excerpt = excerpt[:maxErrorExcerptBytes]
 	}
-	return Result{Outcome: Failed, Reason: fmt.Sprintf("the worker answered %s: %s", resp.Status, bytes.TrimSpace(excerpt))}
+	return Result{Outcome: Failed, Reason: fmt.Sprintf("the worker answered %s: %s", statusText, bytes.TrimSpace(excerpt))}
 }
 
 func classifyInterruption(ctx, attemptCtx context.Context, err error) Result {
