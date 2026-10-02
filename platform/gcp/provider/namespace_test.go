@@ -32,6 +32,9 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 				"passphrase secret": names.PassphraseSecret(environment.TierProduction),
 				"image repository":  names.Repository(environment.TierProduction),
 				"runtime account":   names.WorkloadAccount(environment.TierProduction),
+				"task database":     names.TaskDatabase(environment.TierProduction),
+				"delay queue":       names.DelayQueue(environment.TierProduction),
+				"push account":      names.PushAccount(environment.TierProduction),
 			} {
 				if !strings.HasPrefix(got, tc.stem) {
 					t.Errorf("the %s is %q, want it derived from namespace %q", what, got, tc.stem)
@@ -57,6 +60,16 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 			}
 			if got, want := names.WorkloadAccountEmail(environment.TierProduction), tc.stem+"-production@acme-prod.iam.gserviceaccount.com"; got != want {
 				t.Errorf("WorkloadAccountEmail() = %q, want %q: a service runs as the account that address names", got, want)
+			}
+			if got, want := names.TaskDatabase(environment.TierPreview), tc.stem+"-preview-tasks"; got != want {
+				t.Errorf("TaskDatabase() = %q, want %q", got, want)
+			}
+			if got, want := names.DelayQueue(environment.TierProduction), tc.stem+"-production-delays"; got != want {
+				t.Errorf("DelayQueue() = %q, want %q", got, want)
+			}
+			if got := names.PushAccountEmail(environment.TierProduction); !strings.HasPrefix(got, names.PushAccount(environment.TierProduction)+"@acme-prod.iam.gserviceaccount.com") ||
+				names.PushAccount(environment.TierProduction) == names.PushAccount(environment.TierPreview) || len(names.PushAccount(environment.TierProduction)) > 30 {
+				t.Errorf("PushAccount() = %q (%q), want an account of the tier's own, in 30 characters", names.PushAccount(environment.TierProduction), got)
 			}
 			if names.Database() != tc.stem || names.KeyRing() != tc.stem {
 				t.Errorf("Database() = %q and KeyRing() = %q, want both %q", names.Database(), names.KeyRing(), tc.stem)
