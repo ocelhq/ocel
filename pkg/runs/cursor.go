@@ -9,17 +9,17 @@ import (
 )
 
 const (
-	DefaultRunPage = 100
-	MaxRunPage     = 1000
+	defaultRunPage = 100
+	maxRunPage     = 1000
 )
 
 var ErrUnknownCursor = errors.New("the cursor is not one a listing returned")
 
 func PageLimit(requested int) int {
 	if requested <= 0 {
-		return DefaultRunPage
+		return defaultRunPage
 	}
-	return min(requested, MaxRunPage)
+	return min(requested, maxRunPage)
 }
 
 func CursorOf(at time.Time, execution string) string {
