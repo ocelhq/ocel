@@ -12,6 +12,7 @@ import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func failingUntil(attempt int32) func(*topicv1.Envelope) reply {
@@ -30,7 +31,7 @@ func failingUntil(attempt int32) func(*topicv1.Envelope) reply {
 func TestTheBackoffDoublesFromTheMinimumDelayUpToTheMaximumWithJitterInItsUpperHalf(t *testing.T) {
 	t.Parallel()
 
-	policy := retryPolicy{maxAttempts: 10, minDelay: time.Second, maxDelay: 5 * time.Second}
+	policy := provider.RetryPolicy{MaxAttempts: 10, MinDelay: time.Second, MaxDelay: 5 * time.Second}
 	for _, tc := range []struct {
 		attempt int
 		random  float64
@@ -44,7 +45,7 @@ func TestTheBackoffDoublesFromTheMinimumDelayUpToTheMaximumWithJitterInItsUpperH
 		{4, 0, 2500 * time.Millisecond},
 		{30, 1, 5 * time.Second},
 	} {
-		if got := policy.backoff(tc.attempt, tc.random); got != tc.want {
+		if got := backoff(policy, tc.attempt, tc.random); got != tc.want {
 			t.Errorf("backoff(attempt %d, random %v) = %v, want %v", tc.attempt, tc.random, got, tc.want)
 		}
 	}

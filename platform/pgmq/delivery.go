@@ -334,7 +334,7 @@ func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedC
 	if claimed.attempt >= claimed.maxAttempts {
 		return provider.RunFailed, e.settle(ctx, loop.name, claimed, provider.RunFailed, nil, res.reason)
 	}
-	retryAt := time.Now().Add(retryPolicyOf(deployed).backoff(claimed.attempt, jitter()))
+	retryAt := time.Now().Add(backoff(retryPolicyOf(deployed), claimed.attempt, jitter()))
 	return provider.RunQueued, e.inTx(ctx, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = 'queued', error = $2, revision = `+newRevisionSQL+`
 			WHERE execution = $1 AND status = 'executing'`, claimed.execution, res.reason)

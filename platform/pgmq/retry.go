@@ -7,29 +7,23 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-type retryPolicy struct {
-	maxAttempts        int
-	minDelay, maxDelay time.Duration
+func retryPolicyOf(deployed deployedConsumer) provider.RetryPolicy {
+	return provider.ResolveRetryPolicy(deployed.topic.GetRetry(), deployed.consumer.GetRetry())
 }
 
-func retryPolicyOf(deployed deployedConsumer) retryPolicy {
-	resolved := provider.ResolveRetryPolicy(deployed.topic.GetRetry(), deployed.consumer.GetRetry())
-	return retryPolicy{maxAttempts: resolved.MaxAttempts, minDelay: resolved.MinDelay, maxDelay: resolved.MaxDelay}
-}
-
-func (p retryPolicy) attemptsFor(requested int32) int {
-	if requested > 0 && int(requested) < p.maxAttempts {
+func attemptsFor(policy provider.RetryPolicy, requested int32) int {
+	if requested > 0 && int(requested) < policy.MaxAttempts {
 		return int(requested)
 	}
-	return p.maxAttempts
+	return policy.MaxAttempts
 }
 
-func (p retryPolicy) backoff(attempt int, random float64) time.Duration {
-	delay := p.minDelay
-	for i := 1; i < attempt && delay < p.maxDelay; i++ {
+func backoff(policy provider.RetryPolicy, attempt int, random float64) time.Duration {
+	delay := policy.MinDelay
+	for i := 1; i < attempt && delay < policy.MaxDelay; i++ {
 		delay *= 2
 	}
-	delay = min(delay, p.maxDelay)
+	delay = min(delay, policy.MaxDelay)
 	return delay/2 + time.Duration(random*float64(delay/2))
 }
 
