@@ -10,6 +10,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 
 	"github.com/aws/aws-lambda-go/events"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 )
@@ -180,5 +182,29 @@ func TestLiveAFailedRunOfAnOrderedTaskIsRetriedInPlaceAheadOfItsKey(t *testing.T
 	got := worker.deliveries()
 	if len(got) != 3 || !strings.Contains(string(got[2].envelope.GetPayload()), "second") {
 		t.Errorf("deliveries = %d, want the first run twice and then the second", len(got))
+	}
+}
+
+func TestLiveAnOrderedBatchConsumerHoldsEveryLaterMessageOnceOneIsHeld(t *testing.T) {
+	em := live(t)
+	d := em.deploy(t, map[string]*provider.TopicSpec{"tally": aTask("tally", ordered, func(topic *provider.TopicSpec) {
+		topic.Consumers[0].Batch = &provider.BatchPolicy{Size: 5}
+	})}, nil)
+	worker := newFakeWorker(t, succeeding)
+	e := d.engine(worker)
+
+	early := trigger(t, e, "tally", `{"n":1}`, &taskv1.TriggerOptions{Key: "k", DueAt: timestamppb.New(time.Now().Add(time.Hour))})
+	due := trigger(t, e, "tally", `{"n":2}`, &taskv1.TriggerOptions{Key: "k"})
+	records := d.receiveBatch(t, "tally", "tally", 2, 10*time.Second)
+	if retained := deliver(t, d, e, "tally", "tally", records...); len(retained) != 2 {
+		t.Errorf("retained %v, want both messages: the first is early and the second is behind it", retained)
+	}
+	if got := worker.deliveries(); len(got) != 0 {
+		t.Errorf("the worker received %d envelopes, want none while the first run of the key waits", len(got))
+	}
+	for _, id := range []string{early, due} {
+		if run := retrieve(t, e, id); run.GetAttempts() != 0 {
+			t.Errorf("run %v was attempted, want neither run of the key attempted", run)
+		}
 	}
 }

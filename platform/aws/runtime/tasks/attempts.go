@@ -597,23 +597,30 @@ func (e *Engine) settle(ctx context.Context, deployed deployedConsumer, got rece
 func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, records []events.SQSMessage) []string {
 	var retainedIDs []string
 	var admitted []received
-	for _, record := range records {
+	for i, record := range records {
 		got, err := e.recordArrival(ctx, deployed, record)
 		if errors.Is(err, errRunGone) {
 			continue
 		}
+		keep := err != nil
 		if err != nil {
 			slog.Warn("read a delivered message", "queue", deployed.queue, "error", err)
-			retainedIDs = append(retainedIDs, record.MessageId)
+		} else if ready, disposition := e.setAsideUnlessRunnable(ctx, deployed, got); !ready {
+			keep = disposition == retained
+		} else {
+			admitted = append(admitted, got)
 			continue
 		}
-		if ready, disposition := e.setAsideUnlessRunnable(ctx, deployed, got); !ready {
-			if disposition == retained {
-				retainedIDs = append(retainedIDs, record.MessageId)
+		if !keep {
+			continue
+		}
+		retainedIDs = append(retainedIDs, record.MessageId)
+		if deployed.fifo() {
+			for _, rest := range records[i+1:] {
+				retainedIDs = append(retainedIDs, rest.MessageId)
 			}
-			continue
+			break
 		}
-		admitted = append(admitted, got)
 	}
 	if len(admitted) == 0 {
 		return retainedIDs
@@ -630,11 +637,17 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 	}
 	defer e.releaseSlots(ctx, slots, holder)
 	var claimed []received
-	for _, got := range admitted {
+	for i, got := range admitted {
 		run, ok, err := e.claim(ctx, deployed, got)
 		if err != nil {
 			slog.Warn("claim a run", "execution", got.execution, "error", err)
 			retainedIDs = append(retainedIDs, got.record.MessageId)
+			if deployed.fifo() {
+				for _, rest := range admitted[i+1:] {
+					retainedIDs = append(retainedIDs, rest.record.MessageId)
+				}
+				break
+			}
 			continue
 		}
 		if ok {
