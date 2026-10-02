@@ -100,6 +100,8 @@ type AppSpec struct {
 	VendorState any
 
 	Proxied bool
+
+	Topics []Resource
 }
 
 type RoutingSpec struct {

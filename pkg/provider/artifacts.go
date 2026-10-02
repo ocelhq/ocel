@@ -45,6 +45,7 @@ type PackAppRequest struct {
 	Edge   edge.Kind
 	App    string
 	Values AppValues
+	Topics []Resource
 }
 
 type PackAppResult struct {

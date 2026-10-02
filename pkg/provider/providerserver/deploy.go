@@ -1024,7 +1024,11 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err != nil {
 				return err
 			}
-			pack, err := r.pack(ctx, entry, values, progress)
+			topics, err := r.declaredTopics()
+			if err != nil {
+				return err
+			}
+			pack, err := r.pack(ctx, entry, values, topics, progress)
 			if err != nil {
 				return err
 			}
@@ -1073,6 +1077,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					Guard:                     facts.Guard,
 					VendorState:               pack.VendorState,
 					Proxied:                   anyProxied(proxied, grants),
+					Topics:                    topics,
 				},
 			}
 			if r.dry {

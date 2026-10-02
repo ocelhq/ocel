@@ -33,7 +33,7 @@ func topicTaskAndWorkerManifests() map[string]*contractv1.Manifest {
 	return map[string]*contractv1.Manifest{
 		"a topic":  {Slug: "shop", Resources: []*contractv1.ManifestResource{topicResource(resourcesv1.ResourceType_RESOURCE_TYPE_TOPIC, "orders")}},
 		"a task":   {Slug: "shop", Resources: []*contractv1.ManifestResource{topicResource(resourcesv1.ResourceType_RESOURCE_TYPE_TASK, "resize-image")}},
-		"a worker": {Slug: "shop", Workers: []*contractv1.ManifestWorker{{Name: "media"}}},
+		"a worker": {Slug: "shop", Workers: []*contractv1.ManifestWorker{{Name: "media", App: "media", Compute: string(provider.ComputeServerless)}}},
 	}
 }
 
@@ -65,6 +65,28 @@ func TestAProviderNamingAWorkerCeilingIsNotRefusedTopicsTasksOrWorkers(t *testin
 	for declared, manifest := range topicTaskAndWorkerManifests() {
 		if err := providerserver.RefuseUnsupportedTopicsTasksAndWorkers(facts, manifest); err != nil {
 			t.Errorf("RefuseUnsupportedTopicsTasksAndWorkers(%s) = %v, want nil from a provider that runs workers", declared, err)
+		}
+	}
+}
+
+func TestAWorkerOnAComputeTheProviderNamesNoCeilingForIsRefusedAsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	facts := fake.NewProvider(fake.Options{}).Facts()
+	facts.WorkerCeilings = []provider.WorkerCeiling{{Compute: provider.ComputeServerless, MaxDuration: 15 * time.Minute}}
+	manifest := &contractv1.Manifest{Slug: "shop", Workers: []*contractv1.ManifestWorker{
+		{Name: "worker", App: "web", Compute: string(provider.ComputeServerless)},
+		{Name: "media", App: "media", Compute: string(provider.ComputeContainer)},
+	}}
+
+	err := providerserver.RefuseUnsupportedTopicsTasksAndWorkers(facts, manifest)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeUnsupported {
+		t.Fatalf("RefuseUnsupportedTopicsTasksAndWorkers() = %v, want a refusal with code %s", err, refusal.CodeUnsupported)
+	}
+	for _, named := range []string{`"media"`, string(provider.ComputeContainer), string(facts.Vendor)} {
+		if !strings.Contains(err.Error(), named) {
+			t.Errorf("RefuseUnsupportedTopicsTasksAndWorkers() = %q, want it to name %s", err, named)
 		}
 	}
 }
