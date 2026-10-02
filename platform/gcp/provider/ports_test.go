@@ -214,12 +214,12 @@ func TestSealingAValueThatNamesNoTierIsTheCallersMistake(t *testing.T) {
 	}
 }
 
-func TestServesKVStoresAloneAmongTheResourcePrimitives(t *testing.T) {
+func TestServesKVStoresTopicsAndTasksAmongTheResourcePrimitives(t *testing.T) {
 	t.Parallel()
 
 	p := testProvider(t)
-	if got := p.Facts().Bindings; len(got) != 1 || got[0] != provider.BindingKV {
-		t.Errorf("Facts().Bindings = %v, want kv alone: it is the one resource primitive this provider provisions", got)
+	if got, want := p.Facts().Bindings, []provider.BindingType{provider.BindingKV, provider.BindingTopic, provider.BindingTask}; !slices.Equal(got, want) {
+		t.Errorf("Facts().Bindings = %v, want %v: the resource primitives this provider provisions", got, want)
 	}
 	want := []provider.Compute{provider.ComputeServerless, provider.ComputeContainer}
 	got := p.Facts().Computes
