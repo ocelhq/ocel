@@ -23,6 +23,9 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := p.host.RefuseDisagreeingFront(ctx, pre.Deploy.Tier); err != nil {
 		return err
 	}
+	if err := p.refuseStaleAgent(ctx, pre); err != nil {
+		return err
+	}
 	if pre.Deploy.Tier == environment.TierPreview && !p.options.PerHostnamePreviewCertificates {
 		if err := p.host.RefusePerHostnamePreviewCertificates(ctx, pre.PreviewBaseDomain); err != nil {
 			return err
@@ -40,6 +43,22 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 		pre.Progress.Warn(said)
 	}
 	return err
+}
+
+func (p *Provider) refuseStaleAgent(ctx context.Context, pre provider.DeployPreflight) error {
+	queued := slices.ContainsFunc(pre.Resources, func(resource provider.Resource) bool {
+		return resource.Type == provider.BindingTopic || resource.Type == provider.BindingTask
+	})
+	if !queued {
+		return nil
+	}
+	current, err := p.host.IsAgentCurrent(ctx)
+	if err != nil || current {
+		return err
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"this box's agent at %s predates this ocel and runs no topic or task, and this deploy declares them\nRun `%s` and deploy again",
+		host.LiveBinary, provider.BootstrapCommand(pre.Deploy.Tier))
 }
 
 var oneInstance = provider.Instances{Min: 1, Max: 1}
