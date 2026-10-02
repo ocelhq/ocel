@@ -55,7 +55,7 @@ func TestLiveARunTheEngineChangesIsReadByItsExecutionAtItsNewRevision(t *testing
 		t.Errorf("WriteRun at the revision before the cancel = %v, want ErrStale", err)
 	}
 
-	item, _, err := e.store.readRun(ctx, "resize", id, true)
+	item, _, err := e.store.readRunItem(ctx, "resize", id, true)
 	if err != nil {
 		t.Fatal(err)
 	}

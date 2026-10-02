@@ -34,7 +34,7 @@ const (
 	inPlaceRetryCap = 30 * time.Second
 )
 
-type received struct {
+type arrival struct {
 	record    events.SQSMessage
 	msg       queueMessage
 	execution string
@@ -51,6 +51,7 @@ type disposition int
 const (
 	acknowledged disposition = iota
 	retained
+	retryInPlace
 )
 
 func queueOf(arn string) string {
@@ -101,23 +102,23 @@ func (e *Engine) Deliver(ctx context.Context, event events.SQSEvent) events.SQSE
 	return resp
 }
 
-func (e *Engine) recordArrival(ctx context.Context, deployed deployedConsumer, record events.SQSMessage) (received, error) {
+func (e *Engine) recordArrival(ctx context.Context, deployed deployedConsumer, record events.SQSMessage) (arrival, error) {
 	var msg queueMessage
 	if err := json.Unmarshal([]byte(record.Body), &msg); err != nil {
-		return received{}, fmt.Errorf("message %s is not one this engine sent: %w", record.MessageId, err)
+		return arrival{}, fmt.Errorf("message %s is not one this engine sent: %w", record.MessageId, err)
 	}
-	got := received{record: record, msg: msg, execution: msg.executionFor(deployed.consumer.Name)}
+	got := arrival{record: record, msg: msg, execution: msg.executionFor(deployed.consumer.Name)}
 	if msg.Execution == "" && msg.Message != "" {
 		if err := e.recordConsumerRun(ctx, deployed, msg, got.execution); err != nil && !errors.Is(err, errConditionFailed) {
-			return received{}, err
+			return arrival{}, err
 		}
 	}
-	item, found, err := e.store.readRun(ctx, deployed.topicName, got.execution, true)
+	item, found, err := e.store.readRunItem(ctx, deployed.topicName, got.execution, true)
 	if err != nil {
-		return received{}, err
+		return arrival{}, err
 	}
 	if !found {
-		return received{}, errRunGone
+		return arrival{}, errRunGone
 	}
 	got.run = item
 	return got, nil
@@ -156,7 +157,7 @@ const (
 	expired
 )
 
-func readinessOf(got received, now time.Time) (readiness, time.Duration) {
+func readinessOf(got arrival, now time.Time) (readiness, time.Duration) {
 	run := got.run
 	status := provider.RunStatus(run.Status)
 	switch {
@@ -172,7 +173,7 @@ func readinessOf(got received, now time.Time) (readiness, time.Duration) {
 	return runnable, 0
 }
 
-func (e *Engine) setAsideUnlessRunnable(ctx context.Context, deployed deployedConsumer, got received) (bool, disposition) {
+func (e *Engine) setAsideUnlessRunnable(ctx context.Context, deployed deployedConsumer, got arrival) (bool, disposition) {
 	readiness, wait := readinessOf(got, time.Now())
 	switch readiness {
 	case stale:
@@ -200,7 +201,7 @@ func (e *Engine) setAsideUnlessRunnable(ctx context.Context, deployed deployedCo
 	return true, acknowledged
 }
 
-func (e *Engine) recordReceipt(ctx context.Context, deployed deployedConsumer, got received) {
+func (e *Engine) recordReceipt(ctx context.Context, deployed deployedConsumer, got arrival) {
 	_, err := e.store.updateRun(ctx, deployed.topicName, got.execution, change{
 		set:        map[string]any{"receipt": got.record.ReceiptHandle},
 		condition:  "#delivery = :token",
@@ -224,7 +225,7 @@ func (e *Engine) releaseHeld(ctx context.Context, deployed deployedConsumer, rec
 	return err
 }
 
-func (e *Engine) deferMessage(ctx context.Context, deployed deployedConsumer, got received, wait time.Duration) disposition {
+func (e *Engine) deferMessage(ctx context.Context, deployed deployedConsumer, got arrival, wait time.Duration) disposition {
 	if deployed.fifo() {
 		return e.holdInQueue(ctx, deployed, got, wait)
 	}
@@ -235,7 +236,7 @@ func (e *Engine) deferMessage(ctx context.Context, deployed deployedConsumer, go
 	return acknowledged
 }
 
-func (e *Engine) holdInQueue(ctx context.Context, deployed deployedConsumer, got received, wait time.Duration) disposition {
+func (e *Engine) holdInQueue(ctx context.Context, deployed deployedConsumer, got arrival, wait time.Duration) disposition {
 	if receives := receiveCount(got.record); receives >= queues.MaxReceiveCount {
 		return e.failUndelivered(ctx, deployed, got, receives)
 	}
@@ -266,7 +267,7 @@ func slotHold(receives int) time.Duration {
 	return min(max(hold, time.Duration(receives)*slotWait), maxSlotHold)
 }
 
-func (e *Engine) failUndelivered(ctx context.Context, deployed deployedConsumer, got received, receives int) disposition {
+func (e *Engine) failUndelivered(ctx context.Context, deployed deployedConsumer, got arrival, receives int) disposition {
 	now := time.Now()
 	set := map[string]any{
 		"status":      string(provider.RunFailed),
@@ -331,7 +332,7 @@ func invocationDeadline(ctx context.Context) time.Time {
 	return time.Now().Add(15 * time.Minute)
 }
 
-func (e *Engine) claim(ctx context.Context, deployed deployedConsumer, got received) (runItem, bool, error) {
+func (e *Engine) claim(ctx context.Context, deployed deployedConsumer, got arrival) (runItem, bool, error) {
 	now := time.Now()
 	item, err := e.store.updateRun(ctx, deployed.topicName, got.execution, change{
 		set: map[string]any{
@@ -401,10 +402,10 @@ func (e *Engine) deliverOne(ctx context.Context, deployed deployedConsumer, reco
 			return acknowledged
 		}
 		got.run = run
-		answer := e.attempt(ctx, deployed, []received{got})
+		answer := e.attempt(ctx, deployed, []arrival{got})
 		next, wait := e.finish(ctx, deployed, got, answer)
 		if next != retryInPlace {
-			return dispositionOf(next)
+			return next
 		}
 		if remaining := time.Until(invocationDeadline(ctx)) - settleMargin; wait > inPlaceRetryCap || wait+attemptBudget(deployed) > remaining {
 			return e.holdInQueue(ctx, deployed, got, wait)
@@ -421,22 +422,7 @@ func attemptBudget(deployed deployedConsumer) time.Duration {
 	return deployed.consumer.MaxDuration
 }
 
-type settled int
-
-const (
-	done settled = iota
-	keptInQueue
-	retryInPlace
-)
-
-func dispositionOf(s settled) disposition {
-	if s == keptInQueue {
-		return retained
-	}
-	return acknowledged
-}
-
-func (e *Engine) envelopeOf(deployed deployedConsumer, claimed []received) *topicv1.Envelope {
+func (e *Engine) envelopeOf(deployed deployedConsumer, claimed []arrival) *topicv1.Envelope {
 	envelope := &topicv1.Envelope{
 		V:        envelope.Version,
 		Topic:    deployed.topicName,
@@ -468,7 +454,7 @@ func (e *Engine) envelopeOf(deployed deployedConsumer, claimed []received) *topi
 	return envelope
 }
 
-func (e *Engine) attempt(ctx context.Context, deployed deployedConsumer, claimed []received) envelope.Result {
+func (e *Engine) attempt(ctx context.Context, deployed deployedConsumer, claimed []arrival) envelope.Result {
 	postCtx, stopPost := context.WithDeadline(ctx, invocationDeadline(ctx).Add(-settleMargin))
 	defer stopPost()
 	attemptCtx, cancel := context.WithCancelCause(postCtx)
@@ -486,7 +472,7 @@ func (e *Engine) attempt(ctx context.Context, deployed deployedConsumer, claimed
 	return envelope.Post(postCtx, attemptCtx, e.cfg.Client, e.cfg.WorkerURL, e.envelopeOf(deployed, claimed))
 }
 
-func (e *Engine) watchForCancel(ctx context.Context, deployed deployedConsumer, got received, cancel context.CancelCauseFunc) {
+func (e *Engine) watchForCancel(ctx context.Context, deployed deployedConsumer, got arrival, cancel context.CancelCauseFunc) {
 	ticker := time.NewTicker(cancelPoll)
 	defer ticker.Stop()
 	for {
@@ -495,7 +481,7 @@ func (e *Engine) watchForCancel(ctx context.Context, deployed deployedConsumer, 
 			return
 		case <-ticker.C:
 		}
-		item, found, err := e.store.readRun(ctx, deployed.topicName, got.execution, false)
+		item, found, err := e.store.readRunItem(ctx, deployed.topicName, got.execution, false)
 		if err != nil {
 			continue
 		}
@@ -506,28 +492,28 @@ func (e *Engine) watchForCancel(ctx context.Context, deployed deployedConsumer, 
 	}
 }
 
-func (e *Engine) finish(ctx context.Context, deployed deployedConsumer, got received, answer envelope.Result) (settled, time.Duration) {
+func (e *Engine) finish(ctx context.Context, deployed deployedConsumer, got arrival, answer envelope.Result) (disposition, time.Duration) {
 	ctx = context.WithoutCancel(ctx)
 	switch answer.Outcome {
 	case envelope.Canceled:
-		return done, 0
+		return acknowledged, 0
 	case envelope.Interrupted:
-		return keptInQueue, 0
+		return retained, 0
 	case envelope.Succeeded:
 		e.settle(ctx, deployed, got, provider.RunCompleted, answer.Output, "")
-		return done, 0
+		return acknowledged, 0
 	case envelope.Aborted, envelope.Refused:
 		e.settle(ctx, deployed, got, provider.RunFailed, nil, answer.Reason)
-		return done, 0
+		return acknowledged, 0
 	case envelope.TimedOut:
 		if deployed.isTask() {
 			e.settle(ctx, deployed, got, provider.RunTimedOut, nil, answer.Reason)
-			return done, 0
+			return acknowledged, 0
 		}
 	}
 	if got.run.Attempts >= got.run.MaxAttempts {
 		e.settle(ctx, deployed, got, provider.RunFailed, nil, answer.Reason)
-		return done, 0
+		return acknowledged, 0
 	}
 	backoff := runs.Backoff(deployed.retry(), got.run.Attempts, runs.Jitter())
 	if deployed.fifo() {
@@ -557,20 +543,20 @@ func (e *Engine) finish(ctx context.Context, deployed deployedConsumer, got rece
 			condition:  "#delivery = :token",
 			conditions: map[string]any{":token": token},
 		})
-		return keptInQueue, 0
+		return retained, 0
 	}
-	return done, 0
+	return acknowledged, 0
 }
 
-func dispositionOnFailure(err error) settled {
+func dispositionOnFailure(err error) disposition {
 	if errors.Is(err, errConditionFailed) {
-		return done
+		return acknowledged
 	}
 	slog.Warn("record an attempt's outcome", "error", err)
-	return keptInQueue
+	return retained
 }
 
-func (e *Engine) settle(ctx context.Context, deployed deployedConsumer, got received, status provider.RunStatus, output json.RawMessage, reason string) {
+func (e *Engine) settle(ctx context.Context, deployed deployedConsumer, got arrival, status provider.RunStatus, output json.RawMessage, reason string) {
 	now := time.Now()
 	set := map[string]any{
 		"status":      string(status),
@@ -596,7 +582,7 @@ func (e *Engine) settle(ctx context.Context, deployed deployedConsumer, got rece
 
 func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, records []events.SQSMessage) []string {
 	var retainedIDs []string
-	var admitted []received
+	var admitted []arrival
 	for i, record := range records {
 		got, err := e.recordArrival(ctx, deployed, record)
 		if errors.Is(err, errRunGone) {
@@ -636,7 +622,7 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 		return retainedIDs
 	}
 	defer e.releaseSlots(ctx, slots, holder)
-	var claimed []received
+	var claimed []arrival
 	for i, got := range admitted {
 		run, ok, err := e.claim(ctx, deployed, got)
 		if err != nil {
@@ -661,7 +647,7 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 	answer := e.attempt(ctx, deployed, claimed)
 	for _, got := range claimed {
 		next, wait := e.finish(ctx, deployed, got, answer)
-		retain := dispositionOf(next) == retained
+		retain := next == retained
 		if next == retryInPlace {
 			retain = e.holdInQueue(ctx, deployed, got, wait) == retained
 		}

@@ -77,7 +77,7 @@ func (t Tasks) BatchTrigger(ctx context.Context, req *taskv1.BatchTriggerRequest
 	return &taskv1.BatchTriggerResponse{Ids: ids}, nil
 }
 
-type triggered struct {
+type runRequest struct {
 	payload     json.RawMessage
 	dueAt       time.Time
 	key         string
@@ -93,7 +93,7 @@ func (t Tasks) trigger(ctx context.Context, deployed deployedConsumer, payload [
 		return "", err
 	}
 	now := time.Now()
-	run := triggered{
+	run := runRequest{
 		payload:     payload,
 		dueAt:       now,
 		key:         options.GetKey(),
@@ -155,7 +155,7 @@ func (t Tasks) trigger(ctx context.Context, deployed deployedConsumer, payload [
 	return execution, nil
 }
 
-func (e *Engine) startRun(ctx context.Context, deployed deployedConsumer, messageID string, now time.Time, execution string, run triggered) error {
+func (e *Engine) startRun(ctx context.Context, deployed deployedConsumer, messageID string, now time.Time, execution string, run runRequest) error {
 	token := envelope.NewMessageID(now)
 	status := provider.RunQueued
 	if run.dueAt.After(now) {
@@ -235,7 +235,7 @@ func taskOf(id string) (string, bool) {
 func (t Tasks) readTaskRun(ctx context.Context, id string) (runItem, error) {
 	task, ok := taskOf(id)
 	if ok {
-		item, found, err := t.engine.store.readRun(ctx, task, id, true)
+		item, found, err := t.engine.store.readRunItem(ctx, task, id, true)
 		if err != nil {
 			return runItem{}, err
 		}
@@ -344,7 +344,7 @@ func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*ta
 		return nil, err
 	}
 	now := time.Now()
-	run := triggered{
+	run := runRequest{
 		payload:     json.RawMessage(item.Payload),
 		dueAt:       now,
 		key:         item.Key,

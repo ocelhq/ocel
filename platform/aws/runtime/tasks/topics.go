@@ -125,7 +125,7 @@ func (t Topics) deadLetters(ctx context.Context, topic, consumer string, executi
 	}
 	var letters []runItem
 	for _, execution := range executions {
-		item, found, err := t.engine.store.readRun(ctx, topic, execution, true)
+		item, found, err := t.engine.store.readRunItem(ctx, topic, execution, true)
 		if err != nil {
 			return nil, err
 		}
