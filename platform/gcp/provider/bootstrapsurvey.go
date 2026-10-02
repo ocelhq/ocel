@@ -171,7 +171,7 @@ type presence struct {
 func (b bootstrap) presenceOf(ctx context.Context, tier environment.Tier, target item) (presence, error) {
 	switch target.Kind {
 	case KindDatabase:
-		return b.databasePresence(ctx)
+		return b.databasePresence(ctx, b.clients.Database())
 	case KindBucket:
 		return b.bucketPresence(ctx, target.Name)
 	case KindKeyRing:
@@ -194,7 +194,7 @@ func (b bootstrap) presenceOf(ctx context.Context, tier environment.Tier, target
 
 func presenceFrom(present bool, err error) (presence, error) { return presence{present: present}, err }
 
-func (b bootstrap) databasePresence(ctx context.Context) (presence, error) {
+func (b bootstrap) databasePresence(ctx context.Context, id string) (presence, error) {
 	if b.clients.emulated() {
 		return presence{present: true}, nil
 	}
@@ -202,12 +202,12 @@ func (b bootstrap) databasePresence(ctx context.Context) (presence, error) {
 	if err != nil {
 		return presence{}, err
 	}
-	database, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients)).Context(ctx).Do)
+	database, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients, id)).Context(ctx).Do)
 	if absent(err) {
 		return presence{}, nil
 	}
 	if err != nil {
-		return presence{}, fmt.Errorf("read the %q Firestore database: %w", b.clients.Database(), err)
+		return presence{}, fmt.Errorf("read the %q Firestore database: %w", id, err)
 	}
 	if database.DeleteProtectionState != protectionOn {
 		return presence{present: true, mends: reasonUnprotected}, nil
@@ -215,8 +215,8 @@ func (b bootstrap) databasePresence(ctx context.Context) (presence, error) {
 	return presence{present: true}, nil
 }
 
-func databasePath(c *clients) string {
-	return "projects/" + c.project + "/databases/" + c.Database()
+func databasePath(c *clients, id string) string {
+	return "projects/" + c.project + "/databases/" + id
 }
 
 func (b bootstrap) bucketPresence(ctx context.Context, name string) (presence, error) {

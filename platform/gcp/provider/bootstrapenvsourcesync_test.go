@@ -628,9 +628,6 @@ func TestABootstrapChecksThePermissionsTheEnvSourceSyncNeeds(t *testing.T) {
 			t.Errorf("a refusal over a missing permission names %v, want %s among them: it covers what the env source sync checks", rolesCovering(nil), role)
 		}
 	}
-	if slices.Contains(rolesFor(edge.PurposeDeploy), "roles/cloudscheduler.admin") {
-		t.Error("deploy credentials are granted roles/cloudscheduler.admin, and a deploy creates no schedule")
-	}
 	if !slices.Contains(BootstrapAPIs, "cloudscheduler.googleapis.com") {
 		t.Errorf("a bootstrap checks %v are on, want cloudscheduler.googleapis.com among them", BootstrapAPIs)
 	}

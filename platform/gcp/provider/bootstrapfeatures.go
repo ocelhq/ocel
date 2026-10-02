@@ -40,6 +40,9 @@ func (bootstrap) Catalogue() []provider.Feature {
 		Name: kvFeature,
 		Summary: "a network of the tier's own with one subnetwork, " + kvSubnetRange + ", and the service connection policy Memorystore reaches it through: " +
 			"what kv stores and the apps bound to them are connected over, with no recurring cost of its own",
+	}, {
+		Name:    tasksFeature,
+		Summary: tasksSummary(),
 	}}
 }
 
@@ -90,6 +93,12 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 func (b bootstrap) raiseFeatures(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	if err := b.raiseFronts(ctx, req, progress); err != nil {
 		return err
+	}
+	if slices.Contains(req.Features, tasksFeature) {
+		ensureProgress(progress).Say("Installing feature " + tasksFeature + " for " + string(req.Tier) + ": " + b.summaryOf(tasksFeature))
+		if err := b.raiseTasks(ctx, req.Tier, progress); err != nil {
+			return err
+		}
 	}
 	if !slices.Contains(req.Features, kvFeature) {
 		return nil
@@ -149,6 +158,12 @@ func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.B
 	if err := b.dropFronts(ctx, read, req, progress); err != nil {
 		return err
 	}
+	if slices.Contains(droppedFeatures(read.Stamp.Features, req), tasksFeature) {
+		ensureProgress(progress).Say("Taking down the " + string(req.Tier) + " task database, push account and grants, and purging its delay queue: this bootstrap no longer requests feature " + tasksFeature)
+		if err := b.tearTasks(ctx, req.Tier); err != nil {
+			return err
+		}
+	}
 	if !slices.Contains(droppedFeatures(read.Stamp.Features, req), kvFeature) {
 		return nil
 	}
@@ -160,6 +175,11 @@ func (b bootstrap) tearFeatures(ctx context.Context, tier environment.Tier, feat
 	if err := b.tearFronts(ctx, tier, features); err != nil {
 		return err
 	}
+	if slices.Contains(features, tasksFeature) {
+		if err := b.tearTasks(ctx, tier); err != nil {
+			return err
+		}
+	}
 	if !slices.Contains(features, kvFeature) {
 		return nil
 	}
@@ -167,8 +187,11 @@ func (b bootstrap) tearFeatures(ctx context.Context, tier environment.Tier, feat
 }
 
 func (b bootstrap) featureInstalled(ctx context.Context, tier environment.Tier, feature string) (bool, error) {
-	if feature == kvFeature {
+	switch feature {
+	case kvFeature:
 		return b.networkInstalled(ctx, tier)
+	case tasksFeature:
+		return b.tasksInstalled(ctx, tier)
 	}
 	return b.frontInstalled(ctx, tier, feature)
 }
@@ -230,6 +253,9 @@ func apisFor(features []string) []string {
 	}
 	if slices.Contains(features, kvFeature) {
 		apis = appendMissing(apis, kvAPIs)
+	}
+	if slices.Contains(features, tasksFeature) {
+		apis = appendMissing(apis, TasksAPIs)
 	}
 	return apis
 }

@@ -90,6 +90,8 @@ var deployRoles = []string{
 	"roles/iam.serviceAccountUser",
 	"roles/run.admin",
 	"roles/memorystore.admin",
+	"roles/pubsub.admin",
+	"roles/cloudscheduler.admin",
 }
 
 func rolesFor(purpose edge.CredentialPurpose) []string {
@@ -126,6 +128,9 @@ func permissionsFor(features []string) []string {
 	if slices.Contains(features, kvFeature) {
 		permissions = appendMissing(permissions, kvPermissions)
 	}
+	if slices.Contains(features, tasksFeature) {
+		permissions = appendMissing(permissions, tasksPermissions)
+	}
 	return permissions
 }
 
@@ -139,6 +144,9 @@ func rolesCovering(features []string) []string {
 	}
 	if slices.Contains(features, kvFeature) {
 		roles = appendMissing(roles, kvRoles)
+	}
+	if slices.Contains(features, tasksFeature) {
+		roles = appendMissing(roles, tasksRoles)
 	}
 	return roles
 }
