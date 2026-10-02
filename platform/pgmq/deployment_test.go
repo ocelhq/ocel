@@ -3,6 +3,7 @@ package pgmq
 import (
 	"context"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -34,7 +35,7 @@ func TestADeploymentTakesTheManifestsTopicsAndTheWorkersThatHaveAnAddress(t *tes
 		t.Errorf("slug = %q, want the manifest's shop", got.Slug)
 	}
 	want := map[string]Worker{"mail": {URL: "http://127.0.0.1:4001", Concurrency: 4}, "worker": {URL: "http://127.0.0.1:4002"}}
-	if !maps.Equal(got.Workers, want) {
+	if !maps.EqualFunc(got.Workers, want, func(a, b Worker) bool { return reflect.DeepEqual(a, b) }) {
 		t.Errorf("workers = %v, want %v: a worker with no address is not served", got.Workers, want)
 	}
 }

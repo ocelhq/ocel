@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -22,6 +23,7 @@ type Deployment struct {
 type Worker struct {
 	URL         string
 	Concurrency int
+	Header      http.Header
 }
 
 func DeploymentOf(manifest *contractv1.Manifest, workerURLs map[string]string) Deployment {

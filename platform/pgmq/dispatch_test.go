@@ -31,6 +31,7 @@ type reply struct {
 type delivered struct {
 	envelope *topicv1.Envelope
 	body     []byte
+	header   http.Header
 	at       time.Time
 }
 
@@ -66,7 +67,7 @@ func (w *aWorker) serve(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 	w.mu.Lock()
-	w.envelopes = append(w.envelopes, delivered{envelope: posted, body: body, at: time.Now()})
+	w.envelopes = append(w.envelopes, delivered{envelope: posted, body: body, header: req.Header.Clone(), at: time.Now()})
 	w.inFlight++
 	w.peak = max(w.peak, w.inFlight)
 	w.mu.Unlock()
@@ -218,6 +219,22 @@ func TestATriggeredRunIsPostedToItsWorkerAsAnEnvelopeAndCompletesWithTheWorkersA
 	}
 	if run.GetAttempts() != 1 || run.GetTask() != "resize" || len(run.GetTags()) != 1 || run.GetStartedAt() == nil || run.GetFinishedAt() == nil {
 		t.Errorf("run = %v, want one attempt of resize, tagged, started and finished", run)
+	}
+}
+
+func TestAWorkersHeaderRidesOnEveryDeliveryToIt(t *testing.T) {
+	worker := newWorker(t, succeeding)
+	engine := dispatching(t, map[string]*contractv1.ManifestTopic{"resize": aTask()},
+		map[string]Worker{"worker": {URL: worker.server.URL, Header: http.Header{"X-Ocel-Origin-Secret": {"only-the-engine-knows"}}}})
+
+	awaitRun(t, engine, trigger(t, engine, "resize", `{}`, nil), taskv1.RunStatus_RUN_STATUS_COMPLETED)
+
+	got := worker.received()
+	if len(got) != 1 {
+		t.Fatalf("the worker received %d deliveries, want 1", len(got))
+	}
+	if secret := got[0].header.Get("X-Ocel-Origin-Secret"); secret != "only-the-engine-knows" {
+		t.Errorf("the delivery carried X-Ocel-Origin-Secret %q, want the header its deployment names", secret)
 	}
 }
 
