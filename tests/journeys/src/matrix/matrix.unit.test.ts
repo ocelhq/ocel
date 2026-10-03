@@ -352,10 +352,28 @@ describe("the realtime concern", () => {
     }
   });
 
-  it("skips the suite on aws, gcp and a box with the provider's refusal, under each target's ticket", () => {
+  it("runs the behavioural suite on aws in every language, expecting nothing red", () => {
+    const planned = planOn("aws");
+    expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(CELLS));
+    for (const cell of CELLS) {
+      expect(planned.skipped[cell]).toBeUndefined();
+      expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
+    }
+  });
+
+  it("skips the suite on floci, which runs no AppSync Event API", () => {
+    const planned = planOn("aws.floci");
+    expect(Object.keys(planned.skipped).filter((cell) => cell.startsWith("realtime/"))).toEqual(
+      CELLS,
+    );
+    for (const cell of CELLS) {
+      const gap = planned.skipped[cell]?.find((one) => one.id === "floci-runs-no-event-api");
+      expect(gap?.reason).toMatch(/Event API/);
+    }
+  });
+
+  it("skips the suite on gcp and a box with the provider's refusal, under each target's ticket", () => {
     const tickets = {
-      aws: 1514,
-      "aws.floci": 1514,
       gcp: 1515,
       "gcp.floci": 1515,
       vps: 1516,
