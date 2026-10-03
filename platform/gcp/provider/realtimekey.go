@@ -19,10 +19,9 @@ import (
 )
 
 const (
-	realtimeKeysReaderRole = "roles/secretmanager.secretAccessor"
-	firstSecretVersion     = "1"
-	enabledVersions        = "state:ENABLED"
-	failedPrecondition     = "FAILED_PRECONDITION"
+	firstSecretVersion = "1"
+	enabledVersions    = "state:ENABLED"
+	failedPrecondition = "FAILED_PRECONDITION"
 )
 
 func (r realtimeEnvironment) secrets() (*secretmanager.Service, error) { return r.clients.Secrets() }
@@ -171,7 +170,7 @@ func (r realtimeEnvironment) writeKeys(ctx context.Context, keys map[string]stri
 	if err != nil {
 		return err
 	}
-	name := r.clients.RealtimeKeysSecret(r.ref.Project, r.ref.Name.Env)
+	name := r.clients.RealtimeKeysSecret(r.ref.Tier, r.ref.Project, r.ref.Name.Env)
 	written, err := json.Marshal(keys)
 	if err != nil {
 		return err
@@ -185,9 +184,6 @@ func (r realtimeEnvironment) writeKeys(ctx context.Context, keys map[string]stri
 			return err
 		}
 	}
-	if err := r.letGatewayReadKeys(ctx, service, name); err != nil {
-		return err
-	}
 	if found && string(current) == string(written) {
 		return nil
 	}
@@ -198,28 +194,10 @@ func (r realtimeEnvironment) writeKeys(ctx context.Context, keys map[string]stri
 	return r.destroyVersionsBefore(ctx, service, name, added)
 }
 
-func (r realtimeEnvironment) letGatewayReadKeys(ctx context.Context, service *secretmanager.Service, name string) error {
-	path := secretPath(r.clients.project, name)
-	member := "serviceAccount:" + r.clients.RealtimeAccountEmail(r.ref.Tier)
-	policy, err := attempted(ctx, service.Projects.Secrets.GetIamPolicy(path).Context(ctx).Do)
-	if err != nil {
-		return fmt.Errorf("read who may read the %s secret: %w", name, err)
-	}
-	bindings, changed := boundSecretMember(policy.Bindings, realtimeKeysReaderRole, member, true)
-	if !changed {
-		return nil
-	}
-	policy.Bindings = bindings
-	if _, err := attempted(ctx, service.Projects.Secrets.SetIamPolicy(path, &secretmanager.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do); err != nil {
-		return fmt.Errorf("let %s read the %s secret: %w", member, name, err)
-	}
-	return nil
-}
-
 func (r realtimeEnvironment) removeKeys(ctx context.Context) error {
 	service, err := r.secrets()
 	if err != nil {
 		return err
 	}
-	return r.deleteSecret(ctx, service, r.clients.RealtimeKeysSecret(r.ref.Project, r.ref.Name.Env))
+	return r.deleteSecret(ctx, service, r.clients.RealtimeKeysSecret(r.ref.Tier, r.ref.Project, r.ref.Name.Env))
 }

@@ -62,6 +62,8 @@ type Credentials struct {
 	Endpoint string
 
 	Projects Projects
+
+	Namespace provider.Namespace
 }
 
 const emulatorPrincipal = "emulator"
@@ -156,9 +158,15 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose) (edge.Credentia
 		if err != nil {
 			return edge.CredentialDocument{}, err
 		}
+		roles := rolesFor(purpose)
+		heading := fmt.Sprintf("the roles a %s credential is granted on project %s", purpose, project)
+		if purpose == edge.PurposeDeploy {
+			roles = append(roles, realtimeSecretsGrant(Names{namespace: c.Namespace, project: project}))
+			heading += fmt.Sprintf(", where %s is the number `gcloud projects describe %s --format='value(projectNumber)'` prints", projectNumberHole, project)
+		}
 		return edge.CredentialDocument{
-			Heading:  fmt.Sprintf("the roles a %s credential is granted on project %s", purpose, project),
-			Document: strings.Join(rolesFor(purpose), "\n"),
+			Heading:  heading,
+			Document: strings.Join(roles, "\n"),
 		}, nil
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,

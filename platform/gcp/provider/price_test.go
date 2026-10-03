@@ -7,6 +7,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -221,9 +222,9 @@ func TestARealtimeIsShapedAsItsEnvironmentsGatewayKeysAndSigningKey(t *testing.T
 	}
 	names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 	want := map[string]string{
-		names.RealtimeGateway("shop", "prod"):              "google_cloud_run_v2_service",
-		names.RealtimeKeysSecret("shop", "prod"):           "google_secret_manager_secret",
-		names.RealtimeSigningSecret("shop", "prod", "app"): "google_secret_manager_secret",
+		names.RealtimeGateway("shop", "prod"):                                "google_cloud_run_v2_service",
+		names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"): "google_secret_manager_secret",
+		names.RealtimeSigningSecret("shop", "prod", "app"):                   "google_secret_manager_secret",
 	}
 	for _, resource := range set.GetResources() {
 		if typ, named := want[resource.GetName()]; named {

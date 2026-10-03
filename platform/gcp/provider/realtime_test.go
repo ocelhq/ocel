@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -26,8 +25,9 @@ type realtimeHarness struct {
 	secrets *secretServer
 	env     realtimeEnvironment
 
-	mu     sync.Mutex
-	pushed []string
+	mu          sync.Mutex
+	pushed      []string
+	unaccounted bool
 }
 
 func newRealtimeHarness(t *testing.T) *realtimeHarness {
@@ -37,6 +37,10 @@ func newRealtimeHarness(t *testing.T) *realtimeHarness {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/v1/projects/") && strings.Contains(r.URL.Path, "/secrets") {
 			h.secrets.serve(t, w, r)
+			return
+		}
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/serviceAccounts/") {
+			h.serveAccount(w, r)
 			return
 		}
 		serveRun(w, r)
@@ -60,6 +64,18 @@ func newRealtimeHarness(t *testing.T) *realtimeHarness {
 		},
 	}
 	return h
+}
+
+func (h *realtimeHarness) serveAccount(w http.ResponseWriter, r *http.Request) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	if h.unaccounted {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":{"code":404,"message":"Unknown service account"}}`))
+		return
+	}
+	w.Write([]byte(`{"email":"` + r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:] + `"}`))
 }
 
 func aRealtime(name string) provider.Resource {
@@ -90,7 +106,7 @@ func (h *realtimeHarness) remove(t *testing.T, binding provider.Binding) {
 
 func (h *realtimeHarness) keys(t *testing.T) map[string]string {
 	t.Helper()
-	raw, found := h.secrets.latest(t, h.env.clients.RealtimeKeysSecret("shop", "prod"))
+	raw, found := h.secrets.latest(t, h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"))
 	if !found {
 		t.Fatal("the keys secret holds no version")
 	}
@@ -193,18 +209,10 @@ func TestRemovingTheLastRealtimeTakesTheGatewayAndItsKeysAway(t *testing.T) {
 	if h.run.serving() != nil {
 		t.Error("the gateway outlived the last realtime it served")
 	}
-	for _, secret := range []string{h.env.clients.RealtimeKeysSecret("shop", "prod"), h.env.clients.RealtimeSigningSecret("shop", "prod", "app")} {
+	for _, secret := range []string{h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"), h.env.clients.RealtimeSigningSecret("shop", "prod", "app")} {
 		if h.secrets.has(secret) {
 			t.Errorf("secret %s outlived the last realtime", secret)
 		}
-	}
-}
-
-func TestADeployCredentialMayKeepTheSecretsRealtimeIsServedFrom(t *testing.T) {
-	t.Parallel()
-
-	if !slices.Contains(rolesFor(edge.PurposeDeploy), "roles/secretmanager.admin") {
-		t.Errorf("a deploy credential is granted %v, want roles/secretmanager.admin: a deploy creates, writes, deletes and sets who reads a realtime's secrets", rolesFor(edge.PurposeDeploy))
 	}
 }
 

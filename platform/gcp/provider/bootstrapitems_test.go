@@ -1,7 +1,6 @@
 package gcp
 
 import (
-	"context"
 	"slices"
 	"testing"
 
@@ -62,7 +61,7 @@ func TestTheRuntimeAccountIsProvisionedWhereverTheBootstrapIs(t *testing.T) {
 	}
 }
 
-func TestEachTierHasAnAccountItsRealtimeGatewaysRunAsThatMayDoNothingInTheProject(t *testing.T) {
+func TestEachTierHasAnAccountItsRealtimeGatewaysRunAs(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
@@ -75,12 +74,6 @@ func TestEachTierHasAnAccountItsRealtimeGatewaysRunAsThatMayDoNothingInTheProjec
 	}
 	opened := bootstrap{clients: &clients{Names: names}}
 	purpose := opened.purposeOf(tier, account.Name)
-	if err := purpose.grant(context.Background(), tier); err != nil {
-		t.Errorf("granting the realtime account = %v, want nothing granted: it reads its keys secret alone, which each deploy grants", err)
-	}
-	if granted, err := purpose.granted(context.Background(), tier); err != nil || !granted {
-		t.Errorf("granted() = %t, %v, want an account holding no role to count as granted", granted, err)
-	}
 	if purpose.description == opened.purposeOf(tier, names.WorkloadAccount(tier)).description {
 		t.Error("the realtime account is described as the account apps run as")
 	}

@@ -96,9 +96,11 @@ func (n Names) WorkerService(project, env, app, worker string) string {
 }
 
 const (
-	realtimeInfix       = "realtime"
-	realtimeKeysInfix   = "keys"
-	maxReadableSecretID = 200
+	realtimeInfix        = "realtime"
+	realtimeKeysInfix    = "keys"
+	realtimeSigningInfix = "signing"
+	realtimeSecretSep    = "_"
+	maxReadableSecretID  = 200
 )
 
 func (n Names) RealtimeGateway(project, env string) string {
@@ -107,18 +109,32 @@ func (n Names) RealtimeGateway(project, env string) string {
 	return readable + "-" + serviceHash(string(n.namespace), project, env, realtimeInfix)
 }
 
-func (n Names) RealtimeKeysSecret(project, env string) string {
-	return n.realtimeSecret(project, env, realtimeKeysInfix, realtimeInfix, realtimeKeysInfix)
+func (n Names) RealtimeSecretPrefix() string {
+	return string(n.namespace) + realtimeSecretSep + realtimeInfix + "-"
+}
+
+func (n Names) RealtimeKeysSecretPrefix(tier environment.Tier) string {
+	return n.RealtimeSecretPrefix() + realtimeKeysInfix + "-" + string(tier) + "-"
+}
+
+func (n Names) RealtimeKeysSecret(tier environment.Tier, project, env string) string {
+	return realtimeSecret(n.RealtimeKeysSecretPrefix(tier), []string{project, env},
+		string(n.namespace), string(tier), project, env, realtimeInfix, realtimeKeysInfix)
 }
 
 func (n Names) RealtimeSigningSecret(project, env, resource string) string {
-	return n.realtimeSecret(project, env, naming.Sanitize(resource), realtimeInfix, "signing", resource)
+	return realtimeSecret(n.RealtimeSecretPrefix()+realtimeSigningInfix+"-", []string{project, env, resource},
+		string(n.namespace), project, env, realtimeInfix, realtimeSigningInfix, resource)
 }
 
-func (n Names) realtimeSecret(project, env, readableTail string, hashed ...string) string {
-	readable := strings.Join([]string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), realtimeInfix, readableTail}, "-")
+func realtimeSecret(prefix string, readableParts []string, hashed ...string) string {
+	sanitized := make([]string, 0, len(readableParts))
+	for _, part := range readableParts {
+		sanitized = append(sanitized, naming.Sanitize(part))
+	}
+	readable := prefix + strings.Join(sanitized, "-")
 	readable = strings.TrimRight(readable[:min(len(readable), maxReadableSecretID)], "-")
-	return readable + "-" + serviceHash(append([]string{string(n.namespace), project, env}, hashed...)...)
+	return readable + "-" + serviceHash(hashed...)
 }
 
 func (n Names) RealtimeAccount(tier environment.Tier) string {

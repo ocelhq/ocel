@@ -85,13 +85,25 @@ var deployRoles = []string{
 	"roles/datastore.user",
 	"roles/storage.objectAdmin",
 	"roles/cloudkms.cryptoKeyEncrypterDecrypter",
-	"roles/secretmanager.admin",
+	"roles/secretmanager.secretAccessor",
 	"roles/artifactregistry.writer",
 	"roles/iam.serviceAccountUser",
 	"roles/run.admin",
 	"roles/memorystore.admin",
 	"roles/pubsub.admin",
 	"roles/cloudscheduler.admin",
+}
+
+const (
+	realtimeSecretsRole = "roles/secretmanager.editor"
+	secretType          = "secretmanager.googleapis.com/Secret"
+	projectNumberHole   = "PROJECT_NUMBER"
+)
+
+func realtimeSecretsGrant(names Names) string {
+	return fmt.Sprintf("%s, on the condition (resource.type != %q && resource.type != %q) || resource.name.startsWith(%q)",
+		realtimeSecretsRole, secretType, secretVersionType,
+		"projects/"+projectNumberHole+"/secrets/"+names.RealtimeSecretPrefix())
 }
 
 func rolesFor(purpose edge.CredentialPurpose) []string {

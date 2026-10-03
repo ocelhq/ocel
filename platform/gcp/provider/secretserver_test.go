@@ -19,7 +19,6 @@ type storedVersion struct {
 
 type storedSecret struct {
 	versions []storedVersion
-	policy   *secretmanager.Policy
 }
 
 type secretServer struct {
@@ -45,7 +44,7 @@ func (s *secretServer) serve(t *testing.T, w http.ResponseWriter, r *http.Reques
 			w.Write([]byte(`{"error":{"code":409,"message":"secret already exists"}}`))
 			return
 		}
-		s.secrets[name] = &storedSecret{policy: &secretmanager.Policy{}}
+		s.secrets[name] = &storedSecret{}
 		writeBody(w, &secretmanager.Secret{Name: name})
 	case r.Method == http.MethodPost && strings.HasSuffix(path, ":addVersion"):
 		secret := s.secrets[strings.TrimSuffix(path, ":addVersion")]
@@ -105,22 +104,6 @@ func (s *secretServer) serve(t *testing.T, w http.ResponseWriter, r *http.Reques
 		}
 		secret.versions[at-1].destroyed = true
 		writeBody(w, &secretmanager.SecretVersion{Name: name + "/versions/" + version, State: "DESTROYED"})
-	case r.Method == http.MethodGet && strings.HasSuffix(path, ":getIamPolicy"):
-		secret := s.secrets[strings.TrimSuffix(path, ":getIamPolicy")]
-		if secret == nil {
-			secretAbsent(w)
-			return
-		}
-		writeBody(w, secret.policy)
-	case r.Method == http.MethodPost && strings.HasSuffix(path, ":setIamPolicy"):
-		secret := s.secrets[strings.TrimSuffix(path, ":setIamPolicy")]
-		asked := readBody[secretmanager.SetIamPolicyRequest](w, r)
-		if secret == nil || asked == nil {
-			secretAbsent(w)
-			return
-		}
-		secret.policy = asked.Policy
-		writeBody(w, secret.policy)
 	case r.Method == http.MethodDelete:
 		if _, found := s.secrets[path]; !found {
 			secretAbsent(w)
@@ -159,20 +142,6 @@ func (s *secretServer) has(name string) bool {
 	defer s.mu.Unlock()
 	_, found := s.secrets[name]
 	return found
-}
-
-func (s *secretServer) readers(name, role string) []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	secret := s.secrets[name]
-	if secret == nil {
-		return nil
-	}
-	at := slices.IndexFunc(secret.policy.Bindings, func(binding *secretmanager.Binding) bool { return binding.Role == role })
-	if at < 0 {
-		return nil
-	}
-	return slices.Clone(secret.policy.Bindings[at].Members)
 }
 
 func (s *secretServer) versionsAdded() int {

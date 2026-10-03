@@ -185,7 +185,7 @@ func shapeRealtime(tree *pricing.Tree, names Names, req provider.ShapeRequest, r
 	if !declared {
 		return
 	}
-	tree.Add(environment, string(Vendor), tfSecretManagerSecret, names.RealtimeKeysSecret(req.Deploy.Slug, req.Deploy.Env), region, secret)
+	tree.Add(environment, string(Vendor), tfSecretManagerSecret, names.RealtimeKeysSecret(req.Deploy.Tier, req.Deploy.Slug, req.Deploy.Env), region, secret)
 	tree.Add(environment, string(Vendor), tfCloudRunService, names.RealtimeGateway(req.Deploy.Slug, req.Deploy.Env), region, map[string]any{
 		"location":      region,
 		"ingress":       ingressEverywhere,

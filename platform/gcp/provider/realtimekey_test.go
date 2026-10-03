@@ -25,17 +25,6 @@ func TestASigningKeyIsMintedOnceAndKeptInItsOwnSecret(t *testing.T) {
 	}
 }
 
-func TestOnlyTheGatewaysAccountMayReadTheKeysSecret(t *testing.T) {
-	t.Parallel()
-
-	h := newRealtimeHarness(t)
-	h.provision(t, "app")
-	readers := h.secrets.readers(h.env.clients.RealtimeKeysSecret("shop", "prod"), "roles/secretmanager.secretAccessor")
-	if want := []string{"serviceAccount:" + h.env.clients.RealtimeAccountEmail(environment.TierProduction)}; !slices.Equal(readers, want) {
-		t.Errorf("the keys secret may be read by %v, want %v", readers, want)
-	}
-}
-
 func TestAnotherRealtimeIsTrustedThroughANewKeysVersionWithoutANewRevision(t *testing.T) {
 	t.Parallel()
 
@@ -62,7 +51,7 @@ func TestTheKeysSecretKeepsOnlyTheVersionTheGatewayReads(t *testing.T) {
 	h.provision(t, "app")
 	h.remove(t, h.provision(t, "chat"))
 
-	if got := h.secrets.enabledVersions(h.env.clients.RealtimeKeysSecret("shop", "prod")); len(got) != 1 {
+	if got := h.secrets.enabledVersions(h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod")); len(got) != 1 {
 		t.Errorf("the keys secret holds versions %v readable, want its latest alone: each one superseded is billed and read by nothing", got)
 	}
 }
