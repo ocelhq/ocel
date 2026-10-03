@@ -6,12 +6,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -285,5 +288,72 @@ func TestAnAppBindingNoRealtimeIsHandedNoGateway(t *testing.T) {
 	manifest := manifestFor(t, &box{kept: sealedRootKey()}, vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}}, boundApp())
 	if manifest.RealtimePublishURL != "" {
 		t.Errorf("an app binding no realtime is handed the gateway %q", manifest.RealtimePublishURL)
+	}
+}
+
+type deployArrivingMidRun struct {
+	keyvalue.Store
+	once   sync.Once
+	always bool
+	arrive func(context.Context)
+}
+
+func (s *deployArrivingMidRun) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	listed, err := s.Store.List(ctx, in, under...)
+	if in.Root == keyvalue.RootRealtime && s.always {
+		s.arrive(ctx)
+	} else if in.Root == keyvalue.RootRealtime {
+		s.once.Do(func() { s.arrive(ctx) })
+	}
+	return listed, err
+}
+
+func TestAGatewayWhoseRealtimeKeepsChangingUnderItIsRefusedAsBusy(t *testing.T) {
+	t.Parallel()
+
+	p, store := recording(&box{})
+	ref := aRealtime(t, "app").Ref
+	record, err := json.Marshal(live.RealtimeNamespace{VerifyKey: base64.StdEncoding.EncodeToString(make([]byte, ed25519.PublicKeySize))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	arrived := 0
+	p.Recording(&deployArrivingMidRun{Store: store, always: true, arrive: func(ctx context.Context) {
+		arrived++
+		key := live.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, fmt.Sprintf("chat%d", arrived))
+		if _, err := store.Write(ctx, keyvalue.Entry{Key: key, Value: record}); err != nil {
+			t.Errorf("record chat%d: %v", arrived, err)
+		}
+	}})
+
+	_, err = p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Errorf("ProvisionRealtime() = %v, want it refused as busy rather than restarting the gateway without end", err)
+	}
+}
+
+func TestARealtimeAnotherDeployRecordsWhileTheGatewayRestartsIsVerifiedByTheGatewayLeftRunning(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	p, store := recording(machine)
+	ref := aRealtime(t, "app").Ref
+	chat, err := json.Marshal(live.RealtimeNamespace{VerifyKey: base64.StdEncoding.EncodeToString(make([]byte, ed25519.PublicKeySize))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Recording(&deployArrivingMidRun{Store: store, arrive: func(ctx context.Context) {
+		key := live.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, "chat")
+		if _, err := store.Write(ctx, keyvalue.Entry{Key: key, Value: chat}); err != nil {
+			t.Errorf("record chat: %v", err)
+		}
+	}})
+
+	if _, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), nil); err != nil {
+		t.Fatalf("ProvisionRealtime() = %v", err)
+	}
+	if keys := gatewayKeys(t, machine); len(keys) != 2 || keys["app"] == "" || keys["chat"] == "" {
+		t.Errorf("the gateway left running verifies %v, want app and the chat another deploy recorded meanwhile", keys)
 	}
 }
