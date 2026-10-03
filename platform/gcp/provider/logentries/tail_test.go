@@ -87,8 +87,8 @@ func sendThenHold(stream loggingpb.LoggingServiceV2_TailLogEntriesServer, respon
 	return hold(0, stream)
 }
 
-func ignoreEvents([]Event) error     { return nil }
-func ignoreNotices(Suppressed) error { return nil }
+func ignoreEvents([]Event) error { return nil }
+func ignoreNotices(Notice) error { return nil }
 
 func waitFor(t *testing.T, ok func() bool) {
 	t.Helper()
@@ -192,38 +192,61 @@ func TestTailEmitsEntriesAsTheyArrive(t *testing.T) {
 	}
 }
 
-func TestTailReportsSuppressedEntries(t *testing.T) {
-	t.Parallel()
+func noticesFrom(t *testing.T, response *loggingpb.TailLogEntriesResponse, count int) []Notice {
+	t.Helper()
 	client, _ := serveTail(t, func(_ int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
-		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{
-			Entries: []*loggingpb.LogEntry{pbEntry(since, "kept")},
-			SuppressionInfo: []*loggingpb.TailLogEntriesResponse_SuppressionInfo{
-				{Reason: loggingpb.TailLogEntriesResponse_SuppressionInfo_RATE_LIMIT, SuppressedCount: 120},
-				{Reason: loggingpb.TailLogEntriesResponse_SuppressionInfo_NOT_CONSUMED, SuppressedCount: 7},
-			},
-		})
+		return sendThenHold(stream, response)
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	var (
 		mu      sync.Mutex
-		notices []Suppressed
+		notices []Notice
 	)
 	done := make(chan error, 1)
 	go func() {
-		done <- Tail(ctx, client, "acme-prod", webSource(), ignoreEvents, func(s Suppressed) error {
+		done <- Tail(ctx, client, "acme-prod", webSource(), ignoreEvents, func(n Notice) error {
 			mu.Lock()
 			defer mu.Unlock()
-			notices = append(notices, s)
+			notices = append(notices, n)
 			return nil
 		})
 	}()
-	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(notices) == 2 })
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(notices) == count })
 	cancel()
 	<-done
+	return notices
+}
 
-	want := []Suppressed{{Reason: "RATE_LIMIT", Count: 120}, {Reason: "NOT_CONSUMED", Count: 7}}
+func TestTailReportsSuppressedEntries(t *testing.T) {
+	t.Parallel()
+
+	notices := noticesFrom(t, &loggingpb.TailLogEntriesResponse{
+		Entries: []*loggingpb.LogEntry{pbEntry(since, "kept")},
+		SuppressionInfo: []*loggingpb.TailLogEntriesResponse_SuppressionInfo{
+			{Reason: loggingpb.TailLogEntriesResponse_SuppressionInfo_RATE_LIMIT, SuppressedCount: 120},
+			{Reason: loggingpb.TailLogEntriesResponse_SuppressionInfo_NOT_CONSUMED, SuppressedCount: 7},
+		},
+	}, 2)
+
+	want := []Notice{{Reason: RateLimit, Count: 120}, {Reason: NotConsumed, Count: 7}}
+	if !slices.Equal(notices, want) {
+		t.Errorf("notices = %+v, want %+v", notices, want)
+	}
+}
+
+func TestTailReportsASuppressionWithoutAKnownReasonAsUnspecified(t *testing.T) {
+	t.Parallel()
+
+	notices := noticesFrom(t, &loggingpb.TailLogEntriesResponse{
+		SuppressionInfo: []*loggingpb.TailLogEntriesResponse_SuppressionInfo{
+			{Reason: loggingpb.TailLogEntriesResponse_SuppressionInfo_REASON_UNSPECIFIED, SuppressedCount: 3},
+			{Reason: loggingpb.TailLogEntriesResponse_SuppressionInfo_Reason(99), SuppressedCount: 4},
+		},
+	}, 2)
+
+	want := []Notice{{Reason: Unspecified, Count: 3}, {Reason: Unspecified, Count: 4}}
 	if !slices.Equal(notices, want) {
 		t.Errorf("notices = %+v, want %+v", notices, want)
 	}
@@ -245,7 +268,7 @@ func TestTailReconnectsOnceWhenTheStreamEnds(t *testing.T) {
 	var (
 		mu      sync.Mutex
 		texts   []string
-		notices []Suppressed
+		notices []Notice
 	)
 	done := make(chan error, 1)
 	go func() {
@@ -256,7 +279,7 @@ func TestTailReconnectsOnceWhenTheStreamEnds(t *testing.T) {
 				texts = append(texts, event.Text)
 			}
 			return nil
-		}, func(s Suppressed) error {
+		}, func(s Notice) error {
 			mu.Lock()
 			defer mu.Unlock()
 			notices = append(notices, s)
@@ -272,7 +295,7 @@ func TestTailReconnectsOnceWhenTheStreamEnds(t *testing.T) {
 	if want := []string{"call 1", "call 2"}; !slices.Equal(texts, want) {
 		t.Errorf("texts = %v, want %v", texts, want)
 	}
-	if want := []Suppressed{{Reason: Reconnected}}; !slices.Equal(notices, want) {
+	if want := []Notice{{Reason: Reconnected}}; !slices.Equal(notices, want) {
 		t.Errorf("notices = %+v, want %+v", notices, want)
 	}
 	asked := fake.asked()
@@ -440,7 +463,7 @@ func TestTailStopsWhenNoticeFails(t *testing.T) {
 	})
 	broken := errors.New("the reader went away")
 
-	err := Tail(context.Background(), client, "acme-prod", webSource(), ignoreEvents, func(Suppressed) error { return broken })
+	err := Tail(context.Background(), client, "acme-prod", webSource(), ignoreEvents, func(Notice) error { return broken })
 
 	if !errors.Is(err, broken) {
 		t.Errorf("Tail = %v, want the notice error", err)
@@ -452,7 +475,7 @@ func TestTailStopsWhenTheReconnectNoticeFails(t *testing.T) {
 	client, fake := serveTail(t, func(int, loggingpb.LoggingServiceV2_TailLogEntriesServer) error { return nil })
 	broken := errors.New("the reader went away")
 
-	err := Tail(context.Background(), client, "acme-prod", webSource(), ignoreEvents, func(Suppressed) error { return broken })
+	err := Tail(context.Background(), client, "acme-prod", webSource(), ignoreEvents, func(Notice) error { return broken })
 
 	if !errors.Is(err, broken) {
 		t.Errorf("Tail = %v, want the notice error", err)
