@@ -121,7 +121,7 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 	if err != nil {
 		return err
 	}
-	sealed, secret, err := p.keptSealed(ctx, ref.Tier, spec.Name, spec.Resource, bound)
+	sealed, secret, err := p.keptSealed(ctx, ref.Tier, spec.Name, spec.Resource, bound, mintResourceSecret)
 	if err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 	if err != nil {
 		return err
 	}
-	deliverySealed, _, err := p.keptSealed(ctx, ref.Tier, nameDeliverySecret(spec), spec.Resource, deliveryBound)
+	deliverySealed, _, err := p.keptSealed(ctx, ref.Tier, nameDeliverySecret(spec), spec.Resource, deliveryBound, mintResourceSecret)
 	if err != nil {
 		return err
 	}

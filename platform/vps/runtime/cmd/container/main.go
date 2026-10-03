@@ -67,6 +67,16 @@ func run(ctx context.Context, command []string, environ []string) int {
 		return fatal(fmt.Sprintf("find a loopback port for the app: %v", err))
 	}
 	app := "127.0.0.1:" + strconv.Itoa(internal)
+	var ready atomic.Bool
+	front, err := newFront(pinned, originguard.Options{
+		Upstream:   &url.URL{Scheme: "http", Host: app},
+		Guard:      guard,
+		HealthPath: healthPath,
+		Ready:      ready.Load,
+	})
+	if err != nil {
+		return fatal(err.Error())
+	}
 
 	fronting, err := proxying(pinned, values, variables.SocketPath, app)
 	if err != nil {
@@ -83,7 +93,6 @@ func run(ctx context.Context, command []string, environ []string) int {
 		return fatal(err.Error())
 	}
 
-	var ready atomic.Bool
 	listening := child.WatchListening(app, nil)
 	go func() {
 		if err := <-listening; err == nil {
@@ -96,13 +105,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 		_ = proc.Stop(stopGrace)
 		return fatal(fmt.Sprintf("listen on port %s: %v", exposed, err))
 	}
-	upstream := &url.URL{Scheme: "http", Host: app}
-	server := &http.Server{Handler: originguard.Handler(originguard.Options{
-		Upstream:   upstream,
-		Guard:      guard,
-		HealthPath: healthPath,
-		Ready:      ready.Load,
-	})}
+	server := &http.Server{Handler: front}
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(ln) }()
 

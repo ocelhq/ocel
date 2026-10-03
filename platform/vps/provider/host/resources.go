@@ -136,6 +136,11 @@ type Credential struct {
 	Reassert func(secret string) (argv []string, stdin string) `json:"-"`
 }
 
+type Mount struct {
+	Source string
+	Target string
+}
+
 type ResourceContainer struct {
 	Name     string
 	Project  string
@@ -151,6 +156,8 @@ type ResourceContainer struct {
 	Memory       string
 	CPUs         string
 	ShmSize      string
+	ReadOnly     bool
+	Mounts       []Mount
 
 	Volume     Volume
 	Credential Credential
@@ -244,8 +251,17 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 			argv = append(argv, limit[0], limit[1])
 		}
 	}
-	argv = append(argv, "--env-file", envFile,
-		"--mount", "type=volume,src="+spec.volume()+",dst="+spec.Volume.Path, spec.Image)
+	if spec.ReadOnly {
+		argv = append(argv, "--read-only")
+	}
+	argv = append(argv, "--env-file", envFile)
+	for _, mount := range spec.Mounts {
+		argv = append(argv, "--mount", boundMount(mount.Source, mount.Target, "readonly"))
+	}
+	if spec.Volume.Path != "" {
+		argv = append(argv, "--mount", "type=volume,src="+spec.volume()+",dst="+spec.Volume.Path)
+	}
+	argv = append(argv, spec.Image)
 	return append(argv, spec.Args...)
 }
 
@@ -426,8 +442,10 @@ func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret s
 	if err := h.sweep(ctx, elevation); err != nil {
 		return err
 	}
-	if _, err := h.ran(ctx, "keep a volume for "+spec.Resource, volumeCreating(spec), nil, elevation); err != nil {
-		return err
+	if spec.Volume.Path != "" {
+		if _, err := h.ran(ctx, "keep a volume for "+spec.Resource, volumeCreating(spec), nil, elevation); err != nil {
+			return err
+		}
 	}
 	delivery, err := h.handResource(ctx, spec, secret)
 	if err != nil {

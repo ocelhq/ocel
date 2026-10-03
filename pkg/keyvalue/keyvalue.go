@@ -50,6 +50,7 @@ const (
 	RootEnvSourceDigestKey Root = "envsourcedigestkey"
 	RootSharedPhysicals    Root = "sharedphysicals"
 	RootQueues             Root = "queues"
+	RootRealtime           Root = "realtime"
 )
 
 var variableRoots = []Root{RootValues, RootValueRefs, RootEnvSources, RootEnvSourceStatus, RootEnvSourceDigestKey}

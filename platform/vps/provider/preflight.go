@@ -17,7 +17,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := refuseScaledContainers(pre.Deploy); err != nil {
 		return err
 	}
-	if err := refuseEphemeralQueues(pre); err != nil {
+	if err := refuseEphemeralInfra(pre); err != nil {
 		return err
 	}
 	if err := p.host.CheckEngine(ctx); err != nil {
@@ -27,6 +27,9 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 		return err
 	}
 	if err := p.refuseStaleAgent(ctx, pre); err != nil {
+		return err
+	}
+	if err := p.refuseStaleGateway(ctx, pre); err != nil {
 		return err
 	}
 	if pre.Deploy.Tier == environment.TierPreview && !p.options.PerHostnamePreviewCertificates {
@@ -52,18 +55,26 @@ func isQueued(resource provider.Resource) bool {
 	return resource.Type == provider.BindingTopic || resource.Type == provider.BindingTask
 }
 
-func refuseEphemeralQueues(pre provider.DeployPreflight) error {
+func isRealtime(resource provider.Resource) bool { return resource.Type == provider.BindingRealtime }
+
+func refuseEphemeralInfra(pre provider.DeployPreflight) error {
 	if !pre.Deploy.Infra.IsZero() {
 		return nil
 	}
-	at := slices.IndexFunc(pre.Resources, isQueued)
-	if at < 0 {
-		return nil
+	for _, declared := range pre.Resources {
+		name := chooseDeclaredName(declared.Declared, declared.Name)
+		switch {
+		case isQueued(declared):
+			return refusal.Refuse(refusal.CodeInvalid,
+				"this ephemeral preview declares %s %s, and a box runs topics and tasks only on the queue of an environment with an infra stack of its own: deploy it as a persistent preview, or leave the %s out of it",
+				declared.Type, name, declared.Type)
+		case isRealtime(declared):
+			return refusal.Refuse(refusal.CodeInvalid,
+				"this ephemeral preview declares realtime %s, and a box serves realtime only from the gateway of an environment with an infra stack of its own: deploy it as a persistent preview, or leave the realtime out of it",
+				name)
+		}
 	}
-	queued := pre.Resources[at]
-	return refusal.Refuse(refusal.CodeInvalid,
-		"this ephemeral preview declares %s %s, and a box runs topics and tasks only on the queue of an environment with an infra stack of its own: deploy it as a persistent preview, or leave the %s out of it",
-		queued.Type, chooseDeclaredName(queued.Declared, queued.Name), queued.Type)
+	return nil
 }
 
 func (p *Provider) refuseStaleAgent(ctx context.Context, pre provider.DeployPreflight) error {
@@ -77,6 +88,19 @@ func (p *Provider) refuseStaleAgent(ctx context.Context, pre provider.DeployPref
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this box's agent at %s predates this ocel and runs no topic or task, and this deploy declares them\nRun `%s` and deploy again",
 		host.LiveBinary, provider.BootstrapCommand(pre.Deploy.Tier))
+}
+
+func (p *Provider) refuseStaleGateway(ctx context.Context, pre provider.DeployPreflight) error {
+	if !slices.ContainsFunc(pre.Resources, isRealtime) {
+		return nil
+	}
+	current, err := p.host.IsRealtimeCurrent(ctx)
+	if err != nil || current {
+		return err
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"this box's realtime gateway at %s predates this ocel, and this deploy declares realtime\nRun `%s` and deploy again",
+		host.RealtimeBinary, provider.BootstrapCommand(pre.Deploy.Tier))
 }
 
 var oneInstance = provider.Instances{Min: 1, Max: 1}

@@ -32,12 +32,13 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		return nil, fmt.Errorf("pin the store %s writes through: %w", app.App, err)
 	}
 	pinned := variables.Manifest{
-		Slug:        spec.Ref.Project,
-		Tier:        string(spec.Ref.Tier),
-		Environment: liveEnvironment(spec.Ref),
-		Keys:        liveKeys(app.Values),
-		Bindings:    liveBindings(app.Values),
-		Store:       store,
+		Slug:               spec.Ref.Project,
+		Tier:               string(spec.Ref.Tier),
+		Environment:        liveEnvironment(spec.Ref),
+		Keys:               liveKeys(app.Values),
+		Bindings:           liveBindings(app.Values),
+		Store:              store,
+		RealtimePublishURL: findRealtimePublishURL(app.Values.Bindings),
 	}
 	if hasQueue(app) {
 		pinned.Queue = spec.Ref.Name.Env

@@ -38,6 +38,7 @@ on:
       - "platform/edge/cloudflare/deploy/**"
       - "platform/edge/contract/**"
       - "platform/s3/**"
+      - "platform/realtime/**"
       - "cli/internal/appurl/**"
       - "cli/internal/attribution/**"
       - "cli/internal/build/**"

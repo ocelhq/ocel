@@ -99,7 +99,7 @@ func StorageItems(tier environment.Tier, keys []byte) []Item {
 }
 
 func Items(tier environment.Tier, keys []byte, arch string, front Front) []Item {
-	return slices.Concat(TierItems(tier), StorageItems(tier, keys), EngineItems(), LiveItems(arch), EnvSourceSyncItems(tier, arch), ProxyItems(arch, front), BackupItems())
+	return slices.Concat(TierItems(tier), StorageItems(tier, keys), EngineItems(), LiveItems(arch), EnvSourceSyncItems(tier, arch), ProxyItems(arch, front), RealtimeItems(arch), BackupItems())
 }
 
 func dir(name string, mode fs.FileMode, owner string, note string) Item {
