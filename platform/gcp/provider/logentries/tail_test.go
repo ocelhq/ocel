@@ -499,29 +499,37 @@ func TestTailOpensNoStreamWithoutSources(t *testing.T) {
 	}
 }
 
-func TestTailKeepsAnEntryWhoseJSONPayloadCannotBeEncoded(t *testing.T) {
+func TestTailWritesANonFiniteNumberInAJSONPayloadAsAString(t *testing.T) {
 	t.Parallel()
 	client, _ := serveTail(t, func(_ int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
 		odd := streamedEntry(since, "")
 		odd.Payload = &loggingpb.LogEntry_JsonPayload{JsonPayload: &structpb.Struct{Fields: map[string]*structpb.Value{
-			"ratio": structpb.NewNumberValue(math.NaN()),
+			"ratio":   structpb.NewNumberValue(math.NaN()),
+			"ceiling": structpb.NewNumberValue(math.Inf(1)),
+			"floor":   structpb.NewNumberValue(math.Inf(-1)),
 		}}}
 		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{odd}})
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var seen atomic.Int64
+	texts := make(chan string, 1)
 	done := make(chan error, 1)
 	go func() {
 		done <- Tail(ctx, client, "acme-prod", webQuery(), func(events []Event) error {
-			seen.Add(int64(len(events)))
+			for _, event := range events {
+				texts <- event.Text
+			}
 			return nil
 		}, ignoreNotices)
 	}()
-	waitFor(t, func() bool { return seen.Load() == 1 })
+	got := <-texts
 	cancel()
 	<-done
+
+	if want := `{"ceiling":"Infinity","floor":"-Infinity","ratio":"NaN"}`; got != want {
+		t.Errorf("text = %s, want %s", got, want)
+	}
 }
 
 func TestTailEndsTheStreamWhenEmitFails(t *testing.T) {

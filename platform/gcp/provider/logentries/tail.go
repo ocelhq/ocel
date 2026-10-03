@@ -117,11 +117,11 @@ func deliver(batch *loggingpb.TailLogEntriesResponse, sources []Source, emit fun
 func tailEventOf(entry *loggingpb.LogEntry, sources []Source) (Event, bool) {
 	text := entry.GetTextPayload()
 	if text == "" && entry.GetJsonPayload() != nil {
-		if encoded, err := json.Marshal(entry.GetJsonPayload().AsMap()); err == nil {
-			text = string(encoded)
-		} else {
-			text = entry.GetJsonPayload().String()
+		encoded, err := json.Marshal(entry.GetJsonPayload().AsMap())
+		if err != nil {
+			return Event{}, false
 		}
+		text = string(encoded)
 	}
 	if text == "" {
 		return Event{}, false
