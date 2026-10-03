@@ -222,7 +222,9 @@ gcloud projects add-iam-policy-binding my-project \
 
 Secret Manager checks creating a secret against the project, so the condition cannot narrow
 what a deploy may create; it narrows every read, write and deletion of a secret that exists.
-A bootstrap needs those plus `roles/datastore.owner`, `roles/storage.admin`,
+
+A bootstrap needs those, with `roles/secretmanager.admin` unconditioned in place of the
+realtime grant, plus `roles/datastore.owner`, `roles/storage.admin`,
 `roles/cloudkms.admin`, `roles/artifactregistry.admin`,
 `roles/iam.serviceAccountAdmin`, `roles/resourcemanager.projectIamAdmin` and
 `roles/cloudscheduler.admin`. Anything missing is named back to you before anything is
