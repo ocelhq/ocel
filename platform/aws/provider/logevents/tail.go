@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"slices"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -89,7 +88,7 @@ func tail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Clie
 	}
 	wait := every
 	for {
-		events, err := pollGroups(ctx, logs, groups, query)
+		err := pollGroups(ctx, logs, groups, query, emit)
 		switch {
 		case ctx.Err() != nil:
 			return nil
@@ -99,11 +98,6 @@ func tail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Clie
 			return err
 		default:
 			wait = every
-			if len(events) > 0 {
-				if err := emit(events); err != nil {
-					return err
-				}
-			}
 		}
 		if err := sleep(ctx, wait); err != nil {
 			return nil
@@ -121,22 +115,13 @@ func refuseInvalidTailQuery(query Query) error {
 	return refuseInvalidSources(query)
 }
 
-func pollGroups(ctx context.Context, logs *cloudwatchlogs.Client, groups []*tailedGroup, query Query) ([]Event, error) {
-	var events []Event
-	polled := make([]cursor, len(groups))
-	for i, group := range groups {
-		unseen, next, err := pollGroup(ctx, logs, group, query)
-		if err != nil {
-			return nil, err
+func pollGroups(ctx context.Context, logs *cloudwatchlogs.Client, groups []*tailedGroup, query Query, emit func([]Event) error) error {
+	for _, group := range groups {
+		if err := pollGroup(ctx, logs, group, query, emit); err != nil {
+			return err
 		}
-		events = append(events, unseen...)
-		polled[i] = next
 	}
-	for i, group := range groups {
-		group.cursor = polled[i]
-	}
-	slices.SortStableFunc(events, func(a, b Event) int { return a.Time.Compare(b.Time) })
-	return events, nil
+	return nil
 }
 
 func isThrottled(err error) bool {
@@ -144,34 +129,34 @@ func isThrottled(err error) bool {
 	return errors.As(err, &api) && api.ErrorCode() == "ThrottlingException"
 }
 
-func pollGroup(ctx context.Context, logs *cloudwatchlogs.Client, group *tailedGroup, query Query) ([]Event, cursor, error) {
-	var unseen []Event
-	next := group.cursor
-	next.seenMillis = maps.Clone(group.cursor.seenMillis)
-	var token *string
-	for {
-		page, err := logs.FilterLogEvents(ctx, &cloudwatchlogs.FilterLogEventsInput{
-			LogGroupName:        aws.String(group.name),
-			LogStreamNamePrefix: group.streamPrefix,
-			StartFromHead:       aws.Bool(true),
-			FilterPattern:       quoteFilterPattern(query.Contains),
-			StartTime:           aws.Int64(group.cursor.startMillis()),
-			NextToken:           token,
-		})
+func pollGroup(ctx context.Context, logs *cloudwatchlogs.Client, group *tailedGroup, query Query, emit func([]Event) error) error {
+	pages := cloudwatchlogs.NewFilterLogEventsPaginator(logs, &cloudwatchlogs.FilterLogEventsInput{
+		LogGroupName:        aws.String(group.name),
+		LogStreamNamePrefix: group.streamPrefix,
+		StartFromHead:       aws.Bool(true),
+		FilterPattern:       quoteFilterPattern(query.Contains),
+		StartTime:           aws.Int64(group.cursor.startMillis()),
+	})
+	for pages.HasMorePages() {
+		page, err := pages.NextPage(ctx)
 		if err != nil {
-			return nil, cursor{}, fmt.Errorf("tail log events of %s: %w", group.name, err)
+			return fmt.Errorf("tail log events of %s: %w", group.name, err)
 		}
+		var unseen []Event
 		for _, logged := range page.Events {
-			if !next.markSeen(aws.ToString(logged.EventId), aws.ToInt64(logged.Timestamp)) {
+			if !group.cursor.markSeen(aws.ToString(logged.EventId), aws.ToInt64(logged.Timestamp)) {
 				continue
 			}
 			if event, keep := parseLoggedEvent(group.logGroup, group.source, logged); keep {
 				unseen = append(unseen, event)
 			}
 		}
-		next.forgetBeforeStart()
-		if token = page.NextToken; token == nil {
-			return unseen, next, nil
+		group.cursor.forgetBeforeStart()
+		if len(unseen) > 0 {
+			if err := emit(unseen); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }

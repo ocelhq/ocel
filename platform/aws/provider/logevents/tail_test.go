@@ -241,7 +241,7 @@ func TestTailAsksOnlyForEventsFromSinceOnwardsOldestFirst(t *testing.T) {
 	}
 }
 
-func TestTailPagesThroughEveryPageOfAPoll(t *testing.T) {
+func TestTailEmitsEveryPageOfAPollAsItArrives(t *testing.T) {
 	t.Parallel()
 	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.pageSize = 2
@@ -251,12 +251,12 @@ func TestTailPagesThroughEveryPageOfAPoll(t *testing.T) {
 
 	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, time.Second, func() { fake.add(webGroup, webLine(6, "line 6")) })
 
-	if got, want := run.batchTexts(), "line 1,line 2,line 3,line 4,line 5|line 6"; got != want {
+	if got, want := run.batchTexts(), "line 1,line 2|line 3,line 4|line 5|line 6"; got != want {
 		t.Fatalf("Tail() emitted batches %q, want %q", got, want)
 	}
 }
 
-func TestTailMergesTheGroupsOfASourceSetByTime(t *testing.T) {
+func TestTailEmitsEachGroupsEventsLabelledByItsSource(t *testing.T) {
 	t.Parallel()
 	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.lambdas["api-fn"] = "/aws/lambda/api-fn-2"
@@ -270,11 +270,11 @@ func TestTailMergesTheGroupsOfASourceSetByTime(t *testing.T) {
 		Tier:    environment.TierProduction,
 	}, time.Second, func() { fake.add("/aws/lambda/api-fn-2", webLine(6, "api 6")) })
 
-	if got, want := run.batchTexts(), "web 1,api 2,api 3,web 4,svc 5|api 6"; got != want {
+	if got, want := run.batchTexts(), "web 1,web 4|api 2,api 3|svc 5|api 6"; got != want {
 		t.Fatalf("Tail() emitted batches %q, want %q", got, want)
 	}
-	if first := run.batches[0]; first[1].Label != "api" || first[4].Label != "svc" || first[4].Instance != "t1" {
-		t.Errorf("first batch = %+v, want each event labelled by its source", first)
+	if web, api, svc := run.batches[0][0], run.batches[1][0], run.batches[2][0]; web.Label != "web" || api.Label != "api" || svc.Label != "svc" || svc.Instance != "t1" {
+		t.Errorf("batches = %+v, want each event labelled by its source", run.batches)
 	}
 }
 
@@ -289,7 +289,7 @@ func TestTailTracksEachGroupsPositionSeparately(t *testing.T) {
 		func() { fake.add("/aws/lambda/api-fn-2", webLine(5, "api 5")) },
 	)
 
-	if got, want := run.batchTexts(), "api 1,web 10|api 5"; got != want {
+	if got, want := run.batchTexts(), "web 10|api 1|api 5"; got != want {
 		t.Fatalf("Tail() emitted batches %q, want %q: a quiet group is not skipped past because another has newer events", got, want)
 	}
 }
@@ -306,20 +306,38 @@ func TestTailDropsLambdaBookkeepingLinesButStillAdvancesPastThem(t *testing.T) {
 	}
 }
 
-func TestTailRetriesAThrottledPollWithoutLosingEvents(t *testing.T) {
+func TestTailKeepsTheGroupsAPollReadBeforeAThrottle(t *testing.T) {
 	t.Parallel()
 	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.lambdas["api-fn"] = "/aws/lambda/api-fn-2"
 	fake.add(webGroup, webLine(1, "web 1"))
 	fake.add("/aws/lambda/api-fn-2", webLine(2, "api 2"))
+	fake.throttledRequests = map[int]bool{2: true}
 
-	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}, {Function: "api-fn"}}}, time.Second,
-		func() { fake.throttles = 1 },
-		func() {},
-	)
+	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}, {Function: "api-fn"}}}, time.Second, idle(2)...)
 
-	if got, want := run.batchTexts(), "web 1,api 2"; got != want {
-		t.Fatalf("Tail() emitted batches %q, want %q: a poll that failed halfway re-reads its groups, and no group's events are emitted twice", got, want)
+	if got, want := run.batchTexts(), "web 1|api 2"; got != want {
+		t.Fatalf("Tail() emitted batches %q, want %q: the group read before the throttle is shown at once and never again", got, want)
+	}
+}
+
+func TestTailKeepsThePagesAPollReadBeforeAThrottle(t *testing.T) {
+	t.Parallel()
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
+	fake.pageSize = 2
+	for i := 100; i <= 104; i++ {
+		fake.add(webGroup, webLine(i, "line "+strconv.Itoa(i)))
+	}
+	fake.throttledRequests = map[int]bool{2: true}
+
+	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, time.Second, idle(2)...)
+
+	if got, want := run.batchTexts(), "line 100,line 101|line 102,line 103|line 104"; got != want {
+		t.Fatalf("Tail() emitted batches %q, want %q: each page is shown once, whether or not a later page was throttled", got, want)
+	}
+	sent := fake.listRequests()
+	if got, want := time.UnixMilli(*sent[2].StartTime).UTC(), addToEpoch(101).Add(-lateEventWindow); !got.Equal(want) {
+		t.Fatalf("the poll after the throttle started at %v, want %v: the page read before the throttle moves the tail forward", got, want)
 	}
 }
 
