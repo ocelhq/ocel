@@ -45,6 +45,7 @@
         "$TURBO_ROOT$/packages/**",
         "$TURBO_ROOT$/frameworks/**",
         "$TURBO_ROOT$/platform/gcp/**",
+        "$TURBO_ROOT$/platform/realtime/**",
         "$TURBO_ROOT$/platform/edge/**",
         "$TURBO_ROOT$/tests/fixtures/**",
         "$TURBO_ROOT$/tests/shared/**",
