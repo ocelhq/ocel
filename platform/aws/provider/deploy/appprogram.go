@@ -418,13 +418,9 @@ func (r *release) decodeApp(spec provider.StackSpec, outputs auto.OutputMap) (pr
 		result.ISRWriteSecret = work.cache.WriterSecret
 	}
 	for _, logical := range work.logical {
-		raw, produced := outputs[logical]
-		if !produced {
-			return provider.StackResult{}, fmt.Errorf("stack produced no output for %s", logical)
-		}
-		fields, mapped := raw.Value.(map[string]any)
-		if !mapped {
-			return provider.StackResult{}, fmt.Errorf("output for %s is not a map", logical)
+		fields, err := requireOutputFields(outputs, logical)
+		if err != nil {
+			return provider.StackResult{}, err
 		}
 		url, err := requireStringField(fields, logical, outputKeyFunctionURL)
 		if err != nil {

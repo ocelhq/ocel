@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -144,6 +145,18 @@ func collectPostgresBinding(ctx context.Context, secrets SecretsAPI, name string
 			Password: password,
 		}},
 	}, nil
+}
+
+func requireOutputFields(outputs auto.OutputMap, name string) (map[string]any, error) {
+	raw, produced := outputs[name]
+	if !produced {
+		return nil, fmt.Errorf("stack produced no output for %s", name)
+	}
+	fields, mapped := raw.Value.(map[string]any)
+	if !mapped {
+		return nil, fmt.Errorf("output for %s is not a map", name)
+	}
+	return fields, nil
 }
 
 func requireStringField(fields map[string]any, name, key string) (string, error) {
