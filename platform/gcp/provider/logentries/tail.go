@@ -17,10 +17,15 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-const (
-	bufferWindow = 2 * time.Second
+const bufferWindow = 2 * time.Second
 
-	Reconnected = "RECONNECTED"
+type Reason string
+
+const (
+	RateLimit   Reason = "RATE_LIMIT"
+	NotConsumed Reason = "NOT_CONSUMED"
+	Unspecified Reason = "UNSPECIFIED"
+	Reconnected Reason = "RECONNECTED"
 )
 
 var (
@@ -28,12 +33,12 @@ var (
 	transientCodes = []codes.Code{codes.DeadlineExceeded, codes.Internal, codes.Unavailable}
 )
 
-type Suppressed struct {
-	Reason string
+type Notice struct {
+	Reason Reason
 	Count  int
 }
 
-func Tail(ctx context.Context, client *logging.Client, project string, q Query, emit func([]Event) error, notice func(Suppressed) error) error {
+func Tail(ctx context.Context, client *logging.Client, project string, q Query, emit func([]Event) error, notice func(Notice) error) error {
 	if len(q.Sources) == 0 {
 		return nil
 	}
@@ -53,7 +58,7 @@ func Tail(ctx context.Context, client *logging.Client, project string, q Query, 
 			continue
 		case errors.Is(err, errStreamEnded) && !reconnected:
 			reconnected = true
-			if err := notice(Suppressed{Reason: Reconnected}); err != nil {
+			if err := notice(Notice{Reason: Reconnected}); err != nil {
 				return err
 			}
 			continue
@@ -69,7 +74,7 @@ func tailed(project string, err error) error {
 	return fmt.Errorf("tail log entries of project %s: %w", project, err)
 }
 
-func followed(ctx context.Context, client *logging.Client, req *loggingpb.TailLogEntriesRequest, sources []Source, emit func([]Event) error, notice func(Suppressed) error) error {
+func followed(ctx context.Context, client *logging.Client, req *loggingpb.TailLogEntriesRequest, sources []Source, emit func([]Event) error, notice func(Notice) error) error {
 	session, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream, err := client.TailLogEntries(session)
@@ -94,7 +99,7 @@ func followed(ctx context.Context, client *logging.Client, req *loggingpb.TailLo
 	return err
 }
 
-func deliver(batch *loggingpb.TailLogEntriesResponse, sources []Source, emit func([]Event) error, notice func(Suppressed) error) error {
+func deliver(batch *loggingpb.TailLogEntriesResponse, sources []Source, emit func([]Event) error, notice func(Notice) error) error {
 	var events []Event
 	for _, entry := range batch.GetEntries() {
 		if event, ok := tailEventOf(entry, sources); ok {
@@ -107,7 +112,7 @@ func deliver(batch *loggingpb.TailLogEntriesResponse, sources []Source, emit fun
 		}
 	}
 	for _, info := range batch.GetSuppressionInfo() {
-		if err := notice(Suppressed{Reason: info.GetReason().String(), Count: int(info.GetSuppressedCount())}); err != nil {
+		if err := notice(Notice{Reason: reasonOf(info.GetReason()), Count: int(info.GetSuppressedCount())}); err != nil {
 			return err
 		}
 	}
@@ -134,4 +139,14 @@ func tailEventOf(entry *loggingpb.LogEntry, sources []Source) (Event, bool) {
 		event.Label = labelOf(sources, resource.GetLabels()["service_name"], resource.GetLabels()["revision_name"])
 	}
 	return event, true
+}
+
+func reasonOf(reason loggingpb.TailLogEntriesResponse_SuppressionInfo_Reason) Reason {
+	switch reason {
+	case loggingpb.TailLogEntriesResponse_SuppressionInfo_RATE_LIMIT:
+		return RateLimit
+	case loggingpb.TailLogEntriesResponse_SuppressionInfo_NOT_CONSUMED:
+		return NotConsumed
+	}
+	return Unspecified
 }
