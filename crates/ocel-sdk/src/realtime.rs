@@ -21,7 +21,6 @@
 //! let app = axum::Router::new().nest_service("/api/realtime", ocel::realtime::axum::router(rt));
 //! ```
 
-mod appsync;
 #[cfg(feature = "axum")]
 pub mod axum;
 mod denial;
@@ -34,10 +33,13 @@ pub use denial::DenialCode;
 
 use crate::binding::read_realtime;
 use crate::declare::{is_discovering, Schema};
+use crate::proto::app::realtime::v1::{PublishRequest, RealtimeServiceClient};
 use crate::proto::common::bindings::v1::RealtimeProperties;
 use crate::run::BoxFuture;
+use crate::runtime::read_client_config;
 use crate::Error;
 use bytes::Bytes;
+use connectrpc::client::HttpClient;
 use futures_util::FutureExt;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -47,9 +49,8 @@ use std::fmt::Display;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::panic::AssertUnwindSafe;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
-use transport::read_transport;
 use wire::{encode_wire_channel, is_channel_segment, ChannelPattern, SEGMENT_RULE};
 
 const DEFAULT_TOKEN_TTL: Duration = Duration::from_secs(60);
@@ -321,6 +322,7 @@ pub(crate) struct Resource {
     pub(crate) allowed_origins: Vec<String>,
     pub(crate) authorize: Option<AuthorizeFn>,
     pub(crate) channels: HashMap<&'static str, ServedChannel>,
+    pub(crate) runtime: OnceLock<RealtimeServiceClient<HttpClient>>,
 }
 
 /// A realtime resource whose channels are declared by [`Channel`] structs, built with its
@@ -380,10 +382,10 @@ impl Realtime {
     }
 
     /// Publish `event` to every subscriber of the channel `params` fill in `C`'s pattern,
-    /// within 10 seconds. A channel of another resource, an empty param, one over 30 bytes,
-    /// an event its JSON Schema refuses or whose JSON is over 240 KiB is refused with
-    /// [`Error::PublishRefused`]; a transport that refuses it, cannot be reached or does not
-    /// answer in time fails it with [`Error::PublishFailed`].
+    /// through the ocel runtime. A channel of another resource, an empty param, one over 30
+    /// bytes, an event its JSON Schema refuses or whose JSON is over 240 KiB is refused with
+    /// [`Error::PublishRefused`]; an event the runtime does not publish fails with
+    /// [`Error::PublishFailed`].
     pub async fn publish<C: Channel>(&self, params: &C, event: &C::Event) -> Result<(), Error> {
         let refuse = |code| Error::PublishRefused {
             pattern: C::PATTERN.to_string(),
@@ -395,14 +397,11 @@ impl Realtime {
             .get(C::PATTERN)
             .filter(|_| C::REALTIME == self.inner.name)
             .ok_or_else(|| refuse(DenialCode::UnknownPattern))?;
-        let properties = self.read_properties("publish")?;
+        self.read_properties("publish")?;
         let failed = |said: String| Error::PublishFailed {
             name: self.inner.name.clone(),
             said,
         };
-        let transport = read_transport(&properties).ok_or_else(|| {
-            failed("the binding names a transport this SDK does not speak".to_string())
-        })?;
         let data = serde_json::to_value(event).map_err(|err| Error::Payload {
             said: err.to_string(),
         })?;
@@ -416,8 +415,33 @@ impl Realtime {
         let envelope = channel
             .encode_envelope(&wire, data, generate_envelope_id().map_err(failed)?)
             .map_err(refuse)?;
-        let token = transport::mint_publish_token(self, &properties, &wire).map_err(failed)?;
-        transport::publish(self, &properties, transport, &wire, &token, envelope).await
+        self.publish_event(&wire, envelope).await
+    }
+
+    pub(crate) async fn publish_event(&self, wire: &str, envelope: Bytes) -> Result<(), Error> {
+        let failed = |said: String| Error::PublishFailed {
+            name: self.inner.name.clone(),
+            said: format!("publish on {wire}: {said}"),
+        };
+        let runtime = match self.inner.runtime.get() {
+            Some(runtime) => runtime,
+            None => {
+                let client =
+                    RealtimeServiceClient::new(HttpClient::plaintext(), read_client_config()?);
+                self.inner.runtime.get_or_init(|| client)
+            }
+        };
+        let event = String::from_utf8(envelope.to_vec()).map_err(|err| failed(err.to_string()))?;
+        runtime
+            .publish(PublishRequest {
+                realtime: self.inner.name.clone(),
+                channel: wire.to_string(),
+                event,
+                ..Default::default()
+            })
+            .await
+            .map_err(|err| failed(err.to_string()))?;
+        Ok(())
     }
 
     /// Serve one request to the realtime handler: a batched `POST` of `{ connect?, ops }`,
@@ -647,6 +671,7 @@ impl<A: Send + Sync + 'static> RealtimeBuilder<A> {
                 allowed_origins: self.allowed_origins,
                 authorize: self.authorize,
                 channels,
+                runtime: OnceLock::new(),
             }),
         })
     }
