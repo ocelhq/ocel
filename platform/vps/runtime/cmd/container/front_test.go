@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
+	boxlive "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 type heard struct {
@@ -42,11 +42,11 @@ func serveGateway(t *testing.T) (string, chan heard) {
 	return strings.TrimPrefix(server.URL, "http://"), seen
 }
 
-func realtimeManifest(publishURL string) variables.Manifest {
-	return variables.Manifest{Slug: "shop", Tier: "production", RealtimePublishURL: publishURL}
+func realtimeManifest(publishURL string) boxlive.Manifest {
+	return boxlive.Manifest{Slug: "shop", Tier: "production", RealtimePublishURL: publishURL}
 }
 
-func mustFront(t *testing.T, manifest variables.Manifest, opts originguard.Options) http.Handler {
+func mustFront(t *testing.T, manifest boxlive.Manifest, opts originguard.Options) http.Handler {
 	t.Helper()
 	front, err := newFront(manifest, opts)
 	if err != nil {
@@ -72,7 +72,7 @@ func upgrade(t *testing.T, front, origin string) string {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	request := "GET " + variables.RealtimeSocketPath + " HTTP/1.1\r\nHost: web.shop.example\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n" +
+	request := "GET " + boxlive.RealtimeSocketPath + " HTTP/1.1\r\nHost: web.shop.example\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n" +
 		"Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: " + origin + "\r\n\r\n"
 	if _, err := conn.Write([]byte(request)); err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestAContainerHandedNoGatewayLeavesTheRealtimePathToTheApp(t *testing.T) {
 	front := httptest.NewServer(mustFront(t, realtimeManifest(""), originguard.Options{Upstream: serveApp(t)}))
 	t.Cleanup(front.Close)
 
-	res, err := http.Get(front.URL + variables.RealtimeSocketPath)
+	res, err := http.Get(front.URL + boxlive.RealtimeSocketPath)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,7 +21,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
+	boxlive "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 type agentTasks struct {
@@ -42,8 +42,8 @@ func agentServing(t *testing.T, values map[string]string, tasks *agentTasks) str
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc(variables.ValuesPath, func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(variables.Answer{Values: values})
+	mux.HandleFunc(boxlive.ValuesPath, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(boxlive.Answer{Values: values})
 	})
 	mux.Handle(taskv1connect.NewTaskServiceHandler(tasks))
 	server := &http.Server{Handler: mux}
@@ -60,11 +60,11 @@ func (w withToken) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func TestTheRuntimeFrontsTheBoxsQueueForAnAppThatBindsATask(t *testing.T) {
-	manifest := variables.Manifest{
+	manifest := boxlive.Manifest{
 		Slug: "shop", Tier: "production", Queue: "prod",
 		Bindings: []live.Binding{{Name: "task--send-email", Key: "OCEL_RESOURCE_TASK_send-email", Type: bindingsv1.BindingType_BINDING_TYPE_TASK}},
 	}
-	rendered, err := variables.Render(manifest)
+	rendered, err := boxlive.Render(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
