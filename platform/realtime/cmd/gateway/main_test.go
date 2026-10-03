@@ -8,8 +8,11 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -51,7 +54,7 @@ func keysOf(t *testing.T, keys map[string]ed25519.PrivateKey) string {
 
 func startGateway(t *testing.T, keys map[string]ed25519.PrivateKey) (string, func() error) {
 	t.Helper()
-	cfg, err := readConfig(environOf(map[string]string{gatewayenv.HostVar: audience, gatewayenv.KeysVar: keysOf(t, keys)}))
+	cfg, err := readConfig(environOf(map[string]string{gatewayenv.HostVar: audience, gatewayenv.KeysVar: keysOf(t, keys)}), time.Now)
 	if err != nil {
 		t.Fatalf("readConfig = %v", err)
 	}
@@ -185,6 +188,8 @@ func TestAConfigTheGatewayCannotVerifyTokensWithIsRefused(t *testing.T) {
 	t.Parallel()
 
 	valid := keysOf(t, map[string]ed25519.PrivateKey{"app": newKey(t)})
+	keysFile := filepath.Join(t.TempDir(), "keys.json")
+	writeKeysFile(t, keysFile, map[string]ed25519.PrivateKey{"app": newKey(t)})
 	for name, env := range map[string]map[string]string{
 		"no host":               {gatewayenv.KeysVar: valid},
 		"no keys":               {gatewayenv.HostVar: audience},
@@ -192,10 +197,180 @@ func TestAConfigTheGatewayCannotVerifyTokensWithIsRefused(t *testing.T) {
 		"a key of 3 bytes":      {gatewayenv.HostVar: audience, gatewayenv.KeysVar: `{"app":"AAEC"}`},
 		"a key not base64":      {gatewayenv.HostVar: audience, gatewayenv.KeysVar: `{"app":"not base64!"}`},
 		"an empty key set":      {gatewayenv.HostVar: audience, gatewayenv.KeysVar: `{}`},
+		"keys and a keys file":  {gatewayenv.HostVar: audience, gatewayenv.KeysVar: valid, gatewayenv.KeysFileVar: keysFile},
+		"a missing keys file":   {gatewayenv.HostVar: audience, gatewayenv.KeysFileVar: filepath.Join(t.TempDir(), "absent.json")},
+		"a socket cap of 0":     {gatewayenv.HostVar: audience, gatewayenv.KeysVar: valid, gatewayenv.MaxSocketsVar: "0"},
+		"a socket cap of words": {gatewayenv.HostVar: audience, gatewayenv.KeysVar: valid, gatewayenv.MaxSocketsVar: "many"},
+		"any origin of maybe":   {gatewayenv.HostVar: audience, gatewayenv.KeysVar: valid, gatewayenv.AnyOriginVar: "maybe"},
 	} {
-		if _, err := readConfig(environOf(env)); err == nil {
+		if _, err := readConfig(environOf(env), time.Now); err == nil {
 			t.Errorf("readConfig with %s = nil, want it refused", name)
 		}
+	}
+}
+
+type fakeClock struct{ at atomic.Int64 }
+
+func (c *fakeClock) now() time.Time { return time.Unix(0, c.at.Load()) }
+
+func (c *fakeClock) advance(by time.Duration) { c.at.Add(int64(by)) }
+
+func writeKeysFile(t *testing.T, path string, keys map[string]ed25519.PrivateKey) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(keysOf(t, keys)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func startGatewayFrom(t *testing.T, env map[string]string, clock *fakeClock) string {
+	t.Helper()
+	env[gatewayenv.HostVar] = audience
+	now := time.Now
+	if clock != nil {
+		now = clock.now
+	}
+	cfg, err := readConfig(environOf(env), now)
+	if err != nil {
+		t.Fatalf("readConfig = %v", err)
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- serve(ctx, listener, cfg) }()
+	t.Cleanup(func() {
+		cancel()
+		<-served
+	})
+	return listener.Addr().String()
+}
+
+func dialFrom(t *testing.T, address, origin, connectToken string) (map[string]any, int) {
+	t.Helper()
+	header, _ := json.Marshal(map[string]string{"Authorization": connectToken})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, resp, err := websocket.Dial(ctx, "ws://"+address+gateway.SocketPath, &websocket.DialOptions{
+		Subprotocols: []string{gateway.Subprotocol, "header-" + base64.RawURLEncoding.EncodeToString(header)},
+		HTTPHeader:   http.Header{"Origin": {origin}},
+	})
+	if err != nil {
+		if resp == nil {
+			t.Fatalf("dial the gateway: %v", err)
+		}
+		return nil, resp.StatusCode
+	}
+	defer conn.CloseNow()
+	return exchange(t, conn, map[string]any{"type": "connection_init"}), http.StatusSwitchingProtocols
+}
+
+func TestAKeyAddedToTheKeysFileIsTrustedWithoutARestart(t *testing.T) {
+	t.Parallel()
+
+	app, chat := newKey(t), newKey(t)
+	path := filepath.Join(t.TempDir(), "keys.json")
+	writeKeysFile(t, path, map[string]ed25519.PrivateKey{"app": app})
+	clock := &fakeClock{}
+	address := startGatewayFrom(t, map[string]string{gatewayenv.KeysFileVar: path}, clock)
+
+	if _, ack := connect(t, address, mint(t, app, "app", token.Connect, "/app", "u1")); ack["type"] != "connection_ack" {
+		t.Fatalf("connect to app = %v, want connection_ack", ack)
+	}
+	writeKeysFile(t, path, map[string]ed25519.PrivateKey{"app": app, "chat": chat})
+	clock.advance(time.Second)
+	if _, ack := connect(t, address, mint(t, chat, "chat", token.Connect, "/chat", "u1")); ack["type"] != "connection_ack" {
+		t.Fatalf("connect to chat once its key is in the file = %v, want connection_ack", ack)
+	}
+}
+
+func TestAnUnknownNamespaceRereadsTheKeysFileAtMostOnceASecond(t *testing.T) {
+	t.Parallel()
+
+	app, chat := newKey(t), newKey(t)
+	path := filepath.Join(t.TempDir(), "keys.json")
+	writeKeysFile(t, path, map[string]ed25519.PrivateKey{"app": app})
+	clock := &fakeClock{}
+	address := startGatewayFrom(t, map[string]string{gatewayenv.KeysFileVar: path}, clock)
+
+	clock.advance(time.Second)
+	if _, refused := connect(t, address, mint(t, chat, "chat", token.Connect, "/chat", "u1")); refused["type"] == "connection_ack" {
+		t.Fatalf("connect to chat before its key is in the file = %v, want it refused", refused)
+	}
+	writeKeysFile(t, path, map[string]ed25519.PrivateKey{"app": app, "chat": chat})
+	if _, refused := connect(t, address, mint(t, chat, "chat", token.Connect, "/chat", "u1")); refused["type"] == "connection_ack" {
+		t.Fatalf("connect to chat within a second of the last read = %v, want it refused", refused)
+	}
+	clock.advance(time.Second)
+	if _, ack := connect(t, address, mint(t, chat, "chat", token.Connect, "/chat", "u1")); ack["type"] != "connection_ack" {
+		t.Fatalf("connect to chat a second later = %v, want connection_ack", ack)
+	}
+}
+
+func TestAKeyRemovedFromTheKeysFileStopsBeingTrustedWithinThirtySeconds(t *testing.T) {
+	t.Parallel()
+
+	app, chat := newKey(t), newKey(t)
+	path := filepath.Join(t.TempDir(), "keys.json")
+	writeKeysFile(t, path, map[string]ed25519.PrivateKey{"app": app, "chat": chat})
+	clock := &fakeClock{}
+	address := startGatewayFrom(t, map[string]string{gatewayenv.KeysFileVar: path}, clock)
+
+	writeKeysFile(t, path, map[string]ed25519.PrivateKey{"app": app})
+	if _, ack := connect(t, address, mint(t, chat, "chat", token.Connect, "/chat", "u1")); ack["type"] != "connection_ack" {
+		t.Fatalf("connect to chat before the keys are read again = %v, want connection_ack", ack)
+	}
+	clock.advance(30 * time.Second)
+	if _, refused := connect(t, address, mint(t, chat, "chat", token.Connect, "/chat", "u1")); refused["type"] == "connection_ack" {
+		t.Fatalf("connect to chat 30s after its key left the file = %v, want it refused", refused)
+	}
+}
+
+func TestAKeysFileThatCannotBeReadKeepsTheKeysLastRead(t *testing.T) {
+	t.Parallel()
+
+	app := newKey(t)
+	path := filepath.Join(t.TempDir(), "keys.json")
+	writeKeysFile(t, path, map[string]ed25519.PrivateKey{"app": app})
+	clock := &fakeClock{}
+	address := startGatewayFrom(t, map[string]string{gatewayenv.KeysFileVar: path}, clock)
+
+	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clock.advance(30 * time.Second)
+	if _, ack := connect(t, address, mint(t, app, "app", token.Connect, "/app", "u1")); ack["type"] != "connection_ack" {
+		t.Fatalf("connect to app while the keys file is malformed = %v, want connection_ack", ack)
+	}
+}
+
+func TestASocketFromAnotherOriginOpensOnlyWhenTheGatewayAllowsAnyOrigin(t *testing.T) {
+	t.Parallel()
+
+	key := newKey(t)
+	keys := keysOf(t, map[string]ed25519.PrivateKey{"app": key})
+	connectToken := mint(t, key, "app", token.Connect, "/app", "u1")
+
+	strict := startGatewayFrom(t, map[string]string{gatewayenv.KeysVar: keys}, nil)
+	if _, status := dialFrom(t, strict, "https://shop.example", connectToken); status != http.StatusForbidden {
+		t.Errorf("dial from another origin = %d, want 403", status)
+	}
+	open := startGatewayFrom(t, map[string]string{gatewayenv.KeysVar: keys, gatewayenv.AnyOriginVar: "true"}, nil)
+	if ack, _ := dialFrom(t, open, "https://shop.example", connectToken); ack["type"] != "connection_ack" {
+		t.Errorf("dial from another origin = %v, want connection_ack", ack)
+	}
+}
+
+func TestASocketPastTheConfiguredCapIsRefusedWithServiceUnavailable(t *testing.T) {
+	t.Parallel()
+
+	key := newKey(t)
+	address := startGatewayFrom(t, map[string]string{gatewayenv.KeysVar: keysOf(t, map[string]ed25519.PrivateKey{"app": key}), gatewayenv.MaxSocketsVar: "1"}, nil)
+
+	connect(t, address, mint(t, key, "app", token.Connect, "/app", "u1"))
+	if _, status := dialFrom(t, address, "", mint(t, key, "app", token.Connect, "/app", "u2")); status != http.StatusServiceUnavailable {
+		t.Errorf("dial past the cap = %d, want 503", status)
 	}
 }
 
@@ -203,11 +378,11 @@ func TestTheGatewayListensOnPort8080UnlessTold(t *testing.T) {
 	t.Parallel()
 
 	keys := keysOf(t, map[string]ed25519.PrivateKey{"app": newKey(t)})
-	cfg, err := readConfig(environOf(map[string]string{gatewayenv.HostVar: audience, gatewayenv.KeysVar: keys}))
+	cfg, err := readConfig(environOf(map[string]string{gatewayenv.HostVar: audience, gatewayenv.KeysVar: keys}), time.Now)
 	if err != nil || cfg.listen != ":8080" {
 		t.Errorf("listen = %q (%v), want :8080", cfg.listen, err)
 	}
-	cfg, err = readConfig(environOf(map[string]string{gatewayenv.HostVar: audience, gatewayenv.KeysVar: keys, listenEnv: "127.0.0.1:9000"}))
+	cfg, err = readConfig(environOf(map[string]string{gatewayenv.HostVar: audience, gatewayenv.KeysVar: keys, listenEnv: "127.0.0.1:9000"}), time.Now)
 	if err != nil || cfg.listen != "127.0.0.1:9000" {
 		t.Errorf("listen = %q (%v), want 127.0.0.1:9000", cfg.listen, err)
 	}
