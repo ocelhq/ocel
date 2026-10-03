@@ -19,9 +19,9 @@ func TestRetryer(t *testing.T) {
 	})
 
 	t.Run("runtime is standard and wider than the default", func(t *testing.T) {
-		r := runtimeRetryer()
+		r := WorkloadRetryer()
 		if _, ok := r.(*retry.Standard); !ok {
-			t.Fatalf("runtimeRetryer() = %T, want *retry.Standard", r)
+			t.Fatalf("WorkloadRetryer() = %T, want *retry.Standard", r)
 		}
 		if got := r.MaxAttempts(); got != runtimeMaxAttempts {
 			t.Fatalf("MaxAttempts() = %d, want %d", got, runtimeMaxAttempts)

@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	connect "connectrpc.com/connect"
+	"github.com/aws/aws-sdk-go-v2/aws/ratelimit"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -59,6 +62,12 @@ func (a *appSync) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	answer(w)
 }
 
+func (a *appSync) taken() []received {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]received(nil), a.received...)
+}
+
 type toServer struct{ server *url.URL }
 
 func (s toServer) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -98,7 +107,7 @@ func TestAPublishPostsTheEventToTheAPIHostsEventPath(t *testing.T) {
 	if err := publish(cfg); err != nil {
 		t.Fatalf("publish = %v", err)
 	}
-	got := endpoint.received[0]
+	got := endpoint.taken()[0]
 	var body struct {
 		Channel string   `json:"channel"`
 		Events  []string `json:"events"`
@@ -118,7 +127,7 @@ func TestAPublishIsSignedForAppSyncInTheRegionItsHostNames(t *testing.T) {
 	if err := publish(cfg); err != nil {
 		t.Fatalf("publish = %v", err)
 	}
-	got := endpoint.received[0]
+	got := endpoint.taken()[0]
 	signedAt, err := time.Parse("20060102T150405Z", got.header.Get("X-Amz-Date"))
 	if err != nil {
 		t.Fatalf("the publish carried X-Amz-Date %q: %v", got.header.Get("X-Amz-Date"), err)
@@ -156,8 +165,8 @@ func TestAPublishAppSyncThrottlesIsRetried(t *testing.T) {
 	if err := publish(cfg); err != nil {
 		t.Errorf("publish = %v, want the throttled publish retried until AppSync takes it", err)
 	}
-	if len(endpoint.received) != 2 {
-		t.Errorf("AppSync was sent %d publishes, want the throttled one and its retry", len(endpoint.received))
+	if len(endpoint.taken()) != 2 {
+		t.Errorf("AppSync was sent %d publishes, want the throttled one and its retry", len(endpoint.taken()))
 	}
 }
 
@@ -203,6 +212,70 @@ func TestAPublishTheCallerCancelsWhileAppSyncIsThrottlingFailsAsCanceled(t *test
 	}
 }
 
+type refusedDialOnce struct {
+	mu      sync.Mutex
+	refused bool
+	next    http.RoundTripper
+}
+
+func (d *refusedDialOnce) RoundTrip(r *http.Request) (*http.Response, error) {
+	d.mu.Lock()
+	refuse := !d.refused
+	d.refused = true
+	d.mu.Unlock()
+	if refuse {
+		return nil, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}
+	}
+	return d.next.RoundTrip(r)
+}
+
+func TestAPublishWhoseConnectionWasRefusedIsRetried(t *testing.T) {
+	t.Parallel()
+
+	endpoint, cfg := serveAppSync(t)
+	cfg.Client = &http.Client{Transport: &refusedDialOnce{next: cfg.Client.Transport}}
+	if err := publish(cfg); err != nil {
+		t.Errorf("publish = %v, want a publish that never reached AppSync sent again", err)
+	}
+	if len(endpoint.taken()) != 1 {
+		t.Errorf("AppSync took %d publishes, want the retried one", len(endpoint.taken()))
+	}
+}
+
+func TestAPublishWhoseConnectionDroppedAfterItWasSentIsNotSentTwice(t *testing.T) {
+	t.Parallel()
+
+	endpoint, cfg := serveAppSync(t, func(w http.ResponseWriter) {
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	})
+	err := publish(cfg)
+	if connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Errorf("publish = %v, want unavailable", err)
+	}
+	if len(endpoint.taken()) != 1 {
+		t.Errorf("AppSync was sent %d publishes, want one: AppSync may have delivered the event before the connection dropped", len(endpoint.taken()))
+	}
+}
+
+func TestAThrottledPublishIsNotRetriedOnceTheRetryQuotaIsSpent(t *testing.T) {
+	t.Parallel()
+
+	endpoint, cfg := serveAppSync(t, func(w http.ResponseWriter) { w.WriteHeader(http.StatusTooManyRequests) })
+	cfg.Retryer = retry.NewStandard(func(o *retry.StandardOptions) {
+		o.Backoff = noBackoff{}
+		o.RateLimiter = ratelimit.NewTokenRateLimit(0)
+	})
+	if err := publish(cfg); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Errorf("publish = %v, want resource exhausted", err)
+	}
+	if len(endpoint.taken()) != 1 {
+		t.Errorf("AppSync was sent %d publishes, want one: the runtime's retry quota is spent", len(endpoint.taken()))
+	}
+}
+
 type constantBackoff time.Duration
 
 func (c constantBackoff) BackoffDelay(int, error) (time.Duration, error) {
@@ -232,8 +305,8 @@ func TestAPublishAppSyncAnswersWithAThrottlingErrorIsRetried(t *testing.T) {
 	if err := publish(cfg); err != nil {
 		t.Errorf("publish = %v, want the throttled publish retried until AppSync takes it", err)
 	}
-	if len(endpoint.received) != 2 {
-		t.Errorf("AppSync was sent %d publishes, want the throttled one and its retry", len(endpoint.received))
+	if len(endpoint.taken()) != 2 {
+		t.Errorf("AppSync was sent %d publishes, want the throttled one and its retry", len(endpoint.taken()))
 	}
 }
 
@@ -244,7 +317,7 @@ func TestAPublishAppSyncFailsWithAServerErrorIsNotSentTwice(t *testing.T) {
 	if err := publish(cfg); err == nil {
 		t.Errorf("publish = nil, want the server error reported")
 	}
-	if len(endpoint.received) != 1 {
-		t.Errorf("AppSync was sent %d publishes, want one: AppSync may have delivered an event it answered 500 for", len(endpoint.received))
+	if len(endpoint.taken()) != 1 {
+		t.Errorf("AppSync was sent %d publishes, want one: AppSync may have delivered an event it answered 500 for", len(endpoint.taken()))
 	}
 }

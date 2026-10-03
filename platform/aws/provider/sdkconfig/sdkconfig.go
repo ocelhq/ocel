@@ -30,11 +30,11 @@ func ControlRetryer() aws.Retryer {
 }
 
 func Workload(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
-	opts := append([]func(*config.LoadOptions) error{config.WithRetryer(runtimeRetryer)}, optFns...)
+	opts := append([]func(*config.LoadOptions) error{config.WithRetryer(func() aws.Retryer { return WorkloadRetryer() })}, optFns...)
 	return config.LoadDefaultConfig(ctx, opts...)
 }
 
-func runtimeRetryer() aws.Retryer {
+func WorkloadRetryer() aws.RetryerV2 {
 	return retry.NewStandard(func(o *retry.StandardOptions) {
 		o.MaxAttempts = runtimeMaxAttempts
 	})

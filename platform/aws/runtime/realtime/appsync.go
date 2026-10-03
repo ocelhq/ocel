@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	connect "connectrpc.com/connect"
@@ -31,8 +33,19 @@ const (
 type Config struct {
 	Client      *http.Client
 	Credentials aws.CredentialsProvider
-	Retryer     aws.Retryer
+	Retryer     aws.RetryerV2
 	Region      string
+}
+
+type unsentError struct{ err error }
+
+func (e *unsentError) Error() string { return "AppSync was never sent it: " + e.err.Error() }
+
+func (e *unsentError) Unwrap() error { return e.err }
+
+func isRetryable(err error) bool {
+	var unsent *unsentError
+	return errors.As(err, &unsent) || isThrottle(err)
 }
 
 func isThrottle(err error) bool {
@@ -80,7 +93,9 @@ func NewAppSyncTransport(cfg Config) proxy.Transport {
 			if err != nil {
 				return nil, fmt.Errorf("read the runtime's AWS credentials: %w", err)
 			}
-			post, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://"+properties.GetHost()+appSyncPublishPath, bytes.NewReader(body))
+			var written atomic.Bool
+			traced := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteHeaders: func() { written.Store(true) }})
+			post, err := http.NewRequestWithContext(traced, http.MethodPost, "https://"+properties.GetHost()+appSyncPublishPath, bytes.NewReader(body))
 			if err != nil {
 				return nil, err
 			}
@@ -89,19 +104,45 @@ func NewAppSyncTransport(cfg Config) proxy.Transport {
 			if err := signer.SignHTTP(ctx, creds, post, hex.EncodeToString(sum[:]), appSyncService, findRegion(properties.GetHost(), cfg.Region), time.Now()); err != nil {
 				return nil, err
 			}
-			return proxy.Send(cfg.Client, post, "AppSync")
+			answer, err := proxy.Send(cfg.Client, post, "AppSync")
+			var refusal *proxy.Refusal
+			if err != nil && !written.Load() && !errors.As(err, &refusal) {
+				return nil, &unsentError{err: err}
+			}
+			return answer, err
 		}
+		exhausted := func(err error) error {
+			if isThrottle(err) {
+				return failed(connect.CodeResourceExhausted, err)
+			}
+			return proxy.NewPublishError(ctx, req.GetChannel(), err)
+		}
+		releaseRetry := func(error) error { return nil }
 		for attempt := 1; ; attempt++ {
+			releaseAttempt, err := cfg.Retryer.GetAttemptToken(ctx)
+			if err != nil {
+				return proxy.NewPublishError(ctx, req.GetChannel(), err)
+			}
 			answer, err := publish()
+			_ = releaseRetry(err)
+			_ = releaseAttempt(err)
 			if err == nil {
 				return refuseFailedEvents(answer, failed)
 			}
-			if !isThrottle(err) {
+			if ctx.Err() != nil || !isRetryable(err) {
 				return proxy.NewPublishError(ctx, req.GetChannel(), err)
 			}
+			if attempt >= cfg.Retryer.MaxAttempts() {
+				return exhausted(err)
+			}
+			release, quotaErr := cfg.Retryer.GetRetryToken(ctx, err)
+			if quotaErr != nil {
+				return exhausted(errors.Join(err, quotaErr))
+			}
+			releaseRetry = release
 			delay, delayErr := cfg.Retryer.RetryDelay(attempt, err)
-			if attempt >= cfg.Retryer.MaxAttempts() || delayErr != nil {
-				return failed(connect.CodeResourceExhausted, err)
+			if delayErr != nil {
+				return exhausted(errors.Join(err, delayErr))
 			}
 			select {
 			case <-ctx.Done():
