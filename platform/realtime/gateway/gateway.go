@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"context"
 	"crypto/ed25519"
+	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"sync"
@@ -29,6 +31,8 @@ type Config struct {
 	Host             string
 	Keys             func(namespace string) (ed25519.PublicKey, bool)
 	AllowedOrigins   func() []string
+	AllowsAnyOrigin  bool
+	MaxSockets       int
 	KeepAlive        time.Duration
 	QueueBudgetBytes int
 	Now              func() time.Time
@@ -43,6 +47,7 @@ type Gateway struct {
 	stop        context.CancelFunc
 	mu          sync.Mutex
 	isClosed    bool
+	socketCount int
 	openSockets sync.WaitGroup
 }
 
@@ -89,17 +94,28 @@ func (g *Gateway) Close(ctx context.Context) error {
 	}
 }
 
-func (g *Gateway) trackSocket() bool {
+func (g *Gateway) trackSocket() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.isClosed {
-		return false
+		return errors.New("the realtime gateway is shutting down")
 	}
+	if g.cfg.MaxSockets > 0 && g.socketCount >= g.cfg.MaxSockets {
+		return fmt.Errorf("the realtime gateway holds its limit of %d sockets", g.cfg.MaxSockets)
+	}
+	g.socketCount++
 	g.openSockets.Add(1)
-	return true
+	return nil
+}
+
+func (g *Gateway) releaseSocket() {
+	g.mu.Lock()
+	g.socketCount--
+	g.mu.Unlock()
+	g.openSockets.Done()
 }
 
 func (g *Gateway) isAllowedOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
-	return origin == "" || slices.Contains(g.cfg.AllowedOrigins(), origin)
+	return origin == "" || g.cfg.AllowsAnyOrigin || slices.Contains(g.cfg.AllowedOrigins(), origin)
 }

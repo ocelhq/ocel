@@ -397,6 +397,33 @@ func TestASocketFromAnOriginNotAllowedIsRefusedBeforeItOpens(t *testing.T) {
 	}
 }
 
+func TestAGatewayAllowingAnyOriginLetsASocketFromAnyOriginPresentItsToken(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, func(cfg *gateway.Config) {
+		cfg.AllowedOrigins = nil
+		cfg.AllowsAnyOrigin = true
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for name, connectToken := range map[string]string{"its own": h.mint(token.Connect, "/"+namespace), "a foreign": h.mintFor("user-1", token.Connect, "/other")} {
+		conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(h.server.URL, "http")+"/event/realtime", &websocket.DialOptions{
+			Subprotocols: []string{"aws-appsync-event-ws", authorization(t, connectToken)},
+			HTTPHeader:   http.Header{"Origin": {"https://shop-abc123-uc.a.run.app"}},
+		})
+		if err != nil {
+			t.Fatalf("dial with %s token from another origin = %v, want the socket opened", name, err)
+		}
+		c := &client{t: t, conn: conn}
+		c.send(map[string]any{"type": "connection_init"})
+		got := c.read()
+		_ = conn.CloseNow()
+		if want := map[string]string{"its own": "connection_ack", "a foreign": "connection_error"}[name]; got["type"] != want {
+			t.Errorf("connection_init with %s token = %v, want %s", name, got, want)
+		}
+	}
+}
+
 func TestTheTwoHundredAndFirstSubscriptionOnAConnectionIsRefused(t *testing.T) {
 	t.Parallel()
 
@@ -614,5 +641,34 @@ func TestAServerPublishRefusesAnEnvelopeOfAnotherShape(t *testing.T) {
 	}
 	if resp := h.publish(authorization, `{"v":1,"id":"`+id+`","ch":"`+channel+`","ts":1790000000000,"kind":"live","data":null}`); resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("publish of an envelope with null data answered %s, want 204", resp.Status)
+	}
+}
+
+func TestASocketPastTheCapIsRefusedBeforeItUpgradesAndItsSlotFreesOnClose(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, func(cfg *gateway.Config) { cfg.MaxSockets = 1 })
+	first := h.connect()
+
+	if _, resp, err := h.dial(h.mint(token.Connect, "/"+namespace)); err == nil || resp == nil || resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("dial past the cap = %v, want 503 before the upgrade", err)
+	}
+	channel := "/app/status"
+	if resp := h.publish(h.serverAuthorization(channel), envelope(t, channel, "ok")); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("publish at the cap answered %s, want 204", resp.Status)
+	}
+
+	_ = first.conn.Close(websocket.StatusNormalClosure, "")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		c, _, err := h.dial(h.mint(token.Connect, "/"+namespace))
+		if err == nil {
+			_ = c.conn.CloseNow()
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("dial once the first socket closed = %v, want it admitted", err)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

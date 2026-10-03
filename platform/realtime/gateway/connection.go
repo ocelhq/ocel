@@ -34,11 +34,11 @@ type connection struct {
 }
 
 func (g *Gateway) serveSocket(w http.ResponseWriter, r *http.Request) {
-	if !g.trackSocket() {
-		http.Error(w, "the realtime gateway is shutting down", http.StatusServiceUnavailable)
+	if err := g.trackSocket(); err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	defer g.openSockets.Done()
+	defer g.releaseSocket()
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		Subprotocols:       []string{Subprotocol},
 		InsecureSkipVerify: true,
