@@ -66,9 +66,17 @@ export class EventSocket {
     });
   }
 
-  static async open(url: string, host: string | undefined, token: string): Promise<EventSocket> {
+  static async open(
+    url: string,
+    host: string | undefined,
+    token: string,
+    origin?: string,
+  ): Promise<EventSocket> {
+    const protocols = [SUBPROTOCOL, encodeAuthorization(token, host)];
     const socket = new EventSocket(
-      new WebSocket(url, [SUBPROTOCOL, encodeAuthorization(token, host)]),
+      origin === undefined
+        ? new WebSocket(url, protocols)
+        : new WebSocket(url, { protocols, headers: { origin } }),
       host,
     );
     await new Promise<void>((resolve, reject) => {

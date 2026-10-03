@@ -10,6 +10,10 @@ import {
   nextOriginCacheChecks,
   nextOriginDataCacheChecks,
   orderedKeysInParallelCheck,
+  realtimeChecks,
+  realtimeHandlerDefaultsCheck,
+  realtimeOperationLimitCheck,
+  realtimeRuleDeniesCheck,
   taskConcurrencyCheck,
 } from "../checks";
 import { NO_FILTER, plan, type RunFilter } from "../plan";
@@ -394,21 +398,30 @@ describe("the realtime concern", () => {
     }
   });
 
-  it("skips the suite on gcp with the provider's refusal, under its ticket", () => {
-    const tickets = {
-      gcp: 1515,
-      "gcp.floci": 1515,
-    } as const;
-    for (const [lane, issue] of Object.entries(tickets) as [Lane, number][]) {
-      const planned = planOn(lane);
-      const skipped = Object.keys(planned.skipped).filter((cell) => cell.startsWith("realtime/"));
-      expect(skipped).toEqual(CELLS);
-      for (const cell of CELLS) {
-        const refusal = planned.skipped[cell]?.find((gap) => gap.issue === issue);
-        expect(refusal?.reason).toMatch(/realtime is unsupported/);
-      }
-      expect(planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name)).toEqual(
-        expect.arrayContaining(CELLS),
+  it("runs the behavioural suite on gcp in every language, expecting nothing red", () => {
+    const planned = planOn("gcp");
+    expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(CELLS));
+    for (const cell of CELLS) {
+      expect(planned.skipped[cell]).toBeUndefined();
+      expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
+    }
+  });
+
+  it("runs the suite on floci-gcp, expecting red every check that holds a socket or hears a publish", () => {
+    const planned = planOn("gcp.floci");
+    const handlerOnly = [
+      realtimeRuleDeniesCheck,
+      realtimeHandlerDefaultsCheck,
+      realtimeOperationLimitCheck,
+    ].map((one) => one.title);
+    for (const cell of CELLS) {
+      expect(planned.skipped[cell]).toBeUndefined();
+      const red = Object.keys(planned.expectedFailures[`${cell}/web`] ?? {});
+      expect(red.sort()).toEqual(
+        realtimeChecks
+          .map((one) => one.title)
+          .filter((title) => !handlerOnly.includes(title))
+          .sort(),
       );
     }
   });

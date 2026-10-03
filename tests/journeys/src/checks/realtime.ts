@@ -187,6 +187,29 @@ export const realtimeRuleAllowsCheck: Check = {
   },
 };
 
+export const realtimeAppOriginCheck: Check = {
+  title:
+    "a socket opened from the app's own origin, as a browser on the app's page opens it, is served",
+  run: async (ctx) => {
+    const answer = await requestBatch(ctx, { connect: true, ops: [buildSubscribe("status")] });
+    const grant = readGrant(answer, 0);
+    const socket = await EventSocket.open(
+      await ctx.reach(answer.url),
+      answer.host,
+      readConnectToken(answer),
+      new URL(ctx.baseUrl).origin,
+    );
+    try {
+      await socket.subscribe("status", grant.wire, grant.token);
+      const text = newId("origin");
+      await assertPublishedFromServer(ctx, "status", {}, { text });
+      assert.deepEqual((await socket.readNextEvent("status")).data, { text });
+    } finally {
+      socket.close();
+    }
+  },
+};
+
 export const realtimeRuleDeniesCheck: Check = {
   title: "a subscribe its rule refuses is denied forbidden, and one from nobody unauthenticated",
   run: async (ctx) => {
@@ -710,6 +733,7 @@ export const realtimeEventSizeCheck: Check = {
 
 export const realtimeChecks: Check[] = [
   realtimeRuleAllowsCheck,
+  realtimeAppOriginCheck,
   realtimeRuleDeniesCheck,
   realtimePublicCheck,
   realtimeWildcardCheck,

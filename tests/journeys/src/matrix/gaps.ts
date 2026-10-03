@@ -18,6 +18,17 @@ import {
   nodeRuntimeChecks,
   orderedKeysInParallelCheck,
   publicOriginCheck,
+  realtimeAppOriginCheck,
+  realtimeConnectTokenVectorsCheck,
+  realtimeEventSizeCheck,
+  realtimePublicCheck,
+  realtimeReauthorizeCheck,
+  realtimeRelayedPublishCheck,
+  realtimeRuleAllowsCheck,
+  realtimeSchemaCheck,
+  realtimeSubscribeTokenVectorsCheck,
+  realtimeSubscriptionLimitCheck,
+  realtimeWildcardCheck,
   rewrittenQueryCheck,
   sseCheck,
   sseSilenceCheck,
@@ -525,19 +536,30 @@ export const gaps: Gap[] = [
       { on: ["gcp", "gcp.floci"], fixtures: [tasks.node], fails: [check(taskConcurrencyCheck)] },
     ],
   },
-  ...([{ target: "gcp", lanes: ["gcp", "gcp.floci"], issue: 1515 }] as const).map(
-    ({ target, lanes, issue }): Gap => ({
-      id: `${target}-refuses-realtime`,
-      reason: `the ${target} provider refuses a deploy that declares a realtime resource at preflight: realtime is unsupported on ${target}, as it runs no transport for channels`,
-      issue,
-      where: [
-        {
-          on: [...lanes],
-          fixtures: Object.values(realtime),
-          fails: [step.deploy],
-          skipsCell: true,
-        },
-      ],
-    }),
-  ),
+  {
+    id: "floci-runs-no-gateway-socket-or-publish",
+    reason:
+      "floci-gcp proxies a Cloud Run service by host with no WebSocket upgrade and no secret volume, so the realtime gateway it runs holds no socket and the runtime's publish to it is never heard",
+    where: [
+      {
+        on: ["gcp.floci"],
+        fixtures: Object.values(realtime),
+        fails: [
+          check([
+            realtimeRuleAllowsCheck,
+            realtimeAppOriginCheck,
+            realtimePublicCheck,
+            realtimeWildcardCheck,
+            realtimeConnectTokenVectorsCheck,
+            realtimeSubscribeTokenVectorsCheck,
+            realtimeRelayedPublishCheck,
+            realtimeSchemaCheck,
+            realtimeReauthorizeCheck,
+            realtimeSubscriptionLimitCheck,
+            realtimeEventSizeCheck,
+          ]),
+        ],
+      },
+    ],
+  },
 ];
