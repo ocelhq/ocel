@@ -295,13 +295,71 @@ func TestTailFailsWhenTheStreamEndsAgainAfterReconnecting(t *testing.T) {
 	}
 }
 
-func TestTailReconnectsWhenTheServiceIsUnavailable(t *testing.T) {
+func TestTailReconnectsAfterATransientFailure(t *testing.T) {
 	t.Parallel()
+	for _, code := range []codes.Code{codes.Unavailable, codes.Internal, codes.DeadlineExceeded} {
+		t.Run(code.String(), func(t *testing.T) {
+			t.Parallel()
+			client, _ := serveTail(t, func(call int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
+				if call == 1 {
+					return status.Error(code, "restarting")
+				}
+				return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{pbEntry(since, "back")}})
+			})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var seen atomic.Int64
+			done := make(chan error, 1)
+			go func() {
+				done <- Tail(ctx, client, "acme-prod", webSource(), func([]Event) error { seen.Add(1); return nil }, ignoreNotices)
+			}()
+			waitFor(t, func() bool { return seen.Load() == 1 })
+			cancel()
+
+			if err := <-done; err != nil {
+				t.Errorf("Tail after cancel: %v", err)
+			}
+		})
+	}
+}
+
+func TestTailWaitsBeforeReconnecting(t *testing.T) {
+	t.Parallel()
+	var (
+		mu     sync.Mutex
+		starts []time.Time
+	)
 	client, _ := serveTail(t, func(call int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
+		mu.Lock()
+		starts = append(starts, time.Now())
+		mu.Unlock()
 		if call == 1 {
-			return status.Error(codes.Unavailable, "restarting")
+			return nil
 		}
-		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{pbEntry(since, "back")}})
+		return hold(call, stream)
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- Tail(ctx, client, "acme-prod", webSource(), ignoreEvents, ignoreNotices) }()
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(starts) == 2 })
+	cancel()
+	<-done
+
+	if gap := starts[1].Sub(starts[0]); gap < retryBackoff/2 {
+		t.Errorf("reconnected after %v, want at least %v", gap, retryBackoff/2)
+	}
+}
+
+func TestTailAsksAgainAfterBeingThrottled(t *testing.T) {
+	t.Parallel()
+	client, fake := serveTail(t, func(call int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
+		if call < 3 {
+			return status.Error(codes.ResourceExhausted, "too many tail sessions")
+		}
+		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{pbEntry(since, "in")}})
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -316,6 +374,25 @@ func TestTailReconnectsWhenTheServiceIsUnavailable(t *testing.T) {
 
 	if err := <-done; err != nil {
 		t.Errorf("Tail after cancel: %v", err)
+	}
+	if n := len(fake.asked()); n != 3 {
+		t.Errorf("sessions opened = %d, want 3: two throttled, one served", n)
+	}
+}
+
+func TestTailFailsWhenEveryAttemptIsThrottled(t *testing.T) {
+	t.Parallel()
+	client, fake := serveTail(t, func(int, loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
+		return status.Error(codes.ResourceExhausted, "too many tail sessions")
+	})
+
+	err := Tail(context.Background(), client, "acme-prod", webSource(), ignoreEvents, ignoreNotices)
+
+	if status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("Tail = %v, want the throttle", err)
+	}
+	if n := len(fake.asked()); n != retryAttempts {
+		t.Errorf("sessions opened = %d, want %d", n, retryAttempts)
 	}
 }
 

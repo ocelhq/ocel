@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"time"
 
 	logging "cloud.google.com/go/logging/apiv2"
@@ -22,7 +23,10 @@ const (
 	Reconnected = "RECONNECTED"
 )
 
-var errStreamEnded = errors.New("the stream ended")
+var (
+	errStreamEnded = errors.New("the stream ended")
+	transientCodes = []codes.Code{codes.DeadlineExceeded, codes.Internal, codes.Unavailable}
+)
 
 type Suppressed struct {
 	Reason string
@@ -38,14 +42,24 @@ func Tail(ctx context.Context, client *logging.Client, project string, q Query, 
 		Filter:        tailFilter(q),
 		BufferWindow:  durationpb.New(bufferWindow),
 	}
-	err := followed(ctx, client, req, q.Sources, emit, notice)
-	if !errors.Is(err, errStreamEnded) {
+	reconnected := false
+	for attempt := 0; ; attempt++ {
+		if attempt > 0 && !waited(ctx, attempt) {
+			return nil
+		}
+		err := followed(ctx, client, req, q.Sources, emit, notice)
+		switch {
+		case status.Code(err) == codes.ResourceExhausted && attempt+1 < retryAttempts:
+			continue
+		case errors.Is(err, errStreamEnded) && !reconnected:
+			reconnected = true
+			if err := notice(Suppressed{Reason: Reconnected}); err != nil {
+				return err
+			}
+			continue
+		}
 		return tailed(project, err)
 	}
-	if err := notice(Suppressed{Reason: Reconnected}); err != nil {
-		return err
-	}
-	return tailed(project, followed(ctx, client, req, q.Sources, emit, notice))
 }
 
 func tailed(project string, err error) error {
@@ -74,7 +88,7 @@ func followed(ctx context.Context, client *logging.Client, req *loggingpb.TailLo
 	switch {
 	case ctx.Err() != nil:
 		return nil
-	case errors.Is(err, io.EOF) || status.Code(err) == codes.Unavailable:
+	case errors.Is(err, io.EOF) || slices.Contains(transientCodes, status.Code(err)):
 		return fmt.Errorf("%w: %w", errStreamEnded, err)
 	}
 	return err
