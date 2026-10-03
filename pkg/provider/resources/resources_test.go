@@ -104,6 +104,10 @@ func TestServesNamesEveryResourceTheHooksProvision(t *testing.T) {
 	if served := resources.ServedBindingTypes(queues); !slices.Equal(served, []provider.BindingType{provider.BindingTopic, provider.BindingTask}) {
 		t.Fatalf("ServedBindingTypes() = %v, want the topics and the tasks one hook provisions: a task is a topic with one consumer", served)
 	}
+	channels := resources.Hooks{ProvisionRealtime: (&buckets{}).ProvisionBucket}
+	if served := resources.ServedBindingTypes(channels); !slices.Equal(served, []provider.BindingType{provider.BindingRealtime}) {
+		t.Fatalf("ServedBindingTypes() = %v, want the realtime stores the hooks provision", served)
+	}
 	removing := resources.Hooks{RemoveResource: (&buckets{}).RemoveResource}
 	if served := resources.ServedBindingTypes(removing); len(served) != 0 {
 		t.Fatalf("ServedBindingTypes() = %v for hooks that only remove, want nothing: a resource nothing can provision is not served", served)

@@ -111,6 +111,7 @@ func (p *Provider) resourceHooks() resources.Hooks {
 		ProvisionBucket:   p.ProvisionBucket,
 		ProvisionKV:       p.ProvisionKV,
 		ProvisionTopic:    p.ProvisionTopic,
+		ProvisionRealtime: p.ProvisionRealtime,
 		RemoveResource:    p.RemoveResource,
 		Containers:        &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
 		Retention:         &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},

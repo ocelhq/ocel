@@ -26,6 +26,8 @@ func (p *Provider) RemoveResource(ctx context.Context, ref provider.StackRef, bi
 		return p.removeTopic(ctx, ref, binding, progress)
 	case provider.BindingBucket:
 		return p.removeBucket(ctx, ref, binding, progress)
+	case provider.BindingRealtime:
+		return p.removeRealtime(ctx, ref, binding, progress)
 	default:
 		return nil
 	}

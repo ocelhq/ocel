@@ -4,6 +4,7 @@ set -eu
 host_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 provider_dir=$(CDPATH= cd -- "$host_dir/.." && pwd)
 runtime_dir=$(CDPATH= cd -- "$provider_dir/../runtime" && pwd)
+realtime_dir=$(CDPATH= cd -- "$provider_dir/../../realtime" && pwd)
 dist="$host_dir/dist"
 
 arches="amd64 arm64"
@@ -23,5 +24,10 @@ for arch in $arches; do
     CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
       go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/ocel-runtime-$arch" ./cmd/container
   )
-  chmod 755 "$dist/ocel-switchboard-$arch" "$dist/ocel-live-$arch" "$dist/ocel-runtime-$arch"
+  (
+    cd "$realtime_dir"
+    CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
+      go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/ocel-realtime-$arch" ./cmd/gateway
+  )
+  chmod 755 "$dist/ocel-switchboard-$arch" "$dist/ocel-live-$arch" "$dist/ocel-runtime-$arch" "$dist/ocel-realtime-$arch"
 done

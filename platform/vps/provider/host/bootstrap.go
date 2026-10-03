@@ -264,6 +264,9 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err := b.write(ctx, served, current.recorded, progress); err != nil {
 		return err
 	}
+	if err := b.write(ctx, served, RealtimeItems(current.Arch), progress); err != nil {
+		return err
+	}
 	if err := b.write(ctx, served, BackupItems(), progress); err != nil {
 		return err
 	}
@@ -664,6 +667,8 @@ func removing(read, sibling Reading, apps appsPresent) []removal {
 			taking(KindFile, boxstore.SealHelper, ""),
 			taking(KindFile, SwitchboardBinary, ""),
 			taking(KindDir, SwitchboardDir, ""),
+			taking(KindFile, RealtimeBinary, ""),
+			taking(KindDir, RealtimeDir, ""),
 			sharing(boxstore.Dir, ""),
 		)
 		above = []removal{sharing(tierRoot, "")}
