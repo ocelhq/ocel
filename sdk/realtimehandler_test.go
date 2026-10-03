@@ -1,6 +1,7 @@
 package ocel_test
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -16,7 +17,11 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
+
 	"ocel.dev"
+	realtimev1 "ocel.dev/internal/proto/app/realtime/v1"
+	"ocel.dev/internal/proto/app/realtime/v1/realtimev1connect"
 )
 
 type realtimeFixture struct {
@@ -84,9 +89,9 @@ func readClaims(t *testing.T, verifyKey []byte, token string) tokenClaims {
 }
 
 type publishedEvent struct {
-	Path          string
-	Authorization string
-	Envelope      struct {
+	Realtime string
+	Channel  string
+	Envelope struct {
 		Version   int             `json:"v"`
 		ID        string          `json:"id"`
 		Channel   string          `json:"ch"`
@@ -96,64 +101,86 @@ type publishedEvent struct {
 	}
 }
 
-type fakeGateway struct {
+type fakeRealtimeRuntime struct {
+	t           *testing.T
 	mutex       sync.Mutex
 	published   []publishedEvent
-	status      int
+	refusal     error
 	delay       time.Duration
 	inFlight    int
 	maxInFlight int
 }
 
-func (g *fakeGateway) listEvents() []publishedEvent {
-	g.mutex.Lock()
-	defer g.mutex.Unlock()
-	return append([]publishedEvent(nil), g.published...)
+func (r *fakeRealtimeRuntime) Publish(ctx context.Context, req *realtimev1.PublishRequest) (*realtimev1.PublishResponse, error) {
+	event := publishedEvent{Realtime: req.GetRealtime(), Channel: req.GetChannel()}
+	if err := json.Unmarshal([]byte(req.GetEvent()), &event.Envelope); err != nil {
+		r.t.Errorf("the runtime received %q, which is no envelope: %v", req.GetEvent(), err)
+	}
+	r.mutex.Lock()
+	r.inFlight++
+	r.maxInFlight = max(r.maxInFlight, r.inFlight)
+	delay, refusal := r.delay, r.refusal
+	r.mutex.Unlock()
+	select {
+	case <-time.After(delay):
+	case <-ctx.Done():
+	}
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.inFlight--
+	if refusal != nil {
+		return nil, refusal
+	}
+	r.published = append(r.published, event)
+	return &realtimev1.PublishResponse{}, nil
 }
 
-func (g *fakeGateway) answerSlowly(delay time.Duration) {
-	g.mutex.Lock()
-	defer g.mutex.Unlock()
-	g.delay = delay
+func (r *fakeRealtimeRuntime) listEvents() []publishedEvent {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	return append([]publishedEvent(nil), r.published...)
 }
 
-func (g *fakeGateway) readMaxInFlight() int {
-	g.mutex.Lock()
-	defer g.mutex.Unlock()
-	return g.maxInFlight
+func (r *fakeRealtimeRuntime) answerSlowly(delay time.Duration) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.delay = delay
 }
 
-func serveFakeGateway(t *testing.T, name string, status int) (*fakeGateway, realtimeFixture) {
+func (r *fakeRealtimeRuntime) refuse(err error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.refusal = err
+}
+
+func (r *fakeRealtimeRuntime) readMaxInFlight() int {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	return r.maxInFlight
+}
+
+func serveFakeRealtimeRuntime(t *testing.T, name string) (*fakeRealtimeRuntime, realtimeFixture) {
 	t.Helper()
-	gateway := &fakeGateway{status: status}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		event := publishedEvent{Path: r.URL.Path, Authorization: r.Header.Get("Authorization")}
-		raw, _ := io.ReadAll(r.Body)
-		if err := json.Unmarshal(raw, &event.Envelope); err != nil {
-			t.Errorf("the gateway received %q, which is no envelope: %v", raw, err)
+	runtime := &fakeRealtimeRuntime{t: t}
+	path, handler := realtimev1connect.NewRealtimeServiceHandler(runtime)
+	mux := http.NewServeMux()
+	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+storeToken {
+			http.Error(w, "this request has no valid session token", http.StatusForbidden)
+			return
 		}
-		gateway.mutex.Lock()
-		gateway.inFlight++
-		gateway.maxInFlight = max(gateway.maxInFlight, gateway.inFlight)
-		delay := gateway.delay
-		gateway.mutex.Unlock()
-		select {
-		case <-time.After(delay):
-		case <-r.Context().Done():
-		}
-		gateway.mutex.Lock()
-		gateway.inFlight--
-		gateway.published = append(gateway.published, event)
-		gateway.mutex.Unlock()
-		w.WriteHeader(gateway.status)
+		handler.ServeHTTP(w, r)
 	}))
+	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
+	t.Setenv("OCEL_RUNTIME_ADDRESS", server.URL)
+	t.Setenv("OCEL_SESSION_TOKEN", storeToken)
 	fixture := readRealtimeFixture(t)
 	fixture.Realtime.Transport = "REALTIME_TRANSPORT_OCEL_GATEWAY"
-	fixture.Realtime.Host = strings.TrimPrefix(server.URL, "http://")
-	fixture.Realtime.URL = "ws://" + fixture.Realtime.Host + "/realtime"
+	fixture.Realtime.Host = "realtime.shop.example"
+	fixture.Realtime.URL = "wss://realtime.shop.example/event/realtime"
 	deliverRealtime(t, name, fixture)
-	return gateway, fixture
+	return runtime, fixture
 }
 
 type realtimeAnswer struct {
@@ -460,18 +487,6 @@ func TestTheHandlerSendsCORSWithEveryAnswerToAnAllowedOrigin(t *testing.T) {
 	}
 }
 
-func TestTheHandlerAnswers500WhenARelayedPublishTokenCannotBeMinted(t *testing.T) {
-	gateway, fixture := serveFakeGateway(t, "app", http.StatusAccepted)
-	fixture.Realtime.SigningKey = []byte("short")
-	deliverRealtime(t, "app", fixture)
-	handler := declareHandlerResource(newHandlerRules()).Handler()
-
-	assertServerFailure(t, postRealtime(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"hi"}}]}`, map[string]string{"X-User": "u1"}))
-	if events := gateway.listEvents(); len(events) != 0 {
-		t.Errorf("published = %+v, want nothing", events)
-	}
-}
-
 func TestTheHandlerAnswers500WhenTheBindingNamesATransportItDoesNotSpeak(t *testing.T) {
 	fixture := readRealtimeFixture(t)
 	fixture.Realtime.Transport = "REALTIME_TRANSPORT_UNSPECIFIED"
@@ -582,9 +597,9 @@ func TestTheHandlerDeniesEachMalformedOpOnItsOwnInSpecOrder(t *testing.T) {
 	}
 }
 
-func TestRelayedPublishesReachTheTransportOneAtATimeInBatchOrder(t *testing.T) {
-	gateway, _ := serveFakeGateway(t, "app", http.StatusAccepted)
-	gateway.answerSlowly(10 * time.Millisecond)
+func TestRelayedPublishesReachTheRuntimeOneAtATimeInBatchOrder(t *testing.T) {
+	runtime, _ := serveFakeRealtimeRuntime(t, "app")
+	runtime.answerSlowly(10 * time.Millisecond)
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 	var ops []string
 	for i := range 8 {
@@ -597,39 +612,19 @@ func TestRelayedPublishesReachTheTransportOneAtATimeInBatchOrder(t *testing.T) {
 	if len(answer.Grants) != 16 {
 		t.Fatalf("answer = %+v, want every op granted", answer)
 	}
-	events := gateway.listEvents()
+	events := runtime.listEvents()
 	for i, event := range events {
 		if want := `{"text":"` + strconv.Itoa(i) + `"}`; string(event.Envelope.Data) != want {
 			t.Errorf("event %d = %s, want %s", i, event.Envelope.Data, want)
 		}
 	}
-	if inFlight := gateway.readMaxInFlight(); len(events) != 8 || inFlight != 1 {
+	if inFlight := runtime.readMaxInFlight(); len(events) != 8 || inFlight != 1 {
 		t.Errorf("published %d with at most %d in flight, want 8 one at a time", len(events), inFlight)
 	}
 }
 
-func TestARelayedPublishTheTransportDoesNotAnswerInTimeIsDenied(t *testing.T) {
-	gateway, _ := serveFakeGateway(t, "app", http.StatusAccepted)
-	gateway.answerSlowly(10 * time.Second)
-	shortenRealtimePublishTimeout(t)
-	handler := declareHandlerResource(newHandlerRules()).Handler()
-
-	answer := readAnswer(t, postRealtime(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"hi"}}]}`, map[string]string{"X-User": "u1"}))
-
-	if len(answer.Denied) != 1 || answer.Denied[0].Code != "publish-failed" {
-		t.Errorf("denied = %+v, want publish-failed", answer.Denied)
-	}
-}
-
-func shortenRealtimePublishTimeout(t *testing.T) {
-	t.Helper()
-	previous := *ocel.RealtimePublishTimeout
-	*ocel.RealtimePublishTimeout = 50 * time.Millisecond
-	t.Cleanup(func() { *ocel.RealtimePublishTimeout = previous })
-}
-
 func TestARelayedPublishOfAnEventOutsideTheChannelSchemaIsDenied(t *testing.T) {
-	gateway, _ := serveFakeGateway(t, "app", http.StatusAccepted)
+	runtime, _ := serveFakeRealtimeRuntime(t, "app")
 	resource := ocel.Realtime("app", ocel.RealtimeAuthorize(authorizeByHeader))
 	ocel.Channel[chatMessage, roomParams](resource, "rooms/:roomId", ocel.ChannelSubscribePublic(),
 		ocel.Schema(`{"type":"object","properties":{"text":{"type":"string","maxLength":3}}}`),
@@ -642,7 +637,7 @@ func TestARelayedPublishOfAnEventOutsideTheChannelSchemaIsDenied(t *testing.T) {
 	if len(answer.Denied) != 1 || answer.Denied[0].Index != 0 || answer.Denied[0].Code != "invalid-body" || len(answer.Grants) != 1 {
 		t.Errorf("answer = %+v, want the long text denied invalid-body and the short one granted", answer)
 	}
-	if events := gateway.listEvents(); len(events) != 1 {
+	if events := runtime.listEvents(); len(events) != 1 {
 		t.Errorf("published = %+v, want only the short text", events)
 	}
 }
@@ -688,7 +683,7 @@ func TestTheHandlerAnswers500WithoutTheCauseWhenAuthorizeFails(t *testing.T) {
 }
 
 func TestARelayedPublishRunsThePublishRuleThenPublishesFromTheServer(t *testing.T) {
-	gateway, _ := serveFakeGateway(t, "app", http.StatusAccepted)
+	runtime, _ := serveFakeRealtimeRuntime(t, "app")
 	rules := newHandlerRules()
 	handler := declareHandlerResource(rules).Handler()
 
@@ -703,14 +698,14 @@ func TestARelayedPublishRunsThePublishRuleThenPublishesFromTheServer(t *testing.
 	if len(rules.publishCalls) != 1 || rules.publishCalls[0].Body.Text != "hi" || rules.publishCalls[0].Params.RoomID != "r1" {
 		t.Errorf("publish rule saw %+v, want body hi in room r1", rules.publishCalls)
 	}
-	events := gateway.listEvents()
+	events := runtime.listEvents()
 	if len(events) != 1 || events[0].Envelope.Channel != "/app/rooms/r1" || events[0].Envelope.Kind != "live" || string(events[0].Envelope.Data) != `{"text":"hi"}` {
 		t.Errorf("published = %+v, want one live event on /app/rooms/r1", events)
 	}
 }
 
 func TestARelayedPublishIsDeniedWhenItsRuleOrItsBodyRefusesIt(t *testing.T) {
-	gateway, _ := serveFakeGateway(t, "app", http.StatusAccepted)
+	runtime, _ := serveFakeRealtimeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	invalid := readAnswer(t, postRealtime(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":1}}]}`, map[string]string{"X-User": "u1"}))
@@ -722,13 +717,14 @@ func TestARelayedPublishIsDeniedWhenItsRuleOrItsBodyRefusesIt(t *testing.T) {
 	if len(forbidden.Denied) != 1 || forbidden.Denied[0].Code != "forbidden" {
 		t.Errorf("denied = %+v, want forbidden", forbidden.Denied)
 	}
-	if events := gateway.listEvents(); len(events) != 0 {
+	if events := runtime.listEvents(); len(events) != 0 {
 		t.Errorf("published = %+v, want nothing", events)
 	}
 }
 
-func TestARelayedPublishTheTransportRefusesIsDenied(t *testing.T) {
-	serveFakeGateway(t, "app", http.StatusUnauthorized)
+func TestARelayedPublishTheRuntimeRefusesIsDenied(t *testing.T) {
+	runtime, _ := serveFakeRealtimeRuntime(t, "app")
+	runtime.refuse(connect.NewError(connect.CodeUnavailable, errors.New("the gateway refused it with status 401")))
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	answer := readAnswer(t, postRealtime(handler, `{"ops":[{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"hi"}}]}`, map[string]string{"X-User": "u1"}))
