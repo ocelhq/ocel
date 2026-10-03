@@ -59,7 +59,8 @@ which are tooling.
   and the dispatcher that delivers them to workers. Like `platform/s3/`, every vendor may
   import it, and it imports none of them.
 - **`platform/realtime/`** — the realtime gateway `ocel dev`, GCP and the VPS box run for
-  realtime channels, and the token verifier it shares with the AWS authorizer. Like
+  realtime channels, the token verifier it shares with the AWS authorizer, and the runtime
+  proxy's publish service, which publishes over a vendor's own transport. Like
   `platform/s3/`, every vendor may import it, and it imports none of them.
 - **`frameworks/<name>/`** — framework support, containing only what is **not** a branch of
   some host: shared protocol, the build-time adapter, and the host-neutral serving

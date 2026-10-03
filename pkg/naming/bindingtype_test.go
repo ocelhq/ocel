@@ -33,6 +33,7 @@ func TestProxied(t *testing.T) {
 		want bool
 	}{
 		{bindingsv1.BindingType_BINDING_TYPE_BUCKET, true},
+		{bindingsv1.BindingType_BINDING_TYPE_REALTIME, true},
 		{bindingsv1.BindingType_BINDING_TYPE_POSTGRES, false},
 		{bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED, false},
 		{bindingsv1.BindingType(99), false},

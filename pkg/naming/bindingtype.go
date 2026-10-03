@@ -23,9 +23,10 @@ var bindingKinds = map[bindingsv1.BindingType]Kind{
 }
 
 var proxiedTypes = map[bindingsv1.BindingType]bool{
-	bindingsv1.BindingType_BINDING_TYPE_BUCKET: true,
-	bindingsv1.BindingType_BINDING_TYPE_TASK:   true,
-	bindingsv1.BindingType_BINDING_TYPE_TOPIC:  true,
+	bindingsv1.BindingType_BINDING_TYPE_BUCKET:   true,
+	bindingsv1.BindingType_BINDING_TYPE_TASK:     true,
+	bindingsv1.BindingType_BINDING_TYPE_TOPIC:    true,
+	bindingsv1.BindingType_BINDING_TYPE_REALTIME: true,
 }
 
 func Proxied(t bindingsv1.BindingType) bool {
