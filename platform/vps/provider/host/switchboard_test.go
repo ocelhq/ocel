@@ -267,8 +267,8 @@ func TestTheSwitchboardRunsOnTheBoxNetworkBehindTheFrontProxyAndPublishesNothing
 	if strings.Contains(joined, "--publish") {
 		t.Errorf("the switchboard publishes a port: %q; only the front proxy is reached from outside the box", joined)
 	}
-	if at := slices.Index(argv, SwitchboardImage); at < 0 || !strings.Contains(SwitchboardImage, "@sha256:") {
-		t.Errorf("the switchboard runs %q, want an image pinned by digest", SwitchboardImage)
+	if at := slices.Index(argv, StaticImage); at < 0 || !strings.Contains(StaticImage, "@sha256:") {
+		t.Errorf("the switchboard runs %q, want an image pinned by digest", StaticImage)
 	}
 	for _, capability := range []string{"NET_BIND_SERVICE", "NET_ADMIN", "SYS_ADMIN"} {
 		if slices.Contains(argv, capability) {
