@@ -210,7 +210,7 @@ func TestKVStoresPassTheConformanceSuite(t *testing.T) {
 	conformance.RunKVStores(t, p.Facts())
 }
 
-func TestRealtimeIsRefusedAtPreflightAsUnsupported(t *testing.T) {
+func TestRealtimePassesTheConformanceSuite(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
