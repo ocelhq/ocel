@@ -113,10 +113,11 @@ func (p *Provider) Hooks() provider.Hooks {
 
 func (p *Provider) resourceHooks() resources.Hooks {
 	return resources.Hooks{
-		ProvisionKV:    p.ProvisionKV,
-		ProvisionTopic: p.ProvisionTopic,
-		RecordsWorkers: true,
-		RemoveResource: p.RemoveResource,
+		ProvisionKV:       p.ProvisionKV,
+		ProvisionTopic:    p.ProvisionTopic,
+		ProvisionRealtime: p.ProvisionRealtime,
+		RecordsWorkers:    true,
+		RemoveResource:    p.RemoveResource,
 		Functions: &resources.FunctionHooks{
 			Provision: p.ProvisionFunctions,
 			Remove:    p.RemoveFunctions,

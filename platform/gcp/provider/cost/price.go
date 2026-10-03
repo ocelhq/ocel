@@ -31,11 +31,13 @@ const (
 	usageVersions        = "active_secret_versions"
 	usageMessages        = "monthly_messages"
 	usageTaskOperations  = "monthly_task_operations"
+	usageConnectedHours  = "monthly_connected_hours"
 
 	ingressEverywhere = "INGRESS_TRAFFIC_ALL"
 	cpuIdle           = "template.containers.0.resources.cpu_idle"
 	scheduledRequests = "requests_per_hour"
 	billedSecondsEach = "billed_seconds_per_request"
+	holdsSockets      = "holds_sockets"
 	deadLetter        = "dead_letter"
 	mebibytesPerGiB   = 1024
 	secondsPerHour    = 3600
@@ -56,6 +58,7 @@ var (
 	versionsBand = pricing.Band{Light: 1, Moderate: 1, Heavy: 3}
 	messagesBand = pricing.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
 	taskOpsBand  = pricing.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
+	socketsBand  = pricing.Band{Light: 180, Moderate: 730, Heavy: 730}
 	thousand     = decimal.NewFromInt(1000)
 	kibPerGiB    = decimal.NewFromInt(1 << 20)
 )
@@ -104,6 +107,7 @@ func Price(req *costv1.PriceRequest) (*costv1.Estimate, error) {
 		"list prices for the regions the card names and for global SKUs; a resource elsewhere is left unpriced unless a note above says otherwise",
 		"the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is spent once per account across every resource sharing it",
 		"the forwarding rule is priced as the project's first five, which share one hourly charge",
+		"a realtime gateway is priced at Cloud Run's request-based rate for every hour a socket is open, an upper bound on what an instance holding sockets bills",
 	)
 	return estimate, nil
 }
@@ -124,6 +128,15 @@ func cloudRunService(r *pricing.Subject) {
 		}
 		r.Add(pricing.Component{Name: "CPU, always allocated", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-always", Quantity: seconds().Mul(cpu()), Needs: billing})
 		r.Add(pricing.Component{Name: "Memory, always allocated", Unit: "GiB-seconds", Rate: "gcp/run/memory-always", Quantity: seconds().Mul(memoryGiB()), Needs: billing})
+	case r.Bool(holdsSockets):
+		seconds := func() decimal.Decimal {
+			return r.Usage(usageConnectedHours, socketsBand).Mul(decimal.NewFromInt(secondsPerHour))
+		}
+		r.Add(pricing.Component{Name: "Requests", Unit: "requests", Rate: "gcp/run/requests", Quantity: r.Usage(usageRequests, requestsBand), UsageBased: true, Needs: billing})
+		r.Add(pricing.Component{Name: "CPU while sockets are open", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-active", UsageBased: true,
+			Quantity: seconds().Mul(cpu()), Needs: billing})
+		r.Add(pricing.Component{Name: "Memory while sockets are open", Unit: "GiB-seconds", Rate: "gcp/run/memory-active", UsageBased: true,
+			Quantity: seconds().Mul(memoryGiB()), Needs: billing})
 	case r.Has(scheduledRequests):
 		requests := r.Number(scheduledRequests).Mul(pricing.MonthlyHours)
 		seconds := requests.Mul(r.Number(billedSecondsEach))

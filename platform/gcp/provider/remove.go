@@ -13,6 +13,8 @@ func (p *Provider) RemoveResource(ctx context.Context, ref provider.StackRef, bi
 		return p.removeKV(ctx, ref, binding, progress)
 	case provider.BindingTopic, provider.BindingTask:
 		return p.removeTopic(ctx, ref, binding, progress)
+	case provider.BindingRealtime:
+		return p.removeRealtime(ctx, ref, binding, progress)
 	}
 	return nil
 }

@@ -143,8 +143,11 @@ func TestKVStoresPassTheConformanceSuite(t *testing.T) {
 	conformance.RunKVStores(t, p.Facts())
 }
 
-func TestRealtimeIsRefusedAtPreflightAsUnsupported(t *testing.T) {
+func TestRealtimePassesTheConformanceSuite(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	if served := p.Facts().Bindings; !slices.Contains(served, provider.BindingRealtime) {
+		t.Errorf("Facts().Bindings = %v, and a project declaring realtime is refused at deploy on gcp", served)
+	}
 	conformance.RunRealtime(t, p.Facts())
 }

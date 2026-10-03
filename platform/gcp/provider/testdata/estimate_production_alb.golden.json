@@ -152,6 +152,10 @@
       "status": "STATUS_FREE"
     },
     {
+      "resource": "project:shop/shared:production/google_service_account:ocel-ce6fea64cc",
+      "status": "STATUS_FREE"
+    },
+    {
       "resource": "project:shop/shared:production/google_artifact_registry_repository:ocel-acme-prod-production",
       "status": "STATUS_PRICED",
       "components": [
@@ -415,7 +419,7 @@
   ],
   "coverage": {
     "supported": 12,
-    "free": 10,
+    "free": 11,
     "supportedTypes": [
       "google_artifact_registry_repository",
       "google_certificate_manager_certificate_map",
@@ -440,7 +444,8 @@
     "a free allowance the account gets once is assumed unspent: a scan cannot see what the account already used this month, so a deploy beside other use of the same allowance costs more than shown",
     "list prices for the regions the card names and for global SKUs; a resource elsewhere is left unpriced unless a note above says otherwise",
     "the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is spent once per account across every resource sharing it",
-    "the forwarding rule is priced as the project's first five, which share one hourly charge"
+    "the forwarding rule is priced as the project's first five, which share one hourly charge",
+    "a realtime gateway is priced at Cloud Run's request-based rate for every hour a socket is open, an upper bound on what an instance holding sockets bills"
   ],
   "monthlyFixed": "68.46",
   "monthlyUsage": "7.93"

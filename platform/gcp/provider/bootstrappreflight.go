@@ -85,7 +85,7 @@ var deployRoles = []string{
 	"roles/datastore.user",
 	"roles/storage.objectAdmin",
 	"roles/cloudkms.cryptoKeyEncrypterDecrypter",
-	"roles/secretmanager.secretAccessor",
+	"roles/secretmanager.admin",
 	"roles/artifactregistry.writer",
 	"roles/iam.serviceAccountUser",
 	"roles/run.admin",

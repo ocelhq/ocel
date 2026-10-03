@@ -8,4 +8,5 @@ const (
 	MaxSocketsVar = "OCEL_REALTIME_MAX_SOCKETS"
 	ListenPort    = "8080"
 	PublishPath   = "/publish"
+	SocketPath    = "/event/realtime"
 )

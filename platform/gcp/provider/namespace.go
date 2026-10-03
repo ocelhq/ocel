@@ -95,6 +95,40 @@ func (n Names) WorkerService(project, env, app, worker string) string {
 	return readable + "-" + serviceHash(string(n.namespace), project, env, app, workerInfix, worker)
 }
 
+const (
+	realtimeInfix       = "realtime"
+	realtimeKeysInfix   = "keys"
+	maxReadableSecretID = 200
+)
+
+func (n Names) RealtimeGateway(project, env string) string {
+	readable := strings.Join([]string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), realtimeInfix}, "-")
+	readable = strings.TrimRight(readable[:min(len(readable), maxServiceNameLength-serviceHashLength-1)], "-")
+	return readable + "-" + serviceHash(string(n.namespace), project, env, realtimeInfix)
+}
+
+func (n Names) RealtimeKeysSecret(project, env string) string {
+	return n.realtimeSecret(project, env, realtimeKeysInfix, realtimeInfix, realtimeKeysInfix)
+}
+
+func (n Names) RealtimeSigningSecret(project, env, resource string) string {
+	return n.realtimeSecret(project, env, naming.Sanitize(resource), realtimeInfix, "signing", resource)
+}
+
+func (n Names) realtimeSecret(project, env, readableTail string, hashed ...string) string {
+	readable := strings.Join([]string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), realtimeInfix, readableTail}, "-")
+	readable = strings.TrimRight(readable[:min(len(readable), maxReadableSecretID)], "-")
+	return readable + "-" + serviceHash(append([]string{string(n.namespace), project, env}, hashed...)...)
+}
+
+func (n Names) RealtimeAccount(tier environment.Tier) string {
+	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), realtimeInfix)
+}
+
+func (n Names) RealtimeAccountEmail(tier environment.Tier) string {
+	return n.RealtimeAccount(tier) + "@" + n.project + accountDomain
+}
+
 const functionSuffix = "fn"
 
 var cloudRunService = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
