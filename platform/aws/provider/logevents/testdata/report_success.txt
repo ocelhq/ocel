@@ -1,0 +1,1 @@
+REPORT RequestId: 70b609e1-c0ae-483f-8cf2-cac7eb9aa711	Duration: 266.38 ms	Billed Duration: 607 ms	Memory Size: 512 MB	Max Memory Used: 96 MB	Init Duration: 339.69 ms
