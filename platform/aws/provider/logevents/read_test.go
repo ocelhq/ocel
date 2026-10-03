@@ -47,6 +47,7 @@ type fakeAWS struct {
 	requests  []filterRequest
 	logsError string
 	emptyPage bool
+	throttles int
 }
 
 func newFakeAWS(t *testing.T) (*fakeAWS, *cloudwatchlogs.Client, *lambda.Client) {
@@ -87,13 +88,24 @@ func (f *fakeAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	var filter filterRequest
 	json.NewDecoder(req.Body).Decode(&filter)
 	f.requests = append(f.requests, filter)
+	if f.throttles > 0 {
+		f.throttles--
+		writer.Header().Set("X-Amzn-Errortype", "ThrottlingException")
+		writer.WriteHeader(http.StatusBadRequest)
+		io.WriteString(writer, `{"message":"Rate exceeded"}`)
+		return
+	}
 
 	if f.emptyPage && filter.NextToken == "" {
 		json.NewEncoder(writer).Encode(map[string]any{"events": []any{}, "nextToken": "0"})
 		return
 	}
-	var matched []storedEvent
-	for _, stored := range f.groups[filter.LogGroupName] {
+	type numbered struct {
+		storedEvent
+		id string
+	}
+	var matched []numbered
+	for i, stored := range f.groups[filter.LogGroupName] {
 		if filter.LogStreamNamePrefix != "" && !strings.HasPrefix(stored.Stream, filter.LogStreamNamePrefix) {
 			continue
 		}
@@ -103,9 +115,13 @@ func (f *fakeAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 		if filter.EndTime != nil && stored.Time.UnixMilli() > *filter.EndTime {
 			continue
 		}
-		matched = append(matched, stored)
+		matched = append(matched, numbered{stored, filter.LogGroupName + "#" + strconv.Itoa(i)})
 	}
-	slices.SortStableFunc(matched, func(a, b storedEvent) int { return b.Time.Compare(a.Time) })
+	if filter.StartFromHead != nil && *filter.StartFromHead {
+		slices.SortStableFunc(matched, func(a, b numbered) int { return a.Time.Compare(b.Time) })
+	} else {
+		slices.SortStableFunc(matched, func(a, b numbered) int { return b.Time.Compare(a.Time) })
+	}
 	offset := 0
 	if filter.NextToken != "" {
 		offset, _ = strconv.Atoi(filter.NextToken)
@@ -117,13 +133,19 @@ func (f *fakeAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	end := min(offset+size, len(matched))
 	events := []map[string]any{}
 	for _, stored := range matched[offset:end] {
-		events = append(events, map[string]any{"logStreamName": stored.Stream, "timestamp": stored.Time.UnixMilli(), "message": stored.Message})
+		events = append(events, map[string]any{"eventId": stored.id, "logStreamName": stored.Stream, "timestamp": stored.Time.UnixMilli(), "message": stored.Message})
 	}
 	body := map[string]any{"events": events}
 	if end < len(matched) {
 		body["nextToken"] = strconv.Itoa(end)
 	}
 	json.NewEncoder(writer).Encode(body)
+}
+
+func (f *fakeAWS) add(group string, events ...storedEvent) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.groups[group] = append(f.groups[group], events...)
 }
 
 func (f *fakeAWS) listRequests() []filterRequest {

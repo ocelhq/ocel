@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -76,6 +77,10 @@ func refuseInvalidQuery(query Query) error {
 	if query.Since.Before(earliestNewestFirstSince) {
 		return fmt.Errorf("since %s is before %s, the earliest CloudWatch Logs reads newest first from", query.Since.UTC().Format(time.RFC3339), earliestNewestFirstSince.Format(time.DateOnly))
 	}
+	return refuseInvalidSources(query)
+}
+
+func refuseInvalidSources(query Query) error {
 	for _, source := range query.Sources {
 		if (source.Function == "") == (source.Container == "") {
 			return fmt.Errorf("source %+v names both or neither of a function and a container", source)
@@ -106,14 +111,9 @@ func readNewestEvents(ctx context.Context, logs *cloudwatchlogs.Client, group lo
 			return nil, fmt.Errorf("read log events of %s: %w", group.name, err)
 		}
 		for _, logged := range page.Events {
-			event, keep := group.parseLine(strings.TrimSuffix(aws.ToString(logged.Message), "\n"))
-			if !keep {
-				continue
+			if event, keep := parseLoggedEvent(group, source, logged); keep {
+				newestFirst = append(newestFirst, event)
 			}
-			event.Time = time.UnixMilli(aws.ToInt64(logged.Timestamp)).UTC()
-			event.Label = source.Label
-			event.Instance = group.parseInstance(aws.ToString(logged.LogStreamName))
-			newestFirst = append(newestFirst, event)
 		}
 		if token = page.NextToken; token == nil {
 			break
@@ -122,6 +122,17 @@ func readNewestEvents(ctx context.Context, logs *cloudwatchlogs.Client, group lo
 	newestFirst = newestFirst[:min(len(newestFirst), query.Limit)]
 	slices.Reverse(newestFirst)
 	return newestFirst, nil
+}
+
+func parseLoggedEvent(group logGroup, source Source, logged types.FilteredLogEvent) (Event, bool) {
+	event, keep := group.parseLine(strings.TrimSuffix(aws.ToString(logged.Message), "\n"))
+	if !keep {
+		return Event{}, false
+	}
+	event.Time = time.UnixMilli(aws.ToInt64(logged.Timestamp)).UTC()
+	event.Label = source.Label
+	event.Instance = group.parseInstance(aws.ToString(logged.LogStreamName))
+	return event, true
 }
 
 func quoteFilterPattern(contains string) *string {
