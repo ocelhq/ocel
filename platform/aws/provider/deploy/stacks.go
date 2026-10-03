@@ -321,18 +321,11 @@ func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs a
 			result.Bindings = append(result.Bindings, collected)
 			continue
 		}
-		raw, produced := outputs[resource.Name]
-		if !produced {
-			return provider.StackResult{}, fmt.Errorf("stack produced no output for %s", resource.Name)
+		fields, err := requireOutputFields(outputs, resource.Name)
+		if err != nil {
+			return provider.StackResult{}, err
 		}
-		fields, mapped := raw.Value.(map[string]any)
-		if !mapped {
-			return provider.StackResult{}, fmt.Errorf("output for %s is not a map", resource.Name)
-		}
-		var (
-			binding *bindingsv1.Binding
-			err     error
-		)
+		var binding *bindingsv1.Binding
 		switch resource.Type {
 		case provider.BindingPostgres:
 			binding, err = collectPostgresBinding(ctx, r.cfg.Secrets, resource.Name, fields)

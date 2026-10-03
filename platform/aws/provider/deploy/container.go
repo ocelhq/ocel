@@ -741,13 +741,9 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 }
 
 func (r *release) decodeContainer(work *containerWork, outputs auto.OutputMap) (provider.StackResult, error) {
-	raw, produced := outputs[work.app]
-	if !produced {
-		return provider.StackResult{}, fmt.Errorf("stack produced no output for %s", work.app)
-	}
-	fields, mapped := raw.Value.(map[string]any)
-	if !mapped {
-		return provider.StackResult{}, fmt.Errorf("output for %s is not a map", work.app)
+	fields, err := requireOutputFields(outputs, work.app)
+	if err != nil {
+		return provider.StackResult{}, err
 	}
 	url, err := requireStringField(fields, work.app, outputKeyContainerURL)
 	if err != nil {

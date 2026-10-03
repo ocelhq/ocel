@@ -132,13 +132,9 @@ func (w *workersWork) decode(outputs auto.OutputMap) (provider.StackResult, erro
 	functions := make([]provider.Function, 0, len(w.workers))
 	for _, worker := range w.workers {
 		logical := resources.WorkerName(worker.Name)
-		raw, produced := outputs[logical]
-		if !produced {
-			return provider.StackResult{}, fmt.Errorf("stack produced no output for %s", logical)
-		}
-		fields, mapped := raw.Value.(map[string]any)
-		if !mapped {
-			return provider.StackResult{}, fmt.Errorf("output for %s is not a map", logical)
+		fields, err := requireOutputFields(outputs, logical)
+		if err != nil {
+			return provider.StackResult{}, err
 		}
 		physical, err := requireStringField(fields, logical, outputKeyFunctionName)
 		if err != nil {
