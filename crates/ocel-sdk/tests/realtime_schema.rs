@@ -1,9 +1,10 @@
 #![cfg(all(feature = "schemars", feature = "realtime"))]
 
 mod realtime;
+mod runtime;
 
 use ocel::realtime::{DenialCode, Realtime};
-use realtime::{post, FakeGateway};
+use realtime::{post, FakeRuntime};
 use serde_json::json;
 
 #[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
@@ -37,9 +38,8 @@ fn build() -> Realtime {
 
 #[tokio::test]
 async fn an_event_its_channel_schema_refuses_is_never_published() {
-    let gateway = FakeGateway::serve();
-    std::env::remove_var("OCEL_PHASE");
-    std::env::set_var("OCEL_RESOURCE_REALTIME_app", gateway.binding());
+    let runtime = FakeRuntime::serve();
+    std::env::set_var("OCEL_RESOURCE_REALTIME_app", runtime.binding());
     let rt = build();
     let note = |text: &str| Note {
         text: text.to_string(),
@@ -74,7 +74,7 @@ async fn an_event_its_channel_schema_refuses_is_never_published() {
         relayed["grants"],
         json!([{ "i": 1, "wire": "/app/notes/n1" }])
     );
-    let published = gateway.published.lock().unwrap();
+    let published = runtime.published();
     assert_eq!(published.len(), 1);
     assert_eq!(published[0].envelope["data"], json!({ "text": "ok" }));
 }

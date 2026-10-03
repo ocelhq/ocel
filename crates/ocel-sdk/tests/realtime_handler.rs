@@ -1,10 +1,11 @@
 #![cfg(feature = "realtime")]
 
 mod realtime;
+mod runtime;
 
 use ocel::realtime::{DenialCode, Realtime};
 use ocel::realtime::{PublishRule, Request, SubscribeContext, SubscribeRule};
-use realtime::{call, post, read_claims, read_fixture, FakeGateway, StalledGateway};
+use realtime::{call, post, read_claims, read_fixture, FakeRuntime};
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -447,8 +448,8 @@ async fn the_handler_answers_500_without_the_cause_when_authorize_fails() {
 
 #[tokio::test]
 async fn a_relayed_publish_runs_the_publish_rule_then_publishes_from_the_server() {
-    let gateway = FakeGateway::serve();
-    let _env = deliver(&gateway.binding()).await;
+    let runtime = FakeRuntime::serve();
+    let _env = deliver(&runtime.binding()).await;
     let seen = Arc::new(Mutex::new(Seen::default()));
     let rt = build(seen.clone());
 
@@ -472,7 +473,7 @@ async fn a_relayed_publish_runs_the_publish_rule_then_publishes_from_the_server(
             }
         )
     );
-    let published = gateway.published.lock().unwrap();
+    let published = runtime.published();
     assert_eq!(published.len(), 1);
     assert_eq!(published[0].envelope["ch"], "/app/rooms/r1");
     assert_eq!(published[0].envelope["kind"], "live");
@@ -480,16 +481,16 @@ async fn a_relayed_publish_runs_the_publish_rule_then_publishes_from_the_server(
 }
 
 #[tokio::test]
-async fn a_relayed_publish_is_denied_when_its_rule_its_body_or_the_transport_refuses_it() {
-    let gateway = FakeGateway::serve();
-    let _env = deliver(&gateway.binding()).await;
+async fn a_relayed_publish_is_denied_when_its_rule_its_body_or_the_runtime_refuses_it() {
+    let runtime = FakeRuntime::serve();
+    let _env = deliver(&runtime.binding()).await;
     let rt = build(Arc::default());
     let publish = |text: Value| json!({ "ops": [{ "op": "publish", "pattern": "rooms/:room_id", "params": { "room_id": "r1" }, "body": { "text": text } }] });
 
     let invalid = post(&rt, publish(json!(1)), &[("x-user", "u1")]).await;
     let forbidden = post(&rt, publish(json!("x")), &[("x-user", "u2")]).await;
-    assert!(gateway.published.lock().unwrap().is_empty());
-    *gateway.status.lock().unwrap() = 401;
+    assert!(runtime.published().is_empty());
+    runtime.refuse("the gateway refused it with status 401");
     let refused = post(&rt, publish(json!("hi")), &[("x-user", "u1")]).await;
 
     assert_eq!(
@@ -507,9 +508,9 @@ async fn a_relayed_publish_is_denied_when_its_rule_its_body_or_the_transport_ref
 }
 
 #[tokio::test]
-async fn publish_posts_the_envelope_to_the_gateway_with_a_publish_token() {
-    let gateway = FakeGateway::serve();
-    let _env = deliver(&gateway.binding()).await;
+async fn publish_hands_the_runtime_the_envelope_on_its_wire_channel() {
+    let runtime = FakeRuntime::serve();
+    let _env = deliver(&runtime.binding()).await;
     let rt = build(Arc::default());
 
     rt.publish(
@@ -523,8 +524,13 @@ async fn publish_posts_the_envelope_to_the_gateway_with_a_publish_token() {
     .await
     .expect("published");
 
-    let published = gateway.published.lock().unwrap();
-    assert_eq!(published[0].path, "/publish");
+    let published = runtime.published();
+    assert_eq!(published[0].request.realtime, "app");
+    assert_eq!(published[0].request.channel, "/app/orders/0zn5ptc");
+    assert_eq!(
+        runtime.authorizations(),
+        [Some("Bearer opensesame".to_string())]
+    );
     let envelope = &published[0].envelope;
     assert_eq!(
         (
@@ -544,19 +550,12 @@ async fn publish_posts_the_envelope_to_the_gateway_with_a_publish_token() {
         "id {id} is not 32 lowercase hex characters"
     );
     assert!(envelope["ts"].is_u64());
-    let claims = read_claims(published[0].authorization.strip_prefix("Bearer ").unwrap());
-    assert_eq!(claims["aud"], gateway.host);
-    assert_eq!(claims["sub"], "server");
-    assert_eq!(
-        claims["ocel"],
-        json!({ "op": "publish", "ch": "/app/orders/0zn5ptc", "ns": "app" })
-    );
 }
 
 #[tokio::test]
 async fn publish_refuses_params_or_an_event_it_cannot_send() {
-    let gateway = FakeGateway::serve();
-    let _env = deliver(&gateway.binding()).await;
+    let runtime = FakeRuntime::serve();
+    let _env = deliver(&runtime.binding()).await;
     let rt = build(Arc::default());
 
     let empty = rt
@@ -579,7 +578,7 @@ async fn publish_refuses_params_or_an_event_it_cannot_send() {
             },
         )
         .await;
-    *gateway.status.lock().unwrap() = 401;
+    runtime.refuse("the gateway refused it with status 401");
     let refused = rt
         .publish(
             &Orders {
@@ -613,24 +612,12 @@ async fn publish_outside_a_provisioned_run_says_why() {
         order_id: "o1".to_string(),
     };
 
-    for name in [
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
-        "AWS_CONTAINER_CREDENTIALS_FULL_URI",
-    ] {
-        std::env::remove_var(name);
-    }
-    let unsigned = rt.publish(&orders, &event).await;
     std::env::set_var("OCEL_PHASE", "discovery");
     let unprovisioned = rt.publish(&orders, &event).await;
     std::env::remove_var("OCEL_PHASE");
     std::env::remove_var("OCEL_RESOURCE_REALTIME_app");
     let missing = rt.publish(&orders, &event).await;
 
-    assert!(
-        matches!(unsigned, Err(ocel::Error::PublishFailed { said, .. }) if said.contains("AWS_ACCESS_KEY_ID"))
-    );
     assert!(matches!(
         unprovisioned,
         Err(ocel::Error::Unprovisioned { .. })
@@ -696,8 +683,8 @@ fn a_builder_outside_the_contract_is_refused_saying_why() {
 
 #[tokio::test]
 async fn publish_refuses_a_channel_of_another_realtime_resource() {
-    let gateway = FakeGateway::serve();
-    let _env = deliver(&gateway.binding()).await;
+    let runtime = FakeRuntime::serve();
+    let _env = deliver(&runtime.binding()).await;
     let rt = build(Arc::default());
 
     let refused = rt
@@ -714,7 +701,7 @@ async fn publish_refuses_a_channel_of_another_realtime_resource() {
     assert!(
         matches!(refused, Err(ocel::Error::PublishRefused { code, .. }) if code == DenialCode::UnknownPattern)
     );
-    assert!(gateway.published.lock().unwrap().is_empty());
+    assert!(runtime.published().is_empty());
 }
 
 #[tokio::test]
@@ -798,51 +785,10 @@ async fn a_binding_the_handler_cannot_use_answers_500_uncacheable() {
     }
 }
 
-#[tokio::test(start_paused = true)]
-async fn a_publish_the_gateway_never_answers_fails_after_10_seconds() {
-    let gateway = StalledGateway::serve();
-    let _env = deliver(&gateway.binding()).await;
-    let rt = build(Arc::default());
-    let started = tokio::time::Instant::now();
-
-    let published = tokio::time::timeout(
-        Duration::from_secs(60),
-        rt.publish(
-            &Orders {
-                order_id: "o1".to_string(),
-            },
-            &OrderEvent {
-                status: "x".to_string(),
-            },
-        ),
-    )
-    .await
-    .expect("the publish gave up before 60s");
-    let relayed = tokio::time::timeout(
-        Duration::from_secs(60),
-        post(
-            &rt,
-            json!({ "ops": [{ "op": "publish", "pattern": "rooms/:room_id", "params": { "room_id": "r1" }, "body": { "text": "hi" } }] }),
-            &[("x-user", "u1")],
-        ),
-    )
-    .await
-    .expect("the relayed publish gave up before 60s");
-
-    assert!(
-        matches!(published, Err(ocel::Error::PublishFailed { said, .. }) if said.contains("within 10s"))
-    );
-    assert_eq!(
-        relayed["denied"],
-        json!([{ "i": 0, "code": "publish-failed" }])
-    );
-    assert_eq!(started.elapsed(), Duration::from_secs(20));
-}
-
 #[tokio::test]
-async fn relayed_publishes_reach_the_transport_in_batch_order() {
-    let gateway = FakeGateway::serve();
-    let _env = deliver(&gateway.binding()).await;
+async fn relayed_publishes_reach_the_runtime_in_batch_order() {
+    let runtime = FakeRuntime::serve();
+    let _env = deliver(&runtime.binding()).await;
     let rt = build_ruled(
         |_| async { Ok::<_, String>(true) },
         |ctx| async move {
@@ -862,7 +808,7 @@ async fn relayed_publishes_reach_the_transport_in_batch_order() {
     .await;
 
     assert_eq!(res["denied"], json!([]));
-    let published = gateway.published.lock().unwrap();
+    let published = runtime.published();
     let texts: Vec<&Value> = published
         .iter()
         .map(|one| &one.envelope["data"]["text"])
@@ -903,8 +849,8 @@ async fn the_handler_takes_exactly_the_batch_shape_and_refuses_anything_else() {
 
 #[tokio::test]
 async fn the_handler_denies_each_malformed_op_on_its_own_in_the_order_of_the_checks() {
-    let gateway = FakeGateway::serve();
-    let _env = deliver(&gateway.binding()).await;
+    let runtime = FakeRuntime::serve();
+    let _env = deliver(&runtime.binding()).await;
     let rt = build(Arc::default());
     let room = json!({ "room_id": "r1" });
 
@@ -960,30 +906,5 @@ async fn the_handler_denies_each_malformed_op_on_its_own_in_the_order_of_the_che
             { "i": 15, "code": "invalid-body" },
         ])
     );
-    assert!(gateway.published.lock().unwrap().is_empty());
-}
-
-#[tokio::test]
-async fn a_relayed_publish_whose_token_cannot_be_minted_answers_500_and_publishes_nothing() {
-    let gateway = FakeGateway::serve();
-    let mut binding: Value = serde_json::from_str(&gateway.binding()).unwrap();
-    binding["realtime"]["signingKey"] = json!("AAAAAAA=");
-    let _env = deliver(&binding.to_string()).await;
-    let rt = build(Arc::default());
-
-    let answered = call(
-        &rt,
-        "POST",
-        &[("x-user", "u1"), ("origin", "https://app.example")],
-        r#"{"ops":[{"op":"publish","pattern":"rooms/:room_id","params":{"room_id":"r1"},"body":{"text":"hi"}}]}"#,
-    )
-    .await;
-
-    assert_eq!(answered.status, 500, "{}", answered.body);
-    assert_eq!(answered.headers["cache-control"], "no-store");
-    assert_eq!(
-        answered.headers["access-control-allow-origin"],
-        "https://app.example"
-    );
-    assert!(gateway.published.lock().unwrap().is_empty());
+    assert!(runtime.published().is_empty());
 }

@@ -283,8 +283,8 @@ pub enum Error {
     },
 
     #[cfg(feature = "realtime")]
-    /// The transport refused a publish, could not be reached, or did not answer within 10
-    /// seconds.
+    /// The ocel runtime did not publish the event: it could not be reached, or the
+    /// transport behind it refused the event.
     #[error("ocel: realtime '{name}': {said}")]
     PublishFailed {
         /// The realtime resource published on.
