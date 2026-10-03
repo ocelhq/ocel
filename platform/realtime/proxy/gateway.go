@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -21,9 +20,7 @@ import (
 )
 
 const (
-	publishTimeout     = 10 * time.Second
 	serverTokenTTL     = 60 * time.Second
-	maxAnswerBytes     = 64 << 10
 	serverTokenSubject = "server"
 )
 
@@ -40,7 +37,7 @@ func NewGatewayTransport(client *http.Client, publishURL string) Transport {
 		if err != nil {
 			return connect.NewError(connect.CodeFailedPrecondition, err)
 		}
-		ctx, cancel := context.WithTimeout(ctx, publishTimeout)
+		ctx, cancel := context.WithTimeout(ctx, PublishTimeout)
 		defer cancel()
 		post, err := http.NewRequestWithContext(ctx, http.MethodPost, address.String(), strings.NewReader(req.GetEvent()))
 		if err != nil {
@@ -48,14 +45,8 @@ func NewGatewayTransport(client *http.Client, publishURL string) Transport {
 		}
 		post.Header.Set("Authorization", "Bearer "+credential)
 		post.Header.Set("Content-Type", "application/json")
-		res, err := client.Do(post)
-		if err != nil {
-			return connect.NewError(connect.CodeUnavailable, fmt.Errorf("publish on %s: the gateway did not answer: %w", req.GetChannel(), err))
-		}
-		defer res.Body.Close()
-		answer, _ := io.ReadAll(io.LimitReader(res.Body, maxAnswerBytes))
-		if res.StatusCode/100 != 2 {
-			return connect.NewError(connect.CodeUnavailable, fmt.Errorf("publish on %s: the gateway refused it with status %d: %s", req.GetChannel(), res.StatusCode, answer))
+		if _, err := Send(client, post, "the gateway"); err != nil {
+			return connect.NewError(connect.CodeUnavailable, fmt.Errorf("publish on %s: %w", req.GetChannel(), err))
 		}
 		return nil
 	}
