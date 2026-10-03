@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	connect "connectrpc.com/connect"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -167,9 +168,45 @@ func TestAPublishAppSyncRefusesFailsNamingTheStatus(t *testing.T) {
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{"errors":[{"errorType":"UnauthorizedException"}]}`))
 	})
-	if err := publish(cfg); err == nil || !strings.Contains(err.Error(), "403") {
-		t.Errorf("publish = %v, want the refusal named by status", err)
+	if err := publish(cfg); connect.CodeOf(err) != connect.CodePermissionDenied || !strings.Contains(err.Error(), "403") {
+		t.Errorf("publish = %v, want a permission denied naming the status", err)
 	}
+}
+
+func TestAPublishAppSyncFindsMalformedFailsAsAnInvalidArgument(t *testing.T) {
+	t.Parallel()
+
+	_, cfg := serveAppSync(t, func(w http.ResponseWriter) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"errors":[{"errorType":"BadRequestException"}]}`))
+	})
+	if err := publish(cfg); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("publish = %v, want an invalid argument", err)
+	}
+}
+
+func TestAPublishTheCallerCancelsWhileAppSyncIsThrottlingFailsAsCanceled(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	_, cfg := serveAppSync(t, func(w http.ResponseWriter) {
+		cancel()
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+	cfg.Retryer = retry.NewStandard(func(o *retry.StandardOptions) { o.Backoff = constantBackoff(time.Minute) })
+	err := realtime.NewAppSyncTransport(cfg)(ctx, &bindingsv1.RealtimeProperties{
+		Transport: bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_APPSYNC_EVENTS,
+		Host:      apiHost,
+	}, &realtimev1.PublishRequest{Realtime: "app", Channel: channel, Event: event})
+	if connect.CodeOf(err) != connect.CodeCanceled {
+		t.Errorf("publish = %v, want canceled: the caller gave up while the publish waited to retry", err)
+	}
+}
+
+type constantBackoff time.Duration
+
+func (c constantBackoff) BackoffDelay(int, error) (time.Duration, error) {
+	return time.Duration(c), nil
 }
 
 func TestAnAppSyncRuntimeRefusesABindingOverAnotherTransport(t *testing.T) {
