@@ -9,6 +9,7 @@ import {
 import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import {
   appsyncBinding,
+  appsyncHost,
   type FakeGateway,
   readClaims,
   serveFakeGateway,
@@ -293,13 +294,75 @@ describe("publishing outside a provisioned run", () => {
       rt.publish("orders/:orderId", { params: { orderId: "o1" }, body: { status: "paid" } }),
     ).rejects.toThrow("OCEL_RESOURCE_REALTIME_app");
   });
+});
 
-  it("says publishing on AppSync Events is not supported yet", async () => {
+describe("realtime publish on AppSync Events", () => {
+  const rt = realtime("app", {
+    channels: {
+      "orders/:orderId": { schema: z.object({ status: z.string() }), subscribe: "public" },
+    },
+  });
+
+  function stubAppSync(status: number, answer: string) {
+    const sent: Request[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string, init?: RequestInit) => {
+        sent.push(new Request(input, init));
+        return new Response(answer, { status });
+      }),
+    );
+    return sent;
+  }
+
+  beforeEach(() => {
     vi.stubEnv("OCEL_PHASE", "");
     vi.stubEnv(bindingKey("app", BindingType.REALTIME), appsyncBinding);
+    vi.stubEnv("AWS_ACCESS_KEY_ID", "ASIAAPPROLE");
+    vi.stubEnv("AWS_SECRET_ACCESS_KEY", "role-secret");
+    vi.stubEnv("AWS_SESSION_TOKEN", "role-session");
+  });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("posts the envelope as one event to /event, signed with the app's role", async () => {
+    const sent = stubAppSync(200, '{"successful":[{"identifier":"x","index":0}],"failed":[]}');
+
+    await rt.publish("orders/:orderId", { params: { orderId: "o1" }, body: { status: "paid" } });
+
+    expect(sent).toHaveLength(1);
+    const [request] = sent;
+    expect(request?.url).toBe(`https://${appsyncHost}/event`);
+    expect(request?.headers.get("authorization")).toMatch(
+      /^AWS4-HMAC-SHA256 Credential=ASIAAPPROLE\/\d{8}\/us-east-1\/appsync\/aws4_request, SignedHeaders=content-type;host;x-amz-date;x-amz-security-token, Signature=[0-9a-f]{64}$/,
+    );
+    expect(request?.headers.get("x-amz-security-token")).toBe("role-session");
+    const published = (await request?.json()) as { channel: string; events: string[] };
+    expect(published.channel).toBe("/app/orders/o1");
+    expect(published.events).toHaveLength(1);
+    expect(JSON.parse(published.events[0] ?? "")).toMatchObject({
+      v: 1,
+      ch: "/app/orders/o1",
+      kind: "live",
+      data: { status: "paid" },
+    });
+  });
+
+  it("fails a publish AppSync refuses, or answers with the event failed", async () => {
+    stubAppSync(403, '{"errors":[{"errorType":"UnauthorizedException"}]}');
     await expect(
       rt.publish("orders/:orderId", { params: { orderId: "o1" }, body: { status: "paid" } }),
-    ).rejects.toThrow("AppSync Events is not supported yet");
+    ).rejects.toThrow("status 403");
+
+    stubAppSync(
+      200,
+      '{"successful":[],"failed":[{"identifier":"x","index":0,"message":"too large"}]}',
+    );
+    await expect(
+      rt.publish("orders/:orderId", { params: { orderId: "o1" }, body: { status: "paid" } }),
+    ).rejects.toThrow("too large");
   });
 });

@@ -2,6 +2,7 @@ import {
   type RealtimeProperties,
   RealtimeTransport,
 } from "../gen/proto/common/bindings/v1/bindings_pb.js";
+import { findAppSyncRegion, readAwsCredentials, signAppSyncPublish } from "./aws-signature.js";
 import { mintToken, type TokenIssuer } from "./token.js";
 
 /** The transport a realtime binding names: how the handler names it and how events reach it. */
@@ -32,6 +33,15 @@ async function postWithDeadline(url: string, init: RequestInit): Promise<Respons
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timer);
+  }
+}
+
+function hasFailedEvents(answer: string): boolean {
+  try {
+    const failed = (JSON.parse(answer) as { failed?: unknown[] }).failed;
+    return Array.isArray(failed) && failed.length > 0;
+  } catch {
+    return false;
   }
 }
 
@@ -72,12 +82,39 @@ export function resolveTransport(properties: RealtimeProperties, issuer: TokenIs
       return {
         name: "appsync-events",
         host: properties.host,
-        signPublish() {
-          return async () => {
-            // TODO(#1514): publish with a SigV4-signed POST /event under the app's role once the AWS target lands.
-            throw new Error(
-              `realtime("${issuer.name}"): publishing on AppSync Events is not supported yet`,
+        signPublish(channel) {
+          return async (envelope) => {
+            const failed = (said: string, cause?: unknown) =>
+              new Error(`realtime("${issuer.name}"): publish on ${channel}: ${said}`, { cause });
+            const body = JSON.stringify({ channel, events: [envelope] });
+            const credentials = await readAwsCredentials().catch((cause: Error) => {
+              throw failed(cause.message, cause);
+            });
+            const headers = signAppSyncPublish(
+              properties.host,
+              body,
+              credentials,
+              findAppSyncRegion(properties.host),
+              new Date(),
             );
+            let response: Response;
+            try {
+              response = await postWithDeadline(`https://${properties.host}/event`, {
+                method: "POST",
+                headers,
+                body,
+              });
+            } catch (cause) {
+              throw failed(
+                `AppSync did not take it within ${publishDeadlineMilliseconds / 1_000}s`,
+                cause,
+              );
+            }
+            const answer = await response.text();
+            if (!response.ok) {
+              throw failed(`AppSync refused it with status ${response.status}: ${answer}`);
+            }
+            if (hasFailedEvents(answer)) throw failed(`AppSync failed the event: ${answer}`);
           };
         },
       };
