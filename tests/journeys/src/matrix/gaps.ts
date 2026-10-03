@@ -291,7 +291,8 @@ export const gaps: Gap[] = [
   {
     id: "floci-runs-no-event-api",
     reason:
-      "the aws provider serves realtime from an AppSync Event API, and floci emulates AppSync's GraphQL APIs alone: no CreateApi, channel namespace, Lambda authorizer or Event socket",
+      "the aws provider serves realtime from an AppSync Event API, and floci emulates AppSync's GraphQL APIs alone: no CreateApi, Lambda authorizer, POST /event or Event socket",
+    issue: 1570,
     where: [
       {
         on: ["aws.floci"],
