@@ -2,7 +2,10 @@ package gcp
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"io"
 	"net"
 	"net/url"
 	"strings"
@@ -34,6 +37,10 @@ func TestOnlyTheAnswersThatMeanTryAgainAreTriedAgain(t *testing.T) {
 		{name: "nothing at all", err: nil},
 		{name: "connection reset", err: &url.Error{Op: "Get", Err: &net.OpError{Err: syscall.ECONNRESET}}, again: true},
 		{name: "timed out", err: &url.Error{Op: "Get", Err: &net.OpError{Err: timedOut{}}}, again: true},
+		{name: "connection dropped", err: &url.Error{Op: "Post", Err: io.EOF}, again: true},
+		{name: "endpoint speaks no TLS", err: &url.Error{Op: "Get", Err: tls.RecordHeaderError{Msg: "first record does not look like a TLS handshake"}}},
+		{name: "untrusted certificate", err: &url.Error{Op: "Get", Err: &tls.CertificateVerificationError{Err: x509.UnknownAuthorityError{}}}},
+		{name: "no such host", err: &url.Error{Op: "Get", Err: &net.DNSError{Err: "no such host", Name: "logging.example", IsNotFound: true}}},
 	} {
 		t.Run(tried.name, func(t *testing.T) {
 			if again := retryable(answeredCode(tried.err), tried.err); again != tried.again {

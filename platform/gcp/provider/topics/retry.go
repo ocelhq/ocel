@@ -3,9 +3,11 @@ package topics
 import (
 	"context"
 	"errors"
+	"io"
 	"math/rand/v2"
 	"net"
 	"net/http"
+	"syscall"
 	"time"
 
 	"google.golang.org/api/googleapi"
@@ -44,8 +46,13 @@ func isRetryable(err error) bool {
 	case http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 		return true
 	}
-	var reached net.Error
-	return errors.As(err, &reached)
+	var timed net.Error
+	return (errors.As(err, &timed) && timed.Timeout()) ||
+		errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.ECONNABORTED) ||
+		errors.Is(err, syscall.EPIPE)
 }
 
 func answeredCode(err error) int {
