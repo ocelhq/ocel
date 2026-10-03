@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -27,8 +26,6 @@ const (
 	appSyncService      = "appsync"
 	appSyncPublishPath  = "/event"
 	appSyncAPIHostLabel = ".appsync-api."
-	publishTimeout      = 10 * time.Second
-	maxAnswerBytes      = 64 << 10
 )
 
 type Config struct {
@@ -38,17 +35,12 @@ type Config struct {
 	Region      string
 }
 
-type unacceptedError struct {
-	status int
-	answer []byte
-}
-
-func (e *unacceptedError) Error() string {
-	return fmt.Sprintf("AppSync refused it with status %d: %s", e.status, e.answer)
-}
-
-func (e *unacceptedError) isThrottle() bool {
-	if e.status == http.StatusTooManyRequests {
+func isThrottle(err error) bool {
+	var refusal *proxy.Refusal
+	if !errors.As(err, &refusal) {
+		return false
+	}
+	if refusal.Status == http.StatusTooManyRequests {
 		return true
 	}
 	var answer struct {
@@ -56,9 +48,9 @@ func (e *unacceptedError) isThrottle() bool {
 			ErrorType string `json:"errorType"`
 		} `json:"errors"`
 	}
-	_ = json.Unmarshal(e.answer, &answer)
-	for _, refusal := range answer.Errors {
-		if _, throttle := retry.DefaultThrottleErrorCodes[refusal.ErrorType]; throttle {
+	_ = json.Unmarshal(refusal.Answer, &answer)
+	for _, refused := range answer.Errors {
+		if _, throttle := retry.DefaultThrottleErrorCodes[refused.ErrorType]; throttle {
 			return true
 		}
 	}
@@ -81,7 +73,7 @@ func NewAppSyncTransport(cfg Config) proxy.Transport {
 		if err != nil {
 			return failed(connect.CodeInternal, err)
 		}
-		ctx, cancel := context.WithTimeout(ctx, publishTimeout)
+		ctx, cancel := context.WithTimeout(ctx, proxy.PublishTimeout)
 		defer cancel()
 		publish := func() ([]byte, error) {
 			creds, err := cfg.Credentials.Retrieve(ctx)
@@ -97,24 +89,14 @@ func NewAppSyncTransport(cfg Config) proxy.Transport {
 			if err := signer.SignHTTP(ctx, creds, post, hex.EncodeToString(sum[:]), appSyncService, findRegion(properties.GetHost(), cfg.Region), time.Now()); err != nil {
 				return nil, err
 			}
-			res, err := cfg.Client.Do(post)
-			if err != nil {
-				return nil, err
-			}
-			defer res.Body.Close()
-			answer, _ := io.ReadAll(io.LimitReader(res.Body, maxAnswerBytes))
-			if res.StatusCode/100 != 2 {
-				return nil, &unacceptedError{status: res.StatusCode, answer: answer}
-			}
-			return answer, nil
+			return proxy.Send(cfg.Client, post, "AppSync")
 		}
 		for attempt := 1; ; attempt++ {
 			answer, err := publish()
 			if err == nil {
 				return refuseFailedEvents(answer, failed)
 			}
-			var unaccepted *unacceptedError
-			if !errors.As(err, &unaccepted) || !unaccepted.isThrottle() || attempt >= cfg.Retryer.MaxAttempts() {
+			if !isThrottle(err) || attempt >= cfg.Retryer.MaxAttempts() {
 				return failed(connect.CodeUnavailable, err)
 			}
 			delay, delayErr := cfg.Retryer.RetryDelay(attempt, err)
