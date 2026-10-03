@@ -124,7 +124,7 @@ func (r realtimeEnvironment) deleteSecret(ctx context.Context, service *secretma
 	return nil
 }
 
-func (r realtimeEnvironment) signingSeed(ctx context.Context, resource string) ([]byte, error) {
+func (r realtimeEnvironment) ensureSigningSeed(ctx context.Context, resource string) ([]byte, error) {
 	service, err := r.secrets()
 	if err != nil {
 		return nil, err
