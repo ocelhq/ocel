@@ -52,8 +52,10 @@ func Tail(ctx context.Context, client *logging.Client, project string, q Query, 
 		if attempt > 0 && !waited(ctx, attempt) {
 			return nil
 		}
-		err := followed(ctx, client, req, q.Sources, emit, notice)
+		err := followStream(ctx, client, req, q.Sources, emit, notice)
 		switch {
+		case err == nil:
+			return nil
 		case status.Code(err) == codes.ResourceExhausted && attempt+1 < retryAttempts:
 			continue
 		case errors.Is(err, errStreamEnded) && !reconnected:
@@ -63,18 +65,11 @@ func Tail(ctx context.Context, client *logging.Client, project string, q Query, 
 			}
 			continue
 		}
-		return tailed(project, err)
+		return fmt.Errorf("tail log entries of project %s: %w", project, err)
 	}
 }
 
-func tailed(project string, err error) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("tail log entries of project %s: %w", project, err)
-}
-
-func followed(ctx context.Context, client *logging.Client, req *loggingpb.TailLogEntriesRequest, sources []Source, emit func([]Event) error, notice func(Notice) error) error {
+func followStream(ctx context.Context, client *logging.Client, req *loggingpb.TailLogEntriesRequest, sources []Source, emit func([]Event) error, notice func(Notice) error) error {
 	session, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream, err := client.TailLogEntries(session)

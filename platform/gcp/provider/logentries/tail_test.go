@@ -28,14 +28,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type tailing struct {
+type tailServer struct {
 	loggingpb.UnimplementedLoggingServiceV2Server
 	mu       sync.Mutex
 	requests []*loggingpb.TailLogEntriesRequest
 	session  func(call int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error
 }
 
-func (s *tailing) TailLogEntries(stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
+func (s *tailServer) TailLogEntries(stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
 	req, err := stream.Recv()
 	if err != nil {
 		return err
@@ -47,15 +47,15 @@ func (s *tailing) TailLogEntries(stream loggingpb.LoggingServiceV2_TailLogEntrie
 	return s.session(call, stream)
 }
 
-func (s *tailing) asked() []*loggingpb.TailLogEntriesRequest {
+func (s *tailServer) received() []*loggingpb.TailLogEntriesRequest {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.requests)
 }
 
-func serveTail(t *testing.T, session func(call int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error) (*logging.Client, *tailing) {
+func serveTail(t *testing.T, session func(call int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error) (*logging.Client, *tailServer) {
 	t.Helper()
-	fake := &tailing{session: session}
+	fake := &tailServer{session: session}
 	listener := bufconn.Listen(1 << 20)
 	server := grpc.NewServer()
 	loggingpb.RegisterLoggingServiceV2Server(server, fake)
@@ -114,13 +114,13 @@ func TestTailSendsTheSourcesFilter(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() { done <- Tail(ctx, client, "acme-prod", q, ignoreEvents, ignoreNotices) }()
-	waitFor(t, func() bool { return len(fake.asked()) == 1 })
+	waitFor(t, func() bool { return len(fake.received()) == 1 })
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatalf("Tail after cancel: %v", err)
 	}
 
-	got := fake.asked()[0]
+	got := fake.received()[0]
 	want := `resource.type="cloud_run_revision" AND ((resource.labels.service_name="web" AND resource.labels.revision_name="web-00001")) AND "boom" AND (log_id("run.googleapis.com/stdout") OR log_id("run.googleapis.com/stderr"))`
 	if got.Filter != want {
 		t.Errorf("filter = %s, want %s", got.Filter, want)
@@ -133,7 +133,7 @@ func TestTailSendsTheSourcesFilter(t *testing.T) {
 	}
 }
 
-func pbEntry(at time.Time, text string) *loggingpb.LogEntry {
+func streamedEntry(at time.Time, text string) *loggingpb.LogEntry {
 	return &loggingpb.LogEntry{
 		Timestamp: timestamppb.New(at),
 		Payload:   &loggingpb.LogEntry_TextPayload{TextPayload: text},
@@ -145,7 +145,7 @@ func pbEntry(at time.Time, text string) *loggingpb.LogEntry {
 	}
 }
 
-func webSource() Query {
+func webQuery() Query {
 	return Query{Sources: []Source{{Service: "web", Revision: "web-00001", Label: "web"}}, Since: since}
 }
 
@@ -153,10 +153,10 @@ func TestTailEmitsEntriesAsTheyArrive(t *testing.T) {
 	t.Parallel()
 	first, second := since.Add(time.Second), since.Add(2*time.Second)
 	client, _ := serveTail(t, func(_ int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
-		if err := stream.Send(&loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{pbEntry(first, "listening")}}); err != nil {
+		if err := stream.Send(&loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{streamedEntry(first, "listening")}}); err != nil {
 			return err
 		}
-		warned := pbEntry(second, "")
+		warned := streamedEntry(second, "")
 		warned.Payload = &loggingpb.LogEntry_JsonPayload{JsonPayload: &structpb.Struct{Fields: map[string]*structpb.Value{
 			"msg": structpb.NewStringValue("slow"),
 		}}}
@@ -172,7 +172,7 @@ func TestTailEmitsEntriesAsTheyArrive(t *testing.T) {
 	)
 	done := make(chan error, 1)
 	go func() {
-		done <- Tail(ctx, client, "acme-prod", webSource(), func(events []Event) error {
+		done <- Tail(ctx, client, "acme-prod", webQuery(), func(events []Event) error {
 			mu.Lock()
 			defer mu.Unlock()
 			batches = append(batches, events)
@@ -206,7 +206,7 @@ func noticesFrom(t *testing.T, response *loggingpb.TailLogEntriesResponse, count
 	)
 	done := make(chan error, 1)
 	go func() {
-		done <- Tail(ctx, client, "acme-prod", webSource(), ignoreEvents, func(n Notice) error {
+		done <- Tail(ctx, client, "acme-prod", webQuery(), ignoreEvents, func(n Notice) error {
 			mu.Lock()
 			defer mu.Unlock()
 			notices = append(notices, n)
@@ -223,7 +223,7 @@ func TestTailReportsSuppressedEntries(t *testing.T) {
 	t.Parallel()
 
 	notices := noticesFrom(t, &loggingpb.TailLogEntriesResponse{
-		Entries: []*loggingpb.LogEntry{pbEntry(since, "kept")},
+		Entries: []*loggingpb.LogEntry{streamedEntry(since, "kept")},
 		SuppressionInfo: []*loggingpb.TailLogEntriesResponse_SuppressionInfo{
 			{Reason: loggingpb.TailLogEntriesResponse_SuppressionInfo_RATE_LIMIT, SuppressedCount: 120},
 			{Reason: loggingpb.TailLogEntriesResponse_SuppressionInfo_NOT_CONSUMED, SuppressedCount: 7},
@@ -255,7 +255,7 @@ func TestTailReportsASuppressionWithoutAKnownReasonAsUnspecified(t *testing.T) {
 func TestTailReconnectsOnceWhenTheStreamEnds(t *testing.T) {
 	t.Parallel()
 	client, fake := serveTail(t, func(call int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
-		err := stream.Send(&loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{pbEntry(since, "call "+strconv.Itoa(call))}})
+		err := stream.Send(&loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{streamedEntry(since, "call "+strconv.Itoa(call))}})
 		if err != nil || call > 1 {
 			<-stream.Context().Done()
 			return err
@@ -272,7 +272,7 @@ func TestTailReconnectsOnceWhenTheStreamEnds(t *testing.T) {
 	)
 	done := make(chan error, 1)
 	go func() {
-		done <- Tail(ctx, client, "acme-prod", webSource(), func(events []Event) error {
+		done <- Tail(ctx, client, "acme-prod", webQuery(), func(events []Event) error {
 			mu.Lock()
 			defer mu.Unlock()
 			for _, event := range events {
@@ -298,9 +298,9 @@ func TestTailReconnectsOnceWhenTheStreamEnds(t *testing.T) {
 	if want := []Notice{{Reason: Reconnected}}; !slices.Equal(notices, want) {
 		t.Errorf("notices = %+v, want %+v", notices, want)
 	}
-	asked := fake.asked()
-	if len(asked) != 2 || asked[0].Filter != asked[1].Filter {
-		t.Errorf("sessions asked = %v, want two with the same filter", asked)
+	received := fake.received()
+	if len(received) != 2 || received[0].Filter != received[1].Filter {
+		t.Errorf("sessions received = %v, want two with the same filter", received)
 	}
 }
 
@@ -308,12 +308,12 @@ func TestTailFailsWhenTheStreamEndsAgainAfterReconnecting(t *testing.T) {
 	t.Parallel()
 	client, fake := serveTail(t, func(int, loggingpb.LoggingServiceV2_TailLogEntriesServer) error { return nil })
 
-	err := Tail(context.Background(), client, "acme-prod", webSource(), ignoreEvents, ignoreNotices)
+	err := Tail(context.Background(), client, "acme-prod", webQuery(), ignoreEvents, ignoreNotices)
 
 	if err == nil || !errors.Is(err, errStreamEnded) {
 		t.Fatalf("Tail = %v, want the stream ending twice to fail", err)
 	}
-	if n := len(fake.asked()); n != 2 {
+	if n := len(fake.received()); n != 2 {
 		t.Errorf("sessions opened = %d, want 2: the first and one reconnect", n)
 	}
 }
@@ -327,7 +327,7 @@ func TestTailReconnectsAfterATransientFailure(t *testing.T) {
 				if call == 1 {
 					return status.Error(code, "restarting")
 				}
-				return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{pbEntry(since, "back")}})
+				return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{streamedEntry(since, "back")}})
 			})
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -335,7 +335,7 @@ func TestTailReconnectsAfterATransientFailure(t *testing.T) {
 			var seen atomic.Int64
 			done := make(chan error, 1)
 			go func() {
-				done <- Tail(ctx, client, "acme-prod", webSource(), func([]Event) error { seen.Add(1); return nil }, ignoreNotices)
+				done <- Tail(ctx, client, "acme-prod", webQuery(), func([]Event) error { seen.Add(1); return nil }, ignoreNotices)
 			}()
 			waitFor(t, func() bool { return seen.Load() == 1 })
 			cancel()
@@ -366,7 +366,7 @@ func TestTailWaitsBeforeReconnecting(t *testing.T) {
 	defer cancel()
 
 	done := make(chan error, 1)
-	go func() { done <- Tail(ctx, client, "acme-prod", webSource(), ignoreEvents, ignoreNotices) }()
+	go func() { done <- Tail(ctx, client, "acme-prod", webQuery(), ignoreEvents, ignoreNotices) }()
 	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(starts) == 2 })
 	cancel()
 	<-done
@@ -382,7 +382,7 @@ func TestTailAsksAgainAfterBeingThrottled(t *testing.T) {
 		if call < 3 {
 			return status.Error(codes.ResourceExhausted, "too many tail sessions")
 		}
-		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{pbEntry(since, "in")}})
+		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{streamedEntry(since, "in")}})
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -390,7 +390,7 @@ func TestTailAsksAgainAfterBeingThrottled(t *testing.T) {
 	var seen atomic.Int64
 	done := make(chan error, 1)
 	go func() {
-		done <- Tail(ctx, client, "acme-prod", webSource(), func([]Event) error { seen.Add(1); return nil }, ignoreNotices)
+		done <- Tail(ctx, client, "acme-prod", webQuery(), func([]Event) error { seen.Add(1); return nil }, ignoreNotices)
 	}()
 	waitFor(t, func() bool { return seen.Load() == 1 })
 	cancel()
@@ -398,7 +398,7 @@ func TestTailAsksAgainAfterBeingThrottled(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Errorf("Tail after cancel: %v", err)
 	}
-	if n := len(fake.asked()); n != 3 {
+	if n := len(fake.received()); n != 3 {
 		t.Errorf("sessions opened = %d, want 3: two throttled, one served", n)
 	}
 }
@@ -409,12 +409,12 @@ func TestTailFailsWhenEveryAttemptIsThrottled(t *testing.T) {
 		return status.Error(codes.ResourceExhausted, "too many tail sessions")
 	})
 
-	err := Tail(context.Background(), client, "acme-prod", webSource(), ignoreEvents, ignoreNotices)
+	err := Tail(context.Background(), client, "acme-prod", webQuery(), ignoreEvents, ignoreNotices)
 
 	if status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("Tail = %v, want the throttle", err)
 	}
-	if n := len(fake.asked()); n != retryAttempts {
+	if n := len(fake.received()); n != retryAttempts {
 		t.Errorf("sessions opened = %d, want %d", n, retryAttempts)
 	}
 }
@@ -425,7 +425,7 @@ func TestTailReturnsAStreamErrorWithoutReconnecting(t *testing.T) {
 		return status.Error(codes.PermissionDenied, "logging.logEntries.list denied")
 	})
 
-	err := Tail(context.Background(), client, "acme-prod", webSource(), ignoreEvents, ignoreNotices)
+	err := Tail(context.Background(), client, "acme-prod", webQuery(), ignoreEvents, ignoreNotices)
 
 	if status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("Tail = %v, want the permission refusal", err)
@@ -433,7 +433,7 @@ func TestTailReturnsAStreamErrorWithoutReconnecting(t *testing.T) {
 	if !strings.Contains(err.Error(), "acme-prod") {
 		t.Errorf("Tail = %v, want it to name the project", err)
 	}
-	if n := len(fake.asked()); n != 1 {
+	if n := len(fake.received()); n != 1 {
 		t.Errorf("sessions opened = %d, want 1: a refusal is not a stream ending", n)
 	}
 }
@@ -441,11 +441,11 @@ func TestTailReturnsAStreamErrorWithoutReconnecting(t *testing.T) {
 func TestTailStopsWhenEmitFails(t *testing.T) {
 	t.Parallel()
 	client, _ := serveTail(t, func(_ int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
-		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{pbEntry(since, "line")}})
+		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{streamedEntry(since, "line")}})
 	})
 	broken := errors.New("the reader went away")
 
-	err := Tail(context.Background(), client, "acme-prod", webSource(), func([]Event) error { return broken }, ignoreNotices)
+	err := Tail(context.Background(), client, "acme-prod", webQuery(), func([]Event) error { return broken }, ignoreNotices)
 
 	if !errors.Is(err, broken) {
 		t.Errorf("Tail = %v, want the emit error", err)
@@ -463,7 +463,7 @@ func TestTailStopsWhenNoticeFails(t *testing.T) {
 	})
 	broken := errors.New("the reader went away")
 
-	err := Tail(context.Background(), client, "acme-prod", webSource(), ignoreEvents, func(Notice) error { return broken })
+	err := Tail(context.Background(), client, "acme-prod", webQuery(), ignoreEvents, func(Notice) error { return broken })
 
 	if !errors.Is(err, broken) {
 		t.Errorf("Tail = %v, want the notice error", err)
@@ -475,12 +475,12 @@ func TestTailStopsWhenTheReconnectNoticeFails(t *testing.T) {
 	client, fake := serveTail(t, func(int, loggingpb.LoggingServiceV2_TailLogEntriesServer) error { return nil })
 	broken := errors.New("the reader went away")
 
-	err := Tail(context.Background(), client, "acme-prod", webSource(), ignoreEvents, func(Notice) error { return broken })
+	err := Tail(context.Background(), client, "acme-prod", webQuery(), ignoreEvents, func(Notice) error { return broken })
 
 	if !errors.Is(err, broken) {
 		t.Errorf("Tail = %v, want the notice error", err)
 	}
-	if n := len(fake.asked()); n != 1 {
+	if n := len(fake.received()); n != 1 {
 		t.Errorf("sessions opened = %d, want 1: no reconnect once the reader is gone", n)
 	}
 }
@@ -494,7 +494,7 @@ func TestTailOpensNoStreamWithoutSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Tail = %v, want nil", err)
 	}
-	if n := len(fake.asked()); n != 0 {
+	if n := len(fake.received()); n != 0 {
 		t.Errorf("sessions opened = %d, want 0", n)
 	}
 }
@@ -502,7 +502,7 @@ func TestTailOpensNoStreamWithoutSources(t *testing.T) {
 func TestTailKeepsAnEntryWhoseJSONPayloadCannotBeEncoded(t *testing.T) {
 	t.Parallel()
 	client, _ := serveTail(t, func(_ int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
-		odd := pbEntry(since, "")
+		odd := streamedEntry(since, "")
 		odd.Payload = &loggingpb.LogEntry_JsonPayload{JsonPayload: &structpb.Struct{Fields: map[string]*structpb.Value{
 			"ratio": structpb.NewNumberValue(math.NaN()),
 		}}}
@@ -514,7 +514,7 @@ func TestTailKeepsAnEntryWhoseJSONPayloadCannotBeEncoded(t *testing.T) {
 	var seen atomic.Int64
 	done := make(chan error, 1)
 	go func() {
-		done <- Tail(ctx, client, "acme-prod", webSource(), func(events []Event) error {
+		done <- Tail(ctx, client, "acme-prod", webQuery(), func(events []Event) error {
 			seen.Add(int64(len(events)))
 			return nil
 		}, ignoreNotices)
@@ -529,10 +529,10 @@ func TestTailEndsTheStreamWhenEmitFails(t *testing.T) {
 	ended := make(chan struct{})
 	client, _ := serveTail(t, func(_ int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
 		defer close(ended)
-		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{pbEntry(since, "line")}})
+		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{streamedEntry(since, "line")}})
 	})
 
-	err := Tail(context.Background(), client, "acme-prod", webSource(), func([]Event) error { return errors.New("the reader went away") }, ignoreNotices)
+	err := Tail(context.Background(), client, "acme-prod", webQuery(), func([]Event) error { return errors.New("the reader went away") }, ignoreNotices)
 	if err == nil {
 		t.Fatal("Tail = nil, want the emit error")
 	}
