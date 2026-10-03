@@ -94,19 +94,18 @@ func refuseInvalidSources(query Query) error {
 
 func readNewestEvents(ctx context.Context, logs *cloudwatchlogs.Client, group logGroup, source Source, query Query) ([]Event, error) {
 	pageEvents := int32(min(max(query.Limit, minPageEvents), maxPageEvents))
+	pages := cloudwatchlogs.NewFilterLogEventsPaginator(logs, &cloudwatchlogs.FilterLogEventsInput{
+		LogGroupName:        aws.String(group.name),
+		LogStreamNamePrefix: group.streamPrefix,
+		StartFromHead:       aws.Bool(false),
+		Limit:               aws.Int32(pageEvents),
+		FilterPattern:       quoteFilterPattern(query.Contains),
+		StartTime:           aws.Int64(query.Since.UnixMilli()),
+		EndTime:             toUnixMillis(query.Until),
+	})
 	var newestFirst []Event
-	var token *string
-	for len(newestFirst) < query.Limit {
-		page, err := logs.FilterLogEvents(ctx, &cloudwatchlogs.FilterLogEventsInput{
-			LogGroupName:        aws.String(group.name),
-			LogStreamNamePrefix: group.streamPrefix,
-			StartFromHead:       aws.Bool(false),
-			Limit:               aws.Int32(pageEvents),
-			FilterPattern:       quoteFilterPattern(query.Contains),
-			StartTime:           aws.Int64(query.Since.UnixMilli()),
-			EndTime:             toUnixMillis(query.Until),
-			NextToken:           token,
-		})
+	for pages.HasMorePages() && len(newestFirst) < query.Limit {
+		page, err := pages.NextPage(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("read log events of %s: %w", group.name, err)
 		}
@@ -114,9 +113,6 @@ func readNewestEvents(ctx context.Context, logs *cloudwatchlogs.Client, group lo
 			if event, keep := parseLoggedEvent(group, source, logged); keep {
 				newestFirst = append(newestFirst, event)
 			}
-		}
-		if token = page.NextToken; token == nil {
-			break
 		}
 	}
 	newestFirst = newestFirst[:min(len(newestFirst), query.Limit)]
