@@ -214,10 +214,10 @@ func proxying(manifest variables.Manifest, values *live.Values, socket, app stri
 }
 
 func newRealtime(manifest variables.Manifest, values *live.Values) realtimev1connect.RealtimeServiceHandler {
-	if manifest.Realtime == "" {
+	if manifest.RealtimePublishURL == "" {
 		return nil
 	}
-	return realtimeproxy.NewService(values, realtimeproxy.NewGatewayTransport(http.DefaultClient, manifest.Realtime))
+	return realtimeproxy.NewService(values, realtimeproxy.NewGatewayTransport(http.DefaultClient, manifest.RealtimePublishURL))
 }
 
 func newBuckets(manifest variables.Manifest, values *live.Values, socket, app string) (bucketv1connect.BucketServiceHandler, error) {
