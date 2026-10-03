@@ -111,6 +111,12 @@ function readOwnOrigin(request: Request): { scheme: string; host: string } {
   };
 }
 
+function resolveSocketURL(url: string, request: Request): string {
+  if (!url.startsWith("/")) return url;
+  const own = readOwnOrigin(request);
+  return `${own.scheme === "https" ? "wss" : "ws"}://${own.host}${url}`;
+}
+
 type OriginVerdict = { allowed: false } | { allowed: true; cors: Record<string, string> };
 
 function judgeOrigin(request: Request, allowedOrigins: readonly string[]): OriginVerdict {
@@ -335,7 +341,7 @@ async function serveBatch(
   const outcomes = await evaluateOperations(batch, parsed.operations);
   const answer: RealtimeBatchAnswer = {
     transport: transport.name,
-    url: properties.url,
+    url: resolveSocketURL(properties.url, request),
     ...(transport.host === undefined ? {} : { host: transport.host }),
     ...(connect === undefined ? {} : { connect }),
     grants: outcomes.flatMap((outcome) => ("grant" in outcome ? [outcome.grant] : [])),

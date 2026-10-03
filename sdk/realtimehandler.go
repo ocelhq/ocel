@@ -171,6 +171,17 @@ func readRequestScheme(r *http.Request) string {
 	return "http"
 }
 
+func resolveSocketURL(socket string, r *http.Request) string {
+	if !strings.HasPrefix(socket, "/") {
+		return socket
+	}
+	scheme := "ws"
+	if readRequestScheme(r) == "https" {
+		scheme = "wss"
+	}
+	return scheme + "://" + readRequestHost(r) + socket
+}
+
 func (h *realtimeHandler) checkOrigin(r *http.Request) (cors http.Header, allowed bool) {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
@@ -375,7 +386,7 @@ func (d *RealtimeDefinition) readOp(raw json.RawMessage) (realtimeOp, denialCode
 }
 
 func (c *realtimeCall) answerBatch(batch realtimeBatch) (realtimeAnswer, error) {
-	answer := realtimeAnswer{Transport: c.binding.transport.name, URL: c.binding.properties.GetUrl(), Grants: []realtimeGrant{}, Denied: []realtimeDenial{}}
+	answer := realtimeAnswer{Transport: c.binding.transport.name, URL: resolveSocketURL(c.binding.properties.GetUrl(), c.request), Grants: []realtimeGrant{}, Denied: []realtimeDenial{}}
 	if c.binding.transport.answersHost {
 		answer.Host = c.binding.properties.GetHost()
 	}
