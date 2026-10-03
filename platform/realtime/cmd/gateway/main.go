@@ -2,15 +2,13 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -29,9 +27,11 @@ const (
 )
 
 type config struct {
-	listen string
-	host   string
-	keys   map[string]ed25519.PublicKey
+	listen          string
+	host            string
+	keys            *keySet
+	allowsAnyOrigin bool
+	maxSockets      int
 }
 
 func main() {
@@ -46,7 +46,7 @@ func run(args []string) int {
 		}
 		return 0
 	}
-	cfg, err := readConfig(os.Getenv)
+	cfg, err := readConfig(os.Getenv, time.Now)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -72,35 +72,47 @@ func listenAddress(getenv func(string) string) string {
 	return defaultListen
 }
 
-func readConfig(getenv func(string) string) (config, error) {
-	cfg := config{listen: listenAddress(getenv), host: getenv(gatewayenv.HostVar), keys: map[string]ed25519.PublicKey{}}
+func readConfig(getenv func(string) string, now func() time.Time) (config, error) {
+	cfg := config{listen: listenAddress(getenv), host: getenv(gatewayenv.HostVar)}
 	if cfg.host == "" {
 		return config{}, fmt.Errorf("%s names no host, and every token names the host it was minted for", gatewayenv.HostVar)
 	}
-	var encoded map[string]string
-	if err := json.Unmarshal([]byte(getenv(gatewayenv.KeysVar)), &encoded); err != nil {
-		return config{}, fmt.Errorf("%s is no JSON object of each namespace's base64 public key: %w", gatewayenv.KeysVar, err)
+	keys, err := readKeySet(getenv, now)
+	if err != nil {
+		return config{}, err
 	}
-	if len(encoded) == 0 {
-		return config{}, fmt.Errorf("%s names no namespace, so the gateway could verify no token", gatewayenv.KeysVar)
-	}
-	for namespace, key := range encoded {
-		raw, err := base64.StdEncoding.DecodeString(key)
-		if err != nil || len(raw) != ed25519.PublicKeySize {
-			return config{}, fmt.Errorf("%s names a key for %s that is no base64 Ed25519 public key", gatewayenv.KeysVar, namespace)
+	cfg.keys = keys
+	if raw := getenv(gatewayenv.AnyOriginVar); raw != "" {
+		if cfg.allowsAnyOrigin, err = strconv.ParseBool(raw); err != nil {
+			return config{}, fmt.Errorf("%s is %q, not true or false", gatewayenv.AnyOriginVar, raw)
 		}
-		cfg.keys[namespace] = raw
+	}
+	if raw := getenv(gatewayenv.MaxSocketsVar); raw != "" {
+		if cfg.maxSockets, err = strconv.Atoi(raw); err != nil || cfg.maxSockets < 1 {
+			return config{}, fmt.Errorf("%s is %q, not a count of sockets above 0", gatewayenv.MaxSocketsVar, raw)
+		}
 	}
 	return cfg, nil
 }
 
+func readKeySet(getenv func(string) string, now func() time.Time) (*keySet, error) {
+	encoded, path := getenv(gatewayenv.KeysVar), getenv(gatewayenv.KeysFileVar)
+	switch {
+	case encoded != "" && path != "":
+		return nil, fmt.Errorf("%s and %s both name keys; set one", gatewayenv.KeysVar, gatewayenv.KeysFileVar)
+	case path != "":
+		return newKeysFileSet(path, now)
+	default:
+		return newFixedKeySet(gatewayenv.KeysVar, encoded)
+	}
+}
+
 func serve(ctx context.Context, listener net.Listener, cfg config) error {
 	realtime := gateway.New(gateway.Config{
-		Host: cfg.host,
-		Keys: func(namespace string) (ed25519.PublicKey, bool) {
-			key, known := cfg.keys[namespace]
-			return key, known
-		},
+		Host:            cfg.host,
+		Keys:            cfg.keys.find,
+		AllowsAnyOrigin: cfg.allowsAnyOrigin,
+		MaxSockets:      cfg.maxSockets,
 	})
 	answering := http.NewServeMux()
 	answering.Handle("/", realtime)
