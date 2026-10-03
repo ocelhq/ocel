@@ -112,7 +112,7 @@ jobs:
         run: gh pr edit "$PR" --remove-label journey:real
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
@@ -395,7 +395,7 @@ jobs:
 
       - name: Upload them for the lanes
         if: ${{ steps.gate.outputs.any == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: journey-binaries
           if-no-files-found: error
@@ -428,7 +428,7 @@ jobs:
       EMULATOR: ocel-journey-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: ./.github/actions/node-workspace
         with:
@@ -446,7 +446,7 @@ jobs:
 
       - name: Log in to the registry the emulator image lives in
         if: ${{ needs.binary.outputs.aws == 'true' && needs.binary.outputs.real != 'true' }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -528,7 +528,7 @@ jobs:
 
       - name: Upload the evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: journey-evidence-aws
           path: ${{ runner.temp }}/journey-evidence.tgz
@@ -554,7 +554,7 @@ jobs:
       OCEL_JOURNEY_SKIPS: ${{ needs.binary.outputs.skips }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: ./.github/actions/node-workspace
         with:
@@ -568,7 +568,7 @@ jobs:
         uses: ./.github/actions/go
 
       - name: The uv a python fixture's environment is synced with
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
 
       - name: Take the binaries this lane drives
         uses: ./.github/actions/journey-binaries
@@ -602,7 +602,7 @@ jobs:
 
       - name: Upload the evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: journey-evidence-dev
           path: ${{ runner.temp }}/journey-evidence.tgz
@@ -629,7 +629,7 @@ jobs:
       EMULATOR: ocel-journey-gcp-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Go
         uses: ./.github/actions/go
@@ -680,7 +680,7 @@ jobs:
 
       - name: Upload the evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: journey-evidence-gcp
           path: ${{ runner.temp }}/journey-evidence.tgz
@@ -708,7 +708,7 @@ jobs:
       OCEL_AWS_VARIABLES_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: ./.github/actions/node-workspace
         with:
@@ -778,7 +778,7 @@ jobs:
 
       - name: Upload the evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: journey-evidence-next
           path: ${{ runner.temp }}/journey-evidence.tgz
@@ -814,7 +814,7 @@ jobs:
       BOX: journey-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
@@ -907,7 +907,7 @@ jobs:
       BOX: journey-${{ matrix.front }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
@@ -965,7 +965,7 @@ jobs:
       BOX: journey-engine-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
@@ -1011,7 +1011,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
@@ -1040,7 +1040,7 @@ jobs:
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Checkout the branch the preview is named after
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.pull_request.head.ref }}
 
@@ -1097,7 +1097,7 @@ jobs:
       - name: Mint the token the fallback comment is written with
         id: app-token
         if: ${{ always() && (steps.report-deployed.outcome == 'failure' || steps.report-failed.outcome == 'failure') && github.event.pull_request.number }}
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ vars.OCEL_GITHUB_APP_ID }}
           private-key: ${{ secrets.OCEL_GITHUB_APP_PRIVATE_KEY }}
@@ -1125,7 +1125,7 @@ jobs:
 
       - name: Keep what the preview reported
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: preview-result
           path: |
@@ -1151,7 +1151,7 @@ jobs:
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Checkout the default branch, the head and a stacked base may already be gone
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.repository.default_branch }}
 
@@ -1225,7 +1225,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: ./.github/actions/node-workspace
         with:

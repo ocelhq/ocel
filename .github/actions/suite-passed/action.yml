@@ -24,7 +24,7 @@ runs:
         mkdir -p "$(dirname "$MARKER")"
         echo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > "$MARKER"
 
-    - uses: actions/cache/save@v4
+    - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ runner.temp }}/suite-green/${{ inputs.suite }}
         key: ${{ inputs.key }}
