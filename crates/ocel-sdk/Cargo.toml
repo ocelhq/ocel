@@ -14,7 +14,7 @@ name = "ocel"
 [features]
 postgres = ["dep:sqlx"]
 schemars = ["dep:schemars"]
-kv = ["dep:redis"]
+kv = ["dep:redis", "dep:rustls"]
 axum = ["dep:axum"]
 realtime = [
     "dep:base64",
