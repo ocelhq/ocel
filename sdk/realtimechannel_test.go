@@ -2,8 +2,11 @@ package ocel_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
@@ -117,8 +120,87 @@ func TestPublishOutsideAProvisionedRunSaysWhy(t *testing.T) {
 		t.Errorf("err = %v, want OCEL_RESOURCE_REALTIME_app missing", err)
 	}
 
-	deliverRealtime(t, "app", readRealtimeFixture(t))
-	if err := orders.Publish(context.Background(), orderParams{OrderID: "o1"}, orderEvent{}); err == nil || !strings.Contains(err.Error(), "AppSync Events is not supported yet") {
-		t.Errorf("err = %v, want AppSync publishing said to be unsupported yet", err)
+}
+
+type appSyncPublish struct {
+	Authorization string
+	Token         string
+	Body          struct {
+		Channel string   `json:"channel"`
+		Events  []string `json:"events"`
+	}
+}
+
+func serveFakeAppSync(t *testing.T, name string, status int, answer string) *[]appSyncPublish {
+	t.Helper()
+	var received []appSyncPublish
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/event" {
+			t.Errorf("AppSync was sent %s %s, want POST /event", r.Method, r.URL.Path)
+		}
+		publish := appSyncPublish{Authorization: r.Header.Get("Authorization"), Token: r.Header.Get("X-Amz-Security-Token")}
+		if err := json.NewDecoder(r.Body).Decode(&publish.Body); err != nil {
+			t.Errorf("AppSync was sent no publish body: %v", err)
+		}
+		received = append(received, publish)
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, answer)
+	}))
+	t.Cleanup(server.Close)
+	previous := *ocel.RealtimeHTTPClient
+	*ocel.RealtimeHTTPClient = server.Client()
+	t.Cleanup(func() { *ocel.RealtimeHTTPClient = previous })
+	t.Setenv("AWS_ACCESS_KEY_ID", "ASIAAPPROLE")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "role-secret")
+	t.Setenv("AWS_SESSION_TOKEN", "role-session")
+	t.Setenv("AWS_REGION", "eu-west-1")
+	fixture := readRealtimeFixture(t)
+	fixture.Realtime.Host = strings.TrimPrefix(server.URL, "https://")
+	deliverRealtime(t, name, fixture)
+	return &received
+}
+
+func TestPublishOnAppSyncPostsTheEnvelopeAsOneEventSignedWithTheAppsRole(t *testing.T) {
+	received := serveFakeAppSync(t, "app", http.StatusOK, `{"successful":[{"identifier":"x","index":0}],"failed":[]}`)
+	orders := ocel.Channel[orderEvent, orderParams](ocel.Realtime("app"), "orders/:orderId", ocel.ChannelSubscribePublic())
+
+	if err := orders.Publish(context.Background(), orderParams{OrderID: "o1"}, orderEvent{Status: "shipped"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(*received) != 1 {
+		t.Fatalf("AppSync received %d publishes, want 1", len(*received))
+	}
+	got := (*received)[0]
+	if got.Body.Channel != "/app/orders/o1" || len(got.Body.Events) != 1 {
+		t.Fatalf("AppSync received %+v, want one event on /app/orders/o1", got.Body)
+	}
+	var envelope struct {
+		Channel string     `json:"ch"`
+		Kind    string     `json:"kind"`
+		Data    orderEvent `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(got.Body.Events[0]), &envelope); err != nil || envelope.Channel != "/app/orders/o1" || envelope.Kind != "live" || envelope.Data.Status != "shipped" {
+		t.Errorf("the event = %s, want the live envelope of the published body", got.Body.Events[0])
+	}
+	if !strings.HasPrefix(got.Authorization, "AWS4-HMAC-SHA256 Credential=ASIAAPPROLE/") || !strings.Contains(got.Authorization, "/eu-west-1/appsync/aws4_request") || got.Token != "role-session" {
+		t.Errorf("Authorization = %q with token %q, want a SigV4 signature for appsync in eu-west-1 under the role's session", got.Authorization, got.Token)
+	}
+}
+
+func TestPublishOnAppSyncFailsWhenAppSyncRefusesOrFailsTheEvent(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		answer string
+		want   string
+	}{
+		{http.StatusForbidden, `{"errors":[{"errorType":"UnauthorizedException"}]}`, "status 403"},
+		{http.StatusOK, `{"successful":[],"failed":[{"identifier":"x","index":0,"code":400,"message":"too large"}]}`, "too large"},
+	} {
+		serveFakeAppSync(t, "app", tc.status, tc.answer)
+		orders := ocel.Channel[orderEvent, orderParams](ocel.Realtime("app"), "orders/:orderId", ocel.ChannelSubscribePublic())
+		if err := orders.Publish(context.Background(), orderParams{OrderID: "o1"}, orderEvent{}); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("err = %v, want %q", err, tc.want)
+		}
 	}
 }

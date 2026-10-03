@@ -12,3 +12,5 @@ func Version() string { return version }
 var VersionIn = versionIn
 
 var RealtimePublishTimeout = &realtimePublishTimeout
+
+var RealtimeHTTPClient = &realtimeHTTPClient
