@@ -95,12 +95,12 @@ func (h *Host) IsAgentCurrent(ctx context.Context) (bool, error) {
 	return h.isCurrent(ctx, "survey the box agent", func(arch string) Item { return newAgentItem(liveAgent(arch)) })
 }
 
-func (h *Host) isCurrent(ctx context.Context, what string, placed func(arch string) Item) (bool, error) {
+func (h *Host) isCurrent(ctx context.Context, what string, newItem func(arch string) Item) (bool, error) {
 	arch, err := h.arch(ctx)
 	if err != nil {
 		return false, err
 	}
-	item := placed(arch)
+	item := newItem(arch)
 	rendered, err := h.reach(ctx, what, survey([]Item{item}), nil)
 	if err != nil {
 		return false, err
