@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
@@ -53,7 +54,6 @@ type workersWork struct {
 	table    string
 	prefix   string
 	group    string
-	outputs  auto.OutputMap
 }
 
 func workersStack(env, app string) naming.StackName {
@@ -99,33 +99,50 @@ func workerNames(workers []provider.WorkerSpec) []string {
 	return names
 }
 
-func (r *release) provisionWorkers(ctx context.Context, spec provider.StackSpec, work *appWork, progress progress.Log) error {
+func (r *release) provisionWorkers(ctx context.Context, spec provider.StackSpec, work *appWork, progress progress.Log) ([]provider.Function, error) {
 	if spec.App == nil || len(spec.App.Workers) == 0 || work == nil {
-		return nil
+		return nil, nil
 	}
 	if spec.Ref.Name.Env == "" {
-		return nil
+		return nil, nil
 	}
 	hosted, err := r.workersWork(spec, work)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ref := provider.StackRef{Project: spec.Ref.Project, Tier: spec.Ref.Tier, Name: hosted.stack}
 	if r.cfg.KeyValues != nil {
 		entry, err := keyvalue.ReadOrEmpty(ctx, r.cfg.KeyValues, workersAt(ref))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		entry.Value = []byte("{}")
 		if _, err := r.cfg.KeyValues.Write(ctx, entry); err != nil {
-			return fmt.Errorf("record the workers of %s: %w", spec.App.App, err)
+			return nil, fmt.Errorf("record the workers of %s: %w", spec.App.App, err)
 		}
 	}
-	_, err = r.automation.Run(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackApp, Tags: spec.Tags, VendorState: hosted}, progress)
+	result, err := r.automation.Run(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackApp, Tags: spec.Tags, VendorState: hosted}, progress)
 	if err != nil {
-		return fmt.Errorf("provision the workers of %s: %w", spec.App.App, err)
+		return nil, fmt.Errorf("provision the workers of %s: %w", spec.App.App, err)
 	}
-	return nil
+	return result.Functions, nil
+}
+
+func (w *workersWork) decode(outputs auto.OutputMap) (provider.StackResult, error) {
+	functions := make([]provider.Function, 0, len(w.workers))
+	for _, worker := range w.workers {
+		logical := resources.WorkerName(worker.Name)
+		fields, err := requireOutputFields(outputs, logical)
+		if err != nil {
+			return provider.StackResult{}, err
+		}
+		physical, err := requireStringField(fields, logical, outputKeyFunctionName)
+		if err != nil {
+			return provider.StackResult{}, err
+		}
+		functions = append(functions, provider.Function{Name: logical, Physical: physical})
+	}
+	return provider.StackResult{Functions: functions}, nil
 }
 
 func (r *Stacks) destroyWorkers(ctx context.Context, opened *release, ref provider.StackRef, progress progress.Log) error {
@@ -203,6 +220,7 @@ func (w *workersWork) run(ctx *pulumi.Context) error {
 			return err
 		}
 		functions = append(functions, fn)
+		ctx.Export(resources.WorkerName(worker.Name), pulumi.Map{outputKeyFunctionName: fn.Name})
 		for _, task := range w.cronTasks(worker.Name) {
 			crons = append(crons, cronTarget{task: task, function: fn})
 		}
