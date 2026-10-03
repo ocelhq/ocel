@@ -34,6 +34,10 @@ runs:
       shell: bash
       run: echo "GOFLAGS=${GOFLAGS:+$GOFLAGS }-trimpath" >> "$GITHUB_ENV"
 
+    - name: Race-built test processes exit without the race detector's one-second sleep
+      shell: bash
+      run: echo "GORACE=${GORACE:+$GORACE }atexit_sleep_ms=0" >> "$GITHUB_ENV"
+
     - name: Name the caches
       id: paths
       shell: bash

@@ -11,6 +11,7 @@ node = "26.7.0"
 
 [env]
 OCEL_ENV = 'dev'
+GORACE = "{{ (get_env(name='GORACE', default='') | replace(from='atexit_sleep_ms=0', to='') ~ ' atexit_sleep_ms=0') | trim }}"
 GOFLAGS = "{{ (get_env(name='GOFLAGS', default='') | replace(from='-trimpath', to='') ~ ' -trimpath') | trim }}"
 _.path = "{{config_root}}/dist/bin"
 
