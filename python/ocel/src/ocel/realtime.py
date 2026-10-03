@@ -258,13 +258,7 @@ def _read_first_header_value(request: RealtimeRequest, name: str) -> str:
     return request.headers.get(name, "").split(",")[0].strip()
 
 
-def _is_own_origin(request: RealtimeRequest, origin: str) -> bool:
-    try:
-        parts = urlsplit(origin)
-    except ValueError:
-        return False
-    if parts.netloc == "":
-        return False
+def _read_own_origin(request: RealtimeRequest) -> tuple[str, str]:
     own_url = urlsplit(request.url)
     host = (
         _read_first_header_value(request, "x-forwarded-host")
@@ -272,7 +266,24 @@ def _is_own_origin(request: RealtimeRequest, origin: str) -> bool:
         or own_url.netloc
     )
     scheme = _read_first_header_value(request, "x-forwarded-proto").lower() or own_url.scheme
-    return parts.scheme == scheme and parts.netloc == host
+    return scheme, host
+
+
+def _is_own_origin(request: RealtimeRequest, origin: str) -> bool:
+    try:
+        parts = urlsplit(origin)
+    except ValueError:
+        return False
+    if parts.netloc == "":
+        return False
+    return (parts.scheme, parts.netloc) == _read_own_origin(request)
+
+
+def _resolve_socket_url(url: str, request: RealtimeRequest) -> str:
+    if not url.startswith("/"):
+        return url
+    scheme, host = _read_own_origin(request)
+    return f"{'wss' if scheme == 'https' else 'ws'}://{host}{url}"
 
 
 class Realtime:
@@ -567,7 +578,10 @@ class Realtime:
             [*(task.result() for task in others), *chain.result()], key=lambda pair: pair[0]
         )
 
-        answer: dict[str, Any] = {"transport": transport.name, "url": properties.url}
+        answer: dict[str, Any] = {
+            "transport": transport.name,
+            "url": _resolve_socket_url(properties.url, request),
+        }
         if transport.answered_host is not None:
             answer["host"] = transport.answered_host
         if connect:

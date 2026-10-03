@@ -185,6 +185,30 @@ def test_the_handler_names_the_transport_and_mints_a_connect_token_when_asked(ap
     assert claims["exp"] - claims["iat"] == 30
 
 
+def test_the_handler_answers_a_socket_path_on_the_origin_the_request_reached_it_at(
+    monkeypatch,
+):
+    realtime_properties = {
+        **FIXTURE["realtime"],
+        "transport": "REALTIME_TRANSPORT_OCEL_GATEWAY",
+        "url": "/.well-known/ocel-realtime",
+        "host": "gateway:8080",
+    }
+    monkeypatch.setenv(
+        "OCEL_RESOURCE_REALTIME_app",
+        json.dumps({"name": "realtime--app", "realtime": realtime_properties}),
+    )
+    app = declare_app(Rules()).asgi()
+
+    reached = answer(app, {"ops": []})
+    forwarded = answer(
+        app, {"ops": []}, {"x-forwarded-proto": "http", "x-forwarded-host": "web.localhost"}
+    )
+
+    assert reached["url"] == "wss://shop.example/.well-known/ocel-realtime"
+    assert forwarded["url"] == "ws://web.localhost/.well-known/ocel-realtime"
+
+
 def test_the_handler_grants_a_public_subscribe_to_anyone(appsync):
     res = answer(
         declare_app(Rules()).asgi(),
