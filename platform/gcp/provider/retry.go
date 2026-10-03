@@ -42,7 +42,7 @@ func asked[T any](ctx context.Context, ask func() (T, int, error)) (T, int, erro
 			return nothing, 0, ctx.Err()
 		}
 		value, status, err = ask()
-		if !retryable(status, err) {
+		if !isRetryable(status, err) {
 			return value, status, err
 		}
 	}
@@ -67,14 +67,14 @@ func dialled[T any](ctx context.Context, call func() (T, error)) (T, error) {
 			var nothing T
 			return nothing, ctx.Err()
 		}
-		if value, err = call(); !redialled(err) {
+		if value, err = call(); !isRetryableGrpc(err) {
 			return value, err
 		}
 	}
 	return value, err
 }
 
-func redialled(err error) bool {
+func isRetryableGrpc(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -82,7 +82,7 @@ func redialled(err error) bool {
 	case codes.Unavailable, codes.ResourceExhausted, codes.DeadlineExceeded, codes.Aborted:
 		return true
 	}
-	return retryable(answeredCode(err), err)
+	return isRetryable(answeredCode(err), err)
 }
 
 func done(ctx context.Context, call func() error) error {
@@ -98,17 +98,17 @@ var retryableAnswers = []int{
 	http.StatusGatewayTimeout,
 }
 
-func retryable(status int, err error) bool {
-	return throttling(status) || (status == 0 && err != nil && transport(err))
+func isRetryable(status int, err error) bool {
+	return isRetryableAnswer(status) || (status == 0 && err != nil && isRetryableTransport(err))
 }
 
-func throttling(status int) bool { return slices.Contains(retryableAnswers, status) }
+func isRetryableAnswer(status int) bool { return slices.Contains(retryableAnswers, status) }
 
-func unreachable(status int) bool {
+func isThrottledOrDown(status int) bool {
 	return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
-func transport(err error) bool {
+func isRetryableTransport(err error) bool {
 	var timed net.Error
 	return (errors.As(err, &timed) && timed.Timeout()) ||
 		errors.Is(err, io.EOF) ||
