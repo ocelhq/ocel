@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/logevents"
 )
 
 const (
@@ -256,7 +257,7 @@ func (s costShape) container(scope string, app provider.AppEntry) {
 func (s costShape) containerInfra(scope string, tier environment.Tier) {
 	s.plain(scope, tfECSCluster, ContainersSlug, map[string]any{})
 	s.plain(scope, tfLoadBalancer, ContainersSlug, map[string]any{"load_balancer_type": "application", "internal": true})
-	s.plain(scope, tfLogGroup, ContainersSlug, map[string]any{"retention_in_days": containerLogRetentionDays, "name": "/ocel/containers/" + string(tier)})
+	s.plain(scope, tfLogGroup, ContainersSlug, map[string]any{"retention_in_days": containerLogRetentionDays, "name": logevents.NameContainerGroup(tier)})
 }
 
 func (s costShape) postgres(scope, project, env string, resource provider.Resource) {
