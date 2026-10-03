@@ -282,6 +282,27 @@ func TestTheRolesRenderedForADeployAreTheOnesADeployUses(t *testing.T) {
 	}
 }
 
+func TestADeployMayKeepTheRealtimeSecretsOfItsNamespaceAndAdministersNoOtherSecret(t *testing.T) {
+	t.Parallel()
+
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	if err != nil {
+		t.Fatalf("Permissions(deploy) = %v", err)
+	}
+	if strings.Contains(document.Document, "roles/secretmanager.admin") {
+		t.Errorf("Permissions(deploy) names roles/secretmanager.admin, which reads, rewrites and deletes every secret in the project and changes who may read each:\n%s", document.Document)
+	}
+	const realtime = `roles/secretmanager.editor, on the condition ` +
+		`(resource.type != "secretmanager.googleapis.com/Secret" && resource.type != "secretmanager.googleapis.com/SecretVersion") || ` +
+		`resource.name.startsWith("projects/PROJECT_NUMBER/secrets/ocel_realtime-")`
+	if !strings.Contains(document.Document, realtime) {
+		t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a deploy creates, writes and deletes the realtime secrets of its namespace and no others", document.Document, realtime)
+	}
+	if !strings.Contains(document.Document, "roles/secretmanager.secretAccessor") {
+		t.Errorf("Permissions(deploy) does not name roles/secretmanager.secretAccessor, and a deploy reads the passphrase its edge's state is sealed with")
+	}
+}
+
 func TestACredentialPurposeNobodyDefinedIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 

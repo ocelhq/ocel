@@ -66,6 +66,8 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		path := r.URL.Path
 		switch {
+		case r.Method == http.MethodGet && path == "/v1/projects/acme-prod":
+			w.Write([]byte(`{"projectId":"acme-prod","projectNumber":"123456789"}`))
 		case strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, ":getIamPolicy") && !strings.Contains(path, "/serviceAccounts/"):
 			_ = json.NewEncoder(w).Encode(s.project)
 		case strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, ":setIamPolicy") && !strings.Contains(path, "/serviceAccounts/"):

@@ -100,6 +100,9 @@ socket from any origin; the tokens your handler signs are the only check.
   request-based rate: about $70 a month if a browser is connected all the time, plus
   requests and egress. Each key is one secret. Ocel's cost estimate prices all of these.
 
-The deploy credentials need Secret Manager admin, and the bootstrap adds the service
-account the gateway runs as. Run the bootstrap again before the first realtime deploy in a
-project bootstrapped before realtime existed.
+Every realtime secret is named under one prefix, so IAM conditions confine both sides to
+them. The deploy credentials need `roles/secretmanager.editor` on the realtime secrets of
+their namespace alone ([what to grant](/docs/providers/gcp#what-to-grant)). The bootstrap
+adds the service account the gateway runs as, which may read its tier's verify keys and no
+other secret. A realtime deploy in a project bootstrapped before realtime existed is
+refused until you run the bootstrap again.

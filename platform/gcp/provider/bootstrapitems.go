@@ -89,7 +89,7 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 		},
 		{
 			Kind: KindServiceAccount, Name: names.RealtimeAccount(tier),
-			Note: "the identity this tier's realtime gateways run as: it holds no role in the project, and each deploy lets it read its environment's realtime keys alone",
+			Note: "the identity this tier's realtime gateways run as, which may read this tier's realtime keys and no other secret",
 		},
 		{
 			Kind: KindRepository, Name: names.Repository(tier),

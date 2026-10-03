@@ -176,20 +176,28 @@ func (c *clients) Logging() (*logging.Client, error) {
 }
 
 func (c *clients) ReadServiceAgent(ctx context.Context, domain string) (string, error) {
+	number, err := c.ReadProjectNumber(ctx)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("serviceAccount:service-%d%s", number, domain), nil
+}
+
+func (c *clients) ReadProjectNumber(ctx context.Context) (int64, error) {
 	c.numberLock.Lock()
 	defer c.numberLock.Unlock()
 	if c.projectNumber == 0 {
 		service, err := c.Projects()
 		if err != nil {
-			return "", err
+			return 0, err
 		}
 		project, err := attempted(ctx, service.Projects.Get(c.project).Context(ctx).Do)
 		if err != nil {
-			return "", fmt.Errorf("read project %s's number, which names its service agents: %w", c.project, err)
+			return 0, fmt.Errorf("read project %s's number, which names its service agents and its resources in IAM conditions: %w", c.project, err)
 		}
 		c.projectNumber = project.ProjectNumber
 	}
-	return fmt.Sprintf("serviceAccount:service-%d%s", c.projectNumber, domain), nil
+	return c.projectNumber, nil
 }
 
 func (c *clients) emulated() bool { return c.endpoint != "" }

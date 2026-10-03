@@ -1,6 +1,9 @@
 package gcp
 
 import (
+	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	run "google.golang.org/api/run/v2"
@@ -8,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
@@ -82,8 +86,8 @@ func TestTheGatewayReadsItsKeysFromTheLatestVersionOfItsEnvironmentsKeysSecret(t
 		t.Fatalf("volumes = %d, want the keys secret alone", len(desired.Template.Volumes))
 	}
 	volume := desired.Template.Volumes[0]
-	if volume.Secret == nil || volume.Secret.Secret != names.RealtimeKeysSecret("shop", "prod") {
-		t.Fatalf("the volume mounts %+v, want secret %s", volume.Secret, names.RealtimeKeysSecret("shop", "prod"))
+	if volume.Secret == nil || volume.Secret.Secret != names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod") {
+		t.Fatalf("the volume mounts %+v, want secret %s", volume.Secret, names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"))
 	}
 	if items := volume.Secret.Items; len(items) != 1 || items[0].Version != "latest" {
 		t.Errorf("the keys secret is mounted at %+v, want version latest so a new version is read without a new revision", items)
@@ -131,5 +135,21 @@ func TestOnTheEmulatorTheGatewayTakesItsKeysFromItsEnvironmentForWantOfSecretVol
 	env := envOf(desired.Template.Containers[0])
 	if env[gatewayenv.KeysVar] != keys || env[gatewayenv.KeysFileVar] != "" {
 		t.Errorf("%s = %q and %s = %q, want the keys in the environment and no file", gatewayenv.KeysVar, env[gatewayenv.KeysVar], gatewayenv.KeysFileVar, env[gatewayenv.KeysFileVar])
+	}
+}
+
+func TestATierBootstrappedBeforeRealtimeIsRefusedNamingTheBootstrapToRunAgain(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.unaccounted = true
+	_, err := h.env.provision(context.Background(), aRealtime("app"), nil)
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(err.Error(), "`ocel bootstrap` for this tier again") {
+		t.Errorf("provision() = %v, want a not-ready refusal saying to run `ocel bootstrap` for this tier again", err)
+	}
+	if h.run.serving() != nil {
+		t.Error("a gateway was released to run as an account the tier does not have")
 	}
 }

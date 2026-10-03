@@ -175,7 +175,7 @@ func TestEachEnvironmentHasAGatewayAndKeysOfItsOwn(t *testing.T) {
 	if names.RealtimeGateway("shop-prod", "x") == names.RealtimeGateway("shop", "prod-x") {
 		t.Error("two scopes whose dashes fall differently share one gateway")
 	}
-	if names.RealtimeKeysSecret("shop", "prod") == names.RealtimeKeysSecret("shop", "pr-7") {
+	if names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod") == names.RealtimeKeysSecret(environment.TierProduction, "shop", "pr-7") {
 		t.Error("two environments share one keys secret")
 	}
 	app, err := names.Service("shop", "prod", "realtime", "realtime")
@@ -191,7 +191,7 @@ func TestEveryRealtimeSecretIsOneSecretManagerTakesAndEachResourceHasItsOwn(t *t
 	names := longNames(t)
 	project, env := "a-project-slug-that-runs-on-and-on", "feature-branch-with-a-very-long-name"
 
-	keys := names.RealtimeKeysSecret(project, env)
+	keys := names.RealtimeKeysSecret(environment.TierPreview, project, env)
 	app, chat := names.RealtimeSigningSecret(project, env, "app"), names.RealtimeSigningSecret(project, env, "chat")
 	for _, secret := range []string{keys, app, chat} {
 		if !secretID.MatchString(secret) {
@@ -200,6 +200,41 @@ func TestEveryRealtimeSecretIsOneSecretManagerTakesAndEachResourceHasItsOwn(t *t
 	}
 	if app == chat || app == keys {
 		t.Errorf("signing secrets %q and %q and keys secret %q are not apart", app, chat, keys)
+	}
+}
+
+func TestEveryRealtimeSecretSharesAPrefixNoOtherSecretOfAnyNamespaceStartsWith(t *testing.T) {
+	ours := longNames(t)
+	production, preview := environment.TierProduction, environment.TierPreview
+	keys := ours.RealtimeKeysSecret(production, "shop", "prod")
+	signing := ours.RealtimeSigningSecret("shop", "prod", "app")
+
+	for _, secret := range []string{keys, signing, ours.RealtimeKeysSecret(preview, "shop", "pr-7")} {
+		if !strings.HasPrefix(secret, ours.RealtimeSecretPrefix()) {
+			t.Errorf("%q is not under %q, so a deploy granted the realtime secrets alone could not keep it", secret, ours.RealtimeSecretPrefix())
+		}
+	}
+	if !strings.HasPrefix(keys, ours.RealtimeKeysSecretPrefix(production)) {
+		t.Errorf("%q is not under %q, so the production gateway could not read it", keys, ours.RealtimeKeysSecretPrefix(production))
+	}
+	for secret, why := range map[string]string{
+		signing: "a gateway would read the seeds tokens are signed with",
+		ours.RealtimeKeysSecret(preview, "shop", "pr-7"): "the production gateway would read the preview tier's keys",
+	} {
+		if strings.HasPrefix(secret, ours.RealtimeKeysSecretPrefix(production)) {
+			t.Errorf("%q is under the production keys prefix %q: %s", secret, ours.RealtimeKeysSecretPrefix(production), why)
+		}
+	}
+
+	t.Setenv(provider.NamespaceEnvVar, ours.Namespace().String()+"-realtime")
+	other := names(t, newProvider(t, gcp.Options{Project: "acme-production-workloads", Region: "europe-west1"}))
+	for _, secret := range []string{
+		ours.PassphraseSecret(production), ours.ConnectorKeySecret(),
+		other.PassphraseSecret(production), other.ConnectorKeySecret(), other.RealtimeSigningSecret("shop", "prod", "app"),
+	} {
+		if strings.HasPrefix(secret, ours.RealtimeSecretPrefix()) {
+			t.Errorf("%q is under %q, and a deploy granted the realtime secrets of %s would reach it", secret, ours.RealtimeSecretPrefix(), ours.Namespace())
+		}
 	}
 }
 

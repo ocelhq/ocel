@@ -67,7 +67,7 @@ func realtimeGatewayServing(names Names, ref provider.StackRef, host, image, inl
 		gateway.env[gatewayenv.KeysVar] = inlineKeys
 		return gateway
 	}
-	keys := secretMount{name: realtimeKeysVolume, secret: names.RealtimeKeysSecret(ref.Project, ref.Name.Env), dir: realtimeKeysDir, file: realtimeKeysFile}
+	keys := secretMount{name: realtimeKeysVolume, secret: names.RealtimeKeysSecret(ref.Tier, ref.Project, ref.Name.Env), dir: realtimeKeysDir, file: realtimeKeysFile}
 	gateway.mounts = []secretMount{keys}
 	gateway.env[gatewayenv.KeysFileVar] = keys.dir + "/" + keys.file
 	return gateway
@@ -114,6 +114,11 @@ func (r realtimeEnvironment) serveGateway(ctx context.Context, keys map[string]s
 			return "", err
 		}
 	}
+	if current == nil {
+		if err := r.refuseUnbootstrappedTier(ctx); err != nil {
+			return "", err
+		}
+	}
 	name := r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env)
 	host := name
 	if current != nil && hostOf(current.Uri) != "" {
@@ -144,6 +149,25 @@ func (r realtimeEnvironment) serveGateway(ctx context.Context, keys map[string]s
 		return host, nil
 	}
 	return "", fmt.Errorf("the realtime gateway %s answers on another host each time it is released", name)
+}
+
+func (r realtimeEnvironment) refuseUnbootstrappedTier(ctx context.Context) error {
+	accounts, err := r.clients.Accounts()
+	if err != nil {
+		return err
+	}
+	account := r.clients.RealtimeAccount(r.ref.Tier)
+	_, err = attempted(ctx, accounts.Projects.ServiceAccounts.Get(accountPath(r.clients, account)).Context(ctx).Do)
+	if absent(err) {
+		return refusal.Refuse(refusal.CodeNotReady,
+			"the realtime gateways of tier %s run as the %s service account, and project %s has none: the tier was bootstrapped before realtime was served here.\n"+
+				"Run `ocel bootstrap` for this tier again, then deploy",
+			r.ref.Tier, account, r.clients.project)
+	}
+	if err != nil {
+		return fmt.Errorf("read the %s service account the realtime gateways of tier %s run as: %w", account, r.ref.Tier, err)
+	}
+	return nil
 }
 
 func imageOf(service *run.GoogleCloudRunV2Service) string {

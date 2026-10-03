@@ -150,11 +150,12 @@ func (p *Provider) Cipher() seal.Cipher { return cipher{p: p} }
 
 func (p *Provider) Credentials() provider.Credentials {
 	return Credentials{
-		Project:  p,
-		Region:   p.options.Region,
-		Tokens:   p.tokens,
-		Endpoint: p.endpoint,
-		Projects: resourceManager{endpoint: p.endpoint},
+		Project:   p,
+		Region:    p.options.Region,
+		Tokens:    p.tokens,
+		Endpoint:  p.endpoint,
+		Projects:  resourceManager{endpoint: p.endpoint},
+		Namespace: p.namespace,
 	}
 }
 
