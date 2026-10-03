@@ -54,6 +54,9 @@ const (
 	appCacheSubnetGroupARN   = "arn:aws:elasticache:*:*:subnetgroup:" + appScopePrefix + "*"
 	elastiCacheLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/elasticache.amazonaws.com/*"
 
+	appEventAPIARN         = "arn:aws:appsync:*:*:apis/*"
+	appChannelNamespaceARN = "arn:aws:appsync:*:*:apis/*/channelNamespace/*"
+
 	appSecurityGroupARN  = "arn:aws:ec2:*:*:security-group/*"
 	appVPCARN            = "arn:aws:ec2:*:*:vpc/*"
 	appRepositoryARN     = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
@@ -112,6 +115,7 @@ type ScopedARNs struct {
 	stackRecord         string
 	anyParam            string
 	kvToken             string
+	signingKey          string
 }
 
 func (n Namespace) ScopedARNs() ScopedARNs {
@@ -139,6 +143,7 @@ func (n Namespace) ScopedARNs() ScopedARNs {
 		stackRecordTree:    parameterARNPrefix + n.stackRecordRoot() + "*",
 		anyParam:           parameterARNPrefix + n.paramRoot() + "/*",
 		kvToken:            parameterARNPrefix + n.KVTokenRoot() + "/*",
+		signingKey:         "arn:aws:secretsmanager:*:*:secret:" + n.SigningKeyRoot() + "/*",
 	}
 	a.bootstrapObject = a.bootstrapBucket + "/*"
 	a.runtimeLayerVersion = a.runtimeLayer + ":*"
@@ -843,6 +848,45 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Actions:   []string{"secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"},
 			Resources: []string{appSecretARN},
 			Condition: managedByAnAppCluster(),
+		},
+		{
+			Actions:   []string{"secretsmanager:CreateSecret", "secretsmanager:TagResource"},
+			Resources: []string{r.signingKey},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions:   []string{"secretsmanager:DeleteSecret", "secretsmanager:GetSecretValue"},
+			Resources: []string{r.signingKey},
+			Condition: taggedByOcel(),
+		},
+		{
+			Actions:   []string{"secretsmanager:ListSecrets"},
+			Resources: []string{UnscopedResource},
+		},
+		{
+			Actions:   []string{"appsync:CreateApi"},
+			Resources: []string{UnscopedResource},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions:   []string{"appsync:CreateChannelNamespace"},
+			Resources: []string{appChannelNamespaceARN},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions: []string{
+				"appsync:DeleteApi",
+				"appsync:DeleteChannelNamespace",
+				"appsync:GetApi",
+				"appsync:GetChannelNamespace",
+				"appsync:ListTagsForResource",
+				"appsync:TagResource",
+				"appsync:UntagResource",
+				"appsync:UpdateApi",
+				"appsync:UpdateChannelNamespace",
+			},
+			Resources: []string{appEventAPIARN, appChannelNamespaceARN},
+			Condition: taggedByOcel(),
 		},
 		{
 			Actions:   []string{"logs:CreateLogGroup"},

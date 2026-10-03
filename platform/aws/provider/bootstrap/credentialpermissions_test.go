@@ -567,7 +567,7 @@ func TestEveryCredentialReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppSc
 						t.Errorf("the %s credential grants %s on %s, an identifier a deploy never mints", purpose, g.action, g.resource)
 					}
 				}
-			case strings.HasPrefix(g.action, "secretsmanager:"):
+			case strings.HasPrefix(g.action, "secretsmanager:") && g.resource == appSecretARN:
 				if g.condition != conditionJSON(t, managedByAnAppCluster()) {
 					t.Errorf("the %s credential grants %s on %s under %s, want the secret pinned to a cluster in the app scope through the tag RDS stamps on it, or the credential reads every Aurora master password in the account", purpose, g.action, g.resource, g.condition)
 				}
@@ -876,6 +876,63 @@ func TestEveryCredentialImportsAndReclaimsOnlyTheCertificatesItTagged(t *testing
 			if !want[g] {
 				t.Errorf("the %s credential grants %s on %s under %s, which reaches certificates Ocel never imported", purpose, g.action, g.resource, g.condition)
 			}
+		}
+	}
+}
+
+func TestEveryCredentialRunsEventAPIsOnlyOnWhatItTagged(t *testing.T) {
+	apis, namespaces := "arn:aws:appsync:*:*:apis/*", "arn:aws:appsync:*:*:apis/*/channelNamespace/*"
+	want := map[grant]bool{
+		{action: "appsync:CreateApi", resource: UnscopedResource, condition: conditionJSON(t, taggedOnCreate())}:        true,
+		{action: "appsync:CreateChannelNamespace", resource: namespaces, condition: conditionJSON(t, taggedOnCreate())}: true,
+	}
+	for _, action := range []string{
+		"appsync:DeleteApi",
+		"appsync:DeleteChannelNamespace",
+		"appsync:GetApi",
+		"appsync:GetChannelNamespace",
+		"appsync:ListTagsForResource",
+		"appsync:TagResource",
+		"appsync:UntagResource",
+		"appsync:UpdateApi",
+		"appsync:UpdateChannelNamespace",
+	} {
+		for _, resource := range []string{apis, namespaces} {
+			want[grant{action: action, resource: resource, condition: conditionJSON(t, taggedByOcel())}] = true
+		}
+	}
+	for purpose, document := range bothCredentials(t) {
+		granted := map[grant]bool{}
+		for g := range grantsOf(t, document) {
+			if strings.HasPrefix(g.action, "appsync:") {
+				granted[g] = true
+			}
+		}
+		if !maps.Equal(granted, want) {
+			t.Errorf("the %s credential grants appsync %v, want exactly %v: an Event API and its namespaces created tagged, and touched only while tagged", purpose, granted, want)
+		}
+	}
+}
+
+func TestEveryCredentialKeepsRealtimeSigningKeysUnderTheirRootAlone(t *testing.T) {
+	keys := "arn:aws:secretsmanager:*:*:secret:" + defaultNamespace.SigningKeyRoot() + "/*"
+	want := map[grant]bool{
+		{action: "secretsmanager:CreateSecret", resource: keys, condition: conditionJSON(t, taggedOnCreate())}: true,
+		{action: "secretsmanager:TagResource", resource: keys, condition: conditionJSON(t, taggedOnCreate())}:  true,
+		{action: "secretsmanager:ListSecrets", resource: UnscopedResource, condition: conditionJSON(t, nil)}:   true,
+	}
+	for _, action := range []string{"secretsmanager:DeleteSecret", "secretsmanager:GetSecretValue"} {
+		want[grant{action: action, resource: keys, condition: conditionJSON(t, taggedByOcel())}] = true
+	}
+	for purpose, document := range bothCredentials(t) {
+		granted := map[grant]bool{}
+		for g := range grantsOf(t, document) {
+			if strings.HasPrefix(g.action, "secretsmanager:") && g.resource != appSecretARN {
+				granted[g] = true
+			}
+		}
+		if !maps.Equal(granted, want) {
+			t.Errorf("the %s credential grants secretsmanager %v beyond the RDS master secrets, want exactly %v", purpose, granted, want)
 		}
 	}
 }

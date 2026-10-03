@@ -241,6 +241,40 @@
       }
     },
     {
+      "id": "aws/appsync/event-operations",
+      "region": "us-east-1",
+      "unit": "Operation",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.000001"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppSync/20260911124525/us-east-1/index.json#CEM6653GX3MWYEUN",
+      "verified": "2026-10-03",
+      "query": {
+        "service": "AWSAppSync",
+        "usagetype": "USE1-EventAPI-Operation"
+      }
+    },
+    {
+      "id": "aws/appsync/event-connection-minutes",
+      "region": "us-east-1",
+      "unit": "Minute",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.00000008"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppSync/20260911124525/us-east-1/index.json#73YBXMJS92PHR2Y6",
+      "verified": "2026-10-03",
+      "query": {
+        "service": "AWSAppSync",
+        "usagetype": "USE1-EventAPI-ConnectionDuration"
+      }
+    },
+    {
       "id": "aws/secretsmanager/secret",
       "region": "us-east-1",
       "unit": "Secrets",

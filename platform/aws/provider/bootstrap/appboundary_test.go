@@ -131,6 +131,9 @@ func TestTheAppBoundaryStillAdmitsWhatADeployGrantsARole(t *testing.T) {
 				"lambda:InvokeFunctionUrl",
 				"secretsmanager:GetSecretValue",
 				"ecr:BatchGetImage",
+				"appsync:EventConnect",
+				"appsync:EventPublish",
+				"appsync:GetApi",
 			} {
 				if !slices.Contains(admitted, action) {
 					t.Errorf("the boundary no longer admits %s, which a deploy writes onto an app role", action)

@@ -37,6 +37,8 @@ const (
 	usageInvocations       = "monthly_invocations"
 	usageOutboundInternet  = "monthly_outbound_internet_gb"
 	usageSnapshotStorage   = "snapshot_storage_gb"
+	usageEventOperations   = "monthly_operations"
+	usageConnectionMinutes = "monthly_connection_minutes"
 
 	elastiCacheFreeSnapshots = 1
 
@@ -71,6 +73,7 @@ var (
 	apiCallsBand   = pricing.Band{Light: 1_000, Moderate: 10_000, Heavy: 100_000}
 	imagesBand     = pricing.Band{Light: 1, Moderate: 5, Heavy: 50}
 	scheduleBand   = pricing.Band{Light: 1_440, Moderate: 43_200, Heavy: 1_000_000}
+	minutesBand    = pricing.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
 
 	thousand        = decimal.NewFromInt(1000)
 	secondsPerMonth = pricing.MonthlyHours.Mul(decimal.NewFromInt(secondsPerHour))
@@ -99,6 +102,7 @@ var formulas = pricing.Table{
 	"aws_cloudfront_key_value_store":  free,
 	"aws_cloudfront_distribution":     distribution,
 	"aws_api_gateway_rest_api":        restAPI,
+	"aws_appsync_api":                 eventAPI,
 	"aws_ecr_repository":              registry,
 	"aws_data_transfer":               dataTransfer,
 
@@ -263,6 +267,11 @@ func distribution(r *pricing.Subject) {
 
 func restAPI(r *pricing.Subject) {
 	r.Add(pricing.Component{Name: "Requests", Unit: "requests", Rate: "aws/apigateway/rest-requests", Quantity: r.Usage(usageRequests, requestsBand), UsageBased: true})
+}
+
+func eventAPI(r *pricing.Subject) {
+	r.Add(pricing.Component{Name: "Event API operations", Unit: "operations", Rate: "aws/appsync/event-operations", Quantity: r.Usage(usageEventOperations, requestsBand), UsageBased: true})
+	r.Add(pricing.Component{Name: "Connection minutes", Unit: "minutes", Rate: "aws/appsync/event-connection-minutes", Quantity: r.Usage(usageConnectionMinutes, minutesBand), UsageBased: true})
 }
 
 func registry(r *pricing.Subject) {
