@@ -8,6 +8,7 @@
     "---Resources---",
     "bucket",
     "queue",
+    "realtime",
     "database",
     "secret",
     "---Internals---",
