@@ -32,11 +32,13 @@ func (r *release) declareRealtime(pctx *sdk.Context, project, env string, resour
 	args := realtimeArgs{Authorizer: work.authorizer, BoundaryARN: r.cfg.AppBoundaryARN}
 	for _, resource := range realtimes {
 		secret := signingKeySecret(r.cfg.SigningKeyRoot, project, env, resource.Name)
-		readKey := ensureSigningKey
+		var seed []byte
+		var err error
 		if work.previewing {
-			readKey = previewSigningKey
+			seed, err = previewSigningKey(pctx.Context(), r.cfg.SigningKeys, secret)
+		} else {
+			seed, err = ensureSigningKey(pctx.Context(), r.cfg.SigningKeys, secret)
 		}
-		seed, err := readKey(pctx.Context(), r.cfg.SigningKeys, secret)
 		if err != nil {
 			return fmt.Errorf("declare %s: %w", resource.Name, err)
 		}
