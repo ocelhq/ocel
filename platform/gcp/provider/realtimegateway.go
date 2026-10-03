@@ -148,7 +148,10 @@ func (r realtimeEnvironment) serveGateway(ctx context.Context, keys map[string]s
 		}
 		return host, nil
 	}
-	return "", fmt.Errorf("the realtime gateway %s answers on another host each time it is released", name)
+	return "", refusal.Refuse(refusal.CodeBusy,
+		"Cloud Run answered the realtime gateway %s on another host each time it was released, and a realtime binding names the one host browsers connect to\n"+
+			"Deploy again once the service settles",
+		name)
 }
 
 func (r realtimeEnvironment) refuseUnbootstrappedTier(ctx context.Context) error {
