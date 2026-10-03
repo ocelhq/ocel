@@ -62,16 +62,21 @@ export interface FakeGatewayOptions {
   answeringSubscribes?: boolean;
 }
 
-function findRefusal(
+/**
+ * Answers why `token` does not admit `op` on `channel` at `host` as of `nowSeconds`, or
+ * undefined when it does.
+ */
+export function findRefusal(
   token: string | undefined,
   host: string,
   op: string,
   channel: string,
+  nowSeconds = Date.now() / 1_000,
 ): string | undefined {
   try {
     const claims = readClaims(token ?? "");
     if (claims.aud !== host) return "the token is for another host";
-    if (Number(claims.exp) <= Date.now() / 1_000) return "the token has expired";
+    if (Number(claims.exp) <= nowSeconds) return "the token has expired";
     if (claims.ocel.op !== op || claims.ocel.ch !== channel) {
       return `the token admits ${claims.ocel.op} on ${claims.ocel.ch}`;
     }
