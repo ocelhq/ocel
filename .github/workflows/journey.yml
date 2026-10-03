@@ -70,9 +70,6 @@ concurrency:
 env:
   OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.1.0-ocel.1
   OCEL_FLOCI_GCP_IMAGE: floci/floci-gcp:0.8.0
-  NODE_VERSION: "22"
-  PNPM_VERSION: "11.10.0"
-  BUN_VERSION: "1.4.0"
   FORCE_COLOR: "1"
 
 jobs:
@@ -254,10 +251,6 @@ jobs:
         with:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
 
       - name: Has aws already passed what it reads
         id: gate-aws
@@ -463,13 +456,17 @@ jobs:
         if: ${{ needs.binary.outputs.aws == 'true' && needs.binary.outputs.real != 'true' }}
         run: docker pull "$OCEL_FLOCI_IMAGE"
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./.github/actions/versions
+
       - name: Assume the session that may spend the real account
         if: ${{ needs.binary.outputs.real == 'true' }}
         uses: ./.github/actions/real-aws-session
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-journey-aws-${{ github.run_id }}
@@ -724,12 +721,16 @@ jobs:
       - name: Take the binaries this lane drives
         uses: ./.github/actions/journey-binaries
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./.github/actions/versions
+
       - name: Assume the session that may spend the real account
         uses: ./.github/actions/real-aws-session
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-journey-next-${{ github.run_id }}
@@ -1244,12 +1245,16 @@ jobs:
           set -euo pipefail
           node scripts/snapshot.mjs | tee -a "$GITHUB_ENV"
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./.github/actions/versions
+
       - name: Assume the session that may spend the real account
         uses: ./.github/actions/real-aws-session
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-journey-reap-${{ github.run_id }}

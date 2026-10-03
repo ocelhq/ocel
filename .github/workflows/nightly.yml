@@ -182,9 +182,13 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./.github/actions/versions
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ steps.versions.outputs.node }}
 
       - name: Name the nightly this commit releases
         id: plan
@@ -255,9 +259,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./.github/actions/versions
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ steps.versions.outputs.node }}
 
       - name: Delete the nightlies older than thirty days, release then tag
         env:

@@ -289,9 +289,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./.github/actions/versions
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ steps.versions.outputs.node }}
 
       - uses: ./.github/actions/released-archives
         with:
