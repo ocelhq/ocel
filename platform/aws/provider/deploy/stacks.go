@@ -297,8 +297,7 @@ func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs a
 		return provider.StackResult{}, nil
 	}
 	if work, ok := spec.VendorState.(*workersWork); ok {
-		work.outputs = outputs
-		return provider.StackResult{}, nil
+		return work.decode(outputs)
 	}
 	if work, ok := spec.VendorState.(*containerWork); ok {
 		return r.decodeContainer(work, outputs)
@@ -481,9 +480,11 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 	if err := writeOriginRecord(ctx, r.cfg, spec.Ref.Name.App, work, result); err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := r.provisionWorkers(ctx, prepared, work, progress); err != nil {
+	workers, err := r.provisionWorkers(ctx, prepared, work, progress)
+	if err != nil {
 		return provider.StackResult{}, err
 	}
+	result.Functions = append(result.Functions, workers...)
 	return result, nil
 }
 
