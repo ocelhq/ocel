@@ -21,6 +21,7 @@ func TestPayloads(t *testing.T) {
 		{"runtime layer arm64", runtimeLayerFor(arch.ARM64), "bootstrap"},
 		{"upload completer", UploadCompleter, "bootstrap"},
 		{"env source sync", EnvSourceSync, "bootstrap"},
+		{"realtime authorizer", RealtimeAuthorizer, "bootstrap"},
 		{"image optimizer", ImageOptimizer, "index.mjs"},
 		{"revalidator", Revalidator, "index.mjs"},
 		{"tag publisher", TagPublisher, "index.mjs"},

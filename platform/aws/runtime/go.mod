@@ -8,6 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.46.0
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.30
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.51
+	github.com/aws/aws-sdk-go-v2/service/appsync v1.60.0
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.0
 	github.com/aws/aws-sdk-go-v2/service/kms v1.55.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.106.0
@@ -16,6 +17,7 @@ require (
 	github.com/aws/smithy-go v1.28.1
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/aws/provider v0.0.0
+	github.com/ocelhq/ocel/platform/realtime v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
 	google.golang.org/protobuf v1.36.12
 )
@@ -63,3 +65,5 @@ replace github.com/ocelhq/ocel/platform/s3 => ../../s3
 replace github.com/ocelhq/ocel/pkg => ../../../pkg
 
 replace github.com/ocelhq/ocel/pkg/provider/pulumi => ../../../pkg/provider/pulumi
+
+replace github.com/ocelhq/ocel/platform/realtime => ../../realtime
