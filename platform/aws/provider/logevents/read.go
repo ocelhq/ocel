@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type Source struct {
@@ -21,7 +22,7 @@ type Source struct {
 
 type Query struct {
 	Sources      []Source
-	Tier         string
+	Tier         environment.Tier
 	Since, Until time.Time
 	Limit        int
 	Contains     string
@@ -35,70 +36,95 @@ type Event struct {
 	Failure  bool
 }
 
-const maxPageEvents = 10000
+const (
+	minPageEvents = 1000
+	maxPageEvents = 10000
+)
 
-func Read(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Client, q Query) ([]Event, error) {
-	if q.Limit < 1 {
-		return nil, fmt.Errorf("read log events: limit %d is below 1", q.Limit)
+var earliestNewestFirstSince = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
+func Read(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Client, query Query) ([]Event, error) {
+	if err := refuseInvalidQuery(query); err != nil {
+		return nil, fmt.Errorf("read log events: %w", err)
 	}
 	var events []Event
-	for _, source := range q.Sources {
-		group, err := findGroup(ctx, lambdas, source, q.Tier)
+	for _, source := range query.Sources {
+		group, err := findGroup(ctx, lambdas, source, query.Tier)
 		if err != nil {
 			return nil, err
 		}
-		newest, err := readNewest(ctx, logs, group, source, q)
+		newest, err := readNewestEvents(ctx, logs, group, source, query)
 		if err != nil {
 			return nil, err
 		}
 		events = append(events, newest...)
 	}
-	sort.SliceStable(events, func(i, j int) bool { return events[i].Time.Before(events[j].Time) })
-	if len(events) > q.Limit {
-		events = events[len(events)-q.Limit:]
+	slices.SortStableFunc(events, func(a, b Event) int { return a.Time.Compare(b.Time) })
+	if len(events) > query.Limit {
+		events = events[len(events)-query.Limit:]
 	}
 	return events, nil
 }
 
-func readNewest(ctx context.Context, logs *cloudwatchlogs.Client, group logGroup, source Source, q Query) ([]Event, error) {
+func refuseInvalidQuery(query Query) error {
+	if query.Limit < 1 {
+		return fmt.Errorf("limit %d is below 1", query.Limit)
+	}
+	if query.Since.IsZero() {
+		return fmt.Errorf("the query has no since")
+	}
+	if query.Since.Before(earliestNewestFirstSince) {
+		return fmt.Errorf("since %s is before %s, the earliest CloudWatch Logs reads newest first from", query.Since.UTC().Format(time.RFC3339), earliestNewestFirstSince.Format(time.DateOnly))
+	}
+	for _, source := range query.Sources {
+		if (source.Function == "") == (source.Container == "") {
+			return fmt.Errorf("source %+v names both or neither of a function and a container", source)
+		}
+		if source.Container != "" && query.Tier == "" {
+			return fmt.Errorf("container %s has no tier to read its log group from", source.Container)
+		}
+	}
+	return nil
+}
+
+func readNewestEvents(ctx context.Context, logs *cloudwatchlogs.Client, group logGroup, source Source, query Query) ([]Event, error) {
+	pageEvents := int32(min(max(query.Limit, minPageEvents), maxPageEvents))
 	var newestFirst []Event
 	var token *string
-	for len(newestFirst) < q.Limit {
-		out, err := logs.FilterLogEvents(ctx, &cloudwatchlogs.FilterLogEventsInput{
+	for len(newestFirst) < query.Limit {
+		page, err := logs.FilterLogEvents(ctx, &cloudwatchlogs.FilterLogEventsInput{
 			LogGroupName:        aws.String(group.name),
 			LogStreamNamePrefix: group.streamPrefix,
 			StartFromHead:       aws.Bool(false),
-			Limit:               aws.Int32(int32(min(q.Limit-len(newestFirst), maxPageEvents))),
-			FilterPattern:       filterPattern(q.Contains),
-			StartTime:           unixMillis(q.Since),
-			EndTime:             unixMillis(q.Until),
+			Limit:               aws.Int32(pageEvents),
+			FilterPattern:       quoteFilterPattern(query.Contains),
+			StartTime:           aws.Int64(query.Since.UnixMilli()),
+			EndTime:             toUnixMillis(query.Until),
 			NextToken:           token,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("read log events of %s: %w", group.name, err)
 		}
-		for _, e := range out.Events {
-			text, failure, keep := group.read(strings.TrimSuffix(aws.ToString(e.Message), "\n"))
+		for _, logged := range page.Events {
+			event, keep := group.parseLine(strings.TrimSuffix(aws.ToString(logged.Message), "\n"))
 			if !keep {
 				continue
 			}
-			newestFirst = append(newestFirst, Event{
-				Time:     time.UnixMilli(aws.ToInt64(e.Timestamp)).UTC(),
-				Label:    source.Label,
-				Instance: group.instance(aws.ToString(e.LogStreamName)),
-				Text:     text,
-				Failure:  failure,
-			})
+			event.Time = time.UnixMilli(aws.ToInt64(logged.Timestamp)).UTC()
+			event.Label = source.Label
+			event.Instance = group.parseInstance(aws.ToString(logged.LogStreamName))
+			newestFirst = append(newestFirst, event)
 		}
-		if token = out.NextToken; token == nil {
+		if token = page.NextToken; token == nil {
 			break
 		}
 	}
+	newestFirst = newestFirst[:min(len(newestFirst), query.Limit)]
 	slices.Reverse(newestFirst)
 	return newestFirst, nil
 }
 
-func filterPattern(contains string) *string {
+func quoteFilterPattern(contains string) *string {
 	if contains == "" {
 		return nil
 	}
@@ -106,9 +132,9 @@ func filterPattern(contains string) *string {
 	return aws.String(`"` + quoted + `"`)
 }
 
-func unixMillis(t time.Time) *int64 {
-	if t.IsZero() {
+func toUnixMillis(bound time.Time) *int64 {
+	if bound.IsZero() {
 		return nil
 	}
-	return aws.Int64(t.UnixMilli())
+	return aws.Int64(bound.UnixMilli())
 }
