@@ -9,14 +9,13 @@ import (
 	"time"
 )
 
-const (
-	timestampPattern = `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})`
-	levelPattern     = `TRACE|DEBUG|INFO|WARNING|WARN|ERROR|FATAL|CRITICAL`
-)
+const timestampPattern = `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})`
+
+var levelPattern = buildLevelPattern()
 
 var levelPrefix = regexp.MustCompile(`(?s)^(?:(?P<lead>` + timestampPattern + `)\s+)?` +
 	`(?:\[(?:(?P<inner>` + timestampPattern + `)\s+)?(?P<bracketed>` + levelPattern + `)(?:\s+(?P<target>[^\]\s]+))?\]` +
-	`|(?P<bare>` + levelPattern + `)(?::(?P<logger>[A-Za-z_][\w.]*):|:?(?:\s+|$)))` +
+	`|(?P<bare>` + levelPattern + `)(?::(?P<logger>[^:\s]+):|:?(?:\s+|$)))` +
 	`\s*(?P<rest>.*)$`)
 
 func Parse(raw string) Entry {
@@ -54,12 +53,12 @@ func parseLogfmt(raw string) (map[string]any, bool) {
 	pairs := 0
 	rest := strings.TrimSpace(raw)
 	for rest != "" {
-		eq := strings.IndexByte(rest, '=')
-		if eq <= 0 || strings.ContainsAny(rest[:eq], " \t\"") {
+		equals := strings.IndexByte(rest, '=')
+		if equals <= 0 || strings.ContainsAny(rest[:equals], " \t\"") {
 			return nil, false
 		}
-		key := rest[:eq]
-		rest = rest[eq+1:]
+		key := rest[:equals]
+		rest = rest[equals+1:]
 		var value string
 		if strings.HasPrefix(rest, `"`) {
 			end := closingQuote(rest)
@@ -82,17 +81,24 @@ func parseLogfmt(raw string) (map[string]any, bool) {
 		pairs++
 		rest = strings.TrimLeft(rest, " \t")
 	}
-	_, hasLevel := fields["level"]
-	_, hasMessage := fields["msg"]
-	if pairs < 2 || (!hasLevel && !hasMessage) {
+	if pairs < 2 || (!hasAnyKey(fields, levelKeys) && !hasAnyKey(fields, messageKeys)) {
 		return nil, false
 	}
 	return fields, true
 }
 
-func closingQuote(s string) int {
-	for i := 1; i < len(s); i++ {
-		switch s[i] {
+func hasAnyKey(fields map[string]any, keys []string) bool {
+	for _, key := range keys {
+		if _, ok := fields[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func closingQuote(quoted string) int {
+	for i := 1; i < len(quoted); i++ {
+		switch quoted[i] {
 		case '\\':
 			i++
 		case '"':

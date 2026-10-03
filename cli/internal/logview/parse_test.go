@@ -137,6 +137,51 @@ func TestParseReadsEachLoggingFormat(t *testing.T) {
 			},
 		},
 		{
+			name: "zap with nanosecond precision in seconds",
+			raw:  `{"ts":1700000000.123456789,"msg":"precise"}`,
+			want: logview.Entry{Message: "precise", Time: time.Unix(1700000000, 123_456_789)},
+		},
+		{
+			name: "milliseconds with a fraction",
+			raw:  `{"time":1700000000123.456789,"msg":"precise"}`,
+			want: logview.Entry{Message: "precise", Time: time.UnixMilli(1700000000123).Add(456_789)},
+		},
+		{
+			name: "an epoch in nanoseconds stays a field",
+			raw:  `{"time":1700000000123456789,"msg":"x"}`,
+			want: logview.Entry{Message: "x", Fields: map[string]any{"time": json.Number("1700000000123456789")}},
+		},
+		{
+			name: "an epoch in microseconds stays a field",
+			raw:  `{"time":1700000000123456,"msg":"x"}`,
+			want: logview.Entry{Message: "x", Fields: map[string]any{"time": json.Number("1700000000123456")}},
+		},
+		{
+			name: "an infinite time stays a field",
+			raw:  `{"ts":"Inf","msg":"x"}`,
+			want: logview.Entry{Message: "x", Fields: map[string]any{"ts": "Inf"}},
+		},
+		{
+			name: "a huge time stays a field",
+			raw:  `{"ts":1e300,"msg":"x"}`,
+			want: logview.Entry{Message: "x", Fields: map[string]any{"ts": json.Number("1e300")}},
+		},
+		{
+			name: "gcp notice severity",
+			raw:  `{"severity":"NOTICE","message":"deployed"}`,
+			want: logview.Entry{Message: "deployed", Level: logview.LevelInfo},
+		},
+		{
+			name: "gcp alert severity",
+			raw:  `{"severity":"ALERT","message":"paged"}`,
+			want: logview.Entry{Message: "paged", Level: logview.LevelError},
+		},
+		{
+			name: "gcp emergency severity",
+			raw:  `{"severity":"EMERGENCY","message":"down"}`,
+			want: logview.Entry{Message: "down", Level: logview.LevelError},
+		},
+		{
 			name: "json with severity and a critical level",
 			raw:  `{"severity":"CRITICAL","message":"down"}`,
 			want: logview.Entry{Message: "down", Level: logview.LevelError},
@@ -210,6 +255,41 @@ func TestParseReadsEachLoggingFormat(t *testing.T) {
 			name: "python logging",
 			raw:  `ERROR:root:something broke`,
 			want: logview.Entry{Message: "something broke", Level: logview.LevelError, Fields: map[string]any{"logger": "root"}},
+		},
+		{
+			name: "python logging with a hyphenated logger",
+			raw:  `ERROR:my-app:boom`,
+			want: logview.Entry{Message: "boom", Level: logview.LevelError, Fields: map[string]any{"logger": "my-app"}},
+		},
+		{
+			name: "panic as a level prefix",
+			raw:  `PANIC: invariant broken`,
+			want: logview.Entry{Message: "invariant broken", Level: logview.LevelError},
+		},
+		{
+			name: "dpanic as a bracketed level",
+			raw:  `[DPANIC] invariant broken`,
+			want: logview.Entry{Message: "invariant broken", Level: logview.LevelError},
+		},
+		{
+			name: "logfmt with severity and message",
+			raw:  `severity=warning message="disk almost full" used=91%`,
+			want: logview.Entry{Message: "disk almost full", Level: logview.LevelWarn, Fields: map[string]any{"used": "91%"}},
+		},
+		{
+			name: "logfmt with lvl and event",
+			raw:  `lvl=info event=started`,
+			want: logview.Entry{Message: "started", Level: logview.LevelInfo},
+		},
+		{
+			name: "a sentence holding level and msg pairs is plain text",
+			raw:  `set level=debug and msg=hi for now`,
+			want: logview.Entry{Message: `set level=debug and msg=hi for now`},
+		},
+		{
+			name: "logfmt with a bare word is plain text",
+			raw:  `level=info msg=hi verbose`,
+			want: logview.Entry{Message: `level=info msg=hi verbose`},
 		},
 		{
 			name: "env_logger",
