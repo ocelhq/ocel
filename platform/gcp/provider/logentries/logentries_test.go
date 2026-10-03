@@ -376,6 +376,41 @@ func TestReadAsksAgainWhenTheConnectionDropsMidAnswer(t *testing.T) {
 	}
 }
 
+type closingOnce struct {
+	calls atomic.Int32
+	next  http.RoundTripper
+}
+
+func (c *closingOnce) RoundTrip(req *http.Request) (*http.Response, error) {
+	if c.calls.Add(1) == 1 {
+		return nil, &net.OpError{Op: "write", Net: "tcp", Err: net.ErrClosed}
+	}
+	return c.next.RoundTrip(req)
+}
+
+func TestReadAsksAgainWhenTheConnectionClosesWhileTheRequestIsWritten(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"entries": []any{entry(since.Add(time.Minute), "kept")}})
+	}))
+	t.Cleanup(server.Close)
+	transport := &closingOnce{next: http.DefaultTransport}
+	logs, err := logging.NewService(context.Background(),
+		option.WithEndpoint(server.URL), option.WithHTTPClient(&http.Client{Transport: transport}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Read(context.Background(), logs, "acme-prod", Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || transport.calls.Load() != 2 {
+		t.Errorf("got %d entries after %d calls, want 1 after 2", len(got), transport.calls.Load())
+	}
+}
+
 func TestReadRefusesAQueryWithNoStartRatherThanScanAllRetention(t *testing.T) {
 	t.Parallel()
 	logs, listed := serve(t, empty)
