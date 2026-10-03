@@ -1,6 +1,7 @@
 package ocel
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -10,6 +11,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	realtimev1 "ocel.dev/internal/proto/app/realtime/v1"
+	"ocel.dev/internal/proto/app/realtime/v1/realtimev1connect"
 	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
@@ -67,8 +70,9 @@ type RealtimeDefinition struct {
 	source   string
 	settings realtimeSettings
 
-	mutex    sync.Mutex
-	channels []*declaredChannel
+	mutex      sync.Mutex
+	channels   []*declaredChannel
+	connection boundResourceConnection[realtimev1connect.RealtimeServiceClient]
 }
 
 // Realtime declares a realtime resource named name, which begins every channel it
@@ -159,4 +163,17 @@ func (d *RealtimeDefinition) readBinding(access string) (realtimeBinding, error)
 		return realtimeBinding{}, fmt.Errorf("ocel: realtime %q: %w", d.name, err)
 	}
 	return realtimeBinding{properties: properties, transport: transport}, nil
+}
+
+func (d *RealtimeDefinition) connect(access string) (*boundResource[realtimev1connect.RealtimeServiceClient], error) {
+	return d.connection.connect(fmt.Sprintf("realtime(%q)", d.name), access, func() (*boundResource[realtimev1connect.RealtimeServiceClient], error) {
+		return dialBoundResource(d.name, bindingsv1.BindingType_BINDING_TYPE_REALTIME, realtimev1connect.NewRealtimeServiceClient)
+	})
+}
+
+func (d *RealtimeDefinition) publishEvent(ctx context.Context, runtime *boundResource[realtimev1connect.RealtimeServiceClient], wire string, envelope []byte) error {
+	if _, err := runtime.client.Publish(ctx, &realtimev1.PublishRequest{Realtime: d.name, Channel: wire, Event: string(envelope)}); err != nil {
+		return fmt.Errorf("ocel: realtime %q: publish on %s: %w", d.name, wire, err)
+	}
+	return nil
 }

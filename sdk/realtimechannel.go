@@ -242,7 +242,7 @@ func (e *PublishRefusedError) Error() string {
 // that cannot be published, an [*UnprovisionedError] during discovery and a
 // [*MissingBindingError] when no binding was delivered.
 func (c *ChannelDefinition[E, P]) Publish(ctx context.Context, params P, body E) error {
-	binding, err := c.realtime.readBinding("Publish")
+	runtime, err := c.realtime.connect("Publish")
 	if err != nil {
 		return err
 	}
@@ -254,11 +254,7 @@ func (c *ChannelDefinition[E, P]) Publish(ctx context.Context, params P, body E)
 	if refused != "" {
 		return &PublishRefusedError{Code: string(refused), Pattern: c.channel.pattern.written}
 	}
-	credential, err := c.realtime.mintPublishCredential(binding, wire)
-	if err != nil {
-		return err
-	}
-	return c.realtime.sendEvent(ctx, binding, wire, envelope, credential)
+	return c.realtime.publishEvent(ctx, runtime, wire, envelope)
 }
 
 type realtimeEnvelope struct {
