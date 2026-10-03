@@ -423,3 +423,23 @@ func TestTailKeepsAnEntryWhoseJSONPayloadCannotBeEncoded(t *testing.T) {
 	cancel()
 	<-done
 }
+
+func TestTailEndsTheStreamWhenEmitFails(t *testing.T) {
+	t.Parallel()
+	ended := make(chan struct{})
+	client, _ := serveTail(t, func(_ int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
+		defer close(ended)
+		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{pbEntry(since, "line")}})
+	})
+
+	err := Tail(context.Background(), client, "acme-prod", webSource(), func([]Event) error { return errors.New("the reader went away") }, ignoreNotices)
+	if err == nil {
+		t.Fatal("Tail = nil, want the emit error")
+	}
+
+	select {
+	case <-ended:
+	case <-time.After(5 * time.Second):
+		t.Error("the server's stream is still open after Tail returned")
+	}
+}
