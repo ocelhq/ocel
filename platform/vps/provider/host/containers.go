@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -364,6 +366,60 @@ func stateCommand(name string) string {
 
 func logCommand(name string) string {
 	return "docker logs --timestamps --tail " + appLogTail + " " + quoted(name) + " 2>&1 || true"
+}
+
+var ErrContainerMissing = errors.New("the container does not exist")
+
+type Line struct {
+	Time   time.Time
+	Stderr bool
+	Text   string
+}
+
+func (h *Host) ReadContainerLogs(ctx context.Context, name string, since, until time.Time, limit int, contains string) ([]Line, error) {
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result, err := h.stream(ctx, logsCommand(name, since, until, limit, contains), nil, elevation)
+	if err != nil {
+		return nil, err
+	}
+	if result.Code != 0 {
+		if strings.Contains(strings.ToLower(result.Stderr), "no such container") {
+			return nil, ErrContainerMissing
+		}
+		return nil, h.refuse("read the logs of "+name, result, elevation)
+	}
+	lines := slices.DeleteFunc(append(parseLogLines(result.Stdout, false), parseLogLines(result.Stderr, true)...), func(line Line) bool {
+		return line.Time.Before(since) || !until.IsZero() && line.Time.After(until) || !strings.Contains(line.Text, contains)
+	})
+	slices.SortStableFunc(lines, func(a, b Line) int { return a.Time.Compare(b.Time) })
+	return lines[len(lines)-min(len(lines), max(limit, 0)):], nil
+}
+
+func logsCommand(name string, since, until time.Time, limit int, contains string) string {
+	command := "docker logs --timestamps --since " + quoted(since.UTC().Format(time.RFC3339Nano))
+	if !until.IsZero() {
+		command += " --until " + quoted(until.UTC().Format(time.RFC3339Nano))
+	}
+	if until.IsZero() && contains == "" {
+		command += " --tail " + strconv.Itoa(limit)
+	}
+	return command + " " + quoted(name)
+}
+
+func parseLogLines(output string, stderr bool) []Line {
+	var lines []Line
+	for raw := range strings.SplitSeq(output, "\n") {
+		stamp, text, _ := strings.Cut(strings.TrimSuffix(raw, "\r"), " ")
+		at, err := time.Parse(time.RFC3339Nano, stamp)
+		if err != nil {
+			continue
+		}
+		lines = append(lines, Line{Time: at.UTC(), Stderr: stderr, Text: text})
+	}
+	return lines
 }
 
 func (h *Host) said(ctx context.Context, command string, elevation string) string {

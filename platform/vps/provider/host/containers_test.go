@@ -3,11 +3,14 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"text/template"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -290,5 +293,166 @@ func TestAChangedManifestReplacesTheContainerLikeAChangedValue(t *testing.T) {
 	}
 	if other.digest == current.digest {
 		t.Error("a deploy that declares one more live key is labelled the same as the one before it, and the container running under the old manifest would never read the new key")
+	}
+}
+
+func readingLogs(t *testing.T, answer session.Result) (*bench, []Line, error) {
+	t.Helper()
+	box := machine(nil)
+	box.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, "docker logs") {
+			return answer, true
+		}
+		return session.Result{}, false
+	}
+	since := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+	lines, err := box.host().ReadContainerLogs(context.Background(), physical, since, time.Time{}, 50, "")
+	return box, lines, err
+}
+
+func TestReadContainerLogsKeepsStdoutAndStderrApartAndOrdersThemByTime(t *testing.T) {
+	t.Parallel()
+
+	box, lines, err := readingLogs(t, session.Result{
+		Stdout: "2026-03-01T10:00:01.000000002Z listening on 3000\n2026-03-01T10:00:03Z served /\n",
+		Stderr: "2026-03-01T10:00:02.5Z warn: slow query\n",
+	})
+	if err != nil {
+		t.Fatalf("ReadContainerLogs() error = %v", err)
+	}
+	want := []Line{
+		{Time: time.Date(2026, 3, 1, 10, 0, 1, 2, time.UTC), Text: "listening on 3000"},
+		{Time: time.Date(2026, 3, 1, 10, 0, 2, 500_000_000, time.UTC), Stderr: true, Text: "warn: slow query"},
+		{Time: time.Date(2026, 3, 1, 10, 0, 3, 0, time.UTC), Text: "served /"},
+	}
+	if !slices.Equal(lines, want) {
+		t.Errorf("ReadContainerLogs() = %+v, want %+v", lines, want)
+	}
+	command := box.commands()[box.at("docker logs")]
+	if strings.Contains(command, "2>&1") {
+		t.Errorf("ReadContainerLogs ran %q, and 2>&1 merges the stderr it must keep apart", command)
+	}
+	for _, wanted := range []string{"--timestamps", "--since " + quoted("2026-03-01T10:00:00Z"), "--tail 50", quoted(physical)} {
+		if !strings.Contains(command, wanted) {
+			t.Errorf("ReadContainerLogs ran %q, want it to contain %q", command, wanted)
+		}
+	}
+	if strings.Contains(command, "--until") {
+		t.Errorf("ReadContainerLogs ran %q with no until given, want no --until", command)
+	}
+}
+
+func TestReadContainerLogsBoundsTheReadByUntilWhenGiven(t *testing.T) {
+	t.Parallel()
+
+	box := machine(nil)
+	until := time.Date(2026, 3, 1, 11, 0, 0, 0, time.UTC)
+	if _, err := box.host().ReadContainerLogs(context.Background(), physical, until.Add(-time.Hour), until, 5, ""); err != nil {
+		t.Fatalf("ReadContainerLogs() error = %v", err)
+	}
+	if command := box.commands()[box.at("docker logs")]; !strings.Contains(command, "--until "+quoted("2026-03-01T11:00:00Z")) {
+		t.Errorf("ReadContainerLogs ran %q, want it bounded by --until", command)
+	}
+}
+
+func TestReadContainerLogsPassesSinceAndUntilToTheNanosecond(t *testing.T) {
+	t.Parallel()
+
+	box := machine(nil)
+	since := time.Date(2026, 3, 1, 10, 0, 0, 500_000_001, time.UTC)
+	until := time.Date(2026, 3, 1, 11, 0, 0, 999_999_999, time.UTC)
+	if _, err := box.host().ReadContainerLogs(context.Background(), physical, since, until, 5, ""); err != nil {
+		t.Fatalf("ReadContainerLogs() error = %v", err)
+	}
+	command := box.commands()[box.at("docker logs")]
+	for _, wanted := range []string{"--since " + quoted("2026-03-01T10:00:00.500000001Z"), "--until " + quoted("2026-03-01T11:00:00.999999999Z")} {
+		if !strings.Contains(command, wanted) {
+			t.Errorf("ReadContainerLogs ran %q, want it to contain %q", command, wanted)
+		}
+	}
+}
+
+func readingLogsBetween(t *testing.T, stdout string, since, until time.Time, limit int, contains string) (string, []string) {
+	t.Helper()
+	box := machine(nil)
+	box.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, "docker logs") {
+			return session.Result{Stdout: stdout}, true
+		}
+		return session.Result{}, false
+	}
+	lines, err := box.host().ReadContainerLogs(context.Background(), physical, since, until, limit, contains)
+	if err != nil {
+		t.Fatalf("ReadContainerLogs() error = %v", err)
+	}
+	var texts []string
+	for _, line := range lines {
+		texts = append(texts, line.Text)
+	}
+	return box.commands()[box.at("docker logs")], texts
+}
+
+const windowedLogs = "2026-03-01T09:59:59.9Z before\n" +
+	"2026-03-01T10:00:00Z first\n" +
+	"2026-03-01T10:00:01Z boom second\n" +
+	"2026-03-01T10:00:02Z third\n" +
+	"2026-03-01T10:00:03Z boom fourth\n" +
+	"2026-03-01T10:00:04Z fifth\n" +
+	"2026-03-01T10:00:04.1Z after\n"
+
+func TestReadContainerLogsKeepsTheNewestLimitLinesOfAWindowThatEndsBeforeTheLog(t *testing.T) {
+	t.Parallel()
+
+	since := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+	command, got := readingLogsBetween(t, windowedLogs, since, since.Add(4*time.Second), 2, "")
+	if want := []string{"boom fourth", "fifth"}; !slices.Equal(got, want) {
+		t.Errorf("ReadContainerLogs() = %v, want %v", got, want)
+	}
+	if strings.Contains(command, "--tail") {
+		t.Errorf("ReadContainerLogs ran %q, and docker takes the tail before it applies --until, which would drop the window's newest lines", command)
+	}
+}
+
+func TestReadContainerLogsKeepsTheNewestLimitLinesThatContainTheText(t *testing.T) {
+	t.Parallel()
+
+	since := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+	command, got := readingLogsBetween(t, windowedLogs, since, time.Time{}, 1, "boom")
+	if want := []string{"boom fourth"}; !slices.Equal(got, want) {
+		t.Errorf("ReadContainerLogs() = %v, want %v", got, want)
+	}
+	if strings.Contains(command, "--tail") {
+		t.Errorf("ReadContainerLogs ran %q, and a tail taken before the text is matched leaves fewer matches than there are", command)
+	}
+}
+
+func TestReadContainerLogsDropsLinesDockerReturnsOutsideTheWindow(t *testing.T) {
+	t.Parallel()
+
+	since := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+	_, got := readingLogsBetween(t, windowedLogs, since, since.Add(4*time.Second), 10, "")
+	if want := []string{"first", "boom second", "third", "boom fourth", "fifth"}; !slices.Equal(got, want) {
+		t.Errorf("ReadContainerLogs() = %v, want %v", got, want)
+	}
+}
+
+func TestReadContainerLogsNamesAContainerThatNoLongerExists(t *testing.T) {
+	t.Parallel()
+
+	_, lines, err := readingLogs(t, session.Result{Code: 1, Stderr: "Error response from daemon: No such container: " + physical})
+	if !errors.Is(err, ErrContainerMissing) {
+		t.Errorf("ReadContainerLogs() error = %v, want ErrContainerMissing", err)
+	}
+	if len(lines) != 0 {
+		t.Errorf("ReadContainerLogs() = %v, want no lines", lines)
+	}
+}
+
+func TestReadContainerLogsRefusesAnyOtherDockerFailure(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := readingLogs(t, session.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"})
+	if err == nil || errors.Is(err, ErrContainerMissing) {
+		t.Errorf("ReadContainerLogs() error = %v, want a failure that is not ErrContainerMissing", err)
 	}
 }
