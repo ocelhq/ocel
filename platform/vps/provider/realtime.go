@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -25,7 +26,6 @@ const (
 	realtimeGatewayResource = "ocel-realtime"
 	realtimeGatewayOwner    = "ocel"
 	realtimeGatewayKind     = "realtime"
-	realtimeGatewayPort     = "8080"
 	realtimeGatewayUser     = "65532:65532"
 	realtimeSigningKind     = "signing-key"
 	realtimeSigningName     = "signing-key"
@@ -36,7 +36,7 @@ func realtimeGatewayName(ref provider.StackRef) string {
 }
 
 func realtimeGatewayAddress(ref provider.StackRef) string {
-	return realtimeGatewayName(ref) + ":" + realtimeGatewayPort
+	return realtimeGatewayName(ref) + ":" + gatewayenv.ListenPort
 }
 
 func findRealtimePublishURL(bindings []provider.Binding) string {
@@ -44,7 +44,7 @@ func findRealtimePublishURL(bindings []provider.Binding) string {
 	if at < 0 {
 		return ""
 	}
-	return "http://" + bindings[at].Properties[provider.PropertyHost] + "/publish"
+	return "http://" + bindings[at].Properties[provider.PropertyHost] + gatewayenv.PublishPath
 }
 
 func newRealtimeGateway(ref provider.StackRef, keys map[string]string) (host.ResourceContainer, error) {
@@ -65,8 +65,8 @@ func newRealtimeGateway(ref provider.StackRef, keys map[string]string) (host.Res
 		Mounts:   []host.Mount{{Source: host.RealtimeDir, Target: host.RealtimeMount}},
 		Labels:   map[string]string{host.LabelBinary: host.RealtimeBinarySum()},
 		Env: map[string]string{
-			"OCEL_REALTIME_HOST": realtimeGatewayAddress(ref),
-			"OCEL_REALTIME_KEYS": string(encoded),
+			gatewayenv.HostVar: realtimeGatewayAddress(ref),
+			gatewayenv.KeysVar: string(encoded),
 		},
 		Ready: []string{host.RealtimeMounted, "ready"},
 	}, nil

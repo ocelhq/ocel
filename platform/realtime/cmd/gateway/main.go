@@ -15,14 +15,13 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
+	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
 const (
-	hostEnv   = "OCEL_REALTIME_HOST"
-	keysEnv   = "OCEL_REALTIME_KEYS"
 	listenEnv = "OCEL_REALTIME_LISTEN"
 
-	defaultListen     = ":8080"
+	defaultListen     = ":" + gatewayenv.ListenPort
 	readyPath         = "/ready"
 	readHeaderTimeout = 10 * time.Second
 	readyTimeout      = 2 * time.Second
@@ -74,21 +73,21 @@ func listenAddress(getenv func(string) string) string {
 }
 
 func readConfig(getenv func(string) string) (config, error) {
-	cfg := config{listen: listenAddress(getenv), host: getenv(hostEnv), keys: map[string]ed25519.PublicKey{}}
+	cfg := config{listen: listenAddress(getenv), host: getenv(gatewayenv.HostVar), keys: map[string]ed25519.PublicKey{}}
 	if cfg.host == "" {
-		return config{}, fmt.Errorf("%s names no host, and every token names the host it was minted for", hostEnv)
+		return config{}, fmt.Errorf("%s names no host, and every token names the host it was minted for", gatewayenv.HostVar)
 	}
 	var encoded map[string]string
-	if err := json.Unmarshal([]byte(getenv(keysEnv)), &encoded); err != nil {
-		return config{}, fmt.Errorf("%s is no JSON object of each namespace's base64 public key: %w", keysEnv, err)
+	if err := json.Unmarshal([]byte(getenv(gatewayenv.KeysVar)), &encoded); err != nil {
+		return config{}, fmt.Errorf("%s is no JSON object of each namespace's base64 public key: %w", gatewayenv.KeysVar, err)
 	}
 	if len(encoded) == 0 {
-		return config{}, fmt.Errorf("%s names no namespace, so the gateway could verify no token", keysEnv)
+		return config{}, fmt.Errorf("%s names no namespace, so the gateway could verify no token", gatewayenv.KeysVar)
 	}
 	for namespace, key := range encoded {
 		raw, err := base64.StdEncoding.DecodeString(key)
 		if err != nil || len(raw) != ed25519.PublicKeySize {
-			return config{}, fmt.Errorf("%s names a key for %s that is no base64 Ed25519 public key", keysEnv, namespace)
+			return config{}, fmt.Errorf("%s names a key for %s that is no base64 Ed25519 public key", gatewayenv.KeysVar, namespace)
 		}
 		cfg.keys[namespace] = raw
 	}
