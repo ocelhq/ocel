@@ -8,6 +8,7 @@ require (
 	connectrpc.com/connect v1.20.0
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/gcp/provider v0.0.0
+	github.com/ocelhq/ocel/platform/realtime v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
@@ -39,6 +40,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.106.0 // indirect
 	github.com/aws/smithy-go v1.28.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/coder/websocket v1.8.15 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -80,3 +82,5 @@ replace github.com/ocelhq/ocel/platform/gcp/provider => ../provider
 replace github.com/ocelhq/ocel/platform/s3 => ../../s3
 
 replace github.com/ocelhq/ocel/pkg => ../../../pkg
+
+replace github.com/ocelhq/ocel/platform/realtime => ../../realtime

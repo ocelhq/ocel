@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	source "github.com/ocelhq/ocel/platform/gcp/runtime/live"
+	realtimeproxy "github.com/ocelhq/ocel/platform/realtime/proxy"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -184,6 +185,9 @@ func serveProxy(values *live.Values, manifest variables.Manifest, app string) (b
 	if manifest.Tasks != nil {
 		deployment := deploymentOf(manifest)
 		services.Tasks, services.Topics = deployment.Tasks(), deployment.Topics()
+	}
+	if values != nil && manifest.RealtimePublishURL != "" {
+		services.Realtime = realtimeproxy.NewService(values, realtimeproxy.NewGatewayTransport(http.DefaultClient, manifest.RealtimePublishURL))
 	}
 	if services.Empty() {
 		return bindingproxy.Served{}, nil
