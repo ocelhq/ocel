@@ -7,13 +7,7 @@ import {
   ResourceType,
 } from "../gen/proto/app/resources/v1/resources_pb.js";
 import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
-import {
-  appsyncBinding,
-  appsyncHost,
-  type FakeGateway,
-  readClaims,
-  serveFakeGateway,
-} from "../testing/realtime-gateway.js";
+import { type FakeGateway, serveFakeGateway } from "../testing/realtime-gateway.js";
 
 const declareMock = vi.hoisted(() => vi.fn((_req: unknown) => Promise.resolve({})));
 
@@ -181,7 +175,7 @@ describe("publishing from the server", () => {
     await gateway.close();
   });
 
-  it("posts the event's envelope to the gateway with a publish token for its wire channel", async () => {
+  it("hands the ocel runtime the event's envelope on its wire channel", async () => {
     await rt.publish("orders/:orderId", {
       params: { orderId: "o_1" },
       body: { status: "shipped" },
@@ -189,7 +183,8 @@ describe("publishing from the server", () => {
 
     expect(gateway.published).toHaveLength(1);
     const [event] = gateway.published;
-    expect(event?.path).toBe("/publish");
+    expect(event?.realtime).toBe("app");
+    expect(event?.channel).toBe("/app/orders/0zn5ptc");
     expect(event?.envelope).toEqual({
       v: 1,
       id: expect.stringMatching(/^[0-9a-f]{32}$/),
@@ -197,13 +192,6 @@ describe("publishing from the server", () => {
       ts: expect.any(Number),
       kind: "live",
       data: { status: "shipped" },
-    });
-    const claims = readClaims(event?.authorization?.replace(/^Bearer /, "") ?? "");
-    expect(claims).toMatchObject({
-      iss: "ocel:rt:app",
-      aud: gateway.host,
-      sub: "server",
-      ocel: { op: "publish", ch: "/app/orders/0zn5ptc", ns: "app" },
     });
   });
 
@@ -240,7 +228,7 @@ describe("publishing from the server", () => {
     });
   });
 
-  it("throws when the gateway refuses the publish", async () => {
+  it("throws when the runtime refuses the publish", async () => {
     await gateway.close();
     gateway = await serveFakeGateway({ status: 401 });
     vi.stubEnv(bindingKey("app", BindingType.REALTIME), gateway.binding);
@@ -248,31 +236,6 @@ describe("publishing from the server", () => {
     await expect(
       rt.publish("orders/:orderId", { params: { orderId: "o1" }, body: { status: "paid" } }),
     ).rejects.toThrow("status 401");
-  });
-
-  it("throws when the gateway has not answered within 10 seconds", async () => {
-    await gateway.close();
-    gateway = await serveFakeGateway({ answering: false });
-    vi.stubEnv(bindingKey("app", BindingType.REALTIME), gateway.binding);
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-
-    try {
-      let settled = false;
-      const publishing = rt
-        .publish("orders/:orderId", { params: { orderId: "o1" }, body: { status: "paid" } })
-        .finally(() => {
-          settled = true;
-        });
-      publishing.catch(() => {});
-      while (gateway.published.length === 0) await new Promise((resolve) => setImmediate(resolve));
-      await vi.advanceTimersByTimeAsync(9_999);
-      expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-
-      await expect(publishing).rejects.toThrow();
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });
 
@@ -293,76 +256,5 @@ describe("publishing outside a provisioned run", () => {
     await expect(
       rt.publish("orders/:orderId", { params: { orderId: "o1" }, body: { status: "paid" } }),
     ).rejects.toThrow("OCEL_RESOURCE_REALTIME_app");
-  });
-});
-
-describe("realtime publish on AppSync Events", () => {
-  const rt = realtime("app", {
-    channels: {
-      "orders/:orderId": { schema: z.object({ status: z.string() }), subscribe: "public" },
-    },
-  });
-
-  function stubAppSync(status: number, answer: string) {
-    const sent: Request[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string, init?: RequestInit) => {
-        sent.push(new Request(input, init));
-        return new Response(answer, { status });
-      }),
-    );
-    return sent;
-  }
-
-  beforeEach(() => {
-    vi.stubEnv("OCEL_PHASE", "");
-    vi.stubEnv(bindingKey("app", BindingType.REALTIME), appsyncBinding);
-    vi.stubEnv("AWS_ACCESS_KEY_ID", "ASIAAPPROLE");
-    vi.stubEnv("AWS_SECRET_ACCESS_KEY", "role-secret");
-    vi.stubEnv("AWS_SESSION_TOKEN", "role-session");
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-  });
-
-  it("posts the envelope as one event to /event, signed with the app's role", async () => {
-    const sent = stubAppSync(200, '{"successful":[{"identifier":"x","index":0}],"failed":[]}');
-
-    await rt.publish("orders/:orderId", { params: { orderId: "o1" }, body: { status: "paid" } });
-
-    expect(sent).toHaveLength(1);
-    const [request] = sent;
-    expect(request?.url).toBe(`https://${appsyncHost}/event`);
-    expect(request?.headers.get("authorization")).toMatch(
-      /^AWS4-HMAC-SHA256 Credential=ASIAAPPROLE\/\d{8}\/us-east-1\/appsync\/aws4_request, SignedHeaders=content-type;host;x-amz-date;x-amz-security-token, Signature=[0-9a-f]{64}$/,
-    );
-    expect(request?.headers.get("x-amz-security-token")).toBe("role-session");
-    const published = (await request?.json()) as { channel: string; events: string[] };
-    expect(published.channel).toBe("/app/orders/o1");
-    expect(published.events).toHaveLength(1);
-    expect(JSON.parse(published.events[0] ?? "")).toMatchObject({
-      v: 1,
-      ch: "/app/orders/o1",
-      kind: "live",
-      data: { status: "paid" },
-    });
-  });
-
-  it("fails a publish AppSync refuses, or answers with the event failed", async () => {
-    stubAppSync(403, '{"errors":[{"errorType":"UnauthorizedException"}]}');
-    await expect(
-      rt.publish("orders/:orderId", { params: { orderId: "o1" }, body: { status: "paid" } }),
-    ).rejects.toThrow("status 403");
-
-    stubAppSync(
-      200,
-      '{"successful":[],"failed":[{"identifier":"x","index":0,"message":"too large"}]}',
-    );
-    await expect(
-      rt.publish("orders/:orderId", { params: { orderId: "o1" }, body: { status: "paid" } }),
-    ).rejects.toThrow("too large");
   });
 });

@@ -612,37 +612,7 @@ describe("a publish relayed through the realtime handler", () => {
     expect(gateway.published).toEqual([]);
   });
 
-  it("answers 500 no-store when the token to publish a relayed event cannot be minted", async () => {
-    vi.stubEnv(
-      bindingKey("app", BindingType.REALTIME),
-      JSON.stringify({
-        name: "realtime--app",
-        realtime: { ...JSON.parse(gateway.binding).realtime, signingKey: "AAAA" },
-      }),
-    );
-
-    const res = await POST(
-      post(
-        {
-          ops: [
-            {
-              op: "publish",
-              pattern: "rooms/:roomId",
-              params: { roomId: "r1" },
-              body: { text: "hi" },
-            },
-          ],
-        },
-        { "x-user": "u1" },
-      ),
-    );
-
-    expect(res.status).toBe(500);
-    expect(res.headers.get("cache-control")).toBe("no-store");
-    expect(gateway.published).toEqual([]);
-  });
-
-  it("denies a publish the transport refuses", async () => {
+  it("denies a publish the runtime refuses", async () => {
     await gateway.close();
     gateway = await serveFakeGateway({ status: 401 });
     vi.stubEnv(bindingKey("app", BindingType.REALTIME), gateway.binding);
