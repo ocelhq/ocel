@@ -76,7 +76,7 @@ func TestEveryTokenVectorIsAcceptedOrRefusedForTheReasonItNames(t *testing.T) {
 	}
 }
 
-func TestEveryMintVectorIsTheTokenTheTestMinterSigns(t *testing.T) {
+func TestEveryMintVectorIsTheTokenSignMints(t *testing.T) {
 	t.Parallel()
 
 	vectors := readTokenVectors(t)
@@ -86,8 +86,9 @@ func TestEveryMintVectorIsTheTokenTheTestMinterSigns(t *testing.T) {
 		if err := json.Unmarshal(c.Claims, &claims); err != nil {
 			t.Fatalf("%s: decode claims: %v", c.Name, err)
 		}
-		if minted := tokentest.Sign(t, key, claims); minted != c.Token {
-			t.Errorf("%s: Sign = %q, want %q", c.Name, minted, c.Token)
+		minted, err := token.Sign(key, claims)
+		if err != nil || minted != c.Token {
+			t.Errorf("%s: Sign = %q, %v, want %q", c.Name, minted, err, c.Token)
 		}
 	}
 }

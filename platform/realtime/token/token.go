@@ -1,6 +1,7 @@
 package token
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -146,6 +147,29 @@ func decodeClaims(segment string) (Claims, error) {
 		return Claims{}, refuse(ReasonMalformed)
 	}
 	return claims, nil
+}
+
+func Sign(key ed25519.PrivateKey, claims Claims) (string, error) {
+	header, err := encodeSegment(Header{Algorithm: Algorithm, Type: "JWT"})
+	if err != nil {
+		return "", err
+	}
+	body, err := encodeSegment(claims)
+	if err != nil {
+		return "", err
+	}
+	input := header + "." + body
+	return input + "." + base64.RawURLEncoding.EncodeToString(ed25519.Sign(key, []byte(input))), nil
+}
+
+func encodeSegment(value any) (string, error) {
+	var out bytes.Buffer
+	encoder := json.NewEncoder(&out)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(bytes.TrimSuffix(out.Bytes(), []byte("\n"))), nil
 }
 
 func decodeSegment(segment string, into any) error {
