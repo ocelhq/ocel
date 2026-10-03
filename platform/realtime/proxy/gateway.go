@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -29,6 +30,8 @@ const (
 	maxGatewayRetries      = 5
 	firstGatewayRetryDelay = 100 * time.Millisecond
 	maxGatewayRetryDelay   = 2 * time.Second
+
+	dialOperation = "dial"
 )
 
 func NewGatewayTransport(client *http.Client, publishURL string) Transport {
@@ -51,7 +54,7 @@ func NewGatewayTransport(client *http.Client, publishURL string) Transport {
 			if err == nil {
 				return nil
 			}
-			if !isRetriable(isWritten, err) || attempt == maxGatewayRetries || !waitToRetry(ctx, attempt) {
+			if !isRetriable(isWritten, err) || attempt == maxGatewayRetries || !waitToRetry(ctx, attempt, retryAfterOf(err)) {
 				return NewPublishError(ctx, req.GetChannel(), err)
 			}
 		}
@@ -76,12 +79,27 @@ func isRetriable(isWritten bool, err error) bool {
 	if errors.As(err, &refusal) {
 		return refusal.Status == http.StatusTooManyRequests
 	}
-	return !isWritten
+	var dialing *net.OpError
+	if isWritten || !errors.As(err, &dialing) || dialing.Op != dialOperation {
+		return false
+	}
+	var lookup *net.DNSError
+	return !errors.As(err, &lookup) || !lookup.IsNotFound
 }
 
-func waitToRetry(ctx context.Context, attempt int) bool {
-	ceiling := min(firstGatewayRetryDelay<<attempt, maxGatewayRetryDelay)
-	delay := rand.N(ceiling) + 1
+func retryAfterOf(err error) time.Duration {
+	var refusal *Refusal
+	if errors.As(err, &refusal) {
+		return refusal.RetryAfter
+	}
+	return 0
+}
+
+func waitToRetry(ctx context.Context, attempt int, retryAfter time.Duration) bool {
+	delay := retryAfter
+	if delay == 0 {
+		delay = rand.N(min(firstGatewayRetryDelay<<attempt, maxGatewayRetryDelay)) + 1
+	}
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < delay {
 		return false
 	}

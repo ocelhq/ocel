@@ -78,8 +78,9 @@ socket from any origin; the tokens your handler signs are the only check.
 
 - **Publishing.** `publish` hands the event to the Ocel runtime beside your app, which
   posts it to the gateway's `/publish` under a token signed with the resource's key. The
-  runtime sends a publish again only when Cloud Run answered 429 or the request never
-  left, so an event is delivered at most once.
+  runtime sends a publish again only when Cloud Run answered 429, no sooner than its
+  `Retry-After`, or no connection to the gateway opened, so an event is delivered at most
+  once.
 - **Keys.** The first deploy mints an Ed25519 key per resource and keeps it in Secret
   Manager. It reaches your app through the resource's binding. The gateway reads every
   resource's public key from one secret per environment, mounted at its latest version, so
