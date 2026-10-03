@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -68,20 +67,18 @@ func TestAPublishIsTakenByTheGatewayTheBindingNames(t *testing.T) {
 	t.Parallel()
 
 	key := newKey(t)
-	server := httptest.NewUnstartedServer(nil)
-	host := server.Listener.Addr().String()
-	server.Config.Handler = gateway.New(gateway.Config{
-		Host: host,
+	properties := gatewayProperties(key)
+	server := httptest.NewServer(gateway.New(gateway.Config{
+		Host: properties.GetHost(),
 		Keys: func(namespace string) (ed25519.PublicKey, bool) {
 			return key.Public().(ed25519.PublicKey), namespace == "app"
 		},
-	})
-	server.Start()
+	}))
 	t.Cleanup(server.Close)
 
-	service := proxy.NewService(bindRealtime(t, gatewayProperties(key)), proxy.NewGatewayTransport(server.Client(), "http://"+host+gateway.PublishPath))
+	service := proxy.NewService(bindRealtime(t, properties), proxy.NewGatewayTransport(server.Client(), server.URL+gateway.PublishPath))
 	if err := publish(service); err != nil {
-		t.Errorf("Publish() = %v, want the gateway to take a publish signed with the binding's key", err)
+		t.Errorf("Publish() = %v, want the gateway serving the binding's host to take a publish sent to its internal address", err)
 	}
 }
 
@@ -105,9 +102,8 @@ func TestAGatewayPublishCarriesTheEventUnderAServerTokenForItsChannel(t *testing
 	if body != event {
 		t.Errorf("the gateway was sent %s, want the event as the app encoded it", body)
 	}
-	address, _ := url.Parse(publishURL)
 	if _, err := token.Verify(strings.TrimPrefix(authorization, "Bearer "), key.Public().(ed25519.PublicKey), time.Now(), token.Expected{
-		Audience: address.Host, Namespace: "app", Operation: token.Publish, Channel: channel, Subject: "server",
+		Audience: "realtime.shop.example", Namespace: "app", Operation: token.Publish, Channel: channel, Subject: "server",
 	}); err != nil {
 		t.Errorf("the publish carried %q, which does not verify as a server publish token for %s: %v", authorization, channel, err)
 	}
