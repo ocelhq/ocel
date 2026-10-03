@@ -402,13 +402,16 @@ describe("the realtime concern", () => {
     }
   });
 
-  const GCP_CELLS = CELLS.filter((cell) => cell !== "realtime/python");
+  const GCP_SKIPS: Record<string, number> = { "realtime/python": 1260, "realtime/rust": 1609 };
+  const GCP_CELLS = CELLS.filter((cell) => !(cell in GCP_SKIPS));
 
-  it("runs the behavioural suite on gcp in every language, expecting nothing red, but Python, whose function ships none of its pyproject dependencies", () => {
+  it("runs the behavioural suite on gcp in TypeScript and Go, expecting nothing red, and skips Python and Rust under the tickets for their builds", () => {
     for (const lane of ["gcp", "gcp.floci"] as const) {
       const planned = planOn(lane);
       expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(GCP_CELLS));
-      expect(planned.skipped["realtime/python"]?.map((gap) => gap.issue)).toEqual([1260]);
+      for (const [cell, issue] of Object.entries(GCP_SKIPS)) {
+        expect(planned.skipped[cell]?.map((gap) => gap.issue)).toEqual([issue]);
+      }
     }
     const planned = planOn("gcp");
     for (const cell of GCP_CELLS) {

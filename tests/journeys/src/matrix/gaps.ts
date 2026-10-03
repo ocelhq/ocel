@@ -514,6 +514,20 @@ export const gaps: Gap[] = [
     ],
   },
   {
+    id: "rust-attribution-resolves-offline",
+    reason:
+      "attribution resolves a rust app's whole lockfile with cargo metadata --offline, and the build downloaded only what its musl target builds, so a crate only another platform builds is missing and the manifest is never assembled",
+    issue: 1609,
+    where: [
+      {
+        on: ["gcp", "gcp.floci"],
+        fixtures: [realtime.rust],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+    ],
+  },
+  {
     id: "aws-reads-lanes-unweighted",
     reason:
       "on aws each queue is read by its own event source mapping in the order SQS hands its messages out, and SQS has no priority, so a lane is recorded on the run but takes no share of the reads",
