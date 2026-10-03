@@ -14,6 +14,7 @@ require (
 	connectrpc.com/connect v1.20.0
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/pgmq v0.0.0
+	github.com/ocelhq/ocel/platform/realtime v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
 	github.com/ocelhq/ocel/platform/vps/provider v0.0.0
 	golang.org/x/sys v0.48.0
@@ -78,3 +79,5 @@ require (
 )
 
 replace github.com/ocelhq/ocel/pkg => ../../../pkg
+
+replace github.com/ocelhq/ocel/platform/realtime => ../../realtime
