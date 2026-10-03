@@ -3,11 +3,11 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { createServer as createSecureServer } from "node:https";
-import { createServer as createNetServer, type Server as NetServer } from "node:net";
+import { connect, createServer as createNetServer, type Server as NetServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { TLSSocket } from "node:tls";
-import { type Edge, forwarder } from "./gateway";
+import { type Edge, forwarder, socketForwarder } from "./gateway";
 
 type Edging = { edge: Edge; sockets: () => number; reload: () => void; close: () => Promise<void> };
 
@@ -154,5 +154,71 @@ describe("forwarder", () => {
     expect(answered.status).toBe(200);
     await expect(answered.text()).rejects.toThrow();
     expect((await fetch(`${url}/dropped`)).status).toBe(200);
+  });
+});
+
+function upgradingEdge(): { server: NetServer; heads: string[] } {
+  const heads: string[] = [];
+  const server = createNetServer((socket) => {
+    let head = "";
+    const reading = (chunk: Buffer) => {
+      head += chunk.toString("latin1");
+      const end = head.indexOf("\r\n\r\n");
+      if (end < 0) return;
+      socket.off("data", reading);
+      heads.push(head.slice(0, end));
+      socket.write(
+        "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n",
+      );
+      const early = head.slice(end + 4);
+      if (early) socket.write(`echo:${early}`);
+      socket.on("data", (more: Buffer) => socket.write(`echo:${more.toString("latin1")}`));
+    };
+    socket.on("data", reading);
+  });
+  return { server, heads };
+}
+
+function converse(host: string, port: number, sent: string[], until: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = connect(port, host);
+    let heard = "";
+    socket.on("error", reject);
+    socket.on("data", (chunk: Buffer) => {
+      heard += chunk.toString("latin1");
+      if (heard.includes(until)) {
+        socket.destroy();
+        resolve(heard);
+      }
+    });
+    socket.on("connect", () => {
+      for (const part of sent) socket.write(part);
+    });
+  });
+}
+
+describe("socketForwarder", () => {
+  it("names the app's hostname to the edge and carries the upgraded socket both ways", async () => {
+    const edge = upgradingEdge();
+    closers.push(() => new Promise((resolve) => edge.server.close(() => resolve())));
+    const forwarded = socketForwarder(await opened(edge.server), "realtime.app.localhost");
+    closers.push(() => new Promise((resolve) => forwarded.close(() => resolve())));
+    const { host, port } = await opened(forwarded);
+
+    const heard = await converse(
+      host,
+      port,
+      [
+        `GET /event HTTP/1.1\r\nHost: ${host}:${port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n`,
+        "ping",
+      ],
+      "echo:ping",
+    );
+
+    expect(heard).toStartWith("HTTP/1.1 101");
+    expect(edge.heads).toHaveLength(1);
+    expect(edge.heads[0]).toContain("\r\nhost: realtime.app.localhost");
+    expect(edge.heads[0]).not.toContain(`${host}:${port}`);
+    expect(edge.heads[0]).toStartWith("GET /event HTTP/1.1");
   });
 });

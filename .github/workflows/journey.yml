@@ -193,10 +193,10 @@ jobs:
             shared="$shared"'|^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$'
             seed=$PR
             touched=$(printf '%s\n' "$files" | sed -n 's|^tests/fixtures/\([^/]*\)/\([^/]*\)/.*|\1/\2|p' | sort -u | paste -sd, -)
-            dev=$(hit "$shared"'|^platform/aws/runtime/bucket/|^(python|crates)/')
+            dev=$(hit "$shared"'|^platform/aws/runtime/bucket/|^platform/realtime/|^(python|crates)/')
             aws=$(hit "$shared"'|^platform/(aws|edge)/|^scripts/floci\.sh$')
             gcp=$(hit "$shared"'|^platform/gcp/|^scripts/floci\.sh$|^scripts/flocidispatch/')
-            vps=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$')
+            vps=$(hit "$shared"'|^platform/(vps|realtime)/|^scripts/(incus|ec2)\.sh$')
             front=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$|^tests/fronts/')
             engine=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2|vps-docker)\.sh$')
             next=$(hit "$shared"'|^platform/(aws|edge)/')

@@ -372,12 +372,23 @@ describe("the realtime concern", () => {
     }
   });
 
-  it("skips the suite on gcp and a box with the provider's refusal, under each target's ticket", () => {
+  it("runs the behavioural suite on a box in TypeScript, Go, Python and Rust, expecting nothing red", () => {
+    for (const lane of ["vps", "vps.incus"] as const) {
+      const planned = planOn(lane);
+      expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(CELLS));
+      expect(Object.keys(planned.skipped).filter((cell) => cell.startsWith("realtime/"))).toEqual(
+        [],
+      );
+      for (const cell of CELLS) {
+        expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
+      }
+    }
+  });
+
+  it("skips the suite on gcp with the provider's refusal, under its ticket", () => {
     const tickets = {
       gcp: 1515,
       "gcp.floci": 1515,
-      vps: 1516,
-      "vps.incus": 1516,
     } as const;
     for (const [lane, issue] of Object.entries(tickets) as [Lane, number][]) {
       const planned = planOn(lane);

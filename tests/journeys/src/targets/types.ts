@@ -6,6 +6,7 @@ import type { CellUnderTest } from "../run/cellRun";
 export type Deployment = {
   baseUrl: (app: string) => string;
   fetch: Fetch;
+  reach?: (url: string) => Promise<string>;
 };
 
 export interface Sweeper {

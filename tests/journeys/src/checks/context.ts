@@ -25,6 +25,7 @@ export type CheckContext = {
   phase: Phase;
   notes: Map<string, string>;
   fetch: Fetch;
+  reach: (url: string) => Promise<string>;
   readExposed: () => Promise<string>;
   journeyNonce: string;
 };
