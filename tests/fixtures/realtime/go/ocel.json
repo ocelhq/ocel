@@ -2,5 +2,5 @@
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "realtime-go",
   "provider": "aws",
-  "apps": [{ "name": "web", "path": "./server" }]
+  "apps": [{ "name": "web", "path": ".", "entrypoint": "./server" }]
 }
