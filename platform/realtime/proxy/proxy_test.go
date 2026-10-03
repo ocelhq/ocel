@@ -5,9 +5,11 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -199,5 +201,107 @@ func TestAPublishPastTheCallersDeadlineFailsAsDeadlineExceeded(t *testing.T) {
 	_, err := service.Publish(ctx, &realtimev1.PublishRequest{Realtime: "app", Channel: channel, Event: event})
 	if connect.CodeOf(err) != connect.CodeDeadlineExceeded {
 		t.Errorf("Publish() = %v, want deadline exceeded", err)
+	}
+}
+
+func countingServer(t *testing.T, answer func(attempt int64, w http.ResponseWriter)) (*httptest.Server, *atomic.Int64) {
+	t.Helper()
+	var attempts atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.ReadAll(r.Body)
+		answer(attempts.Add(1), w)
+	}))
+	t.Cleanup(server.Close)
+	return server, &attempts
+}
+
+func TestAPublishThrottledWith429IsSentAgainUntilItLands(t *testing.T) {
+	t.Parallel()
+
+	server, attempts := countingServer(t, func(attempt int64, w http.ResponseWriter) {
+		if attempt < 3 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	if err := publish(proxy.NewService(bindRealtime(t, gatewayProperties(newKey(t))), proxy.NewGatewayTransport(server.Client(), server.URL+"/publish"))); err != nil {
+		t.Fatalf("Publish() = %v, want it to land once the throttling passes", err)
+	}
+	if got := attempts.Load(); got != 3 {
+		t.Errorf("the gateway was sent the publish %d times, want 3", got)
+	}
+}
+
+func TestAPublishTheGatewayAnsweredOtherThan429IsSentOnce(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []int{http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusUnauthorized} {
+		server, attempts := countingServer(t, func(_ int64, w http.ResponseWriter) { w.WriteHeader(status) })
+
+		if err := publish(proxy.NewService(bindRealtime(t, gatewayProperties(newKey(t))), proxy.NewGatewayTransport(server.Client(), server.URL+"/publish"))); err == nil {
+			t.Errorf("status %d: Publish() = nil, want it failed", status)
+		}
+		if got := attempts.Load(); got != 1 {
+			t.Errorf("status %d: the gateway was sent the publish %d times, want once: it may have delivered it", status, got)
+		}
+	}
+}
+
+func TestAPublishWhoseConnectionCouldNotBeOpenedIsSentAgain(t *testing.T) {
+	t.Parallel()
+
+	server, attempts := countingServer(t, func(_ int64, w http.ResponseWriter) { w.WriteHeader(http.StatusNoContent) })
+	var dials atomic.Int64
+	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+		if dials.Add(1) < 3 {
+			return nil, errors.New("connection refused")
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, address)
+	}}}
+
+	if err := publish(proxy.NewService(bindRealtime(t, gatewayProperties(newKey(t))), proxy.NewGatewayTransport(client, server.URL+"/publish"))); err != nil {
+		t.Fatalf("Publish() = %v, want it to land once a connection opens", err)
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Errorf("the gateway was sent the publish %d times, want once", got)
+	}
+}
+
+func TestAPublishWhoseConnectionDropsAfterItWasSentIsNotSentAgain(t *testing.T) {
+	t.Parallel()
+
+	server, attempts := countingServer(t, func(_ int64, w http.ResponseWriter) {
+		conn, _, err := http.NewResponseController(w).Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	})
+
+	err := publish(proxy.NewService(bindRealtime(t, gatewayProperties(newKey(t))), proxy.NewGatewayTransport(server.Client(), server.URL+"/publish")))
+	if connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Errorf("Publish() = %v, want unavailable", err)
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Errorf("the gateway was sent the publish %d times, want once: it may have delivered it", got)
+	}
+}
+
+func TestAPublishThrottledThroughoutFailsAsResourceExhaustedWithinThePublishTimeout(t *testing.T) {
+	t.Parallel()
+
+	server, attempts := countingServer(t, func(_ int64, w http.ResponseWriter) { w.WriteHeader(http.StatusTooManyRequests) })
+
+	started := time.Now()
+	err := publish(proxy.NewService(bindRealtime(t, gatewayProperties(newKey(t))), proxy.NewGatewayTransport(server.Client(), server.URL+"/publish")))
+	if connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Errorf("Publish() = %v, want resource exhausted", err)
+	}
+	if took := time.Since(started); took > proxy.PublishTimeout {
+		t.Errorf("Publish() took %s, want it to give up within %s", took, proxy.PublishTimeout)
+	}
+	if got := attempts.Load(); got < 2 {
+		t.Errorf("the gateway was sent the publish %d times, want it sent again after a 429", got)
 	}
 }
