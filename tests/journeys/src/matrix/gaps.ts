@@ -540,6 +540,7 @@ export const gaps: Gap[] = [
     id: "floci-runs-no-gateway-socket-or-publish",
     reason:
       "floci-gcp proxies a Cloud Run service by host with no WebSocket upgrade and no secret volume, so the realtime gateway it runs holds no socket and the runtime's publish to it is never heard",
+    issue: 1605,
     where: [
       {
         on: ["gcp.floci"],

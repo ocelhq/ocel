@@ -45,7 +45,7 @@ func (p *Provider) openRealtime(ctx context.Context, ref provider.StackRef) (rea
 		clients: opened,
 		records: p.KeyValues(),
 		ref:     ref,
-		// HACK: floci-gcp runs no secret volume, so an emulated gateway takes its keys from its environment and a change of keys rolls a revision.
+		// HACK: floci-gcp runs no secret volume, so an emulated gateway takes its keys from its environment and a change of keys rolls a revision; drop keysInEnv once floci-gcp mounts secret volumes (#1605).
 		keysInEnv:     p.emulated(),
 		pushBinary:    p.pushBinary,
 		deployService: p.deployService,
