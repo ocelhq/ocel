@@ -79,9 +79,13 @@ jobs:
           go build "${packages[@]}"
           go test -race -count=1 -run '^$' "${packages[@]}"
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./.github/actions/versions
+
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.2
+          version: v${{ steps.versions.outputs.golangci-lint }}
           install-only: true
           skip-cache: true
 

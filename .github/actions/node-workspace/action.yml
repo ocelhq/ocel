@@ -25,14 +25,23 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Take the versions the repository pins
+      id: versions
+      uses: ./.github/actions/versions
+      with:
+        working-directory: ${{ inputs.working-directory }}
+
     - uses: pnpm/action-setup@v4
       with:
-        version: 11.10.0
+        version: ${{ steps.versions.outputs.pnpm }}
 
     - name: Name the installed workspace after the lockfile, node and pnpm
       id: modules
       shell: bash
-      run: echo "key=node-modules-$RUNNER_OS-$RUNNER_ARCH-node22-pnpm11.10.0-${{ hashFiles(format('{0}/pnpm-lock.yaml', inputs.working-directory), format('{0}/pnpm-workspace.yaml', inputs.working-directory)) }}" >> "$GITHUB_OUTPUT"
+      env:
+        NODE: ${{ steps.versions.outputs.node }}
+        PNPM: ${{ steps.versions.outputs.pnpm }}
+      run: echo "key=node-modules-$RUNNER_OS-$RUNNER_ARCH-node$NODE-pnpm$PNPM-${{ hashFiles(format('{0}/pnpm-lock.yaml', inputs.working-directory), format('{0}/pnpm-workspace.yaml', inputs.working-directory)) }}" >> "$GITHUB_OUTPUT"
 
     - name: The workspace as main last installed it
       id: installed
@@ -43,14 +52,14 @@ runs:
 
     - uses: actions/setup-node@v4
       with:
-        node-version: 22
+        node-version: ${{ steps.versions.outputs.node }}
         cache: ${{ steps.installed.outputs.cache-hit != 'true' && 'pnpm' || '' }}
         cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
         registry-url: ${{ inputs.registry-url }}
 
     - uses: oven-sh/setup-bun@v2
       with:
-        bun-version: 1.4.0
+        bun-version: ${{ steps.versions.outputs.bun }}
 
     - name: Put its node_modules back
       if: steps.installed.outputs.cache-hit == 'true'

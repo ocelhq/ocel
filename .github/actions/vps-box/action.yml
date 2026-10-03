@@ -86,13 +86,18 @@ runs:
           echo "OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY"
         } >> "$GITHUB_ENV"
 
+    - name: Take the versions the repository pins
+      if: inputs.real == 'true'
+      id: versions
+      uses: ./.github/actions/versions
+
     - name: Assume the session that may spend the real account
       if: inputs.real == 'true'
       uses: ./.github/actions/real-aws-session
       with:
-        node-version: ${{ env.NODE_VERSION }}
-        pnpm-version: ${{ env.PNPM_VERSION }}
-        bun-version: ${{ env.BUN_VERSION }}
+        node-version: ${{ steps.versions.outputs.node }}
+        pnpm-version: ${{ steps.versions.outputs.pnpm }}
+        bun-version: ${{ steps.versions.outputs.bun }}
         aws-region: ${{ inputs.aws-region }}
         role-to-assume: ${{ inputs.role-to-assume }}
         role-session-name: ${{ inputs.session }}

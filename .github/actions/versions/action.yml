@@ -1,0 +1,50 @@
+name: versions
+description: >-
+  The node, bun, pnpm and golangci-lint versions the repository pins, read from
+  mise.toml and package.json so no workflow carries a version of its own.
+
+inputs:
+  working-directory:
+    description: Repository root, when the checkout is not at the workspace root.
+    required: false
+    default: "."
+
+outputs:
+  node:
+    description: Node version mise.toml pins.
+    value: ${{ steps.read.outputs.node }}
+  bun:
+    description: Bun version mise.toml pins.
+    value: ${{ steps.read.outputs.bun }}
+  golangci-lint:
+    description: golangci-lint version mise.toml pins, without a leading v.
+    value: ${{ steps.read.outputs.golangci-lint }}
+  pnpm:
+    description: pnpm version package.json pins in devEngines.packageManager.
+    value: ${{ steps.read.outputs.pnpm }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read the pinned versions
+      id: read
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        tool() {
+          python3 -c 'import sys, tomllib; print(tomllib.load(open("mise.toml", "rb"))["tools"][sys.argv[1]])' "$1"
+        }
+        node=$(tool node)
+        bun=$(tool bun)
+        golangci_lint=$(tool golangci-lint)
+        pnpm=$(jq -er '.devEngines.packageManager.version' package.json)
+        for pair in node=$node bun=$bun golangci-lint=$golangci_lint pnpm=$pnpm; do
+          [ -n "${pair#*=}" ] || { echo "::error::no ${pair%%=*} version pinned"; exit 1; }
+        done
+        {
+          echo "node=$node"
+          echo "bun=$bun"
+          echo "golangci-lint=$golangci_lint"
+          echo "pnpm=$pnpm"
+        } >> "$GITHUB_OUTPUT"

@@ -20,9 +20,6 @@ env:
   OCEL_NAMESPACE: e2e-next-compat
   BASELINE_MANIFEST: test/ocel-deploy-tests-manifest.json
   ADAPTER_BASELINE: tests/next-compat/baseline-manifest.json
-  NODE_VERSION: "22"
-  PNPM_VERSION: "11.10.0"
-  BUN_VERSION: "1.4.0"
   # FIXME: must match PinnedVersion in pkg/provider/pulumi/runtime.go —
   # nothing checks that it does, and a mismatch silently warms the wrong directory.
   PULUMI_VERSION: "3.146.0"
@@ -56,11 +53,17 @@ jobs:
           path: nextjs
           fetch-depth: 25
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./adapter/.github/actions/versions
+        with:
+          working-directory: adapter
+
       - uses: ./adapter/.github/actions/real-aws-session
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-build-${{ github.run_id }}
@@ -143,11 +146,17 @@ jobs:
           key: build-${{ github.sha }}-${{ github.run_id }}
           fail-on-cache-miss: true
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./adapter/.github/actions/versions
+        with:
+          working-directory: adapter
+
       - uses: ./adapter/.github/actions/real-aws-session
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-sweep-${{ github.run_id }}
@@ -190,11 +199,17 @@ jobs:
           key: build-${{ github.sha }}-${{ github.run_id }}
           fail-on-cache-miss: true
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./adapter/.github/actions/versions
+        with:
+          working-directory: adapter
+
       - uses: ./adapter/.github/actions/real-aws-session
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-smoke-${{ github.run_id }}
@@ -337,11 +352,17 @@ jobs:
           key: build-${{ github.sha }}-${{ github.run_id }}
           fail-on-cache-miss: true
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./adapter/.github/actions/versions
+        with:
+          working-directory: adapter
+
       - uses: ./adapter/.github/actions/real-aws-session
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-${{ github.run_id }}-${{ strategy.job-index }}
@@ -445,9 +466,15 @@ jobs:
           key: build-${{ github.sha }}-${{ github.run_id }}
           fail-on-cache-miss: true
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./adapter/.github/actions/versions
+        with:
+          working-directory: adapter
+
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ steps.versions.outputs.node }}
 
       - name: Ask the provider what this tier may do
         run: |
@@ -495,9 +522,9 @@ jobs:
 
       - uses: ./adapter/.github/actions/real-aws-session
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-tier-${{ matrix.tier }}-${{ github.run_id }}
@@ -573,11 +600,17 @@ jobs:
           key: build-${{ github.sha }}-${{ github.run_id }}
           fail-on-cache-miss: true
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./adapter/.github/actions/versions
+        with:
+          working-directory: adapter
+
       - uses: ./adapter/.github/actions/real-aws-session
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-destroy-${{ github.run_id }}
@@ -615,9 +648,15 @@ jobs:
         with:
           path: adapter
 
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./adapter/.github/actions/versions
+        with:
+          working-directory: adapter
+
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ steps.versions.outputs.node }}
 
       - uses: actions/download-artifact@v4
         with:
