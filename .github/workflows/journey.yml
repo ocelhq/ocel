@@ -648,6 +648,9 @@ jobs:
       - name: The musl targets a rust fixture compiles for
         run: rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
 
+      - name: The musl C compiler a rust fixture's C dependencies build with
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
       - name: The Docker the image build and the emulator share
         uses: ./.github/actions/containerd-docker
 
