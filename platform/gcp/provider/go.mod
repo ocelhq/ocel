@@ -8,6 +8,7 @@ require (
 	cloud.google.com/go/firestore v1.24.0
 	cloud.google.com/go/iam v1.12.0
 	cloud.google.com/go/kms v1.33.0
+	cloud.google.com/go/logging v1.19.0
 	cloud.google.com/go/storage v1.64.0
 	connectrpc.com/connect v1.20.0
 	github.com/google/go-containerregistry v0.21.7
@@ -21,6 +22,8 @@ require (
 	github.com/shopspring/decimal v1.4.0
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.297.0
+	google.golang.org/genproto v0.0.0-20260724162435-b2f20204f0df
+	google.golang.org/genproto/googleapis/api v0.0.0-20260825221802-da73d73af1c5
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
 )
@@ -211,8 +214,6 @@ require (
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
-	google.golang.org/genproto v0.0.0-20260724162435-b2f20204f0df // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260825221802-da73d73af1c5 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
