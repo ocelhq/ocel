@@ -141,14 +141,14 @@ func TestReadQuotesContainsAndUntilIntoTheFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	filter := listed.asked()[0].Filter
-	for _, term := range []string{
-		` AND timestamp<="2026-10-03T10:00:00Z"`,
-		` AND "said \"hi\" \\ bye"`,
-	} {
-		if !strings.Contains(filter, term) {
-			t.Errorf("Filter = %s, want it to contain %s", filter, term)
-		}
+	want := `resource.type="cloud_run_revision"` +
+		` AND ((resource.labels.service_name="web"))` +
+		` AND timestamp>="2026-10-03T09:00:00Z"` +
+		` AND timestamp<="2026-10-03T10:00:00Z"` +
+		` AND "said \"hi\" \\ bye"` +
+		` AND (log_id("run.googleapis.com/stdout") OR log_id("run.googleapis.com/stderr"))`
+	if got := listed.asked()[0].Filter; got != want {
+		t.Errorf("Filter =\n%s\nwant\n%s", got, want)
 	}
 }
 
