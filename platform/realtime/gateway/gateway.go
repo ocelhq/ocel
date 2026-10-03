@@ -8,6 +8,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
 const maxSubscriptions = 200
@@ -15,7 +17,7 @@ const maxSubscriptions = 200
 const (
 	Subprotocol = "aws-appsync-event-ws"
 	SocketPath  = "/event/realtime"
-	PublishPath = "/publish"
+	PublishPath = gatewayenv.PublishPath
 
 	MaxEventBytes = 240 * 1024
 

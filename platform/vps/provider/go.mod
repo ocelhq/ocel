@@ -10,6 +10,7 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
+	github.com/ocelhq/ocel/platform/realtime v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
 	golang.org/x/sys v0.47.0
 	google.golang.org/protobuf v1.36.12
@@ -91,3 +92,5 @@ replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/clo
 replace github.com/ocelhq/ocel/pkg => ../../../pkg
 
 replace github.com/ocelhq/ocel/platform/s3 => ../../s3
+
+replace github.com/ocelhq/ocel/platform/realtime => ../../realtime

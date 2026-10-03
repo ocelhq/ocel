@@ -16,6 +16,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
+	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	"github.com/ocelhq/ocel/platform/realtime/token"
 	"github.com/ocelhq/ocel/platform/realtime/token/tokentest"
 )
@@ -50,7 +51,7 @@ func keysOf(t *testing.T, keys map[string]ed25519.PrivateKey) string {
 
 func startGateway(t *testing.T, keys map[string]ed25519.PrivateKey) (string, func() error) {
 	t.Helper()
-	cfg, err := readConfig(environOf(map[string]string{hostEnv: audience, keysEnv: keysOf(t, keys)}))
+	cfg, err := readConfig(environOf(map[string]string{gatewayenv.HostVar: audience, gatewayenv.KeysVar: keysOf(t, keys)}))
 	if err != nil {
 		t.Fatalf("readConfig = %v", err)
 	}
@@ -185,12 +186,12 @@ func TestAConfigTheGatewayCannotVerifyTokensWithIsRefused(t *testing.T) {
 
 	valid := keysOf(t, map[string]ed25519.PrivateKey{"app": newKey(t)})
 	for name, env := range map[string]map[string]string{
-		"no host":               {keysEnv: valid},
-		"no keys":               {hostEnv: audience},
-		"keys that are no JSON": {hostEnv: audience, keysEnv: "app=abc"},
-		"a key of 3 bytes":      {hostEnv: audience, keysEnv: `{"app":"AAEC"}`},
-		"a key not base64":      {hostEnv: audience, keysEnv: `{"app":"not base64!"}`},
-		"an empty key set":      {hostEnv: audience, keysEnv: `{}`},
+		"no host":               {gatewayenv.KeysVar: valid},
+		"no keys":               {gatewayenv.HostVar: audience},
+		"keys that are no JSON": {gatewayenv.HostVar: audience, gatewayenv.KeysVar: "app=abc"},
+		"a key of 3 bytes":      {gatewayenv.HostVar: audience, gatewayenv.KeysVar: `{"app":"AAEC"}`},
+		"a key not base64":      {gatewayenv.HostVar: audience, gatewayenv.KeysVar: `{"app":"not base64!"}`},
+		"an empty key set":      {gatewayenv.HostVar: audience, gatewayenv.KeysVar: `{}`},
 	} {
 		if _, err := readConfig(environOf(env)); err == nil {
 			t.Errorf("readConfig with %s = nil, want it refused", name)
@@ -202,11 +203,11 @@ func TestTheGatewayListensOnPort8080UnlessTold(t *testing.T) {
 	t.Parallel()
 
 	keys := keysOf(t, map[string]ed25519.PrivateKey{"app": newKey(t)})
-	cfg, err := readConfig(environOf(map[string]string{hostEnv: audience, keysEnv: keys}))
+	cfg, err := readConfig(environOf(map[string]string{gatewayenv.HostVar: audience, gatewayenv.KeysVar: keys}))
 	if err != nil || cfg.listen != ":8080" {
 		t.Errorf("listen = %q (%v), want :8080", cfg.listen, err)
 	}
-	cfg, err = readConfig(environOf(map[string]string{hostEnv: audience, keysEnv: keys, listenEnv: "127.0.0.1:9000"}))
+	cfg, err = readConfig(environOf(map[string]string{gatewayenv.HostVar: audience, gatewayenv.KeysVar: keys, listenEnv: "127.0.0.1:9000"}))
 	if err != nil || cfg.listen != "127.0.0.1:9000" {
 		t.Errorf("listen = %q (%v), want 127.0.0.1:9000", cfg.listen, err)
 	}
