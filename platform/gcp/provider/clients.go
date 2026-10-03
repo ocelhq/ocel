@@ -9,6 +9,7 @@ import (
 
 	"cloud.google.com/go/firestore"
 	kms "cloud.google.com/go/kms/apiv1"
+	logging "cloud.google.com/go/logging/apiv2"
 	"cloud.google.com/go/storage"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/artifactregistry/v1"
@@ -57,6 +58,7 @@ type clients struct {
 	connectivity  memo[*networkconnectivity.Service]
 	principal     memo[string]
 	projects      memo[*cloudresourcemanager.Service]
+	logs          memo[*logging.Client]
 	numberLock    sync.Mutex
 	projectNumber int64
 }
@@ -164,6 +166,12 @@ func (c *clients) Principal(ctx context.Context) (string, error) {
 func (c *clients) Projects() (*cloudresourcemanager.Service, error) {
 	return opened(c, &c.projects, "Resource Manager", func() (*cloudresourcemanager.Service, error) {
 		return cloudresourcemanager.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) Logging() (*logging.Client, error) {
+	return opened(c, &c.logs, "Cloud Logging", func() (*logging.Client, error) {
+		return logging.NewClient(context.Background(), ports.EmulatorGRPC(c.endpoint)...)
 	})
 }
 

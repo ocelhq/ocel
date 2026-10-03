@@ -42,3 +42,22 @@ func TestAFailedProjectNumberReadIsAskedAgainByTheNextCaller(t *testing.T) {
 		t.Errorf("the project was read %d times, want 2: once refused, once remembered", n)
 	}
 }
+
+func TestLoggingOpensOneSharedClientAgainstTheEmulator(t *testing.T) {
+	t.Parallel()
+
+	c := &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1", endpoint: "http://127.0.0.1:1"}
+
+	first, err := c.Logging()
+	if err != nil {
+		t.Fatalf("Logging: %v", err)
+	}
+	t.Cleanup(func() { first.Close() })
+	second, err := c.Logging()
+	if err != nil {
+		t.Fatalf("Logging again: %v", err)
+	}
+	if first != second {
+		t.Error("Logging opened a second client, want the first remembered")
+	}
+}
