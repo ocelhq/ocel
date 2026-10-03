@@ -32,6 +32,11 @@ func (r tailRun) batchTexts() string {
 
 func runTail(t *testing.T, logs *cloudwatchlogs.Client, lambdas *lambda.Client, query Query, every time.Duration, between ...func()) tailRun {
 	t.Helper()
+	return runTailWithChance(t, 0, logs, lambdas, query, every, between...)
+}
+
+func runTailWithChance(t *testing.T, chance float64, logs *cloudwatchlogs.Client, lambdas *lambda.Client, query Query, every time.Duration, between ...func()) tailRun {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var run tailRun
@@ -47,7 +52,7 @@ func runTail(t *testing.T, logs *cloudwatchlogs.Client, lambdas *lambda.Client, 
 	run.err = tail(ctx, logs, lambdas, query, every, func(events []Event) error {
 		run.batches = append(run.batches, events)
 		return nil
-	}, sleep)
+	}, sleep, func() float64 { return chance })
 	return run
 }
 
@@ -169,6 +174,24 @@ func TestTailBacksOffWhenThrottled(t *testing.T) {
 	}
 	if got := run.batchTexts(); got != "one" {
 		t.Fatalf("Tail() emitted batches %q, want the event once, after the throttling ended", got)
+	}
+}
+
+func TestTailShortensItsThrottledBackoffByUpToAQuarterAtRandom(t *testing.T) {
+	t.Parallel()
+	for chance, want := range map[float64][]time.Duration{
+		0:   {4 * time.Second, 8 * time.Second, 2 * time.Second},
+		0.5: {3500 * time.Millisecond, 7 * time.Second, 2 * time.Second},
+		1:   {3 * time.Second, 6 * time.Second, 2 * time.Second},
+	} {
+		fake, logs, lambdas := newFakeAWSWithWebFunction(t)
+		fake.throttles = 2
+
+		run := runTailWithChance(t, chance, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, 2*time.Second, idle(2)...)
+
+		if !slices.Equal(run.sleeps, want) {
+			t.Errorf("Tail() with chance %v slept %v, want %v", chance, run.sleeps, want)
+		}
 	}
 }
 
@@ -410,6 +433,7 @@ func TestTailStopsWhenEmitFails(t *testing.T) {
 	err := tail(context.Background(), logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, time.Second,
 		func([]Event) error { return refused },
 		func(context.Context, time.Duration) error { t.Fatal("slept after emit failed"); return nil },
+		func() float64 { return 0 },
 	)
 
 	if !errors.Is(err, refused) {

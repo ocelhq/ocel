@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math/rand/v2"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -16,10 +17,11 @@ const (
 	defaultPollInterval  = 2 * time.Second
 	maxThrottledInterval = 10 * time.Second
 	lateEventWindow      = 10 * time.Second
+	throttledJitter      = 0.25
 )
 
 func Tail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Client, query Query, every time.Duration, emit func([]Event) error) error {
-	return tail(ctx, logs, lambdas, query, every, emit, sleepFor)
+	return tail(ctx, logs, lambdas, query, every, emit, sleepFor, rand.Float64)
 }
 
 func sleepFor(ctx context.Context, d time.Duration) error {
@@ -67,7 +69,7 @@ func (c *cursor) forgetBeforeStart() {
 	maps.DeleteFunc(c.seenMillis, func(_ string, millis int64) bool { return millis < start })
 }
 
-func tail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Client, query Query, every time.Duration, emit func([]Event) error, sleep func(context.Context, time.Duration) error) error {
+func tail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Client, query Query, every time.Duration, emit func([]Event) error, sleep func(context.Context, time.Duration) error, chance func() float64) error {
 	if err := refuseInvalidTailQuery(query); err != nil {
 		return fmt.Errorf("tail log events: %w", err)
 	}
@@ -75,22 +77,24 @@ func tail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Clie
 		every = defaultPollInterval
 	}
 	var groups []*tailedGroup
-	wait := every
+	backoff := every
 	for {
 		var err error
 		groups, err = findTailedGroups(ctx, lambdas, query, groups)
 		if err == nil {
 			err = pollGroups(ctx, logs, groups, query, emit)
 		}
+		wait := every
 		switch {
 		case ctx.Err() != nil:
 			return nil
 		case isThrottled(err):
-			wait = min(wait*2, max(maxThrottledInterval, every))
+			backoff = min(backoff*2, max(maxThrottledInterval, every))
+			wait = backoff - time.Duration(float64(backoff)*throttledJitter*chance())
 		case err != nil:
 			return err
 		default:
-			wait = every
+			backoff = every
 		}
 		if err := sleep(ctx, wait); err != nil {
 			return nil
