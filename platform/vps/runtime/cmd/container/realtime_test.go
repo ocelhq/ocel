@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -20,15 +19,12 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/platform/realtime/gateway"
 	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func serveRealtimeProxy(t *testing.T, gatewayPublishURL string) realtimev1connect.RealtimeServiceClient {
+func serveRealtimeProxy(t *testing.T, key ed25519.PrivateKey, gatewayPublishURL string) realtimev1connect.RealtimeServiceClient {
 	t.Helper()
-	_, key, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
 	record, err := protojson.Marshal(&bindingsv1.Binding{Name: "realtime--app", Properties: &bindingsv1.Binding_Realtime{Realtime: &bindingsv1.RealtimeProperties{
 		Transport:  bindingsv1.RealtimeTransport_REALTIME_TRANSPORT_OCEL_GATEWAY,
 		Url:        "wss://shop.example/event/realtime",
@@ -76,21 +72,22 @@ func readEnv(served bindingproxy.Served, key string) string {
 	return ""
 }
 
-func TestTheRuntimePublishesARealtimeEventToTheBoxsGateway(t *testing.T) {
-	var path, authorization, body string
-	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw, _ := io.ReadAll(r.Body)
-		path, authorization, body = r.URL.Path, r.Header.Get("Authorization"), string(raw)
-		w.WriteHeader(http.StatusNoContent)
+func TestTheRuntimePublishesARealtimeEventToTheBoxsGatewayAtItsInternalAddress(t *testing.T) {
+	_, key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	box := httptest.NewServer(gateway.New(gateway.Config{
+		Host: "shop.example",
+		Keys: func(namespace string) (ed25519.PublicKey, bool) {
+			return key.Public().(ed25519.PublicKey), namespace == "app"
+		},
 	}))
-	t.Cleanup(gateway.Close)
+	t.Cleanup(box.Close)
 
-	client := serveRealtimeProxy(t, gateway.URL+"/publish")
+	client := serveRealtimeProxy(t, key, box.URL+gateway.PublishPath)
 	event := `{"v":1,"id":"0123456789abcdef0123456789abcdef","ch":"/app/status","ts":1,"kind":"live","data":{}}`
 	if _, err := client.Publish(context.Background(), &realtimev1.PublishRequest{Realtime: "app", Channel: "/app/status", Event: event}); err != nil {
-		t.Fatalf("Publish() = %v", err)
-	}
-	if path != "/publish" || body != event || !strings.HasPrefix(authorization, "Bearer ") {
-		t.Errorf("the gateway was sent %s to %s under %q, want the event to /publish under a bearer token", body, path, authorization)
+		t.Errorf("Publish() = %v, want the gateway serving shop.example to take a publish sent to its internal address", err)
 	}
 }

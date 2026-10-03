@@ -36,7 +36,7 @@ func NewGatewayTransport(client *http.Client, publishURL string) Transport {
 		if malformed != nil || address.Host == "" {
 			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this runtime's gateway publish address %q is no URL with a host", publishURL))
 		}
-		credential, err := mintServerToken(properties.GetSigningKey(), address.Host, req)
+		credential, err := mintServerToken(properties.GetSigningKey(), properties.GetHost(), req)
 		if err != nil {
 			return connect.NewError(connect.CodeFailedPrecondition, err)
 		}
