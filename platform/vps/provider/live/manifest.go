@@ -51,6 +51,8 @@ type Manifest struct {
 	Bindings    []live.Binding `json:"bindings,omitempty"`
 	Store       *Store         `json:"store,omitempty"`
 	Queue       string         `json:"queue,omitempty"`
+	// TODO(#1516): set Realtime to the box gateway's publish address once the provider provisions realtime.
+	Realtime string `json:"realtime,omitempty"`
 }
 
 func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }
