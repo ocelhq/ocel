@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	listAttempts = 4
-	listBackoff  = 100 * time.Millisecond
-	listCeiling  = 2 * time.Second
+	retryAttempts = 4
+	retryBackoff  = 100 * time.Millisecond
+	retryCeiling  = 2 * time.Second
 )
 
 var retryableAnswers = []int{
@@ -34,7 +34,7 @@ func listed(ctx context.Context, logs *logging.Service, req *logging.ListLogEntr
 		page *logging.ListLogEntriesResponse
 		err  error
 	)
-	for attempt := range listAttempts {
+	for attempt := range retryAttempts {
 		if attempt > 0 && !waited(ctx, attempt) {
 			return nil, ctx.Err()
 		}
@@ -63,7 +63,7 @@ func isRetryable(err error) bool {
 }
 
 func waited(ctx context.Context, attempt int) bool {
-	backoff := min(listBackoff<<(attempt-1), listCeiling)
+	backoff := min(retryBackoff<<(attempt-1), retryCeiling)
 	timer := time.NewTimer(backoff/2 + rand.N(backoff/2))
 	defer timer.Stop()
 	select {
