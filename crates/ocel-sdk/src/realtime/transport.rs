@@ -11,6 +11,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 const PUBLISH_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_ANSWER_BYTES: usize = 64 << 10;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -70,13 +71,18 @@ where
         .await
         .map_err(|err| err.to_string())?;
     let status = response.status().as_u16();
-    let body = response
-        .into_body()
-        .collect()
-        .await
-        .map_err(|err| err.to_string())?
-        .to_bytes();
-    Ok((status, body))
+    let mut body = response.into_body();
+    let mut answer = Vec::new();
+    while answer.len() < MAX_ANSWER_BYTES {
+        let Some(frame) = body.frame().await else {
+            break;
+        };
+        if let Ok(data) = frame.map_err(|err| err.to_string())?.into_data() {
+            let kept = data.len().min(MAX_ANSWER_BYTES - answer.len());
+            answer.extend_from_slice(&data[..kept]);
+        }
+    }
+    Ok((status, Bytes::from(answer)))
 }
 
 pub(crate) async fn send_request(
@@ -180,4 +186,34 @@ pub(crate) async fn publish(
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn an_answer_is_read_no_further_than_64_kib() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let host = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0u8; 4096];
+            let _ = stream.read(&mut request).await;
+            let answer = vec![b'x'; 4 << 20];
+            let head = format!(
+                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\n\r\n",
+                answer.len()
+            );
+            let _ = stream.write_all(head.as_bytes()).await;
+            let _ = stream.write_all(&answer).await;
+        });
+        let uri: http::Uri = format!("http://{host}/creds").parse().unwrap();
+        let (status, body) = send_request(http::Method::GET, &uri, &[], Bytes::new())
+            .await
+            .unwrap();
+        assert_eq!(status, 200);
+        assert_eq!(body.len(), 64 << 10);
+    }
 }
