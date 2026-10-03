@@ -13,6 +13,7 @@ import "common/plan/v1/plan.proto";
 import "common/progress/v1/progress.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
 import "provider/cost/v1/cost.proto";
 
 service ProviderService {
@@ -75,6 +76,8 @@ service ProviderService {
     rpc Shape(ShapeRequest) returns (provider.cost.v1.ResourceSet);
 
     rpc Confirm(ConfirmRequest) returns (ConfirmResponse);
+
+    rpc ReadLogs(ReadLogsRequest) returns (stream ReadLogsResponse);
 }
 
 message ProviderConfig {
@@ -831,3 +834,83 @@ message InstallConnectorRequest {
 }
 
 message RemoveConnectorRequest {}
+
+message ReadLogsRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Environment environment = 2;
+
+  EdgeSelection edge = 3;
+
+  repeated string apps = 4;
+
+  bool all_releases = 5;
+
+  google.protobuf.Timestamp since = 6;
+
+  google.protobuf.Timestamp until = 7;
+
+  uint32 limit = 8 [(buf.validate.field).uint32 = {gte: 1, lte: 10000}];
+
+  string contains = 9;
+}
+
+message ReadLogsResponse {
+  oneof body {
+    LogBatch batch = 1;
+
+    LogNotice notice = 2;
+  }
+}
+
+message LogBatch {
+  repeated LogEntry entries = 1;
+}
+
+message LogEntry {
+  google.protobuf.Timestamp time = 1;
+
+  string app = 2;
+
+  string source = 3;
+
+  string release = 4;
+
+  string instance = 5;
+
+  LogStream stream = 6;
+
+  string message = 7;
+
+  string severity = 8;
+
+  bool failure = 9;
+}
+
+enum LogStream {
+  LOG_STREAM_UNSPECIFIED = 0;
+
+  LOG_STREAM_STDOUT = 1;
+
+  LOG_STREAM_STDERR = 2;
+}
+
+message LogNotice {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+
+    KIND_CAUGHT_UP = 1;
+
+    KIND_SAMPLED = 2;
+
+    KIND_SOURCE_GONE = 3;
+
+    KIND_RECONNECTED = 4;
+  }
+
+  Kind kind = 1;
+
+  string message = 2;
+
+  uint64 omitted = 3;
+}

@@ -20,6 +20,8 @@ type Suite struct {
 	Vendor func(t *testing.T, p provider.Provider)
 
 	Certificates *CertificateChecks
+
+	Logs *LogChecks
 }
 
 func Run(t *testing.T, suite Suite) {
@@ -29,6 +31,7 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("rpc", func(t *testing.T) { runRPC(t, suite) })
 	t.Run("certificates", func(t *testing.T) { runCertificates(t, suite) })
 	t.Run("hooks", func(t *testing.T) { runHooks(t, suite) })
+	t.Run("logs", func(t *testing.T) { runLogs(t, suite) })
 	t.Run("vendor", func(t *testing.T) { runVendor(t, suite) })
 }
 

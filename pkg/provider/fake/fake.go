@@ -48,6 +48,7 @@ type Provider struct {
 	routers        *Routers
 	dns            *DNS
 	connector      *Connector
+	logs           Logs
 }
 
 func New(_ context.Context, settings provider.Settings) (provider.Provider, error) {
@@ -157,3 +158,5 @@ func (p *Provider) Connector() provider.Connector { return p.connector }
 func (p *Provider) Runtime() provider.Runtime { return containerRuntime{p} }
 
 func (p *Provider) Liveness() provider.Liveness { return liveness{p} }
+
+func (p *Provider) Logs() provider.Logs { return &p.logs }

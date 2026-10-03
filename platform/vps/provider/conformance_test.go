@@ -8,8 +8,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -21,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -215,4 +219,62 @@ func TestRealtimePassesTheConformanceSuite(t *testing.T) {
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	conformance.RunRealtime(t, p.Facts())
+}
+
+type dockerLogs struct {
+	mu      sync.Mutex
+	entries map[string][]provider.LogEntry
+}
+
+func (d *dockerLogs) seed(_ *testing.T, target provider.LogTarget, entries []provider.LogEntry) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.entries == nil {
+		d.entries = map[string][]provider.LogEntry{}
+	}
+	d.entries[target.Container.Physical] = entries
+}
+
+func (d *dockerLogs) answer(command string) (session.Result, bool) {
+	if !strings.Contains(command, "docker logs") {
+		return session.Result{}, false
+	}
+	words := strings.Fields(strings.ReplaceAll(command, "'", ""))
+	flag := func(name string) string {
+		if at := slices.Index(words, name); at >= 0 {
+			return words[at+1]
+		}
+		return ""
+	}
+	since, _ := time.Parse(time.RFC3339Nano, flag("--since"))
+	until, _ := time.Parse(time.RFC3339Nano, flag("--until"))
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	logged := d.entries[words[len(words)-1]]
+	if tail, err := strconv.Atoi(flag("--tail")); err == nil {
+		logged = logged[len(logged)-min(len(logged), tail):]
+	}
+	var kept []provider.LogEntry
+	for _, entry := range logged {
+		if !until.IsZero() && entry.Time.After(until) {
+			break
+		}
+		if !entry.Time.Before(since) {
+			kept = append(kept, entry)
+		}
+	}
+	var stdout strings.Builder
+	for _, entry := range kept {
+		stdout.WriteString(entry.Time.Format(time.RFC3339Nano) + " " + entry.Message + "\n")
+	}
+	return session.Result{Stdout: stdout.String()}, true
+}
+
+func TestTheLogsPortKeepsTheConformanceHistoryOfAContainerOnTheBox(t *testing.T) {
+	t.Parallel()
+
+	docker := &dockerLogs{}
+	p := over(&box{refuses: docker.answer})
+	conformance.RunLogs(t, p.Facts(), p.Logs())
+	conformance.RunLogHistory(t, p.Facts(), p.Logs(), docker.seed)
 }

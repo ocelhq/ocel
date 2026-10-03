@@ -123,6 +123,9 @@ const (
 	ProviderServiceShapeProcedure = "/provider.contract.v1.ProviderService/Shape"
 	// ProviderServiceConfirmProcedure is the fully-qualified name of the ProviderService's Confirm RPC.
 	ProviderServiceConfirmProcedure = "/provider.contract.v1.ProviderService/Confirm"
+	// ProviderServiceReadLogsProcedure is the fully-qualified name of the ProviderService's ReadLogs
+	// RPC.
+	ProviderServiceReadLogsProcedure = "/provider.contract.v1.ProviderService/ReadLogs"
 )
 
 // ProviderServiceClient is a client for the provider.contract.v1.ProviderService service.
@@ -157,6 +160,7 @@ type ProviderServiceClient interface {
 	RemoveConnector(context.Context, *v1.RemoveConnectorRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error)
 	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
+	ReadLogs(context.Context, *v1.ReadLogsRequest) (*connect.ServerStreamForClient[v1.ReadLogsResponse], error)
 }
 
 // NewProviderServiceClient constructs a client for the provider.contract.v1.ProviderService
@@ -350,6 +354,12 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("Confirm")),
 			connect.WithClientOptions(opts...),
 		),
+		readLogs: connect.NewClient[v1.ReadLogsRequest, v1.ReadLogsResponse](
+			httpClient,
+			baseURL+ProviderServiceReadLogsProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("ReadLogs")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -385,6 +395,7 @@ type providerServiceClient struct {
 	removeConnector           *connect.Client[v1.RemoveConnectorRequest, v11.OperationEvent]
 	shape                     *connect.Client[v1.ShapeRequest, v13.ResourceSet]
 	confirm                   *connect.Client[v1.ConfirmRequest, v1.ConfirmResponse]
+	readLogs                  *connect.Client[v1.ReadLogsRequest, v1.ReadLogsResponse]
 }
 
 // Configure calls provider.contract.v1.ProviderService.Configure.
@@ -609,6 +620,11 @@ func (c *providerServiceClient) Confirm(ctx context.Context, req *v1.ConfirmRequ
 	return nil, err
 }
 
+// ReadLogs calls provider.contract.v1.ProviderService.ReadLogs.
+func (c *providerServiceClient) ReadLogs(ctx context.Context, req *v1.ReadLogsRequest) (*connect.ServerStreamForClient[v1.ReadLogsResponse], error) {
+	return c.readLogs.CallServerStream(ctx, connect.NewRequest(req))
+}
+
 // ProviderServiceHandler is an implementation of the provider.contract.v1.ProviderService service.
 type ProviderServiceHandler interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
@@ -641,6 +657,7 @@ type ProviderServiceHandler interface {
 	RemoveConnector(context.Context, *v1.RemoveConnectorRequest, *connect.ServerStream[v11.OperationEvent]) error
 	Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error)
 	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
+	ReadLogs(context.Context, *v1.ReadLogsRequest, *connect.ServerStream[v1.ReadLogsResponse]) error
 }
 
 // NewProviderServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -830,6 +847,12 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("Confirm")),
 		connect.WithHandlerOptions(opts...),
 	)
+	providerServiceReadLogsHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceReadLogsProcedure,
+		svc.ReadLogs,
+		connect.WithSchema(providerServiceMethods.ByName("ReadLogs")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/provider.contract.v1.ProviderService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProviderServiceConfigureProcedure:
@@ -892,6 +915,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceShapeHandler.ServeHTTP(w, r)
 		case ProviderServiceConfirmProcedure:
 			providerServiceConfirmHandler.ServeHTTP(w, r)
+		case ProviderServiceReadLogsProcedure:
+			providerServiceReadLogsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1019,4 +1044,8 @@ func (UnimplementedProviderServiceHandler) Shape(context.Context, *v1.ShapeReque
 
 func (UnimplementedProviderServiceHandler) Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Confirm is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) ReadLogs(context.Context, *v1.ReadLogsRequest, *connect.ServerStream[v1.ReadLogsResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ReadLogs is not implemented"))
 }

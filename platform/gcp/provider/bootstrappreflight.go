@@ -92,6 +92,7 @@ var deployRoles = []string{
 	"roles/memorystore.admin",
 	"roles/pubsub.admin",
 	"roles/cloudscheduler.admin",
+	"roles/logging.viewer",
 }
 
 const (

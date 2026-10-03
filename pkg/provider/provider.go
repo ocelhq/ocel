@@ -25,6 +25,7 @@ type Provider interface {
 	Connector() Connector
 	Runtime() Runtime
 	Liveness() Liveness
+	Logs() Logs
 }
 
 type Facts struct {
