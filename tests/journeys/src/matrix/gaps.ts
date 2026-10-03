@@ -457,10 +457,29 @@ export const gaps: Gap[] = [
   {
     id: "go-image-built-from-the-app-path-alone",
     reason:
-      "a container app's image is built from its path alone, and tasks/go's module is rooted above ./server and replaces ocel.dev with the repository's sdk, so go build in the image finds no go.mod",
+      "a container app's image is built from its path alone, and the Go fixtures' module is rooted above ./server and replaces ocel.dev with the repository's sdk, so go build in the image finds no go.mod",
     issue: 1550,
     where: [
-      { on: ["vps", "vps.incus"], fixtures: [tasks.go], fails: [step.deploy], skipsCell: true },
+      {
+        on: ["vps", "vps.incus"],
+        fixtures: [tasks.go, realtime.go],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+    ],
+  },
+  {
+    id: "path-dependency-outside-the-image",
+    reason:
+      "a container app's image is built from its path alone, and the Python and Rust fixtures depend on the repository's SDK by a path outside it, so the install in the image finds no SDK",
+    issue: 1598,
+    where: [
+      {
+        on: ["vps", "vps.incus"],
+        fixtures: [realtime.python, realtime.rust],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
     ],
   },
   {

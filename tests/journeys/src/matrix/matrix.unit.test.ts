@@ -372,16 +372,25 @@ describe("the realtime concern", () => {
     }
   });
 
-  it("runs the behavioural suite on a box in TypeScript, Go, Python and Rust, expecting nothing red", () => {
+  it("runs the behavioural suite on a box in TypeScript, and skips Go, Python and Rust under the tickets for their images", () => {
     for (const lane of ["vps", "vps.incus"] as const) {
       const planned = planOn(lane);
-      expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(CELLS));
-      expect(Object.keys(planned.skipped).filter((cell) => cell.startsWith("realtime/"))).toEqual(
-        [],
+      expect(planned.cells.map((cell) => cell.name)).toContain("realtime/node");
+      expect(planned.expectedFailures["realtime/node/web"] ?? {}).toEqual({});
+      expect(
+        Object.fromEntries(
+          Object.entries(planned.skipped)
+            .filter(([cell]) => cell.startsWith("realtime/"))
+            .map(([cell, gaps]) => [cell, gaps.map((gap) => gap.issue)]),
+        ),
+      ).toEqual({
+        "realtime/go": [1550],
+        "realtime/python": [1598],
+        "realtime/rust": [1598],
+      });
+      expect(planOn(lane, {}, EVERY_CELL).cells.map((cell) => cell.name)).toEqual(
+        expect.arrayContaining(CELLS),
       );
-      for (const cell of CELLS) {
-        expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
-      }
     }
   });
 
