@@ -94,7 +94,7 @@ func (r realtimeEnvironment) provision(ctx context.Context, resource provider.Re
 			"realtime %s reached the provider with no config, so nothing knows its channels", resource.Declared)
 	}
 	namespace := realtimeNamespaceOf(resource.Declared, resource.Name)
-	seed, err := r.signingSeed(ctx, namespace)
+	seed, err := r.ensureSigningSeed(ctx, namespace)
 	if err != nil {
 		return provider.Binding{}, err
 	}
