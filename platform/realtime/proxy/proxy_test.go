@@ -143,3 +143,61 @@ func TestAGatewayRuntimeRefusesABindingOverAnotherTransport(t *testing.T) {
 		t.Errorf("Publish() = %v, want a failed precondition naming the transport this runtime does not publish to", err)
 	}
 }
+
+func TestAPublishTheGatewayRefusesFailsWithTheCodeItsStatusMeans(t *testing.T) {
+	t.Parallel()
+
+	for status, want := range map[int]connect.Code{
+		http.StatusBadRequest:          connect.CodeInvalidArgument,
+		http.StatusUnauthorized:        connect.CodePermissionDenied,
+		http.StatusForbidden:           connect.CodePermissionDenied,
+		http.StatusTooManyRequests:     connect.CodeResourceExhausted,
+		http.StatusNotFound:            connect.CodeFailedPrecondition,
+		http.StatusInternalServerError: connect.CodeUnavailable,
+		http.StatusBadGateway:          connect.CodeUnavailable,
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
+		t.Cleanup(server.Close)
+
+		err := publish(proxy.NewService(bindRealtime(t, gatewayProperties(newKey(t))), proxy.NewGatewayTransport(server.Client(), server.URL+"/publish")))
+		if connect.CodeOf(err) != want {
+			t.Errorf("status %d: Publish() = %v, want %s", status, err, want)
+		}
+	}
+}
+
+func TestAPublishTheCallerCancelsMidRequestFailsAsCanceled(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_, _ = io.ReadAll(r.Body)
+		cancel()
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+
+	service := proxy.NewService(bindRealtime(t, gatewayProperties(newKey(t))), proxy.NewGatewayTransport(server.Client(), server.URL+"/publish"))
+	_, err := service.Publish(ctx, &realtimev1.PublishRequest{Realtime: "app", Channel: channel, Event: event})
+	if connect.CodeOf(err) != connect.CodeCanceled {
+		t.Errorf("Publish() = %v, want canceled: the caller gave up, the gateway did not fail", err)
+	}
+}
+
+func TestAPublishPastTheCallersDeadlineFailsAsDeadlineExceeded(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_, _ = io.ReadAll(r.Body)
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	t.Cleanup(cancel)
+	service := proxy.NewService(bindRealtime(t, gatewayProperties(newKey(t))), proxy.NewGatewayTransport(server.Client(), server.URL+"/publish"))
+	_, err := service.Publish(ctx, &realtimev1.PublishRequest{Realtime: "app", Channel: channel, Event: event})
+	if connect.CodeOf(err) != connect.CodeDeadlineExceeded {
+		t.Errorf("Publish() = %v, want deadline exceeded", err)
+	}
+}

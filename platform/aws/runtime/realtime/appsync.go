@@ -96,16 +96,16 @@ func NewAppSyncTransport(cfg Config) proxy.Transport {
 			if err == nil {
 				return refuseFailedEvents(answer, failed)
 			}
-			if !isThrottle(err) || attempt >= cfg.Retryer.MaxAttempts() {
-				return failed(connect.CodeUnavailable, err)
+			if !isThrottle(err) {
+				return proxy.NewPublishError(ctx, req.GetChannel(), err)
 			}
 			delay, delayErr := cfg.Retryer.RetryDelay(attempt, err)
-			if delayErr != nil {
-				return failed(connect.CodeUnavailable, err)
+			if attempt >= cfg.Retryer.MaxAttempts() || delayErr != nil {
+				return failed(connect.CodeResourceExhausted, err)
 			}
 			select {
 			case <-ctx.Done():
-				return failed(connect.CodeDeadlineExceeded, err)
+				return proxy.NewPublishError(ctx, req.GetChannel(), err)
 			case <-time.After(delay):
 			}
 		}

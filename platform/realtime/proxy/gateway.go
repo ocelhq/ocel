@@ -46,7 +46,7 @@ func NewGatewayTransport(client *http.Client, publishURL string) Transport {
 		post.Header.Set("Authorization", "Bearer "+credential)
 		post.Header.Set("Content-Type", "application/json")
 		if _, err := Send(client, post, "the gateway"); err != nil {
-			return connect.NewError(connect.CodeUnavailable, fmt.Errorf("publish on %s: %w", req.GetChannel(), err))
+			return NewPublishError(ctx, req.GetChannel(), err)
 		}
 		return nil
 	}
