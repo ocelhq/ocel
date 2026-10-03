@@ -1,6 +1,7 @@
 package logentries
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
@@ -9,26 +10,35 @@ var quoting = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
 
 func quoted(s string) string { return `"` + quoting.Replace(s) + `"` }
 
-func filter(q Query) string { return filterOf(q, true) }
+func filter(q Query) string {
+	return strings.Join(slices.Concat(revisionTerms(q.Sources), timeTerms(q), outputTerms(q)), " AND ")
+}
 
-func tailFilter(q Query) string { return filterOf(q, false) }
+func tailFilter(q Query) string {
+	return strings.Join(slices.Concat(revisionTerms(q.Sources), outputTerms(q)), " AND ")
+}
 
-func filterOf(q Query, timed bool) string {
-	terms := []string{
+func revisionTerms(sources []Source) []string {
+	return []string{
 		`resource.type="cloud_run_revision"`,
-		"(" + strings.Join(sourceTerms(q.Sources), " OR ") + ")",
+		"(" + strings.Join(sourceTerms(sources), " OR ") + ")",
 	}
-	if timed {
-		terms = append(terms, "timestamp>="+quoted(q.Since.UTC().Format(time.RFC3339Nano)))
-		if !q.Until.IsZero() {
-			terms = append(terms, "timestamp<="+quoted(q.Until.UTC().Format(time.RFC3339Nano)))
-		}
+}
+
+func timeTerms(q Query) []string {
+	terms := []string{"timestamp>=" + quoted(q.Since.UTC().Format(time.RFC3339Nano))}
+	if !q.Until.IsZero() {
+		terms = append(terms, "timestamp<="+quoted(q.Until.UTC().Format(time.RFC3339Nano)))
 	}
+	return terms
+}
+
+func outputTerms(q Query) []string {
+	var terms []string
 	if q.Contains != "" {
 		terms = append(terms, quoted(q.Contains))
 	}
-	terms = append(terms, `(log_id("run.googleapis.com/stdout") OR log_id("run.googleapis.com/stderr"))`)
-	return strings.Join(terms, " AND ")
+	return append(terms, `(log_id("run.googleapis.com/stdout") OR log_id("run.googleapis.com/stderr"))`)
 }
 
 func sourceTerms(sources []Source) []string {
