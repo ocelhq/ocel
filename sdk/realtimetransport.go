@@ -68,7 +68,7 @@ func sendToGateway(ctx context.Context, d *RealtimeDefinition, binding realtimeB
 	}
 	req.Header.Set("Authorization", bearer(credential))
 	req.Header.Set("Content-Type", "application/json")
-	res, err := http.DefaultClient.Do(req)
+	res, err := realtimeHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("ocel: realtime %q: publish on %s: %w", d.name, channel, err)
 	}
@@ -80,8 +80,3 @@ func sendToGateway(ctx context.Context, d *RealtimeDefinition, binding realtimeB
 }
 
 func mintNoCredential(*RealtimeDefinition, realtimeBinding, string) (string, error) { return "", nil }
-
-func sendToAppSyncEvents(_ context.Context, d *RealtimeDefinition, _ realtimeBinding, _ string, _ []byte, _ string) error {
-	// TODO(#1514): publish with a SigV4-signed POST /event under the app's role once the AWS target lands.
-	return fmt.Errorf("ocel: realtime %q: publishing on AppSync Events is not supported yet", d.name)
-}
