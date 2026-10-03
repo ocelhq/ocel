@@ -45,7 +45,6 @@ type realtimeArgs struct {
 	Namespaces  []realtimeNamespace
 	Authorizer  payloads.Placement
 	BoundaryARN string
-	Tags        map[string]string
 }
 
 func realtimeResourcesOf(resources []provider.Resource) []provider.Resource {
@@ -87,7 +86,7 @@ func registerRealtime(ctx *pulumi.Context, project, env string, args realtimeArg
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy("lambda.amazonaws.com")),
 		Description:         pulumi.String(at.Description("execution role for the realtime authorizer")),
 		PermissionsBoundary: pulumi.String(args.BoundaryARN),
-		Tags:                resourceTags(naming.KindRole, "", args.Tags),
+		Tags:                resourceTags(naming.KindRole, "", nil),
 	})
 	if err != nil {
 		return err
@@ -102,7 +101,7 @@ func registerRealtime(ctx *pulumi.Context, project, env string, args realtimeArg
 	logs, err := newLambdaLogGroup(ctx,
 		naming.ResourceID(naming.KindRealtimeAuthorizer, "", "logs"),
 		at.PhysicalPrefix(maxLambdaBaseNameLen-len(naming.KindRealtimeAuthorizer))+string(naming.KindRealtimeAuthorizer),
-		naming.KindRealtimeAuthorizer, "", args.Tags)
+		naming.KindRealtimeAuthorizer, "", nil)
 	if err != nil {
 		return err
 	}
@@ -116,7 +115,7 @@ func registerRealtime(ctx *pulumi.Context, project, env string, args realtimeArg
 		Role:          role.Arn,
 		Description:   capDescription(at.Description("verifies the realtime tokens this stage's apps sign"), maxDescriptionLen),
 		LoggingConfig: lambdaLogging(logs),
-		Tags:          resourceTags(naming.KindRealtimeAuthorizer, "", args.Tags),
+		Tags:          resourceTags(naming.KindRealtimeAuthorizer, "", nil),
 		S3Bucket:      pulumi.String(args.Authorizer.Bucket),
 		S3Key:         pulumi.String(args.Authorizer.Key),
 		Environment: &lambda.FunctionEnvironmentArgs{
@@ -152,7 +151,7 @@ func registerRealtime(ctx *pulumi.Context, project, env string, args realtimeArg
 				&appsync.ApiEventConfigDefaultPublishAuthModeArgs{AuthType: pulumi.String(appSyncIAMAuth)},
 			},
 		},
-		Tags: resourceTags(naming.KindRealtime, "", args.Tags),
+		Tags: resourceTags(naming.KindRealtime, "", nil),
 	})
 	if err != nil {
 		return err
