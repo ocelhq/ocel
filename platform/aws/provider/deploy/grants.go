@@ -18,6 +18,8 @@ const (
 	policyBudgetChars          = rolePolicyCeilingChars - platformPolicyReserveChars
 
 	s3ARNPrefix = "arn:aws:s3:::"
+
+	widestEventAPIARN = "arn:aws:appsync:ap-southeast-5:123456789012:apis/abcdefghijklmnopqrstuvwxyz"
 )
 
 type bindingPolicy struct {
@@ -235,10 +237,19 @@ func billedPolicies(resources []provider.Resource, grants []provider.Binding, se
 		billed[binding.Name] = PolicyBillItem{Binding: binding.Name, Type: binding.Type, Chars: len(policy)}
 	}
 	for _, resource := range resources {
-		if resource.Binding != "" || resource.Type != provider.BindingBucket {
+		if resource.Binding != "" {
 			continue
 		}
-		policy, err := bindingPolicyDocument(resource.Name, bucketGrants(strings.Repeat("b", maxS3BucketNameLen), sessions))
+		var grants []*bindingsv1.Grant
+		switch resource.Type {
+		case provider.BindingBucket:
+			grants = bucketGrants(strings.Repeat("b", maxS3BucketNameLen), sessions)
+		case provider.BindingRealtime:
+			grants = realtimeGrants(widestEventAPIARN, resource.Declared)
+		default:
+			continue
+		}
+		policy, err := bindingPolicyDocument(resource.Name, grants)
 		if err != nil {
 			return nil, err
 		}

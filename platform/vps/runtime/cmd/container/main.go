@@ -20,12 +20,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/app/realtime/v1/realtimev1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	realtimeproxy "github.com/ocelhq/ocel/platform/realtime/proxy"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
 	source "github.com/ocelhq/ocel/platform/vps/runtime/live"
@@ -199,7 +201,7 @@ func proxying(manifest variables.Manifest, values *live.Values, socket, app stri
 	if err != nil {
 		return bindingproxy.Served{}, err
 	}
-	services := bindingproxy.Services{Buckets: buckets}
+	services := bindingproxy.Services{Buckets: buckets, Realtime: newRealtime(manifest, values)}
 	if manifest.Queue != "" {
 		agent := source.Client(socket)
 		services.Tasks = taskv1connect.NewTaskServiceClient(agent, source.AgentURL)
@@ -209,6 +211,13 @@ func proxying(manifest variables.Manifest, values *live.Values, socket, app stri
 		return bindingproxy.Served{}, nil
 	}
 	return bindingproxy.Serve(services)
+}
+
+func newRealtime(manifest variables.Manifest, values *live.Values) realtimev1connect.RealtimeServiceHandler {
+	if manifest.RealtimePublishURL == "" {
+		return nil
+	}
+	return realtimeproxy.NewService(values, realtimeproxy.NewGatewayTransport(http.DefaultClient, manifest.RealtimePublishURL))
 }
 
 func newBuckets(manifest variables.Manifest, values *live.Values, socket, app string) (bucketv1connect.BucketServiceHandler, error) {

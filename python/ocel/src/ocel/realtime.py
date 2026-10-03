@@ -9,10 +9,11 @@ from datetime import timedelta
 from typing import Any, Literal, get_args, overload
 from urllib.parse import urlsplit, urlunsplit
 
+from connectrpc.errors import ConnectError
 from protobuf import Oneof
 from protobuf.wkt import Duration
 
-from ocel._binding import read_realtime_binding, refuse_unprovisioned
+from ocel._binding import read_realtime_binding, read_runtime, refuse_unprovisioned
 from ocel._declare import declare, find_caller_source, is_discovering
 from ocel._payload import Codec
 from ocel._realtime_token import TokenOperation, mint_token
@@ -23,6 +24,11 @@ from ocel._realtime_wire import (
     WireRefusal,
     encode_wire_channel,
 )
+from ocel.gen.app.realtime.v1.realtime_connect import (
+    RealtimeServiceClient,
+    RealtimeServiceClientSync,
+)
+from ocel.gen.app.realtime.v1.realtime_pb import PublishRequest
 from ocel.gen.app.resources.v1.resources_pb import (
     DeclareRequest,
     RealtimeChannel,
@@ -39,7 +45,6 @@ _MAX_TOKEN_TTL_SECONDS = 300
 _MAX_OPS = 50
 _MAX_REQUEST_BYTES = 1 << 20
 _MAX_EVENT_BYTES = 240 * 1024
-_PUBLISH_TIMEOUT_SECONDS = 10.0
 _BATCH_KEYS = frozenset({"connect", "ops"})
 _OP_KEYS = frozenset({"op", "pattern", "params", "body"})
 _MISSING_BODY = object()
@@ -111,28 +116,7 @@ Rule = Callable[[RuleContext], bool | Awaitable[bool]]
 @dataclass(frozen=True)
 class _Transport:
     name: Literal["appsync-events", "ocel-gateway"]
-    answered_host: str | None
-    publish_url: str | None
-
-
-def _resolve_transport(resource: str, properties: RealtimeProperties) -> _Transport:
-    if properties.transport == RealtimeTransport.APPSYNC_EVENTS:
-        # TODO(#1514): publish with a SigV4-signed POST /event under the app's role
-        # once the AWS target lands.
-        return _Transport("appsync-events", properties.host, None)
-    if properties.transport == RealtimeTransport.OCEL_GATEWAY:
-        return _Transport("ocel-gateway", None, _build_gateway_publish_url(properties.url))
-    raise RuntimeError(
-        f'realtime "{resource}": the binding names transport {properties.transport}, '
-        "which this SDK does not speak"
-    )
-
-
-def _build_gateway_publish_url(socket_url: str) -> str:
-    parts = urlsplit(socket_url)
-    return urlunsplit(
-        ("https" if parts.scheme == "wss" else "http", parts.netloc, "/publish", "", "")
-    )
+    answered_host: str | None = None
 
 
 async def _await_if_awaitable(value: Any) -> Any:
@@ -223,16 +207,15 @@ class Channel:
         """Publish ``body`` to every subscriber of the channel ``params`` fill in the
         pattern, after validating it against the channel's schema. Every param is required.
         Raises :class:`RealtimePublishError` for params or a body that cannot be published,
-        and ``TimeoutError`` when the transport does not take the event within 10 seconds."""
-        properties = self._resource._read_properties("publish")
+        and ``RuntimeError`` when the ocel runtime does not publish the event."""
+        self._resource._ensure_connection("publish")
         channel, _, envelope = self._encode_event(params, body)
-        self._resource._publish_sync(properties, channel, envelope)
+        self._resource._publish("publish", channel, envelope)
 
     async def publish_async(self, body: Any, /, **params: str) -> None:
         """Publish ``body`` as :meth:`publish` does, without blocking the event loop."""
-        properties = self._resource._read_properties("publish_async")
         channel, _, envelope = self._encode_event(params, body)
-        await self._resource._publish_async(properties, channel, envelope)
+        await self._resource._publish_async("publish_async", channel, envelope)
 
 
 @dataclass
@@ -313,6 +296,8 @@ class Realtime:
         self._ttl_seconds = ttl_seconds
         self._source = source
         self._channels: dict[str, Channel] = {}
+        self._connection: tuple[Any, dict[str, str]] | None = None
+        self._async_connection: tuple[Any, dict[str, str]] | None = None
 
     def _declare(self) -> None:
         if not is_discovering():
@@ -423,53 +408,58 @@ class Realtime:
             ttl_seconds=self._ttl_seconds,
         )
 
-    def _build_publish_request(
-        self, properties: RealtimeProperties, transport: _Transport, channel: str
-    ) -> tuple[str, dict[str, str]]:
-        if transport.publish_url is None:
-            raise RuntimeError(
-                f'realtime "{self.name}": publishing on {transport.name} is not supported yet'
-            )
-        token = self._mint_token(properties, "server", "publish", channel)["token"]
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        return transport.publish_url, headers
-
-    def _raise_unless_accepted(self, channel: str, status: int) -> None:
-        if status // 100 != 2:
-            raise RuntimeError(
-                f'realtime "{self.name}": the gateway refused a publish on {channel} '
-                f"with status {status}"
-            )
-
-    def _publish_sync(self, properties: RealtimeProperties, channel: str, envelope: bytes) -> None:
-        from pyqwest import SyncClient
-
-        transport = _resolve_transport(self.name, properties)
-        url, headers = self._build_publish_request(properties, transport, channel)
-        response = SyncClient().post(url, headers, envelope, timeout=_PUBLISH_TIMEOUT_SECONDS)
-        self._raise_unless_accepted(channel, response.status)
-
-    async def _publish_async(
-        self, properties: RealtimeProperties, channel: str, envelope: bytes
-    ) -> None:
-        transport = _resolve_transport(self.name, properties)
-        url, headers = self._build_publish_request(properties, transport, channel)
-        await self._post_event(url, headers, channel, envelope)
-
-    async def _post_event(
-        self, url: str, headers: dict[str, str], channel: str, envelope: bytes
-    ) -> None:
-        from pyqwest import Client
-
-        response = await asyncio.wait_for(
-            Client().post(url, headers, envelope), _PUBLISH_TIMEOUT_SECONDS
+    def _resolve_transport(self, properties: RealtimeProperties) -> _Transport:
+        if properties.transport == RealtimeTransport.APPSYNC_EVENTS:
+            return _Transport("appsync-events", properties.host)
+        if properties.transport == RealtimeTransport.OCEL_GATEWAY:
+            return _Transport("ocel-gateway")
+        raise RuntimeError(
+            f'realtime "{self.name}": the binding names transport {properties.transport}, '
+            "which this SDK does not speak"
         )
-        self._raise_unless_accepted(channel, response.status)
+
+    def _ensure_connection(self, access: str) -> tuple[Any, dict[str, str]]:
+        if is_discovering():
+            raise refuse_unprovisioned(f'realtime("{self.name}")', access)
+        if self._connection is None:
+            self._connection = self._new_connection(RealtimeServiceClientSync)
+        return self._connection
+
+    def _ensure_async_connection(self, access: str) -> tuple[Any, dict[str, str]]:
+        if is_discovering():
+            raise refuse_unprovisioned(f'realtime("{self.name}")', access)
+        if self._async_connection is None:
+            self._async_connection = self._new_connection(RealtimeServiceClient)
+        return self._async_connection
+
+    def _new_connection(self, client_type: Any) -> tuple[Any, dict[str, str]]:
+        read_realtime_binding(self.name)
+        address, headers = read_runtime()
+        return client_type(address, send_compression=None), headers
+
+    def _build_request(self, channel: str, envelope: bytes) -> PublishRequest:
+        return PublishRequest(realtime=self.name, channel=channel, event=envelope.decode())
+
+    def _refused_publish(self, channel: str, refused: ConnectError) -> RuntimeError:
+        return RuntimeError(f'realtime "{self.name}": publish on {channel}: {refused.message}')
+
+    def _publish(self, access: str, channel: str, envelope: bytes) -> None:
+        client, headers = self._ensure_connection(access)
+        try:
+            client.publish(self._build_request(channel, envelope), headers=headers)
+        except ConnectError as refused:
+            raise self._refused_publish(channel, refused) from refused
+
+    async def _publish_async(self, access: str, channel: str, envelope: bytes) -> None:
+        client, headers = self._ensure_async_connection(access)
+        try:
+            await client.publish(self._build_request(channel, envelope), headers=headers)
+        except ConnectError as refused:
+            raise self._refused_publish(channel, refused) from refused
 
     async def _serve_op(
         self,
         properties: RealtimeProperties,
-        transport: _Transport,
         request: RealtimeRequest,
         auth: Any,
         op: Any,
@@ -499,7 +489,7 @@ class Realtime:
         if operation == "subscribe":
             return await self._serve_subscribe(properties, request, auth, channel, params)
         return await self._serve_publish(
-            properties, transport, request, auth, channel, params, op.get("body", _MISSING_BODY)
+            request, auth, channel, params, op.get("body", _MISSING_BODY)
         )
 
     async def _serve_subscribe(
@@ -524,8 +514,6 @@ class Realtime:
 
     async def _serve_publish(
         self,
-        properties: RealtimeProperties,
-        transport: _Transport,
         request: RealtimeRequest,
         auth: Any,
         channel: Channel,
@@ -542,11 +530,8 @@ class Realtime:
         denied = await _run_rule(channel._publish, context)
         if denied is not None:
             return _deny(denied)
-        if transport.publish_url is None:
-            return _deny("publish-failed")
-        url, headers = self._build_publish_request(properties, transport, wire)
         try:
-            await self._post_event(url, headers, wire, envelope)
+            await self._publish_async("handler", wire, envelope)
         except Exception:
             return _deny("publish-failed")
         return {"wire": wire}
@@ -555,13 +540,13 @@ class Realtime:
         self, request: RealtimeRequest, connect: bool, ops: list[Any]
     ) -> dict[str, Any]:
         properties = self._read_properties("handler")
-        transport = _resolve_transport(self.name, properties)
+        transport = self._resolve_transport(properties)
         auth = None
         if self._authorize is not None:
             auth = await _await_if_awaitable(self._authorize(request))
 
         async def serve(i: int, op: Any) -> tuple[int, dict[str, Any]]:
-            return i, await self._serve_op(properties, transport, request, auth, op)
+            return i, await self._serve_op(properties, request, auth, op)
 
         publishes = [
             (i, op)

@@ -289,6 +289,20 @@ export const gaps: Gap[] = [
     where: [{ on: ["aws.floci"], variants: [container], fails: [step.deploy], skipsCell: true }],
   },
   {
+    id: "floci-runs-no-event-api",
+    reason:
+      "the aws provider serves realtime from an AppSync Event API, and floci emulates AppSync's GraphQL APIs alone: no CreateApi, Lambda authorizer, POST /event or Event socket",
+    issue: 1570,
+    where: [
+      {
+        on: ["aws.floci"],
+        fixtures: Object.values(realtime),
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+    ],
+  },
+  {
     id: "next-on-cloud-run",
     reason:
       "gcp phase 3 serves node, go, python and rust; a Next app has no router in front of it there",
@@ -494,7 +508,6 @@ export const gaps: Gap[] = [
   },
   ...(
     [
-      { target: "aws", lanes: ["aws", "aws.floci"], issue: 1514 },
       { target: "gcp", lanes: ["gcp", "gcp.floci"], issue: 1515 },
       { target: "vps", lanes: ["vps", "vps.incus"], issue: 1516 },
     ] as const

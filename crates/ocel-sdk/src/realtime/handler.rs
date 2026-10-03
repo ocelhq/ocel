@@ -1,5 +1,5 @@
 use super::token::{mint_token, MintedToken, Operation};
-use super::transport::{mint_publish_token, publish, read_transport, Transport};
+use super::transport::{read_transport, Transport};
 use super::wire::encode_wire_channel;
 use super::{generate_envelope_id, DenialCode, ErasedAuth, Realtime, Request, ServedChannel};
 use crate::proto::common::bindings::v1::RealtimeProperties;
@@ -262,7 +262,6 @@ async fn decide(
 async fn serve_operation(
     rt: &Realtime,
     properties: &RealtimeProperties,
-    transport: Transport,
     request: &Arc<Request>,
     caller: &Caller,
     operation: ReadOperation<'_>,
@@ -295,9 +294,7 @@ async fn serve_operation(
                 .as_ref()
                 .expect("a publish op was read only for a channel with a publish rule");
             decide(rule, caller, params, Some(body), request).await?;
-            let token = mint_publish_token(rt, properties, &wire)
-                .map_err(|_| OperationFailure::Failed("minting a token failed"))?;
-            publish(rt, properties, transport, &wire, &token, envelope)
+            rt.publish_event(&wire, envelope)
                 .await
                 .map_err(|_| DenialCode::PublishFailed)?;
             Ok(ServedOperation { wire, token: None })
@@ -367,7 +364,7 @@ async fn serve_batch(
         async move {
             (
                 i,
-                serve_operation(rt, properties, transport, request, caller, operation).await,
+                serve_operation(rt, properties, request, caller, operation).await,
             )
         }
     };

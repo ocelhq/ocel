@@ -14,6 +14,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
+	realtimev1 "github.com/ocelhq/ocel/pkg/proto/app/realtime/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/realtime/v1/realtimev1connect"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -164,6 +166,23 @@ func TestATaskIsServedThroughTheProxyOnlyWithTheQueueTopologyBesideTheCode(t *te
 	_, err = client.Trigger(context.Background(), &taskv1.TriggerRequest{Task: "resize"})
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("a trigger of a task the topology does not declare = %v, want NotFound from the engine behind the proxy", err)
+	}
+}
+
+func TestARealtimeBindingIsPublishedThroughTheProxy(t *testing.T) {
+	t.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_ACCESS_KEY_ID", "test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
+	values := binds(live.Binding{Name: "realtime--app", Key: "OCEL_RESOURCE_REALTIME_app", Type: bindingsv1.BindingType_BINDING_TYPE_REALTIME})
+
+	served, err := serveProxy(context.Background(), values, proxyConfig{})
+	if err != nil {
+		t.Fatalf("serveProxy: %v", err)
+	}
+	client := realtimev1connect.NewRealtimeServiceClient(&http.Client{Transport: bearerToken(proxyEnvValue(t, served.env, localrpc.SessionTokenEnvVar))}, proxyEnvValue(t, served.env, processenv.RuntimeAddressEnvVar))
+	_, err = client.Publish(context.Background(), &realtimev1.PublishRequest{Realtime: "other", Channel: "/other/status", Event: `{"v":1}`})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("a publish on a resource this deployment does not bind = %v, want FailedPrecondition from the realtime service behind the proxy", err)
 	}
 }
 

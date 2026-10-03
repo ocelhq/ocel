@@ -3,10 +3,9 @@ import io
 import json
 import os
 import re
-import sys
 
 import pytest
-from fakegateway import FIXTURE, FakeGateway, read_claims
+from fakerealtime import FIXTURE, FakeRealtimeRuntime, read_claims
 from pydantic import BaseModel
 
 from ocel import RealtimePublishError, UnprovisionedResourceError, realtime
@@ -117,9 +116,11 @@ def appsync(monkeypatch):
 
 
 @pytest.fixture
-def gateway(monkeypatch):
-    fake = FakeGateway()
+def runtime(monkeypatch):
+    fake = FakeRealtimeRuntime()
     monkeypatch.setenv("OCEL_RESOURCE_REALTIME_app", fake.binding())
+    monkeypatch.setenv("OCEL_RUNTIME_ADDRESS", fake.url)
+    monkeypatch.setenv("OCEL_SESSION_TOKEN", "letmein")
     yield fake
     fake.close()
 
@@ -397,7 +398,7 @@ def test_the_wsgi_handler_serves_the_same_batch(appsync):
     assert read_claims(res["grants"][0]["token"])["sub"] == "u1"
 
 
-def test_a_relayed_publish_runs_the_publish_rule_then_publishes_from_the_server(gateway):
+def test_a_relayed_publish_runs_the_publish_rule_then_publishes_from_the_server(runtime):
     rules = Rules()
     res = answer(
         declare_app(rules).asgi(),
@@ -423,13 +424,13 @@ def test_a_relayed_publish_runs_the_publish_rule_then_publishes_from_the_server(
         {"room_id": "r1"},
         ChatMessage(text="hi"),
     )
-    [event] = gateway.published
+    [event] = runtime.published
     assert event["envelope"]["ch"] == "/app/rooms/r1"
     assert event["envelope"]["kind"] == "live"
     assert event["envelope"]["data"] == {"text": "hi"}
 
 
-def test_a_relayed_publish_is_denied_when_its_rule_or_its_body_refuses_it(gateway):
+def test_a_relayed_publish_is_denied_when_its_rule_or_its_body_refuses_it(runtime):
     app = declare_app(Rules()).asgi()
 
     def publish(text, user):
@@ -450,11 +451,11 @@ def test_a_relayed_publish_is_denied_when_its_rule_or_its_body_refuses_it(gatewa
 
     assert publish(1, "u1")["denied"] == [{"i": 0, "code": "invalid-body"}]
     assert publish("x", "u2")["denied"] == [{"i": 0, "code": "forbidden"}]
-    assert gateway.published == []
+    assert runtime.published == []
 
 
-def test_a_relayed_publish_the_transport_refuses_is_denied(gateway):
-    gateway.status = 401
+def test_a_relayed_publish_the_runtime_refuses_is_denied(runtime):
+    runtime.refusal = "the gateway refused it with status 401"
     res = answer(
         declare_app(Rules()).asgi(),
         {
@@ -473,25 +474,22 @@ def test_a_relayed_publish_the_transport_refuses_is_denied(gateway):
     assert res["denied"] == [{"i": 0, "code": "publish-failed"}]
 
 
-def test_publish_posts_the_envelope_to_the_gateway_with_a_publish_token(gateway):
+def test_publish_hands_the_runtime_the_envelope_on_its_wire_channel(runtime):
     orders = realtime("app").channel("orders/:order_id", schema=OrderEvent, subscribe="public")
 
     orders.publish(OrderEvent(status="shipped"), order_id="o_1")
     asyncio.run(orders.publish_async({"status": "paid"}, order_id="o_2"))
 
-    first, second = gateway.published
-    assert first["path"] == "/publish"
+    first, second = runtime.published
+    assert (first["realtime"], first["channel"]) == ("app", "/app/orders/0zn5ptc")
     envelope = first["envelope"]
     assert (envelope["v"], envelope["ch"], envelope["kind"]) == (1, "/app/orders/0zn5ptc", "live")
     assert envelope["data"] == {"status": "shipped"} and envelope["id"] and envelope["ts"]
-    claims = read_claims(first["authorization"].removeprefix("Bearer "))
-    assert claims["aud"] == gateway.host
-    assert claims["sub"] == "server"
-    assert claims["ocel"] == {"op": "publish", "ch": "/app/orders/0zn5ptc", "ns": "app"}
     assert second["envelope"]["data"] == {"status": "paid"}
+    assert runtime.authorizations == ["Bearer letmein", "Bearer letmein"]
 
 
-def test_publish_refuses_params_or_an_event_it_cannot_send(gateway):
+def test_publish_refuses_params_or_an_event_it_cannot_send(runtime):
     resource = realtime("app")
     orders = resource.channel("orders/:order_id", schema=OrderEvent, subscribe="public")
     blobs = resource.channel("blobs", schema=Blob, subscribe="public")
@@ -504,11 +502,11 @@ def test_publish_refuses_params_or_an_event_it_cannot_send(gateway):
         with pytest.raises(RealtimePublishError) as refused:
             publish()
         assert refused.value.code == code
-    assert gateway.published == []
+    assert runtime.published == []
 
 
-def test_publish_fails_when_the_gateway_refuses_it(gateway):
-    gateway.status = 401
+def test_publish_fails_when_the_runtime_refuses_it(runtime):
+    runtime.refusal = "the gateway refused it with status 401"
     orders = realtime("app").channel("orders/:order_id", schema=OrderEvent, subscribe="public")
 
     with pytest.raises(RuntimeError, match="status 401"):
@@ -522,10 +520,6 @@ def test_publish_outside_a_provisioned_run_says_why(collector, monkeypatch):
 
     monkeypatch.setenv("OCEL_PHASE", "")
     with pytest.raises(RuntimeError, match="OCEL_RESOURCE_REALTIME_app"):
-        status.publish({"status": "up"})
-
-    monkeypatch.setenv("OCEL_RESOURCE_REALTIME_app", json.dumps(FIXTURE))
-    with pytest.raises(RuntimeError, match="publishing on appsync-events is not supported yet"):
         status.publish({"status": "up"})
 
 
@@ -689,52 +683,27 @@ def test_the_wsgi_handler_answers_500_when_the_resource_has_no_binding():
     assert (status, headers["Cache-Control"]) == ("500 Internal Server Error", "no-store")
 
 
-def test_publish_takes_a_param_named_body(gateway):
+def test_publish_takes_a_param_named_body(runtime):
     posts = realtime("app").channel("posts/:body", schema=OrderEvent, subscribe="public")
 
     posts.publish({"status": "up"}, body="b1")
     asyncio.run(posts.publish_async({"status": "down"}, body="b2"))
 
-    assert [event["envelope"]["ch"] for event in gateway.published] == [
+    assert [event["envelope"]["ch"] for event in runtime.published] == [
         "/app/posts/b1",
         "/app/posts/b2",
     ]
 
 
-def test_publish_stamps_each_envelope_with_32_lowercase_hex_characters(gateway):
+def test_publish_stamps_each_envelope_with_32_lowercase_hex_characters(runtime):
     status = realtime("app").channel("status", schema=OrderEvent, subscribe="public")
 
     status.publish({"status": "up"})
 
-    assert re.fullmatch(r"[0-9a-f]{32}", gateway.published[0]["envelope"]["id"])
+    assert re.fullmatch(r"[0-9a-f]{32}", runtime.published[0]["envelope"]["id"])
 
 
-def test_publish_fails_when_the_gateway_does_not_answer_in_time(gateway, monkeypatch):
-    monkeypatch.setattr(sys.modules["ocel.realtime"], "_PUBLISH_TIMEOUT_SECONDS", 0.2)
-    gateway.delay_seconds = 2
-    status = realtime("app").channel("status", schema=OrderEvent, subscribe="public")
-
-    with pytest.raises(TimeoutError):
-        status.publish({"status": "up"})
-    with pytest.raises(TimeoutError):
-        asyncio.run(status.publish_async({"status": "up"}))
-
-
-def test_a_relayed_publish_the_gateway_does_not_answer_in_time_is_denied(gateway, monkeypatch):
-    monkeypatch.setattr(sys.modules["ocel.realtime"], "_PUBLISH_TIMEOUT_SECONDS", 0.2)
-    gateway.delay_seconds = 2
-    room = {"op": "publish", "pattern": "rooms/:room_id", "params": {"room_id": "r1"}}
-
-    res = answer(
-        declare_app(Rules()).asgi(),
-        {"ops": [{**room, "body": {"text": "hi"}}]},
-        {"x-user": "u1"},
-    )
-
-    assert res["denied"] == [{"i": 0, "code": "publish-failed"}]
-
-
-def test_relayed_publishes_reach_the_gateway_in_batch_order(gateway):
+def test_relayed_publishes_reach_the_runtime_in_batch_order(runtime):
     async def may_post_slowly_first(ctx):
         await asyncio.sleep(0.3 if ctx.body.text == "first" else 0)
         return True
@@ -752,7 +721,7 @@ def test_relayed_publishes_reach_the_gateway_in_batch_order(gateway):
     )
 
     assert [g["i"] for g in res["grants"]] == [0, 1, 2]
-    assert [event["envelope"]["data"]["text"] for event in gateway.published] == [
+    assert [event["envelope"]["data"]["text"] for event in runtime.published] == [
         "first",
         "second",
         "third",

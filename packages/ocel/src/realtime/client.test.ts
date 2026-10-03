@@ -5,6 +5,11 @@ import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
 import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import {
+  type FakeAppSync,
+  type FakeAppSyncOptions,
+  serveFakeAppSync,
+} from "../testing/realtime-appsync.js";
+import {
   type FakeGateway,
   type FakeGatewayOptions,
   serveFakeGateway,
@@ -563,6 +568,166 @@ describe("a realtime client's state", () => {
 
     await waitFor(() => live.state === "idle", "idle");
     expect(states).toEqual(["connecting", "connected", "idle"]);
+    live.close();
+  });
+});
+
+describe("a realtime client on AppSync Events", () => {
+  let appsync: FakeAppSync;
+
+  async function serveAppSync(options: FakeAppSyncOptions = {}): Promise<void> {
+    await appsync?.close();
+    appsync = await serveFakeAppSync(options);
+    vi.stubEnv(bindingKey("app", BindingType.REALTIME), appsync.binding);
+  }
+
+  function envelopeOn(channel: string, data: unknown): string {
+    return JSON.stringify({
+      v: 1,
+      id: "0123456789abcdef0123456789abcdef",
+      ch: channel,
+      ts: 1_790_000_000_000,
+      kind: "live",
+      data,
+    });
+  }
+
+  beforeEach(async () => {
+    await serveAppSync();
+  });
+
+  afterEach(async () => {
+    await appsync.close();
+  });
+
+  it("connects with the API's host in its header and authorizes each subscribe with its own token", async () => {
+    const live = createRealtimeClient<typeof rt>({ url: app.url, headers: { "x-user": "u1" } });
+    live.subscribe("orders/:orderId", { params: { orderId: "o-1" } }, () => {});
+    await waitFor(() => appsync.subscribes.length === 1, "the subscribe");
+
+    expect(appsync.connects).toEqual([{ host: appsync.host, Authorization: expect.any(String) }]);
+    expect(appsync.subscribes[0]).toEqual({
+      id: expect.any(String),
+      channel: "/app/orders/o-1",
+      authorization: { host: appsync.host, Authorization: expect.any(String) },
+    });
+    expect(live.state).toBe("connected");
+    live.close();
+  });
+
+  it.each(["string", "array", "double-encoded"] as const)(
+    "receives an event AppSync carries as %s",
+    async (eventForm) => {
+      await serveAppSync({ eventForm });
+      const live = createRealtimeClient<typeof rt>({ url: app.url });
+      const received: { event: unknown; meta: unknown }[] = [];
+      live.subscribe("status", {}, (event, meta) => received.push({ event, meta }));
+      await waitFor(() => appsync.subscribes.length === 1, "the subscribe");
+
+      appsync.broadcast("/app/status", envelopeOn("/app/status", { status: "up" }));
+
+      await waitFor(() => received.length === 1, "the event");
+      expect(received[0]).toEqual({
+        event: { status: "up" },
+        meta: {
+          id: "0123456789abcdef0123456789abcdef",
+          channel: "/app/status",
+          publishedAt: 1_790_000_000_000,
+        },
+      });
+      live.close();
+    },
+  );
+
+  it("reports a connect AppSync refuses as a retriable failure naming why", async () => {
+    await serveAppSync({ clockOffsetSeconds: 600 });
+    const live = createRealtimeClient<typeof rt>({ url: app.url });
+    const errors: InstanceType<typeof RealtimeError>[] = [];
+    live.subscribe("status", { onError: (error) => errors.push(error) }, () => {});
+
+    await waitFor(() => errors.length === 1, "the refusal");
+    expect(errors[0]).toMatchObject({ code: "connection-failed", retriable: true });
+    expect(errors[0]?.message).toContain("the token has expired");
+    live.close();
+  });
+
+  it("reports an expired subscribe token AppSync refuses as a non-retriable subscribe-refused", async () => {
+    const live = createRealtimeClient<typeof rt>({ url: app.url, headers: { "x-user": "u1" } });
+    const errors: InstanceType<typeof RealtimeError>[] = [];
+    live.subscribe("status", {}, () => {});
+    await waitFor(() => appsync.subscribes.length === 1, "the first subscribe");
+    appsync.options.clockOffsetSeconds = 600;
+
+    live.subscribe(
+      "orders/:orderId",
+      { params: { orderId: "o-1" }, onError: (error) => errors.push(error) },
+      () => {},
+    );
+
+    await waitFor(() => errors.length === 1, "the refusal");
+    expect(errors[0]).toMatchObject({ code: "subscribe-refused", retriable: false });
+    expect(errors[0]?.message).toContain("AppSync refused the subscription");
+    expect(live.state).toBe("connected");
+    live.close();
+  });
+
+  it("keeps a subscription whose event AppSync failed to broadcast, and delivers the next", async () => {
+    const live = createRealtimeClient<typeof rt>({ url: app.url });
+    const received: unknown[] = [];
+    const errors: unknown[] = [];
+    live.subscribe("status", { onError: (error) => errors.push(error) }, (event) =>
+      received.push(event),
+    );
+    await waitFor(() => appsync.subscribes.length === 1, "the subscribe");
+
+    appsync.breakBroadcast("/app/status");
+    appsync.broadcast("/app/status", envelopeOn("/app/status", { status: "after" }));
+
+    await waitFor(() => received.length === 1, "the next event");
+    expect(received).toEqual([{ status: "after" }]);
+    expect(errors).toEqual([]);
+    expect(live.state).toBe("connected");
+    live.close();
+  });
+
+  it("drops a socket whose keep-alives stop for connectionTimeoutMs, and reconnects", async () => {
+    await serveAppSync({ keepAliveMilliseconds: 20, connectionTimeoutMilliseconds: 200 });
+    const live = createRealtimeClient<typeof rt>({ url: app.url });
+    const errors: InstanceType<typeof RealtimeError>[] = [];
+    live.subscribe("status", { onError: (error) => errors.push(error) }, () => {});
+    await waitFor(() => appsync.subscribes.length === 1, "the subscribe");
+
+    appsync.silence();
+
+    await waitFor(() => errors.length === 1, "the drop");
+    expect(errors[0]).toMatchObject({ code: "connection-lost", retriable: true });
+    expect(errors[0]?.message).toContain("AppSync sent nothing for 200ms");
+    await waitFor(() => appsync.connects.length === 2, "the reconnect");
+  });
+
+  it("asks the handler for every live subscription again when AppSync ends a connection at its lifetime", async () => {
+    await serveAppSync({ connectionLifetimeMilliseconds: 300 });
+    const live = createRealtimeClient<typeof rt>({ url: app.url, headers: { "x-user": "u1" } });
+    const received: unknown[] = [];
+    live.subscribe("status", {}, (event) => received.push(event));
+    live.subscribe("orders/:orderId", { params: { orderId: "o-1" } }, (event) =>
+      received.push(event),
+    );
+    await waitFor(() => appsync.subscribes.length === 2, "both subscribes");
+    const requestsBefore = app.requests.length;
+
+    await waitFor(() => appsync.subscribes.length === 4, "both subscriptions again");
+
+    expect(app.requests.slice(requestsBefore)).toContainEqual({
+      connect: true,
+      ops: [
+        { op: "subscribe", pattern: "status", params: {} },
+        { op: "subscribe", pattern: "orders/:orderId", params: { orderId: "o-1" } },
+      ],
+    });
+    await waitFor(() => live.state === "connected", "the new socket");
+    appsync.broadcast("/app/orders/o-1", envelopeOn("/app/orders/o-1", { status: "paid" }));
+    await waitFor(() => received.length >= 1, "an event on the new socket");
     live.close();
   });
 });

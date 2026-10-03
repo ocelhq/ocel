@@ -1,13 +1,58 @@
 import { createPublicKey, verify } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { type WebSocket, WebSocketServer } from "ws";
+import { RealtimeService } from "../gen/proto/app/realtime/v1/realtime_pb.js";
 import { readRealtimeBindingFixture } from "./realtime-vectors.js";
 
 export interface PublishedEvent {
-  path: string;
-  authorization: string | undefined;
+  realtime: string;
+  channel: string;
   envelope: { v: number; id: string; ch: string; ts: number; kind: string; data: unknown };
+}
+
+interface GatewayPublishes {
+  published: PublishedEvent[];
+  status: number;
+  relay(channel: string, envelope: string): void;
+}
+
+let publishingGateway: GatewayPublishes | undefined;
+let runtimeProxyAddress: Promise<string> | undefined;
+
+function serveRuntimeProxy(): Promise<string> {
+  const adapter = connectNodeAdapter({
+    routes: (router) =>
+      router.service(RealtimeService, {
+        publish(req) {
+          const gateway = publishingGateway;
+          if (!gateway)
+            throw new ConnectError("no fake gateway is serving", Code.FailedPrecondition);
+          gateway.published.push({
+            realtime: req.realtime,
+            channel: req.channel,
+            envelope: JSON.parse(req.event),
+          });
+          if (gateway.status >= 300) {
+            throw new ConnectError(
+              `the gateway refused it with status ${gateway.status}`,
+              Code.Unavailable,
+            );
+          }
+          gateway.relay(req.channel, req.event);
+          return {};
+        },
+      }),
+  });
+  const server = createServer(adapter);
+  server.unref();
+  return new Promise((resolve) =>
+    server.listen(0, "127.0.0.1", () =>
+      resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`),
+    ),
+  );
 }
 
 export interface FakeGateway {
@@ -57,21 +102,25 @@ export function readClaims(token: string): Record<string, unknown> & {
 
 export interface FakeGatewayOptions {
   status?: number;
-  answering?: boolean;
   acknowledgingConnections?: boolean;
   answeringSubscribes?: boolean;
 }
 
-function findRefusal(
+/**
+ * Answers why `token` does not admit `op` on `channel` at `host` as of `nowSeconds`, or
+ * undefined when it does.
+ */
+export function findRefusal(
   token: string | undefined,
   host: string,
   op: string,
   channel: string,
+  nowSeconds = Date.now() / 1_000,
 ): string | undefined {
   try {
     const claims = readClaims(token ?? "");
     if (claims.aud !== host) return "the token is for another host";
-    if (Number(claims.exp) <= Date.now() / 1_000) return "the token has expired";
+    if (Number(claims.exp) <= nowSeconds) return "the token has expired";
     if (claims.ocel.op !== op || claims.ocel.ch !== channel) {
       return `the token admits ${claims.ocel.op} on ${claims.ocel.ch}`;
     }
@@ -95,9 +144,12 @@ function isSubscribedTo(subscribed: string, channel: string): boolean {
   return subscribed.endsWith("/*") && channel.startsWith(subscribed.slice(0, -1));
 }
 
+/**
+ * Serves a fake gateway's sockets, and points the SDK at a fake ocel runtime that publishes
+ * to it, answering each publish with `status`.
+ */
 export async function serveFakeGateway({
   status = 202,
-  answering = true,
   acknowledgingConnections = true,
   answeringSubscribes = true,
 }: FakeGatewayOptions = {}): Promise<FakeGateway> {
@@ -114,23 +166,14 @@ export async function serveFakeGateway({
       }
     }
   };
-  const server = createServer((req, res) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
-    req.on("end", () => {
-      const text = Buffer.concat(chunks).toString("utf8");
-      const event: PublishedEvent = {
-        path: req.url ?? "",
-        authorization: req.headers.authorization,
-        envelope: JSON.parse(text),
-      };
-      published.push(event);
-      if (!answering) return;
-      res.statusCode = status;
-      res.end();
-      if (status < 300) relay(event.envelope.ch, text);
-    });
+  const server = createServer((_req, res) => {
+    res.statusCode = 404;
+    res.end();
   });
+  const publishes: GatewayPublishes = { published, status, relay };
+  publishingGateway = publishes;
+  process.env.OCEL_RUNTIME_ADDRESS = await (runtimeProxyAddress ??= serveRuntimeProxy());
+  process.env.OCEL_SESSION_TOKEN = "session-token";
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
   const host = `127.0.0.1:${port}`;
@@ -205,6 +248,7 @@ export async function serveFakeGateway({
     }),
     close: () =>
       new Promise<void>((resolve, reject) => {
+        if (publishingGateway === publishes) publishingGateway = undefined;
         for (const socket of sockets) socket.terminate();
         socketServer.close();
         server.close((err) => (err ? reject(err) : resolve()));

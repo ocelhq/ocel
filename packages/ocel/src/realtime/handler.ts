@@ -259,9 +259,8 @@ async function evaluatePublish(
     rule({ auth: batch.auth, params, body: event.body, request }),
   );
   if (verdict !== "allowed") return { denied: { i, code: verdict } };
-  const send = batch.transport.signPublish(event.channel);
   try {
-    await send(event.envelope);
+    await batch.runtime.publish("handler", event.channel, event.envelope);
   } catch {
     return { denied: { i, code: "publish-failed" } };
   }
@@ -311,7 +310,7 @@ async function serveBatch(
   }
 
   const properties = runtime.properties("handler");
-  const transport = resolveTransport(properties, runtime);
+  const transport = resolveTransport(properties, runtime.name);
   let auth: unknown = null;
   if (runtime.authorize) {
     try {

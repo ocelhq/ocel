@@ -483,11 +483,11 @@ func (c *realtimeCall) publish(op realtimeOp) realtimeOutcome {
 	if denied := decideRule(channel.settings.publish, c.auth, channel.params.decodeParams(op.params), body, c.cloneRequest()); denied != "" {
 		return realtimeOutcome{denial: denied}
 	}
-	credential, err := c.realtime.mintPublishCredential(c.binding, wire)
+	runtime, err := c.realtime.connect("Handler")
 	if err != nil {
 		return realtimeOutcome{err: err}
 	}
-	if err := c.realtime.sendEvent(c.request.Context(), c.binding, wire, envelope, credential); err != nil {
+	if err := c.realtime.publishEvent(c.request.Context(), runtime, wire, envelope); err != nil {
 		return realtimeOutcome{denial: denialPublishFailed}
 	}
 	return realtimeOutcome{grant: &realtimeGrant{Wire: wire}}

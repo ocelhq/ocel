@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -18,7 +19,10 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
-const liveKVTokenRoot = "/ocel-live/kv"
+const (
+	liveKVTokenRoot    = "/ocel-live/kv"
+	liveSigningKeyRoot = "ocel-live/realtime"
+)
 
 func writeRESP(conn net.Conn, args ...string) {
 	var command strings.Builder
@@ -72,12 +76,14 @@ func TestLiveAKVStoreAnswersItsTokenAloneAndItsTokenGoesWithIt(t *testing.T) {
 	backend := "file://" + t.TempDir()
 	stacks := deploy.NewStacks(func(context.Context, deploy.Scope) (deploy.Config, error) {
 		return deploy.Config{
-			Region:        liveRegion,
-			BackendURL:    backend,
-			Passphrase:    "live-suite",
-			PulumiProject: naming.PulumiProject("kvlive"),
-			Parameters:    params,
-			KVTokenRoot:   liveKVTokenRoot,
+			Region:         liveRegion,
+			BackendURL:     backend,
+			Passphrase:     "live-suite",
+			PulumiProject:  naming.PulumiProject("kvlive"),
+			Parameters:     params,
+			KVTokenRoot:    liveKVTokenRoot,
+			SigningKeys:    secretsmanager.NewFromConfig(a.aws),
+			SigningKeyRoot: liveSigningKeyRoot,
 		}, nil
 	}, &deploy.Realized{})
 	ref := provider.StackRef{Project: "kvlive", Tier: environment.TierProduction, Name: naming.InfraStack("production")}

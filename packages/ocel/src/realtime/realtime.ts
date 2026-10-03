@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
+import { type Client, createClient } from "@connectrpc/connect";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { getConfig } from "../binding/binding.js";
+import { getConfig, refuseUnbound } from "../binding/binding.js";
 import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
 import { declarationSite } from "../declaration/callsite.js";
 import { defer } from "../declaration/defer.js";
 import { type Duration, encodeDuration, parseDurationMilliseconds } from "../delivery/duration.js";
 import { encodeJsonSchema, validatePayload } from "../delivery/schema.js";
+import { RealtimeService } from "../gen/proto/app/realtime/v1/realtime_pb.js";
 import {
   RealtimePublish,
   RealtimeSubscribe,
@@ -14,8 +16,8 @@ import {
 import type { RealtimeProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import type { PatternParameters } from "../kv/pattern.js";
 import { rpc } from "../runtime/rpc.js";
+import { createRuntimeTransport } from "../runtime/transport.js";
 import type { TokenIssuer } from "./token.js";
-import { resolveTransport } from "./transport.js";
 import {
   type ChannelPattern,
   encodeWireChannel,
@@ -133,6 +135,8 @@ export interface RealtimeRuntime extends TokenIssuer {
   channels: Map<string, DeclaredChannel>;
   authorize?: (request: Request) => MaybePromise<unknown>;
   properties(access: string): RealtimeProperties;
+  /** Hands the ocel runtime `envelope` to publish on the wire `channel`. */
+  publish(access: string, channel: string, envelope: string): Promise<void>;
 }
 
 /**
@@ -256,6 +260,7 @@ export class Realtime<
       );
     }
 
+    let client: Client<typeof RealtimeService> | undefined;
     runtimes.set(this, {
       name,
       ttlSeconds,
@@ -264,6 +269,17 @@ export class Realtime<
       properties: (access) => {
         if (unprovisionedPhase()) throw unprovisioned(what, access);
         return getConfig(name, "realtime");
+      },
+      publish: async (access, channel, envelope) => {
+        if (unprovisionedPhase()) throw unprovisioned(what, access);
+        const refusal = refuseUnbound(name, "realtime");
+        if (refusal) throw refusal;
+        client ??= createClient(RealtimeService, createRuntimeTransport());
+        try {
+          await client.publish({ realtime: name, channel, event: envelope });
+        } catch (cause) {
+          throw new Error(`${what}: publish on ${channel}: ${(cause as Error).message}`, { cause });
+        }
       },
     });
   }
@@ -278,7 +294,6 @@ export class Realtime<
     message: PublishMessage<TPattern, TChannels[TPattern]>,
   ): Promise<void> {
     const runtime = readRuntime(this);
-    const transport = resolveTransport(runtime.properties("publish"), runtime);
     const prepared = await prepareEvent(runtime, pattern, message.params ?? {}, message.body);
     if ("refused" in prepared) {
       throw new RealtimePublishError(
@@ -286,11 +301,11 @@ export class Realtime<
         `realtime("${this.name}") cannot publish on "${pattern}": ${prepared.reason}`,
       );
     }
-    await transport.signPublish(prepared.channel)(prepared.envelope);
+    await runtime.publish("publish", prepared.channel, prepared.envelope);
   }
 }
 
-/** An event ready for its transport, or why it cannot be published. */
+/** An event ready for the runtime to publish, or why it cannot be published. */
 export type PreparedEvent =
   | { channel: string; body: unknown; envelope: string }
   | { refused: PublishRefusal; reason: string };

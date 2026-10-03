@@ -249,3 +249,32 @@ func TestPriceOfAServiceWithAnUnknownCPUStillPricesItsMemory(t *testing.T) {
 		t.Errorf("status = %v, want priced for what is known", got.GetStatus())
 	}
 }
+
+func TestAnEventAPIIsPricedPerOperationAndConnectionMinute(t *testing.T) {
+	_, costs := costServed(t)
+
+	properties, _ := structpb.NewStruct(map[string]any{})
+	set := &costv1.ResourceSet{
+		Source: "ocel",
+		Scopes: []*costv1.Scope{{Id: "p", Kind: "project", Name: "shop"}},
+		Resources: []*costv1.Resource{{
+			Id: "p/aws_appsync_api:realtime", Scope: "p", Vendor: "aws", Type: "aws_appsync_api", Name: "realtime", Region: "us-east-1",
+			Properties: properties,
+		}},
+	}
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	if err != nil {
+		t.Fatalf("Price() = %v", err)
+	}
+	if got := estimateNamed(t, est, "p/aws_appsync_api:realtime").GetMonthlyFixed(); got != "0.00" {
+		t.Errorf("an idle Event API costs %s a month, want nothing fixed: AppSync bills what is used", got)
+	}
+	operations := componentNamed(t, est, "p/aws_appsync_api:realtime", "Event API operations")
+	if operations.GetUnitPrice() != "0.000001" || operations.GetMonthlyQuantity() != "1000000" {
+		t.Errorf("operations = %s at %s, want 1000000 (the moderate profile) at 0.000001 ($1 per million)", operations.GetMonthlyQuantity(), operations.GetUnitPrice())
+	}
+	minutes := componentNamed(t, est, "p/aws_appsync_api:realtime", "Connection minutes")
+	if minutes.GetUnitPrice() != "0.00000008" || minutes.GetMonthlyQuantity() != "1000000" {
+		t.Errorf("connection minutes = %s at %s, want 1000000 (the moderate profile) at 0.00000008 ($0.08 per million)", minutes.GetMonthlyQuantity(), minutes.GetUnitPrice())
+	}
+}

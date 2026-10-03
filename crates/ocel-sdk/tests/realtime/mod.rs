@@ -1,13 +1,11 @@
 #![allow(dead_code)]
 
+use crate::runtime::{runtime, Runtime};
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use bytes::Bytes;
+use ocel::proto::app::realtime::v1::{PublishRequest, PublishResponse};
 use serde_json::Value;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpListener;
-use std::sync::{Arc, Mutex};
-use std::thread;
 
 pub fn read_fixture() -> Value {
     let path = concat!(
@@ -34,100 +32,52 @@ pub fn read_claims(token: &str) -> Value {
 }
 
 pub struct Published {
-    pub path: String,
-    pub authorization: String,
+    pub request: PublishRequest,
     pub envelope: Value,
 }
 
-pub struct FakeGateway {
-    pub host: String,
-    pub published: Arc<Mutex<Vec<Published>>>,
-    pub status: Arc<Mutex<u16>>,
+pub struct FakeRuntime {
+    runtime: Runtime,
 }
 
-impl FakeGateway {
+impl FakeRuntime {
     pub fn serve() -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
-        let host = listener.local_addr().expect("addr").to_string();
-        let published = Arc::new(Mutex::new(Vec::new()));
-        let status = Arc::new(Mutex::new(202u16));
-        let (seen, answer) = (published.clone(), status.clone());
-        thread::spawn(move || {
-            for stream in listener.incoming() {
-                let mut stream = stream.expect("accept");
-                let mut reader = BufReader::new(stream.try_clone().expect("clone"));
-                let mut line = String::new();
-                reader.read_line(&mut line).expect("request line");
-                let path = line.split_whitespace().nth(1).unwrap_or("").to_string();
-                let (mut length, mut authorization) = (0usize, String::new());
-                loop {
-                    let mut header = String::new();
-                    reader.read_line(&mut header).expect("header");
-                    let header = header.trim_end();
-                    if header.is_empty() {
-                        break;
-                    }
-                    let (name, value) = header.split_once(':').unwrap_or_default();
-                    match name.to_ascii_lowercase().as_str() {
-                        "content-length" => length = value.trim().parse().unwrap_or_default(),
-                        "authorization" => authorization = value.trim().to_string(),
-                        _ => {}
-                    }
-                }
-                let mut body = vec![0u8; length];
-                reader.read_exact(&mut body).expect("body");
-                seen.lock().unwrap().push(Published {
-                    path,
-                    authorization,
-                    envelope: serde_json::from_slice(&body).expect("an envelope"),
-                });
-                let status = *answer.lock().unwrap();
-                write!(
-                    stream,
-                    "HTTP/1.1 {status} OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
-                )
-                .expect("respond");
-            }
-        });
-        Self {
-            host,
-            published,
-            status,
-        }
+        let runtime = runtime();
+        runtime.answer("Publish", PublishResponse::default());
+        Self { runtime }
     }
 
     pub fn binding(&self) -> String {
         let mut binding = read_fixture();
         binding["realtime"]["transport"] = "REALTIME_TRANSPORT_OCEL_GATEWAY".into();
-        binding["realtime"]["host"] = self.host.clone().into();
-        binding["realtime"]["url"] = format!("ws://{}/realtime", self.host).into();
+        binding["realtime"]["host"] = "realtime.shop.example".into();
+        binding["realtime"]["url"] = "wss://realtime.shop.example/event/realtime".into();
         binding.to_string()
     }
-}
 
-pub struct StalledGateway {
-    pub host: String,
-}
-
-impl StalledGateway {
-    pub fn serve() -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
-        let host = listener.local_addr().expect("addr").to_string();
-        thread::spawn(move || {
-            let mut held = Vec::new();
-            for stream in listener.incoming() {
-                held.push(stream.expect("accept"));
-            }
-        });
-        Self { host }
+    pub fn refuse(&self, said: &str) {
+        self.runtime.refuse("Publish", 503, "unavailable", said);
     }
 
-    pub fn binding(&self) -> String {
-        let mut binding = read_fixture();
-        binding["realtime"]["transport"] = "REALTIME_TRANSPORT_OCEL_GATEWAY".into();
-        binding["realtime"]["host"] = self.host.clone().into();
-        binding["realtime"]["url"] = format!("ws://{}/realtime", self.host).into();
-        binding.to_string()
+    pub fn published(&self) -> Vec<Published> {
+        self.runtime
+            .calls()
+            .iter()
+            .filter(|call| call.path == "/app.realtime.v1.RealtimeService/Publish")
+            .map(|call| {
+                let request: PublishRequest = call.decode();
+                let envelope = serde_json::from_str(&request.event).expect("an envelope");
+                Published { request, envelope }
+            })
+            .collect()
+    }
+
+    pub fn authorizations(&self) -> Vec<Option<String>> {
+        self.runtime
+            .calls()
+            .iter()
+            .map(|call| call.authorization.clone())
+            .collect()
     }
 }
 

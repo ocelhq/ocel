@@ -41,6 +41,7 @@ var pulumiTokens = map[string]string{
 	"aws:sns/topic:Topic":                              "aws_sns_topic",
 	"aws:lambda/eventSourceMapping:EventSourceMapping": "aws_lambda_event_source_mapping",
 	"aws:scheduler/schedule:Schedule":                  "aws_scheduler_schedule",
+	"aws:appsync/api:Api":                              "aws_appsync_api",
 }
 
 func shapeRequest(t *testing.T) provider.ShapeRequest {
@@ -62,6 +63,8 @@ func shapeRequest(t *testing.T) provider.ShapeRequest {
 			{Name: "uploads", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
 			{Name: "shared", Type: provider.BindingBucket, Binding: "elsewhere"},
 			{Name: "cache", Type: provider.BindingKV, KV: &provider.KVSpec{}},
+			{Name: "realtime--live", Declared: "live", Type: provider.BindingRealtime, Realtime: &provider.RealtimeSpec{}},
+			{Name: "realtime--chat", Declared: "chat", Type: provider.BindingRealtime, Realtime: &provider.RealtimeSpec{}},
 			taskResource("heartbeat", provider.ConsumerSpec{Worker: "worker"}, cronEveryMinute),
 			topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}, provider.ConsumerSpec{Name: "ledger-entry", Worker: "ledger"}),
 		},
@@ -166,6 +169,9 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 		if err := registerKV(pctx, "shop", "prod", "cache", store, "vpc-1", "10.0.0.0/16", []string{"subnet-a"}); err != nil {
 			return err
 		}
+		if err := registerRealtime(pctx, "shop", "prod", testRealtimeArgs()); err != nil {
+			return err
+		}
 		return registerBucket(pctx, "shop", "prod", "uploads", translateBucket(nil), "ocel-state", containerCfg.AppBoundaryARN, newSessionScope("shop", "prod", "arn"), testUploadCompleter())
 	})
 
@@ -215,6 +221,16 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 	}
 	if token := shapedNamed(t, set, "aws_ssm_parameter", "cache"); token["type"] != "SecureString" {
 		t.Errorf("shaped token = %v, want the SecureString the store's AUTH token is kept in", token)
+	}
+	authorizer := rec.recorded["aws:lambda/function:Function::realtime-authorizer"]
+	shapedAuthorizer := shapedNamed(t, set, "aws_lambda_function", "realtime-authorizer")
+	if shapedAuthorizer["memory_size"] != authorizer["memorySize"].NumberValue() || shapedAuthorizer["timeout"] != authorizer["timeout"].NumberValue() || shapedAuthorizer["architectures"].([]any)[0] != authorizer["architectures"].ArrayValue()[0].StringValue() {
+		t.Errorf("shaped authorizer = %v, program registered %v", shapedAuthorizer, authorizer)
+	}
+	for _, name := range []string{"live", "chat"} {
+		if key := shapedNamed(t, set, "aws_secretsmanager_secret", name); key["managed_by"] != "ocel" {
+			t.Errorf("shaped signing key %s = %v, want the secret a deploy mints for it", name, key)
+		}
 	}
 }
 
@@ -269,8 +285,8 @@ func TestAnAppWithNoBuildShapesOneFunction(t *testing.T) {
 	req.Functions, req.Deploy.Apps[0].Workers = nil, nil
 	set := shaped(t, nil, req)
 
-	if got := countTypes(set)["aws_lambda_function"]; got != 2 {
-		t.Errorf("lambdas = %d, want one for web and the upload completer", got)
+	if got := countTypes(set)["aws_lambda_function"]; got != 3 {
+		t.Errorf("lambdas = %d, want one for web, the upload completer and the realtime authorizer", got)
 	}
 	if memory := shapedNamed(t, set, "aws_lambda_function", "web")["memory_size"]; memory != float64(nextBundleFunctionMemoryMB) {
 		t.Errorf("a next app's stand-in function has %v MB, want %d", memory, nextBundleFunctionMemoryMB)

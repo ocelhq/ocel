@@ -23,6 +23,7 @@ const (
 	tfLambdaFunction     = "aws_lambda_function"
 	tfLambdaFunctionURL  = "aws_lambda_function_url"
 	tfLogGroup           = "aws_cloudwatch_log_group"
+	tfAppSyncAPI         = "aws_appsync_api"
 	tfS3Bucket           = "aws_s3_bucket"
 	tfRDSCluster         = "aws_rds_cluster"
 	tfRDSClusterInstance = "aws_rds_cluster_instance"
@@ -79,6 +80,7 @@ func Shape(ctx context.Context, pass transform.Pass, region string, req provider
 			}
 		}
 	}
+	shape.realtime(scopes.Environment, req.Resources)
 	topics := topicsOf(project, req.Deploy.Env, req.Resources)
 	shape.topics(scopes.Environment, topics)
 	if err := shape.workers(scopes.Environment, req, topics); err != nil {
@@ -302,6 +304,26 @@ func (s costShape) kv(scope, project, env string, resource provider.Resource) er
 	s.add(scope, tfElastiCacheSubnetGroup, resource.Name, map[string]any{}, names["subnetGroup"])
 	s.plain(scope, tfSSMParameter, resource.Name, map[string]any{"type": "SecureString"})
 	return nil
+}
+
+func (s costShape) realtime(scope string, resources []provider.Resource) {
+	realtimes := realtimeResourcesOf(resources)
+	if len(realtimes) == 0 {
+		return
+	}
+	authorizer := string(naming.KindRealtimeAuthorizer)
+	s.plain(scope, tfAppSyncAPI, string(naming.KindRealtime), map[string]any{})
+	s.plain(scope, tfLambdaFunction, authorizer, map[string]any{
+		"runtime":           realtimeAuthorizerRuntime,
+		"memory_size":       realtimeAuthorizerMemoryMB,
+		"timeout":           realtimeAuthorizerTimeoutSeconds,
+		"architectures":     []any{arch.ARM64},
+		"ephemeral_storage": map[string]any{"size": lambdaDefaultEphemeralMB},
+	})
+	s.plain(scope, tfLogGroup, authorizer, map[string]any{"retention_in_days": lambdaLogRetentionDays})
+	for _, resource := range realtimes {
+		s.plain(scope, tfSecret, resource.Declared, map[string]any{"managed_by": "ocel"})
+	}
 }
 
 func (s costShape) bucket(scope, project, env string, resource provider.Resource) {

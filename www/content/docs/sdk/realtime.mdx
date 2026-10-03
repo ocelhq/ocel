@@ -1,0 +1,70 @@
+---
+title: Realtime
+description: Typed channels that browsers subscribe to and your server publishes on.
+---
+
+A realtime resource holds a set of channel patterns. Your app decides who may subscribe or
+publish, in rules it runs behind its own realtime handler. The transport that holds the
+sockets only checks the short-lived tokens your handler signed.
+
+```ts title="resources/realtime.ts"
+import { realtime } from "ocel/realtime";
+
+export const rt = realtime("app", {
+  authorize: async (req) => {
+    const session = await auth.api.getSession({ headers: req.headers });
+    return session ? { id: session.user.id } : null;
+  },
+  channels: {
+    "orders/:orderId": {
+      schema: OrderEvent,
+      subscribe: async ({ auth, params }) => ownsOrder(auth.id, params.orderId),
+    },
+    status: { schema: Status, subscribe: "public" },
+  },
+});
+
+await rt.publish("orders/:orderId", { params: { orderId }, body: { status: "shipped" } });
+```
+
+## Where it runs
+
+| Target | Transport | A subscription outlives a revoked caller for at most |
+| --- | --- | --- |
+| `ocel dev` | the Ocel gateway inside `ocel dev` | the dev server's lifetime |
+| AWS | AppSync Events | 24 hours |
+
+Google Cloud and a VPS refuse a deploy that declares a realtime resource for now.
+
+Access is checked when a browser subscribes and again every time it reconnects. A
+subscription that is already open keeps receiving events until its connection ends, so
+taking a user's access away takes effect within the window above, not at once.
+
+## On AWS
+
+Each environment gets one AppSync Event API, and each realtime resource is a channel
+namespace on it. Ocel deploys one Lambda authorizer per API: a Go function with 128 MB on
+arm64 that checks each connect and subscribe token against the resource's public key. It
+runs none of your code. It answers every request uncached, so a token is never admitted
+after it expires.
+
+- **Publishing.** Only the server publishes to AppSync. `publish` hands the event to the
+  Ocel runtime beside your app, which signs a `POST /event` with your app's own IAM role.
+  That role may connect to its API and publish to its own namespace and nothing else. A
+  browser publish goes through your handler, which runs the `publish` rule and then
+  publishes from the server.
+- **Signing key.** The first deploy mints an Ed25519 key per resource and keeps it in
+  Secrets Manager. It reaches your app through the resource's binding. Removing the
+  resource, or destroying the environment, deletes the key at once with no recovery
+  window.
+- **Connection lifetime.** AppSync closes every connection after 24 hours. The browser
+  client reconnects on its own and asks your handler to authorize every live
+  subscription again in one request, so your rules run again.
+- **Cost.** AppSync bills each publish, subscribe and delivered message as an operation,
+  plus connection minutes. The authorizer is billed per connect and subscribe, and each
+  signing key is one secret. Ocel's cost estimate prices all of these.
+
+Realtime needs AppSync and Secrets Manager permissions on the deploy credentials and on
+the boundary every app role is made under. Both live in the bootstrap stack, so an account
+bootstrapped before realtime existed has its bootstrap stack updated before its first
+realtime deploy.

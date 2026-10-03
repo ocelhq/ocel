@@ -183,8 +183,9 @@ func provisionedOutputs() auto.OutputMap {
 			outputKeyUsername:  "ocel",
 			outputKeySecretARN: "arn:aws:secretsmanager:eu-west-1:111122223333:secret:shop",
 		}},
-		"c-bucket": auto.OutputValue{Value: map[string]any{outputKeyBucket: "shop-prod-uploads"}},
-		"c-kv":     kvOutput("c-kv"),
+		"c-bucket":   auto.OutputValue{Value: map[string]any{outputKeyBucket: "shop-prod-uploads"}},
+		"c-kv":       kvOutput("c-kv"),
+		"c-realtime": realtimeOutput("c-realtime"),
 	}
 }
 
@@ -199,6 +200,8 @@ func stacksPlacingInto(engine *mockedEngine, uploader *fakeArtifactStore) *Stack
 func conformingConfig(uploader *fakeArtifactStore) Config {
 	params := newFakeParameters()
 	params.values[conformanceKVToken("c-kv")] = "a-kv-token"
+	keys := newFakeSigningKeys()
+	keys.values[conformanceSigningKey("c-realtime")] = conformanceSeed
 	return Config{
 		Slug:           "conformance",
 		Region:         "eu-west-1",
@@ -213,6 +216,8 @@ func conformingConfig(uploader *fakeArtifactStore) Config {
 		Objects:        uploader,
 		Parameters:     params,
 		KVTokenRoot:    conformanceKVTokenRoot,
+		SigningKeys:    keys,
+		SigningKeyRoot: conformanceSigningKeyRoot,
 	}
 }
 

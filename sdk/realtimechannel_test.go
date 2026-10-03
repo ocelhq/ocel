@@ -3,11 +3,11 @@ package ocel_test
 import (
 	"context"
 	"errors"
-	"net/http"
 	"regexp"
 	"strings"
 	"testing"
-	"time"
+
+	"connectrpc.com/connect"
 
 	"ocel.dev"
 )
@@ -18,8 +18,8 @@ type blobEvent struct {
 	Data string `json:"data"`
 }
 
-func TestPublishPostsTheEnvelopeToTheGatewayWithAPublishTokenForItsChannel(t *testing.T) {
-	gateway, fixture := serveFakeGateway(t, "app", http.StatusAccepted)
+func TestPublishSendsTheEnvelopeToTheRuntimeOnItsWireChannel(t *testing.T) {
+	runtime, _ := serveFakeRealtimeRuntime(t, "app")
 	resource := ocel.Realtime("app")
 	orders := ocel.Channel[orderEvent, orderParams](resource, "orders/:orderId", ocel.ChannelSubscribePublic())
 
@@ -27,24 +27,19 @@ func TestPublishPostsTheEnvelopeToTheGatewayWithAPublishTokenForItsChannel(t *te
 		t.Fatal(err)
 	}
 
-	events := gateway.listEvents()
+	events := runtime.listEvents()
 	if len(events) != 1 {
 		t.Fatalf("published = %d, want 1", len(events))
 	}
 	event := events[0]
-	if event.Path != "/publish" || event.Envelope.Version != 1 || !lowerHexID.MatchString(event.Envelope.ID) || event.Envelope.Timestamp == 0 ||
-		event.Envelope.Channel != "/app/orders/0zn5ptc" || event.Envelope.Kind != "live" || string(event.Envelope.Data) != `{"status":"shipped"}` {
-		t.Errorf("published = %+v, want the envelope of the event on /app/orders/0zn5ptc", event)
-	}
-	claims := readClaims(t, fixture.Realtime.VerifyKey, strings.TrimPrefix(event.Authorization, "Bearer "))
-	if claims.Issuer != "ocel:rt:app" || claims.Audience != fixture.Realtime.Host || claims.Subject != "server" ||
-		claims.Ocel.Operation != "publish" || claims.Ocel.Channel != "/app/orders/0zn5ptc" || claims.Ocel.Namespace != "app" {
-		t.Errorf("claims = %+v, want a server publish token for the channel", claims)
+	if event.Realtime != "app" || event.Channel != "/app/orders/0zn5ptc" || event.Envelope.Version != 1 || !lowerHexID.MatchString(event.Envelope.ID) ||
+		event.Envelope.Timestamp == 0 || event.Envelope.Channel != "/app/orders/0zn5ptc" || event.Envelope.Kind != "live" || string(event.Envelope.Data) != `{"status":"shipped"}` {
+		t.Errorf("published = %+v, want the envelope of the event on /app/orders/0zn5ptc for app", event)
 	}
 }
 
 func TestPublishRefusesParamsOrAnEventItCannotSend(t *testing.T) {
-	gateway, _ := serveFakeGateway(t, "app", http.StatusAccepted)
+	runtime, _ := serveFakeRealtimeRuntime(t, "app")
 	resource := ocel.Realtime("app")
 	orders := ocel.Channel[orderEvent, orderParams](resource, "orders/:orderId", ocel.ChannelSubscribePublic())
 	blobs := ocel.Channel[blobEvent, struct{}](resource, "blobs", ocel.ChannelSubscribePublic())
@@ -58,13 +53,13 @@ func TestPublishRefusesParamsOrAnEventItCannotSend(t *testing.T) {
 			t.Errorf("err = %v, want refused for %s", err, code)
 		}
 	}
-	if events := gateway.listEvents(); len(events) != 0 {
+	if events := runtime.listEvents(); len(events) != 0 {
 		t.Errorf("published = %+v, want nothing", events)
 	}
 }
 
 func TestPublishRefusesAnEventOutsideTheChannelSchema(t *testing.T) {
-	gateway, _ := serveFakeGateway(t, "app", http.StatusAccepted)
+	runtime, _ := serveFakeRealtimeRuntime(t, "app")
 	notes := ocel.Channel[chatMessage, struct{}](ocel.Realtime("app"), "notes", ocel.ChannelSubscribePublic(),
 		ocel.Schema(`{"type":"object","properties":{"text":{"type":"string","maxLength":3}}}`))
 
@@ -75,31 +70,28 @@ func TestPublishRefusesAnEventOutsideTheChannelSchema(t *testing.T) {
 	if err := notes.Publish(context.Background(), struct{}{}, chatMessage{Text: "ok"}); err != nil {
 		t.Fatal(err)
 	}
-	if events := gateway.listEvents(); len(events) != 1 || string(events[0].Envelope.Data) != `{"text":"ok"}` {
+	if events := runtime.listEvents(); len(events) != 1 || string(events[0].Envelope.Data) != `{"text":"ok"}` {
 		t.Errorf("published = %+v, want only the short text", events)
 	}
 }
 
-func TestPublishFailsWhenTheGatewayDoesNotAnswerInTime(t *testing.T) {
-	gateway, _ := serveFakeGateway(t, "app", http.StatusAccepted)
-	gateway.answerSlowly(10 * time.Second)
-	shortenRealtimePublishTimeout(t)
-	orders := ocel.Channel[orderEvent, orderParams](ocel.Realtime("app"), "orders/:orderId", ocel.ChannelSubscribePublic())
-
-	started := time.Now()
-	err := orders.Publish(context.Background(), orderParams{OrderID: "o1"}, orderEvent{})
-
-	if err == nil || time.Since(started) > 5*time.Second {
-		t.Errorf("err = %v after %s, want a failure at the deadline", err, time.Since(started))
-	}
-}
-
-func TestPublishFailsWhenTheGatewayRefusesIt(t *testing.T) {
-	serveFakeGateway(t, "app", http.StatusUnauthorized)
+func TestPublishFailsWhenTheRuntimeRefusesIt(t *testing.T) {
+	runtime, _ := serveFakeRealtimeRuntime(t, "app")
+	runtime.refuse(connect.NewError(connect.CodeUnavailable, errors.New("the gateway refused it with status 401")))
 	orders := ocel.Channel[orderEvent, orderParams](ocel.Realtime("app"), "orders/:orderId", ocel.ChannelSubscribePublic())
 
 	if err := orders.Publish(context.Background(), orderParams{OrderID: "o1"}, orderEvent{}); err == nil || !strings.Contains(err.Error(), "status 401") {
-		t.Errorf("err = %v, want the gateway's 401", err)
+		t.Errorf("err = %v, want the runtime's refusal", err)
+	}
+}
+
+func TestPublishWithoutTheRuntimeSaysHowToReachIt(t *testing.T) {
+	deliverRealtime(t, "app", readRealtimeFixture(t))
+	t.Setenv("OCEL_RUNTIME_ADDRESS", "")
+	orders := ocel.Channel[orderEvent, orderParams](ocel.Realtime("app"), "orders/:orderId", ocel.ChannelSubscribePublic())
+
+	if err := orders.Publish(context.Background(), orderParams{OrderID: "o1"}, orderEvent{}); err == nil || !strings.Contains(err.Error(), "OCEL_RUNTIME_ADDRESS") {
+		t.Errorf("err = %v, want the missing runtime address named", err)
 	}
 }
 
@@ -117,8 +109,4 @@ func TestPublishOutsideAProvisionedRunSaysWhy(t *testing.T) {
 		t.Errorf("err = %v, want OCEL_RESOURCE_REALTIME_app missing", err)
 	}
 
-	deliverRealtime(t, "app", readRealtimeFixture(t))
-	if err := orders.Publish(context.Background(), orderParams{OrderID: "o1"}, orderEvent{}); err == nil || !strings.Contains(err.Error(), "AppSync Events is not supported yet") {
-		t.Errorf("err = %v, want AppSync publishing said to be unsupported yet", err)
-	}
 }

@@ -11,11 +11,13 @@ import (
 	"testing"
 	"time"
 
+	connect "connectrpc.com/connect"
 	"github.com/coder/websocket"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/realtime"
+	realtimev1 "github.com/ocelhq/ocel/pkg/proto/app/realtime/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
@@ -169,6 +171,40 @@ func TestTheBindingCarriesAGatewayOnLoopbackThatAcceptsTheTokensItsKeySigns(t *t
 	}
 	if got := exchange(t, conn, nil); got["type"] != "data" || got["event"] != event {
 		t.Fatalf("got %v, want the published event", got)
+	}
+}
+
+func TestAnEventPublishedThroughTheBackendReachesASubscriber(t *testing.T) {
+	t.Parallel()
+
+	backend := newBackend(t)
+	bound := resolveOne(t, backend, "app")
+	conn, err := dial(t, bound, mint(t, bound, "app", token.Connect, "/app"))
+	if err != nil {
+		t.Fatalf("dial the gateway: %v", err)
+	}
+	exchange(t, conn, map[string]any{"type": "connection_init"})
+	channel := "/app/orders/o-1"
+	subscribe := map[string]any{"type": "subscribe", "id": "s-1", "channel": channel, "authorization": map[string]string{"Authorization": mint(t, bound, "app", token.Subscribe, channel)}}
+	if got := exchange(t, conn, subscribe); got["type"] != "subscribe_success" {
+		t.Fatalf("got %v, want subscribe_success", got)
+	}
+
+	event := `{"v":1,"id":"0123456789abcdef0123456789abcdef","ch":"/app/orders/o-1","ts":1790000000000,"kind":"live","data":{"status":"shipped"}}`
+	if _, err := backend.Publish(context.Background(), &realtimev1.PublishRequest{Realtime: "app", Channel: channel, Event: event}); err != nil {
+		t.Fatalf("Publish = %v", err)
+	}
+	if got := exchange(t, conn, nil); got["type"] != "data" || got["event"] != event {
+		t.Fatalf("got %v, want the published event", got)
+	}
+}
+
+func TestAPublishBeforeAnyRealtimeIsDeclaredIsAFailedPrecondition(t *testing.T) {
+	t.Parallel()
+
+	_, err := newBackend(t).Publish(context.Background(), &realtimev1.PublishRequest{Realtime: "app", Channel: "/app/status", Event: `{"v":1}`})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("Publish = %v, want a failed precondition: no realtime is declared", err)
 	}
 }
 

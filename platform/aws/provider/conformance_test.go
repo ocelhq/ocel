@@ -87,23 +87,26 @@ func buildProvider(t *testing.T) string {
 	return binary
 }
 
-func TestTopicsTasksAndWorkersAreRefusedAtPreflightAsUnsupported(t *testing.T) {
+func TestTopicsTasksAndWorkersAreServedRatherThanRefusedAtPreflight(t *testing.T) {
 	t.Parallel()
 
 	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	conformance.RunWorkers(t, p.Facts())
 }
 
-func TestKVStoresAreRefusedAtPreflightAsUnsupported(t *testing.T) {
+func TestKVStoresAreServedRatherThanRefusedAtPreflight(t *testing.T) {
 	t.Parallel()
 
 	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	conformance.RunKVStores(t, p.Facts())
 }
 
-func TestRealtimeIsRefusedAtPreflightAsUnsupported(t *testing.T) {
+func TestRealtimeIsServedRatherThanRefusedAtPreflight(t *testing.T) {
 	t.Parallel()
 
 	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	if !slices.Contains(p.Facts().Bindings, provider.BindingRealtime) {
+		t.Errorf("Facts().Bindings = %v, want realtime served over AppSync Events", p.Facts().Bindings)
+	}
 	conformance.RunRealtime(t, p.Facts())
 }

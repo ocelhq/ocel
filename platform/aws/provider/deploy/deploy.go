@@ -29,6 +29,9 @@ type Config struct {
 	Parameters    ParametersAPI
 	KVTokenRoot   string
 
+	SigningKeys    SigningKeysAPI
+	SigningKeyRoot string
+
 	Tags      TagClock
 	KeyValues keyvalue.Store
 	Rules     RulesAPI
