@@ -2,15 +2,14 @@ package logevents
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
-	"github.com/aws/smithy-go"
 )
 
 const (
@@ -76,19 +75,13 @@ func tail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Clie
 		every = defaultPollInterval
 	}
 	var groups []*tailedGroup
-	for _, source := range query.Sources {
-		group, err := findGroup(ctx, lambdas, source, query.Tier)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-			return err
-		}
-		groups = append(groups, &tailedGroup{logGroup: group, source: source, cursor: newCursor(query.Since)})
-	}
 	wait := every
 	for {
-		err := pollGroups(ctx, logs, groups, query, emit)
+		var err error
+		groups, err = findTailedGroups(ctx, lambdas, query, groups)
+		if err == nil {
+			err = pollGroups(ctx, logs, groups, query, emit)
+		}
 		switch {
 		case ctx.Err() != nil:
 			return nil
@@ -115,6 +108,17 @@ func refuseInvalidTailQuery(query Query) error {
 	return refuseInvalidSources(query)
 }
 
+func findTailedGroups(ctx context.Context, lambdas *lambda.Client, query Query, found []*tailedGroup) ([]*tailedGroup, error) {
+	for _, source := range query.Sources[len(found):] {
+		group, err := findGroup(ctx, lambdas, source, query.Tier)
+		if err != nil {
+			return found, err
+		}
+		found = append(found, &tailedGroup{logGroup: group, source: source, cursor: newCursor(query.Since)})
+	}
+	return found, nil
+}
+
 func pollGroups(ctx context.Context, logs *cloudwatchlogs.Client, groups []*tailedGroup, query Query, emit func([]Event) error) error {
 	for _, group := range groups {
 		if err := pollGroup(ctx, logs, group, query, emit); err != nil {
@@ -125,8 +129,7 @@ func pollGroups(ctx context.Context, logs *cloudwatchlogs.Client, groups []*tail
 }
 
 func isThrottled(err error) bool {
-	var api smithy.APIError
-	return errors.As(err, &api) && api.ErrorCode() == "ThrottlingException"
+	return err != nil && retry.IsErrorThrottles(retry.DefaultThrottles).IsErrorThrottle(err) == aws.TrueTernary
 }
 
 func pollGroup(ctx context.Context, logs *cloudwatchlogs.Client, group *tailedGroup, query Query, emit func([]Event) error) error {

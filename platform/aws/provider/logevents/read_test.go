@@ -1,6 +1,7 @@
 package logevents
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"io"
@@ -49,6 +50,8 @@ type fakeAWS struct {
 	emptyPage         bool
 	throttles         int
 	throttledRequests map[int]bool
+	throttleCode      string
+	lambdaThrottles   int
 	filterRequests    int
 }
 
@@ -71,6 +74,13 @@ func (f *fakeAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	defer f.mutex.Unlock()
 	if name, ok := strings.CutPrefix(req.URL.Path, "/2015-03-31/functions/"); ok {
 		name = strings.TrimSuffix(name, "/configuration")
+		if f.lambdaThrottles > 0 {
+			f.lambdaThrottles--
+			writer.Header().Set("X-Amzn-Errortype", "TooManyRequestsException")
+			writer.WriteHeader(http.StatusTooManyRequests)
+			io.WriteString(writer, `{"Message":"Rate exceeded"}`)
+			return
+		}
 		group, found := f.lambdas[name]
 		if !found {
 			writer.Header().Set("X-Amzn-Errortype", "ResourceNotFoundException")
@@ -93,7 +103,7 @@ func (f *fakeAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	f.filterRequests++
 	if f.throttles > 0 || f.throttledRequests[f.filterRequests] {
 		f.throttles = max(f.throttles-1, 0)
-		writer.Header().Set("X-Amzn-Errortype", "ThrottlingException")
+		writer.Header().Set("X-Amzn-Errortype", cmp.Or(f.throttleCode, "ThrottlingException"))
 		writer.WriteHeader(http.StatusBadRequest)
 		io.WriteString(writer, `{"message":"Rate exceeded"}`)
 		return

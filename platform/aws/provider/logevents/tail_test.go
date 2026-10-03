@@ -172,6 +172,40 @@ func TestTailBacksOffWhenThrottled(t *testing.T) {
 	}
 }
 
+func TestTailBacksOffForEveryCodeAWSUsesForThrottling(t *testing.T) {
+	t.Parallel()
+	for _, code := range []string{"ThrottlingException", "Throttling", "LimitExceededException", "TooManyRequestsException", "RequestLimitExceeded"} {
+		fake, logs, lambdas := newFakeAWSWithWebFunction(t)
+		fake.add(webGroup, webLine(1, "one"))
+		fake.throttles, fake.throttleCode = 1, code
+
+		run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, time.Second, idle(1)...)
+
+		if run.err != nil || run.batchTexts() != "one" {
+			t.Errorf("Tail() throttled with %s: error = %v, batches %q, want it to back off and then show the event", code, run.err, run.batchTexts())
+		}
+	}
+}
+
+func TestTailBacksOffWhenLambdaThrottlesTheLogGroupLookup(t *testing.T) {
+	t.Parallel()
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
+	fake.add(webGroup, webLine(1, "one"))
+	fake.lambdaThrottles = 2
+
+	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, time.Second, idle(2)...)
+
+	if run.err != nil {
+		t.Fatalf("Tail() error = %v, want a throttled lookup retried", run.err)
+	}
+	if want := []time.Duration{2 * time.Second, 4 * time.Second, time.Second}; !slices.Equal(run.sleeps, want) {
+		t.Fatalf("Tail() slept %v, want %v", run.sleeps, want)
+	}
+	if got := run.batchTexts(); got != "one" {
+		t.Fatalf("Tail() emitted batches %q, want the event once the lookup succeeded", got)
+	}
+}
+
 func TestTailStopsWhenTheContextIsCancelled(t *testing.T) {
 	t.Parallel()
 	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
