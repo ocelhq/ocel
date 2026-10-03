@@ -14,7 +14,6 @@ import {
   nextOriginDataCacheChecks,
   orderedKeysInParallelCheck,
   realtimeChecks,
-  realtimeHandlerDefaultsCheck,
   realtimeOperationLimitCheck,
   realtimeRuleDeniesCheck,
   taskConcurrencyCheck,
@@ -412,13 +411,11 @@ describe("the realtime concern", () => {
     }
   });
 
-  it("runs the suite on floci-gcp, expecting red every check that holds a socket or hears a publish", () => {
+  it("runs the suite on floci-gcp, expecting red every check that holds a socket or hears a publish, or asks the handler to know its own origin", () => {
     const planned = planOn("gcp.floci");
-    const handlerOnly = [
-      realtimeRuleDeniesCheck,
-      realtimeHandlerDefaultsCheck,
-      realtimeOperationLimitCheck,
-    ].map((one) => one.title);
+    const handlerOnly = [realtimeRuleDeniesCheck, realtimeOperationLimitCheck].map(
+      (one) => one.title,
+    );
     for (const cell of CELLS) {
       expect(planned.skipped[cell]).toBeUndefined();
       const red = Object.keys(planned.expectedFailures[`${cell}/web`] ?? {});
