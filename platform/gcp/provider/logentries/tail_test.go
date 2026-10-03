@@ -3,6 +3,8 @@ package logentries
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"math"
 	"net"
 	"reflect"
@@ -529,6 +531,58 @@ func TestTailWritesANonFiniteNumberInAJSONPayloadAsAString(t *testing.T) {
 
 	if want := `{"ceiling":"Infinity","floor":"-Infinity","ratio":"NaN"}`; got != want {
 		t.Errorf("text = %s, want %s", got, want)
+	}
+}
+
+func TestTailReturnsACallbackErrorThatLooksLikeAStreamErrorWithoutAskingAgain(t *testing.T) {
+	t.Parallel()
+	for name, broken := range map[string]error{
+		"throttled":   status.Error(codes.ResourceExhausted, "the reader is throttled"),
+		"unavailable": status.Error(codes.Unavailable, "the reader is down"),
+		"ended":       fmt.Errorf("the reader closed: %w", io.EOF),
+	} {
+		t.Run("emit "+name, func(t *testing.T) {
+			t.Parallel()
+			client, fake := serveTail(t, func(_ int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
+				return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{streamedEntry(since, "line")}})
+			})
+			var calls atomic.Int64
+
+			err := Tail(context.Background(), client, "acme-prod", webQuery(), func([]Event) error { calls.Add(1); return broken }, ignoreNotices)
+
+			if !errors.Is(err, broken) {
+				t.Errorf("Tail = %v, want the emit error", err)
+			}
+			if n := calls.Load(); n != 1 {
+				t.Errorf("emit called %d times, want 1", n)
+			}
+			if n := len(fake.received()); n != 1 {
+				t.Errorf("sessions opened = %d, want 1", n)
+			}
+		})
+		t.Run("notice "+name, func(t *testing.T) {
+			t.Parallel()
+			client, fake := serveTail(t, func(_ int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
+				return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{
+					SuppressionInfo: []*loggingpb.TailLogEntriesResponse_SuppressionInfo{
+						{Reason: loggingpb.TailLogEntriesResponse_SuppressionInfo_RATE_LIMIT, SuppressedCount: 1},
+					},
+				})
+			})
+			var calls atomic.Int64
+
+			err := Tail(context.Background(), client, "acme-prod", webQuery(), ignoreEvents, func(Notice) error { calls.Add(1); return broken })
+
+			if !errors.Is(err, broken) {
+				t.Errorf("Tail = %v, want the notice error", err)
+			}
+			if n := calls.Load(); n != 1 {
+				t.Errorf("notice called %d times, want 1", n)
+			}
+			if n := len(fake.received()); n != 1 {
+				t.Errorf("sessions opened = %d, want 1", n)
+			}
+		})
 	}
 }
 
