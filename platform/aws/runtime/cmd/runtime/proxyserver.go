@@ -136,7 +136,7 @@ func serveProxy(ctx context.Context, values s3store.Records, cfg proxyConfig) (p
 		services.Realtime = realtimeproxy.NewService(values, realtime.NewAppSyncTransport(realtime.Config{
 			Client:      http.DefaultClient,
 			Credentials: aws.Credentials,
-			Retryer:     aws.Retryer(),
+			Retryer:     sdkconfig.WorkloadRetryer(),
 			Region:      aws.Region,
 		}))
 	}
