@@ -208,14 +208,9 @@ class Channel:
         pattern, after validating it against the channel's schema. Every param is required.
         Raises :class:`RealtimePublishError` for params or a body that cannot be published,
         and ``RuntimeError`` when the ocel runtime does not publish the event."""
-        client, headers = self._resource._ensure_connection("publish")
+        self._resource._ensure_connection("publish")
         channel, _, envelope = self._encode_event(params, body)
-        self._resource._raise_unless_published(
-            channel,
-            lambda: client.publish(
-                self._resource._build_request(channel, envelope), headers=headers
-            ),
-        )
+        self._resource._publish("publish", channel, envelope)
 
     async def publish_async(self, body: Any, /, **params: str) -> None:
         """Publish ``body`` as :meth:`publish` does, without blocking the event loop."""
@@ -427,42 +422,40 @@ class Realtime:
         if is_discovering():
             raise refuse_unprovisioned(f'realtime("{self.name}")', access)
         if self._connection is None:
-            read_realtime_binding(self.name)
-            address, headers = read_runtime()
-            self._connection = (RealtimeServiceClientSync(address, send_compression=None), headers)
+            self._connection = self._new_connection(RealtimeServiceClientSync)
         return self._connection
 
     def _ensure_async_connection(self, access: str) -> tuple[Any, dict[str, str]]:
         if is_discovering():
             raise refuse_unprovisioned(f'realtime("{self.name}")', access)
         if self._async_connection is None:
-            read_realtime_binding(self.name)
-            address, headers = read_runtime()
-            self._async_connection = (
-                RealtimeServiceClient(address, send_compression=None),
-                headers,
-            )
+            self._async_connection = self._new_connection(RealtimeServiceClient)
         return self._async_connection
+
+    def _new_connection(self, client_type: Any) -> tuple[Any, dict[str, str]]:
+        read_realtime_binding(self.name)
+        address, headers = read_runtime()
+        return client_type(address, send_compression=None), headers
 
     def _build_request(self, channel: str, envelope: bytes) -> PublishRequest:
         return PublishRequest(realtime=self.name, channel=channel, event=envelope.decode())
 
-    def _raise_unless_published(self, channel: str, publish: Callable[[], Any]) -> None:
+    def _refused_publish(self, channel: str, refused: ConnectError) -> RuntimeError:
+        return RuntimeError(f'realtime "{self.name}": publish on {channel}: {refused.message}')
+
+    def _publish(self, access: str, channel: str, envelope: bytes) -> None:
+        client, headers = self._ensure_connection(access)
         try:
-            publish()
+            client.publish(self._build_request(channel, envelope), headers=headers)
         except ConnectError as refused:
-            raise RuntimeError(
-                f'realtime "{self.name}": publish on {channel}: {refused.message}'
-            ) from refused
+            raise self._refused_publish(channel, refused) from refused
 
     async def _publish_async(self, access: str, channel: str, envelope: bytes) -> None:
         client, headers = self._ensure_async_connection(access)
         try:
             await client.publish(self._build_request(channel, envelope), headers=headers)
         except ConnectError as refused:
-            raise RuntimeError(
-                f'realtime "{self.name}": publish on {channel}: {refused.message}'
-            ) from refused
+            raise self._refused_publish(channel, refused) from refused
 
     async def _serve_op(
         self,
