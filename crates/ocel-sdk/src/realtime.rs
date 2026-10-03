@@ -21,6 +21,7 @@
 //! let app = axum::Router::new().nest_service("/api/realtime", ocel::realtime::axum::router(rt));
 //! ```
 
+mod appsync;
 #[cfg(feature = "axum")]
 pub mod axum;
 mod denial;

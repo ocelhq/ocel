@@ -613,7 +613,15 @@ async fn publish_outside_a_provisioned_run_says_why() {
         order_id: "o1".to_string(),
     };
 
-    let unsupported = rt.publish(&orders, &event).await;
+    for name in [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+        "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+    ] {
+        std::env::remove_var(name);
+    }
+    let unsigned = rt.publish(&orders, &event).await;
     std::env::set_var("OCEL_PHASE", "discovery");
     let unprovisioned = rt.publish(&orders, &event).await;
     std::env::remove_var("OCEL_PHASE");
@@ -621,7 +629,7 @@ async fn publish_outside_a_provisioned_run_says_why() {
     let missing = rt.publish(&orders, &event).await;
 
     assert!(
-        matches!(unsupported, Err(ocel::Error::PublishFailed { said, .. }) if said.contains("AppSync Events is not supported yet"))
+        matches!(unsigned, Err(ocel::Error::PublishFailed { said, .. }) if said.contains("AWS_ACCESS_KEY_ID"))
     );
     assert!(matches!(
         unprovisioned,

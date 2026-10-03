@@ -1,9 +1,10 @@
+use super::appsync::{build_appsync_publish_url, publish_to_appsync};
 use super::token::{mint_token, Operation};
 use super::Realtime;
 use crate::proto::common::bindings::v1::{RealtimeProperties, RealtimeTransport};
 use crate::Error;
 use bytes::Bytes;
-use http_body_util::Full;
+use http_body_util::{BodyExt, Full};
 use hyper_util::rt::TokioIo;
 use serde::Serialize;
 use std::sync::{Arc, OnceLock};
@@ -56,7 +57,7 @@ fn get_tls_connector() -> tokio_rustls::TlsConnector {
     tokio_rustls::TlsConnector::from(config.clone())
 }
 
-async fn send<S>(stream: S, request: http::Request<Full<Bytes>>) -> Result<u16, String>
+async fn send<S>(stream: S, request: http::Request<Full<Bytes>>) -> Result<(u16, Bytes), String>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
 {
@@ -68,25 +69,38 @@ where
         .send_request(request)
         .await
         .map_err(|err| err.to_string())?;
-    Ok(response.status().as_u16())
+    let status = response.status().as_u16();
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .map_err(|err| err.to_string())?
+        .to_bytes();
+    Ok((status, body))
 }
 
-async fn post(uri: &http::Uri, token: &str, envelope: Bytes) -> Result<u16, String> {
-    let host = uri
-        .host()
-        .ok_or("the publish url names no host")?
-        .to_string();
+pub(crate) async fn send_request(
+    method: http::Method,
+    uri: &http::Uri,
+    headers: &[(String, String)],
+    body: Bytes,
+) -> Result<(u16, Bytes), String> {
+    let host = uri.host().ok_or("the url names no host")?.to_string();
     let https = uri.scheme_str() == Some("https");
     let port = uri.port_u16().unwrap_or(if https { 443 } else { 80 });
-    let request = http::Request::post(uri.path())
+    let mut request = http::Request::builder()
+        .method(method)
+        .uri(uri.path_and_query().map_or("/", |path| path.as_str()))
         .header(
             "host",
             uri.authority().map(ToString::to_string).unwrap_or_default(),
         )
-        .header("authorization", format!("Bearer {token}"))
-        .header("content-type", "application/json")
-        .header("content-length", envelope.len())
-        .body(Full::new(envelope))
+        .header("content-length", body.len());
+    for (name, value) in headers {
+        request = request.header(name.as_str(), value.as_str());
+    }
+    let request = request
+        .body(Full::new(body))
         .map_err(|err| err.to_string())?;
     let stream = tokio::net::TcpStream::connect((host.as_str(), port))
         .await
@@ -123,22 +137,43 @@ pub(crate) async fn publish(
         said,
     };
     if transport == Transport::AppsyncEvents {
-        // TODO(#1514): publish with a SigV4-signed POST /event under the app's role once the AWS target lands.
-        return Err(failed(
-            "publishing on AppSync Events is not supported yet".to_string(),
-        ));
-    }
-    let url = build_gateway_publish_url(&properties.url)
-        .ok_or_else(|| failed(format!("the binding's url '{}' is no URL", properties.url)))?;
-    let status = tokio::time::timeout(PUBLISH_TIMEOUT, post(&url, token, envelope))
+        let endpoint = build_appsync_publish_url(&properties.host).ok_or_else(|| {
+            failed(format!(
+                "the binding's host '{}' is no host",
+                properties.host
+            ))
+        })?;
+        return tokio::time::timeout(
+            PUBLISH_TIMEOUT,
+            publish_to_appsync(&endpoint, &properties.host, channel, envelope),
+        )
         .await
         .map_err(|_| {
             failed(format!(
-                "the gateway did not answer a publish on {channel} within {}s",
+                "AppSync did not answer a publish on {channel} within {}s",
                 PUBLISH_TIMEOUT.as_secs()
             ))
         })?
-        .map_err(|err| failed(format!("publish on {channel}: {err}")))?;
+        .map_err(|err| failed(format!("publish on {channel}: {err}")));
+    }
+    let url = build_gateway_publish_url(&properties.url)
+        .ok_or_else(|| failed(format!("the binding's url '{}' is no URL", properties.url)))?;
+    let headers = [
+        ("authorization".to_string(), format!("Bearer {token}")),
+        ("content-type".to_string(), "application/json".to_string()),
+    ];
+    let (status, _) = tokio::time::timeout(
+        PUBLISH_TIMEOUT,
+        send_request(http::Method::POST, &url, &headers, envelope),
+    )
+    .await
+    .map_err(|_| {
+        failed(format!(
+            "the gateway did not answer a publish on {channel} within {}s",
+            PUBLISH_TIMEOUT.as_secs()
+        ))
+    })?
+    .map_err(|err| failed(format!("publish on {channel}: {err}")))?;
     if !(200..300).contains(&status) {
         return Err(failed(format!(
             "the gateway refused a publish on {channel} with status {status}"
