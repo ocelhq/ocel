@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"net"
 	"net/http"
@@ -108,8 +109,10 @@ func unreachable(status int) bool {
 }
 
 func transport(err error) bool {
-	var reached net.Error
-	return errors.As(err, &reached) ||
+	var timed net.Error
+	return (errors.As(err, &timed) && timed.Timeout()) ||
+		errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, syscall.ECONNRESET) ||
 		errors.Is(err, syscall.ECONNABORTED) ||
 		errors.Is(err, syscall.EPIPE)
