@@ -82,14 +82,24 @@ func eventOf(entry *logging.LogEntry, sources []Source) (Event, bool, error) {
 	if err != nil {
 		return Event{}, false, fmt.Errorf("read the time of log entry %s: %w", entry.InsertId, err)
 	}
-	event := Event{Time: at, Text: text, Instance: entry.Labels["instanceId"]}
-	if entry.Severity != "DEFAULT" {
-		event.Severity = entry.Severity
-	}
+	var resource map[string]string
 	if entry.Resource != nil {
-		event.Label = labelOf(sources, entry.Resource.Labels["service_name"], entry.Resource.Labels["revision_name"])
+		resource = entry.Resource.Labels
 	}
-	return event, true, nil
+	return newEvent(sources, at, text, entry.Severity, entry.Labels, resource), true, nil
+}
+
+func newEvent(sources []Source, at time.Time, text, severity string, labels, resource map[string]string) Event {
+	event := Event{
+		Time:     at,
+		Text:     text,
+		Instance: labels["instanceId"],
+		Label:    labelOf(sources, resource["service_name"], resource["revision_name"]),
+	}
+	if severity != "DEFAULT" {
+		event.Severity = severity
+	}
+	return event
 }
 
 func labelOf(sources []Source, service, revision string) string {
