@@ -40,14 +40,16 @@ type filterRequest struct {
 }
 
 type fakeAWS struct {
-	mutex     sync.Mutex
-	groups    map[string][]storedEvent
-	lambdas   map[string]string
-	pageSize  int
-	requests  []filterRequest
-	logsError string
-	emptyPage bool
-	throttles int
+	mutex             sync.Mutex
+	groups            map[string][]storedEvent
+	lambdas           map[string]string
+	pageSize          int
+	requests          []filterRequest
+	logsError         string
+	emptyPage         bool
+	throttles         int
+	throttledRequests map[int]bool
+	filterRequests    int
 }
 
 func newFakeAWS(t *testing.T) (*fakeAWS, *cloudwatchlogs.Client, *lambda.Client) {
@@ -88,8 +90,9 @@ func (f *fakeAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	var filter filterRequest
 	json.NewDecoder(req.Body).Decode(&filter)
 	f.requests = append(f.requests, filter)
-	if f.throttles > 0 {
-		f.throttles--
+	f.filterRequests++
+	if f.throttles > 0 || f.throttledRequests[f.filterRequests] {
+		f.throttles = max(f.throttles-1, 0)
 		writer.Header().Set("X-Amzn-Errortype", "ThrottlingException")
 		writer.WriteHeader(http.StatusBadRequest)
 		io.WriteString(writer, `{"message":"Rate exceeded"}`)
