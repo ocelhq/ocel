@@ -125,7 +125,7 @@ jobs:
       engine_key: ${{ steps.gate-engine.outputs.key }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: ./.github/actions/node-workspace
 
@@ -160,7 +160,7 @@ jobs:
       VM: ocel-live-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup the incus host
         uses: ./.github/actions/incus-vm
@@ -207,7 +207,7 @@ jobs:
 
       - name: Keep every lane's report and the host profile
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vps-live-${{ github.run_attempt }}
           path: reports
@@ -246,7 +246,7 @@ jobs:
       VM: ocel-pipeline-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup the incus host
         uses: ./.github/actions/incus-vm
@@ -281,7 +281,7 @@ jobs:
 
       - name: Keep every lane's report and the host profile
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vps-pipeline-${{ github.run_attempt }}
           path: reports

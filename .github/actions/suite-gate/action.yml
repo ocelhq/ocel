@@ -40,7 +40,7 @@ runs:
 
     - name: Look for a run that already passed them
       id: restore
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ runner.temp }}/suite-green/${{ inputs.suite }}
         key: ${{ steps.hash.outputs.key }}
