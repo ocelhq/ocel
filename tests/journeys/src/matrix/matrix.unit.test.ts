@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import stripJsonComments from "strip-json-comments";
 import {
   batchCheck,
   exactTaskPayloadCheck,
@@ -16,12 +19,14 @@ import {
   realtimeRuleDeniesCheck,
   taskConcurrencyCheck,
 } from "../checks";
+import { DEFAULT_BASE, GCP_BASE, VPS_BASE } from "../config";
+import { fixtureDir } from "../paths";
 import { NO_FILTER, plan, type RunFilter } from "../plan";
 import { filterFrom } from "../run/filter";
 import { hasReleaseCycle, targetNamed } from "../targets";
 import { fixtures } from "./fixtures";
 import { gaps } from "./gaps";
-import { type Concern, LANES, type Lane, targetOfLane } from "./types";
+import { type Concern, LANES, type Lane, type TargetName, targetOfLane } from "./types";
 
 const REGISTRY_CREDENTIALS = {
   OCEL_JOURNEY_REGISTRY_USER: "octocat",
@@ -424,5 +429,41 @@ describe("the realtime concern", () => {
           .sort(),
       );
     }
+  });
+});
+
+describe("the fixtures a lane deploys", () => {
+  const BASES: Record<Exclude<TargetName, "dev">, string> = {
+    aws: DEFAULT_BASE,
+    gcp: GCP_BASE,
+    vps: VPS_BASE,
+  };
+  const MARKERS = ["go.mod", "pyproject.toml", "requirements.txt", "package.json", "Cargo.toml"];
+
+  it("put every app a planned cell deploys where ocel can tell what it is built with", () => {
+    const undetectable = new Set<string>();
+    for (const lane of LANES) {
+      const target = targetOfLane(lane);
+      if (target === "dev") {
+        continue;
+      }
+      for (const cell of planOn(lane).cells) {
+        const dir = fixtureDir(cell.fixture);
+        const base = path.join(dir, BASES[target]);
+        if (!existsSync(base)) {
+          continue;
+        }
+        const config = JSON.parse(stripJsonComments(readFileSync(base, "utf8"))) as {
+          apps?: { name: string; path: string; framework?: string }[];
+        };
+        for (const app of config.apps ?? []) {
+          const appDir = path.join(dir, app.path);
+          if (!app.framework && !MARKERS.some((marker) => existsSync(path.join(appDir, marker)))) {
+            undetectable.add(`${lane}: ${cell.fixture} ${BASES[target]} app ${app.name}`);
+          }
+        }
+      }
+    }
+    expect([...undetectable].sort()).toEqual([]);
   });
 });
