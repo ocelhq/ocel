@@ -3,6 +3,7 @@ package logevents
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -50,7 +51,7 @@ func runTail(t *testing.T, logs *cloudwatchlogs.Client, lambdas *lambda.Client, 
 	return run
 }
 
-func lambdaFunction(t *testing.T) (*fakeAWS, *cloudwatchlogs.Client, *lambda.Client) {
+func newFakeAWSWithWebFunction(t *testing.T) (*fakeAWS, *cloudwatchlogs.Client, *lambda.Client) {
 	t.Helper()
 	fake, logs, lambdas := newFakeAWS(t)
 	fake.lambdas["web-fn"] = "/aws/lambda/web-fn-1"
@@ -65,7 +66,7 @@ func webLine(seconds int, text string) storedEvent {
 
 func TestTailEmitsOnlyEventsNewerThanTheLastPoll(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.add(webGroup, webLine(1, "one"), webLine(2, "two"))
 
 	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, time.Second,
@@ -82,11 +83,12 @@ func TestTailEmitsOnlyEventsNewerThanTheLastPoll(t *testing.T) {
 
 func TestTailSkipsAnEventSeenAtTheSameTimestamp(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.add(webGroup, webLine(1, "first"))
 
 	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, time.Second,
 		func() { fake.add(webGroup, webLine(1, "second")) },
+		func() {},
 	)
 
 	if run.err != nil {
@@ -97,9 +99,62 @@ func TestTailSkipsAnEventSeenAtTheSameTimestamp(t *testing.T) {
 	}
 }
 
+func TestTailEmitsAnEventIngestedLateWithAnOlderTimestampOnce(t *testing.T) {
+	t.Parallel()
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
+	fake.add(webGroup, webLine(5, "newer"))
+
+	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, time.Second,
+		func() {
+			fake.add(webGroup, storedEvent{Stream: "2026/09/01/[$LATEST]other", Time: addToEpoch(3), Message: "older, ingested late\n"})
+		},
+		func() {},
+	)
+
+	if run.err != nil {
+		t.Fatalf("Tail() error = %v", run.err)
+	}
+	if got, want := run.batchTexts(), "newer|older, ingested late"; got != want {
+		t.Fatalf("Tail() emitted batches %q, want %q: another instance's event arrived after a newer one and must still be shown, once", got, want)
+	}
+}
+
+func TestTailReadsBackOverTheLateEventWindowButNeverBeforeSince(t *testing.T) {
+	t.Parallel()
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
+	fake.add(webGroup, webLine(3, "early"))
+
+	runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, time.Second,
+		func() { fake.add(webGroup, webLine(60, "late")) },
+		func() {},
+	)
+
+	var starts []time.Time
+	for _, sent := range fake.listRequests() {
+		starts = append(starts, time.UnixMilli(*sent.StartTime).UTC())
+	}
+	want := []time.Time{epoch, epoch, addToEpoch(60).Add(-lateEventWindow)}
+	if !slices.Equal(starts, want) {
+		t.Fatalf("polls started at %v, want %v", starts, want)
+	}
+}
+
+func TestCursorForgetsEventsOlderThanTheLateEventWindow(t *testing.T) {
+	t.Parallel()
+	position := newCursor(epoch)
+	position.markSeen("old", addToEpoch(1).UnixMilli())
+	position.markSeen("new", addToEpoch(60).UnixMilli())
+
+	position.forgetBeforeStart()
+
+	if remembered := slices.Sorted(maps.Keys(position.seenMillis)); !slices.Equal(remembered, []string{"new"}) {
+		t.Fatalf("cursor remembers %v, want only the event inside the late event window", remembered)
+	}
+}
+
 func TestTailBacksOffWhenThrottled(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.add(webGroup, webLine(1, "one"))
 	fake.throttles = 4
 
@@ -119,7 +174,7 @@ func TestTailBacksOffWhenThrottled(t *testing.T) {
 
 func TestTailStopsWhenTheContextIsCancelled(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.add(webGroup, webLine(1, "one"))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -136,7 +191,7 @@ func TestTailStopsWhenTheContextIsCancelled(t *testing.T) {
 
 func TestTailReturnsNilWhenTheContextIsCancelledDuringARequest(t *testing.T) {
 	t.Parallel()
-	_, logs, lambdas := lambdaFunction(t)
+	_, logs, lambdas := newFakeAWSWithWebFunction(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -149,7 +204,7 @@ func TestTailReturnsNilWhenTheContextIsCancelledDuringARequest(t *testing.T) {
 
 func TestTailPollsEveryTwoSecondsByDefault(t *testing.T) {
 	t.Parallel()
-	_, logs, lambdas := lambdaFunction(t)
+	_, logs, lambdas := newFakeAWSWithWebFunction(t)
 
 	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, 0, idle(1)...)
 
@@ -160,7 +215,7 @@ func TestTailPollsEveryTwoSecondsByDefault(t *testing.T) {
 
 func TestTailEmitsNothingForAPollWithNoNewEvents(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.add(webGroup, webLine(1, "one"))
 
 	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, time.Second, idle(3)...)
@@ -172,7 +227,7 @@ func TestTailEmitsNothingForAPollWithNoNewEvents(t *testing.T) {
 
 func TestTailAsksOnlyForEventsFromSinceOnwardsOldestFirst(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.add(webGroup, webLine(-5, "before since"), webLine(1, "after since"))
 
 	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}, Contains: `say "hi"`}, time.Second)
@@ -188,7 +243,7 @@ func TestTailAsksOnlyForEventsFromSinceOnwardsOldestFirst(t *testing.T) {
 
 func TestTailPagesThroughEveryPageOfAPoll(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.pageSize = 2
 	for i := 1; i <= 5; i++ {
 		fake.add(webGroup, webLine(i, "line "+strconv.Itoa(i)))
@@ -203,7 +258,7 @@ func TestTailPagesThroughEveryPageOfAPoll(t *testing.T) {
 
 func TestTailMergesTheGroupsOfASourceSetByTime(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.lambdas["api-fn"] = "/aws/lambda/api-fn-2"
 	fake.add(webGroup, webLine(1, "web 1"), webLine(4, "web 4"))
 	fake.add("/aws/lambda/api-fn-2", webLine(2, "api 2"), webLine(3, "api 3"))
@@ -225,7 +280,7 @@ func TestTailMergesTheGroupsOfASourceSetByTime(t *testing.T) {
 
 func TestTailTracksEachGroupsPositionSeparately(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.lambdas["api-fn"] = "/aws/lambda/api-fn-2"
 	fake.add(webGroup, webLine(10, "web 10"))
 	fake.add("/aws/lambda/api-fn-2", webLine(1, "api 1"))
@@ -241,7 +296,7 @@ func TestTailTracksEachGroupsPositionSeparately(t *testing.T) {
 
 func TestTailDropsLambdaBookkeepingLinesButStillAdvancesPastThem(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.add(webGroup, webLine(1, "START RequestId: abc Version: $LATEST"), webLine(2, "hello"))
 
 	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, time.Second, idle(1)...)
@@ -253,7 +308,7 @@ func TestTailDropsLambdaBookkeepingLinesButStillAdvancesPastThem(t *testing.T) {
 
 func TestTailRetriesAThrottledPollWithoutLosingEvents(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.lambdas["api-fn"] = "/aws/lambda/api-fn-2"
 	fake.add(webGroup, webLine(1, "web 1"))
 	fake.add("/aws/lambda/api-fn-2", webLine(2, "api 2"))
@@ -270,7 +325,7 @@ func TestTailRetriesAThrottledPollWithoutLosingEvents(t *testing.T) {
 
 func TestTailStopsOnAnErrorThatIsNotThrottling(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.logsError = "AccessDeniedException"
 
 	run := runTail(t, logs, lambdas, Query{Since: epoch, Sources: []Source{{Function: "web-fn"}}}, time.Second, idle(1)...)
@@ -296,7 +351,7 @@ func TestTailStopsOnAnErrorFromLambda(t *testing.T) {
 
 func TestTailStopsWhenEmitFails(t *testing.T) {
 	t.Parallel()
-	fake, logs, lambdas := lambdaFunction(t)
+	fake, logs, lambdas := newFakeAWSWithWebFunction(t)
 	fake.add(webGroup, webLine(1, "one"))
 	refused := errors.New("terminal closed")
 
@@ -312,7 +367,7 @@ func TestTailStopsWhenEmitFails(t *testing.T) {
 
 func TestTailRefusesAnInvalidQuery(t *testing.T) {
 	t.Parallel()
-	_, logs, lambdas := lambdaFunction(t)
+	_, logs, lambdas := newFakeAWSWithWebFunction(t)
 	web := []Source{{Function: "web-fn"}}
 	tests := map[string]Query{
 		"no since":                 {Sources: web},

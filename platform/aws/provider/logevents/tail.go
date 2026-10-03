@@ -17,9 +17,8 @@ import (
 const (
 	defaultPollInterval  = 2 * time.Second
 	maxThrottledInterval = 10 * time.Second
+	lateEventWindow      = 10 * time.Second
 )
-
-type sleeper func(ctx context.Context, d time.Duration) error
 
 func Tail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Client, query Query, every time.Duration, emit func([]Event) error) error {
 	return tail(ctx, logs, lambdas, query, every, emit, sleepFor)
@@ -43,11 +42,34 @@ type tailedGroup struct {
 }
 
 type cursor struct {
-	millis int64
-	seen   map[string]struct{}
+	sinceMillis  int64
+	newestMillis int64
+	seenMillis   map[string]int64
 }
 
-func tail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Client, query Query, every time.Duration, emit func([]Event) error, sleep sleeper) error {
+func newCursor(since time.Time) cursor {
+	return cursor{sinceMillis: since.UnixMilli(), newestMillis: since.UnixMilli(), seenMillis: map[string]int64{}}
+}
+
+func (c cursor) startMillis() int64 {
+	return max(c.sinceMillis, c.newestMillis-lateEventWindow.Milliseconds())
+}
+
+func (c *cursor) markSeen(id string, millis int64) bool {
+	if _, seen := c.seenMillis[id]; seen {
+		return false
+	}
+	c.seenMillis[id] = millis
+	c.newestMillis = max(c.newestMillis, millis)
+	return true
+}
+
+func (c *cursor) forgetBeforeStart() {
+	start := c.startMillis()
+	maps.DeleteFunc(c.seenMillis, func(_ string, millis int64) bool { return millis < start })
+}
+
+func tail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Client, query Query, every time.Duration, emit func([]Event) error, sleep func(context.Context, time.Duration) error) error {
 	if err := refuseInvalidTailQuery(query); err != nil {
 		return fmt.Errorf("tail log events: %w", err)
 	}
@@ -63,7 +85,7 @@ func tail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Clie
 			}
 			return err
 		}
-		groups = append(groups, &tailedGroup{logGroup: group, source: source, cursor: cursor{millis: query.Since.UnixMilli()}})
+		groups = append(groups, &tailedGroup{logGroup: group, source: source, cursor: newCursor(query.Since)})
 	}
 	wait := every
 	for {
@@ -101,17 +123,17 @@ func refuseInvalidTailQuery(query Query) error {
 
 func pollGroups(ctx context.Context, logs *cloudwatchlogs.Client, groups []*tailedGroup, query Query) ([]Event, error) {
 	var events []Event
-	advanced := make([]cursor, len(groups))
+	polled := make([]cursor, len(groups))
 	for i, group := range groups {
-		fresh, next, err := pollGroup(ctx, logs, group, query)
+		unseen, next, err := pollGroup(ctx, logs, group, query)
 		if err != nil {
 			return nil, err
 		}
-		events = append(events, fresh...)
-		advanced[i] = next
+		events = append(events, unseen...)
+		polled[i] = next
 	}
 	for i, group := range groups {
-		group.cursor = advanced[i]
+		group.cursor = polled[i]
 	}
 	slices.SortStableFunc(events, func(a, b Event) int { return a.Time.Compare(b.Time) })
 	return events, nil
@@ -123,8 +145,9 @@ func isThrottled(err error) bool {
 }
 
 func pollGroup(ctx context.Context, logs *cloudwatchlogs.Client, group *tailedGroup, query Query) ([]Event, cursor, error) {
-	var fresh []Event
-	next := cursor{millis: group.cursor.millis, seen: maps.Clone(group.cursor.seen)}
+	var unseen []Event
+	next := group.cursor
+	next.seenMillis = maps.Clone(group.cursor.seenMillis)
 	var token *string
 	for {
 		page, err := logs.FilterLogEvents(ctx, &cloudwatchlogs.FilterLogEventsInput{
@@ -132,30 +155,23 @@ func pollGroup(ctx context.Context, logs *cloudwatchlogs.Client, group *tailedGr
 			LogStreamNamePrefix: group.streamPrefix,
 			StartFromHead:       aws.Bool(true),
 			FilterPattern:       quoteFilterPattern(query.Contains),
-			StartTime:           aws.Int64(group.cursor.millis),
+			StartTime:           aws.Int64(group.cursor.startMillis()),
 			NextToken:           token,
 		})
 		if err != nil {
 			return nil, cursor{}, fmt.Errorf("tail log events of %s: %w", group.name, err)
 		}
 		for _, logged := range page.Events {
-			millis, id := aws.ToInt64(logged.Timestamp), aws.ToString(logged.EventId)
-			if _, done := group.cursor.seen[id]; done && millis == group.cursor.millis {
+			if !next.markSeen(aws.ToString(logged.EventId), aws.ToInt64(logged.Timestamp)) {
 				continue
 			}
-			if millis > next.millis {
-				next = cursor{millis: millis}
-			}
-			if next.seen == nil {
-				next.seen = map[string]struct{}{}
-			}
-			next.seen[id] = struct{}{}
 			if event, keep := parseLoggedEvent(group.logGroup, group.source, logged); keep {
-				fresh = append(fresh, event)
+				unseen = append(unseen, event)
 			}
 		}
+		next.forgetBeforeStart()
 		if token = page.NextToken; token == nil {
-			return fresh, next, nil
+			return unseen, next, nil
 		}
 	}
 }
