@@ -24,17 +24,18 @@ import (
 type Backend struct {
 	appOrigins func() []string
 
-	mu      sync.Mutex
-	server  *http.Server
-	gateway *gateway.Gateway
-	host    string
-	keys    map[string]ed25519.PrivateKey
-	records boundRecords
+	mu        sync.Mutex
+	server    *http.Server
+	gateway   *gateway.Gateway
+	publisher *proxy.Service
+	host      string
+	keys      map[string]ed25519.PrivateKey
+	records   map[string]string
 }
 
-type boundRecords map[string]string
+type readRecord func(key string) string
 
-func (r boundRecords) Value(key string) string { return r[key] }
+func (r readRecord) Value(key string) string { return r(key) }
 
 func New(appOrigins func() []string) *Backend {
 	return &Backend{appOrigins: appOrigins, keys: map[string]ed25519.PrivateKey{}}
@@ -50,7 +51,7 @@ func (b *Backend) Resolve(_ context.Context, _ string, resources []declaration.R
 		}
 	}
 	keys := make(map[string]ed25519.PrivateKey, len(resources))
-	records := boundRecords{}
+	records := map[string]string{}
 	out := make([]binding.Resolved, 0, len(resources))
 	for _, resource := range resources {
 		key, known := b.keys[resource.Name]
@@ -94,6 +95,7 @@ func (b *Backend) listen() error {
 		Keys:           b.verifyKey,
 		AllowedOrigins: b.appOrigins,
 	})
+	b.publisher = proxy.NewService(readRecord(b.readRecord), proxy.NewGatewayTransport(http.DefaultClient, "http://"+b.host+gateway.PublishPath))
 	server := &http.Server{Handler: b.gateway}
 	b.server = server
 	go func() { _ = server.Serve(listener) }()
@@ -110,14 +112,20 @@ func (b *Backend) verifyKey(namespace string) (ed25519.PublicKey, bool) {
 	return key.Public().(ed25519.PublicKey), true
 }
 
+func (b *Backend) readRecord(key string) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.records[key]
+}
+
 func (b *Backend) Publish(ctx context.Context, req *realtimev1.PublishRequest) (*realtimev1.PublishResponse, error) {
 	b.mu.Lock()
-	host, records := b.host, b.records
+	publisher := b.publisher
 	b.mu.Unlock()
-	if host == "" {
+	if publisher == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this app declares no realtime, so there is nothing to publish on"))
 	}
-	return proxy.NewService(records, proxy.NewGatewayTransport(http.DefaultClient, "http://"+host+gateway.PublishPath)).Publish(ctx, req)
+	return publisher.Publish(ctx, req)
 }
 
 func (b *Backend) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
@@ -129,7 +137,7 @@ func (b *Backend) Close(ctx context.Context, _ bool) error {
 	b.mu.Lock()
 	b.keys, b.records = map[string]ed25519.PrivateKey{}, nil
 	server, realtimeGateway := b.server, b.gateway
-	b.server, b.gateway, b.host = nil, nil, ""
+	b.server, b.gateway, b.publisher, b.host = nil, nil, nil, ""
 	b.mu.Unlock()
 	if server == nil {
 		return nil
