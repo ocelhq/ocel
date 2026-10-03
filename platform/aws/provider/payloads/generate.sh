@@ -55,6 +55,10 @@ mkdir -p "$stage/envsourcesync"
 build_lambda ./cmd/envsourcesync "$stage/envsourcesync/bootstrap" arm64
 pack "$stage/envsourcesync" "$dist/envsourcesync.zip"
 
+mkdir -p "$stage/realtime-authorizer"
+build_lambda ./cmd/realtimeauthorizer "$stage/realtime-authorizer/bootstrap" arm64
+pack "$stage/realtime-authorizer" "$dist/realtime-authorizer.zip"
+
 for fn in $functions; do
   cp "$root/platform/aws/functions/$fn/dist/$fn.zip" "$dist/$fn.zip"
 done
