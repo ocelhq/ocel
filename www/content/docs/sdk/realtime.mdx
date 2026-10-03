@@ -48,10 +48,11 @@ arm64 that checks each connect and subscribe token against the resource's public
 runs none of your code. It answers every request uncached, so a token is never admitted
 after it expires.
 
-- **Publishing.** Only the server publishes to AppSync. Your app signs a `POST /event` with
-  its own IAM role, which may connect to its API and publish to its own namespace and
-  nothing else. A browser publish goes through your handler, which runs the `publish`
-  rule and then publishes from the server.
+- **Publishing.** Only the server publishes to AppSync. `publish` hands the event to the
+  Ocel runtime beside your app, which signs a `POST /event` with your app's own IAM role.
+  That role may connect to its API and publish to its own namespace and nothing else. A
+  browser publish goes through your handler, which runs the `publish` rule and then
+  publishes from the server.
 - **Signing key.** The first deploy mints an Ed25519 key per resource and keeps it in
   Secrets Manager. It reaches your app through the resource's binding. Removing the
   resource, or destroying the environment, deletes the key at once with no recovery
