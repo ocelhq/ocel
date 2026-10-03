@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
+	boxlive "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func answering(t *testing.T, values map[string]string) string {
@@ -28,11 +28,11 @@ func answering(t *testing.T, values map[string]string) string {
 		t.Fatal(err)
 	}
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != variables.ValuesPath {
+		if r.URL.Path != boxlive.ValuesPath {
 			http.NotFound(w, r)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(variables.Answer{Values: values})
+		_ = json.NewEncoder(w).Encode(boxlive.Answer{Values: values})
 	})}
 	go func() { _ = server.Serve(ln) }()
 	t.Cleanup(func() { _ = server.Close() })
@@ -41,7 +41,7 @@ func answering(t *testing.T, values map[string]string) string {
 
 func TestTheRuntimeProjectsLiveValuesIntoADirectoryTheImageNeverHadToShip(t *testing.T) {
 	socket := answering(t, map[string]string{"DATABASE_URL": "postgres://app:hunter2@db/orders"})
-	manifest, err := variables.Render(variables.Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})
+	manifest, err := boxlive.Render(boxlive.Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,9 +67,9 @@ func TestTheRuntimeProjectsLiveValuesIntoADirectoryTheImageNeverHadToShip(t *tes
 	}
 }
 
-func bucketManifest(t *testing.T, store *variables.Store) (variables.Manifest, string) {
+func bucketManifest(t *testing.T, store *boxlive.Store) (boxlive.Manifest, string) {
 	t.Helper()
-	manifest := variables.Manifest{
+	manifest := boxlive.Manifest{
 		Slug: "shop", Tier: "production",
 		Bindings: []live.Binding{{
 			Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads",
@@ -88,15 +88,15 @@ func bucketManifest(t *testing.T, store *variables.Store) (variables.Manifest, s
 }
 
 func TestTheRuntimeFrontsAProxiedBindingAndKeepsTheStoreCredentialToItself(t *testing.T) {
-	manifest, record := bucketManifest(t, &variables.Store{
+	manifest, record := bucketManifest(t, &boxlive.Store{
 		Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
 		AccessKeyID: "ocel", PathStyle: true, Sessions: "shop-prod-uploads", Volume: "shop-prod-store-s3",
 	})
 	socket := answering(t, map[string]string{
 		"OCEL_RESOURCE_BUCKET_uploads": record,
-		variables.StoreSecretKey:       "s3cr3t",
+		boxlive.StoreSecretKey:         "s3cr3t",
 	})
-	rendered, err := variables.Render(manifest)
+	rendered, err := boxlive.Render(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestTheRuntimeFrontsABucketBoundToAStoreWithNoStoreOfItsOwn(t *testing.T) {
 		t.Fatal(err)
 	}
 	socket := answering(t, map[string]string{"OCEL_RESOURCE_BUCKET_uploads": string(bound)})
-	rendered, err := variables.Render(manifest)
+	rendered, err := boxlive.Render(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestTheRuntimeFrontsABucketBoundToAStoreWithNoStoreOfItsOwn(t *testing.T) {
 }
 
 func TestTheRuntimeFrontsNothingWhereNoBindingIsProxied(t *testing.T) {
-	manifest := variables.Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}
+	manifest := boxlive.Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}
 	served, err := proxying(manifest, nil, filepath.Join(t.TempDir(), "absent.sock"), "127.0.0.1:1")
 	if err != nil || served.Env != nil {
 		t.Errorf("proxying() = %+v, %v, want no proxy for a deployment binding nothing it must be fronted for", served, err)
@@ -180,9 +180,9 @@ func TestTheRuntimeFrontsNothingWhereNoBindingIsProxied(t *testing.T) {
 }
 
 func TestAProxiedBindingWithNoStoreCredentialIsRefused(t *testing.T) {
-	manifest, record := bucketManifest(t, &variables.Store{Env: "shop-prod", Endpoint: "http://store:9000", Region: "us-east-1", AccessKeyID: "ocel"})
+	manifest, record := bucketManifest(t, &boxlive.Store{Env: "shop-prod", Endpoint: "http://store:9000", Region: "us-east-1", AccessKeyID: "ocel"})
 	socket := answering(t, map[string]string{"OCEL_RESOURCE_BUCKET_uploads": record})
-	rendered, err := variables.Render(manifest)
+	rendered, err := boxlive.Render(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,10 +8,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
+	boxlive "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func newFront(manifest variables.Manifest, opts originguard.Options) (http.Handler, error) {
+func newFront(manifest boxlive.Manifest, opts originguard.Options) (http.Handler, error) {
 	app := originguard.Handler(opts)
 	if manifest.RealtimePublishURL == "" {
 		return app, nil
@@ -32,7 +32,7 @@ func newFront(manifest variables.Manifest, opts originguard.Options) (http.Handl
 		},
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != variables.RealtimeSocketPath {
+		if r.URL.Path != boxlive.RealtimeSocketPath {
 			app.ServeHTTP(w, r)
 			return
 		}
@@ -48,7 +48,7 @@ func findRealtimeGateway(publishURL string) (*url.URL, error) {
 	published, err := url.Parse(publishURL)
 	if err != nil || published.Scheme == "" || published.Host == "" {
 		return nil, fmt.Errorf("this container serves realtime at %s, but its gateway's publish address %q names no gateway to reach",
-			variables.RealtimeSocketPath, publishURL)
+			boxlive.RealtimeSocketPath, publishURL)
 	}
 	return &url.URL{Scheme: published.Scheme, Host: published.Host}, nil
 }
