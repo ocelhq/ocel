@@ -28,6 +28,8 @@ type runServer struct {
 
 	patchConflicts int
 	patchTries     int
+
+	uriEachRevision bool
 }
 
 func (s *runServer) open(t *testing.T) *Provider {
@@ -131,6 +133,9 @@ func (s *runServer) revised() {
 	s.revision++
 	s.writes++
 	s.service.LatestReadyRevision = s.service.Name + "/revisions/" + revisionName(s.service.Name) + "-0000" + strconv.Itoa(s.revision)
+	if s.uriEachRevision {
+		s.service.Uri = "https://" + revisionName(s.service.Name) + "-" + strconv.Itoa(s.revision) + ".run.app"
+	}
 	s.service.Etag = "etag-" + strconv.Itoa(s.writes)
 	s.revisions = append(s.revisions, revisionName(s.service.LatestReadyRevision))
 }

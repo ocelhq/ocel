@@ -153,3 +153,16 @@ func TestATierBootstrappedBeforeRealtimeIsRefusedNamingTheBootstrapToRunAgain(t 
 		t.Error("a gateway was released to run as an account the tier does not have")
 	}
 }
+
+func TestAGatewayCloudRunServesOnAnotherHostEachReleaseIsRefused(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.run.uriEachRevision = true
+	_, err := h.env.provision(context.Background(), aRealtime("app"), nil)
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Errorf("provision() = %v, want a busy refusal: no host the binding names would be the one browsers reach", err)
+	}
+}
