@@ -1,6 +1,7 @@
 package conformance_test
 
 import (
+	"context"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -13,14 +14,22 @@ import (
 )
 
 func TestReferenceProvider(t *testing.T) {
+	var vendor *fake.Provider
 	conformance.Run(t, conformance.Suite{
-		New:     fake.New,
+		New: func(ctx context.Context, settings provider.Settings) (provider.Provider, error) {
+			p, err := fake.New(ctx, settings)
+			vendor, _ = p.(*fake.Provider)
+			return p, err
+		},
 		Server:  providerserver.Config{Version: "test", New: fake.New},
 		Options: provider.Options{"region": "nowhere"},
 		Binary:  buildFakeProvider(t),
 		Certificates: &conformance.CertificateChecks{
 			Kind: fake.KindRelay,
 		},
+		Logs: &conformance.LogChecks{Seed: func(_ *testing.T, target provider.LogTarget, entries []provider.LogEntry) {
+			vendor.FakeLogs().Append(target.Physical(), entries...)
+		}},
 	})
 }
 

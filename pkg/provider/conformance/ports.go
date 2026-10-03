@@ -58,6 +58,7 @@ func RunPorts(t *testing.T, p provider.Provider) {
 	t.Run("Workers", func(t *testing.T) { RunWorkers(t, facts) })
 	t.Run("KVStores", func(t *testing.T) { RunKVStores(t, facts) })
 	t.Run("Realtime", func(t *testing.T) { RunRealtime(t, facts) })
+	t.Run("Logs", func(t *testing.T) { RunLogs(t, facts, p.Logs()) })
 }
 
 func bootstrapOf(t *testing.T, p provider.Provider) provider.Bootstrap {

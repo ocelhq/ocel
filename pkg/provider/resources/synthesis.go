@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -91,6 +92,8 @@ func SynthesizedRemoval(ref provider.StackRef, deployed provider.StackResult) pr
 const workerPrefix = "worker:"
 
 func WorkerName(worker string) string { return workerPrefix + worker }
+
+func WorkerOf(name string) (string, bool) { return strings.CutPrefix(name, workerPrefix) }
 
 func DeclaredFunctions(spec provider.StackSpec, recordsWorkers bool) []string {
 	if spec.App == nil {

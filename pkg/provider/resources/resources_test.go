@@ -578,6 +578,17 @@ func TestAWorkerIsNamedApartFromEveryFunction(t *testing.T) {
 	}
 }
 
+func TestAWorkersNameReadsBackAsTheWorker(t *testing.T) {
+	t.Parallel()
+
+	if worker, isWorker := resources.WorkerOf(resources.WorkerName("media")); !isWorker || worker != "media" {
+		t.Errorf("WorkerOf(WorkerName(media)) = %q, %v, want media, true", worker, isWorker)
+	}
+	if worker, isWorker := resources.WorkerOf("web-server"); isWorker {
+		t.Errorf("WorkerOf(web-server) = %q, true, want a function's name to be no worker's", worker)
+	}
+}
+
 type withContainers struct {
 	*buckets
 	provisioned []provider.StackSpec

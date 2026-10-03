@@ -140,3 +140,5 @@ func (p *Provider) Connector() provider.Connector { return connector{p} }
 func (p *Provider) Runtime() provider.Runtime { return containerRuntime{p} }
 
 func (p *Provider) Liveness() provider.Liveness { return &p.Net }
+
+func (p *Provider) Logs() provider.Logs { return logs{p} }
