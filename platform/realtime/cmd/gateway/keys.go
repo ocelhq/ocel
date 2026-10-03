@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -19,9 +19,9 @@ type keySet struct {
 	path string
 	now  func() time.Time
 
-	mu     sync.Mutex
-	keys   map[string]ed25519.PublicKey
-	readAt time.Time
+	keys      atomic.Pointer[map[string]ed25519.PublicKey]
+	readAt    atomic.Int64
+	rereading atomic.Bool
 }
 
 func newFixedKeySet(source, encoded string) (*keySet, error) {
@@ -29,7 +29,9 @@ func newFixedKeySet(source, encoded string) (*keySet, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &keySet{keys: keys}, nil
+	s := &keySet{}
+	s.keys.Store(&keys)
+	return s, nil
 }
 
 func newKeysFileSet(path string, now func() time.Time) (*keySet, error) {
@@ -38,32 +40,35 @@ func newKeysFileSet(path string, now func() time.Time) (*keySet, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.keys, s.readAt = keys, now()
+	s.keys.Store(&keys)
+	s.readAt.Store(now().UnixNano())
 	return s, nil
 }
 
 func (s *keySet) find(namespace string) (ed25519.PublicKey, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	keys := *s.keys.Load()
 	if s.path != "" {
-		_, known := s.keys[namespace]
-		age := s.now().Sub(s.readAt)
-		if age >= keysFileMaxAge || (!known && age >= unknownNamespaceReread) {
-			s.reread()
+		_, known := keys[namespace]
+		age := time.Duration(s.now().UnixNano() - s.readAt.Load())
+		stale := age >= keysFileMaxAge || (!known && age >= unknownNamespaceReread)
+		if stale && s.rereading.CompareAndSwap(false, true) {
+			keys = s.reread(keys)
+			s.rereading.Store(false)
 		}
 	}
-	key, known := s.keys[namespace]
+	key, known := keys[namespace]
 	return key, known
 }
 
-func (s *keySet) reread() {
-	s.readAt = s.now()
+func (s *keySet) reread(current map[string]ed25519.PublicKey) map[string]ed25519.PublicKey {
+	s.readAt.Store(s.now().UnixNano())
 	keys, err := s.readFile()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "keep the realtime keys last read: %v\n", err)
-		return
+		return current
 	}
-	s.keys = keys
+	s.keys.Store(&keys)
+	return keys
 }
 
 func (s *keySet) readFile() (map[string]ed25519.PublicKey, error) {
