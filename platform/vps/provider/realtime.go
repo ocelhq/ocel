@@ -27,6 +27,7 @@ const (
 	realtimeGatewayOwner    = "ocel"
 	realtimeGatewayKind     = "realtime"
 	realtimeGatewayUser     = "65532:65532"
+	realtimeGatewayRuns     = 3
 	realtimeSigningKind     = "signing-key"
 	realtimeSigningName     = "signing-key"
 )
@@ -165,20 +166,40 @@ func (p *Provider) runRealtimeGateway(ctx context.Context, ref provider.StackRef
 	if err != nil {
 		return err
 	}
-	if len(keys) == 0 {
-		if progress != nil {
-			progress.Say("Removing the realtime gateway " + realtimeGatewayName(ref) + ": " + ref.Name.Env + " declares no realtime any more")
+	for range realtimeGatewayRuns {
+		if err := p.placeRealtimeGateway(ctx, ref, keys, progress); err != nil {
+			return err
 		}
+		placed := keys
+		if keys, err = p.readRealtimeKeys(ctx, ref); err != nil {
+			return err
+		}
+		if maps.Equal(placed, keys) {
+			return nil
+		}
+	}
+	return refusal.Refuse(refusal.CodeBusy,
+		"the realtime of %s changed each of the %d times its gateway %s was restarted to match, so another deploy is changing it\nDeploy again once that deploy is done",
+		ref.Name.Env, realtimeGatewayRuns, realtimeGatewayName(ref))
+}
+
+func (p *Provider) placeRealtimeGateway(ctx context.Context, ref provider.StackRef, keys map[string]string, progress progress.Log) error {
+	if len(keys) == 0 {
+		say(progress, "Removing the realtime gateway "+realtimeGatewayName(ref)+": "+ref.Name.Env+" declares no realtime any more")
 		return p.host.RemoveResource(ctx, host.ResourceRef{Tier: ref.Tier, Project: ref.Project, Resource: realtimeGatewayResource, Name: realtimeGatewayName(ref)})
 	}
 	gateway, err := newRealtimeGateway(ref, keys)
 	if err != nil {
 		return err
 	}
-	if progress != nil {
-		progress.Say("Serving realtime " + strings.Join(slices.Sorted(maps.Keys(keys)), ", ") + " from the gateway in container " + gateway.Name)
-	}
+	say(progress, "Serving realtime "+strings.Join(slices.Sorted(maps.Keys(keys)), ", ")+" from the gateway in container "+gateway.Name)
 	return p.host.RunResource(ctx, gateway, "")
+}
+
+func say(progress progress.Log, line string) {
+	if progress != nil {
+		progress.Say(line)
+	}
 }
 
 func (p *Provider) removeRealtime(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
