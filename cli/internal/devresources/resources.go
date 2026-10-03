@@ -119,7 +119,7 @@ func New(projectName string, opts Options) *Resources {
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_KV}, Resolve: stores.Resolve, Close: stores.Close},
 		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET}, Resolve: buckets.Resolve, Routes: buckets.Routes, Close: buckets.Close},
 		{Kinds: queue.Kinds, Resolve: r.queue.Resolve, Routes: r.queue.Routes, Close: r.queue.Close},
-		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME}, Resolve: realtimeBackend.Resolve, Close: realtimeBackend.Close},
+		{Kinds: []resourcesv1.ResourceType{resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME}, Resolve: realtimeBackend.Resolve, Routes: realtimeBackend.Routes, Close: realtimeBackend.Close},
 	}
 	return r
 }
