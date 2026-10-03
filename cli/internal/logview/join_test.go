@@ -114,6 +114,35 @@ func TestJoinGroupsStackTraceLinesWithTheirEntry(t *testing.T) {
 			},
 		},
 		{
+			name: "go panic through generic functions",
+			lines: []string{
+				"panic: boom",
+				"",
+				"goroutine 1 [running]:",
+				"main.Map[...](0x1)",
+				"\t/app/map.go:4 +0x1",
+				"example.com/pkg.(*List[go.shape.int,go.shape.string]).Push(0xc000010000, 0x2)",
+				"\t/app/list.go:9 +0x2",
+				"main.main()",
+				"\t/app/main.go:10 +0x1d",
+				"after",
+			},
+			want: [][]string{
+				{
+					"panic: boom",
+					"",
+					"goroutine 1 [running]:",
+					"main.Map[...](0x1)",
+					"\t/app/map.go:4 +0x1",
+					"example.com/pkg.(*List[go.shape.int,go.shape.string]).Push(0xc000010000, 0x2)",
+					"\t/app/list.go:9 +0x2",
+					"main.main()",
+					"\t/app/main.go:10 +0x1d",
+				},
+				{"after"},
+			},
+		},
+		{
 			name: "two goroutines stay in one group",
 			lines: []string{
 				"goroutine 1 [running]:",
@@ -161,6 +190,32 @@ func TestJoinGroupsStackTraceLinesWithTheirEntry(t *testing.T) {
 					"             at /rustc/abc/library/std/src/panicking.rs:645:5",
 					"   1: app::main",
 					"note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.",
+				},
+				{"after"},
+			},
+		},
+		{
+			name: "an old rust panic carrying its message leaves the next line apart",
+			lines: []string{
+				"thread 'main' panicked at 'boom', src/main.rs:2:5",
+				"after",
+			},
+			want: [][]string{
+				{"thread 'main' panicked at 'boom', src/main.rs:2:5"},
+				{"after"},
+			},
+		},
+		{
+			name: "an old rust panic carrying its message joins its note",
+			lines: []string{
+				"thread 'main' panicked at 'boom', src/main.rs:2:5",
+				"note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+				"after",
+			},
+			want: [][]string{
+				{
+					"thread 'main' panicked at 'boom', src/main.rs:2:5",
+					"note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
 				},
 				{"after"},
 			},
