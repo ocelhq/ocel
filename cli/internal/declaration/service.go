@@ -27,6 +27,11 @@ type Service struct {
 	resources []Resource
 }
 
+var growsAsDeclared = map[resourcesv1.ResourceType]bool{
+	resourcesv1.ResourceType_RESOURCE_TYPE_KV:       true,
+	resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME: true,
+}
+
 func NewService(variables VariableDeclarations) *Service {
 	return &Service{VariableDeclarations: variables, sdk: sdkversion.NewGate(version.Version)}
 }
@@ -39,7 +44,7 @@ func (s *Service) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, prior := range s.resources {
-		if resource.Type == resourcesv1.ResourceType_RESOURCE_TYPE_KV && resource.Source != "" && prior.Source == resource.Source && prior.Type == resource.Type && prior.Name == resource.Name {
+		if growsAsDeclared[resource.Type] && resource.Source != "" && prior.Source == resource.Source && prior.Type == resource.Type && prior.Name == resource.Name {
 			s.resources[i] = resource
 			return &resourcesv1.DeclareResponse{}, nil
 		}

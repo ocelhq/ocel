@@ -204,6 +204,33 @@ func TestAKVDeclarationResentFromItsLineReplacesTheOneBefore(t *testing.T) {
 	}
 }
 
+func TestARealtimeDeclarationResentFromItsLineReplacesTheOneBefore(t *testing.T) {
+	t.Parallel()
+
+	s := NewService(nil)
+	realtime := func(patterns ...string) *resourcesv1.DeclareRequest {
+		config := &resourcesv1.RealtimeConfig{}
+		for _, pattern := range patterns {
+			config.Channels = append(config.Channels, &resourcesv1.RealtimeChannel{Pattern: pattern, Source: "/app/infra.go:20"})
+		}
+		return &resourcesv1.DeclareRequest{
+			Resource: &resourcesv1.ResourceIdentifier{Name: "app", Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME},
+			Config:   &resourcesv1.DeclareRequest_Realtime{Realtime: config},
+			Source:   "/app/infra.go:12",
+		}
+	}
+	for _, req := range []*resourcesv1.DeclareRequest{realtime(), realtime("orders/:orderId"), realtime("orders/:orderId", "status")} {
+		if _, err := s.Declare(context.Background(), req); err != nil {
+			t.Fatalf("Declare: %v", err)
+		}
+	}
+
+	got := s.Resources()
+	if len(got) != 1 || len(got[0].Realtime.GetChannels()) != 2 {
+		t.Errorf("Resources() = %+v, want the realtime resource from infra.go:12 once, with both channels", got)
+	}
+}
+
 func TestANonKVDeclarationRepeatedFromOneLineKeepsBothForTheManifestToRefuse(t *testing.T) {
 	t.Parallel()
 
