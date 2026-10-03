@@ -4,6 +4,7 @@ use super::Realtime;
 use crate::proto::common::bindings::v1::{RealtimeProperties, RealtimeTransport};
 use crate::Error;
 use bytes::Bytes;
+use futures_util::future::BoxFuture;
 use http_body_util::{BodyExt, Full};
 use hyper_util::rt::TokioIo;
 use serde::Serialize;
@@ -130,6 +131,25 @@ pub(crate) fn mint_publish_token(
     mint_token(rt, properties, "server", Operation::Publish, channel).map(|token| token.token)
 }
 
+async fn publish_to_gateway(
+    url: &http::Uri,
+    token: &str,
+    channel: &str,
+    envelope: Bytes,
+) -> Result<(), String> {
+    let headers = [
+        ("authorization".to_string(), format!("Bearer {token}")),
+        ("content-type".to_string(), "application/json".to_string()),
+    ];
+    let (status, _) = send_request(http::Method::POST, url, &headers, envelope).await?;
+    if !(200..300).contains(&status) {
+        return Err(format!(
+            "the gateway refused a publish on {channel} with status {status}"
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) async fn publish(
     rt: &Realtime,
     properties: &RealtimeProperties,
@@ -142,50 +162,40 @@ pub(crate) async fn publish(
         name: rt.inner.name.clone(),
         said,
     };
-    if transport == Transport::AppsyncEvents {
-        let endpoint = build_appsync_publish_url(&properties.host).ok_or_else(|| {
-            failed(format!(
-                "the binding's host '{}' is no host",
-                properties.host
-            ))
-        })?;
-        return tokio::time::timeout(
-            PUBLISH_TIMEOUT,
-            publish_to_appsync(&endpoint, &properties.host, channel, envelope),
-        )
+    let (peer, sent): (&str, BoxFuture<'_, Result<(), String>>) = match transport {
+        Transport::AppsyncEvents => {
+            let endpoint = build_appsync_publish_url(&properties.host).ok_or_else(|| {
+                failed(format!(
+                    "the binding's host '{}' is no host",
+                    properties.host
+                ))
+            })?;
+            (
+                "AppSync",
+                Box::pin(async move {
+                    publish_to_appsync(&endpoint, &properties.host, channel, envelope).await
+                }),
+            )
+        }
+        Transport::OcelGateway => {
+            let url = build_gateway_publish_url(&properties.url).ok_or_else(|| {
+                failed(format!("the binding's url '{}' is no URL", properties.url))
+            })?;
+            (
+                "the gateway",
+                Box::pin(async move { publish_to_gateway(&url, token, channel, envelope).await }),
+            )
+        }
+    };
+    tokio::time::timeout(PUBLISH_TIMEOUT, sent)
         .await
         .map_err(|_| {
             failed(format!(
-                "AppSync did not answer a publish on {channel} within {}s",
+                "{peer} did not answer a publish on {channel} within {}s",
                 PUBLISH_TIMEOUT.as_secs()
             ))
         })?
-        .map_err(|err| failed(format!("publish on {channel}: {err}")));
-    }
-    let url = build_gateway_publish_url(&properties.url)
-        .ok_or_else(|| failed(format!("the binding's url '{}' is no URL", properties.url)))?;
-    let headers = [
-        ("authorization".to_string(), format!("Bearer {token}")),
-        ("content-type".to_string(), "application/json".to_string()),
-    ];
-    let (status, _) = tokio::time::timeout(
-        PUBLISH_TIMEOUT,
-        send_request(http::Method::POST, &url, &headers, envelope),
-    )
-    .await
-    .map_err(|_| {
-        failed(format!(
-            "the gateway did not answer a publish on {channel} within {}s",
-            PUBLISH_TIMEOUT.as_secs()
-        ))
-    })?
-    .map_err(|err| failed(format!("publish on {channel}: {err}")))?;
-    if !(200..300).contains(&status) {
-        return Err(failed(format!(
-            "the gateway refused a publish on {channel} with status {status}"
-        )));
-    }
-    Ok(())
+        .map_err(|err| failed(format!("publish on {channel}: {err}")))
 }
 
 #[cfg(test)]
