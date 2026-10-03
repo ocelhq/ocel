@@ -15,6 +15,7 @@ import (
 
 	connect "connectrpc.com/connect"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 
 	realtimev1 "github.com/ocelhq/ocel/pkg/proto/app/realtime/v1"
@@ -46,8 +47,22 @@ func (e *unacceptedError) Error() string {
 	return fmt.Sprintf("AppSync refused it with status %d: %s", e.status, e.answer)
 }
 
-func (e *unacceptedError) isRetryable() bool {
-	return e.status == http.StatusTooManyRequests || e.status >= http.StatusInternalServerError
+func (e *unacceptedError) isThrottle() bool {
+	if e.status == http.StatusTooManyRequests {
+		return true
+	}
+	var answer struct {
+		Errors []struct {
+			ErrorType string `json:"errorType"`
+		} `json:"errors"`
+	}
+	_ = json.Unmarshal(e.answer, &answer)
+	for _, refusal := range answer.Errors {
+		if _, throttle := retry.DefaultThrottleErrorCodes[refusal.ErrorType]; throttle {
+			return true
+		}
+	}
+	return false
 }
 
 func NewAppSyncTransport(cfg Config) proxy.Transport {
@@ -99,7 +114,7 @@ func NewAppSyncTransport(cfg Config) proxy.Transport {
 				return refuseFailedEvents(answer, failed)
 			}
 			var unaccepted *unacceptedError
-			if !errors.As(err, &unaccepted) || !unaccepted.isRetryable() || attempt >= cfg.Retryer.MaxAttempts() {
+			if !errors.As(err, &unaccepted) || !unaccepted.isThrottle() || attempt >= cfg.Retryer.MaxAttempts() {
 				return failed(connect.CodeUnavailable, err)
 			}
 			delay, delayErr := cfg.Retryer.RetryDelay(attempt, err)

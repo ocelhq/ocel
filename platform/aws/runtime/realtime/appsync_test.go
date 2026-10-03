@@ -184,3 +184,30 @@ func TestAnAppSyncRuntimeRefusesABindingOverAnotherTransport(t *testing.T) {
 		t.Errorf("publish = %v, want a binding over the gateway refused", err)
 	}
 }
+
+func TestAPublishAppSyncAnswersWithAThrottlingErrorIsRetried(t *testing.T) {
+	t.Parallel()
+
+	endpoint, cfg := serveAppSync(t, func(w http.ResponseWriter) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"errors":[{"errorType":"ThrottlingException","message":"Rate exceeded"}]}`))
+	})
+	if err := publish(cfg); err != nil {
+		t.Errorf("publish = %v, want the throttled publish retried until AppSync takes it", err)
+	}
+	if len(endpoint.received) != 2 {
+		t.Errorf("AppSync was sent %d publishes, want the throttled one and its retry", len(endpoint.received))
+	}
+}
+
+func TestAPublishAppSyncFailsWithAServerErrorIsNotSentTwice(t *testing.T) {
+	t.Parallel()
+
+	endpoint, cfg := serveAppSync(t, func(w http.ResponseWriter) { w.WriteHeader(http.StatusInternalServerError) })
+	if err := publish(cfg); err == nil {
+		t.Errorf("publish = nil, want the server error reported")
+	}
+	if len(endpoint.received) != 1 {
+		t.Errorf("AppSync was sent %d publishes, want one: AppSync may have delivered an event it answered 500 for", len(endpoint.received))
+	}
+}
