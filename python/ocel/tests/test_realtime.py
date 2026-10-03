@@ -6,7 +6,7 @@ import re
 import sys
 
 import pytest
-from fakegateway import FIXTURE, FakeGateway, read_claims
+from fakegateway import FIXTURE, FakeAppSync, FakeGateway, read_claims
 from pydantic import BaseModel
 
 from ocel import RealtimePublishError, UnprovisionedResourceError, realtime
@@ -114,6 +114,23 @@ def answer(app, batch, headers=None):
 @pytest.fixture
 def appsync(monkeypatch):
     monkeypatch.setenv("OCEL_RESOURCE_REALTIME_app", json.dumps(FIXTURE))
+
+
+@pytest.fixture
+def fake_appsync(monkeypatch):
+    fake = FakeAppSync()
+    monkeypatch.setenv("OCEL_RESOURCE_REALTIME_app", fake.binding())
+    monkeypatch.setattr(
+        sys.modules["ocel.realtime"],
+        "_build_appsync_publish_url",
+        lambda host: f"http://{host}/event",
+    )
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "ASIAAPPROLE")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "role-secret")
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "role-session")
+    monkeypatch.setenv("AWS_REGION", "eu-west-1")
+    yield fake
+    fake.close()
 
 
 @pytest.fixture
@@ -524,9 +541,43 @@ def test_publish_outside_a_provisioned_run_says_why(collector, monkeypatch):
     with pytest.raises(RuntimeError, match="OCEL_RESOURCE_REALTIME_app"):
         status.publish({"status": "up"})
 
-    monkeypatch.setenv("OCEL_RESOURCE_REALTIME_app", json.dumps(FIXTURE))
-    with pytest.raises(RuntimeError, match="publishing on appsync-events is not supported yet"):
-        status.publish({"status": "up"})
+
+def test_publish_on_appsync_posts_the_envelope_as_one_event_signed_with_the_apps_role(
+    fake_appsync,
+):
+    orders = realtime("app").channel("orders/:order_id", schema=OrderEvent, subscribe="public")
+
+    orders.publish(OrderEvent(status="shipped"), order_id="o1")
+    asyncio.run(orders.publish_async({"status": "paid"}, order_id="o2"))
+
+    first, second = fake_appsync.published
+    assert first["path"] == "/event"
+    assert first["body"]["channel"] == "/app/orders/o1"
+    (event,) = first["body"]["events"]
+    envelope = json.loads(event)
+    assert (envelope["v"], envelope["ch"], envelope["kind"]) == (1, "/app/orders/o1", "live")
+    assert envelope["data"] == {"status": "shipped"}
+    assert first["authorization"].startswith("AWS4-HMAC-SHA256 Credential=ASIAAPPROLE/")
+    assert "/eu-west-1/appsync/aws4_request" in first["authorization"]
+    assert first["token"] == "role-session"
+    assert json.loads(second["body"]["events"][0])["data"] == {"status": "paid"}
+
+
+@pytest.mark.parametrize(
+    ("status", "answer", "said"),
+    [
+        (403, b'{"errors":[{"errorType":"UnauthorizedException"}]}', "status 403"),
+        (200, b'{"successful":[],"failed":[{"index":0,"message":"too large"}]}', "too large"),
+    ],
+)
+def test_publish_on_appsync_fails_when_appsync_refuses_or_fails_the_event(
+    fake_appsync, status, answer, said
+):
+    fake_appsync.status, fake_appsync.answer = status, answer
+    orders = realtime("app").channel("orders/:order_id", schema=OrderEvent, subscribe="public")
+
+    with pytest.raises(RuntimeError, match=said):
+        orders.publish({"status": "paid"}, order_id="o1")
 
 
 @pytest.mark.parametrize(

@@ -5,13 +5,14 @@ import secrets
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, get_args, overload
 from urllib.parse import urlsplit, urlunsplit
 
 from protobuf import Oneof
 from protobuf.wkt import Duration
 
+from ocel._aws_signature import find_appsync_region, read_aws_credentials, sign_appsync_publish
 from ocel._binding import read_realtime_binding, refuse_unprovisioned
 from ocel._declare import declare, find_caller_source, is_discovering
 from ocel._payload import Codec
@@ -112,14 +113,14 @@ Rule = Callable[[RuleContext], bool | Awaitable[bool]]
 class _Transport:
     name: Literal["appsync-events", "ocel-gateway"]
     answered_host: str | None
-    publish_url: str | None
+    publish_url: str
 
 
 def _resolve_transport(resource: str, properties: RealtimeProperties) -> _Transport:
     if properties.transport == RealtimeTransport.APPSYNC_EVENTS:
-        # TODO(#1514): publish with a SigV4-signed POST /event under the app's role
-        # once the AWS target lands.
-        return _Transport("appsync-events", properties.host, None)
+        return _Transport(
+            "appsync-events", properties.host, _build_appsync_publish_url(properties.host)
+        )
     if properties.transport == RealtimeTransport.OCEL_GATEWAY:
         return _Transport("ocel-gateway", None, _build_gateway_publish_url(properties.url))
     raise RuntimeError(
@@ -128,11 +129,23 @@ def _resolve_transport(resource: str, properties: RealtimeProperties) -> _Transp
     )
 
 
+def _build_appsync_publish_url(host: str) -> str:
+    return f"https://{host}/event"
+
+
 def _build_gateway_publish_url(socket_url: str) -> str:
     parts = urlsplit(socket_url)
     return urlunsplit(
         ("https" if parts.scheme == "wss" else "http", parts.netloc, "/publish", "", "")
     )
+
+
+def _has_failed_events(answer: bytes) -> bool:
+    try:
+        failed = json.loads(answer).get("failed")
+    except (ValueError, AttributeError):
+        return False
+    return isinstance(failed, list) and len(failed) > 0
 
 
 async def _await_if_awaitable(value: Any) -> Any:
@@ -424,47 +437,66 @@ class Realtime:
         )
 
     def _build_publish_request(
-        self, properties: RealtimeProperties, transport: _Transport, channel: str
-    ) -> tuple[str, dict[str, str]]:
-        if transport.publish_url is None:
-            raise RuntimeError(
-                f'realtime "{self.name}": publishing on {transport.name} is not supported yet'
+        self, properties: RealtimeProperties, transport: _Transport, channel: str, envelope: bytes
+    ) -> tuple[str, dict[str, str], bytes]:
+        if transport.name == "appsync-events":
+            body = json.dumps(
+                {"channel": channel, "events": [envelope.decode()]},
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode()
+            headers = sign_appsync_publish(
+                properties.host,
+                body,
+                read_aws_credentials(),
+                find_appsync_region(properties.host),
+                datetime.now(timezone.utc),
             )
+            return transport.publish_url, headers, body
         token = self._mint_token(properties, "server", "publish", channel)["token"]
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        return transport.publish_url, headers
+        return transport.publish_url, headers, envelope
 
-    def _raise_unless_accepted(self, channel: str, status: int) -> None:
+    def _raise_unless_accepted(
+        self, transport: _Transport, channel: str, status: int, answer: bytes
+    ) -> None:
         if status // 100 != 2:
             raise RuntimeError(
-                f'realtime "{self.name}": the gateway refused a publish on {channel} '
-                f"with status {status}"
+                f'realtime "{self.name}": {transport.name} refused a publish on {channel} '
+                f"with status {status}: {answer.decode(errors='replace')}"
+            )
+        if transport.name == "appsync-events" and _has_failed_events(answer):
+            raise RuntimeError(
+                f'realtime "{self.name}": AppSync failed the event published on {channel}: '
+                f"{answer.decode(errors='replace')}"
             )
 
     def _publish_sync(self, properties: RealtimeProperties, channel: str, envelope: bytes) -> None:
         from pyqwest import SyncClient
 
         transport = _resolve_transport(self.name, properties)
-        url, headers = self._build_publish_request(properties, transport, channel)
-        response = SyncClient().post(url, headers, envelope, timeout=_PUBLISH_TIMEOUT_SECONDS)
-        self._raise_unless_accepted(channel, response.status)
+        url, headers, body = self._build_publish_request(properties, transport, channel, envelope)
+        response = SyncClient().post(url, headers, body, timeout=_PUBLISH_TIMEOUT_SECONDS)
+        self._raise_unless_accepted(transport, channel, response.status, response.content)
 
     async def _publish_async(
         self, properties: RealtimeProperties, channel: str, envelope: bytes
     ) -> None:
         transport = _resolve_transport(self.name, properties)
-        url, headers = self._build_publish_request(properties, transport, channel)
-        await self._post_event(url, headers, channel, envelope)
+        await self._post_event(properties, transport, channel, envelope)
 
     async def _post_event(
-        self, url: str, headers: dict[str, str], channel: str, envelope: bytes
+        self, properties: RealtimeProperties, transport: _Transport, channel: str, envelope: bytes
     ) -> None:
         from pyqwest import Client
 
-        response = await asyncio.wait_for(
-            Client().post(url, headers, envelope), _PUBLISH_TIMEOUT_SECONDS
+        url, headers, body = await asyncio.to_thread(
+            self._build_publish_request, properties, transport, channel, envelope
         )
-        self._raise_unless_accepted(channel, response.status)
+        response = await asyncio.wait_for(
+            Client().post(url, headers, body), _PUBLISH_TIMEOUT_SECONDS
+        )
+        self._raise_unless_accepted(transport, channel, response.status, response.content)
 
     async def _serve_op(
         self,
@@ -542,11 +574,8 @@ class Realtime:
         denied = await _run_rule(channel._publish, context)
         if denied is not None:
             return _deny(denied)
-        if transport.publish_url is None:
-            return _deny("publish-failed")
-        url, headers = self._build_publish_request(properties, transport, wire)
         try:
-            await self._post_event(url, headers, wire, envelope)
+            await self._post_event(properties, transport, wire, envelope)
         except Exception:
             return _deny("publish-failed")
         return {"wire": wire}
