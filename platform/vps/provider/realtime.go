@@ -81,7 +81,7 @@ func mintSigningSeed() (string, error) {
 	return base64.StdEncoding.EncodeToString(seed), nil
 }
 
-func realtimeSigningKept(ref provider.StackRef, binding string) string {
+func nameSigningKey(ref provider.StackRef, binding string) string {
 	return host.ResourceName(ref.Project, ref.Name.String(), binding, realtimeSigningKind)
 }
 
@@ -128,7 +128,7 @@ func (p *Provider) realtimeSigningSeed(ctx context.Context, in resources.Provisi
 	if err != nil {
 		return nil, err
 	}
-	_, opened, err := p.keptSealed(ctx, in.Ref.Tier, realtimeSigningKept(in.Ref, in.Resource.Name), in.Resource.Name, bound, mintSigningSeed)
+	_, opened, err := p.keptSealed(ctx, in.Ref.Tier, nameSigningKey(in.Ref, in.Resource.Name), in.Resource.Name, bound, mintSigningSeed)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (p *Provider) realtimeSigningSeed(ctx context.Context, in resources.Provisi
 	if err != nil || len(seed) != ed25519.SeedSize {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"the signing key kept for realtime %s is no Ed25519 seed\nRemove %s on the box",
-			in.Resource.Declared, host.KeptPath(in.Ref.Tier, realtimeSigningKept(in.Ref, in.Resource.Name)))
+			in.Resource.Declared, host.KeptPath(in.Ref.Tier, nameSigningKey(in.Ref, in.Resource.Name)))
 	}
 	return seed, nil
 }
@@ -210,5 +210,5 @@ func (p *Provider) removeRealtime(ctx context.Context, ref provider.StackRef, bi
 	if err := p.runRealtimeGateway(ctx, ref, progress); err != nil {
 		return err
 	}
-	return p.host.ForgetKept(ctx, ref.Tier, []string{realtimeSigningKept(ref, binding.Name)})
+	return p.host.ForgetKept(ctx, ref.Tier, []string{nameSigningKey(ref, binding.Name)})
 }

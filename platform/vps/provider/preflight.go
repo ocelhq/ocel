@@ -17,7 +17,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	if err := refuseScaledContainers(pre.Deploy); err != nil {
 		return err
 	}
-	if err := refuseEphemeralInfra(pre); err != nil {
+	if err := refuseEphemeralQueuesAndRealtime(pre); err != nil {
 		return err
 	}
 	if err := p.host.CheckEngine(ctx); err != nil {
@@ -57,7 +57,7 @@ func isQueued(resource provider.Resource) bool {
 
 func isRealtime(resource provider.Resource) bool { return resource.Type == provider.BindingRealtime }
 
-func refuseEphemeralInfra(pre provider.DeployPreflight) error {
+func refuseEphemeralQueuesAndRealtime(pre provider.DeployPreflight) error {
 	if !pre.Deploy.Infra.IsZero() {
 		return nil
 	}
