@@ -14,8 +14,6 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-const SwitchboardImage = "gcr.io/distroless/static-debian12@sha256:d75cdd72874d4790092fcb1b058493ecf6bb5bf2b2b897045b00ff01d91843f2"
-
 const (
 	SwitchboardContainer = switchboard.Name
 	SwitchboardDir       = boxstore.Dir + "/switchboard"
@@ -35,7 +33,7 @@ func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, a
 func switchboardBox(binary []byte, front Front) boxContainer {
 	return boxContainer{
 		name:  SwitchboardContainer,
-		image: SwitchboardImage,
+		image: StaticImage,
 		command: append([]string{SwitchboardMounted, "serve",
 			"--listen", ":" + switchboardPort,
 			"--front", switchboard.FrontSocket,
@@ -77,7 +75,7 @@ func placementRun(fed bool, dir string, argv []string) []string {
 		"--mount", boundMount(SwitchboardDir, switchboardMount, "readonly"),
 		"--mount", boundMount(dir, dir),
 		"--env", switchboard.PlaceEnv+"="+dir,
-		SwitchboardImage, SwitchboardMounted)
+		StaticImage, SwitchboardMounted)
 	return append(run, argv...)
 }
 

@@ -229,7 +229,7 @@ func renderTunnelTokenArgv(subcommand, name string) []string {
 		"--volume", SwitchboardDir + ":" + switchboardMount + ":ro",
 		"--volume", TunnelDir + ":" + tunnelMount}
 	argv = append(argv, confined(nil, false)...)
-	return append(argv, SwitchboardImage, SwitchboardMounted, subcommand, tunnelTokenMounted(name))
+	return append(argv, StaticImage, SwitchboardMounted, subcommand, tunnelTokenMounted(name))
 }
 
 func renderTunnelInspect() string {
