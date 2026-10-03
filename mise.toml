@@ -7,7 +7,7 @@ changie = "1.26.0"
 bun = "1.4.0"
 go = "1.27.0"
 "go:github.com/richardartoul/gobuildcache" = "1.7.0"
-node = "26.7.0"
+node = "24.21.0"
 
 [env]
 OCEL_ENV = 'dev'
