@@ -23,6 +23,7 @@ const (
 	listenEnv = "OCEL_REALTIME_LISTEN"
 
 	defaultListen     = ":8080"
+	readyPath         = "/ready"
 	readHeaderTimeout = 10 * time.Second
 	readyTimeout      = 2 * time.Second
 	stopGrace         = 10 * time.Second
@@ -102,7 +103,10 @@ func serve(ctx context.Context, listener net.Listener, cfg config) error {
 			return key, known
 		},
 	})
-	server := &http.Server{Handler: realtime, ReadHeaderTimeout: readHeaderTimeout}
+	answering := http.NewServeMux()
+	answering.Handle("/", realtime)
+	answering.HandleFunc("GET "+readyPath, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	server := &http.Server{Handler: answering, ReadHeaderTimeout: readHeaderTimeout}
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(listener) }()
 
@@ -129,9 +133,14 @@ func readyAddress(listen string) string {
 }
 
 func probeReady(address string) error {
-	conn, err := net.DialTimeout("tcp", address, readyTimeout)
+	client := &http.Client{Timeout: readyTimeout}
+	answer, err := client.Get("http://" + address + readyPath)
 	if err != nil {
 		return fmt.Errorf("the realtime gateway does not answer on %s: %w", address, err)
 	}
-	return conn.Close()
+	_ = answer.Body.Close()
+	if answer.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("what answers on %s is no realtime gateway: %s answered %s", address, readyPath, answer.Status)
+	}
+	return nil
 }
