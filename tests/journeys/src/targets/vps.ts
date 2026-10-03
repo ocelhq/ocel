@@ -707,7 +707,24 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
       fetch: proxied
         ? (...args) => fetch(...args)
         : (input, init) => this.reaching(session, input, init),
+      ...(proxied ? {} : { reach: (url: string) => this.reachingUrl(session, url) }),
     };
+  }
+
+  private async reachingUrl(session: BoxSession, asked: string): Promise<string> {
+    const url = new URL(asked);
+    if (url.hostname === BOX_ZONE || !url.hostname.endsWith(`.${BOX_ZONE}`)) {
+      return asked;
+    }
+    const isSocket = url.protocol === "ws:" || url.protocol === "wss:";
+    const front = new URL(
+      await (isSocket
+        ? session.gateway.socketServing(url.hostname)
+        : session.gateway.serving(url.hostname)),
+    );
+    url.protocol = front.protocol;
+    url.host = front.host;
+    return url.toString();
   }
 
   private async reaching(
