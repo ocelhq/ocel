@@ -3,6 +3,7 @@ package ocel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -113,5 +114,53 @@ func TestAWSCredentialsThatCannotBeFoundAreSaidSo(t *testing.T) {
 	forgetContainerCredentials()
 	if _, err := readAWSCredentials(context.Background()); err == nil || !strings.Contains(err.Error(), "AWS_ACCESS_KEY_ID") {
 		t.Errorf("readAWSCredentials() = %v, want the missing credentials named", err)
+	}
+}
+
+type recordedHosts struct{ hosts []string }
+
+func (r *recordedHosts) RoundTrip(req *http.Request) (*http.Response, error) {
+	r.hosts = append(r.hosts, req.URL.Host)
+	return nil, errors.New("unreachable")
+}
+
+func askContainerCredentialsEndpoints(t *testing.T, endpoints []string) ([]string, []error) {
+	t.Helper()
+	recorded := &recordedHosts{}
+	realtimeHTTPClient = &http.Client{Transport: recorded}
+	t.Cleanup(func() { realtimeHTTPClient = http.DefaultClient })
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+	t.Setenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "")
+	t.Setenv("AWS_CONTAINER_AUTHORIZATION_TOKEN", "container-token")
+	t.Cleanup(forgetContainerCredentials)
+	var errs []error
+	for _, endpoint := range endpoints {
+		forgetContainerCredentials()
+		t.Setenv("AWS_CONTAINER_CREDENTIALS_FULL_URI", endpoint)
+		_, err := readAWSCredentials(context.Background())
+		errs = append(errs, err)
+	}
+	return recorded.hosts, errs
+}
+
+func TestAContainerCredentialsEndpointOffTheHostOverPlainHTTPIsNeverSentTheToken(t *testing.T) {
+	endpoints := []string{"http://credentials.example.com/v2", "http://10.0.0.5/v2", "http://169.254.169.254/latest", "http://127.0.0.1.example.com/v2", "ftp://127.0.0.1/v2"}
+	asked, errs := askContainerCredentialsEndpoints(t, endpoints)
+	for i, err := range errs {
+		if err == nil || !strings.Contains(err.Error(), "AWS_CONTAINER_CREDENTIALS_FULL_URI") {
+			t.Errorf("readAWSCredentials() with %s = %v, want a refusal naming AWS_CONTAINER_CREDENTIALS_FULL_URI", endpoints[i], err)
+		}
+	}
+	if len(asked) != 0 {
+		t.Errorf("asked %v, want no refused endpoint asked", asked)
+	}
+}
+
+func TestAContainerCredentialsEndpointOnLoopbackTheContainerAddressesOrHTTPSIsAsked(t *testing.T) {
+	endpoints := []string{"http://localhost:9000/v2", "http://127.0.0.1/v2", "http://127.8.9.10/v2", "http://[::1]/v2", "http://169.254.170.2/v2", "http://169.254.170.23/v1", "http://[fd00:ec2::23]/v1", "https://credentials.example.com/v2"}
+	asked, _ := askContainerCredentialsEndpoints(t, endpoints)
+	if len(asked) != len(endpoints) {
+		t.Errorf("asked %v, want every one of %v", asked, endpoints)
 	}
 }

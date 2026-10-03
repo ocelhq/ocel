@@ -1,10 +1,12 @@
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
 import threading
 import time
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,6 +15,11 @@ _CONTAINER_CREDENTIALS_ORIGIN = "http://169.254.170.2"
 _REFRESH_BEFORE_EXPIRY_SECONDS = 300
 _CREDENTIALS_TIMEOUT_SECONDS = 5
 _APPSYNC_REGION = re.compile(r"\.appsync-api\.([a-z0-9-]+)\.")
+_CONTAINER_CREDENTIALS_IPS = (
+    ipaddress.ip_address("169.254.170.2"),
+    ipaddress.ip_address("169.254.170.23"),
+    ipaddress.ip_address("fd00:ec2::23"),
+)
 
 
 @dataclass(frozen=True)
@@ -71,18 +78,39 @@ def read_aws_credentials() -> AwsCredentials:
             access_key_id, secret_access_key, os.environ.get("AWS_SESSION_TOKEN", "")
         )
     relative = os.environ.get("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
-    endpoint = (
-        _CONTAINER_CREDENTIALS_ORIGIN + relative
-        if relative
-        else os.environ.get("AWS_CONTAINER_CREDENTIALS_FULL_URI")
-    )
+    if relative:
+        return _read_container_credentials(_CONTAINER_CREDENTIALS_ORIGIN + relative)
+    endpoint = os.environ.get("AWS_CONTAINER_CREDENTIALS_FULL_URI")
     if not endpoint:
         raise RuntimeError(
             "no AWS credentials to sign an AppSync publish with: set AWS_ACCESS_KEY_ID and "
             "AWS_SECRET_ACCESS_KEY, or run where AWS_CONTAINER_CREDENTIALS_RELATIVE_URI is "
             "delivered"
         )
+    _refuse_untrusted_credentials_endpoint(endpoint)
     return _read_container_credentials(endpoint)
+
+
+def _refuse_untrusted_credentials_endpoint(endpoint: str) -> None:
+    parsed = urllib.parse.urlsplit(endpoint)
+    if parsed.scheme == "https":
+        return
+    if parsed.scheme == "http" and _is_container_credentials_host(parsed.hostname or ""):
+        return
+    raise RuntimeError(
+        f"AWS_CONTAINER_CREDENTIALS_FULL_URI names {parsed.scheme}://{parsed.netloc}, and only "
+        "https or a loopback, ECS or EKS address over http is asked for credentials"
+    )
+
+
+def _is_container_credentials_host(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip in _CONTAINER_CREDENTIALS_IPS
 
 
 def find_appsync_region(host: str) -> str:

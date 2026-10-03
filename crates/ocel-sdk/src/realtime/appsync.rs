@@ -1,6 +1,7 @@
 use super::transport::send_request;
 use bytes::Bytes;
 use ring::{digest, hmac};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -153,15 +154,48 @@ pub(crate) async fn read_aws_credentials() -> Result<AwsCredentials, String> {
             session_token: read_env("AWS_SESSION_TOKEN"),
         });
     }
-    let endpoint = read_env("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
-        .map(|relative| format!("{CONTAINER_CREDENTIALS_ORIGIN}{relative}"))
-        .or_else(|| read_env("AWS_CONTAINER_CREDENTIALS_FULL_URI"))
-        .ok_or_else(|| {
-            "no AWS credentials to sign an AppSync publish with: set AWS_ACCESS_KEY_ID and \
-             AWS_SECRET_ACCESS_KEY, or run where AWS_CONTAINER_CREDENTIALS_RELATIVE_URI is delivered"
-                .to_string()
-        })?;
+    if let Some(relative) = read_env("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI") {
+        return read_container_credentials(&format!("{CONTAINER_CREDENTIALS_ORIGIN}{relative}"))
+            .await;
+    }
+    let endpoint = read_env("AWS_CONTAINER_CREDENTIALS_FULL_URI").ok_or_else(|| {
+        "no AWS credentials to sign an AppSync publish with: set AWS_ACCESS_KEY_ID and \
+         AWS_SECRET_ACCESS_KEY, or run where AWS_CONTAINER_CREDENTIALS_RELATIVE_URI is delivered"
+            .to_string()
+    })?;
+    refuse_untrusted_credentials_endpoint(&endpoint)?;
     read_container_credentials(&endpoint).await
+}
+
+const CONTAINER_CREDENTIALS_IPS: [IpAddr; 3] = [
+    IpAddr::V4(Ipv4Addr::new(169, 254, 170, 2)),
+    IpAddr::V4(Ipv4Addr::new(169, 254, 170, 23)),
+    IpAddr::V6(Ipv6Addr::new(0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x23)),
+];
+
+fn is_container_credentials_host(host: &str) -> bool {
+    if host == "localhost" {
+        return true;
+    }
+    host.trim_start_matches('[')
+        .trim_end_matches(']')
+        .parse::<IpAddr>()
+        .is_ok_and(|ip| ip.is_loopback() || CONTAINER_CREDENTIALS_IPS.contains(&ip))
+}
+
+fn refuse_untrusted_credentials_endpoint(endpoint: &str) -> Result<(), String> {
+    let uri: http::Uri = endpoint
+        .parse()
+        .map_err(|_| "AWS_CONTAINER_CREDENTIALS_FULL_URI is no URL".to_string())?;
+    let scheme = uri.scheme_str().unwrap_or_default();
+    let host = uri.host().unwrap_or_default();
+    if scheme == "https" || scheme == "http" && is_container_credentials_host(host) {
+        return Ok(());
+    }
+    Err(format!(
+        "AWS_CONTAINER_CREDENTIALS_FULL_URI names {scheme}://{host}, and only https or a \
+         loopback, ECS or EKS address over http is asked for credentials"
+    ))
 }
 
 pub(crate) fn find_appsync_region(host: &str) -> String {
@@ -490,11 +524,53 @@ mod tests {
             heard.await.unwrap().headers["authorization"],
             "container-token"
         );
+        std::env::set_var(
+            "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+            "http://credentials.invalid/creds",
+        );
+        forget_container_credentials();
+        let refused = read_aws_credentials().await;
+        assert!(
+            matches!(&refused, Err(said) if said.contains("AWS_CONTAINER_CREDENTIALS_FULL_URI")),
+            "{refused:?}"
+        );
         std::env::remove_var("AWS_CONTAINER_CREDENTIALS_FULL_URI");
         std::env::remove_var("AWS_CONTAINER_AUTHORIZATION_TOKEN");
         forget_container_credentials();
         let missing = read_aws_credentials().await;
         assert!(matches!(missing, Err(said) if said.contains("AWS_ACCESS_KEY_ID")));
+    }
+
+    #[test]
+    fn only_a_loopback_container_or_https_credentials_endpoint_is_trusted_with_the_token() {
+        for endpoint in [
+            "http://localhost:9000/v2",
+            "http://127.0.0.1/v2",
+            "http://127.8.9.10/v2",
+            "http://[::1]/v2",
+            "http://169.254.170.2/v2",
+            "http://169.254.170.23/v1",
+            "http://[fd00:ec2::23]/v1",
+            "https://credentials.example.com/v2",
+        ] {
+            assert_eq!(
+                refuse_untrusted_credentials_endpoint(endpoint),
+                Ok(()),
+                "{endpoint}"
+            );
+        }
+        for endpoint in [
+            "http://credentials.example.com/v2",
+            "http://10.0.0.5/v2",
+            "http://169.254.169.254/latest",
+            "http://127.0.0.1.example.com/v2",
+            "ftp://127.0.0.1/v2",
+        ] {
+            assert!(
+                matches!(refuse_untrusted_credentials_endpoint(endpoint), Err(said) if said.contains("AWS_CONTAINER_CREDENTIALS_FULL_URI")),
+                "{endpoint}"
+            );
+        }
     }
 
     #[test]
