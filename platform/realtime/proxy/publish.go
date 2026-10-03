@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	connect "connectrpc.com/connect"
@@ -17,9 +18,10 @@ const (
 )
 
 type Refusal struct {
-	Transport string
-	Status    int
-	Answer    []byte
+	Transport  string
+	Status     int
+	Answer     []byte
+	RetryAfter time.Duration
 }
 
 func (r *Refusal) Error() string {
@@ -34,9 +36,19 @@ func Send(client *http.Client, post *http.Request, transport string) ([]byte, er
 	defer res.Body.Close()
 	answer, _ := io.ReadAll(io.LimitReader(res.Body, maxAnswerBytes))
 	if res.StatusCode/100 != 2 {
-		return nil, &Refusal{Transport: transport, Status: res.StatusCode, Answer: answer}
+		return nil, &Refusal{Transport: transport, Status: res.StatusCode, Answer: answer, RetryAfter: readRetryAfter(res.Header.Get("Retry-After"), time.Now())}
 	}
 	return answer, nil
+}
+
+func readRetryAfter(value string, now time.Time) time.Duration {
+	if seconds, err := strconv.Atoi(value); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	if at, err := http.ParseTime(value); err == nil && at.After(now) {
+		return at.Sub(now)
+	}
+	return 0
 }
 
 func NewPublishError(ctx context.Context, channel string, err error) error {
