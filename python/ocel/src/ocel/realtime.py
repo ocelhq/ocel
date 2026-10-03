@@ -109,24 +109,68 @@ class RealtimePublishError(ValueError):
 Rule = Callable[[RuleContext], bool | Awaitable[bool]]
 
 
-@dataclass(frozen=True)
-class _Transport:
-    name: Literal["appsync-events", "ocel-gateway"]
-    answered_host: str | None
-    publish_url: str
-
-
-def _resolve_transport(resource: str, properties: RealtimeProperties) -> _Transport:
-    if properties.transport == RealtimeTransport.APPSYNC_EVENTS:
-        return _Transport(
-            "appsync-events", properties.host, _build_appsync_publish_url(properties.host)
+def _raise_unless_taken(
+    resource: str, transport: str, channel: str, status: int, answer: bytes
+) -> None:
+    if status // 100 != 2:
+        raise RuntimeError(
+            f'realtime "{resource}": {transport} refused a publish on {channel} '
+            f"with status {status}: {answer.decode(errors='replace')}"
         )
-    if properties.transport == RealtimeTransport.OCEL_GATEWAY:
-        return _Transport("ocel-gateway", None, _build_gateway_publish_url(properties.url))
-    raise RuntimeError(
-        f'realtime "{resource}": the binding names transport {properties.transport}, '
-        "which this SDK does not speak"
-    )
+
+
+@dataclass(frozen=True)
+class _OcelGateway:
+    resource: str
+    publish_url: str
+    mint_publish_token: Callable[[str], str]
+    name: Literal["ocel-gateway"] = "ocel-gateway"
+    answered_host: None = None
+
+    def read_credentials_and_sign(
+        self, channel: str, envelope: bytes
+    ) -> tuple[str, dict[str, str], bytes]:
+        token = self.mint_publish_token(channel)
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        return self.publish_url, headers, envelope
+
+    def raise_unless_taken(self, channel: str, status: int, answer: bytes) -> None:
+        _raise_unless_taken(self.resource, self.name, channel, status, answer)
+
+
+@dataclass(frozen=True)
+class _AppSyncEvents:
+    resource: str
+    answered_host: str
+    name: Literal["appsync-events"] = "appsync-events"
+
+    def read_credentials_and_sign(
+        self, channel: str, envelope: bytes
+    ) -> tuple[str, dict[str, str], bytes]:
+        body = json.dumps(
+            {"channel": channel, "events": [envelope.decode()]},
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+        headers = sign_appsync_publish(
+            self.answered_host,
+            body,
+            read_aws_credentials(),
+            find_appsync_region(self.answered_host),
+            datetime.now(timezone.utc),
+        )
+        return _build_appsync_publish_url(self.answered_host), headers, body
+
+    def raise_unless_taken(self, channel: str, status: int, answer: bytes) -> None:
+        _raise_unless_taken(self.resource, self.name, channel, status, answer)
+        if _has_failed_events(answer):
+            raise RuntimeError(
+                f'realtime "{self.resource}": AppSync failed the event published on {channel}: '
+                f"{answer.decode(errors='replace')}"
+            )
+
+
+_Transport = _OcelGateway | _AppSyncEvents
 
 
 def _build_appsync_publish_url(host: str) -> str:
@@ -436,67 +480,43 @@ class Realtime:
             ttl_seconds=self._ttl_seconds,
         )
 
-    def _build_publish_request(
-        self, properties: RealtimeProperties, transport: _Transport, channel: str, envelope: bytes
-    ) -> tuple[str, dict[str, str], bytes]:
-        if transport.name == "appsync-events":
-            body = json.dumps(
-                {"channel": channel, "events": [envelope.decode()]},
-                separators=(",", ":"),
-                ensure_ascii=False,
-            ).encode()
-            headers = sign_appsync_publish(
-                properties.host,
-                body,
-                read_aws_credentials(),
-                find_appsync_region(properties.host),
-                datetime.now(timezone.utc),
+    def _resolve_transport(self, properties: RealtimeProperties) -> _Transport:
+        if properties.transport == RealtimeTransport.APPSYNC_EVENTS:
+            return _AppSyncEvents(self.name, properties.host)
+        if properties.transport == RealtimeTransport.OCEL_GATEWAY:
+            return _OcelGateway(
+                self.name,
+                _build_gateway_publish_url(properties.url),
+                lambda channel: self._mint_token(properties, "server", "publish", channel)["token"],
             )
-            return transport.publish_url, headers, body
-        token = self._mint_token(properties, "server", "publish", channel)["token"]
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        return transport.publish_url, headers, envelope
-
-    def _raise_unless_accepted(
-        self, transport: _Transport, channel: str, status: int, answer: bytes
-    ) -> None:
-        if status // 100 != 2:
-            raise RuntimeError(
-                f'realtime "{self.name}": {transport.name} refused a publish on {channel} '
-                f"with status {status}: {answer.decode(errors='replace')}"
-            )
-        if transport.name == "appsync-events" and _has_failed_events(answer):
-            raise RuntimeError(
-                f'realtime "{self.name}": AppSync failed the event published on {channel}: '
-                f"{answer.decode(errors='replace')}"
-            )
+        raise RuntimeError(
+            f'realtime "{self.name}": the binding names transport {properties.transport}, '
+            "which this SDK does not speak"
+        )
 
     def _publish_sync(self, properties: RealtimeProperties, channel: str, envelope: bytes) -> None:
         from pyqwest import SyncClient
 
-        transport = _resolve_transport(self.name, properties)
-        url, headers, body = self._build_publish_request(properties, transport, channel, envelope)
+        transport = self._resolve_transport(properties)
+        url, headers, body = transport.read_credentials_and_sign(channel, envelope)
         response = SyncClient().post(url, headers, body, timeout=_PUBLISH_TIMEOUT_SECONDS)
-        self._raise_unless_accepted(transport, channel, response.status, response.content)
+        transport.raise_unless_taken(channel, response.status, response.content)
 
     async def _publish_async(
         self, properties: RealtimeProperties, channel: str, envelope: bytes
     ) -> None:
-        transport = _resolve_transport(self.name, properties)
-        await self._post_event(properties, transport, channel, envelope)
+        await self._post_event(self._resolve_transport(properties), channel, envelope)
 
-    async def _post_event(
-        self, properties: RealtimeProperties, transport: _Transport, channel: str, envelope: bytes
-    ) -> None:
+    async def _post_event(self, transport: _Transport, channel: str, envelope: bytes) -> None:
         from pyqwest import Client
 
         url, headers, body = await asyncio.to_thread(
-            self._build_publish_request, properties, transport, channel, envelope
+            transport.read_credentials_and_sign, channel, envelope
         )
         response = await asyncio.wait_for(
             Client().post(url, headers, body), _PUBLISH_TIMEOUT_SECONDS
         )
-        self._raise_unless_accepted(transport, channel, response.status, response.content)
+        transport.raise_unless_taken(channel, response.status, response.content)
 
     async def _serve_op(
         self,
@@ -575,7 +595,7 @@ class Realtime:
         if denied is not None:
             return _deny(denied)
         try:
-            await self._post_event(properties, transport, wire, envelope)
+            await self._post_event(transport, wire, envelope)
         except Exception:
             return _deny("publish-failed")
         return {"wire": wire}
@@ -584,7 +604,7 @@ class Realtime:
         self, request: RealtimeRequest, connect: bool, ops: list[Any]
     ) -> dict[str, Any]:
         properties = self._read_properties("handler")
-        transport = _resolve_transport(self.name, properties)
+        transport = self._resolve_transport(properties)
         auth = None
         if self._authorize is not None:
             auth = await _await_if_awaitable(self._authorize(request))
