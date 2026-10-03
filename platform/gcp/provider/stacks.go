@@ -307,16 +307,17 @@ func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec, tasks *varia
 		env[originguard.HealthPathVar] = app.HealthCheckPath
 	}
 	manifest, err := variables.Render(variables.Manifest{
-		Project:     names.project,
-		Region:      p.options.Region,
-		Namespace:   string(names.namespace),
-		Slug:        spec.Ref.Project,
-		Tier:        string(spec.Ref.Tier),
-		Environment: liveEnvironment(spec.Ref),
-		Endpoint:    p.containerEndpoint(),
-		Keys:        liveKeys(app.Values),
-		Bindings:    liveBindings(app.Values),
-		Tasks:       tasks,
+		Project:            names.project,
+		Region:             p.options.Region,
+		Namespace:          string(names.namespace),
+		Slug:               spec.Ref.Project,
+		Tier:               string(spec.Ref.Tier),
+		Environment:        liveEnvironment(spec.Ref),
+		Endpoint:           p.containerEndpoint(),
+		Keys:               liveKeys(app.Values),
+		Bindings:           liveBindings(app.Values),
+		Tasks:              tasks,
+		RealtimePublishURL: findRealtimePublishURL(app.Values.Bindings),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("pin %s's live values: %w", app.App, err)

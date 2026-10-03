@@ -7,9 +7,11 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -188,5 +190,82 @@ func TestTheEnvSourceSyncBillsOnlyTheRequestsItsScheduleSends(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func realtimeManifest() *contractv1.Manifest {
+	manifest := shopManifest()
+	manifest.Resources = append(manifest.Resources, &contractv1.ManifestResource{
+		LogicalName: "realtime--app",
+		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME, Name: "app"},
+		Config: &contractv1.ManifestResource_Realtime{Realtime: &resourcesv1.RealtimeConfig{
+			Channels: []*resourcesv1.RealtimeChannel{{
+				Pattern:   "orders/:orderId",
+				Subscribe: resourcesv1.RealtimeSubscribe_REALTIME_SUBSCRIBE_RULE,
+				Publish:   resourcesv1.RealtimePublish_REALTIME_PUBLISH_SERVER,
+			}},
+		}},
+	})
+	return manifest
+}
+
+func TestARealtimeIsShapedAsItsEnvironmentsGatewayKeysAndSigningKey(t *testing.T) {
+	client, _ := costServed(t)
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    realtimeManifest(),
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+	names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	want := map[string]string{
+		names.RealtimeGateway("shop", "prod"):              "google_cloud_run_v2_service",
+		names.RealtimeKeysSecret("shop", "prod"):           "google_secret_manager_secret",
+		names.RealtimeSigningSecret("shop", "prod", "app"): "google_secret_manager_secret",
+	}
+	for _, resource := range set.GetResources() {
+		if typ, named := want[resource.GetName()]; named {
+			if resource.GetType() != typ || resource.GetScope() != "project:shop/environment:prod" {
+				t.Errorf("%s is shaped as %s under %s, want %s under the environment", resource.GetName(), resource.GetType(), resource.GetScope(), typ)
+			}
+			delete(want, resource.GetName())
+		}
+	}
+	if len(want) > 0 {
+		t.Errorf("the shape leaves out %v", want)
+	}
+}
+
+func TestPriceOfARealtimeGatewayBillsEveryConnectedHourAtTheRequestRate(t *testing.T) {
+	client, costs := costServed(t)
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    realtimeManifest(),
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	if err != nil {
+		t.Fatalf("Price() = %v", err)
+	}
+	var gateway string
+	names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	for _, resource := range set.GetResources() {
+		if resource.GetName() == names.RealtimeGateway("shop", "prod") {
+			gateway = resource.GetId()
+		}
+	}
+	if got := componentNamed(t, est, gateway, "CPU while sockets are open").GetMonthlyCost(); got != "63.07" {
+		t.Errorf("cpu = %s, want 63.07 (730 connected hours of 1 vCPU at 0.000024 a second)", got)
+	}
+	if got := componentNamed(t, est, gateway, "Memory while sockets are open").GetMonthlyCost(); got != "6.57" {
+		t.Errorf("memory = %s, want 6.57 (730 connected hours of 1 GiB at 0.0000025 a second)", got)
+	}
+	if cov := est.GetCoverage(); cov.GetUnsupported() != 0 || cov.GetNoPrice() != 0 {
+		t.Errorf("coverage = %v, want everything the shape lists priced or free", cov)
 	}
 }

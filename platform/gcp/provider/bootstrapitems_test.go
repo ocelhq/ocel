@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"context"
 	"slices"
 	"testing"
 
@@ -58,5 +59,29 @@ func TestTheRuntimeAccountIsProvisionedWhereverTheBootstrapIs(t *testing.T) {
 			t.Errorf("a bootstrap with emulated=%t provisions %v, want %s among them: an app has to run as something wherever it runs",
 				emulated, ids, account.ID())
 		}
+	}
+}
+
+func TestEachTierHasAnAccountItsRealtimeGatewaysRunAsThatMayDoNothingInTheProject(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	names := Names{namespace: "ocel", project: "acme-prod"}
+	account := item{Kind: KindServiceAccount, Name: names.RealtimeAccount(tier)}
+	for _, emulated := range []bool{false, true} {
+		if ids := idsOf(bootstrapItems(names, tier, emulated)); !slices.Contains(ids, account.ID()) {
+			t.Errorf("a bootstrap with emulated=%t provisions %v, want %s among them", emulated, ids, account.ID())
+		}
+	}
+	opened := bootstrap{clients: &clients{Names: names}}
+	purpose := opened.purposeOf(tier, account.Name)
+	if err := purpose.grant(context.Background(), tier); err != nil {
+		t.Errorf("granting the realtime account = %v, want nothing granted: it reads its keys secret alone, which each deploy grants", err)
+	}
+	if granted, err := purpose.granted(context.Background(), tier); err != nil || !granted {
+		t.Errorf("granted() = %t, %v, want an account holding no role to count as granted", granted, err)
+	}
+	if purpose.description == opened.purposeOf(tier, names.WorkloadAccount(tier)).description {
+		t.Error("the realtime account is described as the account apps run as")
 	}
 }

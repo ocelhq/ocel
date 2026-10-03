@@ -99,6 +99,15 @@
       "properties": {}
     },
     {
+      "id": "project:shop/shared:preview/google_service_account:ocel-345a57cc3f",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_service_account",
+      "name": "ocel-345a57cc3f",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/shared:preview/google_artifact_registry_repository:ocel-acme-prod-preview",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",

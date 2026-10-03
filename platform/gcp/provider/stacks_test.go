@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
 var sharedPreviewLabel = edge.PreviewKey("0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0").Sign("shop", "abcdefghijklmnop")
@@ -352,5 +353,42 @@ func TestAnAppBoundToNoStoreHasNoNetworkInterface(t *testing.T) {
 	}
 	if got := egressOf(server.created[0]); got != "" {
 		t.Errorf("a service bound to no store has egress %q, want none", got)
+	}
+}
+
+func TestAnAppBoundToARealtimeIsToldWhereItsGatewayTakesPublishes(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	spec := previewSpec(sharedPreviewLabel)
+	spec.App.Values.Bindings = []provider.Binding{{
+		Type: provider.BindingRealtime, Name: "realtime--app", Resource: "app",
+		Properties: map[string]string{provider.PropertyHost: "ocel-shop-pr-7-realtime-abc123-ew.a.run.app"},
+	}}
+
+	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	manifest, err := variables.Parse([]byte(envOf(server.created[0].Template.Containers[0])[variables.EnvVar]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "https://ocel-shop-pr-7-realtime-abc123-ew.a.run.app/publish"; manifest.RealtimePublishURL != want {
+		t.Errorf("the manifest names %q as where to publish, want %q", manifest.RealtimePublishURL, want)
+	}
+}
+
+func TestAnAppBoundToNoRealtimeIsToldOfNoGateway(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+
+	if _, err := p.ProvisionContainers(context.Background(), boundToAStore(previewSpec(sharedPreviewLabel)), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	manifest, err := variables.Parse([]byte(envOf(server.created[0].Template.Containers[0])[variables.EnvVar]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.RealtimePublishURL != "" {
+		t.Errorf("the manifest names %q as where to publish, want nothing", manifest.RealtimePublishURL)
 	}
 }

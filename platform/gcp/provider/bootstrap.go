@@ -563,6 +563,8 @@ func (b bootstrap) purposeOf(tier environment.Tier, name string) accountPurpose 
 		return b.syncPurpose(tier)
 	case b.clients.PushAccount(tier):
 		return b.pushPurpose(tier)
+	case b.clients.RealtimeAccount(tier):
+		return realtimePurpose(tier)
 	}
 	return accountPurpose{
 		displayName: "ocel " + string(tier) + " apps",

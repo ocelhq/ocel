@@ -54,3 +54,19 @@ func TestTheEnvSourceSyncIsAStaticLinuxBinaryForTheOneArchitectureCloudRunRuns(t
 		t.Error("EnvSourceSync() is the container runtime")
 	}
 }
+
+func TestTheRealtimeGatewayIsAStaticLinuxBinaryForTheOneArchitectureCloudRunRuns(t *testing.T) {
+	binary, err := elf.NewFile(bytes.NewReader(RealtimeGateway()))
+	if err != nil {
+		t.Fatalf("RealtimeGateway() is no ELF binary: %v", err)
+	}
+	if binary.Machine != elf.EM_X86_64 {
+		t.Errorf("RealtimeGateway() is built for %s, and Cloud Run runs x86_64 alone", binary.Machine)
+	}
+	if section := binary.Section(".interp"); section != nil {
+		t.Error("the realtime gateway asks for a dynamic loader, and the image it runs in has none")
+	}
+	if bytes.Equal(RealtimeGateway(), EnvSourceSync()) || bytes.Equal(RealtimeGateway(), containerRuntime) {
+		t.Error("RealtimeGateway() is another payload")
+	}
+}

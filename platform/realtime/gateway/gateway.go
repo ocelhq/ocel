@@ -18,7 +18,7 @@ const maxSubscriptions = 200
 
 const (
 	Subprotocol = "aws-appsync-event-ws"
-	SocketPath  = "/event/realtime"
+	SocketPath  = gatewayenv.SocketPath
 	PublishPath = gatewayenv.PublishPath
 
 	MaxEventBytes = 240 * 1024

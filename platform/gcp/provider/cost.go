@@ -112,6 +112,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		return nil, err
 	}
 	shapeTopics(tree, names, req, region, shared, environment)
+	shapeRealtime(tree, names, req, region, environment)
 	return tree.Set(provider.CostSource)
 }
 
@@ -168,6 +169,38 @@ func shapeTopics(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 	tree.Add(shared, string(Vendor), tfFirestoreDatabase, names.TaskDatabase(tier), region, map[string]any{"location_id": region, "type": nativeFirestore})
 	tree.Add(shared, string(Vendor), tfCloudTasksQueue, names.DelayQueue(tier), region, map[string]any{"location": region})
 	tree.Add(shared, string(Vendor), tfServiceAccount, names.PushAccount(tier), region, map[string]any{})
+}
+
+func shapeRealtime(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, environment string) {
+	secret := itemProperties(item{Kind: KindSecret}, region)
+	declared := false
+	for _, resource := range req.Resources {
+		if resource.Type != provider.BindingRealtime {
+			continue
+		}
+		declared = true
+		namespace := realtimeNamespaceOf(resource.Declared, resource.Name)
+		tree.Add(environment, string(Vendor), tfSecretManagerSecret, names.RealtimeSigningSecret(req.Deploy.Slug, req.Deploy.Env, namespace), region, secret)
+	}
+	if !declared {
+		return
+	}
+	tree.Add(environment, string(Vendor), tfSecretManagerSecret, names.RealtimeKeysSecret(req.Deploy.Slug, req.Deploy.Env), region, secret)
+	tree.Add(environment, string(Vendor), tfCloudRunService, names.RealtimeGateway(req.Deploy.Slug, req.Deploy.Env), region, map[string]any{
+		"location":      region,
+		"ingress":       ingressEverywhere,
+		"holds_sockets": true,
+		"template": map[string]any{
+			"scaling":                          map[string]any{"min_instance_count": 0, "max_instance_count": realtimeGatewayInstances},
+			"max_instance_request_concurrency": realtimeGatewayConcurrency,
+			"containers": []any{map[string]any{
+				"resources": map[string]any{
+					"cpu_idle": true,
+					"limits":   map[string]any{"cpu": realtimeGatewayCPU, "memory": strconv.Itoa(realtimeGatewayMemoryMiB) + "Mi"},
+				},
+			}},
+		},
+	})
 }
 
 func itemProperties(item item, region string) map[string]any {

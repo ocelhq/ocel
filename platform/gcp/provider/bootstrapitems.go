@@ -88,6 +88,10 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 			Note: "the identity every app in this tier runs as, and the one the deploy hands Cloud Run",
 		},
 		{
+			Kind: KindServiceAccount, Name: names.RealtimeAccount(tier),
+			Note: "the identity this tier's realtime gateways run as: it holds no role in the project, and each deploy lets it read its environment's realtime keys alone",
+		},
+		{
 			Kind: KindRepository, Name: names.Repository(tier),
 			Note: "the images this tier runs, and an untagged image lives at least a week",
 		},
