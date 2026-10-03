@@ -29,6 +29,7 @@ const (
 
 var (
 	errStreamEnded = errors.New("the stream ended")
+	errThrottled   = errors.New("the stream was throttled")
 	transientCodes = []codes.Code{codes.DeadlineExceeded, codes.Internal, codes.Unavailable}
 )
 
@@ -55,7 +56,7 @@ func Tail(ctx context.Context, client *logging.Client, project string, q Query, 
 		switch {
 		case err == nil:
 			return nil
-		case status.Code(err) == codes.ResourceExhausted && attempt+1 < retryAttempts:
+		case errors.Is(err, errThrottled) && attempt+1 < retryAttempts:
 			continue
 		case errors.Is(err, errStreamEnded) && !reconnected:
 			reconnected = true
@@ -89,6 +90,8 @@ func followStream(ctx context.Context, client *logging.Client, req *loggingpb.Ta
 		return nil
 	case errors.Is(err, io.EOF) || slices.Contains(transientCodes, status.Code(err)):
 		return fmt.Errorf("%w: %w", errStreamEnded, err)
+	case status.Code(err) == codes.ResourceExhausted:
+		return fmt.Errorf("%w: %w", errThrottled, err)
 	}
 	return err
 }
