@@ -7,35 +7,55 @@ import (
 var lambdaBookkeepingPrefixes = []string{"INIT_START ", "START RequestId:", "END RequestId:"}
 
 const (
-	lambdaReportPrefix = "REPORT RequestId:"
-	outOfMemoryType    = "Runtime.OutOfMemory"
+	lambdaReportPrefix     = "REPORT RequestId:"
+	lambdaInitReportPrefix = "INIT_REPORT "
+	outOfMemoryErrorType   = "Runtime.OutOfMemory"
 )
 
-func readLambdaLine(text string) (line string, failure, keep bool) {
+func parseLambdaLine(message string) (Event, bool) {
 	for _, prefix := range lambdaBookkeepingPrefixes {
-		if strings.HasPrefix(text, prefix) {
-			return "", false, false
+		if strings.HasPrefix(message, prefix) {
+			return Event{}, false
 		}
 	}
-	if !strings.HasPrefix(text, lambdaReportPrefix) {
-		return text, false, true
+	switch {
+	case strings.HasPrefix(message, lambdaReportPrefix):
+		return parseReport(message)
+	case strings.HasPrefix(message, lambdaInitReportPrefix):
+		return parseInitReport(message)
 	}
-	fields := reportFields(text)
+	return Event{Text: message}, true
+}
+
+func parseReport(message string) (Event, bool) {
+	fields := parseReportFields(message)
 	status, hasStatus := fields["Status"]
 	switch {
 	case !hasStatus:
-		return "", false, false
+		return Event{}, false
 	case status == "timeout":
-		return "timed out after " + fields["Duration"], true, true
-	case status == "error" && fields["Error Type"] == outOfMemoryType:
-		return "ran out of memory (" + fields["Memory Size"] + ")", true, true
+		return Event{Text: "timed out after " + fields["Duration"], Failure: true}, true
+	case status == "error" && fields["Error Type"] == outOfMemoryErrorType:
+		return Event{Text: "ran out of memory (" + fields["Memory Size"] + ")", Failure: true}, true
 	}
-	return text, true, true
+	return Event{Text: message, Failure: true}, true
 }
 
-func reportFields(text string) map[string]string {
+func parseInitReport(message string) (Event, bool) {
+	fields := parseReportFields(strings.TrimPrefix(message, lambdaInitReportPrefix))
+	status, hasStatus := fields["Status"]
+	switch {
+	case !hasStatus:
+		return Event{}, false
+	case status == "timeout":
+		return Event{Text: "timed out after " + fields["Init Duration"], Failure: true}, true
+	}
+	return Event{Text: message, Failure: true}, true
+}
+
+func parseReportFields(message string) map[string]string {
 	fields := map[string]string{}
-	for part := range strings.SplitSeq(text, "\t") {
+	for part := range strings.SplitSeq(message, "\t") {
 		if key, value, ok := strings.Cut(part, ": "); ok {
 			fields[key] = strings.TrimSpace(value)
 		}

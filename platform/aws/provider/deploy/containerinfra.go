@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/logevents"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -472,7 +473,7 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	}
 
 	logs, err := cloudwatch.NewLogGroup(ctx, naming.ResourceID(naming.KindService, "logs"), &cloudwatch.LogGroupArgs{
-		Name:            pulumi.String("/ocel/containers/" + string(tier)),
+		Name:            pulumi.String(logevents.NameContainerGroup(tier)),
 		RetentionInDays: pulumi.Int(containerLogRetentionDays),
 		Tags:            tags,
 	})

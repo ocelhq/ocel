@@ -7,24 +7,28 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-const containerGroupPrefix = "/ocel/containers/"
-
 type logGroup struct {
-	name         string
-	streamPrefix *string
-	instance     func(stream string) string
-	read         func(text string) (line string, failure, keep bool)
+	name          string
+	streamPrefix  *string
+	parseInstance func(stream string) string
+	parseLine     func(message string) (event Event, keep bool)
 }
 
-func findGroup(ctx context.Context, lambdas *lambda.Client, source Source, tier string) (logGroup, error) {
+func NameContainerGroup(tier environment.Tier) string {
+	return "/ocel/containers/" + string(tier)
+}
+
+func findGroup(ctx context.Context, lambdas *lambda.Client, source Source, tier environment.Tier) (logGroup, error) {
 	if source.Function == "" {
 		return logGroup{
-			name:         containerGroupPrefix + tier,
-			streamPrefix: aws.String(source.Container + "/"),
-			instance:     taskID,
-			read:         keepLine,
+			name:          NameContainerGroup(tier),
+			streamPrefix:  aws.String(source.Container + "/"),
+			parseInstance: parseTaskID,
+			parseLine:     keepLine,
 		}, nil
 	}
 	config, err := lambdas.GetFunctionConfiguration(ctx, &lambda.GetFunctionConfigurationInput{FunctionName: aws.String(source.Function)})
@@ -34,18 +38,18 @@ func findGroup(ctx context.Context, lambdas *lambda.Client, source Source, tier 
 	if config.LoggingConfig == nil || aws.ToString(config.LoggingConfig.LogGroup) == "" {
 		return logGroup{}, fmt.Errorf("function %s names no log group", source.Function)
 	}
-	return logGroup{name: aws.ToString(config.LoggingConfig.LogGroup), instance: versionAndID, read: readLambdaLine}, nil
+	return logGroup{name: aws.ToString(config.LoggingConfig.LogGroup), parseInstance: parseVersionAndID, parseLine: parseLambdaLine}, nil
 }
 
-func keepLine(text string) (string, bool, bool) {
-	return text, false, true
+func keepLine(message string) (Event, bool) {
+	return Event{Text: message}, true
 }
 
-func taskID(stream string) string {
+func parseTaskID(stream string) string {
 	return stream[strings.LastIndex(stream, "/")+1:]
 }
 
-func versionAndID(stream string) string {
+func parseVersionAndID(stream string) string {
 	start := strings.Index(stream, "[")
 	if start < 0 {
 		return stream
