@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
@@ -131,7 +132,12 @@ func (r realtimeEnvironment) serveGateway(ctx context.Context, keys map[string]s
 		if err != nil {
 			return "", err
 		}
-		if served := hostOf(ran.url); served != host {
+		served := hostOf(ran.url)
+		if served == "" {
+			return "", refusal.Refuse(refusal.CodeNotReady,
+				"Cloud Run gave the realtime gateway %s no URL, and a realtime binding names the host browsers connect to", name)
+		}
+		if served != host {
 			host, current = served, nil
 			continue
 		}
