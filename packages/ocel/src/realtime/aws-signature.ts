@@ -1,5 +1,6 @@
 import { createHash, createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { isIPv4 } from "node:net";
 
 /** The AWS credentials a request is signed with. */
 export interface AwsCredentials {
@@ -9,6 +10,13 @@ export interface AwsCredentials {
 }
 
 const containerCredentialsOrigin = "http://169.254.170.2";
+const containerCredentialsHosts = new Set([
+  "localhost",
+  "169.254.170.2",
+  "169.254.170.23",
+  "[fd00:ec2::23]",
+  "[::1]",
+]);
 const refreshBeforeExpiryMilliseconds = 5 * 60_000;
 
 let heldContainerCredentials: { credentials: AwsCredentials; expiresAt: number } | undefined;
@@ -66,15 +74,34 @@ export async function readAwsCredentials(): Promise<AwsCredentials> {
     return { accessKeyId, secretAccessKey, ...(sessionToken ? { sessionToken } : {}) };
   }
   const relative = process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI;
-  const endpoint = relative
-    ? containerCredentialsOrigin + relative
-    : process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI;
+  if (relative) return readContainerCredentials(containerCredentialsOrigin + relative);
+  const endpoint = process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI;
   if (!endpoint) {
     throw new Error(
       "no AWS credentials to sign an AppSync publish with: set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or run where AWS_CONTAINER_CREDENTIALS_RELATIVE_URI is delivered",
     );
   }
+  refuseUntrustedCredentialsEndpoint(endpoint);
   return readContainerCredentials(endpoint);
+}
+
+function refuseUntrustedCredentialsEndpoint(endpoint: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(endpoint);
+  } catch {
+    throw new Error("AWS_CONTAINER_CREDENTIALS_FULL_URI is no URL");
+  }
+  if (parsed.protocol === "https:") return;
+  if (parsed.protocol === "http:" && isContainerCredentialsHost(parsed.hostname)) return;
+  throw new Error(
+    `AWS_CONTAINER_CREDENTIALS_FULL_URI names ${parsed.protocol}//${parsed.host}, and only https or a loopback, ECS or EKS address over http is asked for credentials`,
+  );
+}
+
+function isContainerCredentialsHost(hostname: string): boolean {
+  if (containerCredentialsHosts.has(hostname)) return true;
+  return isIPv4(hostname) && hostname.startsWith("127.");
 }
 
 /** Reads the region an AppSync API's HTTP host is in, falling back to `AWS_REGION`. */

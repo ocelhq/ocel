@@ -1,5 +1,6 @@
 import json
 import threading
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -105,3 +106,59 @@ def test_credentials_that_cannot_be_found_are_said_so(monkeypatch):
     forget_container_credentials()
     with pytest.raises(RuntimeError, match="AWS_ACCESS_KEY_ID"):
         read_aws_credentials()
+
+
+def _stub_container_endpoint(monkeypatch, endpoint):
+    asked = []
+
+    def urlopen(request, timeout):
+        asked.append(request.full_url)
+        raise OSError("unreachable")
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", raising=False)
+    monkeypatch.setenv("AWS_CONTAINER_CREDENTIALS_FULL_URI", endpoint)
+    monkeypatch.setenv("AWS_CONTAINER_AUTHORIZATION_TOKEN", "container-token")
+    forget_container_credentials()
+    return asked
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "http://credentials.example.com/v2",
+        "http://10.0.0.5/v2",
+        "http://169.254.169.254/latest",
+        "http://127.0.0.1.example.com/v2",
+        "ftp://127.0.0.1/v2",
+    ],
+)
+def test_the_containers_token_is_never_sent_to_an_endpoint_off_the_host_over_plain_http(
+    monkeypatch, endpoint
+):
+    asked = _stub_container_endpoint(monkeypatch, endpoint)
+    with pytest.raises(RuntimeError, match="AWS_CONTAINER_CREDENTIALS_FULL_URI"):
+        read_aws_credentials()
+    assert asked == []
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "http://localhost:9000/v2",
+        "http://127.0.0.1/v2",
+        "http://127.8.9.10/v2",
+        "http://[::1]/v2",
+        "http://169.254.170.2/v2",
+        "http://169.254.170.23/v1",
+        "http://[fd00:ec2::23]/v1",
+        "https://credentials.example.com/v2",
+    ],
+)
+def test_a_loopback_container_or_https_endpoint_is_asked_for_credentials(monkeypatch, endpoint):
+    asked = _stub_container_endpoint(monkeypatch, endpoint)
+    with pytest.raises(OSError, match="unreachable"):
+        read_aws_credentials()
+    assert asked == [endpoint]

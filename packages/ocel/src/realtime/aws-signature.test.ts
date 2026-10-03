@@ -93,4 +93,49 @@ describe("readAwsCredentials", () => {
     vi.stubEnv("AWS_CONTAINER_CREDENTIALS_FULL_URI", "");
     await expect(readAwsCredentials()).rejects.toThrow("AWS_ACCESS_KEY_ID");
   });
+
+  function stubContainerEndpoint(endpoint: string) {
+    vi.stubEnv("AWS_ACCESS_KEY_ID", "");
+    vi.stubEnv("AWS_SECRET_ACCESS_KEY", "");
+    vi.stubEnv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "");
+    vi.stubEnv("AWS_CONTAINER_CREDENTIALS_FULL_URI", endpoint);
+    vi.stubEnv("AWS_CONTAINER_AUTHORIZATION_TOKEN", "container-token");
+    forgetContainerCredentials();
+  }
+
+  it.each([
+    "http://credentials.example.com/v2",
+    "http://10.0.0.5/v2",
+    "http://169.254.169.254/latest",
+    "http://127.0.0.1.example.com/v2",
+    "ftp://127.0.0.1/v2",
+  ])("never sends the container's token to %s", async (endpoint) => {
+    stubContainerEndpoint(endpoint);
+    const fetched = vi.fn(async () => Response.json({}));
+    vi.stubGlobal("fetch", fetched);
+    await expect(readAwsCredentials()).rejects.toThrow("AWS_CONTAINER_CREDENTIALS_FULL_URI");
+    expect(fetched).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "http://localhost:9000/v2",
+    "http://127.0.0.1/v2",
+    "http://127.8.9.10/v2",
+    "http://[::1]/v2",
+    "http://169.254.170.2/v2",
+    "http://169.254.170.23/v1",
+    "http://[fd00:ec2::23]/v1",
+    "https://credentials.example.com/v2",
+  ])("asks %s for the container's credentials", async (endpoint) => {
+    stubContainerEndpoint(endpoint);
+    const fetched = vi.fn(async (_url: string) =>
+      Response.json({ AccessKeyId: "ASIACONTAINER", SecretAccessKey: "container-secret" }),
+    );
+    vi.stubGlobal("fetch", fetched);
+    await expect(readAwsCredentials()).resolves.toEqual({
+      accessKeyId: "ASIACONTAINER",
+      secretAccessKey: "container-secret",
+    });
+    expect(fetched.mock.calls[0]?.[0]).toBe(endpoint);
+  });
 });

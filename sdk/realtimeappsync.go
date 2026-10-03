@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -28,6 +30,12 @@ const (
 )
 
 var realtimeHTTPClient = http.DefaultClient
+
+var containerCredentialIPs = []net.IP{
+	net.IPv4(169, 254, 170, 2),
+	net.IPv4(169, 254, 170, 23),
+	net.ParseIP("fd00:ec2::23"),
+}
 
 type awsCredentials struct {
 	AccessKeyID     string
@@ -53,14 +61,44 @@ func readAWSCredentials(ctx context.Context) (awsCredentials, error) {
 	if id, secret := os.Getenv("AWS_ACCESS_KEY_ID"), os.Getenv("AWS_SECRET_ACCESS_KEY"); id != "" && secret != "" {
 		return awsCredentials{AccessKeyID: id, SecretAccessKey: secret, SessionToken: os.Getenv("AWS_SESSION_TOKEN")}, nil
 	}
-	endpoint := os.Getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI")
 	if relative := os.Getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"); relative != "" {
-		endpoint = containerCredentialIP + relative
+		return heldContainerCredentials.read(ctx, containerCredentialIP+relative)
 	}
+	endpoint := os.Getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI")
 	if endpoint == "" {
 		return awsCredentials{}, fmt.Errorf("no AWS credentials to sign an AppSync publish with: set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or run where AWS_CONTAINER_CREDENTIALS_RELATIVE_URI is delivered")
 	}
+	if err := refuseUntrustedCredentialsEndpoint(endpoint); err != nil {
+		return awsCredentials{}, err
+	}
 	return heldContainerCredentials.read(ctx, endpoint)
+}
+
+func refuseUntrustedCredentialsEndpoint(endpoint string) error {
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return fmt.Errorf("AWS_CONTAINER_CREDENTIALS_FULL_URI is no URL: %w", err)
+	}
+	if parsed.Scheme == "https" || parsed.Scheme == "http" && isContainerCredentialsHost(parsed.Hostname()) {
+		return nil
+	}
+	return fmt.Errorf("AWS_CONTAINER_CREDENTIALS_FULL_URI names %s://%s, and only https or a loopback, ECS or EKS address over http is asked for credentials", parsed.Scheme, parsed.Host)
+}
+
+func isContainerCredentialsHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	for _, allowed := range containerCredentialIPs {
+		if ip.Equal(allowed) {
+			return true
+		}
+	}
+	return ip.IsLoopback()
 }
 
 func (c *containerCredentials) read(ctx context.Context, endpoint string) (awsCredentials, error) {
