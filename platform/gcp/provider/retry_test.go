@@ -43,8 +43,8 @@ func TestOnlyTheAnswersThatMeanTryAgainAreTriedAgain(t *testing.T) {
 		{name: "no such host", err: &url.Error{Op: "Get", Err: &net.DNSError{Err: "no such host", Name: "logging.example", IsNotFound: true}}},
 	} {
 		t.Run(tried.name, func(t *testing.T) {
-			if again := retryable(answeredCode(tried.err), tried.err); again != tried.again {
-				t.Errorf("retryable(%v) = %v, want %v", tried.err, again, tried.again)
+			if again := isRetryable(answeredCode(tried.err), tried.err); again != tried.again {
+				t.Errorf("isRetryable(%v) = %v, want %v", tried.err, again, tried.again)
 			}
 		})
 	}
