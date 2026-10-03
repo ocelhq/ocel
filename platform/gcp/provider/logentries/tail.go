@@ -56,7 +56,9 @@ func tailed(project string, err error) error {
 }
 
 func followed(ctx context.Context, client *logging.Client, req *loggingpb.TailLogEntriesRequest, sources []Source, emit func([]Event) error, notice func(Suppressed) error) error {
-	stream, err := client.TailLogEntries(ctx)
+	session, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stream, err := client.TailLogEntries(session)
 	if err == nil {
 		err = stream.Send(req)
 	}
