@@ -16,6 +16,9 @@ func appBoundaryARNFor(ns Namespace, tier environment.Tier) string {
 
 func appBoundaryActions() []string {
 	return []string{
+		"appsync:EventConnect",
+		"appsync:EventPublish",
+		"appsync:GetApi",
 		"bedrock:InvokeModel",
 		"bedrock:InvokeModelWithResponseStream",
 		"cloudwatch:PutMetricData",

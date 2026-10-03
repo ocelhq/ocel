@@ -42,6 +42,8 @@ const (
 	tokenECSService                  = "aws:ecs/service:Service"
 	tokenLBTargetGroup               = "aws:lb/targetGroup:TargetGroup"
 	tokenLBListenerRule              = "aws:lb/listenerRule:ListenerRule"
+	tokenAppSyncAPI                  = "aws:appsync/api:Api"
+	tokenAppSyncChannelNamespace     = "aws:appsync/channelNamespace:ChannelNamespace"
 )
 
 type resourceKey struct {

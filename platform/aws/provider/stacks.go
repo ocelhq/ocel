@@ -57,13 +57,15 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	}
 
 	cfg := deploy.Config{
-		Region:        p.aws.Region,
-		BackendURL:    stateBackendURL(deployed.StateBucket, scope.Slug),
-		Passphrase:    params.Passphrase,
-		PulumiProject: naming.PulumiProject(scope.Slug),
-		Secrets:       secretsmanager.NewFromConfig(p.aws),
-		Parameters:    ssm.NewFromConfig(p.aws),
-		KVTokenRoot:   p.namespace.KVTokenRoot(),
+		Region:         p.aws.Region,
+		BackendURL:     stateBackendURL(deployed.StateBucket, scope.Slug),
+		Passphrase:     params.Passphrase,
+		PulumiProject:  naming.PulumiProject(scope.Slug),
+		Secrets:        secretsmanager.NewFromConfig(p.aws),
+		Parameters:     ssm.NewFromConfig(p.aws),
+		KVTokenRoot:    p.namespace.KVTokenRoot(),
+		SigningKeys:    secretsmanager.NewFromConfig(p.aws),
+		SigningKeyRoot: p.namespace.SigningKeyRoot(),
 
 		Tags:      &tagclock.Table{Dynamo: dynamodb.NewFromConfig(p.aws), Table: deployed.StateTable},
 		KeyValues: p.KeyValues(),

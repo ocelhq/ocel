@@ -107,6 +107,29 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		}
 	})
 
+	t.Run("realtime resources this deploy has not provisioned yet are billed for their two grants", func(t *testing.T) {
+		t.Parallel()
+
+		pre := provider.DeployPreflight{
+			Deploy: preflightSpec(),
+			Apps:   []provider.AppUsage{{App: "web"}},
+		}
+		for i := range 40 {
+			name := fmt.Sprintf("realtime--%02d", i)
+			live := provider.Resource{Name: name, Declared: fmt.Sprintf("live%02d", i), Type: provider.BindingRealtime}
+			pre.Resources = append(pre.Resources, live)
+			pre.Apps[0].Resources = append(pre.Apps[0].Resources, live)
+		}
+
+		var over *PolicyBudgetError
+		if err := preflighting(preflightConfig(), pre); !errors.As(err, &over) {
+			t.Fatalf("Preflight() = %v, want a *PolicyBudgetError", err)
+		}
+		if !strings.Contains(over.Error(), "realtime--00") {
+			t.Errorf("Error() = %q, want it to name the realtime resources it billed", over.Error())
+		}
+	})
+
 	t.Run("only the app whose own role is over budget is refused", func(t *testing.T) {
 		t.Parallel()
 

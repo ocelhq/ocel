@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -127,7 +128,7 @@ func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) 
 }
 
 func Serves() []provider.BindingType {
-	return []provider.BindingType{provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTask, provider.BindingTopic}
+	return []provider.BindingType{provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTask, provider.BindingTopic, provider.BindingRealtime}
 }
 
 const skipTeardownRefreshEnv = "OCEL_SKIP_TEARDOWN_REFRESH"
@@ -158,6 +159,7 @@ type stackWork struct {
 type infraWork struct {
 	transformed *transformPatches
 	completer   payloads.Placement
+	authorizer  payloads.Placement
 	previewing  bool
 }
 
@@ -226,16 +228,19 @@ func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraW
 			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, work.completer)
 		case provider.BindingKV:
 			err = r.declareKV(pctx, project, env, resource, work, vpc.Id, vpc.CidrBlock, subnets.Ids)
-		case provider.BindingTask, provider.BindingTopic:
+		case provider.BindingTask, provider.BindingTopic, provider.BindingRealtime:
 			continue
 		default:
 			return refusal.Refuse(refusal.CodeInvalid,
-				"this provider provisions no %s; it provisions %s, %s, %s, %s and %s", resource.Type,
-				provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTask, provider.BindingTopic)
+				"this provider provisions no %s; it provisions %s, %s, %s, %s, %s and %s", resource.Type,
+				provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTask, provider.BindingTopic, provider.BindingRealtime)
 		}
 		if err != nil {
 			return fmt.Errorf("declare %s: %w", resource.Name, err)
 		}
+	}
+	if err := r.declareRealtime(pctx, project, env, spec.Resources, work); err != nil {
+		return err
 	}
 	return r.declareTopics(pctx, project, env, spec.Resources)
 }
@@ -341,6 +346,8 @@ func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs a
 			binding, err = collectBucketBinding(resource.Name, sessions, fields)
 		case provider.BindingKV:
 			binding, err = collectKVBinding(ctx, r.cfg.Parameters, resource.Name, fields)
+		case provider.BindingRealtime:
+			binding, err = collectRealtimeBinding(ctx, r.cfg.SigningKeys, resource.Name, fields)
 		}
 		if err != nil {
 			return provider.StackResult{}, err
@@ -371,6 +378,13 @@ func bindingOf(kind provider.BindingType, binding *bindingsv1.Binding) provider.
 		properties[provider.PropertyUsername] = kv.GetUsername()
 		properties[provider.PropertyPassword] = kv.GetPassword()
 		properties[provider.PropertyTLS] = strconv.FormatBool(kv.GetTls())
+	case provider.BindingRealtime:
+		realtime := binding.GetRealtime()
+		properties[provider.PropertyTransport] = realtime.GetTransport().String()
+		properties[provider.PropertyURL] = realtime.GetUrl()
+		properties[provider.PropertyHost] = realtime.GetHost()
+		properties[provider.PropertySigningKey] = base64.StdEncoding.EncodeToString(realtime.GetSigningKey())
+		properties[provider.PropertyVerifyKey] = base64.StdEncoding.EncodeToString(realtime.GetVerifyKey())
 	}
 	return provider.Binding{
 		Type:       kind,
@@ -462,9 +476,12 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 		r.pending.add(work.stack, work.sets, progress)
 		defer r.pending.drop(work.stack, work.sets)
 	}
-	var listedTokens []string
+	var listedTokens, listedKeys []string
 	if spec.App == nil {
 		if listedTokens, err = r.listKVTokens(ctx, spec.Ref); err != nil {
+			return provider.StackResult{}, err
+		}
+		if listedKeys, err = r.listSigningKeys(ctx, spec.Ref); err != nil {
 			return provider.StackResult{}, err
 		}
 	}
@@ -476,6 +493,9 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 		return provider.StackResult{}, err
 	}
 	if err := deleteKVTokens(ctx, r.cfg.Parameters, r.findUndeclaredKVTokens(listedTokens, spec)); err != nil {
+		return provider.StackResult{}, err
+	}
+	if err := deleteSigningKeys(ctx, r.cfg.SigningKeys, r.findUndeclaredSigningKeys(listedKeys, spec)); err != nil {
 		return provider.StackResult{}, err
 	}
 	if err := writeOriginRecord(ctx, r.cfg, spec.Ref.Name.App, work, result); err != nil {
@@ -544,6 +564,11 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 				return provider.StackSpec{}, nil, err
 			}
 		}
+		if provisionsRealtime(spec) {
+			if work.authorizer, err = placeRealtimeAuthorizer(ctx, r.cfg); err != nil {
+				return provider.StackSpec{}, nil, err
+			}
+		}
 		spec.VendorState = work
 		return spec, nil, nil
 	}
@@ -572,6 +597,13 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress pr
 			return err
 		}
 		if err := deleteKVTokens(ctx, opened.cfg.Parameters, tokens); err != nil {
+			return err
+		}
+		keys, err := opened.listSigningKeys(ctx, ref)
+		if err != nil {
+			return err
+		}
+		if err := deleteSigningKeys(ctx, opened.cfg.SigningKeys, keys); err != nil {
 			return err
 		}
 	}
