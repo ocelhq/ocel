@@ -155,6 +155,36 @@ async fn deliver_appsync() -> MutexGuard<'static, ()> {
 }
 
 #[tokio::test]
+async fn the_handler_answers_a_socket_path_on_the_origin_the_request_reached_it_at() {
+    let mut binding = read_fixture();
+    binding["realtime"]["transport"] = "REALTIME_TRANSPORT_OCEL_GATEWAY".into();
+    binding["realtime"]["url"] = "/.well-known/ocel-realtime".into();
+    binding["realtime"]["host"] = "gateway:8080".into();
+    let _env = deliver(&binding.to_string()).await;
+    let rt = build(Arc::default());
+
+    let reached = post(&rt, json!({ "ops": [] }), &[("x-forwarded-proto", "https")]).await;
+    let forwarded = post(
+        &rt,
+        json!({ "ops": [] }),
+        &[
+            ("x-forwarded-proto", "http"),
+            ("x-forwarded-host", "web.localhost"),
+        ],
+    )
+    .await;
+
+    assert_eq!(
+        reached["url"],
+        "wss://shop.example/.well-known/ocel-realtime"
+    );
+    assert_eq!(
+        forwarded["url"],
+        "ws://web.localhost/.well-known/ocel-realtime"
+    );
+}
+
+#[tokio::test]
 async fn the_handler_names_the_transport_and_mints_a_connect_token_when_asked() {
     let _env = deliver_appsync().await;
     let rt = build(Arc::default());

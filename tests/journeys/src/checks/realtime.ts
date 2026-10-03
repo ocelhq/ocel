@@ -122,12 +122,16 @@ function readConnectToken(answer: HandlerAnswer): string {
   return answer.connect.token;
 }
 
-function openEventSocket(answer: HandlerAnswer): Promise<EventSocket> {
-  return EventSocket.open(answer.url, answer.host, readConnectToken(answer));
+async function openEventSocket(ctx: CheckContext, answer: HandlerAnswer): Promise<EventSocket> {
+  return EventSocket.open(await ctx.reach(answer.url), answer.host, readConnectToken(answer));
 }
 
-async function runWithSocket(answer: HandlerAnswer, use: (socket: EventSocket) => Promise<void>) {
-  const socket = await openEventSocket(answer);
+async function runWithSocket(
+  ctx: CheckContext,
+  answer: HandlerAnswer,
+  use: (socket: EventSocket) => Promise<void>,
+) {
+  const socket = await openEventSocket(ctx, answer);
   try {
     await use(socket);
   } finally {
@@ -170,7 +174,7 @@ export const realtimeRuleAllowsCheck: Check = {
     assert.deepEqual(answer.denied, []);
     const grant = readGrant(answer, 0);
     assert.equal(grant.wire, `/app/orders/${orderId}`);
-    await runWithSocket(answer, async (socket) => {
+    await runWithSocket(ctx, answer, async (socket) => {
       await socket.subscribe("order", grant.wire, grant.token);
       await assertPublishedFromServer(ctx, "orders/:orderId", { orderId }, { status: "shipped" });
       const event = await socket.readNextEvent("order");
@@ -211,7 +215,7 @@ export const realtimePublicCheck: Check = {
     const grant = readGrant(answer, 0);
     assert.equal(grant.wire, "/app/status");
     const text = newId("status");
-    await runWithSocket(answer, async (socket) => {
+    await runWithSocket(ctx, answer, async (socket) => {
       await socket.subscribe("status", grant.wire, grant.token);
       await assertPublishedFromServer(ctx, "status", {}, { text });
       assert.deepEqual((await socket.readNextEvent("status")).data, { text });
@@ -236,7 +240,7 @@ export const realtimeWildcardCheck: Check = {
     assertDenied(answer, { 1: "missing-param" });
     const grant = readGrant(answer, 0);
     assert.equal(grant.wire, `/app/projects/${projectId}/deploys/*`);
-    await runWithSocket(answer, async (socket) => {
+    await runWithSocket(ctx, answer, async (socket) => {
       await socket.subscribe("deploys", grant.wire, grant.token);
       await assertPublishedFromServer(
         ctx,
@@ -343,10 +347,9 @@ export const realtimeConnectTokenVectorsCheck: Check = {
     const answer = await requestVectorGrants(ctx);
     const live = decodeToken(readConnectToken(answer));
     const serverSecond = newServerClock(live);
+    const reached = await ctx.reach(answer.url);
     const open = (token: string) =>
-      readRefusal(
-        EventSocket.open(answer.url, answer.host, token).then((socket) => socket.close()),
-      );
+      readRefusal(EventSocket.open(reached, answer.host, token).then((socket) => socket.close()));
     assert.equal(
       await open(await signUnchanged(ctx, live)),
       undefined,
@@ -373,7 +376,7 @@ export const realtimeSubscribeTokenVectorsCheck: Check = {
     const grant = readGrant(answer, 0);
     const live = decodeToken(grant.token);
     const serverSecond = newServerClock(live);
-    await runWithSocket(answer, async (socket) => {
+    await runWithSocket(ctx, answer, async (socket) => {
       const wrong: string[] = [];
       for (const [n, forgery] of forgeRefusedCases(readTokenVectors(), live).entries()) {
         const token = await signForgery(ctx, forgery, serverSecond);
@@ -405,7 +408,7 @@ export const realtimeRelayedPublishCheck: Check = {
       { user: "ada" },
     );
     const grant = readGrant(listener, 0);
-    await runWithSocket(listener, async (socket) => {
+    await runWithSocket(ctx, listener, async (socket) => {
       await socket.subscribe("room", grant.wire, grant.token);
       const relayed = await requestBatch(
         ctx,
@@ -453,7 +456,7 @@ export const realtimeSchemaCheck: Check = {
       { user: "ada" },
     );
     const grant = readGrant(listener, 0);
-    await runWithSocket(listener, async (socket) => {
+    await runWithSocket(ctx, listener, async (socket) => {
       await socket.subscribe("room", grant.wire, grant.token);
       const relayed = await requestBatch(
         ctx,
@@ -498,9 +501,10 @@ async function publishUntilHeard(
 
 class RecordedWebSocket extends WebSocket {
   static readonly opened: WebSocket[] = [];
+  static readonly reached = new Map<string, string>();
 
   constructor(url: string | URL, protocols?: string | string[]) {
-    super(url, protocols);
+    super(RecordedWebSocket.reached.get(String(url)) ?? url, protocols);
     RecordedWebSocket.opened.push(this);
   }
 }
@@ -516,11 +520,14 @@ export const realtimeReauthorizeCheck: Check = {
     };
     const heard = new Map<string, string[]>();
     const failures = new Map<string, RealtimeError[]>();
+    const { url: socketUrl } = await requestBatch(ctx, { ops: [] });
+    RecordedWebSocket.reached.set(socketUrl, await ctx.reach(socketUrl));
+    const handlerUrl = await ctx.reach(`${ctx.baseUrl}${HANDLER_PATH}`);
     const native = globalThis.WebSocket;
     globalThis.WebSocket = RecordedWebSocket as typeof WebSocket;
     const clients = Object.entries(callers).map(([name, caller]) => {
       const client = createRealtimeClient<FixtureChannels>({
-        url: `${ctx.baseUrl}${HANDLER_PATH}`,
+        url: handlerUrl,
         headers: () => ({ authorization: encodeBearer(caller) }),
       });
       client.subscribe(
@@ -645,7 +652,7 @@ export const realtimeSubscriptionLimitCheck: Check = {
       grants.push(...answer.grants.map((grant) => readGrant(answer, grant.i)));
     }
     assert.equal(grants.length, rooms.length);
-    await runWithSocket(first as HandlerAnswer, async (socket) => {
+    await runWithSocket(ctx, first as HandlerAnswer, async (socket) => {
       for (const [n, grant] of grants.slice(0, MAX_SUBSCRIPTIONS).entries()) {
         await socket.subscribe(`room-${n}`, grant.wire, grant.token);
       }
@@ -679,7 +686,7 @@ export const realtimeEventSizeCheck: Check = {
       { user: "ada" },
     );
     const grant = readGrant(listener, 0);
-    await runWithSocket(listener, async (socket) => {
+    await runWithSocket(ctx, listener, async (socket) => {
       await socket.subscribe("room", grant.wire, grant.token);
       const largest = buildNoteOfBytes(roomId, MAX_EVENT_BYTES);
       await assertPublishedFromServer(ctx, "rooms/:roomId", { roomId }, largest);

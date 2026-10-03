@@ -457,10 +457,29 @@ export const gaps: Gap[] = [
   {
     id: "go-image-built-from-the-app-path-alone",
     reason:
-      "a container app's image is built from its path alone, and tasks/go's module is rooted above ./server and replaces ocel.dev with the repository's sdk, so go build in the image finds no go.mod",
+      "a container app's image is built from its path alone, and the Go fixtures' module is rooted above ./server and replaces ocel.dev with the repository's sdk, so go build in the image finds no go.mod",
     issue: 1550,
     where: [
-      { on: ["vps", "vps.incus"], fixtures: [tasks.go], fails: [step.deploy], skipsCell: true },
+      {
+        on: ["vps", "vps.incus"],
+        fixtures: [tasks.go, realtime.go],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+    ],
+  },
+  {
+    id: "path-dependency-outside-the-image",
+    reason:
+      "a container app's image is built from its path alone, and the Python and Rust fixtures depend on the repository's SDK by a path outside it, so the install in the image finds no SDK",
+    issue: 1598,
+    where: [
+      {
+        on: ["vps", "vps.incus"],
+        fixtures: [realtime.python, realtime.rust],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
     ],
   },
   {
@@ -506,12 +525,7 @@ export const gaps: Gap[] = [
       { on: ["gcp", "gcp.floci"], fixtures: [tasks.node], fails: [check(taskConcurrencyCheck)] },
     ],
   },
-  ...(
-    [
-      { target: "gcp", lanes: ["gcp", "gcp.floci"], issue: 1515 },
-      { target: "vps", lanes: ["vps", "vps.incus"], issue: 1516 },
-    ] as const
-  ).map(
+  ...([{ target: "gcp", lanes: ["gcp", "gcp.floci"], issue: 1515 }] as const).map(
     ({ target, lanes, issue }): Gap => ({
       id: `${target}-refuses-realtime`,
       reason: `the ${target} provider refuses a deploy that declares a realtime resource at preflight: realtime is unsupported on ${target}, as it runs no transport for channels`,

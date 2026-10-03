@@ -29,7 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	realtimeproxy "github.com/ocelhq/ocel/platform/realtime/proxy"
 	s3store "github.com/ocelhq/ocel/platform/s3"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
+	boxlive "github.com/ocelhq/ocel/platform/vps/provider/live"
 	source "github.com/ocelhq/ocel/platform/vps/runtime/live"
 )
 
@@ -53,7 +53,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	read, env := readFront(environ)
 	exposed, manifest, healthPath, guard := read.exposed, read.manifest, read.healthPath, read.guard
 
-	values, err := resolve(ctx, manifest, variables.SocketPath, containerimage.LivePath)
+	values, err := resolve(ctx, manifest, boxlive.SocketPath, containerimage.LivePath)
 	if err != nil {
 		return fatal(err.Error())
 	}
@@ -67,8 +67,18 @@ func run(ctx context.Context, command []string, environ []string) int {
 		return fatal(fmt.Sprintf("find a loopback port for the app: %v", err))
 	}
 	app := "127.0.0.1:" + strconv.Itoa(internal)
+	var ready atomic.Bool
+	front, err := newFront(pinned, originguard.Options{
+		Upstream:   &url.URL{Scheme: "http", Host: app},
+		Guard:      guard,
+		HealthPath: healthPath,
+		Ready:      ready.Load,
+	})
+	if err != nil {
+		return fatal(err.Error())
+	}
 
-	fronting, err := proxying(pinned, values, variables.SocketPath, app)
+	fronting, err := proxying(pinned, values, boxlive.SocketPath, app)
 	if err != nil {
 		return fatal(err.Error())
 	}
@@ -83,7 +93,6 @@ func run(ctx context.Context, command []string, environ []string) int {
 		return fatal(err.Error())
 	}
 
-	var ready atomic.Bool
 	listening := child.WatchListening(app, nil)
 	go func() {
 		if err := <-listening; err == nil {
@@ -96,13 +105,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 		_ = proc.Stop(stopGrace)
 		return fatal(fmt.Sprintf("listen on port %s: %v", exposed, err))
 	}
-	upstream := &url.URL{Scheme: "http", Host: app}
-	server := &http.Server{Handler: originguard.Handler(originguard.Options{
-		Upstream:   upstream,
-		Guard:      guard,
-		HealthPath: healthPath,
-		Ready:      ready.Load,
-	})}
+	server := &http.Server{Handler: front}
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(ln) }()
 
@@ -155,7 +158,7 @@ func readFront(environ []string) (front, []string) {
 		case containerimage.PortEnvVar:
 			read.exposed = value
 			continue
-		case variables.EnvVar:
+		case boxlive.EnvVar:
 			read.manifest = value
 			continue
 		case originguard.HealthPathVar:
@@ -186,14 +189,14 @@ func exitCode(exit child.Exit) int {
 	return exit.Code
 }
 
-func pinned(manifest string) (variables.Manifest, error) {
+func pinned(manifest string) (boxlive.Manifest, error) {
 	if manifest == "" {
-		return variables.Manifest{}, nil
+		return boxlive.Manifest{}, nil
 	}
-	return variables.Parse([]byte(manifest))
+	return boxlive.Parse([]byte(manifest))
 }
 
-func proxying(manifest variables.Manifest, values *live.Values, socket, app string) (bindingproxy.Served, error) {
+func proxying(manifest boxlive.Manifest, values *live.Values, socket, app string) (bindingproxy.Served, error) {
 	if values == nil {
 		return bindingproxy.Served{}, nil
 	}
@@ -213,18 +216,18 @@ func proxying(manifest variables.Manifest, values *live.Values, socket, app stri
 	return bindingproxy.Serve(services)
 }
 
-func newRealtime(manifest variables.Manifest, values *live.Values) realtimev1connect.RealtimeServiceHandler {
+func newRealtime(manifest boxlive.Manifest, values *live.Values) realtimev1connect.RealtimeServiceHandler {
 	if manifest.RealtimePublishURL == "" {
 		return nil
 	}
 	return realtimeproxy.NewService(values, realtimeproxy.NewGatewayTransport(http.DefaultClient, manifest.RealtimePublishURL))
 }
 
-func newBuckets(manifest variables.Manifest, values *live.Values, socket, app string) (bucketv1connect.BucketServiceHandler, error) {
+func newBuckets(manifest boxlive.Manifest, values *live.Values, socket, app string) (bucketv1connect.BucketServiceHandler, error) {
 	if manifest.Store == nil {
 		return s3store.NewBoundDispatch(values, app), nil
 	}
-	secret := values.Value(variables.StoreSecretKey)
+	secret := values.Value(boxlive.StoreSecretKey)
 	if secret == "" {
 		return nil, fmt.Errorf("this deployment binds a bucket but has no credential for the store at %s", manifest.Store.Endpoint)
 	}
@@ -259,7 +262,7 @@ func publishing(store s3store.Store, values *live.Values) func(context.Context) 
 	var signer s3store.PresignAPI
 	var looked time.Time
 	return func(ctx context.Context) (s3store.PresignAPI, string) {
-		claimed := values.Value(variables.StorePublicKey)
+		claimed := values.Value(boxlive.StorePublicKey)
 		if claimed == "" {
 			mu.Lock()
 			stale := time.Since(looked) >= unclaimedWindow
@@ -269,7 +272,7 @@ func publishing(store s3store.Store, values *live.Values) func(context.Context) 
 			mu.Unlock()
 			if stale {
 				values.Reread(ctx)
-				claimed = values.Value(variables.StorePublicKey)
+				claimed = values.Value(boxlive.StorePublicKey)
 			}
 		}
 		now := claimed

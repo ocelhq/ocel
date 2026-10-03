@@ -44,15 +44,14 @@ type Store struct {
 }
 
 type Manifest struct {
-	Slug        string         `json:"slug"`
-	Tier        string         `json:"tier"`
-	Environment string         `json:"environment,omitempty"`
-	Keys        []live.Key     `json:"keys,omitempty"`
-	Bindings    []live.Binding `json:"bindings,omitempty"`
-	Store       *Store         `json:"store,omitempty"`
-	Queue       string         `json:"queue,omitempty"`
-	// TODO(#1516): set RealtimePublishURL to the box gateway's publish address once the provider provisions realtime.
-	RealtimePublishURL string `json:"realtimePublishUrl,omitempty"`
+	Slug               string         `json:"slug"`
+	Tier               string         `json:"tier"`
+	Environment        string         `json:"environment,omitempty"`
+	Keys               []live.Key     `json:"keys,omitempty"`
+	Bindings           []live.Binding `json:"bindings,omitempty"`
+	Store              *Store         `json:"store,omitempty"`
+	Queue              string         `json:"queue,omitempty"`
+	RealtimePublishURL string         `json:"realtimePublishUrl,omitempty"`
 }
 
 func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }

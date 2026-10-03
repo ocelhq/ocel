@@ -145,6 +145,18 @@ fn read_own_scheme(request: &Request) -> String {
         .to_ascii_lowercase()
 }
 
+fn resolve_socket_url(url: &str, request: &Request) -> String {
+    if !url.starts_with('/') {
+        return url.to_string();
+    }
+    let scheme = if read_own_scheme(request) == "https" {
+        "wss"
+    } else {
+        "ws"
+    };
+    format!("{scheme}://{}{url}", read_own_host(request))
+}
+
 fn is_same_origin(request: &Request, origin: &str) -> bool {
     let Ok(uri) = origin.parse::<http::Uri>() else {
         return false;
@@ -382,7 +394,7 @@ async fn serve_batch(
 
     let mut answer = Answer {
         transport,
-        url: properties.url.clone(),
+        url: resolve_socket_url(&properties.url, &request),
         host: (transport == Transport::AppsyncEvents).then(|| properties.host.clone()),
         connect,
         grants: Vec::new(),

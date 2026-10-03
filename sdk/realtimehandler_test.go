@@ -287,6 +287,23 @@ func TestTheHandlerNamesTheTransportAndMintsAConnectTokenWhenAsked(t *testing.T)
 	}
 }
 
+func TestTheHandlerAnswersASocketPathOnTheOriginTheRequestReachedItAt(t *testing.T) {
+	fixture := readRealtimeFixture(t)
+	fixture.Realtime.Transport = "REALTIME_TRANSPORT_OCEL_GATEWAY"
+	fixture.Realtime.URL = "/.well-known/ocel-realtime"
+	fixture.Realtime.Host = "gateway:8080"
+	deliverRealtime(t, "app", fixture)
+	handler := declareHandlerResource(newHandlerRules()).Handler()
+
+	if answer := readAnswer(t, postRealtime(handler, `{"ops":[]}`, nil)); answer.URL != "wss://shop.example/.well-known/ocel-realtime" {
+		t.Errorf("url = %q, want the socket path on the https origin the request reached", answer.URL)
+	}
+	forwarded := map[string]string{"X-Forwarded-Proto": "http", "X-Forwarded-Host": "web.localhost"}
+	if answer := readAnswer(t, postRealtime(handler, `{"ops":[]}`, forwarded)); answer.URL != "ws://web.localhost/.well-known/ocel-realtime" {
+		t.Errorf("url = %q, want the socket path on the forwarded http origin", answer.URL)
+	}
+}
+
 func TestTheHandlerGrantsAPublicSubscribeToAnyone(t *testing.T) {
 	fixture := readRealtimeFixture(t)
 	deliverRealtime(t, "app", fixture)

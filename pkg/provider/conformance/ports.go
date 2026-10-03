@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
+	"github.com/ocelhq/ocel/pkg/realtime"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -796,6 +797,10 @@ func declared(serves []provider.BindingType) []provider.Resource {
 			resource.Topic = &provider.TopicSpec{Consumers: []provider.ConsumerSpec{{Name: "c-consumer", Worker: "c-worker", Retry: provider.ResolveRetryPolicy()}}}
 		case provider.BindingTask:
 			resource.Topic = &provider.TopicSpec{Consumers: []provider.ConsumerSpec{{Name: resource.Name, Worker: "c-worker", Exclusive: true, Retry: provider.ResolveRetryPolicy()}}}
+		case provider.BindingRealtime:
+			resource.Realtime = &provider.RealtimeSpec{TokenTTL: realtime.DefaultTokenTTL, Channels: []provider.ChannelSpec{{
+				Pattern: "orders/:orderId", Subscribe: realtime.ChannelAccessRule, Publish: realtime.ChannelAccessServer,
+			}}}
 		}
 		resources = append(resources, resource)
 	}

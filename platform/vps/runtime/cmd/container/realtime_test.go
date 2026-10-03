@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
-	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
+	boxlive "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func serveRealtimeProxy(t *testing.T, key ed25519.PrivateKey, gatewayPublishURL string) realtimev1connect.RealtimeServiceClient {
@@ -35,12 +35,12 @@ func serveRealtimeProxy(t *testing.T, key ed25519.PrivateKey, gatewayPublishURL 
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest := variables.Manifest{
+	manifest := boxlive.Manifest{
 		Slug: "shop", Tier: "production",
 		Bindings:           []live.Binding{{Name: "realtime--app", Key: "OCEL_RESOURCE_REALTIME_app", Type: bindingsv1.BindingType_BINDING_TYPE_REALTIME}},
 		RealtimePublishURL: gatewayPublishURL,
 	}
-	rendered, err := variables.Render(manifest)
+	rendered, err := boxlive.Render(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}

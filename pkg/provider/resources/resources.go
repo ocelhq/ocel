@@ -26,6 +26,7 @@ type Hooks struct {
 	ProvisionBucket   func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
 	ProvisionKV       func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
 	ProvisionTopic    func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
+	ProvisionRealtime func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
 	RemoveResource    func(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error
 	Functions         *FunctionHooks
 	Containers        *ContainerHooks
@@ -82,6 +83,7 @@ var primitives = []primitive{
 	{kind: provider.BindingKV, of: func(h Hooks) provisionFunc { return h.ProvisionKV }},
 	{kind: provider.BindingTopic, of: func(h Hooks) provisionFunc { return h.ProvisionTopic }},
 	{kind: provider.BindingTask, of: func(h Hooks) provisionFunc { return h.ProvisionTopic }},
+	{kind: provider.BindingRealtime, of: func(h Hooks) provisionFunc { return h.ProvisionRealtime }},
 }
 
 type hookStacks struct {

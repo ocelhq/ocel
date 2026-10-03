@@ -131,7 +131,7 @@ func TestTheProviderNamesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) {
 	if p.Facts().Vendor != vps.Vendor {
 		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, vps.Vendor)
 	}
-	if got := p.Facts().Bindings; !slices.Equal(got, []provider.BindingType{provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTopic, provider.BindingTask}) {
+	if got := p.Facts().Bindings; !slices.Equal(got, []provider.BindingType{provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTopic, provider.BindingTask, provider.BindingRealtime}) {
 		t.Errorf("Facts().Bindings = %v, want the binding types a box provisions for itself", got)
 	}
 

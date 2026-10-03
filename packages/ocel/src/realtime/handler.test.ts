@@ -698,3 +698,39 @@ describe("a publish relayed through the realtime handler", () => {
     ]);
   });
 });
+
+describe("a gateway the binding names by a path on the app's own origin", () => {
+  const socketPath = "/.well-known/ocel-realtime";
+
+  beforeEach(() => {
+    vi.stubEnv("OCEL_PHASE", "");
+    vi.stubEnv(
+      bindingKey("app", BindingType.REALTIME),
+      JSON.stringify({
+        name: "realtime--app",
+        realtime: {
+          ...JSON.parse(appsyncBinding).realtime,
+          transport: "REALTIME_TRANSPORT_OCEL_GATEWAY",
+          url: socketPath,
+          host: "gateway:8080",
+        },
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("answers the socket url on the origin the request reached the handler at", async () => {
+    const reached = await answer(await POST(post({ ops: [] })));
+    expect(reached.url).toBe(`wss://shop.example${socketPath}`);
+
+    const forwarded = await answer(
+      await POST(
+        post({ ops: [] }, { "x-forwarded-proto": "http", "x-forwarded-host": "web.localhost" }),
+      ),
+    );
+    expect(forwarded.url).toBe(`ws://web.localhost${socketPath}`);
+  });
+});

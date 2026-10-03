@@ -92,12 +92,16 @@ func ContainerRuntime(architecture string) ([]byte, error) {
 }
 
 func (h *Host) IsAgentCurrent(ctx context.Context) (bool, error) {
+	return h.isCurrent(ctx, "survey the box agent", func(arch string) Item { return newAgentItem(liveAgent(arch)) })
+}
+
+func (h *Host) isCurrent(ctx context.Context, what string, newItem func(arch string) Item) (bool, error) {
 	arch, err := h.arch(ctx)
 	if err != nil {
 		return false, err
 	}
-	agent := newAgentItem(liveAgent(arch))
-	rendered, err := h.reach(ctx, "survey the box agent", survey([]Item{agent}), nil)
+	item := newItem(arch)
+	rendered, err := h.reach(ctx, what, survey([]Item{item}), nil)
 	if err != nil {
 		return false, err
 	}
@@ -105,7 +109,7 @@ func (h *Host) IsAgentCurrent(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return observed[agent.ID()] == agent.Digest(), nil
+	return observed[item.ID()] == item.Digest(), nil
 }
 
 func newAgentItem(agent []byte) Item {

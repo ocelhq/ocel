@@ -167,6 +167,7 @@ export class CellRun {
       phase,
       notes: this.notes,
       fetch: guard.fetch,
+      reach: this.deployment.reach ?? (async (url) => url),
       readExposed: () => this.readExposed(),
       journeyNonce: this.journeyNonce,
     }).then(

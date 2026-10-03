@@ -19,6 +19,9 @@
         "$TURBO_ROOT$/platform/s3/**/*.go",
         "$TURBO_ROOT$/platform/s3/go.mod",
         "$TURBO_ROOT$/platform/s3/go.sum",
+        "$TURBO_ROOT$/platform/realtime/**/*.go",
+        "$TURBO_ROOT$/platform/realtime/go.mod",
+        "$TURBO_ROOT$/platform/realtime/go.sum",
         "!$TURBO_ROOT$/**/*_test.go"
       ]
     },
@@ -34,6 +37,7 @@
         "$TURBO_ROOT$/frameworks/**",
         "$TURBO_ROOT$/platform/vps/**",
         "$TURBO_ROOT$/platform/s3/**",
+        "$TURBO_ROOT$/platform/realtime/**",
         "$TURBO_ROOT$/platform/edge/**",
         "$TURBO_ROOT$/scripts/incus.sh",
         "$TURBO_ROOT$/scripts/incus-fanout.sh",

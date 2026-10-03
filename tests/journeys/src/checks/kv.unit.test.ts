@@ -43,6 +43,7 @@ function context(fetch: Fetch, phase: Phase, notes: Map<string, string>): CheckC
     phase,
     notes,
     fetch,
+    reach: async (url) => url,
     readExposed: async () => "",
     journeyNonce: NONCE,
   };

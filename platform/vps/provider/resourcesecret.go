@@ -27,17 +27,17 @@ func mintResourceSecret() (string, error) {
 }
 
 func (p *Provider) keptSecret(ctx context.Context, in resources.ProvisionRequest, name string, bound seal.AssociatedData) (string, error) {
-	_, opened, err := p.keptSealed(ctx, in.Ref.Tier, name, in.Resource.Name, bound)
+	_, opened, err := p.keptSealed(ctx, in.Ref.Tier, name, in.Resource.Name, bound, mintResourceSecret)
 	return opened, err
 }
 
-func (p *Provider) keptSealed(ctx context.Context, tier environment.Tier, name, resource string, bound seal.AssociatedData) ([]byte, string, error) {
+func (p *Provider) keptSealed(ctx context.Context, tier environment.Tier, name, resource string, bound seal.AssociatedData, mint func() (string, error)) ([]byte, string, error) {
 	sealed, err := p.host.Kept(ctx, tier, name)
 	if err != nil {
 		return nil, "", err
 	}
 	if len(sealed) == 0 {
-		minted, err := mintResourceSecret()
+		minted, err := mint()
 		if err != nil {
 			return nil, "", err
 		}

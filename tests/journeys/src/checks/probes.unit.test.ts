@@ -22,6 +22,7 @@ function context(fetch: Fetch, baseUrl = BASE): CheckContext {
     phase: "verify",
     notes: new Map(),
     fetch,
+    reach: async (url) => url,
     readExposed: async () => "",
     journeyNonce: "journey-nonce",
   };
