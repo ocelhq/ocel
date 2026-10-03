@@ -332,6 +332,7 @@ func TestTheDeployCredentialOwnsTheLogGroupsItCreates(t *testing.T) {
 	want := map[string]string{
 		"logs:CreateLogGroup":      conditionJSON(t, taggedOnCreate()),
 		"logs:DeleteLogGroup":      conditionJSON(t, taggedByOcel()),
+		"logs:FilterLogEvents":     conditionJSON(t, taggedByOcel()),
 		"logs:ListTagsForResource": conditionJSON(t, taggedByOcel()),
 		"logs:PutRetentionPolicy":  conditionJSON(t, taggedByOcel()),
 		"logs:TagResource":         conditionJSON(t, taggedByOcel()),
@@ -343,6 +344,16 @@ func TestTheDeployCredentialOwnsTheLogGroupsItCreates(t *testing.T) {
 			t.Errorf("the deploy credential grants %v on %s, want exactly %v, so a log group is either never made with a retention, never reclaimed by the teardown, or reachable beyond what ocel tagged", got, resource, want)
 		}
 	}
+}
+
+func TestTheDeployCredentialIsGrantedGetFunctionConfiguration(t *testing.T) {
+	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
+	for g := range grants {
+		if g.action == "lambda:GetFunctionConfiguration" {
+			return
+		}
+	}
+	t.Error("the deploy credential does not grant lambda:GetFunctionConfiguration, so a log read cannot learn which log group a function writes to")
 }
 
 func TestEveryCredentialListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) {

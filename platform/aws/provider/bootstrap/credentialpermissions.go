@@ -896,6 +896,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		{
 			Actions: []string{
 				"logs:DeleteLogGroup",
+				"logs:FilterLogEvents",
 				"logs:ListTagsForResource",
 				"logs:PutRetentionPolicy",
 				"logs:TagResource",
