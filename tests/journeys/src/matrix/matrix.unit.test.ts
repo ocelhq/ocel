@@ -402,10 +402,16 @@ describe("the realtime concern", () => {
     }
   });
 
-  it("runs the behavioural suite on gcp in every language, expecting nothing red", () => {
+  const GCP_CELLS = CELLS.filter((cell) => cell !== "realtime/python");
+
+  it("runs the behavioural suite on gcp in every language, expecting nothing red, but Python, whose function ships none of its pyproject dependencies", () => {
+    for (const lane of ["gcp", "gcp.floci"] as const) {
+      const planned = planOn(lane);
+      expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(GCP_CELLS));
+      expect(planned.skipped["realtime/python"]?.map((gap) => gap.issue)).toEqual([1260]);
+    }
     const planned = planOn("gcp");
-    expect(planned.cells.map((cell) => cell.name)).toEqual(expect.arrayContaining(CELLS));
-    for (const cell of CELLS) {
+    for (const cell of GCP_CELLS) {
       expect(planned.skipped[cell]).toBeUndefined();
       expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
     }
@@ -416,7 +422,7 @@ describe("the realtime concern", () => {
     const handlerOnly = [realtimeRuleDeniesCheck, realtimeOperationLimitCheck].map(
       (one) => one.title,
     );
-    for (const cell of CELLS) {
+    for (const cell of GCP_CELLS) {
       expect(planned.skipped[cell]).toBeUndefined();
       const red = Object.keys(planned.expectedFailures[`${cell}/web`] ?? {});
       expect(red.sort()).toEqual(

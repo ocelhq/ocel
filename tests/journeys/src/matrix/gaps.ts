@@ -500,6 +500,20 @@ export const gaps: Gap[] = [
     ],
   },
   {
+    id: "python-function-vendors-requirements-alone",
+    reason:
+      "a Python function vendors what requirements.txt lists and nothing else, and realtime/python declares its dependencies, the SDK among them, in pyproject.toml, so the function cannot import them and Cloud Run never sees it ready",
+    issue: 1260,
+    where: [
+      {
+        on: ["gcp", "gcp.floci"],
+        fixtures: [realtime.python],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+    ],
+  },
+  {
     id: "aws-reads-lanes-unweighted",
     reason:
       "on aws each queue is read by its own event source mapping in the order SQS hands its messages out, and SQS has no priority, so a lane is recorded on the run but takes no share of the reads",
