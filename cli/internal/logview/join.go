@@ -5,10 +5,10 @@ import (
 	"strings"
 )
 
-type trace int
+type traceMode int
 
 const (
-	plain trace = iota
+	plain traceMode = iota
 	pythonBody
 	goTrace
 	rustPanic
@@ -19,7 +19,7 @@ const (
 var (
 	nodeFrame  = regexp.MustCompile(`^\s+(?:at |File ")`)
 	goroutine  = regexp.MustCompile(`^goroutine \d+ \[`)
-	goFrame    = regexp.MustCompile(`^[\w./*()-]+\(.*\)$`)
+	goFrame    = regexp.MustCompile(`^[\w./*()\[\],-]+\(.*\)$`)
 	rustThread = regexp.MustCompile(`^thread '.*' panicked at `)
 )
 
@@ -27,7 +27,7 @@ func Join(lines []string) [][]string {
 	var groups [][]string
 	mode := plain
 	for _, line := range lines {
-		next, joins := step(mode, line)
+		next, joins := nextMode(mode, line)
 		if joins && len(groups) > 0 {
 			last := len(groups) - 1
 			groups[last] = append(groups[last], line)
@@ -39,7 +39,7 @@ func Join(lines []string) [][]string {
 	return groups
 }
 
-func step(mode trace, line string) (trace, bool) {
+func nextMode(mode traceMode, line string) (traceMode, bool) {
 	switch {
 	case strings.HasPrefix(line, "Traceback (most recent call last):"):
 		return pythonBody, false
@@ -48,7 +48,10 @@ func step(mode trace, line string) (trace, bool) {
 	case strings.HasPrefix(line, "panic: "), strings.HasPrefix(line, "fatal error: "):
 		return goTrace, false
 	case rustThread.MatchString(line):
-		return rustPanic, false
+		if strings.HasSuffix(line, ":") {
+			return rustPanic, false
+		}
+		return rustMessage, false
 	case line == "stack backtrace:":
 		return rustTrace, mode == rustPanic || mode == rustMessage || mode == rustTrace
 	}
