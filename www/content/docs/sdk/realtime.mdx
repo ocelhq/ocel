@@ -33,8 +33,8 @@ await rt.publish("orders/:orderId", { params: { orderId }, body: { status: "ship
 | --- | --- | --- |
 | `ocel dev` | the Ocel gateway inside `ocel dev` | the dev server's lifetime |
 | AWS | AppSync Events | 24 hours |
-
-Google Cloud and a VPS refuse a deploy that declares a realtime resource for now.
+| Google Cloud | the Ocel gateway on Cloud Run | 60 minutes |
+| VPS | the Ocel gateway in a container on the box | the next deploy |
 
 Access is checked when a browser subscribes and again every time it reconnects. A
 subscription that is already open keeps receiving events until its connection ends, so
@@ -68,3 +68,38 @@ Realtime needs AppSync and Secrets Manager permissions on the deploy credentials
 the boundary every app role is made under. Both live in the bootstrap stack, so an account
 bootstrapped before realtime existed has its bootstrap stack updated before its first
 realtime deploy.
+
+## On Google Cloud
+
+Each environment gets one Cloud Run service running the Ocel gateway, and it serves every
+realtime resource in that environment. Browsers connect to its `run.app` address directly,
+so it takes traffic from anywhere with Cloud Run's invoker check off. The gateway admits a
+socket from any origin; the tokens your handler signs are the only check.
+
+- **Publishing.** `publish` hands the event to the Ocel runtime beside your app, which
+  posts it to the gateway's `/publish` under a token signed with the resource's key. The
+  runtime sends a publish again only when Cloud Run answered 429 or the request never
+  left, so an event is delivered at most once.
+- **Keys.** The first deploy mints an Ed25519 key per resource and keeps it in Secret
+  Manager. It reaches your app through the resource's binding. The gateway reads every
+  resource's public key from one secret per environment, mounted at its latest version, so
+  adding or removing a resource changes no revision. The gateway reads that secret again
+  at least every 30 seconds.
+- **Connection lifetime.** Cloud Run ends a request after 60 minutes, and a socket is a
+  request. The browser client reconnects on its own and asks your handler to authorize
+  every live subscription again.
+- **Capacity.** The gateway runs as one instance of 1 vCPU and 1 GiB, and holds up to 950
+  sockets. It refuses the next one with 503 before it opens, keeping room for publishes,
+  and the client retries.
+- **Upgrades.** A deploy that brings a new gateway version rolls a new revision. Sockets
+  on the old revision stay open for up to 60 minutes but stop receiving events, because
+  publishes reach the new one. While the new revision starts, Cloud Run may also run a
+  second instance for a short time, and sockets on it miss events from the other. Clients
+  recover when those sockets close and reconnect.
+- **Cost.** Cloud Run bills the gateway for every second a socket is open, at its
+  request-based rate: about $70 a month if a browser is connected all the time, plus
+  requests and egress. Each key is one secret. Ocel's cost estimate prices all of these.
+
+The deploy credentials need Secret Manager admin, and the bootstrap adds the service
+account the gateway runs as. Run the bootstrap again before the first realtime deploy in a
+project bootstrapped before realtime existed.

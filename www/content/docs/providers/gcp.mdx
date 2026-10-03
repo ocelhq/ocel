@@ -187,6 +187,13 @@ batches of one, a task's own `concurrency` is not enforced (its worker's is), an
 is not atomic. A deploy that changes a topic's `ordered` is refused while any of its consumers is
 kept, since Pub/Sub cannot change a subscription's ordering: rename the consumers to change it.
 
+## Realtime
+
+Each environment's realtime resources share one Cloud Run service running the Ocel gateway,
+which runs as a service account of the tier's own that may read the environment's realtime
+keys and nothing else. See [Realtime](/docs/sdk/realtime#on-google-cloud) for how sockets,
+publishes, keys, upgrades and cost work there.
+
 ## What to grant
 
 Turn the services on once:
@@ -198,11 +205,11 @@ gcloud services enable firestore.googleapis.com storage.googleapis.com \
 ```
 
 A deploy needs `roles/datastore.user`, `roles/storage.objectAdmin`,
-`roles/cloudkms.cryptoKeyEncrypterDecrypter`, `roles/secretmanager.secretAccessor`,
+`roles/cloudkms.cryptoKeyEncrypterDecrypter`, `roles/secretmanager.admin`,
 `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`, `roles/run.admin`,
 `roles/memorystore.admin`, `roles/pubsub.admin` and `roles/cloudscheduler.admin`.
 A bootstrap needs those plus `roles/datastore.owner`, `roles/storage.admin`,
-`roles/cloudkms.admin`, `roles/secretmanager.admin`, `roles/artifactregistry.admin`,
+`roles/cloudkms.admin`, `roles/artifactregistry.admin`,
 `roles/iam.serviceAccountAdmin`, `roles/resourcemanager.projectIamAdmin` and
 `roles/cloudscheduler.admin`. Anything missing is named back to you before anything is
 created.
