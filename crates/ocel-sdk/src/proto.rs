@@ -21,6 +21,13 @@ pub mod app {
         }
     }
 
+    pub mod realtime {
+        pub mod v1 {
+            include!("proto/app.realtime.v1.rs");
+            include!("proto/app.realtime.v1.mod.rs");
+        }
+    }
+
     pub mod task {
         pub mod v1 {
             include!("proto/app.task.v1.rs");

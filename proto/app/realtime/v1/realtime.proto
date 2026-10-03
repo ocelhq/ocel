@@ -1,0 +1,26 @@
+syntax = "proto3";
+package app.realtime.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/app/realtime/v1;realtimev1";
+
+import "buf/validate/validate.proto";
+
+service RealtimeService {
+  rpc Publish(PublishRequest) returns (PublishResponse);
+}
+
+message PublishRequest {
+  option (buf.validate.message).cel = {
+    id: "realtime.publish.channel"
+    message: "a resource publishes only on a channel under its own name"
+    expression: "this.channel.startsWith('/' + this.realtime + '/')"
+  };
+
+  string realtime = 1 [(buf.validate.field).string.pattern = "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$"];
+
+  string channel = 2 [(buf.validate.field).string.min_len = 1];
+
+  string event = 3 [(buf.validate.field).string = {min_len: 1, max_bytes: 245760}];
+}
+
+message PublishResponse {}
