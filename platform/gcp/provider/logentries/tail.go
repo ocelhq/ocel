@@ -11,7 +11,6 @@ import (
 
 	logging "cloud.google.com/go/logging/apiv2"
 	"cloud.google.com/go/logging/apiv2/loggingpb"
-	logtype "google.golang.org/genproto/googleapis/logging/type"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -126,14 +125,7 @@ func tailEventOf(entry *loggingpb.LogEntry, sources []Source) (Event, bool) {
 	if text == "" {
 		return Event{}, false
 	}
-	event := Event{Time: entry.GetTimestamp().AsTime(), Text: text, Instance: entry.GetLabels()["instanceId"]}
-	if entry.GetSeverity() != logtype.LogSeverity_DEFAULT {
-		event.Severity = entry.GetSeverity().String()
-	}
-	if resource := entry.GetResource(); resource != nil {
-		event.Label = labelOf(sources, resource.GetLabels()["service_name"], resource.GetLabels()["revision_name"])
-	}
-	return event, true
+	return newEvent(sources, entry.GetTimestamp().AsTime(), text, entry.GetSeverity().String(), entry.GetLabels(), entry.GetResource().GetLabels()), true
 }
 
 func reasonOf(reason loggingpb.TailLogEntriesResponse_SuppressionInfo_Reason) Reason {
