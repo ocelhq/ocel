@@ -37,8 +37,8 @@ func serveRealtimeProxy(t *testing.T, key ed25519.PrivateKey, gatewayPublishURL 
 	}
 	manifest := variables.Manifest{
 		Slug: "shop", Tier: "production",
-		Bindings: []live.Binding{{Name: "realtime--app", Key: "OCEL_RESOURCE_REALTIME_app", Type: bindingsv1.BindingType_BINDING_TYPE_REALTIME}},
-		Realtime: gatewayPublishURL,
+		Bindings:           []live.Binding{{Name: "realtime--app", Key: "OCEL_RESOURCE_REALTIME_app", Type: bindingsv1.BindingType_BINDING_TYPE_REALTIME}},
+		RealtimePublishURL: gatewayPublishURL,
 	}
 	rendered, err := variables.Render(manifest)
 	if err != nil {
