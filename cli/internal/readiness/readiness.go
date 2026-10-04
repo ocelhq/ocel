@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -94,14 +95,14 @@ func refuseAbsentInfrastructure(resp *contractv1.PreflightResponse, provider *pr
 	if resp.GetInfrastructurePresent() {
 		absent.PresentTier = infra
 	}
-	return absent
+	return &clierror.Error{Code: "bootstrap.missing", Hint: absent.command(), Cause: absent}
 }
 
 func refuseMissingFeatures(gap Gap, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) error {
 	if len(gap.Missing) == 0 {
 		return nil
 	}
-	return MissingFeaturesError{Gap: gap, Tier: tier, Edge: cfg.EdgeSelection(), Provider: provider}
+	return MissingFeaturesError{Gap: gap, Tier: tier, Edge: cfg.EdgeSelection(), Provider: provider}.refuse()
 }
 
 func refuseMissingOfferedFeature(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.BootstrapStatus, req Request) error {

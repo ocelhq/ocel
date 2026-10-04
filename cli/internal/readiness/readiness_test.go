@@ -2,14 +2,17 @@ package readiness
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -216,4 +219,66 @@ func TestAProjectWithNoHostnameWhereTheRouterNeedsOneIsADomainToSetUp(t *testing
 			t.Errorf("RefuseUnready err = %v, want no hostname asked for", err)
 		}
 	})
+}
+
+func TestATierWithNoInfrastructureReportsBootstrapMissingHintingTheCommandThroughWrapping(t *testing.T) {
+	resp := &contractv1.PreflightResponse{Bootstrap: &contractv1.BootstrapStatus{Tier: environmentv1.Tier_TIER_PRODUCTION, Stacks: []*contractv1.BootstrapStack{
+		{Name: "ocel-bootstrap-isr", Feature: "isr", Required: true},
+	}}}
+	err := RefuseUnready(resp, nil, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Infrastructure})
+
+	got := clierror.NewRunError(fmt.Errorf("deploy: %w", fmt.Errorf("checking: %w", err)))
+	if got.GetCode() != "bootstrap.missing" || got.GetHint() != "ocel bootstrap production --features isr" {
+		t.Fatalf("run error = %s, want bootstrap.missing hinting the bootstrap command", protojson.Format(got))
+	}
+	var missing prerequisite.MissingError
+	var absent NoInfrastructureError
+	if !errors.As(err, &missing) || !errors.As(err, &absent) {
+		t.Errorf("err = %T, want the prerequisite and its typed error still found through the code", err)
+	}
+	if !strings.HasPrefix(err.Error(), "no production infrastructure is set up yet.") {
+		t.Errorf("error = %q, want the unchanged human text", err.Error())
+	}
+}
+
+func TestAnotherTiersInfrastructureReportsBootstrapMissingHintingTheTierToSetUp(t *testing.T) {
+	err := RefuseUnready(infrastructureIn(environmentv1.Tier_TIER_PRODUCTION), nil, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PREVIEW, Require: Infrastructure})
+
+	got := clierror.NewRunError(err)
+	if got.GetCode() != "bootstrap.missing" || got.GetHint() != "ocel bootstrap preview" {
+		t.Fatalf("run error = %s, want bootstrap.missing hinting ocel bootstrap preview", protojson.Format(got))
+	}
+}
+
+func TestABootstrapLackingAFeatureReportsBootstrapFeaturesMissingHintingTheRepair(t *testing.T) {
+	resp := infrastructureIn(environmentv1.Tier_TIER_PRODUCTION)
+	resp.Bootstrap = bootstrapOf(
+		&contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true},
+		&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Required: true},
+	)
+	err := RefuseUnready(resp, nil, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Features})
+
+	got := clierror.NewRunError(fmt.Errorf("deploy: %w", err))
+	if got.GetCode() != "bootstrap.features_missing" || got.GetHint() != "ocel bootstrap production --features isr" {
+		t.Fatalf("run error = %s, want bootstrap.features_missing hinting the repair command", protojson.Format(got))
+	}
+	var lacking MissingFeaturesError
+	if !errors.As(err, &lacking) {
+		t.Errorf("err = %T, want the typed error still found through the code", err)
+	}
+	if !strings.HasPrefix(err.Error(), "the production bootstrap does not include what this project needs: isr.") {
+		t.Errorf("error = %q, want the unchanged human text", err.Error())
+	}
+}
+
+func TestAGapRefusingMissingFeaturesReportsBootstrapFeaturesMissing(t *testing.T) {
+	gap := Gap{Missing: []string{"isr"}, Features: []string{"isr"}}
+	for name, err := range map[string]error{
+		"RefuseMissing":    gap.RefuseMissing(environmentv1.Tier_TIER_PRODUCTION),
+		"RefuseIncomplete": gap.RefuseIncomplete(environmentv1.Tier_TIER_PRODUCTION),
+	} {
+		if got := clierror.NewRunError(err); got.GetCode() != "bootstrap.features_missing" {
+			t.Errorf("%s: run error = %s, want bootstrap.features_missing", name, protojson.Format(got))
+		}
+	}
 }
