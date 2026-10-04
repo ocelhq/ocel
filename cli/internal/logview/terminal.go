@@ -111,7 +111,7 @@ func (v *TerminalView) box(entry Entry) string {
 	content = append(content, v.fieldLines(entry.Fields)...)
 	stack := messageLines[1:]
 	if entry.Error != "" {
-		stack = strings.Split(entry.Error, "\n")
+		stack = append(stack, strings.Split(entry.Error, "\n")...)
 	}
 	if len(stack) > 0 {
 		content = append(content, "")
