@@ -115,6 +115,26 @@ func TestTerminalViewWritesNoEscapesWithoutColour(t *testing.T) {
 	golden(t, "TestTerminalViewWritesNoEscapesWithoutColour", got)
 }
 
+func TestTerminalViewQuotesInlineKeysAndValuesThatHoldSpacesOrEquals(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	got := render(t, false, logview.TerminalLine{Time: viewEpoch, App: "web", Entry: logview.Entry{
+		Message: "saved",
+		Level:   logview.LevelInfo,
+		Fields: map[string]any{
+			"my key": "v",
+			"note":   "two words",
+			"path":   `C:\my docs`,
+			"query":  "a=b",
+			"quote":  `say "hi"`,
+			"tags":   []any{"a", "b"},
+		},
+	}})
+	want := `12:04:07.123  web  INFO   saved  "my key"=v note="two words" path="C:\my docs" query="a=b" quote="say \"hi\"" tags=[a, b]` + "\n"
+	if got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
 func TestTerminalViewShortensWideValuesByTheColumnsTheyTake(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	wide := strings.Repeat("漢", 60)
