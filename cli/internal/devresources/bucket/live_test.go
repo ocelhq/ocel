@@ -1,3 +1,5 @@
+//go:build integration
+
 package bucket_test
 
 import (
@@ -36,7 +38,7 @@ type liveBucket struct {
 func startLive(t *testing.T, project string) liveBucket {
 	t.Helper()
 	if os.Getenv(liveEnv) == "" {
-		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
+		t.Fatalf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
 	}
 	ctx := context.Background()
 

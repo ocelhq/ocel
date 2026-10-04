@@ -12,7 +12,6 @@
         "$TURBO_ROOT$/platform/gcp/**",
         "$TURBO_ROOT$/platform/edge/**",
         "$TURBO_ROOT$/scripts/floci.sh",
-        "$TURBO_ROOT$/scripts/assert-ran.sh",
         "$TURBO_ROOT$/go.work",
         "$TURBO_ROOT$/go.work.sum",
         "$TURBO_ROOT$/.github/workflows/go.yml",

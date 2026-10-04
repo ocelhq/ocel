@@ -5,6 +5,6 @@
   "private": true,
   "scripts": {
     "generate": "sh ./generate.sh",
-    "live": "go test -C .. -race -count=1 -timeout 30m -run '^TestLive' ./..."
+    "live": "go test -C .. -race -count=1 -timeout 30m -tags integration -run '^TestLive' ./..."
   }
 }

@@ -1,3 +1,5 @@
+//go:build integration
+
 package vps_test
 
 import (
@@ -70,7 +72,7 @@ func TestHostToolOcelServesBehindDokploysTraefikThroughItsPreset(t *testing.T) {
 func hostTool(t *testing.T, tool string) machine {
 	t.Helper()
 	if os.Getenv("OCEL_INCUS_ADDR") == "" {
-		t.Skip(unreachable)
+		t.Fatal(unreachable)
 	}
 	vm := liveMachine(t)
 	if strings.TrimSpace(vm.ssh(t, "sudo docker inspect --type container --format '{{.Name}}' "+quote(tool)+" 2>/dev/null || true")) == "" {

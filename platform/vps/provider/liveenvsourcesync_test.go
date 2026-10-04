@@ -1,3 +1,5 @@
+//go:build integration
+
 package vps_test
 
 import (

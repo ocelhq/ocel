@@ -6,7 +6,7 @@
   "description": "the node side of the ocel cli \u2014 bundled by build.mjs and embedded in the Go binary",
   "scripts": {
     "build": "bun build.mjs",
-    "live": "go test -C .. -race -count=1 -timeout 30m -run '^TestLive' ./...",
+    "live": "go test -C .. -race -count=1 -timeout 30m -tags integration -run '^TestLive' ./...",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.variable-editor.json"
   },

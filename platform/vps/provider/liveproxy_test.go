@@ -1,11 +1,11 @@
+//go:build integration
+
 package vps_test
 
 import (
 	"context"
 	"encoding/json"
-	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -17,8 +17,6 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
-var adminPort = strconv.Itoa(caddy.AdminPort)
-
 func (vm machine) inspects(t *testing.T, what, name, format string) string {
 	t.Helper()
 	rendered, err := vm.attempt(vm.user, "sudo docker "+what+" inspect -f "+quote(format)+" "+quote(name))
@@ -29,30 +27,6 @@ func (vm machine) inspects(t *testing.T, what, name, format string) string {
 		t.Fatalf("docker %s inspect -f %s %s: %v", what, quote(format), quote(name), err)
 	}
 	return strings.TrimSpace(rendered)
-}
-
-var (
-	noSuchObject   = regexp.MustCompile(`no such (container|image|object|volume|network|plugin|config|secret)\b`)
-	objectNotFound = regexp.MustCompile(`\b(container|image|object|volume|network|plugin|config|secret) \S+ not found\b`)
-)
-
-func absent(said error) bool {
-	lowered := strings.ToLower(said.Error())
-	return noSuchObject.MatchString(lowered) || objectNotFound.MatchString(lowered)
-}
-
-const containerSaid = "ocel-container-said"
-
-func containerScript(command string) string {
-	return quote("{\n" + command + "\n} 2>&1\nprintf " + quote("\n"+containerSaid))
-}
-
-func spoken(rendered string) (string, bool) {
-	said, ran := strings.CutSuffix(rendered, containerSaid)
-	if !ran {
-		return "", false
-	}
-	return strings.TrimSuffix(said, "\n"), true
 }
 
 func (vm machine) ran(t *testing.T, what, command string) string {
@@ -106,8 +80,6 @@ func (vm machine) beside(t *testing.T, container, command string) string {
 		"sudo docker run --rm --network "+quote("container:"+container)+" "+quote(caddy.Image())+
 			" sh -c "+containerScript(command))
 }
-
-func quote(arg string) string { return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'" }
 
 func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T) {
 	vm := liveMachine(t)
@@ -428,4 +400,8 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active docker.service || true")); active != "active" {
 		t.Errorf("docker.service is %q after a destroy, want a daemon that still serves this host's workloads", active)
 	}
+}
+
+func containerScript(command string) string {
+	return quote("{\n" + command + "\n} 2>&1\nprintf " + quote("\n"+containerSaid))
 }

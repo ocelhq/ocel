@@ -1,3 +1,5 @@
+//go:build integration
+
 package session
 
 import (
@@ -25,7 +27,7 @@ func live(t *testing.T) harness {
 	t.Helper()
 	addr, user, key := os.Getenv("OCEL_INCUS_ADDR"), os.Getenv("OCEL_INCUS_USER"), os.Getenv("OCEL_INCUS_KEY")
 	if addr == "" || user == "" || key == "" {
-		t.Skip("no incus VM in the environment; run under `scripts/incus.sh run <name> -- go test ./...`")
+		t.Fatal("no incus VM in the environment; run under `scripts/incus.sh run <name> -- go test ./...`")
 	}
 
 	dir := t.TempDir()

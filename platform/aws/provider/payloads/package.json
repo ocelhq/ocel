@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "generate": "sh ./generate.sh",
-    "live": "go test -C ../../../.. -race -count=1 -timeout 30m -run '^TestLive' ./platform/aws/provider/... ./platform/aws/runtime/...",
-    "lifecycle": "go test -C ../../../.. -race -count=1 -timeout 30m -run '^TestLifecycle' ./platform/aws/provider/... ./platform/aws/runtime/..."
+    "live": "go test -C ../../../.. -race -count=1 -timeout 30m -tags integration -skip '^TestLifecycle' ./platform/aws/provider/... ./platform/aws/runtime/...",
+    "lifecycle": "go test -C ../../../.. -race -count=1 -timeout 30m -tags integration -run '^TestLifecycle' ./platform/aws/provider/... ./platform/aws/runtime/..."
   },
   "devDependencies": {
     "@platform/aws-image-optimizer": "workspace:*",

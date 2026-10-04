@@ -1,3 +1,5 @@
+//go:build integration
+
 package vps_test
 
 import (
@@ -123,7 +125,7 @@ func (vm machine) forgetsTheDeployLogin(t *testing.T) {
 func liveMachine(t *testing.T) machine {
 	t.Helper()
 	if suite.addr == "" {
-		t.Skip(unreachable)
+		t.Fatal(unreachable)
 	}
 	return suite
 }

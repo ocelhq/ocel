@@ -7,8 +7,10 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -200,5 +202,27 @@ func TestTheProviderWrapsEveryContainerInTheRuntimeItShips(t *testing.T) {
 	}
 	if _, err := p.Runtime().Binary(context.Background(), "riscv64"); err == nil {
 		t.Error("ContainerRuntime(riscv64) handed something back, and a riscv64 image would be wrapped in a runtime that cannot run on it")
+	}
+}
+
+type said struct{ lines []string }
+
+func (s *said) Say(message string) { s.lines = append(s.lines, message) }
+
+func (s *said) Warn(message string) { s.lines = append(s.lines, message) }
+
+func (s *said) Error(message string) { s.lines = append(s.lines, message) }
+
+func (s *said) Detail(message string) { s.lines = append(s.lines, message) }
+
+func (s *said) Debug(line string) { s.lines = append(s.lines, line) }
+
+func (s *said) Span(name string, _, _ time.Time, err error, attrs ...progress.Attr) {
+	s.lines = append(s.lines, name)
+	if err != nil {
+		s.lines = append(s.lines, err.Error())
+	}
+	for _, attr := range attrs {
+		s.lines = append(s.lines, attr.Key.Name, attr.Value)
 	}
 }

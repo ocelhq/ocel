@@ -153,11 +153,7 @@ jobs:
           OCEL_LIVE_DOCKER: "1"
         run: |
           set -euo pipefail
-          go test -race -count=1 -timeout 20m -run '^TestDocker' -json ./cli/internal/devresources/... | tee live-devresources.json
-
-      - name: Assert the dev resources' live suite ran
-        if: matrix.group.name == 'cli'
-        run: scripts/assert-ran.sh live-devresources.json TestDocker
+          go test -race -count=1 -timeout 20m -tags integration -run '^TestDocker' ./cli/...
 
       - name: Pull the gcp emulator
         if: matrix.group.name == 'gcp' && steps.gate-gcp-live.outputs.green != 'true'
@@ -167,11 +163,7 @@ jobs:
         if: matrix.group.name == 'gcp' && steps.gate-gcp-live.outputs.green != 'true'
         run: |
           set -euo pipefail
-          scripts/floci.sh --cloud gcp run "ocel-gcp-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -race -count=1 -timeout 30m -run '^TestLive' -json ./platform/gcp/provider/... ./platform/gcp/runtime/... ./scripts/flocidispatch/... | tee live-gcp.json
-
-      - name: Assert the gcp live suite ran
-        if: matrix.group.name == 'gcp' && steps.gate-gcp-live.outputs.green != 'true'
-        run: scripts/assert-ran.sh live-gcp.json TestLive
+          scripts/floci.sh --cloud gcp run "ocel-gcp-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -race -count=1 -timeout 30m -tags integration ./platform/gcp/provider/... ./platform/gcp/runtime/... ./scripts/flocidispatch/...
 
       - name: Record that what the gcp live suite reads has passed
         if: matrix.group.name == 'gcp' && steps.gate-gcp-live.outputs.green != 'true'
@@ -202,11 +194,7 @@ jobs:
         if: matrix.group.name == 'aws' && steps.gate-live.outputs.green != 'true'
         run: |
           set -euo pipefail
-          scripts/floci.sh run "ocel-aws-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -race -count=1 -timeout 30m -run '^TestLive' -json ./platform/aws/provider/... ./platform/aws/runtime/... | tee live.json
-
-      - name: Assert the live suite ran
-        if: matrix.group.name == 'aws' && steps.gate-live.outputs.green != 'true'
-        run: scripts/assert-ran.sh live.json TestLive
+          scripts/floci.sh run "ocel-aws-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -race -count=1 -timeout 30m -tags integration -skip '^TestLifecycle' ./platform/aws/provider/... ./platform/aws/runtime/...
 
       - name: Record that what the live suite reads has passed
         if: matrix.group.name == 'aws' && steps.gate-live.outputs.green != 'true'
@@ -226,11 +214,7 @@ jobs:
         if: matrix.group.name == 'aws' && steps.gate-lifecycle.outputs.green != 'true'
         run: |
           set -euo pipefail
-          scripts/floci.sh run "ocel-aws-lifecycle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -race -count=1 -timeout 30m -run '^TestLifecycle' -json ./platform/aws/provider/... ./platform/aws/runtime/... | tee lifecycle.json
-
-      - name: Assert the lifecycle suite ran
-        if: matrix.group.name == 'aws' && steps.gate-lifecycle.outputs.green != 'true'
-        run: scripts/assert-ran.sh lifecycle.json TestLifecycle
+          scripts/floci.sh run "ocel-aws-lifecycle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -race -count=1 -timeout 30m -tags integration -run '^TestLifecycle' ./platform/aws/provider/... ./platform/aws/runtime/...
 
       - name: Record that what the lifecycle suite reads has passed
         if: matrix.group.name == 'aws' && steps.gate-lifecycle.outputs.green != 'true'

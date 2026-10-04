@@ -9,7 +9,10 @@ Unit tests live beside the code they cover, in vitest for TypeScript, `bun test`
 `journeys`, and `go test` for Go.
 The Go provider suites (`TestLive*`) stay in the provider packages and, for the image build
 and the container dry run, in the CLI; the lifecycle suites (`TestLifecycle*`) stay in the
-provider packages alone. Both run from the provider workflows.
+provider packages alone, and the dev resources' suites (`TestDocker*`) in the CLI. Every file
+holding one builds only under the `integration` tag, so `go test ./...` never compiles them,
+and `go test -tags integration` fails rather than skips where the emulator, VM or docker
+daemon they drive is missing.
 
 ## Running one journey locally
 
@@ -200,7 +203,7 @@ gcloud services enable firestore.googleapis.com storage.googleapis.com \
   cloudkms.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com \
   iam.googleapis.com run.googleapis.com cloudscheduler.googleapis.com --project <project>
 OCEL_NAMESPACE=ocel-live OCEL_GCP_LIVE_PROJECT=<project> \
-  go test -C platform/gcp/provider -count=1 -run '^Test(Live|Project)' ./...
+  go test -C platform/gcp/provider -count=1 -tags integration -run '^Test(Live|Project)' ./...
 ```
 
 | name                    | kind | what it contains                                                     |
@@ -218,7 +221,7 @@ database can be named after it.
 
 The run creates and destroys buckets, a Firestore database, a key ring and a secret in
 that project, and schedules its KMS key material for destruction, so name a project you
-are willing to lose. Unset, and with no emulator answering, every `TestLive` skips.
+are willing to lose. Unset, and with no emulator answering, every `TestLive` fails.
 
 The `vps` lane points at an incus VM on a pull request, and on a real run brings up a
 throwaway EC2 box with `scripts/ec2.sh` under the same role and account guard as the `aws`

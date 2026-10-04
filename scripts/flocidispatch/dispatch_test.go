@@ -1,3 +1,5 @@
+//go:build integration
+
 package main
 
 import (
@@ -32,7 +34,7 @@ func flociEndpoint(t *testing.T) string {
 	t.Helper()
 	endpoint := os.Getenv(endpointVariable)
 	if endpoint == "" {
-		t.Skipf("no floci-gcp emulator in %s: this dispatches what the emulator holds", endpointVariable)
+		t.Fatalf("no floci-gcp emulator in %s: this dispatches what the emulator holds", endpointVariable)
 	}
 	return endpoint
 }
