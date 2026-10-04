@@ -15,51 +15,6 @@ env:
   OCEL_VPS_OFFICIAL_IMAGES_MIRROR: mirror.gcr.io/library
 
 jobs:
-  lint:
-    name: lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - name: Setup Go
-        uses: ./.github/actions/go
-
-      - uses: ./.github/actions/node-workspace
-        with:
-          turbo-token: ${{ secrets.TURBO_TOKEN }}
-          turbo-team: ${{ vars.TURBO_TEAM }}
-
-      - name: Everything the modules embed
-        run: |
-          set -euo pipefail
-          for dir in cli platform/aws/provider platform/gcp/provider platform/vps/provider pkg/provider/transform; do
-            go generate -C "$dir" ./...
-          done
-
-      - name: Take the versions the repository pins
-        id: versions
-        uses: ./.github/actions/versions
-
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          version: v${{ steps.versions.outputs.golangci-lint }}
-          install-only: true
-          skip-cache: true
-
-      - name: golangci-lint and redactvet, every module
-        run: |
-          set -uo pipefail
-          go build -o "$RUNNER_TEMP/redactvet" ./scripts/redactvet || exit 1
-          status=0
-          for dir in $(go list -m -f '{{.Dir}}'); do
-            (cd "$dir" && golangci-lint run ./...) || status=1
-            (cd "$dir" && go vet -vettool="$RUNNER_TEMP/redactvet" ./...) || status=1
-          done
-          exit "$status"
-
   go:
     name: ${{ matrix.group.name }}
     runs-on: ubuntu-latest
@@ -94,29 +49,6 @@ jobs:
           diff -u \
             <(sed -n 's/^ *dirs: //p' .github/workflows/go.yml | tr ' ' '\n' | sort) \
             <(go list -m -f '{{.Dir}}' | sed "s|^$PWD/||" | sort)
-
-      - name: Every module of this repo resolves to its directory in this tree
-        run: |
-          set -euo pipefail
-          for dir in $DIRS; do
-            (cd "$dir" && GOWORK=off go list -m -f '{{if not .Main}}{{.Path}} {{.Version}} {{.Dir}}{{end}}' all) |
-              awk -v root="$PWD" -v dir="$dir" '
-                index($1, "github.com/ocelhq/ocel/") == 1 {
-                  want = root "/" substr($1, length("github.com/ocelhq/ocel/") + 1)
-                  if ($2 != "v0.0.0" || $3 != want) {
-                    printf "%s: requires %s %s from %s; want v0.0.0 replaced with %s\n", dir, $1, $2, ($3 == "" ? "the network" : $3), want
-                    bad = 1
-                  }
-                }
-                END { exit bad }'
-          done
-
-      - name: Every go.mod is tidy
-        run: |
-          set -euo pipefail
-          for dir in $DIRS; do
-            (cd "$dir" && go mod tidy -diff)
-          done
 
       - uses: ./.github/actions/node-workspace
         with:

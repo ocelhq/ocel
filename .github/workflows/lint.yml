@@ -2,68 +2,235 @@ name: Lint
 
 on:
   workflow_call:
+    inputs:
+      go:
+        description: Whether a change reaches the Go modules.
+        type: boolean
+        default: true
+      rust:
+        description: Whether a change reaches the Rust crates.
+        type: boolean
+        default: true
+      python:
+        description: Whether a change reaches the Python packages.
+        type: boolean
+        default: true
   workflow_dispatch:
+    inputs:
+      go:
+        description: Whether a change reaches the Go modules.
+        type: boolean
+        default: true
+      rust:
+        description: Whether a change reaches the Rust crates.
+        type: boolean
+        default: true
+      python:
+        description: Whether a change reaches the Python packages.
+        type: boolean
+        default: true
 
 permissions:
   contents: read
+  issues: read
 
 jobs:
-  biome:
-    name: biome
+  node:
+    name: Node
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - uses: ./.github/actions/node-workspace
-
-      - run: pnpm exec biome ci
-
-  schema:
-    name: schema
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - uses: ./.github/actions/node-workspace
-
-      - name: The published schema and the types it generates are what is committed
-        run: node scripts/schema/build.mjs
-
-      - name: Nothing regenerated differs from what is committed
-        run: git diff --exit-code
-
-  licensing:
-    name: licensing
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - name: The go sdk ships the root's LICENSE and NOTICE, byte for byte
-        run: cmp LICENSE sdk/LICENSE && cmp NOTICE sdk/NOTICE
-
-  actions:
-    name: actionlint
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - name: Every workflow parses, and every expression is allowed where it appears
-        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color -shellcheck= -pyflakes=
-
-  commits:
-    name: commitlint
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          fetch-depth: 0
+          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
 
       - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+      - name: biome
+        run: pnpm exec biome ci
+
+      - name: Every workspace package typechecks
+        run: pnpm turbo run typecheck --filter='!./console/*' --filter='!./tests/fixtures/**' --filter='!./tests/next-compat'
+
+      - name: Every commit of the pull request is a conventional commit
+        if: github.event_name == 'pull_request'
+        run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+  go:
+    name: Go
+    if: inputs.go
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Go
+        uses: ./.github/actions/go
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Every module of this repo resolves to its directory in this tree
+        run: |
+          set -euo pipefail
+          for dir in $(go list -m -f '{{.Dir}}' | sed "s|^$PWD/||"); do
+            (cd "$dir" && GOWORK=off go list -m -f '{{if not .Main}}{{.Path}} {{.Version}} {{.Dir}}{{end}}' all) |
+              awk -v root="$PWD" -v dir="$dir" '
+                index($1, "github.com/ocelhq/ocel/") == 1 {
+                  want = root "/" substr($1, length("github.com/ocelhq/ocel/") + 1)
+                  if ($2 != "v0.0.0" || $3 != want) {
+                    printf "%s: requires %s %s from %s; want v0.0.0 replaced with %s\n", dir, $1, $2, ($3 == "" ? "the network" : $3), want
+                    bad = 1
+                  }
+                }
+                END { exit bad }'
+          done
+
+      - name: Every go.mod is tidy
+        run: |
+          set -euo pipefail
+          for dir in $(go list -m -f '{{.Dir}}'); do
+            (cd "$dir" && go mod tidy -diff)
+          done
+
+      - name: Everything the modules embed
+        run: |
+          set -euo pipefail
+          for dir in cli platform/aws/provider platform/gcp/provider platform/vps/provider pkg/provider/transform; do
+            go generate -C "$dir" ./...
+          done
+
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./.github/actions/versions
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v${{ steps.versions.outputs.golangci-lint }}
+          install-only: true
+          skip-cache: true
+
+      - name: golangci-lint and redactvet, every module
+        run: |
+          set -uo pipefail
+          go build -o "$RUNNER_TEMP/redactvet" ./scripts/redactvet || exit 1
+          status=0
+          for dir in $(go list -m -f '{{.Dir}}'); do
+            (cd "$dir" && golangci-lint run ./...) || status=1
+            (cd "$dir" && go vet -vettool="$RUNNER_TEMP/redactvet" ./...) || status=1
+          done
+          exit "$status"
+
+  rust:
+    name: Rust
+    if: inputs.rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: crates
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup rust
+        uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: crates
+
+      - name: cargo fmt
+        run: cargo fmt --all --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-features --all-targets -- -D warnings
+
+  python:
+    name: Python
+    if: inputs.python
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: Install
+        run: uv sync --all-extras --frozen
+
+      - name: ruff check
+        run: uv run ruff check .
+
+      - name: ruff format
+        run: uv run ruff format --check .
+
+  workflows:
+    name: Workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./.github/actions/versions
+
+      - name: Install actionlint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.versions.outputs.actionlint }}
+        run: |
+          set -euo pipefail
+          archive="actionlint_${VERSION}_linux_amd64.tar.gz"
+          cd "$RUNNER_TEMP"
+          gh release download "v$VERSION" --repo rhysd/actionlint --pattern "$archive" --pattern "actionlint_${VERSION}_checksums.txt"
+          grep -F " $archive" "actionlint_${VERSION}_checksums.txt" | sha256sum --check --strict
+          tar -xzf "$archive" actionlint
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Every workflow parses, and every expression is allowed where it appears
+        run: actionlint -color -shellcheck= -pyflakes=
+
+      - name: The repository's labels are the ones labels.yml lists, and no others
+        uses: crazy-max/ghaction-github-labeler@548a7c3603594ec17c819e1239f281a3b801ab4d # v6.0.0
+        with:
+          yaml-file: .github/labels.yml
+          dry-run: true
+
+  generated:
+    name: Generated
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Go
+        uses: ./.github/actions/go
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Every derived file is what regenerating it writes
+        run: scripts/check/derived.sh

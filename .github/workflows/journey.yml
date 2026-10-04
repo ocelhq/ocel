@@ -380,8 +380,8 @@ jobs:
       - name: Setup Go
         uses: ./.github/actions/go
 
-      - name: Build, typecheck and test the workspace
-        run: pnpm turbo run build typecheck test --filter='!./console/*' --filter='!./tests/fixtures/**' --filter='!./tests/next-compat'
+      - name: Build and test the workspace
+        run: pnpm turbo run build test --filter='!./console/*' --filter='!./tests/fixtures/**' --filter='!./tests/next-compat'
 
       - uses: ./.github/actions/goreleaser
         if: ${{ steps.gate.outputs.any == 'true' }}
