@@ -40,6 +40,7 @@ func (o *output) printResponse(resp *contractv1.ReadLogsResponse) error {
 	case *contractv1.ReadLogsResponse_Batch:
 		for _, entry := range body.Batch.GetEntries() {
 			parsed := o.parse(entry.GetMessage())
+			parsed.Level = logview.ResolveLevel(parsed.Level, entry.GetSeverity(), entry.GetFailure())
 			if parsed.Level < o.minLevel {
 				continue
 			}

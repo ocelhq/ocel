@@ -36,6 +36,16 @@ func (l Level) String() string {
 	return levelNames[l]
 }
 
+func ResolveLevel(parsed Level, severity string, failure bool) Level {
+	switch {
+	case failure:
+		return LevelError
+	case parsed != LevelUnknown:
+		return parsed
+	}
+	return levelOf(severity)
+}
+
 var levelOffset = regexp.MustCompile(`[+-]\d+$`)
 
 var levelSpellings = map[string]Level{
