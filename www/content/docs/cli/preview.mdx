@@ -27,7 +27,8 @@ preview domain.
 
 Without a name, a command addresses the current branch's preview. In CI, a pull request
 checks out a detached HEAD, so the branch comes from `GITHUB_HEAD_REF`; with neither a branch
-nor that variable, the command stops and asks for a name.
+nor that variable, the command stops and asks for a name. [`ocel logs --preview`](/docs/cli/logs)
+finds the preview the same way.
 
 A name addresses one preview from any branch or machine. It is a DNS label (lowercase letters,
 digits and hyphens, starting with a letter) with no `--`. It always follows a subcommand, so

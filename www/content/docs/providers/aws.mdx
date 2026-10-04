@@ -131,6 +131,13 @@ finishes, or 30 days after it was due if it never finished. An idempotency key l
 table an hour after its `idempotencyKeyTTL` ends, 30 days by default, and a debounce record an
 hour after the run it folds into is due.
 
+## Logs
+
+Each Lambda function and worker logs to a CloudWatch log group of its own, which `ocel destroy`
+deletes with it. Containers log to `/ocel/containers/<tier>`, one log group per tier. Both keep
+entries for 14 days. Read them with [`ocel logs`](/docs/cli/logs), which also lists the
+CloudWatch rate limits a read shares.
+
 ## Edge
 
 Leave `edge` out and the deployment is fronted by CloudFront. Name an edge to choose it —

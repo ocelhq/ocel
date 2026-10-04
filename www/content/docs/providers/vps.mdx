@@ -695,6 +695,11 @@ older release puts its app back, and leaves the workers on the newest code.
 A bucket runs in a store the box keeps for the project. Bind it to a store you already run and
 the box keeps none for it. See [Bucket](/docs/sdk/bucket#on-a-vps).
 
+## Logs
+
+Containers log to the box, in Docker's `local` log driver: at most 100 MB a container, and a
+release's logs go when its container is pruned. Read them with [`ocel logs`](/docs/cli/logs).
+
 ## Options
 
 | Option | What it does |
