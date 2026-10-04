@@ -29,13 +29,31 @@ type output struct {
 	minLevel    logview.Level
 }
 
-func newOutput(stdout io.Writer, present terminal.Presentation, asJSON, raw bool, minLevel logview.Level, warn func(string)) *output {
-	out := &output{format: plainFormat{stdout: stdout, warn: warn}, raw: raw, minLevel: minLevel}
+const liveMarker = "── live ──"
+
+type notices struct {
+	warn func(string)
+	note func(string)
+}
+
+func (n notices) report(notice *contractv1.LogNotice) {
+	message := terminal.SanitizeLogText(notice.GetMessage())
+	switch notice.GetKind() {
+	case contractv1.LogNotice_KIND_CAUGHT_UP:
+	case contractv1.LogNotice_KIND_SAMPLED, contractv1.LogNotice_KIND_RECONNECTED:
+		n.note(message)
+	default:
+		n.warn(message)
+	}
+}
+
+func newOutput(stdout io.Writer, present terminal.Presentation, asJSON, raw bool, minLevel logview.Level, tail bool, notes notices) *output {
+	out := &output{format: plainFormat{stdout: stdout, notes: notes}, raw: raw, minLevel: minLevel}
 	switch {
 	case asJSON:
 		out.format = jsonFormat{stdout: stdout}
 	case present.TTY && !raw:
-		out.format = terminalFormat{view: logview.NewTerminalView(stdout, present), warn: warn}
+		out.format = terminalFormat{view: logview.NewTerminalView(stdout, present), stdout: stdout, palette: present.Palette(), tail: tail, notes: notes}
 		out.joinsTraces = true
 	}
 	return out
@@ -93,7 +111,7 @@ func (o *output) parse(message string) logview.Entry {
 
 type plainFormat struct {
 	stdout io.Writer
-	warn   func(string)
+	notes  notices
 }
 
 func (f plainFormat) writeEntry(entry *contractv1.LogEntry, parsed logview.Entry) error {
@@ -114,12 +132,16 @@ func (f plainFormat) writeEntry(entry *contractv1.LogEntry, parsed logview.Entry
 }
 
 func (f plainFormat) writeNotice(notice *contractv1.LogNotice) error {
-	return warnOfNotice(f.warn, notice)
+	f.notes.report(notice)
+	return nil
 }
 
 type terminalFormat struct {
-	view *logview.TerminalView
-	warn func(string)
+	view    *logview.TerminalView
+	stdout  io.Writer
+	palette terminal.Palette
+	tail    bool
+	notes   notices
 }
 
 func (f terminalFormat) writeEntry(entry *contractv1.LogEntry, parsed logview.Entry) error {
@@ -133,13 +155,11 @@ func (f terminalFormat) writeEntry(entry *contractv1.LogEntry, parsed logview.En
 }
 
 func (f terminalFormat) writeNotice(notice *contractv1.LogNotice) error {
-	return warnOfNotice(f.warn, notice)
-}
-
-func warnOfNotice(warn func(string), notice *contractv1.LogNotice) error {
-	if notice.GetKind() != contractv1.LogNotice_KIND_CAUGHT_UP {
-		warn(terminal.SanitizeLogText(notice.GetMessage()))
+	if f.tail && notice.GetKind() == contractv1.LogNotice_KIND_CAUGHT_UP {
+		_, err := fmt.Fprintln(f.stdout, f.palette.Muted(liveMarker))
+		return err
 	}
+	f.notes.report(notice)
 	return nil
 }
 

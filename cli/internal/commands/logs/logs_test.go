@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/logview"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -52,6 +54,10 @@ func recordApp(t *testing.T, project clitest.FakeProject, tier environment.Tier,
 
 func line(offset time.Duration, message string) provider.LogEntry {
 	return provider.LogEntry{Time: logsEpoch.Add(offset), Message: message, Instance: "i-1", Stream: provider.LogStreamStdout}
+}
+
+func liveLine(message string) provider.LogEntry {
+	return provider.LogEntry{Time: time.Now(), Message: message, Instance: "i-1", Stream: provider.LogStreamStdout}
 }
 
 func deployedWithLogs(t *testing.T) clitest.FakeProject {
@@ -686,7 +692,7 @@ func TestLogsReportsAReleaseWhoseLogsAreGoneOnStderr(t *testing.T) {
 func TestLogsPlainTextReportsOtherNoticesAsWarningsNotLogData(t *testing.T) {
 	var stdout bytes.Buffer
 	var warned []string
-	out := newOutput(&stdout, terminal.Presentation{}, false, false, logview.LevelUnknown, func(message string) { warned = append(warned, message) })
+	out := newOutput(&stdout, terminal.Presentation{}, false, false, logview.LevelUnknown, false, notices{warn: func(message string) { warned = append(warned, message) }})
 
 	for _, kind := range []contractv1.LogNotice_Kind{contractv1.LogNotice_KIND_CAUGHT_UP, contractv1.LogNotice_KIND_SOURCE_GONE} {
 		notice := &contractv1.LogNotice{Kind: kind, Message: "web of release r1 no longer exists, so its logs are gone"}
@@ -705,7 +711,7 @@ func TestLogsPlainTextReportsOtherNoticesAsWarningsNotLogData(t *testing.T) {
 
 func TestLogsJSONPrintsEveryKindOfNoticeAsAnObject(t *testing.T) {
 	var stdout bytes.Buffer
-	out := newOutput(&stdout, terminal.Presentation{}, true, false, logview.LevelUnknown, nil)
+	out := newOutput(&stdout, terminal.Presentation{}, true, false, logview.LevelUnknown, false, notices{})
 
 	for _, kind := range []contractv1.LogNotice_Kind{contractv1.LogNotice_KIND_SAMPLED, contractv1.LogNotice_KIND_SOURCE_GONE, contractv1.LogNotice_KIND_RECONNECTED} {
 		notice := &contractv1.LogNotice{Kind: kind, Message: "m", Omitted: 7}
@@ -864,5 +870,311 @@ func TestLogsJSONKeepsEachLineOfAStackTraceAsItsOwnObject(t *testing.T) {
 
 	if n := len(linesOf(got.stdout)); n != 5 {
 		t.Errorf("stdout = %q, want 5 objects, one per provider entry", got.stdout)
+	}
+}
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+type tailRun struct {
+	t      *testing.T
+	stdout *lockedBuffer
+	stderr *lockedBuffer
+	cancel context.CancelFunc
+	done   chan error
+}
+
+func plainDependencies(stderr io.Writer) Dependencies { return dependenciesFor(stderr, "main") }
+
+func terminalDependencies(stderr io.Writer) Dependencies {
+	dependencies := dependenciesFor(stderr, "main")
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{TTY: true, ColorAsked: terminal.ColorNever})
+	}
+	return dependencies
+}
+
+func startTail(t *testing.T, project clitest.FakeProject, dependencies func(io.Writer) Dependencies, mutate func(*logsOptions)) *tailRun {
+	t.Helper()
+	opts := defaultLogsOptions()
+	opts.tail = true
+	if mutate != nil {
+		mutate(&opts)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	run := &tailRun{t: t, stdout: &lockedBuffer{}, stderr: &lockedBuffer{}, cancel: cancel, done: make(chan error, 1)}
+	t.Cleanup(cancel)
+	go func() { run.done <- runLogs(ctx, dependencies(run.stderr), project.Root, nil, opts, run.stdout) }()
+	return run
+}
+
+func (r *tailRun) waitForTailOpened(project clitest.FakeProject) {
+	r.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := project.Provider.FakeLogs().WaitForTail(ctx); err != nil {
+		r.t.Fatalf("the provider's tail was not opened: %v; stdout=%q stderr=%q", err, r.stdout.String(), r.stderr.String())
+	}
+}
+
+func (r *tailRun) waitFor(out *lockedBuffer, want string) {
+	r.t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(out.String(), want) {
+		if time.Now().After(deadline) {
+			r.t.Fatalf("output = %q, want it to hold %q; stderr=%q", out.String(), want, r.stderr.String())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func (r *tailRun) finish() error {
+	r.t.Helper()
+	select {
+	case err := <-r.done:
+		return err
+	case <-time.After(10 * time.Second):
+		r.t.Fatalf("runLogs did not return; stdout=%q stderr=%q", r.stdout.String(), r.stderr.String())
+		return nil
+	}
+}
+
+func (r *tailRun) interrupt() error {
+	r.cancel()
+	return r.finish()
+}
+
+func TestLogsTailPrintsHistoryThenLiveEntries(t *testing.T) {
+	project := deployedWithLogs(t)
+	run := startTail(t, project, plainDependencies, nil)
+
+	run.waitFor(run.stdout, "api is listening")
+	run.waitForTailOpened(project)
+	project.Provider.FakeLogs().Append("web-live", liveLine("a live request"))
+	run.waitFor(run.stdout, "a live request")
+
+	if err := run.interrupt(); err != nil {
+		t.Fatalf("runLogs err = %v", err)
+	}
+	lines := linesOf(run.stdout.String())
+	if len(lines) != 3 ||
+		lines[0] != "2026-01-05T12:02:00.000Z web/http - web is listening" ||
+		lines[1] != "2026-01-05T12:03:00.000Z api/http - api is listening" ||
+		!strings.HasSuffix(lines[2], "Z web/http - a live request") {
+		t.Errorf("stdout = %q, want history oldest first and then the live entry", run.stdout.String())
+	}
+	if !lastReadLogs(t, project).GetTail() {
+		t.Error("the provider was not asked to tail")
+	}
+}
+
+func TestLogsAsksTheProviderToTailOnlyWithTail(t *testing.T) {
+	project := deployedWithLogs(t)
+
+	read(t, project, nil)
+
+	if lastReadLogs(t, project).GetTail() {
+		t.Error("the provider was asked to tail without --tail")
+	}
+}
+
+func TestLogsTailStopsAfterFor(t *testing.T) {
+	project := deployedWithLogs(t)
+	run := startTail(t, project, plainDependencies, func(o *logsOptions) { o.stopAfter = "200ms" })
+
+	err := run.finish()
+
+	if err != nil {
+		t.Fatalf("runLogs err = %v, want reaching --for to be a normal stop", err)
+	}
+	if !strings.Contains(run.stdout.String(), "api is listening") {
+		t.Errorf("stdout = %q, want the history printed before the stop", run.stdout.String())
+	}
+}
+
+func TestLogsTailExitsZeroWhenInterrupted(t *testing.T) {
+	project := deployedWithLogs(t)
+	run := startTail(t, project, plainDependencies, nil)
+	run.waitFor(run.stdout, "api is listening")
+	run.waitForTailOpened(project)
+
+	err := run.interrupt()
+
+	if err != nil {
+		t.Fatalf("runLogs err = %v, want an interrupted tail to end without an error", err)
+	}
+	if code, exits := exitcode.Of(err); exits {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if strings.Contains(run.stderr.String(), "cancelled") {
+		t.Errorf("stderr = %q, want no cancellation notice for the normal way to stop", run.stderr.String())
+	}
+}
+
+func TestLogsRefusesForWithoutTail(t *testing.T) {
+	project := deployedWithLogs(t)
+	opts := defaultLogsOptions()
+	opts.stopAfter = "30s"
+
+	got := runWith(project, plainDependencies, opts)
+
+	if got.err == nil || got.err.Error() != "--for stops a --tail, so pass --tail with it" {
+		t.Errorf("runLogs err = %v, want the one-line refusal naming --for and --tail", got.err)
+	}
+	if sent := clitest.RequestsTo[*contractv1.ReadLogsRequest](t, project.Requests, contractv1connect.ProviderServiceReadLogsProcedure); len(sent) != 0 {
+		t.Errorf("the provider received %d ReadLogs requests, want none before the refusal", len(sent))
+	}
+}
+
+func TestLogsRefusesATailOptionThatCannotBeRead(t *testing.T) {
+	project := deployedWithLogs(t)
+
+	cases := []struct {
+		name   string
+		mutate func(*logsOptions)
+		want   string
+	}{
+		{"a for that is not a duration", func(o *logsOptions) { o.tail, o.stopAfter = true, "soon" }, "--for"},
+		{"a for of zero", func(o *logsOptions) { o.tail, o.stopAfter = true, "0s" }, "--for"},
+		{"a negative for", func(o *logsOptions) { o.tail, o.stopAfter = true, "-5s" }, "--for"},
+		{"an until with tail", func(o *logsOptions) { o.tail, o.until = true, "1m" }, "--until"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := defaultLogsOptions()
+			tc.mutate(&opts)
+			got := runWith(project, plainDependencies, opts)
+			if got.err == nil || !strings.Contains(got.err.Error(), tc.want) {
+				t.Errorf("runLogs err = %v, want it to name %s", got.err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLogsTailOnATerminalMarksWhereHistoryEndsAndLiveBegins(t *testing.T) {
+	project := deployedWithLogs(t)
+	run := startTail(t, project, terminalDependencies, nil)
+
+	run.waitFor(run.stdout, "── live ──")
+	run.waitForTailOpened(project)
+	project.Provider.FakeLogs().Append("web-live", liveLine("a live request"))
+	run.waitFor(run.stdout, "a live request")
+	if err := run.interrupt(); err != nil {
+		t.Fatalf("runLogs err = %v", err)
+	}
+
+	got := run.stdout.String()
+	history, live, after := strings.Index(got, "api is listening"), strings.Index(got, "── live ──"), strings.Index(got, "a live request")
+	if history >= live || live >= after || strings.Count(got, "── live ──") != 1 {
+		t.Errorf("stdout = %q, want one live line between history and the live entry", got)
+	}
+}
+
+func TestLogsOnATerminalPrintsNoLiveLineWithoutTail(t *testing.T) {
+	project := deployedWithLogs(t)
+
+	got := readOnTerminal(t, project, false, nil)
+
+	if strings.Contains(got.stdout, "live") {
+		t.Errorf("stdout = %q, want no live line for a read that ends", got.stdout)
+	}
+}
+
+func TestLogsTailPrintsNoLiveLineOffATerminal(t *testing.T) {
+	project := deployedWithLogs(t)
+	run := startTail(t, project, plainDependencies, nil)
+	run.waitFor(run.stdout, "api is listening")
+	run.waitForTailOpened(project)
+	project.Provider.FakeLogs().Append("web-live", liveLine("a live request"))
+	run.waitFor(run.stdout, "a live request")
+	if err := run.interrupt(); err != nil {
+		t.Fatalf("runLogs err = %v", err)
+	}
+
+	if got := run.stdout.String(); strings.Contains(got, "live ──") || len(linesOf(got)) != 3 {
+		t.Errorf("stdout = %q, want log lines only", got)
+	}
+}
+
+func TestLogsTailReportsSamplingAndReconnectsOnStderrNotStdout(t *testing.T) {
+	for name, dependencies := range map[string]func(io.Writer) Dependencies{
+		"in plain text": plainDependencies,
+		"on a terminal": terminalDependencies,
+	} {
+		t.Run(name, func(t *testing.T) {
+			project := deployedWithLogs(t)
+			run := startTail(t, project, dependencies, nil)
+			run.waitFor(run.stdout, "api is listening")
+			run.waitForTailOpened(project)
+
+			project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7})
+			run.waitFor(run.stderr, "7")
+			project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected})
+			project.Provider.FakeLogs().Append("web-live", liveLine("after the notices"))
+			run.waitFor(run.stdout, "after the notices")
+			if err := run.interrupt(); err != nil {
+				t.Fatalf("runLogs err = %v", err)
+			}
+
+			notices := 0
+			for _, l := range linesOf(run.stderr.String()) {
+				if strings.Contains(l, "sampl") || strings.Contains(l, "reconnect") || strings.Contains(l, "omitted") {
+					notices++
+					if strings.Contains(l, "WARN") {
+						t.Errorf("stderr line %q is a warning, want a muted line", l)
+					}
+				}
+			}
+			if notices != 2 {
+				t.Errorf("stderr = %q, want one line for each of the two notices", run.stderr.String())
+			}
+			if out := run.stdout.String(); strings.Contains(out, "sampl") || strings.Contains(out, "reconnect") {
+				t.Errorf("stdout = %q, want entries only", out)
+			}
+		})
+	}
+}
+
+func TestLogsTailPrintsSamplingAndReconnectsAsNoticesInJSON(t *testing.T) {
+	project := deployedWithLogs(t)
+	run := startTail(t, project, plainDependencies, func(o *logsOptions) { o.json = true })
+	run.waitFor(run.stdout, "caught_up")
+	run.waitForTailOpened(project)
+
+	project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7})
+	run.waitFor(run.stdout, `"kind":"sampled"`)
+	project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected})
+	run.waitFor(run.stdout, `"kind":"reconnected"`)
+	if err := run.interrupt(); err != nil {
+		t.Fatalf("runLogs err = %v", err)
+	}
+
+	if strings.Contains(run.stderr.String(), "sampl") || strings.Contains(run.stderr.String(), "reconnect") {
+		t.Errorf("stderr = %q, want the notices only in the JSON stream", run.stderr.String())
+	}
+}
+
+func TestLogsTailFlagsAreTailAndFor(t *testing.T) {
+	cmd := NewCommand(Dependencies{})
+
+	if tail := cmd.Flags().ShorthandLookup("t"); tail == nil || tail.Name != "tail" || tail.DefValue != "false" {
+		t.Errorf("-t = %v, want --tail defaulting to false", tail)
+	}
+	if found := cmd.Flags().Lookup("for"); found == nil || found.DefValue != "" {
+		t.Errorf("--for = %v, want a flag with no default", found)
 	}
 }
