@@ -596,7 +596,7 @@ func TestLogsPlainTextReportsOtherNoticesAsWarningsNotLogData(t *testing.T) {
 
 	for _, kind := range []contractv1.LogNotice_Kind{contractv1.LogNotice_KIND_CAUGHT_UP, contractv1.LogNotice_KIND_SOURCE_GONE} {
 		notice := &contractv1.LogNotice{Kind: kind, Message: "web of release r1 no longer exists, so its logs are gone"}
-		if err := out.accept(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: notice}}); err != nil {
+		if err := out.printResponse(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: notice}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -615,7 +615,7 @@ func TestLogsJSONPrintsEveryKindOfNoticeAsAnObject(t *testing.T) {
 
 	for _, kind := range []contractv1.LogNotice_Kind{contractv1.LogNotice_KIND_SAMPLED, contractv1.LogNotice_KIND_SOURCE_GONE, contractv1.LogNotice_KIND_RECONNECTED} {
 		notice := &contractv1.LogNotice{Kind: kind, Message: "m", Omitted: 7}
-		if err := out.accept(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: notice}}); err != nil {
+		if err := out.printResponse(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: notice}}); err != nil {
 			t.Fatal(err)
 		}
 	}

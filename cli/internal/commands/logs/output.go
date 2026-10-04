@@ -16,26 +16,26 @@ import (
 
 const timeLayout = "2006-01-02T15:04:05.000Z07:00"
 
-type renderer interface {
-	entry(entry *contractv1.LogEntry, parsed logview.Entry) error
-	notice(notice *contractv1.LogNotice) error
+type format interface {
+	writeEntry(entry *contractv1.LogEntry, parsed logview.Entry) error
+	writeNotice(notice *contractv1.LogNotice) error
 }
 
 type output struct {
-	renderer
+	format
 	raw      bool
 	minLevel logview.Level
 }
 
 func newOutput(stdout io.Writer, asJSON, raw bool, minLevel logview.Level, warn func(string)) *output {
-	var out renderer = plainRenderer{stdout: stdout, warn: warn}
+	var out format = plainFormat{stdout: stdout, warn: warn}
 	if asJSON {
-		out = jsonRenderer{stdout: stdout}
+		out = jsonFormat{stdout: stdout}
 	}
-	return &output{renderer: out, raw: raw, minLevel: minLevel}
+	return &output{format: out, raw: raw, minLevel: minLevel}
 }
 
-func (o *output) accept(resp *contractv1.ReadLogsResponse) error {
+func (o *output) printResponse(resp *contractv1.ReadLogsResponse) error {
 	switch body := resp.GetBody().(type) {
 	case *contractv1.ReadLogsResponse_Batch:
 		for _, entry := range body.Batch.GetEntries() {
@@ -43,12 +43,12 @@ func (o *output) accept(resp *contractv1.ReadLogsResponse) error {
 			if parsed.Level < o.minLevel {
 				continue
 			}
-			if err := o.entry(entry, parsed); err != nil {
+			if err := o.writeEntry(entry, parsed); err != nil {
 				return err
 			}
 		}
 	case *contractv1.ReadLogsResponse_Notice:
-		return o.notice(body.Notice)
+		return o.writeNotice(body.Notice)
 	}
 	return nil
 }
@@ -60,12 +60,12 @@ func (o *output) parse(message string) logview.Entry {
 	return logview.Parse(message)
 }
 
-type plainRenderer struct {
+type plainFormat struct {
 	stdout io.Writer
 	warn   func(string)
 }
 
-func (r plainRenderer) entry(entry *contractv1.LogEntry, parsed logview.Entry) error {
+func (f plainFormat) writeEntry(entry *contractv1.LogEntry, parsed logview.Entry) error {
 	app := terminal.SanitizeText(entry.GetApp())
 	if source := terminal.SanitizeText(entry.GetSource()); source != "" {
 		app += "/" + source
@@ -78,13 +78,13 @@ func (r plainRenderer) entry(entry *contractv1.LogEntry, parsed logview.Entry) e
 	if fields := plainFields(parsed); fields != "" {
 		parts = append(parts, fields)
 	}
-	_, err := fmt.Fprintln(r.stdout, strings.Join(parts, " "))
+	_, err := fmt.Fprintln(f.stdout, strings.Join(parts, " "))
 	return err
 }
 
-func (r plainRenderer) notice(notice *contractv1.LogNotice) error {
+func (f plainFormat) writeNotice(notice *contractv1.LogNotice) error {
 	if notice.GetKind() != contractv1.LogNotice_KIND_CAUGHT_UP {
-		r.warn(terminal.SanitizeText(notice.GetMessage()))
+		f.warn(terminal.SanitizeText(notice.GetMessage()))
 	}
 	return nil
 }
@@ -117,7 +117,7 @@ func plainFields(parsed logview.Entry) string {
 	return terminal.SanitizeText(encoded)
 }
 
-type jsonRenderer struct {
+type jsonFormat struct {
 	stdout io.Writer
 }
 
@@ -142,8 +142,8 @@ type noticeObject struct {
 	Omitted uint64 `json:"omitted"`
 }
 
-func (r jsonRenderer) entry(entry *contractv1.LogEntry, parsed logview.Entry) error {
-	return r.write(entryObject{
+func (f jsonFormat) writeEntry(entry *contractv1.LogEntry, parsed logview.Entry) error {
+	return f.write(entryObject{
 		Type:     "entry",
 		Time:     entry.GetTime().AsTime().UTC().Format(timeLayout),
 		App:      entry.GetApp(),
@@ -158,8 +158,8 @@ func (r jsonRenderer) entry(entry *contractv1.LogEntry, parsed logview.Entry) er
 	})
 }
 
-func (r jsonRenderer) notice(notice *contractv1.LogNotice) error {
-	return r.write(noticeObject{
+func (f jsonFormat) writeNotice(notice *contractv1.LogNotice) error {
+	return f.write(noticeObject{
 		Type:    "notice",
 		Kind:    strings.ToLower(strings.TrimPrefix(notice.GetKind().String(), "KIND_")),
 		Message: notice.GetMessage(),
@@ -167,12 +167,12 @@ func (r jsonRenderer) notice(notice *contractv1.LogNotice) error {
 	})
 }
 
-func (r jsonRenderer) write(object any) error {
+func (f jsonFormat) write(object any) error {
 	encoded, err := encodeJSON(object)
 	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(r.stdout, escapeC1Controls(encoded)+"\n")
+	_, err = io.WriteString(f.stdout, escapeC1Controls(encoded)+"\n")
 	return err
 }
 
