@@ -8,6 +8,8 @@ import (
 	"maps"
 	"strings"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ocelhq/ocel/cli/internal/logview"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -22,27 +24,28 @@ type format interface {
 
 type output struct {
 	format
-	raw      bool
-	minLevel logview.Level
+	raw         bool
+	joinsTraces bool
+	minLevel    logview.Level
 }
 
 func newOutput(stdout io.Writer, present terminal.Presentation, asJSON, raw bool, minLevel logview.Level, warn func(string)) *output {
-	var out format = plainFormat{stdout: stdout, warn: warn}
+	out := &output{format: plainFormat{stdout: stdout, warn: warn}, raw: raw, minLevel: minLevel}
 	switch {
 	case asJSON:
-		out = jsonFormat{stdout: stdout}
+		out.format = jsonFormat{stdout: stdout}
 	case present.TTY && !raw:
-		out = terminalFormat{view: logview.NewTerminalView(stdout, present), warn: warn}
+		out.format = terminalFormat{view: logview.NewTerminalView(stdout, present), warn: warn}
+		out.joinsTraces = true
 	}
-	return &output{format: out, raw: raw, minLevel: minLevel}
+	return out
 }
 
 func (o *output) printResponse(resp *contractv1.ReadLogsResponse) error {
 	switch body := resp.GetBody().(type) {
 	case *contractv1.ReadLogsResponse_Batch:
-		for _, entry := range body.Batch.GetEntries() {
-			parsed := o.parse(entry.GetMessage())
-			parsed.Level = logview.ResolveLevel(parsed.Level, entry.GetSeverity(), entry.GetFailure())
+		for _, group := range o.groupEntries(body.Batch.GetEntries()) {
+			entry, parsed := o.mergeGroup(group)
 			if parsed.Level < o.minLevel {
 				continue
 			}
@@ -54,6 +57,31 @@ func (o *output) printResponse(resp *contractv1.ReadLogsResponse) error {
 		return o.writeNotice(body.Notice)
 	}
 	return nil
+}
+
+func (o *output) groupEntries(entries []*contractv1.LogEntry) [][]*contractv1.LogEntry {
+	if o.joinsTraces {
+		return groupTraces(entries)
+	}
+	groups := make([][]*contractv1.LogEntry, len(entries))
+	for i := range entries {
+		groups[i] = entries[i : i+1]
+	}
+	return groups
+}
+
+func (o *output) mergeGroup(group []*contractv1.LogEntry) (*contractv1.LogEntry, logview.Entry) {
+	entry := group[0]
+	parsed := o.parse(entry.GetMessage())
+	if len(group) > 1 {
+		entry = proto.CloneOf(entry)
+		for _, next := range group[1:] {
+			parsed.Message += "\n" + next.GetMessage()
+			entry.Failure = entry.GetFailure() || next.GetFailure()
+		}
+	}
+	parsed.Level = logview.ResolveLevel(parsed.Level, entry.GetSeverity(), entry.GetFailure())
+	return entry, parsed
 }
 
 func (o *output) parse(message string) logview.Entry {

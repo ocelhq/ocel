@@ -67,7 +67,8 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 			"severity the provider recorded; a failure the provider reports, such as a timeout, is an error. " +
 			"With --raw, messages are not read, so the level is the provider's alone.\n\n" +
 			"On a terminal, each entry is one coloured line stamped in local time and errors are boxed, with long field values " +
-			"shortened unless -v is set. --json and --raw print the same lines a pipe gets.",
+			"shortened unless -v is set. A stack trace whose lines arrive as separate entries is shown as one. " +
+			"--json and --raw print the same lines a pipe gets.",
 		Example: "  $ ocel logs\n" +
 			"  $ ocel logs web --since 15m --level warn\n" +
 			"  $ ocel logs --preview --grep timeout --json",
