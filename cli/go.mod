@@ -3,6 +3,7 @@ module github.com/ocelhq/ocel/cli
 go 1.27.0
 
 require (
+	buf.build/go/protovalidate v1.0.0
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.1
 	connectrpc.com/connect v1.20.0
@@ -49,7 +50,6 @@ require (
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260709200747-435963d16310.1 // indirect
-	buf.build/go/protovalidate v1.0.0 // indirect
 	cel.dev/expr v0.25.2 // indirect
 	charm.land/bubbles/v2 v2.0.0 // indirect
 	charm.land/bubbletea/v2 v2.0.10 // indirect

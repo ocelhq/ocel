@@ -500,3 +500,24 @@ func TestASuccessfulRunThatReportedNoHeadlineIsHeadedByTheCommandItFinished(t *t
 		t.Errorf("the run ended with headline %q, want Env ls finished", got)
 	}
 }
+
+func TestASummaryOfARunThatSucceededOrWasCancelledCarriesNoError(t *testing.T) {
+	succeeded := &recording{}
+	ok, _ := begin(t, succeeded)
+	var none error
+	ok.End(&none)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancelled := &recording{}
+	interrupted, _ := beginIn(t, ctx, cancelled)
+	cancel()
+	err := context.Canceled
+	interrupted.End(&err)
+
+	for name, sink := range map[string]*recording{"succeeded": succeeded, "cancelled": cancelled} {
+		got := sink.received()
+		if summary := got[len(got)-1].GetSummary(); summary.GetError() != nil {
+			t.Errorf("%s summary error = %v, want none", name, summary.GetError())
+		}
+	}
+}

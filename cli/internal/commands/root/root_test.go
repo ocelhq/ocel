@@ -4,15 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
+	"github.com/spf13/cobra"
+
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -196,6 +202,67 @@ func TestTheRemovedLogFormatFlagIsRejected(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "unknown flag: --log-format") {
 		t.Errorf("err = %v, want unknown flag: --log-format", err)
+	}
+}
+
+func lastJSONSummaryOfAFailingCommand(t *testing.T, failure error) map[string]any {
+	t.Helper()
+	ocel := newCommand()
+	ocel.root.AddCommand(&cobra.Command{
+		Use: "fail",
+		RunE: func(cmd *cobra.Command, _ []string) (err error) {
+			_, running, err := ocel.bus.Begin(cmd.Context(), "ocel fail", "")
+			if err != nil {
+				return err
+			}
+			defer running.End(&err)
+			return failure
+		},
+	})
+	var stdout bytes.Buffer
+	ocel.root.SetArgs([]string{"--json", "fail"})
+	ocel.root.SetOut(&stdout)
+	ocel.root.SetErr(&bytes.Buffer{})
+	if err := ocel.execute(); err == nil {
+		t.Fatal("ocel fail succeeded, want the command's failure")
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	var last map[string]any
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &last); err != nil {
+		t.Fatalf("last line %q is not JSON: %v", lines[len(lines)-1], err)
+	}
+	summary, ok := last["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("stdout = %q, want the run's events ending in its summary", stdout.String())
+	}
+	return summary
+}
+
+func TestARunFailingWithACodedErrorWrappedTwiceEndsItsJSONStreamWithThatErrorInTheSummary(t *testing.T) {
+	failure := fmt.Errorf("deploy: %w", fmt.Errorf("reading project: %w", &clierror.Error{
+		Code: "project.no_config", Hint: "run `ocel init`", Retryable: true, Cause: errors.New("no ocel.json"),
+	}))
+
+	summary := lastJSONSummaryOfAFailingCommand(t, failure)
+
+	want := map[string]any{
+		"code":      "project.no_config",
+		"message":   "deploy: reading project: no ocel.json",
+		"hint":      "run `ocel init`",
+		"docsUrl":   "https://ocel.dev/docs/errors/project.no_config",
+		"retryable": true,
+	}
+	if !reflect.DeepEqual(summary["error"], want) {
+		t.Errorf("summary error = %v, want %v", summary["error"], want)
+	}
+}
+
+func TestARunFailingWithAnUncodedErrorEndsItsJSONStreamWithAnInternalErrorAndNoDocsURL(t *testing.T) {
+	summary := lastJSONSummaryOfAFailingCommand(t, errors.New("the upload was refused"))
+
+	want := map[string]any{"code": "internal", "message": "the upload was refused"}
+	if !reflect.DeepEqual(summary["error"], want) {
+		t.Errorf("summary error = %v, want %v", summary["error"], want)
 	}
 }
 

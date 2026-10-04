@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/docsurl"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -196,10 +197,6 @@ func resolveSlug(projectDir, requested string) (string, error) {
 	return requested, nil
 }
 
-func schemaURL() string {
-	return "https://ocel.dev/schema/" + version.Version + "/ocel.schema.json"
-}
-
 type providerSetting struct {
 	name  string
 	value string
@@ -232,7 +229,7 @@ func configTemplate(name, slug, provider string, settings []providerSetting) str
   "slug": %q,
   "provider": %s
 }
-`, schemaURL(), slug, selected)
+`, docsurl.FormatSchema(version.Version), slug, selected)
 }
 
 func yamlTemplate(slug, provider string, settings []providerSetting) string {
@@ -246,7 +243,7 @@ func yamlTemplate(slug, provider string, settings []providerSetting) string {
 	return fmt.Sprintf(`# yaml-language-server: $schema=%s
 slug: %q
 provider:%s
-`, schemaURL(), slug, selected)
+`, docsurl.FormatSchema(version.Version), slug, selected)
 }
 
 func typescriptTemplate(slug, provider string, settings []providerSetting) string {
