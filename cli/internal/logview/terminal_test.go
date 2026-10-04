@@ -113,6 +113,14 @@ func TestTerminalViewWritesNoEscapesWithoutColour(t *testing.T) {
 	golden(t, "TestTerminalViewWritesNoEscapesWithoutColour", got)
 }
 
+func TestTerminalViewNamesAnEntryWithoutAnAppWithADash(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	got := render(t, false, logview.TerminalLine{Time: viewEpoch, Entry: logview.Entry{Message: "hello", Level: logview.LevelInfo}})
+	if want := "12:04:07.123  -  INFO   hello\n"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestTerminalViewIndentsTheLaterLinesOfAMessage(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	got := render(t, false, logview.TerminalLine{Time: viewEpoch, App: "web", Entry: logview.Entry{

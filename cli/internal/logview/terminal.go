@@ -54,6 +54,9 @@ func (v *TerminalView) Write(line TerminalLine) error {
 
 func (v *TerminalView) formatHeader(line TerminalLine) string {
 	app := terminal.SanitizeLogText(line.App)
+	if app == "" {
+		app = missingName
+	}
 	label := app
 	if source := terminal.SanitizeLogText(line.Source); source != "" {
 		label += "/" + source
