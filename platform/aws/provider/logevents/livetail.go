@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,7 +17,8 @@ import (
 )
 
 const (
-	maxLiveTailGroups = 10
+	maxSessionGroups   = 10
+	maxSessionPrefixes = 100
 
 	sessionLimitMessage = "Live Tail is at its session limit; polling instead"
 	sampledMessage      = "Live Tail sampled the entries it sent, so entries written meanwhile may be missing"
@@ -111,21 +114,57 @@ func liveTail(ctx context.Context, groups []liveGroup, query Query, client liveT
 }
 
 func splitIntoSessions(groups []liveGroup) [][]liveGroup {
-	var sessions [][]liveGroup
 	var lambdaGroups []liveGroup
+	var containerARNs []string
+	containerGroups := map[string][]liveGroup{}
 	for _, group := range groups {
-		if group.streamPrefix != nil {
-			sessions = append(sessions, []liveGroup{group})
+		if group.streamPrefix == nil {
+			lambdaGroups = append(lambdaGroups, group)
 			continue
 		}
-		lambdaGroups = append(lambdaGroups, group)
+		if _, known := containerGroups[group.arn]; !known {
+			containerARNs = append(containerARNs, group.arn)
+		}
+		containerGroups[group.arn] = append(containerGroups[group.arn], group)
 	}
-	for len(lambdaGroups) > 0 {
-		size := min(len(lambdaGroups), maxLiveTailGroups)
-		sessions = append(sessions, lambdaGroups[:size])
-		lambdaGroups = lambdaGroups[size:]
+	sessions := splitByKey(lambdaGroups, maxSessionGroups, func(group liveGroup) string { return group.arn })
+	for _, arn := range containerARNs {
+		sessions = append(sessions, splitByKey(containerGroups[arn], maxSessionPrefixes, func(group liveGroup) string { return aws.ToString(group.streamPrefix) })...)
 	}
 	return sessions
+}
+
+func splitByKey(groups []liveGroup, maxKeys int, keyOf func(liveGroup) string) [][]liveGroup {
+	var sessions [][]liveGroup
+	var keys []int
+	sessionOf := map[string]int{}
+	for _, group := range groups {
+		key := keyOf(group)
+		i, known := sessionOf[key]
+		if !known {
+			if len(sessions) == 0 || keys[len(keys)-1] == maxKeys {
+				sessions, keys = append(sessions, nil), append(keys, 0)
+			}
+			i = len(sessions) - 1
+			sessionOf[key] = i
+			keys[i]++
+		}
+		sessions[i] = append(sessions[i], group)
+	}
+	return sessions
+}
+
+func buildSessionInput(groups []liveGroup, contains string) *cloudwatchlogs.StartLiveTailInput {
+	input := &cloudwatchlogs.StartLiveTailInput{LogEventFilterPattern: quoteFilterPattern(contains)}
+	for _, group := range groups {
+		if !slices.Contains(input.LogGroupIdentifiers, group.arn) {
+			input.LogGroupIdentifiers = append(input.LogGroupIdentifiers, group.arn)
+		}
+		if prefix := aws.ToString(group.streamPrefix); group.streamPrefix != nil && !slices.Contains(input.LogStreamNamePrefixes, prefix) {
+			input.LogStreamNamePrefixes = append(input.LogStreamNamePrefixes, prefix)
+		}
+	}
+	return input
 }
 
 type liveSessionTail struct {
@@ -139,13 +178,9 @@ type liveSessionTail struct {
 }
 
 func (s *liveSessionTail) run(ctx context.Context) error {
-	input := &cloudwatchlogs.StartLiveTailInput{LogEventFilterPattern: quoteFilterPattern(s.query.Contains)}
+	input := buildSessionInput(s.groups, s.query.Contains)
 	sources := make([]Source, len(s.groups))
 	for i, group := range s.groups {
-		input.LogGroupIdentifiers = append(input.LogGroupIdentifiers, group.arn)
-		if group.streamPrefix != nil {
-			input.LogStreamNamePrefixes = []string{aws.ToString(group.streamPrefix)}
-		}
 		sources[i] = group.source
 	}
 	for {
@@ -218,18 +253,17 @@ func (s *liveSessionTail) emitUpdate(received types.StartLiveTailResponseStream)
 	s.sampled = sampled
 	var events []Event
 	for _, logged := range update.Value.SessionResults {
-		group, found := s.groupOf(aws.ToString(logged.LogGroupIdentifier))
-		if !found {
-			continue
+		stream := aws.ToString(logged.LogStreamName)
+		for _, group := range s.groupsOf(aws.ToString(logged.LogGroupIdentifier), stream) {
+			event, keep := buildEvent(group.logGroup, group.source, stream, aws.ToInt64(logged.Timestamp), aws.ToString(logged.Message))
+			if !keep {
+				continue
+			}
+			if event.Time.After(s.resume) {
+				s.resume = event.Time
+			}
+			events = append(events, event)
 		}
-		event, keep := buildEvent(group.logGroup, group.source, aws.ToString(logged.LogStreamName), aws.ToInt64(logged.Timestamp), aws.ToString(logged.Message))
-		if !keep {
-			continue
-		}
-		if event.Time.After(s.resume) {
-			s.resume = event.Time
-		}
-		events = append(events, event)
 	}
 	if len(events) == 0 {
 		return nil
@@ -237,11 +271,12 @@ func (s *liveSessionTail) emitUpdate(received types.StartLiveTailResponseStream)
 	return s.emit(events)
 }
 
-func (s *liveSessionTail) groupOf(identifier string) (liveGroup, bool) {
+func (s *liveSessionTail) groupsOf(identifier, stream string) []liveGroup {
+	var groups []liveGroup
 	for _, group := range s.groups {
-		if identifier == group.name || identifier == group.arn {
-			return group, true
+		if (identifier == group.name || identifier == group.arn) && strings.HasPrefix(stream, aws.ToString(group.streamPrefix)) {
+			groups = append(groups, group)
 		}
 	}
-	return liveGroup{}, false
+	return groups
 }
