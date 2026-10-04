@@ -5,7 +5,6 @@ import (
 	"io"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -126,9 +125,24 @@ func (v *TerminalView) formatBox(entry Entry) string {
 func (v *TerminalView) formatInlineFields(fields map[string]any) string {
 	pairs := make([]string, 0, len(fields))
 	for _, key := range slices.Sorted(maps.Keys(fields)) {
-		pairs = append(pairs, terminal.SanitizeLogText(key)+"="+quoteIfNeeded(v.formatScalar(fields[key])))
+		pairs = append(pairs, quoteIfNeeded(terminal.SanitizeLogText(key))+"="+v.formatInlineValue(fields[key]))
 	}
 	return strings.Join(pairs, " ")
+}
+
+func (v *TerminalView) formatInlineValue(value any) string {
+	if items, ok := value.([]any); ok {
+		return v.formatList(items)
+	}
+	return quoteIfNeeded(v.formatScalar(value))
+}
+
+func (v *TerminalView) formatList(items []any) string {
+	texts := make([]string, len(items))
+	for i, item := range items {
+		texts[i] = v.formatScalar(item)
+	}
+	return "[" + strings.Join(texts, ", ") + "]"
 }
 
 func (v *TerminalView) formatFieldLines(fields map[string]any) []string {
@@ -149,11 +163,7 @@ func (v *TerminalView) appendValue(lines []string, indent, label string, value a
 		return lines
 	case []any:
 		if !hasNestedItem(value) {
-			items := make([]string, len(value))
-			for i, item := range value {
-				items[i] = v.formatScalar(item)
-			}
-			return append(lines, indent+label+" ["+strings.Join(items, ", ")+"]")
+			return append(lines, indent+label+" "+v.formatList(value))
 		}
 		lines = append(lines, indent+label)
 		for _, item := range value {
@@ -192,7 +202,7 @@ func (v *TerminalView) formatScalar(value any) string {
 
 func quoteIfNeeded(value string) string {
 	if value == "" || strings.ContainsAny(value, " \t=\"") {
-		return strconv.Quote(value)
+		return `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
 	}
 	return value
 }
