@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -13,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -759,5 +761,85 @@ func TestPreflightRefusesADNSWriterThatCannotServeTheSelectedEdge(t *testing.T) 
 	})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "cannot write the records a relay edge answers on") {
 		t.Fatalf("Preflight() error = %v, want the DNS writer's refusal of the edge it would front, before the build", err)
+	}
+}
+
+func TestPreflightNamesNoKnownSlugsForAProjectThatIsAlreadyRecorded(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{
+		Tier:     environmentv1.Tier_TIER_PRODUCTION,
+		Features: []string{fake.FeatureCache},
+	})
+	recordProject(t, vendor, "blog")
+	recordProject(t, vendor, "shop")
+
+	resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if len(resp.GetKnownSlugs()) != 0 {
+		t.Errorf("Preflight() known slugs = %v, want none for a project the backend already records", resp.GetKnownSlugs())
+	}
+}
+
+type projectListingProvider struct {
+	*fake.Provider
+
+	mu       sync.Mutex
+	listings int
+}
+
+func (p *projectListingProvider) KeyValues() keyvalue.Store {
+	return projectListingStore{Store: p.Provider.KeyValues(), on: p}
+}
+
+func (p *projectListingProvider) projectListings() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.listings
+}
+
+type projectListingStore struct {
+	keyvalue.Store
+	on *projectListingProvider
+}
+
+func (s projectListingStore) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	if in.Root == keyvalue.RootProjects {
+		s.on.mu.Lock()
+		s.on.listings++
+		s.on.mu.Unlock()
+	}
+	return s.Store.List(ctx, in, under...)
+}
+
+func TestPreflightOfARecordedProjectReadsItsRecordWithoutListingTheOthers(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	vendor := &projectListingProvider{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t))}
+	client := servedProvider(t, "1.2.3", vendor)
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{
+		Tier:     environmentv1.Tier_TIER_PRODUCTION,
+		Features: []string{fake.FeatureCache},
+	})
+	recordProject(t, vendor.Provider, "blog")
+	recordProject(t, vendor.Provider, "shop")
+	before := vendor.projectListings()
+
+	if _, err := client.Preflight(ctx, &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+	}); err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if listed := vendor.projectListings() - before; listed != 0 {
+		t.Errorf("Preflight() listed the projects partition %d times, want none for a project whose own record answers whether it is new", listed)
 	}
 }
