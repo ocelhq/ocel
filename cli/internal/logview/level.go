@@ -19,6 +19,27 @@ const (
 	LevelError
 )
 
+var requestableLevels = map[string]Level{
+	"debug": LevelDebug,
+	"info":  LevelInfo,
+	"warn":  LevelWarn,
+	"error": LevelError,
+}
+
+func ParseLevel(name string) (Level, bool) {
+	level, ok := requestableLevels[strings.ToLower(name)]
+	return level, ok
+}
+
+func (l Level) String() string {
+	for name, level := range requestableLevels {
+		if level == l {
+			return name
+		}
+	}
+	return ""
+}
+
 var levelOffset = regexp.MustCompile(`[+-]\d+$`)
 
 var levelNames = map[string]Level{
