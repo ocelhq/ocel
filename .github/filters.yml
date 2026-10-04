@@ -145,17 +145,6 @@ provider_vps:
   - ".github/actions/vps-images/**"
   - ".github/actions/suite-gate/**"
   - ".github/actions/suite-passed/**"
-proto:
-  - "proto/**"
-  - "pkg/proto/**"
-  - "console/connectors/src/gen/**"
-  - "packages/ocel/src/gen/**"
-  - "python/ocel/src/ocel/gen/**"
-  - "crates/ocel-sdk/src/proto/**"
-  - "sdk/internal/proto/**"
-  - "package.json"
-  - ".github/workflows/proto.yml"
-  - ".github/actions/node-workspace/**"
 python:
   - "python/**"
   - ".github/workflows/python.yml"
@@ -165,3 +154,7 @@ rust:
 labels:
   - ".github/labels.yml"
   - ".github/workflows/labels.yml"
+lint:
+  - ".github/workflows/lint.yml"
+  - ".github/actions/versions/**"
+  - "mise.toml"

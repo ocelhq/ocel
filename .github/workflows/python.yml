@@ -28,11 +28,5 @@ jobs:
       - name: Install
         run: uv sync --all-extras --frozen
 
-      - name: ruff check
-        run: uv run ruff check .
-
-      - name: ruff format
-        run: uv run ruff format --check .
-
       - name: pytest
         run: uv run pytest -q
