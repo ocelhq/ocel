@@ -36,3 +36,4 @@ jobs:
 
       - name: pytest
         run: uv run pytest -q
+# probe
