@@ -102,4 +102,18 @@ message RunSummary {
   Party origin = 14;
 
   string promotion_id = 15;
+
+  RunError error = 16;
+}
+
+message RunError {
+  string code = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"];
+
+  string message = 2;
+
+  optional string hint = 3;
+
+  optional string docs_url = 4;
+
+  bool retryable = 5;
 }
