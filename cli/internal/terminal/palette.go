@@ -72,6 +72,22 @@ func (p Palette) WarnMark() string { return p.Warning(warnGlyph) }
 
 func (p Palette) NeutralMark() string { return p.Faint(neutralGlyph) }
 
+var hues = [...]color.Attribute{color.FgGreen, color.FgBlue, color.FgMagenta, color.FgCyan, color.FgHiBlue, color.FgHiMagenta}
+
+func (p Palette) HueCount() int { return len(hues) }
+
+func (p Palette) Hue(slot int, text string) string {
+	return p.paint(text, hues[slot%len(hues)])
+}
+
+func (p Palette) FailureBox() lipgloss.Style {
+	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
+	if p.colored {
+		style = style.BorderForeground(lipgloss.ANSIColor(1))
+	}
+	return style
+}
+
 func (p Palette) Commands(text string) string {
 	parts := strings.Split(text, "`")
 	if len(parts)%2 == 0 {

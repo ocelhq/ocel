@@ -1,0 +1,6 @@
+<ESC>[90m12:04:07.123<ESC>[0m  <ESC>[34mweb<ESC>[0m  INFO   tick
+<ESC>[90m12:04:07.123<ESC>[0m  <ESC>[95mapi<ESC>[0m  INFO   tick
+<ESC>[90m12:04:07.123<ESC>[0m  <ESC>[95mworker<ESC>[0m  INFO   tick
+<ESC>[90m12:04:07.123<ESC>[0m  <ESC>[34mweb<ESC>[0m  INFO   tick
+<ESC>[90m12:04:07.123<ESC>[0m  <ESC>[36mcron<ESC>[0m  INFO   tick
+<ESC>[90m12:04:07.123<ESC>[0m  <ESC>[95mapi<ESC>[0m  INFO   tick

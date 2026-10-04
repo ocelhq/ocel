@@ -1,0 +1,6 @@
+12:04:07.123  api  INFO   inline  body=abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghi… id=k
+12:04:07.123  api  ERROR
+╭────────────────────────────────────────────────────────────────────────────────────────╮
+│ boxed                                                                                  │
+│ body: abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghi… │
+╰────────────────────────────────────────────────────────────────────────────────────────╯

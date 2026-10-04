@@ -1,0 +1,220 @@
+package logview
+
+import (
+	"fmt"
+	"hash/fnv"
+	"io"
+	"maps"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+)
+
+const (
+	timeLayout       = "15:04:05.000"
+	levelWidth       = 5
+	maxValueRunes    = 80
+	fieldIndent      = "    "
+	nestedIndent     = "  "
+	truncationMarker = "…"
+)
+
+type TerminalLine struct {
+	Time    time.Time
+	App     string
+	Source  string
+	Failure bool
+	Entry   Entry
+}
+
+type TerminalView struct {
+	out     io.Writer
+	palette terminal.Palette
+	verbose bool
+}
+
+func NewTerminalView(out io.Writer, palette terminal.Palette, verbose bool) *TerminalView {
+	return &TerminalView{out: out, palette: palette, verbose: verbose}
+}
+
+func (v *TerminalView) Write(line TerminalLine) error {
+	var text string
+	if line.Failure || line.Entry.Level == LevelError {
+		text = v.header(line) + "\n" + v.box(line.Entry) + "\n"
+	} else {
+		text = v.entry(line)
+	}
+	_, err := io.WriteString(v.out, text)
+	return err
+}
+
+func (v *TerminalView) header(line TerminalLine) string {
+	label := terminal.SanitizeLogText(line.App)
+	slot := hueSlot(label, v.palette.HueCount())
+	if source := terminal.SanitizeLogText(line.Source); source != "" {
+		label += "/" + source
+	}
+	parts := []string{
+		v.palette.Muted(line.Time.UTC().Format(timeLayout)),
+		v.palette.Hue(slot, label),
+		v.level(line.Entry.Level),
+	}
+	return strings.Join(parts, "  ")
+}
+
+func (v *TerminalView) level(level Level) string {
+	name := "-"
+	if level != LevelUnknown {
+		name = strings.ToUpper(level.String())
+	}
+	name = fmt.Sprintf("%-*s", levelWidth, name)
+	switch level {
+	case LevelError:
+		return v.palette.Failure(name)
+	case LevelWarn:
+		return v.palette.Warning(name)
+	case LevelDebug:
+		return v.palette.Muted(name)
+	}
+	return name
+}
+
+func hueSlot(app string, slots int) int {
+	hash := fnv.New32a()
+	hash.Write([]byte(app))
+	return int(hash.Sum32() % uint32(slots))
+}
+
+func (v *TerminalView) entry(line TerminalLine) string {
+	entry := line.Entry
+	text := v.header(line) + "  " + terminal.SanitizeLogText(entry.Message)
+	fields := v.fieldLines(entry.Fields)
+	if !v.verbose && !hasNestedField(entry.Fields) {
+		if len(fields) > 0 {
+			text += "  " + v.palette.Muted(v.inlineFields(entry.Fields))
+		}
+		return text + "\n"
+	}
+	for _, field := range fields {
+		text += "\n" + v.palette.Muted(fieldIndent+field)
+	}
+	return text + "\n"
+}
+
+func (v *TerminalView) box(entry Entry) string {
+	messageLines := strings.Split(entry.Message, "\n")
+	content := []string{terminal.SanitizeLogText(messageLines[0])}
+	content = append(content, v.fieldLines(entry.Fields)...)
+	stack := messageLines[1:]
+	if entry.Error != "" {
+		stack = strings.Split(entry.Error, "\n")
+	}
+	if len(stack) > 0 {
+		content = append(content, "")
+		for _, line := range stack {
+			content = append(content, v.palette.Muted(terminal.SanitizeLogText(line)))
+		}
+	}
+	return v.palette.FailureBox().Render(strings.Join(content, "\n"))
+}
+
+func (v *TerminalView) inlineFields(fields map[string]any) string {
+	pairs := make([]string, 0, len(fields))
+	for _, key := range slices.Sorted(maps.Keys(fields)) {
+		pairs = append(pairs, terminal.SanitizeLogText(key)+"="+quoteIfNeeded(v.scalar(fields[key])))
+	}
+	return strings.Join(pairs, " ")
+}
+
+func (v *TerminalView) fieldLines(fields map[string]any) []string {
+	var lines []string
+	for _, key := range slices.Sorted(maps.Keys(fields)) {
+		lines = v.appendValue(lines, "", terminal.SanitizeLogText(key)+":", fields[key])
+	}
+	return lines
+}
+
+func (v *TerminalView) appendValue(lines []string, indent, label string, value any) []string {
+	switch value := value.(type) {
+	case map[string]any:
+		lines = append(lines, indent+label)
+		for _, key := range slices.Sorted(maps.Keys(value)) {
+			lines = v.appendValue(lines, indent+nestedIndent, terminal.SanitizeLogText(key)+":", value[key])
+		}
+		return lines
+	case []any:
+		if !hasNestedItem(value) {
+			items := make([]string, len(value))
+			for i, item := range value {
+				items[i] = v.scalar(item)
+			}
+			return append(lines, indent+label+" ["+strings.Join(items, ", ")+"]")
+		}
+		lines = append(lines, indent+label)
+		for _, item := range value {
+			lines = v.appendItem(lines, indent+nestedIndent, item)
+		}
+		return lines
+	}
+	return append(lines, indent+label+" "+v.scalar(value))
+}
+
+func (v *TerminalView) appendItem(lines []string, indent string, item any) []string {
+	object, ok := item.(map[string]any)
+	if !ok {
+		return v.appendValue(lines, indent, "-", item)
+	}
+	first := len(lines)
+	for _, key := range slices.Sorted(maps.Keys(object)) {
+		lines = v.appendValue(lines, indent+nestedIndent, terminal.SanitizeLogText(key)+":", object[key])
+	}
+	if first < len(lines) {
+		lines[first] = indent + "- " + strings.TrimPrefix(lines[first], indent+nestedIndent)
+	}
+	return lines
+}
+
+func (v *TerminalView) scalar(value any) string {
+	if value == nil {
+		return "null"
+	}
+	text := terminal.SanitizeLogText(fmt.Sprint(value))
+	if !v.verbose && utf8.RuneCountInString(text) > maxValueRunes {
+		return string([]rune(text)[:maxValueRunes-1]) + truncationMarker
+	}
+	return text
+}
+
+func quoteIfNeeded(value string) string {
+	if value == "" || strings.ContainsAny(value, " \t=\"") {
+		return strconv.Quote(value)
+	}
+	return value
+}
+
+func hasNestedField(fields map[string]any) bool {
+	for _, value := range fields {
+		if isNested(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasNestedItem(items []any) bool {
+	return slices.ContainsFunc(items, isNested)
+}
+
+func isNested(value any) bool {
+	switch value := value.(type) {
+	case map[string]any:
+		return true
+	case []any:
+		return hasNestedItem(value)
+	}
+	return false
+}

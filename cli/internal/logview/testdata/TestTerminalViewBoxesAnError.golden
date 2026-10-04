@@ -1,0 +1,17 @@
+12:04:07.123  web  INFO   ready
+12:04:08.123  web  ERROR
+╭─────────────────────────────╮
+│ db down                     │
+│ host: db.internal           │
+│ retries: 3                  │
+│                             │
+│ Error: connect ECONNREFUSED │
+│     at connect (db.js:12)   │
+│     at run (app.js:4)       │
+╰─────────────────────────────╯
+12:04:09.123  web  ERROR
+╭───────────────────────────────────╮
+│ Task timed out after 3.00 seconds │
+│                                   │
+│   at handler (index.js:9)         │
+╰───────────────────────────────────╯
