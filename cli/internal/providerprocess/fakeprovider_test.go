@@ -263,9 +263,18 @@ func (s *fakeProviderServer) ReadLogs(ctx context.Context, _ *contractv1.ReadLog
 			return askedOver(err)
 		}
 	}
-	if s.mode == "hang-logs" {
+	switch s.mode {
+	case "hang-logs":
 		<-ctx.Done()
 		return ctx.Err()
+	case "crash-logs":
+		os.Exit(2)
+	case "not-found-logs":
+		return connect.NewError(connect.CodeNotFound, errors.New("simulated missing log group"))
+	case "permission-denied-logs":
+		return connect.NewError(connect.CodePermissionDenied, errors.New("simulated denied log read"))
+	case "unimplemented-logs":
+		return connect.NewError(connect.CodeUnimplemented, errors.New("simulated older provider"))
 	}
 	return stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: &contractv1.LogNotice{Kind: contractv1.LogNotice_KIND_CAUGHT_UP}}})
 }

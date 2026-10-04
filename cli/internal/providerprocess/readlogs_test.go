@@ -158,3 +158,41 @@ func TestReadLogsNeverAsksAQuestionAfterLogsWerePrintedSoNoneArePrintedTwice(t *
 		t.Errorf("the read ran %d times, want once", got)
 	}
 }
+
+func TestReadLogsReportsAnErrorTheProviderAnsweredWithAsThatCallsErrorNotALostConnection(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"not-found-logs":         "simulated missing log group",
+		"permission-denied-logs": "simulated denied log read",
+		"unimplemented-logs":     "simulated older provider",
+	}
+	for mode, message := range cases {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, span, _ := deploySpan(t)
+			p := startFake(t, ctx, mode, span, Questions{})
+
+			_, err := readLogMessages(ctx, p)
+			if err == nil || !strings.Contains(err.Error(), "call ReadLogs") || !strings.Contains(err.Error(), message) {
+				t.Fatalf("ReadLogs() error = %v, want the call's own error naming %q", err, message)
+			}
+			if strings.Contains(err.Error(), "connection lost") {
+				t.Errorf("ReadLogs() error = %v, want an answer from the provider not called a lost connection", err)
+			}
+		})
+	}
+}
+
+func TestReadLogsReportsAProviderThatDiesMidReadAsALostConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx, span, _ := deploySpan(t)
+	p := startFake(t, ctx, "crash-logs", span, Questions{})
+
+	_, err := readLogMessages(ctx, p)
+	if err == nil || !strings.Contains(err.Error(), "connection lost") {
+		t.Fatalf("ReadLogs() error = %v, want a lost connection", err)
+	}
+}

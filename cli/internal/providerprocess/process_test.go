@@ -375,6 +375,9 @@ func TestDeploy(t *testing.T) {
 		if !strings.Contains(err.Error(), "panic: assignment to entry in nil map") {
 			t.Errorf("Deploy() error = %q, want the provider's last stderr lines: without --verbose they are the only trace of why it died", err)
 		}
+		if !strings.Contains(err.Error(), "connection lost") {
+			t.Errorf("Deploy() error = %q, want a provider that died mid-stream reported as a lost connection", err)
+		}
 	})
 
 	t.Run("cancelling the run is reported as a cancellation rather than a lost connection", func(t *testing.T) {
