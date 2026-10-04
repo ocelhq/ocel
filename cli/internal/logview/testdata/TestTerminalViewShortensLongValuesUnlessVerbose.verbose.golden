@@ -1,0 +1,8 @@
+12:04:07.123  api  INFO   inline
+    body: abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij
+    id: k
+12:04:07.123  api  ERROR
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ boxed                                                                                                                          │
+│ body: abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

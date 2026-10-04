@@ -1,0 +1,9 @@
+12:04:07.123  api  INFO   order placed  note="two words" orderId=o-1 paid=true total=12.5
+12:04:07.123  api  WARN   slow query
+    calls:
+      - name: x
+    db:
+      host: pg
+      pool:
+        size: 4
+    tags: [a, b]

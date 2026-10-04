@@ -1,0 +1,8 @@
+12:04:07.123  web  DEBUG  debugging  a=b
+12:04:07.123  web  WARN   careful
+12:04:07.123  web  ERROR
+╭────────╮
+│ broken │
+│        │
+│ trace  │
+╰────────╯
