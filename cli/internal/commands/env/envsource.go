@@ -36,7 +36,7 @@ func newEnvSourceCommand(dependencies Dependencies) *cobra.Command {
 		})
 	}
 	previewFlag(cmd, &opts)
-	return commands.ReadOnly(cmd)
+	return commands.DeclareReadOnly(cmd)
 }
 
 func newSyncCommand(dependencies Dependencies) *cobra.Command {
@@ -53,7 +53,7 @@ func newSyncCommand(dependencies Dependencies) *cobra.Command {
 		})
 	}
 	previewFlag(cmd, &opts)
-	return commands.Mutates(cmd)
+	return commands.DeclareMutating(cmd)
 }
 
 func tierName(opts envOptions) string {

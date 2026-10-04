@@ -16,7 +16,7 @@ import (
 )
 
 func NewLogoutCommand(dependencies Dependencies) *cobra.Command {
-	return commands.Mutates(&cobra.Command{
+	return commands.DeclareMutating(&cobra.Command{
 		Use:     "logout",
 		Short:   "Log out of the Ocel console",
 		Example: "  $ ocel logout",

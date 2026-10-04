@@ -80,7 +80,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
 	cmd.Flags().BoolVar(&opts.dry, "dry", false, dryFlagUsage)
 
-	return commands.Mutates(cmd)
+	return commands.DeclareMutating(cmd)
 }
 
 func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {

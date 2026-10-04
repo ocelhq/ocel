@@ -16,7 +16,7 @@ import (
 )
 
 func NewCommand(invocation commands.Invocation) *cobra.Command {
-	return commands.ReadOnly(commands.ReserveStdout(&cobra.Command{
+	return commands.DeclareReadOnly(commands.ReserveStdout(&cobra.Command{
 		Use:     "permissions <bootstrap|deploy>",
 		Aliases: []string{"perms"},
 		Short:   "Print the permissions bootstrap or deploy credentials need",

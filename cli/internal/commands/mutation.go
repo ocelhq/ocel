@@ -8,11 +8,11 @@ import (
 
 const mutatesAnnotation = "ocel.mutates"
 
-func Mutates(cmd *cobra.Command) *cobra.Command {
+func DeclareMutating(cmd *cobra.Command) *cobra.Command {
 	return declareMutation(cmd, true)
 }
 
-func ReadOnly(cmd *cobra.Command) *cobra.Command {
+func DeclareReadOnly(cmd *cobra.Command) *cobra.Command {
 	return declareMutation(cmd, false)
 }
 

@@ -31,7 +31,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&reset, "reset", false, "Wipe the data this project's dev resources have kept, then start from empty ones")
-	return commands.Mutates(commands.ShareTerminalWithChild(cmd))
+	return commands.DeclareMutating(commands.ShareTerminalWithChild(cmd))
 }
 
 func runOnBus(cmd *cobra.Command, dependencies Dependencies, command string, args []string, body func(ctx context.Context, opts dev.Options, cwd string) error) (err error) {

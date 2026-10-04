@@ -32,7 +32,7 @@ func newUICommand(dependencies Dependencies) *cobra.Command {
 		})
 	}
 	previewFlag(cmd, &opts)
-	return commands.Mutates(cmd)
+	return commands.DeclareMutating(cmd)
 }
 
 func runEnvUI(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {

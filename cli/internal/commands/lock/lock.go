@@ -12,7 +12,7 @@ import (
 )
 
 func NewCommand(invocation commands.Invocation) *cobra.Command {
-	return commands.Mutates(&cobra.Command{
+	return commands.DeclareMutating(&cobra.Command{
 		Use:   "lock",
 		Short: "Pin the provider binaries this CLI version runs",
 		Long: "Pin the provider binaries this CLI version runs.\n\n" +

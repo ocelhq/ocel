@@ -60,7 +60,7 @@ func describedFlag(command *helpv1.Command, name string) *helpv1.Flag {
 func TestEveryVisibleCommandDeclaresWhetherItMutates(t *testing.T) {
 	for _, cmd := range visibleCommands(newCommand().root) {
 		if _, declared := commands.FindMutation(cmd); !declared {
-			t.Errorf("ocel %s does not declare whether it mutates, want commands.Mutates or commands.ReadOnly", commandPath(cmd))
+			t.Errorf("ocel %s does not declare whether it mutates, want commands.DeclareMutating or commands.DeclareReadOnly", commandPath(cmd))
 		}
 	}
 }
@@ -83,9 +83,9 @@ func TestHelpJSONDescribesEveryVisibleCommand(t *testing.T) {
 func TestHelpJSONLeavesOutHiddenCommandsAndHiddenFlags(t *testing.T) {
 	ocel := newCommand()
 	secret := &cobra.Command{Use: "secret", Hidden: true, RunE: func(*cobra.Command, []string) error { return nil }}
-	commands.ReadOnly(secret)
+	commands.DeclareReadOnly(secret)
 	ocel.root.AddCommand(secret)
-	visible := commands.ReadOnly(&cobra.Command{Use: "visible", RunE: func(*cobra.Command, []string) error { return nil }})
+	visible := commands.DeclareReadOnly(&cobra.Command{Use: "visible", RunE: func(*cobra.Command, []string) error { return nil }})
 	visible.Flags().String("open", "", "A flag anyone may pass")
 	visible.Flags().String("internal", "", "A flag only maintainers pass")
 	if err := visible.Flags().MarkHidden("internal"); err != nil {

@@ -194,11 +194,11 @@ func newListCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&opts.preview, "preview", false, "List the global preview domain and the projects served on it instead of this project's own hostnames")
-	return commands.ReadOnly(cmd)
+	return commands.DeclareReadOnly(cmd)
 }
 
 func newAddCommand(invocation commands.Invocation) *cobra.Command {
-	return commands.Mutates(&cobra.Command{
+	return commands.DeclareMutating(&cobra.Command{
 		Use:   "add [host]",
 		Short: "Provision the certificate, the edge surface and the DNS for this project's production hostnames",
 		Args:  cobra.MaximumNArgs(1),
@@ -227,5 +227,5 @@ func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	commands.AddYesFlag(cmd, &opts.yes)
-	return commands.Mutates(cmd)
+	return commands.DeclareMutating(cmd)
 }
