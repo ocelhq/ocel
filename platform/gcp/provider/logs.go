@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -73,9 +74,9 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 
 func noticeOf(suppressed logentries.Notice) provider.LogNotice {
 	if suppressed.Reason == logentries.Reconnected {
-		return provider.LogNotice{Kind: provider.LogReconnected}
+		return provider.LogNotice{Kind: provider.LogReconnected, Message: "the log stream dropped and reconnected, so entries written meanwhile may be missing"}
 	}
-	return provider.LogNotice{Kind: provider.LogSampled, Omitted: suppressed.Count}
+	return provider.LogNotice{Kind: provider.LogSampled, Omitted: suppressed.Count, Message: fmt.Sprintf("%d entries were left out because the log store sampled them", suppressed.Count)}
 }
 
 func logSourcesOf(targets []provider.LogTarget) []logentries.Source {

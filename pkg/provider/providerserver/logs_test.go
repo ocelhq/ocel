@@ -773,33 +773,32 @@ func TestReadLogsPassesTheNoticesOfATailOn(t *testing.T) {
 		t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
 	}
 	tailOpened(t, vendor)
-	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7})
+	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7, Message: "7 entries were sampled out"})
 	sampled := tailed.next().GetNotice()
-	if sampled.GetKind() != contractv1.LogNotice_KIND_SAMPLED || sampled.GetOmitted() != 7 || sampled.GetMessage() == "" {
-		t.Errorf("a sampled notice reached the caller as %v, want KIND_SAMPLED omitting 7 with a message", sampled)
+	if sampled.GetKind() != contractv1.LogNotice_KIND_SAMPLED || sampled.GetOmitted() != 7 || sampled.GetMessage() != "7 entries were sampled out" {
+		t.Errorf("a sampled notice reached the caller as %v, want KIND_SAMPLED omitting 7 with the provider's message", sampled)
 	}
-	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected})
-	if reconnected := tailed.next().GetNotice(); reconnected.GetKind() != contractv1.LogNotice_KIND_RECONNECTED || reconnected.GetMessage() == "" {
-		t.Errorf("a reconnected notice reached the caller as %v, want KIND_RECONNECTED with a message", reconnected)
+	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected, Message: "polling instead"})
+	if reconnected := tailed.next().GetNotice(); reconnected.GetKind() != contractv1.LogNotice_KIND_RECONNECTED || reconnected.GetMessage() != "polling instead" {
+		t.Errorf("a reconnected notice reached the caller as %v, want KIND_RECONNECTED with the provider's message", reconnected)
 	}
 }
 
-func TestReadLogsSendsTheMessageAProviderGivesANotice(t *testing.T) {
+func TestReadLogsFailsOnASampledOrReconnectedNoticeWithNoMessage(t *testing.T) {
 	t.Parallel()
-	client, vendor := liveWeb(t)
+	for _, kind := range []provider.LogNoticeKind{provider.LogSampled, provider.LogReconnected} {
+		client, vendor := liveWeb(t)
 
-	tailed := tailLogsOf(t, client, logsRequest())
-	if got := tailed.nextKind(); got != contractv1.LogNotice_KIND_CAUGHT_UP.String() {
-		t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
-	}
-	tailOpened(t, vendor)
-	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected, Message: "polling instead"})
-	if notice := tailed.next().GetNotice(); notice.GetKind() != contractv1.LogNotice_KIND_RECONNECTED || notice.GetMessage() != "polling instead" {
-		t.Errorf("a notice with a message reached the caller as %v, want KIND_RECONNECTED saying %q", notice, "polling instead")
-	}
-	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Message: "sampled above 500 a second"})
-	if notice := tailed.next().GetNotice(); notice.GetKind() != contractv1.LogNotice_KIND_SAMPLED || notice.GetMessage() != "sampled above 500 a second" {
-		t.Errorf("a sampled notice with a message reached the caller as %v, want its own message", notice)
+		tailed := tailLogsOf(t, client, logsRequest())
+		if got := tailed.nextKind(); got != contractv1.LogNotice_KIND_CAUGHT_UP.String() {
+			t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
+		}
+		tailOpened(t, vendor)
+		vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: kind, Omitted: 3})
+		err, ended := tailed.endsWithin(time.Second)
+		if !ended || err == nil {
+			t.Errorf("ReadLogs() after a notice of kind %d with no message = %v (ended %v), want the stream to fail: only the provider knows what happened", kind, err, ended)
+		}
 	}
 }
 

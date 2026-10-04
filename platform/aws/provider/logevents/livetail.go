@@ -24,6 +24,7 @@ const (
 
 	sessionLimitMessage = "Live Tail is at its session limit; polling instead"
 	sampledMessage      = "Live Tail sampled the entries it sent, so entries written meanwhile may be missing"
+	restartedMessage    = "the Live Tail session timed out and restarted, so entries written meanwhile may be missing"
 )
 
 type NoticeKind int
@@ -240,7 +241,7 @@ func (s *liveSessionTail) run(ctx context.Context) error {
 			return err
 		}
 		s.written = nil
-		if err := s.notice(Notice{Kind: NoticeReconnected}); err != nil {
+		if err := s.notice(Notice{Kind: NoticeReconnected, Message: restartedMessage}); err != nil {
 			return err
 		}
 	}
