@@ -107,7 +107,7 @@ func nameGroupARN(region, account, name string) string {
 func liveTail(ctx context.Context, groups []liveGroup, query Query, client liveTailClient, emit func([]Event) error, notice func(Notice) error) error {
 	running, ctx := errgroup.WithContext(ctx)
 	for _, sessionGroups := range splitIntoSessions(groups) {
-		tail := &liveSessionTail{groups: sessionGroups, query: query, client: client, emit: emit, notice: notice, resume: query.Since}
+		tail := &liveSessionTail{groups: sessionGroups, query: query, client: client, emit: emit, notice: notice}
 		running.Go(func() error { return tail.run(ctx) })
 	}
 	return running.Wait()
@@ -173,7 +173,7 @@ type liveSessionTail struct {
 	client  liveTailClient
 	emit    func([]Event) error
 	notice  func(Notice) error
-	resume  time.Time
+	newest  time.Time
 	sampled bool
 }
 
@@ -193,7 +193,7 @@ func (s *liveSessionTail) run(ctx context.Context) error {
 			if err := s.notice(Notice{Kind: NoticeReconnected, Message: sessionLimitMessage}); err != nil {
 				return err
 			}
-			return s.client.tail(ctx, sources, s.resume)
+			return s.client.tail(ctx, sources, s.pollFrom())
 		case err != nil:
 			return fmt.Errorf("start a Live Tail session of %s: %w", s.groups[0].name, err)
 		}
@@ -209,6 +209,13 @@ func (s *liveSessionTail) run(ctx context.Context) error {
 			return err
 		}
 	}
+}
+
+func (s *liveSessionTail) pollFrom() time.Time {
+	if next := s.newest.Add(time.Millisecond); next.After(s.query.Since) {
+		return next
+	}
+	return s.query.Since
 }
 
 func (s *liveSessionTail) follow(ctx context.Context, session liveSession) error {
@@ -259,8 +266,8 @@ func (s *liveSessionTail) emitUpdate(received types.StartLiveTailResponseStream)
 			if !keep {
 				continue
 			}
-			if event.Time.After(s.resume) {
-				s.resume = event.Time
+			if event.Time.After(s.newest) {
+				s.newest = event.Time
 			}
 			events = append(events, event)
 		}
