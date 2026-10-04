@@ -3,6 +3,7 @@ package providerprocess
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -98,5 +99,62 @@ func TestReadLogsStopsAndReturnsTheCallersError(t *testing.T) {
 	err := ReadLogs(ctx, p, &contractv1.ReadLogsRequest{Slug: "acme", Limit: 10}, func(*contractv1.ReadLogsResponse) error { return broken })
 	if !errors.Is(err, broken) {
 		t.Errorf("ReadLogs() error = %v, want the caller's error", err)
+	}
+}
+
+func readLogMessages(ctx context.Context, p *Provider) ([]string, error) {
+	var messages []string
+	err := ReadLogs(ctx, p, &contractv1.ReadLogsRequest{Slug: "acme", Limit: 10}, func(resp *contractv1.ReadLogsResponse) error {
+		for _, entry := range resp.GetBatch().GetEntries() {
+			messages = append(messages, entry.GetMessage())
+		}
+		return nil
+	})
+	return messages, err
+}
+
+func TestReadLogsAsksAQuestionTheProviderPutsBeforeAnyLogsAndReadsAgain(t *testing.T) {
+	t.Parallel()
+
+	ctx, span, _ := deploySpan(t)
+	fake := newQuestionFake(t, "unknown-host-key")
+	asker := &scriptedPrompt{attended: true, answer: true}
+	p := startFake(t, ctx, "unknown-host-key", span, answering(asker, io.Discard), fake.env()...)
+
+	messages, err := readLogMessages(ctx, p)
+	if err != nil {
+		t.Fatalf("ReadLogs() error = %v, want the read retried once the key was trusted", err)
+	}
+	if len(asker.asked) != 1 {
+		t.Errorf("asked %d times, want once", len(asker.asked))
+	}
+	if got := strings.Join(messages, ","); got != "listening" {
+		t.Errorf("messages = %s, want the one batch once", got)
+	}
+	if got := fake.drivenTimes(t); got != 2 {
+		t.Errorf("the read ran %d times, want twice: asked, then read", got)
+	}
+}
+
+func TestReadLogsNeverAsksAQuestionAfterLogsWerePrintedSoNoneArePrintedTwice(t *testing.T) {
+	t.Parallel()
+
+	ctx, span, _ := deploySpan(t)
+	fake := newQuestionFake(t, "unknown-host-key-after-logs")
+	asker := &scriptedPrompt{attended: true, answer: true}
+	p := startFake(t, ctx, "unknown-host-key-after-logs", span, answering(asker, io.Discard), fake.env()...)
+
+	messages, err := readLogMessages(ctx, p)
+	if err == nil {
+		t.Fatal("ReadLogs() error = nil, want the late question reported as an error")
+	}
+	if len(asker.asked) != 0 {
+		t.Errorf("asked %v, want no prompt once logs were printed", asker.asked)
+	}
+	if got := strings.Join(messages, ","); got != "listening" {
+		t.Errorf("messages = %s, want the batch handed over once", got)
+	}
+	if got := fake.drivenTimes(t); got != 1 {
+		t.Errorf("the read ran %d times, want once", got)
 	}
 }

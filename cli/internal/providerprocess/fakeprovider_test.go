@@ -245,12 +245,23 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployR
 }
 
 func (s *fakeProviderServer) ReadLogs(ctx context.Context, _ *contractv1.ReadLogsRequest, stream *connect.ServerStream[contractv1.ReadLogsResponse]) error {
+	if err := recordDrive(); err != nil {
+		return err
+	}
 	if s.mode == "refuse-logs" {
 		return provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "web is not deployed here"))
+	}
+	if err := refusalFor(s.mode); err != nil {
+		return askedOver(err)
 	}
 	batch := &contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Batch{Batch: &contractv1.LogBatch{Entries: []*contractv1.LogEntry{{App: "web", Message: "listening"}}}}}
 	if err := stream.Send(batch); err != nil {
 		return err
+	}
+	if s.mode == "unknown-host-key-after-logs" {
+		if err := refusalFor("unknown-host-key"); err != nil {
+			return askedOver(err)
+		}
 	}
 	if s.mode == "hang-logs" {
 		<-ctx.Done()

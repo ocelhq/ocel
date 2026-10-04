@@ -75,8 +75,16 @@ func Stream[Req any](ctx context.Context, p *Provider, rpc string, req *Req, cal
 }
 
 func ReadLogs(ctx context.Context, p *Provider, req *contractv1.ReadLogsRequest, onResponse func(*contractv1.ReadLogsResponse) error) error {
+	delivered := false
 	return p.callAnswering(ctx, func(r *Process) error {
-		return r.readLogs(ctx, req, onResponse)
+		err := r.readLogs(ctx, req, func(resp *contractv1.ReadLogsResponse) error {
+			delivered = true
+			return onResponse(resp)
+		})
+		if question, asked := questionIn(err); asked && delivered {
+			return fmt.Errorf("provider: ReadLogs asked a question after sending logs, and reading again would print them twice: %s", question.GetFinding())
+		}
+		return err
 	})
 }
 
