@@ -755,6 +755,15 @@ func TestReadLogsRefusesATailThatHasAnEndTime(t *testing.T) {
 	}
 }
 
+func tailOpened(t *testing.T, vendor *fake.Provider) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := vendor.FakeLogs().WaitForTail(ctx); err != nil {
+		t.Fatalf("the provider's tail was not opened after CAUGHT_UP: %v", err)
+	}
+}
+
 func TestReadLogsPassesTheNoticesOfATailOn(t *testing.T) {
 	t.Parallel()
 	client, vendor := liveWeb(t)
@@ -763,6 +772,7 @@ func TestReadLogsPassesTheNoticesOfATailOn(t *testing.T) {
 	if got := tailed.nextKind(); got != contractv1.LogNotice_KIND_CAUGHT_UP.String() {
 		t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
 	}
+	tailOpened(t, vendor)
 	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7})
 	sampled := tailed.next().GetNotice()
 	if sampled.GetKind() != contractv1.LogNotice_KIND_SAMPLED || sampled.GetOmitted() != 7 || sampled.GetMessage() == "" {
@@ -818,6 +828,7 @@ func TestReadLogsNamesTheReleaseOfASourceThatIsGoneWhileTailing(t *testing.T) {
 	if got := tailed.nextKind(); got != contractv1.LogNotice_KIND_CAUGHT_UP.String() {
 		t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
 	}
+	tailOpened(t, vendor)
 	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSourceGone, Target: provider.LogTarget{App: "web", Source: "http", Release: build.Release().String()}})
 	gone := tailed.next().GetNotice()
 	if gone.GetKind() != contractv1.LogNotice_KIND_SOURCE_GONE || !strings.Contains(gone.GetMessage(), build.Release().String()) || !strings.Contains(gone.GetMessage(), "web") {
@@ -833,6 +844,7 @@ func TestReadLogsFailsOnANoticeItCannotName(t *testing.T) {
 	if got := tailed.nextKind(); got != contractv1.LogNotice_KIND_CAUGHT_UP.String() {
 		t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
 	}
+	tailOpened(t, vendor)
 	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogNoticeKind(99)})
 	err, ended := tailed.endsWithin(time.Second)
 	if !ended || err == nil {
