@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands/link"
 	"github.com/ocelhq/ocel/cli/internal/commands/lock"
 	"github.com/ocelhq/ocel/cli/internal/commands/login"
+	"github.com/ocelhq/ocel/cli/internal/commands/logs"
 	"github.com/ocelhq/ocel/cli/internal/commands/permissions"
 	"github.com/ocelhq/ocel/cli/internal/commands/projectinit"
 	"github.com/ocelhq/ocel/cli/internal/commands/promotions"
@@ -142,6 +143,7 @@ func newCommand() *command {
 	rootCmd.AddCommand(env.NewCommand(env.Dependencies{Invocation: invocation, OpenBrowser: browser.OpenURL, ServeVariableEditor: env.ServeVariableEditor}))
 	rootCmd.AddCommand(promotions.NewRollbackCommand(invocation))
 	rootCmd.AddCommand(promotions.NewDeploymentsCommand(invocation))
+	rootCmd.AddCommand(logs.NewCommand(logs.Dependencies{Invocation: invocation, ReadGitBranch: deploy.ReadGitBranch, DiscoverPRNumber: deploy.DiscoverPRNumber, Now: time.Now}))
 	rootCmd.AddCommand(domain.NewCommand(invocation))
 	rootCmd.AddCommand(bindings.NewCommand(invocation))
 	rootCmd.AddCommand(destroy.NewCommand(invocation))
