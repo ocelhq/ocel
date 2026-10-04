@@ -669,6 +669,20 @@ func TestLogsPlainTextKeepsTheCaughtUpNoticeOffStdout(t *testing.T) {
 	}
 }
 
+func TestLogsReportsAReleaseWhoseLogsAreGoneOnStderr(t *testing.T) {
+	project := deployedWithLogs(t)
+	project.Provider.FakeLogs().Delete("web-old")
+
+	got := read(t, project, func(o *logsOptions) { o.allReleases = true }, "web")
+
+	if !strings.Contains(got.stderr, "web (http) of release") || !strings.Contains(got.stderr, "no longer exists, so its logs are gone") {
+		t.Errorf("stderr = %q, want the source-gone notice as a warning", got.stderr)
+	}
+	if strings.Contains(got.stdout, "no longer exists") {
+		t.Errorf("stdout = %q, want log lines only", got.stdout)
+	}
+}
+
 func TestLogsPlainTextReportsOtherNoticesAsWarningsNotLogData(t *testing.T) {
 	var stdout bytes.Buffer
 	var warned []string
