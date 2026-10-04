@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -89,6 +90,7 @@ func logEntryOf(target provider.LogTarget, line host.Line) provider.LogEntry {
 		stream = provider.LogStreamStderr
 	}
 	return provider.LogEntry{
+		ID:      target.Physical() + "/" + string(stream) + "/" + line.Time.Format(time.RFC3339Nano),
 		Time:    line.Time,
 		App:     target.App,
 		Source:  target.Source,

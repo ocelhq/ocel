@@ -37,6 +37,7 @@ func (l *loggedGCP) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	l.mutex.Unlock()
 	entry := func(service, revision, text string) map[string]any {
 		return map[string]any{
+			"insertId":    "insert-" + text,
 			"timestamp":   "2026-01-05T12:00:00Z",
 			"textPayload": text,
 			"severity":    "ERROR",
@@ -101,6 +102,9 @@ func TestLogsReadsEachTargetFromItsServiceAndRevision(t *testing.T) {
 	}
 	if served := got["served"]; served.Source != "http" || served.App != "web" || served.Release != "r1" || served.Severity != "ERROR" || served.Instance != "instance-1" {
 		t.Errorf("Read() entry for the web function = %+v, want it labelled web/r1/http with severity ERROR from instance-1", served)
+	}
+	if served := got["served"]; served.ID != "insert-served" {
+		t.Errorf("Read() gave the entry for the web function the ID %q, want Cloud Logging's insert id", served.ID)
 	}
 	if sent := got["sent"]; sent.Source != "mailer" {
 		t.Errorf("Read() entry for the mailer = %+v, want source mailer", sent)
@@ -174,6 +178,12 @@ func (l *tailedGCP) TailLogEntries(stream loggingpb.LoggingServiceV2_TailLogEntr
 	return nil
 }
 
+var tailSince = time.Date(2026, 1, 5, 11, 0, 0, 0, time.UTC)
+
+func (l *tailedGCP) ListLogEntries(context.Context, *loggingpb.ListLogEntriesRequest) (*loggingpb.ListLogEntriesResponse, error) {
+	return &loggingpb.ListLogEntriesResponse{}, nil
+}
+
 func tailingGCP(t *testing.T, stub *tailedGCP) provider.Provider {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -194,6 +204,7 @@ func tailingGCP(t *testing.T, stub *tailedGCP) provider.Provider {
 
 func tailedEntry(service, revision, text string) *loggingpb.LogEntry {
 	return &loggingpb.LogEntry{
+		InsertId:  "insert-" + text,
 		Timestamp: timestamppb.New(time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC)),
 		Payload:   &loggingpb.LogEntry_TextPayload{TextPayload: text},
 		Severity:  logtype.LogSeverity_ERROR,
@@ -219,7 +230,7 @@ func TestLogsTailsEachTargetFromItsServiceAndRevision(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var entries []provider.LogEntry
-	err := p.Logs().Read(ctx, provider.LogQuery{Targets: webAndMailer(), Since: time.Now(), Contains: "boom", Tail: true}, func(batch []provider.LogEntry) error {
+	err := p.Logs().Read(ctx, provider.LogQuery{Targets: webAndMailer(), Since: tailSince, Contains: "boom", Tail: true}, func(batch []provider.LogEntry) error {
 		entries = append(entries, batch...)
 		cancel()
 		return nil
@@ -252,6 +263,9 @@ func TestLogsTailsEachTargetFromItsServiceAndRevision(t *testing.T) {
 	if served := got["served"]; served.Source != "http" || served.App != "web" || served.Release != "r1" || served.Severity != "ERROR" || served.Instance != "instance-1" {
 		t.Errorf("the tail's entry for the web function = %+v, want it labelled web/r1/http with severity ERROR from instance-1", served)
 	}
+	if served := got["served"]; served.ID != "insert-served" {
+		t.Errorf("the tail's entry for the web function has the ID %q, want Cloud Logging's insert id", served.ID)
+	}
 	if sent := got["sent"]; sent.Source != "mailer" {
 		t.Errorf("the tail's entry for the mailer = %+v, want source mailer", sent)
 	}
@@ -267,7 +281,7 @@ func TestLogsTailTurnsEverySuppressionIntoASampledNotice(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var notices []provider.LogNotice
-	err := p.Logs().Read(ctx, provider.LogQuery{Targets: webAndMailer(), Since: time.Now(), Tail: true}, func([]provider.LogEntry) error { return nil }, func(notice provider.LogNotice) error {
+	err := p.Logs().Read(ctx, provider.LogQuery{Targets: webAndMailer(), Since: tailSince, Tail: true}, func([]provider.LogEntry) error { return nil }, func(notice provider.LogNotice) error {
 		notices = append(notices, notice)
 		if len(notices) == 2 {
 			cancel()
@@ -291,7 +305,7 @@ func TestLogsTailTellsTheCallerWhenTheStreamReconnected(t *testing.T) {
 	defer cancel()
 	var notices []provider.LogNotice
 	var read int
-	err := p.Logs().Read(ctx, provider.LogQuery{Targets: webAndMailer(), Since: time.Now(), Tail: true}, func(batch []provider.LogEntry) error {
+	err := p.Logs().Read(ctx, provider.LogQuery{Targets: webAndMailer(), Since: tailSince, Tail: true}, func(batch []provider.LogEntry) error {
 		read += len(batch)
 		if read == 2 {
 			cancel()

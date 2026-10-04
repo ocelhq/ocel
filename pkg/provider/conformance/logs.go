@@ -210,6 +210,34 @@ func RunLogTail(t *testing.T, facts provider.Facts, logs provider.Logs, feed fun
 		}
 	})
 
+	t.Run("a tail and a read give an entry the same ID", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		named := targetOn(facts, "conformance-named")
+		since := time.Now()
+		tail := startTail(ctx, logs, since, nil, named)
+		feed(t, named, []provider.LogEntry{{Time: time.Now(), Message: "named"}})
+		tailed, ok := tail.next(t)
+		if !ok {
+			return
+		}
+		if tailed.ID == "" {
+			t.Fatal("a tail emitted an entry with no ID, and without one the server cannot tell it from an entry history already sent")
+		}
+		q := logQuery(named)
+		q.Since = since
+		var read []provider.LogEntry
+		if err := logs.Read(context.Background(), q, func(batch []provider.LogEntry) error {
+			read = append(read, batch...)
+			return nil
+		}, noticeNothing); err != nil {
+			t.Fatalf("Read() error = %v", err)
+		}
+		if len(read) != 1 || read[0].ID != tailed.ID {
+			t.Errorf("a read gave the entry a tail emitted as %q the IDs %+v, want the same ID", tailed.ID, read)
+		}
+	})
+
 	t.Run("a tail keeps running while nothing is written", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()

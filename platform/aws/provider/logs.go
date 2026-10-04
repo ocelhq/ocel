@@ -34,6 +34,7 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 				continue
 			}
 			entries = append(entries, provider.LogEntry{
+				ID:       event.ID,
 				Time:     event.Time,
 				App:      target.App,
 				Source:   target.Source,

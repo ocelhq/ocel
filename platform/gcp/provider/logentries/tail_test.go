@@ -34,7 +34,9 @@ type tailServer struct {
 	loggingpb.UnimplementedLoggingServiceV2Server
 	mu       sync.Mutex
 	requests []*loggingpb.TailLogEntriesRequest
+	lists    []*loggingpb.ListLogEntriesRequest
 	session  func(call int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error
+	listed   []*loggingpb.LogEntry
 }
 
 func (s *tailServer) TailLogEntries(stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
@@ -47,6 +49,13 @@ func (s *tailServer) TailLogEntries(stream loggingpb.LoggingServiceV2_TailLogEnt
 	call := len(s.requests)
 	s.mu.Unlock()
 	return s.session(call, stream)
+}
+
+func (s *tailServer) ListLogEntries(_ context.Context, req *loggingpb.ListLogEntriesRequest) (*loggingpb.ListLogEntriesResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lists = append(s.lists, req)
+	return &loggingpb.ListLogEntriesResponse{Entries: s.listed}, nil
 }
 
 func (s *tailServer) received() []*loggingpb.TailLogEntriesRequest {
@@ -603,5 +612,86 @@ func TestTailEndsTheStreamWhenEmitFails(t *testing.T) {
 	case <-ended:
 	case <-time.After(5 * time.Second):
 		t.Error("the server's stream is still open after Tail returned")
+	}
+}
+
+func TestTailFirstReadsWhatWasWrittenFromSinceOnceTheStreamIsOpen(t *testing.T) {
+	t.Parallel()
+	early, late := streamedEntry(since.Add(time.Second), "written before the stream opened"), streamedEntry(since.Add(3*time.Second), "live")
+	early.InsertId, late.InsertId = "early", "late"
+	client, fake := serveTail(t, func(_ int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
+		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{early, late}})
+	})
+	fake.listed = []*loggingpb.LogEntry{early}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var (
+		mu     sync.Mutex
+		events []Event
+	)
+	done := make(chan error, 1)
+	go func() {
+		done <- Tail(ctx, client, "acme-prod", webQuery(), func(batch []Event) error {
+			mu.Lock()
+			defer mu.Unlock()
+			events = append(events, batch...)
+			return nil
+		}, ignoreNotices)
+	}()
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(events) >= 2 })
+	cancel()
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	var texts []string
+	for _, event := range events {
+		texts = append(texts, event.ID+":"+event.Text)
+	}
+	if want := []string{"early:written before the stream opened", "late:live"}; !slices.Equal(texts, want) {
+		t.Errorf("Tail emitted %q, want each entry once, the one written before the stream opened first", texts)
+	}
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	if len(fake.lists) != 1 {
+		t.Fatalf("Tail read from since %d times, want once", len(fake.lists))
+	}
+	if filter := fake.lists[0].GetFilter(); !strings.Contains(filter, `timestamp>="2026-10-03T09:00:00Z"`) {
+		t.Errorf("Tail read from since with the filter %s, want it to start at since", filter)
+	}
+}
+
+func TestTailEmitsNothingStampedBeforeSince(t *testing.T) {
+	t.Parallel()
+	client, _ := serveTail(t, func(_ int, stream loggingpb.LoggingServiceV2_TailLogEntriesServer) error {
+		return sendThenHold(stream, &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{
+			streamedEntry(since.Add(-time.Second), "before since"),
+			streamedEntry(since.Add(time.Second), "after since"),
+		}})
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var (
+		mu     sync.Mutex
+		events []Event
+	)
+	done := make(chan error, 1)
+	go func() {
+		done <- Tail(ctx, client, "acme-prod", webQuery(), func(batch []Event) error {
+			mu.Lock()
+			defer mu.Unlock()
+			events = append(events, batch...)
+			return nil
+		}, ignoreNotices)
+	}()
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(events) >= 1 })
+	cancel()
+	<-done
+	mu.Lock()
+	defer mu.Unlock()
+	if len(events) != 1 || events[0].Text != "after since" {
+		t.Errorf("Tail emitted %+v, want only the entry stamped from since on", events)
 	}
 }

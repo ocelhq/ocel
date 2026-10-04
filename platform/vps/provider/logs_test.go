@@ -56,8 +56,8 @@ func TestLogsReadsEachContainerOfTheTargetsByItsPhysicalName(t *testing.T) {
 	}
 
 	want := []provider.LogEntry{
-		{Time: time.Date(2026, 1, 5, 12, 0, 2, 0, time.UTC), App: "web", Release: "r1", Source: "media", Stream: provider.LogStreamStdout, Message: "resized"},
-		{Time: time.Date(2026, 1, 5, 12, 0, 3, 0, time.UTC), App: "web", Release: "r1", Source: "http", Stream: provider.LogStreamStderr, Message: "warn: slow"},
+		{ID: "shop-media-r1/stdout/2026-01-05T12:00:02Z", Time: time.Date(2026, 1, 5, 12, 0, 2, 0, time.UTC), App: "web", Release: "r1", Source: "media", Stream: provider.LogStreamStdout, Message: "resized"},
+		{ID: "shop-web-r1/stderr/2026-01-05T12:00:03Z", Time: time.Date(2026, 1, 5, 12, 0, 3, 0, time.UTC), App: "web", Release: "r1", Source: "http", Stream: provider.LogStreamStderr, Message: "warn: slow"},
 	}
 	if len(entries) != len(want) {
 		t.Fatalf("Read() emitted %+v, want the newest 2 across both containers: %+v", entries, want)
@@ -257,9 +257,9 @@ func TestLogsTailsEveryContainerThroughOneFollowerFromSince(t *testing.T) {
 	}
 
 	want := []provider.LogEntry{
-		{Time: time.Date(2026, 1, 5, 12, 0, 1, 0, time.UTC), App: "web", Release: "r1", Source: "http", Stream: provider.LogStreamStdout, Message: "served /"},
-		{Time: time.Date(2026, 1, 5, 12, 0, 3, 0, time.UTC), App: "web", Release: "r1", Source: "http", Stream: provider.LogStreamStderr, Message: "warn: slow"},
-		{Time: time.Date(2026, 1, 5, 12, 0, 2, 0, time.UTC), App: "web", Release: "r1", Source: "media", Stream: provider.LogStreamStdout, Message: "resized"},
+		{ID: "shop-web-r1/stdout/2026-01-05T12:00:01Z", Time: time.Date(2026, 1, 5, 12, 0, 1, 0, time.UTC), App: "web", Release: "r1", Source: "http", Stream: provider.LogStreamStdout, Message: "served /"},
+		{ID: "shop-web-r1/stderr/2026-01-05T12:00:03Z", Time: time.Date(2026, 1, 5, 12, 0, 3, 0, time.UTC), App: "web", Release: "r1", Source: "http", Stream: provider.LogStreamStderr, Message: "warn: slow"},
+		{ID: "shop-media-r1/stdout/2026-01-05T12:00:02Z", Time: time.Date(2026, 1, 5, 12, 0, 2, 0, time.UTC), App: "web", Release: "r1", Source: "media", Stream: provider.LogStreamStdout, Message: "resized"},
 	}
 	if len(read.entries) != len(want) {
 		t.Fatalf("Read() of a tail emitted %+v, want %+v", read.entries, want)
