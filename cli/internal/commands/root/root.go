@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/pkg/browser"
@@ -44,7 +45,8 @@ import (
 type flags struct {
 	verbose   bool
 	config    string
-	logFormat string
+	json      bool
+	jsonAsked func() bool
 }
 
 func (f *flags) explicitConfigPath() string {
@@ -62,8 +64,19 @@ func (f *flags) isVerbose() bool {
 	return ok
 }
 
+func (f *flags) format() terminal.Format {
+	asJSON := f.json
+	if !asJSON && (f.jsonAsked == nil || !f.jsonAsked()) {
+		asJSON, _ = strconv.ParseBool(os.Getenv(commands.JSONEnvVar))
+	}
+	if asJSON {
+		return terminal.FormatJSON
+	}
+	return terminal.FormatHuman
+}
+
 func (f *flags) presentation(w io.Writer) terminal.Presentation {
-	return terminal.Detect(terminal.Format(f.logFormat), f.isVerbose(), w)
+	return terminal.Detect(f.format(), f.isVerbose(), w)
 }
 
 type command struct {
@@ -102,7 +115,8 @@ func newCommand() *command {
 
 	rootCmd.PersistentFlags().BoolVarP(&set.verbose, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
 	rootCmd.PersistentFlags().StringVarP(&set.config, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
-	rootCmd.PersistentFlags().StringVar(&set.logFormat, "log-format", string(terminal.FormatHuman), "Log output format: human or json")
+	rootCmd.PersistentFlags().BoolVar(&set.json, "json", false, "Print machine-readable JSON instead of the human view (also $OCEL_JSON)")
+	set.jsonAsked = func() bool { return rootCmd.PersistentFlags().Changed("json") }
 
 	devDependencies := dev.Dependencies{Invocation: invocation, OpenDocker: docker.Open}
 	devCmd, runCmd := dev.NewCommand(devDependencies), dev.NewRunCommand(devDependencies)

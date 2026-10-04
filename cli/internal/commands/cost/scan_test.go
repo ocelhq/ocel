@@ -192,7 +192,7 @@ export default {
 		}
 	})
 
-	t.Run("it writes the resource set and the estimate as JSON under --log-format json", func(t *testing.T) {
+	t.Run("it writes the resource set and the estimate as JSON under --json", func(t *testing.T) {
 		root, _, dependencies := scanFixture(t)
 		dependencies.Presentation = func(io.Writer) terminal.Presentation {
 			return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})

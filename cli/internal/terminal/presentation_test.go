@@ -16,7 +16,7 @@ func TestTheFormatIsHumanUnlessJSONIsAskedForByName(t *testing.T) {
 		{"yaml", FormatHuman},
 	} {
 		if got := Resolve(Conditions{LogFormat: tc.asked}).Format; got != tc.want {
-			t.Errorf("Resolve(--log-format %q).Format = %q, want %q", tc.asked, got, tc.want)
+			t.Errorf("Resolve(LogFormat %q).Format = %q, want %q", tc.asked, got, tc.want)
 		}
 	}
 }

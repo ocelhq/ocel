@@ -48,7 +48,7 @@ func newScanCommand(dependencies Dependencies) *cobra.Command {
 		Example: "  $ ocel cost scan\n" +
 			"  $ ocel cost scan --env preview --profile heavy\n" +
 			"  $ ocel cost scan --usage usage.yaml\n" +
-			"  $ ocel cost scan --log-format json",
+			"  $ ocel cost scan --json",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, err := os.Getwd()

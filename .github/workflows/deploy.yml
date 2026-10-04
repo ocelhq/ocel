@@ -65,7 +65,7 @@ jobs:
           variables-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
 
       - name: Deploy
-        run: ocel deploy --yes --log-format json --tag "sha-$(git rev-parse --short=7 HEAD)"
+        run: ocel deploy --yes --json --tag "sha-$(git rev-parse --short=7 HEAD)"
 
       - name: Keep what the deploy reported
         if: always()
