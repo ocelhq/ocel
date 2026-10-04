@@ -106,6 +106,18 @@ func TestTerminalViewGivesEachAppTheSameColourEveryTime(t *testing.T) {
 	golden(t, "TestTerminalViewGivesEachAppTheSameColourEveryTime", strings.ReplaceAll(first, "\x1b", "<ESC>"))
 }
 
+func TestTerminalViewColoursEachLevelAndTheErrorBox(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("FORCE_COLOR", "1")
+	got := render(t, false,
+		logview.TerminalLine{Time: viewEpoch, App: "web", Entry: logview.Entry{Message: "debugging", Level: logview.LevelDebug}},
+		logview.TerminalLine{Time: viewEpoch, App: "web", Entry: logview.Entry{Message: "ready", Level: logview.LevelInfo, Fields: map[string]any{"port": "3000"}}},
+		logview.TerminalLine{Time: viewEpoch, App: "web", Entry: logview.Entry{Message: "careful", Level: logview.LevelWarn}},
+		logview.TerminalLine{Time: viewEpoch, App: "web", Entry: logview.Entry{Message: "broken", Level: logview.LevelError, Error: "trace"}},
+	)
+	golden(t, "TestTerminalViewColoursEachLevelAndTheErrorBox", strings.ReplaceAll(got, "\x1b", "<ESC>"))
+}
+
 func TestTerminalViewWritesNoEscapesWithoutColour(t *testing.T) {
 	t.Setenv("FORCE_COLOR", "1")
 	t.Setenv("NO_COLOR", "1")
