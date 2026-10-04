@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -32,13 +33,18 @@ type TerminalLine struct {
 }
 
 type TerminalView struct {
-	out     io.Writer
-	palette terminal.Palette
-	verbose bool
+	out      io.Writer
+	palette  terminal.Palette
+	verbose  bool
+	maxWidth int
 }
 
-func NewTerminalView(out io.Writer, palette terminal.Palette, verbose bool) *TerminalView {
-	return &TerminalView{out: out, palette: palette, verbose: verbose}
+func NewTerminalView(out io.Writer, present terminal.Presentation) *TerminalView {
+	view := &TerminalView{out: out, palette: present.Palette(), verbose: present.Verbose}
+	if present.WidthMeasured {
+		view.maxWidth = present.Width
+	}
+	return view
 }
 
 func (v *TerminalView) Write(line TerminalLine) error {
@@ -119,7 +125,12 @@ func (v *TerminalView) formatBox(entry Entry) string {
 			content = append(content, v.palette.Muted(terminal.SanitizeLogText(line)))
 		}
 	}
-	return v.palette.FailureBox().Render(strings.Join(content, "\n"))
+	box := v.palette.FailureBox()
+	text := strings.Join(content, "\n")
+	if v.maxWidth > 0 && lipgloss.Width(text)+box.GetHorizontalFrameSize() > v.maxWidth {
+		box = box.Width(v.maxWidth)
+	}
+	return box.Render(text)
 }
 
 func (v *TerminalView) formatInlineFields(fields map[string]any) string {
