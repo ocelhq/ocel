@@ -1,0 +1,79 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "$ref": "#/definitions/WaitingEvent",
+    "definitions": {
+        "WaitingEvent": {
+            "properties": {
+                "url": {
+                    "type": "string"
+                },
+                "missing": {
+                    "$ref": "#/definitions/cli.stream.v1.MissingVariables",
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Waiting Event"
+        },
+        "cli.stream.v1.MissingGroup": {
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Missing Group"
+        },
+        "cli.stream.v1.MissingVariable": {
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "folder": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "group": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Missing Variable"
+        },
+        "cli.stream.v1.MissingVariables": {
+            "properties": {
+                "cells": {
+                    "items": {
+                        "$ref": "#/definitions/cli.stream.v1.MissingVariable"
+                    },
+                    "additionalProperties": false,
+                    "type": "array"
+                },
+                "remedy": {
+                    "type": "string"
+                },
+                "groups": {
+                    "items": {
+                        "$ref": "#/definitions/cli.stream.v1.MissingGroup"
+                    },
+                    "additionalProperties": false,
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Missing Variables"
+        }
+    }
+}

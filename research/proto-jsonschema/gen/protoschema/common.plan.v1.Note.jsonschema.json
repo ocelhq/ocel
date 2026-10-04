@@ -1,0 +1,40 @@
+{
+  "$id": "common.plan.v1.Note.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "anyOf": [
+        {
+          "pattern": "^ACTION_UNSPECIFIED$",
+          "type": "string"
+        },
+        {
+          "enum": [
+            "ACTION_CREATE",
+            "ACTION_UPDATE",
+            "ACTION_REPLACE",
+            "ACTION_DELETE",
+            "ACTION_DISABLE_THEN_DELETE",
+            "ACTION_KEEP",
+            "ACTION_ADOPT"
+          ],
+          "type": "string"
+        },
+        {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        }
+      ],
+      "default": 0,
+      "title": "Action"
+    },
+    "text": {
+      "default": "",
+      "type": "string"
+    }
+  },
+  "title": "Note",
+  "type": "object"
+}

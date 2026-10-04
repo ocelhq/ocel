@@ -1,0 +1,14 @@
+version: v2
+clean: true
+inputs:
+  - directory: proto
+    paths:
+      - proto/cli/stream
+plugins:
+  - local:
+      [go, run, github.com/pubg/protoc-gen-jsonschema@v0.8.0]
+    out: research/proto-jsonschema/gen/pubg-default
+    opt:
+      - entrypoint_message=RunEvent
+      - respect_protojson_int64=true
+      - additional_properties=AlwaysFalse

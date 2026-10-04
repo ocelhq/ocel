@@ -1,0 +1,222 @@
+{
+  "$id": "probe.v1.Probe.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^(any_value)$": {
+      "$ref": "google.protobuf.Value.jsonschema.json"
+    },
+    "^(maybe_big)$": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "pattern": "^-?[0-9]+$",
+          "type": "string"
+        }
+      ]
+    },
+    "^(snake_case_name)$": {
+      "default": "",
+      "type": "string"
+    },
+    "^(wrapped_big)$": {
+      "$ref": "google.protobuf.Int64Value.jsonschema.json"
+    },
+    "^(wrapped_str)$": {
+      "$ref": "google.protobuf.StringValue.jsonschema.json"
+    }
+  },
+  "properties": {
+    "anyValue": {
+      "$ref": "google.protobuf.Value.jsonschema.json"
+    },
+    "at": {
+      "$ref": "google.protobuf.Timestamp.jsonschema.json"
+    },
+    "big": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "pattern": "^-?[0-9]+$",
+          "type": "string"
+        }
+      ],
+      "default": 0
+    },
+    "blob": {
+      "default": null,
+      "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+      "type": "string"
+    },
+    "color": {
+      "anyOf": [
+        {
+          "pattern": "^COLOR_UNSPECIFIED$",
+          "type": "string"
+        },
+        {
+          "enum": [
+            "COLOR_RED"
+          ],
+          "type": "string"
+        },
+        {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        }
+      ],
+      "default": 0,
+      "title": "Color"
+    },
+    "colors": {
+      "items": {
+        "anyOf": [
+          {
+            "enum": [
+              "COLOR_UNSPECIFIED",
+              "COLOR_RED"
+            ],
+            "type": "string"
+          },
+          {
+            "maximum": 2147483647,
+            "minimum": -2147483648,
+            "type": "integer"
+          }
+        ],
+        "title": "Color"
+      },
+      "type": "array"
+    },
+    "counts": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "pattern": "^-?[0-9]+$",
+            "type": "string"
+          }
+        ]
+      },
+      "propertyNames": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "inner": {
+      "$ref": "probe.v1.Inner.jsonschema.json"
+    },
+    "inners": {
+      "additionalProperties": {
+        "$ref": "probe.v1.Inner.jsonschema.json"
+      },
+      "propertyNames": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "items": {
+      "items": {
+        "$ref": "probe.v1.Inner.jsonschema.json"
+      },
+      "type": "array"
+    },
+    "mask": {
+      "$ref": "google.protobuf.FieldMask.jsonschema.json"
+    },
+    "maybe": {
+      "type": "string"
+    },
+    "maybeBig": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "pattern": "^-?[0-9]+$",
+          "type": "string"
+        }
+      ]
+    },
+    "meta": {
+      "$ref": "google.protobuf.Struct.jsonschema.json"
+    },
+    "nothing": {
+      "$ref": "google.protobuf.Empty.jsonschema.json"
+    },
+    "packed": {
+      "$ref": "google.protobuf.Any.jsonschema.json"
+    },
+    "ratio": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "default": 0
+    },
+    "small": {
+      "anyOf": [
+        {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        },
+        {
+          "pattern": "^-?[0-9]+$",
+          "type": "string"
+        }
+      ],
+      "default": 0
+    },
+    "snakeCaseName": {
+      "default": "",
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "took": {
+      "$ref": "google.protobuf.Duration.jsonschema.json"
+    },
+    "ubig": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "pattern": "^[0-9]+$",
+          "type": "string"
+        }
+      ],
+      "default": 0
+    },
+    "wrappedBig": {
+      "$ref": "google.protobuf.Int64Value.jsonschema.json"
+    },
+    "wrappedStr": {
+      "$ref": "google.protobuf.StringValue.jsonschema.json"
+    }
+  },
+  "title": "Probe",
+  "type": "object"
+}

@@ -1,0 +1,16 @@
+{
+  "$id": "cli.stream.v1.WaitingEvent.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "missing": {
+      "$ref": "cli.stream.v1.MissingVariables.jsonschema.json"
+    },
+    "url": {
+      "default": "",
+      "type": "string"
+    }
+  },
+  "title": "Waiting Event",
+  "type": "object"
+}

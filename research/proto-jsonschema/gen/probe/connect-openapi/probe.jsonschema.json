@@ -1,0 +1,347 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "google.protobuf.Any": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "format": "binary"
+        }
+      },
+      "additionalProperties": true,
+      "description": "An arbitrary message with a type URL identifying the encoded message type."
+    },
+    "google.protobuf.Duration": {
+      "type": "string",
+      "format": "duration",
+      "description": "A signed duration in seconds, with up to nine fractional digits and an `s` suffix (for example, `3s` or `-0.001s`)."
+    },
+    "google.protobuf.Empty": {
+      "type": "object",
+      "description": "An empty JSON object."
+    },
+    "google.protobuf.FieldMask": {
+      "type": "string",
+      "description": "Comma-separated field paths in lowerCamelCase (for example, `user.displayName,photo`)."
+    },
+    "google.protobuf.Int64Value": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "description": "A signed 64-bit integer encoded as a decimal string. Input may also be a JSON number or `null`."
+    },
+    "google.protobuf.ListValue": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/google.protobuf.Value"
+      },
+      "description": "A JSON array whose elements may be any JSON value."
+    },
+    "google.protobuf.NullValue": {
+      "type": "string",
+      "title": "NullValue",
+      "enum": [
+        "NULL_VALUE"
+      ],
+      "description": "`NullValue` is a singleton enumeration to represent the null value for the\n `Value` type union.\n\n The JSON representation for `NullValue` is JSON `null`."
+    },
+    "google.protobuf.StringValue": {
+      "type": "string",
+      "description": "A string value; `null` is also accepted."
+    },
+    "google.protobuf.Struct": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/google.protobuf.Value"
+      },
+      "description": "A JSON object whose property values may be any JSON value."
+    },
+    "google.protobuf.Timestamp": {
+      "type": "string",
+      "examples": [
+        "2023-01-15T01:30:15.01Z",
+        "2024-12-25T12:00:00Z"
+      ],
+      "format": "date-time",
+      "description": "A point in time in RFC 3339 format, with up to nanosecond precision. Output uses UTC (`Z`); input may use an offset from UTC."
+    },
+    "google.protobuf.Value": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ],
+      "description": "Any JSON value: `null`, number, string, boolean, array, or object."
+    },
+    "probe.v1.Color": {
+      "type": "string",
+      "title": "Color",
+      "enum": [
+        "COLOR_UNSPECIFIED",
+        "COLOR_RED"
+      ]
+    },
+    "probe.v1.Inner": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "name"
+        }
+      },
+      "title": "Inner",
+      "additionalProperties": false
+    },
+    "probe.v1.Probe": {
+      "type": "object",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "inner": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/probe.v1.Inner"
+                }
+              ],
+              "title": "inner"
+            }
+          },
+          "title": "inner"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "title": "text"
+            }
+          },
+          "title": "text"
+        }
+      ],
+      "unevaluatedProperties": false,
+      "not": {
+        "allOf": [
+          {
+            "anyOf": [
+              {
+                "required": [
+                  "inner"
+                ]
+              },
+              {
+                "required": [
+                  "text"
+                ]
+              }
+            ]
+          },
+          {
+            "not": {
+              "oneOf": [
+                {
+                  "required": [
+                    "inner"
+                  ]
+                },
+                {
+                  "required": [
+                    "text"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "properties": {
+        "big": {
+          "type": "string",
+          "title": "big",
+          "format": "int64"
+        },
+        "ubig": {
+          "type": "string",
+          "title": "ubig",
+          "format": "int64"
+        },
+        "small": {
+          "type": "integer",
+          "title": "small",
+          "format": "int32"
+        },
+        "ratio": {
+          "type": "number",
+          "title": "ratio",
+          "format": "double"
+        },
+        "blob": {
+          "type": "string",
+          "title": "blob",
+          "format": "byte"
+        },
+        "color": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/probe.v1.Color"
+            }
+          ],
+          "title": "color"
+        },
+        "maybe": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "title": "maybe"
+        },
+        "maybeBig": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "title": "maybe_big",
+          "format": "int64"
+        },
+        "counts": {
+          "type": "object",
+          "title": "counts",
+          "additionalProperties": {
+            "type": "string",
+            "title": "value",
+            "format": "int64"
+          }
+        },
+        "inners": {
+          "type": "object",
+          "title": "inners",
+          "additionalProperties": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/probe.v1.Inner"
+              }
+            ],
+            "title": "value"
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/probe.v1.Inner"
+          },
+          "title": "items"
+        },
+        "colors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/probe.v1.Color"
+          },
+          "title": "colors"
+        },
+        "at": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/google.protobuf.Timestamp"
+            }
+          ],
+          "title": "at"
+        },
+        "took": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/google.protobuf.Duration"
+            }
+          ],
+          "title": "took"
+        },
+        "meta": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/google.protobuf.Struct"
+            }
+          ],
+          "title": "meta"
+        },
+        "anyValue": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/google.protobuf.Value"
+            }
+          ],
+          "title": "any_value"
+        },
+        "packed": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/google.protobuf.Any"
+            }
+          ],
+          "title": "packed"
+        },
+        "wrappedBig": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/google.protobuf.Int64Value"
+            }
+          ],
+          "title": "wrapped_big"
+        },
+        "wrappedStr": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/google.protobuf.StringValue"
+            }
+          ],
+          "title": "wrapped_str"
+        },
+        "nothing": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/google.protobuf.Empty"
+            }
+          ],
+          "title": "nothing"
+        },
+        "mask": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/google.protobuf.FieldMask"
+            }
+          ],
+          "title": "mask"
+        },
+        "snakeCaseName": {
+          "type": "string",
+          "title": "snake_case_name"
+        }
+      },
+      "title": "Probe"
+    }
+  }
+}

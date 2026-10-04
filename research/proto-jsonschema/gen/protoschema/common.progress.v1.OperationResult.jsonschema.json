@@ -1,0 +1,55 @@
+{
+  "$id": "common.progress.v1.OperationResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^(promotion_id)$": {
+      "default": "",
+      "type": "string"
+    },
+    "^(url_notes)$": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "properties": {
+    "apps": {
+      "items": {
+        "$ref": "common.progress.v1.AppResult.jsonschema.json"
+      },
+      "type": "array"
+    },
+    "connector": {
+      "$ref": "common.progress.v1.ConnectorInstalled.jsonschema.json"
+    },
+    "error": {
+      "default": "",
+      "type": "string"
+    },
+    "promotionId": {
+      "default": "",
+      "type": "string"
+    },
+    "propagation": {
+      "$ref": "common.progress.v1.Propagation.jsonschema.json"
+    },
+    "refused": {
+      "default": false,
+      "type": "boolean"
+    },
+    "success": {
+      "default": false,
+      "type": "boolean"
+    },
+    "urlNotes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "title": "Operation Result",
+  "type": "object"
+}

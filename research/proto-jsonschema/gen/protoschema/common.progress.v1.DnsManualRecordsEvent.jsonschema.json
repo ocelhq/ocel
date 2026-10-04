@@ -1,0 +1,25 @@
+{
+  "$id": "common.progress.v1.DnsManualRecordsEvent.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "headline": {
+      "default": "",
+      "type": "string"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "records": {
+      "items": {
+        "$ref": "common.progress.v1.DnsRecord.jsonschema.json"
+      },
+      "type": "array"
+    }
+  },
+  "title": "Dns Manual Records Event",
+  "type": "object"
+}

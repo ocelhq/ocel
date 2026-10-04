@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "cli.stream.v1.MissingGroup.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "key": {
+          "minLength": 1,
+          "pattern": "^[^#[:cntrl:]]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "description"
+      ],
+      "title": "Missing Group",
+      "type": "object"
+    },
+    "cli.stream.v1.MissingVariable.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "folder": {
+          "pattern": "^(/[^/#[:cntrl:]]+)*$",
+          "type": "string"
+        },
+        "group": {
+          "pattern": "^[^#[:cntrl:]]*$",
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "folder",
+        "reason",
+        "description",
+        "group"
+      ],
+      "title": "Missing Variable",
+      "type": "object"
+    },
+    "cli.stream.v1.MissingVariables.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "cells": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.MissingVariable.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.MissingGroup.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "remedy": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "remedy"
+      ],
+      "title": "Missing Variables",
+      "type": "object"
+    },
+    "cli.stream.v1.WaitingEvent.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "missing": {
+          "$ref": "#/$defs/cli.stream.v1.MissingVariables.jsonschema.strict.json"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "Waiting Event",
+      "type": "object"
+    }
+  },
+  "$id": "cli.stream.v1.WaitingEvent.jsonschema.strict.bundle.json",
+  "$ref": "#/$defs/cli.stream.v1.WaitingEvent.jsonschema.strict.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

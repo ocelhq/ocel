@@ -1,0 +1,27 @@
+{
+  "$defs": {
+    "cli.stream.v1.MissingGroup.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "key": {
+          "minLength": 1,
+          "pattern": "^[^#[:cntrl:]]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "description"
+      ],
+      "title": "Missing Group",
+      "type": "object"
+    }
+  },
+  "$id": "cli.stream.v1.MissingGroup.jsonschema.strict.bundle.json",
+  "$ref": "#/$defs/cli.stream.v1.MissingGroup.jsonschema.strict.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

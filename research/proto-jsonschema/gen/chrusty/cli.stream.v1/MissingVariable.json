@@ -1,0 +1,28 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "$ref": "#/definitions/MissingVariable",
+    "definitions": {
+        "MissingVariable": {
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "folder": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "group": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Missing Variable"
+        }
+    }
+}

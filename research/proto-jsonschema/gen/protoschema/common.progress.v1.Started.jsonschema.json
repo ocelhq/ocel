@@ -1,0 +1,25 @@
+{
+  "$id": "common.progress.v1.Started.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^(parent_span_id)$": {
+      "default": null,
+      "maxLength": 12,
+      "minLength": 11,
+      "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "parentSpanId": {
+      "default": null,
+      "maxLength": 12,
+      "minLength": 11,
+      "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+      "type": "string"
+    }
+  },
+  "title": "Started",
+  "type": "object"
+}

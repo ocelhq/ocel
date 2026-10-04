@@ -1,0 +1,41 @@
+{
+  "$id": "cli.stream.v1.IdentityEvent.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "edge": {
+      "$ref": "cli.stream.v1.Party.jsonschema.json"
+    },
+    "origin": {
+      "$ref": "cli.stream.v1.Party.jsonschema.json"
+    },
+    "project": {
+      "default": "",
+      "type": "string"
+    },
+    "tier": {
+      "anyOf": [
+        {
+          "pattern": "^TIER_UNSPECIFIED$",
+          "type": "string"
+        },
+        {
+          "enum": [
+            "TIER_PREVIEW",
+            "TIER_PRODUCTION"
+          ],
+          "type": "string"
+        },
+        {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        }
+      ],
+      "default": 0,
+      "title": "Tier"
+    }
+  },
+  "title": "Identity Event",
+  "type": "object"
+}

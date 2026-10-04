@@ -1,0 +1,31 @@
+{
+  "$id": "cli.stream.v1.MissingVariable.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "description": {
+      "default": "",
+      "type": "string"
+    },
+    "folder": {
+      "default": "",
+      "pattern": "^(/[^/#[:cntrl:]]+)*$",
+      "type": "string"
+    },
+    "group": {
+      "default": "",
+      "pattern": "^[^#[:cntrl:]]*$",
+      "type": "string"
+    },
+    "key": {
+      "default": "",
+      "type": "string"
+    },
+    "reason": {
+      "default": "",
+      "type": "string"
+    }
+  },
+  "title": "Missing Variable",
+  "type": "object"
+}

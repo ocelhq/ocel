@@ -1,0 +1,191 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "$ref": "#/definitions/Probe",
+    "definitions": {
+        "Probe": {
+            "properties": {
+                "big": {
+                    "type": "string"
+                },
+                "ubig": {
+                    "type": "string"
+                },
+                "small": {
+                    "type": "integer"
+                },
+                "ratio": {
+                    "type": "number"
+                },
+                "blob": {
+                    "type": "string",
+                    "format": "binary",
+                    "binaryEncoding": "base64"
+                },
+                "color": {
+                    "enum": [
+                        "COLOR_UNSPECIFIED",
+                        "COLOR_RED"
+                    ],
+                    "type": "string",
+                    "title": "Color"
+                },
+                "maybe": {
+                    "type": "string"
+                },
+                "maybeBig": {
+                    "type": "string"
+                },
+                "counts": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "type": "object"
+                },
+                "inners": {
+                    "additionalProperties": {
+                        "$ref": "#/definitions/probe.v1.Inner",
+                        "additionalProperties": false
+                    },
+                    "type": "object"
+                },
+                "items": {
+                    "items": {
+                        "$ref": "#/definitions/probe.v1.Inner"
+                    },
+                    "additionalProperties": false,
+                    "type": "array"
+                },
+                "colors": {
+                    "items": {
+                        "enum": [
+                            "COLOR_UNSPECIFIED",
+                            "COLOR_RED"
+                        ]
+                    },
+                    "type": "array",
+                    "title": "Color"
+                },
+                "at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "took": {
+                    "pattern": "^([0-9]+\\.?[0-9]*|\\.[0-9]+)s$",
+                    "type": "string",
+                    "format": "regex"
+                },
+                "meta": {
+                    "additionalProperties": false,
+                    "type": "object"
+                },
+                "anyValue": {
+                    "oneOf": [
+                        {
+                            "type": "array"
+                        },
+                        {
+                            "type": "boolean"
+                        },
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "object"
+                        },
+                        {
+                            "type": "string"
+                        }
+                    ],
+                    "title": "Value",
+                    "description": "`Value` represents a dynamically typed value which can be either null, a number, a string, a boolean, a recursive struct value, or a list of values. A producer of value is expected to set one of these variants. Absence of any variant indicates an error. The JSON representation for `Value` is JSON value."
+                },
+                "packed": {
+                    "properties": {
+                        "typeUrl": {
+                            "type": "string",
+                            "description": "A URL/resource name that uniquely identifies the type of the serialized protocol buffer message. This string must contain at least one \"/\" character. The last segment of the URL's path must represent the fully qualified name of the type (as in `path/google.protobuf.Duration`). The name should be in a canonical form (e.g., leading \".\" is not accepted). In practice, teams usually precompile into the binary all types that they expect it to use in the context of Any. However, for URLs which use the scheme `http`, `https`, or no scheme, one can optionally set up a type server that maps type URLs to message definitions as follows: * If no scheme is provided, `https` is assumed. * An HTTP GET on the URL must yield a [google.protobuf.Type][]   value in binary format, or produce an error. * Applications are allowed to cache lookup results based on the   URL, or have them precompiled into a binary to avoid any   lookup. Therefore, binary compatibility needs to be preserved   on changes to types. (Use versioned type names to manage   breaking changes.) Note: this functionality is not currently available in the official protobuf release, and it is not used for type URLs beginning with type.googleapis.com. As of May 2023, there are no widely used type server implementations and no plans to implement one. Schemes other than `http`, `https` (or the empty scheme) might be used with implementation specific semantics."
+                        },
+                        "value": {
+                            "type": "string",
+                            "description": "Must be a valid serialized protocol buffer of the above specified type.",
+                            "format": "binary",
+                            "binaryEncoding": "base64"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "type": "object"
+                },
+                "wrappedBig": {
+                    "additionalProperties": false,
+                    "type": "string"
+                },
+                "wrappedStr": {
+                    "additionalProperties": false,
+                    "type": "string"
+                },
+                "nothing": {
+                    "additionalProperties": false,
+                    "type": "object"
+                },
+                "mask": {
+                    "properties": {
+                        "paths": {
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": "array",
+                            "description": "The set of field mask paths."
+                        }
+                    },
+                    "additionalProperties": false,
+                    "type": "object"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "inner": {
+                    "$ref": "#/definitions/probe.v1.Inner",
+                    "additionalProperties": false
+                },
+                "snakeCaseName": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "oneOf": [
+                {
+                    "required": [
+                        "maybe"
+                    ]
+                },
+                {
+                    "required": [
+                        "maybe_big"
+                    ]
+                },
+                {
+                    "required": [
+                        "text"
+                    ]
+                },
+                {
+                    "required": [
+                        "inner"
+                    ]
+                }
+            ],
+            "title": "Probe"
+        },
+        "probe.v1.Inner": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Inner"
+        }
+    }
+}

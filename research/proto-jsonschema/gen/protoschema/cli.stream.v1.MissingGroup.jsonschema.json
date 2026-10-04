@@ -1,0 +1,19 @@
+{
+  "$id": "cli.stream.v1.MissingGroup.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "description": {
+      "default": "",
+      "type": "string"
+    },
+    "key": {
+      "default": "",
+      "minLength": 1,
+      "pattern": "^[^#[:cntrl:]]*$",
+      "type": "string"
+    }
+  },
+  "title": "Missing Group",
+  "type": "object"
+}

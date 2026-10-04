@@ -1,0 +1,31 @@
+{
+  "$id": "common.progress.v1.Output.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "stream": {
+      "anyOf": [
+        {
+          "pattern": "^STREAM_UNSPECIFIED$",
+          "type": "string"
+        },
+        {
+          "enum": [
+            "STREAM_STDOUT",
+            "STREAM_STDERR"
+          ],
+          "type": "string"
+        },
+        {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        }
+      ],
+      "default": 0,
+      "title": "Stream"
+    }
+  },
+  "title": "Output",
+  "type": "object"
+}

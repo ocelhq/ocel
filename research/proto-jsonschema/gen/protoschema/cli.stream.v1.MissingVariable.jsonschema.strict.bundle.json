@@ -1,0 +1,39 @@
+{
+  "$defs": {
+    "cli.stream.v1.MissingVariable.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "folder": {
+          "pattern": "^(/[^/#[:cntrl:]]+)*$",
+          "type": "string"
+        },
+        "group": {
+          "pattern": "^[^#[:cntrl:]]*$",
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "folder",
+        "reason",
+        "description",
+        "group"
+      ],
+      "title": "Missing Variable",
+      "type": "object"
+    }
+  },
+  "$id": "cli.stream.v1.MissingVariable.jsonschema.strict.bundle.json",
+  "$ref": "#/$defs/cli.stream.v1.MissingVariable.jsonschema.strict.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

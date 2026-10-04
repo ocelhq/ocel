@@ -1,0 +1,56 @@
+{
+  "$id": "common.progress.v1.AppResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^(deployment_url)$": {
+      "default": "",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "app": {
+      "default": "",
+      "type": "string"
+    },
+    "deploymentUrl": {
+      "default": "",
+      "type": "string"
+    },
+    "error": {
+      "default": "",
+      "type": "string"
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "pattern": "^APP_OUTCOME_UNSPECIFIED$",
+          "type": "string"
+        },
+        {
+          "enum": [
+            "APP_OUTCOME_SUCCEEDED",
+            "APP_OUTCOME_FAILED",
+            "APP_OUTCOME_NOT_RUN"
+          ],
+          "type": "string"
+        },
+        {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        }
+      ],
+      "default": 0,
+      "title": "App Outcome"
+    },
+    "urls": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "title": "App Result",
+  "type": "object"
+}

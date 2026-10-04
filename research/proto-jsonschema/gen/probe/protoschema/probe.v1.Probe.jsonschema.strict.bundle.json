@@ -1,0 +1,210 @@
+{
+  "$defs": {
+    "google.protobuf.Any.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "title": "Any",
+      "type": "object"
+    },
+    "google.protobuf.Duration.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "format": "duration",
+      "title": "Duration",
+      "type": "string"
+    },
+    "google.protobuf.Empty.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "service Foo {\n       rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty);\n     }",
+      "properties": {},
+      "title": "A generic empty message that you can re-use to avoid defining duplicated\n empty messages in your APIs. A typical example is to use it as the request\n or the response type of an API method. For instance:",
+      "type": "object"
+    },
+    "google.protobuf.FieldMask.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Field Mask",
+      "type": "string"
+    },
+    "google.protobuf.Int64Value.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "The int64 value.",
+      "title": "Int64 Value",
+      "type": "integer"
+    },
+    "google.protobuf.StringValue.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "The string value.",
+      "title": "String Value",
+      "type": "string"
+    },
+    "google.protobuf.Struct.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Struct",
+      "type": "object"
+    },
+    "google.protobuf.Timestamp.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "google.protobuf.Value.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Value"
+    },
+    "probe.v1.Inner.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Inner",
+      "type": "object"
+    },
+    "probe.v1.Probe.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "anyValue": {
+          "$ref": "#/$defs/google.protobuf.Value.jsonschema.strict.json"
+        },
+        "at": {
+          "$ref": "#/$defs/google.protobuf.Timestamp.jsonschema.strict.json"
+        },
+        "big": {
+          "type": "integer"
+        },
+        "blob": {
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "color": {
+          "enum": [
+            "COLOR_UNSPECIFIED",
+            "COLOR_RED"
+          ],
+          "title": "Color",
+          "type": "string"
+        },
+        "colors": {
+          "items": {
+            "enum": [
+              "COLOR_UNSPECIFIED",
+              "COLOR_RED"
+            ],
+            "title": "Color",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "inner": {
+          "$ref": "#/$defs/probe.v1.Inner.jsonschema.strict.json"
+        },
+        "inners": {
+          "additionalProperties": {
+            "$ref": "#/$defs/probe.v1.Inner.jsonschema.strict.json"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/probe.v1.Inner.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "mask": {
+          "$ref": "#/$defs/google.protobuf.FieldMask.jsonschema.strict.json"
+        },
+        "maybe": {
+          "type": "string"
+        },
+        "maybeBig": {
+          "type": "integer"
+        },
+        "meta": {
+          "$ref": "#/$defs/google.protobuf.Struct.jsonschema.strict.json"
+        },
+        "nothing": {
+          "$ref": "#/$defs/google.protobuf.Empty.jsonschema.strict.json"
+        },
+        "packed": {
+          "$ref": "#/$defs/google.protobuf.Any.jsonschema.strict.json"
+        },
+        "ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "Infinity",
+                "-Infinity",
+                "NaN"
+              ],
+              "type": "string"
+            }
+          ]
+        },
+        "small": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        },
+        "snakeCaseName": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "took": {
+          "$ref": "#/$defs/google.protobuf.Duration.jsonschema.strict.json"
+        },
+        "ubig": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "wrappedBig": {
+          "$ref": "#/$defs/google.protobuf.Int64Value.jsonschema.strict.json"
+        },
+        "wrappedStr": {
+          "$ref": "#/$defs/google.protobuf.StringValue.jsonschema.strict.json"
+        }
+      },
+      "required": [
+        "big",
+        "ubig",
+        "small",
+        "ratio",
+        "blob",
+        "color",
+        "snakeCaseName"
+      ],
+      "title": "Probe",
+      "type": "object"
+    }
+  },
+  "$id": "probe.v1.Probe.jsonschema.strict.bundle.json",
+  "$ref": "#/$defs/probe.v1.Probe.jsonschema.strict.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

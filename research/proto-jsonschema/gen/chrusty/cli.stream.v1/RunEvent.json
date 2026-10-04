@@ -1,0 +1,714 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "$ref": "#/definitions/RunEvent",
+    "definitions": {
+        "RunEvent": {
+            "properties": {
+                "operation": {
+                    "$ref": "#/definitions/common.progress.v1.OperationEvent",
+                    "additionalProperties": false
+                },
+                "waiting": {
+                    "$ref": "#/definitions/cli.stream.v1.WaitingEvent",
+                    "additionalProperties": false
+                },
+                "resumed": {
+                    "$ref": "#/definitions/cli.stream.v1.ResumedEvent",
+                    "additionalProperties": false
+                },
+                "summary": {
+                    "$ref": "#/definitions/cli.stream.v1.RunSummary",
+                    "additionalProperties": false
+                },
+                "identity": {
+                    "$ref": "#/definitions/cli.stream.v1.IdentityEvent",
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "oneOf": [
+                {
+                    "required": [
+                        "waiting"
+                    ]
+                },
+                {
+                    "required": [
+                        "resumed"
+                    ]
+                },
+                {
+                    "required": [
+                        "summary"
+                    ]
+                },
+                {
+                    "required": [
+                        "identity"
+                    ]
+                }
+            ],
+            "title": "Run Event"
+        },
+        "cli.stream.v1.IdentityEvent": {
+            "properties": {
+                "project": {
+                    "type": "string"
+                },
+                "tier": {
+                    "enum": [
+                        "TIER_UNSPECIFIED",
+                        "TIER_PREVIEW",
+                        "TIER_PRODUCTION"
+                    ],
+                    "type": "string",
+                    "title": "Tier"
+                },
+                "origin": {
+                    "$ref": "#/definitions/cli.stream.v1.Party",
+                    "additionalProperties": false
+                },
+                "edge": {
+                    "$ref": "#/definitions/cli.stream.v1.Party",
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Identity Event"
+        },
+        "cli.stream.v1.MissingGroup": {
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Missing Group"
+        },
+        "cli.stream.v1.MissingVariable": {
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "folder": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "group": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Missing Variable"
+        },
+        "cli.stream.v1.MissingVariables": {
+            "properties": {
+                "cells": {
+                    "items": {
+                        "$ref": "#/definitions/cli.stream.v1.MissingVariable"
+                    },
+                    "additionalProperties": false,
+                    "type": "array"
+                },
+                "remedy": {
+                    "type": "string"
+                },
+                "groups": {
+                    "items": {
+                        "$ref": "#/definitions/cli.stream.v1.MissingGroup"
+                    },
+                    "additionalProperties": false,
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Missing Variables"
+        },
+        "cli.stream.v1.Party": {
+            "properties": {
+                "vendor": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "string"
+                },
+                "principal": {
+                    "type": "string"
+                },
+                "location": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Party"
+        },
+        "cli.stream.v1.ResumedEvent": {
+            "properties": {
+                "reason": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Resumed Event"
+        },
+        "cli.stream.v1.RunSummary": {
+            "properties": {
+                "success": {
+                    "type": "boolean"
+                },
+                "detail": {
+                    "type": "string"
+                },
+                "durationMs": {
+                    "type": "string"
+                },
+                "logPath": {
+                    "type": "string"
+                },
+                "headline": {
+                    "type": "string"
+                },
+                "urlNotes": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "propagation": {
+                    "$ref": "#/definitions/common.progress.v1.Propagation",
+                    "additionalProperties": false
+                },
+                "interrupted": {
+                    "type": "boolean"
+                },
+                "apps": {
+                    "items": {
+                        "$ref": "#/definitions/common.progress.v1.AppResult"
+                    },
+                    "additionalProperties": false,
+                    "type": "array"
+                },
+                "missing": {
+                    "$ref": "#/definitions/cli.stream.v1.MissingVariables",
+                    "additionalProperties": false
+                },
+                "changeStarted": {
+                    "type": "boolean"
+                },
+                "tier": {
+                    "enum": [
+                        "TIER_UNSPECIFIED",
+                        "TIER_PREVIEW",
+                        "TIER_PRODUCTION"
+                    ],
+                    "type": "string",
+                    "title": "Tier"
+                },
+                "origin": {
+                    "$ref": "#/definitions/cli.stream.v1.Party",
+                    "additionalProperties": false
+                },
+                "promotionId": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Run Summary"
+        },
+        "cli.stream.v1.WaitingEvent": {
+            "properties": {
+                "url": {
+                    "type": "string"
+                },
+                "missing": {
+                    "$ref": "#/definitions/cli.stream.v1.MissingVariables",
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Waiting Event"
+        },
+        "common.plan.v1.Change": {
+            "properties": {
+                "kind": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "action": {
+                    "enum": [
+                        "ACTION_UNSPECIFIED",
+                        "ACTION_CREATE",
+                        "ACTION_UPDATE",
+                        "ACTION_REPLACE",
+                        "ACTION_DELETE",
+                        "ACTION_DISABLE_THEN_DELETE",
+                        "ACTION_KEEP",
+                        "ACTION_ADOPT"
+                    ],
+                    "type": "string",
+                    "title": "Action"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "slow": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Change"
+        },
+        "common.plan.v1.ChangeGroup": {
+            "properties": {
+                "kind": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "feature": {
+                    "type": "string"
+                },
+                "action": {
+                    "enum": [
+                        "ACTION_UNSPECIFIED",
+                        "ACTION_CREATE",
+                        "ACTION_UPDATE",
+                        "ACTION_REPLACE",
+                        "ACTION_DELETE",
+                        "ACTION_DISABLE_THEN_DELETE",
+                        "ACTION_KEEP",
+                        "ACTION_ADOPT"
+                    ],
+                    "type": "string",
+                    "title": "Action"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "slow": {
+                    "type": "boolean"
+                },
+                "changes": {
+                    "items": {
+                        "$ref": "#/definitions/common.plan.v1.Change"
+                    },
+                    "additionalProperties": false,
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Change Group"
+        },
+        "common.plan.v1.ChangePlan": {
+            "properties": {
+                "subject": {
+                    "type": "string"
+                },
+                "edgeKind": {
+                    "type": "string"
+                },
+                "groups": {
+                    "items": {
+                        "$ref": "#/definitions/common.plan.v1.ChangeGroup"
+                    },
+                    "additionalProperties": false,
+                    "type": "array"
+                },
+                "headline": {
+                    "type": "string"
+                },
+                "notes": {
+                    "items": {
+                        "$ref": "#/definitions/common.plan.v1.Note"
+                    },
+                    "additionalProperties": false,
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Change Plan"
+        },
+        "common.plan.v1.Note": {
+            "properties": {
+                "action": {
+                    "enum": [
+                        "ACTION_UNSPECIFIED",
+                        "ACTION_CREATE",
+                        "ACTION_UPDATE",
+                        "ACTION_REPLACE",
+                        "ACTION_DELETE",
+                        "ACTION_DISABLE_THEN_DELETE",
+                        "ACTION_KEEP",
+                        "ACTION_ADOPT"
+                    ],
+                    "type": "string",
+                    "title": "Action"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Note"
+        },
+        "common.progress.v1.AppResult": {
+            "properties": {
+                "app": {
+                    "type": "string"
+                },
+                "outcome": {
+                    "enum": [
+                        "APP_OUTCOME_UNSPECIFIED",
+                        "APP_OUTCOME_SUCCEEDED",
+                        "APP_OUTCOME_FAILED",
+                        "APP_OUTCOME_NOT_RUN"
+                    ],
+                    "type": "string",
+                    "title": "App Outcome"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "urls": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "deploymentUrl": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "App Result"
+        },
+        "common.progress.v1.ConnectorInstalled": {
+            "properties": {
+                "url": {
+                    "type": "string"
+                },
+                "publicKey": {
+                    "type": "string"
+                },
+                "compute": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Connector Installed"
+        },
+        "common.progress.v1.DnsManualRecordsEvent": {
+            "properties": {
+                "headline": {
+                    "type": "string"
+                },
+                "records": {
+                    "items": {
+                        "$ref": "#/definitions/common.progress.v1.DnsRecord"
+                    },
+                    "additionalProperties": false,
+                    "type": "array"
+                },
+                "notes": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Dns Manual Records Event"
+        },
+        "common.progress.v1.DnsRecord": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                },
+                "proxied": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Dns Record"
+        },
+        "common.progress.v1.Ended": {
+            "properties": {
+                "status": {
+                    "enum": [
+                        "SPAN_STATUS_UNSPECIFIED",
+                        "SPAN_STATUS_OK",
+                        "SPAN_STATUS_ERROR"
+                    ],
+                    "type": "string",
+                    "title": "Span Status"
+                },
+                "startTimeUnixNano": {
+                    "type": "string"
+                },
+                "attributes": {
+                    "items": {
+                        "$ref": "#/definitions/common.progress.v1.SpanAttribute"
+                    },
+                    "additionalProperties": false,
+                    "type": "array"
+                },
+                "title": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Ended"
+        },
+        "common.progress.v1.OperationEvent": {
+            "properties": {
+                "time": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "level": {
+                    "enum": [
+                        "LEVEL_UNSPECIFIED",
+                        "LEVEL_DEBUG",
+                        "LEVEL_INFO",
+                        "LEVEL_WARN",
+                        "LEVEL_ERROR"
+                    ],
+                    "type": "string",
+                    "title": "Level"
+                },
+                "phase": {
+                    "enum": [
+                        "PHASE_UNSPECIFIED",
+                        "PHASE_CHECK",
+                        "PHASE_BUILD",
+                        "PHASE_PLAN",
+                        "PHASE_PROVISION",
+                        "PHASE_DEPLOY",
+                        "PHASE_PROMOTE",
+                        "PHASE_DESTROY"
+                    ],
+                    "type": "string",
+                    "title": "Phase"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "spanId": {
+                    "type": "string",
+                    "format": "binary",
+                    "binaryEncoding": "base64"
+                },
+                "started": {
+                    "$ref": "#/definitions/common.progress.v1.Started",
+                    "additionalProperties": false
+                },
+                "ended": {
+                    "$ref": "#/definitions/common.progress.v1.Ended",
+                    "additionalProperties": false
+                },
+                "output": {
+                    "$ref": "#/definitions/common.progress.v1.Output",
+                    "additionalProperties": false
+                },
+                "plan": {
+                    "$ref": "#/definitions/common.plan.v1.ChangePlan",
+                    "additionalProperties": false
+                },
+                "dnsManualRecords": {
+                    "$ref": "#/definitions/common.progress.v1.DnsManualRecordsEvent",
+                    "additionalProperties": false
+                },
+                "result": {
+                    "$ref": "#/definitions/common.progress.v1.OperationResult",
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "oneOf": [
+                {
+                    "required": [
+                        "started"
+                    ]
+                },
+                {
+                    "required": [
+                        "ended"
+                    ]
+                },
+                {
+                    "required": [
+                        "output"
+                    ]
+                },
+                {
+                    "required": [
+                        "plan"
+                    ]
+                },
+                {
+                    "required": [
+                        "dns_manual_records"
+                    ]
+                },
+                {
+                    "required": [
+                        "result"
+                    ]
+                }
+            ],
+            "title": "Operation Event"
+        },
+        "common.progress.v1.OperationResult": {
+            "properties": {
+                "success": {
+                    "type": "boolean"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "promotionId": {
+                    "type": "string"
+                },
+                "propagation": {
+                    "$ref": "#/definitions/common.progress.v1.Propagation",
+                    "additionalProperties": false
+                },
+                "urlNotes": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "apps": {
+                    "items": {
+                        "$ref": "#/definitions/common.progress.v1.AppResult"
+                    },
+                    "additionalProperties": false,
+                    "type": "array"
+                },
+                "refused": {
+                    "type": "boolean"
+                },
+                "connector": {
+                    "$ref": "#/definitions/common.progress.v1.ConnectorInstalled",
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Operation Result"
+        },
+        "common.progress.v1.Output": {
+            "properties": {
+                "stream": {
+                    "enum": [
+                        "STREAM_UNSPECIFIED",
+                        "STREAM_STDOUT",
+                        "STREAM_STDERR"
+                    ],
+                    "type": "string",
+                    "title": "Stream"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Output"
+        },
+        "common.progress.v1.Propagation": {
+            "properties": {
+                "typicalMs": {
+                    "type": "string"
+                },
+                "published": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Propagation"
+        },
+        "common.progress.v1.SpanAttribute": {
+            "properties": {
+                "key": {
+                    "enum": [
+                        "ATTRIBUTE_KEY_UNSPECIFIED",
+                        "ATTRIBUTE_KEY_COMMAND",
+                        "ATTRIBUTE_KEY_SPAN_NAME",
+                        "ATTRIBUTE_KEY_APP",
+                        "ATTRIBUTE_KEY_PHASE",
+                        "ATTRIBUTE_KEY_PROVIDER",
+                        "ATTRIBUTE_KEY_EXIT_CODE",
+                        "ATTRIBUTE_KEY_ERROR_KIND",
+                        "ATTRIBUTE_KEY_RESOURCE_COUNT",
+                        "ATTRIBUTE_KEY_BYTES",
+                        "ATTRIBUTE_KEY_RETRY_COUNT",
+                        "ATTRIBUTE_KEY_DURATION_MS",
+                        "ATTRIBUTE_KEY_RESOURCE_TYPE",
+                        "ATTRIBUTE_KEY_RESOURCE_NAME",
+                        "ATTRIBUTE_KEY_CACHED",
+                        "ATTRIBUTE_KEY_RESOURCE_ACTION"
+                    ],
+                    "type": "string",
+                    "title": "Attribute Key"
+                },
+                "value": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Span Attribute"
+        },
+        "common.progress.v1.Started": {
+            "properties": {
+                "parentSpanId": {
+                    "type": "string",
+                    "format": "binary",
+                    "binaryEncoding": "base64"
+                }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "title": "Started"
+        }
+    }
+}

@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "cli.stream.v1.IdentityEvent.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "edge": {
+          "$ref": "#/$defs/cli.stream.v1.Party.jsonschema.strict.json"
+        },
+        "origin": {
+          "$ref": "#/$defs/cli.stream.v1.Party.jsonschema.strict.json"
+        },
+        "project": {
+          "type": "string"
+        },
+        "tier": {
+          "enum": [
+            "TIER_UNSPECIFIED",
+            "TIER_PREVIEW",
+            "TIER_PRODUCTION"
+          ],
+          "title": "Tier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project",
+        "tier"
+      ],
+      "title": "Identity Event",
+      "type": "object"
+    },
+    "cli.stream.v1.Party.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "principal": {
+          "type": "string"
+        },
+        "vendor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "vendor",
+        "account",
+        "principal",
+        "location"
+      ],
+      "title": "Party",
+      "type": "object"
+    }
+  },
+  "$id": "cli.stream.v1.IdentityEvent.jsonschema.strict.bundle.json",
+  "$ref": "#/$defs/cli.stream.v1.IdentityEvent.jsonschema.strict.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

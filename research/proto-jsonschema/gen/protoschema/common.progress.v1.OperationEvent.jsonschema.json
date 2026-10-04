@@ -1,0 +1,108 @@
+{
+  "$id": "common.progress.v1.OperationEvent.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^(dns_manual_records)$": {
+      "$ref": "common.progress.v1.DnsManualRecordsEvent.jsonschema.json"
+    },
+    "^(span_id)$": {
+      "default": null,
+      "maxLength": 12,
+      "minLength": 11,
+      "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "dnsManualRecords": {
+      "$ref": "common.progress.v1.DnsManualRecordsEvent.jsonschema.json"
+    },
+    "ended": {
+      "$ref": "common.progress.v1.Ended.jsonschema.json"
+    },
+    "level": {
+      "anyOf": [
+        {
+          "pattern": "^LEVEL_UNSPECIFIED$",
+          "type": "string"
+        },
+        {
+          "enum": [
+            "LEVEL_DEBUG",
+            "LEVEL_INFO",
+            "LEVEL_WARN",
+            "LEVEL_ERROR"
+          ],
+          "type": "string"
+        },
+        {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        }
+      ],
+      "default": 0,
+      "title": "Level"
+    },
+    "message": {
+      "default": "",
+      "type": "string"
+    },
+    "output": {
+      "$ref": "common.progress.v1.Output.jsonschema.json"
+    },
+    "phase": {
+      "anyOf": [
+        {
+          "pattern": "^PHASE_UNSPECIFIED$",
+          "type": "string"
+        },
+        {
+          "enum": [
+            "PHASE_CHECK",
+            "PHASE_BUILD",
+            "PHASE_PLAN",
+            "PHASE_PROVISION",
+            "PHASE_DEPLOY",
+            "PHASE_PROMOTE",
+            "PHASE_DESTROY"
+          ],
+          "type": "string"
+        },
+        {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        }
+      ],
+      "default": 0,
+      "title": "Phase"
+    },
+    "plan": {
+      "$ref": "common.plan.v1.ChangePlan.jsonschema.json"
+    },
+    "result": {
+      "$ref": "common.progress.v1.OperationResult.jsonschema.json"
+    },
+    "spanId": {
+      "default": null,
+      "maxLength": 12,
+      "minLength": 11,
+      "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+      "type": "string"
+    },
+    "started": {
+      "$ref": "common.progress.v1.Started.jsonschema.json"
+    },
+    "subject": {
+      "default": "",
+      "type": "string"
+    },
+    "time": {
+      "$ref": "google.protobuf.Timestamp.jsonschema.json"
+    }
+  },
+  "title": "Operation Event",
+  "type": "object"
+}

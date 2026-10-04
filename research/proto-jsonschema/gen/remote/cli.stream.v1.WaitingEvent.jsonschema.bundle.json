@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "cli.stream.v1.MissingGroup.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "default": "",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "minLength": 1,
+          "pattern": "^[^#[:cntrl:]]*$",
+          "type": "string"
+        }
+      },
+      "title": "Missing Group",
+      "type": "object"
+    },
+    "cli.stream.v1.MissingVariable.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "default": "",
+          "type": "string"
+        },
+        "folder": {
+          "default": "",
+          "pattern": "^(/[^/#[:cntrl:]]+)*$",
+          "type": "string"
+        },
+        "group": {
+          "default": "",
+          "pattern": "^[^#[:cntrl:]]*$",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Missing Variable",
+      "type": "object"
+    },
+    "cli.stream.v1.MissingVariables.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "cells": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.MissingVariable.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.MissingGroup.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "remedy": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Missing Variables",
+      "type": "object"
+    },
+    "cli.stream.v1.WaitingEvent.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "missing": {
+          "$ref": "#/$defs/cli.stream.v1.MissingVariables.jsonschema.json"
+        },
+        "url": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Waiting Event",
+      "type": "object"
+    }
+  },
+  "$id": "cli.stream.v1.WaitingEvent.jsonschema.bundle.json",
+  "$ref": "#/$defs/cli.stream.v1.WaitingEvent.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

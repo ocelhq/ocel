@@ -1,0 +1,39 @@
+{
+  "$id": "common.plan.v1.ChangePlan.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^(edge_kind)$": {
+      "default": "",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "edgeKind": {
+      "default": "",
+      "type": "string"
+    },
+    "groups": {
+      "items": {
+        "$ref": "common.plan.v1.ChangeGroup.jsonschema.json"
+      },
+      "type": "array"
+    },
+    "headline": {
+      "default": "",
+      "type": "string"
+    },
+    "notes": {
+      "items": {
+        "$ref": "common.plan.v1.Note.jsonschema.json"
+      },
+      "type": "array"
+    },
+    "subject": {
+      "default": "",
+      "type": "string"
+    }
+  },
+  "title": "Change Plan",
+  "type": "object"
+}

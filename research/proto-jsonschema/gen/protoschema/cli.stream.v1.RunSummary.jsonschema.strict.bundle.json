@@ -1,0 +1,241 @@
+{
+  "$defs": {
+    "cli.stream.v1.MissingGroup.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "key": {
+          "minLength": 1,
+          "pattern": "^[^#[:cntrl:]]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "description"
+      ],
+      "title": "Missing Group",
+      "type": "object"
+    },
+    "cli.stream.v1.MissingVariable.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "folder": {
+          "pattern": "^(/[^/#[:cntrl:]]+)*$",
+          "type": "string"
+        },
+        "group": {
+          "pattern": "^[^#[:cntrl:]]*$",
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "folder",
+        "reason",
+        "description",
+        "group"
+      ],
+      "title": "Missing Variable",
+      "type": "object"
+    },
+    "cli.stream.v1.MissingVariables.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "cells": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.MissingVariable.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.MissingGroup.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "remedy": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "remedy"
+      ],
+      "title": "Missing Variables",
+      "type": "object"
+    },
+    "cli.stream.v1.Party.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "principal": {
+          "type": "string"
+        },
+        "vendor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "vendor",
+        "account",
+        "principal",
+        "location"
+      ],
+      "title": "Party",
+      "type": "object"
+    },
+    "cli.stream.v1.RunSummary.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "apps": {
+          "items": {
+            "$ref": "#/$defs/common.progress.v1.AppResult.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "changeStarted": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "headline": {
+          "type": "string"
+        },
+        "interrupted": {
+          "type": "boolean"
+        },
+        "logPath": {
+          "type": "string"
+        },
+        "missing": {
+          "$ref": "#/$defs/cli.stream.v1.MissingVariables.jsonschema.strict.json"
+        },
+        "origin": {
+          "$ref": "#/$defs/cli.stream.v1.Party.jsonschema.strict.json"
+        },
+        "promotionId": {
+          "type": "string"
+        },
+        "propagation": {
+          "$ref": "#/$defs/common.progress.v1.Propagation.jsonschema.strict.json"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "tier": {
+          "enum": [
+            "TIER_UNSPECIFIED",
+            "TIER_PREVIEW",
+            "TIER_PRODUCTION"
+          ],
+          "title": "Tier",
+          "type": "string"
+        },
+        "urlNotes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success",
+        "detail",
+        "durationMs",
+        "logPath",
+        "headline",
+        "interrupted",
+        "changeStarted",
+        "tier",
+        "promotionId"
+      ],
+      "title": "Run Summary",
+      "type": "object"
+    },
+    "common.progress.v1.AppResult.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "deploymentUrl": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "APP_OUTCOME_UNSPECIFIED",
+            "APP_OUTCOME_SUCCEEDED",
+            "APP_OUTCOME_FAILED",
+            "APP_OUTCOME_NOT_RUN"
+          ],
+          "title": "App Outcome",
+          "type": "string"
+        },
+        "urls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "app",
+        "outcome",
+        "error",
+        "deploymentUrl"
+      ],
+      "title": "App Result",
+      "type": "object"
+    },
+    "common.progress.v1.Propagation.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "published": {
+          "type": "boolean"
+        },
+        "typicalMs": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "typicalMs",
+        "published"
+      ],
+      "title": "Propagation",
+      "type": "object"
+    }
+  },
+  "$id": "cli.stream.v1.RunSummary.jsonschema.strict.bundle.json",
+  "$ref": "#/$defs/cli.stream.v1.RunSummary.jsonschema.strict.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

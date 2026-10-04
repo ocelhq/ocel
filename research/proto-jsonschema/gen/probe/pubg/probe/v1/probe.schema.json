@@ -1,0 +1,582 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/.probe.v1.Probe",
+  "$defs": {
+    ".google.protobuf.Empty": {
+      "properties": {},
+      "additionalProperties": {
+        "not": {}
+      },
+      "type": "object",
+      "description": "A generic empty message that you can re-use to avoid defining duplicated\n empty messages in your APIs. A typical example is to use it as the request\n or the response type of an API method. For instance:\n\n     service Foo {\n       rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty);\n     }"
+    },
+    ".google.protobuf.FieldMask": {
+      "properties": {
+        "paths": {
+          "$ref": "#/$defs/.google.protobuf.FieldMask.paths"
+        }
+      },
+      "additionalProperties": {
+        "not": {}
+      },
+      "type": "object",
+      "description": "`FieldMask` represents a set of symbolic field paths, for example:\n\n     paths: \"f.a\"\n     paths: \"f.b.d\"\n\n Here `f` represents a field in some root message, `a` and `b`\n fields in the message found in `f`, and `d` a field found in the\n message in `f.b`.\n\n Field masks are used to specify a subset of fields that should be\n returned by a get operation or modified by an update operation.\n Field masks also have a custom JSON encoding (see below).\n\n # Field Masks in Projections\n\n When used in the context of a projection, a response message or\n sub-message is filtered by the API to only contain those fields as\n specified in the mask. For example, if the mask in the previous\n example is applied to a response message as follows:\n\n     f {\n       a : 22\n       b {\n         d : 1\n         x : 2\n       }\n       y : 13\n     }\n     z: 8\n\n The result will not contain specific values for fields x,y and z\n (their value will be set to the default, and omitted in proto text\n output):\n\n\n     f {\n       a : 22\n       b {\n         d : 1\n       }\n     }\n\n A repeated field is not allowed except at the last position of a\n paths string.\n\n If a FieldMask object is not present in a get operation, the\n operation applies to all fields (as if a FieldMask of all fields\n had been specified).\n\n Note that a field mask does not necessarily apply to the\n top-level response message. In case of a REST get operation, the\n field mask applies directly to the response, but in case of a REST\n list operation, the mask instead applies to each individual message\n in the returned resource list. In case of a REST custom method,\n other definitions may be used. Where the mask applies will be\n clearly documented together with its declaration in the API.  In\n any case, the effect on the returned resource/resources is required\n behavior for APIs.\n\n # Field Masks in Update Operations\n\n A field mask in update operations specifies which fields of the\n targeted resource are going to be updated. The API is required\n to only change the values of the fields as specified in the mask\n and leave the others untouched. If a resource is passed in to\n describe the updated values, the API ignores the values of all\n fields not covered by the mask.\n\n If a repeated field is specified for an update operation, new values will\n be appended to the existing repeated field in the target resource. Note that\n a repeated field is only allowed in the last position of a `paths` string.\n\n If a sub-message is specified in the last position of the field mask for an\n update operation, then new value will be merged into the existing sub-message\n in the target resource.\n\n For example, given the target message:\n\n     f {\n       b {\n         d: 1\n         x: 2\n       }\n       c: [1]\n     }\n\n And an update message:\n\n     f {\n       b {\n         d: 10\n       }\n       c: [2]\n     }\n\n then if the field mask is:\n\n  paths: [\"f.b\", \"f.c\"]\n\n then the result will be:\n\n     f {\n       b {\n         d: 10\n         x: 2\n       }\n       c: [1, 2]\n     }\n\n An implementation may provide options to override this default behavior for\n repeated and message fields.\n\n In order to reset a field's value to the default, the field must\n be in the mask and set to the default value in the provided resource.\n Hence, in order to reset all fields of a resource, provide a default\n instance of the resource and set all fields in the mask, or do\n not provide a mask as described below.\n\n If a field mask is not present on update, the operation applies to\n all fields (as if a field mask of all fields has been specified).\n Note that in the presence of schema evolution, this may mean that\n fields the client does not know and has therefore not filled into\n the request will be reset to their default. If this is unwanted\n behavior, a specific service may require a client to always specify\n a field mask, producing an error if not.\n\n As with get operations, the location of the resource which\n describes the updated values in the request message depends on the\n operation kind. In any case, the effect of the field mask is\n required to be honored by the API.\n\n ## Considerations for HTTP REST\n\n The HTTP kind of an update operation which uses a field mask must\n be set to PATCH instead of PUT in order to satisfy HTTP semantics\n (PUT must only be used for full updates).\n\n # JSON Encoding of Field Masks\n\n In JSON, a field mask is encoded as a single string where paths are\n separated by a comma. Fields name in each path are converted\n to/from lower-camel naming conventions.\n\n As an example, consider the following message declarations:\n\n     message Profile {\n       User user = 1;\n       Photo photo = 2;\n     }\n     message User {\n       string display_name = 1;\n       string address = 2;\n     }\n\n In proto a field mask for `Profile` may look as such:\n\n     mask {\n       paths: \"user.display_name\"\n       paths: \"photo\"\n     }\n\n In JSON, the same mask is represented as below:\n\n     {\n       mask: \"user.displayName,photo\"\n     }\n\n # Field Masks and Oneof Fields\n\n Field masks treat fields in oneofs just as regular fields. Consider the\n following message:\n\n     message SampleMessage {\n       oneof test_oneof {\n         string name = 4;\n         SubMessage sub_message = 9;\n       }\n     }\n\n The field mask can be:\n\n     mask {\n       paths: \"name\"\n     }\n\n Or:\n\n     mask {\n       paths: \"sub_message\"\n     }\n\n Note that oneof type names (\"test_oneof\" in this case) cannot be used in\n paths.\n\n ## Field Mask Verification\n\n The implementation of any API method which has a FieldMask type field in the\n request should verify the included field paths, and return an\n `INVALID_ARGUMENT` error if any path is unmappable."
+    },
+    ".google.protobuf.FieldMask.paths": {
+      "items": {
+        "type": "string",
+        "description": "The set of field mask paths."
+      },
+      "type": "array",
+      "description": "The set of field mask paths."
+    },
+    ".google.protobuf.Int64Value": {
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/.google.protobuf.Int64Value.value"
+        }
+      },
+      "additionalProperties": {
+        "not": {}
+      },
+      "type": "object",
+      "description": "Wrapper message for `int64`.\n\n The JSON representation for `Int64Value` is JSON string.\n\n Not recommended for use in new APIs, but still useful for legacy APIs and\n has no plan to be removed."
+    },
+    ".google.protobuf.Int64Value.value": {
+      "type": "string",
+      "format": "int64",
+      "description": "The int64 value."
+    },
+    ".google.protobuf.ListValue": {
+      "properties": {
+        "values": {
+          "$ref": "#/$defs/.google.protobuf.ListValue.values"
+        }
+      },
+      "additionalProperties": {
+        "not": {}
+      },
+      "type": "object",
+      "description": "`ListValue` is a wrapper around a repeated field of values.\n\n The JSON representation for `ListValue` is JSON array."
+    },
+    ".google.protobuf.ListValue.values": {
+      "items": {
+        "$ref": "#/$defs/.google.protobuf.Value",
+        "description": "Repeated field of dynamically typed values."
+      },
+      "type": "array",
+      "description": "Repeated field of dynamically typed values."
+    },
+    ".google.protobuf.NullValue": {
+      "type": "string",
+      "enum": [
+        "NULL_VALUE"
+      ],
+      "description": "`NullValue` is a singleton enumeration to represent the null value for the\n `Value` type union.\n\n The JSON representation for `NullValue` is JSON `null`."
+    },
+    ".google.protobuf.StringValue": {
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/.google.protobuf.StringValue.value"
+        }
+      },
+      "additionalProperties": {
+        "not": {}
+      },
+      "type": "object",
+      "description": "Wrapper message for `string`.\n\n The JSON representation for `StringValue` is JSON string.\n\n Not recommended for use in new APIs, but still useful for legacy APIs and\n has no plan to be removed."
+    },
+    ".google.protobuf.StringValue.value": {
+      "type": "string",
+      "description": "The string value."
+    },
+    ".google.protobuf.Struct": {
+      "properties": {
+        "fields": {
+          "$ref": "#/$defs/.google.protobuf.Struct.fields"
+        }
+      },
+      "additionalProperties": {
+        "not": {}
+      },
+      "type": "object",
+      "description": "`Struct` represents a structured data value, consisting of fields\n which map to dynamically typed values. In some languages, `Struct`\n might be supported by a native representation. For example, in\n scripting languages like JS a struct is represented as an\n object. The details of that representation are described together\n with the proto support for the language.\n\n The JSON representation for `Struct` is JSON object."
+    },
+    ".google.protobuf.Struct.fields": {
+      "additionalProperties": {
+        "$ref": "#/$defs/.google.protobuf.Value"
+      },
+      "type": "object",
+      "description": "Unordered map of dynamically typed values."
+    },
+    ".google.protobuf.Value": {
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": [
+                "nullValue"
+              ]
+            },
+            {
+              "required": [
+                "numberValue"
+              ]
+            },
+            {
+              "required": [
+                "stringValue"
+              ]
+            },
+            {
+              "required": [
+                "boolValue"
+              ]
+            },
+            {
+              "required": [
+                "structValue"
+              ]
+            },
+            {
+              "required": [
+                "listValue"
+              ]
+            },
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "nullValue"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "numberValue"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "stringValue"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "boolValue"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "structValue"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "listValue"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "properties": {
+        "nullValue": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/.google.protobuf.Value.null_value"
+            }
+          ]
+        },
+        "numberValue": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/.google.protobuf.Value.number_value"
+            }
+          ]
+        },
+        "stringValue": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/.google.protobuf.Value.string_value"
+            }
+          ]
+        },
+        "boolValue": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/.google.protobuf.Value.bool_value"
+            }
+          ]
+        },
+        "structValue": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/.google.protobuf.Value.struct_value"
+            }
+          ]
+        },
+        "listValue": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/.google.protobuf.Value.list_value"
+            }
+          ]
+        }
+      },
+      "additionalProperties": {
+        "not": {}
+      },
+      "type": "object",
+      "description": "`Value` represents a dynamically typed value which can be either\n null, a number, a string, a boolean, a recursive struct value, or a\n list of values. A producer of value is expected to set one of these\n variants. Absence of any variant indicates an error.\n\n The JSON representation for `Value` is JSON value."
+    },
+    ".google.protobuf.Value.bool_value": {
+      "type": "boolean",
+      "description": "Represents a boolean value."
+    },
+    ".google.protobuf.Value.list_value": {
+      "$ref": "#/$defs/.google.protobuf.ListValue",
+      "description": "Represents a repeated `Value`."
+    },
+    ".google.protobuf.Value.null_value": {
+      "$ref": "#/$defs/.google.protobuf.NullValue",
+      "description": "Represents a null value."
+    },
+    ".google.protobuf.Value.number_value": {
+      "type": "number",
+      "description": "Represents a double value."
+    },
+    ".google.protobuf.Value.string_value": {
+      "type": "string",
+      "description": "Represents a string value."
+    },
+    ".google.protobuf.Value.struct_value": {
+      "$ref": "#/$defs/.google.protobuf.Struct",
+      "description": "Represents a structured value."
+    },
+    ".probe.v1.Color": {
+      "type": "string",
+      "enum": [
+        "COLOR_UNSPECIFIED",
+        "COLOR_RED"
+      ]
+    },
+    ".probe.v1.Inner": {
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/.probe.v1.Inner.name"
+        }
+      },
+      "additionalProperties": {
+        "not": {}
+      },
+      "type": "object"
+    },
+    ".probe.v1.Inner.name": {
+      "type": "string"
+    },
+    ".probe.v1.Probe": {
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": [
+                "text"
+              ]
+            },
+            {
+              "required": [
+                "inner"
+              ]
+            },
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "text"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "inner"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "required": [
+                "maybe"
+              ]
+            },
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "maybe"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "required": [
+                "maybeBig"
+              ]
+            },
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "maybeBig"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "properties": {
+        "big": {
+          "$ref": "#/$defs/.probe.v1.Probe.big"
+        },
+        "ubig": {
+          "$ref": "#/$defs/.probe.v1.Probe.ubig"
+        },
+        "small": {
+          "$ref": "#/$defs/.probe.v1.Probe.small"
+        },
+        "ratio": {
+          "$ref": "#/$defs/.probe.v1.Probe.ratio"
+        },
+        "blob": {
+          "$ref": "#/$defs/.probe.v1.Probe.blob"
+        },
+        "color": {
+          "$ref": "#/$defs/.probe.v1.Probe.color"
+        },
+        "maybe": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/.probe.v1.Probe.maybe"
+            }
+          ]
+        },
+        "maybeBig": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/.probe.v1.Probe.maybe_big"
+            }
+          ]
+        },
+        "counts": {
+          "$ref": "#/$defs/.probe.v1.Probe.counts"
+        },
+        "inners": {
+          "$ref": "#/$defs/.probe.v1.Probe.inners"
+        },
+        "items": {
+          "$ref": "#/$defs/.probe.v1.Probe.items"
+        },
+        "colors": {
+          "$ref": "#/$defs/.probe.v1.Probe.colors"
+        },
+        "at": {
+          "$ref": "#/$defs/.probe.v1.Probe.at"
+        },
+        "took": {
+          "$ref": "#/$defs/.probe.v1.Probe.took"
+        },
+        "meta": {
+          "$ref": "#/$defs/.probe.v1.Probe.meta"
+        },
+        "anyValue": {
+          "$ref": "#/$defs/.probe.v1.Probe.any_value"
+        },
+        "packed": {
+          "$ref": "#/$defs/.probe.v1.Probe.packed"
+        },
+        "wrappedBig": {
+          "$ref": "#/$defs/.probe.v1.Probe.wrapped_big"
+        },
+        "wrappedStr": {
+          "$ref": "#/$defs/.probe.v1.Probe.wrapped_str"
+        },
+        "nothing": {
+          "$ref": "#/$defs/.probe.v1.Probe.nothing"
+        },
+        "mask": {
+          "$ref": "#/$defs/.probe.v1.Probe.mask"
+        },
+        "text": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/.probe.v1.Probe.text"
+            }
+          ]
+        },
+        "inner": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/.probe.v1.Probe.inner"
+            }
+          ]
+        },
+        "snakeCaseName": {
+          "$ref": "#/$defs/.probe.v1.Probe.snake_case_name"
+        }
+      },
+      "additionalProperties": {
+        "not": {}
+      },
+      "type": "object",
+      "required": [
+        "maybe",
+        "maybeBig",
+        "at",
+        "took",
+        "meta",
+        "anyValue",
+        "packed",
+        "wrappedBig",
+        "wrappedStr",
+        "nothing",
+        "mask"
+      ]
+    },
+    ".probe.v1.Probe.any_value": {
+      "$ref": "#/$defs/.google.protobuf.Value"
+    },
+    ".probe.v1.Probe.at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    ".probe.v1.Probe.big": {
+      "type": "string",
+      "format": "int64"
+    },
+    ".probe.v1.Probe.blob": {
+      "type": "string",
+      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+    },
+    ".probe.v1.Probe.color": {
+      "$ref": "#/$defs/.probe.v1.Color"
+    },
+    ".probe.v1.Probe.colors": {
+      "items": {
+        "$ref": "#/$defs/.probe.v1.Color"
+      },
+      "type": "array"
+    },
+    ".probe.v1.Probe.counts": {
+      "additionalProperties": {},
+      "type": "string",
+      "format": "int64"
+    },
+    ".probe.v1.Probe.inner": {
+      "$ref": "#/$defs/.probe.v1.Inner"
+    },
+    ".probe.v1.Probe.inners": {
+      "additionalProperties": {
+        "$ref": "#/$defs/.probe.v1.Inner"
+      },
+      "type": "object"
+    },
+    ".probe.v1.Probe.items": {
+      "items": {
+        "$ref": "#/$defs/.probe.v1.Inner"
+      },
+      "type": "array"
+    },
+    ".probe.v1.Probe.mask": {
+      "$ref": "#/$defs/.google.protobuf.FieldMask"
+    },
+    ".probe.v1.Probe.maybe": {
+      "type": "string"
+    },
+    ".probe.v1.Probe.maybe_big": {
+      "type": "string",
+      "format": "int64"
+    },
+    ".probe.v1.Probe.meta": {
+      "$ref": "#/$defs/.google.protobuf.Struct"
+    },
+    ".probe.v1.Probe.nothing": {
+      "$ref": "#/$defs/.google.protobuf.Empty"
+    },
+    ".probe.v1.Probe.packed": {
+      "type": "object"
+    },
+    ".probe.v1.Probe.ratio": {
+      "type": "number"
+    },
+    ".probe.v1.Probe.small": {
+      "type": "integer"
+    },
+    ".probe.v1.Probe.snake_case_name": {
+      "type": "string"
+    },
+    ".probe.v1.Probe.text": {
+      "type": "string"
+    },
+    ".probe.v1.Probe.took": {
+      "type": "string",
+      "format": "duration"
+    },
+    ".probe.v1.Probe.ubig": {
+      "type": "string",
+      "format": "int64"
+    },
+    ".probe.v1.Probe.wrapped_big": {
+      "$ref": "#/$defs/.google.protobuf.Int64Value"
+    },
+    ".probe.v1.Probe.wrapped_str": {
+      "$ref": "#/$defs/.google.protobuf.StringValue"
+    }
+  },
+  "type": "object"
+}

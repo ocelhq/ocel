@@ -1,0 +1,785 @@
+{
+  "$defs": {
+    "cli.stream.v1.IdentityEvent.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "edge": {
+          "$ref": "#/$defs/cli.stream.v1.Party.jsonschema.strict.json"
+        },
+        "origin": {
+          "$ref": "#/$defs/cli.stream.v1.Party.jsonschema.strict.json"
+        },
+        "project": {
+          "type": "string"
+        },
+        "tier": {
+          "enum": [
+            "TIER_UNSPECIFIED",
+            "TIER_PREVIEW",
+            "TIER_PRODUCTION"
+          ],
+          "title": "Tier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project",
+        "tier"
+      ],
+      "title": "Identity Event",
+      "type": "object"
+    },
+    "cli.stream.v1.MissingGroup.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "key": {
+          "minLength": 1,
+          "pattern": "^[^#[:cntrl:]]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "description"
+      ],
+      "title": "Missing Group",
+      "type": "object"
+    },
+    "cli.stream.v1.MissingVariable.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "folder": {
+          "pattern": "^(/[^/#[:cntrl:]]+)*$",
+          "type": "string"
+        },
+        "group": {
+          "pattern": "^[^#[:cntrl:]]*$",
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "folder",
+        "reason",
+        "description",
+        "group"
+      ],
+      "title": "Missing Variable",
+      "type": "object"
+    },
+    "cli.stream.v1.MissingVariables.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "cells": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.MissingVariable.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.MissingGroup.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "remedy": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "remedy"
+      ],
+      "title": "Missing Variables",
+      "type": "object"
+    },
+    "cli.stream.v1.Party.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "principal": {
+          "type": "string"
+        },
+        "vendor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "vendor",
+        "account",
+        "principal",
+        "location"
+      ],
+      "title": "Party",
+      "type": "object"
+    },
+    "cli.stream.v1.ResumedEvent.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "Resumed Event",
+      "type": "object"
+    },
+    "cli.stream.v1.RunEvent.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/cli.stream.v1.IdentityEvent.jsonschema.strict.json"
+        },
+        "operation": {
+          "$ref": "#/$defs/common.progress.v1.OperationEvent.jsonschema.strict.json"
+        },
+        "resumed": {
+          "$ref": "#/$defs/cli.stream.v1.ResumedEvent.jsonschema.strict.json"
+        },
+        "summary": {
+          "$ref": "#/$defs/cli.stream.v1.RunSummary.jsonschema.strict.json"
+        },
+        "waiting": {
+          "$ref": "#/$defs/cli.stream.v1.WaitingEvent.jsonschema.strict.json"
+        }
+      },
+      "title": "Run Event",
+      "type": "object"
+    },
+    "cli.stream.v1.RunSummary.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "apps": {
+          "items": {
+            "$ref": "#/$defs/common.progress.v1.AppResult.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "changeStarted": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "headline": {
+          "type": "string"
+        },
+        "interrupted": {
+          "type": "boolean"
+        },
+        "logPath": {
+          "type": "string"
+        },
+        "missing": {
+          "$ref": "#/$defs/cli.stream.v1.MissingVariables.jsonschema.strict.json"
+        },
+        "origin": {
+          "$ref": "#/$defs/cli.stream.v1.Party.jsonschema.strict.json"
+        },
+        "promotionId": {
+          "type": "string"
+        },
+        "propagation": {
+          "$ref": "#/$defs/common.progress.v1.Propagation.jsonschema.strict.json"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "tier": {
+          "enum": [
+            "TIER_UNSPECIFIED",
+            "TIER_PREVIEW",
+            "TIER_PRODUCTION"
+          ],
+          "title": "Tier",
+          "type": "string"
+        },
+        "urlNotes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success",
+        "detail",
+        "durationMs",
+        "logPath",
+        "headline",
+        "interrupted",
+        "changeStarted",
+        "tier",
+        "promotionId"
+      ],
+      "title": "Run Summary",
+      "type": "object"
+    },
+    "cli.stream.v1.WaitingEvent.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "missing": {
+          "$ref": "#/$defs/cli.stream.v1.MissingVariables.jsonschema.strict.json"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "Waiting Event",
+      "type": "object"
+    },
+    "common.plan.v1.Change.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "ACTION_UNSPECIFIED",
+            "ACTION_CREATE",
+            "ACTION_UPDATE",
+            "ACTION_REPLACE",
+            "ACTION_DELETE",
+            "ACTION_DISABLE_THEN_DELETE",
+            "ACTION_KEEP",
+            "ACTION_ADOPT"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "slow": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "action",
+        "reason",
+        "slow"
+      ],
+      "title": "Change",
+      "type": "object"
+    },
+    "common.plan.v1.ChangeGroup.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "ACTION_UNSPECIFIED",
+            "ACTION_CREATE",
+            "ACTION_UPDATE",
+            "ACTION_REPLACE",
+            "ACTION_DELETE",
+            "ACTION_DISABLE_THEN_DELETE",
+            "ACTION_KEEP",
+            "ACTION_ADOPT"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "changes": {
+          "items": {
+            "$ref": "#/$defs/common.plan.v1.Change.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "feature": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "slow": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "feature",
+        "action",
+        "reason",
+        "slow"
+      ],
+      "title": "Change Group",
+      "type": "object"
+    },
+    "common.plan.v1.ChangePlan.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "edgeKind": {
+          "type": "string"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/common.plan.v1.ChangeGroup.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "headline": {
+          "type": "string"
+        },
+        "notes": {
+          "items": {
+            "$ref": "#/$defs/common.plan.v1.Note.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "subject": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject",
+        "edgeKind",
+        "headline"
+      ],
+      "title": "Change Plan",
+      "type": "object"
+    },
+    "common.plan.v1.Note.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "ACTION_UNSPECIFIED",
+            "ACTION_CREATE",
+            "ACTION_UPDATE",
+            "ACTION_REPLACE",
+            "ACTION_DELETE",
+            "ACTION_DISABLE_THEN_DELETE",
+            "ACTION_KEEP",
+            "ACTION_ADOPT"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "text"
+      ],
+      "title": "Note",
+      "type": "object"
+    },
+    "common.progress.v1.AppResult.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "deploymentUrl": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "APP_OUTCOME_UNSPECIFIED",
+            "APP_OUTCOME_SUCCEEDED",
+            "APP_OUTCOME_FAILED",
+            "APP_OUTCOME_NOT_RUN"
+          ],
+          "title": "App Outcome",
+          "type": "string"
+        },
+        "urls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "app",
+        "outcome",
+        "error",
+        "deploymentUrl"
+      ],
+      "title": "App Result",
+      "type": "object"
+    },
+    "common.progress.v1.ConnectorInstalled.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "compute": {
+          "type": "string"
+        },
+        "publicKey": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "publicKey",
+        "compute"
+      ],
+      "title": "Connector Installed",
+      "type": "object"
+    },
+    "common.progress.v1.DnsManualRecordsEvent.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "headline": {
+          "type": "string"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "records": {
+          "items": {
+            "$ref": "#/$defs/common.progress.v1.DnsRecord.jsonschema.strict.json"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "headline"
+      ],
+      "title": "Dns Manual Records Event",
+      "type": "object"
+    },
+    "common.progress.v1.DnsRecord.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "proxied": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "value",
+        "proxied"
+      ],
+      "title": "Dns Record",
+      "type": "object"
+    },
+    "common.progress.v1.Ended.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "attributes": {
+          "items": {
+            "$ref": "#/$defs/common.progress.v1.SpanAttribute.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "startTimeUnixNano": {
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "SPAN_STATUS_UNSPECIFIED",
+            "SPAN_STATUS_OK",
+            "SPAN_STATUS_ERROR"
+          ],
+          "title": "Span Status",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "startTimeUnixNano",
+        "title"
+      ],
+      "title": "Ended",
+      "type": "object"
+    },
+    "common.progress.v1.OperationEvent.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "dnsManualRecords": {
+          "$ref": "#/$defs/common.progress.v1.DnsManualRecordsEvent.jsonschema.strict.json"
+        },
+        "ended": {
+          "$ref": "#/$defs/common.progress.v1.Ended.jsonschema.strict.json"
+        },
+        "level": {
+          "enum": [
+            "LEVEL_UNSPECIFIED",
+            "LEVEL_DEBUG",
+            "LEVEL_INFO",
+            "LEVEL_WARN",
+            "LEVEL_ERROR"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "output": {
+          "$ref": "#/$defs/common.progress.v1.Output.jsonschema.strict.json"
+        },
+        "phase": {
+          "enum": [
+            "PHASE_UNSPECIFIED",
+            "PHASE_CHECK",
+            "PHASE_BUILD",
+            "PHASE_PLAN",
+            "PHASE_PROVISION",
+            "PHASE_DEPLOY",
+            "PHASE_PROMOTE",
+            "PHASE_DESTROY"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "plan": {
+          "$ref": "#/$defs/common.plan.v1.ChangePlan.jsonschema.strict.json"
+        },
+        "result": {
+          "$ref": "#/$defs/common.progress.v1.OperationResult.jsonschema.strict.json"
+        },
+        "spanId": {
+          "maxLength": 12,
+          "minLength": 11,
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "started": {
+          "$ref": "#/$defs/common.progress.v1.Started.jsonschema.strict.json"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "time": {
+          "$ref": "#/$defs/google.protobuf.Timestamp.jsonschema.strict.json"
+        }
+      },
+      "required": [
+        "level",
+        "phase",
+        "subject",
+        "message",
+        "spanId"
+      ],
+      "title": "Operation Event",
+      "type": "object"
+    },
+    "common.progress.v1.OperationResult.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "apps": {
+          "items": {
+            "$ref": "#/$defs/common.progress.v1.AppResult.jsonschema.strict.json"
+          },
+          "type": "array"
+        },
+        "connector": {
+          "$ref": "#/$defs/common.progress.v1.ConnectorInstalled.jsonschema.strict.json"
+        },
+        "error": {
+          "type": "string"
+        },
+        "promotionId": {
+          "type": "string"
+        },
+        "propagation": {
+          "$ref": "#/$defs/common.progress.v1.Propagation.jsonschema.strict.json"
+        },
+        "refused": {
+          "type": "boolean"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "urlNotes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success",
+        "error",
+        "promotionId",
+        "refused"
+      ],
+      "title": "Operation Result",
+      "type": "object"
+    },
+    "common.progress.v1.Output.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "stream": {
+          "enum": [
+            "STREAM_UNSPECIFIED",
+            "STREAM_STDOUT",
+            "STREAM_STDERR"
+          ],
+          "title": "Stream",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stream"
+      ],
+      "title": "Output",
+      "type": "object"
+    },
+    "common.progress.v1.Propagation.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "published": {
+          "type": "boolean"
+        },
+        "typicalMs": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "typicalMs",
+        "published"
+      ],
+      "title": "Propagation",
+      "type": "object"
+    },
+    "common.progress.v1.SpanAttribute.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "enum": [
+            "ATTRIBUTE_KEY_UNSPECIFIED",
+            "ATTRIBUTE_KEY_COMMAND",
+            "ATTRIBUTE_KEY_SPAN_NAME",
+            "ATTRIBUTE_KEY_APP",
+            "ATTRIBUTE_KEY_PHASE",
+            "ATTRIBUTE_KEY_PROVIDER",
+            "ATTRIBUTE_KEY_EXIT_CODE",
+            "ATTRIBUTE_KEY_ERROR_KIND",
+            "ATTRIBUTE_KEY_RESOURCE_COUNT",
+            "ATTRIBUTE_KEY_BYTES",
+            "ATTRIBUTE_KEY_RETRY_COUNT",
+            "ATTRIBUTE_KEY_DURATION_MS",
+            "ATTRIBUTE_KEY_RESOURCE_TYPE",
+            "ATTRIBUTE_KEY_RESOURCE_NAME",
+            "ATTRIBUTE_KEY_CACHED",
+            "ATTRIBUTE_KEY_RESOURCE_ACTION"
+          ],
+          "title": "Attribute Key",
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ],
+      "title": "Span Attribute",
+      "type": "object"
+    },
+    "common.progress.v1.Started.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "parentSpanId": {
+          "maxLength": 12,
+          "minLength": 11,
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "parentSpanId"
+      ],
+      "title": "Started",
+      "type": "object"
+    },
+    "google.protobuf.Timestamp.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    }
+  },
+  "$id": "cli.stream.v1.RunEvent.jsonschema.strict.bundle.json",
+  "$ref": "#/$defs/cli.stream.v1.RunEvent.jsonschema.strict.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

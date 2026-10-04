@@ -1,0 +1,24 @@
+{
+  "$id": "cli.stream.v1.RunEvent.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "identity": {
+      "$ref": "cli.stream.v1.IdentityEvent.jsonschema.json"
+    },
+    "operation": {
+      "$ref": "common.progress.v1.OperationEvent.jsonschema.json"
+    },
+    "resumed": {
+      "$ref": "cli.stream.v1.ResumedEvent.jsonschema.json"
+    },
+    "summary": {
+      "$ref": "cli.stream.v1.RunSummary.jsonschema.json"
+    },
+    "waiting": {
+      "$ref": "cli.stream.v1.WaitingEvent.jsonschema.json"
+    }
+  },
+  "title": "Run Event",
+  "type": "object"
+}

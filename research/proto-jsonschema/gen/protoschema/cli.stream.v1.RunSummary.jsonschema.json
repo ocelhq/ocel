@@ -1,0 +1,124 @@
+{
+  "$id": "cli.stream.v1.RunSummary.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^(change_started)$": {
+      "default": false,
+      "type": "boolean"
+    },
+    "^(duration_ms)$": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "pattern": "^-?[0-9]+$",
+          "type": "string"
+        }
+      ],
+      "default": 0
+    },
+    "^(log_path)$": {
+      "default": "",
+      "type": "string"
+    },
+    "^(promotion_id)$": {
+      "default": "",
+      "type": "string"
+    },
+    "^(url_notes)$": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "properties": {
+    "apps": {
+      "items": {
+        "$ref": "common.progress.v1.AppResult.jsonschema.json"
+      },
+      "type": "array"
+    },
+    "changeStarted": {
+      "default": false,
+      "type": "boolean"
+    },
+    "detail": {
+      "default": "",
+      "type": "string"
+    },
+    "durationMs": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "pattern": "^-?[0-9]+$",
+          "type": "string"
+        }
+      ],
+      "default": 0
+    },
+    "headline": {
+      "default": "",
+      "type": "string"
+    },
+    "interrupted": {
+      "default": false,
+      "type": "boolean"
+    },
+    "logPath": {
+      "default": "",
+      "type": "string"
+    },
+    "missing": {
+      "$ref": "cli.stream.v1.MissingVariables.jsonschema.json"
+    },
+    "origin": {
+      "$ref": "cli.stream.v1.Party.jsonschema.json"
+    },
+    "promotionId": {
+      "default": "",
+      "type": "string"
+    },
+    "propagation": {
+      "$ref": "common.progress.v1.Propagation.jsonschema.json"
+    },
+    "success": {
+      "default": false,
+      "type": "boolean"
+    },
+    "tier": {
+      "anyOf": [
+        {
+          "pattern": "^TIER_UNSPECIFIED$",
+          "type": "string"
+        },
+        {
+          "enum": [
+            "TIER_PREVIEW",
+            "TIER_PRODUCTION"
+          ],
+          "type": "string"
+        },
+        {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        }
+      ],
+      "default": 0,
+      "title": "Tier"
+    },
+    "urlNotes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "title": "Run Summary",
+  "type": "object"
+}

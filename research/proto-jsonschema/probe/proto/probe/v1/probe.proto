@@ -1,0 +1,48 @@
+syntax = "proto3";
+package probe.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+enum Color {
+  COLOR_UNSPECIFIED = 0;
+  COLOR_RED = 1;
+}
+
+message Inner {
+  string name = 1;
+}
+
+message Probe {
+  int64 big = 1;
+  uint64 ubig = 2;
+  int32 small = 3;
+  double ratio = 4;
+  bytes blob = 5;
+  Color color = 6;
+  optional string maybe = 7;
+  optional int64 maybe_big = 8;
+  map<string, int64> counts = 9;
+  map<string, Inner> inners = 10;
+  repeated Inner items = 11;
+  repeated Color colors = 12;
+  google.protobuf.Timestamp at = 13;
+  google.protobuf.Duration took = 14;
+  google.protobuf.Struct meta = 15;
+  google.protobuf.Value any_value = 16;
+  google.protobuf.Any packed = 17;
+  google.protobuf.Int64Value wrapped_big = 18;
+  google.protobuf.StringValue wrapped_str = 19;
+  google.protobuf.Empty nothing = 20;
+  google.protobuf.FieldMask mask = 21;
+  oneof choice {
+    string text = 22;
+    Inner inner = 23;
+  }
+  string snake_case_name = 24;
+}

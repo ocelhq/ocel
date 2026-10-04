@@ -1,0 +1,48 @@
+{
+  "$id": "common.progress.v1.SpanAttribute.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "key": {
+      "anyOf": [
+        {
+          "pattern": "^ATTRIBUTE_KEY_UNSPECIFIED$",
+          "type": "string"
+        },
+        {
+          "enum": [
+            "ATTRIBUTE_KEY_COMMAND",
+            "ATTRIBUTE_KEY_SPAN_NAME",
+            "ATTRIBUTE_KEY_APP",
+            "ATTRIBUTE_KEY_PHASE",
+            "ATTRIBUTE_KEY_PROVIDER",
+            "ATTRIBUTE_KEY_EXIT_CODE",
+            "ATTRIBUTE_KEY_ERROR_KIND",
+            "ATTRIBUTE_KEY_RESOURCE_COUNT",
+            "ATTRIBUTE_KEY_BYTES",
+            "ATTRIBUTE_KEY_RETRY_COUNT",
+            "ATTRIBUTE_KEY_DURATION_MS",
+            "ATTRIBUTE_KEY_RESOURCE_TYPE",
+            "ATTRIBUTE_KEY_RESOURCE_NAME",
+            "ATTRIBUTE_KEY_CACHED",
+            "ATTRIBUTE_KEY_RESOURCE_ACTION"
+          ],
+          "type": "string"
+        },
+        {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        }
+      ],
+      "default": 0,
+      "title": "Attribute Key"
+    },
+    "value": {
+      "default": "",
+      "type": "string"
+    }
+  },
+  "title": "Span Attribute",
+  "type": "object"
+}

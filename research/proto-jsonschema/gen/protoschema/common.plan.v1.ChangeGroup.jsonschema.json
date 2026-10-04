@@ -1,0 +1,62 @@
+{
+  "$id": "common.plan.v1.ChangeGroup.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "anyOf": [
+        {
+          "pattern": "^ACTION_UNSPECIFIED$",
+          "type": "string"
+        },
+        {
+          "enum": [
+            "ACTION_CREATE",
+            "ACTION_UPDATE",
+            "ACTION_REPLACE",
+            "ACTION_DELETE",
+            "ACTION_DISABLE_THEN_DELETE",
+            "ACTION_KEEP",
+            "ACTION_ADOPT"
+          ],
+          "type": "string"
+        },
+        {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        }
+      ],
+      "default": 0,
+      "title": "Action"
+    },
+    "changes": {
+      "items": {
+        "$ref": "common.plan.v1.Change.jsonschema.json"
+      },
+      "type": "array"
+    },
+    "feature": {
+      "default": "",
+      "type": "string"
+    },
+    "kind": {
+      "default": "",
+      "type": "string"
+    },
+    "name": {
+      "default": "",
+      "type": "string"
+    },
+    "reason": {
+      "default": "",
+      "type": "string"
+    },
+    "slow": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "title": "Change Group",
+  "type": "object"
+}

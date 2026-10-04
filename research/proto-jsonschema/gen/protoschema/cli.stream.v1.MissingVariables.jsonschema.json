@@ -1,0 +1,25 @@
+{
+  "$id": "cli.stream.v1.MissingVariables.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "cells": {
+      "items": {
+        "$ref": "cli.stream.v1.MissingVariable.jsonschema.json"
+      },
+      "type": "array"
+    },
+    "groups": {
+      "items": {
+        "$ref": "cli.stream.v1.MissingGroup.jsonschema.json"
+      },
+      "type": "array"
+    },
+    "remedy": {
+      "default": "",
+      "type": "string"
+    }
+  },
+  "title": "Missing Variables",
+  "type": "object"
+}

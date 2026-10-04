@@ -1,0 +1,67 @@
+{
+  "$id": "common.progress.v1.Ended.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^(start_time_unix_nano)$": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "pattern": "^-?[0-9]+$",
+          "type": "string"
+        }
+      ],
+      "default": 0
+    }
+  },
+  "properties": {
+    "attributes": {
+      "items": {
+        "$ref": "common.progress.v1.SpanAttribute.jsonschema.json"
+      },
+      "type": "array"
+    },
+    "startTimeUnixNano": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "pattern": "^-?[0-9]+$",
+          "type": "string"
+        }
+      ],
+      "default": 0
+    },
+    "status": {
+      "anyOf": [
+        {
+          "pattern": "^SPAN_STATUS_UNSPECIFIED$",
+          "type": "string"
+        },
+        {
+          "enum": [
+            "SPAN_STATUS_OK",
+            "SPAN_STATUS_ERROR"
+          ],
+          "type": "string"
+        },
+        {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        }
+      ],
+      "default": 0,
+      "title": "Span Status"
+    },
+    "title": {
+      "default": "",
+      "type": "string"
+    }
+  },
+  "title": "Ended",
+  "type": "object"
+}

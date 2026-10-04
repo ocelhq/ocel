@@ -1,0 +1,27 @@
+{
+  "$id": "common.progress.v1.ConnectorInstalled.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^(public_key)$": {
+      "default": "",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "compute": {
+      "default": "",
+      "type": "string"
+    },
+    "publicKey": {
+      "default": "",
+      "type": "string"
+    },
+    "url": {
+      "default": "",
+      "type": "string"
+    }
+  },
+  "title": "Connector Installed",
+  "type": "object"
+}

@@ -1,0 +1,33 @@
+{
+  "$defs": {
+    "cli.stream.v1.Party.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "principal": {
+          "type": "string"
+        },
+        "vendor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "vendor",
+        "account",
+        "principal",
+        "location"
+      ],
+      "title": "Party",
+      "type": "object"
+    }
+  },
+  "$id": "cli.stream.v1.Party.jsonschema.strict.bundle.json",
+  "$ref": "#/$defs/cli.stream.v1.Party.jsonschema.strict.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

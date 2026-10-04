@@ -1,0 +1,15 @@
+version: v2
+clean: true
+inputs:
+  - directory: proto
+    paths:
+      - proto/cli/stream
+plugins:
+  - remote: buf.build/community/chrusty-jsonschema:v1.4.1
+    out: research/proto-jsonschema/gen/chrusty
+    opt:
+      - json_fieldnames
+      - disallow_additional_properties
+      - enforce_oneof
+      - enums_as_strings_only
+      - prefix_schema_files_with_package

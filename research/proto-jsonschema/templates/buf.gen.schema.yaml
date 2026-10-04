@@ -1,0 +1,11 @@
+version: v2
+clean: true
+inputs:
+  - directory: proto
+    paths:
+      - proto/cli/stream
+plugins:
+  - local: [go, tool, protoc-gen-jsonschema]
+    out: research/proto-jsonschema/gen/go-tool
+    opt:
+      - target=json-bundle

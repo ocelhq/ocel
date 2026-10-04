@@ -1,0 +1,21 @@
+{
+  "$defs": {
+    "cli.stream.v1.ResumedEvent.jsonschema.strict.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "Resumed Event",
+      "type": "object"
+    }
+  },
+  "$id": "cli.stream.v1.ResumedEvent.jsonschema.strict.bundle.json",
+  "$ref": "#/$defs/cli.stream.v1.ResumedEvent.jsonschema.strict.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

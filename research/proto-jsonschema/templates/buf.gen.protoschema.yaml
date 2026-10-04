@@ -1,0 +1,12 @@
+version: v2
+clean: true
+inputs:
+  - directory: proto
+    paths:
+      - proto/cli/stream
+plugins:
+  - local:
+      [go, run, github.com/bufbuild/protoschema-plugins/cmd/protoc-gen-jsonschema@v0.6.0]
+    out: research/proto-jsonschema/gen/protoschema
+    opt:
+      - target=json+json-bundle+json-strict-bundle
