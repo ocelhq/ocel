@@ -54,3 +54,17 @@ func TestAFailureUnderJSONIsOneLineHoldingTheErrorObject(t *testing.T) {
 		t.Errorf("output = %q, want exactly one line", out.String())
 	}
 }
+
+func TestAFailureUnderJSONThatCannotBeEncodedStillPrintsOneInternalDocument(t *testing.T) {
+	var out bytes.Buffer
+	PrintFailureJSON(&out, &streamv1.RunError{Code: "project.no_config", Message: "no \xff.json"})
+
+	var doc map[string]any
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("output %q is not one JSON document: %v", out.String(), err)
+	}
+	failure, _ := doc["error"].(map[string]any)
+	if doc["ok"] != false || failure["code"] != "internal" || failure["message"] == "" {
+		t.Errorf("document = %v, want ok:false and an internal error with a message", doc)
+	}
+}

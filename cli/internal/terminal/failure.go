@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,19 +18,19 @@ func PrintFailure(w io.Writer, err error) {
 	}
 }
 
+const unencodableFailureJSON = `{"ok":false,"error":{"code":"internal","message":"the error could not be encoded as JSON"}}`
+
 func PrintFailureJSON(w io.Writer, failure *streamv1.RunError) {
+	var document bytes.Buffer
 	body, err := protojson.Marshal(failure)
+	if err == nil {
+		err = json.Compact(&document, fmt.Appendf(nil, `{"ok":false,"error":%s}`, body))
+	}
 	if err != nil {
+		fmt.Fprintln(w, unencodableFailureJSON)
 		return
 	}
-	document, err := json.Marshal(struct {
-		OK    bool            `json:"ok"`
-		Error json.RawMessage `json:"error"`
-	}{Error: body})
-	if err != nil {
-		return
-	}
-	fmt.Fprintln(w, string(document))
+	fmt.Fprintln(w, document.String())
 }
 
 func failureLines(p Palette, headline, detail string) []string {
