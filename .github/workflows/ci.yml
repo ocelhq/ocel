@@ -45,6 +45,7 @@ jobs:
           filters: .github/filters.yml
 
   lint:
+    name: Lint
     needs: changes
     uses: ./.github/workflows/lint.yml
     with:
@@ -54,36 +55,42 @@ jobs:
     secrets: inherit
 
   go:
+    name: Go
     needs: changes
     if: github.event_name == 'pull_request' && needs.changes.outputs.go == 'true'
     uses: ./.github/workflows/go.yml
     secrets: inherit
 
   journey:
+    name: Journey
     needs: changes
     if: github.event_name == 'pull_request' && needs.changes.outputs.journey == 'true'
     uses: ./.github/workflows/journey.yml
     secrets: inherit
 
   provider-vps:
+    name: Provider VPS
     needs: changes
     if: github.event_name == 'pull_request' && needs.changes.outputs.provider_vps == 'true'
     uses: ./.github/workflows/provider-vps.yml
     secrets: inherit
 
   python:
+    name: Python
     needs: changes
     if: github.event_name == 'pull_request' && needs.changes.outputs.python == 'true'
     uses: ./.github/workflows/python.yml
     secrets: inherit
 
   rust:
+    name: Rust
     needs: changes
     if: github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true'
     uses: ./.github/workflows/rust.yml
     secrets: inherit
 
   labels:
+    name: Labels
     needs: changes
     if: github.event_name == 'push' && needs.changes.outputs.labels == 'true'
     uses: ./.github/workflows/labels.yml
