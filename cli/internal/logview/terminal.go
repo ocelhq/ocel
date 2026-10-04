@@ -22,6 +22,7 @@ const (
 	nestedIndent     = "  "
 	truncationMarker = "…"
 	missingName      = "-"
+	liveMarker       = "── live ──"
 )
 
 type TerminalLine struct {
@@ -55,6 +56,11 @@ func (v *TerminalView) Write(line TerminalLine) error {
 		text = v.formatEntry(line)
 	}
 	_, err := io.WriteString(v.out, text)
+	return err
+}
+
+func (v *TerminalView) WriteLiveMarker() error {
+	_, err := io.WriteString(v.out, v.palette.Muted(liveMarker)+"\n")
 	return err
 }
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -83,7 +84,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return runLogs(cmd.Context(), dependencies, cwd, args, opts, cmd.OutOrStdout())
+			return runLogs(cmd.Context(), dependencies, cwd, args, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	cmd.Flags().BoolVar(&opts.preview, "preview", false, "Read a preview instead of production")
@@ -101,8 +102,15 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	return commands.ReserveStdout(cmd)
 }
 
-func runLogs(ctx context.Context, dependencies Dependencies, cwd string, apps []string, opts logsOptions, stdout io.Writer) error {
-	request, minLevel, err := opts.resolve(dependencies, cwd)
+type logsQuery struct {
+	request   *contractv1.ReadLogsRequest
+	stopAfter time.Duration
+}
+
+var errStopAfterElapsed = errors.New("--for elapsed")
+
+func runLogs(ctx context.Context, dependencies Dependencies, cwd string, apps []string, opts logsOptions, stdout, stderr io.Writer) error {
+	query, mode, err := opts.resolve(dependencies, cwd)
 	if err != nil {
 		return err
 	}
@@ -110,71 +118,83 @@ func runLogs(ctx context.Context, dependencies Dependencies, cwd string, apps []
 	if err != nil {
 		return err
 	}
-	request.Slug, request.Edge, request.Apps = cfg.Slug, cfg.EdgeSelection(), apps
+	query.request.Slug, query.request.Edge, query.request.Apps = cfg.Slug, cfg.EdgeSelection(), apps
 
 	present := dependencies.Presentation(stdout)
-	asJSON := opts.json || present.Format == terminal.FormatJSON
-	open := commands.OpenOptions{Tier: request.GetEnvironment().GetTier(), Require: readiness.Infrastructure}
+	mode.json = mode.json || present.Format == terminal.FormatJSON
+	open := commands.OpenOptions{Tier: query.request.GetEnvironment().GetTier(), Require: readiness.Infrastructure}
 	return dependencies.WithProvider(ctx, cfg, "ocel logs", open, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
-		out := newOutput(stdout, present, asJSON, opts.raw, minLevel, opts.tail, notices{warn: p.Check.Warn, note: p.Check.Say})
-		return opts.read(ctx, p.Provider, request, out)
+		out := newOutput(stdout, present, mode, newNotices(stderr, dependencies.Presentation(stderr).Palette(), p.Check.Warn))
+		return query.read(ctx, p.Provider, out)
 	})
 }
 
-func (o logsOptions) read(ctx context.Context, provider *providerprocess.Provider, request *contractv1.ReadLogsRequest, out *output) error {
-	if !o.tail {
-		return providerprocess.ReadLogs(ctx, provider, request, out.printResponse)
+func (q logsQuery) read(ctx context.Context, provider *providerprocess.Provider, out *output) error {
+	if !q.request.GetTail() {
+		return providerprocess.ReadLogs(ctx, provider, q.request, out.printResponse)
 	}
-	stopAfter, _ := o.parseStopAfter()
-	if stopAfter > 0 {
+	tailCtx := ctx
+	if q.stopAfter > 0 {
 		var stop context.CancelFunc
-		ctx, stop = context.WithTimeout(ctx, stopAfter)
+		tailCtx, stop = context.WithTimeoutCause(ctx, q.stopAfter, errStopAfterElapsed)
 		defer stop()
 	}
-	err := providerprocess.ReadLogs(ctx, provider, request, out.printResponse)
-	if ctx.Err() != nil && (err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+	err := providerprocess.ReadLogs(tailCtx, provider, q.request, out.printResponse)
+	if err != nil && isTailStopped(ctx, tailCtx, err) {
 		return nil
 	}
 	return err
 }
 
-func (o logsOptions) parseStopAfter() (time.Duration, error) {
-	if o.stopAfter == "" {
-		return 0, nil
+func isTailStopped(command, tail context.Context, err error) bool {
+	switch {
+	case command.Err() != nil:
+		return errors.Is(context.Cause(command), context.Canceled) && providerprocess.IsCancelled(err)
+	case errors.Is(context.Cause(tail), errStopAfterElapsed):
+		return errors.Is(err, context.DeadlineExceeded) || connect.CodeOf(err) == connect.CodeDeadlineExceeded
 	}
-	stopAfter, err := time.ParseDuration(o.stopAfter)
+	return false
+}
+
+func parseStopAfter(value string) (time.Duration, error) {
+	stopAfter, err := time.ParseDuration(value)
 	if err != nil || stopAfter <= 0 {
-		return 0, fmt.Errorf("--for %q is not a positive duration such as 30s or 5m", o.stopAfter)
+		return 0, fmt.Errorf("--for %q is not a positive duration such as 30s or 5m", value)
 	}
 	return stopAfter, nil
 }
 
-func (o logsOptions) resolve(dependencies Dependencies, cwd string) (*contractv1.ReadLogsRequest, logview.Level, error) {
-	var minLevel logview.Level
+func (o logsOptions) resolve(dependencies Dependencies, cwd string) (logsQuery, outputMode, error) {
+	mode := outputMode{json: o.json, raw: o.raw, tail: o.tail}
 	if o.level != "" {
 		level, ok := logview.ParseLevel(o.level)
 		if !ok {
-			return nil, 0, fmt.Errorf("--level %q is not one of debug, info, warn or error", o.level)
+			return logsQuery{}, outputMode{}, fmt.Errorf("--level %q is not one of debug, info, warn or error", o.level)
 		}
-		minLevel = level
+		mode.minLevel = level
 	}
-	if _, err := o.parseStopAfter(); err != nil {
-		return nil, 0, err
-	}
-	if o.stopAfter != "" && !o.tail {
-		return nil, 0, errors.New("--for stops a --tail, so pass --tail with it")
+	var query logsQuery
+	if o.stopAfter != "" {
+		stopAfter, err := parseStopAfter(o.stopAfter)
+		if err != nil {
+			return logsQuery{}, outputMode{}, err
+		}
+		if !o.tail {
+			return logsQuery{}, outputMode{}, errors.New("--for stops a --tail, so pass --tail with it")
+		}
+		query.stopAfter = stopAfter
 	}
 	if o.tail && o.until != "" {
-		return nil, 0, errors.New("--until ends a window, which a --tail never has, so drop one of them")
+		return logsQuery{}, outputMode{}, errors.New("--until ends a window, which a --tail never has, so drop one of them")
 	}
 	if o.lines < 1 || o.lines > maxLines {
-		return nil, 0, fmt.Errorf("--lines %d is outside 1 to %d", o.lines, maxLines)
+		return logsQuery{}, outputMode{}, fmt.Errorf("--lines %d is outside 1 to %d", o.lines, maxLines)
 	}
 	now := dependencies.Now()
 	since, err := parseMoment(now, "--since", o.since)
 	if err != nil {
-		return nil, 0, err
+		return logsQuery{}, outputMode{}, err
 	}
 	request := &contractv1.ReadLogsRequest{
 		AllReleases: o.allReleases,
@@ -186,17 +206,18 @@ func (o logsOptions) resolve(dependencies Dependencies, cwd string) (*contractv1
 	if o.until != "" {
 		until, err := parseMoment(now, "--until", o.until)
 		if err != nil {
-			return nil, 0, err
+			return logsQuery{}, outputMode{}, err
 		}
 		if until.Before(since) {
-			return nil, 0, fmt.Errorf("--until %s is before --since %s", until.Format(time.RFC3339), since.Format(time.RFC3339))
+			return logsQuery{}, outputMode{}, fmt.Errorf("--until %s is before --since %s", until.Format(time.RFC3339), since.Format(time.RFC3339))
 		}
 		request.Until = timestamppb.New(until)
 	}
 	if request.Environment, err = o.resolveEnvironment(dependencies, cwd); err != nil {
-		return nil, 0, err
+		return logsQuery{}, outputMode{}, err
 	}
-	return request, minLevel, nil
+	query.request = request
+	return query, mode, nil
 }
 
 func parseMoment(now time.Time, flag, value string) (time.Time, error) {
