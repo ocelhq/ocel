@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/language"
 )
 
@@ -19,6 +20,8 @@ type release struct {
 }
 
 const Header = "Ocel-Sdk-Version"
+
+const codeVersionMismatch = "sdk.version_mismatch"
 
 const core = `(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)`
 
@@ -141,7 +144,8 @@ func Check(written language.Language, sdk, cli string) error {
 	if Compatible(cli, sdk) {
 		return nil
 	}
-	return &MismatchError{Language: written, SDK: sdk, CLI: cli}
+	mismatch := &MismatchError{Language: written, SDK: sdk, CLI: cli}
+	return &clierror.Error{Code: codeVersionMismatch, Hint: Upgrade(written, cli), Cause: mismatch}
 }
 
 func Parse(header string) (written language.Language, version string, ok bool) {

@@ -113,31 +113,32 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 	apps := make([]App, 0, len(raw))
 	seen := make(map[string]bool, len(raw))
 	boundFolders := make(map[string]string, len(raw))
-	for _, a := range raw {
+	for i, a := range raw {
+		field := func(key string) string { return configdoc.JoinPath(configdoc.IndexPath("apps", i), key) }
 		if a.Name == "" {
-			return nil, fmt.Errorf("app is missing required \"name\"")
+			return nil, newInvalidConfigError(fmt.Errorf("app is missing required \"name\""), field("name"))
 		}
 		if !validAppName(a.Name) {
-			return nil, fmt.Errorf("invalid app name %q — an app name must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen. It is served as a label of a preview hostname (\"<preview>--%s.<your-preview-domain>\") and is a segment of every resource name this app deploys", a.Name, a.Name)
+			return nil, newInvalidConfigError(fmt.Errorf("invalid app name %q — an app name must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen. It is served as a label of a preview hostname (\"<preview>--%s.<your-preview-domain>\") and is a segment of every resource name this app deploys", a.Name, a.Name), field("name"))
 		}
 		if a.Name == naming.InfraApp {
-			return nil, fmt.Errorf("app name %q is reserved — it names the stack holding each environment's shared infrastructure, so no app may take it: rename the app", a.Name)
+			return nil, newInvalidConfigError(fmt.Errorf("app name %q is reserved — it names the stack holding each environment's shared infrastructure, so no app may take it: rename the app", a.Name), field("name"))
 		}
 		if seen[a.Name] {
-			return nil, fmt.Errorf("duplicate app name %q — app names must be unique", a.Name)
+			return nil, newInvalidConfigError(fmt.Errorf("duplicate app name %q — app names must be unique", a.Name), field("name"))
 		}
 		seen[a.Name] = true
 
 		if a.Path == "" {
-			return nil, fmt.Errorf("app %q is missing required \"path\"", a.Name)
+			return nil, newInvalidConfigError(fmt.Errorf("app %q is missing required \"path\"", a.Name), field("path"))
 		}
 
 		if a.Folder != "" {
 			if err := variables.ValidateFolder(a.Folder); err != nil {
-				return nil, fmt.Errorf("app %q: %w", a.Name, err)
+				return nil, newInvalidConfigError(fmt.Errorf("app %q: %w", a.Name, err), field("folder"))
 			}
 			if other, taken := boundFolders[a.Folder]; taken {
-				return nil, fmt.Errorf("apps %q and %q both bind folder %q — a folder stores one app's values, so two apps sharing one would defeat the divergence folders exist for", other, a.Name, a.Folder)
+				return nil, newInvalidConfigError(fmt.Errorf("apps %q and %q both bind folder %q — a folder stores one app's values, so two apps sharing one would defeat the divergence folders exist for", other, a.Name, a.Folder), field("folder"))
 			}
 			boundFolders[a.Folder] = a.Name
 		}
@@ -148,11 +149,11 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 		}
 		domains, err := normalizeProductionDomains(production, "")
 		if err != nil {
-			return nil, fmt.Errorf("app %q: %w", a.Name, err)
+			return nil, newInvalidConfigError(fmt.Errorf("app %q: %w", a.Name, err), field("domains.production"))
 		}
 		architecture, err := architectureOf(a.Name, strings.TrimSpace(a.Arch))
 		if err != nil {
-			return nil, err
+			return nil, newInvalidConfigError(err, field("arch"))
 		}
 		app := App{
 			Name:              a.Name,
@@ -173,21 +174,21 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 	compute := provider.Compute(strings.TrimSpace(a.Compute))
 	if compute != "" && !provider.KnownCompute(string(compute)) {
-		return fmt.Errorf("app %q asks for compute %q, which ocel does not know: the computes are %s", a.Name, compute, english.Or(english.Quoted(provider.ComputeNames(provider.Computes()))))
+		return newInvalidConfigError(fmt.Errorf("app %q asks for compute %q, which ocel does not know: the computes are %s", a.Name, compute, english.Or(english.Quoted(provider.ComputeNames(provider.Computes())))), "")
 	}
 	app.Compute = compute
 
 	build, err := normalizeBuild(a)
 	if err != nil {
-		return err
+		return newInvalidConfigError(err, "")
 	}
 	health, err := normalizeHealth(a)
 	if err != nil {
-		return err
+		return newInvalidConfigError(err, "")
 	}
 	container := &Container{Build: build, Health: health, MinInstances: a.MinInstances, MaxInstances: a.MaxInstances}
 	if err := refuseImpossibleInstances(a.Name, container); err != nil {
-		return err
+		return newInvalidConfigError(err, "")
 	}
 	if compute != provider.ComputeServerless {
 		app.Container = container
@@ -196,7 +197,7 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 	named := strings.TrimSpace(a.Framework)
 	if compute == provider.ComputeContainer {
 		if named != "" {
-			return frameworkOnContainer(a.Name, named, compute)
+			return newInvalidConfigError(frameworkOnContainer(a.Name, named, compute), "")
 		}
 		return nil
 	}
@@ -211,7 +212,9 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 		app.Serverless = &Serverless{Framework: framework, Detected: named == "", Entrypoint: a.Entrypoint}
 	}
 	if compute == provider.ComputeServerless {
-		return refuseContainerConfig(*app, compute, container)
+		if err := refuseContainerConfig(*app, compute, container); err != nil {
+			return newInvalidConfigError(err, "")
+		}
 	}
 	return nil
 }

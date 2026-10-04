@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/language"
 )
 
@@ -58,10 +59,14 @@ func detectLanguage(dir string) (sdkLanguage, bool, error) {
 		for _, l := range found {
 			names = append(names, sdkLanguageOf(l).name)
 		}
-		return sdkLanguage{}, false, fmt.Errorf(
-			"this directory contains the manifests of %s at once, so it could be a %s project: name the one this is with `--lang %s`",
-			strings.Join(names, " and "), strings.Join(names, " or "), names[0],
-		)
+		return sdkLanguage{}, false, &clierror.Error{
+			Code: codeAmbiguousLanguage,
+			Hint: "--lang",
+			Cause: fmt.Errorf(
+				"this directory contains the manifests of %s at once, so it could be a %s project: name the one this is with `--lang %s`",
+				strings.Join(names, " and "), strings.Join(names, " or "), names[0],
+			),
+		}
 	}
 }
 

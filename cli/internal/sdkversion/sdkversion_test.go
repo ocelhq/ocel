@@ -3,6 +3,7 @@ package sdkversion
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,10 +11,34 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
+
+func TestAMismatchedSDKReportsSDKVersionMismatchHintingTheUpgradeCommand(t *testing.T) {
+	err := fmt.Errorf("collect: %w", Check(language.JS, "0.0.2", "0.0.3"))
+
+	runError := clierror.NewRunError(err)
+
+	if runError.GetCode() != "sdk.version_mismatch" || runError.GetHint() != "npm i ocel@0.0.3" {
+		t.Fatalf("code, hint = %q, %q; want sdk.version_mismatch, npm i ocel@0.0.3", runError.GetCode(), runError.GetHint())
+	}
+}
+
+func TestCheckingAMismatchedSDKReturnsAMismatchErrorWithItsOwnMessage(t *testing.T) {
+	err := Check(language.JS, "0.0.2", "0.0.3")
+
+	var mismatch *MismatchError
+	if !errors.As(err, &mismatch) || mismatch.SDK != "0.0.2" {
+		t.Fatalf("Check() = %v, want a MismatchError for 0.0.2", err)
+	}
+	want := "the JavaScript SDK (ocel) is version 0.0.2 and this CLI is version 0.0.3; an SDK works with the CLI of its own release — run `npm i ocel@0.0.3`"
+	if err.Error() != want {
+		t.Fatalf("Check() = %q, want %q", err, want)
+	}
+}
 
 func TestCompatible(t *testing.T) {
 	t.Parallel()

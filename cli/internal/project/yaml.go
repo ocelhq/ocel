@@ -24,7 +24,7 @@ func readYAML(_ context.Context, configPath string, _ environment) ([]byte, erro
 	}
 	standard, err := yamlToJSON(read)
 	if err != nil {
-		return nil, fmt.Errorf("%s %w", configPath, err)
+		return nil, newInvalidConfigError(fmt.Errorf("%s %w", configPath, err), "")
 	}
 	return standard, nil
 }
