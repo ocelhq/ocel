@@ -48,6 +48,7 @@ func TestMain(m *testing.M) {
 	os.Setenv("XDG_CONFIG_HOME", dir)
 	os.Unsetenv("OCEL_CONFIG")
 	os.Unsetenv("OCEL_JSON")
+	os.Unsetenv("OCEL_DEBUG")
 	clitest.UnsetColorEnv()
 	code := m.Run()
 	os.RemoveAll(dir)

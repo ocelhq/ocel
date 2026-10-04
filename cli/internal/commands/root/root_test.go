@@ -225,6 +225,45 @@ func TestATerminalFortyColumnsWideGetsTheLiveLineView(t *testing.T) {
 	}
 }
 
+func TestOCELDebugFalseyKeepsTheLiveLineView(t *testing.T) {
+	for _, value := range []string{"0", "false"} {
+		t.Run(value, func(t *testing.T) {
+			inADeployedProject(t)
+			t.Setenv("OCEL_DEBUG", value)
+			tty, screen := aTerminal(t, "xterm-256color", 80)
+
+			executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
+
+			if got := screen(); !strings.Contains(got, liveFrame) {
+				t.Errorf("OCEL_DEBUG=%q: the terminal shows %q, want the live-line view debug leaves off", value, got)
+			}
+		})
+	}
+}
+
+func TestOCELDebugTrueStreamsTheFullLogs(t *testing.T) {
+	inADeployedProject(t)
+	t.Setenv("OCEL_DEBUG", "1")
+	tty, screen := aTerminal(t, "xterm-256color", 80)
+
+	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
+
+	if got := screen(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
+		t.Errorf("the terminal shows %q, want the full logs with no live line", got)
+	}
+}
+
+func TestOCELDebugThatIsNotABooleanIsAnError(t *testing.T) {
+	inADeployedProject(t)
+	t.Setenv("OCEL_DEBUG", "yes")
+
+	err := executeRootErr("deployments", "prune", "--yes")
+
+	if err == nil || !strings.Contains(err.Error(), "OCEL_DEBUG") {
+		t.Errorf("err = %v, want an error naming OCEL_DEBUG", err)
+	}
+}
+
 func TestADumbTerminalGetsTheGroupedView(t *testing.T) {
 	inADeployedProject(t)
 	tty, screen := aTerminal(t, "dumb", 80)
