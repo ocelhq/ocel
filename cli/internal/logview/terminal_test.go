@@ -115,6 +115,17 @@ func TestTerminalViewWritesNoEscapesWithoutColour(t *testing.T) {
 	golden(t, "TestTerminalViewWritesNoEscapesWithoutColour", got)
 }
 
+func TestTerminalViewShowsTheTimeInTheLocalZone(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	utc := time.Local
+	time.Local = time.FixedZone("UTC+2", 2*60*60)
+	t.Cleanup(func() { time.Local = utc })
+	got := render(t, false, logview.TerminalLine{Time: viewEpoch, App: "web", Entry: logview.Entry{Message: "hello", Level: logview.LevelInfo}})
+	if want := "14:04:07.123  web  INFO   hello\n"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestTerminalViewQuotesInlineKeysAndValuesThatHoldSpacesOrEquals(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	got := render(t, false, logview.TerminalLine{Time: viewEpoch, App: "web", Entry: logview.Entry{

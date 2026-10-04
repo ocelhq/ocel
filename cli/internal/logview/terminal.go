@@ -62,7 +62,7 @@ func (v *TerminalView) formatHeader(line TerminalLine) string {
 		label += "/" + source
 	}
 	parts := []string{
-		v.palette.Muted(line.Time.UTC().Format(timeLayout)),
+		v.palette.Muted(line.Time.Local().Format(timeLayout)),
 		v.palette.Hue(app, label),
 		v.formatLevel(line.Entry.Level),
 	}
