@@ -1,29 +1,17 @@
 package root
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
 const rootArgsEnvVar = "OCEL_TEST_ROOT_ARGS"
 
 func runRootSubprocess(args []string) int {
-	ocel := newCommand()
-	ocel.root.SetArgs(args)
-	err := ocel.execute()
-	if err == nil {
-		return 0
-	}
-	if code, ok := exitcode.Of(err); ok {
-		return code
-	}
-	fmt.Fprintln(os.Stderr, "Error:", err)
-	return 1
+	return newCommand().exit(args)
 }
 
 func TestMain(m *testing.M) {

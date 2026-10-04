@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/bindings"
 	"github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
@@ -91,14 +92,18 @@ type command struct {
 	root                 *cobra.Command
 	bus                  *run.Bus
 	stopInterruptHandler context.CancelFunc
+	commandStarted       bool
 }
 
-func Execute() error {
-	return newCommand().execute()
+func Execute() int {
+	return newCommand().exit(os.Args[1:])
 }
 
 func (c *command) execute() error {
-	err := c.root.Execute()
+	failed, err := c.root.ExecuteC()
+	if err != nil && !c.commandStarted {
+		err = &clierror.Error{Code: usageCode, Hint: failed.UseLine(), Cause: err}
+	}
 	c.stopInterruptHandler()
 	return errors.Join(err, c.bus.Close())
 }
@@ -128,6 +133,7 @@ func newCommand() *command {
 	devDependencies := dev.Dependencies{Invocation: invocation, OpenDocker: docker.Open}
 	devCmd, runCmd := dev.NewCommand(devDependencies), dev.NewRunCommand(devDependencies)
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		c.commandStarted = true
 		if err := set.readUnsetFromEnv(cmd); err != nil {
 			return err
 		}
