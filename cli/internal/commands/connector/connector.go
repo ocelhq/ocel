@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
@@ -140,7 +141,7 @@ func withOptions(cmd *cobra.Command, dependencies Dependencies, opts *options,
 	}
 	if link == nil {
 		fmt.Fprintln(cmd.ErrOrStderr(), "This directory isn't linked to a console project. Run `ocel link` first.")
-		return &exitcode.ExitError{Code: 1}
+		return &clierror.Error{Code: "console.not_linked", Hint: "ocel link", Cause: &exitcode.ExitError{Code: 1, Err: console.ErrNotLinked}}
 	}
 	return run(ctx, cfg, link)
 }

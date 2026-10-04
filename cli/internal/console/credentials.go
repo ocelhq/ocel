@@ -12,6 +12,7 @@ import (
 
 	"github.com/zalando/go-keyring"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
@@ -132,9 +133,12 @@ func DeleteCredentials() error {
 
 func RequireLogin(load func() (Credentials, error), stderr io.Writer) (Credentials, error) {
 	creds, err := load()
-	if err != nil {
+	if errors.Is(err, ErrNotLoggedIn) {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return Credentials{}, &exitcode.ExitError{Code: 1}
+		return Credentials{}, &clierror.Error{Code: "console.not_logged_in", Hint: "ocel login", Cause: &exitcode.ExitError{Code: 1, Err: err}}
+	}
+	if err != nil {
+		return Credentials{}, fmt.Errorf("your saved login could not be read: %w\nRun `ocel login` to sign in again", err)
 	}
 	return creds, nil
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/executables"
@@ -510,6 +514,62 @@ func TestBeingLoggedOutIsPointedAtOcelLogin(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "ocel login") {
 		t.Errorf("output = %q, want it to point at `ocel login`", out.String())
+	}
+}
+
+func TestAnUnlinkedTreeReportsConsoleNotLinkedWithOcelLinkAsItsHint(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	dependencies.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+
+	cmd := NewCommand(dependencies)
+	cmd.SetArgs([]string{"status"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	err := chdir(t, root, cmd.Execute)
+
+	got := clierror.NewRunError(fmt.Errorf("status: %w", err))
+	if got.GetCode() != "console.not_linked" || got.GetHint() != "ocel link" {
+		t.Fatalf("run error = %s, want console.not_linked hinting `ocel link`", protojson.Format(got))
+	}
+	if code, ok := exitcode.Of(err); !ok || code != 1 {
+		t.Errorf("exit code = %d, %v, want 1 from the exit error", code, ok)
+	}
+	if strings.Count(out.String(), "ocel link") != 1 {
+		t.Errorf("output = %q, want the one human line pointing at `ocel link`", out.String())
+	}
+}
+
+func TestBeingLoggedOutReportsConsoleNotLoggedInWithOcelLoginAsItsHint(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = func() (console.Credentials, error) {
+		return console.Credentials{}, console.ErrNotLoggedIn
+	}
+	dependencies.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+
+	cmd := NewCommand(dependencies)
+	cmd.SetArgs([]string{"status"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	err := chdir(t, root, cmd.Execute)
+
+	got := clierror.NewRunError(fmt.Errorf("status: %w", err))
+	if got.GetCode() != "console.not_logged_in" || got.GetHint() != "ocel login" {
+		t.Fatalf("run error = %s, want console.not_logged_in hinting `ocel login`", protojson.Format(got))
+	}
+	if code, ok := exitcode.Of(err); !ok || code != 1 {
+		t.Errorf("exit code = %d, %v, want 1 from the exit error", code, ok)
+	}
+	if !errors.Is(err, console.ErrNotLoggedIn) {
+		t.Errorf("Execute() = %v, want it to still be console.ErrNotLoggedIn", err)
 	}
 }
 

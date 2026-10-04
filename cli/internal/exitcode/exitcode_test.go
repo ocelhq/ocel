@@ -38,3 +38,20 @@ func TestOfLeavesOrdinaryErrorsAlone(t *testing.T) {
 		t.Errorf("Of = (%d, true), want no mapping for a nil error", code)
 	}
 }
+
+func TestAnExitErrorWithACauseReadsAsItAndKeepsItsCode(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("not logged in")
+	err := fmt.Errorf("status: %w", &ExitError{Code: 1, Err: cause})
+
+	if code, ok := Of(err); !ok || code != 1 {
+		t.Errorf("Of = (%d, %v), want (1, true)", code, ok)
+	}
+	if !errors.Is(err, cause) {
+		t.Errorf("errors.Is(%v, cause) = false, want true", err)
+	}
+	if err.Error() != "status: not logged in" {
+		t.Errorf("Error() = %q, want the cause's text", err.Error())
+	}
+}
