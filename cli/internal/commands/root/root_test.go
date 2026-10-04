@@ -24,7 +24,7 @@ func TestTheRootFlagsFeedTheOneResolver(t *testing.T) {
 
 	p := set.presentation(&bytes.Buffer{})
 	if p.Format != terminal.FormatJSON {
-		t.Errorf("Format = %q, want the --json flag to reach the resolver", p.Format)
+		t.Errorf("Format = %v, want the --json flag to reach the resolver", p.Format)
 	}
 	if !p.Verbose {
 		t.Errorf("Verbose = false, want the --verbose flag to reach the resolver")
@@ -121,7 +121,7 @@ func TestOCELJSONAttachesOnlyTheJSONSink(t *testing.T) {
 }
 
 func TestOCELJSONFalseyLeavesTheHumanView(t *testing.T) {
-	for _, value := range []string{"0", "false", "", "garbage"} {
+	for _, value := range []string{"0", "false", ""} {
 		t.Run(value, func(t *testing.T) {
 			inADeployedProject(t)
 			t.Setenv("OCEL_JSON", value)
@@ -155,13 +155,44 @@ func TestJSONFlagFalseWinsOverOCELJSON(t *testing.T) {
 	}
 }
 
-func TestLogFormatIsAnUnknownFlag(t *testing.T) {
+func executeRootErr(args ...string) error {
 	ocel := newCommand()
-	ocel.root.SetArgs([]string{"--log-format", "json", "deployments", "ls"})
+	ocel.root.SetArgs(args)
 	ocel.root.SetOut(&bytes.Buffer{})
 	ocel.root.SetErr(&bytes.Buffer{})
+	return ocel.execute()
+}
 
-	err := ocel.execute()
+func TestOCELJSONThatIsNotABooleanIsAnError(t *testing.T) {
+	for _, value := range []string{"garbage", "yes"} {
+		t.Run(value, func(t *testing.T) {
+			inADeployedProject(t)
+			t.Setenv("OCEL_JSON", value)
+
+			err := executeRootErr("deployments", "prune", "--yes")
+
+			if err == nil || !strings.Contains(err.Error(), "OCEL_JSON") || !strings.Contains(err.Error(), "true") || !strings.Contains(err.Error(), "false") {
+				t.Errorf("OCEL_JSON=%q: err = %v, want an error naming OCEL_JSON and its accepted values", value, err)
+			}
+		})
+	}
+}
+
+func TestAnExplicitJSONFlagLeavesOCELJSONUnread(t *testing.T) {
+	for _, flag := range []string{"--json", "--json=false"} {
+		t.Run(flag, func(t *testing.T) {
+			inADeployedProject(t)
+			t.Setenv("OCEL_JSON", "garbage")
+
+			if err := executeRootErr(flag, "deployments", "prune", "--yes"); err != nil {
+				t.Errorf("ocel %s with OCEL_JSON=garbage: err = %v, want the flag to win unread", flag, err)
+			}
+		})
+	}
+}
+
+func TestTheRemovedLogFormatFlagIsRejected(t *testing.T) {
+	err := executeRootErr("--log-format", "json", "deployments", "ls")
 
 	if err == nil || !strings.Contains(err.Error(), "unknown flag: --log-format") {
 		t.Errorf("err = %v, want unknown flag: --log-format", err)

@@ -625,7 +625,7 @@ func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStd
 
 	invocation := clitest.NewInvocation()
 	invocation.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 	}
 
 	var stdout, stderr bytes.Buffer

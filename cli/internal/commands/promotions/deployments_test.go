@@ -249,7 +249,7 @@ func TestListingDeploymentsSaysWhoItActsAsInTheCheckPhaseAndPrintsItsTableBeside
 	project := promotedTwice(t)
 	invocation := clitest.NewInvocation()
 	invocation.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 	}
 
 	var stream, stdout, stderr bytes.Buffer
@@ -278,7 +278,7 @@ func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 	project := promotedThrice(t)
 	invocation := clitest.NewInvocation()
 	invocation.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 	}
 
 	var stream bytes.Buffer

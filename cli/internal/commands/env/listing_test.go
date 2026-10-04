@@ -146,7 +146,7 @@ func TestListingValuesSaysWhoItActsAsInTheCheckPhaseOfItsRunAndPrintsTheListingA
 	envSet(t, root, "LOG_LEVEL", "debug", envOptions{})
 	dependencies := newTestDependencies()
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 	}
 
 	var stdout, stderr bytes.Buffer

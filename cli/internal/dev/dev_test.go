@@ -852,11 +852,11 @@ func toMap(env []string) map[string]string {
 
 type testDeps struct {
 	OpenDocker docker.OpenFunc
-	LogFormat  terminal.Format
+	Format     terminal.Format
 }
 
 func devDeps() testDeps {
-	return testDeps{OpenDocker: (&dockertest.Engine{}).OpenFunc(), LogFormat: terminal.FormatHuman}
+	return testDeps{OpenDocker: (&dockertest.Engine{}).OpenFunc(), Format: terminal.FormatHuman}
 }
 
 func options(ctx context.Context, deps testDeps, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) (Options, error) {
@@ -891,7 +891,7 @@ func underRun(ctx context.Context, deps testDeps, command string, opts Options, 
 	output := &lockedWriter{w: opts.Stderr}
 	opts.Stderr = output
 	bus := run.NewBus(time.Now)
-	bus.Attach(terminal.NewSink(terminal.Resolve(terminal.Conditions{LogFormat: deps.LogFormat}), output))
+	bus.Attach(terminal.NewSink(terminal.Resolve(terminal.Conditions{Format: deps.Format}), output))
 	defer bus.Close()
 	ctx, begun, err := bus.Begin(ctx, command, opts.Project.Dir)
 	if err != nil {
@@ -1066,7 +1066,7 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, dotfile.FileName), "API_TOKEN=first\n")
 
 		deps := devDeps()
-		deps.LogFormat = terminal.FormatJSON
+		deps.Format = terminal.FormatJSON
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		var stdout, stderr syncBuffer
@@ -1102,7 +1102,7 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		deps := devDeps()
-		deps.LogFormat = terminal.FormatJSON
+		deps.Format = terminal.FormatJSON
 		var stdout, stderr bytes.Buffer
 		if err := runRun(context.Background(), deps, root, []string{"sh", "-c", "echo hello"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runRun err = %v; stderr=%s", err, stderr.String())

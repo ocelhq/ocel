@@ -128,7 +128,7 @@ func TestADeployWhoseStdinIsNotATerminalProceedsWithoutPrompting(t *testing.T) {
 func TestADeploysResultNamesTheProjectAndProduction(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
-	useJSONLogFormat(t, &dependencies)
+	useJSONFormat(t, &dependencies)
 	fixture := setUpDeployProject(t)
 
 	var stream, stdout, stderr bytes.Buffer

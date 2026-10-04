@@ -22,19 +22,19 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-var testLogFormat = terminal.FormatHuman
+var testFormat = terminal.FormatHuman
 
 func useJSONOutput(t *testing.T) {
 	t.Helper()
-	orig := testLogFormat
-	t.Cleanup(func() { testLogFormat = orig })
-	testLogFormat = terminal.FormatJSON
+	orig := testFormat
+	t.Cleanup(func() { testFormat = orig })
+	testFormat = terminal.FormatJSON
 }
 
 func newTestInvocation() commands.Invocation {
 	invocation := clitest.NewInvocation()
 	invocation.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: testLogFormat})
+		return terminal.Resolve(terminal.Conditions{Format: testFormat})
 	}
 	return invocation
 }

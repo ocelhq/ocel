@@ -3,6 +3,7 @@ package root
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -43,10 +44,9 @@ import (
 )
 
 type flags struct {
-	verbose   bool
-	config    string
-	json      bool
-	jsonAsked func() bool
+	verbose bool
+	config  string
+	json    bool
 }
 
 func (f *flags) explicitConfigPath() string {
@@ -64,19 +64,33 @@ func (f *flags) isVerbose() bool {
 	return ok
 }
 
-func (f *flags) format() terminal.Format {
-	asJSON := f.json
-	if !asJSON && (f.jsonAsked == nil || !f.jsonAsked()) {
-		asJSON, _ = strconv.ParseBool(os.Getenv(commands.JSONEnvVar))
+func (f *flags) readUnsetFromEnv(cmd *cobra.Command) error {
+	if cmd.Flags().Changed("json") {
+		return nil
 	}
-	if asJSON {
-		return terminal.FormatJSON
+	var err error
+	f.json, err = envBool(commands.JSONEnvVar)
+	return err
+}
+
+func envBool(name string) (bool, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		return false, nil
 	}
-	return terminal.FormatHuman
+	on, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("%s=%q is not a boolean: want 1, true, 0, false or empty", name, value)
+	}
+	return on, nil
 }
 
 func (f *flags) presentation(w io.Writer) terminal.Presentation {
-	return terminal.Detect(f.format(), f.isVerbose(), w)
+	format := terminal.FormatHuman
+	if f.json {
+		format = terminal.FormatJSON
+	}
+	return terminal.Detect(format, f.isVerbose(), w)
 }
 
 type command struct {
@@ -115,12 +129,14 @@ func newCommand() *command {
 
 	rootCmd.PersistentFlags().BoolVarP(&set.verbose, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
 	rootCmd.PersistentFlags().StringVarP(&set.config, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
-	rootCmd.PersistentFlags().BoolVar(&set.json, "json", false, "Print machine-readable JSON instead of the human view (also $OCEL_JSON)")
-	set.jsonAsked = func() bool { return rootCmd.PersistentFlags().Changed("json") }
+	rootCmd.PersistentFlags().BoolVar(&set.json, "json", false, "Write the run's events as NDJSON instead of the human view (also $OCEL_JSON)")
 
 	devDependencies := dev.Dependencies{Invocation: invocation, OpenDocker: docker.Open}
 	devCmd, runCmd := dev.NewCommand(devDependencies), dev.NewRunCommand(devDependencies)
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		if err := set.readUnsetFromEnv(cmd); err != nil {
+			return err
+		}
 		invocation.AttachCommandSink(cmd)
 		install := installInterruptHandler
 		if cmd == devCmd || cmd == runCmd {
@@ -129,6 +145,7 @@ func newCommand() *command {
 		ctx, stop := install(cmd.Root().Context(), cmd.ErrOrStderr(), c.bus)
 		cmd.SetContext(ctx)
 		c.stopInterruptHandler = stop
+		return nil
 	}
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(runCmd)

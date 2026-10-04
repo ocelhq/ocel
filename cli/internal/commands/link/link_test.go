@@ -337,7 +337,7 @@ func TestLinkingShowsEachConsoleWaitAsASpanOnItsRunAndNothingElseWritesTheTermin
 	dependencies := newTestDependencies()
 	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON, TTY: true, Width: 80})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON, TTY: true, Width: 80})
 	}
 	var stdout safeBuffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)

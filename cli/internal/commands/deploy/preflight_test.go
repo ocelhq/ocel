@@ -482,7 +482,7 @@ func TestRunDeployRefusesAComputeTheProviderDoesNotRun(t *testing.T) {
 func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckSpanNamedForItsProviderThenSaysWhoItActsAs(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
-	useJSONLogFormat(t, &dependencies)
+	useJSONFormat(t, &dependencies)
 	fixture := setUpDeployProject(t)
 
 	out := deployOutput(t, fixture, dependencies, deployOptions{yes: true}, "")
@@ -516,7 +516,7 @@ func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckSpanNamedForItsPr
 func TestAnUnbootstrappedProductionFailsTheCheckSpanWithTheCommandThatBootstrapsIt(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
-	useJSONLogFormat(t, &dependencies)
+	useJSONFormat(t, &dependencies)
 	fixture := setUpDeployProject(t)
 	removeBootstrap(t, fixture, environment.TierProduction)
 
@@ -544,7 +544,7 @@ func TestAnUnbootstrappedProductionFailsTheCheckSpanWithTheCommandThatBootstraps
 func TestDeploysEventsAreInTheCheckPhaseThenBuildThenTheProvidersDeployPhases(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
-	useJSONLogFormat(t, &dependencies)
+	useJSONFormat(t, &dependencies)
 	fixture := setUpDeployProject(t)
 
 	out := deployOutput(t, fixture, dependencies, deployOptions{yes: true}, "")
@@ -666,7 +666,7 @@ func TestDeployRendersTheNeedsRefusalInHumanMode(t *testing.T) {
 
 func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
 	fixture, dependencies := setUpNeedsProject(t, "", middlewareNeeds)
-	useJSONLogFormat(t, &dependencies)
+	useJSONFormat(t, &dependencies)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
@@ -714,7 +714,7 @@ func TestDeployRendersADegradedNeedInHumanMode(t *testing.T) {
 func TestDeployRendersADegradedNeedAsACheckPhaseWarningInJSON(t *testing.T) {
 	fixture, dependencies := setUpNeedsProject(t, "  allowDegraded: [\"edge-middleware\", \"ppr-resume\"],\n",
 		`{"edge-middleware":{"count":1,"routes":["/dashboard"]},"ppr-resume":{"count":1,"routes":["/"]}}`)
-	useJSONLogFormat(t, &dependencies)
+	useJSONFormat(t, &dependencies)
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
@@ -757,7 +757,7 @@ func TestDeploySaysNothingAboutNeedsForAnAppThatDeclaresNone(t *testing.T) {
 		writeUsageMonorepo(t, fixture.Root, "")
 		dependencies := newTestDependencies()
 		stubBuild(&dependencies, apiFunction())
-		useJSONLogFormat(t, &dependencies)
+		useJSONFormat(t, &dependencies)
 
 		out := deployOutput(t, fixture, dependencies, deployOptions{yes: true}, "")
 		for _, ev := range envelopes(t, out) {

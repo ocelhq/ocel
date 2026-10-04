@@ -523,7 +523,7 @@ func TestTearingDownAPersistentPreviewAsksThroughConsentWhileTheRunIsHeld(t *tes
 	previewUp(t, fixture, previewDependencies("feature/login", ""), previewUpOptions{name: "staging", persistent: true})
 	dependencies := newTestDependencies()
 	terminalStdin(&dependencies)
-	useJSONLogFormat(t, &dependencies)
+	useJSONFormat(t, &dependencies)
 
 	var stream, stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
@@ -646,7 +646,7 @@ func TestListingPreviewsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheList
 	identity := previewKey(t, "feature/login")
 	dependencies := newTestDependencies()
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 	}
 
 	var stdout, stderr bytes.Buffer

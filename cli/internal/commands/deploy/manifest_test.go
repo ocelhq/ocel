@@ -993,7 +993,7 @@ func twoAppProject(t *testing.T) (Dependencies, clitest.FakeProject) {
 	t.Helper()
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
-	useJSONLogFormat(t, &dependencies)
+	useJSONFormat(t, &dependencies)
 	fixture := setUpDeployProject(t)
 	writeAppsConfig(t, fixture.Root, `
     { name: "web", path: "apps/web", framework: "node" },
