@@ -352,6 +352,29 @@ func TestLiveTailFallsBackToPollingAtTheSessionLimit(t *testing.T) {
 	}
 }
 
+func TestLiveTailPollsFromAfterTheLastEmittedMillisecondWhenARestartMeetsTheSessionLimit(t *testing.T) {
+	t.Parallel()
+	first := newFakeSession()
+	groups := lambdaGroups(1)
+	run, stop := runLiveTail(t, groups, Query{Since: epoch}, func(run *liveRun, _ *cloudwatchlogs.StartLiveTailInput) (liveSession, error) {
+		if run.starts() == 1 {
+			return first, nil
+		}
+		return nil, &types.LimitExceededException{Message: aws.String("too many sessions")}
+	})
+	last := epoch.Add(time.Minute + 250*time.Millisecond)
+	first.events <- update(false, liveLine(groups[0].arn, "2026/09/01/[$LATEST]aaa", "hello\n", last))
+	waitFor(t, func() bool { return len(run.events()) == 1 })
+
+	first.endWith(&types.SessionTimeoutException{})
+	waitFor(t, func() bool { return run.polls() == 1 })
+	stop()
+
+	if want := last.Add(time.Millisecond); !run.polledAt[0].Equal(want) {
+		t.Errorf("LiveTail() polled from %s, want %s: polling from the last emitted millisecond sends its events again, and they carry no ID to drop them by", run.polledAt[0], want)
+	}
+}
+
 func TestLiveTailRestartsASessionThatTimesOutAndReportsReconnected(t *testing.T) {
 	t.Parallel()
 	first := newFakeSession()
