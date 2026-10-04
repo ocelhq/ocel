@@ -20,7 +20,7 @@ const (
 func identityLines(present Presentation, ev *streamv1.IdentityEvent) []string {
 	var out []string
 	if head := identityHeadline(present, ev); head != "" {
-		out = append(out, present.palette().pill().Render(identityName)+identityGap+present.palette().Muted(version.Version)+head)
+		out = append(out, present.Palette().pill().Render(identityName)+identityGap+present.Palette().Muted(version.Version)+head)
 	}
 	rows := partyRows(present, ev)
 	if len(out) > 0 && len(rows) > 0 {
@@ -41,7 +41,7 @@ func partyRows(present Presentation, ev *streamv1.IdentityEvent) []string {
 	rows := make([]string, 0, len(parties))
 	for _, party := range parties {
 		vendor := vendorName(party)
-		row := blockIndent + present.palette().Bold(vendor)
+		row := blockIndent + present.Palette().Bold(vendor)
 		if detail := partyDetail(present, party); detail != "" {
 			row += strings.Repeat(" ", width-utf8.RuneCountInString(vendor)) + identityGap + detail
 		}
@@ -54,7 +54,7 @@ func targetLine(present Presentation, party *streamv1.Party) string {
 	if !isNamedParty(party) {
 		return ""
 	}
-	text := blockIndent + present.palette().Muted("on ") + present.palette().Bold(vendorName(party))
+	text := blockIndent + present.Palette().Muted("on ") + present.Palette().Bold(vendorName(party))
 	if detail := partyDetail(present, party); detail != "" {
 		text += " " + detail
 	}
@@ -64,9 +64,9 @@ func targetLine(present Presentation, party *streamv1.Party) string {
 func partyDetail(present Presentation, party *streamv1.Party) string {
 	parts := nonEmpty(party.GetAccount(), party.GetLocation())
 	if principal := party.GetPrincipal(); principal != "" {
-		parts = append(parts, present.palette().Muted("as ")+principal)
+		parts = append(parts, present.Palette().Muted("as ")+principal)
 	}
-	return strings.Join(parts, present.palette().Muted(partySep))
+	return strings.Join(parts, present.Palette().Muted(partySep))
 }
 
 func isNamedParty(party *streamv1.Party) bool {
@@ -80,18 +80,18 @@ func vendorName(party *streamv1.Party) string {
 func identityHeadline(present Presentation, ev *streamv1.IdentityEvent) string {
 	var named []string
 	if project := ev.GetProject(); project != "" {
-		named = append(named, present.palette().Bold(project))
+		named = append(named, present.Palette().Bold(project))
 	}
 	if tier := tierName(ev.GetTier()); tier != "" {
 		if ev.GetTier() == environmentv1.Tier_TIER_PRODUCTION {
-			tier = present.palette().WarningBold(tier)
+			tier = present.Palette().WarningBold(tier)
 		}
 		named = append(named, tier)
 	}
 	if len(named) == 0 {
 		return ""
 	}
-	return identityGap + strings.Join(named, present.palette().Muted(pathSep))
+	return identityGap + strings.Join(named, present.Palette().Muted(pathSep))
 }
 
 func nonEmpty(values ...string) []string {

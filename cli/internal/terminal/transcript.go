@@ -119,7 +119,7 @@ func (s *Transcript) standalone(ev *streamv1.RunEvent) blockLine {
 func (s *Transcript) detail(ev *streamv1.RunEvent) blockLine {
 	text := ev.GetOperation().GetMessage()
 	if ev.GetOperation().GetLevel() == progressv1.Level_LEVEL_INFO {
-		text = s.present.palette().Muted(text)
+		text = s.present.Palette().Muted(text)
 	}
 	text = strings.ReplaceAll(text, "\n", "\n"+continuationIndent)
 	if ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_INFO {

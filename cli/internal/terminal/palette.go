@@ -30,7 +30,7 @@ func PaletteFor(w io.Writer) Palette {
 	return Palette{colored: Detect(FormatHuman, false, w).Color}
 }
 
-func (p Presentation) palette() Palette {
+func (p Presentation) Palette() Palette {
 	return Palette{colored: p.Color}
 }
 
@@ -137,7 +137,7 @@ func (l label) render(present Presentation) string {
 	if len(l.attrs) == 0 {
 		return l.text
 	}
-	return present.palette().paint(l.text, l.attrs...)
+	return present.Palette().paint(l.text, l.attrs...)
 }
 
 var sigilAttrs = map[string][]color.Attribute{

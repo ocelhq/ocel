@@ -34,7 +34,7 @@ func (l line) render(present Presentation) string {
 		b.WriteString(mark.render(present) + " ")
 	}
 	if l.subject != "" {
-		b.WriteString(present.palette().Bold(l.subject) + ": ")
+		b.WriteString(present.Palette().Bold(l.subject) + ": ")
 	}
 	indent := continuationIndent
 	if l.header {
@@ -42,9 +42,9 @@ func (l line) render(present Presentation) string {
 	}
 	message := l.message
 	if l.dim {
-		message = present.palette().Muted(message)
+		message = present.Palette().Muted(message)
 	}
-	b.WriteString(strings.ReplaceAll(message+present.palette().Muted(l.timing)+l.outcome, "\n", "\n"+indent))
+	b.WriteString(strings.ReplaceAll(message+present.Palette().Muted(l.timing)+l.outcome, "\n", "\n"+indent))
 	return b.String()
 }
 
