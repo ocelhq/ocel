@@ -1,9 +1,54 @@
 package console
 
 import (
+	"bytes"
 	"errors"
+	"strings"
 	"testing"
+
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
+
+func TestRequireLoginWithoutSavedCredentialsReportsConsoleNotLoggedInHintingOcelLogin(t *testing.T) {
+	var stderr bytes.Buffer
+	_, err := RequireLogin(func() (Credentials, error) { return Credentials{}, ErrNotLoggedIn }, &stderr)
+
+	got := clierror.NewRunError(err)
+	if got.GetCode() != "console.not_logged_in" || got.GetHint() != "ocel login" {
+		t.Fatalf("run error = %s, want console.not_logged_in hinting `ocel login`", protojson.Format(got))
+	}
+	if code, ok := exitcode.Of(err); !ok || code != 1 {
+		t.Errorf("exit code = %d, %v, want 1 without printing the error again", code, ok)
+	}
+	if stderr.String() != "You're not logged in. Run `ocel login` first.\n" {
+		t.Errorf("stderr = %q, want the one human line", stderr.String())
+	}
+}
+
+func TestRequireLoginWithUnreadableCredentialsReportsWhyAndNeverClaimsALogout(t *testing.T) {
+	unreadable := errors.New("decode stored credentials: unexpected end of JSON input")
+	var stderr bytes.Buffer
+	_, err := RequireLogin(func() (Credentials, error) { return Credentials{}, unreadable }, &stderr)
+
+	if !errors.Is(err, unreadable) || errors.Is(err, ErrNotLoggedIn) {
+		t.Fatalf("err = %v, want the read failure as its cause and no not-logged-in", err)
+	}
+	if got := clierror.NewRunError(err); got.GetCode() != "internal" {
+		t.Errorf("run error = %s, want internal", protojson.Format(got))
+	}
+	if _, ok := exitcode.Of(err); ok {
+		t.Errorf("err = %v carries an exit status, want it printed as a failure", err)
+	}
+	if strings.Contains(stderr.String()+err.Error(), "not logged in") {
+		t.Errorf("stderr = %q, err = %q, want neither to claim a logout", stderr.String(), err)
+	}
+	if !strings.Contains(err.Error(), "ocel login") {
+		t.Errorf("err = %q, want it to point at `ocel login`", err)
+	}
+}
 
 func TestLoadCredentials(t *testing.T) {
 	t.Run("an env token overrides everything else", func(t *testing.T) {

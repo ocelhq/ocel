@@ -24,6 +24,8 @@ func linkPath(projectDir string) string {
 	return filepath.Join(projectDir, statedir.Name, linkFileName)
 }
 
+var ErrNotLinked = errors.New("this directory isn't linked to a console project")
+
 func ReadLink(projectDir, apiURL string) (*Link, error) {
 	data, err := os.ReadFile(linkPath(projectDir))
 	if err != nil {
