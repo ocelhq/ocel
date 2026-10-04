@@ -1,15 +1,35 @@
 package terminal
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
+
+	"google.golang.org/protobuf/encoding/protojson"
+
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
 func PrintFailure(w io.Writer, err error) {
 	for _, line := range failureLines(PaletteFor(w), "", err.Error()) {
 		fmt.Fprintln(w, line)
 	}
+}
+
+func PrintFailureJSON(w io.Writer, failure *streamv1.RunError) {
+	body, err := protojson.Marshal(failure)
+	if err != nil {
+		return
+	}
+	document, err := json.Marshal(struct {
+		OK    bool            `json:"ok"`
+		Error json.RawMessage `json:"error"`
+	}{Error: body})
+	if err != nil {
+		return
+	}
+	fmt.Fprintln(w, string(document))
 }
 
 func failureLines(p Palette, headline, detail string) []string {
