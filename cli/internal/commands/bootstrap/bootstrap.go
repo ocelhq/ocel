@@ -93,7 +93,7 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 	}
 
 	commands.AddYesFlag(cmd, &opts.Yes)
-	cmd.Flags().BoolVar(&opts.Dry, "dry", false, "Print the changes and stop, applying nothing")
+	commands.AddDryFlag(cmd, &opts.Dry, "Print the changes and stop, applying nothing")
 	cmd.Flags().StringVar(&opts.Features, "features", "", "Comma-separated `set` of features to add or refresh; whatever else is installed is left alone (also: all, none)")
 	cmd.Flags().StringVar(&opts.Remove, "remove", "", "Comma-separated `set` of features to tear down; nothing goes unless it is named here")
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "Remove a feature other projects still use")
@@ -132,7 +132,7 @@ func newDestroyCommand(invocation commands.Invocation) *cobra.Command {
 	}
 
 	commands.AddYesFlag(cmd, &opts.Yes)
-	cmd.Flags().BoolVar(&opts.Dry, "dry", false, "Print what would be removed and stop, removing nothing")
+	commands.AddDryFlag(cmd, &opts.Dry, "Print what would be removed and stop, removing nothing")
 
 	return commands.DeclareMutating(cmd)
 }

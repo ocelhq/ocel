@@ -50,7 +50,7 @@ func NewRollbackCommand(invocation commands.Invocation) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&opts.to, "to", "", "Roll back to a specific promotion id instead of the immediately previous one")
 	cmd.Flags().StringVar(&opts.tag, "tag", "", "Roll back to the promotion with this tag (mutually exclusive with --to)")
-	cmd.Flags().BoolVar(&opts.dry, "dry", false, "Print what would be rolled back and stop, rolling back nothing")
+	commands.AddDryFlag(cmd, &opts.dry, "Print what would be rolled back and stop, rolling back nothing")
 	commands.AddYesFlag(cmd, &opts.yes)
 	return commands.DeclareMutating(cmd)
 }
