@@ -243,6 +243,58 @@ func TestLogsDropsEntriesBelowTheRequestedLevel(t *testing.T) {
 	}
 }
 
+func TestLogsPrintsAFailureAtErrorLevelSoLevelErrorKeepsIt(t *testing.T) {
+	project := deployedWithLogs(t)
+	failure := line(4*time.Minute, "timed out after 3000 ms")
+	failure.Failure = true
+	project.Provider.FakeLogs().Append("web-live", failure)
+
+	plain := read(t, project, func(o *logsOptions) { o.level = "error" }, "web")
+	asJSON := read(t, project, func(o *logsOptions) { o.level, o.json = "error", true }, "web")
+
+	if want := "2026-01-05T12:04:00.000Z web/http ERROR timed out after 3000 ms\n"; plain.stdout != want {
+		t.Errorf("stdout = %q, want the failure alone, at error level: %q", plain.stdout, want)
+	}
+	entry := clitest.DecodeJSON(t, linesOf(asJSON.stdout)[0])
+	if entry["level"] != "error" || entry["failure"] != true {
+		t.Errorf("entry = %v, want level error and failure true", entry)
+	}
+}
+
+func TestLogsTakesTheVendorSeverityWhenTheMessageNamesNoLevel(t *testing.T) {
+	project := deployedWithLogs(t)
+	severe := line(4*time.Minute, "disk filling")
+	severe.Severity = "WARNING"
+	overruled := line(5*time.Minute, "INFO all is well")
+	overruled.Severity = "ERROR"
+	project.Provider.FakeLogs().Append("web-live", severe, overruled)
+
+	got := read(t, project, nil, "web")
+
+	for _, want := range []string{" web/http WARN disk filling\n", " web/http INFO all is well\n"} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("stdout = %q, want %q: the message's own level first, the vendor's severity when it has none", got.stdout, want)
+		}
+	}
+}
+
+func TestLogsRawFiltersByTheVendorSeverityAndFailureAlone(t *testing.T) {
+	project := deployedWithLogs(t)
+	severe := line(4*time.Minute, "INFO says the message")
+	severe.Severity = "ERROR"
+	failure := line(5*time.Minute, "ran out of memory (128 MB)")
+	failure.Failure = true
+	project.Provider.FakeLogs().Append("web-live", line(3*time.Minute, "WARN only the text says so"), severe, failure)
+
+	got := read(t, project, func(o *logsOptions) { o.raw, o.level = true, "warn" }, "web")
+
+	want := "2026-01-05T12:04:00.000Z web/http ERROR INFO says the message\n" +
+		"2026-01-05T12:05:00.000Z web/http ERROR ran out of memory (128 MB)\n"
+	if got.stdout != want {
+		t.Errorf("stdout = %q, want only what the provider marked as warn or worse: %q", got.stdout, want)
+	}
+}
+
 func TestLogsStripsTerminalEscapesFromMessages(t *testing.T) {
 	project := deployedWithLogs(t)
 	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, "\x1b[31mred\x1b[0m\x1b]0;owned\a\x1b[2J\u009b ok\r\x1b[1A"))
@@ -422,7 +474,6 @@ func TestLogsRefusesOptionsThatCannotBeRead(t *testing.T) {
 		{"an unknown level", func(o *logsOptions) { o.level = "loud" }, "--level"},
 		{"no lines", func(o *logsOptions) { o.lines = 0 }, "--lines"},
 		{"more lines than a read returns", func(o *logsOptions) { o.lines = 10001 }, "--lines"},
-		{"a level with raw messages", func(o *logsOptions) { o.level, o.raw = "warn", true }, "--raw"},
 		{"an environment without preview", func(o *logsOptions) { o.environment = "staging" }, "--preview"},
 	}
 	for _, tc := range cases {

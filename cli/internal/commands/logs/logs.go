@@ -63,7 +63,9 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 			"unless --all-releases adds the ones still running but no longer promoted.\n\n" +
 			"--grep is a substring match the provider does where it can. --level is applied here, " +
 			"after -n has chosen its lines, so it can leave you fewer than -n; a line whose level " +
-			"cannot be told is dropped by it.",
+			"cannot be told is dropped by it. A line's level is the one its message names, else the " +
+			"severity the provider recorded; a failure the provider reports, such as a timeout, is an error. " +
+			"With --raw, messages are not read, so the level is the provider's alone.",
 		Example: "  $ ocel logs\n" +
 			"  $ ocel logs web --since 15m --level warn\n" +
 			"  $ ocel logs --preview --grep timeout --json",
@@ -84,7 +86,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&opts.level, "level", "", "Minimum `level` to print: debug, info, warn or error")
 	cmd.Flags().StringVar(&opts.grep, "grep", "", "Print only entries containing this `text`")
 	cmd.Flags().BoolVar(&opts.json, "json", false, "Print one JSON object per line (also: --log-format json)")
-	cmd.Flags().BoolVar(&opts.raw, "raw", false, "Print messages as sent, without parsing their level and fields")
+	cmd.Flags().BoolVar(&opts.raw, "raw", false, "Print messages as sent, without reading a level or fields out of them")
 	return commands.ReserveStdout(cmd)
 }
 
@@ -114,9 +116,6 @@ func (o logsOptions) resolve(dependencies Dependencies, cwd string) (*contractv1
 		level, ok := logview.ParseLevel(o.level)
 		if !ok {
 			return nil, 0, fmt.Errorf("--level %q is not one of debug, info, warn or error", o.level)
-		}
-		if o.raw {
-			return nil, 0, errors.New("--level reads the level out of each message and --raw leaves messages unparsed; use one or the other")
 		}
 		minLevel = level
 	}
