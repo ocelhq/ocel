@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -70,7 +71,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 
 	if status.Present {
 		resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier), true
-		resp.KnownSlugs, err = slugsBesides(ctx, gate, tier, req.GetSlug())
+		resp.KnownSlugs, err = listOtherSlugsIfUnrecorded(ctx, gate, tier, req.GetSlug())
 		if err != nil {
 			return nil, provider.RefusalError(err)
 		}
@@ -226,20 +227,22 @@ func boundHere(ctx context.Context, store keyvalue.Store, tier environment.Tier,
 	return state.Edge.Bound, nil
 }
 
-func slugsBesides(ctx context.Context, gate Gate, tier environment.Tier, slug string) ([]string, error) {
+func listOtherSlugsIfUnrecorded(ctx context.Context, gate Gate, tier environment.Tier, slug string) ([]string, error) {
 	if slug == "" {
+		return nil, nil
+	}
+	own, err := keyvalue.ReadOrEmpty(ctx, gate.KeyValues, stackrecords.ProjectKey(tier, slug))
+	if err != nil {
+		return nil, fmt.Errorf("read %s's record: %w", slug, err)
+	}
+	if len(own.Value) > 0 {
 		return nil, nil
 	}
 	recorded, err := gate.RecordedFeatures(ctx, tier)
 	if err != nil {
 		return nil, err
 	}
-	var slugs []string
-	for known := range recorded {
-		if known != slug {
-			slugs = append(slugs, known)
-		}
-	}
+	slugs := slices.Collect(maps.Keys(recorded))
 	slices.Sort(slugs)
 	return slugs, nil
 }
