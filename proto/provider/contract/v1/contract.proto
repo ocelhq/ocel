@@ -853,6 +853,8 @@ message ReadLogsRequest {
   uint32 limit = 8 [(buf.validate.field).uint32 = {gte: 1, lte: 10000}];
 
   string contains = 9;
+
+  bool tail = 10;
 }
 
 message ReadLogsResponse {

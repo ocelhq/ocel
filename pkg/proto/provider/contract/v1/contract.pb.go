@@ -5499,6 +5499,7 @@ type ReadLogsRequest struct {
 	Until         *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=until,proto3" json:"until,omitempty"`
 	Limit         uint32                 `protobuf:"varint,8,opt,name=limit,proto3" json:"limit,omitempty"`
 	Contains      string                 `protobuf:"bytes,9,opt,name=contains,proto3" json:"contains,omitempty"`
+	Tail          bool                   `protobuf:"varint,10,opt,name=tail,proto3" json:"tail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5594,6 +5595,13 @@ func (x *ReadLogsRequest) GetContains() string {
 		return x.Contains
 	}
 	return ""
+}
+
+func (x *ReadLogsRequest) GetTail() bool {
+	if x != nil {
+		return x.Tail
+	}
+	return false
 }
 
 type ReadLogsResponse struct {
@@ -6320,7 +6328,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"configJson\x129\n" +
 	"\acompute\x18\x04 \x01(\tB\x1f\xbaH\x1c\xd8\x01\x01r\x17R\n" +
 	"serverlessR\tcontainerR\acompute\"\x18\n" +
-	"\x16RemoveConnectorRequest\"\xa0\x03\n" +
+	"\x16RemoveConnectorRequest\"\xb4\x03\n" +
 	"\x0fReadLogsRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x127\n" +
@@ -6331,7 +6339,9 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x05until\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x05until\x12 \n" +
 	"\x05limit\x18\b \x01(\rB\n" +
 	"\xbaH\a*\x05\x18\x90N(\x01R\x05limit\x12\x1a\n" +
-	"\bcontains\x18\t \x01(\tR\bcontains\"\x8d\x01\n" +
+	"\bcontains\x18\t \x01(\tR\bcontains\x12\x12\n" +
+	"\x04tail\x18\n" +
+	" \x01(\bR\x04tail\"\x8d\x01\n" +
 	"\x10ReadLogsResponse\x126\n" +
 	"\x05batch\x18\x01 \x01(\v2\x1e.provider.contract.v1.LogBatchH\x00R\x05batch\x129\n" +
 	"\x06notice\x18\x02 \x01(\v2\x1f.provider.contract.v1.LogNoticeH\x00R\x06noticeB\x06\n" +

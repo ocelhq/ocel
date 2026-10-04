@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	connect "connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -37,27 +38,33 @@ func (h *handlers) ReadLogs(ctx context.Context, req *contractv1.ReadLogsRequest
 	if req.GetSince() == nil {
 		return provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "a log read names no start time, and without one it would scan the project's whole retention"))
 	}
+	if req.GetTail() && req.GetUntil() != nil {
+		return provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "a tail has no end time, because it ends only when the caller stops it"))
+	}
 	targets, err := h.chooseLogTargets(ctx, p, tier, env, req)
 	if err != nil {
 		return provider.RefusalError(err)
 	}
+	query := provider.LogQuery{
+		Tier:     tier,
+		Slug:     req.GetSlug(),
+		Env:      env,
+		Targets:  targets,
+		Since:    req.GetSince().AsTime(),
+		Limit:    int(req.GetLimit()),
+		Contains: req.GetContains(),
+	}
+	if req.GetUntil() != nil {
+		query.Until = req.GetUntil().AsTime()
+	}
+	tailFrom := time.Now()
+	if req.GetTail() {
+		query.Until = tailFrom
+	}
+	sink := &logSink{stream: stream}
+	var missing provider.LogTargetsMissing
 	if len(targets) > 0 {
-		query := provider.LogQuery{
-			Tier:     tier,
-			Slug:     req.GetSlug(),
-			Env:      env,
-			Targets:  targets,
-			Since:    req.GetSince().AsTime(),
-			Limit:    int(req.GetLimit()),
-			Contains: req.GetContains(),
-		}
-		if req.GetUntil() != nil {
-			query.Until = req.GetUntil().AsTime()
-		}
-		err := p.Logs().Read(ctx, query, func(entries []provider.LogEntry) error {
-			return stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Batch{Batch: &contractv1.LogBatch{Entries: logEntriesProto(entries)}}})
-		})
-		var missing provider.LogTargetsMissing
+		err := p.Logs().Read(ctx, query, sink.sendEntries, sink.sendNotice)
 		if errors.As(err, &missing) {
 			for _, target := range missing.Targets {
 				if err := sendLogNotice(stream, contractv1.LogNotice_KIND_SOURCE_GONE, fmt.Sprintf("%s (%s) of release %s no longer exists, so its logs are gone", target.App, target.Source, target.Release)); err != nil {
@@ -68,7 +75,44 @@ func (h *handlers) ReadLogs(ctx context.Context, req *contractv1.ReadLogsRequest
 			return provider.RefusalError(err)
 		}
 	}
-	return sendLogNotice(stream, contractv1.LogNotice_KIND_CAUGHT_UP, "")
+	if err := sendLogNotice(stream, contractv1.LogNotice_KIND_CAUGHT_UP, ""); err != nil || !req.GetTail() {
+		return err
+	}
+	query.Tail, query.Since, query.Until = true, tailFrom, time.Time{}
+	query.Targets = slices.DeleteFunc(slices.Clone(targets), func(target provider.LogTarget) bool {
+		return slices.ContainsFunc(missing.Targets, func(gone provider.LogTarget) bool { return gone.Physical() == target.Physical() })
+	})
+	if len(query.Targets) == 0 {
+		<-ctx.Done()
+		return nil
+	}
+	err = p.Logs().Read(ctx, query, sink.sendEntries, sink.sendNotice)
+	if err != nil && ctx.Err() == nil {
+		return provider.RefusalError(err)
+	}
+	return nil
+}
+
+type logSink struct {
+	stream *connect.ServerStream[contractv1.ReadLogsResponse]
+}
+
+func (s *logSink) sendEntries(entries []provider.LogEntry) error {
+	return s.stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Batch{Batch: &contractv1.LogBatch{Entries: logEntriesProto(entries)}}})
+}
+
+func (s *logSink) sendNotice(notice provider.LogNotice) error {
+	switch notice.Kind {
+	case provider.LogSampled:
+		return s.stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: &contractv1.LogNotice{
+			Kind:    contractv1.LogNotice_KIND_SAMPLED,
+			Message: fmt.Sprintf("%d entries were left out because the log store sampled them", notice.Omitted),
+			Omitted: uint64(max(notice.Omitted, 0)),
+		}}})
+	case provider.LogReconnected:
+		return sendLogNotice(s.stream, contractv1.LogNotice_KIND_RECONNECTED, "the log stream dropped and reconnected, so entries written meanwhile may be missing")
+	}
+	return nil
 }
 
 func sendLogNotice(stream *connect.ServerStream[contractv1.ReadLogsResponse], kind contractv1.LogNotice_Kind, message string) error {

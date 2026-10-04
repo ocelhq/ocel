@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -26,6 +27,7 @@ type loggedAWS struct {
 	prefix []string
 	limit  []int32
 	filter []string
+	starts []int64
 }
 
 func (l *loggedAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
@@ -41,6 +43,7 @@ func (l *loggedAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 		LogStreamNamePrefix string `json:"logStreamNamePrefix"`
 		FilterPattern       string `json:"filterPattern"`
 		Limit               int32  `json:"limit"`
+		StartTime           int64  `json:"startTime"`
 	}
 	body, _ := io.ReadAll(req.Body)
 	_ = json.Unmarshal(body, &filter)
@@ -48,6 +51,7 @@ func (l *loggedAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	l.prefix = append(l.prefix, filter.LogStreamNamePrefix)
 	l.limit = append(l.limit, filter.Limit)
 	l.filter = append(l.filter, filter.FilterPattern)
+	l.starts = append(l.starts, filter.StartTime)
 	json.NewEncoder(writer).Encode(map[string]any{"events": []map[string]any{{
 		"logStreamName": "2026/01/05/[$LATEST]abcdef",
 		"timestamp":     time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC).UnixMilli(),
@@ -89,7 +93,7 @@ func TestLogsReadsEachFunctionFromItsLogGroupAndEachContainerFromTheTiersSharedG
 	err := p.Logs().Read(context.Background(), query, func(batch []provider.LogEntry) error {
 		entries = append(entries, batch...)
 		return nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("Read() error = %v", err)
 	}
@@ -135,7 +139,7 @@ func TestLogsReadsNothingFromAnEmptyTargetList(t *testing.T) {
 	err := p.Logs().Read(context.Background(), provider.LogQuery{Tier: environment.TierProduction}, func([]provider.LogEntry) error {
 		t.Error("Read() emitted a batch for no targets")
 		return nil
-	})
+	}, nil)
 	if err != nil {
 		t.Errorf("Read() error = %v, want none", err)
 	}
@@ -156,7 +160,7 @@ func TestLogsReadsNothingForALimitBelowOne(t *testing.T) {
 	}, func([]provider.LogEntry) error {
 		t.Error("Read() emitted a batch for a limit of 0")
 		return nil
-	})
+	}, nil)
 	if err != nil {
 		t.Errorf("Read() error = %v, want none", err)
 	}
@@ -174,8 +178,138 @@ func TestLogsRefusesATargetThatNamesNeitherAFunctionNorAContainer(t *testing.T) 
 		Targets: []provider.LogTarget{{App: "web", Release: "r1", Source: "http"}},
 		Since:   time.Date(2026, 1, 5, 11, 0, 0, 0, time.UTC),
 		Limit:   10,
-	}, func([]provider.LogEntry) error { return nil })
+	}, func([]provider.LogEntry) error { return nil }, nil)
 	if err == nil {
 		t.Error("Read() of a target with no function and no container error = nil, want a failure")
+	}
+}
+
+func TestLogsTailsEachTargetFromItsLogGroupFromSince(t *testing.T) {
+	t.Parallel()
+
+	stub := &loggedAWS{}
+	p := providerOn(t, stub)
+	since := time.Date(2026, 1, 5, 11, 0, 0, 0, time.UTC)
+	query := provider.LogQuery{
+		Tier: environment.TierProduction,
+		Targets: []provider.LogTarget{
+			{App: "web", Release: "r1", Source: "http", Function: &provider.Function{Name: "web-server", Physical: "web-fn"}},
+			{App: "api", Release: "r2", Source: "http", Container: &provider.AppContainer{Name: "api", Physical: "api-box"}},
+		},
+		Since:    since,
+		Contains: "boom",
+		Tail:     true,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var entries []provider.LogEntry
+	err := p.Logs().Read(ctx, query, func(batch []provider.LogEntry) error {
+		entries = append(entries, batch...)
+		if len(entries) == 2 {
+			cancel()
+		}
+		return nil
+	}, func(provider.LogNotice) error { return nil })
+	if err != nil {
+		t.Fatalf("Read() of a tail error = %v, want none once the caller cancelled", err)
+	}
+
+	stub.mutex.Lock()
+	defer stub.mutex.Unlock()
+	groups := slices.Clone(stub.groups)
+	slices.Sort(groups)
+	if want := []string{"/aws/lambda/web-fn", "/ocel/containers/production"}; !slices.Equal(groups, want) {
+		t.Errorf("the tail read the log groups %v, want %v", groups, want)
+	}
+	if !slices.Contains(stub.prefix, "api-box/") {
+		t.Errorf("the tail filtered container streams by %v, want the prefix api-box/", stub.prefix)
+	}
+	for _, start := range stub.starts {
+		if start != since.UnixMilli() {
+			t.Errorf("the tail began at %d, want Since %d", start, since.UnixMilli())
+		}
+	}
+	for _, pattern := range stub.filter {
+		if pattern != `"boom"` {
+			t.Errorf("the tail sent the filter %q, want the contains text quoted", pattern)
+		}
+	}
+	sources := map[string]string{}
+	for _, entry := range entries {
+		sources[entry.App] = entry.Release + "/" + entry.Source
+	}
+	if want := map[string]string{"web": "r1/http", "api": "r2/http"}; !maps.Equal(sources, want) {
+		t.Errorf("the tail labelled its entries %v, want %v", sources, want)
+	}
+}
+
+func TestLogsTailsWhateverTheLimitIs(t *testing.T) {
+	t.Parallel()
+
+	stub := &loggedAWS{}
+	p := providerOn(t, stub)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	query := provider.LogQuery{
+		Tier:    environment.TierProduction,
+		Targets: []provider.LogTarget{{App: "web", Release: "r1", Source: "http", Function: &provider.Function{Name: "web-server", Physical: "web-fn"}}},
+		Since:   time.Date(2026, 1, 5, 11, 0, 0, 0, time.UTC),
+		Tail:    true,
+	}
+
+	var read int
+	err := p.Logs().Read(ctx, query, func(batch []provider.LogEntry) error {
+		read += len(batch)
+		cancel()
+		return nil
+	}, func(provider.LogNotice) error { return nil })
+	if err != nil || read == 0 {
+		t.Errorf("Read() of a tail with Limit 0 = %d entries, %v, want the tail read without a Limit", read, err)
+	}
+}
+
+func TestLogsTailsNothingFromAnEmptyTargetList(t *testing.T) {
+	t.Parallel()
+
+	stub := &loggedAWS{}
+	p := providerOn(t, stub)
+
+	query := provider.LogQuery{Tier: environment.TierProduction, Since: time.Now(), Tail: true}
+	err := p.Logs().Read(context.Background(), query, func([]provider.LogEntry) error {
+		t.Error("Read() of a tail with no targets emitted entries")
+		return nil
+	}, func(provider.LogNotice) error { return nil })
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if len(stub.groups) != 0 {
+		t.Errorf("Read() of a tail with no targets read %v, want no request", stub.groups)
+	}
+}
+
+func TestLogsTailStopsWhenTheCallerCancelsBeforeAnyEventArrives(t *testing.T) {
+	t.Parallel()
+
+	p := providerOn(t, &loggedAWS{})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	query := provider.LogQuery{
+		Tier:    environment.TierProduction,
+		Targets: []provider.LogTarget{{App: "web", Release: "r1", Source: "http", Function: &provider.Function{Name: "web-server", Physical: "web-fn"}}},
+		Since:   time.Now(),
+		Tail:    true,
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- p.Logs().Read(ctx, query, func([]provider.LogEntry) error { return nil }, func(provider.LogNotice) error { return nil })
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Read() of a cancelled tail error = %v, want none", err)
+		}
+	case <-time.After(time.Second):
+		t.Error("Read() of a tail was still running 1s after its context was cancelled")
 	}
 }

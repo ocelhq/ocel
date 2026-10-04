@@ -13,44 +13,49 @@ import (
 
 type logs struct{ *Provider }
 
-func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error) error {
-	if len(q.Targets) == 0 || q.Limit < 1 {
+func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, _ func(provider.LogNotice) error) error {
+	if len(q.Targets) == 0 || !q.Tail && q.Limit < 1 {
 		return nil
 	}
-	events, err := logevents.Read(ctx, cloudwatchlogs.NewFromConfig(p.aws), lambda.NewFromConfig(p.aws), logevents.Query{
+	cloudwatch, functions := cloudwatchlogs.NewFromConfig(p.aws), lambda.NewFromConfig(p.aws)
+	query := logevents.Query{
 		Sources:  logSourcesOf(q.Targets),
 		Tier:     q.Tier,
 		Since:    q.Since,
 		Until:    q.Until,
 		Limit:    q.Limit,
 		Contains: q.Contains,
-	})
+	}
+	emitEvents := func(events []logevents.Event) error {
+		entries := make([]provider.LogEntry, 0, len(events))
+		for _, event := range events {
+			target, labelled := targetOfLabel(q.Targets, event.Label)
+			if !labelled {
+				continue
+			}
+			entries = append(entries, provider.LogEntry{
+				Time:     event.Time,
+				App:      target.App,
+				Source:   target.Source,
+				Release:  target.Release,
+				Instance: event.Instance,
+				Message:  event.Text,
+				Failure:  event.Failure,
+			})
+		}
+		if len(entries) == 0 {
+			return nil
+		}
+		return emit(entries)
+	}
+	if q.Tail {
+		return logevents.Tail(ctx, cloudwatch, functions, query, 0, emitEvents)
+	}
+	events, err := logevents.Read(ctx, cloudwatch, functions, query)
 	if err != nil {
 		return err
 	}
-	if len(events) == 0 {
-		return nil
-	}
-	entries := make([]provider.LogEntry, 0, len(events))
-	for _, event := range events {
-		target, labelled := targetOfLabel(q.Targets, event.Label)
-		if !labelled {
-			continue
-		}
-		entries = append(entries, provider.LogEntry{
-			Time:     event.Time,
-			App:      target.App,
-			Source:   target.Source,
-			Release:  target.Release,
-			Instance: event.Instance,
-			Message:  event.Text,
-			Failure:  event.Failure,
-		})
-	}
-	if len(entries) == 0 {
-		return nil
-	}
-	return emit(entries)
+	return emitEvents(events)
 }
 
 func logSourcesOf(targets []provider.LogTarget) []logevents.Source {

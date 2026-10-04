@@ -29,6 +29,8 @@ func TestReferenceProvider(t *testing.T) {
 		},
 		Logs: &conformance.LogChecks{Seed: func(_ *testing.T, target provider.LogTarget, entries []provider.LogEntry) {
 			vendor.FakeLogs().Append(target.Physical(), entries...)
+		}, Feed: func(_ *testing.T, target provider.LogTarget, entries []provider.LogEntry) {
+			vendor.FakeLogs().Feed(target.Physical(), entries...)
 		}},
 	})
 }

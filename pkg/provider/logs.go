@@ -41,6 +41,7 @@ type LogQuery struct {
 	Since, Until time.Time
 	Limit        int
 	Contains     string
+	Tail         bool
 }
 
 type LogStream string
@@ -62,8 +63,20 @@ type LogEntry struct {
 	Failure  bool
 }
 
+type LogNoticeKind int
+
+const (
+	LogSampled LogNoticeKind = iota + 1
+	LogReconnected
+)
+
+type LogNotice struct {
+	Kind    LogNoticeKind
+	Omitted int
+}
+
 type Logs interface {
-	Read(ctx context.Context, q LogQuery, emit func([]LogEntry) error) error
+	Read(ctx context.Context, q LogQuery, emit func([]LogEntry) error, notice func(LogNotice) error) error
 }
 
 type LogTargetsMissing struct{ Targets []LogTarget }

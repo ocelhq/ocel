@@ -18,6 +18,7 @@ import (
 
 type Conn interface {
 	Stream(ctx context.Context, command string, stdin io.Reader) (session.Result, error)
+	RunLines(ctx context.Context, command string, each func(session.Line) error) error
 	Run(ctx context.Context, command string) (string, error)
 	Preflight(ctx context.Context) (session.Facts, error)
 	Destination() session.Destination
@@ -229,6 +230,18 @@ func (h *Host) stream(ctx context.Context, command string, stdin io.Reader, elev
 		command = elevation + "sh -c " + quoted(command)
 	}
 	return live.Stream(ctx, command, stdin)
+}
+
+func (h *Host) streamLines(ctx context.Context, command string, elevation string, each func(session.Line) error) error {
+	live, err := h.dial(ctx)
+	if err != nil {
+		return err
+	}
+	h.remember(live.Destination().Principal())
+	if elevation != "" {
+		command = elevation + "sh -c " + quoted(command)
+	}
+	return live.RunLines(ctx, command, each)
 }
 
 func (h *Host) granted(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {

@@ -10,51 +10,68 @@ import (
 
 type logs struct{ *Provider }
 
-func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error) error {
-	if len(q.Targets) == 0 || q.Limit < 1 {
+func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, notice func(provider.LogNotice) error) error {
+	if len(q.Targets) == 0 || !q.Tail && q.Limit < 1 {
 		return nil
 	}
 	resolved, err := p.openClients(ctx)
 	if err != nil {
 		return err
 	}
-	service, err := resolved.LoggingREST()
-	if err != nil {
-		return err
-	}
-	events, err := logentries.Read(ctx, service, resolved.project, logentries.Query{
+	query := logentries.Query{
 		Sources:  logSourcesOf(q.Targets),
 		Since:    q.Since,
 		Until:    q.Until,
 		Limit:    q.Limit,
 		Contains: q.Contains,
-	})
+	}
+	emitEvents := func(events []logentries.Event) error {
+		entries := make([]provider.LogEntry, 0, len(events))
+		for _, event := range events {
+			target, labelled := targetOfLabel(q.Targets, event.Label)
+			if !labelled {
+				continue
+			}
+			entries = append(entries, provider.LogEntry{
+				Time:     event.Time,
+				App:      target.App,
+				Source:   target.Source,
+				Release:  target.Release,
+				Instance: event.Instance,
+				Message:  event.Text,
+				Severity: event.Severity,
+			})
+		}
+		if len(entries) == 0 {
+			return nil
+		}
+		return emit(entries)
+	}
+	if q.Tail {
+		stream, err := resolved.Logging()
+		if err != nil {
+			return err
+		}
+		return logentries.Tail(ctx, stream, resolved.project, query, emitEvents, func(suppressed logentries.Notice) error {
+			return notice(noticeOf(suppressed))
+		})
+	}
+	service, err := resolved.LoggingREST()
 	if err != nil {
 		return err
 	}
-	if len(events) == 0 {
-		return nil
+	events, err := logentries.Read(ctx, service, resolved.project, query)
+	if err != nil {
+		return err
 	}
-	entries := make([]provider.LogEntry, 0, len(events))
-	for _, event := range events {
-		target, labelled := targetOfLabel(q.Targets, event.Label)
-		if !labelled {
-			continue
-		}
-		entries = append(entries, provider.LogEntry{
-			Time:     event.Time,
-			App:      target.App,
-			Source:   target.Source,
-			Release:  target.Release,
-			Instance: event.Instance,
-			Message:  event.Text,
-			Severity: event.Severity,
-		})
+	return emitEvents(events)
+}
+
+func noticeOf(suppressed logentries.Notice) provider.LogNotice {
+	if suppressed.Reason == logentries.Reconnected {
+		return provider.LogNotice{Kind: provider.LogReconnected}
 	}
-	if len(entries) == 0 {
-		return nil
-	}
-	return emit(entries)
+	return provider.LogNotice{Kind: provider.LogSampled, Omitted: suppressed.Count}
 }
 
 func logSourcesOf(targets []provider.LogTarget) []logentries.Source {

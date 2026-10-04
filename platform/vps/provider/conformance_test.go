@@ -224,6 +224,28 @@ func TestRealtimePassesTheConformanceSuite(t *testing.T) {
 type dockerLogs struct {
 	mu      sync.Mutex
 	entries map[string][]provider.LogEntry
+	live    chan provider.LogEntry
+}
+
+func newDockerLogs() *dockerLogs { return &dockerLogs{live: make(chan provider.LogEntry, 16)} }
+
+func (d *dockerLogs) feed(_ *testing.T, _ provider.LogTarget, entries []provider.LogEntry) {
+	for _, entry := range entries {
+		d.live <- entry
+	}
+}
+
+func (d *dockerLogs) follow(ctx context.Context, _ string, each func(session.Line) error) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case entry := <-d.live:
+			if err := each(session.Line{Pipe: session.Stdout, Text: entry.Time.Format(time.RFC3339Nano) + " " + entry.Message}); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (d *dockerLogs) seed(_ *testing.T, target provider.LogTarget, entries []provider.LogEntry) {
@@ -273,8 +295,9 @@ func (d *dockerLogs) answer(command string) (session.Result, bool) {
 func TestTheLogsPortKeepsTheConformanceHistoryOfAContainerOnTheBox(t *testing.T) {
 	t.Parallel()
 
-	docker := &dockerLogs{}
-	p := over(&box{refuses: docker.answer})
+	docker := newDockerLogs()
+	p := over(&box{refuses: docker.answer, follows: docker.follow})
 	conformance.RunLogs(t, p.Facts(), p.Logs())
 	conformance.RunLogHistory(t, p.Facts(), p.Logs(), docker.seed)
+	conformance.RunLogTail(t, p.Facts(), p.Logs(), docker.feed)
 }

@@ -48,6 +48,19 @@ func (c *sudoless) Stream(_ context.Context, command string, _ io.Reader) (sessi
 	}
 }
 
+func (c *sudoless) RunLines(ctx context.Context, command string, each func(session.Line) error) error {
+	said, err := c.Stream(ctx, command, nil)
+	if err != nil {
+		return err
+	}
+	for text := range strings.Lines(said.Stdout) {
+		if err := each(session.Line{Pipe: session.Stdout, Text: strings.TrimSuffix(text, "\n")}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *sudoless) Destination() session.Destination {
 	return session.Destination{Written: "box.example", Address: "203.0.113.7", Port: 22, User: "ocel-deploy"}
 }
