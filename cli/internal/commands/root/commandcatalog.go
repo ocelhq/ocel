@@ -18,29 +18,29 @@ import (
 
 const cobraHelpFlag = "help"
 
-func describeCommandTree(start *cobra.Command) *helpv1.CommandTree {
-	tree := &helpv1.CommandTree{}
+func describeCommandCatalog(start *cobra.Command) *helpv1.CommandCatalog {
+	catalog := &helpv1.CommandCatalog{}
 	var walk func(cmd *cobra.Command)
 	walk = func(cmd *cobra.Command) {
 		if cmd.Hidden {
 			return
 		}
 		if cmd.HasParent() {
-			tree.Commands = append(tree.Commands, describeCommand(cmd))
+			catalog.Commands = append(catalog.Commands, describeCommand(cmd))
 		}
 		for _, sub := range cmd.Commands() {
 			walk(sub)
 		}
 	}
 	walk(start)
-	sort.Slice(tree.Commands, func(i, j int) bool { return tree.Commands[i].GetPath() < tree.Commands[j].GetPath() })
-	return tree
+	sort.Slice(catalog.Commands, func(i, j int) bool { return catalog.Commands[i].GetPath() < catalog.Commands[j].GetPath() })
+	return catalog
 }
 
 func describeCommand(cmd *cobra.Command) *helpv1.Command {
 	mutates, _ := commands.FindMutation(cmd)
 	return &helpv1.Command{
-		Path:       strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" "),
+		Path:       commandPath(cmd),
 		Short:      cmd.Short,
 		Long:       cmd.Long,
 		Usage:      cmd.UseLine(),
@@ -51,6 +51,10 @@ func describeCommand(cmd *cobra.Command) *helpv1.Command {
 		Mutates:    mutates,
 		Confirms:   commands.HasConfirmationFlag(cmd),
 	}
+}
+
+func commandPath(cmd *cobra.Command) string {
+	return strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" ")
 }
 
 func describeArguments(cmd *cobra.Command) []*helpv1.Argument {
@@ -98,14 +102,14 @@ func describeFlags(cmd *cobra.Command) []*helpv1.Flag {
 	return flags
 }
 
-func writeCommandTree(w io.Writer, tree *helpv1.CommandTree) error {
-	compact, err := protojson.MarshalOptions{UseProtoNames: true, EmitUnpopulated: true}.Marshal(tree)
+func writeCommandCatalog(w io.Writer, catalog *helpv1.CommandCatalog) error {
+	compact, err := protojson.MarshalOptions{UseProtoNames: true, EmitUnpopulated: true}.Marshal(catalog)
 	if err != nil {
-		return fmt.Errorf("render the command tree: %w", err)
+		return fmt.Errorf("render the command catalog: %w", err)
 	}
 	var indented bytes.Buffer
 	if err := json.Indent(&indented, compact, "", "  "); err != nil {
-		return fmt.Errorf("render the command tree: %w", err)
+		return fmt.Errorf("render the command catalog: %w", err)
 	}
 	indented.WriteByte('\n')
 	_, err = w.Write(indented.Bytes())

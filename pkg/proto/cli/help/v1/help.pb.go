@@ -21,27 +21,27 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type CommandTree struct {
+type CommandCatalog struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Commands      []*Command             `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CommandTree) Reset() {
-	*x = CommandTree{}
+func (x *CommandCatalog) Reset() {
+	*x = CommandCatalog{}
 	mi := &file_cli_help_v1_help_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CommandTree) String() string {
+func (x *CommandCatalog) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CommandTree) ProtoMessage() {}
+func (*CommandCatalog) ProtoMessage() {}
 
-func (x *CommandTree) ProtoReflect() protoreflect.Message {
+func (x *CommandCatalog) ProtoReflect() protoreflect.Message {
 	mi := &file_cli_help_v1_help_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -53,12 +53,12 @@ func (x *CommandTree) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CommandTree.ProtoReflect.Descriptor instead.
-func (*CommandTree) Descriptor() ([]byte, []int) {
+// Deprecated: Use CommandCatalog.ProtoReflect.Descriptor instead.
+func (*CommandCatalog) Descriptor() ([]byte, []int) {
 	return file_cli_help_v1_help_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *CommandTree) GetCommands() []*Command {
+func (x *CommandCatalog) GetCommands() []*Command {
 	if x != nil {
 		return x.Commands
 	}
@@ -329,8 +329,8 @@ var File_cli_help_v1_help_proto protoreflect.FileDescriptor
 
 const file_cli_help_v1_help_proto_rawDesc = "" +
 	"\n" +
-	"\x16cli/help/v1/help.proto\x12\vcli.help.v1\"?\n" +
-	"\vCommandTree\x120\n" +
+	"\x16cli/help/v1/help.proto\x12\vcli.help.v1\"B\n" +
+	"\x0eCommandCatalog\x120\n" +
 	"\bcommands\x18\x01 \x03(\v2\x14.cli.help.v1.CommandR\bcommands\"\xac\x02\n" +
 	"\aCommand\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x14\n" +
@@ -373,13 +373,13 @@ func file_cli_help_v1_help_proto_rawDescGZIP() []byte {
 
 var file_cli_help_v1_help_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_cli_help_v1_help_proto_goTypes = []any{
-	(*CommandTree)(nil), // 0: cli.help.v1.CommandTree
-	(*Command)(nil),     // 1: cli.help.v1.Command
-	(*Argument)(nil),    // 2: cli.help.v1.Argument
-	(*Flag)(nil),        // 3: cli.help.v1.Flag
+	(*CommandCatalog)(nil), // 0: cli.help.v1.CommandCatalog
+	(*Command)(nil),        // 1: cli.help.v1.Command
+	(*Argument)(nil),       // 2: cli.help.v1.Argument
+	(*Flag)(nil),           // 3: cli.help.v1.Flag
 }
 var file_cli_help_v1_help_proto_depIdxs = []int32{
-	1, // 0: cli.help.v1.CommandTree.commands:type_name -> cli.help.v1.Command
+	1, // 0: cli.help.v1.CommandCatalog.commands:type_name -> cli.help.v1.Command
 	2, // 1: cli.help.v1.Command.arguments:type_name -> cli.help.v1.Argument
 	3, // 2: cli.help.v1.Command.flags:type_name -> cli.help.v1.Flag
 	3, // [3:3] is the sub-list for method output_type

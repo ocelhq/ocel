@@ -3,7 +3,7 @@ package cli.help.v1;
 
 option go_package = "github.com/ocelhq/ocel/pkg/proto/cli/help/v1;helpv1";
 
-message CommandTree {
+message CommandCatalog {
   repeated Command commands = 1;
 }
 
