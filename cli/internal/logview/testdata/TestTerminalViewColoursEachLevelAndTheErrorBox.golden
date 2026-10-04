@@ -1,0 +1,9 @@
+<ESC>[90m12:04:07.123<ESC>[0m  <ESC>[34mweb<ESC>[0m  <ESC>[90mDEBUG<ESC>[0m  debugging
+<ESC>[90m12:04:07.123<ESC>[0m  <ESC>[34mweb<ESC>[0m  INFO   ready  <ESC>[90mport=3000<ESC>[0m
+<ESC>[90m12:04:07.123<ESC>[0m  <ESC>[34mweb<ESC>[0m  <ESC>[33mWARN <ESC>[0m  careful
+<ESC>[90m12:04:07.123<ESC>[0m  <ESC>[34mweb<ESC>[0m  <ESC>[31mERROR<ESC>[0m
+<ESC>[31m╭────────╮<ESC>[m
+<ESC>[31m│<ESC>[m broken <ESC>[31m│<ESC>[m
+<ESC>[31m│<ESC>[m        <ESC>[31m│<ESC>[m
+<ESC>[31m│<ESC>[m <ESC>[90mtrace<ESC>[0m  <ESC>[31m│<ESC>[m
+<ESC>[31m╰────────╯<ESC>[m
