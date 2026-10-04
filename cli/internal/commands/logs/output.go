@@ -26,10 +26,13 @@ type output struct {
 	minLevel logview.Level
 }
 
-func newOutput(stdout io.Writer, asJSON, raw bool, minLevel logview.Level, warn func(string)) *output {
+func newOutput(stdout io.Writer, present terminal.Presentation, asJSON, raw bool, minLevel logview.Level, warn func(string)) *output {
 	var out format = plainFormat{stdout: stdout, warn: warn}
-	if asJSON {
+	switch {
+	case asJSON:
 		out = jsonFormat{stdout: stdout}
+	case present.TTY && !raw:
+		out = terminalFormat{view: logview.NewTerminalView(stdout, present.Palette(), present.Verbose), warn: warn}
 	}
 	return &output{format: out, raw: raw, minLevel: minLevel}
 }
@@ -83,8 +86,31 @@ func (f plainFormat) writeEntry(entry *contractv1.LogEntry, parsed logview.Entry
 }
 
 func (f plainFormat) writeNotice(notice *contractv1.LogNotice) error {
+	return warnOfNotice(f.warn, notice)
+}
+
+type terminalFormat struct {
+	view *logview.TerminalView
+	warn func(string)
+}
+
+func (f terminalFormat) writeEntry(entry *contractv1.LogEntry, parsed logview.Entry) error {
+	return f.view.Write(logview.TerminalLine{
+		Time:    entry.GetTime().AsTime(),
+		App:     entry.GetApp(),
+		Source:  entry.GetSource(),
+		Failure: entry.GetFailure(),
+		Entry:   parsed,
+	})
+}
+
+func (f terminalFormat) writeNotice(notice *contractv1.LogNotice) error {
+	return warnOfNotice(f.warn, notice)
+}
+
+func warnOfNotice(warn func(string), notice *contractv1.LogNotice) error {
 	if notice.GetKind() != contractv1.LogNotice_KIND_CAUGHT_UP {
-		f.warn(terminal.SanitizeLogText(notice.GetMessage()))
+		warn(terminal.SanitizeLogText(notice.GetMessage()))
 	}
 	return nil
 }

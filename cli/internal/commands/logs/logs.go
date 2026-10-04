@@ -65,7 +65,9 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 			"after -n has chosen its lines, so it can leave you fewer than -n; a line whose level " +
 			"cannot be told is dropped by it. A line's level is the one its message names, else the " +
 			"severity the provider recorded; a failure the provider reports, such as a timeout, is an error. " +
-			"With --raw, messages are not read, so the level is the provider's alone.",
+			"With --raw, messages are not read, so the level is the provider's alone.\n\n" +
+			"On a terminal, each entry is one coloured line and errors are boxed, with long field values " +
+			"shortened unless -v is set. --json and --raw print the same lines a pipe gets.",
 		Example: "  $ ocel logs\n" +
 			"  $ ocel logs web --since 15m --level warn\n" +
 			"  $ ocel logs --preview --grep timeout --json",
@@ -101,11 +103,12 @@ func runLogs(ctx context.Context, dependencies Dependencies, cwd string, apps []
 	}
 	request.Slug, request.Edge, request.Apps = cfg.Slug, cfg.EdgeSelection(), apps
 
-	asJSON := opts.json || dependencies.Presentation(stdout).Format == terminal.FormatJSON
+	present := dependencies.Presentation(stdout)
+	asJSON := opts.json || present.Format == terminal.FormatJSON
 	open := commands.OpenOptions{Tier: request.GetEnvironment().GetTier(), Require: readiness.Infrastructure}
 	return dependencies.WithProvider(ctx, cfg, "ocel logs", open, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
-		out := newOutput(stdout, asJSON, opts.raw, minLevel, p.Check.Warn)
+		out := newOutput(stdout, present, asJSON, opts.raw, minLevel, p.Check.Warn)
 		return providerprocess.ReadLogs(ctx, p.Provider, request, out.printResponse)
 	})
 }
