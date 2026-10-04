@@ -427,7 +427,7 @@ func TestRemovingABootstrapAsksForItsNameWhileTheRunIsHeldAfterThePlanItShows(t 
 	project, invocation := bootstrapProject(t, "", featureISR)
 	invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 	invocation.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 	}
 
 	var stream, stdout bytes.Buffer
@@ -781,7 +781,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 	t.Run("what the removal takes rides the stream, so a json run consents to something it was shown", func(t *testing.T) {
 		project, invocation := bootstrapProject(t, "", featureISR)
 		invocation.Presentation = func(io.Writer) terminal.Presentation {
-			return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+			return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 		}
 		project.Provider.FakeBootstrap().PlansWith(provider.Plan{})
 
@@ -806,7 +806,7 @@ func TestTheBootstrapPlanIsAPlanPhaseEventBeforeTheConsentPrompt(t *testing.T) {
 	project, invocation := bootstrapProject(t, "", featureISR)
 	invocation.StdinIsTerminal = func(io.Reader) bool { return true }
 	invocation.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 	}
 	project.Provider.FakeBootstrap().PlansWith(mixedPlan())
 
@@ -904,7 +904,7 @@ func TestUnderJSONWhatABootstrapSaysRidesItsRunAndStdoutIsOnlyTheStream(t *testi
 		t.Run(tc.name, func(t *testing.T) {
 			project, invocation := bootstrapProject(t, tc.edge, tc.installed...)
 			invocation.Presentation = func(io.Writer) terminal.Presentation {
-				return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+				return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 			}
 			if tc.arrange != nil {
 				tc.arrange(t, project)

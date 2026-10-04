@@ -587,7 +587,7 @@ func newJSONDependencies() Dependencies {
 	dependencies := newTestDependencies()
 	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 	}
 	return dependencies
 }

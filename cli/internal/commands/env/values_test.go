@@ -780,7 +780,7 @@ func TestWhatTheDeclarationCollectorPrintsReachesTheRunAsOutputAndNeverRawStderr
 	root := setUpDeclaringProject(t, `console.error("collecting the declared variables");`+envDeclaringScript(fixtureDefinitions)).Root
 	dependencies := newTestDependencies()
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 	}
 
 	var stdout, stderr bytes.Buffer

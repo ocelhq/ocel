@@ -5,11 +5,11 @@ import (
 	"os"
 )
 
-type Format string
+type Format int
 
 const (
-	FormatHuman Format = "human"
-	FormatJSON  Format = "json"
+	FormatHuman Format = iota
+	FormatJSON
 )
 
 type ColorChoice int
@@ -21,7 +21,7 @@ const (
 )
 
 type Conditions struct {
-	LogFormat     Format
+	Format        Format
 	Verbose       bool
 	ColorAsked    ColorChoice
 	TTY           bool
@@ -47,7 +47,7 @@ const minLiveColumns = 40
 
 func Resolve(o Conditions) Presentation {
 	p := Presentation{
-		Format:        FormatHuman,
+		Format:        o.Format,
 		Verbose:       o.Verbose,
 		Color:         o.ColorAsked == ColorAlways || o.ColorAsked == ColorAuto && (o.TTY && !o.Dumb || o.GitHubActions),
 		TTY:           o.TTY,
@@ -55,9 +55,6 @@ func Resolve(o Conditions) Presentation {
 		Width:         o.Width,
 		WidthMeasured: o.WidthMeasured,
 		GitHubActions: o.GitHubActions,
-	}
-	if o.LogFormat == FormatJSON {
-		p.Format = FormatJSON
 	}
 	if p.Width <= 0 {
 		p.Width = defaultColumns
@@ -69,10 +66,10 @@ func (p Presentation) Live() bool {
 	return p.Format == FormatHuman && !p.Verbose && p.TTY && !p.Dumb && !p.SharedTerminal && p.WidthMeasured && p.Width >= minLiveColumns
 }
 
-func Detect(logFormat Format, verbose bool, w io.Writer) Presentation {
+func Detect(format Format, verbose bool, w io.Writer) Presentation {
 	_, measured := liveWidth(w)
 	return Resolve(Conditions{
-		LogFormat:     logFormat,
+		Format:        format,
 		Verbose:       verbose,
 		ColorAsked:    colorAsked(),
 		TTY:           IsTerminal(w),

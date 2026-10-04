@@ -178,7 +178,7 @@ func TestAMissingVariableHoldsTheRunWithTheWaitingEventAndResumesIt(t *testing.T
 	problems := problemsFile(t, missingStripeKey)
 	dependencies := newTestDependencies()
 	terminalStdin(&dependencies)
-	useJSONLogFormat(t, &dependencies)
+	useJSONFormat(t, &dependencies)
 	var mu sync.Mutex
 	var opened []string
 	recordBrowser(&dependencies, &opened, &mu)
@@ -1304,7 +1304,7 @@ func nothingToDeployHeadline(t *testing.T, fields string) string {
 	t.Helper()
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
-	useJSONLogFormat(t, &dependencies)
+	useJSONFormat(t, &dependencies)
 	fixture := setUpDeployProject(t)
 	writeConfig(t, fixture.Root, fields)
 	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(fixture.Root), "main.ts"), "export {};\n")

@@ -5,19 +5,12 @@ import (
 	"testing"
 )
 
-func TestTheFormatIsHumanUnlessJSONIsAskedForByName(t *testing.T) {
-	for _, tc := range []struct {
-		asked Format
-		want  Format
-	}{
-		{"json", FormatJSON},
-		{"human", FormatHuman},
-		{"", FormatHuman},
-		{"yaml", FormatHuman},
-	} {
-		if got := Resolve(Conditions{LogFormat: tc.asked}).Format; got != tc.want {
-			t.Errorf("Resolve(LogFormat %q).Format = %q, want %q", tc.asked, got, tc.want)
-		}
+func TestTheFormatIsHumanUnlessJSONIsAsked(t *testing.T) {
+	if got := Resolve(Conditions{}).Format; got != FormatHuman {
+		t.Errorf("Resolve(no format).Format = %v, want the human view", got)
+	}
+	if got := Resolve(Conditions{Format: FormatJSON}).Format; got != FormatJSON {
+		t.Errorf("Resolve(JSON).Format = %v, want JSON", got)
 	}
 }
 
@@ -27,11 +20,11 @@ func TestTheLiveViewNeedsHumanFormatOnATerminal(t *testing.T) {
 		origin Conditions
 		want   bool
 	}{
-		{"human on a terminal", Conditions{LogFormat: "human", TTY: true, Width: 80, WidthMeasured: true}, true},
-		{"human on a terminal that reports no width", Conditions{LogFormat: "human", TTY: true, Width: 80}, false},
-		{"human off a terminal", Conditions{LogFormat: "human"}, false},
-		{"json on a terminal", Conditions{LogFormat: "json", TTY: true}, false},
-		{"verbose on a terminal", Conditions{LogFormat: "human", TTY: true, Verbose: true}, false},
+		{"human on a terminal", Conditions{Format: FormatHuman, TTY: true, Width: 80, WidthMeasured: true}, true},
+		{"human on a terminal that reports no width", Conditions{Format: FormatHuman, TTY: true, Width: 80}, false},
+		{"human off a terminal", Conditions{Format: FormatHuman}, false},
+		{"json on a terminal", Conditions{Format: FormatJSON, TTY: true}, false},
+		{"verbose on a terminal", Conditions{Format: FormatHuman, TTY: true, Verbose: true}, false},
 	} {
 		if got := Resolve(tc.origin).Live(); got != tc.want {
 			t.Errorf("%s: Live() = %v, want %v", tc.name, got, tc.want)
@@ -40,11 +33,11 @@ func TestTheLiveViewNeedsHumanFormatOnATerminal(t *testing.T) {
 }
 
 func TestVerboseIsAFilterAndNotAFormat(t *testing.T) {
-	dim := Resolve(Conditions{LogFormat: "json", TTY: true})
-	loud := Resolve(Conditions{LogFormat: "json", TTY: true, Verbose: true})
+	dim := Resolve(Conditions{Format: FormatJSON, TTY: true})
+	loud := Resolve(Conditions{Format: FormatJSON, TTY: true, Verbose: true})
 
 	if loud.Format != dim.Format {
-		t.Errorf("--verbose moved the format to %q, want it left at %q", loud.Format, dim.Format)
+		t.Errorf("--verbose moved the format to %v, want it left at %v", loud.Format, dim.Format)
 	}
 	if loud.Color != dim.Color {
 		t.Errorf("--verbose moved colour to %v, want it left at %v", loud.Color, dim.Color)
@@ -114,8 +107,8 @@ func TestForcedColourReachesAWriterThatIsNoTerminal(t *testing.T) {
 }
 
 func TestOnlyTheTerminalFactsMoveWhenTheTerminalGoesAway(t *testing.T) {
-	terminal := Resolve(Conditions{LogFormat: "json", Verbose: true, TTY: true, Width: 120})
-	pipe := Resolve(Conditions{LogFormat: "json", Verbose: true, Width: 120})
+	terminal := Resolve(Conditions{Format: FormatJSON, Verbose: true, TTY: true, Width: 120})
+	pipe := Resolve(Conditions{Format: FormatJSON, Verbose: true, Width: 120})
 
 	if terminal.Format != pipe.Format || terminal.Verbose != pipe.Verbose || terminal.Width != pipe.Width {
 		t.Errorf("off a terminal the flags resolved to %+v, want the same as %+v", pipe, terminal)
@@ -128,7 +121,7 @@ func TestDetectReadsTheTerminalTheCommandWasGiven(t *testing.T) {
 	t.Setenv("CLICOLOR_FORCE", "")
 	t.Setenv("GITHUB_ACTIONS", "")
 
-	p := Detect("json", true, &bytes.Buffer{})
+	p := Detect(FormatJSON, true, &bytes.Buffer{})
 
 	if p.Format != FormatJSON || !p.Verbose {
 		t.Errorf("Detect() = %+v, want the flags it was handed", p)
@@ -153,10 +146,10 @@ func TestAnUnknownWidthFallsBackToEightyColumns(t *testing.T) {
 func TestAGitHubActionsRunnerIsCarriedIntoThePresentation(t *testing.T) {
 	t.Parallel()
 
-	if !Resolve(Conditions{LogFormat: "human", GitHubActions: true}).GitHubActions {
+	if !Resolve(Conditions{Format: FormatHuman, GitHubActions: true}).GitHubActions {
 		t.Error("Resolve() dropped the GitHub Actions runner the origin declared")
 	}
-	if Resolve(Conditions{LogFormat: "human"}).GitHubActions {
+	if Resolve(Conditions{Format: FormatHuman}).GitHubActions {
 		t.Error("Resolve() declared a GitHub Actions runner the origin did not")
 	}
 }
@@ -165,7 +158,7 @@ func TestDetectRecognisesAGitHubActionsRunnerOnlyWhenItsVariableIsTrue(t *testin
 	for value, want := range map[string]bool{"true": true, "": false, "false": false, "1": false} {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("GITHUB_ACTIONS", value)
-			if got := Detect("human", false, &bytes.Buffer{}).GitHubActions; got != want {
+			if got := Detect(FormatHuman, false, &bytes.Buffer{}).GitHubActions; got != want {
 				t.Errorf("GITHUB_ACTIONS=%q: GitHubActions = %v, want %v", value, got, want)
 			}
 		})

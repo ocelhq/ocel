@@ -37,7 +37,7 @@ func TestAddingTheSDKIsASpanOnTheInitRunAndThePackageManagerSpeaksThroughIt(t *t
 
 	dependencies := newTestDependencies()
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON, TTY: true, Width: 80})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON, TTY: true, Width: 80})
 	}
 	dependencies.RunPackageManager = func(_ context.Context, _ string, _ []string, output io.Writer) error {
 		time.Sleep(300 * time.Millisecond)

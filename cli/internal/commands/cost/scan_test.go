@@ -125,7 +125,7 @@ func TestCostScanPricesEveryResourceUnderTheProfileAskedFor(t *testing.T) {
 	t.Run("it includes the unbuilt assumption in the JSON envelope and none when the build is read", func(t *testing.T) {
 		root, _, dependencies := scanFixture(t)
 		dependencies.Presentation = func(io.Writer) terminal.Presentation {
-			return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+			return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 		}
 
 		var built scanJSON
@@ -195,7 +195,7 @@ export default {
 	t.Run("it writes the resource set and the estimate as JSON under --json", func(t *testing.T) {
 		root, _, dependencies := scanFixture(t)
 		dependencies.Presentation = func(io.Writer) terminal.Presentation {
-			return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+			return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 		}
 
 		out := scan(t, dependencies, root, Options{})
@@ -254,7 +254,7 @@ func TestAScanAgainstAProviderThatPricesNothingSaysSoBeforeScanning(t *testing.T
 func TestAScanStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsItsEstimateAloneOnStdout(t *testing.T) {
 	root, _, dependencies := scanFixture(t)
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 	}
 
 	var stdout, stderr bytes.Buffer

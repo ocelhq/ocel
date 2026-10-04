@@ -193,10 +193,10 @@ func recordedDeploymentID(app string) string {
 	return hex.EncodeToString(sum[:])[:32]
 }
 
-func useJSONLogFormat(t *testing.T, dependencies *Dependencies) {
+func useJSONFormat(t *testing.T, dependencies *Dependencies) {
 	t.Helper()
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 	}
 }
 
