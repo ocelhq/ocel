@@ -133,6 +133,9 @@ func newCommand() *command {
 	devDependencies := dev.Dependencies{Invocation: invocation, OpenDocker: docker.Open}
 	devCmd, runCmd := dev.NewCommand(devDependencies), dev.NewRunCommand(devDependencies)
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		if err := errors.Join(cmd.ValidateRequiredFlags(), cmd.ValidateFlagGroups()); err != nil {
+			return err
+		}
 		c.preRunReached = true
 		if err := set.readUnsetFromEnv(cmd); err != nil {
 			return err

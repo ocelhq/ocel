@@ -276,3 +276,47 @@ func TestTheUsageDocumentCarriesTheStableCodeAndItsDocsURL(t *testing.T) {
 		t.Errorf("error keys = %v, want %v", got, want)
 	}
 }
+
+func TestMutuallyExclusiveFlagsUnderJSONPrintAUsageDocument(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	code, stdout, stderr := executeAndReportRoot(t, "--json", "init", "--ts", "--yaml")
+
+	failure := requireOneFailureDocument(t, stdout)
+	if failure["code"] != "usage" {
+		t.Errorf("error code = %v, want usage", failure["code"])
+	}
+	if hint, _ := failure["hint"].(string); !strings.HasPrefix(hint, "ocel init") {
+		t.Errorf("error hint = %q, want the usage line of ocel init", hint)
+	}
+	if code != 1 || stderr != "" {
+		t.Errorf("exit code = %d, stderr = %q, want 1 and nothing", code, stderr)
+	}
+}
+
+func TestAMissingRequiredFlagUnderJSONPrintsAUsageDocumentWithoutRunningTheCommand(t *testing.T) {
+	ocel := newCommand()
+	ran := false
+	needs := &cobra.Command{Use: "needs", RunE: func(*cobra.Command, []string) error { ran = true; return nil }}
+	needs.Flags().String("name", "", "")
+	if err := needs.MarkFlagRequired("name"); err != nil {
+		t.Fatal(err)
+	}
+	ocel.root.AddCommand(needs)
+	var stdout, stderr bytes.Buffer
+	ocel.root.SetOut(&stdout)
+	ocel.root.SetErr(&stderr)
+
+	code := ocel.executeAndReport([]string{"--json", "needs"})
+
+	failure := requireOneFailureDocument(t, stdout.String())
+	if failure["code"] != "usage" {
+		t.Errorf("error code = %v, want usage", failure["code"])
+	}
+	if hint, _ := failure["hint"].(string); !strings.HasPrefix(hint, "ocel needs") {
+		t.Errorf("error hint = %q, want the usage line of ocel needs", hint)
+	}
+	if code != 1 || stderr.Len() != 0 || ran {
+		t.Errorf("exit code = %d, stderr = %q, ran = %v, want 1, nothing, and the command not run", code, stderr.String(), ran)
+	}
+}
