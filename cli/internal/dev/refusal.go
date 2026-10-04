@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -38,7 +40,25 @@ func describeRefusal(err error, dotfileKeys map[string]struct{}, run invocation)
 		}
 	}
 	fmt.Fprintf(&b, "\nSet the values above in %s, then run `%s` again.", run.source.where(), run.command())
-	return errors.New(b.String())
+	described := errors.New(b.String())
+	var raised *clierror.Error
+	if !errors.As(err, &raised) {
+		return described
+	}
+	coded := *raised
+	coded.Hint = fmt.Sprintf("set %s in %s, then run `%s` again", english.And(missingKeys(refusal.Problems)), run.source.where(), run.command())
+	coded.Cause = described
+	return &coded
+}
+
+func missingKeys(problems []*resourcesv1.VariableProblem) []string {
+	var keys []string
+	for _, problem := range problems {
+		if !slices.Contains(keys, problem.GetKey()) {
+			keys = append(keys, problem.GetKey())
+		}
+	}
+	return keys
 }
 
 func shellHint(key string, dotfileKeys map[string]struct{}, run invocation) string {

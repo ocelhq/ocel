@@ -160,16 +160,16 @@ func (d *Declarations) RefuseIncomplete() error {
 		}
 		return cmp.Compare(a.GetFolder(), b.GetFolder())
 	})
-	return &MissingError{Problems: problems, Definitions: definitions, Groups: groups, Scope: d.scope}
+	return refuse(&MissingError{Problems: problems, Definitions: definitions, Groups: groups, Scope: d.scope})
 }
 
-func (d *Declarations) RefuseCredentials(problems []*resourcesv1.VariableProblem) *MissingError {
-	return &MissingError{
+func (d *Declarations) RefuseCredentials(problems []*resourcesv1.VariableProblem) error {
+	return refuse(&MissingError{
 		Problems:    problems,
 		Definitions: d.Declared(),
 		Groups:      append(d.Groups(), d.scope.impliedGroups()...),
 		Scope:       d.scope,
-	}
+	})
 }
 
 func declaredAt(definitions []*resourcesv1.VariableDefinition, key string) int {

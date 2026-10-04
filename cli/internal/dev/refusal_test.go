@@ -1,9 +1,15 @@
 package dev
 
 import (
+	"fmt"
+
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -115,6 +121,32 @@ func TestDescribeRefusal(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestADevRunNeedingUnsetVariablesKeepsVariablesMissingHintingWhereToSetTheKeys(t *testing.T) {
+	refusal := &variables.MissingError{
+		Problems: []*resourcesv1.VariableProblem{
+			{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
+			{Key: "STRIPE_KEY", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "expected a key"},
+			{Key: "DATABASE_URL", Folder: "/web", Kind: resourcesv1.VariableProblem_KIND_MISSING},
+		},
+	}
+	raised := &clierror.Error{Code: "variables.missing", Hint: "ocel env set <KEY>=<VALUE>", Cause: refusal}
+	t.Setenv("STRIPE_KEY", "sk_live_from_the_shell")
+
+	described := describeRefusal(fmt.Errorf("checking variables: %w", raised), nil, invocation{name: "dev", source: valueSource{id: "dotenv", ownStore: true}})
+
+	got := clierror.NewRunError(fmt.Errorf("dev: %w", described))
+	want := "set DATABASE_URL and STRIPE_KEY in " + dotfile.FileName + ", then run `ocel dev` again"
+	if got.GetCode() != "variables.missing" || got.GetHint() != want {
+		t.Fatalf("run error = %s, want variables.missing hinting %q", protojson.Format(got), want)
+	}
+	if strings.Contains(protojson.Format(got), "sk_live_from_the_shell") {
+		t.Errorf("run error = %s, want no value in it", protojson.Format(got))
+	}
+	if !strings.HasPrefix(described.Error(), "3 variables are not ready") {
+		t.Errorf("refusal = %q, want the dev description as its text", described)
+	}
 }
 
 func TestRefusalsNameTheCommandThatRan(t *testing.T) {

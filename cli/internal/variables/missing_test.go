@@ -1,14 +1,18 @@
 package variables_test
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -255,4 +259,60 @@ func TestASchemaComplaintAboutAValueThatIsNotPlainQuotesNothingTheSDKSaid(t *tes
 			t.Errorf("RefuseIncomplete() = %v, want a refusal quoting nothing the schema said", err)
 		}
 	})
+}
+
+func TestARunNeedingUnsetVariablesReportsVariablesMissingNamingTheKeysAndTheRemedy(t *testing.T) {
+	t.Parallel()
+
+	g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web"}}})
+	declare(t, g, def("STRIPE_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET), def("DATABASE_URL", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE))
+	err := g.RefuseIncomplete()
+
+	got := clierror.NewRunError(fmt.Errorf("deploy: %w", fmt.Errorf("checking variables: %w", err)))
+	if got.GetCode() != "variables.missing" {
+		t.Fatalf("run error = %s, want variables.missing", protojson.Format(got))
+	}
+	for _, key := range []string{"STRIPE_KEY", "DATABASE_URL"} {
+		if !strings.Contains(got.GetMessage(), key) {
+			t.Errorf("message = %q, want it to name %s", got.GetMessage(), key)
+		}
+	}
+	if got.GetHint() != "ocel env set <KEY>=<VALUE>" {
+		t.Errorf("hint = %q, want the command that sets a variable", got.GetHint())
+	}
+	var refusal *variables.MissingError
+	if !errors.As(err, &refusal) || len(refusal.Problems) != 2 {
+		t.Errorf("err = %v, want the *MissingError still found through the code", err)
+	}
+}
+
+func TestAnInvalidSecretReportsVariablesMissingWithoutItsValueInTheErrorObject(t *testing.T) {
+	t.Parallel()
+
+	values := newFakeValues()
+	values.set("STRIPE_KEY", "", "sk_live_leaked")
+	g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web"}}})
+	declare(t, g, def("STRIPE_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+	report(t, g, invalid("STRIPE_KEY", "", `expected "sk_test_", received "sk_live_leaked"`))
+
+	got := clierror.NewRunError(g.RefuseIncomplete())
+
+	if got.GetCode() != "variables.missing" {
+		t.Fatalf("run error = %s, want variables.missing", protojson.Format(got))
+	}
+	if strings.Contains(protojson.Format(got), "sk_live_leaked") {
+		t.Errorf("run error = %s, want no value in it", protojson.Format(got))
+	}
+}
+
+func TestMissingCredentialsReportVariablesMissing(t *testing.T) {
+	t.Parallel()
+
+	g := prefetched(t, newFakeValues(), variables.Scope{Apps: []variables.App{{Name: "web"}}})
+	err := g.RefuseCredentials([]*resourcesv1.VariableProblem{missing("AWS_SECRET_ACCESS_KEY", "")})
+
+	got := clierror.NewRunError(err)
+	if got.GetCode() != "variables.missing" || !strings.Contains(got.GetMessage(), "AWS_SECRET_ACCESS_KEY") {
+		t.Fatalf("run error = %s, want variables.missing naming the key", protojson.Format(got))
+	}
 }
