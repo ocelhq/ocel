@@ -13,7 +13,7 @@ import (
 
 type logs struct{ *Provider }
 
-func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, _ func(provider.LogNotice) error) error {
+func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, notice func(provider.LogNotice) error) error {
 	if len(q.Targets) == 0 || !q.Tail && q.Limit < 1 {
 		return nil
 	}
@@ -49,6 +49,11 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 		}
 		return emit(entries)
 	}
+	if q.Tail && p.options.Logs.LiveTail {
+		return logevents.LiveTail(ctx, cloudwatch, functions, query, emitEvents, func(n logevents.Notice) error {
+			return notice(logNoticeOf(n))
+		})
+	}
 	if q.Tail {
 		return logevents.Tail(ctx, cloudwatch, functions, query, 0, emitEvents)
 	}
@@ -57,6 +62,13 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 		return err
 	}
 	return emitEvents(events)
+}
+
+func logNoticeOf(n logevents.Notice) provider.LogNotice {
+	if n.Kind == logevents.NoticeSampled {
+		return provider.LogNotice{Kind: provider.LogSampled, Message: n.Message}
+	}
+	return provider.LogNotice{Kind: provider.LogReconnected, Message: n.Message}
 }
 
 func logSourcesOf(targets []provider.LogTarget) []logevents.Source {

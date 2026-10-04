@@ -75,6 +75,7 @@ const (
 type LogNotice struct {
 	Kind    LogNoticeKind
 	Omitted int
+	Message string
 	Target  LogTarget
 }
 

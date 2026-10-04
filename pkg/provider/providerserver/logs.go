@@ -1,6 +1,7 @@
 package providerserver
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -154,11 +155,11 @@ func sendProviderNotice(stream *connect.ServerStream[contractv1.ReadLogsResponse
 	case provider.LogSampled:
 		return stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: &contractv1.LogNotice{
 			Kind:    contractv1.LogNotice_KIND_SAMPLED,
-			Message: fmt.Sprintf("%d entries were left out because the log store sampled them", notice.Omitted),
+			Message: cmp.Or(notice.Message, fmt.Sprintf("%d entries were left out because the log store sampled them", notice.Omitted)),
 			Omitted: uint64(max(notice.Omitted, 0)),
 		}}})
 	case provider.LogReconnected:
-		return sendLogNotice(stream, contractv1.LogNotice_KIND_RECONNECTED, "the log stream dropped and reconnected, so entries written meanwhile may be missing")
+		return sendLogNotice(stream, contractv1.LogNotice_KIND_RECONNECTED, cmp.Or(notice.Message, "the log stream dropped and reconnected, so entries written meanwhile may be missing"))
 	case provider.LogSourceGone:
 		return sendLogNotice(stream, contractv1.LogNotice_KIND_SOURCE_GONE, sourceGoneMessage(notice.Target))
 	}

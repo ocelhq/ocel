@@ -899,6 +899,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"logs:FilterLogEvents",
 				"logs:ListTagsForResource",
 				"logs:PutRetentionPolicy",
+				"logs:StartLiveTail",
 				"logs:TagResource",
 				"logs:UntagResource",
 			},

@@ -358,10 +358,18 @@ export type ProviderDescriptor =
 export interface AwsProviderOptions {
   /** Certificates to serve a hostname with, keyed by hostname, valued by the ARN of an already-issued ACM certificate. A hostname left off gets a certificate ocel requests, validates and deletes again. */
   certificates?: Record<string, string>;
+  /** How ocel logs --tail reads this account's logs. */
+  logs?: AwsLogOptions;
   /** The AWS region to deploy into. */
   region?: string;
   /** ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap --features variables-key makes a key ocel owns. */
   variablesKey?: string;
+}
+
+/** How ocel logs --tail reads this account's logs. */
+export interface AwsLogOptions {
+  /** Tail through CloudWatch Live Tail: lower latency and no sampling gaps between polls, billed per session-minute past the free tier and capped at 15 sessions per account. Off, ocel logs --tail polls FilterLogEvents. */
+  liveTail?: boolean;
 }
 
 export interface GcpProviderOptions {
