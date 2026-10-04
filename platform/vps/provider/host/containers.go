@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const (
@@ -398,6 +399,25 @@ func (h *Host) ReadContainerLogs(ctx context.Context, name string, since, until 
 	return lines[len(lines)-min(len(lines), max(limit, 0)):], nil
 }
 
+func (h *Host) FollowContainerLogs(ctx context.Context, name string, since time.Time, each func(Line) error) error {
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return err
+	}
+	command := "docker logs --follow --timestamps --since " + quoted(since.UTC().Format(time.RFC3339Nano)) + " " + quoted(name)
+	err = h.streamLines(ctx, command, elevation, func(raw session.Line) error {
+		line, stamped := parseLogLine(raw.Text, raw.Pipe == session.Stderr)
+		if !stamped {
+			return nil
+		}
+		return each(line)
+	})
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "no such container") {
+		return ErrContainerMissing
+	}
+	return err
+}
+
 func logsCommand(name string, since, until time.Time, limit int, contains string) string {
 	command := "docker logs --timestamps --since " + quoted(since.UTC().Format(time.RFC3339Nano))
 	if !until.IsZero() {
@@ -412,14 +432,20 @@ func logsCommand(name string, since, until time.Time, limit int, contains string
 func parseLogLines(output string, stderr bool) []Line {
 	var lines []Line
 	for raw := range strings.SplitSeq(output, "\n") {
-		stamp, text, _ := strings.Cut(strings.TrimSuffix(raw, "\r"), " ")
-		at, err := time.Parse(time.RFC3339Nano, stamp)
-		if err != nil {
-			continue
+		if line, stamped := parseLogLine(raw, stderr); stamped {
+			lines = append(lines, line)
 		}
-		lines = append(lines, Line{Time: at.UTC(), Stderr: stderr, Text: text})
 	}
 	return lines
+}
+
+func parseLogLine(raw string, stderr bool) (Line, bool) {
+	stamp, text, _ := strings.Cut(strings.TrimSuffix(raw, "\r"), " ")
+	at, err := time.Parse(time.RFC3339Nano, stamp)
+	if err != nil {
+		return Line{}, false
+	}
+	return Line{Time: at.UTC(), Stderr: stderr, Text: text}, true
 }
 
 func (h *Host) said(ctx context.Context, command string, elevation string) string {

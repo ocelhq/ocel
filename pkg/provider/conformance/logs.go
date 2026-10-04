@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"testing"
@@ -13,6 +14,7 @@ import (
 
 type LogChecks struct {
 	Seed func(t *testing.T, target provider.LogTarget, entries []provider.LogEntry)
+	Feed func(t *testing.T, target provider.LogTarget, entries []provider.LogEntry)
 }
 
 const cancelledReadDeadline = time.Second
@@ -38,6 +40,9 @@ func runLogs(t *testing.T, suite Suite) {
 	}
 	if suite.Logs != nil {
 		RunLogHistory(t, p.Facts(), p.Logs(), suite.Logs.Seed)
+	}
+	if suite.Logs != nil && suite.Logs.Feed != nil {
+		RunLogTail(t, p.Facts(), p.Logs(), suite.Logs.Feed)
 	}
 }
 
@@ -70,8 +75,37 @@ func RunLogs(t *testing.T, facts provider.Facts, logs provider.Logs) {
 			t.Errorf("Read() with no targets emitted %v, want nothing", entries)
 			return nil
 		}
-		if err := logs.Read(context.Background(), logQuery(), emit); err != nil {
+		if err := logs.Read(context.Background(), logQuery(), emit, noticeNothing); err != nil {
 			t.Errorf("Read() with no targets error = %v, want none", err)
+		}
+	})
+
+	t.Run("a tail of no targets reads nothing and fails nothing", func(t *testing.T) {
+		q := logQuery()
+		q.Tail, q.Since = true, time.Now()
+		emit := func(entries []provider.LogEntry) error {
+			t.Errorf("Read() of a tail with no targets emitted %v, want nothing", entries)
+			return nil
+		}
+		if err := logs.Read(context.Background(), q, emit, noticeNothing); err != nil {
+			t.Errorf("Read() of a tail with no targets error = %v, want none", err)
+		}
+	})
+
+	t.Run("a tail returns within a second of its context being cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		q := logQuery(targetOn(facts, "conformance-cancelled"))
+		q.Tail, q.Since = true, time.Now()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_ = logs.Read(ctx, q, func([]provider.LogEntry) error { return nil }, noticeNothing)
+		}()
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(cancelledReadDeadline):
+			t.Errorf("Read() of a tail was still running %s after its context was cancelled", cancelledReadDeadline)
 		}
 	})
 
@@ -81,12 +115,75 @@ func RunLogs(t *testing.T, facts provider.Facts, logs provider.Logs) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			_ = logs.Read(ctx, logQuery(targetOn(facts, "conformance-cancelled")), func([]provider.LogEntry) error { return nil })
+			_ = logs.Read(ctx, logQuery(targetOn(facts, "conformance-cancelled")), func([]provider.LogEntry) error { return nil }, noticeNothing)
 		}()
 		select {
 		case <-done:
 		case <-time.After(cancelledReadDeadline):
 			t.Errorf("Read() was still running %s after its context was cancelled", cancelledReadDeadline)
+		}
+	})
+}
+
+func noticeNothing(provider.LogNotice) error { return nil }
+
+func RunLogTail(t *testing.T, facts provider.Facts, logs provider.Logs, feed func(t *testing.T, target provider.LogTarget, entries []provider.LogEntry)) {
+	t.Helper()
+
+	target := targetOn(facts, "conformance-tail")
+	tail := func(ctx context.Context, emit func([]provider.LogEntry) error) <-chan error {
+		q := logQuery(target)
+		q.Tail, q.Since, q.Limit = true, time.Now(), 0
+		done := make(chan error, 1)
+		go func() { done <- logs.Read(ctx, q, emit, noticeNothing) }()
+		return done
+	}
+
+	t.Run("a tail emits the entries written after it began, and returns within a second of its context being cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		live := make(chan provider.LogEntry, 16)
+		done := tail(ctx, func(batch []provider.LogEntry) error {
+			for _, entry := range batch {
+				live <- entry
+			}
+			return nil
+		})
+		feed(t, target, []provider.LogEntry{{Time: time.Now(), Message: "live"}})
+		select {
+		case entry := <-live:
+			if entry.Message != "live" {
+				t.Errorf("a tail emitted %q, want the entry written after it began", entry.Message)
+			}
+		case err := <-done:
+			t.Fatalf("a tail ended with %v before it emitted a live entry", err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("a tail emitted nothing within 5s of an entry being written")
+		}
+		cancel()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("a tail returned %v after its context was cancelled, want none", err)
+			}
+		case <-time.After(cancelledReadDeadline):
+			t.Errorf("a tail was still running %s after its context was cancelled", cancelledReadDeadline)
+		}
+	})
+
+	t.Run("a tail that fails to emit stops and returns the failure", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		refused := errors.New("the caller has gone away")
+		done := tail(ctx, func([]provider.LogEntry) error { return refused })
+		feed(t, target, []provider.LogEntry{{Time: time.Now(), Message: "live"}})
+		select {
+		case err := <-done:
+			if !errors.Is(err, refused) {
+				t.Errorf("a tail whose emit failed returned %v, want that failure", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Error("a tail whose emit failed was still running 5s later")
 		}
 	})
 }
@@ -109,7 +206,7 @@ func RunLogHistory(t *testing.T, facts provider.Facts, logs provider.Logs, seed 
 				messages = append(messages, entry.Message)
 			}
 			return nil
-		})
+		}, noticeNothing)
 		if err != nil {
 			t.Fatalf("Read() error = %v", err)
 		}

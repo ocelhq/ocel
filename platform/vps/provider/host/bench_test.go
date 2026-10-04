@@ -35,6 +35,7 @@ type bench struct {
 	answer    func(command string) (session.Result, bool)
 	broke     func(command string) error
 	after     func(b *bench, command string)
+	followed  func(command string, each func(session.Line) error) error
 }
 
 func machine(installed map[environment.Tier][]Item) *bench {
@@ -190,6 +191,19 @@ func (w wire) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 		hook(b, command)
 	}
 	return result, nil
+}
+
+func (w wire) RunLines(_ context.Context, command string, each func(session.Line) error) error {
+	b := w.b
+	b.mu.Lock()
+	b.ran = append(b.ran, command)
+	b.fed = append(b.fed, "")
+	followed := b.followed
+	b.mu.Unlock()
+	if followed == nil {
+		return nil
+	}
+	return followed(command, each)
 }
 
 func (b *bench) rendered(command string) session.Result {

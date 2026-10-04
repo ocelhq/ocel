@@ -48,6 +48,7 @@ type box struct {
 	kept       string
 	routingDoc string
 	refuses    func(command string) (session.Result, bool)
+	follows    func(ctx context.Context, command string, each func(session.Line) error) error
 }
 
 func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
@@ -226,6 +227,18 @@ func (b *box) under(ref string) string {
 }
 
 func unquoted(field string) string { return strings.Trim(field, "'") }
+
+func (b *box) RunLines(ctx context.Context, command string, each func(session.Line) error) error {
+	b.mu.Lock()
+	b.ran = append(b.ran, command)
+	b.fed = append(b.fed, "")
+	follows := b.follows
+	b.mu.Unlock()
+	if follows == nil {
+		return nil
+	}
+	return follows(ctx, command, each)
+}
 
 func (b *box) Run(ctx context.Context, command string) (string, error) {
 	result, err := b.Stream(ctx, command, nil)

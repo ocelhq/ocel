@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
+	"sync"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -12,15 +14,18 @@ import (
 
 type logs struct{ *Provider }
 
-func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error) error {
+func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, _ func(provider.LogNotice) error) error {
+	if q.Tail {
+		return p.follow(ctx, q, emit)
+	}
 	if q.Limit < 1 {
 		return nil
 	}
 	var entries []provider.LogEntry
 	var missing provider.LogTargetsMissing
 	for _, target := range q.Targets {
-		if target.Container == nil {
-			return refusal.Refuse(refusal.CodeInvalid, "%s of release %s names no container, and a box runs only containers", target.App, target.Release)
+		if err := refuseNonContainer(target); err != nil {
+			return err
 		}
 		lines, err := p.host.ReadContainerLogs(ctx, target.Physical(), q.Since, q.Until, q.Limit, q.Contains)
 		if errors.Is(err, host.ErrContainerMissing) {
@@ -56,4 +61,60 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 		return missing
 	}
 	return nil
+}
+
+func refuseNonContainer(target provider.LogTarget) error {
+	if target.Container == nil {
+		return refusal.Refuse(refusal.CodeInvalid, "%s of release %s names no container, and a box runs only containers", target.App, target.Release)
+	}
+	return nil
+}
+
+func (p logs) follow(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error) error {
+	for _, target := range q.Targets {
+		if err := refuseNonContainer(target); err != nil {
+			return err
+		}
+	}
+	followCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	var (
+		mu       sync.Mutex
+		failure  error
+		followed sync.WaitGroup
+	)
+	for _, target := range q.Targets {
+		followed.Go(func() {
+			err := p.host.FollowContainerLogs(followCtx, target.Physical(), q.Since, func(line host.Line) error {
+				if !strings.Contains(line.Text, q.Contains) {
+					return nil
+				}
+				stream := provider.LogStreamStdout
+				if line.Stderr {
+					stream = provider.LogStreamStderr
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				return emit([]provider.LogEntry{{
+					Time:    line.Time,
+					App:     target.App,
+					Source:  target.Source,
+					Release: target.Release,
+					Stream:  stream,
+					Message: line.Text,
+				}})
+			})
+			if err == nil || errors.Is(err, host.ErrContainerMissing) {
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if failure == nil && followCtx.Err() == nil {
+				failure = err
+				stop()
+			}
+		})
+	}
+	followed.Wait()
+	return failure
 }

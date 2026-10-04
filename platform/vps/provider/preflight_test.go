@@ -123,6 +123,8 @@ func (s *scripted) Run(ctx context.Context, command string) (string, error) {
 	return result.Stdout, err
 }
 
+func (s *scripted) RunLines(context.Context, string, func(session.Line) error) error { return nil }
+
 func (s *scripted) Preflight(context.Context) (session.Facts, error) {
 	return session.Facts{Root: true, Systemd: true}, nil
 }
