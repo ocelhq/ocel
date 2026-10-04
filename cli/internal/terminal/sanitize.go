@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"unicode"
@@ -12,9 +13,34 @@ const tabStopColumns = 8
 
 var boxDrawing = &unicode.RangeTable{R16: []unicode.Range16{{Lo: 0x2500, Hi: 0x257f, Stride: 1}}}
 
-func SanitizeText(raw string) string {
-	text, _ := sanitize(raw)
-	return text
+var bidiControls = &unicode.RangeTable{R16: []unicode.Range16{
+	{Lo: 0x061c, Hi: 0x061c, Stride: 1},
+	{Lo: 0x200e, Hi: 0x200f, Stride: 1},
+	{Lo: 0x202a, Hi: 0x202e, Stride: 1},
+	{Lo: 0x2066, Hi: 0x2069, Stride: 1},
+}}
+
+func SanitizeLogText(raw string) string {
+	return EscapeControls(strings.TrimRight(ansi.Strip(raw), "\r\n"))
+}
+
+func EscapeControls(text string) string {
+	var b strings.Builder
+	for _, r := range text {
+		switch {
+		case r == '\t':
+			b.WriteRune(r)
+		case r == '\n':
+			b.WriteString(`\n`)
+		case r == '\r':
+			b.WriteString(`\r`)
+		case unicode.IsControl(r), unicode.In(r, bidiControls, unicode.Zl, unicode.Zp):
+			fmt.Fprintf(&b, `\u%04x`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func sanitize(raw string) (string, bool) {

@@ -7,7 +7,6 @@ import (
 	"io"
 	"maps"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/ocelhq/ocel/cli/internal/logview"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -67,15 +66,15 @@ type plainFormat struct {
 }
 
 func (f plainFormat) writeEntry(entry *contractv1.LogEntry, parsed logview.Entry) error {
-	app := terminal.SanitizeText(entry.GetApp())
-	if source := terminal.SanitizeText(entry.GetSource()); source != "" {
+	app := terminal.SanitizeLogText(entry.GetApp())
+	if source := terminal.SanitizeLogText(entry.GetSource()); source != "" {
 		app += "/" + source
 	}
 	level := "-"
 	if parsed.Level != logview.LevelUnknown {
 		level = strings.ToUpper(parsed.Level.String())
 	}
-	parts := []string{entry.GetTime().AsTime().UTC().Format(timeLayout), app, level, plainMessage(parsed.Message)}
+	parts := []string{entry.GetTime().AsTime().UTC().Format(timeLayout), app, level, terminal.SanitizeLogText(parsed.Message)}
 	if fields := plainFields(parsed); fields != "" {
 		parts = append(parts, fields)
 	}
@@ -85,19 +84,9 @@ func (f plainFormat) writeEntry(entry *contractv1.LogEntry, parsed logview.Entry
 
 func (f plainFormat) writeNotice(notice *contractv1.LogNotice) error {
 	if notice.GetKind() != contractv1.LogNotice_KIND_CAUGHT_UP {
-		f.warn(terminal.SanitizeText(notice.GetMessage()))
+		f.warn(terminal.SanitizeLogText(notice.GetMessage()))
 	}
 	return nil
-}
-
-func plainMessage(message string) string {
-	var lines []string
-	for _, line := range strings.Split(message, "\n") {
-		if text := terminal.SanitizeText(line); text != "" {
-			lines = append(lines, text)
-		}
-	}
-	return strings.Join(lines, `\n`)
 }
 
 func fieldsWithError(parsed logview.Entry) map[string]any {
@@ -121,7 +110,7 @@ func plainFields(parsed logview.Entry) string {
 	if err != nil {
 		return ""
 	}
-	return terminal.SanitizeText(encoded)
+	return terminal.EscapeControls(encoded)
 }
 
 type jsonFormat struct {
@@ -179,7 +168,7 @@ func (f jsonFormat) write(object any) error {
 	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(f.stdout, escapeC1Controls(encoded)+"\n")
+	_, err = io.WriteString(f.stdout, terminal.EscapeControls(encoded)+"\n")
 	return err
 }
 
@@ -198,16 +187,4 @@ func encodeJSON(value any) (string, error) {
 		return "", err
 	}
 	return strings.TrimSuffix(buf.String(), "\n"), nil
-}
-
-func escapeC1Controls(encoded string) string {
-	var b strings.Builder
-	for _, r := range encoded {
-		if r >= 0x80 && r <= 0x9f && utf8.ValidRune(r) {
-			fmt.Fprintf(&b, `\u%04x`, r)
-			continue
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
 }
