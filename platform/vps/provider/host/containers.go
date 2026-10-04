@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const (
@@ -397,25 +396,6 @@ func (h *Host) ReadContainerLogs(ctx context.Context, name string, since, until 
 	})
 	slices.SortStableFunc(lines, func(a, b Line) int { return a.Time.Compare(b.Time) })
 	return lines[len(lines)-min(len(lines), max(limit, 0)):], nil
-}
-
-func (h *Host) FollowContainerLogs(ctx context.Context, name string, since time.Time, each func(Line) error) error {
-	elevation, err := h.reachDocker(ctx)
-	if err != nil {
-		return err
-	}
-	command := "docker logs --follow --timestamps --since " + quoted(since.UTC().Format(time.RFC3339Nano)) + " " + quoted(name)
-	err = h.streamLines(ctx, command, elevation, func(raw session.Line) error {
-		line, stamped := parseLogLine(raw.Text, raw.Pipe == session.Stderr)
-		if !stamped {
-			return nil
-		}
-		return each(line)
-	})
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "no such container") {
-		return ErrContainerMissing
-	}
-	return err
 }
 
 func logsCommand(name string, since, until time.Time, limit int, contains string) string {
