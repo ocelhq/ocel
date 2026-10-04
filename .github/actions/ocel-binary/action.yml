@@ -30,6 +30,9 @@ runs:
     - name: Setup Go
       if: inputs.source == 'head'
       uses: ./.github/actions/go
+      with:
+        caches: modules,build
+        build-scope: binaries
 
     - name: Build the node halves the binaries embed
       shell: bash

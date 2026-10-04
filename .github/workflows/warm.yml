@@ -16,6 +16,8 @@ on:
       - ".golangci.yml"
       - "pnpm-lock.yaml"
       - ".github/actions/go/**"
+      - ".github/actions/go-cache-save/**"
+      - ".github/go-groups.json"
       - ".github/workflows/warm.yml"
       - "scripts/incus.sh"
       - ".github/actions/vps-images/**"
@@ -46,9 +48,109 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-  go:
+  groups:
     if: github.event_name != 'schedule'
-    name: go
+    name: groups
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      groups: ${{ steps.read.outputs.groups }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Read the groups the modules are split into
+        id: read
+        run: echo "groups=$(jq -c . .github/go-groups.json)" >> "$GITHUB_OUTPUT"
+
+  modules:
+    if: github.event_name != 'schedule'
+    name: modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Go
+        id: go
+        uses: ./.github/actions/go
+        with:
+          caches: modules
+
+      - name: Every module's dependencies, in the workspace and out of it
+        run: |
+          set -euo pipefail
+          for dir in $(go list -m -f '{{.Dir}}'); do
+            (cd "$dir" && go mod download && GOWORK=off go mod download)
+          done
+
+      - name: Save the modules
+        uses: ./.github/actions/go-cache-save
+        with:
+          path: ${{ steps.go.outputs.modules-path }}
+          key: ${{ steps.go.outputs.modules-key }}
+          prefix: ${{ steps.go.outputs.modules-prefix }}
+
+  build:
+    if: github.event_name != 'schedule'
+    name: build ${{ matrix.group.scope }}
+    needs: groups
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.groups.outputs.groups) }}
+    env:
+      DIRS: ${{ matrix.group.dirs }}
+      GENERATE: ${{ matrix.group.generate }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Go
+        id: go
+        uses: ./.github/actions/go
+        with:
+          caches: modules,build
+          build-scope: ${{ matrix.group.scope }}
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: The node halves the modules embed
+        run: pnpm turbo run build --filter=ocel
+
+      - name: go generate, what the group's modules embed
+        run: |
+          set -euo pipefail
+          for dir in $GENERATE; do
+            go generate -C "$dir" ./...
+          done
+
+      - name: The group's packages, and their race-instrumented tests
+        run: |
+          set -euo pipefail
+          packages=()
+          for dir in $DIRS; do
+            packages+=("./$dir/...")
+          done
+          go build "${packages[@]}"
+          go test -race -count=1 -run '^$' "${packages[@]}"
+
+      - name: Save the build cache
+        uses: ./.github/actions/go-cache-save
+        with:
+          path: ${{ steps.go.outputs.build-path }}
+          key: ${{ steps.go.outputs.build-key }}
+          prefix: ${{ steps.go.outputs.build-prefix }}
+
+  binaries:
+    if: github.event_name != 'schedule'
+    name: build binaries
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -58,6 +160,9 @@ jobs:
       - name: Setup Go
         id: go
         uses: ./.github/actions/go
+        with:
+          caches: modules,build
+          build-scope: binaries
 
       - uses: ./.github/actions/node-workspace
         with:
@@ -72,12 +177,39 @@ jobs:
       - name: The snapshot binaries a journey, a preview and a deploy build
         run: node scripts/snapshot.mjs
 
-      - name: Every module's packages, and their race-instrumented tests
+      - name: Save the build cache
+        uses: ./.github/actions/go-cache-save
+        with:
+          path: ${{ steps.go.outputs.build-path }}
+          key: ${{ steps.go.outputs.build-key }}
+          prefix: ${{ steps.go.outputs.build-prefix }}
+
+  lint:
+    if: github.event_name != 'schedule'
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Go
+        id: go
+        uses: ./.github/actions/go
+        with:
+          caches: modules,lint
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Everything the modules embed
         run: |
           set -euo pipefail
-          mapfile -t packages < <(go list -m -f '{{.Dir}}' | sed "s|^$PWD/|./|; s|\$|/...|")
-          go build "${packages[@]}"
-          go test -race -count=1 -run '^$' "${packages[@]}"
+          for dir in cli platform/aws/provider platform/gcp/provider platform/vps/provider pkg/provider/transform; do
+            go generate -C "$dir" ./...
+          done
 
       - name: Take the versions the repository pins
         id: versions
@@ -96,23 +228,9 @@ jobs:
               || echo "::notice::golangci-lint reported $dir; what it analysed is cached all the same"
           done
 
-      - name: Save them
-        if: ${{ !cancelled() && steps.go.outcome == 'success' }}
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - name: Save the lint cache
+        uses: ./.github/actions/go-cache-save
         with:
-          path: ${{ steps.go.outputs.paths }}
-          key: ${{ steps.go.outputs.key }}
-
-      - name: Drop the entries this one supersedes
-        if: ${{ !cancelled() && steps.go.outcome == 'success' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PREFIX: ${{ steps.go.outputs.prefix }}
-          KEY: ${{ steps.go.outputs.key }}
-          REF: ${{ github.ref }}
-        run: |
-          set -euo pipefail
-          gh cache list --ref "$REF" --key "$PREFIX" --limit 100 --json key --jq '.[].key' \
-            | { grep -vxF "$KEY" || true; } \
-            | xargs -r -n1 gh cache delete
+          path: ${{ steps.go.outputs.lint-path }}
+          key: ${{ steps.go.outputs.lint-key }}
+          prefix: ${{ steps.go.outputs.lint-prefix }}

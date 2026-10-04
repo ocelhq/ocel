@@ -1,0 +1,39 @@
+name: go-cache-save
+description: >-
+  Saves one of the caches the go action names under its key, and deletes the
+  entries of the same prefix it supersedes, so the quota holds one entry per
+  cache. Only the warm workflow runs it, from main.
+
+inputs:
+  path:
+    description: The directory to save, from the go action's outputs.
+    required: true
+  key:
+    description: The key to save under, from the go action's outputs.
+    required: true
+  prefix:
+    description: What every key of this cache starts with, from the go action's outputs.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Save it
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ inputs.path }}
+        key: ${{ inputs.key }}
+
+    - name: Drop the entries it supersedes
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        PREFIX: ${{ inputs.prefix }}
+        KEY: ${{ inputs.key }}
+        REF: ${{ github.ref }}
+      run: |
+        set -euo pipefail
+        gh cache list --ref "$REF" --key "$PREFIX" --limit 100 --json key --jq '.[].key' \
+          | { grep -vxF "$KEY" || true; } \
+          | xargs -r -n1 gh cache delete

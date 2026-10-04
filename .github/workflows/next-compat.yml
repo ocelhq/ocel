@@ -75,6 +75,8 @@ jobs:
         uses: ./adapter/.github/actions/go
         with:
           go-version-file: adapter/go.work
+          caches: modules,build
+          build-scope: binaries
 
       - name: Install & build Next.js
         working-directory: nextjs

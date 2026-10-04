@@ -70,6 +70,8 @@ jobs:
 
       - name: Setup Go
         uses: ./.github/actions/go
+        with:
+          caches: modules,lint
 
       - uses: ./.github/actions/node-workspace
         with:
@@ -226,6 +228,8 @@ jobs:
 
       - name: Setup Go
         uses: ./.github/actions/go
+        with:
+          caches: modules
 
       - uses: ./.github/actions/node-workspace
         with:
