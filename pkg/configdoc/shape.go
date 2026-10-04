@@ -236,7 +236,7 @@ func jsonFields(target reflect.Type) []jsonField {
 			pattern:  field.Tag.Get("pattern"),
 			secret:   field.Tag.Get("secret"),
 			unless:   field.Tag.Get("unless"),
-			optional: strings.Contains(options, "omitempty"),
+			optional: strings.Contains(options, "omitempty") || strings.Contains(options, "omitzero"),
 			kind:     field.Type,
 		})
 	}

@@ -84,6 +84,31 @@ func TestProviderSchemaIncludesTheOptionsAndWhatTheProviderFrontsAndWritesWith(t
 	}
 }
 
+func TestProviderSchemaRequiresNoOptionTaggedOmitzero(t *testing.T) {
+	type nested struct {
+		Quiet bool `json:"quiet,omitempty"`
+	}
+	type options struct {
+		Region string `json:"region,omitempty"`
+		Nested nested `json:"nested,omitzero"`
+	}
+	generated, err := ProviderSchema[string, string]("acme", options{}, nil, nil)
+	if err != nil {
+		t.Fatalf("provider schema: %v", err)
+	}
+	var fragment struct {
+		Options struct {
+			Required []string `json:"required"`
+		} `json:"options"`
+	}
+	if err := json.Unmarshal(generated, &fragment); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(fragment.Options.Required) != 0 {
+		t.Errorf("required = %v, want none: a field tagged omitzero may be left out", fragment.Options.Required)
+	}
+}
+
 func TestProviderSchemaRefusesAnUnidentifiedProvider(t *testing.T) {
 	type options struct {
 		Region string `json:"region,omitempty"`
