@@ -469,27 +469,8 @@ func resolvePreviewEnvironment(dependencies Dependencies, cwd, name string, life
 		if err := refuseInvalidPreviewName(name); err != nil {
 			return nil, err
 		}
-		return &environmentv1.Environment{
-			Tier:      environmentv1.Tier_TIER_PREVIEW,
-			Lifecycle: lifecycle,
-			Identity:  name,
-		}, nil
 	}
-
-	branch, err := dependencies.ReadGitBranch(cwd)
-	if err != nil {
-		return nil, err
-	}
-	id, err := previewid.Resolve(branch, dependencies.DiscoverPRNumber())
-	if err != nil {
-		return nil, err
-	}
-	return &environmentv1.Environment{
-		Tier:      environmentv1.Tier_TIER_PREVIEW,
-		Lifecycle: lifecycle,
-		Identity:  id.Key,
-		Label:     id.Label,
-	}, nil
+	return commands.ResolvePreviewEnvironment(cwd, name, lifecycle, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
 }
 
 func readPreviewNameArgument(args []string) string {
