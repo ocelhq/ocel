@@ -396,7 +396,7 @@ func TestLiveTailReturnsAStreamErrorThatIsNotATimeout(t *testing.T) {
 func TestLiveTailRefusesAQueryWithAnUntil(t *testing.T) {
 	t.Parallel()
 	query := Query{Since: epoch, Until: epoch.Add(time.Hour), Sources: []Source{{Function: "web-fn"}}}
-	if err := LiveTail(context.Background(), nil, nil, query, nil, nil); err == nil {
+	if err := LiveTail(context.Background(), nil, nil, "123456789012", query, nil, nil); err == nil {
 		t.Fatal("LiveTail() error = nil, want a refusal: a tail ends only when its context does")
 	}
 }
