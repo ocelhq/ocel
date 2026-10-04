@@ -32,4 +32,6 @@ func (e NoHostnameError) Remedy() string {
 	return fmt.Sprintf("add a production hostname under \"domains\" in %s, then run `ocel deploy`", e.configName())
 }
 
+func (e NoHostnameError) Hint() string { return e.Remedy() }
+
 func (e NoHostnameError) configName() string { return filepath.Base(e.ConfigPath) }

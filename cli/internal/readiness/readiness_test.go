@@ -132,6 +132,9 @@ func TestATierWithNoInfrastructureIsABootstrapToSetUpNamingItsCommand(t *testing
 	if !strings.Contains(missing.Finding(), "203.0.113.7") {
 		t.Errorf("finding = %q, want it to name the account with nothing set up", missing.Finding())
 	}
+	if missing.Hint() != "ocel bootstrap production --features isr" {
+		t.Errorf("hint = %q, want the bootstrap as typed", missing.Hint())
+	}
 	var absent NoInfrastructureError
 	if !errors.As(missing, &absent) {
 		t.Fatalf("missing = %T, want a NoInfrastructureError", missing)
@@ -177,6 +180,9 @@ func TestABootstrapLackingAFeatureTheProjectNeedsIsABootstrapToSetUp(t *testing.
 	if missing.Missing() != prerequisite.Bootstrap || missing.Remedy() != "`ocel bootstrap production --features isr`" {
 		t.Errorf("missing = %v %q, want the bootstrap that adds isr", missing.Missing(), missing.Remedy())
 	}
+	if missing.Hint() != "ocel bootstrap production --features isr" {
+		t.Errorf("hint = %q, want the bootstrap that adds isr as typed", missing.Hint())
+	}
 	var lacking MissingFeaturesError
 	if !errors.As(missing, &lacking) || strings.Join(lacking.BootstrapRequest().GetFeatures(), ",") != "isr" {
 		t.Errorf("missing = %#v, want a MissingFeaturesError asking for isr", missing)
@@ -191,6 +197,9 @@ func TestAProjectWithNoHostnameWhereTheRouterNeedsOneIsADomainToSetUp(t *testing
 	missing := refusedFor(t, resp, cfg, req)
 	if missing.Missing() != prerequisite.Domain {
 		t.Errorf("missing = %v, want the domain", missing.Missing())
+	}
+	if want := "add a production hostname under \"domains\" in ocel.json, then run `ocel deploy`"; missing.Hint() != want {
+		t.Errorf("hint = %q, want %q", missing.Hint(), want)
 	}
 	for _, want := range []string{"shop", "ocel.json", "domains"} {
 		if !strings.Contains(missing.Error(), want) {

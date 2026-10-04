@@ -59,7 +59,9 @@ func (e NoConfigError) Finding() string {
 	return fmt.Sprintf("No %s in %s or any parent.", english.Or(e.Names), e.StartDir)
 }
 
-func (NoConfigError) Remedy() string { return "`" + initCommand + "`" }
+func (e NoConfigError) Remedy() string { return "`" + e.Hint() + "`" }
+
+func (NoConfigError) Hint() string { return initCommand }
 
 type form struct {
 	suffix string

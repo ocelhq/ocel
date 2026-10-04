@@ -25,4 +25,7 @@ func TestAMissingConfigIsAPrerequisiteInitSetsUp(t *testing.T) {
 	if missing.Remedy() != "`ocel init`" {
 		t.Errorf("remedy = %q, want `ocel init`", missing.Remedy())
 	}
+	if missing.Hint() != "ocel init" {
+		t.Errorf("hint = %q, want ocel init as typed", missing.Hint())
+	}
 }
