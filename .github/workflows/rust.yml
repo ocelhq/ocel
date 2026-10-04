@@ -1,16 +1,8 @@
 name: Rust
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    paths:
-      - "crates/**"
-      - ".github/workflows/rust.yml"
+  workflow_call:
   workflow_dispatch:
-
-concurrency:
-  group: rust-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read

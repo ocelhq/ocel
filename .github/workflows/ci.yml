@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+  issues: write
+  packages: write
+  pull-requests: write
+
+jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+      journey: ${{ steps.filter.outputs.journey }}
+      provider_vps: ${{ steps.filter.outputs.provider_vps }}
+      proto: ${{ steps.filter.outputs.proto }}
+      python: ${{ steps.filter.outputs.python }}
+      rust: ${{ steps.filter.outputs.rust }}
+      labels: ${{ steps.filter.outputs.labels }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Name the workflows the changed paths reach
+        id: filter
+        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
+        with:
+          filters: .github/filters.yml
+
+  lint:
+    needs: changes
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/lint.yml
+    secrets: inherit
+
+  go:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.go == 'true'
+    uses: ./.github/workflows/go.yml
+    secrets: inherit
+
+  journey:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.journey == 'true'
+    uses: ./.github/workflows/journey.yml
+    secrets: inherit
+
+  provider-vps:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.provider_vps == 'true'
+    uses: ./.github/workflows/provider-vps.yml
+    secrets: inherit
+
+  python:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.python == 'true'
+    uses: ./.github/workflows/python.yml
+    secrets: inherit
+
+  rust:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/rust.yml
+    secrets: inherit
+
+  proto:
+    needs: changes
+    if: needs.changes.outputs.proto == 'true'
+    uses: ./.github/workflows/proto.yml
+    secrets: inherit
+
+  labels:
+    needs: changes
+    if: needs.changes.outputs.labels == 'true'
+    uses: ./.github/workflows/labels.yml
+    secrets: inherit
+
+  ci-ok:
+    name: ci-ok
+    needs: [changes, lint, go, journey, provider-vps, python, rust, proto, labels]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Every workflow this change reaches passed
+        env:
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries | map("\(.key)=\(.value.result)") | join(" ")'
+          [ "$FAILED" = false ]

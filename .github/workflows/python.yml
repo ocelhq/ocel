@@ -1,16 +1,8 @@
 name: Python
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    paths:
-      - "python/**"
-      - ".github/workflows/python.yml"
+  workflow_call:
   workflow_dispatch:
-
-concurrency:
-  group: python-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read

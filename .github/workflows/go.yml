@@ -1,42 +1,8 @@
 name: Go
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, closed]
-    paths:
-      - "cli/**"
-      - "sdk/**"
-      - "pkg/**"
-      - "platform/**"
-      - "packages/ocel/**"
-      - "tests/fixtures/sdk/go/**"
-      - "tests/fixtures/deploy/go/**"
-      - "tests/fixtures/tasks/go/**"
-      - "tests/fixtures/realtime/go/**"
-      - "tests/fixtures/worker/**"
-      - "tests/fixtures/sdk/python/**"
-      - "tests/fixtures/sdk/rust/**"
-      - "tests/fixtures/sdk/rust-workspace/**"
-      - "go.work"
-      - "crates/**"
-      - "python/**"
-      - "pnpm-lock.yaml"
-      - "turbo.json"
-      - "scripts/floci.sh"
-      - "scripts/assert-ran.sh"
-      - "scripts/flocidispatch/**"
-      - "scripts/redactvet/**"
-      - ".golangci.yml"
-      - ".github/workflows/go.yml"
-      - ".github/actions/go/**"
-      - ".github/actions/node-workspace/**"
-      - ".github/actions/suite-gate/**"
-      - ".github/actions/suite-passed/**"
+  workflow_call:
   workflow_dispatch:
-
-concurrency:
-  group: go-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -50,7 +16,6 @@ env:
 
 jobs:
   lint:
-    if: github.event.action != 'closed'
     name: lint
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -96,7 +61,6 @@ jobs:
           exit "$status"
 
   go:
-    if: github.event.action != 'closed'
     name: ${{ matrix.group.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 90

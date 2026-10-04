@@ -1,13 +1,8 @@
 name: Lint
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_call:
   workflow_dispatch:
-
-concurrency:
-  group: lint-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
