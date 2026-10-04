@@ -291,7 +291,7 @@ func TestLogsTailTurnsEverySuppressionIntoASampledNotice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read() of a tail error = %v", err)
 	}
-	want := []provider.LogNotice{{Kind: provider.LogSampled, Omitted: 4}, {Kind: provider.LogSampled, Omitted: 9}}
+	want := []provider.LogNotice{{Kind: provider.LogSampled, Omitted: 4, Message: "4 entries were left out because the log store sampled them"}, {Kind: provider.LogSampled, Omitted: 9, Message: "9 entries were left out because the log store sampled them"}}
 	if !slices.Equal(notices, want) {
 		t.Errorf("the tail sent the notices %+v, want %+v", notices, want)
 	}
@@ -318,7 +318,7 @@ func TestLogsTailTellsTheCallerWhenTheStreamReconnected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read() of a tail error = %v", err)
 	}
-	if want := []provider.LogNotice{{Kind: provider.LogReconnected}}; !slices.Equal(notices, want) {
+	if want := []provider.LogNotice{{Kind: provider.LogReconnected, Message: "the log stream dropped and reconnected, so entries written meanwhile may be missing"}}; !slices.Equal(notices, want) {
 		t.Errorf("the tail sent the notices %+v, want %+v", notices, want)
 	}
 }

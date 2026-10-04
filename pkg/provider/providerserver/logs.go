@@ -1,7 +1,6 @@
 package providerserver
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -151,19 +150,24 @@ func sendLogEntries(stream *connect.ServerStream[contractv1.ReadLogsResponse], e
 }
 
 func sendProviderNotice(stream *connect.ServerStream[contractv1.ReadLogsResponse], notice provider.LogNotice) error {
-	switch notice.Kind {
-	case provider.LogSampled:
-		return stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: &contractv1.LogNotice{
-			Kind:    contractv1.LogNotice_KIND_SAMPLED,
-			Message: cmp.Or(notice.Message, fmt.Sprintf("%d entries were left out because the log store sampled them", notice.Omitted)),
-			Omitted: uint64(max(notice.Omitted, 0)),
-		}}})
-	case provider.LogReconnected:
-		return sendLogNotice(stream, contractv1.LogNotice_KIND_RECONNECTED, cmp.Or(notice.Message, "the log stream dropped and reconnected, so entries written meanwhile may be missing"))
-	case provider.LogSourceGone:
+	if notice.Kind == provider.LogSourceGone {
 		return sendLogNotice(stream, contractv1.LogNotice_KIND_SOURCE_GONE, sourceGoneMessage(notice.Target))
 	}
-	return fmt.Errorf("the provider sent a log notice of kind %d, which has no meaning on the wire", notice.Kind)
+	kind, known := map[provider.LogNoticeKind]contractv1.LogNotice_Kind{
+		provider.LogSampled:     contractv1.LogNotice_KIND_SAMPLED,
+		provider.LogReconnected: contractv1.LogNotice_KIND_RECONNECTED,
+	}[notice.Kind]
+	switch {
+	case !known:
+		return fmt.Errorf("the provider sent a log notice of kind %d, which has no meaning on the wire", notice.Kind)
+	case notice.Message == "":
+		return fmt.Errorf("the provider sent a %s log notice with no message", kind)
+	}
+	return stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: &contractv1.LogNotice{
+		Kind:    kind,
+		Message: notice.Message,
+		Omitted: uint64(max(notice.Omitted, 0)),
+	}}})
 }
 
 func sendLogNotice(stream *connect.ServerStream[contractv1.ReadLogsResponse], kind contractv1.LogNotice_Kind, message string) error {

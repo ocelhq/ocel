@@ -487,7 +487,10 @@ func TestLiveTailRestartsASessionThatTimesOutAndReportsReconnected(t *testing.T)
 	stop()
 
 	if want := []NoticeKind{NoticeReconnected}; !slices.Equal(run.noticeKinds(), want) {
-		t.Errorf("LiveTail() reported %v after a timeout, want %v", run.noticeKinds(), want)
+		t.Fatalf("LiveTail() reported %v after a timeout, want %v", run.noticeKinds(), want)
+	}
+	if run.notices[0].Message == "" {
+		t.Error("LiveTail() reported the restart with no message, want one saying entries written meanwhile may be missing")
 	}
 	if !first.isClosed() {
 		t.Error("LiveTail() left the timed out session open")
