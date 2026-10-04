@@ -36,6 +36,10 @@ func ChooseRunOutput(cmd *cobra.Command) io.Writer {
 	return cmd.OutOrStdout()
 }
 
+func PrintsData(cmd *cobra.Command) bool {
+	return isStdoutReserved(cmd) && !isTerminalSharedWithChild(cmd)
+}
+
 func isStdoutReserved(cmd *cobra.Command) bool {
 	return findStdoutUse(cmd) != ""
 }

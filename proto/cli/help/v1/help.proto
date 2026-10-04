@@ -1,0 +1,52 @@
+syntax = "proto3";
+package cli.help.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/cli/help/v1;helpv1";
+
+message CommandTree {
+  repeated Command commands = 1;
+}
+
+message Command {
+  string path = 1;
+
+  string short = 2;
+
+  string long = 3;
+
+  string usage = 4;
+
+  repeated Argument arguments = 5;
+
+  repeated string aliases = 6;
+
+  repeated Flag flags = 7;
+
+  bool prints_data = 8;
+
+  bool mutates = 9;
+
+  bool confirms = 10;
+}
+
+message Argument {
+  string name = 1;
+
+  bool required = 2;
+
+  bool variadic = 3;
+}
+
+message Flag {
+  string name = 1;
+
+  string shorthand = 2;
+
+  string type = 3;
+
+  string default = 4;
+
+  string description = 5;
+
+  bool persistent = 6;
+}

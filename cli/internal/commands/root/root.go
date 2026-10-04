@@ -195,7 +195,7 @@ func newCommand() *command {
 	readsConsoleURL(rootCmd, loginCmd, logoutCmd, linkCmd, connectorCmd)
 	addConsoleCommands(rootCmd, loginCmd, logoutCmd, linkCmd, link.NewUnlinkCommand(linkDependencies), connectorCmd)
 
-	installHelpStyle(rootCmd)
+	installHelpStyle(rootCmd, func() bool { return set.json })
 	return c
 }
 
