@@ -41,14 +41,25 @@ func (p Policy) Refuse() error {
 	return p.unattended()
 }
 
+func (p Policy) RefuseQuestion(question, before string) error {
+	if p.Yes || p.Interactive {
+		return nil
+	}
+	return p.refuseUnattended(fmt.Sprintf("ask %q %s", question, before))
+}
+
 func (p Policy) unattended() error {
+	return p.refuseUnattended("confirm the plan it shows before applying it")
+}
+
+func (p Policy) refuseUnattended(need string) error {
 	remedy := p.UnattendedRemedy
 	if remedy == "" {
 		remedy = "pass --yes"
 	}
 	return clierror.NewConfirmationRequired(
-		fmt.Errorf("`%s` needs a terminal to confirm the plan it shows before applying it; to run it unattended, %s", p.Command, remedy),
-		remedy,
+		fmt.Errorf("`%s` needs a terminal to %s; to run it unattended, %s", p.Command, need, remedy),
+		"--yes",
 	)
 }
 

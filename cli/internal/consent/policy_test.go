@@ -449,14 +449,13 @@ func TestAConfirmationAnsweredNoOnATerminalAssumesNothing(t *testing.T) {
 	}
 }
 
-func TestAPlanRefusedForWantOfATerminalFailsWithConfirmationRequiredAndHintsTheRemedy(t *testing.T) {
+func TestAPlanRefusedForWantOfATerminalFailsWithConfirmationRequiredHintingYes(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		remedy string
-		hint   string
 	}{
-		{"the default remedy", "", "pass --yes"},
-		{"a command's own remedy", "pass --yes, or set OCEL_DESTROY_BYPASS_CONFIRMATION to the project name", "pass --yes, or set OCEL_DESTROY_BYPASS_CONFIRMATION to the project name"},
+		{"the default remedy", ""},
+		{"a command's own remedy", "pass --yes, or set OCEL_DESTROY_BYPASS_CONFIRMATION to the project name"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			g := confirmingPlan()
@@ -464,8 +463,8 @@ func TestAPlanRefusedForWantOfATerminalFailsWithConfirmationRequiredAndHintsTheR
 
 			got := clierror.NewRunError(fmt.Errorf("deploy: %w", g.Refuse()))
 
-			if got.GetCode() != "confirmation_required" || got.GetHint() != tc.hint {
-				t.Errorf("run error = %s, want code confirmation_required and hint %q", protojson.Format(got), tc.hint)
+			if got.GetCode() != clierror.CodeConfirmationRequired || got.GetHint() != "--yes" {
+				t.Errorf("run error = %s, want code confirmation_required and hint --yes", protojson.Format(got))
 			}
 		})
 	}
@@ -474,7 +473,38 @@ func TestAPlanRefusedForWantOfATerminalFailsWithConfirmationRequiredAndHintsTheR
 func TestAPlanShownToNoTerminalFailsWithConfirmationRequired(t *testing.T) {
 	_, err := confirmingPlan().ConfirmPlan(context.Background(), spanOn(t, &terminal{}), mutatingPlan(), "Apply?")
 
-	if got := clierror.NewRunError(err).GetCode(); got != "confirmation_required" {
+	if got := clierror.NewRunError(err).GetCode(); got != clierror.CodeConfirmationRequired {
 		t.Errorf("code = %q, want confirmation_required", got)
+	}
+}
+
+const teardown = `Tear down the named preview "staging"?`
+
+func TestAQuestionWithNoTerminalToAskOnIsRefusedWithConfirmationRequiredNamingYes(t *testing.T) {
+	g := askingPolicy(&terminal{}, "")
+	g.Command = "ocel preview rm"
+	g.Interactive = false
+
+	err := g.RefuseQuestion(teardown, "before it tears the preview down")
+
+	want := "`ocel preview rm`" + ` needs a terminal to ask "Tear down the named preview \"staging\"?" before it tears the preview down; to run it unattended, pass --yes`
+	if err == nil || err.Error() != want {
+		t.Fatalf("RefuseQuestion() = %v, want %s", err, want)
+	}
+	if got := clierror.NewRunError(err); got.GetCode() != clierror.CodeConfirmationRequired || got.GetHint() != "--yes" {
+		t.Errorf("run error = %s, want code confirmation_required and hint --yes", protojson.Format(got))
+	}
+}
+
+func TestAQuestionIsNotRefusedOnATerminalOrUnderYes(t *testing.T) {
+	onTerminal := askingPolicy(&terminal{}, "")
+	underYes := askingPolicy(&terminal{}, "")
+	underYes.Interactive = false
+	underYes.Yes = true
+
+	for _, g := range []consent.Policy{onTerminal, underYes} {
+		if err := g.RefuseQuestion(teardown, "before it tears the preview down"); err != nil {
+			t.Errorf("RefuseQuestion() = %v with Interactive=%v Yes=%v, want nil", err, g.Interactive, g.Yes)
+		}
 	}
 }

@@ -206,9 +206,12 @@ func selectOrCreateProject(
 
 	if !terminal.IsTerminal(lr.stdin) {
 		if len(projects) == 0 {
-			return nil, errors.New("no project selected — pass --create to make one")
+			return nil, clierror.NewInputRequired(errors.New("no project selected — pass --create to make one"), "--create")
 		}
-		return nil, fmt.Errorf("no project selected — pass a project slug or --create. available: %s", joinProjectSlugs(projects))
+		return nil, clierror.NewInputRequired(
+			fmt.Errorf("no project selected — pass a project slug or --create. available: %s", joinProjectSlugs(projects)),
+			"ocel link <project>",
+		)
 	}
 
 	if len(projects) == 0 {

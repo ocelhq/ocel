@@ -177,7 +177,24 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 			t.Fatal("runDestroyProduction without a TTY err = nil, want a refusal")
 		}
 		if !strings.Contains(err.Error(), consent.BypassEnv) {
-			t.Errorf("err = %v, want the no-TTY refusal to name %s, the only way production destroys unattended", err, consent.BypassEnv)
+			t.Errorf("err = %v, want the no-TTY refusal to name %s, the remedy beside --yes", err, consent.BypassEnv)
+		}
+		if got := clierror.NewRunError(err); got.GetCode() != clierror.CodeConfirmationRequired || got.GetHint() != "--yes" {
+			t.Errorf("run error = %v, want confirmation_required with the hint --yes", got)
+		}
+	})
+
+	t.Run("--yes alone destroys production without a terminal", func(t *testing.T) {
+		project := deployedToProduction(t)
+		invocation := clitest.NewInvocation()
+
+		var stdout bytes.Buffer
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := runDestroyProduction(context.Background(), invocation, project.Root, true, false, &stdout, strings.NewReader("")); err != nil {
+			t.Fatalf("runDestroyProduction --yes err = %v; stdout=%s", err, stdout.String())
+		}
+		if left := recordedStacks(t, project, environment.TierProduction); len(left) != 0 {
+			t.Errorf("stacks left = %v, want --yes to destroy production unattended", left)
 		}
 	})
 
@@ -296,7 +313,7 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 		if !strings.Contains(err.Error(), consent.BypassEnv) || !strings.Contains(err.Error(), "test-app") {
 			t.Errorf("err = %v, want it to name %s and the project", err, consent.BypassEnv)
 		}
-		if got := clierror.NewRunError(err).GetCode(); got != "confirmation_bypass_mismatch" {
+		if got := clierror.NewRunError(err).GetCode(); got != clierror.CodeConfirmationBypassMismatch {
 			t.Errorf("code = %q, want confirmation_bypass_mismatch", got)
 		}
 	})
