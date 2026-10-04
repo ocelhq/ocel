@@ -784,6 +784,25 @@ func TestReadLogsPassesTheNoticesOfATailOn(t *testing.T) {
 	}
 }
 
+func TestReadLogsSendsTheMessageAProviderGivesANotice(t *testing.T) {
+	t.Parallel()
+	client, vendor := liveWeb(t)
+
+	tailed := tailLogsOf(t, client, logsRequest())
+	if got := tailed.nextKind(); got != contractv1.LogNotice_KIND_CAUGHT_UP.String() {
+		t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
+	}
+	tailOpened(t, vendor)
+	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected, Message: "polling instead"})
+	if notice := tailed.next().GetNotice(); notice.GetKind() != contractv1.LogNotice_KIND_RECONNECTED || notice.GetMessage() != "polling instead" {
+		t.Errorf("a notice with a message reached the caller as %v, want KIND_RECONNECTED saying %q", notice, "polling instead")
+	}
+	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Message: "sampled above 500 a second"})
+	if notice := tailed.next().GetNotice(); notice.GetKind() != contractv1.LogNotice_KIND_SAMPLED || notice.GetMessage() != "sampled above 500 a second" {
+		t.Errorf("a sampled notice with a message reached the caller as %v, want its own message", notice)
+	}
+}
+
 func TestReadLogsStopsWhenTheProviderRefusesTheTail(t *testing.T) {
 	t.Parallel()
 	spy := &spyingLogs{

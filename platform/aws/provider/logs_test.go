@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"maps"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -22,12 +23,13 @@ import (
 )
 
 type loggedAWS struct {
-	mutex  sync.Mutex
-	groups []string
-	prefix []string
-	limit  []int32
-	filter []string
-	starts []int64
+	mutex     sync.Mutex
+	groups    []string
+	prefix    []string
+	limit     []int32
+	filter    []string
+	starts    []int64
+	liveTails int
 }
 
 func (l *loggedAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
@@ -36,6 +38,24 @@ func (l *loggedAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	if name, ok := strings.CutPrefix(req.URL.Path, "/2015-03-31/functions/"); ok {
 		name = strings.TrimSuffix(name, "/configuration")
 		json.NewEncoder(writer).Encode(map[string]any{"FunctionName": name, "LoggingConfig": map[string]any{"LogGroup": "/aws/lambda/" + name, "LogFormat": "Text"}})
+		return
+	}
+	switch {
+	case strings.HasSuffix(req.Header.Get("X-Amz-Target"), ".DescribeLogGroups"):
+		var describe struct {
+			LogGroupNamePrefix string `json:"logGroupNamePrefix"`
+		}
+		_ = json.NewDecoder(req.Body).Decode(&describe)
+		json.NewEncoder(writer).Encode(map[string]any{"logGroups": []map[string]any{{
+			"logGroupName": describe.LogGroupNamePrefix,
+			"arn":          "arn:aws:logs:us-east-1:123456789012:log-group:" + describe.LogGroupNamePrefix + ":*",
+		}}})
+		return
+	case strings.HasSuffix(req.Header.Get("X-Amz-Target"), ".StartLiveTail"):
+		l.liveTails++
+		writer.Header().Set("X-Amzn-Errortype", "LimitExceededException")
+		writer.WriteHeader(http.StatusBadRequest)
+		io.WriteString(writer, `{"message":"too many sessions"}`)
 		return
 	}
 	var filter struct {
@@ -62,6 +82,11 @@ func (l *loggedAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 
 func providerOn(t *testing.T, server http.Handler) provider.Provider {
 	t.Helper()
+	return providerWith(t, server, aws.Options{Region: "us-east-1"})
+}
+
+func providerWith(t *testing.T, server http.Handler, options aws.Options) provider.Provider {
+	t.Helper()
 	stub := httptest.NewServer(server)
 	t.Cleanup(stub.Close)
 	cfg := awssdk.Config{
@@ -69,8 +94,11 @@ func providerOn(t *testing.T, server http.Handler) provider.Provider {
 		BaseEndpoint:     awssdk.String(stub.URL),
 		Credentials:      credentials.NewStaticCredentialsProvider("id", "secret", ""),
 		RetryMaxAttempts: 1,
+		HTTPClient: &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, network, stub.Listener.Addr().String())
+		}}},
 	}
-	return aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, cfg, defaultNamespace)
+	return aws.NewProvider(options, nil, cfg, defaultNamespace)
 }
 
 func TestLogsReadsEachFunctionFromItsLogGroupAndEachContainerFromTheTiersSharedGroup(t *testing.T) {
@@ -318,5 +346,53 @@ func TestLogsTailStopsWhenTheCallerCancelsBeforeAnyEventArrives(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Error("Read() of a tail was still running 1s after its context was cancelled")
+	}
+}
+
+func TestTheLiveTailOptionChoosesLiveTail(t *testing.T) {
+	t.Parallel()
+
+	query := provider.LogQuery{
+		Tier:    environment.TierProduction,
+		Targets: []provider.LogTarget{{App: "web", Release: "r1", Source: "http", Function: &provider.Function{Name: "web-server", Physical: "web-fn"}}},
+		Since:   time.Date(2026, 1, 5, 11, 0, 0, 0, time.UTC),
+		Tail:    true,
+	}
+	for _, test := range []struct {
+		name      string
+		options   aws.Options
+		wantTails int
+		wantNote  []provider.LogNotice
+	}{
+		{"set", aws.Options{Region: "us-east-1", Logs: aws.LogOptions{LiveTail: true}}, 1, []provider.LogNotice{{Kind: provider.LogReconnected, Message: "Live Tail is at its session limit; polling instead"}}},
+		{"unset", aws.Options{Region: "us-east-1"}, 0, nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			stub := &loggedAWS{}
+			p := providerWith(t, stub, test.options)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var notices []provider.LogNotice
+			err := p.Logs().Read(ctx, query, func([]provider.LogEntry) error {
+				cancel()
+				return nil
+			}, func(notice provider.LogNotice) error {
+				notices = append(notices, notice)
+				return nil
+			})
+			if err != nil {
+				t.Fatalf("Read() error = %v, want none once the caller cancelled", err)
+			}
+			stub.mutex.Lock()
+			defer stub.mutex.Unlock()
+			if stub.liveTails != test.wantTails {
+				t.Errorf("the tail started %d Live Tail sessions, want %d", stub.liveTails, test.wantTails)
+			}
+			if !slices.Equal(notices, test.wantNote) {
+				t.Errorf("the tail reported %v, want %v", notices, test.wantNote)
+			}
+		})
 	}
 }

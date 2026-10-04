@@ -19,6 +19,18 @@
         "description": "Certificates to serve a hostname with, keyed by hostname, valued by the ARN of an already-issued ACM certificate. A hostname left off gets a certificate ocel requests, validates and deletes again.",
         "type": "object"
       },
+      "logs": {
+        "additionalProperties": false,
+        "description": "How ocel logs --tail reads this account's logs.",
+        "properties": {
+          "liveTail": {
+            "description": "Tail through CloudWatch Live Tail: lower latency and no sampling gaps between polls, billed per session-minute past the free tier and capped at 15 sessions per account. Off, ocel logs --tail polls FilterLogEvents.",
+            "type": "boolean"
+          }
+        },
+        "title": "LogOptions",
+        "type": "object"
+      },
       "region": {
         "description": "The AWS region to deploy into.",
         "type": "string"

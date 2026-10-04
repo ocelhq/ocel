@@ -122,14 +122,19 @@ func readNewestEvents(ctx context.Context, logs *cloudwatchlogs.Client, group lo
 }
 
 func parseLoggedEvent(group logGroup, source Source, logged types.FilteredLogEvent) (Event, bool) {
-	event, keep := group.parseLine(strings.TrimSuffix(aws.ToString(logged.Message), "\n"))
+	event, keep := buildEvent(group, source, aws.ToString(logged.LogStreamName), aws.ToInt64(logged.Timestamp), aws.ToString(logged.Message))
+	event.ID = aws.ToString(logged.EventId)
+	return event, keep
+}
+
+func buildEvent(group logGroup, source Source, stream string, millis int64, message string) (Event, bool) {
+	event, keep := group.parseLine(strings.TrimSuffix(message, "\n"))
 	if !keep {
 		return Event{}, false
 	}
-	event.ID = aws.ToString(logged.EventId)
-	event.Time = time.UnixMilli(aws.ToInt64(logged.Timestamp)).UTC()
+	event.Time = time.UnixMilli(millis).UTC()
 	event.Label = source.Label
-	event.Instance = group.parseInstance(aws.ToString(logged.LogStreamName))
+	event.Instance = group.parseInstance(stream)
 	return event, true
 }
 

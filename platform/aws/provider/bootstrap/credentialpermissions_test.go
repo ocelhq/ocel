@@ -335,6 +335,7 @@ func TestTheDeployCredentialOwnsTheLogGroupsItCreates(t *testing.T) {
 		"logs:FilterLogEvents":     conditionJSON(t, taggedByOcel()),
 		"logs:ListTagsForResource": conditionJSON(t, taggedByOcel()),
 		"logs:PutRetentionPolicy":  conditionJSON(t, taggedByOcel()),
+		"logs:StartLiveTail":       conditionJSON(t, taggedByOcel()),
 		"logs:TagResource":         conditionJSON(t, taggedByOcel()),
 		"logs:UntagResource":       conditionJSON(t, taggedByOcel()),
 	}
