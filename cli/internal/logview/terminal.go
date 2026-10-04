@@ -91,16 +91,19 @@ func hueSlot(app string, slots int) int {
 
 func (v *TerminalView) entry(line TerminalLine) string {
 	entry := line.Entry
-	text := v.header(line) + "  " + terminal.SanitizeLogText(entry.Message)
-	fields := v.fieldLines(entry.Fields)
-	if !v.verbose && !hasNestedField(entry.Fields) {
-		if len(fields) > 0 {
-			text += "  " + v.palette.Muted(v.inlineFields(entry.Fields))
-		}
-		return text + "\n"
+	messageLines := strings.Split(entry.Message, "\n")
+	text := v.header(line) + "  " + terminal.SanitizeLogText(messageLines[0])
+	inline := !v.verbose && !hasNestedField(entry.Fields)
+	if inline && len(entry.Fields) > 0 {
+		text += "  " + v.palette.Muted(v.inlineFields(entry.Fields))
 	}
-	for _, field := range fields {
-		text += "\n" + v.palette.Muted(fieldIndent+field)
+	for _, messageLine := range messageLines[1:] {
+		text += "\n" + fieldIndent + terminal.SanitizeLogText(messageLine)
+	}
+	if !inline {
+		for _, field := range v.fieldLines(entry.Fields) {
+			text += "\n" + v.palette.Muted(fieldIndent+field)
+		}
 	}
 	return text + "\n"
 }
