@@ -56,21 +56,15 @@ func (f *flags) explicitConfigPath() string {
 	return os.Getenv(commands.ConfigEnvVar)
 }
 
-func (f *flags) isVerbose() bool {
-	if f.verbose {
-		return true
-	}
-	_, ok := os.LookupEnv(commands.DebugEnvVar)
-	return ok
-}
-
 func (f *flags) readUnsetFromEnv(cmd *cobra.Command) error {
-	if cmd.Flags().Changed("json") {
-		return nil
+	var errVerbose, errJSON error
+	if !cmd.Flags().Changed("verbose") {
+		f.verbose, errVerbose = envBool(commands.DebugEnvVar)
 	}
-	var err error
-	f.json, err = envBool(commands.JSONEnvVar)
-	return err
+	if !cmd.Flags().Changed("json") {
+		f.json, errJSON = envBool(commands.JSONEnvVar)
+	}
+	return errors.Join(errVerbose, errJSON)
 }
 
 func envBool(name string) (bool, error) {
@@ -90,7 +84,7 @@ func (f *flags) presentation(w io.Writer) terminal.Presentation {
 	if f.json {
 		format = terminal.FormatJSON
 	}
-	return terminal.Detect(format, f.isVerbose(), w)
+	return terminal.Detect(format, f.verbose, w)
 }
 
 type command struct {
