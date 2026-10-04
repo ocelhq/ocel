@@ -686,7 +686,7 @@ func TestLogsReportsAReleaseWhoseLogsAreGoneOnStderr(t *testing.T) {
 func TestLogsPlainTextReportsOtherNoticesAsWarningsNotLogData(t *testing.T) {
 	var stdout bytes.Buffer
 	var warned []string
-	out := newOutput(&stdout, false, false, logview.LevelUnknown, func(message string) { warned = append(warned, message) })
+	out := newOutput(&stdout, terminal.Presentation{}, false, false, logview.LevelUnknown, func(message string) { warned = append(warned, message) })
 
 	for _, kind := range []contractv1.LogNotice_Kind{contractv1.LogNotice_KIND_CAUGHT_UP, contractv1.LogNotice_KIND_SOURCE_GONE} {
 		notice := &contractv1.LogNotice{Kind: kind, Message: "web of release r1 no longer exists, so its logs are gone"}
@@ -705,7 +705,7 @@ func TestLogsPlainTextReportsOtherNoticesAsWarningsNotLogData(t *testing.T) {
 
 func TestLogsJSONPrintsEveryKindOfNoticeAsAnObject(t *testing.T) {
 	var stdout bytes.Buffer
-	out := newOutput(&stdout, true, false, logview.LevelUnknown, nil)
+	out := newOutput(&stdout, terminal.Presentation{}, true, false, logview.LevelUnknown, nil)
 
 	for _, kind := range []contractv1.LogNotice_Kind{contractv1.LogNotice_KIND_SAMPLED, contractv1.LogNotice_KIND_SOURCE_GONE, contractv1.LogNotice_KIND_RECONNECTED} {
 		notice := &contractv1.LogNotice{Kind: kind, Message: "m", Omitted: 7}
@@ -746,5 +746,86 @@ func TestLogsFlagsDefaultToTheLastHundredLinesOfTheLastHour(t *testing.T) {
 	}
 	if cmd.Use != "logs [app...]" {
 		t.Errorf("Use = %q, want %q", cmd.Use, "logs [app...]")
+	}
+}
+
+func readOnTerminal(t *testing.T, project clitest.FakeProject, verbose bool, mutate func(*logsOptions)) logsRun {
+	t.Helper()
+	opts := defaultLogsOptions()
+	if mutate != nil {
+		mutate(&opts)
+	}
+	got := runWith(project, func(stderr io.Writer) Dependencies {
+		dependencies := dependenciesFor(stderr, "main")
+		dependencies.Presentation = func(io.Writer) terminal.Presentation {
+			return terminal.Resolve(terminal.Conditions{TTY: true, Verbose: verbose, ColorAsked: terminal.ColorNever})
+		}
+		return dependencies
+	}, opts)
+	if got.err != nil {
+		t.Fatalf("runLogs err = %v; stdout=%s stderr=%s", got.err, got.stdout, got.stderr)
+	}
+	return got
+}
+
+func TestLogsOnATerminalPrintsTheTerminalViewOfEachEntry(t *testing.T) {
+	project := deployedWithLogs(t)
+	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, "level=warn msg=slow ms=900"))
+
+	got := readOnTerminal(t, project, false, nil)
+
+	lines := linesOf(got.stdout)
+	if want := "12:04:00.000  web/http  WARN   slow  ms=900"; lines[len(lines)-1] != want {
+		t.Errorf("last line = %q, want %q", lines[len(lines)-1], want)
+	}
+	if want := "12:02:00.000  web/http  -      web is listening"; !strings.Contains(got.stdout, want+"\n") {
+		t.Errorf("stdout = %q, want a line %q", got.stdout, want)
+	}
+}
+
+func TestLogsOnATerminalBoxesAFailure(t *testing.T) {
+	project := deployedWithLogs(t)
+	project.Provider.FakeLogs().Append("web-live", provider.LogEntry{Time: logsEpoch.Add(4 * time.Minute), Message: "Task timed out after 3.00 seconds", Failure: true, Stream: provider.LogStreamStdout})
+
+	got := readOnTerminal(t, project, false, nil)
+
+	if !strings.Contains(got.stdout, "│ Task timed out after 3.00 seconds │") {
+		t.Errorf("stdout = %q, want the failure in a box", got.stdout)
+	}
+}
+
+func TestLogsJSONOnATerminalStillPrintsJSON(t *testing.T) {
+	project := deployedWithLogs(t)
+
+	got := readOnTerminal(t, project, false, func(o *logsOptions) { o.json = true })
+
+	if first := linesOf(got.stdout)[0]; !strings.HasPrefix(first, "{") {
+		t.Errorf("first line = %q, want a JSON object", first)
+	}
+}
+
+func TestLogsRawOnATerminalStillPrintsPlainLines(t *testing.T) {
+	project := deployedWithLogs(t)
+
+	got := readOnTerminal(t, project, false, func(o *logsOptions) { o.raw = true })
+
+	if want := "2026-01-05T12:02:00.000Z web/http - web is listening\n"; !strings.Contains(got.stdout, want) {
+		t.Errorf("stdout = %q, want it to hold %q", got.stdout, want)
+	}
+}
+
+func TestLogsOnATerminalShortensLongFieldValuesUnlessVerbose(t *testing.T) {
+	project := deployedWithLogs(t)
+	long := strings.Repeat("x", 100)
+	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, "level=info msg=big body="+long))
+
+	compact := readOnTerminal(t, project, false, nil)
+	verbose := readOnTerminal(t, project, true, nil)
+
+	if strings.Contains(compact.stdout, long) || !strings.Contains(compact.stdout, "…") {
+		t.Errorf("compact stdout = %q, want the value shortened", compact.stdout)
+	}
+	if !strings.Contains(verbose.stdout, long) {
+		t.Errorf("verbose stdout = %q, want the full value", verbose.stdout)
 	}
 }
