@@ -112,3 +112,16 @@ func TestTerminalViewWritesNoEscapesWithoutColour(t *testing.T) {
 	}
 	golden(t, "TestTerminalViewWritesNoEscapesWithoutColour", got)
 }
+
+func TestTerminalViewBoxesTheMessageLinesAboveTheError(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	got := render(t, false, logview.TerminalLine{Time: viewEpoch, App: "web", Entry: logview.Entry{
+		Message: "request failed\nGET /orders",
+		Level:   logview.LevelError,
+		Error:   "Error: boom\n    at handler (index.js:9)",
+	}})
+	message, trace := strings.Index(got, "GET /orders"), strings.Index(got, "Error: boom")
+	if message < 0 || trace < 0 || message > trace {
+		t.Errorf("box = %q, want the message line GET /orders above the error", got)
+	}
+}
