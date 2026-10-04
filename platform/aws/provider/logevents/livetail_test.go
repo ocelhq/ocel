@@ -28,17 +28,11 @@ func newFakeSession() *fakeSession {
 
 func (s *fakeSession) Events() <-chan types.StartLiveTailResponseStream { return s.events }
 
-func (s *fakeSession) Err() error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	return s.err
-}
-
 func (s *fakeSession) Close() error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.closed = true
-	return nil
+	return s.err
 }
 
 func (s *fakeSession) isClosed() bool {
@@ -135,20 +129,22 @@ func runLiveTail(t *testing.T, groups []liveGroup, query Query, start func(*live
 	ctx, cancel := context.WithCancel(context.Background())
 	run := &liveRun{}
 	go func() {
-		err := liveTail(ctx, groups, query,
-			func(_ context.Context, input *cloudwatchlogs.StartLiveTailInput) (liveSession, error) {
+		client := liveTailClient{
+			startSession: func(_ context.Context, input *cloudwatchlogs.StartLiveTailInput) (liveSession, error) {
 				run.mutex.Lock()
 				run.inputs = append(run.inputs, input)
 				run.mutex.Unlock()
 				return start(run, input)
 			},
-			func(_ context.Context, sources []Source, since time.Time) error {
+			tail: func(_ context.Context, sources []Source, since time.Time) error {
 				run.mutex.Lock()
 				run.polled = append(run.polled, sources)
 				run.polledAt = append(run.polledAt, since)
 				run.mutex.Unlock()
 				return nil
 			},
+		}
+		err := liveTail(ctx, groups, query, client,
 			func(events []Event) error {
 				run.mutex.Lock()
 				run.batches = append(run.batches, events)
