@@ -86,7 +86,7 @@ func (p logs) follow(ctx context.Context, q provider.LogQuery, emit func([]provi
 	for _, target := range q.Targets {
 		followed.Go(func() {
 			err := p.host.FollowContainerLogs(followCtx, target.Physical(), q.Since, func(line host.Line) error {
-				if !strings.Contains(line.Text, q.Contains) {
+				if line.Time.Before(q.Since) || !strings.Contains(line.Text, q.Contains) {
 					return nil
 				}
 				stream := provider.LogStreamStdout

@@ -15,6 +15,9 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 		return nil
 	}
 	resolved, err := p.openClients(ctx)
+	if q.Tail && ctx.Err() != nil {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
