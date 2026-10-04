@@ -179,38 +179,17 @@ func TestAFailureThatAlreadyEndedInARunSummaryPrintsNothingMore(t *testing.T) {
 	}
 }
 
-func TestAProjectThatFailsToLoadBeforeARunStartsPrintsOneDocumentOrASummaryNeverBoth(t *testing.T) {
+func TestAProjectThatFailsToLoadBeforeARunStartsPrintsOneErrorDocument(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	code, stdout, stderr := executeAndReportRoot(t, "--json", "deploy")
 
-	if code == 0 {
-		t.Errorf("exit code = 0, want a failure")
+	failure := requireOneFailureDocument(t, stdout)
+	if message, _ := failure["message"].(string); message == "" {
+		t.Errorf("error = %v, want the load failure's message", failure)
 	}
-	if stderr != "" {
-		t.Errorf("stderr = %q, want nothing", stderr)
-	}
-	var docs []map[string]any
-	decoder := json.NewDecoder(strings.NewReader(stdout))
-	for decoder.More() {
-		var doc map[string]any
-		if err := decoder.Decode(&doc); err != nil {
-			t.Fatalf("stdout = %q: %v", stdout, err)
-		}
-		docs = append(docs, doc)
-	}
-	if len(docs) == 0 {
-		t.Fatalf("stdout = %q, want one error document or a run ending in its summary", stdout)
-	}
-	_, endsInSummary := docs[len(docs)-1]["summary"]
-	_, endsInDocument := docs[len(docs)-1]["ok"]
-	if endsInSummary == endsInDocument {
-		t.Fatalf("stdout = %q, want one error document or a run ending in its summary", stdout)
-	}
-	for _, doc := range docs[:len(docs)-1] {
-		if _, ok := doc["ok"]; ok {
-			t.Errorf("stdout = %q, want no error document before the end", stdout)
-		}
+	if code != 1 || stderr != "" {
+		t.Errorf("exit code = %d, stderr = %q, want 1 and nothing", code, stderr)
 	}
 }
 
