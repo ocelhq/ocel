@@ -408,18 +408,47 @@ func (r *Process) driveStream(rpc string, stream *connect.ServerStreamForClient[
 	}
 
 	if err := stream.Err(); err != nil {
-		if cancelled(err) {
-			return nil, fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
-		}
-		if _, named := provider.RefusedCode(err); refused || named {
-			return nil, fmt.Errorf("provider: call %s: %w", rpc, err)
-		}
-		if connect.CodeOf(err) == connect.CodeInvalidArgument {
-			return nil, r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, err))
-		}
-		return nil, r.withExitStderr(fmt.Errorf("provider: provider connection lost: %w", err))
+		return nil, r.streamError(rpc, err, refused)
 	}
 	return nil, r.withExitStderr(fmt.Errorf("provider: provider closed the %s stream without a result", rpc))
+}
+
+func (r *Process) streamError(rpc string, err error, refused bool) error {
+	if cancelled(err) {
+		return fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
+	}
+	if _, named := provider.RefusedCode(err); refused || named {
+		return fmt.Errorf("provider: call %s: %w", rpc, err)
+	}
+	if connect.CodeOf(err) == connect.CodeInvalidArgument {
+		return r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, err))
+	}
+	return r.withExitStderr(fmt.Errorf("provider: provider connection lost: %w", err))
+}
+
+func (r *Process) readLogs(ctx context.Context, req *contractv1.ReadLogsRequest, onResponse func(*contractv1.ReadLogsResponse) error) error {
+	client, err := r.Client()
+	if err != nil {
+		return err
+	}
+	stream, err := client.ReadLogs(ctx, req)
+	if err != nil {
+		if cancelled(err) {
+			return fmt.Errorf("provider: ReadLogs was cancelled: %w", err)
+		}
+		return r.withExitStderr(fmt.Errorf("provider: call ReadLogs: %w", err))
+	}
+	defer stream.Close()
+
+	for stream.Receive() {
+		if err := onResponse(stream.Msg()); err != nil {
+			return err
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return r.streamError("ReadLogs", err, false)
+	}
+	return nil
 }
 
 const (

@@ -244,6 +244,21 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployR
 	}
 }
 
+func (s *fakeProviderServer) ReadLogs(ctx context.Context, _ *contractv1.ReadLogsRequest, stream *connect.ServerStream[contractv1.ReadLogsResponse]) error {
+	if s.mode == "refuse-logs" {
+		return provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "web is not deployed here"))
+	}
+	batch := &contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Batch{Batch: &contractv1.LogBatch{Entries: []*contractv1.LogEntry{{App: "web", Message: "listening"}}}}}
+	if err := stream.Send(batch); err != nil {
+		return err
+	}
+	if s.mode == "hang-logs" {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	return stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: &contractv1.LogNotice{Kind: contractv1.LogNotice_KIND_CAUGHT_UP}}})
+}
+
 func (s *fakeProviderServer) Preflight(context.Context, *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
 	if err := recordDrive(); err != nil {
 		return nil, err

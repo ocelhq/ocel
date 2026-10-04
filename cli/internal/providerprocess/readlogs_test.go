@@ -1,0 +1,102 @@
+package providerprocess
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+)
+
+func TestReadLogsHandsEveryResponseToTheCallerInOrder(t *testing.T) {
+	t.Parallel()
+
+	ctx, span, _ := deploySpan(t)
+	p := startFake(t, ctx, "success", span, Questions{})
+
+	var bodies []string
+	err := ReadLogs(ctx, p, &contractv1.ReadLogsRequest{Slug: "acme", Limit: 10}, func(resp *contractv1.ReadLogsResponse) error {
+		switch resp.GetBody().(type) {
+		case *contractv1.ReadLogsResponse_Batch:
+			bodies = append(bodies, "batch")
+		case *contractv1.ReadLogsResponse_Notice:
+			bodies = append(bodies, "notice")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("ReadLogs() error = %v", err)
+	}
+	if got := strings.Join(bodies, ","); got != "batch,notice" {
+		t.Errorf("responses = %s, want batch,notice", got)
+	}
+}
+
+func TestReadLogsReportsACancelledReadAsCancelled(t *testing.T) {
+	t.Parallel()
+
+	ctx, span, _ := deploySpan(t)
+	p := startFake(t, ctx, "hang-logs", span, Questions{})
+	called, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	errs := make(chan error, 1)
+	first := make(chan struct{}, 1)
+	go func() {
+		errs <- ReadLogs(called, p, &contractv1.ReadLogsRequest{Slug: "acme", Limit: 10}, func(*contractv1.ReadLogsResponse) error {
+			select {
+			case first <- struct{}{}:
+			default:
+			}
+			return nil
+		})
+	}()
+	select {
+	case <-first:
+	case <-time.After(5 * time.Second):
+		t.Fatal("never received the first batch")
+	}
+	cancel()
+
+	select {
+	case err := <-errs:
+		if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "cancelled") {
+			t.Errorf("ReadLogs() error = %v, want a cancellation wrapping context.Canceled", err)
+		}
+		if strings.Contains(err.Error(), "connection lost") {
+			t.Errorf("ReadLogs() error = %v, want a ctrl-C not dressed up as a lost connection", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("ReadLogs() hung after the caller cancelled")
+	}
+}
+
+func TestReadLogsKeepsTheProvidersRefusalAndDoesNotCallItALostConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx, span, _ := deploySpan(t)
+	p := startFake(t, ctx, "refuse-logs", span, Questions{})
+
+	err := ReadLogs(ctx, p, &contractv1.ReadLogsRequest{Slug: "acme", Limit: 10}, func(*contractv1.ReadLogsResponse) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "web is not deployed here") {
+		t.Fatalf("ReadLogs() error = %v, want the provider's refusal", err)
+	}
+	if strings.Contains(err.Error(), "connection lost") {
+		t.Errorf("ReadLogs() error = %v, want a refusal not reported as a lost connection", err)
+	}
+}
+
+func TestReadLogsStopsAndReturnsTheCallersError(t *testing.T) {
+	t.Parallel()
+
+	ctx, span, _ := deploySpan(t)
+	p := startFake(t, ctx, "hang-logs", span, Questions{})
+	broken := errors.New("stdout closed")
+
+	err := ReadLogs(ctx, p, &contractv1.ReadLogsRequest{Slug: "acme", Limit: 10}, func(*contractv1.ReadLogsResponse) error { return broken })
+	if !errors.Is(err, broken) {
+		t.Errorf("ReadLogs() error = %v, want the caller's error", err)
+	}
+}
