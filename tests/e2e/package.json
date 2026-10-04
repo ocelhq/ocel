@@ -16,6 +16,7 @@
     "e2e:gcp": "OCEL_TARGET=gcp bun src/run/journey.ts",
     "e2e:next": "OCEL_TARGET=aws bun src/run/journey.ts",
     "plan": "bun src/report/lane.ts",
+    "smoke": "bun src/run/smoke.ts",
     "sweep": "bun src/sweep.ts",
     "sweep:registry": "bun src/sweepRegistry.ts",
     "sweep:zone": "bun src/sweepZone.ts",
