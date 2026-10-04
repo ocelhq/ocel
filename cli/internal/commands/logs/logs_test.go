@@ -1115,9 +1115,9 @@ func TestLogsTailReportsSamplingAndReconnectsOnStderrNotStdout(t *testing.T) {
 			run.waitFor(run.stdout, "api is listening")
 			run.waitForTailOpened(project)
 
-			project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7})
+			project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7, Message: sampledMessage})
 			run.waitFor(run.stderr, sampledMessage)
-			project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected})
+			project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected, Message: reconnectedMessage})
 			project.Provider.FakeLogs().Append("web-live", liveEntry("after the notices"))
 			run.waitFor(run.stdout, "after the notices")
 			if err := run.interrupt(); err != nil {
@@ -1149,9 +1149,9 @@ func TestLogsTailPrintsSamplingAndReconnectsAsNoticesInJSON(t *testing.T) {
 	run.waitFor(run.stdout, "caught_up")
 	run.waitForTailOpened(project)
 
-	project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7})
+	project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7, Message: sampledMessage})
 	run.waitFor(run.stdout, `"kind":"sampled"`)
-	project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected})
+	project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected, Message: reconnectedMessage})
 	run.waitFor(run.stdout, `"kind":"reconnected"`)
 	if err := run.interrupt(); err != nil {
 		t.Fatalf("runLogs err = %v", err)
@@ -1223,8 +1223,8 @@ func TestLogsTailOnAColouredTerminalMutesSamplingAndReconnectNotices(t *testing.
 	run.waitFor(run.stdout, "api is listening")
 	run.waitForTailOpened(project)
 
-	project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7})
-	project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected})
+	project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7, Message: sampledMessage})
+	project.Provider.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected, Message: reconnectedMessage})
 	run.waitFor(run.stderr, "reconnected")
 	if err := run.interrupt(); err != nil {
 		t.Fatalf("runLogs err = %v", err)
