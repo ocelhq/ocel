@@ -129,17 +129,17 @@ func installHelpStyle(cmd *cobra.Command, jsonSelected func() bool) {
 					printHumanHelp(help, args)
 					return nil
 				}
-				return printCommandTree(help, args)
+				return printCommandCatalog(help, args)
 			}
 			commands.ReserveStdout(sub)
 		}
 	}
 }
 
-func printCommandTree(help *cobra.Command, args []string) error {
+func printCommandCatalog(help *cobra.Command, args []string) error {
 	target, rest, err := help.Root().Find(args)
 	if err != nil || len(rest) > 0 || target.Hidden {
 		return fmt.Errorf("unknown help topic %q", strings.Join(args, " "))
 	}
-	return writeCommandTree(help.OutOrStdout(), describeCommandTree(target))
+	return writeCommandCatalog(help.OutOrStdout(), describeCommandCatalog(target))
 }

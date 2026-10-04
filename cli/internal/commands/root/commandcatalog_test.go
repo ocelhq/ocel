@@ -31,18 +31,14 @@ func visibleCommands(root *cobra.Command) []*cobra.Command {
 	return found
 }
 
-func commandPath(cmd *cobra.Command) string {
-	return strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" ")
-}
-
 func describedCommands(t *testing.T, stdout string) map[string]*helpv1.Command {
 	t.Helper()
-	tree := &helpv1.CommandTree{}
-	if err := protojson.Unmarshal([]byte(stdout), tree); err != nil {
-		t.Fatalf("stdout is not a protojson CommandTree: %v\n%s", err, stdout)
+	catalog := &helpv1.CommandCatalog{}
+	if err := protojson.Unmarshal([]byte(stdout), catalog); err != nil {
+		t.Fatalf("stdout is not a protojson CommandCatalog: %v\n%s", err, stdout)
 	}
 	byPath := map[string]*helpv1.Command{}
-	for _, command := range tree.GetCommands() {
+	for _, command := range catalog.GetCommands() {
 		byPath[command.GetPath()] = command
 	}
 	return byPath
@@ -125,13 +121,13 @@ func TestHelpJSONIsByteIdenticalAcrossRuns(t *testing.T) {
 
 func TestHelpJSONSortsCommandsByPathAndFlagsByName(t *testing.T) {
 	stdout, _ := executeRoot(t, "help", "--json")
-	tree := &helpv1.CommandTree{}
-	if err := protojson.Unmarshal([]byte(stdout), tree); err != nil {
+	catalog := &helpv1.CommandCatalog{}
+	if err := protojson.Unmarshal([]byte(stdout), catalog); err != nil {
 		t.Fatal(err)
 	}
 
 	var paths []string
-	for _, command := range tree.GetCommands() {
+	for _, command := range catalog.GetCommands() {
 		paths = append(paths, command.GetPath())
 		var names []string
 		for _, flag := range command.GetFlags() {
@@ -358,7 +354,7 @@ func TestHelpJSONForAnUnknownCommandIsAnError(t *testing.T) {
 	}
 }
 
-func TestOCELJSONMakesHelpPrintTheCommandTree(t *testing.T) {
+func TestOCELJSONMakesHelpPrintTheCommandCatalog(t *testing.T) {
 	t.Setenv("OCEL_JSON", "1")
 
 	stdout, _ := executeRoot(t, "help")
