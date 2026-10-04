@@ -1,7 +1,26 @@
+import derived from "./derived.json" with { type: "json" };
+
 const WORKSPACE_FILES = ["go.work", "go.work.sum", ".golangci.yml"];
 
 export function touches(changed, dir) {
   return changed.some((file) => file.startsWith(`${dir}/`));
+}
+
+function matcher(pattern) {
+  if (pattern.endsWith("/")) return (file) => file.startsWith(pattern);
+  const source = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*/g, "\0")
+    .replace(/\*/g, "[^/]*")
+    .replace(/\0/g, ".*");
+  const whole = new RegExp(`^${source}$`);
+  return (file) => whole.test(file) || file.startsWith(`${pattern}/`);
+}
+
+const derivedMatchers = [...derived.sources, ...derived.generated].map(matcher);
+
+export function derivesFrom(changed) {
+  return changed.some((file) => derivedMatchers.some((matches) => matches(file)));
 }
 
 function moduleOf(file, modules) {

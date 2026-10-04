@@ -1,0 +1,28 @@
+{
+  "sources": [
+    "proto/",
+    "VERSION",
+    "package.json",
+    "LICENSE",
+    "NOTICE",
+    "pkg/configdoc/schema.core.json",
+    "platform/**/schema.provider.json",
+    "platform/**/schema.edge.json",
+    "scripts/schema/",
+    "scripts/check/derived.sh",
+    "scripts/check/derived.json"
+  ],
+  "generated": [
+    "www/public/schema",
+    "packages/ocel/src/generated",
+    "pkg/configdoc/selectors.json",
+    "pkg/proto",
+    "console/connectors/src/gen",
+    "packages/ocel/src/gen",
+    "python/ocel/src/ocel/gen",
+    "crates/ocel-sdk/src/proto",
+    "sdk/internal/proto",
+    "sdk/LICENSE",
+    "sdk/NOTICE"
+  ]
+}
