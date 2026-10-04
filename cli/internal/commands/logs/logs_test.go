@@ -313,7 +313,7 @@ func TestLogsRawFiltersByTheVendorSeverityAndFailureAlone(t *testing.T) {
 	}
 }
 
-func TestLogsStripsTerminalEscapesFromMessages(t *testing.T) {
+func TestLogsStripsTerminalEscapesAndShowsLoneControlCharactersInMessages(t *testing.T) {
 	project := deployedWithLogs(t)
 	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, "\x1b[31mred\x1b[0m\x1b]0;owned\a\x1b[2J\u009b ok\r\x1b[1A"))
 
@@ -322,8 +322,19 @@ func TestLogsStripsTerminalEscapesFromMessages(t *testing.T) {
 	if strings.ContainsAny(got.stdout, "\x1b\a\r\u009b") {
 		t.Errorf("stdout = %q, want no terminal control characters", got.stdout)
 	}
-	if !strings.Contains(got.stdout, " - red ok\n") {
-		t.Errorf("stdout = %q, want the visible text of the line kept", got.stdout)
+	if !strings.Contains(got.stdout, ` - red\u009b ok`+"\n") {
+		t.Errorf("stdout = %q, want the visible text kept and the lone control character shown as an escape", got.stdout)
+	}
+}
+
+func TestLogsKeepsTheTextBeforeACarriageReturnSoALineCannotBeForged(t *testing.T) {
+	project := deployedWithLogs(t)
+	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, "GET /admin 403\rGET /admin 200"))
+
+	got := read(t, project, nil, "web")
+
+	if !strings.Contains(got.stdout, ` - GET /admin 403\rGET /admin 200`+"\n") {
+		t.Errorf("stdout = %q, want both halves of the line, the carriage return shown as an escape", got.stdout)
 	}
 }
 
@@ -336,19 +347,19 @@ func TestLogsStripsTerminalEscapesFromFieldValues(t *testing.T) {
 	if strings.ContainsAny(got.stdout, "\x1b\u009b") {
 		t.Errorf("stdout = %q, want an attacker-controlled field value unable to send a control code", got.stdout)
 	}
-	if !strings.Contains(got.stdout, `{"agent":"2Jevil"}`) {
+	if !strings.Contains(got.stdout, `{"agent":"\u009b2Jevil"}`) {
 		t.Errorf("stdout = %q, want the fields as compact JSON after the message", got.stdout)
 	}
 }
 
 func TestLogsJSONEscapesEveryControlCharacterOfTheRawMessage(t *testing.T) {
 	project := deployedWithLogs(t)
-	raw := "\x1b[31mred\x1b[0m \u009b2J"
+	raw := "\x1b[31mred\x1b[0m \u009b2J \u202eexe.txt \x7f"
 	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, raw))
 
 	got := read(t, project, func(o *logsOptions) { o.json = true }, "web")
 
-	if strings.ContainsAny(got.stdout, "\x1b\u009b") {
+	if strings.ContainsAny(got.stdout, "\x1b\u009b\u202e\x7f") {
 		t.Errorf("stdout = %q, want the raw message JSON-escaped so piping it to a terminal is safe", got.stdout)
 	}
 	var found bool
@@ -385,14 +396,14 @@ func TestLogsPrintsOneLineWithTimeAppSourceLevelMessageAndFields(t *testing.T) {
 	}
 }
 
-func TestLogsJoinsALogEntrysLinesWithAnEscapedNewline(t *testing.T) {
+func TestLogsJoinsALogEntrysLinesWithAnEscapedNewlineAndKeepsTheirIndentation(t *testing.T) {
 	project := deployedWithLogs(t)
 	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, "boom\n  at run (app.js:1)\n"))
 
 	got := read(t, project, nil, "web")
 
-	if !strings.Contains(got.stdout, `boom\nat run (app.js:1)`) {
-		t.Errorf("stdout = %q, want the entry on one line, its newlines escaped", got.stdout)
+	if !strings.Contains(got.stdout, `boom\n  at run (app.js:1)`+"\n") {
+		t.Errorf("stdout = %q, want the entry on one line, its newlines escaped and its indentation kept", got.stdout)
 	}
 	if n := len(linesOf(got.stdout)); n != 2 {
 		t.Errorf("stdout = %q has %d lines, want one per entry", got.stdout, n)
