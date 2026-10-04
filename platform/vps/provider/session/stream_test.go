@@ -117,6 +117,34 @@ func TestRunLinesStopsTheCommandWhenTheContextIsCancelled(t *testing.T) {
 	}
 }
 
+func TestRunLinesKeepsTheCommandsInputOpenUntilItReturns(t *testing.T) {
+	box := newSessionRunning(t, "echo started; cat >/dev/null; echo input-closed")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	lines := make(chan string, 4)
+	returned := make(chan error, 1)
+	go func() {
+		returned <- box.RunLines(ctx, "logs --follow", func(line Line) error {
+			lines <- line.Text
+			return nil
+		})
+	}()
+	if first := <-lines; first != "started" {
+		t.Fatalf("RunLines() delivered %q first, want %q", first, "started")
+	}
+	select {
+	case line := <-lines:
+		t.Fatalf("RunLines() delivered %q while it was still running, want the command's input held open so a remote follower can tell its caller is still there", line)
+	case err := <-returned:
+		t.Fatalf("RunLines() returned %v while its context was live, want the command's input held open", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	cancel()
+	<-returned
+}
+
 func TestRunLinesReturnsTheCallbacksError(t *testing.T) {
 	box := newSessionRunning(t, "echo started; exec sleep 30")
 	stopped := errors.New("the caller wants no more")

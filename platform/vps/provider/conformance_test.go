@@ -249,29 +249,52 @@ func (d *dockerLogs) feed(_ *testing.T, target provider.LogTarget, entries []pro
 }
 
 func (d *dockerLogs) follow(ctx context.Context, command string, each func(session.Line) error) error {
-	words := strings.Fields(strings.ReplaceAll(command, "'", ""))
-	physical := words[len(words)-1]
-	since, _ := time.Parse(time.RFC3339Nano, words[slices.Index(words, "--since")+1])
-	follower := make(chan provider.LogEntry, 64)
+	_, args, _ := strings.Cut(command, "' containerlogs ")
+	words := strings.Fields(strings.ReplaceAll(args, "'", ""))
+	since, _ := time.Parse(time.RFC3339Nano, words[0])
+	followers := map[chan provider.LogEntry]int{}
 	d.mu.Lock()
-	for _, entry := range d.entries[physical] {
-		if !entry.Time.Before(since) {
-			follower <- entry
+	for container, physical := range words[1:] {
+		follower := make(chan provider.LogEntry, 64)
+		for _, entry := range d.entries[physical] {
+			if !entry.Time.Before(since) {
+				follower <- entry
+			}
 		}
+		d.followers[follower] = physical
+		followers[follower] = container
 	}
-	d.followers[follower] = physical
 	d.mu.Unlock()
 	defer func() {
 		d.mu.Lock()
 		defer d.mu.Unlock()
-		delete(d.followers, follower)
+		for follower := range followers {
+			delete(d.followers, follower)
+		}
 	}()
+	lines := make(chan session.Line)
+	for follower, container := range followers {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case entry := <-follower:
+					select {
+					case lines <- session.Line{Pipe: session.Stdout, Text: strconv.Itoa(container) + " " + entry.Time.Format(time.RFC3339Nano) + " " + entry.Message}:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}()
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case entry := <-follower:
-			if err := each(session.Line{Pipe: session.Stdout, Text: entry.Time.Format(time.RFC3339Nano) + " " + entry.Message}); err != nil {
+		case line := <-lines:
+			if err := each(line); err != nil {
 				return err
 			}
 		}

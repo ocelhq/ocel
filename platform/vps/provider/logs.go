@@ -5,7 +5,6 @@ import (
 	"errors"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -14,9 +13,9 @@ import (
 
 type logs struct{ *Provider }
 
-func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, _ func(provider.LogNotice) error) error {
+func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, notice func(provider.LogNotice) error) error {
 	if q.Tail {
-		return p.follow(ctx, q, emit)
+		return p.tail(ctx, q, emit, notice)
 	}
 	if q.Limit < 1 {
 		return nil
@@ -36,18 +35,7 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 			return err
 		}
 		for _, line := range lines {
-			stream := provider.LogStreamStdout
-			if line.Stderr {
-				stream = provider.LogStreamStderr
-			}
-			entries = append(entries, provider.LogEntry{
-				Time:    line.Time,
-				App:     target.App,
-				Source:  target.Source,
-				Release: target.Release,
-				Stream:  stream,
-				Message: line.Text,
-			})
+			entries = append(entries, logEntryOf(target, line))
 		}
 	}
 	slices.SortStableFunc(entries, func(a, b provider.LogEntry) int { return a.Time.Compare(b.Time) })
@@ -70,51 +58,42 @@ func refuseNonContainer(target provider.LogTarget) error {
 	return nil
 }
 
-func (p logs) follow(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error) error {
-	for _, target := range q.Targets {
+func (p logs) tail(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, notice func(provider.LogNotice) error) error {
+	if len(q.Targets) == 0 {
+		return nil
+	}
+	names := make([]string, len(q.Targets))
+	for i, target := range q.Targets {
 		if err := refuseNonContainer(target); err != nil {
 			return err
 		}
+		names[i] = target.Physical()
 	}
-	followCtx, stop := context.WithCancel(ctx)
-	defer stop()
-	var (
-		mu       sync.Mutex
-		failure  error
-		followed sync.WaitGroup
-	)
-	for _, target := range q.Targets {
-		followed.Go(func() {
-			err := p.host.FollowContainerLogs(followCtx, target.Physical(), q.Since, func(line host.Line) error {
-				if line.Time.Before(q.Since) || !strings.Contains(line.Text, q.Contains) {
-					return nil
-				}
-				stream := provider.LogStreamStdout
-				if line.Stderr {
-					stream = provider.LogStreamStderr
-				}
-				mu.Lock()
-				defer mu.Unlock()
-				return emit([]provider.LogEntry{{
-					Time:    line.Time,
-					App:     target.App,
-					Source:  target.Source,
-					Release: target.Release,
-					Stream:  stream,
-					Message: line.Text,
-				}})
-			})
-			if err == nil || errors.Is(err, host.ErrContainerMissing) {
-				return
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			if failure == nil && followCtx.Err() == nil {
-				failure = err
-				stop()
-			}
-		})
+	err := p.host.FollowContainerLogs(ctx, names, q.Since, func(container int, line host.Line) error {
+		if !strings.Contains(line.Text, q.Contains) {
+			return nil
+		}
+		return emit([]provider.LogEntry{logEntryOf(q.Targets[container], line)})
+	}, func(container int) error {
+		return notice(provider.LogNotice{Kind: provider.LogSourceGone, Target: q.Targets[container]})
+	})
+	if ctx.Err() != nil {
+		return nil
 	}
-	followed.Wait()
-	return failure
+	return err
+}
+
+func logEntryOf(target provider.LogTarget, line host.Line) provider.LogEntry {
+	stream := provider.LogStreamStdout
+	if line.Stderr {
+		stream = provider.LogStreamStderr
+	}
+	return provider.LogEntry{
+		Time:    line.Time,
+		App:     target.App,
+		Source:  target.Source,
+		Release: target.Release,
+		Stream:  stream,
+		Message: line.Text,
+	}
 }

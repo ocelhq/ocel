@@ -114,7 +114,13 @@ func (s *Session) RunLines(ctx context.Context, command string, each func(Line) 
 	if err != nil {
 		return s.refuseUnreached(ctx, err, "")
 	}
+	input, err := cmd.StdinPipe()
+	if err != nil {
+		return s.refuseUnreached(ctx, err, "")
+	}
+	defer input.Close()
 	cmd.Cancel = func() error {
+		input.Close()
 		killErr := cmd.Process.Kill()
 		stdout.Close()
 		stderr.Close()
