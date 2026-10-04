@@ -81,6 +81,20 @@ func TestACodeOutsideTheDottedLowercaseShapeOrNamedInternalBecomesInternalWithNo
 	}
 }
 
+func TestAMissingInputReportsInputRequiredWithTheFlagOrEnvVarThatSuppliesIt(t *testing.T) {
+	got := clierror.NewRunError(fmt.Errorf("link: %w", clierror.NewInputRequired(errors.New("multiple organizations found"), "--org <slug>")))
+
+	want := &streamv1.RunError{
+		Code:    "input_required",
+		Message: "link: multiple organizations found",
+		Hint:    proto.String("supply it with --org <slug>"),
+		DocsUrl: proto.String("https://ocel.dev/docs/errors/input_required"),
+	}
+	if !proto.Equal(got, want) {
+		t.Fatalf("run error = %s, want %s", protojson.Format(got), protojson.Format(want))
+	}
+}
+
 func TestNoErrorBecomesNoRunError(t *testing.T) {
 	if got := clierror.NewRunError(nil); got != nil {
 		t.Fatalf("run error = %v, want nil", got)

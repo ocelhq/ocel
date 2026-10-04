@@ -52,6 +52,18 @@ func NewRunError(err error) *streamv1.RunError {
 	return runError
 }
 
+func NewConfirmationRequired(cause error, remedy string) *Error {
+	return &Error{Code: "confirmation_required", Hint: remedy, Cause: cause}
+}
+
+func NewConfirmationBypassMismatch(cause error, remedy string) *Error {
+	return &Error{Code: "confirmation_bypass_mismatch", Hint: remedy, Cause: cause}
+}
+
+func NewInputRequired(cause error, supplier string) *Error {
+	return &Error{Code: "input_required", Hint: "supply it with " + supplier, Cause: cause}
+}
+
 func isPublishedCode(code string) bool {
 	return code != internalCode && protovalidate.Validate(&streamv1.RunError{Code: code}) == nil
 }

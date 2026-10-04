@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 )
 
 const BypassEnv = "OCEL_DESTROY_BYPASS_CONFIRMATION"
@@ -28,8 +30,11 @@ func (b Bypass) Granted() (granted bool, notice string, err error) {
 		return true, fmt.Sprintf("%s=%s: %s without confirmation", BypassEnv, b.Subject, b.Action), nil
 	case requested == "" || b.Yes:
 	case !b.TTY:
-		return false, "", fmt.Errorf("%s is set to %q, but this %s is %q; it must name the %s being %s",
-			BypassEnv, requested, b.Noun, b.Subject, b.Noun, b.Verb)
+		return false, "", clierror.NewConfirmationBypassMismatch(
+			fmt.Errorf("%s is set to %q, but this %s is %q; it must name the %s being %s",
+				BypassEnv, requested, b.Noun, b.Subject, b.Noun, b.Verb),
+			fmt.Sprintf("set %s to %s", BypassEnv, b.Subject),
+		)
 	default:
 		return false, fmt.Sprintf("%s is set to %q, not this %s (%s); confirming interactively instead",
 			BypassEnv, requested, b.Noun, b.Subject), nil

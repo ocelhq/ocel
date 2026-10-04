@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -45,7 +46,10 @@ func (p Policy) unattended() error {
 	if remedy == "" {
 		remedy = "pass --yes"
 	}
-	return fmt.Errorf("`%s` needs a terminal to confirm the plan it shows before applying it; to run it unattended, %s", p.Command, remedy)
+	return clierror.NewConfirmationRequired(
+		fmt.Errorf("`%s` needs a terminal to confirm the plan it shows before applying it; to run it unattended, %s", p.Command, remedy),
+		remedy,
+	)
 }
 
 func (p Policy) Confirm(ctx context.Context, span *run.Span, guard Guard) (bool, error) {

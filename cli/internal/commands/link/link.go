@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -330,7 +331,10 @@ func pickOrganization(ctx context.Context, lr linkRun, client *console.Client, a
 	}
 
 	if !terminal.IsTerminal(lr.stdin) {
-		return nil, fmt.Errorf("multiple organizations found; pass --org <slug>. available: %s", joinOrgSlugs(orgs))
+		return nil, clierror.NewInputRequired(
+			fmt.Errorf("multiple organizations found; pass --org <slug>. available: %s", joinOrgSlugs(orgs)),
+			"--org <slug>",
+		)
 	}
 
 	selection, err := lr.ask(ctx, func(stdout io.Writer) {

@@ -3,11 +3,15 @@ package consent_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -442,5 +446,35 @@ func TestAConfirmationAnsweredNoOnATerminalAssumesNothing(t *testing.T) {
 	}
 	if assumed := summaryOf(t, term, span).GetAssumed(); len(assumed) != 0 {
 		t.Errorf("assumed = %v, want a declined question to assume nothing", assumed)
+	}
+}
+
+func TestAPlanRefusedForWantOfATerminalFailsWithConfirmationRequiredAndHintsTheRemedy(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		remedy string
+		hint   string
+	}{
+		{"the default remedy", "", "pass --yes"},
+		{"a command's own remedy", "pass --yes, or set OCEL_DESTROY_BYPASS_CONFIRMATION to the project name", "pass --yes, or set OCEL_DESTROY_BYPASS_CONFIRMATION to the project name"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := confirmingPlan()
+			g.UnattendedRemedy = tc.remedy
+
+			got := clierror.NewRunError(fmt.Errorf("deploy: %w", g.Refuse()))
+
+			if got.GetCode() != "confirmation_required" || got.GetHint() != tc.hint {
+				t.Errorf("run error = %s, want code confirmation_required and hint %q", protojson.Format(got), tc.hint)
+			}
+		})
+	}
+}
+
+func TestAPlanShownToNoTerminalFailsWithConfirmationRequired(t *testing.T) {
+	_, err := confirmingPlan().ConfirmPlan(context.Background(), spanOn(t, &terminal{}), mutatingPlan(), "Apply?")
+
+	if got := clierror.NewRunError(err).GetCode(); got != "confirmation_required" {
+		t.Errorf("code = %q, want confirmation_required", got)
 	}
 }
