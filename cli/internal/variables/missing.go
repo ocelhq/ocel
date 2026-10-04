@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -21,6 +22,10 @@ func (r *MissingError) Error() string {
 	missing := r.Variables()
 	lines := append(terminal.MissingVariablesLines(missing, terminal.Presentation{}), "", terminal.MissingVariablesRemedy(missing.GetRemedy()))
 	return strings.Join(lines, "\n")
+}
+
+func refuse(missing *MissingError) error {
+	return &clierror.Error{Code: "variables.missing", Hint: missing.remedy(), Cause: missing}
 }
 
 func (r *MissingError) Detail() string { return "" }
