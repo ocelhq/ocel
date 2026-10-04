@@ -11,7 +11,7 @@ export const ENDPOINT_ENV = "AWS_ENDPOINT_URL";
 export const ACCOUNT_ENV = "EXPECTED_AWS_ACCOUNT_ID";
 
 export const START_FLOCI =
-  "scripts/floci.sh create ocel-journeys, then export the OCEL_FLOCI_ENDPOINT it prints as AWS_ENDPOINT_URL";
+  "scripts/floci.sh create ocel-e2e, then export the OCEL_FLOCI_ENDPOINT it prints as AWS_ENDPOINT_URL";
 
 export type Probes = {
   answersAsFloci: (endpoint: string) => Promise<boolean>;
@@ -82,14 +82,14 @@ export class AwsWorld {
       if (where.world === "floci") {
         process.env.AWS_ACCESS_KEY_ID ??= "test";
         process.env.AWS_SECRET_ACCESS_KEY ??= "test";
-        process.env.OCEL_JOURNEY_ZONE ??= FLOCI_ZONE;
+        process.env.OCEL_E2E_ZONE ??= FLOCI_ZONE;
       } else {
-        if (!process.env.OCEL_JOURNEY_ZONE) {
+        if (!process.env.OCEL_E2E_ZONE) {
           throw new Error(
-            "OCEL_JOURNEY_ZONE names the zone this run's production hostnames hang under, and an aws project with no production hostname has nowhere to serve",
+            "OCEL_E2E_ZONE names the zone this run's production hostnames hang under, and an aws project with no production hostname has nowhere to serve",
           );
         }
-        process.env.OCEL_JOURNEY_DNS = "cloudflare";
+        process.env.OCEL_E2E_DNS = "cloudflare";
       }
       return where;
     })();
@@ -109,7 +109,7 @@ export class AwsWorld {
   }
 
   zone(): string {
-    const named = process.env.OCEL_JOURNEY_ZONE;
+    const named = process.env.OCEL_E2E_ZONE;
     if (!named) {
       throw new Error("the aws target reached a cell before it knew which zone to serve on");
     }

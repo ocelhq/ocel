@@ -6,7 +6,7 @@ PDFs under `documents/` and writes a row when an upload completes, a plain `GREE
 a secret `SECRET_TOKEN`. The declarations sit in the default discovery directory, and each one is
 the provisioning step.
 
-It doubles as the fixture the journey suites under [`tests/journeys`](../../../journeys) drive through
+It doubles as the fixture the e2e suite under [`tests/e2e`](../../../e2e) drive through
 the real binary, so it also has a test surface of no use to the product.
 
 ## Run it

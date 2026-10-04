@@ -2,9 +2,9 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
-    "journey:aws": {
+    "e2e:aws": {
       "cache": false,
-      "env": ["OCEL_JOURNEY_*"],
+      "env": ["OCEL_E2E_*"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/cli/**",
@@ -36,9 +36,9 @@
         "!$TURBO_ROOT$/platform/**/*_test.go"
       ]
     },
-    "journey:gcp": {
+    "e2e:gcp": {
       "cache": false,
-      "env": ["OCEL_JOURNEY_*"],
+      "env": ["OCEL_E2E_*"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/cli/**",
@@ -70,9 +70,9 @@
         "!$TURBO_ROOT$/platform/**/*_test.go"
       ]
     },
-    "journey:vps": {
+    "e2e:vps": {
       "cache": false,
-      "env": ["OCEL_JOURNEY_*"],
+      "env": ["OCEL_E2E_*"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/cli/**",
@@ -105,9 +105,9 @@
         "!$TURBO_ROOT$/platform/**/*_test.go"
       ]
     },
-    "journey:vps-front": {
+    "e2e:vps-front": {
       "cache": false,
-      "env": ["OCEL_JOURNEY_*", "OCEL_VPS_FRONT"],
+      "env": ["OCEL_E2E_*", "OCEL_VPS_FRONT"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/cli/**",
@@ -141,9 +141,9 @@
         "!$TURBO_ROOT$/platform/**/*_test.go"
       ]
     },
-    "journey:vps-engine": {
+    "e2e:vps-engine": {
       "cache": false,
-      "env": ["OCEL_JOURNEY_*", "OCEL_VPS_DOCKER"],
+      "env": ["OCEL_E2E_*", "OCEL_VPS_DOCKER"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/cli/**",
@@ -177,9 +177,9 @@
         "!$TURBO_ROOT$/platform/**/*_test.go"
       ]
     },
-    "journey:dev": {
+    "e2e:dev": {
       "cache": false,
-      "env": ["OCEL_JOURNEY_*"],
+      "env": ["OCEL_E2E_*"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/cli/**",
@@ -210,9 +210,9 @@
         "!$TURBO_ROOT$/pkg/**/*_test.go"
       ]
     },
-    "journey:next": {
+    "e2e:next": {
       "cache": false,
-      "env": ["OCEL_JOURNEY_*"],
+      "env": ["OCEL_E2E_*"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/cli/**",

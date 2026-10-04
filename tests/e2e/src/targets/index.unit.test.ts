@@ -9,12 +9,12 @@ describe("laneWorkers", () => {
   });
 
   it("takes the override when it names a positive integer", () => {
-    expect(laneWorkers(target, { OCEL_JOURNEY_WORKERS: "6" })).toBe(6);
+    expect(laneWorkers(target, { OCEL_E2E_WORKERS: "6" })).toBe(6);
   });
 
   it("ignores an override that is not a positive integer", () => {
     for (const asked of ["", " ", "0", "-2", "1.5", "many"]) {
-      expect(laneWorkers(target, { OCEL_JOURNEY_WORKERS: asked })).toBe(3);
+      expect(laneWorkers(target, { OCEL_E2E_WORKERS: asked })).toBe(3);
     }
   });
 });

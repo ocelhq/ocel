@@ -27,7 +27,7 @@ export function laneWorkers(
   target: Pick<Target, "workers">,
   env: NodeJS.ProcessEnv = process.env,
 ): number {
-  const asked = Number((env.OCEL_JOURNEY_WORKERS ?? "").trim());
+  const asked = Number((env.OCEL_E2E_WORKERS ?? "").trim());
   return Number.isInteger(asked) && asked > 0 ? asked : target.workers;
 }
 

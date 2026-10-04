@@ -19,7 +19,7 @@ export const GCP_BASE = "./ocel.gcp.json";
 export const BOX_ZONE = "localhost";
 
 export function journeyZone(env: NodeJS.ProcessEnv): string {
-  return env.OCEL_JOURNEY_ZONE?.trim() || BOX_ZONE;
+  return env.OCEL_E2E_ZONE?.trim() || BOX_ZONE;
 }
 
 export function vpsZoneOf(cell: Pick<Cell, "variant">, env: NodeJS.ProcessEnv): string {
@@ -72,7 +72,7 @@ function registryOf(cell: CellUnderTest, env: NodeJS.ProcessEnv): { registry?: R
 }
 
 function dnsOf(env: NodeJS.ProcessEnv): { dns?: "cloudflare" } {
-  return env.OCEL_JOURNEY_DNS === "cloudflare" ? { dns: "cloudflare" } : {};
+  return env.OCEL_E2E_DNS === "cloudflare" ? { dns: "cloudflare" } : {};
 }
 
 export function awsSweepOverlay(
@@ -88,7 +88,7 @@ export function overlayFor(
   target: TargetName,
   env: NodeJS.ProcessEnv,
 ): Overlay {
-  const zone = env.OCEL_JOURNEY_ZONE?.trim() || undefined;
+  const zone = env.OCEL_E2E_ZONE?.trim() || undefined;
   switch (target) {
     case "aws": {
       const variablesKey = env.OCEL_AWS_VARIABLES_KEY?.trim() || undefined;

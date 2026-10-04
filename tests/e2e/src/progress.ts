@@ -2,7 +2,7 @@ import { appendFileSync, closeSync, fstatSync, openSync, readSync } from "node:f
 import type { Readable } from "node:stream";
 import { redact } from "./checks/context";
 
-export const PROGRESS_ENV = "OCEL_JOURNEY_LIVE";
+export const PROGRESS_ENV = "OCEL_E2E_LIVE";
 
 export type Log = (line: string) => void;
 

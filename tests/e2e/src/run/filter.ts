@@ -22,54 +22,52 @@ export function concernsNamed(asked: string | undefined): Concern[] {
 }
 
 function coverageFrom(env: NodeJS.ProcessEnv): Coverage {
-  const asked = (env.OCEL_JOURNEY_COVERAGE ?? "").trim();
+  const asked = (env.OCEL_E2E_COVERAGE ?? "").trim();
   if (asked === "") {
     return "sampled";
   }
   if (!(COVERAGES as string[]).includes(asked)) {
-    throw new Error(
-      `OCEL_JOURNEY_COVERAGE is ${asked}, and a journey runs ${COVERAGES.join(" or ")}`,
-    );
+    throw new Error(`OCEL_E2E_COVERAGE is ${asked}, and a journey runs ${COVERAGES.join(" or ")}`);
   }
   return asked as Coverage;
 }
 
 function drawFrom(env: NodeJS.ProcessEnv): Draw | undefined {
-  const seed = (env.OCEL_JOURNEY_SEED ?? "").trim();
+  const seed = (env.OCEL_E2E_SEED ?? "").trim();
   if (seed === "") {
     return undefined;
   }
-  return { seed, touched: listed(env.OCEL_JOURNEY_TOUCHED, /,/) };
+  return { seed, touched: listed(env.OCEL_E2E_TOUCHED, /,/) };
 }
 
 function skipsLifted(env: NodeJS.ProcessEnv): boolean {
-  const asked = (env.OCEL_JOURNEY_SKIPS ?? "").trim();
+  const asked = (env.OCEL_E2E_SKIPS ?? "").trim();
   if (asked === "" || asked === "skip") {
     return false;
   }
   if (asked === "run") {
     return true;
   }
-  throw new Error(`OCEL_JOURNEY_SKIPS is ${asked}, and a skipped cell is either skipped or run`);
+  throw new Error(`OCEL_E2E_SKIPS is ${asked}, and a skipped cell is either skipped or run`);
 }
 
 function keepsCells(env: NodeJS.ProcessEnv): boolean {
-  const asked = (env.OCEL_JOURNEY_KEEP ?? "").trim().toLowerCase();
+  const asked = (env.OCEL_E2E_KEEP ?? "").trim().toLowerCase();
   if (asked === "") {
     return false;
   }
   if (asked === "1" || asked === "true" || asked === "yes") {
     return true;
   }
-  throw new Error(`OCEL_JOURNEY_KEEP is ${asked}, and a cell is either kept deployed or destroyed`);
+  throw new Error(`OCEL_E2E_KEEP is ${asked}, and a cell is either kept deployed or destroyed`);
 }
 
 export function filterFrom(env: NodeJS.ProcessEnv): RunFilter {
   const draw = drawFrom(env);
   return {
-    concerns: concernsNamed(env.OCEL_JOURNEY_CONCERN),
-    fixtures: listed(env.OCEL_JOURNEY_FIXTURES, /,/),
-    variants: listed(env.OCEL_JOURNEY_VARIANTS, /[\s,]+/),
+    concerns: concernsNamed(env.OCEL_E2E_CONCERN),
+    fixtures: listed(env.OCEL_E2E_FIXTURES, /,/),
+    variants: listed(env.OCEL_E2E_VARIANTS, /[\s,]+/),
     coverage: coverageFrom(env),
     ...(draw === undefined ? {} : { draw }),
     runSkipped: skipsLifted(env),

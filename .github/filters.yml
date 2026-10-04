@@ -42,7 +42,7 @@ journey:
   - "platform/**"
   - "tests/fixtures/**"
   - "tests/fronts/**"
-  - "tests/journeys/**"
+  - "tests/e2e/**"
   - "tests/shared/**"
   - "scripts/**"
   - ".goreleaser.yaml"

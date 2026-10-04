@@ -104,7 +104,7 @@ or extend a comment Signal does not allow, and delete it when you change the cod
 - The VM and emulator suites (`scripts/incus.sh`, `scripts/incus-fanout.sh`,
   `scripts/floci.sh` and the `scripts/act.sh` replays) run in CI. Run one locally only to
   reproduce a failure CI reported.
-- Suites that need cloud credentials (the `journey:real` label, the nightly run) are run by
+- Suites that need cloud credentials (the `e2e:cloud` label, the nightly run) are run by
   maintainers.
 
 ## Fix what you find
