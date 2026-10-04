@@ -49,7 +49,6 @@ as [`ocel preview`](/docs/cli/preview) resolves it, or the one `--environment` n
 | `--for <duration>` | Stop a `--tail` after this long (`30s`, `5m`). Needs `--tail`. |
 | `--level <level>` | Print only entries at this level or above: `debug`, `info`, `warn` or `error`. |
 | `--grep <text>` | Print only entries containing this text. The provider does the matching where it can. |
-| `--json` | Print one JSON object per line. The same as `--log-format json`. |
 | `--raw` | Print messages as the app sent them, without reading a level or fields out of them. |
 
 Entries print oldest first.
@@ -68,8 +67,8 @@ Every `ocel` command takes these.
 | Flag | What it does |
 | --- | --- |
 | `-c, --config <file>` | Use this project config. Default `$OCEL_CONFIG`, else the nearest `ocel.json`, `ocel.yaml`, `ocel.yml` or [TypeScript config](/docs/typescript-config). |
-| `--log-format <format>` | `human` or `json`. `json` makes `ocel logs` print as `--json` does. |
-| `-v, --verbose` | Expand every entry on a terminal and show full field values. Setting `OCEL_DEBUG` does the same. |
+| `--json` | Print machine output: `ocel logs` writes one JSON object per line, as [Agents and CI](#agents-and-ci) describes. Setting `OCEL_JSON=1` does the same. |
+| `-v, --verbose` | Expand every entry on a terminal and show full field values. Setting `OCEL_DEBUG=1` does the same. |
 
 ## Tailing
 
@@ -101,8 +100,9 @@ as entries at error level.
 
 ## Agents and CI
 
-`--json` prints one object per line, and nothing else goes to stdout. Each object's `type` says
-which of two shapes it is.
+`--json`, or `OCEL_JSON=1` in the environment, prints one object per line, and nothing else goes
+to stdout. What the run reports on stderr, such as reaching the provider, is NDJSON too. Each
+object's `type` says which of two shapes it is.
 
 An entry:
 

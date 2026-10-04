@@ -32,23 +32,26 @@ function section(heading: string) {
   return page.slice(start, end === -1 ? undefined : end);
 }
 
+function tableFlags(text: string) {
+  return [...text.matchAll(/^\| `(-[^`<]*?)(?: <[^>]+>)?` \|/gm)].map((m) => m[1]);
+}
+
 describe("the ocel logs reference page", () => {
   it("is listed in the CLI navigation", () => {
     const meta = JSON.parse(read("www/content/docs/cli/meta.json")) as { pages: string[] };
     expect(meta.pages).toContain("logs");
   });
 
-  it("documents every flag the command defines", () => {
+  it("lists exactly the flags the command defines", () => {
     const flags = flagsOf(read(sources.command), "cmd\\.Flags\\(\\)");
     expect(flags.length).toBeGreaterThanOrEqual(10);
-    for (const flag of flags) expect(page, flag).toContain(`\`${flag}`);
+    expect(tableFlags(section("Flags")).sort()).toEqual(flags.sort());
   });
 
-  it("documents every global flag the root command defines, under its own heading", () => {
+  it("lists exactly the global flags the root command defines, under their own heading", () => {
     const flags = flagsOf(read(sources.root), "rootCmd\\.PersistentFlags\\(\\)");
     expect(flags.length).toBeGreaterThanOrEqual(3);
-    const global = section("Global flags");
-    for (const flag of flags) expect(global, flag).toContain(`\`${flag}`);
+    expect(tableFlags(section("Global flags")).sort()).toEqual(flags.sort());
   });
 
   it("names every field of the JSON entry and notice objects", () => {
