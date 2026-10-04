@@ -384,10 +384,7 @@ func stream[Req any](ctx context.Context, r *Process, rpc string, req *Req, call
 
 func (r *Process) driveStream(rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
 	if callErr != nil {
-		if cancelled(callErr) {
-			return nil, fmt.Errorf("provider: %s was cancelled: %w", rpc, callErr)
-		}
-		return nil, r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, callErr))
+		return nil, r.callError(rpc, callErr)
 	}
 	defer stream.Close()
 
@@ -413,6 +410,13 @@ func (r *Process) driveStream(rpc string, stream *connect.ServerStreamForClient[
 	return nil, r.withExitStderr(fmt.Errorf("provider: provider closed the %s stream without a result", rpc))
 }
 
+func (r *Process) callError(rpc string, err error) error {
+	if cancelled(err) {
+		return fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
+	}
+	return r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, err))
+}
+
 func (r *Process) streamError(rpc string, err error, refused bool) error {
 	if cancelled(err) {
 		return fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
@@ -433,10 +437,7 @@ func (r *Process) readLogs(ctx context.Context, req *contractv1.ReadLogsRequest,
 	}
 	stream, err := client.ReadLogs(ctx, req)
 	if err != nil {
-		if cancelled(err) {
-			return fmt.Errorf("provider: ReadLogs was cancelled: %w", err)
-		}
-		return r.withExitStderr(fmt.Errorf("provider: call ReadLogs: %w", err))
+		return r.callError("ReadLogs", err)
 	}
 	defer stream.Close()
 
