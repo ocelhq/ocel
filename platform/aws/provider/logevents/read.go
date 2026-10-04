@@ -30,6 +30,7 @@ type Query struct {
 }
 
 type Event struct {
+	ID       string
 	Time     time.Time
 	Label    string
 	Instance string
@@ -125,6 +126,7 @@ func parseLoggedEvent(group logGroup, source Source, logged types.FilteredLogEve
 	if !keep {
 		return Event{}, false
 	}
+	event.ID = aws.ToString(logged.EventId)
 	event.Time = time.UnixMilli(aws.ToInt64(logged.Timestamp)).UTC()
 	event.Label = source.Label
 	event.Instance = group.parseInstance(aws.ToString(logged.LogStreamName))

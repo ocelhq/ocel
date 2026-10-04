@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -13,6 +14,7 @@ type Logs struct {
 	mu      sync.Mutex
 	entries map[string][]provider.LogEntry
 	deleted map[string]bool
+	written int
 	tails   map[*logTail]bool
 }
 
@@ -35,6 +37,10 @@ func (l *Logs) Append(physical string, entries ...provider.LogEntry) {
 		l.entries = map[string][]provider.LogEntry{}
 	}
 	for _, entry := range entries {
+		if entry.ID == "" {
+			l.written++
+			entry.ID = "fake-" + strconv.Itoa(l.written)
+		}
 		l.entries[physical] = append(l.entries[physical], entry)
 		for tail := range l.tails {
 			if matched := tail.matching(physical, []provider.LogEntry{entry}); len(matched) > 0 {

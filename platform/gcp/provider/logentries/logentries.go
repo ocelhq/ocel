@@ -26,6 +26,7 @@ type Query struct {
 }
 
 type Event struct {
+	ID       string
 	Time     time.Time
 	Label    string
 	Instance string
@@ -86,11 +87,12 @@ func eventOf(entry *logging.LogEntry, sources []Source) (Event, bool, error) {
 	if entry.Resource != nil {
 		resource = entry.Resource.Labels
 	}
-	return newEvent(sources, at, text, entry.Severity, entry.Labels, resource), true, nil
+	return newEvent(sources, entry.InsertId, at, text, entry.Severity, entry.Labels, resource), true, nil
 }
 
-func newEvent(sources []Source, at time.Time, text, severity string, labels, resource map[string]string) Event {
+func newEvent(sources []Source, id string, at time.Time, text, severity string, labels, resource map[string]string) Event {
 	event := Event{
+		ID:       id,
 		Time:     at,
 		Text:     text,
 		Instance: labels["instanceId"],

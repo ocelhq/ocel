@@ -20,7 +20,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-const httpLogSource = "http"
+const (
+	httpLogSource   = "http"
+	lateEntryWindow = 30 * time.Second
+)
 
 func (h *handlers) ReadLogs(ctx context.Context, req *contractv1.ReadLogsRequest, stream *connect.ServerStream[contractv1.ReadLogsResponse]) error {
 	p, err := h.session.use()
@@ -61,11 +64,15 @@ func (h *handlers) ReadLogs(ctx context.Context, req *contractv1.ReadLogsRequest
 	if req.GetTail() {
 		query.Until = tailFrom
 	}
-	emit := func(entries []provider.LogEntry) error { return sendLogEntries(stream, entries) }
+	history := sentLogHistory{ids: map[sentLogEntry]bool{}}
+	emitHistory := func(entries []provider.LogEntry) error {
+		history.record(entries)
+		return sendLogEntries(stream, entries)
+	}
 	notice := func(notice provider.LogNotice) error { return sendProviderNotice(stream, notice) }
 	var missing provider.LogTargetsMissing
 	if len(targets) > 0 {
-		err := p.Logs().Read(ctx, query, emit, notice)
+		err := p.Logs().Read(ctx, query, emitHistory, notice)
 		if errors.As(err, &missing) {
 			for _, target := range missing.Targets {
 				if err := sendLogNotice(stream, contractv1.LogNotice_KIND_SOURCE_GONE, sourceGoneMessage(target)); err != nil {
@@ -79,18 +86,59 @@ func (h *handlers) ReadLogs(ctx context.Context, req *contractv1.ReadLogsRequest
 	if err := sendLogNotice(stream, contractv1.LogNotice_KIND_CAUGHT_UP, ""); err != nil || !req.GetTail() {
 		return err
 	}
-	query.Tail, query.Since, query.Until = true, tailFrom, time.Time{}
+	if rewound := tailFrom.Add(-lateEntryWindow); rewound.After(query.Since) {
+		query.Since = rewound
+	}
+	query.Tail, query.Until = true, time.Time{}
+	emitTail := func(entries []provider.LogEntry) error {
+		unsent := history.unsentOf(entries, query.Limit)
+		if len(unsent) == 0 {
+			return nil
+		}
+		return sendLogEntries(stream, unsent)
+	}
 	query.Targets = slices.DeleteFunc(slices.Clone(targets), func(target provider.LogTarget) bool {
 		return slices.ContainsFunc(missing.Targets, func(gone provider.LogTarget) bool { return gone.Physical() == target.Physical() })
 	})
 	if len(query.Targets) > 0 {
-		err = p.Logs().Read(ctx, query, emit, notice)
+		err = p.Logs().Read(ctx, query, emitTail, notice)
 		if err != nil && ctx.Err() == nil {
 			return provider.RefusalError(err)
 		}
 	}
 	<-ctx.Done()
 	return nil
+}
+
+type sentLogEntry struct{ App, Source, Release, ID string }
+
+type sentLogHistory struct {
+	ids    map[sentLogEntry]bool
+	count  int
+	oldest time.Time
+}
+
+func (h *sentLogHistory) record(entries []provider.LogEntry) {
+	for _, entry := range entries {
+		h.count++
+		if h.oldest.IsZero() || entry.Time.Before(h.oldest) {
+			h.oldest = entry.Time
+		}
+		if entry.ID != "" {
+			h.ids[sentLogEntry{entry.App, entry.Source, entry.Release, entry.ID}] = true
+		}
+	}
+}
+
+func (h *sentLogHistory) unsentOf(entries []provider.LogEntry, limit int) []provider.LogEntry {
+	unsent := make([]provider.LogEntry, 0, len(entries))
+	for _, entry := range entries {
+		if h.count >= limit && entry.Time.Before(h.oldest) || entry.ID != "" && h.ids[sentLogEntry{entry.App, entry.Source, entry.Release, entry.ID}] {
+			continue
+		}
+		unsent = append(unsent, entry)
+	}
+	return unsent
 }
 
 func sourceGoneMessage(target provider.LogTarget) string {

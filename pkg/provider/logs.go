@@ -52,6 +52,7 @@ const (
 )
 
 type LogEntry struct {
+	ID       string
 	Time     time.Time
 	App      string
 	Source   string

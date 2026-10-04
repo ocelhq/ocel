@@ -53,6 +53,7 @@ func (l *loggedAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	l.filter = append(l.filter, filter.FilterPattern)
 	l.starts = append(l.starts, filter.StartTime)
 	json.NewEncoder(writer).Encode(map[string]any{"events": []map[string]any{{
+		"eventId":       "event-in-" + filter.LogGroupName,
 		"logStreamName": "2026/01/05/[$LATEST]abcdef",
 		"timestamp":     time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC).UnixMilli(),
 		"message":       "from " + filter.LogGroupName + "\n",
@@ -127,6 +128,9 @@ func TestLogsReadsEachFunctionFromItsLogGroupAndEachContainerFromTheTiersSharedG
 	}
 	if got := byGroup["/aws/lambda/web-fn"]; got.Instance != "[$LATEST]abcdef" || !got.Time.Equal(time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC)) {
 		t.Errorf("Read() carried instance %q at %s, want the Lambda version and id at the event's time", got.Instance, got.Time)
+	}
+	if got := byGroup["/aws/lambda/web-fn"].ID; got != "event-in-/aws/lambda/web-fn" {
+		t.Errorf("Read() gave the entry the ID %q, want CloudWatch's event id", got)
 	}
 }
 
@@ -238,6 +242,9 @@ func TestLogsTailsEachTargetFromItsLogGroupFromSince(t *testing.T) {
 	sources := map[string]string{}
 	for _, entry := range entries {
 		sources[entry.App] = entry.Release + "/" + entry.Source
+		if entry.ID == "" {
+			t.Errorf("the tail emitted %q with no ID, want CloudWatch's event id", entry.Message)
+		}
 	}
 	if want := map[string]string{"web": "r1/http", "api": "r2/http"}; !maps.Equal(sources, want) {
 		t.Errorf("the tail labelled its entries %v, want %v", sources, want)
