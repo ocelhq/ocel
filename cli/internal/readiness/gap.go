@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -80,7 +81,7 @@ func (g Gap) RefuseMissing(tier environmentv1.Tier) error {
 	if len(g.Missing) == 0 {
 		return nil
 	}
-	return MissingFeaturesError{Gap: g, Tier: tier}
+	return MissingFeaturesError{Gap: g, Tier: tier}.refuse()
 }
 
 type MissingFeaturesError struct {
@@ -104,6 +105,10 @@ func (e MissingFeaturesError) Finding() string {
 }
 
 func (e MissingFeaturesError) Remedy() string { return "`" + e.Gap.RepairCommand(e.Tier) + "`" }
+
+func (e MissingFeaturesError) refuse() error {
+	return &clierror.Error{Code: "bootstrap.features_missing", Hint: e.Gap.RepairCommand(e.Tier), Cause: e}
+}
 
 func (e MissingFeaturesError) BootstrapRequest() *contractv1.BootstrapRequest {
 	return e.Gap.BootstrapRequest(e.Tier, e.Edge)
