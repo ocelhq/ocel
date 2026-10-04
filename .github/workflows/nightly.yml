@@ -99,6 +99,9 @@ jobs:
 
       - name: Setup Go
         uses: ./.github/actions/go
+        with:
+          caches: modules,build
+          build-scope: binaries
 
       - uses: ./.github/actions/goreleaser
 

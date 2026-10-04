@@ -1,0 +1,32 @@
+[
+  {
+    "name": "cli",
+    "scope": "cli",
+    "dirs": "cli sdk tests/fixtures/sdk/go tests/fixtures/deploy/go/server tests/fixtures/tasks/go tests/fixtures/worker/go tests/fixtures/realtime/go scripts/redactvet",
+    "generate": "cli platform/aws/provider"
+  },
+  {
+    "name": "aws",
+    "scope": "aws",
+    "dirs": "platform/aws/provider platform/aws/runtime platform/aws/connector",
+    "generate": "platform/aws/provider"
+  },
+  {
+    "name": "gcp",
+    "scope": "gcp",
+    "dirs": "platform/gcp/provider platform/gcp/runtime platform/gcp/connector scripts/flocidispatch",
+    "generate": "platform/gcp/provider"
+  },
+  {
+    "name": "vps",
+    "scope": "vps",
+    "dirs": "platform/vps/provider platform/vps/runtime platform/vps/connector",
+    "generate": "platform/vps/provider"
+  },
+  {
+    "name": "pkg, s3, pgmq, realtime and edge",
+    "scope": "pkg",
+    "dirs": "pkg pkg/provider/pulumi platform/s3 platform/pgmq platform/realtime platform/edge/cloudflare/deploy",
+    "generate": "pkg/provider/transform platform/edge/cloudflare/deploy"
+  }
+]

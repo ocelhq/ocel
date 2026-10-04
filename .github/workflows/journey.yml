@@ -379,6 +379,9 @@ jobs:
 
       - name: Setup Go
         uses: ./.github/actions/go
+        with:
+          caches: modules,build
+          build-scope: binaries
 
       - name: Build and test the workspace
         run: pnpm turbo run build test --filter='!./console/*' --filter='!./tests/fixtures/**' --filter='!./tests/next-compat'
@@ -1243,6 +1246,9 @@ jobs:
 
       - name: Setup Go
         uses: ./.github/actions/go
+        with:
+          caches: modules,build
+          build-scope: binaries
 
       - uses: ./.github/actions/goreleaser
 

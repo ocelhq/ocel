@@ -23,6 +23,7 @@ go:
   - "scripts/redactvet/**"
   - ".golangci.yml"
   - ".github/workflows/go.yml"
+  - ".github/go-groups.json"
   - ".github/actions/go/**"
   - ".github/actions/node-workspace/**"
   - ".github/actions/suite-gate/**"

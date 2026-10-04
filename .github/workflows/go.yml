@@ -15,39 +15,48 @@ env:
   OCEL_VPS_OFFICIAL_IMAGES_MIRROR: mirror.gcr.io/library
 
 jobs:
+  groups:
+    name: groups
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      groups: ${{ steps.read.outputs.groups }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Read the groups the modules are split into
+        id: read
+        run: echo "groups=$(jq -c . .github/go-groups.json)" >> "$GITHUB_OUTPUT"
+
   go:
     name: ${{ matrix.group.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    needs: groups
     strategy:
       fail-fast: false
       matrix:
-        group:
-          - name: cli
-            dirs: cli sdk tests/fixtures/sdk/go tests/fixtures/deploy/go/server tests/fixtures/tasks/go tests/fixtures/worker/go tests/fixtures/realtime/go scripts/redactvet
-          - name: aws
-            dirs: platform/aws/provider platform/aws/runtime platform/aws/connector
-          - name: gcp
-            dirs: platform/gcp/provider platform/gcp/runtime platform/gcp/connector scripts/flocidispatch
-          - name: vps
-            dirs: platform/vps/provider platform/vps/runtime platform/vps/connector
-          - name: pkg, s3, pgmq, realtime and edge
-            dirs: pkg pkg/provider/pulumi platform/s3 platform/pgmq platform/realtime platform/edge/cloudflare/deploy
+        group: ${{ fromJSON(needs.groups.outputs.groups) }}
     env:
       DIRS: ${{ matrix.group.dirs }}
+      GENERATE: ${{ matrix.group.generate }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Go
         uses: ./.github/actions/go
+        with:
+          caches: modules,build
+          build-scope: ${{ matrix.group.scope }}
 
-      - name: The matrix names every go.work module, and nothing else
+      - name: The groups name every go.work module, and nothing else
         if: matrix.group.name == 'cli'
         run: |
           set -euo pipefail
           diff -u \
-            <(sed -n 's/^ *dirs: //p' .github/workflows/go.yml | tr ' ' '\n' | sort) \
+            <(jq -r '.[].dirs' .github/go-groups.json | tr ' ' '\n' | sort) \
             <(go list -m -f '{{.Dir}}' | sed "s|^$PWD/||" | sort)
 
       - uses: ./.github/actions/node-workspace
@@ -104,29 +113,12 @@ jobs:
         if: matrix.group.name == 'cli'
         run: pnpm turbo run build --filter=ocel
 
-      - name: go generate (embedded dist)
-        if: matrix.group.name == 'cli'
-        run: go generate -C cli ./...
-
-      - name: go generate (provider payloads the cli tests build)
-        if: matrix.group.name == 'cli' || matrix.group.name == 'aws'
-        run: go generate -C platform/aws/provider ./...
-
-      - name: go generate (the gcp provider's embedded runtime)
-        if: matrix.group.name == 'gcp'
-        run: go generate -C platform/gcp/provider ./...
-
-      - name: go generate (the vps provider's embedded dist)
-        if: matrix.group.name == 'vps'
-        run: go generate -C platform/vps/provider ./...
-
-      - name: go generate (the transform runner pkg embeds)
-        if: matrix.group.name == 'pkg, s3, pgmq, realtime and edge'
-        run: go generate -C pkg/provider/transform ./...
-
-      - name: go generate (the worker bundles the cloudflare edge embeds)
-        if: matrix.group.name == 'pkg, s3, pgmq, realtime and edge'
-        run: go generate -C platform/edge/cloudflare/deploy ./...
+      - name: go generate, what the group's modules embed
+        run: |
+          set -euo pipefail
+          for dir in $GENERATE; do
+            go generate -C "$dir" ./...
+          done
 
       - name: go build
         run: |

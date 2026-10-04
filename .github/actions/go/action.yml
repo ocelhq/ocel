@@ -1,26 +1,55 @@
 name: go
 description: >-
-  Go at the version go.work pins, with the build, module and lint caches the
-  warm workflow seeds from main put back. Nothing here saves: a cache a pull
-  request saved only that pull request could read, and it would evict the one
-  every ref shares.
+  Go at the version go.work pins, with the module, build and lint caches the
+  job asks for put back from the ones the warm workflow seeds from main. Each
+  cache has a key of its own, so a job extracts only what it reads. Nothing
+  here saves: a cache a pull request saved only that pull request could read,
+  and it would evict the ones every ref shares.
 
 inputs:
   go-version-file:
     description: The file whose go directive names the version.
     required: false
     default: go.work
+  caches:
+    description: >-
+      Which caches to restore, comma separated: modules (GOMODCACHE), build
+      (GOCACHE, needs build-scope) and lint (golangci-lint's). Empty restores none.
+    required: false
+    default: modules
+  build-scope:
+    description: Whose compiled packages the build cache holds, named by the work that fills it.
+    required: false
+    default: ""
 
 outputs:
-  key:
-    description: The key the warm workflow saves the caches under for this commit.
-    value: ${{ steps.paths.outputs.key }}
-  prefix:
-    description: What every key the warm workflow saves starts with, for this Go.
-    value: ${{ steps.paths.outputs.prefix }}
-  paths:
-    description: The directories the caches save, one per line.
-    value: ${{ steps.paths.outputs.paths }}
+  modules-key:
+    description: The key the warm workflow saves the module cache under.
+    value: ${{ steps.names.outputs.modules-key }}
+  modules-prefix:
+    description: What every module cache key starts with, for this Go.
+    value: ${{ steps.names.outputs.modules-prefix }}
+  modules-path:
+    description: The directory the module cache saves.
+    value: ${{ steps.names.outputs.modules-path }}
+  build-key:
+    description: The key the warm workflow saves the build cache of this scope under.
+    value: ${{ steps.names.outputs.build-key }}
+  build-prefix:
+    description: What every build cache key of this scope starts with, for this Go.
+    value: ${{ steps.names.outputs.build-prefix }}
+  build-path:
+    description: The directory the build cache saves.
+    value: ${{ steps.names.outputs.build-path }}
+  lint-key:
+    description: The key the warm workflow saves the lint cache under.
+    value: ${{ steps.names.outputs.lint-key }}
+  lint-prefix:
+    description: What every lint cache key starts with, for this Go.
+    value: ${{ steps.names.outputs.lint-prefix }}
+  lint-path:
+    description: The directory the lint cache saves.
+    value: ${{ steps.names.outputs.lint-path }}
 
 runs:
   using: composite
@@ -39,23 +68,55 @@ runs:
       run: echo "GORACE=${GORACE:+$GORACE }atexit_sleep_ms=0" >> "$GITHUB_ENV"
 
     - name: Name the caches
-      id: paths
+      id: names
       shell: bash
+      env:
+        CACHES: ${{ inputs.caches }}
+        SCOPE: ${{ inputs.build-scope }}
       run: |
         set -euo pipefail
-        prefix="go-$RUNNER_OS-$RUNNER_ARCH-$(go env GOVERSION)-"
+        sums=$(find . \( -name node_modules -o -name .git \) -prune -o \( -name go.sum -o -name go.work.sum \) -print | sort | xargs sha256sum | sha256sum)
+        base="$RUNNER_OS-$RUNNER_ARCH-$(go env GOVERSION)-"
+        wants() { [[ ",${CACHES// /}," == *",$1,"* ]]; }
+        if wants build && [ -z "$SCOPE" ]; then
+          echo "::error::caches names build, and build-scope names no scope"
+          exit 1
+        fi
         {
-          echo "prefix=$prefix"
-          echo "key=$prefix$GITHUB_SHA"
-          echo "paths<<GO_CACHE_PATHS"
-          go env GOCACHE
-          go env GOMODCACHE
-          echo "$HOME/.cache/golangci-lint"
-          echo "GO_CACHE_PATHS"
+          for name in modules build lint; do
+            if wants "$name"; then echo "$name=true"; else echo "$name=false"; fi
+          done
+          echo "modules-prefix=go-modules-$base"
+          echo "modules-key=go-modules-$base${sums%% *}"
+          echo "modules-path=$(go env GOMODCACHE)"
+          echo "build-prefix=go-build-$SCOPE-$base"
+          echo "build-key=go-build-$SCOPE-$base$GITHUB_SHA"
+          echo "build-path=$(go env GOCACHE)"
+          echo "lint-prefix=go-lint-$base"
+          echo "lint-key=go-lint-$base$GITHUB_SHA"
+          echo "lint-path=$HOME/.cache/golangci-lint"
         } >> "$GITHUB_OUTPUT"
 
-    - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+    - name: The modules main last downloaded
+      if: steps.names.outputs.modules == 'true'
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
-        path: ${{ steps.paths.outputs.paths }}
-        key: ${{ steps.paths.outputs.key }}
-        restore-keys: ${{ steps.paths.outputs.prefix }}
+        path: ${{ steps.names.outputs.modules-path }}
+        key: ${{ steps.names.outputs.modules-key }}
+        restore-keys: ${{ steps.names.outputs.modules-prefix }}
+
+    - name: The packages main last compiled for this scope
+      if: steps.names.outputs.build == 'true'
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.names.outputs.build-path }}
+        key: ${{ steps.names.outputs.build-key }}
+        restore-keys: ${{ steps.names.outputs.build-prefix }}
+
+    - name: What main's golangci-lint last analysed
+      if: steps.names.outputs.lint == 'true'
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ steps.names.outputs.lint-path }}
+        key: ${{ steps.names.outputs.lint-key }}
+        restore-keys: ${{ steps.names.outputs.lint-prefix }}
