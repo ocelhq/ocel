@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { selectGoModules, selectSetup, touches } from "./selection.mjs";
+import { derivesFrom, selectGoModules, selectSetup, touches } from "./selection.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const UPSTREAM = "origin/main";
@@ -107,6 +107,15 @@ function checkJS(changed, base) {
       ...present,
     ]);
   }
+  const excluded = ["!./console/*", "!./tests/fixtures/**", "!./tests/next-compat"];
+  run([
+    "pnpm",
+    "turbo",
+    "run",
+    "typecheck",
+    `--filter=...[${base}]`,
+    ...excluded.map((pattern) => `--filter=${pattern}`),
+  ]);
   run(["pnpm", "turbo", "run", "test", `--filter=...[${base}]`]);
 }
 
@@ -114,13 +123,29 @@ function checkPython(changed) {
   if (!touches(changed, "python")) return;
   console.log("python: changed");
   run(["uv", "sync", "--all-extras"], "python");
+  run(["uv", "run", "ruff", "check", "."], "python");
+  run(["uv", "run", "ruff", "format", "--check", "."], "python");
   run(["uv", "run", "pytest", "-q"], "python");
 }
 
 function checkCrates(changed) {
   if (!touches(changed, "crates")) return;
   console.log("crates: changed");
+  run(["cargo", "fmt", "--all", "--check"], "crates");
+  run(["cargo", "clippy", "--all-features", "--all-targets", "--", "-D", "warnings"], "crates");
   run(["cargo", "test", "--all-features"], "crates");
+}
+
+function checkWorkflows(changed) {
+  if (!touches(changed, ".github")) return;
+  console.log("workflows: changed");
+  run(["actionlint", "-shellcheck=", "-pyflakes="]);
+}
+
+function checkDerived(changed) {
+  if (!derivesFrom(changed)) return;
+  console.log("derived files: a source changed");
+  run(["scripts/check/derived.sh"]);
 }
 
 const base = read("git", ["merge-base", "HEAD", UPSTREAM]);
@@ -134,6 +159,8 @@ checkGo(changed);
 checkJS(changed, base);
 checkPython(changed);
 checkCrates(changed);
+checkWorkflows(changed);
+checkDerived(changed);
 
 if (failed.length > 0) {
   console.error(`\ncheck: ${failed.length} failed:`);

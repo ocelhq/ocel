@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { selectGoModules, selectSetup, touches } from "./selection.mjs";
+import { derivesFrom, selectGoModules, selectSetup, touches } from "./selection.mjs";
 
 const modules = [
   {
@@ -110,5 +110,43 @@ describe("touches", () => {
   it("is false for a sibling whose name only starts the same", () => {
     assert.equal(touches(["pythonic/x.py", "crates.md"], "python"), false);
     assert.equal(touches(["crates.md"], "crates"), false);
+  });
+});
+
+describe("derivesFrom", () => {
+  it("is true for each source a derived file is written from", () => {
+    for (const file of [
+      "proto/app/v1/app.proto",
+      "proto/buf.gen.yaml",
+      "VERSION",
+      "pkg/configdoc/schema.core.json",
+      "platform/aws/provider/schema.provider.json",
+      "platform/edge/cloudflare/schema.edge.json",
+      "scripts/schema/build.mjs",
+      "scripts/check/derived.sh",
+      "package.json",
+      "LICENSE",
+      "NOTICE",
+      "sdk/LICENSE",
+      "sdk/NOTICE",
+    ]) {
+      assert.equal(derivesFrom([file]), true, file);
+    }
+  });
+
+  it("is true for a derived file itself, which no one edits by hand", () => {
+    for (const file of [
+      "pkg/proto/app/v1/app.pb.go",
+      "pkg/configdoc/selectors.json",
+      "www/public/schema/0.1.0/ocel.schema.json",
+      "packages/ocel/src/generated/config.ts",
+    ]) {
+      assert.equal(derivesFrom([file]), true, file);
+    }
+  });
+
+  it("is false for files nothing derives from", () => {
+    assert.equal(derivesFrom(["cli/main.go", "README.md", "packages/ocel/package.json"]), false);
+    assert.equal(derivesFrom(["protocol/notes.md", "platform/aws/provider/main.go"]), false);
   });
 });
