@@ -582,6 +582,7 @@ type RunSummary struct {
 	Tier          v11.Tier               `protobuf:"varint,13,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Origin        *Party                 `protobuf:"bytes,14,opt,name=origin,proto3" json:"origin,omitempty"`
 	PromotionId   string                 `protobuf:"bytes,15,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	Error         *RunError              `protobuf:"bytes,16,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -714,6 +715,89 @@ func (x *RunSummary) GetPromotionId() string {
 	return ""
 }
 
+func (x *RunSummary) GetError() *RunError {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+type RunError struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Hint          *string                `protobuf:"bytes,3,opt,name=hint,proto3,oneof" json:"hint,omitempty"`
+	DocsUrl       *string                `protobuf:"bytes,4,opt,name=docs_url,json=docsUrl,proto3,oneof" json:"docs_url,omitempty"`
+	Retryable     bool                   `protobuf:"varint,5,opt,name=retryable,proto3" json:"retryable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunError) Reset() {
+	*x = RunError{}
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunError) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunError) ProtoMessage() {}
+
+func (x *RunError) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunError.ProtoReflect.Descriptor instead.
+func (*RunError) Descriptor() ([]byte, []int) {
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RunError) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *RunError) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *RunError) GetHint() string {
+	if x != nil && x.Hint != nil {
+		return *x.Hint
+	}
+	return ""
+}
+
+func (x *RunError) GetDocsUrl() string {
+	if x != nil && x.DocsUrl != nil {
+		return *x.DocsUrl
+	}
+	return ""
+}
+
+func (x *RunError) GetRetryable() bool {
+	if x != nil {
+		return x.Retryable
+	}
+	return false
+}
+
 var File_cli_stream_v1_stream_proto protoreflect.FileDescriptor
 
 const file_cli_stream_v1_stream_proto_rawDesc = "" +
@@ -753,7 +837,7 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"&\n" +
 	"\fResumedEvent\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xaf\x04\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xde\x04\n" +
 	"\n" +
 	"RunSummary\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
@@ -771,7 +855,16 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x0echange_started\x18\f \x01(\bR\rchangeStarted\x12/\n" +
 	"\x04tier\x18\r \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12,\n" +
 	"\x06origin\x18\x0e \x01(\v2\x14.cli.stream.v1.PartyR\x06origin\x12!\n" +
-	"\fpromotion_id\x18\x0f \x01(\tR\vpromotionIdB9Z7github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1b\x06proto3"
+	"\fpromotion_id\x18\x0f \x01(\tR\vpromotionId\x12-\n" +
+	"\x05error\x18\x10 \x01(\v2\x17.cli.stream.v1.RunErrorR\x05error\"\xd3\x01\n" +
+	"\bRunError\x12@\n" +
+	"\x04code\x18\x01 \x01(\tB,\xbaH)r'2%^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$R\x04code\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x17\n" +
+	"\x04hint\x18\x03 \x01(\tH\x00R\x04hint\x88\x01\x01\x12\x1e\n" +
+	"\bdocs_url\x18\x04 \x01(\tH\x01R\adocsUrl\x88\x01\x01\x12\x1c\n" +
+	"\tretryable\x18\x05 \x01(\bR\tretryableB\a\n" +
+	"\x05_hintB\v\n" +
+	"\t_docs_urlB9Z7github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1b\x06proto3"
 
 var (
 	file_cli_stream_v1_stream_proto_rawDescOnce sync.Once
@@ -785,7 +878,7 @@ func file_cli_stream_v1_stream_proto_rawDescGZIP() []byte {
 	return file_cli_stream_v1_stream_proto_rawDescData
 }
 
-var file_cli_stream_v1_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_cli_stream_v1_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*RunEvent)(nil),          // 0: cli.stream.v1.RunEvent
 	(*IdentityEvent)(nil),     // 1: cli.stream.v1.IdentityEvent
@@ -796,33 +889,35 @@ var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*MissingGroup)(nil),      // 6: cli.stream.v1.MissingGroup
 	(*ResumedEvent)(nil),      // 7: cli.stream.v1.ResumedEvent
 	(*RunSummary)(nil),        // 8: cli.stream.v1.RunSummary
-	(*v1.OperationEvent)(nil), // 9: common.progress.v1.OperationEvent
-	(v11.Tier)(0),             // 10: common.environment.v1.Tier
-	(*v1.Propagation)(nil),    // 11: common.progress.v1.Propagation
-	(*v1.AppResult)(nil),      // 12: common.progress.v1.AppResult
+	(*RunError)(nil),          // 9: cli.stream.v1.RunError
+	(*v1.OperationEvent)(nil), // 10: common.progress.v1.OperationEvent
+	(v11.Tier)(0),             // 11: common.environment.v1.Tier
+	(*v1.Propagation)(nil),    // 12: common.progress.v1.Propagation
+	(*v1.AppResult)(nil),      // 13: common.progress.v1.AppResult
 }
 var file_cli_stream_v1_stream_proto_depIdxs = []int32{
-	9,  // 0: cli.stream.v1.RunEvent.operation:type_name -> common.progress.v1.OperationEvent
+	10, // 0: cli.stream.v1.RunEvent.operation:type_name -> common.progress.v1.OperationEvent
 	3,  // 1: cli.stream.v1.RunEvent.waiting:type_name -> cli.stream.v1.WaitingEvent
 	7,  // 2: cli.stream.v1.RunEvent.resumed:type_name -> cli.stream.v1.ResumedEvent
 	8,  // 3: cli.stream.v1.RunEvent.summary:type_name -> cli.stream.v1.RunSummary
 	1,  // 4: cli.stream.v1.RunEvent.identity:type_name -> cli.stream.v1.IdentityEvent
-	10, // 5: cli.stream.v1.IdentityEvent.tier:type_name -> common.environment.v1.Tier
+	11, // 5: cli.stream.v1.IdentityEvent.tier:type_name -> common.environment.v1.Tier
 	2,  // 6: cli.stream.v1.IdentityEvent.origin:type_name -> cli.stream.v1.Party
 	2,  // 7: cli.stream.v1.IdentityEvent.edge:type_name -> cli.stream.v1.Party
 	4,  // 8: cli.stream.v1.WaitingEvent.missing:type_name -> cli.stream.v1.MissingVariables
 	5,  // 9: cli.stream.v1.MissingVariables.cells:type_name -> cli.stream.v1.MissingVariable
 	6,  // 10: cli.stream.v1.MissingVariables.groups:type_name -> cli.stream.v1.MissingGroup
-	11, // 11: cli.stream.v1.RunSummary.propagation:type_name -> common.progress.v1.Propagation
-	12, // 12: cli.stream.v1.RunSummary.apps:type_name -> common.progress.v1.AppResult
+	12, // 11: cli.stream.v1.RunSummary.propagation:type_name -> common.progress.v1.Propagation
+	13, // 12: cli.stream.v1.RunSummary.apps:type_name -> common.progress.v1.AppResult
 	4,  // 13: cli.stream.v1.RunSummary.missing:type_name -> cli.stream.v1.MissingVariables
-	10, // 14: cli.stream.v1.RunSummary.tier:type_name -> common.environment.v1.Tier
+	11, // 14: cli.stream.v1.RunSummary.tier:type_name -> common.environment.v1.Tier
 	2,  // 15: cli.stream.v1.RunSummary.origin:type_name -> cli.stream.v1.Party
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	9,  // 16: cli.stream.v1.RunSummary.error:type_name -> cli.stream.v1.RunError
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_cli_stream_v1_stream_proto_init() }
@@ -836,13 +931,14 @@ func file_cli_stream_v1_stream_proto_init() {
 		(*RunEvent_Summary)(nil),
 		(*RunEvent_Identity)(nil),
 	}
+	file_cli_stream_v1_stream_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_stream_v1_stream_proto_rawDesc), len(file_cli_stream_v1_stream_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
