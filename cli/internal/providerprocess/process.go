@@ -18,6 +18,7 @@ import (
 	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -38,6 +39,8 @@ const DefaultGracePeriod = 2 * time.Second
 const DefaultReapTimeout = 2 * time.Second
 
 const MaxMessageBytes = 128 << 20
+
+const unavailableCode = "provider.unavailable"
 
 type LaunchSpec struct {
 	BinaryPath      string
@@ -168,7 +171,7 @@ func Spawn(ctx context.Context, spec LaunchSpec) (*Process, error) {
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("provider: spawn provider %q: %w", spec.BinaryPath, err)
+		return nil, &clierror.Error{Code: unavailableCode, Cause: fmt.Errorf("provider: spawn provider %q: %w", spec.BinaryPath, err)}
 	}
 
 	r := &Process{
@@ -261,9 +264,9 @@ func (r *Process) Ready(ctx context.Context) error {
 		r.stderrMu.Lock()
 		stderr := r.stderrBuf.String()
 		r.stderrMu.Unlock()
-		return &EarlyExitError{Err: r.waitErr, Stderr: stderr}
+		return &clierror.Error{Code: unavailableCode, Cause: &EarlyExitError{Err: r.waitErr, Stderr: stderr}}
 	case <-timer.C:
-		return &ReadyTimeoutError{Timeout: r.readyTimeout}
+		return &clierror.Error{Code: unavailableCode, Cause: &ReadyTimeoutError{Timeout: r.readyTimeout}}
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -271,10 +274,10 @@ func (r *Process) Ready(ctx context.Context) error {
 
 func (r *Process) open(ctx context.Context, ready localrpc.Readiness) error {
 	if ready.Version != version.Version {
-		return &VersionMismatchError{Name: r.providerName, Announced: ready.Version, Expected: version.Version}
+		return &clierror.Error{Code: "provider.version_mismatch", Cause: &VersionMismatchError{Name: r.providerName, Announced: ready.Version, Expected: version.Version}}
 	}
 	if err := r.dial(ready); err != nil {
-		return err
+		return &clierror.Error{Code: unavailableCode, Cause: err}
 	}
 	return r.configure(ctx)
 }
@@ -601,7 +604,7 @@ func (r *Process) drainStdout(stdout io.Reader) {
 		r.record(wrapped.Error())
 		if !ready {
 			select {
-			case r.scanErr <- wrapped:
+			case r.scanErr <- &clierror.Error{Code: unavailableCode, Cause: wrapped}:
 			default:
 			}
 		}

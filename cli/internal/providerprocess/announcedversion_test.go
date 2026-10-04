@@ -3,9 +3,13 @@ package providerprocess
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
@@ -45,5 +49,23 @@ func TestAProviderOfThisVersionIsAccepted(t *testing.T) {
 	process, _ := spawnFake(t, context.Background(), "", LaunchSpec{})
 	if err := process.Ready(context.Background()); err != nil {
 		t.Fatalf("Ready() error = %v, want the provider of this CLI's own version accepted", err)
+	}
+}
+
+func TestAProviderOfAnotherVersionReportsProviderVersionMismatchThroughWrapping(t *testing.T) {
+	t.Parallel()
+
+	process, _ := spawnFake(t, context.Background(), "", LaunchSpec{
+		Env: []string{fakeProviderVersionEnvVar + "=9.9.9-from-another-release"},
+	})
+
+	err := process.Ready(context.Background())
+
+	got := clierror.NewRunError(fmt.Errorf("deploy: %w", fmt.Errorf("opening provider: %w", err)))
+	if got.GetCode() != "provider.version_mismatch" {
+		t.Fatalf("run error = %s, want provider.version_mismatch", protojson.Format(got))
+	}
+	if !strings.Contains(got.GetMessage(), "9.9.9-from-another-release") || !strings.Contains(got.GetMessage(), version.Version) {
+		t.Errorf("message = %q, want both versions named", got.GetMessage())
 	}
 }
