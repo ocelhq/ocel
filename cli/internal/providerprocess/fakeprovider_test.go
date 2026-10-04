@@ -70,6 +70,14 @@ func runFakeProvider() int {
 		return 7
 	case "never-ready":
 		select {}
+	case "unreachable-address":
+		identity, err := localrpc.NewIdentity()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "fake provider: identity:", err)
+			return 1
+		}
+		fmt.Println(localrpc.FormatReadinessLine(fakeProviderVersion(), "tcp:nowhere", identity.CertificateDER()))
+		select {}
 	case "oversized-line":
 		os.Stdout.Write(bytes.Repeat([]byte("x"), 2*1024*1024))
 		fmt.Println()

@@ -15,9 +15,11 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -745,4 +747,87 @@ func init() {
 func streamed[Req any](ctx context.Context, r *Process, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) error {
 	_, err := stream(ctx, r, rpc, req, call, onEvent)
 	return err
+}
+
+func TestAProviderThatExitsBeforeItIsReadyReportsProviderUnavailable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	r, _ := spawnFake(t, ctx, "exit-before-ready", LaunchSpec{ReadyTimeout: 5 * time.Second})
+
+	err := r.Ready(ctx)
+
+	got := clierror.NewRunError(fmt.Errorf("deploy: %w", err))
+	if got.GetCode() != "provider.unavailable" {
+		t.Fatalf("run error = %s, want provider.unavailable", protojson.Format(got))
+	}
+	var earlyExit *EarlyExitError
+	if !errors.As(err, &earlyExit) || earlyExit.Stderr == "" {
+		t.Errorf("Ready() error = %v, want the early exit and its stderr still found through the code", err)
+	}
+}
+
+func TestAProviderThatNeverBecomesReadyReportsProviderUnavailable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	r, _ := spawnFake(t, ctx, "never-ready", LaunchSpec{ReadyTimeout: 150 * time.Millisecond})
+	t.Cleanup(r.Close)
+
+	err := r.Ready(ctx)
+
+	got := clierror.NewRunError(fmt.Errorf("deploy: %w", err))
+	if got.GetCode() != "provider.unavailable" {
+		t.Fatalf("run error = %s, want provider.unavailable", protojson.Format(got))
+	}
+	var timeout *ReadyTimeoutError
+	if !errors.As(err, &timeout) {
+		t.Errorf("Ready() error = %v, want the timeout still found through the code", err)
+	}
+}
+
+func TestAProviderWhoseStdoutBreaksBeforeItIsReadyReportsProviderUnavailable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	r, _ := spawnFake(t, ctx, "oversized-line", LaunchSpec{ReadyTimeout: 10 * time.Second})
+
+	err := r.Ready(ctx)
+
+	if got := clierror.NewRunError(fmt.Errorf("deploy: %w", err)); got.GetCode() != "provider.unavailable" {
+		t.Fatalf("run error = %s, want provider.unavailable", protojson.Format(got))
+	}
+	if !strings.Contains(err.Error(), "read provider stdout") {
+		t.Errorf("Ready() error = %q, want the unreadable stdout named as before", err)
+	}
+}
+
+func TestAProviderAnnouncingAnAddressItCannotBeReachedAtReportsProviderUnavailable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	r, _ := spawnFake(t, ctx, "unreachable-address", LaunchSpec{ReadyTimeout: 5 * time.Second})
+
+	err := r.Ready(ctx)
+
+	if got := clierror.NewRunError(fmt.Errorf("deploy: %w", err)); got.GetCode() != "provider.unavailable" {
+		t.Fatalf("run error = %s, want provider.unavailable", protojson.Format(got))
+	}
+	if !strings.Contains(err.Error(), "tcp:nowhere") {
+		t.Errorf("Ready() error = %q, want it to name the address announced", err)
+	}
+}
+
+func TestAProviderBinaryThatCannotStartReportsProviderUnavailable(t *testing.T) {
+	t.Parallel()
+
+	missing := filepath.Join(t.TempDir(), "ocel-provider-absent")
+	_, err := Spawn(context.Background(), LaunchSpec{BinaryPath: missing})
+
+	if got := clierror.NewRunError(fmt.Errorf("spawn provider: %w", err)); got.GetCode() != "provider.unavailable" {
+		t.Fatalf("run error = %s, want provider.unavailable", protojson.Format(got))
+	}
+	if !strings.Contains(err.Error(), missing) {
+		t.Errorf("Spawn() error = %q, want it to name the binary", err)
+	}
 }
