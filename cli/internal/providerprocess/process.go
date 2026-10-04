@@ -424,7 +424,7 @@ func (r *Process) streamError(rpc string, err error, refused bool) error {
 	if _, named := provider.RefusedCode(err); refused || named {
 		return fmt.Errorf("provider: call %s: %w", rpc, err)
 	}
-	if connect.CodeOf(err) == connect.CodeInvalidArgument {
+	if connect.IsWireError(err) {
 		return r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, err))
 	}
 	return r.withExitStderr(fmt.Errorf("provider: provider connection lost: %w", err))
