@@ -74,6 +74,12 @@ func Stream[Req any](ctx context.Context, p *Provider, rpc string, req *Req, cal
 	return forward(ctx, p, rpc, req, call, p.span.Forward)
 }
 
+func ReadLogs(ctx context.Context, p *Provider, req *contractv1.ReadLogsRequest, onResponse func(*contractv1.ReadLogsResponse) error) error {
+	return p.callAnswering(ctx, func(r *Process) error {
+		return r.readLogs(ctx, req, onResponse)
+	})
+}
+
 func Plan[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req]) (*planv1.ChangePlan, error) {
 	var plan *planv1.ChangePlan
 	_, err := forward(ctx, p, rpc, req, call, func(event *progressv1.OperationEvent) {
