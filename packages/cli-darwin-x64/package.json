@@ -1,6 +1,6 @@
 {
   "name": "@ocel/cli-darwin-x64",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "The ocel binary for darwin-x64",
   "os": [
     "darwin"

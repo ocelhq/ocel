@@ -36,7 +36,7 @@ Name it in `ocel.json`:
 
 ```json
 {
-  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
   "slug": "shop",
   "provider": "aws",
   "bindings": { "postgres": { "orders": "@orders" } },

@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 
 [manifest]
@@ -259,7 +259,7 @@ wheels = [
 
 [[package]]
 name = "ocel"
-version = "0.0.0"
+version = "0.0.1"
 source = { editable = "ocel" }
 dependencies = [
     { name = "connectrpc" },
