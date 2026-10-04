@@ -19,7 +19,7 @@ axum = ["dep:axum"]
 realtime = ["dep:base64", "dep:boon", "dep:ring"]
 
 [dependencies]
-ocel-macros = { path = "../ocel-macros", version = "0.0.0" }
+ocel-macros = { path = "../ocel-macros", version = "0.0.1" }
 buffa = { version = "0.9", features = ["json"] }
 buffa-types = { version = "0.9", features = ["json"] }
 bytes = "1"
