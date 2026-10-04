@@ -1,0 +1,16 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.md",
+        "$TURBO_ROOT$/cli/internal/commands/logs/logs.go",
+        "$TURBO_ROOT$/cli/internal/commands/logs/output.go",
+        "$TURBO_ROOT$/cli/internal/commands/root/root.go",
+        "$TURBO_ROOT$/platform/vps/provider/host/containers.go"
+      ]
+    }
+  }
+}

@@ -13,6 +13,7 @@
     "preview",
     "deployments",
     "rollback",
+    "logs",
     "destroy",
     "---Configure---",
     "env",
