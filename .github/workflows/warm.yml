@@ -174,7 +174,7 @@ jobs:
 
       - uses: ./.github/actions/goreleaser
 
-      - name: The snapshot binaries a journey, a preview and a deploy build
+      - name: The snapshot binaries the Build workflow, a preview and a deploy build
         run: node scripts/snapshot.mjs
 
       - name: Save the build cache

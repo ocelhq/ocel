@@ -1,0 +1,61 @@
+name: binaries
+description: >-
+  What the Build workflow's Binaries job uploaded, put back in the tree: the
+  snapshot CLI under dist/e2e, the providers of its version under
+  dist/providers, and the node bundles of ocel, @ocel/transforms, @ocel/sst
+  and @ocel/pulumi under their dist directories. A job that does its own slow
+  setup first waits here for the upload, and fails as soon as the Binaries job
+  of its run has failed instead. OCEL_BIN and OCEL_PROVIDERS_DIR name what it
+  put back. The job needs actions: read.
+
+inputs:
+  timeout-minutes:
+    description: How long to wait for the upload before giving up.
+    default: "30"
+
+runs:
+  using: composite
+  steps:
+    - name: Wait until this run's Binaries job has uploaded them
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        LIMIT: ${{ inputs.timeout-minutes }}
+      run: |
+        set -euo pipefail
+        deadline=$((SECONDS + LIMIT * 60))
+        while :; do
+          uploaded=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=binaries" --jq '.total_count' || echo 0)
+          if [ "$uploaded" != 0 ]; then
+            echo "the binaries are uploaded"
+            exit 0
+          fi
+          ended=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" --paginate \
+            --jq '.jobs[] | select(.name | endswith("Binaries")) | select(.status == "completed" and .conclusion != "success") | .conclusion' || true)
+          if [ -n "$ended" ]; then
+            echo "::error::the Binaries job of this run ended $ended, so there is nothing to wait for"
+            exit 1
+          fi
+          if [ "$SECONDS" -ge "$deadline" ]; then
+            echo "::error::no binaries were uploaded within $LIMIT minutes"
+            exit 1
+          fi
+          sleep 15
+        done
+
+    - name: Download them
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      with:
+        name: binaries
+        path: .
+
+    - name: Give them back the bit the artifact dropped
+      shell: bash
+      run: |
+        set -euo pipefail
+        chmod +x dist/e2e/ocel
+        find dist/providers -type f -exec chmod +x {} +
+        {
+          echo "OCEL_BIN=$GITHUB_WORKSPACE/dist/e2e/ocel"
+          echo "OCEL_PROVIDERS_DIR=$GITHUB_WORKSPACE/dist/providers"
+        } >> "$GITHUB_ENV"

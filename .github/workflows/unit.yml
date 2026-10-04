@@ -1,0 +1,223 @@
+name: Unit Tests
+
+on:
+  workflow_call:
+    inputs:
+      go:
+        description: Whether a change reaches the Go modules.
+        type: boolean
+        default: true
+      python:
+        description: Whether a change reaches the Python packages.
+        type: boolean
+        default: true
+      rust:
+        description: Whether a change reaches the Rust crates.
+        type: boolean
+        default: true
+  workflow_dispatch:
+    inputs:
+      go:
+        description: Whether a change reaches the Go modules.
+        type: boolean
+        default: true
+      python:
+        description: Whether a change reaches the Python packages.
+        type: boolean
+        default: true
+      rust:
+        description: Whether a change reaches the Rust crates.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  groups:
+    name: Go groups
+    if: inputs.go
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      groups: ${{ steps.read.outputs.groups }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Read the groups the modules are split into
+        id: read
+        run: echo "groups=$(jq -c . .github/go-groups.json)" >> "$GITHUB_OUTPUT"
+
+  go:
+    name: Go (${{ matrix.group.scope }})
+    needs: groups
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.groups.outputs.groups) }}
+    env:
+      DIRS: ${{ matrix.group.dirs }}
+      GENERATE: ${{ matrix.group.generate }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: ./.github/actions/go
+        with:
+          caches: modules,build
+          build-scope: ${{ matrix.group.scope }}
+
+      - name: The groups name every go.work module, and nothing else
+        if: matrix.group.name == 'cli'
+        run: |
+          set -euo pipefail
+          diff -u \
+            <(jq -r '.[].dirs' .github/go-groups.json | tr ' ' '\n' | sort) \
+            <(go list -m -f '{{.Dir}}' | sed "s|^$PWD/||" | sort)
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Setup uv
+        if: matrix.group.name == 'cli'
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: The python sdk the discovery suite runs
+        if: matrix.group.name == 'cli'
+        run: uv sync --all-extras --frozen --directory python
+
+      - name: The musl targets the rust compile suite builds for
+        if: matrix.group.name == 'cli'
+        run: rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
+      - name: The musl C cross compiler the rust compile suite links a C dependency with
+        if: matrix.group.name == 'cli'
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.15.2
+
+      - name: The ocel package the cli tests deploy against
+        if: matrix.group.name == 'cli'
+        run: pnpm turbo run build --filter=ocel
+
+      - name: go generate, what the group's modules embed
+        run: |
+          set -euo pipefail
+          for dir in $GENERATE; do
+            go generate -C "$dir" ./...
+          done
+
+      - name: go build
+        run: |
+          set -euo pipefail
+          packages=()
+          for dir in $DIRS; do
+            packages+=("./$dir/...")
+          done
+          go build "${packages[@]}"
+
+      - name: The provider binary the conformance suites drive
+        if: matrix.group.name == 'aws' || matrix.group.name == 'gcp' || matrix.group.name == 'vps'
+        env:
+          VENDOR: ${{ matrix.group.name }}
+        run: |
+          set -euo pipefail
+          go build -o "$RUNNER_TEMP/provider-$VENDOR" "./platform/$VENDOR/provider/cmd/deploy"
+          echo "OCEL_${VENDOR^^}_PROVIDER_BINARY=$RUNNER_TEMP/provider-$VENDOR" >> "$GITHUB_ENV"
+
+      - name: go test -race
+        run: |
+          set -euo pipefail
+          packages=()
+          for dir in $DIRS; do
+            packages+=("./$dir/...")
+          done
+          go test -race "${packages[@]}"
+
+  node:
+    name: Node
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Setup Go
+        uses: ./.github/actions/go
+
+      - name: Every workspace package's tests
+        run: pnpm turbo run test --filter='!./console/*' --filter='!./tests/fixtures/**' --filter='!./tests/next-compat'
+
+  python:
+    name: Python
+    if: inputs.python
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: Install
+        run: uv sync --all-extras --frozen
+
+      - name: pytest
+        run: uv run pytest -q
+
+  rust:
+    name: Rust
+    if: inputs.rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: crates
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup rust
+        uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
+        with:
+          toolchain: stable
+
+      - name: The compiled crates main last cached, saved again only from main
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: crates
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: cargo test
+        run: cargo test --all-features

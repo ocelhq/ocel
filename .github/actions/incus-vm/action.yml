@@ -26,6 +26,7 @@ runs:
         turbo-team: ${{ inputs.turbo-team }}
 
     - name: The node bundle the CLI binary is built around
+      if: inputs.go == 'true'
       shell: bash
       run: pnpm turbo run build --filter=ocel
 

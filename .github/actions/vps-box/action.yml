@@ -1,16 +1,17 @@
 name: vps-box
 description: >-
-  The box a vps journey lane deploys to and the binaries it drives there: an
-  incus VM for a pull request, an EC2 instance under the real account's
-  session for a real run. OCEL_VPS_HOST, OCEL_VPS_USER and
-  OCEL_VPS_IDENTITY_FILE name it afterwards.
+  The box a vps smoke or e2e job deploys to: an incus VM on an emulator run,
+  an EC2 instance under the real account's session on a real-cloud run.
+  OCEL_VPS_HOST, OCEL_VPS_USER and OCEL_VPS_IDENTITY_FILE name it afterwards.
+  The binaries it drives there are the caller's to take, so the box comes up
+  while they build.
 
 inputs:
   real:
     description: true brings the box up in the real account.
     required: true
   vm:
-    description: The incus VM a pull request's lane deploys to.
+    description: The incus VM an emulator run deploys to.
     required: true
   box:
     description: The EC2 instance a real run deploys to.
@@ -60,18 +61,11 @@ runs:
         turbo-token: ${{ inputs.turbo-token }}
         turbo-team: ${{ inputs.turbo-team }}
 
-    - name: The node bundles the fixtures import
-      shell: bash
-      run: pnpm turbo run build --filter=ocel --filter=@ocel/transforms
-
     - name: The Docker the image build on this runner needs
       if: inputs.real == 'true'
       uses: ./.github/actions/containerd-docker
 
-    - name: Take the binaries this lane drives
-      uses: ./.github/actions/journey-binaries
-
-    - name: Bring up the box this lane deploys to
+    - name: Bring up the box this run deploys to
       if: inputs.real != 'true'
       shell: bash
       env:
@@ -124,7 +118,7 @@ runs:
       shell: bash
       run: scripts/ec2.sh sweep
 
-    - name: Bring up the box this lane deploys to
+    - name: Bring up the box this run deploys to
       if: inputs.real == 'true'
       shell: bash
       env:

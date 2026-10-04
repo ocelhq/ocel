@@ -1,0 +1,264 @@
+name: E2E target
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        description: "The target the cells run on: aws, gcp, vps or dev, or next for the deploy/next cell behind Cloudflare on aws."
+        type: string
+        required: true
+      cloud:
+        description: true drives the target's real account; false its emulator, VM or the runner's docker.
+        type: boolean
+        default: false
+      docker:
+        description: A docker release series, such as 28.0, installed on a vps box before bootstrap adopts it. Empty leaves the box without docker.
+        type: string
+        default: ""
+      suite:
+        description: The name an emulator run's pass is recorded under, so a run over the same inputs skips it.
+        type: string
+        default: ""
+      concern:
+        type: string
+        default: ""
+      fixtures:
+        type: string
+        default: ""
+      variants:
+        type: string
+        default: ""
+      coverage:
+        type: string
+        default: sampled
+      skips:
+        type: string
+        default: skip
+      seed:
+        type: string
+        default: ""
+      touched:
+        type: string
+        default: ""
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+  packages: write
+
+env:
+  OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.1.0-ocel.1
+  OCEL_FLOCI_GCP_IMAGE: floci/floci-gcp:0.8.0
+  FORCE_COLOR: "1"
+
+jobs:
+  run:
+    name: Run
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.cloud && 120 || 75 }}
+    concurrency:
+      group: ${{ inputs.cloud && format('real-{0}{1}', inputs.target, inputs.docker != '' && '-engine' || '') || format('e2e-{0}-{1}-{2}{3}', github.run_id, github.run_attempt, inputs.target, inputs.docker != '' && '-engine' || '') }}
+      cancel-in-progress: false
+    env:
+      OCEL_TARGET: ${{ inputs.target == 'next' && 'aws' || inputs.target }}
+      TARGET: ${{ inputs.target }}
+      CLOUD: ${{ inputs.cloud }}
+      GATED: ${{ !inputs.cloud && inputs.suite != '' }}
+      OCEL_VPS_DOCKER: ${{ inputs.docker }}
+      OCEL_VPS_OFFICIAL_IMAGES_MIRROR: ${{ !inputs.cloud && 'mirror.gcr.io/library' || '' }}
+      OCEL_E2E_CONCERN: ${{ inputs.concern }}
+      OCEL_E2E_FIXTURES: ${{ inputs.fixtures }}
+      OCEL_E2E_VARIANTS: ${{ inputs.variants }}
+      OCEL_E2E_COVERAGE: ${{ inputs.coverage }}
+      OCEL_E2E_SKIPS: ${{ inputs.skips }}
+      OCEL_E2E_SEED: ${{ inputs.seed }}
+      OCEL_E2E_TOUCHED: ${{ inputs.touched }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloud && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
+      CLOUDFLARE_API_TOKEN: ${{ inputs.cloud && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
+      OCEL_AWS_VARIABLES_KEY: ${{ inputs.cloud && vars.DOGFOOD_AWS_VARS_KEY || '' }}
+      REGISTRY_PUSHES: ${{ inputs.cloud && inputs.target == 'vps' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) }}
+      EMULATOR: ocel-e2e-${{ inputs.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+      VM: ocel-e2e-${{ inputs.target }}${{ inputs.docker != '' && '-engine' || '' }}-${{ github.run_id }}-${{ github.run_attempt }}
+      BOX: e2e-${{ inputs.target }}${{ inputs.docker != '' && '-engine' || '' }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Has this target already passed what it reads
+        id: gate
+        if: env.GATED == 'true'
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: ${{ inputs.suite }}
+          task: "@ocel-tests/e2e#e2e:${{ inputs.target }}${{ inputs.docker != '' && '-engine' || '' }}"
+
+      - name: Say whether anything is left to prove
+        id: due
+        env:
+          GREEN: ${{ steps.gate.outputs.green }}
+        run: |
+          if [ "$GREEN" = true ]; then echo "run=false"; else echo "run=true"; fi | tee -a "$GITHUB_OUTPUT"
+
+      - name: The musl targets a rust fixture compiles for
+        if: steps.due.outputs.run == 'true' && (inputs.target == 'aws' || inputs.target == 'gcp')
+        run: rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
+      - name: The musl C compiler a rust fixture's C dependencies build with
+        if: steps.due.outputs.run == 'true' && inputs.target == 'gcp'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: The go a go fixture's app and worker run on
+        if: steps.due.outputs.run == 'true' && (inputs.target == 'gcp' || inputs.target == 'dev')
+        uses: ./.github/actions/go
+
+      - name: The uv a python fixture's environment is synced with
+        if: steps.due.outputs.run == 'true' && inputs.target == 'dev'
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: The Docker the image build and the emulator share
+        if: steps.due.outputs.run == 'true' && inputs.target == 'gcp'
+        uses: ./.github/actions/containerd-docker
+
+      - name: Log in to the registry the emulator image lives in
+        if: steps.due.outputs.run == 'true' && inputs.target == 'aws' && !inputs.cloud
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull the emulator the cells deploy into
+        if: steps.due.outputs.run == 'true' && !inputs.cloud && (inputs.target == 'aws' || inputs.target == 'gcp')
+        run: |
+          if [ "$TARGET" = gcp ]; then docker pull "$OCEL_FLOCI_GCP_IMAGE"; else docker pull "$OCEL_FLOCI_IMAGE"; fi
+
+      - name: Take the versions the repository pins
+        if: steps.due.outputs.run == 'true' && inputs.cloud && inputs.target != 'vps'
+        id: versions
+        uses: ./.github/actions/versions
+
+      - name: Assume the session that may spend the real account
+        if: steps.due.outputs.run == 'true' && inputs.cloud && inputs.target != 'vps'
+        uses: ./.github/actions/real-aws-session
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          role-session-name: ocel-e2e-${{ inputs.target }}-${{ github.run_id }}
+          role-duration-seconds: "14400"
+          guard-script: tests/next-compat/guard-accounts.sh
+          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Name the account and the zone this run may touch
+        if: steps.due.outputs.run == 'true' && inputs.cloud && inputs.target != 'vps'
+        env:
+          EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          ZONE: ${{ vars.E2E_PREVIEW_DOMAIN }}
+          REGION: ${{ vars.E2E_AWS_REGION }}
+        run: |
+          set -euo pipefail
+          ZONE=${ZONE#\*.}
+          {
+            echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
+            echo "OCEL_E2E_ZONE=$ZONE"
+            echo "AWS_REGION=$REGION"
+          } >> "$GITHUB_ENV"
+
+      - name: Bring up the box the cells deploy to while the binaries build
+        if: steps.due.outputs.run == 'true' && inputs.target == 'vps'
+        uses: ./.github/actions/vps-box
+        with:
+          real: ${{ inputs.cloud }}
+          vm: ${{ env.VM }}
+          box: ${{ env.BOX }}
+          session: ocel-e2e-vps${{ inputs.docker != '' && '-engine' || '' }}-${{ github.run_id }}
+          sweep: ${{ inputs.cloud && inputs.docker == '' }}
+          docker: ${{ inputs.docker }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Take the binaries this run built, and the ocel bundle the sweeps import
+        if: steps.due.outputs.run == 'true'
+        uses: ./.github/actions/binaries
+
+      - name: Reclaim what an earlier attempt of this run left behind
+        if: steps.due.outputs.run == 'true' && inputs.cloud && inputs.target != 'vps'
+        run: pnpm --filter @ocel-tests/e2e sweep --target aws --own
+
+      - name: Reclaim e2e images a run that died left in the registry
+        id: registry
+        if: steps.due.outputs.run == 'true' && env.REGISTRY_PUSHES == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm --filter @ocel-tests/e2e sweep:registry --target vps
+
+      - name: Run the cells
+        if: steps.due.outputs.run == 'true'
+        env:
+          OCEL_E2E_REGISTRY_USER: ${{ env.REGISTRY_PUSHES == 'true' && github.actor || '' }}
+          OCEL_E2E_REGISTRY_TOKEN: ${{ env.REGISTRY_PUSHES == 'true' && secrets.GITHUB_TOKEN || '' }}
+        run: |
+          set -uo pipefail
+          if [ "$CLOUD" = true ] || [ "$TARGET" = vps ] || [ "$TARGET" = dev ]; then
+            exec pnpm --filter @ocel-tests/e2e e2e
+          fi
+          if [ "$TARGET" = gcp ]; then
+            exec scripts/floci.sh --cloud gcp run "$EMULATOR" -- pnpm --filter @ocel-tests/e2e e2e
+          fi
+          scripts/floci.sh run "$EMULATOR" -- \
+            bash -c 'AWS_ENDPOINT_URL=${OCEL_FLOCI_ENDPOINT/127.0.0.1/localhost.localstack.cloud} pnpm --filter @ocel-tests/e2e e2e'
+
+      - name: Record that what this target reads has passed
+        if: steps.due.outputs.run == 'true' && env.GATED == 'true'
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: ${{ inputs.suite }}
+          key: ${{ steps.gate.outputs.key }}
+
+      - name: No e2e image left in the registry
+        if: always() && steps.registry.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm --filter @ocel-tests/e2e sweep:registry --target vps --own
+
+      - name: No emulator left behind
+        if: always() && steps.due.outputs.run == 'true' && !inputs.cloud && (inputs.target == 'aws' || inputs.target == 'gcp')
+        run: |
+          if [ "$TARGET" = gcp ]; then cloud=(--cloud gcp); else cloud=(); fi
+          scripts/floci.sh "${cloud[@]}" destroy "$EMULATOR" || echo "could not destroy $EMULATOR"
+
+      - name: No dev container left behind
+        if: always() && steps.due.outputs.run == 'true' && inputs.target == 'dev'
+        run: |
+          left=$(docker ps --all --quiet --filter label=dev.ocel.project)
+          [ -z "$left" ] || docker rm --force --volumes $left
+
+      - name: Nothing left on the box, and the evidence kept
+        if: always() && steps.due.outputs.run == 'true' && inputs.target == 'vps'
+        uses: ./.github/actions/vps-box-gone
+        with:
+          real: ${{ inputs.cloud }}
+          vm: ${{ env.VM }}
+          box: ${{ env.BOX }}
+          evidence: e2e-evidence-vps${{ inputs.docker != '' && '-engine' || '' }}${{ inputs.cloud && '-cloud' || '' }}
+
+      - name: Keep the evidence
+        if: always() && steps.due.outputs.run == 'true' && inputs.target != 'vps'
+        uses: ./.github/actions/evidence
+        with:
+          name: e2e-evidence-${{ inputs.target }}${{ inputs.cloud && '-cloud' || '' }}

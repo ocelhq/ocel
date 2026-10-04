@@ -1,0 +1,367 @@
+name: Smoke Tests
+
+on:
+  workflow_call:
+    inputs:
+      aws:
+        description: Whether a change reaches the aws target.
+        type: boolean
+        default: false
+      gcp:
+        description: Whether a change reaches the gcp target.
+        type: boolean
+        default: false
+      vps:
+        description: Whether a change reaches the vps target.
+        type: boolean
+        default: false
+      dev:
+        description: Whether a change reaches ocel dev.
+        type: boolean
+        default: false
+      next:
+        description: Whether a change reaches a Next.js app on aws behind Cloudflare, deployed into the real account.
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+  packages: read
+
+env:
+  OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.1.0-ocel.1
+  OCEL_FLOCI_GCP_IMAGE: floci/floci-gcp:0.8.0
+  FORCE_COLOR: "1"
+
+jobs:
+  aws:
+    name: AWS
+    if: inputs.aws
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OCEL_TARGET: aws
+      EMULATOR: ocel-smoke-aws-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Has the aws smoke already passed what it reads
+        id: gate
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: smoke-aws
+          task: "@ocel-tests/e2e#e2e:aws"
+
+      - name: Log in to the registry the emulator image lives in
+        if: steps.gate.outputs.green != 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull the emulator the smoke deploys into
+        if: steps.gate.outputs.green != 'true'
+        run: docker pull "$OCEL_FLOCI_IMAGE"
+
+      - name: Take the binaries this run built
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/binaries
+
+      - name: Bootstrap, deploy deploy/node and check it on the emulator
+        if: steps.gate.outputs.green != 'true'
+        run: |
+          scripts/floci.sh run "$EMULATOR" -- \
+            bash -c 'AWS_ENDPOINT_URL=${OCEL_FLOCI_ENDPOINT/127.0.0.1/localhost.localstack.cloud} pnpm --filter @ocel-tests/e2e smoke --target aws'
+
+      - name: Record that what the aws smoke reads has passed
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: smoke-aws
+          key: ${{ steps.gate.outputs.key }}
+
+      - name: No emulator left behind
+        if: always() && steps.gate.outputs.green != 'true'
+        run: scripts/floci.sh destroy "$EMULATOR" || echo "could not destroy $EMULATOR"
+
+      - name: Keep the evidence
+        if: always() && steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/evidence
+        with:
+          name: smoke-evidence-aws
+
+  gcp:
+    name: GCP
+    if: inputs.gcp
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OCEL_TARGET: gcp
+      EMULATOR: ocel-smoke-gcp-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Has the gcp smoke already passed what it reads
+        id: gate
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: smoke-gcp
+          task: "@ocel-tests/e2e#e2e:gcp"
+
+      - name: The Docker the image build and the emulator share
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/containerd-docker
+
+      - name: Pull the emulator the smoke deploys into
+        if: steps.gate.outputs.green != 'true'
+        run: docker pull "$OCEL_FLOCI_GCP_IMAGE"
+
+      - name: Take the binaries this run built
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/binaries
+
+      - name: Bootstrap, deploy deploy/node and check it on the emulator
+        if: steps.gate.outputs.green != 'true'
+        run: scripts/floci.sh --cloud gcp run "$EMULATOR" -- pnpm --filter @ocel-tests/e2e smoke --target gcp
+
+      - name: Record that what the gcp smoke reads has passed
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: smoke-gcp
+          key: ${{ steps.gate.outputs.key }}
+
+      - name: No emulator left behind
+        if: always() && steps.gate.outputs.green != 'true'
+        run: scripts/floci.sh --cloud gcp destroy "$EMULATOR" || echo "could not destroy $EMULATOR"
+
+      - name: Keep the evidence
+        if: always() && steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/evidence
+        with:
+          name: smoke-evidence-gcp
+
+  vps:
+    name: VPS
+    if: inputs.vps
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      OCEL_TARGET: vps
+      OCEL_VPS_OFFICIAL_IMAGES_MIRROR: mirror.gcr.io/library
+      VM: ocel-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+      BOX: smoke-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Has the vps smoke already passed what it reads
+        id: gate
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: smoke-vps
+          task: "@ocel-tests/e2e#e2e:vps"
+
+      - name: Bring up the box the smoke deploys to while the binaries build
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/vps-box
+        with:
+          real: "false"
+          vm: ${{ env.VM }}
+          box: ${{ env.BOX }}
+          session: ocel-smoke-vps-${{ github.run_id }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Take the binaries this run built
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/binaries
+
+      - name: Bootstrap, deploy deploy/node and check it on the box
+        if: steps.gate.outputs.green != 'true'
+        run: pnpm --filter @ocel-tests/e2e smoke --target vps
+
+      - name: Record that what the vps smoke reads has passed
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: smoke-vps
+          key: ${{ steps.gate.outputs.key }}
+
+      - name: Nothing left behind, and the evidence kept
+        if: always() && steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/vps-box-gone
+        with:
+          real: "false"
+          vm: ${{ env.VM }}
+          box: ${{ env.BOX }}
+          evidence: smoke-evidence-vps
+
+  dev:
+    name: Dev
+    if: inputs.dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OCEL_TARGET: dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Has the dev smoke already passed what it reads
+        id: gate
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: smoke-dev
+          task: "@ocel-tests/e2e#e2e:dev"
+
+      - name: Take the binaries this run built
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/binaries
+
+      - name: Run deploy/node under ocel dev and check it
+        if: steps.gate.outputs.green != 'true'
+        run: pnpm --filter @ocel-tests/e2e smoke --target dev
+
+      - name: Record that what the dev smoke reads has passed
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: smoke-dev
+          key: ${{ steps.gate.outputs.key }}
+
+      - name: No dev container left behind
+        if: always() && steps.gate.outputs.green != 'true'
+        run: |
+          left=$(docker ps --all --quiet --filter label=dev.ocel.project)
+          [ -z "$left" ] || docker rm --force --volumes $left
+
+      - name: Keep the evidence
+        if: always() && steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/evidence
+        with:
+          name: smoke-evidence-dev
+
+  next:
+    name: Next.js
+    if: inputs.next && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: smoke-next-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    env:
+      OCEL_TARGET: aws
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+      OCEL_AWS_VARIABLES_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Has the Next.js smoke already passed what it reads
+        id: gate
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: smoke-next
+          task: "@ocel-tests/e2e#e2e:next"
+
+      - name: Take the versions the repository pins
+        if: steps.gate.outputs.green != 'true'
+        id: versions
+        uses: ./.github/actions/versions
+
+      - name: Assume the session that may spend the real account
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/real-aws-session
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          role-session-name: ocel-smoke-next-${{ github.run_id }}
+          role-duration-seconds: "3600"
+          guard-script: tests/next-compat/guard-accounts.sh
+          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Name the account and the zone this run may touch
+        if: steps.gate.outputs.green != 'true'
+        env:
+          EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          ZONE: ${{ vars.E2E_PREVIEW_DOMAIN }}
+          REGION: ${{ vars.E2E_AWS_REGION }}
+        run: |
+          set -euo pipefail
+          ZONE=${ZONE#\*.}
+          {
+            echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
+            echo "OCEL_E2E_ZONE=$ZONE"
+            echo "AWS_REGION=$REGION"
+          } >> "$GITHUB_ENV"
+
+      - name: Take the binaries this run built, and the ocel bundle the sweep imports
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/binaries
+
+      - name: Reclaim what an earlier attempt of this run left behind
+        if: steps.gate.outputs.green != 'true'
+        run: pnpm --filter @ocel-tests/e2e sweep --target aws --own
+
+      - name: Bootstrap, deploy deploy/next behind Cloudflare and check it, kept for the close to reap
+        if: steps.gate.outputs.green != 'true'
+        run: pnpm --filter @ocel-tests/e2e smoke --target next
+
+      - name: Record that what the Next.js smoke reads has passed
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: smoke-next
+          key: ${{ steps.gate.outputs.key }}
+
+      - name: Keep the evidence
+        if: always() && steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/evidence
+        with:
+          name: smoke-evidence-next

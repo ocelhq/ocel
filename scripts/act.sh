@@ -3,26 +3,26 @@ set -euo pipefail
 
 IMAGE="${OCEL_ACT_IMAGE:-ghcr.io/catthehacker/ubuntu:act-latest}"
 DOCKER_SOCK="${OCEL_ACT_DOCKER_SOCK:-/var/run/docker.sock}"
-ALL_WORKFLOWS=(go journey provider-vps)
+ALL_WORKFLOWS=(unit e2e integration)
 
 usage() {
     cat <<'EOF'
 usage: scripts/act.sh [workflow ...]
 
-Runs the PR gates locally before anything is pushed. go replays through
-nektos/act as workflow_dispatch, so every step runs regardless of what
-changed — a superset of the PR run. journey replays its dev and aws
-lanes the same way, with the changes job's lane filter forced to dev and aws;
-its vps lane runs natively instead, alongside provider-vps, since incus wants
-systemd and KVM an act container cannot host (the CI runner executes both
-un-containered too). The remote Go build cache is wired in from your local
-credentials, so a green run both proves the change and leaves the cache warm
-for CI.
+Runs the PR gates locally before anything is pushed. unit replays the Unit
+Tests workflow through nektos/act as workflow_dispatch, so every job runs
+regardless of what changed. e2e and integration run natively instead: e2e
+drives the dev, aws (on floci) and vps (on an incus VM) targets with snapshot
+binaries built here, since its jobs wait on an artifact act cannot serve, and
+integration runs the vps live suite on an incus VM, since incus wants systemd
+and KVM an act container cannot host. The remote Go build cache is wired into
+the act replay from your local credentials, so a green run both proves the
+change and leaves the cache warm for CI.
 
-  workflows: go journey provider-vps    (default: all three)
+  workflows: unit e2e integration    (default: all three)
 
-go and journey drive the host docker daemon; the journey dev lane
-runs its postgres and bucket there, on ports docker picks.
+unit and e2e drive the host docker daemon; the e2e dev target runs its
+postgres and bucket there, on ports docker picks.
 EOF
     exit 2
 }
@@ -78,31 +78,36 @@ incus_run() {
     fi
 }
 
-run_provider_vps() {
+run_integration() {
     eval "$(mise env -s bash 2>/dev/null || true)"
-    [ -e /dev/kvm ] || die "provider-vps needs /dev/kvm"
-    incus_run "incus list" >/dev/null || die "provider-vps needs a working incus (incus admin init --auto)"
+    [ -e /dev/kvm ] || die "integration needs /dev/kvm"
+    incus_run "incus list" >/dev/null || die "integration needs a working incus (incus admin init --auto)"
     pnpm install --frozen-lockfile &&
         pnpm turbo run build --filter=ocel &&
         go generate -C cli ./... &&
         incus_run "scripts/incus.sh run ocel-act-live-$$ -- go test -C platform/vps/provider -race -count=1 -timeout 30m -tags integration -run '^TestLive' ./..."
 }
 
-run_journey_vps() {
+run_e2e() {
     eval "$(mise env -s bash 2>/dev/null || true)"
-    [ -e /dev/kvm ] || die "the journey vps lane needs /dev/kvm"
-    incus_run "incus list" >/dev/null || die "the journey vps lane needs a working incus (incus admin init --auto)"
+    [ -e /dev/kvm ] || die "the e2e vps target needs /dev/kvm"
+    incus_run "incus list" >/dev/null || die "the e2e vps target needs a working incus (incus admin init --auto)"
     pnpm install --frozen-lockfile &&
-        pnpm turbo run build --filter=ocel &&
-        node scripts/snapshot.mjs || return $?
-    local vm=ocel-act-journey-vps-$$ status=0
+        pnpm turbo run build --filter=ocel --filter=@ocel/transforms --filter=@ocel/sst --filter=@ocel/pulumi || return $?
+    local snapshot status=0
+    snapshot=$(node scripts/snapshot.mjs) || return $?
+    eval "$snapshot"
+    export OCEL_BIN OCEL_PROVIDERS_DIR
+    OCEL_TARGET=dev pnpm --filter @ocel-tests/e2e e2e || status=$?
+    OCEL_TARGET=aws scripts/floci.sh run "ocel-act-e2e-$$" -- \
+        bash -c 'AWS_ENDPOINT_URL=${OCEL_FLOCI_ENDPOINT/127.0.0.1/localhost.localstack.cloud} pnpm --filter @ocel-tests/e2e e2e' || status=$?
+    local vm=ocel-act-e2e-vps-$$
     incus_run "scripts/incus.sh create $vm" || return $?
     eval "$(incus_run "scripts/incus.sh info $vm")"
     OCEL_TARGET=vps \
         OCEL_VPS_HOST="$OCEL_INCUS_ADDR" \
         OCEL_VPS_USER="$OCEL_INCUS_USER" \
         OCEL_VPS_IDENTITY_FILE="$OCEL_INCUS_KEY" \
-        OCEL_BIN="$PWD/packages/cli-linux-x64/bin/ocel" \
         pnpm --filter @ocel-tests/e2e e2e || status=$?
     incus_run "scripts/incus.sh destroy $vm" || echo "act.sh: could not destroy $vm" >&2
     return $status
@@ -144,22 +149,21 @@ fi
 failed=()
 for wf in "${selected[@]}"; do
     echo "act.sh: ▸ $wf"
-    if [ "$wf" = provider-vps ]; then
-        run_provider_vps || failed+=("$wf")
-        continue
-    fi
-    container_opts="--init"
-    wf_args=()
     case "$wf" in
-    go | journey)
-        if [ -n "$CACHE_BIN" ]; then
-            container_opts="--init -v $CACHE_BIN:/opt/gobuildcache:ro"
-            wf_args+=("${CACHE_ENV[@]}")
-        fi
+    integration)
+        run_integration || failed+=("$wf")
+        continue
+        ;;
+    e2e)
+        run_e2e || failed+=("$wf")
+        continue
         ;;
     esac
-    if [ "$wf" = journey ]; then
-        wf_args+=(--env "OCEL_E2E_LANES=dev aws")
+    container_opts="--init"
+    wf_args=()
+    if [ -n "$CACHE_BIN" ]; then
+        container_opts="--init -v $CACHE_BIN:/opt/gobuildcache:ro"
+        wf_args+=("${CACHE_ENV[@]}")
     fi
     if ! "$ACT" workflow_dispatch \
         -W ".github/workflows/$wf.yml" \
@@ -169,9 +173,6 @@ for wf in "${selected[@]}"; do
         --container-options "$container_opts" \
         "${wf_args[@]}"; then
         failed+=("$wf")
-    fi
-    if [ "$wf" = journey ]; then
-        run_journey_vps || failed+=("journey-vps")
     fi
 done
 

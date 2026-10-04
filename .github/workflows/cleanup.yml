@@ -1,0 +1,195 @@
+name: Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+    paths:
+      - "www/**"
+      - "console/github/**"
+      - "ocel.aws.json"
+      - "cli/**"
+      - "packages/**"
+      - "frameworks/**"
+      - "pkg/**"
+      - "sdk/**"
+      - "python/**"
+      - "crates/**"
+      - "proto/**"
+      - "platform/**"
+      - "tests/fixtures/**"
+      - "tests/fronts/**"
+      - "tests/e2e/**"
+      - "tests/shared/**"
+      - "scripts/**"
+      - ".goreleaser.yaml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - ".github/workflows/cleanup.yml"
+      - ".github/actions/**"
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+jobs:
+  preview-down:
+    name: Preview down
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    env:
+      OCEL_CONFIG: ocel.aws.json
+      OCEL_GITHUB_APP_URL: ${{ vars.OCEL_GITHUB_APP_URL }}
+      OCEL_REPORT_SECRET: ${{ secrets.OCEL_REPORT_SECRET }}
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      REF: ${{ github.event.pull_request.head.ref }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout the default branch, the head and a stacked base may already be gone
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Take the CLI this preview is torn down with
+        uses: ./.github/actions/ocel-binary
+        with:
+          source: ${{ contains(github.event.pull_request.labels.*.name, 'dogfood:release') && 'release' || 'head' }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Enter the account Ocel deploys itself into
+        uses: ./.github/actions/dogfood-session
+        with:
+          role-to-assume: ${{ secrets.DOGFOOD_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.DOGFOOD_AWS_REGION }}
+          role-session-name: ocel-preview-${{ github.run_id }}
+          expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
+          cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
+          variables-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+
+      - name: Tear down the preview the head branch names, deployed or failed
+        run: |
+          set -euo pipefail
+          git checkout --detach
+          GITHUB_HEAD_REF="$REF" ocel preview rm --yes
+
+      - name: Tell the app the preview is gone
+        continue-on-error: true
+        run: scripts/preview-report.sh removed
+
+  reapable:
+    name: Reapable
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      ids: ${{ steps.runs.outputs.ids }}
+    steps:
+      - name: Name the runs this pull request provisioned cells under
+        id: runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          ids=$(for workflow in ci.yml e2e-cloud.yml; do
+            gh run list --workflow "$workflow" --branch "$HEAD_REF" \
+              --limit 100 --json databaseId --jq '.[].databaseId'
+          done | sort -u | paste -sd' ' -)
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          echo "${ids:-no run} provisioned cells for this pull request"
+
+  reap:
+    name: Reap
+    needs: reapable
+    if: ${{ needs.reapable.outputs.ids != '' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    env:
+      OCEL_CONFIG: ocel.aws.json
+      OCEL_TARGET: aws
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+      OCEL_AWS_VARIABLES_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: The node bundles the fixtures and the external stacks import
+        run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
+
+      - name: Setup Go
+        uses: ./.github/actions/go
+        with:
+          caches: modules,build
+          build-scope: binaries
+
+      - uses: ./.github/actions/goreleaser
+
+      - name: Build the binaries this reaping drives
+        run: |
+          set -euo pipefail
+          node scripts/snapshot.mjs | tee -a "$GITHUB_ENV"
+
+      - name: Take the versions the repository pins
+        id: versions
+        uses: ./.github/actions/versions
+
+      - name: Assume the session that may spend the real account
+        uses: ./.github/actions/real-aws-session
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          role-session-name: ocel-e2e-reap-${{ github.run_id }}
+          role-duration-seconds: "3600"
+          guard-script: tests/next-compat/guard-accounts.sh
+          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Name the account and the zone this reaping may touch
+        env:
+          EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          ZONE: ${{ vars.E2E_PREVIEW_DOMAIN }}
+          REGION: ${{ vars.E2E_AWS_REGION }}
+        run: |
+          set -euo pipefail
+          ZONE=${ZONE#\*.}
+          {
+            echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
+            echo "OCEL_E2E_ZONE=$ZONE"
+            echo "AWS_REGION=$REGION"
+          } >> "$GITHUB_ENV"
+
+      - name: Reclaim the cells and namespaces those runs left provisioned
+        env:
+          IDS: ${{ needs.reapable.outputs.ids }}
+        run: |
+          set -uo pipefail
+          status=0
+          for id in $IDS; do
+            pnpm --filter @ocel-tests/e2e sweep --target aws --run "$id" || status=1
+          done
+          exit "$status"

@@ -100,12 +100,16 @@ or extend a comment Signal does not allow, and delete it when you change the cod
 - Write a failing test first, then the code that makes it pass.
 - A bug fix adds a regression test that fails without the fix.
 - Test names follow the Test row of [Naming](.greptile/rules.md#naming).
-- CI runs every workflow in `.github/workflows/` whose paths a change touches.
+- CI runs in tiers. A pull request runs Lint, Unit Tests, and the Smoke Tests of each target
+  its paths reach; a push to main and a release pull request also run Integration Tests and
+  E2E Tests, and a release pull request E2E Tests (Cloud).
+- A Go test that drives docker, an emulator or a VM builds only under the `integration` tag,
+  and fails rather than skips where that environment is missing.
 - The VM and emulator suites (`scripts/incus.sh`, `scripts/incus-fanout.sh`,
   `scripts/floci.sh` and the `scripts/act.sh` replays) run in CI. Run one locally only to
   reproduce a failure CI reported.
-- Suites that need cloud credentials (the `e2e:cloud` label, the nightly run) are run by
-  maintainers.
+- Suites that need cloud credentials (the `e2e:cloud` label, which runs E2E Tests (Cloud)
+  once on a pull request, and the nightly run) are run by maintainers.
 
 ## Fix what you find
 

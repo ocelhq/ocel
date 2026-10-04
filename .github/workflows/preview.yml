@@ -1,0 +1,66 @@
+name: Preview
+
+on:
+  pull_request:
+    types: [labeled]
+    paths:
+      - "www/**"
+      - "console/github/**"
+      - "cli/**"
+      - "packages/**"
+      - "frameworks/**"
+      - "pkg/**"
+      - "sdk/**"
+      - "proto/**"
+      - "platform/**"
+      - "scripts/**"
+      - "ocel.aws.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - ".github/actions/**"
+      - ".github/workflows/preview.yml"
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  preview:
+    name: Preview
+    if: github.event.label.name == 'dogfood:release' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    env:
+      OCEL_CONFIG: ocel.aws.json
+      OCEL_GITHUB_APP_URL: ${{ vars.OCEL_GITHUB_APP_URL }}
+      OCEL_REPORT_SECRET: ${{ secrets.OCEL_REPORT_SECRET }}
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      REF: ${{ github.event.pull_request.head.ref }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout the branch the preview is named after
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Deploy the preview with the released CLI
+        uses: ./.github/actions/preview
+        with:
+          source: release
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+          role-to-assume: ${{ secrets.DOGFOOD_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.DOGFOOD_AWS_REGION }}
+          expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
+          cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
+          variables-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+          app-id: ${{ vars.OCEL_GITHUB_APP_ID }}
+          app-private-key: ${{ secrets.OCEL_GITHUB_APP_PRIVATE_KEY }}

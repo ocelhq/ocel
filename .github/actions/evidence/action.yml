@@ -1,0 +1,30 @@
+name: evidence
+description: >-
+  Uploads what an e2e or smoke run left under tests/e2e/output, without the
+  node_modules its trees installed, under the artifact name given.
+
+inputs:
+  name:
+    description: The artifact the evidence is uploaded as.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Pack the evidence
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p tests/e2e/output
+        tar -czf "$RUNNER_TEMP/e2e-evidence.tgz" \
+          --exclude='*/node_modules' \
+          --exclude='*/node_modules/*' \
+          --exclude='*/trees/*/packages' \
+          -C tests/e2e output
+
+    - name: Upload the evidence
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ runner.temp }}/e2e-evidence.tgz
+        if-no-files-found: warn

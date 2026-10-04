@@ -1,13 +1,13 @@
 name: ocel binary
 description: >-
   The ocel CLI on PATH. Built from this checkout, or taken prebuilt from the
-  binaries job of this run, it comes with the providers of its own version
+  Binaries job of this run, it comes with the providers of its own version
   under OCEL_PROVIDERS_DIR; installed from the latest release, it fetches the
   providers that release published.
 
 inputs:
   source:
-    description: head builds the CLI from this checkout, prebuilt takes the one the binaries job built, release installs the published one.
+    description: head builds the CLI from this checkout, prebuilt takes the one the Binaries job built, release installs the published one.
     required: false
     default: head
   turbo-token:
@@ -35,6 +35,7 @@ runs:
         build-scope: binaries
 
     - name: Build the node halves the binaries embed
+      if: inputs.source != 'prebuilt'
       shell: bash
       run: pnpm turbo run build --filter=ocel
 
@@ -51,9 +52,9 @@ runs:
         . "$RUNNER_TEMP/snapshot.env"
         dirname "$OCEL_BIN" >> "$GITHUB_PATH"
 
-    - name: Take the binaries the binaries job built
+    - name: Take the binaries the Binaries job built
       if: inputs.source == 'prebuilt'
-      uses: ./.github/actions/journey-binaries
+      uses: ./.github/actions/binaries
 
     - name: Put that CLI on PATH
       if: inputs.source == 'prebuilt'
