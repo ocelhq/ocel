@@ -205,6 +205,24 @@ func TestLogsJSONKeepsTheRawMessageBesideTheParsedFields(t *testing.T) {
 	}
 }
 
+func TestLogsJSONCarriesTheParsedErrorInTheFieldsAsPlainTextDoes(t *testing.T) {
+	project := deployedWithLogs(t)
+	raw := `{"level":50,"msg":"request failed","err":"boom","route":"/pay"}`
+	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, raw))
+
+	plain := read(t, project, nil, "web")
+	asJSON := read(t, project, func(o *logsOptions) { o.json = true }, "web")
+
+	if want := `ERROR request failed {"error":"boom","route":"/pay"}`; !strings.Contains(plain.stdout, want) {
+		t.Errorf("stdout = %q, want %q", plain.stdout, want)
+	}
+	lines := linesOf(asJSON.stdout)
+	fields, _ := clitest.DecodeJSON(t, lines[len(lines)-2])["fields"].(map[string]any)
+	if fields["error"] != "boom" || fields["route"] != "/pay" || len(fields) != 2 {
+		t.Errorf("fields = %v, want the error beside route, as plain text prints them", fields)
+	}
+}
+
 func TestLogsJSONOmitsLevelAndFieldsForALineThatParsesToNeither(t *testing.T) {
 	project := deployedWithLogs(t)
 
