@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"sync"
@@ -85,7 +86,7 @@ func LiveTail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.
 			return Tail(ctx, logs, lambdas, polled, 0, emitSerialized)
 		},
 	}
-	return liveTail(ctx, groups, query, client, emitSerialized, noticeSerialized)
+	return liveTail(ctx, groups, query, client, emitSerialized, noticeSerialized, sleepFor, rand.Float64)
 }
 
 func findLiveGroups(ctx context.Context, lambdas *lambda.Client, region, account string, query Query) ([]liveGroup, error) {
@@ -104,10 +105,10 @@ func nameGroupARN(region, account, name string) string {
 	return fmt.Sprintf("arn:aws:logs:%s:%s:log-group:%s", region, account, name)
 }
 
-func liveTail(ctx context.Context, groups []liveGroup, query Query, client liveTailClient, emit func([]Event) error, notice func(Notice) error) error {
+func liveTail(ctx context.Context, groups []liveGroup, query Query, client liveTailClient, emit func([]Event) error, notice func(Notice) error, sleep func(context.Context, time.Duration) error, chance func() float64) error {
 	running, ctx := errgroup.WithContext(ctx)
 	for _, sessionGroups := range splitIntoSessions(groups) {
-		tail := &liveSessionTail{groups: sessionGroups, query: query, client: client, emit: emit, notice: notice}
+		tail := &liveSessionTail{groups: sessionGroups, query: query, client: client, emit: emit, notice: notice, sleep: sleep, chance: chance}
 		running.Go(func() error { return tail.run(ctx) })
 	}
 	return running.Wait()
@@ -173,6 +174,8 @@ type liveSessionTail struct {
 	client  liveTailClient
 	emit    func([]Event) error
 	notice  func(Notice) error
+	sleep   func(context.Context, time.Duration) error
+	chance  func() float64
 	newest  time.Time
 	sampled bool
 }
@@ -184,7 +187,7 @@ func (s *liveSessionTail) run(ctx context.Context) error {
 		sources[i] = group.source
 	}
 	for {
-		session, err := s.client.startSession(ctx, input)
+		session, err := s.openSession(ctx, input)
 		var limit *types.LimitExceededException
 		switch {
 		case ctx.Err() != nil:
@@ -208,6 +211,21 @@ func (s *liveSessionTail) run(ctx context.Context) error {
 		if err := s.notice(Notice{Kind: NoticeReconnected}); err != nil {
 			return err
 		}
+	}
+}
+
+func (s *liveSessionTail) openSession(ctx context.Context, input *cloudwatchlogs.StartLiveTailInput) (liveSession, error) {
+	backoff := defaultPollInterval
+	for {
+		session, err := s.client.startSession(ctx, input)
+		var limit *types.LimitExceededException
+		if !isThrottled(err) || errors.As(err, &limit) {
+			return session, err
+		}
+		if err := s.sleep(ctx, backoff-time.Duration(float64(backoff)*throttledJitter*s.chance())); err != nil {
+			return nil, err
+		}
+		backoff = min(backoff*2, maxThrottledInterval)
 	}
 }
 
