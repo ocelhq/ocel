@@ -119,24 +119,37 @@ left behind, and only projects the harness named.
 
 `--shard <index>/<total>` is accepted and validated by `cell`; it selects nothing yet.
 
-A pull request and a full run — workflow dispatch, or the `e2e:cloud` label — both run
-`deploy`, `lifecycle`, `sdk`, `kv`, `tasks` and `realtime`, `lifecycle` cells first. `iac` deploys real SST and Pulumi
-stacks, so only a workflow dispatch that names it runs it, and only with `skips=run`: the gap
-list skips every `iac` cell on `aws` and `aws.floci` (#856, #857). Either way it spreads each
-edge of a fixture group over one member of that group, and runs every cell of a member whose
-directory the diff touches. To reproduce a pull request's pick on a laptop:
+A smoke test is one cell per target: one bootstrap, one deploy of `deploy/node` and its
+checks, on floci for `aws` (the `api-gateway` variant, since floci runs no load balancer) and
+`gcp`, on an incus VM for `vps` and on the runner's docker for `dev`, and the real
+`deploy/next` cell behind Cloudflare in the real AWS account for `next`, kept deployed until
+the pull request closes. A pull request runs the smoke of each target its paths reach:
 
 ```
-OCEL_E2E_SEED=<pull request number> OCEL_E2E_TOUCHED=<concern/name,concern/name> \
+pnpm --filter @ocel-tests/e2e smoke --target <aws|gcp|vps|dev|next>
+```
+
+The E2E Tests run on every push to main and on a release pull request, against the
+emulators and VMs: `deploy`, `lifecycle`, `sdk`, `kv`, `tasks` and `realtime`, `lifecycle`
+cells first, plus `deploy/node` on a box whose docker 28 bootstrap adopts. `iac` deploys real
+SST and Pulumi stacks, so only a workflow dispatch that names it runs it, and only with
+`skips=run`: the gap list skips every `iac` cell on `aws` and `aws.floci` (#856, #857). The
+run spreads each edge of a fixture group over one member of that group, rotated by the
+commit, and runs every cell of a member whose directory a release pull request touches. To
+reproduce a pick on a laptop:
+
+```
+OCEL_E2E_SEED=<pull request number or commit> OCEL_E2E_TOUCHED=<concern/name,concern/name> \
   pnpm --filter @ocel-tests/e2e e2e
 ```
 
-Real clouds are reached by workflow dispatch, or by putting the `e2e:cloud` label on a
-pull request — one shot, the label comes off again as the run starts. From here only
-`scripts/ec2.sh` spends a real account.
+The E2E Tests (Cloud) drive `aws`, `vps` and the `next` cell against the real accounts,
+every cell of every concern: on a release pull request, by workflow dispatch, or once on a
+pull request that carries the `e2e:cloud` label, which comes off again as the run starts.
+From here only `scripts/ec2.sh` spends a real account.
 
-`gcp` is not one of them: a real dispatch drives `aws` and `vps` only. The gcp lane runs
-against the floci-gcp emulator on a pull request that touches it, and nowhere real.
+`gcp` is not one of them: the gcp target runs against the floci-gcp emulator, and nowhere
+real.
 
 The `Nightly` workflow drives the `vps` lane against a box it brings up with
 `scripts/gce.sh`, every night and on dispatch, and releases the commit a pass drove.
@@ -192,7 +205,7 @@ job mints, or the assume fails outright.
 | `E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID` | secret | the only Cloudflare account the guard lets a run touch       |
 | `E2E_PREVIEW_DOMAIN`                 | var    | the zone a dispatched run may take hostnames under           |
 
-The `gcp` lane on a pull request runs against the floci-gcp emulator, which serves one
+The `gcp` target runs against the floci-gcp emulator, which serves one
 implicit Firestore database and no Firestore Admin API. The database row, its delete
 protection and the region check are therefore exercised only against a real project,
 which you can drive by hand:
@@ -223,7 +236,7 @@ The run creates and destroys buckets, a Firestore database, a key ring and a sec
 that project, and schedules its KMS key material for destruction, so name a project you
 are willing to lose. Unset, and with no emulator answering, every `TestLive` fails.
 
-The `vps` lane points at an incus VM on a pull request, and on a real run brings up a
+The `vps` target points at an incus VM on an emulator run, and on a real-cloud run brings up a
 throwaway EC2 box with `scripts/ec2.sh` under the same role and account guard as the `aws`
 lane, so it needs no secrets of its own. The `Nightly` workflow's `vps e2e` job brings
 its box up on Compute Engine with `scripts/gce.sh` instead, and drives every cell of every

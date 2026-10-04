@@ -242,7 +242,7 @@ func TestProjectNamesAreReadableAndDistinctPerDirectory(t *testing.T) {
 	t.Parallel()
 
 	if got := devresources.ProjectName("/work/trees/sdk-node/My Shop"); got != "my-shop-2d2cdb07" {
-		t.Fatalf("ProjectName = %q, want my-shop-2d2cdb07, the name the journey harness looks containers up by", got)
+		t.Fatalf("ProjectName = %q, want my-shop-2d2cdb07, the name the e2e harness looks containers up by", got)
 	}
 	a, b := devresources.ProjectName("/home/ada/work/My Shop"), devresources.ProjectName("/home/ada/play/My Shop")
 	if !strings.HasPrefix(a, "my-shop-") || a == b {

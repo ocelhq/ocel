@@ -1,7 +1,7 @@
 name: vps-box-gone
 description: >-
   Takes down the box vps-box brought up, whatever the lane did, and uploads
-  the journey's evidence under the name given.
+  the run's evidence under the name given.
 
 inputs:
   real:
@@ -12,7 +12,7 @@ inputs:
   box:
     required: true
   evidence:
-    description: The artifact the journey's evidence is uploaded as.
+    description: The artifact the run's evidence is uploaded as.
     required: true
 
 runs:
@@ -32,22 +32,8 @@ runs:
         BOX: ${{ inputs.box }}
       run: scripts/ec2.sh destroy "$BOX" || echo "could not destroy $BOX"
 
-    - name: Pack the evidence
+    - name: Keep the evidence
       if: always()
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p tests/e2e/output
-        tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
-          --exclude='*/node_modules' \
-          --exclude='*/node_modules/*' \
-          --exclude='*/trees/*/packages' \
-          -C tests/e2e output
-
-    - name: Upload the evidence
-      if: always()
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      uses: ./.github/actions/evidence
       with:
         name: ${{ inputs.evidence }}
-        path: ${{ runner.temp }}/journey-evidence.tgz
-        if-no-files-found: warn

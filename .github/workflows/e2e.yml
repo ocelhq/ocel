@@ -1,0 +1,133 @@
+name: E2E Tests
+
+on:
+  workflow_call:
+    inputs:
+      seed:
+        description: What the sampled run rotates its pick of each fixture group by.
+        type: string
+        default: ""
+      touched:
+        description: Fixtures, as concern/name and comma separated, every cell of which runs.
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Targets to drive on their emulators, space separated: aws, gcp, vps, vps-docker-28 and dev."
+        default: "aws gcp vps vps-docker-28 dev"
+        type: string
+      variants:
+        description: "Variants each target enumerates, space separated, default among them. Empty runs every variant a fixture lists."
+        default: ""
+        type: string
+      skips:
+        description: "skip leaves out every cell the gap list marks dead; run drives them too, to see what has since turned green."
+        default: "skip"
+        type: choice
+        options: [skip, run]
+      coverage:
+        description: "sampled runs each variant on one member of a group; every-cell runs every cell."
+        default: "sampled"
+        type: choice
+        options: [sampled, every-cell]
+      concern:
+        description: "Concerns each target covers, space separated: deploy, lifecycle, sdk, kv, tasks, realtime, and iac, which runs only when named here and only with skips set to run. Empty covers every one but iac."
+        default: ""
+        type: string
+      fixtures:
+        description: "Fixtures each target runs, space separated, each named <concern>/<name>. Empty runs every one of the concerns picked."
+        default: ""
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  build:
+    name: Build
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+
+  aws:
+    name: AWS
+    if: github.event_name != 'workflow_dispatch' || contains(format(' {0} ', inputs.targets), ' aws ')
+    uses: ./.github/workflows/e2e-target.yml
+    with:
+      target: aws
+      suite: ${{ github.event_name != 'workflow_dispatch' && 'e2e-aws' || '' }}
+      seed: ${{ inputs.seed }}
+      touched: ${{ inputs.touched }}
+      concern: ${{ inputs.concern }}
+      fixtures: ${{ inputs.fixtures }}
+      variants: ${{ inputs.variants }}
+      coverage: ${{ inputs.coverage || 'sampled' }}
+      skips: ${{ inputs.skips || 'skip' }}
+    secrets: inherit
+
+  gcp:
+    name: GCP
+    if: github.event_name != 'workflow_dispatch' || contains(format(' {0} ', inputs.targets), ' gcp ')
+    uses: ./.github/workflows/e2e-target.yml
+    with:
+      target: gcp
+      suite: ${{ github.event_name != 'workflow_dispatch' && 'e2e-gcp' || '' }}
+      seed: ${{ inputs.seed }}
+      touched: ${{ inputs.touched }}
+      concern: ${{ inputs.concern }}
+      fixtures: ${{ inputs.fixtures }}
+      variants: ${{ inputs.variants }}
+      coverage: ${{ inputs.coverage || 'sampled' }}
+      skips: ${{ inputs.skips || 'skip' }}
+    secrets: inherit
+
+  vps:
+    name: VPS
+    if: github.event_name != 'workflow_dispatch' || contains(format(' {0} ', inputs.targets), ' vps ')
+    uses: ./.github/workflows/e2e-target.yml
+    with:
+      target: vps
+      suite: ${{ github.event_name != 'workflow_dispatch' && 'e2e-vps' || '' }}
+      seed: ${{ inputs.seed }}
+      touched: ${{ inputs.touched }}
+      concern: ${{ inputs.concern }}
+      fixtures: ${{ inputs.fixtures }}
+      variants: ${{ inputs.variants }}
+      coverage: ${{ inputs.coverage || 'sampled' }}
+      skips: ${{ inputs.skips || 'skip' }}
+    secrets: inherit
+
+  vps-docker-28:
+    name: VPS (docker 28)
+    if: github.event_name != 'workflow_dispatch' || contains(format(' {0} ', inputs.targets), ' vps-docker-28 ')
+    uses: ./.github/workflows/e2e-target.yml
+    with:
+      target: vps
+      docker: "28.0"
+      suite: ${{ github.event_name != 'workflow_dispatch' && 'e2e-vps-engine' || '' }}
+      concern: deploy
+      fixtures: deploy/node
+      variants: default
+      coverage: every-cell
+      skips: skip
+    secrets: inherit
+
+  dev:
+    name: Dev
+    if: github.event_name != 'workflow_dispatch' || contains(format(' {0} ', inputs.targets), ' dev ')
+    uses: ./.github/workflows/e2e-target.yml
+    with:
+      target: dev
+      suite: ${{ github.event_name != 'workflow_dispatch' && 'e2e-dev' || '' }}
+      seed: ${{ inputs.seed }}
+      touched: ${{ inputs.touched }}
+      concern: ${{ inputs.concern }}
+      fixtures: ${{ inputs.fixtures }}
+      variants: ${{ inputs.variants }}
+      coverage: ${{ inputs.coverage || 'sampled' }}
+      skips: ${{ inputs.skips || 'skip' }}
+    secrets: inherit

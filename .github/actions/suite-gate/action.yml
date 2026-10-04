@@ -8,7 +8,7 @@ description: >-
 
 inputs:
   suite:
-    description: Names the suite in the cache key, e.g. journey-aws.
+    description: Names the suite in the cache key, e.g. e2e-aws.
     required: true
   task:
     description: The turbo task whose hash is the fingerprint, as package#script.

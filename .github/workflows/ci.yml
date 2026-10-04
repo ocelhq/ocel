@@ -2,13 +2,13 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release/v') }}
 
 permissions:
   actions: read
@@ -28,21 +28,95 @@ jobs:
       pull-requests: read
     outputs:
       go: ${{ steps.filter.outputs.go }}
-      journey: ${{ steps.filter.outputs.journey }}
-      provider_vps: ${{ steps.filter.outputs.provider_vps }}
       python: ${{ steps.filter.outputs.python }}
       rust: ${{ steps.filter.outputs.rust }}
       labels: ${{ steps.filter.outputs.labels }}
       lint: ${{ steps.filter.outputs.lint }}
+      release: ${{ steps.tiers.outputs.release }}
+      smoke: ${{ steps.tiers.outputs.smoke }}
+      smoke_aws: ${{ steps.tiers.outputs.smoke_aws }}
+      smoke_gcp: ${{ steps.tiers.outputs.smoke_gcp }}
+      smoke_vps: ${{ steps.tiers.outputs.smoke_vps }}
+      smoke_dev: ${{ steps.tiers.outputs.smoke_dev }}
+      smoke_next: ${{ steps.tiers.outputs.smoke_next }}
+      preview: ${{ steps.tiers.outputs.preview }}
+      build: ${{ steps.tiers.outputs.build }}
+      seed: ${{ steps.tiers.outputs.seed }}
+      touched: ${{ steps.tiers.outputs.touched }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
 
       - name: Name the workflows the changed paths reach
         id: filter
         uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
         with:
           filters: .github/filters.yml
+
+      - name: Name the tiers this event runs
+        id: tiers
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          OURS: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          RELEASED: ${{ contains(github.event.pull_request.labels.*.name, 'dogfood:release') }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          SHA: ${{ github.sha }}
+          AWS: ${{ steps.filter.outputs.smoke_aws }}
+          GCP: ${{ steps.filter.outputs.smoke_gcp }}
+          VPS: ${{ steps.filter.outputs.smoke_vps }}
+          DEV: ${{ steps.filter.outputs.smoke_dev }}
+          NEXT: ${{ steps.filter.outputs.smoke_next }}
+          PREVIEW: ${{ steps.filter.outputs.preview }}
+        run: |
+          set -euo pipefail
+          release=false
+          if [ "$EVENT" = pull_request ] && [[ "$HEAD_REF" == release/v* ]]; then
+            release=true
+          fi
+          if [ "$EVENT" != pull_request ]; then
+            AWS=false GCP=false VPS=false DEV=false NEXT=false
+          elif [ "$release" = true ]; then
+            AWS=true GCP=true VPS=true DEV=true NEXT=true
+          fi
+          [ "$OURS" = true ] || NEXT=false
+          smoke=false
+          [ "$AWS$GCP$VPS$DEV$NEXT" = falsefalsefalsefalsefalse ] || smoke=true
+          if [ "$EVENT" != pull_request ] || [ "$OURS" != true ] || [ "$PREVIEW" != true ]; then
+            preview=false
+          elif [ "$RELEASED" = true ]; then
+            preview=release
+          else
+            preview=prebuilt
+          fi
+          build=false
+          if [ "$EVENT" != pull_request ] || [ "$release" = true ] || [ "$smoke" = true ] || [ "$preview" = prebuilt ]; then
+            build=true
+          fi
+          if [ "$EVENT" = pull_request ]; then
+            seed=$PR
+            touched=$(git diff --name-only "$BASE" "$HEAD" | sed -n 's|^tests/fixtures/\([^/]*\)/\([^/]*\)/.*|\1/\2|p' | sort -u | paste -sd, -)
+          else
+            seed=$SHA
+            touched=
+          fi
+          {
+            echo "release=$release"
+            echo "smoke=$smoke"
+            echo "smoke_aws=$AWS"
+            echo "smoke_gcp=$GCP"
+            echo "smoke_vps=$VPS"
+            echo "smoke_dev=$DEV"
+            echo "smoke_next=$NEXT"
+            echo "preview=$preview"
+            echo "build=$build"
+            echo "seed=$seed"
+            echo "touched=$touched"
+          } | tee -a "$GITHUB_OUTPUT"
 
   lint:
     name: Lint
@@ -54,40 +128,103 @@ jobs:
       rust: ${{ github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true' || needs.changes.outputs.lint == 'true' }}
     secrets: inherit
 
-  go:
-    name: Go
+  unit:
+    name: Unit Tests
     needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.go == 'true'
-    uses: ./.github/workflows/go.yml
+    uses: ./.github/workflows/unit.yml
+    with:
+      go: ${{ github.event_name != 'pull_request' || needs.changes.outputs.go == 'true' }}
+      python: ${{ github.event_name != 'pull_request' || needs.changes.outputs.python == 'true' }}
+      rust: ${{ github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true' }}
     secrets: inherit
 
-  journey:
-    name: Journey
+  build:
+    name: Build
     needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.journey == 'true'
-    uses: ./.github/workflows/journey.yml
+    if: needs.changes.outputs.build == 'true'
+    uses: ./.github/workflows/build.yml
     secrets: inherit
 
-  provider-vps:
-    name: Provider VPS
+  smoke:
+    name: Smoke Tests
     needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.provider_vps == 'true'
-    uses: ./.github/workflows/provider-vps.yml
+    if: needs.changes.outputs.smoke == 'true'
+    uses: ./.github/workflows/smoke.yml
+    with:
+      aws: ${{ needs.changes.outputs.smoke_aws == 'true' }}
+      gcp: ${{ needs.changes.outputs.smoke_gcp == 'true' }}
+      vps: ${{ needs.changes.outputs.smoke_vps == 'true' }}
+      dev: ${{ needs.changes.outputs.smoke_dev == 'true' }}
+      next: ${{ needs.changes.outputs.smoke_next == 'true' }}
     secrets: inherit
 
-  python:
-    name: Python
+  integration:
+    name: Integration Tests
     needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.python == 'true'
-    uses: ./.github/workflows/python.yml
+    if: github.event_name == 'push' || needs.changes.outputs.release == 'true'
+    concurrency:
+      group: ${{ github.event_name == 'push' && 'integration-main' || format('integration-{0}', github.event.pull_request.number) }}
+      cancel-in-progress: false
+    uses: ./.github/workflows/integration.yml
     secrets: inherit
 
-  rust:
-    name: Rust
+  e2e:
+    name: E2E Tests
     needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true'
-    uses: ./.github/workflows/rust.yml
+    if: github.event_name == 'push' || needs.changes.outputs.release == 'true'
+    concurrency:
+      group: ${{ github.event_name == 'push' && 'e2e-main' || format('e2e-{0}', github.event.pull_request.number) }}
+      cancel-in-progress: false
+    uses: ./.github/workflows/e2e.yml
+    with:
+      seed: ${{ needs.changes.outputs.seed }}
+      touched: ${{ needs.changes.outputs.touched }}
     secrets: inherit
+
+  e2e-cloud:
+    name: E2E Tests (Cloud)
+    needs: changes
+    if: needs.changes.outputs.release == 'true'
+    uses: ./.github/workflows/e2e-cloud.yml
+    secrets: inherit
+
+  preview:
+    name: Preview
+    needs: changes
+    if: needs.changes.outputs.preview != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    env:
+      OCEL_CONFIG: ocel.aws.json
+      OCEL_GITHUB_APP_URL: ${{ vars.OCEL_GITHUB_APP_URL }}
+      OCEL_REPORT_SECRET: ${{ secrets.OCEL_REPORT_SECRET }}
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      REF: ${{ github.event.pull_request.head.ref }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout the branch the preview is named after
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Deploy the preview
+        uses: ./.github/actions/preview
+        with:
+          source: ${{ needs.changes.outputs.preview }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+          role-to-assume: ${{ secrets.DOGFOOD_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.DOGFOOD_AWS_REGION }}
+          expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
+          cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
+          variables-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+          app-id: ${{ vars.OCEL_GITHUB_APP_ID }}
+          app-private-key: ${{ secrets.OCEL_GITHUB_APP_PRIVATE_KEY }}
 
   labels:
     name: Labels
@@ -98,16 +235,26 @@ jobs:
 
   ci-ok:
     name: ci-ok
-    needs: [changes, lint, go, journey, provider-vps, python, rust, labels]
+    needs: [changes, lint, unit, build, smoke, integration, e2e, e2e-cloud, preview, labels]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
-      - name: Every workflow this change reaches passed
+      - name: Every tier this change reaches passed
         env:
-          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+          EVENT: ${{ github.event_name }}
           NEEDS: ${{ toJSON(needs) }}
         run: |
+          set -euo pipefail
           echo "$NEEDS" | jq -r 'to_entries | map("\(.key)=\(.value.result)") | join(" ")'
-          [ "$FAILED" = false ]
+          failed=$(echo "$NEEDS" | jq -r --arg event "$EVENT" '
+            to_entries[]
+            | select(.value.result == "failure"
+                or (.value.result == "cancelled"
+                    and ($event != "push" or (.key != "integration" and .key != "e2e"))))
+            | .key')
+          if [ -n "$failed" ]; then
+            echo "::error::did not pass: $(echo "$failed" | paste -sd' ' -)"
+            exit 1
+          fi

@@ -1,0 +1,130 @@
+name: E2E Tests (Cloud)
+
+on:
+  pull_request:
+    types: [labeled]
+    paths:
+      - "cli/**"
+      - "packages/**"
+      - "frameworks/**"
+      - "pkg/**"
+      - "sdk/**"
+      - "python/**"
+      - "crates/**"
+      - "proto/**"
+      - "platform/**"
+      - "tests/fixtures/**"
+      - "tests/e2e/**"
+      - "tests/shared/**"
+      - "scripts/**"
+      - ".goreleaser.yaml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - ".github/workflows/build.yml"
+      - ".github/workflows/e2e-cloud.yml"
+      - ".github/workflows/e2e-target.yml"
+      - ".github/actions/**"
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Targets to drive against their real accounts, space separated: aws, vps and next. gcp and dev are never driven for real."
+        default: "aws vps next"
+        type: string
+      variants:
+        description: "Variants each target enumerates, space separated, default among them. Empty runs every variant a fixture lists."
+        default: ""
+        type: string
+      skips:
+        description: "skip leaves out every cell the gap list marks dead; run drives them too, to see what has since turned green."
+        default: "skip"
+        type: choice
+        options: [skip, run]
+      coverage:
+        description: "sampled runs each variant on one member of a group; every-cell runs every cell."
+        default: "every-cell"
+        type: choice
+        options: [every-cell, sampled]
+      concern:
+        description: "Concerns each target covers, space separated: deploy asks whether the app runs there, lifecycle whether a release can be replaced and rolled back there, sdk whether its resources do, kv whether a kv store behaves as the map in #1474 says, tasks whether topics, tasks and workers behave as the map in #1463 says, realtime whether realtime channels behave as the map in #1508 says, iac whether it binds to what an SST or Pulumi stack provisions. Empty covers every one but iac, which runs only when named here, and then only with skips set to run: the gap list skips every iac cell on aws (#856, #857)."
+        default: ""
+        type: string
+      fixtures:
+        description: "Fixtures each target runs, space separated, each named <concern>/<name>. Empty runs every one of the concerns picked."
+        default: ""
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+  packages: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ format('e2e-cloud-{0}{1}', github.event.pull_request.number || github.run_id, (github.event.action == 'labeled' && github.event.label.name != 'e2e:cloud') && format('-{0}', github.event.label.name) || '') }}
+  cancel-in-progress: false
+
+jobs:
+  label:
+    name: Label
+    if: github.event.action == 'labeled' && github.event.label.name == 'e2e:cloud'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Spend the label that asked for this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr edit "$PR" --remove-label e2e:cloud
+
+  build:
+    name: Build
+    if: github.event_name == 'workflow_dispatch' || (github.event.action == 'labeled' && github.event.label.name == 'e2e:cloud')
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+
+  aws:
+    name: AWS
+    if: (github.event.action != 'labeled' || github.event.label.name == 'e2e:cloud') && (github.event_name != 'workflow_dispatch' || contains(format(' {0} ', inputs.targets), ' aws '))
+    uses: ./.github/workflows/e2e-target.yml
+    with:
+      target: aws
+      cloud: true
+      concern: ${{ inputs.concern }}
+      fixtures: ${{ inputs.fixtures }}
+      variants: ${{ inputs.variants }}
+      coverage: ${{ inputs.coverage || 'every-cell' }}
+      skips: ${{ inputs.skips || 'skip' }}
+    secrets: inherit
+
+  vps:
+    name: VPS
+    if: (github.event.action != 'labeled' || github.event.label.name == 'e2e:cloud') && (github.event_name != 'workflow_dispatch' || contains(format(' {0} ', inputs.targets), ' vps '))
+    uses: ./.github/workflows/e2e-target.yml
+    with:
+      target: vps
+      cloud: true
+      concern: ${{ inputs.concern }}
+      fixtures: ${{ inputs.fixtures }}
+      variants: ${{ inputs.variants }}
+      coverage: ${{ inputs.coverage || 'every-cell' }}
+      skips: ${{ inputs.skips || 'skip' }}
+    secrets: inherit
+
+  next:
+    name: Next.js
+    if: (github.event.action != 'labeled' || github.event.label.name == 'e2e:cloud') && (github.event_name != 'workflow_dispatch' || contains(format(' {0} ', inputs.targets), ' next '))
+    uses: ./.github/workflows/e2e-target.yml
+    with:
+      target: next
+      cloud: true
+      concern: deploy
+      fixtures: deploy/next
+      variants: cloudflare
+      coverage: every-cell
+      skips: skip
+    secrets: inherit

@@ -1,0 +1,131 @@
+name: preview
+description: >-
+  Deploys this pull request's preview of Ocel's own app into the account Ocel
+  deploys itself into, reports it to the GitHub app, and says on the pull
+  request what the app could not. The job checks out the head branch first,
+  and names OCEL_CONFIG, OCEL_GITHUB_APP_URL, OCEL_REPORT_SECRET, PR, SHA, REF
+  and RUN_URL in its environment.
+
+inputs:
+  source:
+    description: prebuilt takes the CLI the Binaries job of this run built, release installs the published one.
+    required: true
+  turbo-token:
+    default: ""
+  turbo-team:
+    default: ""
+  role-to-assume:
+    required: true
+  aws-region:
+    required: true
+  expected-aws-account-id:
+    required: true
+  cloudflare-api-token:
+    required: true
+  cloudflare-account-id:
+    required: true
+  variables-key:
+    required: true
+  app-id:
+    description: The GitHub app the fallback comment is written as.
+    required: true
+  app-private-key:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Take the CLI this preview is deployed with
+      uses: ./.github/actions/ocel-binary
+      with:
+        source: ${{ inputs.source }}
+        turbo-token: ${{ inputs.turbo-token }}
+        turbo-team: ${{ inputs.turbo-team }}
+
+    - name: Enter the account Ocel deploys itself into
+      uses: ./.github/actions/dogfood-session
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-region: ${{ inputs.aws-region }}
+        role-session-name: ocel-preview-${{ github.run_id }}
+        expected-aws-account-id: ${{ inputs.expected-aws-account-id }}
+        cloudflare-api-token: ${{ inputs.cloudflare-api-token }}
+        cloudflare-account-id: ${{ inputs.cloudflare-account-id }}
+        variables-key: ${{ inputs.variables-key }}
+
+    - name: Tell the app the preview has started
+      id: report-started
+      continue-on-error: true
+      shell: bash
+      run: scripts/preview-report.sh started
+
+    - name: Deploy the preview
+      id: up
+      shell: bash
+      env:
+        OCEL_PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        set -euo pipefail
+        ocel preview up --yes 2>&1 | tee "$RUNNER_TEMP/preview.log"
+
+    - name: Drop the deployments this preview has outgrown
+      shell: bash
+      run: ocel preview prune --yes
+
+    - name: Tell the app the preview is deployed
+      id: report-deployed
+      if: ${{ success() }}
+      continue-on-error: true
+      shell: bash
+      run: scripts/preview-report.sh deployed .ocel/deploy-result.json
+
+    - name: Tell the app the preview failed
+      id: report-failed
+      if: ${{ failure() }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        set -euo pipefail
+        ERROR=$(scripts/preview-error.sh)
+        export ERROR
+        scripts/preview-report.sh failed
+
+    - name: Mint the token the fallback comment is written with
+      id: app-token
+      if: ${{ always() && (steps.report-deployed.outcome == 'failure' || steps.report-failed.outcome == 'failure') && github.event.pull_request.number }}
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.app-private-key }}
+
+    - name: Say on the pull request what the app could not
+      if: ${{ always() && steps.app-token.outcome == 'success' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        OUTCOME: ${{ steps.up.outcome }}
+      run: |
+        set -euo pipefail
+        if [ "$OUTCOME" = success ] && [ -f .ocel/deploy-result.json ]; then
+          body=$(scripts/preview-comment.sh deployed .ocel/deploy-result.json)
+        else
+          ERROR=$(scripts/preview-error.sh)
+          body=$(ERROR="$ERROR" scripts/preview-comment.sh failed)
+        fi
+        existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+          --jq 'map(select(.body | contains("<!-- ocel-preview -->"))) | first | .id // empty')
+        if [ -n "$existing" ]; then
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -f body="$body"
+        else
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body"
+        fi
+
+    - name: Keep what the preview reported
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: preview-result
+        path: |
+          .ocel/deploy-result.json
+          ${{ runner.temp }}/preview.log
+        if-no-files-found: warn

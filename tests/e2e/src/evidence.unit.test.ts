@@ -14,7 +14,7 @@ afterAll(async () => {
 
 describe("evidence", () => {
   it("never lands the secret on disk, whatever the binary printed", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "journey-evidence-"));
+    const dir = await mkdtemp(path.join(tmpdir(), "e2e-evidence-"));
     dirs.push(dir);
     await evidence(dir).write("deploy", "deploy.stdout", `set SECRET_TOKEN=${SECRET_TOKEN} ok\n`);
     const written = await readFile(path.join(dir, "deploy", "deploy.stdout"), "utf8");
@@ -23,7 +23,7 @@ describe("evidence", () => {
   });
 
   it("never lands a resource password on disk either", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "journey-evidence-"));
+    const dir = await mkdtemp(path.join(tmpdir(), "e2e-evidence-"));
     dirs.push(dir);
     await evidence(dir).write(
       "deploy",
