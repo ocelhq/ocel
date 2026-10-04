@@ -107,7 +107,7 @@ function checkJS(changed, base) {
       ...present,
     ]);
   }
-  const excluded = ["!./console/*", "!./tests/fixtures/**", "!./tests/next-compat"];
+  const excluded = ["!./tests/fixtures/**", "!./tests/next-compat"];
   run([
     "pnpm",
     "turbo",
