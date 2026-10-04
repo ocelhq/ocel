@@ -12,6 +12,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -96,7 +97,7 @@ func (r *Run) result(err error) (*streamv1.RunSummary, int) {
 		}
 		return result, exitcode.Interrupt
 	}
-	result := &streamv1.RunSummary{Headline: r.verdict("failed"), Detail: err.Error()}
+	result := &streamv1.RunSummary{Headline: r.verdict("failed"), Detail: err.Error(), Error: clierror.NewRunError(err)}
 	var missing missingVariablesError
 	if errors.As(err, &missing) {
 		result.Missing = missing.Variables()
