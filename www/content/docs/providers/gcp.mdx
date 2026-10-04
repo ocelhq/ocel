@@ -194,6 +194,13 @@ which runs as a service account of the tier's own that may read the tier's realt
 and no other secret. See [Realtime](/docs/sdk/realtime#on-google-cloud) for how sockets,
 publishes, keys, upgrades and cost work there.
 
+## Logs
+
+Cloud Run services and workers log to Cloud Logging in your project, which keeps them for as
+long as the project's `_Default` log bucket does: 30 days unless you've changed it. Read them
+with [`ocel logs`](/docs/cli/logs), which also lists the Cloud Logging quotas a read or a tail
+shares.
+
 ## What to grant
 
 Turn the services on once:
