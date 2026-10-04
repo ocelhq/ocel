@@ -695,20 +695,15 @@ func TestPreviewListRendersEveryEnvironment(t *testing.T) {
 	}
 }
 
-func TestAPreviewNameFitsASubdomainLabelAndIsNoSubcommand(t *testing.T) {
+func TestAPreviewNameFitsASubdomainLabel(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a subcommand's name is reserved", func(t *testing.T) {
+	t.Run("a subcommand's name is a valid preview name", func(t *testing.T) {
 		t.Parallel()
 
 		for _, name := range []string{"up", "rm", "ls", "prune"} {
-			_, err := resolvePreviewEnvironment(newTestDependencies(), "", name, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL)
-			if err == nil {
-				t.Errorf("preview name %q accepted, want it refused: `ocel preview %s` runs the subcommand", name, name)
-				continue
-			}
-			if !strings.Contains(err.Error(), "reserved") {
-				t.Errorf("err = %v, want it to say %q is reserved", err, name)
+			if _, err := resolvePreviewEnvironment(newTestDependencies(), "", name, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL); err != nil {
+				t.Errorf("preview name %q refused: %v, want it accepted: `ocel preview up %s` cannot be read as a subcommand", name, err, name)
 			}
 		}
 	})
@@ -965,9 +960,7 @@ func TestAPreviewNamedOnTheCommandLineIsEphemeralUnlessPersistent(t *testing.T) 
 		lifecycle environmentv1.Lifecycle
 	}{
 		{"preview up <name> deploys an ephemeral preview of that name", []string{"up", "staging"}, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL},
-		{"preview <name> is preview up <name>", []string{"staging"}, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL},
 		{"preview up <name> --persistent deploys a persistent preview of that name", []string{"up", "staging", "--persistent"}, environmentv1.Lifecycle_LIFECYCLE_PERSISTENT},
-		{"preview <name> --persistent is preview up <name> --persistent", []string{"staging", "--persistent"}, environmentv1.Lifecycle_LIFECYCLE_PERSISTENT},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fixture := setUpPreviewProject(t)
@@ -979,6 +972,18 @@ func TestAPreviewNamedOnTheCommandLineIsEphemeralUnlessPersistent(t *testing.T) 
 			}
 			assertEnvironment(t, sentDeploy(t, fixture).GetEnvironment(), tc.lifecycle, "staging")
 		})
+	}
+}
+
+func TestPreviewWithoutASubcommandTakesNoName(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+
+	out, err := runPreviewCommand(t, fixture, previewDependencies("feature/login", ""), "", "staging")
+	if err == nil {
+		t.Fatalf("ocel preview staging err = nil, want it refused: a name goes to ocel preview up, so no name can read as a subcommand; out=%s", out)
+	}
+	if !strings.Contains(err.Error(), "ocel preview up staging") {
+		t.Errorf("err = %v, want it to point at ocel preview up staging", err)
 	}
 }
 
