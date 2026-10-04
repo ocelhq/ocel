@@ -226,7 +226,7 @@ func TestLiveTailPutsContainersInTheirOwnSession(t *testing.T) {
 	groups := append(lambdaGroups(2), containerGroup("api-box"), containerGroup("worker-box"))
 	run, stop := runLiveTail(t, groups, Query{Since: epoch}, idleSession)
 
-	waitFor(t, func() bool { return run.starts() == 3 })
+	waitFor(t, func() bool { return run.starts() == 2 })
 	stop()
 
 	var lambdaSessions, containerSessions int
@@ -242,12 +242,89 @@ func TestLiveTailPutsContainersInTheirOwnSession(t *testing.T) {
 		if len(input.LogGroupIdentifiers) != 1 {
 			t.Errorf("a stream prefix is allowed with one log group, got %v", input.LogGroupIdentifiers)
 		}
-		if got := input.LogStreamNamePrefixes[0]; got != "api-box/" && got != "worker-box/" {
-			t.Errorf("the container session filters streams by %q, want the container's prefix", got)
+		if got, want := input.LogStreamNamePrefixes, []string{"api-box/", "worker-box/"}; !slices.Equal(got, want) {
+			t.Errorf("the container session filters streams by %v, want %v", got, want)
 		}
 	}
-	if lambdaSessions != 1 || containerSessions != 2 {
-		t.Errorf("LiveTail() started %d Lambda sessions and %d container sessions, want 1 and 2", lambdaSessions, containerSessions)
+	if lambdaSessions != 1 || containerSessions != 1 {
+		t.Errorf("LiveTail() started %d Lambda sessions and %d container sessions, want 1 and 1", lambdaSessions, containerSessions)
+	}
+}
+
+func TestLiveTailSplitsMoreThanAHundredContainersAcrossSessions(t *testing.T) {
+	t.Parallel()
+	var groups []liveGroup
+	for i := range 150 {
+		groups = append(groups, containerGroup(fmt.Sprintf("box-%d", i)))
+	}
+	run, stop := runLiveTail(t, groups, Query{Since: epoch}, idleSession)
+
+	waitFor(t, func() bool { return run.starts() == 2 })
+	stop()
+
+	var sizes []int
+	seen := map[string]bool{}
+	for _, input := range run.inputs {
+		if len(input.LogGroupIdentifiers) != 1 {
+			t.Errorf("a stream prefix is allowed with one log group, got %v", input.LogGroupIdentifiers)
+		}
+		sizes = append(sizes, len(input.LogStreamNamePrefixes))
+		for _, prefix := range input.LogStreamNamePrefixes {
+			seen[prefix] = true
+		}
+	}
+	slices.Sort(sizes)
+	if want := []int{50, 100}; !slices.Equal(sizes, want) {
+		t.Errorf("LiveTail() started sessions of %v stream prefixes, want %v", sizes, want)
+	}
+	if len(seen) != 150 {
+		t.Errorf("LiveTail() tails %d containers, want 150", len(seen))
+	}
+}
+
+func TestLiveTailEmitsAContainerSessionsEventsUnderTheContainerItsStreamNames(t *testing.T) {
+	t.Parallel()
+	session := newFakeSession()
+	groups := []liveGroup{containerGroup("api"), containerGroup("api-box")}
+	run, stop := runLiveTail(t, groups, Query{Since: epoch}, func(*liveRun, *cloudwatchlogs.StartLiveTailInput) (liveSession, error) {
+		return session, nil
+	})
+	session.events <- update(false,
+		liveLine(groups[0].arn, "api-box/app/task-2", "from api-box\n", epoch.Add(time.Second)),
+		liveLine(groups[0].arn, "api/app/task-1", "from api\n", epoch.Add(2*time.Second)),
+	)
+	waitFor(t, func() bool { return len(run.events()) == 2 })
+	stop()
+
+	want := []Event{
+		{Time: epoch.Add(time.Second).UTC(), Label: "api-box", Instance: "task-2", Text: "from api-box"},
+		{Time: epoch.Add(2 * time.Second).UTC(), Label: "api", Instance: "task-1", Text: "from api"},
+	}
+	if got := run.events(); !slices.Equal(got, want) {
+		t.Errorf("LiveTail() emitted %+v, want %+v", got, want)
+	}
+}
+
+func TestLiveTailTailsALogGroupTwoSourcesShareOnceAndLabelsItsEventsForEach(t *testing.T) {
+	t.Parallel()
+	session := newFakeSession()
+	shared := lambdaGroups(2)
+	shared[1].logGroup, shared[1].arn = shared[0].logGroup, shared[0].arn
+	run, stop := runLiveTail(t, shared, Query{Since: epoch}, func(*liveRun, *cloudwatchlogs.StartLiveTailInput) (liveSession, error) {
+		return session, nil
+	})
+	waitFor(t, func() bool { return run.starts() == 1 })
+	session.events <- update(false, liveLine(shared[0].arn, "2026/09/01/[$LATEST]aaa", "hello\n", epoch.Add(time.Second)))
+	waitFor(t, func() bool { return len(run.events()) == 2 })
+	stop()
+
+	if got := run.inputs[0].LogGroupIdentifiers; !slices.Equal(got, []string{shared[0].arn}) {
+		t.Errorf("LiveTail() tailed %v, want the shared log group once", got)
+	}
+	labels := []string{run.events()[0].Label, run.events()[1].Label}
+	slices.Sort(labels)
+	if want := []string{"0", "1"}; !slices.Equal(labels, want) {
+		t.Errorf("LiveTail() labelled the shared group's event %v, want once for each source %v", labels, want)
 	}
 }
 
