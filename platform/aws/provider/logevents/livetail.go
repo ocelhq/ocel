@@ -35,13 +35,13 @@ type Notice struct {
 
 type liveSession interface {
 	Events() <-chan types.StartLiveTailResponseStream
-	Err() error
 	Close() error
 }
 
-type startSession func(ctx context.Context, input *cloudwatchlogs.StartLiveTailInput) (liveSession, error)
-
-type pollSources func(ctx context.Context, sources []Source, since time.Time) error
+type liveTailClient struct {
+	startSession func(ctx context.Context, input *cloudwatchlogs.StartLiveTailInput) (liveSession, error)
+	tail         func(ctx context.Context, sources []Source, since time.Time) error
+}
 
 type liveGroup struct {
 	logGroup
@@ -58,29 +58,31 @@ func LiveTail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.
 		return err
 	}
 	var mutex sync.Mutex
-	emitOne := func(events []Event) error {
+	emitSerialized := func(events []Event) error {
 		mutex.Lock()
 		defer mutex.Unlock()
 		return emit(events)
 	}
-	noticeOne := func(n Notice) error {
+	noticeSerialized := func(n Notice) error {
 		mutex.Lock()
 		defer mutex.Unlock()
 		return notice(n)
 	}
-	start := func(ctx context.Context, input *cloudwatchlogs.StartLiveTailInput) (liveSession, error) {
-		out, err := logs.StartLiveTail(ctx, input)
-		if err != nil {
-			return nil, err
-		}
-		return out.GetStream(), nil
+	client := liveTailClient{
+		startSession: func(ctx context.Context, input *cloudwatchlogs.StartLiveTailInput) (liveSession, error) {
+			out, err := logs.StartLiveTail(ctx, input)
+			if err != nil {
+				return nil, err
+			}
+			return out.GetStream(), nil
+		},
+		tail: func(ctx context.Context, sources []Source, since time.Time) error {
+			polled := query
+			polled.Sources, polled.Since = sources, since
+			return Tail(ctx, logs, lambdas, polled, 0, emitSerialized)
+		},
 	}
-	poll := func(ctx context.Context, sources []Source, since time.Time) error {
-		polled := query
-		polled.Sources, polled.Since = sources, since
-		return Tail(ctx, logs, lambdas, polled, 0, emitOne)
-	}
-	return liveTail(ctx, groups, query, start, poll, emitOne, noticeOne)
+	return liveTail(ctx, groups, query, client, emitSerialized, noticeSerialized)
 }
 
 func findLiveGroups(ctx context.Context, lambdas *lambda.Client, region, account string, query Query) ([]liveGroup, error) {
@@ -99,10 +101,10 @@ func nameGroupARN(region, account, name string) string {
 	return fmt.Sprintf("arn:aws:logs:%s:%s:log-group:%s", region, account, name)
 }
 
-func liveTail(ctx context.Context, groups []liveGroup, query Query, start startSession, poll pollSources, emit func([]Event) error, notice func(Notice) error) error {
+func liveTail(ctx context.Context, groups []liveGroup, query Query, client liveTailClient, emit func([]Event) error, notice func(Notice) error) error {
 	running, ctx := errgroup.WithContext(ctx)
 	for _, sessionGroups := range splitIntoSessions(groups) {
-		tail := &liveSessionTail{groups: sessionGroups, query: query, start: start, poll: poll, emit: emit, notice: notice, resume: query.Since}
+		tail := &liveSessionTail{groups: sessionGroups, query: query, client: client, emit: emit, notice: notice, resume: query.Since}
 		running.Go(func() error { return tail.run(ctx) })
 	}
 	return running.Wait()
@@ -129,8 +131,7 @@ func splitIntoSessions(groups []liveGroup) [][]liveGroup {
 type liveSessionTail struct {
 	groups  []liveGroup
 	query   Query
-	start   startSession
-	poll    pollSources
+	client  liveTailClient
 	emit    func([]Event) error
 	notice  func(Notice) error
 	resume  time.Time
@@ -148,7 +149,7 @@ func (s *liveSessionTail) run(ctx context.Context) error {
 		sources[i] = group.source
 	}
 	for {
-		session, err := s.start(ctx, input)
+		session, err := s.client.startSession(ctx, input)
 		var limit *types.LimitExceededException
 		switch {
 		case ctx.Err() != nil:
@@ -157,12 +158,11 @@ func (s *liveSessionTail) run(ctx context.Context) error {
 			if err := s.notice(Notice{Kind: NoticeReconnected, Message: sessionLimitMessage}); err != nil {
 				return err
 			}
-			return s.poll(ctx, sources, s.resume)
+			return s.client.tail(ctx, sources, s.resume)
 		case err != nil:
 			return fmt.Errorf("start a Live Tail session of %s: %w", s.groups[0].name, err)
 		}
-		err = s.read(ctx, session)
-		session.Close()
+		err = s.follow(ctx, session)
 		var timeout *types.SessionTimeoutException
 		switch {
 		case ctx.Err() != nil:
@@ -176,26 +176,35 @@ func (s *liveSessionTail) run(ctx context.Context) error {
 	}
 }
 
-func (s *liveSessionTail) read(ctx context.Context, session liveSession) error {
+func (s *liveSessionTail) follow(ctx context.Context, session liveSession) error {
+	err := s.emitUpdates(ctx, session)
+	ended := session.Close()
+	switch {
+	case ctx.Err() != nil || err != nil:
+		return err
+	case ended != nil:
+		return fmt.Errorf("read a Live Tail session of %s: %w", s.groups[0].name, ended)
+	}
+	return fmt.Errorf("the Live Tail session of %s ended unexpectedly", s.groups[0].name)
+}
+
+func (s *liveSessionTail) emitUpdates(ctx context.Context, session liveSession) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case received, open := <-session.Events():
 			if !open {
-				if err := session.Err(); err != nil {
-					return fmt.Errorf("read a Live Tail session of %s: %w", s.groups[0].name, err)
-				}
-				return fmt.Errorf("the Live Tail session of %s ended unexpectedly", s.groups[0].name)
+				return nil
 			}
-			if err := s.handle(received); err != nil {
+			if err := s.emitUpdate(received); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-func (s *liveSessionTail) handle(received types.StartLiveTailResponseStream) error {
+func (s *liveSessionTail) emitUpdate(received types.StartLiveTailResponseStream) error {
 	update, isUpdate := received.(*types.StartLiveTailResponseStreamMemberSessionUpdate)
 	if !isUpdate {
 		return nil
