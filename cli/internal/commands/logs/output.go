@@ -100,14 +100,20 @@ func plainMessage(message string) string {
 	return strings.Join(lines, `\n`)
 }
 
-func plainFields(parsed logview.Entry) string {
-	fields := maps.Clone(parsed.Fields)
-	if parsed.Error != "" {
-		if fields == nil {
-			fields = map[string]any{}
-		}
-		fields["error"] = parsed.Error
+func fieldsWithError(parsed logview.Entry) map[string]any {
+	if parsed.Error == "" {
+		return parsed.Fields
 	}
+	fields := maps.Clone(parsed.Fields)
+	if fields == nil {
+		fields = map[string]any{}
+	}
+	fields["error"] = parsed.Error
+	return fields
+}
+
+func plainFields(parsed logview.Entry) string {
+	fields := fieldsWithError(parsed)
 	if len(fields) == 0 {
 		return ""
 	}
@@ -154,7 +160,7 @@ func (f jsonFormat) writeEntry(entry *contractv1.LogEntry, parsed logview.Entry)
 		Stream:   streamName(entry.GetStream()),
 		Level:    parsed.Level.String(),
 		Message:  entry.GetMessage(),
-		Fields:   parsed.Fields,
+		Fields:   fieldsWithError(parsed),
 		Failure:  entry.GetFailure(),
 	})
 }
