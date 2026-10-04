@@ -163,7 +163,7 @@ func NewPreviewCommand(dependencies Dependencies) *cobra.Command {
 func previewUpFlags(cmd *cobra.Command, opts *previewUpOptions) {
 	cmd.Flags().BoolVar(&opts.persistent, "persistent", false, "Deploy a persistent preview: its own infrastructure, and a confirmation before it is torn down")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
-	cmd.Flags().BoolVar(&opts.dry, "dry", false, dryFlagUsage)
+	commands.AddDryFlag(cmd, &opts.dry, dryFlagUsage)
 	commands.AddYesFlag(cmd, &opts.yes)
 }
 

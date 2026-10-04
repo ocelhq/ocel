@@ -69,7 +69,7 @@ func newProductionCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	commands.AddYesFlag(cmd, &yes)
-	cmd.Flags().BoolVar(&dry, "dry", false, "Print what would be destroyed and stop, destroying nothing")
+	commands.AddDryFlag(cmd, &dry, "Print what would be destroyed and stop, destroying nothing")
 	return commands.DeclareMutating(cmd)
 }
 
@@ -93,7 +93,7 @@ func newPreviewCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	commands.AddYesFlag(cmd, &yes)
-	cmd.Flags().BoolVar(&dry, "dry", false, "Print what would be destroyed and stop, destroying nothing")
+	commands.AddDryFlag(cmd, &dry, "Print what would be destroyed and stop, destroying nothing")
 	return commands.DeclareMutating(cmd)
 }
 

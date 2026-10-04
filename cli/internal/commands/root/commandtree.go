@@ -49,7 +49,7 @@ func describeCommand(cmd *cobra.Command) *helpv1.Command {
 		Flags:      describeFlags(cmd),
 		PrintsData: commands.PrintsData(cmd),
 		Mutates:    mutates,
-		Confirms:   commands.HasConsentFlag(cmd),
+		Confirms:   commands.HasConfirmationFlag(cmd),
 	}
 }
 

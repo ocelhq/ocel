@@ -78,7 +78,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	commands.AddYesFlag(cmd, &opts.yes)
 	cmd.Flags().StringVar(&opts.tag, "tag", "", "Mark this deploy with an immutable `label` to roll back to by name (ocel rollback --tag)")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
-	cmd.Flags().BoolVar(&opts.dry, "dry", false, dryFlagUsage)
+	commands.AddDryFlag(cmd, &opts.dry, dryFlagUsage)
 
 	return commands.DeclareMutating(cmd)
 }
