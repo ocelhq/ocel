@@ -11,6 +11,7 @@ import (
 
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
@@ -57,15 +58,18 @@ func (f *flags) explicitConfigPath() string {
 	return os.Getenv(commands.ConfigEnvVar)
 }
 
-func (f *flags) readUnsetFromEnv(cmd *cobra.Command) error {
+func (f *flags) readFromFlagsOrEnv(cmd *cobra.Command) error {
 	var errVerbose, errJSON error
-	if !cmd.Flags().Changed("verbose") {
-		f.verbose, errVerbose = envBool(commands.DebugEnvVar)
-	}
-	if !cmd.Flags().Changed("json") {
-		f.json, errJSON = envBool(commands.JSONEnvVar)
-	}
+	f.verbose, errVerbose = readFlagOrEnvBool(cmd.Flags(), "verbose", commands.DebugEnvVar)
+	f.json, errJSON = readFlagOrEnvBool(cmd.Flags(), "json", commands.JSONEnvVar)
 	return errors.Join(errVerbose, errJSON)
+}
+
+func readFlagOrEnvBool(set *pflag.FlagSet, flag, envVar string) (bool, error) {
+	if set.Changed(flag) {
+		return set.GetBool(flag)
+	}
+	return envBool(envVar)
 }
 
 func envBool(name string) (bool, error) {
@@ -137,7 +141,7 @@ func newCommand() *command {
 			return err
 		}
 		c.preRunReached = true
-		if err := set.readUnsetFromEnv(cmd); err != nil {
+		if err := set.readFromFlagsOrEnv(cmd); err != nil {
 			return err
 		}
 		invocation.AttachCommandSink(cmd)

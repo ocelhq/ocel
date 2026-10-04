@@ -31,15 +31,24 @@ func (c *command) executeAndReport(args []string) (exitCode int) {
 }
 
 func jsonRequested(args []string) bool {
-	var on bool
+	var value unparsedBool
 	scan := pflag.NewFlagSet("json", pflag.ContinueOnError)
 	scan.ParseErrorsAllowlist.UnknownFlags = true
 	scan.SetOutput(io.Discard)
-	scan.BoolVar(&on, "json", false, "")
+	scan.Var(&value, "json", "")
+	scan.Lookup("json").NoOptDefVal = "true"
 	_ = scan.Parse(args)
-	if scan.Changed("json") {
-		return on
-	}
-	on, err := envBool(commands.JSONEnvVar)
-	return err == nil && on
+	on, err := readFlagOrEnvBool(scan, "json", commands.JSONEnvVar)
+	return on || err != nil
 }
+
+type unparsedBool string
+
+func (b *unparsedBool) String() string { return string(*b) }
+
+func (b *unparsedBool) Set(value string) error {
+	*b = unparsedBool(value)
+	return nil
+}
+
+func (*unparsedBool) Type() string { return "bool" }

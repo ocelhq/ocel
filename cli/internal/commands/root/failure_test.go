@@ -214,13 +214,39 @@ func TestAProjectThatFailsToLoadBeforeARunStartsPrintsOneDocumentOrASummaryNever
 	}
 }
 
-func TestAnInvalidOCELJSONKeepsTheHumanFailureBlock(t *testing.T) {
-	t.Setenv("NO_COLOR", "1")
+func TestAnOCELJSONThatIsNotABooleanStillAsksForTheFailureAsADocument(t *testing.T) {
 	t.Setenv("OCEL_JSON", "garbage")
 
 	code, stdout, stderr := executeAndReportRoot(t, "deployments", "ls")
 
-	if code != 1 || stdout != "" || !strings.HasPrefix(stderr, "✗ OCEL_JSON") {
+	failure := requireOneFailureDocument(t, stdout)
+	if message, _ := failure["message"].(string); !strings.HasPrefix(message, "OCEL_JSON") {
+		t.Errorf("error message = %q, want the invalid OCEL_JSON named", message)
+	}
+	if code != 1 || stderr != "" {
+		t.Errorf("exit code = %d, stderr = %q, want 1 and nothing", code, stderr)
+	}
+}
+
+func TestAJSONFlagThatIsNotABooleanStillAsksForTheUsageDocument(t *testing.T) {
+	code, stdout, stderr := executeAndReportRoot(t, "deployments", "ls", "--json=garbage")
+
+	failure := requireOneFailureDocument(t, stdout)
+	if failure["code"] != "usage" {
+		t.Errorf("error code = %v, want usage", failure["code"])
+	}
+	if code != 1 || stderr != "" {
+		t.Errorf("exit code = %d, stderr = %q, want 1 and nothing", code, stderr)
+	}
+}
+
+func TestAnExplicitlyFalseJSONFlagOverridesAnInvalidOCELJSON(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("OCEL_JSON", "garbage")
+
+	code, stdout, stderr := executeAndReportRoot(t, "--json=false", "deploy", "--no-such-flag")
+
+	if code != 1 || stdout != "" || !strings.HasPrefix(stderr, "✗ ") {
 		t.Errorf("code = %d, stdout = %q, stderr = %q, want the human failure block on stderr", code, stdout, stderr)
 	}
 }
