@@ -411,14 +411,14 @@ func (r *Process) driveStream(rpc string, stream *connect.ServerStreamForClient[
 }
 
 func (r *Process) callError(rpc string, err error) error {
-	if cancelled(err) {
+	if IsCancelled(err) {
 		return fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
 	}
 	return r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, err))
 }
 
 func (r *Process) streamError(rpc string, err error, refused bool) error {
-	if cancelled(err) {
+	if IsCancelled(err) {
 		return fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
 	}
 	if _, named := provider.RefusedCode(err); refused || named {
@@ -475,7 +475,7 @@ func (r *Process) withExitStderr(err error) error {
 	return err
 }
 
-func cancelled(err error) bool {
+func IsCancelled(err error) bool {
 	return errors.Is(err, context.Canceled) || connect.CodeOf(err) == connect.CodeCanceled
 }
 

@@ -230,3 +230,17 @@ func TestTerminalViewBoxesTheMessageLinesAboveTheError(t *testing.T) {
 		t.Errorf("box = %q, want the message line GET /orders above the error", got)
 	}
 }
+
+func TestTerminalViewWritesTheLiveMarkerAsAMutedLine(t *testing.T) {
+	var out bytes.Buffer
+	present := terminal.Resolve(terminal.Conditions{TTY: true, ColorAsked: terminal.ColorAlways})
+	view := logview.NewTerminalView(&out, present)
+
+	if err := view.WriteLiveMarker(); err != nil {
+		t.Fatalf("WriteLiveMarker() = %v", err)
+	}
+
+	if want := present.Palette().Muted("── live ──") + "\n"; out.String() != want || !strings.Contains(want, "\x1b[") {
+		t.Errorf("output = %q, want the marker painted muted: %q", out.String(), want)
+	}
+}
