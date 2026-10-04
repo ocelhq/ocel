@@ -12,8 +12,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 )
 
-const usageTemplate = `{{heading "USAGE"}}
-  {{.UseLine}}
+const usageTemplate = `{{heading "USAGE"}}{{if .Runnable}}
+  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
+  {{.CommandPath}} [command]{{end}}
 {{if .Aliases}}
 {{heading "ALIASES"}}
 {{range .Aliases}}  {{.}}
