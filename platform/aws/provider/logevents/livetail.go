@@ -1,6 +1,7 @@
 package logevents
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -44,6 +45,7 @@ type liveSession interface {
 
 type liveTailClient struct {
 	startSession func(ctx context.Context, input *cloudwatchlogs.StartLiveTailInput) (liveSession, error)
+	readEvents   func(ctx context.Context, group liveGroup, since, until time.Time) ([]Event, error)
 	tail         func(ctx context.Context, sources []Source, since time.Time) error
 }
 
@@ -80,6 +82,9 @@ func LiveTail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.
 			}
 			return out.GetStream(), nil
 		},
+		readEvents: func(ctx context.Context, group liveGroup, since, until time.Time) ([]Event, error) {
+			return readEventsBetween(ctx, logs, group.logGroup, group.source, query.Contains, since, until)
+		},
 		tail: func(ctx context.Context, sources []Source, since time.Time) error {
 			polled := query
 			polled.Sources, polled.Since = sources, since
@@ -99,6 +104,30 @@ func findLiveGroups(ctx context.Context, lambdas *lambda.Client, region, account
 		groups = append(groups, liveGroup{logGroup: group, source: source, arn: nameGroupARN(region, account, group.name)})
 	}
 	return groups, nil
+}
+
+func readEventsBetween(ctx context.Context, logs *cloudwatchlogs.Client, group logGroup, source Source, contains string, since, until time.Time) ([]Event, error) {
+	pages := cloudwatchlogs.NewFilterLogEventsPaginator(logs, &cloudwatchlogs.FilterLogEventsInput{
+		LogGroupName:        aws.String(group.name),
+		LogStreamNamePrefix: group.streamPrefix,
+		StartFromHead:       aws.Bool(true),
+		FilterPattern:       quoteFilterPattern(contains),
+		StartTime:           aws.Int64(since.UnixMilli()),
+		EndTime:             aws.Int64(until.UnixMilli()),
+	})
+	var events []Event
+	for pages.HasMorePages() {
+		page, err := pages.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("read log events of %s: %w", group.name, err)
+		}
+		for _, logged := range page.Events {
+			if event, keep := parseLoggedEvent(group, source, logged); keep {
+				events = append(events, event)
+			}
+		}
+	}
+	return events, nil
 }
 
 func nameGroupARN(region, account, name string) string {
@@ -169,15 +198,17 @@ func buildSessionInput(groups []liveGroup, contains string) *cloudwatchlogs.Star
 }
 
 type liveSessionTail struct {
-	groups  []liveGroup
-	query   Query
-	client  liveTailClient
-	emit    func([]Event) error
-	notice  func(Notice) error
-	sleep   func(context.Context, time.Duration) error
-	chance  func() float64
-	newest  time.Time
-	sampled bool
+	groups   []liveGroup
+	query    Query
+	client   liveTailClient
+	emit     func([]Event) error
+	notice   func(Notice) error
+	sleep    func(context.Context, time.Duration) error
+	chance   func() float64
+	newest   time.Time
+	sampled  bool
+	written  map[Event]int
+	caughtUp bool
 }
 
 func (s *liveSessionTail) run(ctx context.Context) error {
@@ -208,22 +239,63 @@ func (s *liveSessionTail) run(ctx context.Context) error {
 		case !errors.As(err, &timeout):
 			return err
 		}
+		s.written = nil
 		if err := s.notice(Notice{Kind: NoticeReconnected}); err != nil {
 			return err
 		}
 	}
 }
 
-func (s *liveSessionTail) openSession(ctx context.Context, input *cloudwatchlogs.StartLiveTailInput) (liveSession, error) {
+func (s *liveSessionTail) openSession(ctx context.Context, input *cloudwatchlogs.StartLiveTailInput) (session liveSession, err error) {
+	var limit error
+	err = s.retryThrottled(ctx, func() error {
+		session, err = s.client.startSession(ctx, input)
+		if errors.As(err, new(*types.LimitExceededException)) {
+			limit = err
+			return nil
+		}
+		return err
+	})
+	return session, cmp.Or(limit, err)
+}
+
+func (s *liveSessionTail) emitWrittenBefore(ctx context.Context, until time.Time) error {
+	var written []Event
+	for _, group := range s.groups {
+		var read []Event
+		err := s.retryThrottled(ctx, func() (err error) {
+			read, err = s.client.readEvents(ctx, group, s.query.Since, until)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+		written = append(written, read...)
+	}
+	slices.SortStableFunc(written, func(a, b Event) int { return a.Time.Compare(b.Time) })
+	s.written, s.caughtUp = map[Event]int{}, true
+	for _, event := range written {
+		event.ID = ""
+		s.written[event]++
+		if event.Time.After(s.newest) {
+			s.newest = event.Time
+		}
+	}
+	if len(written) == 0 {
+		return nil
+	}
+	return s.emit(written)
+}
+
+func (s *liveSessionTail) retryThrottled(ctx context.Context, call func() error) error {
 	backoff := defaultPollInterval
 	for {
-		session, err := s.client.startSession(ctx, input)
-		var limit *types.LimitExceededException
-		if !isThrottled(err) || errors.As(err, &limit) {
-			return session, err
+		err := call()
+		if !isThrottled(err) {
+			return err
 		}
 		if err := s.sleep(ctx, backoff-time.Duration(float64(backoff)*throttledJitter*s.chance())); err != nil {
-			return nil, err
+			return err
 		}
 		backoff = min(backoff*2, maxThrottledInterval)
 	}
@@ -237,7 +309,13 @@ func (s *liveSessionTail) pollFrom() time.Time {
 }
 
 func (s *liveSessionTail) follow(ctx context.Context, session liveSession) error {
-	err := s.emitUpdates(ctx, session)
+	var err error
+	if !s.caughtUp {
+		err = s.emitWrittenBefore(ctx, time.Now())
+	}
+	if err == nil {
+		err = s.emitUpdates(ctx, session)
+	}
 	ended := session.Close()
 	switch {
 	case ctx.Err() != nil || err != nil:
@@ -282,6 +360,10 @@ func (s *liveSessionTail) emitUpdate(received types.StartLiveTailResponseStream)
 		for _, group := range s.groupsOf(aws.ToString(logged.LogGroupIdentifier), stream) {
 			event, keep := buildEvent(group.logGroup, group.source, stream, aws.ToInt64(logged.Timestamp), aws.ToString(logged.Message))
 			if !keep {
+				continue
+			}
+			if s.written[event] > 0 {
+				s.written[event]--
 				continue
 			}
 			if event.Time.After(s.newest) {

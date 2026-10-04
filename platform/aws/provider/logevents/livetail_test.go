@@ -73,8 +73,14 @@ type liveRun struct {
 	polled   [][]Source
 	polledAt []time.Time
 	sleeps   []time.Duration
+	reads    []caughtUpRead
 	err      error
 	finished bool
+}
+
+type caughtUpRead struct {
+	label        string
+	since, until time.Time
 }
 
 func (r *liveRun) starts() int {
@@ -128,6 +134,11 @@ func (r *liveRun) events() []Event {
 
 func runLiveTail(t *testing.T, groups []liveGroup, query Query, start func(*liveRun, *cloudwatchlogs.StartLiveTailInput) (liveSession, error)) (*liveRun, func()) {
 	t.Helper()
+	return runLiveTailAfter(t, nil, groups, query, start)
+}
+
+func runLiveTailAfter(t *testing.T, written []Event, groups []liveGroup, query Query, start func(*liveRun, *cloudwatchlogs.StartLiveTailInput) (liveSession, error)) (*liveRun, func()) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	run := &liveRun{}
 	go func() {
@@ -137,6 +148,18 @@ func runLiveTail(t *testing.T, groups []liveGroup, query Query, start func(*live
 				run.inputs = append(run.inputs, input)
 				run.mutex.Unlock()
 				return start(run, input)
+			},
+			readEvents: func(_ context.Context, group liveGroup, since, until time.Time) ([]Event, error) {
+				run.mutex.Lock()
+				run.reads = append(run.reads, caughtUpRead{label: group.source.Label, since: since, until: until})
+				run.mutex.Unlock()
+				var read []Event
+				for _, event := range written {
+					if event.Label == group.source.Label && !event.Time.Before(since) && !event.Time.After(until) {
+						read = append(read, event)
+					}
+				}
+				return read, nil
 			},
 			tail: func(_ context.Context, sources []Source, since time.Time) error {
 				run.mutex.Lock()
@@ -337,6 +360,44 @@ func TestLiveTailTailsALogGroupTwoSourcesShareOnceAndLabelsItsEventsForEach(t *t
 	}
 }
 
+func TestLiveTailEmitsWhatWasWrittenBetweenSinceAndTheSessionStartOnceBeforeTheLiveEntries(t *testing.T) {
+	t.Parallel()
+	session := newFakeSession()
+	groups := lambdaGroups(2)
+	since := time.Now().Add(-30 * time.Second)
+	written := []Event{
+		{ID: "a", Time: since.Add(2 * time.Second).Round(time.Millisecond).UTC(), Label: "1", Instance: "[$LATEST]bbb", Text: "before the session, second"},
+		{ID: "b", Time: since.Add(time.Second).Round(time.Millisecond).UTC(), Label: "0", Instance: "[$LATEST]aaa", Text: "before the session, first"},
+	}
+	var startedAt time.Time
+	run, stop := runLiveTailAfter(t, written, groups, Query{Since: since}, func(run *liveRun, _ *cloudwatchlogs.StartLiveTailInput) (liveSession, error) {
+		run.mutex.Lock()
+		defer run.mutex.Unlock()
+		startedAt = time.Now()
+		return session, nil
+	})
+	waitFor(t, func() bool { run.mutex.Lock(); defer run.mutex.Unlock(); return !startedAt.IsZero() })
+	session.events <- update(false,
+		liveLine(groups[1].arn, "2026/09/01/[$LATEST]bbb", "before the session, second\n", written[0].Time),
+		liveLine(groups[0].arn, "2026/09/01/[$LATEST]aaa", "after the session started\n", startedAt.Add(time.Second)),
+	)
+	waitFor(t, func() bool { return len(run.events()) == 3 })
+	stop()
+
+	got := run.events()
+	if want := []string{"before the session, first", "before the session, second", "after the session started"}; !slices.Equal([]string{got[0].Text, got[1].Text, got[2].Text}, want) {
+		t.Errorf("LiveTail() emitted %+v, want each entry once and the caught up ones first: %v", got, want)
+	}
+	if len(run.reads) != 2 {
+		t.Fatalf("LiveTail() read %d log groups up to the session start, want both", len(run.reads))
+	}
+	for _, read := range run.reads {
+		if !read.since.Equal(since) || read.until.Before(startedAt) {
+			t.Errorf("LiveTail() read %s from %s to %s, want from the query's since to when its session started at %s", read.label, read.since, read.until, startedAt)
+		}
+	}
+}
+
 func TestLiveTailFallsBackToPollingAtTheSessionLimit(t *testing.T) {
 	t.Parallel()
 	since := epoch.Add(time.Hour)
@@ -355,6 +416,9 @@ func TestLiveTailFallsBackToPollingAtTheSessionLimit(t *testing.T) {
 	}
 	if want := []NoticeKind{NoticeReconnected}; !slices.Equal(run.noticeKinds(), want) {
 		t.Fatalf("LiveTail() reported %v, want %v", run.noticeKinds(), want)
+	}
+	if len(run.reads) != 0 {
+		t.Errorf("LiveTail() read %v up to a session it never started, want polling from since alone", run.reads)
 	}
 	if got, want := run.notices[0].Message, "Live Tail is at its session limit; polling instead"; got != want {
 		t.Errorf("LiveTail() told the user %q, want %q", got, want)
