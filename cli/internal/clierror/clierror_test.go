@@ -85,9 +85,9 @@ func TestAMissingInputReportsInputRequiredWithTheFlagOrEnvVarThatSuppliesIt(t *t
 	got := clierror.NewRunError(fmt.Errorf("link: %w", clierror.NewInputRequired(errors.New("multiple organizations found"), "--org <slug>")))
 
 	want := &streamv1.RunError{
-		Code:    "input_required",
+		Code:    clierror.CodeInputRequired,
 		Message: "link: multiple organizations found",
-		Hint:    proto.String("supply it with --org <slug>"),
+		Hint:    proto.String("--org <slug>"),
 		DocsUrl: proto.String("https://ocel.dev/docs/errors/input_required"),
 	}
 	if !proto.Equal(got, want) {

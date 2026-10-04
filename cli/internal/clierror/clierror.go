@@ -10,7 +10,12 @@ import (
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
-const internalCode = "internal"
+const (
+	internalCode                   = "internal"
+	CodeConfirmationRequired       = "confirmation_required"
+	CodeConfirmationBypassMismatch = "confirmation_bypass_mismatch"
+	CodeInputRequired              = "input_required"
+)
 
 type Error struct {
 	Code      string
@@ -52,16 +57,16 @@ func NewRunError(err error) *streamv1.RunError {
 	return runError
 }
 
-func NewConfirmationRequired(cause error, remedy string) *Error {
-	return &Error{Code: "confirmation_required", Hint: remedy, Cause: cause}
+func NewConfirmationRequired(cause error, typedInput string) *Error {
+	return &Error{Code: CodeConfirmationRequired, Hint: typedInput, Cause: cause}
 }
 
-func NewConfirmationBypassMismatch(cause error, remedy string) *Error {
-	return &Error{Code: "confirmation_bypass_mismatch", Hint: remedy, Cause: cause}
+func NewConfirmationBypassMismatch(cause error) *Error {
+	return &Error{Code: CodeConfirmationBypassMismatch, Cause: cause}
 }
 
-func NewInputRequired(cause error, supplier string) *Error {
-	return &Error{Code: "input_required", Hint: "supply it with " + supplier, Cause: cause}
+func NewInputRequired(cause error, typedInput string) *Error {
+	return &Error{Code: CodeInputRequired, Hint: typedInput, Cause: cause}
 }
 
 func isPublishedCode(code string) bool {

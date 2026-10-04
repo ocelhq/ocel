@@ -18,6 +18,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 
@@ -253,10 +254,37 @@ func TestLinkSelectsOrCreatesAConsoleProjectForThisDirectory(t *testing.T) {
 
 		evs := clitest.RunEvents(t, stream.String())
 		failure := evs[len(evs)-1].GetSummary().GetError()
-		if failure.GetCode() != "input_required" || failure.GetHint() != "supply it with --org <slug>" {
-			t.Errorf("summary error = %v, want input_required with the hint supply it with --org <slug>", failure)
+		if failure.GetCode() != clierror.CodeInputRequired || failure.GetHint() != "--org <slug>" {
+			t.Errorf("summary error = %v, want input_required with the hint --org <slug>", failure)
 		}
 	})
+
+	for _, tc := range []struct {
+		name     string
+		projects []map[string]string
+		hint     string
+	}{
+		{"an organization with projects", []map[string]string{projectRow("p1", "My App", "my-app")}, "ocel link <project>"},
+		{"an organization with no projects", nil, "--create"},
+	} {
+		t.Run("no project chosen without a terminal in "+tc.name+" ends the JSON stream with input_required naming "+tc.hint, func(t *testing.T) {
+			t.Parallel()
+
+			dependencies := newTestDependencies()
+			dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+			srv := newCloudServer(t, tc.projects...)
+			var stream bytes.Buffer
+			dependencies.Events.Attach(terminal.NewJSONLines(&stream))
+
+			_ = runLink(context.Background(), dependencies, t.TempDir(), "", options{apiURL: srv.URL}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+
+			evs := clitest.RunEvents(t, stream.String())
+			failure := evs[len(evs)-1].GetSummary().GetError()
+			if failure.GetCode() != clierror.CodeInputRequired || failure.GetHint() != tc.hint {
+				t.Errorf("summary error = %v, want input_required with the hint %s", failure, tc.hint)
+			}
+		})
+	}
 
 	t.Run("--org selects among several", func(t *testing.T) {
 		t.Parallel()

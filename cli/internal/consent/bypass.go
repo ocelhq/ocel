@@ -33,7 +33,6 @@ func (b Bypass) Granted() (granted bool, notice string, err error) {
 		return false, "", clierror.NewConfirmationBypassMismatch(
 			fmt.Errorf("%s is set to %q, but this %s is %q; it must name the %s being %s",
 				BypassEnv, requested, b.Noun, b.Subject, b.Noun, b.Verb),
-			fmt.Sprintf("set %s to %s", BypassEnv, b.Subject),
 		)
 	default:
 		return false, fmt.Sprintf("%s is set to %q, not this %s (%s); confirming interactively instead",

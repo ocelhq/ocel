@@ -2,7 +2,6 @@ package consent_test
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -40,10 +39,10 @@ func TestABypassNamingAnotherSubjectWithoutATerminalFailsWithConfirmationBypassM
 	_, _, err := consent.Bypass{Noun: "project", Subject: "acme", Action: "destroying production", Verb: "destroyed"}.Granted()
 
 	got := clierror.NewRunError(fmt.Errorf("destroy: %w", err))
-	if got.GetCode() != "confirmation_bypass_mismatch" {
+	if got.GetCode() != clierror.CodeConfirmationBypassMismatch {
 		t.Fatalf("code = %q, want confirmation_bypass_mismatch; run error = %s", got.GetCode(), protojson.Format(got))
 	}
-	if !strings.Contains(got.GetHint(), "acme") || !strings.Contains(got.GetHint(), consent.BypassEnv) {
-		t.Errorf("hint = %q, want it to name %s and the subject acme", got.GetHint(), consent.BypassEnv)
+	if got.Hint != nil {
+		t.Errorf("hint = %q, want none: a hint naming the subject would steer an unattended run into a destroy nobody confirmed", got.GetHint())
 	}
 }

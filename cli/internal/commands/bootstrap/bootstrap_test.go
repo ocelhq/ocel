@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
@@ -419,6 +420,9 @@ func TestBootstrapDestroyShowsItsPlanAndTakesConsentBeforeRemovingAnything(t *te
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to name %q", err, want)
 			}
+		}
+		if got := clierror.NewRunError(err); got.GetCode() != clierror.CodeConfirmationRequired || got.GetHint() != "--yes" {
+			t.Errorf("run error = %v, want confirmation_required with the hint --yes", got)
 		}
 	})
 }

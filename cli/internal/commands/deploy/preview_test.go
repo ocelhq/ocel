@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
@@ -514,8 +515,8 @@ func TestAPersistentPreviewIsNotTornDownUnasked(t *testing.T) {
 				t.Errorf("ocel preview rm staging err = %v, want a refusal naming --yes; out=%s", err, out)
 			}
 			evs := clitest.RunEvents(t, stream.String())
-			if got := evs[len(evs)-1].GetSummary().GetError(); got.GetCode() != "confirmation_required" || got.GetHint() != "pass --yes" {
-				t.Errorf("summary error = %v, want code confirmation_required with the hint pass --yes", got)
+			if got := evs[len(evs)-1].GetSummary().GetError(); got.GetCode() != clierror.CodeConfirmationRequired || got.GetHint() != "--yes" {
+				t.Errorf("summary error = %v, want code confirmation_required with the hint --yes", got)
 			}
 			if removed := removedEnvironments(t, fixture); len(removed) != 0 {
 				t.Errorf("the CLI removed %v, want nothing torn down without a terminal to ask on", removed)
