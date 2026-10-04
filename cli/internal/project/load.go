@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -41,7 +42,7 @@ func find(ctx context.Context, startDir, explicitPath string, optional bool) (*P
 			}
 			return &Project{Dir: root, Path: filepath.Join(root, DefaultFileName), EnvSource: envsource.DefaultTiers(), Apps: apps}, nil
 		}
-		return nil, NoConfigError{Names: fileNames(""), StartDir: startDir}
+		return nil, newNoConfigError(NoConfigError{Names: fileNames(""), StartDir: startDir}, initCommand)
 	}
 	return load(ctx, configPath)
 }
@@ -50,11 +51,11 @@ func load(ctx context.Context, configPath string) (*Project, error) {
 	base := filepath.Base(configPath)
 	_, f, ok := formOf(base)
 	if !ok {
-		return nil, fmt.Errorf("%s is not a config this reads — a config is named %s, or %s with a target between the stem and the suffix", base, strings.Join(fileNames(""), ", "), strings.Join(fileNames("<target>"), ", "))
+		return nil, newNoConfigError(fmt.Errorf("%s is not a config this reads — a config is named %s, or %s with a target between the stem and the suffix", base, strings.Join(fileNames(""), ", "), strings.Join(fileNames("<target>"), ", ")), "")
 	}
 	dir := filepath.Dir(configPath)
 	if others := OtherConfigFiles(configPath); len(others) > 0 {
-		return nil, fmt.Errorf("%s contains %s, and one project reads one config: delete all but the one you author", dir, strings.Join(append([]string{base}, others...), " and "))
+		return nil, newInvalidConfigError(fmt.Errorf("%s contains %s, and one project reads one config: delete all but the one you author", dir, strings.Join(append([]string{base}, others...), " and ")), "")
 	}
 
 	env, err := readEnvironment(dir)
@@ -71,7 +72,9 @@ func load(ctx context.Context, configPath string) (*Project, error) {
 
 	doc, err := configdoc.Decode(data, env.lookup)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", configPath, err)
+		var unknown configdoc.UnknownKeyError
+		errors.As(err, &unknown)
+		return nil, newInvalidConfigError(fmt.Errorf("%s: %w", configPath, err), unknown.Path)
 	}
 	return normalize(doc, configPath)
 }

@@ -144,10 +144,10 @@ func explicitConfigFile(startDir, explicitPath string) (string, error) {
 		return "", err
 	}
 	if isDir(abs) {
-		return "", fmt.Errorf("config file %s (from --config / OCEL_CONFIG) is a directory, not a config file", abs)
+		return "", newNoConfigError(fmt.Errorf("config file %s (from --config / OCEL_CONFIG) is a directory, not a config file", abs), "")
 	}
 	if !isRegularFile(abs) {
-		return "", fmt.Errorf("config file %s (from --config / OCEL_CONFIG) not found", abs)
+		return "", newNoConfigError(fmt.Errorf("config file %s (from --config / OCEL_CONFIG) not found", abs), "")
 	}
 	return abs, nil
 }
@@ -177,7 +177,7 @@ func readJSON(_ context.Context, configPath string, _ environment) ([]byte, erro
 	}
 	standard, err := hujson.Standardize(read)
 	if err != nil {
-		return nil, fmt.Errorf("%s is not valid JSON: %w", configPath, err)
+		return nil, newInvalidConfigError(fmt.Errorf("%s is not valid JSON: %w", configPath, err), "")
 	}
 	return standard, nil
 }

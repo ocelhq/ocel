@@ -14,16 +14,16 @@ func detectFramework(dir string) (string, error) {
 	if err != nil || found {
 		return framework, err
 	}
-	return "", fmt.Errorf(
+	return "", newInvalidConfigError(fmt.Errorf(
 		"nothing in %s says what this app is built with: it contains no %s, so set \"framework\" to one of %s",
 		dir, english.Or(language.ManifestNames()), english.Or(english.Quoted(buildoutput.Frameworks())),
-	)
+	), "")
 }
 
 func frameworkOf(app string, dir string, named string) (string, error) {
 	if named != "" {
 		if !buildoutput.IsKnownFramework(named) {
-			return "", fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, english.And(english.Quoted(buildoutput.Frameworks())))
+			return "", newInvalidConfigError(fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, english.And(english.Quoted(buildoutput.Frameworks()))), "")
 		}
 		return named, nil
 	}

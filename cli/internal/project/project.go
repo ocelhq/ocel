@@ -70,17 +70,17 @@ func (p *Project) EdgeSelection() *contractv1.EdgeSelection {
 
 func (p *Project) RequireProvider() (*Provider, error) {
 	if p.Provider == nil {
-		return nil, fmt.Errorf("no provider configured in %s — add `\"provider\": { \"<id>\": { … } }` keyed by the provider this project deploys through, one of %s", filepath.Base(p.Path), strings.Join(configdoc.ProviderIDs(), ", "))
+		return nil, newInvalidConfigError(fmt.Errorf("no provider configured in %s — add `\"provider\": { \"<id>\": { … } }` keyed by the provider this project deploys through, one of %s", filepath.Base(p.Path), strings.Join(configdoc.ProviderIDs(), ", ")), "provider")
 	}
 	return p.Provider, nil
 }
 
 func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	if doc.Slug == "" {
-		return nil, fmt.Errorf("%s is missing required \"slug\" — run `%s` to create one", configPath, initCommand)
+		return nil, newInvalidConfigError(fmt.Errorf("%s is missing required \"slug\" — run `%s` to create one", configPath, initCommand), "slug")
 	}
 	if err := ValidateSlug(doc.Slug); err != nil {
-		return nil, fmt.Errorf("%s has an invalid \"slug\": %w", configPath, err)
+		return nil, newInvalidConfigError(fmt.Errorf("%s has an invalid \"slug\": %w", configPath, err), "slug")
 	}
 
 	var provider *Provider
@@ -92,14 +92,14 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	if doc.Edge != nil {
 		options := &structpb.Struct{}
 		if err := protojson.Unmarshal(doc.Edge.Options, options); err != nil {
-			return nil, fmt.Errorf("%s configures edge %q with options that are not an object: %w", configPath, doc.Edge.ID, err)
+			return nil, newInvalidConfigError(fmt.Errorf("%s configures edge %q with options that are not an object: %w", configPath, doc.Edge.ID, err), configdoc.JoinPath("edge", doc.Edge.ID))
 		}
 		front = &Edge{Kind: edge.Kind(doc.Edge.ID), Options: options}
 	}
 
 	allowDegraded, err := normalizeAllowDegraded(doc.AllowDegraded)
 	if err != nil {
-		return nil, fmt.Errorf("%s has an invalid \"allowDegraded\": %w", configPath, err)
+		return nil, newInvalidConfigError(fmt.Errorf("%s has an invalid \"allowDegraded\": %w", configPath, err), "allowDegraded")
 	}
 
 	apps, err := normalizeApps(doc.Apps, filepath.Dir(configPath))
@@ -112,23 +112,23 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 			return nil, err
 		}
 		if len(apps) > 0 && doc.Slug == naming.InfraApp {
-			return nil, fmt.Errorf("%s names no apps, so the app at the project root is named after the slug, and %q is reserved for the stack holding each environment's shared infrastructure: list the app under \"apps\" with another name, or change the slug", configPath, naming.InfraApp)
+			return nil, newInvalidConfigError(fmt.Errorf("%s names no apps, so the app at the project root is named after the slug, and %q is reserved for the stack holding each environment's shared infrastructure: list the app under \"apps\" with another name, or change the slug", configPath, naming.InfraApp), "slug")
 		}
 	}
 
 	domains, err := normalizeProjectDomains(doc.Domains)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", configPath, err)
+		return nil, newInvalidConfigError(fmt.Errorf("%s: %w", configPath, err), "domains")
 	}
 
 	bindings, err := normalizeBindings(doc.Bindings)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", configPath, err)
+		return nil, newInvalidConfigError(fmt.Errorf("%s: %w", configPath, err), "bindings")
 	}
 
 	registry, err := normalizeRegistry(doc.Registry)
 	if err != nil {
-		return nil, fmt.Errorf("%s has an invalid \"registry\": %w", configPath, err)
+		return nil, newInvalidConfigError(fmt.Errorf("%s has an invalid \"registry\": %w", configPath, err), "registry")
 	}
 
 	var discoveryPaths []string

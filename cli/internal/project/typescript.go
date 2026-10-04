@@ -61,7 +61,7 @@ try {
 	})
 	if len(result.Errors) > 0 {
 		msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{Color: false})
-		return nil, fmt.Errorf("%s failed to evaluate: bundle failed:\n%s", configPath, strings.Join(msgs, "\n"))
+		return nil, newInvalidConfigError(fmt.Errorf("%s failed to evaluate: bundle failed:\n%s", configPath, strings.Join(msgs, "\n")), "")
 	}
 
 	if _, err := exec.LookPath("node"); err != nil {
@@ -76,7 +76,7 @@ try {
 	stdout, err := cmd.Output()
 	if err != nil {
 		if stderr.Len() > 0 {
-			return nil, fmt.Errorf("%s failed to evaluate: node exited with error: %s", configPath, strings.TrimSpace(stderr.String()))
+			return nil, newInvalidConfigError(fmt.Errorf("%s failed to evaluate: node exited with error: %s", configPath, strings.TrimSpace(stderr.String())), "")
 		}
 		return nil, fmt.Errorf("%s failed to evaluate: run node: %w", configPath, err)
 	}
