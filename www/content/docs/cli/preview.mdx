@@ -5,8 +5,8 @@ description: Deploy, list and tear down previews beside production.
 
 ```bash
 ocel preview
-ocel preview pr-12
-ocel preview staging --persistent
+ocel preview up pr-12
+ocel preview up staging --persistent
 ocel preview ls
 ocel preview rm pr-12
 ```
@@ -17,7 +17,7 @@ preview domain.
 
 | Command | What it does |
 | --- | --- |
-| `[name]` | The same as `up`. |
+| _(none)_ | The same as `up` with no name: deploys the current branch's preview. |
 | `up [name]` | Deploy or refresh a preview. `--persistent` creates a persistent one, `--prebuilt` deploys the existing `.ocel/output` from `ocel build`, and `--dry` prints every change it would make and stops. |
 | `rm [name]` | Tear down a preview. Asks first for a persistent preview; `--yes` skips that, and without a terminal to ask on it stops unless you pass `--yes`. |
 | `prune [name]` | Delete a preview's old deployments. Keeps the newest `--keep` (3 by default) and whatever is live. |
@@ -30,8 +30,9 @@ checks out a detached HEAD, so the branch comes from `GITHUB_HEAD_REF`; with nei
 nor that variable, the command stops and asks for a name.
 
 A name addresses one preview from any branch or machine. It is a DNS label (lowercase letters,
-digits and hyphens, starting with a letter) with no `--`, and it cannot be `up`, `rm`, `ls` or
-`prune`. `ocel preview ls` lists every preview by the name the other commands take.
+digits and hyphens, starting with a letter) with no `--`. It always follows a subcommand, so
+`ocel preview` alone takes none. `ocel preview ls` lists every preview by the name the other
+commands take.
 
 ```yaml title=".github/workflows/preview.yml"
 - run: ocel preview up pr-${{ github.event.number }}

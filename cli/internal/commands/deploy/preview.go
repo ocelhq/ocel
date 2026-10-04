@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -52,23 +51,27 @@ type previewPruneOptions struct {
 
 const defaultPreviewPruneKeepN = 3
 
-var reservedPreviewNames = []string{"up", "rm", "ls", "prune"}
-
 func NewPreviewCommand(dependencies Dependencies) *cobra.Command {
 	var upOpts previewUpOptions
 
 	cmd := &cobra.Command{
-		Use:   "preview [name]",
+		Use:   "preview",
 		Short: "Deploy a preview of the current branch",
 		Long: "Deploy a preview of the current branch.\n\n" +
-			"A preview is a full deployment beside production, torn down without touching anything else. " +
-			"It is named after the branch that produced it unless you name it. `ocel preview` on its own is `ocel preview up`.",
+			"`ocel preview` on its own is `ocel preview up`: it deploys the current branch's preview. " +
+			"To address a preview by name, pass the name to a subcommand, as in `ocel preview up <name>`.\n\n" +
+			"A preview is a full deployment beside production, torn down without touching anything else.",
 		Example: "  $ ocel preview\n" +
-			"  $ ocel preview pr-12\n" +
-			"  $ ocel preview staging --persistent\n" +
+			"  $ ocel preview up pr-12\n" +
+			"  $ ocel preview up staging --persistent\n" +
 			"  $ ocel preview ls\n" +
-			"  $ ocel preview rm",
-		Args: cobra.MaximumNArgs(1),
+			"  $ ocel preview rm pr-12",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("`ocel preview` takes no name; to deploy the preview %q, run `ocel preview up %s`", args[0], args[0])
+			}
+			return nil
+		},
 		RunE: previewUpRunE(dependencies, &upOpts),
 	}
 	previewUpFlags(cmd, &upOpts)
@@ -79,7 +82,7 @@ func NewPreviewCommand(dependencies Dependencies) *cobra.Command {
 		Long: "Deploy or refresh a preview.\n\n" +
 			"Without a name the preview is the current branch's: deploying the same branch again replaces it, " +
 			"and `ocel preview rm` tears it down. A name addresses one preview from any branch. " +
-			"A name is a DNS label with no `--`, and none of up, rm, ls or prune.\n\n" +
+			"A name is a DNS label with no `--`.\n\n" +
 			"A preview is ephemeral: it gets no infrastructure of its own, only what bindings share, " +
 			"and is torn down without a question. --persistent deploys one with its own infrastructure that " +
 			"asks before it is torn down — a staging environment. A preview keeps the lifecycle it was created with.\n\n" +
@@ -466,7 +469,7 @@ func resolveUpEnvironment(dependencies Dependencies, cwd string, opts previewUpO
 
 func resolvePreviewEnvironment(dependencies Dependencies, cwd, name string, lifecycle environmentv1.Lifecycle) (*environmentv1.Environment, error) {
 	if name != "" {
-		if err := refuseInvalidPreviewName(name); err != nil {
+		if err := previewid.ValidateLabel(name); err != nil {
 			return nil, err
 		}
 	}
@@ -478,13 +481,6 @@ func readPreviewNameArgument(args []string) string {
 		return ""
 	}
 	return args[0]
-}
-
-func refuseInvalidPreviewName(name string) error {
-	if slices.Contains(reservedPreviewNames, name) {
-		return fmt.Errorf("preview name %q is reserved: `ocel preview %s` runs that subcommand, so no preview can be named after it", name, name)
-	}
-	return previewid.ValidateLabel(name)
 }
 
 func renderEnvironments(stdout io.Writer, envs []*contractv1.PreviewEnvironment) {
