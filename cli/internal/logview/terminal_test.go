@@ -37,7 +37,12 @@ func golden(t *testing.T, name, got string) {
 func render(t *testing.T, verbose bool, lines ...logview.TerminalLine) string {
 	t.Helper()
 	var out bytes.Buffer
-	view := logview.NewTerminalView(&out, terminal.PaletteFor(&out), verbose)
+	return renderTo(t, &out, terminal.Detect(terminal.FormatHuman, verbose, &out), lines...)
+}
+
+func renderTo(t *testing.T, out *bytes.Buffer, present terminal.Presentation, lines ...logview.TerminalLine) string {
+	t.Helper()
+	view := logview.NewTerminalView(out, present)
 	for _, line := range lines {
 		if err := view.Write(line); err != nil {
 			t.Fatalf("Write() = %v", err)
@@ -113,6 +118,27 @@ func TestTerminalViewWritesNoEscapesWithoutColour(t *testing.T) {
 		t.Errorf("output holds an escape code:\n%q", got)
 	}
 	golden(t, "TestTerminalViewWritesNoEscapesWithoutColour", got)
+}
+
+func TestTerminalViewFitsTheBoxToANarrowTerminal(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	var out bytes.Buffer
+	present := terminal.Detect(terminal.FormatHuman, false, &out)
+	present.Width, present.WidthMeasured = 40, true
+	got := renderTo(t, &out, present,
+		logview.TerminalLine{Time: viewEpoch, App: "web", Entry: logview.Entry{
+			Message: "payment provider refused the charge for order o-1",
+			Level:   logview.LevelError,
+			Error:   "Error: card_declined\n    at charge (payments/stripe-client.js:120:15)",
+		}},
+		logview.TerminalLine{Time: viewEpoch, App: "web", Failure: true, Entry: logview.Entry{Message: "short"}},
+	)
+	for _, line := range strings.Split(strings.TrimSuffix(got, "\n"), "\n") {
+		if width := ansi.StringWidth(line); width > 40 {
+			t.Errorf("line %q takes %d columns, want at most 40", line, width)
+		}
+	}
+	golden(t, "TestTerminalViewFitsTheBoxToANarrowTerminal", got)
 }
 
 func TestTerminalViewShowsTheTimeInTheLocalZone(t *testing.T) {

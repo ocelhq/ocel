@@ -32,7 +32,7 @@ func newOutput(stdout io.Writer, present terminal.Presentation, asJSON, raw bool
 	case asJSON:
 		out = jsonFormat{stdout: stdout}
 	case present.TTY && !raw:
-		out = terminalFormat{view: logview.NewTerminalView(stdout, present.Palette(), present.Verbose), warn: warn}
+		out = terminalFormat{view: logview.NewTerminalView(stdout, present), warn: warn}
 	}
 	return &output{format: out, raw: raw, minLevel: minLevel}
 }

@@ -1,0 +1,13 @@
+12:04:07.123  web  ERROR
+╭──────────────────────────────────────╮
+│ payment provider refused the charge  │
+│ for order o-1                        │
+│                                      │
+│ Error: card_declined                 │
+│     at charge (payments/stripe-      │
+│ client.js:120:15)                    │
+╰──────────────────────────────────────╯
+12:04:07.123  web  -    
+╭───────╮
+│ short │
+╰───────╯
