@@ -12,13 +12,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func exitRoot(t *testing.T, args ...string) (code int, stdout, stderr string) {
+func executeAndReportRoot(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
 	ocel := newCommand()
 	ocel.root.SetOut(&out)
 	ocel.root.SetErr(&errOut)
-	code = ocel.exit(args)
+	code = ocel.executeAndReport(args)
 	return code, out.String(), errOut.String()
 }
 
@@ -43,7 +43,7 @@ func requireOneFailureDocument(t *testing.T, stdout string) map[string]any {
 }
 
 func TestAnUnknownFlagUnderJSONPrintsOneUsageDocumentOnStdout(t *testing.T) {
-	code, stdout, stderr := exitRoot(t, "--json", "deploy", "--no-such-flag")
+	code, stdout, stderr := executeAndReportRoot(t, "--json", "deploy", "--no-such-flag")
 
 	failure := requireOneFailureDocument(t, stdout)
 	if failure["code"] != "usage" {
@@ -64,7 +64,7 @@ func TestAnUnknownFlagUnderJSONPrintsOneUsageDocumentOnStdout(t *testing.T) {
 }
 
 func TestAnUnknownFlagBeforeTheJSONFlagStillPrintsTheUsageDocument(t *testing.T) {
-	_, stdout, stderr := exitRoot(t, "deploy", "--no-such-flag", "--json")
+	_, stdout, stderr := executeAndReportRoot(t, "deploy", "--no-such-flag", "--json")
 
 	if failure := requireOneFailureDocument(t, stdout); failure["code"] != "usage" {
 		t.Errorf("error code = %v, want usage", failure["code"])
@@ -77,7 +77,7 @@ func TestAnUnknownFlagBeforeTheJSONFlagStillPrintsTheUsageDocument(t *testing.T)
 func TestOCELJSONMakesAUsageErrorADocument(t *testing.T) {
 	t.Setenv("OCEL_JSON", "1")
 
-	_, stdout, _ := exitRoot(t, "deploy", "--no-such-flag")
+	_, stdout, _ := executeAndReportRoot(t, "deploy", "--no-such-flag")
 
 	if failure := requireOneFailureDocument(t, stdout); failure["code"] != "usage" {
 		t.Errorf("error code = %v, want usage", failure["code"])
@@ -85,7 +85,7 @@ func TestOCELJSONMakesAUsageErrorADocument(t *testing.T) {
 }
 
 func TestAWrongArgumentCountUnderJSONPrintsAUsageDocument(t *testing.T) {
-	code, stdout, stderr := exitRoot(t, "--json", "logout", "extra")
+	code, stdout, stderr := executeAndReportRoot(t, "--json", "logout", "extra")
 
 	failure := requireOneFailureDocument(t, stdout)
 	if failure["code"] != "usage" {
@@ -100,7 +100,7 @@ func TestAWrongArgumentCountUnderJSONPrintsAUsageDocument(t *testing.T) {
 }
 
 func TestAnUnknownCommandUnderJSONPrintsAUsageDocument(t *testing.T) {
-	_, stdout, stderr := exitRoot(t, "--json", "no-such-command")
+	_, stdout, stderr := executeAndReportRoot(t, "--json", "no-such-command")
 
 	failure := requireOneFailureDocument(t, stdout)
 	if failure["code"] != "usage" {
@@ -119,7 +119,7 @@ func TestACommandThatNeverStartsARunPrintsItsFailureAsOneInternalDocument(t *tes
 		t.Run(command, func(t *testing.T) {
 			t.Chdir(t.TempDir())
 
-			code, stdout, stderr := exitRoot(t, "--json", command)
+			code, stdout, stderr := executeAndReportRoot(t, "--json", command)
 
 			failure := requireOneFailureDocument(t, stdout)
 			if failure["code"] != "internal" {
@@ -152,7 +152,7 @@ func TestAFailureThatAlreadyEndedInARunSummaryPrintsNothingMore(t *testing.T) {
 	ocel.root.SetOut(&stdout)
 	ocel.root.SetErr(&stderr)
 
-	code := ocel.exit([]string{"--json", "fail"})
+	code := ocel.executeAndReport([]string{"--json", "fail"})
 
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
 	var last map[string]any
@@ -182,7 +182,7 @@ func TestAFailureThatAlreadyEndedInARunSummaryPrintsNothingMore(t *testing.T) {
 func TestAProjectThatFailsToLoadBeforeARunStartsPrintsOneDocumentOrASummaryNeverBoth(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	code, stdout, stderr := exitRoot(t, "--json", "deploy")
+	code, stdout, stderr := executeAndReportRoot(t, "--json", "deploy")
 
 	if code == 0 {
 		t.Errorf("exit code = 0, want a failure")
@@ -218,7 +218,7 @@ func TestAnInvalidOCELJSONKeepsTheHumanFailureBlock(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	t.Setenv("OCEL_JSON", "garbage")
 
-	code, stdout, stderr := exitRoot(t, "deployments", "ls")
+	code, stdout, stderr := executeAndReportRoot(t, "deployments", "ls")
 
 	if code != 1 || stdout != "" || !strings.HasPrefix(stderr, "✗ OCEL_JSON") {
 		t.Errorf("code = %d, stdout = %q, stderr = %q, want the human failure block on stderr", code, stdout, stderr)
@@ -235,7 +235,7 @@ func TestTheHumanViewPrintsAFailureAsTheFailureBlockOnStderrOnly(t *testing.T) {
 		"json off":         {"--json=false", "lock"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			code, stdout, stderr := exitRoot(t, args...)
+			code, stdout, stderr := executeAndReportRoot(t, args...)
 
 			if code != 1 || stdout != "" {
 				t.Errorf("code = %d, stdout = %q, want 1 and nothing on stdout", code, stdout)
@@ -250,7 +250,7 @@ func TestTheHumanViewPrintsAFailureAsTheFailureBlockOnStderrOnly(t *testing.T) {
 func TestAUsageErrorsHumanTextIsTheCobraMessage(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 
-	_, _, stderr := exitRoot(t, "deploy", "--no-such-flag")
+	_, _, stderr := executeAndReportRoot(t, "deploy", "--no-such-flag")
 
 	if want := "✗ unknown flag: --no-such-flag\n"; stderr != want {
 		t.Errorf("stderr = %q, want %q", stderr, want)
@@ -258,7 +258,7 @@ func TestAUsageErrorsHumanTextIsTheCobraMessage(t *testing.T) {
 }
 
 func TestASuccessfulCommandUnderJSONExitsZeroAndPrintsNoFailure(t *testing.T) {
-	code, stdout, stderr := exitRoot(t, "--json", "--version")
+	code, stdout, stderr := executeAndReportRoot(t, "--json", "--version")
 
 	if code != 0 || stderr != "" || strings.Contains(stdout, `"ok"`) {
 		t.Errorf("code = %d, stdout = %q, stderr = %q, want a clean exit", code, stdout, stderr)
@@ -266,7 +266,7 @@ func TestASuccessfulCommandUnderJSONExitsZeroAndPrintsNoFailure(t *testing.T) {
 }
 
 func TestTheUsageDocumentCarriesTheStableCodeAndItsDocsURL(t *testing.T) {
-	_, stdout, _ := exitRoot(t, "--json", "deploy", "--no-such-flag")
+	_, stdout, _ := executeAndReportRoot(t, "--json", "deploy", "--no-such-flag")
 
 	failure := requireOneFailureDocument(t, stdout)
 	if got := failure["docsUrl"]; got != "https://ocel.dev/docs/errors/usage" {

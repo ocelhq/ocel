@@ -92,17 +92,17 @@ type command struct {
 	root                 *cobra.Command
 	bus                  *run.Bus
 	stopInterruptHandler context.CancelFunc
-	commandStarted       bool
+	preRunReached        bool
 }
 
 func Execute() int {
-	return newCommand().exit(os.Args[1:])
+	return newCommand().executeAndReport(os.Args[1:])
 }
 
 func (c *command) execute() error {
-	failed, err := c.root.ExecuteC()
-	if err != nil && !c.commandStarted {
-		err = &clierror.Error{Code: usageCode, Hint: failed.UseLine(), Cause: err}
+	invoked, err := c.root.ExecuteC()
+	if err != nil && !c.preRunReached {
+		err = &clierror.Error{Code: usageCode, Hint: invoked.UseLine(), Cause: err}
 	}
 	c.stopInterruptHandler()
 	return errors.Join(err, c.bus.Close())
@@ -133,7 +133,7 @@ func newCommand() *command {
 	devDependencies := dev.Dependencies{Invocation: invocation, OpenDocker: docker.Open}
 	devCmd, runCmd := dev.NewCommand(devDependencies), dev.NewRunCommand(devDependencies)
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
-		c.commandStarted = true
+		c.preRunReached = true
 		if err := set.readUnsetFromEnv(cmd); err != nil {
 			return err
 		}
