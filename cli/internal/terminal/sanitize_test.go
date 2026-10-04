@@ -83,6 +83,23 @@ func TestSanitizingDropsTheIndentAndTrailingSpaceAroundTheText(t *testing.T) {
 	}
 }
 
+func TestSanitizeTextStripsEveryEscapeAndKeepsTheVisibleText(t *testing.T) {
+	t.Parallel()
+
+	got := SanitizeText("\x1b]0;owned\a\x1b[31mGET /\x1b[0m\u009b ok")
+	if want := "GET / ok"; got != want {
+		t.Fatalf("SanitizeText() = %q, want %q", got, want)
+	}
+}
+
+func TestSanitizeTextOfInvisibleTextIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	if got := SanitizeText("\x1b[2K\r\x1b[1G"); got != "" {
+		t.Fatalf("SanitizeText() = %q, want empty", got)
+	}
+}
+
 func TestSanitizingDropsJoinersVariationSelectorsAndOtherInvisibleCharacters(t *testing.T) {
 	t.Parallel()
 

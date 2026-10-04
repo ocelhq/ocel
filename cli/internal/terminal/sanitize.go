@@ -12,6 +12,11 @@ const tabStopColumns = 8
 
 var boxDrawing = &unicode.RangeTable{R16: []unicode.Range16{{Lo: 0x2500, Hi: 0x257f, Stride: 1}}}
 
+func SanitizeText(raw string) string {
+	text, _ := sanitize(raw)
+	return text
+}
+
 func sanitize(raw string) (string, bool) {
 	drafts := strings.Split(raw, "\r")
 	for i := len(drafts) - 1; i >= 0; i-- {
