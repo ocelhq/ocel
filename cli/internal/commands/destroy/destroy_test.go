@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
@@ -294,6 +295,9 @@ func TestDestroyingProductionShowsThePlanAndTakesTheProjectNameBeforeDestroying(
 		}
 		if !strings.Contains(err.Error(), consent.BypassEnv) || !strings.Contains(err.Error(), "test-app") {
 			t.Errorf("err = %v, want it to name %s and the project", err, consent.BypassEnv)
+		}
+		if got := clierror.NewRunError(err).GetCode(); got != "confirmation_bypass_mismatch" {
+			t.Errorf("code = %q, want confirmation_bypass_mismatch", got)
 		}
 	})
 

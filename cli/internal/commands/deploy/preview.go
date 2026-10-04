@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
@@ -362,7 +363,10 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 		}
 		if question := composeTeardownQuestion(recorded); question != "" {
 			if !policy.Yes && !policy.Interactive {
-				return fmt.Errorf("`ocel preview rm` needs a terminal to ask %q before it tears the preview down; to run it unattended, pass --yes", question)
+				return clierror.NewConfirmationRequired(
+					fmt.Errorf("`ocel preview rm` needs a terminal to ask %q before it tears the preview down; to run it unattended, pass --yes", question),
+					"pass --yes",
+				)
 			}
 			proceed, err := policy.Confirm(ctx, check, consent.Guard{
 				ID:       consent.GuardPersistentPreviewRemoval,

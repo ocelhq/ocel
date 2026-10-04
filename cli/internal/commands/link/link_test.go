@@ -239,6 +239,25 @@ func TestLinkSelectsOrCreatesAConsoleProjectForThisDirectory(t *testing.T) {
 		}
 	})
 
+	t.Run("several organizations without a terminal end the JSON stream with input_required naming --org", func(t *testing.T) {
+		t.Parallel()
+
+		dependencies := newTestDependencies()
+		dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+		srv := newCloudServer(t)
+		srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
+		var stream bytes.Buffer
+		dependencies.Events.Attach(terminal.NewJSONLines(&stream))
+
+		_ = runLink(context.Background(), dependencies, t.TempDir(), "My App", options{apiURL: srv.URL, create: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+
+		evs := clitest.RunEvents(t, stream.String())
+		failure := evs[len(evs)-1].GetSummary().GetError()
+		if failure.GetCode() != "input_required" || failure.GetHint() != "supply it with --org <slug>" {
+			t.Errorf("summary error = %v, want input_required with the hint supply it with --org <slug>", failure)
+		}
+	})
+
 	t.Run("--org selects among several", func(t *testing.T) {
 		t.Parallel()
 

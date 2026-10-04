@@ -506,10 +506,16 @@ func TestAPersistentPreviewIsNotTornDownUnasked(t *testing.T) {
 			fixture := setUpPreviewProject(t)
 			tc.create(t, fixture)
 			dependencies := previewDependencies("feature/login", "")
+			var stream bytes.Buffer
+			dependencies.Events.Attach(terminal.NewJSONLines(&stream))
 
 			out, err := runPreviewCommand(t, fixture, dependencies, "", "rm", "staging")
 			if err == nil || !strings.Contains(out, "to run it unattended, pass --yes") {
 				t.Errorf("ocel preview rm staging err = %v, want a refusal naming --yes; out=%s", err, out)
+			}
+			evs := clitest.RunEvents(t, stream.String())
+			if got := evs[len(evs)-1].GetSummary().GetError(); got.GetCode() != "confirmation_required" || got.GetHint() != "pass --yes" {
+				t.Errorf("summary error = %v, want code confirmation_required with the hint pass --yes", got)
 			}
 			if removed := removedEnvironments(t, fixture); len(removed) != 0 {
 				t.Errorf("the CLI removed %v, want nothing torn down without a terminal to ask on", removed)
