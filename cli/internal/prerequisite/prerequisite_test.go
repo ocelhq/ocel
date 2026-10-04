@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -22,6 +26,7 @@ func (missingProject) Error() string {
 func (missingProject) Missing() prerequisite.Kind { return prerequisite.Project }
 func (missingProject) Finding() string            { return "No ocel.json here." }
 func (missingProject) Remedy() string             { return "`ocel init`" }
+func (missingProject) Hint() string               { return "ocel init" }
 
 type missingBootstrap struct{}
 
@@ -31,6 +36,7 @@ func (missingBootstrap) Error() string {
 func (missingBootstrap) Missing() prerequisite.Kind { return prerequisite.Bootstrap }
 func (missingBootstrap) Finding() string            { return "The account has no Ocel infrastructure yet." }
 func (missingBootstrap) Remedy() string             { return "`ocel bootstrap production`" }
+func (missingBootstrap) Hint() string               { return "ocel bootstrap production" }
 
 func checkSpan(t *testing.T) *run.Span {
 	t.Helper()
@@ -159,5 +165,83 @@ func TestWithoutATerminalNothingIsAskedAndTheErrorNamesTheCommand(t *testing.T) 
 	}
 	if recorded.runs != 0 || out.Len() != 0 {
 		t.Errorf("without a terminal the setup ran %d times and asked %q, want neither", recorded.runs, out.String())
+	}
+}
+
+func TestAMissingPrerequisiteNoTerminalCanSetUpReportsPrerequisiteMissingWithItsFindingAndHint(t *testing.T) {
+	for name, tc := range map[string]struct {
+		missing prerequisite.MissingError
+		message string
+		hint    string
+	}{
+		"project":   {missingProject{}, "No ocel.json here.", "ocel init"},
+		"bootstrap": {missingBootstrap{}, "The account has no Ocel infrastructure yet.", "ocel bootstrap production"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			policy := terminalPolicy("y\n", &bytes.Buffer{})
+			policy.Interactive = false
+			err := prerequisite.Setups{}.Ensure(context.Background(), policy, checkSpan(t), func(context.Context) error {
+				return fmt.Errorf("checking: %w", tc.missing)
+			})
+
+			got := clierror.NewRunError(fmt.Errorf("deploy: %w", err))
+			if got.GetCode() != "prerequisite.missing" || got.GetMessage() != tc.message || got.GetHint() != tc.hint {
+				t.Fatalf("run error = %s, want prerequisite.missing saying %q and hinting %q", protojson.Format(got), tc.message, tc.hint)
+			}
+			if err.Error() != "checking: "+tc.missing.Error() {
+				t.Errorf("Ensure err = %q, want the human text unchanged", err)
+			}
+			var missing prerequisite.MissingError
+			if !errors.As(err, &missing) {
+				t.Errorf("Ensure err = %v, want the prerequisite still found through the code", err)
+			}
+		})
+	}
+}
+
+func TestAMissingPrerequisiteCodedAtItsSourceIsReturnedUnchanged(t *testing.T) {
+	policy := terminalPolicy("y\n", &bytes.Buffer{})
+	policy.Interactive = false
+	coded := fmt.Errorf("checking: %w", &clierror.Error{Code: "bootstrap.missing", Message: "No infrastructure.", Hint: "ocel bootstrap production", Retryable: true, Cause: missingBootstrap{}})
+
+	err := prerequisite.Setups{}.Ensure(context.Background(), policy, checkSpan(t), func(context.Context) error { return coded })
+
+	if !errors.Is(err, coded) || err.Error() != coded.Error() {
+		t.Fatalf("Ensure err = %v, want the source's error itself", err)
+	}
+	got := clierror.NewRunError(err)
+	if got.GetCode() != "bootstrap.missing" || got.GetMessage() != "No infrastructure." || got.GetHint() != "ocel bootstrap production" || !got.GetRetryable() {
+		t.Errorf("run error = %s, want every field the source set", protojson.Format(got))
+	}
+}
+
+func TestADeclinedSetupReportsPrerequisiteMissingWithItsFindingAndHint(t *testing.T) {
+	setups := prerequisite.Setups{prerequisite.Bootstrap: (&recordedSetup{}).setup(true, func() {})}
+
+	err := setups.Ensure(context.Background(), terminalPolicy("n\n", &bytes.Buffer{}), checkSpan(t), func(context.Context) error {
+		return missingBootstrap{}
+	})
+
+	got := clierror.NewRunError(err)
+	if got.GetCode() != "prerequisite.missing" || got.GetMessage() != "The account has no Ocel infrastructure yet." || got.GetHint() != "ocel bootstrap production" {
+		t.Fatalf("run error = %s, want prerequisite.missing with the finding and hint", protojson.Format(got))
+	}
+	if !prerequisite.IsDeclined(err) {
+		t.Errorf("Ensure err = %v, want it still a declined setup", err)
+	}
+}
+
+func TestADeclinedSetupOfAPrerequisiteCodedAtItsSourceKeepsItsCodeAndHint(t *testing.T) {
+	setups := prerequisite.Setups{prerequisite.Bootstrap: (&recordedSetup{}).setup(true, func() {})}
+	coded := &clierror.Error{Code: "bootstrap.missing", Hint: "ocel bootstrap production", Retryable: true, Cause: missingBootstrap{}}
+
+	err := setups.Ensure(context.Background(), terminalPolicy("n\n", &bytes.Buffer{}), checkSpan(t), func(context.Context) error { return coded })
+
+	got := clierror.NewRunError(err)
+	if got.GetCode() != "bootstrap.missing" || got.GetHint() != "ocel bootstrap production" || !got.GetRetryable() {
+		t.Fatalf("run error = %s, want the source's code, hint and retry", protojson.Format(got))
+	}
+	if !prerequisite.IsDeclined(err) {
+		t.Errorf("Ensure err = %v, want it still a declined setup", err)
 	}
 }

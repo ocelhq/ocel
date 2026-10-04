@@ -14,6 +14,7 @@ const internalCode = "internal"
 
 type Error struct {
 	Code      string
+	Message   string
 	Hint      string
 	Retryable bool
 	Cause     error
@@ -36,6 +37,9 @@ func NewRunError(err error) *streamv1.RunError {
 	var coded *Error
 	if !errors.As(err, &coded) || coded == nil {
 		return runError
+	}
+	if coded.Message != "" {
+		runError.Message = coded.Message
 	}
 	runError.Retryable = coded.Retryable
 	if coded.Hint != "" {

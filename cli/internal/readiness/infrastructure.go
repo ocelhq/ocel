@@ -44,7 +44,9 @@ func (e NoInfrastructureError) Finding() string {
 	return fmt.Sprintf("%s has no Ocel %s infrastructure yet. Setting it up is a one-time step.", account, TierName(e.Tier))
 }
 
-func (e NoInfrastructureError) Remedy() string { return "`" + e.command() + "`" }
+func (e NoInfrastructureError) Remedy() string { return "`" + e.Hint() + "`" }
+
+func (e NoInfrastructureError) Hint() string { return e.command() }
 
 func (e NoInfrastructureError) BootstrapRequest() *contractv1.BootstrapRequest {
 	return &contractv1.BootstrapRequest{Tier: e.Tier, Features: e.Features, Edge: e.Edge}

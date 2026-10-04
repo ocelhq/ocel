@@ -45,6 +45,17 @@ func TestAWrappedCodedErrorKeepsItsCodeAndTheWholeWrappedMessage(t *testing.T) {
 	}
 }
 
+func TestACodedErrorWithItsOwnMessageReportsItWhateverWrapsItAndReadsAsItsCause(t *testing.T) {
+	err := fmt.Errorf("deploy: %w", &clierror.Error{Code: "project.no_config", Message: "No ocel.json here.", Cause: errors.New("no ocel.json found.\nRun `ocel init` and try again")})
+
+	if got := clierror.NewRunError(err); got.GetMessage() != "No ocel.json here." {
+		t.Fatalf("run error = %s, want the coded error's own message", protojson.Format(got))
+	}
+	if err.Error() != "deploy: no ocel.json found.\nRun `ocel init` and try again" {
+		t.Errorf("Error() = %q, want the cause's text for the human output", err.Error())
+	}
+}
+
 func TestACodedErrorWithoutACauseReadsAsItsCode(t *testing.T) {
 	err := &clierror.Error{Code: "project.no_config"}
 	if err.Error() != "project.no_config" {
