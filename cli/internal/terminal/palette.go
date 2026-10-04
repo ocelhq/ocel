@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"hash/fnv"
 	"io"
 	"strings"
 
@@ -20,6 +21,7 @@ const (
 var (
 	pillBackground = lipgloss.ANSIColor(6)
 	pillForeground = lipgloss.ANSIColor(0)
+	failureBorder  = lipgloss.Red
 )
 
 type Palette struct {
@@ -74,16 +76,16 @@ func (p Palette) NeutralMark() string { return p.Faint(neutralGlyph) }
 
 var hues = [...]color.Attribute{color.FgGreen, color.FgBlue, color.FgMagenta, color.FgCyan, color.FgHiBlue, color.FgHiMagenta}
 
-func (p Palette) HueCount() int { return len(hues) }
-
-func (p Palette) Hue(slot int, text string) string {
-	return p.paint(text, hues[slot%len(hues)])
+func (p Palette) Hue(key, text string) string {
+	hash := fnv.New32a()
+	hash.Write([]byte(key))
+	return p.paint(text, hues[hash.Sum32()%uint32(len(hues))])
 }
 
 func (p Palette) FailureBox() lipgloss.Style {
 	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
 	if p.colored {
-		style = style.BorderForeground(lipgloss.ANSIColor(1))
+		style = style.BorderForeground(failureBorder)
 	}
 	return style
 }

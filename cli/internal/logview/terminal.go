@@ -2,7 +2,6 @@ package logview
 
 import (
 	"fmt"
-	"hash/fnv"
 	"io"
 	"maps"
 	"slices"
@@ -21,6 +20,7 @@ const (
 	fieldIndent      = "    "
 	nestedIndent     = "  "
 	truncationMarker = "…"
+	missingName      = "-"
 )
 
 type TerminalLine struct {
@@ -44,30 +44,30 @@ func NewTerminalView(out io.Writer, palette terminal.Palette, verbose bool) *Ter
 func (v *TerminalView) Write(line TerminalLine) error {
 	var text string
 	if line.Failure || line.Entry.Level == LevelError {
-		text = v.header(line) + "\n" + v.box(line.Entry) + "\n"
+		text = v.formatHeader(line) + "\n" + v.formatBox(line.Entry) + "\n"
 	} else {
-		text = v.entry(line)
+		text = v.formatEntry(line)
 	}
 	_, err := io.WriteString(v.out, text)
 	return err
 }
 
-func (v *TerminalView) header(line TerminalLine) string {
-	label := terminal.SanitizeLogText(line.App)
-	slot := hueSlot(label, v.palette.HueCount())
+func (v *TerminalView) formatHeader(line TerminalLine) string {
+	app := terminal.SanitizeLogText(line.App)
+	label := app
 	if source := terminal.SanitizeLogText(line.Source); source != "" {
 		label += "/" + source
 	}
 	parts := []string{
 		v.palette.Muted(line.Time.UTC().Format(timeLayout)),
-		v.palette.Hue(slot, label),
-		v.level(line.Entry.Level),
+		v.palette.Hue(app, label),
+		v.formatLevel(line.Entry.Level),
 	}
 	return strings.Join(parts, "  ")
 }
 
-func (v *TerminalView) level(level Level) string {
-	name := "-"
+func (v *TerminalView) formatLevel(level Level) string {
+	name := missingName
 	if level != LevelUnknown {
 		name = strings.ToUpper(level.String())
 	}
@@ -83,35 +83,29 @@ func (v *TerminalView) level(level Level) string {
 	return name
 }
 
-func hueSlot(app string, slots int) int {
-	hash := fnv.New32a()
-	hash.Write([]byte(app))
-	return int(hash.Sum32() % uint32(slots))
-}
-
-func (v *TerminalView) entry(line TerminalLine) string {
+func (v *TerminalView) formatEntry(line TerminalLine) string {
 	entry := line.Entry
 	messageLines := strings.Split(entry.Message, "\n")
-	text := v.header(line) + "  " + terminal.SanitizeLogText(messageLines[0])
+	text := v.formatHeader(line) + "  " + terminal.SanitizeLogText(messageLines[0])
 	inline := !v.verbose && !hasNestedField(entry.Fields)
 	if inline && len(entry.Fields) > 0 {
-		text += "  " + v.palette.Muted(v.inlineFields(entry.Fields))
+		text += "  " + v.palette.Muted(v.formatInlineFields(entry.Fields))
 	}
 	for _, messageLine := range messageLines[1:] {
 		text += "\n" + fieldIndent + terminal.SanitizeLogText(messageLine)
 	}
 	if !inline {
-		for _, field := range v.fieldLines(entry.Fields) {
+		for _, field := range v.formatFieldLines(entry.Fields) {
 			text += "\n" + v.palette.Muted(fieldIndent+field)
 		}
 	}
 	return text + "\n"
 }
 
-func (v *TerminalView) box(entry Entry) string {
+func (v *TerminalView) formatBox(entry Entry) string {
 	messageLines := strings.Split(entry.Message, "\n")
 	content := []string{terminal.SanitizeLogText(messageLines[0])}
-	content = append(content, v.fieldLines(entry.Fields)...)
+	content = append(content, v.formatFieldLines(entry.Fields)...)
 	stack := messageLines[1:]
 	if entry.Error != "" {
 		stack = append(stack, strings.Split(entry.Error, "\n")...)
@@ -125,15 +119,15 @@ func (v *TerminalView) box(entry Entry) string {
 	return v.palette.FailureBox().Render(strings.Join(content, "\n"))
 }
 
-func (v *TerminalView) inlineFields(fields map[string]any) string {
+func (v *TerminalView) formatInlineFields(fields map[string]any) string {
 	pairs := make([]string, 0, len(fields))
 	for _, key := range slices.Sorted(maps.Keys(fields)) {
-		pairs = append(pairs, terminal.SanitizeLogText(key)+"="+quoteIfNeeded(v.scalar(fields[key])))
+		pairs = append(pairs, terminal.SanitizeLogText(key)+"="+quoteIfNeeded(v.formatScalar(fields[key])))
 	}
 	return strings.Join(pairs, " ")
 }
 
-func (v *TerminalView) fieldLines(fields map[string]any) []string {
+func (v *TerminalView) formatFieldLines(fields map[string]any) []string {
 	var lines []string
 	for _, key := range slices.Sorted(maps.Keys(fields)) {
 		lines = v.appendValue(lines, "", terminal.SanitizeLogText(key)+":", fields[key])
@@ -153,7 +147,7 @@ func (v *TerminalView) appendValue(lines []string, indent, label string, value a
 		if !hasNestedItem(value) {
 			items := make([]string, len(value))
 			for i, item := range value {
-				items[i] = v.scalar(item)
+				items[i] = v.formatScalar(item)
 			}
 			return append(lines, indent+label+" ["+strings.Join(items, ", ")+"]")
 		}
@@ -163,7 +157,7 @@ func (v *TerminalView) appendValue(lines []string, indent, label string, value a
 		}
 		return lines
 	}
-	return append(lines, indent+label+" "+v.scalar(value))
+	return append(lines, indent+label+" "+v.formatScalar(value))
 }
 
 func (v *TerminalView) appendItem(lines []string, indent string, item any) []string {
@@ -181,7 +175,7 @@ func (v *TerminalView) appendItem(lines []string, indent string, item any) []str
 	return lines
 }
 
-func (v *TerminalView) scalar(value any) string {
+func (v *TerminalView) formatScalar(value any) string {
 	if value == nil {
 		return "null"
 	}
