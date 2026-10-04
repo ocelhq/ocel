@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
+	"github.com/aws/smithy-go"
 )
 
 type fakeSession struct {
@@ -71,6 +72,7 @@ type liveRun struct {
 	notices  []Notice
 	polled   [][]Source
 	polledAt []time.Time
+	sleeps   []time.Duration
 	err      error
 	finished bool
 }
@@ -156,7 +158,14 @@ func runLiveTail(t *testing.T, groups []liveGroup, query Query, start func(*live
 				run.notices = append(run.notices, notice)
 				run.mutex.Unlock()
 				return nil
-			})
+			},
+			func(ctx context.Context, d time.Duration) error {
+				run.mutex.Lock()
+				run.sleeps = append(run.sleeps, d)
+				run.mutex.Unlock()
+				return ctx.Err()
+			},
+			func() float64 { return 0 })
 		run.mutex.Lock()
 		run.err, run.finished = err, true
 		run.mutex.Unlock()
@@ -372,6 +381,29 @@ func TestLiveTailPollsFromAfterTheLastEmittedMillisecondWhenARestartMeetsTheSess
 
 	if want := last.Add(time.Millisecond); !run.polledAt[0].Equal(want) {
 		t.Errorf("LiveTail() polled from %s, want %s: polling from the last emitted millisecond sends its events again, and they carry no ID to drop them by", run.polledAt[0], want)
+	}
+}
+
+func TestLiveTailBacksOffAndRetriesAThrottledSessionStart(t *testing.T) {
+	t.Parallel()
+	run, stop := runLiveTail(t, lambdaGroups(1), Query{Since: epoch}, func(run *liveRun, _ *cloudwatchlogs.StartLiveTailInput) (liveSession, error) {
+		if run.starts() < 3 {
+			return nil, &smithy.GenericAPIError{Code: "ThrottlingException", Message: "Rate exceeded"}
+		}
+		return newFakeSession(), nil
+	})
+
+	waitFor(t, func() bool { return run.starts() == 3 })
+	stop()
+
+	if err, _ := run.returned(); err != nil {
+		t.Errorf("LiveTail() error = %v, want none: a throttled start is retried", err)
+	}
+	if want := []time.Duration{2 * time.Second, 4 * time.Second}; !slices.Equal(run.sleeps, want) {
+		t.Errorf("LiveTail() slept %v between throttled starts, want %v", run.sleeps, want)
+	}
+	if polls := run.polls(); polls != 0 {
+		t.Errorf("LiveTail() polled %d times, want none: a throttle is not the session limit", polls)
 	}
 }
 
