@@ -510,6 +510,44 @@ func (l *tailedLogs) nextKind() string {
 	return "empty"
 }
 
+func (l *tailedLogs) historyUntilCaughtUp() []string {
+	l.t.Helper()
+	var messages []string
+	for {
+		switch body := l.next().GetBody().(type) {
+		case *contractv1.ReadLogsResponse_Batch:
+			for _, entry := range body.Batch.GetEntries() {
+				messages = append(messages, entry.GetMessage())
+			}
+		case *contractv1.ReadLogsResponse_Notice:
+			if body.Notice.GetKind() != contractv1.LogNotice_KIND_CAUGHT_UP {
+				l.t.Fatalf("ReadLogs() sent the notice %s after the history %v, want CAUGHT_UP", body.Notice.GetKind(), messages)
+			}
+			return messages
+		default:
+			l.t.Fatalf("ReadLogs() sent an empty message after the history %v, want entries or CAUGHT_UP", messages)
+		}
+	}
+}
+
+func (l *tailedLogs) liveEntries(count int) []string {
+	l.t.Helper()
+	var messages []string
+	for len(messages) < count {
+		batch := l.next().GetBatch()
+		if batch == nil {
+			l.t.Fatalf("ReadLogs() sent a message other than entries after the live entries %v, want %d entries", messages, count)
+		}
+		for _, entry := range batch.GetEntries() {
+			messages = append(messages, entry.GetMessage())
+		}
+	}
+	if len(messages) > count {
+		l.t.Fatalf("ReadLogs() sent the live entries %v, want %d", messages, count)
+	}
+	return messages
+}
+
 func (l *tailedLogs) endsWithin(deadline time.Duration) (error, bool) {
 	l.t.Helper()
 	ended := make(chan error, 1)
@@ -541,15 +579,13 @@ func TestReadLogsSendsCaughtUpBeforeLiveEntries(t *testing.T) {
 	vendor.FakeLogs().Append("web-fn-a", logLine(time.Minute, "history"))
 
 	tailed := tailLogsOf(t, client, logsRequest())
-	want := []string{"batch:history", contractv1.LogNotice_KIND_CAUGHT_UP.String(), "batch:live one", "batch:live two"}
-	for i, kind := range want {
-		if i == 2 {
-			vendor.FakeLogs().Append("web-fn-a", liveLine("live one"))
-			vendor.FakeLogs().Append("web-fn-a", liveLine("live two"))
-		}
-		if got := tailed.nextKind(); got != kind {
-			t.Fatalf("ReadLogs() sent %q, want %q in the order %v", got, kind, want)
-		}
+	if got, want := tailed.historyUntilCaughtUp(), []string{"history"}; !slices.Equal(got, want) {
+		t.Fatalf("ReadLogs() sent %v before CAUGHT_UP, want the history %v", got, want)
+	}
+	vendor.FakeLogs().Append("web-fn-a", liveLine("live one"))
+	vendor.FakeLogs().Append("web-fn-a", liveLine("live two"))
+	if got, want := tailed.liveEntries(2), []string{"live one", "live two"}; !slices.Equal(got, want) {
+		t.Errorf("ReadLogs() sent %v after CAUGHT_UP, want the live entries %v in order", got, want)
 	}
 }
 
@@ -839,11 +875,11 @@ func TestReadLogsSendsAnEntryThatBothHistoryAndTheTailReadOnce(t *testing.T) {
 	promoteBuilds(t, vendor, environment.TierProduction, router.DefaultPointer, map[string]string{"web": buildIdentity(0)})
 
 	tailed := tailLogsOf(t, client, logsRequest())
-	want := []string{"batch:at the boundary", contractv1.LogNotice_KIND_CAUGHT_UP.String(), "batch:after"}
-	for _, kind := range want {
-		if got := tailed.nextKind(); got != kind {
-			t.Fatalf("ReadLogs() sent %q, want %q in the order %v", got, kind, want)
-		}
+	if got, want := tailed.historyUntilCaughtUp(), []string{"at the boundary"}; !slices.Equal(got, want) {
+		t.Fatalf("ReadLogs() sent %v before CAUGHT_UP, want the history %v", got, want)
+	}
+	if got, want := tailed.liveEntries(1), []string{"after"}; !slices.Equal(got, want) {
+		t.Errorf("ReadLogs() sent %v after CAUGHT_UP, want %v: the entry history sent once and not again", got, want)
 	}
 }
 
@@ -856,8 +892,8 @@ func TestReadLogsSendsAnEntryTheStoreTookAfterHistoryWasRead(t *testing.T) {
 		t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
 	}
 	vendor.FakeLogs().Append("web-fn-a", provider.LogEntry{Time: time.Now().Add(-5 * time.Second), Message: "taken late"})
-	if got := tailed.nextKind(); got != "batch:taken late" {
-		t.Errorf("ReadLogs() sent %q, want the entry stamped before the tail began that the store took after history was read", got)
+	if got := tailed.liveEntries(1); !slices.Equal(got, []string{"taken late"}) {
+		t.Errorf("ReadLogs() sent %v, want the entry stamped before the tail began that the store took after history was read", got)
 	}
 }
 
@@ -870,14 +906,12 @@ func TestReadLogsTailsNothingOlderThanTheHistoryItCutToTheLimit(t *testing.T) {
 	req := logsRequest()
 	req.Limit = 1
 	tailed := tailLogsOf(t, client, req)
-	want := []string{"batch:kept", contractv1.LogNotice_KIND_CAUGHT_UP.String(), "batch:live"}
-	for i, kind := range want {
-		if i == 2 {
-			vendor.FakeLogs().Append("web-fn-a", liveLine("live"))
-		}
-		if got := tailed.nextKind(); got != kind {
-			t.Fatalf("ReadLogs() sent %q, want %q in the order %v", got, kind, want)
-		}
+	if got, want := tailed.historyUntilCaughtUp(), []string{"kept"}; !slices.Equal(got, want) {
+		t.Fatalf("ReadLogs() sent %v before CAUGHT_UP, want the history %v", got, want)
+	}
+	vendor.FakeLogs().Append("web-fn-a", liveLine("live"))
+	if got, want := tailed.liveEntries(1), []string{"live"}; !slices.Equal(got, want) {
+		t.Errorf("ReadLogs() sent %v after CAUGHT_UP, want %v and nothing older than the history it cut", got, want)
 	}
 }
 
@@ -893,7 +927,7 @@ func TestReadLogsTailsNothingStampedBeforeTheSinceTheCallerAskedFor(t *testing.T
 	}
 	vendor.FakeLogs().Append("web-fn-a", provider.LogEntry{Time: time.Now().Add(-10 * time.Second), Message: "before since"})
 	vendor.FakeLogs().Append("web-fn-a", liveLine("after since"))
-	if got := tailed.nextKind(); got != "batch:after since" {
-		t.Errorf("ReadLogs() sent %q, want only what is stamped from the caller's since on", got)
+	if got := tailed.liveEntries(1); !slices.Equal(got, []string{"after since"}) {
+		t.Errorf("ReadLogs() sent %v, want only what is stamped from the caller's since on", got)
 	}
 }
