@@ -52,7 +52,7 @@ func NewRollbackCommand(invocation commands.Invocation) *cobra.Command {
 	cmd.Flags().StringVar(&opts.tag, "tag", "", "Roll back to the promotion with this tag (mutually exclusive with --to)")
 	cmd.Flags().BoolVar(&opts.dry, "dry", false, "Print what would be rolled back and stop, rolling back nothing")
 	commands.AddYesFlag(cmd, &opts.yes)
-	return cmd
+	return commands.Mutates(cmd)
 }
 
 func runRollback(ctx context.Context, invocation commands.Invocation, cwd string, opts rollbackOptions, stdout, stderr io.Writer, stdin io.Reader) error {

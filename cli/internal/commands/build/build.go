@@ -37,7 +37,7 @@ type Dependencies struct {
 }
 
 func NewCommand(dependencies Dependencies) *cobra.Command {
-	return &cobra.Command{
+	return commands.Mutates(&cobra.Command{
 		Use:   "build",
 		Short: "Build every app in your project without deploying",
 		Long: "Build every app in your project without deploying: a serverless app's functions\n" +
@@ -56,7 +56,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 
 			return runBuild(cmd.Context(), dependencies, cwd)
 		},
-	}
+	})
 }
 
 func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err error) {

@@ -97,7 +97,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	cmd.Flags().BoolVarP(&opts.tail, "tail", "t", false, "Keep streaming new entries after the history")
 	cmd.Flags().StringVar(&opts.stopAfter, "for", "", "Stop a --tail after this `duration` (30s, 5m)")
 	cmd.Flags().BoolVar(&opts.raw, "raw", false, "Print messages as sent, without reading a level or fields out of them")
-	return commands.ReserveStdout(cmd)
+	return commands.ReadOnly(commands.ReserveStdout(cmd))
 }
 
 type logsQuery struct {

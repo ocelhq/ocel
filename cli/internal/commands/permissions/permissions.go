@@ -16,7 +16,7 @@ import (
 )
 
 func NewCommand(invocation commands.Invocation) *cobra.Command {
-	return commands.ReserveStdout(&cobra.Command{
+	return commands.ReadOnly(commands.ReserveStdout(&cobra.Command{
 		Use:     "permissions <bootstrap|deploy>",
 		Aliases: []string{"perms"},
 		Short:   "Print the permissions bootstrap or deploy credentials need",
@@ -39,7 +39,7 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 
 			return Run(cmd.Context(), invocation, cwd, purpose, cmd.OutOrStdout())
 		},
-	})
+	}))
 }
 
 func Run(ctx context.Context, invocation commands.Invocation, cwd string, purpose contractv1.CredentialPurpose, stdout io.Writer) error {

@@ -30,7 +30,7 @@ import (
 )
 
 func NewCommand(invocation commands.Invocation) *cobra.Command {
-	return commands.ReserveStdoutForReport(&cobra.Command{
+	return commands.ReadOnly(commands.ReserveStdoutForReport(&cobra.Command{
 		Use:   "doctor",
 		Short: "Check that everything is good to go",
 		Long: "Check that everything is good to go.\n\n" +
@@ -46,7 +46,7 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 			}
 			return Run(cmd.Context(), invocation, cwd, cmd.OutOrStdout())
 		},
-	})
+	}))
 }
 
 func Run(ctx context.Context, invocation commands.Invocation, cwd string, stdout io.Writer) error {

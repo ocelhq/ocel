@@ -57,7 +57,7 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 		newDestroyCommand(invocation),
 	)
 
-	return cmd
+	return commands.ReadOnly(cmd)
 }
 
 func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier, aliases []string) *cobra.Command {
@@ -99,7 +99,7 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "Remove a feature other projects still use")
 	cmd.Flags().BoolVar(&opts.Repair, "repair", false, "Let later deploys refresh stale features on their own; --repair=false turns it off")
 
-	return cmd
+	return commands.Mutates(cmd)
 }
 
 func newDestroyCommand(invocation commands.Invocation) *cobra.Command {
@@ -134,7 +134,7 @@ func newDestroyCommand(invocation commands.Invocation) *cobra.Command {
 	commands.AddYesFlag(cmd, &opts.Yes)
 	cmd.Flags().BoolVar(&opts.Dry, "dry", false, "Print what would be removed and stop, removing nothing")
 
-	return cmd
+	return commands.Mutates(cmd)
 }
 
 func environmentArg(args []string) (environmentv1.Tier, error) {
