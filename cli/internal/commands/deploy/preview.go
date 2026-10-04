@@ -364,7 +364,11 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 			if !policy.Yes && !policy.Interactive {
 				return fmt.Errorf("`ocel preview rm` needs a terminal to ask %q before it tears the preview down; to run it unattended, pass --yes", question)
 			}
-			proceed, err := policy.Confirm(ctx, check, question)
+			proceed, err := policy.Confirm(ctx, check, consent.Guard{
+				ID:       consent.GuardPersistentPreviewRemoval,
+				Question: question,
+				Action:   fmt.Sprintf("removing the persistent preview %q", env.GetIdentity()),
+			})
 			if err != nil {
 				return err
 			}

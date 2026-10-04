@@ -104,6 +104,8 @@ message RunSummary {
   string promotion_id = 15;
 
   RunError error = 16;
+
+  repeated Assumption assumed = 17;
 }
 
 message RunError {
@@ -116,4 +118,10 @@ message RunError {
   optional string docs_url = 4;
 
   bool retryable = 5;
+}
+
+message Assumption {
+  string id = 1;
+
+  string warning = 2;
 }

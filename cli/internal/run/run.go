@@ -43,6 +43,7 @@ type Run struct {
 	urlNotes    []string
 	propagation *progressv1.Propagation
 	headline    string
+	assumed     []*streamv1.Assumption
 
 	endOnce sync.Once
 }
@@ -56,6 +57,7 @@ func (r *Run) End(errp *error) {
 		result, code := r.result(err)
 		r.mu.Lock()
 		result.Apps, result.ChangeStarted, result.PromotionId = r.apps, r.changed, r.promotion
+		result.Assumed = r.assumed
 		result.Tier, result.Origin = r.identity.GetTier(), r.identity.GetOrigin()
 		r.mu.Unlock()
 		result.DurationMs = r.bus.now().Sub(r.start).Milliseconds()
@@ -280,6 +282,15 @@ func (r *Run) record(result *progressv1.OperationResult) {
 	if propagation := result.GetPropagation(); propagation != nil {
 		r.propagation = propagation
 	}
+}
+
+func (r *Run) assume(id, warning string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if slices.ContainsFunc(r.assumed, func(a *streamv1.Assumption) bool { return a.GetId() == id }) {
+		return
+	}
+	r.assumed = append(r.assumed, &streamv1.Assumption{Id: id, Warning: warning})
 }
 
 func (r *Run) identify(identity *streamv1.IdentityEvent) {

@@ -66,6 +66,11 @@ func (s *Span) Say(message string) { s.say(progressv1.Level_LEVEL_INFO, message)
 
 func (s *Span) Warn(message string) { s.say(progressv1.Level_LEVEL_WARN, message) }
 
+func (s *Span) Assume(id, warning string) {
+	s.run.assume(id, warning)
+	s.Warn(warning)
+}
+
 func (s *Span) Debug(message string) { s.say(progressv1.Level_LEVEL_DEBUG, message) }
 
 func (s *Span) Error(message string) { s.say(progressv1.Level_LEVEL_ERROR, message) }

@@ -583,6 +583,7 @@ type RunSummary struct {
 	Origin        *Party                 `protobuf:"bytes,14,opt,name=origin,proto3" json:"origin,omitempty"`
 	PromotionId   string                 `protobuf:"bytes,15,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	Error         *RunError              `protobuf:"bytes,16,opt,name=error,proto3" json:"error,omitempty"`
+	Assumed       []*Assumption          `protobuf:"bytes,17,rep,name=assumed,proto3" json:"assumed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -722,6 +723,13 @@ func (x *RunSummary) GetError() *RunError {
 	return nil
 }
 
+func (x *RunSummary) GetAssumed() []*Assumption {
+	if x != nil {
+		return x.Assumed
+	}
+	return nil
+}
+
 type RunError struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
@@ -798,6 +806,58 @@ func (x *RunError) GetRetryable() bool {
 	return false
 }
 
+type Assumption struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Warning       string                 `protobuf:"bytes,2,opt,name=warning,proto3" json:"warning,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Assumption) Reset() {
+	*x = Assumption{}
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Assumption) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Assumption) ProtoMessage() {}
+
+func (x *Assumption) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Assumption.ProtoReflect.Descriptor instead.
+func (*Assumption) Descriptor() ([]byte, []int) {
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *Assumption) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Assumption) GetWarning() string {
+	if x != nil {
+		return x.Warning
+	}
+	return ""
+}
+
 var File_cli_stream_v1_stream_proto protoreflect.FileDescriptor
 
 const file_cli_stream_v1_stream_proto_rawDesc = "" +
@@ -837,7 +897,7 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"&\n" +
 	"\fResumedEvent\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xde\x04\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x93\x05\n" +
 	"\n" +
 	"RunSummary\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
@@ -856,7 +916,8 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x04tier\x18\r \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12,\n" +
 	"\x06origin\x18\x0e \x01(\v2\x14.cli.stream.v1.PartyR\x06origin\x12!\n" +
 	"\fpromotion_id\x18\x0f \x01(\tR\vpromotionId\x12-\n" +
-	"\x05error\x18\x10 \x01(\v2\x17.cli.stream.v1.RunErrorR\x05error\"\xd3\x01\n" +
+	"\x05error\x18\x10 \x01(\v2\x17.cli.stream.v1.RunErrorR\x05error\x123\n" +
+	"\aassumed\x18\x11 \x03(\v2\x19.cli.stream.v1.AssumptionR\aassumed\"\xd3\x01\n" +
 	"\bRunError\x12@\n" +
 	"\x04code\x18\x01 \x01(\tB,\xbaH)r'2%^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$R\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x17\n" +
@@ -864,7 +925,11 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\bdocs_url\x18\x04 \x01(\tH\x01R\adocsUrl\x88\x01\x01\x12\x1c\n" +
 	"\tretryable\x18\x05 \x01(\bR\tretryableB\a\n" +
 	"\x05_hintB\v\n" +
-	"\t_docs_urlB9Z7github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1b\x06proto3"
+	"\t_docs_url\"6\n" +
+	"\n" +
+	"Assumption\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
+	"\awarning\x18\x02 \x01(\tR\awarningB9Z7github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1b\x06proto3"
 
 var (
 	file_cli_stream_v1_stream_proto_rawDescOnce sync.Once
@@ -878,7 +943,7 @@ func file_cli_stream_v1_stream_proto_rawDescGZIP() []byte {
 	return file_cli_stream_v1_stream_proto_rawDescData
 }
 
-var file_cli_stream_v1_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_cli_stream_v1_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*RunEvent)(nil),          // 0: cli.stream.v1.RunEvent
 	(*IdentityEvent)(nil),     // 1: cli.stream.v1.IdentityEvent
@@ -890,34 +955,36 @@ var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*ResumedEvent)(nil),      // 7: cli.stream.v1.ResumedEvent
 	(*RunSummary)(nil),        // 8: cli.stream.v1.RunSummary
 	(*RunError)(nil),          // 9: cli.stream.v1.RunError
-	(*v1.OperationEvent)(nil), // 10: common.progress.v1.OperationEvent
-	(v11.Tier)(0),             // 11: common.environment.v1.Tier
-	(*v1.Propagation)(nil),    // 12: common.progress.v1.Propagation
-	(*v1.AppResult)(nil),      // 13: common.progress.v1.AppResult
+	(*Assumption)(nil),        // 10: cli.stream.v1.Assumption
+	(*v1.OperationEvent)(nil), // 11: common.progress.v1.OperationEvent
+	(v11.Tier)(0),             // 12: common.environment.v1.Tier
+	(*v1.Propagation)(nil),    // 13: common.progress.v1.Propagation
+	(*v1.AppResult)(nil),      // 14: common.progress.v1.AppResult
 }
 var file_cli_stream_v1_stream_proto_depIdxs = []int32{
-	10, // 0: cli.stream.v1.RunEvent.operation:type_name -> common.progress.v1.OperationEvent
+	11, // 0: cli.stream.v1.RunEvent.operation:type_name -> common.progress.v1.OperationEvent
 	3,  // 1: cli.stream.v1.RunEvent.waiting:type_name -> cli.stream.v1.WaitingEvent
 	7,  // 2: cli.stream.v1.RunEvent.resumed:type_name -> cli.stream.v1.ResumedEvent
 	8,  // 3: cli.stream.v1.RunEvent.summary:type_name -> cli.stream.v1.RunSummary
 	1,  // 4: cli.stream.v1.RunEvent.identity:type_name -> cli.stream.v1.IdentityEvent
-	11, // 5: cli.stream.v1.IdentityEvent.tier:type_name -> common.environment.v1.Tier
+	12, // 5: cli.stream.v1.IdentityEvent.tier:type_name -> common.environment.v1.Tier
 	2,  // 6: cli.stream.v1.IdentityEvent.origin:type_name -> cli.stream.v1.Party
 	2,  // 7: cli.stream.v1.IdentityEvent.edge:type_name -> cli.stream.v1.Party
 	4,  // 8: cli.stream.v1.WaitingEvent.missing:type_name -> cli.stream.v1.MissingVariables
 	5,  // 9: cli.stream.v1.MissingVariables.cells:type_name -> cli.stream.v1.MissingVariable
 	6,  // 10: cli.stream.v1.MissingVariables.groups:type_name -> cli.stream.v1.MissingGroup
-	12, // 11: cli.stream.v1.RunSummary.propagation:type_name -> common.progress.v1.Propagation
-	13, // 12: cli.stream.v1.RunSummary.apps:type_name -> common.progress.v1.AppResult
+	13, // 11: cli.stream.v1.RunSummary.propagation:type_name -> common.progress.v1.Propagation
+	14, // 12: cli.stream.v1.RunSummary.apps:type_name -> common.progress.v1.AppResult
 	4,  // 13: cli.stream.v1.RunSummary.missing:type_name -> cli.stream.v1.MissingVariables
-	11, // 14: cli.stream.v1.RunSummary.tier:type_name -> common.environment.v1.Tier
+	12, // 14: cli.stream.v1.RunSummary.tier:type_name -> common.environment.v1.Tier
 	2,  // 15: cli.stream.v1.RunSummary.origin:type_name -> cli.stream.v1.Party
 	9,  // 16: cli.stream.v1.RunSummary.error:type_name -> cli.stream.v1.RunError
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	10, // 17: cli.stream.v1.RunSummary.assumed:type_name -> cli.stream.v1.Assumption
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_cli_stream_v1_stream_proto_init() }
@@ -938,7 +1005,7 @@ func file_cli_stream_v1_stream_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_stream_v1_stream_proto_rawDesc), len(file_cli_stream_v1_stream_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

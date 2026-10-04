@@ -251,7 +251,11 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		}
 
 		if status.GetDowngrade() {
-			proceed, err := policy.Confirm(ctx, planning, "Write the older content anyway?")
+			proceed, err := policy.Confirm(ctx, planning, consent.Guard{
+				ID:       consent.GuardBootstrapDowngrade,
+				Question: "Write the older content anyway?",
+				Action:   fmt.Sprintf("writing older %s bootstrap content", readiness.TierName(tier)),
+			})
 			if err != nil {
 				return err
 			}

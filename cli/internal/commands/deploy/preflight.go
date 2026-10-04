@@ -184,7 +184,11 @@ func guardNewProject(ctx context.Context, policy consent.Policy, check *run.Span
 	}
 	check.Warn(fmt.Sprintf("No existing deployment for slug %q.\nThis will create a NEW project.\nThis backend already has: %s",
 		cfg.Slug, strings.Join(knownSlugs, ", ")))
-	return policy.Confirm(ctx, check, "Continue?")
+	return policy.Confirm(ctx, check, consent.Guard{
+		ID:       consent.GuardNewProject,
+		Question: "Continue?",
+		Action:   fmt.Sprintf("creating new project %q", cfg.Slug),
+	})
 }
 
 func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string, warn func(string)) error {
