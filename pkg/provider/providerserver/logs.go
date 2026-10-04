@@ -61,13 +61,14 @@ func (h *handlers) ReadLogs(ctx context.Context, req *contractv1.ReadLogsRequest
 	if req.GetTail() {
 		query.Until = tailFrom
 	}
-	sink := &logSink{stream: stream}
+	emit := func(entries []provider.LogEntry) error { return sendLogEntries(stream, entries) }
+	notice := func(notice provider.LogNotice) error { return sendProviderNotice(stream, notice) }
 	var missing provider.LogTargetsMissing
 	if len(targets) > 0 {
-		err := p.Logs().Read(ctx, query, sink.sendEntries, sink.sendNotice)
+		err := p.Logs().Read(ctx, query, emit, notice)
 		if errors.As(err, &missing) {
 			for _, target := range missing.Targets {
-				if err := sendLogNotice(stream, contractv1.LogNotice_KIND_SOURCE_GONE, fmt.Sprintf("%s (%s) of release %s no longer exists, so its logs are gone", target.App, target.Source, target.Release)); err != nil {
+				if err := sendLogNotice(stream, contractv1.LogNotice_KIND_SOURCE_GONE, sourceGoneMessage(target)); err != nil {
 					return err
 				}
 			}
@@ -82,37 +83,38 @@ func (h *handlers) ReadLogs(ctx context.Context, req *contractv1.ReadLogsRequest
 	query.Targets = slices.DeleteFunc(slices.Clone(targets), func(target provider.LogTarget) bool {
 		return slices.ContainsFunc(missing.Targets, func(gone provider.LogTarget) bool { return gone.Physical() == target.Physical() })
 	})
-	if len(query.Targets) == 0 {
-		<-ctx.Done()
-		return nil
+	if len(query.Targets) > 0 {
+		err = p.Logs().Read(ctx, query, emit, notice)
+		if err != nil && ctx.Err() == nil {
+			return provider.RefusalError(err)
+		}
 	}
-	err = p.Logs().Read(ctx, query, sink.sendEntries, sink.sendNotice)
-	if err != nil && ctx.Err() == nil {
-		return provider.RefusalError(err)
-	}
+	<-ctx.Done()
 	return nil
 }
 
-type logSink struct {
-	stream *connect.ServerStream[contractv1.ReadLogsResponse]
+func sourceGoneMessage(target provider.LogTarget) string {
+	return fmt.Sprintf("%s (%s) of release %s no longer exists, so its logs are gone", target.App, target.Source, target.Release)
 }
 
-func (s *logSink) sendEntries(entries []provider.LogEntry) error {
-	return s.stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Batch{Batch: &contractv1.LogBatch{Entries: logEntriesProto(entries)}}})
+func sendLogEntries(stream *connect.ServerStream[contractv1.ReadLogsResponse], entries []provider.LogEntry) error {
+	return stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Batch{Batch: &contractv1.LogBatch{Entries: logEntriesProto(entries)}}})
 }
 
-func (s *logSink) sendNotice(notice provider.LogNotice) error {
+func sendProviderNotice(stream *connect.ServerStream[contractv1.ReadLogsResponse], notice provider.LogNotice) error {
 	switch notice.Kind {
 	case provider.LogSampled:
-		return s.stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: &contractv1.LogNotice{
+		return stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: &contractv1.LogNotice{
 			Kind:    contractv1.LogNotice_KIND_SAMPLED,
 			Message: fmt.Sprintf("%d entries were left out because the log store sampled them", notice.Omitted),
 			Omitted: uint64(max(notice.Omitted, 0)),
 		}}})
 	case provider.LogReconnected:
-		return sendLogNotice(s.stream, contractv1.LogNotice_KIND_RECONNECTED, "the log stream dropped and reconnected, so entries written meanwhile may be missing")
+		return sendLogNotice(stream, contractv1.LogNotice_KIND_RECONNECTED, "the log stream dropped and reconnected, so entries written meanwhile may be missing")
+	case provider.LogSourceGone:
+		return sendLogNotice(stream, contractv1.LogNotice_KIND_SOURCE_GONE, sourceGoneMessage(notice.Target))
 	}
-	return nil
+	return fmt.Errorf("the provider sent a log notice of kind %d, which has no meaning on the wire", notice.Kind)
 }
 
 func sendLogNotice(stream *connect.ServerStream[contractv1.ReadLogsResponse], kind contractv1.LogNotice_Kind, message string) error {

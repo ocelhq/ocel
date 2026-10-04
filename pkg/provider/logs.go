@@ -68,11 +68,13 @@ type LogNoticeKind int
 const (
 	LogSampled LogNoticeKind = iota + 1
 	LogReconnected
+	LogSourceGone
 )
 
 type LogNotice struct {
 	Kind    LogNoticeKind
 	Omitted int
+	Target  LogTarget
 }
 
 type Logs interface {

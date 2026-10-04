@@ -222,25 +222,55 @@ func TestRealtimePassesTheConformanceSuite(t *testing.T) {
 }
 
 type dockerLogs struct {
-	mu      sync.Mutex
-	entries map[string][]provider.LogEntry
-	live    chan provider.LogEntry
+	mu        sync.Mutex
+	entries   map[string][]provider.LogEntry
+	followers map[chan provider.LogEntry]string
 }
 
-func newDockerLogs() *dockerLogs { return &dockerLogs{live: make(chan provider.LogEntry, 16)} }
+func newDockerLogs() *dockerLogs {
+	return &dockerLogs{followers: map[chan provider.LogEntry]string{}}
+}
 
-func (d *dockerLogs) feed(_ *testing.T, _ provider.LogTarget, entries []provider.LogEntry) {
-	for _, entry := range entries {
-		d.live <- entry
+func (d *dockerLogs) feed(_ *testing.T, target provider.LogTarget, entries []provider.LogEntry) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.entries == nil {
+		d.entries = map[string][]provider.LogEntry{}
+	}
+	d.entries[target.Physical()] = append(d.entries[target.Physical()], entries...)
+	for follower, physical := range d.followers {
+		if physical != target.Physical() {
+			continue
+		}
+		for _, entry := range entries {
+			follower <- entry
+		}
 	}
 }
 
-func (d *dockerLogs) follow(ctx context.Context, _ string, each func(session.Line) error) error {
+func (d *dockerLogs) follow(ctx context.Context, command string, each func(session.Line) error) error {
+	words := strings.Fields(strings.ReplaceAll(command, "'", ""))
+	physical := words[len(words)-1]
+	since, _ := time.Parse(time.RFC3339Nano, words[slices.Index(words, "--since")+1])
+	follower := make(chan provider.LogEntry, 64)
+	d.mu.Lock()
+	for _, entry := range d.entries[physical] {
+		if !entry.Time.Before(since) {
+			follower <- entry
+		}
+	}
+	d.followers[follower] = physical
+	d.mu.Unlock()
+	defer func() {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		delete(d.followers, follower)
+	}()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case entry := <-d.live:
+		case entry := <-follower:
 			if err := each(session.Line{Pipe: session.Stdout, Text: entry.Time.Format(time.RFC3339Nano) + " " + entry.Message}); err != nil {
 				return err
 			}

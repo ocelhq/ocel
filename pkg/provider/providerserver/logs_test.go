@@ -71,6 +71,10 @@ func logLine(offset time.Duration, message string) provider.LogEntry {
 	return provider.LogEntry{Time: logsEpoch.Add(offset), Message: message, Instance: "i-1"}
 }
 
+func liveLine(message string) provider.LogEntry {
+	return provider.LogEntry{Time: time.Now(), Message: message, Instance: "i-1"}
+}
+
 func logsRequest() *contractv1.ReadLogsRequest {
 	return &contractv1.ReadLogsRequest{
 		Slug:  "shop",
@@ -535,13 +539,14 @@ func TestReadLogsSendsCaughtUpBeforeLiveEntries(t *testing.T) {
 	t.Parallel()
 	client, vendor := liveWeb(t)
 	vendor.FakeLogs().Append("web-fn-a", logLine(time.Minute, "history"))
-	vendor.FakeLogs().Feed("web-fn-a", logLine(2*time.Minute, "live one"))
 
 	tailed := tailLogsOf(t, client, logsRequest())
-	vendor.FakeLogs().Feed("web-fn-a", logLine(3*time.Minute, "live two"))
-
 	want := []string{"batch:history", contractv1.LogNotice_KIND_CAUGHT_UP.String(), "batch:live one", "batch:live two"}
-	for _, kind := range want {
+	for i, kind := range want {
+		if i == 2 {
+			vendor.FakeLogs().Append("web-fn-a", liveLine("live one"))
+			vendor.FakeLogs().Append("web-fn-a", liveLine("live two"))
+		}
 		if got := tailed.nextKind(); got != kind {
 			t.Fatalf("ReadLogs() sent %q, want %q in the order %v", got, kind, want)
 		}
@@ -564,8 +569,7 @@ func TestReadLogsStopsTailingWhenTheCallerCancels(t *testing.T) {
 
 func TestReadLogsEndsAfterCaughtUpWhenNotAskedToTail(t *testing.T) {
 	t.Parallel()
-	client, vendor := liveWeb(t)
-	vendor.FakeLogs().Feed("web-fn-a", logLine(time.Minute, "live"))
+	client, _ := liveWeb(t)
 
 	read, err := readLogsOf(t, client, logsRequest())
 	if err != nil {
@@ -593,6 +597,7 @@ type spyingLogs struct {
 	*fake.Provider
 	gone        []string
 	refuseTail  error
+	endTail     bool
 	mu          sync.Mutex
 	queriesRead []provider.LogQuery
 }
@@ -613,6 +618,9 @@ func (l spiedLogs) Read(ctx context.Context, q provider.LogQuery, emit func([]pr
 	l.spy.mu.Unlock()
 	if q.Tail && l.spy.refuseTail != nil {
 		return l.spy.refuseTail
+	}
+	if q.Tail && l.spy.endTail {
+		return nil
 	}
 	if err := l.spy.Provider.Logs().Read(ctx, q, emit, notice); err != nil {
 		return err
@@ -719,12 +727,12 @@ func TestReadLogsPassesTheNoticesOfATailOn(t *testing.T) {
 	if got := tailed.nextKind(); got != contractv1.LogNotice_KIND_CAUGHT_UP.String() {
 		t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
 	}
-	vendor.FakeLogs().FeedNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7})
+	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSampled, Omitted: 7})
 	sampled := tailed.next().GetNotice()
 	if sampled.GetKind() != contractv1.LogNotice_KIND_SAMPLED || sampled.GetOmitted() != 7 || sampled.GetMessage() == "" {
 		t.Errorf("a sampled notice reached the caller as %v, want KIND_SAMPLED omitting 7 with a message", sampled)
 	}
-	vendor.FakeLogs().FeedNotice(provider.LogNotice{Kind: provider.LogReconnected})
+	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogReconnected})
 	if reconnected := tailed.next().GetNotice(); reconnected.GetKind() != contractv1.LogNotice_KIND_RECONNECTED || reconnected.GetMessage() == "" {
 		t.Errorf("a reconnected notice reached the caller as %v, want KIND_RECONNECTED with a message", reconnected)
 	}
@@ -745,5 +753,53 @@ func TestReadLogsStopsWhenTheProviderRefusesTheTail(t *testing.T) {
 	err, ended := tailed.endsWithin(time.Second)
 	if !ended || connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("ReadLogs() after a refused tail = %v (ended %v), want the provider's refusal passed on", err, ended)
+	}
+}
+
+func TestReadLogsKeepsTheStreamOpenWhenTheProvidersTailEndsBeforeTheCallerCancels(t *testing.T) {
+	t.Parallel()
+	spy := &spyingLogs{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)), endTail: true}
+	client := spiedWeb(t, spy)
+
+	tailed := tailLogsOf(t, client, logsRequest())
+	if got := tailed.nextKind(); got != contractv1.LogNotice_KIND_CAUGHT_UP.String() {
+		t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
+	}
+	if err, ended := tailed.endsWithin(200 * time.Millisecond); ended {
+		t.Fatalf("ReadLogs() ended with %v when the provider had nothing more to tail, want the stream held open until the caller cancels", err)
+	}
+}
+
+func TestReadLogsNamesTheReleaseOfASourceThatIsGoneWhileTailing(t *testing.T) {
+	t.Parallel()
+	client, vendor := liveWeb(t)
+	build, err := provider.ParseBuild(buildIdentity(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tailed := tailLogsOf(t, client, logsRequest())
+	if got := tailed.nextKind(); got != contractv1.LogNotice_KIND_CAUGHT_UP.String() {
+		t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
+	}
+	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogSourceGone, Target: provider.LogTarget{App: "web", Source: "http", Release: build.Release().String()}})
+	gone := tailed.next().GetNotice()
+	if gone.GetKind() != contractv1.LogNotice_KIND_SOURCE_GONE || !strings.Contains(gone.GetMessage(), build.Release().String()) || !strings.Contains(gone.GetMessage(), "web") {
+		t.Errorf("a source gone while tailing reached the caller as %v, want KIND_SOURCE_GONE naming its app and release %s", gone, build.Release())
+	}
+}
+
+func TestReadLogsFailsOnANoticeItCannotName(t *testing.T) {
+	t.Parallel()
+	client, vendor := liveWeb(t)
+
+	tailed := tailLogsOf(t, client, logsRequest())
+	if got := tailed.nextKind(); got != contractv1.LogNotice_KIND_CAUGHT_UP.String() {
+		t.Fatalf("ReadLogs() sent %q, want CAUGHT_UP", got)
+	}
+	vendor.FakeLogs().SendNotice(provider.LogNotice{Kind: provider.LogNoticeKind(99)})
+	err, ended := tailed.endsWithin(time.Second)
+	if !ended || err == nil {
+		t.Errorf("ReadLogs() after a notice of an unknown kind = %v (ended %v), want the stream to fail rather than drop it", err, ended)
 	}
 }

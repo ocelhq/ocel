@@ -9,36 +9,23 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const liveCapacity = 1024
-
 type Logs struct {
 	mu      sync.Mutex
 	entries map[string][]provider.LogEntry
 	deleted map[string]bool
-	live    chan liveItem
+	tails   map[*logTail]bool
 }
 
-type liveItem struct {
-	physical string
-	entries  []provider.LogEntry
-	notice   *provider.LogNotice
+type logTail struct {
+	query      provider.LogQuery
+	mu         sync.Mutex
+	deliveries []delivery
+	arrived    chan struct{}
 }
 
-func (l *Logs) liveItems() chan liveItem {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.live == nil {
-		l.live = make(chan liveItem, liveCapacity)
-	}
-	return l.live
-}
-
-func (l *Logs) Feed(physical string, entries ...provider.LogEntry) {
-	l.liveItems() <- liveItem{physical: physical, entries: entries}
-}
-
-func (l *Logs) FeedNotice(notice provider.LogNotice) {
-	l.liveItems() <- liveItem{notice: &notice}
+type delivery struct {
+	entries []provider.LogEntry
+	notice  *provider.LogNotice
 }
 
 func (l *Logs) Append(physical string, entries ...provider.LogEntry) {
@@ -47,7 +34,22 @@ func (l *Logs) Append(physical string, entries ...provider.LogEntry) {
 	if l.entries == nil {
 		l.entries = map[string][]provider.LogEntry{}
 	}
-	l.entries[physical] = append(l.entries[physical], entries...)
+	for _, entry := range entries {
+		l.entries[physical] = append(l.entries[physical], entry)
+		for tail := range l.tails {
+			if matched := tail.matching(physical, []provider.LogEntry{entry}); len(matched) > 0 {
+				tail.deliver(delivery{entries: matched})
+			}
+		}
+	}
+}
+
+func (l *Logs) SendNotice(notice provider.LogNotice) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for tail := range l.tails {
+		tail.deliver(delivery{notice: &notice})
+	}
 }
 
 func (l *Logs) Delete(physical string) {
@@ -60,11 +62,11 @@ func (l *Logs) Delete(physical string) {
 }
 
 func (l *Logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, notice func(provider.LogNotice) error) error {
-	if q.Tail && len(q.Targets) == 0 {
-		return nil
-	}
 	if q.Tail {
-		return l.follow(ctx, q, emit, notice)
+		if len(q.Targets) == 0 {
+			return nil
+		}
+		return l.tail(ctx, q, emit, notice)
 	}
 	if q.Limit < 1 {
 		return nil
@@ -107,38 +109,85 @@ func (l *Logs) entriesOf(target provider.LogTarget) ([]provider.LogEntry, bool) 
 	return slices.Clone(l.entries[target.Physical()]), l.deleted[target.Physical()]
 }
 
-func (l *Logs) follow(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, notice func(provider.LogNotice) error) error {
-	items := l.liveItems()
+func (l *Logs) tail(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, notice func(provider.LogNotice) error) error {
+	tail := l.openTail(q)
+	defer l.closeTail(tail)
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case item := <-items:
-			if item.notice != nil {
-				if err := notice(*item.notice); err != nil {
-					return err
-				}
-				continue
+		case <-tail.arrived:
+		}
+		for _, next := range tail.takeDeliveries() {
+			var err error
+			if next.notice != nil {
+				err = notice(*next.notice)
+			} else {
+				err = emit(next.entries)
 			}
-			var live []provider.LogEntry
-			for _, target := range q.Targets {
-				if target.Physical() != item.physical {
-					continue
-				}
-				for _, entry := range item.entries {
-					if !strings.Contains(entry.Message, q.Contains) {
-						continue
-					}
-					entry.App, entry.Source, entry.Release = target.App, target.Source, target.Release
-					live = append(live, entry)
-				}
-			}
-			if len(live) == 0 {
-				continue
-			}
-			if err := emit(live); err != nil {
+			if err != nil {
 				return err
 			}
 		}
 	}
+}
+
+func (l *Logs) openTail(q provider.LogQuery) *logTail {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	tail := &logTail{query: q, arrived: make(chan struct{}, 1)}
+	var stored []provider.LogEntry
+	for _, target := range q.Targets {
+		stored = append(stored, tail.matching(target.Physical(), l.entries[target.Physical()])...)
+	}
+	slices.SortStableFunc(stored, func(a, b provider.LogEntry) int { return a.Time.Compare(b.Time) })
+	if len(stored) > 0 {
+		tail.deliver(delivery{entries: stored})
+	}
+	if l.tails == nil {
+		l.tails = map[*logTail]bool{}
+	}
+	l.tails[tail] = true
+	return tail
+}
+
+func (l *Logs) closeTail(tail *logTail) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.tails, tail)
+}
+
+func (t *logTail) matching(physical string, entries []provider.LogEntry) []provider.LogEntry {
+	var matched []provider.LogEntry
+	for _, target := range t.query.Targets {
+		if target.Physical() != physical {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.Time.Before(t.query.Since) || !strings.Contains(entry.Message, t.query.Contains) {
+				continue
+			}
+			entry.App, entry.Source, entry.Release = target.App, target.Source, target.Release
+			matched = append(matched, entry)
+		}
+	}
+	return matched
+}
+
+func (t *logTail) deliver(next delivery) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.deliveries = append(t.deliveries, next)
+	select {
+	case t.arrived <- struct{}{}:
+	default:
+	}
+}
+
+func (t *logTail) takeDeliveries() []delivery {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	taken := t.deliveries
+	t.deliveries = nil
+	return taken
 }
