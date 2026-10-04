@@ -104,7 +104,7 @@ func runLogs(ctx context.Context, dependencies Dependencies, cwd string, apps []
 	return dependencies.WithProvider(ctx, cfg, "ocel logs", open, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		out := newOutput(stdout, asJSON, opts.raw, minLevel, p.Check.Warn)
-		return providerprocess.ReadLogs(ctx, p.Provider, request, out.accept)
+		return providerprocess.ReadLogs(ctx, p.Provider, request, out.printResponse)
 	})
 }
 

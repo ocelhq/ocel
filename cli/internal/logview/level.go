@@ -19,30 +19,26 @@ const (
 	LevelError
 )
 
-var requestableLevels = map[string]Level{
-	"debug": LevelDebug,
-	"info":  LevelInfo,
-	"warn":  LevelWarn,
-	"error": LevelError,
-}
+var levelNames = [...]string{LevelUnknown: "", LevelDebug: "debug", LevelInfo: "info", LevelWarn: "warn", LevelError: "error"}
 
 func ParseLevel(name string) (Level, bool) {
-	level, ok := requestableLevels[strings.ToLower(name)]
-	return level, ok
+	index := slices.Index(levelNames[:], strings.ToLower(name))
+	if index <= int(LevelUnknown) {
+		return LevelUnknown, false
+	}
+	return Level(index), true
 }
 
 func (l Level) String() string {
-	for name, level := range requestableLevels {
-		if level == l {
-			return name
-		}
+	if l < LevelUnknown || int(l) >= len(levelNames) {
+		return ""
 	}
-	return ""
+	return levelNames[l]
 }
 
 var levelOffset = regexp.MustCompile(`[+-]\d+$`)
 
-var levelNames = map[string]Level{
+var levelSpellings = map[string]Level{
 	"TRACE":     LevelDebug,
 	"DEBUG":     LevelDebug,
 	"INFO":      LevelInfo,
@@ -59,7 +55,7 @@ var levelNames = map[string]Level{
 }
 
 func buildLevelPattern() string {
-	names := slices.SortedFunc(maps.Keys(levelNames), func(left, right string) int {
+	names := slices.SortedFunc(maps.Keys(levelSpellings), func(left, right string) int {
 		return cmp.Or(cmp.Compare(len(right), len(left)), strings.Compare(left, right))
 	})
 	return strings.Join(names, "|")
@@ -69,7 +65,7 @@ func levelOf(value any) Level {
 	switch value := value.(type) {
 	case string:
 		name := strings.ToUpper(strings.TrimSpace(value))
-		return levelNames[levelOffset.ReplaceAllString(name, "")]
+		return levelSpellings[levelOffset.ReplaceAllString(name, "")]
 	case json.Number:
 		number, err := value.Float64()
 		if err != nil {
