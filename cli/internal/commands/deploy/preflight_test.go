@@ -220,7 +220,7 @@ func onlyPreflight(t *testing.T, fixture clitest.FakeProject) *contractv1.Prefli
 	return preflights[0]
 }
 
-func TestADeployAsksAboutTheProjectsSlugOnlyWhenItCanActOnTheAnswer(t *testing.T) {
+func TestADeployNamesItsSlugToThePreflightWhateverItDeclaresAndWhoeverIsThere(t *testing.T) {
 	t.Run("declared domains pass the slug to the preflight", func(t *testing.T) {
 		dependencies := newTestDependencies()
 		stubBuild(&dependencies, nil)
@@ -232,11 +232,11 @@ func TestADeployAsksAboutTheProjectsSlugOnlyWhenItCanActOnTheAnswer(t *testing.T
 		}
 	})
 
-	t.Run("a non-TTY stdin with no domains leaves the slug out", func(t *testing.T) {
+	t.Run("a non-TTY stdin with no domains passes the slug to the preflight", func(t *testing.T) {
 		dependencies := newTestDependencies()
 		stubBuild(&dependencies, nil)
 		fixture := setUpDeployProject(t)
-		recordProjects(t, fixture, environment.TierProduction, "my-application", "billing")
+		fixture.Provider.Edges().(*fake.Edges).Edge(fake.KindRelay).AddressesItself(true)
 		clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
@@ -245,14 +245,9 @@ export default {
 };
 `)
 
-		var stdout, stderr bytes.Buffer
-		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		_ = runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{}, &stdout, &stderr, strings.NewReader(""))
-		if slug := onlyPreflight(t, fixture).GetSlug(); slug != "" {
-			t.Errorf("the preflight named slug %q, want a non-TTY deploy to ask for no slug-scoped answers", slug)
-		}
-		if strings.Contains(stdout.String(), "NEW project") {
-			t.Errorf("stdout = %q, want no drift warning from a preflight that asked about no slug", stdout.String())
+		deployOutput(t, fixture, dependencies, deployOptions{}, "")
+		if slug := onlyPreflight(t, fixture).GetSlug(); slug != "test-app" {
+			t.Errorf("the preflight named slug %q, want the project's, so a guard skipped off a terminal still knows the project is new", slug)
 		}
 	})
 

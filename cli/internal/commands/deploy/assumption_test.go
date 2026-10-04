@@ -3,6 +3,7 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 const newProjectWarning = `creating new project "test-app" without confirmation (no terminal)`
@@ -48,6 +50,40 @@ func TestTheSummaryOfADeployOfANewProjectWithNoTerminalListsNewProjectAsAssumed(
 	assumed := summaryAssumed(t, stream.String())
 	if len(assumed) != 1 || assumed[0].GetId() != "new_project" || assumed[0].GetWarning() != newProjectWarning {
 		t.Fatalf("assumed = %v, want new_project with its warning", assumed)
+	}
+}
+
+func TestADeployOfANewProjectWithNoTerminalAndNoDomainsWarnsAndListsTheAssumption(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	useJSONFormat(t, &dependencies)
+	fixture := setUpDeployProject(t)
+	fixture.Provider.Edges().(*fake.Edges).Edge(fake.KindRelay).AddressesItself(true)
+	recordProjects(t, fixture, environment.TierProduction, "my-application", "billing")
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), `
+export default {
+  slug: "`+clitest.FixtureSlug+`",
+  provider: { fake: {} },
+  domains: { preview: "*.preview.acme.com" },
+};
+`)
+
+	var stream, stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stream=%s stderr=%s", err, stream.String(), stderr.String())
+	}
+
+	assumed := summaryAssumed(t, stream.String())
+	if len(assumed) != 1 || assumed[0].GetId() != "new_project" || assumed[0].GetWarning() != newProjectWarning {
+		t.Fatalf("assumed = %v, want new_project with its warning", assumed)
+	}
+	var warned bool
+	for _, ev := range envelopes(t, stream.String()) {
+		warned = warned || (ev.GetOperation().GetLevel() == progressv1.Level_LEVEL_WARN && ev.GetOperation().GetMessage() == newProjectWarning)
+	}
+	if !warned {
+		t.Errorf("stream carries no warning event for the skipped guard:\n%s", stream.String())
 	}
 }
 

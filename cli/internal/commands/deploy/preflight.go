@@ -116,7 +116,7 @@ func productionOpenOptions(policy consent.Policy, cfg *project.Project) commands
 		Pinning:         executables.ChoosePinning(policy.DryRun),
 		Tier:            environmentv1.Tier_TIER_PRODUCTION,
 		Require:         readiness.Features,
-		Slug:            slugToScopeBy(policy.Interactive, cfg.HostnameNames(environmentv1.Tier_TIER_PRODUCTION), cfg),
+		Slug:            cfg.Slug,
 		ClaimsDomains:   true,
 		RequireHostname: true,
 		Policy:          policy,
@@ -169,13 +169,6 @@ func refuseStaleBootstrap(policy consent.Policy, check *run.Span, status *contra
 	}
 	gap.WarnStale(tier, check)
 	return nil
-}
-
-func slugToScopeBy(interactive bool, domains []string, cfg *project.Project) string {
-	if interactive || len(domains) > 0 {
-		return cfg.Slug
-	}
-	return ""
 }
 
 func guardNewProject(ctx context.Context, policy consent.Policy, check *run.Span, cfg *project.Project, knownSlugs []string) (bool, error) {
