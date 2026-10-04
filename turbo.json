@@ -3,6 +3,7 @@
   "envMode": "strict",
   "globalDependencies": ["pnpm-lock.yaml", "pnpm-workspace.yaml"],
   "globalPassThroughEnv": ["GO*"],
+  "futureFlags": { "affectedUsingTaskInputs": true },
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

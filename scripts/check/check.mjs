@@ -117,7 +117,8 @@ function checkJS(changed, base) {
     `--filter=...[${base}]`,
     ...excluded.map((pattern) => `--filter=${pattern}`),
   ]);
-  run(["pnpm", "turbo", "run", "test", `--filter=...[${base}]`]);
+  process.env.TURBO_SCM_BASE = base;
+  run(["pnpm", "turbo", "run", "test", "--affected"]);
 }
 
 function checkPython(changed) {
