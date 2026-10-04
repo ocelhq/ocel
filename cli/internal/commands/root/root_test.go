@@ -383,3 +383,14 @@ export default { slug: "test-app" };
 		t.Fatalf("LoadProject err = %v, want it to name the path --config asked for", err)
 	}
 }
+
+func TestTheUsageOfACommandWithSubcommandsNamesTheCommandSlot(t *testing.T) {
+	stdout, _ := executeRoot(t, "preview", "--help")
+	usage := ansi.Strip(stdout)
+
+	for _, want := range []string{"ocel preview [flags]", "ocel preview [command]"} {
+		if !strings.Contains(usage, want) {
+			t.Errorf("ocel preview --help = %q, want its usage to contain %q", usage, want)
+		}
+	}
+}
