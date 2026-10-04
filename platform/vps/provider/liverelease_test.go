@@ -1,3 +1,5 @@
+//go:build integration
+
 package vps_test
 
 import (
@@ -27,7 +29,6 @@ const (
 	liveApp     = "web"
 	liveOwner   = "ocel--shop--production"
 	livePointer = "@production"
-	healthPath  = "/healthz"
 )
 
 type release struct {

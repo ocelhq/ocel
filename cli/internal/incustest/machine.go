@@ -29,7 +29,7 @@ func Require(t *testing.T) Machine {
 		key:     os.Getenv("OCEL_INCUS_KEY"),
 	}
 	if vm.address == "" || vm.user == "" || vm.key == "" {
-		t.Skip("no incus VM in the environment; run under `scripts/incus.sh run <name> -- go test ./...`")
+		t.Fatal("no incus VM in the environment; run under `scripts/incus.sh run <name> -- go test ./...`")
 	}
 
 	vm.known = filepath.Join(t.TempDir(), "known_hosts")

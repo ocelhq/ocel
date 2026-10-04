@@ -1,3 +1,5 @@
+//go:build integration
+
 package devresources_test
 
 import (
@@ -15,7 +17,7 @@ import (
 
 func TestDockerAWorkerWhoseLastTaskIsDeletedNoLongerRuns(t *testing.T) {
 	if os.Getenv(liveEnv) == "" {
-		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
+		t.Fatalf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
 	}
 	ctx := context.Background()
 	const projectName = "devresources-live-forget-test"
@@ -54,7 +56,7 @@ const liveEnv = "OCEL_LIVE_DOCKER"
 
 func TestDockerTwoProcessesOfOneProjectShareOnePostgres(t *testing.T) {
 	if os.Getenv(liveEnv) == "" {
-		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
+		t.Fatalf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
 	}
 	ctx := context.Background()
 	const project = "devresources-live-shared-test"

@@ -1,3 +1,5 @@
+//go:build integration
+
 package main
 
 import (
@@ -29,7 +31,7 @@ func flociEndpoint(t *testing.T) string {
 	t.Helper()
 	endpoint := os.Getenv(emulatorEndpointVariable)
 	if endpoint == "" {
-		t.Skip("no floci-gcp emulator in the environment: a worker records its runs in Firestore")
+		t.Fatal("no floci-gcp emulator in the environment: a worker records its runs in Firestore")
 	}
 	return endpoint
 }

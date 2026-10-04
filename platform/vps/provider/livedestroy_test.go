@@ -1,3 +1,5 @@
+//go:build integration
+
 package vps_test
 
 import (
@@ -6,10 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -22,25 +22,6 @@ const (
 	decoyRepository = "mirror.gcr.io/library/busybox"
 	decoyImage      = decoyRepository + ":stable"
 )
-
-type said struct{ lines []string }
-
-func (s *said) Say(message string)  { s.lines = append(s.lines, message) }
-func (s *said) Warn(message string) { s.lines = append(s.lines, message) }
-
-func (s *said) Error(message string)  { s.lines = append(s.lines, message) }
-func (s *said) Detail(message string) { s.lines = append(s.lines, message) }
-func (s *said) Debug(line string)     { s.lines = append(s.lines, line) }
-
-func (s *said) Span(name string, _, _ time.Time, err error, attrs ...progress.Attr) {
-	s.lines = append(s.lines, name)
-	if err != nil {
-		s.lines = append(s.lines, err.Error())
-	}
-	for _, attr := range attrs {
-		s.lines = append(s.lines, attr.Key.Name, attr.Value)
-	}
-}
 
 func (s *said) at(fragment string) int {
 	return slices.IndexFunc(s.lines, func(line string) bool { return strings.Contains(line, fragment) })

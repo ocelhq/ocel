@@ -1,3 +1,5 @@
+//go:build integration
+
 package vps_test
 
 import (
@@ -303,7 +305,7 @@ func servesAPreviewBehindCaddy(t *testing.T, vm machine, d *vps.Provider, opened
 func coolifysCaddyBox(t *testing.T) machine {
 	t.Helper()
 	if os.Getenv("OCEL_INCUS_ADDR") == "" {
-		t.Skip(unreachable)
+		t.Fatal(unreachable)
 	}
 	vm := liveMachine(t)
 	image := strings.TrimSpace(vm.ssh(t, "sudo docker inspect --type container --format '{{.Config.Image}}' coolify-proxy 2>/dev/null || true"))

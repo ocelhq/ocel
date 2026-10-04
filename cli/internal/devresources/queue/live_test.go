@@ -1,3 +1,5 @@
+//go:build integration
+
 package queue_test
 
 import (
@@ -51,7 +53,7 @@ type liveProject struct {
 func newLiveProject(t *testing.T, name string) liveProject {
 	t.Helper()
 	if os.Getenv(liveEnv) == "" {
-		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
+		t.Fatalf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
 	}
 	dir := t.TempDir()
 	t.Cleanup(func() {

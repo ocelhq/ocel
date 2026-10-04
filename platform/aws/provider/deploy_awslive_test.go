@@ -1,4 +1,4 @@
-//go:build awslive
+//go:build integration && awslive
 
 package aws_test
 

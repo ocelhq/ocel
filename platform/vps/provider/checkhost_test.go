@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -407,3 +408,5 @@ func TestAProxyThatNamedNoSocketAtAllIsNotReadAsACleanNamespace(t *testing.T) {
 		t.Error("a proxy that named no socket has no fix, and there is nothing for an operator to do with the finding alone")
 	}
 }
+
+var adminPort = strconv.Itoa(caddy.AdminPort)

@@ -1,3 +1,5 @@
+//go:build integration
+
 package aws_test
 
 import (
@@ -32,7 +34,7 @@ func live(t *testing.T) account {
 	t.Helper()
 	endpoint := os.Getenv("OCEL_FLOCI_ENDPOINT")
 	if endpoint == "" {
-		t.Skip("no floci emulator in the environment; run under `scripts/floci.sh run <name> -- go test ./...`")
+		t.Fatal("no floci emulator in the environment; run under `scripts/floci.sh run <name> -- go test ./...`")
 	}
 	t.Setenv("AWS_ENDPOINT_URL", endpoint)
 	t.Setenv("AWS_ACCESS_KEY_ID", "test")
@@ -137,3 +139,10 @@ func changeFor(group provider.ChangeGroup, name string) provider.Change {
 	}
 	return provider.Change{}
 }
+
+var (
+	coreStackName, _    = defaultNamespace.StackNameFor(environment.TierProduction)
+	previewStackName, _ = defaultNamespace.StackNameFor(environment.TierPreview)
+
+	passphraseParam = defaultNamespace.PassphraseParamName()
+)

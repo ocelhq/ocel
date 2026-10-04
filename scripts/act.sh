@@ -82,15 +82,10 @@ run_provider_vps() {
     eval "$(mise env -s bash 2>/dev/null || true)"
     [ -e /dev/kvm ] || die "provider-vps needs /dev/kvm"
     incus_run "incus list" >/dev/null || die "provider-vps needs a working incus (incus admin init --auto)"
-    local out status=0
-    out=$(mktemp -d)
     pnpm install --frozen-lockfile &&
         pnpm turbo run build --filter=ocel &&
         go generate -C cli ./... &&
-        incus_run "scripts/incus.sh run ocel-act-live-$$ -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestLive' -json ./..." | tee "$out/live.json" &&
-        scripts/assert-ran.sh "$out/live.json" TestLive || status=$?
-    rm -rf "$out"
-    return $status
+        incus_run "scripts/incus.sh run ocel-act-live-$$ -- go test -C platform/vps/provider -race -count=1 -timeout 30m -tags integration -run '^TestLive' ./..."
 }
 
 run_journey_vps() {

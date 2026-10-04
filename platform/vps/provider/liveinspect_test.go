@@ -2,6 +2,8 @@ package vps_test
 
 import (
 	"errors"
+	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -57,3 +59,25 @@ func TestWhatACommandInAContainerSaidIsToldApartFromTheEngineRefusingToRunIt(t *
 		}
 	}
 }
+
+var (
+	noSuchObject   = regexp.MustCompile(`no such (container|image|object|volume|network|plugin|config|secret)\b`)
+	objectNotFound = regexp.MustCompile(`\b(container|image|object|volume|network|plugin|config|secret) \S+ not found\b`)
+)
+
+func absent(said error) bool {
+	lowered := strings.ToLower(said.Error())
+	return noSuchObject.MatchString(lowered) || objectNotFound.MatchString(lowered)
+}
+
+const containerSaid = "ocel-container-said"
+
+func spoken(rendered string) (string, bool) {
+	said, ran := strings.CutSuffix(rendered, containerSaid)
+	if !ran {
+		return "", false
+	}
+	return strings.TrimSuffix(said, "\n"), true
+}
+
+func quote(arg string) string { return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'" }

@@ -1,3 +1,5 @@
+//go:build integration
+
 package tasks
 
 import (
@@ -43,7 +45,7 @@ func live(t *testing.T) emulator {
 	t.Helper()
 	endpoint := os.Getenv("OCEL_FLOCI_ENDPOINT")
 	if endpoint == "" {
-		t.Skip("no floci emulator in the environment; run under `scripts/floci.sh run <name> -- go test ./...`")
+		t.Fatal("no floci emulator in the environment; run under `scripts/floci.sh run <name> -- go test ./...`")
 	}
 	cfg := aws.Config{
 		Region:       liveRegion,

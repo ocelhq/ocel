@@ -1,3 +1,5 @@
+//go:build integration
+
 package docker_test
 
 import (
@@ -19,7 +21,7 @@ const liveImage = "postgres:17.6@sha256:00bc86618629af00d2937fdc5a5d63db3ff8450a
 func requireDocker(t *testing.T) docker.Engine {
 	t.Helper()
 	if os.Getenv(liveEnv) == "" {
-		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
+		t.Fatalf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
 	}
 	engine, err := docker.Open(context.Background())
 	if err != nil {

@@ -1,3 +1,5 @@
+//go:build integration
+
 package gcp_test
 
 import (
@@ -44,7 +46,7 @@ func liveRegion() string {
 func live(t *testing.T) *gcp.Provider {
 	t.Helper()
 	if !emulated() && os.Getenv(liveProjectVariable) == "" {
-		t.Skipf("no floci-gcp emulator in the environment and %s names no project; run under `scripts/floci.sh --cloud gcp run <name> -- go test ./...`, or name a real project to run against",
+		t.Fatalf("no floci-gcp emulator in the environment and %s names no project; run under `scripts/floci.sh --cloud gcp run <name> -- go test ./...`, or name a real project to run against",
 			liveProjectVariable)
 	}
 	return newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
