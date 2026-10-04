@@ -56,7 +56,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Go
         uses: ./.github/actions/go
@@ -118,7 +118,7 @@ jobs:
       DIRS: ${{ matrix.group.dirs }}
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Go
         uses: ./.github/actions/go
@@ -185,7 +185,7 @@ jobs:
 
       - name: Setup uv
         if: matrix.group.name == 'cli'
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: python/uv.lock
@@ -300,7 +300,7 @@ jobs:
 
       - name: Log in to the registry the emulator image lives in
         if: matrix.group.name == 'aws' && (steps.gate-live.outputs.green != 'true' || steps.gate-lifecycle.outputs.green != 'true')
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
