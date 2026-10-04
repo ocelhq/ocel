@@ -29,7 +29,8 @@ type loggedAWS struct {
 	limit     []int32
 	filter    []string
 	starts    []int64
-	liveTails int
+	liveTails []string
+	described int
 }
 
 func (l *loggedAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
@@ -42,21 +43,27 @@ func (l *loggedAWS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	}
 	switch {
 	case strings.HasSuffix(req.Header.Get("X-Amz-Target"), ".DescribeLogGroups"):
-		var describe struct {
-			LogGroupNamePrefix string `json:"logGroupNamePrefix"`
-		}
-		_ = json.NewDecoder(req.Body).Decode(&describe)
-		json.NewEncoder(writer).Encode(map[string]any{"logGroups": []map[string]any{{
-			"logGroupName": describe.LogGroupNamePrefix,
-			"arn":          "arn:aws:logs:us-east-1:123456789012:log-group:" + describe.LogGroupNamePrefix + ":*",
-		}}})
+		l.described++
+		json.NewEncoder(writer).Encode(map[string]any{"logGroups": []any{}})
 		return
 	case strings.HasSuffix(req.Header.Get("X-Amz-Target"), ".StartLiveTail"):
-		l.liveTails++
+		var live struct {
+			LogGroupIdentifiers []string `json:"logGroupIdentifiers"`
+		}
+		_ = json.NewDecoder(req.Body).Decode(&live)
+		l.liveTails = append(l.liveTails, live.LogGroupIdentifiers...)
 		writer.Header().Set("X-Amzn-Errortype", "LimitExceededException")
 		writer.WriteHeader(http.StatusBadRequest)
 		io.WriteString(writer, `{"message":"too many sessions"}`)
 		return
+	}
+	if req.Header.Get("X-Amz-Target") == "" && req.Method == http.MethodPost {
+		body, _ := io.ReadAll(req.Body)
+		if strings.Contains(string(body), "Action=GetCallerIdentity") {
+			writer.Header().Set("Content-Type", "text/xml")
+			io.WriteString(writer, `<GetCallerIdentityResponse><GetCallerIdentityResult><Account>123456789012</Account><Arn>arn:aws:iam::123456789012:user/deployer</Arn><UserId>deployer</UserId></GetCallerIdentityResult></GetCallerIdentityResponse>`)
+			return
+		}
 	}
 	var filter struct {
 		LogGroupName        string `json:"logGroupName"`
@@ -361,11 +368,11 @@ func TestTheLiveTailOptionChoosesLiveTail(t *testing.T) {
 	for _, test := range []struct {
 		name      string
 		options   aws.Options
-		wantTails int
+		wantTails []string
 		wantNote  []provider.LogNotice
 	}{
-		{"set", aws.Options{Region: "us-east-1", Logs: aws.LogOptions{LiveTail: true}}, 1, []provider.LogNotice{{Kind: provider.LogReconnected, Message: "Live Tail is at its session limit; polling instead"}}},
-		{"unset", aws.Options{Region: "us-east-1"}, 0, nil},
+		{"set", aws.Options{Region: "us-east-1", Logs: aws.LogOptions{LiveTail: true}}, []string{"arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/web-fn"}, []provider.LogNotice{{Kind: provider.LogReconnected, Message: "Live Tail is at its session limit; polling instead"}}},
+		{"unset", aws.Options{Region: "us-east-1"}, nil, nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -387,8 +394,11 @@ func TestTheLiveTailOptionChoosesLiveTail(t *testing.T) {
 			}
 			stub.mutex.Lock()
 			defer stub.mutex.Unlock()
-			if stub.liveTails != test.wantTails {
-				t.Errorf("the tail started %d Live Tail sessions, want %d", stub.liveTails, test.wantTails)
+			if !slices.Equal(stub.liveTails, test.wantTails) {
+				t.Errorf("the tail started Live Tail sessions of %v, want %v", stub.liveTails, test.wantTails)
+			}
+			if stub.described != 0 {
+				t.Errorf("the tail listed log groups %d times, want none: a log group's ARN derives from its name", stub.described)
 			}
 			if !slices.Equal(notices, test.wantNote) {
 				t.Errorf("the tail reported %v, want %v", notices, test.wantNote)

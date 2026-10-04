@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -50,11 +49,11 @@ type liveGroup struct {
 	arn    string
 }
 
-func LiveTail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Client, query Query, emit func([]Event) error, notice func(Notice) error) error {
+func LiveTail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Client, account string, query Query, emit func([]Event) error, notice func(Notice) error) error {
 	if err := refuseInvalidTailQuery(query); err != nil {
 		return fmt.Errorf("live tail log events: %w", err)
 	}
-	groups, err := findLiveGroups(ctx, logs, lambdas, query)
+	groups, err := findLiveGroups(ctx, lambdas, logs.Options().Region, account, query)
 	if err != nil {
 		return err
 	}
@@ -84,40 +83,20 @@ func LiveTail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.
 	return liveTail(ctx, groups, query, start, poll, emitOne, noticeOne)
 }
 
-func findLiveGroups(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Client, query Query) ([]liveGroup, error) {
-	arns := map[string]string{}
+func findLiveGroups(ctx context.Context, lambdas *lambda.Client, region, account string, query Query) ([]liveGroup, error) {
 	groups := make([]liveGroup, 0, len(query.Sources))
 	for _, source := range query.Sources {
 		group, err := findGroup(ctx, lambdas, source, query.Tier)
 		if err != nil {
 			return nil, err
 		}
-		arn, known := arns[group.name]
-		if !known {
-			if arn, err = findGroupARN(ctx, logs, group.name); err != nil {
-				return nil, err
-			}
-			arns[group.name] = arn
-		}
-		groups = append(groups, liveGroup{logGroup: group, source: source, arn: arn})
+		groups = append(groups, liveGroup{logGroup: group, source: source, arn: nameGroupARN(region, account, group.name)})
 	}
 	return groups, nil
 }
 
-func findGroupARN(ctx context.Context, logs *cloudwatchlogs.Client, name string) (string, error) {
-	pages := cloudwatchlogs.NewDescribeLogGroupsPaginator(logs, &cloudwatchlogs.DescribeLogGroupsInput{LogGroupNamePrefix: aws.String(name)})
-	for pages.HasMorePages() {
-		page, err := pages.NextPage(ctx)
-		if err != nil {
-			return "", fmt.Errorf("find the ARN of log group %s: %w", name, err)
-		}
-		for _, found := range page.LogGroups {
-			if aws.ToString(found.LogGroupName) == name {
-				return strings.TrimSuffix(aws.ToString(found.Arn), ":*"), nil
-			}
-		}
-	}
-	return "", fmt.Errorf("find the ARN of log group %s: it does not exist", name)
+func nameGroupARN(region, account, name string) string {
+	return fmt.Sprintf("arn:aws:logs:%s:%s:log-group:%s", region, account, name)
 }
 
 func liveTail(ctx context.Context, groups []liveGroup, query Query, start startSession, poll pollSources, emit func([]Event) error, notice func(Notice) error) error {

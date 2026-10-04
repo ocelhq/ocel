@@ -50,7 +50,11 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 		return emit(entries)
 	}
 	if q.Tail && p.options.Logs.LiveTail {
-		return logevents.LiveTail(ctx, cloudwatch, functions, query, emitEvents, func(n logevents.Notice) error {
+		account, err := p.accountID(ctx)
+		if err != nil {
+			return err
+		}
+		return logevents.LiveTail(ctx, cloudwatch, functions, account, query, emitEvents, func(n logevents.Notice) error {
 			return notice(logNoticeOf(n))
 		})
 	}
