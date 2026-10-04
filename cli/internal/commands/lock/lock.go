@@ -12,7 +12,7 @@ import (
 )
 
 func NewCommand(invocation commands.Invocation) *cobra.Command {
-	return &cobra.Command{
+	return commands.Mutates(&cobra.Command{
 		Use:   "lock",
 		Short: "Pin the provider binaries this CLI version runs",
 		Long: "Pin the provider binaries this CLI version runs.\n\n" +
@@ -39,5 +39,5 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 			fmt.Fprintln(cmd.OutOrStdout(), lockfile.Path(cfg.Dir))
 			return nil
 		},
-	}
+	})
 }

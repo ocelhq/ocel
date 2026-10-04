@@ -10,11 +10,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 )
 
 func NewUnlinkCommand(dependencies Dependencies) *cobra.Command {
-	return &cobra.Command{
+	return commands.Mutates(&cobra.Command{
 		Use:     "unlink",
 		Short:   "Unlink this directory from its console project",
 		Example: "  $ ocel unlink",
@@ -30,7 +31,7 @@ func NewUnlinkCommand(dependencies Dependencies) *cobra.Command {
 			}
 			return runUnlink(dir, cmd.OutOrStdout())
 		},
-	}
+	})
 }
 
 func projectDir(ctx context.Context, dependencies Dependencies, cwd string) (string, error) {

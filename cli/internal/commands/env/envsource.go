@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/dotfile"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -35,7 +36,7 @@ func newEnvSourceCommand(dependencies Dependencies) *cobra.Command {
 		})
 	}
 	previewFlag(cmd, &opts)
-	return cmd
+	return commands.ReadOnly(cmd)
 }
 
 func newSyncCommand(dependencies Dependencies) *cobra.Command {
@@ -52,7 +53,7 @@ func newSyncCommand(dependencies Dependencies) *cobra.Command {
 		})
 	}
 	previewFlag(cmd, &opts)
-	return cmd
+	return commands.Mutates(cmd)
 }
 
 func tierName(opts envOptions) string {

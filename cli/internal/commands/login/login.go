@@ -38,7 +38,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "Log in again even if already logged in")
-	return cmd
+	return commands.Mutates(cmd)
 }
 
 func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Reader, out io.Writer) error {

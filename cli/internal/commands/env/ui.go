@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -31,7 +32,7 @@ func newUICommand(dependencies Dependencies) *cobra.Command {
 		})
 	}
 	previewFlag(cmd, &opts)
-	return cmd
+	return commands.Mutates(cmd)
 }
 
 func runEnvUI(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {

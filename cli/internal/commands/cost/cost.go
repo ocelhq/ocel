@@ -32,7 +32,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		},
 	}
 	cmd.AddCommand(newScanCommand(dependencies))
-	return commands.ReserveStdout(cmd)
+	return commands.ReadOnly(commands.ReserveStdout(cmd))
 }
 
 func newScanCommand(dependencies Dependencies) *cobra.Command {
@@ -62,5 +62,5 @@ func newScanCommand(dependencies Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&opts.Env, "env", envProduction, "Environment to price: production or preview")
 	cmd.Flags().StringVar(&opts.Profile, "profile", profileName(defaultProfile), "Usage assumptions for the usage-based rows: "+strings.Join(profileNames(), ", "))
 	cmd.Flags().StringVar(&opts.Usage, "usage", "", "YAML or JSON `file` of monthly quantities keyed by resource id, overriding the profile")
-	return cmd
+	return commands.ReadOnly(cmd)
 }
