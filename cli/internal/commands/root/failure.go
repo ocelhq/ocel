@@ -13,7 +13,7 @@ import (
 
 const usageCode = "usage"
 
-func (c *command) exit(args []string) int {
+func (c *command) executeAndReport(args []string) (exitCode int) {
 	c.root.SetArgs(args)
 	err := c.execute()
 	if err == nil {

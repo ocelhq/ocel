@@ -11,7 +11,7 @@ import (
 const rootArgsEnvVar = "OCEL_TEST_ROOT_ARGS"
 
 func runRootSubprocess(args []string) int {
-	return newCommand().exit(args)
+	return newCommand().executeAndReport(args)
 }
 
 func TestMain(m *testing.M) {
