@@ -54,7 +54,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version-file: ${{ inputs.go-version-file }}
         cache: false
@@ -99,7 +99,7 @@ runs:
 
     - name: The modules main last downloaded
       if: steps.names.outputs.modules == 'true'
-      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.names.outputs.modules-path }}
         key: ${{ steps.names.outputs.modules-key }}
@@ -107,7 +107,7 @@ runs:
 
     - name: The packages main last compiled for this scope
       if: steps.names.outputs.build == 'true'
-      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.names.outputs.build-path }}
         key: ${{ steps.names.outputs.build-key }}
@@ -115,7 +115,7 @@ runs:
 
     - name: What main's golangci-lint last analysed
       if: steps.names.outputs.lint == 'true'
-      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.names.outputs.lint-path }}
         key: ${{ steps.names.outputs.lint-key }}
