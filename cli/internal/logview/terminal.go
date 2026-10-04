@@ -8,7 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
@@ -16,7 +17,7 @@ import (
 const (
 	timeLayout       = "15:04:05.000"
 	levelWidth       = 5
-	maxValueRunes    = 80
+	maxValueColumns  = 80
 	fieldIndent      = "    "
 	nestedIndent     = "  "
 	truncationMarker = "…"
@@ -183,8 +184,8 @@ func (v *TerminalView) formatScalar(value any) string {
 		return "null"
 	}
 	text := terminal.SanitizeLogText(fmt.Sprint(value))
-	if !v.verbose && utf8.RuneCountInString(text) > maxValueRunes {
-		return string([]rune(text)[:maxValueRunes-1]) + truncationMarker
+	if !v.verbose {
+		return ansi.Truncate(text, maxValueColumns, truncationMarker)
 	}
 	return text
 }

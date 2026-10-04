@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/ocelhq/ocel/cli/internal/logview"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
@@ -111,6 +113,20 @@ func TestTerminalViewWritesNoEscapesWithoutColour(t *testing.T) {
 		t.Errorf("output holds an escape code:\n%q", got)
 	}
 	golden(t, "TestTerminalViewWritesNoEscapesWithoutColour", got)
+}
+
+func TestTerminalViewShortensWideValuesByTheColumnsTheyTake(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	wide := strings.Repeat("漢", 60)
+	got := render(t, false, logview.TerminalLine{Time: viewEpoch, App: "web", Entry: logview.Entry{
+		Message: "wide",
+		Level:   logview.LevelInfo,
+		Fields:  map[string]any{"name": wide},
+	}})
+	value := strings.TrimSuffix(got[strings.Index(got, "name=")+len("name="):], "\n")
+	if width := ansi.StringWidth(value); width > 80 || !strings.HasSuffix(value, "…") {
+		t.Errorf("value %q takes %d columns, want at most 80 ending in …", value, width)
+	}
 }
 
 func TestTerminalViewNamesAnEntryWithoutAnAppWithADash(t *testing.T) {
