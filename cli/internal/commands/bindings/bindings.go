@@ -64,7 +64,7 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 			"your own provider account and are reached through the provider, never by the CLI directly.",
 	}
 	cmd.AddCommand(newSetCommand(invocation), newRemoveCommand(invocation), newListCommand(invocation), newGenerateCommand(invocation))
-	return commands.ReadOnly(commands.ReserveStdout(cmd))
+	return commands.DeclareReadOnly(commands.ReserveStdout(cmd))
 }
 
 func addCoordinateFlags(cmd *cobra.Command, opts *bindingsOptions) {
@@ -93,7 +93,7 @@ func newSetCommand(invocation commands.Invocation) *cobra.Command {
 	}
 	addCoordinateFlags(cmd, &opts)
 	cmd.Flags().StringVar(&opts.owner, "owner", defaultBindingOwner, "Publish under this publisher's name")
-	return commands.Mutates(cmd)
+	return commands.DeclareMutating(cmd)
 }
 
 func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
@@ -109,7 +109,7 @@ func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	addCoordinateFlags(cmd, &opts)
-	return commands.Mutates(cmd)
+	return commands.DeclareMutating(cmd)
 }
 
 func newListCommand(invocation commands.Invocation) *cobra.Command {
@@ -125,7 +125,7 @@ func newListCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	addCoordinateFlags(cmd, &opts)
-	return commands.ReadOnly(cmd)
+	return commands.DeclareReadOnly(cmd)
 }
 
 func newGenerateCommand(invocation commands.Invocation) *cobra.Command {
@@ -148,7 +148,7 @@ func newGenerateCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	addCoordinateFlags(cmd, &opts)
-	return commands.Mutates(cmd)
+	return commands.DeclareMutating(cmd)
 }
 
 func withBindingCommand(cmd *cobra.Command, run func(context.Context, string) error) error {

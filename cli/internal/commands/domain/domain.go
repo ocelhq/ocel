@@ -40,7 +40,7 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 		commands.ReserveStdout(newListCommand(invocation)),
 		newReleaseCommand(invocation),
 	)
-	return commands.ReadOnly(cmd)
+	return commands.DeclareReadOnly(cmd)
 }
 
 func firstArg(args []string) string {

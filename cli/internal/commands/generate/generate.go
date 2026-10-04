@@ -24,7 +24,7 @@ type Dependencies struct {
 }
 
 func NewCommand(dependencies Dependencies) *cobra.Command {
-	return commands.Mutates(&cobra.Command{
+	return commands.DeclareMutating(&cobra.Command{
 		Use:   "generate",
 		Short: "Generate the app-side files ocel derives from your declarations",
 		Long: "Generate the app-side files ocel derives from your declarations.\n\n" +

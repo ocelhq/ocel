@@ -44,7 +44,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		newEnvSourceCommand(dependencies),
 		newSyncCommand(dependencies),
 	)
-	return commands.ReadOnly(commands.ReserveStdout(cmd))
+	return commands.DeclareReadOnly(commands.ReserveStdout(cmd))
 }
 
 func newListCommand(dependencies Dependencies) *cobra.Command {
@@ -61,7 +61,7 @@ func newListCommand(dependencies Dependencies) *cobra.Command {
 		})
 	}
 	previewFlag(cmd, &opts)
-	return commands.ReadOnly(cmd)
+	return commands.DeclareReadOnly(cmd)
 }
 
 func newSetCommand(dependencies Dependencies) *cobra.Command {
@@ -83,7 +83,7 @@ func newSetCommand(dependencies Dependencies) *cobra.Command {
 	}
 	valueFlags(cmd, &opts)
 	environmentFlag(cmd, &opts)
-	return commands.Mutates(cmd)
+	return commands.DeclareMutating(cmd)
 }
 
 type envSetPair struct {
@@ -123,7 +123,7 @@ func newGetCommand(dependencies Dependencies) *cobra.Command {
 	environmentFlag(cmd, &opts)
 	cmd.Flags().BoolVar(&opts.reveal, "reveal", false, "Print the value")
 	commands.AddYesFlag(cmd, &opts.yes)
-	return commands.ReadOnly(cmd)
+	return commands.DeclareReadOnly(cmd)
 }
 
 func newRemoveCommand(dependencies Dependencies) *cobra.Command {
@@ -141,7 +141,7 @@ func newRemoveCommand(dependencies Dependencies) *cobra.Command {
 	}
 	valueFlags(cmd, &opts)
 	environmentFlag(cmd, &opts)
-	return commands.Mutates(cmd)
+	return commands.DeclareMutating(cmd)
 }
 
 func newRefCommand(dependencies Dependencies) *cobra.Command {
@@ -164,7 +164,7 @@ func newRefCommand(dependencies Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&ref.project, "target-project", "", "Read from another `project`")
 	cmd.Flags().StringVar(&ref.folder, "target-folder", "", "Read from a `folder` in the target project")
 	cmd.Flags().StringVar(&ref.key, "target-key", "", "Read a different target `key`")
-	return commands.Mutates(cmd)
+	return commands.DeclareMutating(cmd)
 }
 
 func newRefsCommand(dependencies Dependencies) *cobra.Command {
@@ -181,7 +181,7 @@ func newRefsCommand(dependencies Dependencies) *cobra.Command {
 		})
 	}
 	valueFlags(cmd, &opts)
-	return commands.ReadOnly(cmd)
+	return commands.DeclareReadOnly(cmd)
 }
 
 func newHistoryCommand(dependencies Dependencies) *cobra.Command {
@@ -199,7 +199,7 @@ func newHistoryCommand(dependencies Dependencies) *cobra.Command {
 	}
 	valueFlags(cmd, &opts)
 	environmentFlag(cmd, &opts)
-	return commands.ReadOnly(cmd)
+	return commands.DeclareReadOnly(cmd)
 }
 
 func previewFlag(cmd *cobra.Command, opts *envOptions) {

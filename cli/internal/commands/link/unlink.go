@@ -15,7 +15,7 @@ import (
 )
 
 func NewUnlinkCommand(dependencies Dependencies) *cobra.Command {
-	return commands.Mutates(&cobra.Command{
+	return commands.DeclareMutating(&cobra.Command{
 		Use:     "unlink",
 		Short:   "Unlink this directory from its console project",
 		Example: "  $ ocel unlink",

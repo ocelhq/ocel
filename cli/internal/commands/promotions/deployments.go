@@ -27,11 +27,11 @@ func NewDeploymentsCommand(invocation commands.Invocation) *cobra.Command {
 		Short: "Manage production deployments",
 	}
 	cmd.AddCommand(commands.ReserveStdout(newListCommand(invocation)), newPruneCommand(invocation))
-	return commands.ReadOnly(cmd)
+	return commands.DeclareReadOnly(cmd)
 }
 
 func newListCommand(invocation commands.Invocation) *cobra.Command {
-	return commands.ReadOnly(&cobra.Command{
+	return commands.DeclareReadOnly(&cobra.Command{
 		Use:   "ls",
 		Short: "List production promotions",
 		Args:  cobra.NoArgs,
@@ -68,7 +68,7 @@ func newPruneCommand(invocation commands.Invocation) *cobra.Command {
 	}
 	cmd.Flags().IntVar(&opts.keep, "keep", defaultPruneKeepN, "Number of most recent promotions to keep, always additionally pinning the active one")
 	commands.AddYesFlag(cmd, &opts.yes)
-	return commands.Mutates(cmd)
+	return commands.DeclareMutating(cmd)
 }
 
 func runPromotionsList(ctx context.Context, invocation commands.Invocation, cwd string, stdout, stderr io.Writer) error {
