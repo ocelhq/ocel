@@ -71,7 +71,8 @@ jobs:
       - name: Setup Go
         uses: ./.github/actions/go
         with:
-          caches: modules,lint
+          caches: modules,lint,build
+          build-scope: lint
 
       - uses: ./.github/actions/node-workspace
         with:

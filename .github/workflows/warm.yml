@@ -14,6 +14,7 @@ on:
       - "go.work"
       - ".goreleaser.yaml"
       - ".golangci.yml"
+      - "scripts/redactvet/**"
       - "pnpm-lock.yaml"
       - ".github/actions/go/**"
       - ".github/actions/go-cache-save/**"
@@ -197,7 +198,8 @@ jobs:
         id: go
         uses: ./.github/actions/go
         with:
-          caches: modules,lint
+          caches: modules,lint,build
+          build-scope: lint
 
       - uses: ./.github/actions/node-workspace
         with:
@@ -221,11 +223,16 @@ jobs:
           install-only: true
           skip-cache: true
 
-      - name: Every module's lint
+      - name: Every module's lint, redactvet and go vet of the integration build, as Lint / Go runs them
         run: |
+          go build -o "$RUNNER_TEMP/redactvet" ./scripts/redactvet
           for dir in $(go list -m -f '{{.Dir}}'); do
             (cd "$dir" && golangci-lint run ./... > /dev/null) \
               || echo "::notice::golangci-lint reported $dir; what it analysed is cached all the same"
+            (cd "$dir" && go vet -vettool="$RUNNER_TEMP/redactvet" ./...) \
+              || echo "::notice::redactvet reported $dir; what it compiled is cached all the same"
+            (cd "$dir" && go vet -tags integration ./...) \
+              || echo "::notice::go vet -tags integration reported $dir; what it compiled is cached all the same"
           done
 
       - name: Save the lint cache
@@ -234,3 +241,10 @@ jobs:
           path: ${{ steps.go.outputs.lint-path }}
           key: ${{ steps.go.outputs.lint-key }}
           prefix: ${{ steps.go.outputs.lint-prefix }}
+
+      - name: Save the packages the lint compiled
+        uses: ./.github/actions/go-cache-save
+        with:
+          path: ${{ steps.go.outputs.build-path }}
+          key: ${{ steps.go.outputs.build-key }}
+          prefix: ${{ steps.go.outputs.build-prefix }}
