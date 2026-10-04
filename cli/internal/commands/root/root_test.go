@@ -20,11 +20,11 @@ import (
 )
 
 func TestTheRootFlagsFeedTheOneResolver(t *testing.T) {
-	set := &flags{logFormat: string(terminal.FormatJSON), verbose: true}
+	set := &flags{json: true, verbose: true}
 
 	p := set.presentation(&bytes.Buffer{})
 	if p.Format != terminal.FormatJSON {
-		t.Errorf("Format = %q, want the --log-format flag to reach the resolver", p.Format)
+		t.Errorf("Format = %q, want the --json flag to reach the resolver", p.Format)
 	}
 	if !p.Verbose {
 		t.Errorf("Verbose = false, want the --verbose flag to reach the resolver")
@@ -85,11 +85,8 @@ func inADeployedProject(t *testing.T) {
 	t.Chdir(project.Root)
 }
 
-func TestLogFormatJSONAttachesOnlyTheJSONSink(t *testing.T) {
-	inADeployedProject(t)
-
-	stdout, stderr := executeRoot(t, "--log-format", "json", "deployments", "prune", "--yes")
-
+func requireOnlyTheJSONSink(t *testing.T, stdout, stderr string) {
+	t.Helper()
 	var ended bool
 	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
 		var ev map[string]any
@@ -106,7 +103,72 @@ func TestLogFormatJSONAttachesOnlyTheJSONSink(t *testing.T) {
 	}
 }
 
-func TestTheHumanLogFormatAttachesOnlyTheGroupedSink(t *testing.T) {
+func TestJSONFlagAttachesOnlyTheJSONSink(t *testing.T) {
+	inADeployedProject(t)
+
+	stdout, stderr := executeRoot(t, "--json", "deployments", "prune", "--yes")
+
+	requireOnlyTheJSONSink(t, stdout, stderr)
+}
+
+func TestOCELJSONAttachesOnlyTheJSONSink(t *testing.T) {
+	inADeployedProject(t)
+	t.Setenv("OCEL_JSON", "1")
+
+	stdout, stderr := executeRoot(t, "deployments", "prune", "--yes")
+
+	requireOnlyTheJSONSink(t, stdout, stderr)
+}
+
+func TestOCELJSONFalseyLeavesTheHumanView(t *testing.T) {
+	for _, value := range []string{"0", "false", "", "garbage"} {
+		t.Run(value, func(t *testing.T) {
+			inADeployedProject(t)
+			t.Setenv("OCEL_JSON", value)
+
+			stdout, _ := executeRoot(t, "deployments", "prune", "--yes")
+
+			if !strings.Contains(stdout, "Pruned") {
+				t.Errorf("OCEL_JSON=%q: stdout = %q, want the human view", value, stdout)
+			}
+		})
+	}
+}
+
+func TestJSONFlagWinsOverAFalseyOCELJSON(t *testing.T) {
+	inADeployedProject(t)
+	t.Setenv("OCEL_JSON", "0")
+
+	stdout, stderr := executeRoot(t, "--json", "deployments", "prune", "--yes")
+
+	requireOnlyTheJSONSink(t, stdout, stderr)
+}
+
+func TestJSONFlagFalseWinsOverOCELJSON(t *testing.T) {
+	inADeployedProject(t)
+	t.Setenv("OCEL_JSON", "1")
+
+	stdout, _ := executeRoot(t, "--json=false", "deployments", "prune", "--yes")
+
+	if !strings.Contains(stdout, "Pruned") {
+		t.Errorf("stdout = %q, want --json=false to keep the human view", stdout)
+	}
+}
+
+func TestLogFormatIsAnUnknownFlag(t *testing.T) {
+	ocel := newCommand()
+	ocel.root.SetArgs([]string{"--log-format", "json", "deployments", "ls"})
+	ocel.root.SetOut(&bytes.Buffer{})
+	ocel.root.SetErr(&bytes.Buffer{})
+
+	err := ocel.execute()
+
+	if err == nil || !strings.Contains(err.Error(), "unknown flag: --log-format") {
+		t.Errorf("err = %v, want unknown flag: --log-format", err)
+	}
+}
+
+func TestTheHumanViewAttachesOnlyTheGroupedSink(t *testing.T) {
 	inADeployedProject(t)
 
 	stdout, _ := executeRoot(t, "deployments", "prune", "--yes")
@@ -214,7 +276,7 @@ func TestACommandWhoseStdoutIsItsDataDrawsTheGroupedViewOnAPipedStderr(t *testin
 func TestACommandWhoseStdoutIsItsDataDrawsItsRunOnStderr(t *testing.T) {
 	inADeployedProject(t)
 
-	stdout, stderr := executeRoot(t, "--log-format", "json", "deployments", "ls")
+	stdout, stderr := executeRoot(t, "--json", "deployments", "ls")
 
 	if !strings.Contains(stdout, "promo-2") || strings.Contains(stdout, "{") {
 		t.Errorf("stdout = %q, want the promotions table alone", stdout)
@@ -392,5 +454,18 @@ func TestTheUsageOfACommandWithSubcommandsNamesTheCommandSlot(t *testing.T) {
 		if !strings.Contains(usage, want) {
 			t.Errorf("ocel preview --help = %q, want its usage to contain %q", usage, want)
 		}
+	}
+}
+
+func TestLogsReadsTheRootJSONFlagAndKeepsNoneOfItsOwn(t *testing.T) {
+	logs, _, err := newCommand().root.Find([]string{"logs"})
+	if err != nil {
+		t.Fatalf("find logs: %v", err)
+	}
+	if logs.LocalNonPersistentFlags().Lookup("json") != nil {
+		t.Errorf("logs has its own --json, want the root's one switch")
+	}
+	if logs.InheritedFlags().Lookup("json") == nil {
+		t.Errorf("logs does not inherit --json")
 	}
 }

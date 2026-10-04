@@ -21,6 +21,8 @@ const ConfigEnvVar = "OCEL_CONFIG"
 
 const DebugEnvVar = "OCEL_DEBUG"
 
+const JSONEnvVar = "OCEL_JSON"
+
 type Invocation struct {
 	Events          *run.Bus
 	Presentation    func(w io.Writer) terminal.Presentation

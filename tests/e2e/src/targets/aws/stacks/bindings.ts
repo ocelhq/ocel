@@ -148,7 +148,7 @@ export abstract class AwsStack implements ExternalStack {
             ...process.env,
             OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)),
           };
-          const result = await ocel(dir, ["bindings", "ls", "--log-format", "json"], env);
+          const result = await ocel(dir, ["bindings", "ls", "--json"], env);
           const parsed = JSON.parse(result.stdout) as {
             bindings: Array<{ name: string; type: string; source: string; owner: string }>;
           };

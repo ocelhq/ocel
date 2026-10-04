@@ -112,6 +112,25 @@ func read(t *testing.T, project clitest.FakeProject, mutate func(*logsOptions), 
 	return got
 }
 
+func readJSON(t *testing.T, project clitest.FakeProject, mutate func(*logsOptions), apps ...string) logsRun {
+	t.Helper()
+	opts := defaultLogsOptions()
+	if mutate != nil {
+		mutate(&opts)
+	}
+	got := runWith(project, func(stderr io.Writer) Dependencies {
+		dependencies := dependenciesFor(stderr, "main")
+		dependencies.Presentation = func(io.Writer) terminal.Presentation {
+			return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
+		}
+		return dependencies
+	}, opts, apps...)
+	if got.err != nil {
+		t.Fatalf("runLogs err = %v; stdout=%s stderr=%s", got.err, got.stdout, got.stderr)
+	}
+	return got
+}
+
 func linesOf(out string) []string {
 	return strings.Split(strings.TrimRight(out, "\n"), "\n")
 }
@@ -155,7 +174,7 @@ func TestLogsPrintsOnlyTheNamedApps(t *testing.T) {
 func TestLogsJSONPrintsOneObjectPerLine(t *testing.T) {
 	project := deployedWithLogs(t)
 
-	got := read(t, project, func(o *logsOptions) { o.json = true })
+	got := readJSON(t, project, nil)
 
 	lines := linesOf(got.stdout)
 	if len(lines) != 3 {
@@ -190,7 +209,7 @@ func TestLogsJSONKeepsTheRawMessageBesideTheParsedFields(t *testing.T) {
 	raw := `{"level":30,"msg":"listening","port":3000}`
 	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, raw))
 
-	got := read(t, project, func(o *logsOptions) { o.json = true }, "web")
+	got := readJSON(t, project, nil, "web")
 
 	var entry map[string]any
 	for _, l := range linesOf(got.stdout) {
@@ -216,7 +235,7 @@ func TestLogsJSONCarriesTheParsedErrorInTheFieldsAsPlainTextDoes(t *testing.T) {
 	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, raw))
 
 	plain := read(t, project, nil, "web")
-	asJSON := read(t, project, func(o *logsOptions) { o.json = true }, "web")
+	asJSON := readJSON(t, project, nil, "web")
 
 	if want := `ERROR request failed {"error":"boom","route":"/pay"}`; !strings.Contains(plain.stdout, want) {
 		t.Errorf("stdout = %q, want %q", plain.stdout, want)
@@ -231,7 +250,7 @@ func TestLogsJSONCarriesTheParsedErrorInTheFieldsAsPlainTextDoes(t *testing.T) {
 func TestLogsJSONOmitsLevelAndFieldsForALineThatParsesToNeither(t *testing.T) {
 	project := deployedWithLogs(t)
 
-	got := read(t, project, func(o *logsOptions) { o.json = true }, "api")
+	got := readJSON(t, project, nil, "api")
 
 	entry := clitest.DecodeJSON(t, linesOf(got.stdout)[0])
 	for _, key := range []string{"level", "fields"} {
@@ -273,7 +292,7 @@ func TestLogsPrintsAFailureAtErrorLevelSoLevelErrorKeepsIt(t *testing.T) {
 	project.Provider.FakeLogs().Append("web-live", failure)
 
 	plain := read(t, project, func(o *logsOptions) { o.level = "error" }, "web")
-	asJSON := read(t, project, func(o *logsOptions) { o.level, o.json = "error", true }, "web")
+	asJSON := readJSON(t, project, func(o *logsOptions) { o.level = "error" }, "web")
 
 	if want := "2026-01-05T12:04:00.000Z web/http ERROR timed out after 3000 ms\n"; plain.stdout != want {
 		t.Errorf("stdout = %q, want the failure alone, at error level: %q", plain.stdout, want)
@@ -362,7 +381,7 @@ func TestLogsJSONEscapesEveryControlCharacterOfTheRawMessage(t *testing.T) {
 	raw := "\x1b[31mred\x1b[0m \u009b2J \u202eexe.txt \x7f"
 	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, raw))
 
-	got := read(t, project, func(o *logsOptions) { o.json = true }, "web")
+	got := readJSON(t, project, nil, "web")
 
 	if strings.ContainsAny(got.stdout, "\x1b\u009b\u202e\x7f") {
 		t.Errorf("stdout = %q, want the raw message JSON-escaped so piping it to a terminal is safe", got.stdout)
@@ -607,7 +626,7 @@ func TestLogsRawPrintsMessagesAsSentWithoutParsing(t *testing.T) {
 	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, raw))
 
 	plain := read(t, project, func(o *logsOptions) { o.raw = true }, "web")
-	asJSON := read(t, project, func(o *logsOptions) { o.raw, o.json = true, true }, "web")
+	asJSON := readJSON(t, project, func(o *logsOptions) { o.raw = true }, "web")
 
 	if want := "2026-01-05T12:04:00.000Z web/http - " + raw; !strings.Contains(plain.stdout, want) {
 		t.Errorf("stdout = %q, want the line unparsed: %q", plain.stdout, want)
@@ -627,7 +646,7 @@ func TestLogsRawPrintsMessagesAsSentWithoutParsing(t *testing.T) {
 	t.Errorf("stdout = %q, want an entry carrying the raw message", asJSON.stdout)
 }
 
-func TestLogsPrintsJSONWhenTheLogFormatIsJSON(t *testing.T) {
+func TestLogsPrintsJSONWhenThePresentationIsJSON(t *testing.T) {
 	project := deployedWithLogs(t)
 
 	got := runWith(project, func(stderr io.Writer) Dependencies {
@@ -649,7 +668,7 @@ func TestLogsPrintsJSONWhenTheLogFormatIsJSON(t *testing.T) {
 func TestLogsJSONEndsHistoryWithACaughtUpNotice(t *testing.T) {
 	project := deployedWithLogs(t)
 
-	got := read(t, project, func(o *logsOptions) { o.json = true })
+	got := readJSON(t, project, nil)
 
 	lines := linesOf(got.stdout)
 	var notice struct {
@@ -736,7 +755,7 @@ func TestLogsFlagsDefaultToTheLastHundredLinesOfTheLastHour(t *testing.T) {
 
 	cmd := NewCommand(Dependencies{})
 
-	for flag, want := range map[string]string{"lines": "100", "since": "1h", "until": "", "level": "", "grep": "", "json": "false", "raw": "false", "preview": "false", "environment": "", "all-releases": "false"} {
+	for flag, want := range map[string]string{"lines": "100", "since": "1h", "until": "", "level": "", "grep": "", "raw": "false", "preview": "false", "environment": "", "all-releases": "false"} {
 		found := cmd.Flags().Lookup(flag)
 		if found == nil {
 			t.Errorf("no --%s flag", flag)
@@ -773,6 +792,21 @@ func readOnTerminal(t *testing.T, project clitest.FakeProject, verbose bool, mut
 	return got
 }
 
+func readOnTerminalJSON(t *testing.T, project clitest.FakeProject) logsRun {
+	t.Helper()
+	got := runWith(project, func(stderr io.Writer) Dependencies {
+		dependencies := dependenciesFor(stderr, "main")
+		dependencies.Presentation = func(io.Writer) terminal.Presentation {
+			return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON, TTY: true, ColorAsked: terminal.ColorNever})
+		}
+		return dependencies
+	}, defaultLogsOptions())
+	if got.err != nil {
+		t.Fatalf("runLogs err = %v; stdout=%s stderr=%s", got.err, got.stdout, got.stderr)
+	}
+	return got
+}
+
 func TestLogsOnATerminalPrintsTheTerminalViewOfEachEntry(t *testing.T) {
 	project := deployedWithLogs(t)
 	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, "level=warn msg=slow ms=900"))
@@ -802,7 +836,7 @@ func TestLogsOnATerminalBoxesAFailure(t *testing.T) {
 func TestLogsJSONOnATerminalStillPrintsJSON(t *testing.T) {
 	project := deployedWithLogs(t)
 
-	got := readOnTerminal(t, project, false, func(o *logsOptions) { o.json = true })
+	got := readOnTerminalJSON(t, project)
 
 	if first := linesOf(got.stdout)[0]; !strings.HasPrefix(first, "{") {
 		t.Errorf("first line = %q, want a JSON object", first)
@@ -865,7 +899,7 @@ func TestLogsJSONKeepsEachLineOfAStackTraceAsItsOwnObject(t *testing.T) {
 	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, "Error: card declined"))
 	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute+time.Millisecond, "    at charge (payments.js:12)"))
 
-	got := readOnTerminal(t, project, false, func(o *logsOptions) { o.json = true })
+	got := readOnTerminalJSON(t, project)
 
 	if n := len(linesOf(got.stdout)); n != 5 {
 		t.Errorf("stdout = %q, want 5 objects, one per provider entry", got.stdout)
@@ -903,6 +937,14 @@ func terminalDependencies(stderr io.Writer) Dependencies {
 	dependencies := dependenciesFor(stderr, "main")
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{TTY: true, ColorAsked: terminal.ColorNever})
+	}
+	return dependencies
+}
+
+func jsonDependencies(stderr io.Writer) Dependencies {
+	dependencies := dependenciesFor(stderr, "main")
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{LogFormat: terminal.FormatJSON})
 	}
 	return dependencies
 }
@@ -1150,7 +1192,7 @@ func TestLogsTailReportsSamplingAndReconnectsOnStderrNotStdout(t *testing.T) {
 
 func TestLogsTailPrintsSamplingAndReconnectsAsNoticesInJSON(t *testing.T) {
 	project := deployedWithLogs(t)
-	run := startTail(t, project, plainDependencies, func(o *logsOptions) { o.json = true })
+	run := startTail(t, project, jsonDependencies, nil)
 	run.waitFor(run.stdout, "caught_up")
 	run.waitForTailOpened(project)
 

@@ -44,7 +44,6 @@ type logsOptions struct {
 	until       string
 	level       string
 	grep        string
-	json        bool
 	raw         bool
 	tail        bool
 	stopAfter   string
@@ -95,7 +94,6 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&opts.until, "until", opts.until, "End of the window, as --since (default: now)")
 	cmd.Flags().StringVar(&opts.level, "level", "", "Minimum `level` to print: debug, info, warn or error")
 	cmd.Flags().StringVar(&opts.grep, "grep", "", "Print only entries containing this `text`")
-	cmd.Flags().BoolVar(&opts.json, "json", false, "Print one JSON object per line (also: --log-format json)")
 	cmd.Flags().BoolVarP(&opts.tail, "tail", "t", false, "Keep streaming new entries after the history")
 	cmd.Flags().StringVar(&opts.stopAfter, "for", "", "Stop a --tail after this `duration` (30s, 5m)")
 	cmd.Flags().BoolVar(&opts.raw, "raw", false, "Print messages as sent, without reading a level or fields out of them")
@@ -121,7 +119,7 @@ func runLogs(ctx context.Context, dependencies Dependencies, cwd string, apps []
 	query.request.Slug, query.request.Edge, query.request.Apps = cfg.Slug, cfg.EdgeSelection(), apps
 
 	present := dependencies.Presentation(stdout)
-	mode.json = mode.json || present.Format == terminal.FormatJSON
+	mode.json = present.Format == terminal.FormatJSON
 	open := commands.OpenOptions{Tier: query.request.GetEnvironment().GetTier(), Require: readiness.Infrastructure}
 	return dependencies.WithProvider(ctx, cfg, "ocel logs", open, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
@@ -166,7 +164,7 @@ func parseStopAfter(value string) (time.Duration, error) {
 }
 
 func (o logsOptions) resolve(dependencies Dependencies, cwd string) (logsQuery, outputMode, error) {
-	mode := outputMode{json: o.json, raw: o.raw, tail: o.tail}
+	mode := outputMode{raw: o.raw, tail: o.tail}
 	if o.level != "" {
 		level, ok := logview.ParseLevel(o.level)
 		if !ok {

@@ -346,8 +346,8 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
     }
     const stamped = await ssh(target, target.user, `sudo cat ${STAMP}`);
     for (const [name, args] of [
-      ["replan.log", ["bootstrap", "production", "--dry", "--log-format", "json"]],
-      ["reapply.log", ["bootstrap", "production", "--yes", "--log-format", "json"]],
+      ["replan.log", ["bootstrap", "production", "--dry", "--json"]],
+      ["reapply.log", ["bootstrap", "production", "--yes", "--json"]],
     ] as const) {
       const writes = plannedWrites(await this.said(dir, name, [...args], env));
       if (writes.length > 0) {

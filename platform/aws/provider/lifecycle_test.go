@@ -167,7 +167,7 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 		t.Fatalf("`ocel doctor` after an apply still calls production unbootstrapped:\n%s", diagnosis)
 	}
 
-	replanned := run.must(t, "bootstrap", "production", "--dry", "--log-format", "json")
+	replanned := run.must(t, "bootstrap", "production", "--dry", "--json")
 	if writes := plannedWrites(t, replanned); len(writes) > 0 {
 		t.Errorf("a re-plan over a bootstrapped account would write %v:\n%s", writes, replanned)
 	}

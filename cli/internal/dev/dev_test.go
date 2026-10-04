@@ -1097,7 +1097,7 @@ export default { slug: "test-app" };
 		}
 	})
 
-	t.Run("with --log-format json every line the run writes parses and the child's stdout is its own", func(t *testing.T) {
+	t.Run("with --json every line the run writes parses and the child's stdout is its own", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
