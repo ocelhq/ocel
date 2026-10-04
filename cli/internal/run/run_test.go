@@ -521,3 +521,107 @@ func TestASummaryOfARunThatSucceededOrWasCancelledCarriesNoError(t *testing.T) {
 		}
 	}
 }
+
+func assumedIDs(result *streamv1.RunSummary) []string {
+	var ids []string
+	for _, a := range result.GetAssumed() {
+		ids = append(ids, a.GetId())
+	}
+	return ids
+}
+
+func TestARunThatAssumedNothingEndsWithAnEmptyAssumedList(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Say("Deployed")
+
+	var err error
+	run.End(&err)
+
+	if got := sink.received()[len(sink.received())-1].GetSummary().GetAssumed(); len(got) != 0 {
+		t.Fatalf("assumed = %v, want none", got)
+	}
+}
+
+func TestAnAssumptionIsWarnedOnTheStreamAndListedOnTheSummary(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	check.Assume("new_project", `creating new project "x" without confirmation (no terminal)`)
+
+	var err error
+	run.End(&err)
+
+	got := sink.received()
+	var warned bool
+	for _, ev := range got {
+		if ev.GetOperation().GetLevel() == progressv1.Level_LEVEL_WARN && ev.GetOperation().GetMessage() == `creating new project "x" without confirmation (no terminal)` {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Errorf("no WARN event carried the assumption's text")
+	}
+	assumed := got[len(got)-1].GetSummary().GetAssumed()
+	if len(assumed) != 1 || assumed[0].GetId() != "new_project" || assumed[0].GetWarning() != `creating new project "x" without confirmation (no terminal)` {
+		t.Fatalf("assumed = %v, want the one assumption with its id and warning", assumed)
+	}
+}
+
+func TestAnAssumptionMadeTwiceUnderOneIDIsListedOnce(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	check.Assume("new_project", "first")
+	check.Assume("new_project", "second")
+
+	var err error
+	run.End(&err)
+
+	if ids := assumedIDs(sink.received()[len(sink.received())-1].GetSummary()); strings.Join(ids, ",") != "new_project" {
+		t.Fatalf("assumed ids = %v, want one new_project", ids)
+	}
+}
+
+func TestAssumptionsAreListedInTheOrderTheyWereMade(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	check.Assume("first_guard", "a")
+	check.Assume("second_guard", "b")
+
+	var err error
+	run.End(&err)
+
+	if ids := assumedIDs(sink.received()[len(sink.received())-1].GetSummary()); strings.Join(ids, ",") != "first_guard,second_guard" {
+		t.Fatalf("assumed ids = %v, want them in the order made", ids)
+	}
+}
+
+func TestAFailedRunStillListsWhatItAssumedBeforeItFailed(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	run.Phase(progressv1.Phase_PHASE_CHECK).Assume("new_project", "a")
+
+	err := errors.New("the upload was refused")
+	run.End(&err)
+
+	if ids := assumedIDs(sink.received()[len(sink.received())-1].GetSummary()); strings.Join(ids, ",") != "new_project" {
+		t.Fatalf("assumed ids = %v, want the assumption kept on a failed summary", ids)
+	}
+}
+
+func TestAnInterruptedRunStillListsWhatItAssumedBeforeItWasCancelled(t *testing.T) {
+	sink := &recording{}
+	ctx, cancel := context.WithCancel(context.Background())
+	run, _ := beginIn(t, ctx, sink)
+	run.Phase(progressv1.Phase_PHASE_CHECK).Assume("new_project", "a")
+
+	cancel()
+	err := context.Canceled
+	run.End(&err)
+
+	if ids := assumedIDs(sink.received()[len(sink.received())-1].GetSummary()); strings.Join(ids, ",") != "new_project" {
+		t.Fatalf("assumed ids = %v, want the assumption kept on a cancelled summary", ids)
+	}
+}

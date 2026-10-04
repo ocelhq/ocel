@@ -48,12 +48,16 @@ func (p Policy) unattended() error {
 	return fmt.Errorf("`%s` needs a terminal to confirm the plan it shows before applying it; to run it unattended, %s", p.Command, remedy)
 }
 
-func (p Policy) Confirm(ctx context.Context, span *run.Span, question string) (bool, error) {
-	if p.DryRun || p.Yes || !p.Interactive {
+func (p Policy) Confirm(ctx context.Context, span *run.Span, guard Guard) (bool, error) {
+	if p.DryRun || p.Yes {
+		return true, nil
+	}
+	if !p.Interactive {
+		span.Assume(string(guard.ID), guard.assumption())
 		return true, nil
 	}
 	return p.ask(span, func(prompt terminal.Prompt) (bool, error) {
-		return prompt.Confirm(ctx, question)
+		return prompt.Confirm(ctx, guard.Question)
 	})
 }
 

@@ -90,11 +90,11 @@ func TestAnInteractionHoldsTheStreamWhileItAsks(t *testing.T) {
 	term := &terminal{}
 	span := spanOn(t, term)
 
-	granted, err := askingPolicy(term, "y\n").Confirm(context.Background(), span, `Tear down the named preview "staging"?`)
+	granted, err := askingPolicy(term, "y\n").Confirm(context.Background(), span, newProjectGuard)
 	if err != nil || !granted {
 		t.Fatalf("Confirm() = %v, %v, want the answered yes to grant it", granted, err)
 	}
-	if !strings.Contains(term.whileHeld, "Tear down the named preview") {
+	if !strings.Contains(term.whileHeld, newProjectGuard.Question) {
 		t.Errorf("written while the stream was held = %q, all written = %q, want the question put while the sinks yield the terminal", term.whileHeld, term.written())
 	}
 }
@@ -171,18 +171,32 @@ func TestTheRefusalNamesTheCommandAndTheRemedyThatCommandOffers(t *testing.T) {
 	}
 }
 
-const teardown = `Tear down the named preview "staging"?`
+var newProjectGuard = consent.Guard{
+	ID:       consent.GuardNewProject,
+	Question: `Create the new project "shop"?`,
+	Action:   `creating new project "shop"`,
+}
+
+const newProjectAssumption = `creating new project "shop" without confirmation (no terminal)`
+
+func summaryOf(t *testing.T, term *terminal, span *run.Span) *streamv1.RunSummary {
+	t.Helper()
+	var err error
+	span.Run().End(&err)
+	evs := term.received()
+	return evs[len(evs)-1].GetSummary()
+}
 
 func TestAConfirmationIsGrantedInAdvanceByYes(t *testing.T) {
 	term := &terminal{}
 	g := askingPolicy(term, "n\n")
 	g.Yes = true
 
-	granted, err := g.Confirm(context.Background(), spanOn(t, term), teardown)
+	granted, err := g.Confirm(context.Background(), spanOn(t, term), newProjectGuard)
 	if err != nil || !granted {
 		t.Errorf("Confirm() = %v, %v, want --yes to answer it in advance", granted, err)
 	}
-	if strings.Contains(term.written(), "Tear down") {
+	if strings.Contains(term.written(), newProjectGuard.Question) {
 		t.Errorf("written = %q, want --yes to leave the confirmation unasked", term.written())
 	}
 }
@@ -192,11 +206,11 @@ func TestADryRunAsksNoConfirmation(t *testing.T) {
 	g := askingPolicy(term, "n\n")
 	g.DryRun = true
 
-	granted, err := g.Confirm(context.Background(), spanOn(t, term), teardown)
+	granted, err := g.Confirm(context.Background(), spanOn(t, term), newProjectGuard)
 	if err != nil || !granted {
 		t.Errorf("Confirm() = %v, %v, want a run that changes nothing to need no confirmation", granted, err)
 	}
-	if strings.Contains(term.written(), "Tear down") {
+	if strings.Contains(term.written(), newProjectGuard.Question) {
 		t.Errorf("written = %q, want --dry to leave the confirmation unasked: there is nothing to confirm", term.written())
 	}
 }
@@ -206,11 +220,11 @@ func TestAConfirmationSkipsWhenThereIsNoTerminalToAskOn(t *testing.T) {
 	g := askingPolicy(term, "")
 	g.Interactive = false
 
-	granted, err := g.Confirm(context.Background(), spanOn(t, term), teardown)
+	granted, err := g.Confirm(context.Background(), spanOn(t, term), newProjectGuard)
 	if err != nil || !granted {
 		t.Errorf("Confirm() = %v, %v, want a confirmation to skip and proceed off a terminal", granted, err)
 	}
-	if strings.Contains(term.written(), "Tear down") {
+	if strings.Contains(term.written(), newProjectGuard.Question) {
 		t.Errorf("written = %q, want no question asked where nothing can answer it", term.written())
 	}
 }
@@ -218,11 +232,11 @@ func TestAConfirmationSkipsWhenThereIsNoTerminalToAskOn(t *testing.T) {
 func TestAConfirmationIsAskedOnATerminalAndANoStopsTheCommand(t *testing.T) {
 	term := &terminal{}
 
-	granted, err := askingPolicy(term, "n\n").Confirm(context.Background(), spanOn(t, term), teardown)
+	granted, err := askingPolicy(term, "n\n").Confirm(context.Background(), spanOn(t, term), newProjectGuard)
 	if err != nil || granted {
 		t.Errorf("Confirm() = %v, %v, want the answered no to withhold it", granted, err)
 	}
-	if !strings.Contains(term.written(), "Tear down the named preview") {
+	if !strings.Contains(term.written(), newProjectGuard.Question) {
 		t.Errorf("written = %q, want the confirmation's question put to the terminal", term.written())
 	}
 }
@@ -230,7 +244,7 @@ func TestAConfirmationIsAskedOnATerminalAndANoStopsTheCommand(t *testing.T) {
 func TestADeclinedConfirmationSaysSoOnTheStreamOnceTheStreamIsResumed(t *testing.T) {
 	term := &terminal{}
 
-	if _, err := askingPolicy(term, "n\n").Confirm(context.Background(), spanOn(t, term), teardown); err != nil {
+	if _, err := askingPolicy(term, "n\n").Confirm(context.Background(), spanOn(t, term), newProjectGuard); err != nil {
 		t.Fatal(err)
 	}
 	got := term.received()
@@ -349,5 +363,84 @@ func TestAnOfferIsTakenInAdvanceByYes(t *testing.T) {
 	}
 	if strings.Contains(term.written(), setUp) {
 		t.Errorf("written = %q, want --yes to leave the offer unasked", term.written())
+	}
+}
+
+func TestASkippedConfirmationWarnsWhatItAssumedAndListsItOnTheSummary(t *testing.T) {
+	term := &terminal{}
+	g := askingPolicy(term, "")
+	g.Interactive = false
+	span := spanOn(t, term)
+
+	if granted, err := g.Confirm(context.Background(), span, newProjectGuard); err != nil || !granted {
+		t.Fatalf("Confirm() = %v, %v, want the skip to proceed", granted, err)
+	}
+
+	var warned bool
+	for _, ev := range term.received() {
+		if ev.GetOperation().GetLevel() == progressv1.Level_LEVEL_WARN && ev.GetOperation().GetMessage() == newProjectAssumption {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Errorf("stream = %q, want a WARN naming the guard that was skipped", shape(term.received()))
+	}
+	assumed := summaryOf(t, term, span).GetAssumed()
+	if len(assumed) != 1 || assumed[0].GetId() != "new_project" || assumed[0].GetWarning() != newProjectAssumption {
+		t.Errorf("assumed = %v, want the skipped guard listed with its id and warning", assumed)
+	}
+}
+
+func TestAConfirmationGrantedByYesAssumesNothing(t *testing.T) {
+	term := &terminal{}
+	g := askingPolicy(term, "")
+	g.Interactive = false
+	g.Yes = true
+	span := spanOn(t, term)
+
+	if _, err := g.Confirm(context.Background(), span, newProjectGuard); err != nil {
+		t.Fatal(err)
+	}
+	if assumed := summaryOf(t, term, span).GetAssumed(); len(assumed) != 0 {
+		t.Errorf("assumed = %v, want --yes to be an answer, not an assumption", assumed)
+	}
+}
+
+func TestADryRunAssumesNothingWhereNoTerminalCouldAnswer(t *testing.T) {
+	term := &terminal{}
+	g := askingPolicy(term, "")
+	g.Interactive = false
+	g.DryRun = true
+	span := spanOn(t, term)
+
+	if _, err := g.Confirm(context.Background(), span, newProjectGuard); err != nil {
+		t.Fatal(err)
+	}
+	if assumed := summaryOf(t, term, span).GetAssumed(); len(assumed) != 0 {
+		t.Errorf("assumed = %v, want a run that changes nothing to assume nothing", assumed)
+	}
+}
+
+func TestAConfirmationAnsweredYesOnATerminalAssumesNothing(t *testing.T) {
+	term := &terminal{}
+	span := spanOn(t, term)
+
+	if granted, err := askingPolicy(term, "y\n").Confirm(context.Background(), span, newProjectGuard); err != nil || !granted {
+		t.Fatalf("Confirm() = %v, %v, want yes to grant", granted, err)
+	}
+	if assumed := summaryOf(t, term, span).GetAssumed(); len(assumed) != 0 {
+		t.Errorf("assumed = %v, want an answered question to assume nothing", assumed)
+	}
+}
+
+func TestAConfirmationAnsweredNoOnATerminalAssumesNothing(t *testing.T) {
+	term := &terminal{}
+	span := spanOn(t, term)
+
+	if granted, err := askingPolicy(term, "n\n").Confirm(context.Background(), span, newProjectGuard); err != nil || granted {
+		t.Fatalf("Confirm() = %v, %v, want no to withhold", granted, err)
+	}
+	if assumed := summaryOf(t, term, span).GetAssumed(); len(assumed) != 0 {
+		t.Errorf("assumed = %v, want a declined question to assume nothing", assumed)
 	}
 }
