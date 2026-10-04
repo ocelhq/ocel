@@ -16,7 +16,7 @@ func MissingVariablesHeadline(n int) string {
 }
 
 func MissingVariablesLines(missing *streamv1.MissingVariables, present Presentation) []string {
-	fail := func(text string) string { return present.palette().Failure(text) }
+	fail := func(text string) string { return present.Palette().Failure(text) }
 	cells := missing.GetCells()
 	out := []string{fail(failGlyph) + " " + MissingVariablesHeadline(len(cells)), ""}
 	keyWidth, folderWidth := 0, 0
@@ -40,7 +40,7 @@ func MissingVariablesLines(missing *streamv1.MissingVariables, present Presentat
 			continue
 		}
 		written[group] = true
-		out = append(out, missingIndent+present.palette().Muted(VariableGroupHeadline(group, missingGroupDescription(missing.GetGroups(), group))))
+		out = append(out, missingIndent+present.Palette().Muted(VariableGroupHeadline(group, missingGroupDescription(missing.GetGroups(), group))))
 		for _, member := range cells {
 			if member.GetGroup() == group {
 				out = append(out, missingVariableLines(member, missingIndent+missingIndent, keyWidth-len(missingIndent), folderWidth, present)...)
@@ -53,9 +53,9 @@ func MissingVariablesLines(missing *streamv1.MissingVariables, present Presentat
 func missingVariableLines(cell *streamv1.MissingVariable, lead string, keyWidth, folderWidth int, present Presentation) []string {
 	key := fmt.Sprintf("%-*s", keyWidth, cell.GetKey())
 	folder := fmt.Sprintf("%-*s", folderWidth, VariableFolderName(cell.GetFolder()))
-	out := []string{lead + present.palette().Failure(failGlyph) + " " + key + missingIndent + present.palette().Muted(folder) + missingIndent + cell.GetReason()}
+	out := []string{lead + present.Palette().Failure(failGlyph) + " " + key + missingIndent + present.Palette().Muted(folder) + missingIndent + cell.GetReason()}
 	if description := cell.GetDescription(); description != "" {
-		out = append(out, lead+missingIndent+present.palette().Muted(description))
+		out = append(out, lead+missingIndent+present.Palette().Muted(description))
 	}
 	return out
 }

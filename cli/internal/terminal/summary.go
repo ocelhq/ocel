@@ -35,14 +35,14 @@ func (s summary) lines() []string {
 		out = s.failed(took)
 	}
 	if path := result.GetLogPath(); path != "" {
-		out = append(out, s.present.palette().Muted(blockIndent+"Log: "+relLog(path)))
+		out = append(out, s.present.Palette().Muted(blockIndent+"Log: "+relLog(path)))
 	}
 	return out
 }
 
 func (s summary) succeeded(took string) []string {
 	result := s.result
-	head := s.present.palette().SuccessBold(fmt.Sprintf("%s %s in %s", passGlyph, headlineOr(result, "Done"), took))
+	head := s.present.Palette().SuccessBold(fmt.Sprintf("%s %s in %s", passGlyph, headlineOr(result, "Done"), took))
 	out := []string{head}
 	if target := targetLine(s.present, result.GetOrigin()); target != "" {
 		out = append(out, target)
@@ -55,7 +55,7 @@ func (s summary) succeeded(took string) []string {
 		out = append(out, blockIndent+note)
 	}
 	if note := PropagationNote(result.GetPropagation()); note != "" {
-		out = append(out, s.present.palette().Muted(blockIndent+note))
+		out = append(out, s.present.Palette().Muted(blockIndent+note))
 	}
 	return out
 }
@@ -66,7 +66,7 @@ func (s summary) failed(took string) []string {
 		out := append(MissingVariablesLines(missing, s.present), "", MissingVariablesRemedy(missing.GetRemedy()))
 		return append(out, detailLines(result.GetDetail())...)
 	}
-	out := failureLines(s.present.palette(), headlineOr(result, "Failed")+" in "+took, result.GetDetail())
+	out := failureLines(s.present.Palette(), headlineOr(result, "Failed")+" in "+took, result.GetDetail())
 	if target := targetLine(s.present, result.GetOrigin()); target != "" {
 		out = append(out, target)
 	}
@@ -135,7 +135,7 @@ func (s summary) appURLs() []string {
 	for _, app := range apps {
 		width = max(width, utf8.RuneCountInString(app.GetApp()))
 	}
-	p := s.present.palette()
+	p := s.present.Palette()
 	var out []string
 	for _, app := range apps {
 		label := blockIndent + app.GetApp() + strings.Repeat(" ", width-utf8.RuneCountInString(app.GetApp())) + appURLGutter

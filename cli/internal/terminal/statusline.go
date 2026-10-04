@@ -123,7 +123,7 @@ func (l *statusLine) render(width int) string {
 	if tag, ok := phaseTag(l.present, l.phase); ok {
 		head += tag + " "
 	}
-	head += l.present.palette().Accent(spinnerFrame(int(at.Sub(l.startedAt) / frameRate)))
+	head += l.present.Palette().Accent(spinnerFrame(int(at.Sub(l.startedAt) / frameRate)))
 	spinnerEnds := displayWidth(head)
 	if tracked := l.spans.tracked[l.shown]; tracked != nil {
 		head += " " + l.naming(tracked)
@@ -140,7 +140,7 @@ func (l *statusLine) render(width int) string {
 		return fitToWidth(head, width-1)
 	}
 	head = fitToWidth(head, room)
-	return head + strings.Repeat(" ", max(room-displayWidth(head), 0)) + liveGutter + l.present.palette().Muted(took)
+	return head + strings.Repeat(" ", max(room-displayWidth(head), 0)) + liveGutter + l.present.Palette().Muted(took)
 }
 
 func (l *statusLine) naming(tracked *statusSpan) string {
@@ -149,7 +149,7 @@ func (l *statusLine) naming(tracked *statusSpan) string {
 	if subject == "" {
 		named := tracked.opened.GetOperation().GetMessage()
 		if said != "" {
-			named += liveGutter + l.present.palette().Muted(said)
+			named += liveGutter + l.present.Palette().Muted(said)
 		}
 		return named
 	}
@@ -157,9 +157,9 @@ func (l *statusLine) naming(tracked *statusSpan) string {
 		title, _, _ := strings.Cut(tracked.opened.GetOperation().GetMessage(), "\n")
 		said, _ = sanitize(title)
 	}
-	named := l.present.palette().Bold(subject) + ":"
+	named := l.present.Palette().Bold(subject) + ":"
 	if said != "" {
-		named += " " + l.present.palette().Muted(said)
+		named += " " + l.present.Palette().Muted(said)
 	}
 	return named
 }

@@ -22,6 +22,6 @@ func phaseTag(present Presentation, phase progressv1.Phase) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	p := present.palette()
+	p := present.Palette()
 	return p.Muted("[") + p.paint(description.Name, phaseColors[phase]) + p.Muted("]"), true
 }
