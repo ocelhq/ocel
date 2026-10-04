@@ -35,5 +35,5 @@ jobs:
         run: uv run ruff format --check .
 
       - name: pytest
-        run: uv run pytest -q
+        run: "false"
 # probe
