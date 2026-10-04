@@ -174,15 +174,6 @@ func (o logsOptions) resolveEnvironment(dependencies Dependencies, cwd string) (
 		if err := previewid.ValidateLabel(o.environment); err != nil {
 			return nil, err
 		}
-		return &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: o.environment}, nil
 	}
-	branch, err := dependencies.ReadGitBranch(cwd)
-	if err != nil {
-		return nil, err
-	}
-	id, err := previewid.Resolve(branch, dependencies.DiscoverPRNumber())
-	if err != nil {
-		return nil, err
-	}
-	return &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: id.Key, Label: id.Label}, nil
+	return commands.ResolvePreviewEnvironment(cwd, o.environment, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
 }
