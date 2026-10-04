@@ -829,3 +829,40 @@ func TestLogsOnATerminalShortensLongFieldValuesUnlessVerbose(t *testing.T) {
 		t.Errorf("verbose stdout = %q, want the full value", verbose.stdout)
 	}
 }
+
+func TestLogsOnATerminalBoxesAStackTraceSentAsSeparateLines(t *testing.T) {
+	project := deployedWithLogs(t)
+	trace := []string{"Error: card declined", "    at charge (payments.js:12)", "    at handler (index.js:4)"}
+	for i, message := range trace {
+		entry := line(4*time.Minute+time.Duration(i)*time.Millisecond, message)
+		entry.Severity = "ERROR"
+		project.Provider.FakeLogs().Append("web-live", entry)
+	}
+	project.Provider.FakeLogs().Append("web-live", line(5*time.Minute, "recovered"))
+
+	got := readOnTerminal(t, project, false, nil)
+
+	if strings.Count(got.stdout, "ERROR") != 1 {
+		t.Errorf("stdout = %q, want the trace as one ERROR entry", got.stdout)
+	}
+	for _, frame := range trace {
+		if !strings.Contains(got.stdout, "│ "+frame) {
+			t.Errorf("stdout = %q, want %q inside the box", got.stdout, frame)
+		}
+	}
+	if !strings.Contains(got.stdout, "  -      recovered\n") {
+		t.Errorf("stdout = %q, want the next line as an entry of its own", got.stdout)
+	}
+}
+
+func TestLogsJSONKeepsEachLineOfAStackTraceAsItsOwnObject(t *testing.T) {
+	project := deployedWithLogs(t)
+	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute, "Error: card declined"))
+	project.Provider.FakeLogs().Append("web-live", line(4*time.Minute+time.Millisecond, "    at charge (payments.js:12)"))
+
+	got := readOnTerminal(t, project, false, func(o *logsOptions) { o.json = true })
+
+	if n := len(linesOf(got.stdout)); n != 5 {
+		t.Errorf("stdout = %q, want 5 objects, one per provider entry", got.stdout)
+	}
+}
