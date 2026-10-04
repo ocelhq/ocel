@@ -3,6 +3,7 @@ clean: true
 inputs:
   - directory: proto
     exclude_paths:
+      - proto/cli/help
       - proto/cli/stream
       - proto/common/environment
       - proto/common/plan

@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 )
 
@@ -111,7 +112,7 @@ func colorExamples(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-func installHelpStyle(cmd *cobra.Command) {
+func installHelpStyle(cmd *cobra.Command, jsonSelected func() bool) {
 	cobra.AddTemplateFunc("colorExamples", colorExamples)
 	cobra.AddTemplateFunc("heading", helpPalette.Bold)
 	cobra.AddTemplateFunc("commandGroups", commandGroups)
@@ -121,6 +122,24 @@ func installHelpStyle(cmd *cobra.Command) {
 	for _, sub := range cmd.Commands() {
 		if sub.Name() == "help" {
 			sub.Hidden = true
+			printHumanHelp := sub.Run
+			sub.Run = nil
+			sub.RunE = func(help *cobra.Command, args []string) error {
+				if !jsonSelected() {
+					printHumanHelp(help, args)
+					return nil
+				}
+				return printCommandTree(help, args)
+			}
+			commands.ReserveStdout(sub)
 		}
 	}
+}
+
+func printCommandTree(help *cobra.Command, args []string) error {
+	target, rest, err := help.Root().Find(args)
+	if err != nil || len(rest) > 0 || target.Hidden {
+		return fmt.Errorf("unknown help topic %q", strings.Join(args, " "))
+	}
+	return writeCommandTree(help.OutOrStdout(), describeCommandTree(target))
 }
