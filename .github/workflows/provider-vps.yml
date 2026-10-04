@@ -1,106 +1,8 @@
 name: Provider VPS
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, closed]
-    paths:
-      - "platform/vps/**"
-      - "pkg/arch/**"
-      - "pkg/buildoutput/**"
-      - "pkg/configdoc/**"
-      - "pkg/connectorserver/**"
-      - "pkg/containerimage/**"
-      - "pkg/dotenv/**"
-      - "pkg/edge/**"
-      - "pkg/environment/**"
-      - "pkg/envsource/**"
-      - "pkg/envvars/**"
-      - "pkg/envvarsserver/**"
-      - "pkg/images/**"
-      - "pkg/keyvalue/**"
-      - "pkg/localrpc/**"
-      - "pkg/naming/**"
-      - "pkg/pricing/**"
-      - "pkg/processenv/**"
-      - "pkg/progress/**"
-      - "pkg/progressproto/**"
-      - "pkg/proto/**"
-      - "pkg/provider/**"
-      - "pkg/refusal/**"
-      - "pkg/router/**"
-      - "pkg/runtime/**"
-      - "pkg/seal/**"
-      - "pkg/stackrecords/**"
-      - "pkg/statedir/**"
-      - "pkg/target/**"
-      - "pkg/go.mod"
-      - "pkg/go.sum"
-      - "platform/edge/cloudflare/deploy/**"
-      - "platform/edge/contract/**"
-      - "platform/s3/**"
-      - "platform/realtime/**"
-      - "cli/internal/appurl/**"
-      - "cli/internal/attribution/**"
-      - "cli/internal/build/**"
-      - "cli/internal/cargo/**"
-      - "cli/internal/childprocess/**"
-      - "cli/internal/clientenv/**"
-      - "cli/internal/commands/bootstrap/**"
-      - "cli/internal/commands/deploy/**"
-      - "cli/internal/commands/destroy/**"
-      - "cli/internal/commands/doctor/**"
-      - "cli/internal/commands/domain/**"
-      - "cli/internal/commands/env/**"
-      - "cli/internal/commands/permissions/**"
-      - "cli/internal/commands/promotions/**"
-      - "cli/internal/consent/**"
-      - "cli/internal/declaration/**"
-      - "cli/internal/deployrecord/**"
-      - "cli/internal/discovery/**"
-      - "cli/internal/dotfile/**"
-      - "cli/internal/english/**"
-      - "cli/internal/executables/**"
-      - "cli/internal/exitcode/**"
-      - "cli/internal/incustest/**"
-      - "cli/internal/inlinebinding/**"
-      - "cli/internal/language/**"
-      - "cli/internal/lockfile/**"
-      - "cli/internal/manifest/**"
-      - "cli/internal/nodeprotocol/**"
-      - "cli/internal/previewid/**"
-      - "cli/internal/project/**"
-      - "cli/internal/providerprocess/**"
-      - "cli/internal/readiness/**"
-      - "cli/internal/run/**"
-      - "cli/internal/runtrace/**"
-      - "cli/internal/sdkversion/**"
-      - "cli/internal/terminal/**"
-      - "cli/internal/valuestore/**"
-      - "cli/internal/variableeditor/**"
-      - "cli/internal/variables/**"
-      - "cli/internal/variablescope/**"
-      - "cli/internal/version/**"
-      - "cli/internal/workspace/**"
-      - "cli/internal/commands/*.go"
-      - "cli/go.mod"
-      - "cli/go.sum"
-      - "packages/ocel/**"
-      - "proto/**"
-      - "pnpm-lock.yaml"
-      - "scripts/incus.sh"
-      - "scripts/incus-fanout.sh"
-      - "scripts/assert-ran.sh"
-      - "tests/fronts/**"
-      - ".github/workflows/provider-vps.yml"
-      - ".github/actions/incus-vm/**"
-      - ".github/actions/vps-images/**"
-      - ".github/actions/suite-gate/**"
-      - ".github/actions/suite-passed/**"
+  workflow_call:
   workflow_dispatch:
-
-concurrency:
-  group: provider-vps-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -113,7 +15,6 @@ env:
 
 jobs:
   gate:
-    if: github.event.action != 'closed'
     name: gate
     runs-on: ubuntu-latest
     timeout-minutes: 10

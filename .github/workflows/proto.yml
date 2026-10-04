@@ -1,37 +1,8 @@
 name: Proto
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "proto/**"
-      - "pkg/proto/**"
-      - "console/connectors/src/gen/**"
-      - "packages/ocel/src/gen/**"
-      - "python/ocel/src/ocel/gen/**"
-      - "crates/ocel-sdk/src/proto/**"
-      - "sdk/internal/proto/**"
-      - "package.json"
-      - ".github/workflows/proto.yml"
-      - ".github/actions/node-workspace/**"
-  pull_request:
-    types: [opened, synchronize, reopened]
-    paths:
-      - "proto/**"
-      - "pkg/proto/**"
-      - "console/connectors/src/gen/**"
-      - "packages/ocel/src/gen/**"
-      - "python/ocel/src/ocel/gen/**"
-      - "crates/ocel-sdk/src/proto/**"
-      - "sdk/internal/proto/**"
-      - "package.json"
-      - ".github/workflows/proto.yml"
-      - ".github/actions/node-workspace/**"
+  workflow_call:
   workflow_dispatch:
-
-concurrency:
-  group: proto-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read

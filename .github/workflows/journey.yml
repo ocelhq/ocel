@@ -2,7 +2,7 @@ name: Journey
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed, labeled, unlabeled]
+    types: [labeled, unlabeled, closed]
     paths:
       - "www/**"
       - "console/github/**"
@@ -28,6 +28,7 @@ on:
       - "turbo.json"
       - ".github/workflows/journey.yml"
       - ".github/actions/**"
+  workflow_call:
   workflow_dispatch:
     inputs:
       targets:
@@ -1204,8 +1205,10 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          ids=$(gh run list --workflow journey.yml --branch "$HEAD_REF" \
-            --limit 100 --json databaseId --jq '.[].databaseId' | sort -u | paste -sd' ' -)
+          ids=$(for workflow in ci.yml journey.yml; do
+            gh run list --workflow "$workflow" --branch "$HEAD_REF" \
+              --limit 100 --json databaseId --jq '.[].databaseId'
+          done | sort -u | paste -sd' ' -)
           echo "ids=$ids" >> "$GITHUB_OUTPUT"
           echo "${ids:-no journey run} provisioned cells for this pull request"
 
