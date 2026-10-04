@@ -16,6 +16,7 @@ type Logs struct {
 	deleted map[string]bool
 	written int
 	tails   map[*logTail]bool
+	opened  chan struct{}
 }
 
 type logTail struct {
@@ -55,6 +56,26 @@ func (l *Logs) SendNotice(notice provider.LogNotice) {
 	defer l.mu.Unlock()
 	for tail := range l.tails {
 		tail.deliver(delivery{notice: &notice})
+	}
+}
+
+func (l *Logs) WaitForTail(ctx context.Context) error {
+	for {
+		l.mu.Lock()
+		if len(l.tails) > 0 {
+			l.mu.Unlock()
+			return nil
+		}
+		if l.opened == nil {
+			l.opened = make(chan struct{})
+		}
+		opened := l.opened
+		l.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-opened:
+		}
 	}
 }
 
@@ -154,6 +175,10 @@ func (l *Logs) openTail(q provider.LogQuery) *logTail {
 		l.tails = map[*logTail]bool{}
 	}
 	l.tails[tail] = true
+	if l.opened != nil {
+		close(l.opened)
+		l.opened = nil
+	}
 	return tail
 }
 
