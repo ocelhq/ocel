@@ -1201,6 +1201,31 @@ importers:
 
   scripts/release: {}
 
+  tests/e2e:
+    dependencies:
+      '@ocel-tests/shared':
+        specifier: workspace:*
+        version: link:../shared
+      ocel:
+        specifier: workspace:^
+        version: link:../../packages/ocel
+      undici:
+        specifier: ^7.18.2
+        version: 7.28.0
+    devDependencies:
+      '@types/bun':
+        specifier: ^1.4.0
+        version: 1.4.0
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      strip-json-comments:
+        specifier: ^5.0.3
+        version: 5.0.3
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   tests/fixtures/deploy/next:
     dependencies:
       better-sqlite3:
@@ -1792,31 +1817,6 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.43
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
-  tests/journeys:
-    dependencies:
-      '@ocel-tests/shared':
-        specifier: workspace:*
-        version: link:../shared
-      ocel:
-        specifier: workspace:^
-        version: link:../../packages/ocel
-      undici:
-        specifier: ^7.18.2
-        version: 7.28.0
-    devDependencies:
-      '@types/bun':
-        specifier: ^1.4.0
-        version: 1.4.0
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      strip-json-comments:
-        specifier: ^5.0.3
-        version: 5.0.3
       typescript:
         specifier: ^5
         version: 5.9.3

@@ -37,12 +37,12 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        mkdir -p tests/journeys/output
+        mkdir -p tests/e2e/output
         tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
           --exclude='*/node_modules' \
           --exclude='*/node_modules/*' \
           --exclude='*/trees/*/packages' \
-          -C tests/journeys output
+          -C tests/e2e output
 
     - name: Upload the evidence
       if: always()

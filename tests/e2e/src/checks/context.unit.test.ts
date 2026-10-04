@@ -77,7 +77,7 @@ describe("redact", () => {
 
 describe("secretsOf", () => {
   it("lists the registry token among the journey's secrets when the run has one", () => {
-    expect(secretsOf({ OCEL_JOURNEY_REGISTRY_TOKEN: "ghs_s3cret" })).toEqual([
+    expect(secretsOf({ OCEL_E2E_REGISTRY_TOKEN: "ghs_s3cret" })).toEqual([
       SECRET_TOKEN,
       "ghs_s3cret",
     ]);
@@ -85,6 +85,6 @@ describe("secretsOf", () => {
 
   it("lists only the journey's own secret when the run has no registry token", () => {
     expect(secretsOf({})).toEqual([SECRET_TOKEN]);
-    expect(secretsOf({ OCEL_JOURNEY_REGISTRY_TOKEN: " " })).toEqual([SECRET_TOKEN]);
+    expect(secretsOf({ OCEL_E2E_REGISTRY_TOKEN: " " })).toEqual([SECRET_TOKEN]);
   });
 });

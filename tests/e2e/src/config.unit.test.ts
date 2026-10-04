@@ -51,23 +51,23 @@ function cell(fixture: Fixture, variant: Variant = defaults): CellUnderTest {
 describe("journeyZone", () => {
   it("falls back to the box's own zone when none is named", () => {
     expect(journeyZone({})).toBe("localhost");
-    expect(journeyZone({ OCEL_JOURNEY_ZONE: "  " })).toBe("localhost");
+    expect(journeyZone({ OCEL_E2E_ZONE: "  " })).toBe("localhost");
   });
 
   it("takes the zone named", () => {
-    expect(journeyZone({ OCEL_JOURNEY_ZONE: "journeys.example" })).toBe("journeys.example");
+    expect(journeyZone({ OCEL_E2E_ZONE: "journeys.example" })).toBe("journeys.example");
   });
 });
 
 describe("vpsZoneOf", () => {
   it("puts a cell Cloudflare fronts under the zone the run names", () => {
-    expect(vpsZoneOf(cell(deploy.node, cloudflareOnABox), { OCEL_JOURNEY_ZONE: "j.example" })).toBe(
+    expect(vpsZoneOf(cell(deploy.node, cloudflareOnABox), { OCEL_E2E_ZONE: "j.example" })).toBe(
       "j.example",
     );
   });
 
   it("keeps a cell nothing fronts under the box's own zone, whatever zone the run names", () => {
-    expect(vpsZoneOf(cell(deploy.node), { OCEL_JOURNEY_ZONE: "j.example" })).toBe("localhost");
+    expect(vpsZoneOf(cell(deploy.node), { OCEL_E2E_ZONE: "j.example" })).toBe("localhost");
   });
 });
 
@@ -90,8 +90,8 @@ describe("awsSweepOverlay", () => {
   it("unbinds through the dns the cell was bound under", () => {
     expect(
       awsSweepOverlay(cell(deploy.node), "j-9-deploy-node", {
-        OCEL_JOURNEY_DNS: "cloudflare",
-        OCEL_JOURNEY_ZONE: "j.example",
+        OCEL_E2E_DNS: "cloudflare",
+        OCEL_E2E_ZONE: "j.example",
         OCEL_AWS_VARIABLES_KEY: "arn:aws:kms:key/k",
       }),
     ).toEqual({
@@ -106,8 +106,8 @@ describe("overlayFor", () => {
   it("overlays the aws fixture with the variant's config, the dns and the hostnames", () => {
     expect(
       overlayFor(cell(sdk.workspace, cloudflare), "aws", {
-        OCEL_JOURNEY_ZONE: "j.example",
-        OCEL_JOURNEY_DNS: "cloudflare",
+        OCEL_E2E_ZONE: "j.example",
+        OCEL_E2E_DNS: "cloudflare",
       }),
     ).toEqual({
       base: DEFAULT_BASE,
@@ -130,7 +130,7 @@ describe("overlayFor", () => {
   });
 
   it("leaves the fixture's config alone for a default cell, and dns alone off a real zone", () => {
-    expect(overlayFor(cell(deploy.node), "aws", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
+    expect(overlayFor(cell(deploy.node), "aws", { OCEL_E2E_ZONE: "j.example" })).toEqual({
       base: DEFAULT_BASE,
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.j.example" },
@@ -158,7 +158,7 @@ describe("overlayFor", () => {
   });
 
   it("keeps a vps cell nothing fronts off the run's zone, since no record would reach it there", () => {
-    expect(overlayFor(cell(deploy.node), "vps", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
+    expect(overlayFor(cell(deploy.node), "vps", { OCEL_E2E_ZONE: "j.example" })).toEqual({
       base: VPS_BASE,
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.localhost" },
@@ -168,8 +168,8 @@ describe("overlayFor", () => {
   it("pushes a vps registry cell as the user the run names, under the token's variable", () => {
     expect(
       overlayFor(cell(deploy.node, registry), "vps", {
-        OCEL_JOURNEY_REGISTRY_USER: "octocat",
-        OCEL_JOURNEY_REGISTRY_TOKEN: "ghs_never-written",
+        OCEL_E2E_REGISTRY_USER: "octocat",
+        OCEL_E2E_REGISTRY_TOKEN: "ghs_never-written",
       }),
     ).toEqual({
       base: VPS_BASE,
@@ -178,7 +178,7 @@ describe("overlayFor", () => {
       registry: {
         server: "ghcr.io/ocelhq/journey-vps",
         username: "octocat",
-        password: "${OCEL_JOURNEY_REGISTRY_TOKEN}",
+        password: "${OCEL_E2E_REGISTRY_TOKEN}",
       },
     });
   });
@@ -200,15 +200,15 @@ describe("overlayFor", () => {
 
   it("refuses a vps registry cell when the run names no user to push as", () => {
     expect(() => overlayFor(cell(deploy.node, registry), "vps", {})).toThrow(
-      /OCEL_JOURNEY_REGISTRY_USER/,
+      /OCEL_E2E_REGISTRY_USER/,
     );
   });
 
   it("fronts a vps cloudflare cell with the cloudflare edge under the run's zone and dns", () => {
     expect(
       overlayFor(cell(deploy.node, cloudflareOnABox), "vps", {
-        OCEL_JOURNEY_ZONE: "j.example",
-        OCEL_JOURNEY_DNS: "cloudflare",
+        OCEL_E2E_ZONE: "j.example",
+        OCEL_E2E_DNS: "cloudflare",
       }),
     ).toEqual({
       base: VPS_BASE,
@@ -221,7 +221,7 @@ describe("overlayFor", () => {
 
   it("reaches a vps cloudflare-tunnel cell through the cloudflare edge's tunnel", () => {
     const overlay = overlayFor(cell(deploy.node, cloudflareTunnel), "vps", {
-      OCEL_JOURNEY_ZONE: "j.example",
+      OCEL_E2E_ZONE: "j.example",
     });
     expect(overlay).toMatchObject({ edge: "cloudflare", tunnel: true, dns: "cloudflare" });
     expect(renderConfig({ ...overlay, base: TS_BASE })).toContain(
@@ -234,14 +234,14 @@ describe("overlayFor", () => {
 
   it("writes a vps cloudflare cell's records through Cloudflare, since the edge only forwards a record that exists", () => {
     expect(
-      overlayFor(cell(deploy.node, cloudflareOnABox), "vps", { OCEL_JOURNEY_ZONE: "j.example" }),
+      overlayFor(cell(deploy.node, cloudflareOnABox), "vps", { OCEL_E2E_ZONE: "j.example" }),
     ).toMatchObject({ edge: "cloudflare", dns: "cloudflare" });
   });
 
   it("writes a gcp cloudflare cell's records through Cloudflare, since the edge only forwards a record that exists", () => {
     expect(
       overlayFor(cell(deploy.node, cloudflareOnGoogleCloud), "gcp", {
-        OCEL_JOURNEY_ZONE: "j.example",
+        OCEL_E2E_ZONE: "j.example",
       }),
     ).toMatchObject({ edge: "cloudflare", dns: "cloudflare" });
   });
@@ -249,8 +249,8 @@ describe("overlayFor", () => {
   it("fronts a gcp cloudflare cell with the cloudflare edge, and binds its hostnames under the run's zone", () => {
     expect(
       overlayFor(cell(deploy.node, cloudflareOnGoogleCloud), "gcp", {
-        OCEL_JOURNEY_ZONE: "j.example",
-        OCEL_JOURNEY_DNS: "cloudflare",
+        OCEL_E2E_ZONE: "j.example",
+        OCEL_E2E_DNS: "cloudflare",
       }),
     ).toMatchObject({
       base: GCP_BASE,
@@ -263,7 +263,7 @@ describe("overlayFor", () => {
   it("writes an aws cell's records through Cloudflare when Cloudflare forwards its containers to their origin", () => {
     expect(
       overlayFor(cell(deploy.node, cloudflareInFrontOfContainers), "aws", {
-        OCEL_JOURNEY_ZONE: "j.example",
+        OCEL_E2E_ZONE: "j.example",
       }),
     ).toMatchObject({
       base: DEFAULT_BASE,
@@ -277,7 +277,7 @@ describe("overlayFor", () => {
   it("runs one app of an aws cell as a container and writes its records through Cloudflare when Cloudflare fronts a project mixing computes", () => {
     expect(
       overlayFor(cell(deploy.workspace, cloudflareInFrontOfMixedComputes), "aws", {
-        OCEL_JOURNEY_ZONE: "j.example",
+        OCEL_E2E_ZONE: "j.example",
       }),
     ).toMatchObject({
       edge: "cloudflare",
@@ -291,15 +291,15 @@ describe("overlayFor", () => {
   });
 
   it("binds no hostname on a gcp cell no edge fronts", () => {
-    expect(
-      overlayFor(cell(deploy.node), "gcp", { OCEL_JOURNEY_ZONE: "j.example" }),
-    ).not.toHaveProperty("hostnames");
+    expect(overlayFor(cell(deploy.node), "gcp", { OCEL_E2E_ZONE: "j.example" })).not.toHaveProperty(
+      "hostnames",
+    );
   });
 
   it("renames a dev cell and nothing else", () => {
     expect(
       overlayFor(cell(deploy.node), "dev", {
-        OCEL_JOURNEY_ZONE: "j.example",
+        OCEL_E2E_ZONE: "j.example",
         OCEL_AWS_VARIABLES_KEY: "arn:aws:kms:key/k",
       }),
     ).toEqual({

@@ -5,7 +5,7 @@ import { cellApp, type GapRef, type Plan, plan, type RunFilter } from "../plan";
 import { filterFrom } from "../run/filter";
 import { hasReleaseCycle, targetNamed } from "../targets";
 
-const USAGE = "pnpm --filter @ocel-tests/journeys plan --lane <lane>";
+const USAGE = "pnpm --filter @ocel-tests/e2e plan --lane <lane>";
 
 function said(listed: GapRef[]): string {
   return listed

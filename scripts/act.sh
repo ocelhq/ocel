@@ -103,7 +103,7 @@ run_journey_vps() {
         OCEL_VPS_USER="$OCEL_INCUS_USER" \
         OCEL_VPS_IDENTITY_FILE="$OCEL_INCUS_KEY" \
         OCEL_BIN="$PWD/packages/cli-linux-x64/bin/ocel" \
-        pnpm --filter @ocel-tests/journeys journey || status=$?
+        pnpm --filter @ocel-tests/e2e e2e || status=$?
     incus_run "scripts/incus.sh destroy $vm" || echo "act.sh: could not destroy $vm" >&2
     return $status
 }
@@ -159,7 +159,7 @@ for wf in "${selected[@]}"; do
         ;;
     esac
     if [ "$wf" = journey ]; then
-        wf_args+=(--env "OCEL_JOURNEY_LANES=dev aws")
+        wf_args+=(--env "OCEL_E2E_LANES=dev aws")
     fi
     if ! "$ACT" workflow_dispatch \
         -W ".github/workflows/$wf.yml" \

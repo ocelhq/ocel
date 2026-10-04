@@ -74,8 +74,8 @@ jobs:
       - name: Reclaim the boxes nothing is using
         run: scripts/gce.sh sweep
 
-  journeys:
-    name: journeys
+  e2e:
+    name: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
@@ -125,7 +125,7 @@ jobs:
           bun-version: ${{ steps.versions.outputs.bun }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
-          role-session-name: ocel-sweep-journeys-${{ github.run_id }}
+          role-session-name: ocel-sweep-e2e-${{ github.run_id }}
           role-duration-seconds: "10800"
           guard-script: tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
@@ -141,12 +141,12 @@ jobs:
           ZONE=${ZONE#\*.}
           {
             echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
-            echo "OCEL_JOURNEY_ZONE=$ZONE"
+            echo "OCEL_E2E_ZONE=$ZONE"
             echo "AWS_REGION=$REGION"
           } >> "$GITHUB_ENV"
 
       - name: Reclaim the cells and namespaces no run is using
-        run: pnpm --filter @ocel-tests/journeys sweep --target aws
+        run: pnpm --filter @ocel-tests/e2e sweep --target aws
 
   zone:
     name: zone
@@ -183,10 +183,10 @@ jobs:
           set -euo pipefail
           [ -n "$ZONE" ] || { echo "the repository variable behind ZONE is unset" >&2; exit 1; }
           ZONE=${ZONE#\*.}
-          echo "OCEL_JOURNEY_ZONE=$ZONE" >> "$GITHUB_ENV"
+          echo "OCEL_E2E_ZONE=$ZONE" >> "$GITHUB_ENV"
 
       - name: Reclaim the records and origin certificates a dead vps run left in the zone
-        run: pnpm --filter @ocel-tests/journeys sweep:zone --target vps
+        run: pnpm --filter @ocel-tests/e2e sweep:zone --target vps
 
   previews:
     name: previews

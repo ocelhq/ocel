@@ -31,6 +31,6 @@ describe("cloudflareUrls", () => {
   });
 
   it("refuses a Cloudflare cell the run names no zone for", () => {
-    expect(() => cloudflareUrls(cell(cloudflare), undefined)).toThrow(/OCEL_JOURNEY_ZONE/);
+    expect(() => cloudflareUrls(cell(cloudflare), undefined)).toThrow(/OCEL_E2E_ZONE/);
   });
 });

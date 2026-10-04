@@ -10,7 +10,7 @@ export function cloudflareUrls(
   }
   if (!zone) {
     throw new Error(
-      `${cell.name} is fronted by Cloudflare, which answers only a hostname in a zone it serves, and OCEL_JOURNEY_ZONE names none`,
+      `${cell.name} is fronted by Cloudflare, which answers only a hostname in a zone it serves, and OCEL_E2E_ZONE names none`,
     );
   }
   return new Map(

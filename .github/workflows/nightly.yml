@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: The branch, tag or commit the journey drives and a pass releases as a nightly
+        description: The branch, tag or commit the e2e run drives and a pass releases as a nightly
         required: true
         default: main
         type: string
@@ -19,7 +19,7 @@ permissions: {}
 
 jobs:
   vps:
-    name: vps journey
+    name: vps e2e
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
@@ -31,8 +31,8 @@ jobs:
     env:
       FORCE_COLOR: "1"
       OCEL_TARGET: vps
-      OCEL_JOURNEY_CONCERN: deploy lifecycle sdk kv tasks realtime
-      OCEL_JOURNEY_COVERAGE: every-cell
+      OCEL_E2E_CONCERN: deploy lifecycle sdk kv tasks realtime
+      OCEL_E2E_COVERAGE: every-cell
       OCEL_GCE_ZONE: ${{ vars.GCP_VPS_ZONE || 'europe-west1-b' }}
       BOX: nightly-${{ github.run_id }}-${{ github.run_attempt }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
@@ -92,7 +92,7 @@ jobs:
         run: |
           set -euo pipefail
           ZONE=${ZONE#\*.}
-          echo "OCEL_JOURNEY_ZONE=$ZONE" >> "$GITHUB_ENV"
+          echo "OCEL_E2E_ZONE=$ZONE" >> "$GITHUB_ENV"
 
       - name: The Docker the image build on this runner needs
         uses: ./.github/actions/containerd-docker
@@ -105,7 +105,7 @@ jobs:
 
       - uses: ./.github/actions/goreleaser
 
-      - name: Build the binaries the journey drives
+      - name: Build the binaries the e2e run drives
         run: |
           set -euo pipefail
           node scripts/snapshot.mjs | tee -a "$GITHUB_ENV"
@@ -123,23 +123,23 @@ jobs:
             echo "OCEL_VPS_IDENTITY_FILE=$OCEL_GCE_KEY"
           } >> "$GITHUB_ENV"
 
-      - name: Reclaim journey images a run that died left in the registry
+      - name: Reclaim e2e images a run that died left in the registry
         id: registry
         env:
           GH_TOKEN: ${{ github.token }}
-        run: pnpm --filter @ocel-tests/journeys sweep:registry --target vps
+        run: pnpm --filter @ocel-tests/e2e sweep:registry --target vps
 
-      - name: Run the journey
+      - name: Run every cell
         env:
-          OCEL_JOURNEY_REGISTRY_USER: ${{ github.actor }}
-          OCEL_JOURNEY_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm --filter @ocel-tests/journeys journey
+          OCEL_E2E_REGISTRY_USER: ${{ github.actor }}
+          OCEL_E2E_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm --filter @ocel-tests/e2e e2e
 
-      - name: No journey image left in the registry
+      - name: No e2e image left in the registry
         if: ${{ always() && steps.registry.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: pnpm --filter @ocel-tests/journeys sweep:registry --target vps --own
+        run: pnpm --filter @ocel-tests/e2e sweep:registry --target vps --own
 
       - name: No box left behind
         if: always()
@@ -149,19 +149,19 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          mkdir -p tests/journeys/output
-          tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
+          mkdir -p tests/e2e/output
+          tar -czf "$RUNNER_TEMP/e2e-evidence.tgz" \
             --exclude='*/node_modules' \
             --exclude='*/node_modules/*' \
             --exclude='*/trees/*/packages' \
-            -C tests/journeys output
+            -C tests/e2e output
 
       - name: Upload the evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vps-nightly-evidence
-          path: ${{ runner.temp }}/journey-evidence.tgz
+          path: ${{ runner.temp }}/e2e-evidence.tgz
           if-no-files-found: warn
 
   release:

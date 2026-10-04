@@ -2,11 +2,11 @@
 
 | suite         | what it drives                                                       |
 | ------------- | -------------------------------------------------------------------- |
-| `journeys`    | one fixture on one target, through the real `ocel` binary, over HTTP |
+| `e2e`         | one fixture on one target, through the real `ocel` binary, over HTTP |
 | `next-compat` | Next.js's own deployment-adapter harness, by workflow dispatch only  |
 
 Unit tests live beside the code they cover, in vitest for TypeScript, `bun test` under
-`journeys`, and `go test` for Go.
+`e2e`, and `go test` for Go.
 The Go provider suites (`TestLive*`) stay in the provider packages and, for the image build
 and the container dry run, in the CLI; the lifecycle suites (`TestLifecycle*`) stay in the
 provider packages alone, and the dev resources' suites (`TestDocker*`) in the CLI. Every file
@@ -14,9 +14,9 @@ holding one builds only under the `integration` tag, so `go test ./...` never co
 and `go test -tags integration` fails rather than skips where the emulator, VM or docker
 daemon they drive is missing.
 
-## Running one journey locally
+## Running one cell locally
 
-A cell is one fixture on one target. `journeys/src/matrix/fixtures.ts` names every fixture
+A cell is one fixture on one target. `e2e/src/matrix/fixtures.ts` names every fixture
 and the targets and variants it runs on. A fixture belongs to one concern: `deploy` asks
 whether a runtime runs on a target at all, and its apps under `fixtures/deploy/` declare no
 resources; `lifecycle` asks whether a release can be replaced and rolled back there, from
@@ -41,26 +41,26 @@ node scripts/snapshot.mjs
 Then run one cell:
 
 ```
-pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture node --target dev
+pnpm --filter @ocel-tests/e2e cell --concern deploy --fixture node --target dev
 ```
 
 For `aws` that is a floci emulator and the endpoint it prints:
 
 ```
-scripts/floci.sh create ocel-journeys
+scripts/floci.sh create ocel-e2e
 export AWS_ENDPOINT_URL=http://localhost.localstack.cloud:<the port it printed>
-pnpm --filter @ocel-tests/journeys cell --concern sdk --fixture node --target aws
-scripts/floci.sh destroy ocel-journeys
+pnpm --filter @ocel-tests/e2e cell --concern sdk --fixture node --target aws
+scripts/floci.sh destroy ocel-e2e
 ```
 
-One emulator serves every edge. `OCEL_JOURNEY_CONCERN` narrows a run to the concerns it
-names, space or comma separated, and unset covers every one but `iac`; `OCEL_JOURNEY_FIXTURES`
-narrows it further to fixtures named `<concern>/<name>`. `OCEL_JOURNEY_VARIANTS` narrows a
-run to the variants it names (`default` among them), `OCEL_JOURNEY_COVERAGE=every-cell` runs
-every cell rather than a sampled subset, and `OCEL_JOURNEY_SKIPS=run` drives the cells the gap
+One emulator serves every edge. `OCEL_E2E_CONCERN` narrows a run to the concerns it
+names, space or comma separated, and unset covers every one but `iac`; `OCEL_E2E_FIXTURES`
+narrows it further to fixtures named `<concern>/<name>`. `OCEL_E2E_VARIANTS` narrows a
+run to the variants it names (`default` among them), `OCEL_E2E_COVERAGE=every-cell` runs
+every cell rather than a sampled subset, and `OCEL_E2E_SKIPS=run` drives the cells the gap
 list marks dead at deploy, which a run otherwise leaves out.
 
-`pnpm --filter @ocel-tests/journeys plan --lane <lane>` prints what a lane would run under
+`pnpm --filter @ocel-tests/e2e plan --lane <lane>` prints what a lane would run under
 the same variables — its cells, each cell's steps, the tests a gap expects red and the cells
 it skips — without deploying anything. A lane is a target and where it runs: `aws`,
 `aws.floci`, `gcp`, `gcp.floci`, `vps`, `vps.incus` or `dev`.
@@ -76,13 +76,13 @@ images is the daemon that runs them:
 
 ```
 node scripts/snapshot.mjs
-scripts/floci.sh --cloud gcp create ocel-journeys
+scripts/floci.sh --cloud gcp create ocel-e2e
 export OCEL_FLOCI_GCP_ENDPOINT=http://127.0.0.1:<the port it printed>
-pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture node --target gcp
-scripts/floci.sh --cloud gcp destroy ocel-journeys
+pnpm --filter @ocel-tests/e2e cell --concern deploy --fixture node --target gcp
+scripts/floci.sh --cloud gcp destroy ocel-e2e
 ```
 
-`pnpm --filter @ocel-tests/journeys journey:gcp` runs every gcp cell instead of one. The
+`pnpm --filter @ocel-tests/e2e e2e:gcp` runs every gcp cell instead of one. The
 project is `floci-local` and the region `europe-west1` under the emulator, and both are
 named by `OCEL_GCP_PROJECT` and `OCEL_GCP_REGION` against a real project. The apps are
 served on the url Cloud Run gives each service, not on a hostname, so the lane binds no
@@ -92,10 +92,10 @@ For `vps` that is a box the run can reach over SSH, and on a laptop that is an i
 
 ```
 node scripts/snapshot.mjs
-scripts/incus.sh create journey
-eval "$(scripts/incus.sh info journey)"
+scripts/incus.sh create e2e
+eval "$(scripts/incus.sh info e2e)"
 export OCEL_VPS_HOST=$OCEL_INCUS_ADDR OCEL_VPS_USER=$OCEL_INCUS_USER OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY
-pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture node --target vps
+pnpm --filter @ocel-tests/e2e cell --concern deploy --fixture node --target vps
 ```
 
 `scripts/ec2.sh` is the same box on a real EC2 instance, for when the deploy has to face a
@@ -103,23 +103,23 @@ public IP and a real network. It spends the AWS account you are authenticated ag
 destroy it when the run ends:
 
 ```
-scripts/ec2.sh create journey
-eval "$(scripts/ec2.sh info journey)"
+scripts/ec2.sh create e2e
+eval "$(scripts/ec2.sh info e2e)"
 export OCEL_VPS_HOST=$OCEL_EC2_ADDR OCEL_VPS_USER=$OCEL_EC2_USER OCEL_VPS_IDENTITY_FILE=$OCEL_EC2_KEY
-pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture node --target vps
-scripts/ec2.sh destroy journey
+pnpm --filter @ocel-tests/e2e cell --concern deploy --fixture node --target vps
+scripts/ec2.sh destroy e2e
 ```
 
 `scripts/gce.sh` takes the same commands and brings the box up on Compute Engine instead,
 in the project and zone (`OCEL_GCE_ZONE`, `europe-west1-b` when unset) gcloud is
 configured with, printing `OCEL_GCE_*` lines in place of `OCEL_EC2_*`.
 
-`pnpm --filter @ocel-tests/journeys sweep --target <target>` reclaims what a run that died
+`pnpm --filter @ocel-tests/e2e sweep --target <target>` reclaims what a run that died
 left behind, and only projects the harness named.
 
 `--shard <index>/<total>` is accepted and validated by `cell`; it selects nothing yet.
 
-A pull request and a full run — workflow dispatch, or the `journey:real` label — both run
+A pull request and a full run — workflow dispatch, or the `e2e:cloud` label — both run
 `deploy`, `lifecycle`, `sdk`, `kv`, `tasks` and `realtime`, `lifecycle` cells first. `iac` deploys real SST and Pulumi
 stacks, so only a workflow dispatch that names it runs it, and only with `skips=run`: the gap
 list skips every `iac` cell on `aws` and `aws.floci` (#856, #857). Either way it spreads each
@@ -127,11 +127,11 @@ edge of a fixture group over one member of that group, and runs every cell of a 
 directory the diff touches. To reproduce a pull request's pick on a laptop:
 
 ```
-OCEL_JOURNEY_SEED=<pull request number> OCEL_JOURNEY_TOUCHED=<concern/name,concern/name> \
-  pnpm --filter @ocel-tests/journeys journey
+OCEL_E2E_SEED=<pull request number> OCEL_E2E_TOUCHED=<concern/name,concern/name> \
+  pnpm --filter @ocel-tests/e2e e2e
 ```
 
-Real clouds are reached by workflow dispatch, or by putting the `journey:real` label on a
+Real clouds are reached by workflow dispatch, or by putting the `e2e:cloud` label on a
 pull request — one shot, the label comes off again as the run starts. From here only
 `scripts/ec2.sh` spends a real account.
 
@@ -141,7 +141,7 @@ against the floci-gcp emulator on a pull request that touches it, and nowhere re
 The `Nightly` workflow drives the `vps` lane against a box it brings up with
 `scripts/gce.sh`, every night and on dispatch, and releases the commit a pass drove.
 
-Every known gap is one entry in `journeys/src/matrix/gaps.ts`: a slug, a reason,
+Every known gap is one entry in `e2e/src/matrix/gaps.ts`: a slug, a reason,
 the issue that owns it when one does, and the lanes, variants, fixtures and tests it
 affects. A test can sit under several gaps and a gap under many tests; the run resolves the
 list for its own lane. A gap is un-listed in the pull request that fixes it. The
@@ -149,7 +149,7 @@ account is exact in both directions: a listed test that passes fails the run, an
 test that fails fails the run, and a skipped, `todo` or `only` test fails the run whatever
 the list says.
 
-Evidence and the run's account land under `journeys/output/`, which is untracked and
+Evidence and the run's account land under `e2e/output/`, which is untracked and
 uploaded as a workflow artifact.
 
 ## Running next-compat locally
@@ -179,8 +179,8 @@ Each real lane needs a human to prepare an account once.
 
 The `aws` lane assumes a role over GitHub OIDC — no access key is stored — and hard-fails
 if the session or the Cloudflare token resolves to an account other than the one named. The
-role's `MaxSessionDuration` must be at least 14400 seconds, the duration the journey job
-mints, or the assume fails outright.
+role's `MaxSessionDuration` must be at least 14400 seconds, the duration the real `aws`
+job mints, or the assume fails outright.
 
 | name                                 | kind   | what it contains                                            |
 | ------------------------------------ | ------ | ----------------------------------------------------------- |
@@ -210,7 +210,7 @@ OCEL_NAMESPACE=ocel-live OCEL_GCP_LIVE_PROJECT=<project> \
 | ----------------------- | ---- | -------------------------------------------------------------------- |
 | `OCEL_GCP_LIVE_PROJECT` | env  | the real project a `TestLive` and `TestProject` run bootstraps into and tears down |
 | `OCEL_GCP_LIVE_REGION`  | env  | the region that run uses; `europe-west1` when unset                  |
-| `OCEL_GCP_PROJECT`      | env  | the project the `gcp` journey target deploys into; the emulator's `floci-local` when unset |
+| `OCEL_GCP_PROJECT`      | env  | the project the `gcp` e2e target deploys into; the emulator's `floci-local` when unset |
 | `OCEL_GCP_REGION`       | env  | the region it deploys into; `europe-west1` when unset                |
 | `OCEL_NAMESPACE`        | env  | the namespace every name the run derives includes; `ocel` when unset |
 
@@ -225,9 +225,9 @@ are willing to lose. Unset, and with no emulator answering, every `TestLive` fai
 
 The `vps` lane points at an incus VM on a pull request, and on a real run brings up a
 throwaway EC2 box with `scripts/ec2.sh` under the same role and account guard as the `aws`
-lane, so it needs no secrets of its own. The `Nightly` workflow's `vps journey` job brings
+lane, so it needs no secrets of its own. The `Nightly` workflow's `vps e2e` job brings
 its box up on Compute Engine with `scripts/gce.sh` instead, and drives every cell of every
-concern against it. Either job destroys its box when it ends, whether the journey passed or
+concern against it. Either job destroys its box when it ends, whether the run passed or
 not, and the `Sweep` workflow reclaims, every six hours, any EC2 or Compute Engine box older
 than three hours that a run which died left behind. A nightly pass releases the commit it
 drove as a nightly.

@@ -84,12 +84,12 @@ which are tooling.
 - **`scripts/`** — development and release tooling, and the emulator and ladder scripts.
 - **`www/`** — the docs site at ocel.dev, and what it serves alongside the docs: the
   generated JSON Schema under `public/schema/`.
-- **`tests/`** — the suites that drive the real binary — the journeys, the dev-server
+- **`tests/`** — the suites that drive the real binary — the e2e suite, the dev-server
   suite and the Next compatibility harness — and under `tests/fixtures/<concern>/` the
   apps they drive. A fixture directory exercises one concern and nothing else. Under
   `tests/fronts/<name>/`, a proxy a vps box runs in front of ocel: the steps that set
   it up before bootstrap, check it after, and take it down, and the `proxy` option its
-  projects set. Both the live suite and a journey lane drive them.
+  projects set. Both the live suite and the e2e harness drive them.
 - **`docs/agents/`** — configuration the agent skills read. Not product documentation;
   nothing that explains the code belongs here.
 - **`.github/`** — CI. **`.changes/`** — the release mechanism; the workflow runs the

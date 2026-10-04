@@ -28,8 +28,8 @@ import { gaps } from "./gaps";
 import { type Concern, LANES, type Lane, type TargetName, targetOfLane } from "./types";
 
 const REGISTRY_CREDENTIALS = {
-  OCEL_JOURNEY_REGISTRY_USER: "octocat",
-  OCEL_JOURNEY_REGISTRY_TOKEN: "ghs_t0ken",
+  OCEL_E2E_REGISTRY_USER: "octocat",
+  OCEL_E2E_REGISTRY_TOKEN: "ghs_t0ken",
 };
 
 function planOn(lane: Lane, env: NodeJS.ProcessEnv = {}, filter: RunFilter = NO_FILTER) {
@@ -66,21 +66,19 @@ describe("the iac concern", () => {
   it("plans no iac cell for a run that leaves the concern unnamed", () => {
     for (const lane of IAC_LANES) {
       expect(concernIn("iac", planOn(lane, {}, { ...NO_FILTER, runSkipped: true }))).toEqual([]);
-      expect(concernIn("iac", planOn(lane, {}, filterFrom({ OCEL_JOURNEY_SKIPS: "run" })))).toEqual(
-        [],
-      );
+      expect(concernIn("iac", planOn(lane, {}, filterFrom({ OCEL_E2E_SKIPS: "run" })))).toEqual([]);
     }
   });
 
   it("plans no iac cell for a pull request whose diff touches the iac fixtures", () => {
     const touched = {
-      OCEL_JOURNEY_SEED: "42",
-      OCEL_JOURNEY_TOUCHED: "iac/with-sst,iac/with-pulumi",
+      OCEL_E2E_SEED: "42",
+      OCEL_E2E_TOUCHED: "iac/with-sst,iac/with-pulumi",
     };
     for (const lane of IAC_LANES) {
       expect(concernIn("iac", planOn(lane, {}, filterFrom(touched)))).toEqual([]);
       expect(
-        concernIn("iac", planOn(lane, {}, filterFrom({ ...touched, OCEL_JOURNEY_SKIPS: "run" }))),
+        concernIn("iac", planOn(lane, {}, filterFrom({ ...touched, OCEL_E2E_SKIPS: "run" }))),
       ).toEqual([]);
     }
   });
@@ -90,7 +88,7 @@ describe("the iac concern", () => {
       const planned = planOn(
         lane,
         {},
-        filterFrom({ OCEL_JOURNEY_CONCERN: "iac", OCEL_JOURNEY_SKIPS: "run" }),
+        filterFrom({ OCEL_E2E_CONCERN: "iac", OCEL_E2E_SKIPS: "run" }),
       );
       expect(planned.cells.map((cell) => cell.fixture)).toContain("iac/with-sst");
       expect(planned.cells.map((cell) => cell.fixture)).toContain("iac/with-pulumi");
@@ -100,8 +98,8 @@ describe("the iac concern", () => {
   it("refuses an iac fixture named under a run that does not name iac", () => {
     for (const concern of [undefined, "sdk", "deploy lifecycle sdk"]) {
       const filter = filterFrom({
-        OCEL_JOURNEY_CONCERN: concern,
-        OCEL_JOURNEY_FIXTURES: "iac/with-sst",
+        OCEL_E2E_CONCERN: concern,
+        OCEL_E2E_FIXTURES: "iac/with-sst",
       });
       expect(() => planOn("aws", {}, filter)).toThrow(/no fixture named iac\/with-sst/);
     }
@@ -110,7 +108,7 @@ describe("the iac concern", () => {
 
 describe("a pull request's run", () => {
   it("draws sdk cells when it names no concern", () => {
-    const drawn = filterFrom({ OCEL_JOURNEY_SEED: "42", OCEL_JOURNEY_TOUCHED: "" });
+    const drawn = filterFrom({ OCEL_E2E_SEED: "42", OCEL_E2E_TOUCHED: "" });
     for (const lane of ["aws.floci", "dev", "vps.incus"] as const) {
       expect(concernIn("sdk", planOn(lane, {}, drawn))).not.toEqual([]);
     }
@@ -125,7 +123,7 @@ describe("the Next cache a cell is held to", () => {
   const DATA_CACHE_TITLES = nextOriginDataCacheChecks.map((one) => one.title);
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
   const ZONED = {
-    OCEL_JOURNEY_ZONE: "journeys.example.com",
+    OCEL_E2E_ZONE: "journeys.example.com",
     CLOUDFLARE_API_TOKEN: "token",
     CLOUDFLARE_ACCOUNT_ID: "account",
   };
@@ -135,7 +133,7 @@ describe("the Next cache a cell is held to", () => {
     titles.filter((title) => of.some((cache) => title.endsWith(cache)));
 
   it("holds a Next app on a box with no edge to the Next server's own cache, green but for the data cache, whatever zone the run names", () => {
-    const zones = [{}, { OCEL_JOURNEY_ZONE: "journeys.example.com" }];
+    const zones = [{}, { OCEL_E2E_ZONE: "journeys.example.com" }];
     for (const lane of ["vps", "vps.incus"] as const) {
       for (const env of zones) {
         const planned = planOn(lane, env, EVERY_CELL);
@@ -208,8 +206,8 @@ describe("the registry variant", () => {
   });
 
   it("is skipped on either box when the run lacks the user or the token it pushes with", () => {
-    const { OCEL_JOURNEY_REGISTRY_USER: _user, ...tokenOnly } = REGISTRY_CREDENTIALS;
-    const { OCEL_JOURNEY_REGISTRY_TOKEN: _token, ...userOnly } = REGISTRY_CREDENTIALS;
+    const { OCEL_E2E_REGISTRY_USER: _user, ...tokenOnly } = REGISTRY_CREDENTIALS;
+    const { OCEL_E2E_REGISTRY_TOKEN: _token, ...userOnly } = REGISTRY_CREDENTIALS;
     for (const lane of ["vps", "vps.incus"] as const) {
       for (const env of [{}, tokenOnly, userOnly]) {
         const planned = planOn(lane, env);

@@ -18,7 +18,7 @@ on:
       - "platform/**"
       - "tests/fixtures/**"
       - "tests/fronts/**"
-      - "tests/journeys/**"
+      - "tests/e2e/**"
       - "tests/shared/**"
       - "scripts/**"
       - ".goreleaser.yaml"
@@ -66,7 +66,7 @@ permissions:
 
 concurrency:
   group: ${{ (github.event.action == 'labeled' || github.event.action == 'unlabeled') && format('journey-{0}-{1}', github.event.label.name, github.event.pull_request.number) || format('journey-{0}', github.event.pull_request.number || github.run_id) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' && !(github.event.action == 'labeled' && github.event.label.name == 'journey:real') }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' && !(github.event.action == 'labeled' && github.event.label.name == 'e2e:cloud') }}
 
 env:
   OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.1.0-ocel.1
@@ -76,7 +76,7 @@ env:
 jobs:
   binary:
     name: binaries
-    if: ${{ github.event.action != 'closed' && ((github.event.action != 'labeled' && github.event.action != 'unlabeled') || (github.event.action == 'labeled' && github.event.label.name == 'journey:real') || github.event.label.name == 'dogfood:release') }}
+    if: ${{ github.event.action != 'closed' && ((github.event.action != 'labeled' && github.event.action != 'unlabeled') || (github.event.action == 'labeled' && github.event.label.name == 'e2e:cloud') || github.event.label.name == 'dogfood:release') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -105,12 +105,12 @@ jobs:
       next_key: ${{ steps.gate-next.outputs.key }}
     steps:
       - name: Spend the label that asked for this run
-        if: ${{ github.event.action == 'labeled' && github.event.label.name == 'journey:real' }}
+        if: ${{ github.event.action == 'labeled' && github.event.label.name == 'e2e:cloud' }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
-        run: gh pr edit "$PR" --remove-label journey:real
+        run: gh pr edit "$PR" --remove-label e2e:cloud
 
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -144,7 +144,7 @@ jobs:
             echo false
           }
 
-          forced=${OCEL_JOURNEY_LANES:-}
+          forced=${OCEL_E2E_LANES:-}
           real=false
           next=false
           preview=false
@@ -152,7 +152,7 @@ jobs:
           touched=
           if [ "$EVENT" = workflow_dispatch ]; then
             real=true
-          elif [ "$ACTION" = labeled ] && [ "$LABEL" = journey:real ]; then
+          elif [ "$ACTION" = labeled ] && [ "$LABEL" = e2e:cloud ]; then
             real=true
             TARGETS="aws vps"
             CONCERN=
@@ -186,7 +186,7 @@ jobs:
             files=$(git diff --name-only "$BASE" "$HEAD")
             echo "$files"
             hit() { grep -Eq "$1" <<<"$files" && echo true || echo false; }
-            shared='^(cli|packages|frameworks|pkg|sdk|proto|tests/fixtures|tests/journeys|tests/shared)/'
+            shared='^(cli|packages|frameworks|pkg|sdk|proto|tests/fixtures|tests/e2e|tests/shared)/'
             shared="$shared"'|^\.github/(actions/|workflows/journey\.yml$)'
             shared="$shared"'|^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$'
             seed=$PR
@@ -239,13 +239,13 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
           {
-            echo "OCEL_JOURNEY_CONCERN=$concern"
-            echo "OCEL_JOURNEY_FIXTURES=$(echo "${FIXTURES:-}" | tr ' ' ',')"
-            echo "OCEL_JOURNEY_SEED=$seed"
-            echo "OCEL_JOURNEY_TOUCHED=$touched"
-            echo "OCEL_JOURNEY_COVERAGE=$coverage"
-            echo "OCEL_JOURNEY_VARIANTS=${VARIANTS:-}"
-            echo "OCEL_JOURNEY_SKIPS=${SKIPS:-skip}"
+            echo "OCEL_E2E_CONCERN=$concern"
+            echo "OCEL_E2E_FIXTURES=$(echo "${FIXTURES:-}" | tr ' ' ',')"
+            echo "OCEL_E2E_SEED=$seed"
+            echo "OCEL_E2E_TOUCHED=$touched"
+            echo "OCEL_E2E_COVERAGE=$coverage"
+            echo "OCEL_E2E_VARIANTS=${VARIANTS:-}"
+            echo "OCEL_E2E_SKIPS=${SKIPS:-skip}"
           } >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/node-workspace
@@ -259,7 +259,7 @@ jobs:
         uses: ./.github/actions/suite-gate
         with:
           suite: journey-aws
-          task: "@ocel-tests/journeys#journey:aws"
+          task: "@ocel-tests/e2e#e2e:aws"
 
       - name: Has gcp already passed what it reads
         id: gate-gcp
@@ -267,7 +267,7 @@ jobs:
         uses: ./.github/actions/suite-gate
         with:
           suite: journey-gcp
-          task: "@ocel-tests/journeys#journey:gcp"
+          task: "@ocel-tests/e2e#e2e:gcp"
 
       - name: Has vps already passed what it reads
         id: gate-vps
@@ -275,7 +275,7 @@ jobs:
         uses: ./.github/actions/suite-gate
         with:
           suite: journey-vps
-          task: "@ocel-tests/journeys#journey:vps"
+          task: "@ocel-tests/e2e#e2e:vps"
 
       - name: Has vps behind each front already passed what it reads
         id: gate-front
@@ -283,15 +283,15 @@ jobs:
         uses: ./.github/actions/suite-gate
         with:
           suite: journey-vps-front
-          task: "@ocel-tests/journeys#journey:vps-front"
+          task: "@ocel-tests/e2e#e2e:vps-front"
         env:
-          OCEL_JOURNEY_CONCERN: deploy lifecycle
-          OCEL_JOURNEY_FIXTURES: deploy/node,lifecycle/next
-          OCEL_JOURNEY_VARIANTS: default
-          OCEL_JOURNEY_COVERAGE: every-cell
-          OCEL_JOURNEY_SKIPS: skip
-          OCEL_JOURNEY_SEED: ""
-          OCEL_JOURNEY_TOUCHED: ""
+          OCEL_E2E_CONCERN: deploy lifecycle
+          OCEL_E2E_FIXTURES: deploy/node,lifecycle/next
+          OCEL_E2E_VARIANTS: default
+          OCEL_E2E_COVERAGE: every-cell
+          OCEL_E2E_SKIPS: skip
+          OCEL_E2E_SEED: ""
+          OCEL_E2E_TOUCHED: ""
 
       - name: Has vps over an adopted docker already passed what it reads
         id: gate-engine
@@ -299,16 +299,16 @@ jobs:
         uses: ./.github/actions/suite-gate
         with:
           suite: journey-vps-engine
-          task: "@ocel-tests/journeys#journey:vps-engine"
+          task: "@ocel-tests/e2e#e2e:vps-engine"
         env:
           OCEL_VPS_DOCKER: "28.0"
-          OCEL_JOURNEY_CONCERN: deploy
-          OCEL_JOURNEY_FIXTURES: deploy/node
-          OCEL_JOURNEY_VARIANTS: default
-          OCEL_JOURNEY_COVERAGE: every-cell
-          OCEL_JOURNEY_SKIPS: skip
-          OCEL_JOURNEY_SEED: ""
-          OCEL_JOURNEY_TOUCHED: ""
+          OCEL_E2E_CONCERN: deploy
+          OCEL_E2E_FIXTURES: deploy/node
+          OCEL_E2E_VARIANTS: default
+          OCEL_E2E_COVERAGE: every-cell
+          OCEL_E2E_SKIPS: skip
+          OCEL_E2E_SEED: ""
+          OCEL_E2E_TOUCHED: ""
 
       - name: Has dev already passed what it reads
         id: gate-dev
@@ -316,7 +316,7 @@ jobs:
         uses: ./.github/actions/suite-gate
         with:
           suite: journey-dev
-          task: "@ocel-tests/journeys#journey:dev"
+          task: "@ocel-tests/e2e#e2e:dev"
 
       - name: Has next already passed what it reads
         id: gate-next
@@ -324,16 +324,16 @@ jobs:
         uses: ./.github/actions/suite-gate
         with:
           suite: journey-next
-          task: "@ocel-tests/journeys#journey:next"
+          task: "@ocel-tests/e2e#e2e:next"
         env:
-          OCEL_JOURNEY_CONCERN: deploy
-          OCEL_JOURNEY_FIXTURES: deploy/next
-          OCEL_JOURNEY_VARIANTS: cloudflare
-          OCEL_JOURNEY_COVERAGE: every-cell
-          OCEL_JOURNEY_SKIPS: skip
-          OCEL_JOURNEY_KEEP: "1"
-          OCEL_JOURNEY_SEED: ""
-          OCEL_JOURNEY_TOUCHED: ""
+          OCEL_E2E_CONCERN: deploy
+          OCEL_E2E_FIXTURES: deploy/next
+          OCEL_E2E_VARIANTS: cloudflare
+          OCEL_E2E_COVERAGE: every-cell
+          OCEL_E2E_SKIPS: skip
+          OCEL_E2E_KEEP: "1"
+          OCEL_E2E_SEED: ""
+          OCEL_E2E_TOUCHED: ""
 
       - name: Keep the lanes with something left to prove
         id: gate
@@ -418,17 +418,17 @@ jobs:
       cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
       OCEL_TARGET: aws
-      OCEL_JOURNEY_CONCERN: ${{ needs.binary.outputs.concern }}
-      OCEL_JOURNEY_FIXTURES: ${{ needs.binary.outputs.fixtures }}
-      OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
-      OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
+      OCEL_E2E_CONCERN: ${{ needs.binary.outputs.concern }}
+      OCEL_E2E_FIXTURES: ${{ needs.binary.outputs.fixtures }}
+      OCEL_E2E_SEED: ${{ needs.binary.outputs.seed }}
+      OCEL_E2E_TOUCHED: ${{ needs.binary.outputs.touched }}
       CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
       OCEL_AWS_VARIABLES_KEY: ${{ needs.binary.outputs.real == 'true' && vars.DOGFOOD_AWS_VARS_KEY || '' }}
       REAL: ${{ needs.binary.outputs.real }}
-      OCEL_JOURNEY_COVERAGE: ${{ needs.binary.outputs.coverage }}
-      OCEL_JOURNEY_VARIANTS: ${{ needs.binary.outputs.variants }}
-      OCEL_JOURNEY_SKIPS: ${{ needs.binary.outputs.skips }}
+      OCEL_E2E_COVERAGE: ${{ needs.binary.outputs.coverage }}
+      OCEL_E2E_VARIANTS: ${{ needs.binary.outputs.variants }}
+      OCEL_E2E_SKIPS: ${{ needs.binary.outputs.skips }}
       EMULATOR: ocel-journey-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
@@ -490,23 +490,23 @@ jobs:
           ZONE=${ZONE#\*.}
           {
             echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
-            echo "OCEL_JOURNEY_ZONE=$ZONE"
+            echo "OCEL_E2E_ZONE=$ZONE"
             echo "AWS_REGION=$REGION"
           } >> "$GITHUB_ENV"
 
       - name: Reclaim what an earlier attempt of this run left behind
         if: ${{ needs.binary.outputs.real == 'true' }}
-        run: pnpm --filter @ocel-tests/journeys sweep --target aws --own
+        run: pnpm --filter @ocel-tests/e2e sweep --target aws --own
 
       - name: Run the journey
         if: ${{ needs.binary.outputs.aws == 'true' }}
         run: |
           set -uo pipefail
           if [ "$REAL" = true ]; then
-            exec pnpm --filter @ocel-tests/journeys journey
+            exec pnpm --filter @ocel-tests/e2e e2e
           fi
           scripts/floci.sh run "$EMULATOR" -- \
-            bash -c 'AWS_ENDPOINT_URL=${OCEL_FLOCI_ENDPOINT/127.0.0.1/localhost.localstack.cloud} pnpm --filter @ocel-tests/journeys journey'
+            bash -c 'AWS_ENDPOINT_URL=${OCEL_FLOCI_ENDPOINT/127.0.0.1/localhost.localstack.cloud} pnpm --filter @ocel-tests/e2e e2e'
 
       - name: Record that what aws reads has passed
         if: ${{ needs.binary.outputs.aws == 'true' && needs.binary.outputs.real != 'true' }}
@@ -523,12 +523,12 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          mkdir -p tests/journeys/output
+          mkdir -p tests/e2e/output
           tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
             --exclude='*/node_modules' \
             --exclude='*/node_modules/*' \
             --exclude='*/trees/*/packages' \
-            -C tests/journeys output
+            -C tests/e2e output
 
       - name: Upload the evidence
         if: always()
@@ -549,13 +549,13 @@ jobs:
       cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
       OCEL_TARGET: dev
-      OCEL_JOURNEY_CONCERN: ${{ needs.binary.outputs.concern }}
-      OCEL_JOURNEY_FIXTURES: ${{ needs.binary.outputs.fixtures }}
-      OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
-      OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
-      OCEL_JOURNEY_COVERAGE: ${{ needs.binary.outputs.coverage }}
-      OCEL_JOURNEY_VARIANTS: ${{ needs.binary.outputs.variants }}
-      OCEL_JOURNEY_SKIPS: ${{ needs.binary.outputs.skips }}
+      OCEL_E2E_CONCERN: ${{ needs.binary.outputs.concern }}
+      OCEL_E2E_FIXTURES: ${{ needs.binary.outputs.fixtures }}
+      OCEL_E2E_SEED: ${{ needs.binary.outputs.seed }}
+      OCEL_E2E_TOUCHED: ${{ needs.binary.outputs.touched }}
+      OCEL_E2E_COVERAGE: ${{ needs.binary.outputs.coverage }}
+      OCEL_E2E_VARIANTS: ${{ needs.binary.outputs.variants }}
+      OCEL_E2E_SKIPS: ${{ needs.binary.outputs.skips }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -578,7 +578,7 @@ jobs:
         uses: ./.github/actions/journey-binaries
 
       - name: Run the dev journey
-        run: pnpm --filter @ocel-tests/journeys journey
+        run: pnpm --filter @ocel-tests/e2e e2e
 
       - name: Record that what dev reads has passed
         if: ${{ needs.binary.outputs.real != 'true' }}
@@ -597,12 +597,12 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          mkdir -p tests/journeys/output
+          mkdir -p tests/e2e/output
           tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
             --exclude='*/node_modules' \
             --exclude='*/node_modules/*' \
             --exclude='*/trees/*/packages' \
-            -C tests/journeys output
+            -C tests/e2e output
 
       - name: Upload the evidence
         if: always()
@@ -623,13 +623,13 @@ jobs:
       cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
       OCEL_TARGET: gcp
-      OCEL_JOURNEY_CONCERN: ${{ needs.binary.outputs.concern }}
-      OCEL_JOURNEY_FIXTURES: ${{ needs.binary.outputs.fixtures }}
-      OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
-      OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
-      OCEL_JOURNEY_COVERAGE: ${{ needs.binary.outputs.coverage }}
-      OCEL_JOURNEY_VARIANTS: ${{ needs.binary.outputs.variants }}
-      OCEL_JOURNEY_SKIPS: ${{ needs.binary.outputs.skips }}
+      OCEL_E2E_CONCERN: ${{ needs.binary.outputs.concern }}
+      OCEL_E2E_FIXTURES: ${{ needs.binary.outputs.fixtures }}
+      OCEL_E2E_SEED: ${{ needs.binary.outputs.seed }}
+      OCEL_E2E_TOUCHED: ${{ needs.binary.outputs.touched }}
+      OCEL_E2E_COVERAGE: ${{ needs.binary.outputs.coverage }}
+      OCEL_E2E_VARIANTS: ${{ needs.binary.outputs.variants }}
+      OCEL_E2E_SKIPS: ${{ needs.binary.outputs.skips }}
       EMULATOR: ocel-journey-gcp-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
@@ -662,7 +662,7 @@ jobs:
         run: docker pull "$OCEL_FLOCI_GCP_IMAGE"
 
       - name: Run the journey
-        run: scripts/floci.sh --cloud gcp run "$EMULATOR" -- pnpm --filter @ocel-tests/journeys journey
+        run: scripts/floci.sh --cloud gcp run "$EMULATOR" -- pnpm --filter @ocel-tests/e2e e2e
 
       - name: Record that what gcp reads has passed
         uses: ./.github/actions/suite-passed
@@ -678,12 +678,12 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          mkdir -p tests/journeys/output
+          mkdir -p tests/e2e/output
           tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
             --exclude='*/node_modules' \
             --exclude='*/node_modules/*' \
             --exclude='*/trees/*/packages' \
-            -C tests/journeys output
+            -C tests/e2e output
 
       - name: Upload the evidence
         if: always()
@@ -704,12 +704,12 @@ jobs:
       cancel-in-progress: true
     env:
       OCEL_TARGET: aws
-      OCEL_JOURNEY_CONCERN: deploy
-      OCEL_JOURNEY_FIXTURES: deploy/next
-      OCEL_JOURNEY_VARIANTS: cloudflare
-      OCEL_JOURNEY_COVERAGE: every-cell
-      OCEL_JOURNEY_SKIPS: skip
-      OCEL_JOURNEY_KEEP: "1"
+      OCEL_E2E_CONCERN: deploy
+      OCEL_E2E_FIXTURES: deploy/next
+      OCEL_E2E_VARIANTS: cloudflare
+      OCEL_E2E_COVERAGE: every-cell
+      OCEL_E2E_SKIPS: skip
+      OCEL_E2E_KEEP: "1"
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
       OCEL_AWS_VARIABLES_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
@@ -756,15 +756,15 @@ jobs:
           ZONE=${ZONE#\*.}
           {
             echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
-            echo "OCEL_JOURNEY_ZONE=$ZONE"
+            echo "OCEL_E2E_ZONE=$ZONE"
             echo "AWS_REGION=$REGION"
           } >> "$GITHUB_ENV"
 
       - name: Reclaim what an earlier attempt of this run left behind
-        run: pnpm --filter @ocel-tests/journeys sweep --target aws --own
+        run: pnpm --filter @ocel-tests/e2e sweep --target aws --own
 
       - name: Run the journey
-        run: pnpm --filter @ocel-tests/journeys journey
+        run: pnpm --filter @ocel-tests/e2e e2e
 
       - name: Record that what next reads has passed
         uses: ./.github/actions/suite-passed
@@ -776,12 +776,12 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          mkdir -p tests/journeys/output
+          mkdir -p tests/e2e/output
           tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
             --exclude='*/node_modules' \
             --exclude='*/node_modules/*' \
             --exclude='*/trees/*/packages' \
-            -C tests/journeys output
+            -C tests/e2e output
 
       - name: Upload the evidence
         if: always()
@@ -808,13 +808,13 @@ jobs:
       REGISTRY_PUSHES: ${{ needs.binary.outputs.real == 'true' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) }}
       OCEL_TARGET: vps
       OCEL_VPS_OFFICIAL_IMAGES_MIRROR: ${{ needs.binary.outputs.real != 'true' && 'mirror.gcr.io/library' || '' }}
-      OCEL_JOURNEY_CONCERN: ${{ needs.binary.outputs.concern }}
-      OCEL_JOURNEY_FIXTURES: ${{ needs.binary.outputs.fixtures }}
-      OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
-      OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
-      OCEL_JOURNEY_COVERAGE: ${{ needs.binary.outputs.coverage }}
-      OCEL_JOURNEY_VARIANTS: ${{ needs.binary.outputs.variants }}
-      OCEL_JOURNEY_SKIPS: ${{ needs.binary.outputs.skips }}
+      OCEL_E2E_CONCERN: ${{ needs.binary.outputs.concern }}
+      OCEL_E2E_FIXTURES: ${{ needs.binary.outputs.fixtures }}
+      OCEL_E2E_SEED: ${{ needs.binary.outputs.seed }}
+      OCEL_E2E_TOUCHED: ${{ needs.binary.outputs.touched }}
+      OCEL_E2E_COVERAGE: ${{ needs.binary.outputs.coverage }}
+      OCEL_E2E_VARIANTS: ${{ needs.binary.outputs.variants }}
+      OCEL_E2E_SKIPS: ${{ needs.binary.outputs.skips }}
       CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
       VM: ocel-journey-${{ github.run_id }}-${{ github.run_attempt }}
@@ -845,19 +845,19 @@ jobs:
         if: ${{ env.REGISTRY_PUSHES == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: pnpm --filter @ocel-tests/journeys sweep:registry --target vps
+        run: pnpm --filter @ocel-tests/e2e sweep:registry --target vps
 
       - name: Run the journey
         env:
-          OCEL_JOURNEY_REGISTRY_USER: ${{ env.REGISTRY_PUSHES == 'true' && github.actor || '' }}
-          OCEL_JOURNEY_REGISTRY_TOKEN: ${{ env.REGISTRY_PUSHES == 'true' && secrets.GITHUB_TOKEN || '' }}
-        run: pnpm --filter @ocel-tests/journeys journey
+          OCEL_E2E_REGISTRY_USER: ${{ env.REGISTRY_PUSHES == 'true' && github.actor || '' }}
+          OCEL_E2E_REGISTRY_TOKEN: ${{ env.REGISTRY_PUSHES == 'true' && secrets.GITHUB_TOKEN || '' }}
+        run: pnpm --filter @ocel-tests/e2e e2e
 
       - name: No journey image left in the registry
         if: ${{ always() && steps.registry.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: pnpm --filter @ocel-tests/journeys sweep:registry --target vps --own
+        run: pnpm --filter @ocel-tests/e2e sweep:registry --target vps --own
 
       - name: Record that what vps reads has passed
         if: ${{ needs.binary.outputs.real != 'true' }}
@@ -902,12 +902,12 @@ jobs:
       OCEL_TARGET: vps
       OCEL_VPS_OFFICIAL_IMAGES_MIRROR: ${{ needs.binary.outputs.real != 'true' && 'mirror.gcr.io/library' || '' }}
       OCEL_VPS_FRONT: ${{ matrix.front }}
-      OCEL_JOURNEY_CONCERN: deploy lifecycle
-      OCEL_JOURNEY_FIXTURES: deploy/node,lifecycle/next
-      OCEL_JOURNEY_VARIANTS: default
-      OCEL_JOURNEY_COVERAGE: every-cell
-      OCEL_JOURNEY_SKIPS: skip
-      OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
+      OCEL_E2E_CONCERN: deploy lifecycle
+      OCEL_E2E_FIXTURES: deploy/node,lifecycle/next
+      OCEL_E2E_VARIANTS: default
+      OCEL_E2E_COVERAGE: every-cell
+      OCEL_E2E_SKIPS: skip
+      OCEL_E2E_SEED: ${{ needs.binary.outputs.seed }}
       CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
       VM: ocel-journey-${{ matrix.front }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -933,7 +933,7 @@ jobs:
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Run the journey behind ${{ matrix.front }}
-        run: pnpm --filter @ocel-tests/journeys journey
+        run: pnpm --filter @ocel-tests/e2e e2e
 
       - name: Nothing left behind, and the evidence kept
         if: always()
@@ -960,12 +960,12 @@ jobs:
       OCEL_TARGET: vps
       OCEL_VPS_OFFICIAL_IMAGES_MIRROR: ${{ needs.binary.outputs.real != 'true' && 'mirror.gcr.io/library' || '' }}
       OCEL_VPS_DOCKER: "28.0"
-      OCEL_JOURNEY_CONCERN: deploy
-      OCEL_JOURNEY_FIXTURES: deploy/node
-      OCEL_JOURNEY_VARIANTS: default
-      OCEL_JOURNEY_COVERAGE: every-cell
-      OCEL_JOURNEY_SKIPS: skip
-      OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
+      OCEL_E2E_CONCERN: deploy
+      OCEL_E2E_FIXTURES: deploy/node
+      OCEL_E2E_VARIANTS: default
+      OCEL_E2E_COVERAGE: every-cell
+      OCEL_E2E_SKIPS: skip
+      OCEL_E2E_SEED: ${{ needs.binary.outputs.seed }}
       CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
       VM: ocel-journey-engine-${{ github.run_id }}-${{ github.run_attempt }}
@@ -992,7 +992,7 @@ jobs:
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Run the journey over the docker bootstrap adopts
-        run: pnpm --filter @ocel-tests/journeys journey
+        run: pnpm --filter @ocel-tests/e2e e2e
 
       - name: Record that what vps over an adopted docker reads has passed
         if: ${{ needs.binary.outputs.real != 'true' }}
@@ -1285,7 +1285,7 @@ jobs:
           ZONE=${ZONE#\*.}
           {
             echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
-            echo "OCEL_JOURNEY_ZONE=$ZONE"
+            echo "OCEL_E2E_ZONE=$ZONE"
             echo "AWS_REGION=$REGION"
           } >> "$GITHUB_ENV"
 
@@ -1296,6 +1296,6 @@ jobs:
           set -uo pipefail
           status=0
           for id in $IDS; do
-            pnpm --filter @ocel-tests/journeys sweep --target aws --run "$id" || status=1
+            pnpm --filter @ocel-tests/e2e sweep --target aws --run "$id" || status=1
           done
           exit "$status"

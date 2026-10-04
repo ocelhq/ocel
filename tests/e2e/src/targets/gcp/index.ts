@@ -374,7 +374,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     const found = await this.services();
     const leads = leadsFor(cell.slug, cell.fixture.apps);
     const urls =
-      cloudflareUrls(cell, process.env.OCEL_JOURNEY_ZONE?.trim() || undefined) ??
+      cloudflareUrls(cell, process.env.OCEL_E2E_ZONE?.trim() || undefined) ??
       new Map(
         cell.fixture.apps.map((app, at) => {
           const lead = leads[at] ?? "";

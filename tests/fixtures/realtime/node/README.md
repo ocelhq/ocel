@@ -17,7 +17,7 @@ request says who it is and what it may reach, and a caller loses a channel by se
 signs `{ header, claims }` with the binding's key, another key or none, so the suite can
 replay the shared bad-token vectors against the live transport; it answers only a request
 whose `x-journey-nonce` header matches the secret `JOURNEY_NONCE` the app declares, and the
-journey sets a fresh one for each run.
+e2e harness sets a fresh one for each run.
 
 ## Run it
 
