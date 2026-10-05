@@ -45,11 +45,13 @@ func (p *Provider) askServingPortsOpened(ctx context.Context, tier environment.T
 		return nil
 	}
 	said := describeClosedPorts(address, closed)
+	rerun := provider.BootstrapCommand(tier)
 	return provider.Ask(
-		fmt.Sprintf("%s\nRun `%s` again once you have opened %s.", said, provider.BootstrapCommand(tier), namePorts(closed)),
+		fmt.Sprintf("%s\nRun `%s` again once you have opened %s.", said, rerun, namePorts(closed)),
 		provider.Question{
 			Finding: said,
 			Prompt:  fmt.Sprintf("Have you opened %s?", namePorts(closed)),
+			Remedy:  rerun,
 			Confirm: func(ctx context.Context) error { return p.askServingPortsOpened(ctx, tier) },
 		})
 }
