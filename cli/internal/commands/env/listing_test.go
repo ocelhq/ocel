@@ -283,7 +283,7 @@ func TestListingValuesAsJSONValidatesAgainstTheEnvListSchema(t *testing.T) {
 		t.Fatalf("runEnvList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	schema, err := outputschema.Result(new(resultv1.EnvListResult).ProtoReflect().Descriptor().FullName())
+	schema, err := outputschema.ComposeResult(new(resultv1.EnvListResult).ProtoReflect().Descriptor().FullName())
 	if err != nil {
 		t.Fatal(err)
 	}

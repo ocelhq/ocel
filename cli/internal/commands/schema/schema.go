@@ -115,9 +115,9 @@ func printSchema(cmd *cobra.Command, args []string) error {
 	switch findOutput(target) {
 	case resultv1.CommandOutput_COMMAND_OUTPUT_RESULT:
 		results, _ := commands.FindResults(target)
-		schema, err = outputschema.Result(results...)
+		schema, err = outputschema.ComposeResult(results...)
 	case resultv1.CommandOutput_COMMAND_OUTPUT_RUN_EVENTS:
-		schema, err = outputschema.RunEvent()
+		schema, err = outputschema.ReadRunEvent()
 	default:
 		return refuseUsage(cmd, fmt.Errorf("`ocel %s` has no schema: `ocel schema` lists the commands that do", formatPath(target)))
 	}
