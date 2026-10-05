@@ -118,8 +118,8 @@ func TestShapeDescribesAProductionDeployServedDirect(t *testing.T) {
 	golden(t, "shape_production_direct", set)
 
 	counts := typeCounts(set)
-	if counts["google_cloud_run_v2_service"] != 3 || counts["google_cloud_scheduler_job"] != 1 || counts["google_storage_bucket"] != 2 || counts["google_compute_global_forwarding_rule"] != 0 {
-		t.Errorf("counts = %v, want the two apps' services and the env source sync's with its schedule, the artifact and state buckets, and no load balancer", counts)
+	if counts["google_cloud_run_v2_service"] != 3 || counts["google_cloud_scheduler_job"] != 1 || counts["google_storage_bucket"] != 3 || counts["google_compute_global_forwarding_rule"] != 0 {
+		t.Errorf("counts = %v, want the two apps' services and the env source sync's with its schedule, the artifact and state buckets and the one uploads stores into, and no load balancer", counts)
 	}
 	for _, r := range set.GetResources() {
 		if r.GetVendor() != "gcp" || r.GetRegion() != "europe-west1" {
@@ -133,6 +133,30 @@ func TestShapeDescribesAProductionDeployServedDirect(t *testing.T) {
 		if (r.GetScope() == "project:shop/environment:prod/app:api") != (min == 1) {
 			t.Errorf("%s keeps %v instances warm; a container app keeps one and a serverless app none", r.GetName(), min)
 		}
+	}
+}
+
+func TestShapeOfADeclaredBucketIsOneStorageBucketInTheEnvironmentThatDeclaresIt(t *testing.T) {
+	client, _ := costServed(t)
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    shopManifest(),
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+	var declared []*costv1.Resource
+	for _, r := range set.GetResources() {
+		if r.GetType() == "google_storage_bucket" && r.GetScope() == "project:shop/environment:prod" {
+			declared = append(declared, r)
+		}
+	}
+	if len(declared) != 1 || !strings.HasPrefix(declared[0].GetName(), "ocel--shop-prod-uploads-") {
+		t.Fatalf("the environment shapes buckets %v, want the one bucket uploads stores into", declared)
+	}
+	if properties := declared[0].GetProperties().AsMap(); properties["location"] != "europe-west1" || properties["storage_class"] != "STANDARD" {
+		t.Errorf("the bucket is shaped as %v, want a standard bucket in the deploy's region", properties)
 	}
 }
 

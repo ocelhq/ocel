@@ -25,6 +25,13 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	var needs []featureNeed
 	for _, resource := range pre.Resources {
 		switch resource.Type {
+		case provider.BindingBucket:
+			if resource.Bucket != nil && resource.Bucket.Public {
+				return refusal.Refuse(refusal.CodeInvalid,
+					"bucket %s asks to be public, and this provider creates its buckets under public access prevention, which refuses any grant to allUsers: "+
+						"serve the objects through your app or a signed url instead, or drop `public` from %s",
+					resource.Name, resource.Name)
+			}
 		case provider.BindingKV:
 			if _, err := readKVStore(resource); err != nil {
 				return err

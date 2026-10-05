@@ -63,6 +63,7 @@ func (p *Provider) ensureAppAccount(ctx context.Context, c *clients, spec provid
 	if reachesTopics(spec.App) {
 		grants = append(grants, c.taskGrants(ctx, spec, member, declared)...)
 	}
+	grants = append(grants, c.bucketGrants(ctx, spec, member)...)
 	if refreshesByTask(spec.App.Framework, spec.App.Compute, factsOf(spec.Edge), p.servesBehindIAP(spec)) {
 		grants = append(grants, c.refreshGrants(ctx, tier, member)...)
 	}

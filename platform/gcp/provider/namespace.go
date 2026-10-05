@@ -209,6 +209,19 @@ func (n Names) KVInstance(project, env, store string) (string, error) {
 	return instance, nil
 }
 
+const (
+	appBucketHashLength = 8
+	namespaceEnd        = "--"
+)
+
+func (n Names) AppBucketPrefix() string { return string(n.namespace) + namespaceEnd }
+
+func (n Names) AppBucket(project, env, bucket string) string {
+	readable := n.AppBucketPrefix() + strings.Join([]string{naming.Sanitize(project), naming.Sanitize(env), naming.Sanitize(bucket)}, "-")
+	readable = strings.TrimRight(readable[:min(len(readable), maxBucketName-appBucketHashLength-1)], "-")
+	return readable + "-" + truncatedHash(appBucketHashLength, n.project, string(n.namespace), project, env, bucket)
+}
+
 func (n Names) Network(tier environment.Tier) string {
 	return string(n.namespace) + "-" + string(tier)
 }

@@ -246,6 +246,21 @@
           }
         }
       }
+    },
+    {
+      "id": "project:shop/environment:prod/google_storage_bucket:ocel--shop-prod-uploads-0dd909b8",
+      "scope": "project:shop/environment:prod",
+      "vendor": "gcp",
+      "type": "google_storage_bucket",
+      "name": "ocel--shop-prod-uploads-0dd909b8",
+      "region": "europe-west1",
+      "properties": {
+        "location": "europe-west1",
+        "storage_class": "STANDARD",
+        "versioning": {
+          "enabled": false
+        }
+      }
     }
   ]
 }

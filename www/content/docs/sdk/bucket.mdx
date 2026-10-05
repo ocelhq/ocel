@@ -378,6 +378,21 @@ bucket itself, under the prefix, and completed by checking what the store contai
   never sees it.
 </Callout>
 
+## On Google Cloud
+
+Each declared bucket is its own Cloud Storage bucket, named for the namespace, the project, the
+environment and the bucket, with CORS set from `allowedOrigins`. Only the service accounts of the apps that
+bind it may read and write its objects. An app's account is shared by its environments in a tier, so
+access is per app across the tier's environments: `web` in one preview can reach another preview's
+buckets of `web`, and no other app's. Signed urls and browser upload forms are signed by the
+app's own account through IAM, so no key exists to leak, and a signature lasts at most seven days. Upload sessions
+are kept in the bucket itself and completed by checking what it contains. An abandoned multipart
+upload is aborted after a day, and an upload session is deleted a day after it was last written.
+
+`public` is refused: buckets are created under public access prevention, so serve those objects
+through your app or a signed url. `ocel destroy`, or dropping a bucket from the code, deletes the
+bucket and every object in it.
+
 ## On AWS
 
 Each declared bucket is its own S3 bucket, with CORS set from `allowedOrigins` and browser uploads

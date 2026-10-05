@@ -168,6 +168,20 @@ func untaggingGrants(names Names, region string) []string {
 	return grants
 }
 
+const bucketsRole = "roles/storage.admin"
+
+var projectCreatePermissions = []string{"storage.buckets.create"}
+
+func appBucketsGrant(names Names) string {
+	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q)",
+		bucketsRole, "projects/_/buckets/"+names.AppBucketPrefix())
+}
+
+func projectCreatesGrant() string {
+	return "a custom role holding " + strings.Join(projectCreatePermissions, ", ") +
+		", unconditioned: Google checks each of them against the project, where no name condition can admit it"
+}
+
 func rolesFor(purpose edge.CredentialPurpose) []string {
 	if purpose != edge.PurposeBootstrap {
 		return deployRoles

@@ -266,11 +266,11 @@ func TestSealingAValueThatNamesNoTierIsTheCallersMistake(t *testing.T) {
 	}
 }
 
-func TestServesKVStoresTopicsTasksAndRealtimeAmongTheResourcePrimitives(t *testing.T) {
+func TestServesBucketsKVStoresTopicsTasksAndRealtimeAmongTheResourcePrimitives(t *testing.T) {
 	t.Parallel()
 
 	p := testProvider(t)
-	if got, want := p.Facts().Bindings, []provider.BindingType{provider.BindingKV, provider.BindingTopic, provider.BindingTask, provider.BindingRealtime}; !slices.Equal(got, want) {
+	if got, want := p.Facts().Bindings, []provider.BindingType{provider.BindingBucket, provider.BindingKV, provider.BindingTopic, provider.BindingTask, provider.BindingRealtime}; !slices.Equal(got, want) {
 		t.Errorf("Facts().Bindings = %v, want %v: the resource primitives this provider provisions", got, want)
 	}
 	want := []provider.Compute{provider.ComputeServerless, provider.ComputeContainer}
@@ -327,7 +327,6 @@ func TestTheRolesRenderedForADeployAreTheOnesADeployUses(t *testing.T) {
 	}
 	for role, why := range map[string]string{
 		"roles/run.developer": "roles/run.admin covers every permission it grants, so granting it says something the grant beside it did not",
-		"roles/storage.admin": "a deploy reads and writes objects in buckets the bootstrap already made, and never makes or deletes one",
 	} {
 		if strings.Contains(document.Document, role) {
 			t.Errorf("Permissions(deploy) names %s: %s", role, why)
@@ -441,6 +440,25 @@ func TestADeployMayUntagImagesInItsOwnRepositoriesAndNoOther(t *testing.T) {
 		if want := "roles/artifactregistry.repoAdmin, on the repository " + repository; !strings.Contains(document.Document, want) {
 			t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a prune untags the images no revision runs any more", document.Document, want)
 		}
+	}
+}
+
+func TestADeployAdministersTheBucketsOfItsNamespaceAndNoOtherBucket(t *testing.T) {
+	t.Parallel()
+
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	if err != nil {
+		t.Fatalf("Permissions(deploy) = %v", err)
+	}
+	const buckets = `roles/storage.admin, on the condition resource.name.startsWith("projects/_/buckets/ocel--")`
+	if !strings.Contains(document.Document, buckets) {
+		t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a deploy creates, grants and deletes the buckets an app declares, all named under its namespace, and no others", document.Document, buckets)
+	}
+	if strings.Contains(document.Document, "cloudresourcemanager.googleapis.com/Project") {
+		t.Errorf("Permissions(deploy) =\n%s\ngrants a role on the project itself, which hands a deploy every project-level permission that role holds", document.Document)
+	}
+	if !strings.Contains(document.Document, "a custom role holding storage.buckets.create") {
+		t.Errorf("Permissions(deploy) =\n%s\nwant a custom role holding storage.buckets.create: Cloud Storage checks creating a bucket against the project, where no bucket name condition can admit it", document.Document)
 	}
 }
 

@@ -11,6 +11,7 @@ const (
 	projectLabel     = "ocel-project"
 	environmentLabel = "ocel-environment"
 	kvLabel          = "ocel-kv"
+	bucketLabel      = "ocel-bucket"
 
 	maxLabelValue = 63
 )
@@ -26,4 +27,10 @@ func stackLabels(names Names, ref provider.StackRef) map[string]string {
 		projectLabel:     labelValue(ref.Project),
 		environmentLabel: labelValue(ref.Name.Env),
 	}
+}
+
+func labelsFor(names Names, ref provider.StackRef, kind, resource string) map[string]string {
+	labels := stackLabels(names, ref)
+	labels[kind] = labelValue(resource)
+	return labels
 }

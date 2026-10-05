@@ -23,6 +23,7 @@ type revokedGrants struct {
 	refresh bool
 	topics  []topics.Topology
 	signers []string
+	buckets []string
 }
 
 func findOtherRunningStack(recorded []stackrecords.NamedStack, ref provider.StackRef) (naming.StackName, bool) {
@@ -84,6 +85,9 @@ func revokeUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 	if revoked.topics, err = c.revokeTopicPublisher(ctx, recorded, ref, member); err != nil {
 		return err
 	}
+	if revoked.buckets, err = c.revokeBucketAccess(ctx, recorded, member); err != nil {
+		return err
+	}
 	recordedNow, err := stackrecords.List(ctx, records, ref.Tier, ref.Project)
 	if err != nil {
 		return err
@@ -134,6 +138,11 @@ func (c *clients) restoreGrants(ctx context.Context, ref provider.StackRef, memb
 	}
 	for _, topology := range revoked.topics {
 		if err := topology.GrantPublisher(ctx, c.Workload()); err != nil {
+			return err
+		}
+	}
+	for _, bucket := range revoked.buckets {
+		if _, err := c.bindBucketRole(ctx, bucket, member, true); err != nil {
 			return err
 		}
 	}

@@ -96,6 +96,25 @@ func TestEachBucketIsSentToTheBackendThatStoresIt(t *testing.T) {
 	}
 }
 
+func TestAGrantedSetSendsEachBucketAndSessionToTheServiceThatStoresItAndRefusesTheRest(t *testing.T) {
+	uploads := boundBackend(t, "u0", "shop-uploads")
+	avatars := boundBackend(t, "a0", "shop-avatars")
+	handler := NewGrantedDispatch(uploads, avatars)
+
+	session := presignIn(t, handler, "shop-avatars")
+	if !strings.HasPrefix(session, "sess_a0_") {
+		t.Errorf("session = %q, want it opened by the service that stores shop-avatars", session)
+	}
+	if _, err := handler.GetUploadStatus(context.Background(), &bucketv1.GetUploadStatusRequest{SessionId: session}); err != nil {
+		t.Errorf("GetUploadStatus(%s) = %v, want the session read where it was opened", session, err)
+	}
+
+	_, err := handler.Head(context.Background(), &bucketv1.HeadRequest{Bucket: "another-projects-bucket", Key: "a.png"})
+	if connect.CodeOf(err) != connect.CodePermissionDenied || !strings.Contains(err.Error(), `"another-projects-bucket"`) {
+		t.Errorf("Head(another-projects-bucket) = %v, want permission denied naming it: this app was granted no such bucket", err)
+	}
+}
+
 func TestABucketNoBindingNamesIsRefusedWhenTheRuntimeHasNoStoreOfItsOwn(t *testing.T) {
 	handler := newFixedDispatch(nil, boundBackend(t, "b0", "acme/uploads"))
 

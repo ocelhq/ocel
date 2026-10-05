@@ -36,6 +36,7 @@ var BootstrapAPIs = []string{
 	"iam.googleapis.com",
 	"run.googleapis.com",
 	"cloudscheduler.googleapis.com",
+	"iamcredentials.googleapis.com",
 }
 
 var PreviewAPIs = []string{proxyAPI}
