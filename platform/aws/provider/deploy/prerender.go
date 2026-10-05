@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -24,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/prerender"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -54,35 +54,25 @@ func prerenderAssetSet(cfg Config, app string, cache *isrConfig) (*assetSet, err
 		return nil, nil
 	}
 
-	segments := []struct {
-		dir string
-		to  uploadTarget
-	}{
-		{"cache", entryTarget(cfg)},
-		{"fetch-cache", uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier}},
+	seeds, err := prerender.Seeds(appArtifactRoot(cfg.ArtifactRoot, app), cache.Prefix)
+	if err != nil {
+		return nil, err
 	}
 
 	var uploads []prerenderUpload
 	manifest := newSetManifest()
-	for _, seg := range segments {
-		dir := filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), seg.dir)
-		entries, err := collectFiles(dir)
-		if err != nil {
-			return nil, err
-		}
-		for _, entry := range entries {
-			key := path.Join(cache.Prefix, seg.dir, entry.rel)
-			uploads = append(uploads, prerenderUpload{
-				key: key,
-				src: filepath.Join(dir, filepath.FromSlash(entry.rel)),
-				to:  seg.to,
-			})
-			manifest.add(seg.to.bucket, key, entry.size)
-		}
+	targets := map[string]uploadTarget{
+		prerender.EntrySegment: entryTarget(cfg),
+		prerender.FetchSegment: {up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier},
+	}
+	for _, seed := range seeds {
+		to := targets[seed.Segment]
+		uploads = append(uploads, prerenderUpload{key: seed.Key, src: seed.Path, to: to})
+		manifest.add(to.bucket, seed.Key, seed.Size)
 	}
 	if len(uploads) > 0 {
-		for _, seg := range segments {
-			if err := seg.to.validate(); err != nil {
+		for _, to := range targets {
+			if err := to.validate(); err != nil {
 				return nil, err
 			}
 		}
@@ -144,41 +134,14 @@ func (t uploadTarget) validate() error {
 	return nil
 }
 
-type tagSnapshot struct {
-	Version     int                  `json:"version"`
-	DeployedAt  int64                `json:"deployedAt"`
-	GeneratedAt int64                `json:"generatedAt"`
-	Records     map[string]tagRecord `json:"records"`
-}
-
-type tagRecord struct {
-	Stale   int64 `json:"stale,omitempty"`
-	Expired int64 `json:"expired,omitempty"`
-}
-
-const (
-	tagSnapshotVersion = 1
-	tagSnapshotSuffix  = "/tag-clock.json"
-)
-
-func genesisSnapshot(at time.Time) tagSnapshot {
-	ms := at.UnixMilli()
-	return tagSnapshot{
-		Version:     tagSnapshotVersion,
-		DeployedAt:  ms,
-		GeneratedAt: ms,
-		Records:     map[string]tagRecord{},
-	}
-}
-
 func seedTagSnapshot(ctx context.Context, cfg Config, cache *isrConfig, at time.Time) error {
-	body, err := json.Marshal(genesisSnapshot(at))
+	body, err := json.Marshal(prerender.GenesisTagSnapshot(at))
 	if err != nil {
 		return fmt.Errorf("encode tag snapshot: %w", err)
 	}
 
 	for _, target := range snapshotTargets(cfg) {
-		key := cache.Prefix + tagSnapshotSuffix
+		key := prerender.TagSnapshotKey(cache.Prefix)
 		_, err := target.up.PutObject(ctx, &s3.PutObjectInput{
 			Bucket:      aws.String(target.bucket),
 			Key:         aws.String(key),
