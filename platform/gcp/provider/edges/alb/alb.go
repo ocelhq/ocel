@@ -166,8 +166,14 @@ type edgeRecord struct {
 	Hosts          map[string]Host     `json:"hosts,omitempty"`
 	DeploymentTags map[string]pin.Tags `json:"deploymentTags,omitempty"`
 	Pointers       pin.Pointers        `json:"pointers,omitempty"`
+	TagsToRemove   []RevisionTag       `json:"tagsToRemove,omitempty"`
 
 	Served map[string]servedRelease `json:"served,omitempty"`
+}
+
+type RevisionTag struct {
+	Service string `json:"service"`
+	Tag     string `json:"tag"`
 }
 
 type Host struct {

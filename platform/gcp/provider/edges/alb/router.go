@@ -98,6 +98,13 @@ func (r routerStack) Disclaim(ctx context.Context, hostname string) error {
 }
 
 func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
+	if err := r.moveTraffic(ctx, move, progress); err != nil {
+		return err
+	}
+	return r.s.removeUnheldTags(ctx)
+}
+
+func (r routerStack) moveTraffic(ctx context.Context, move router.PointerMove, progress progress.Log) error {
 	if err := r.s.routePreviewHosts(ctx, move, progress); err != nil {
 		return err
 	}
@@ -129,7 +136,7 @@ func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRe
 	r.s.recorded.Pointers = kept
 	r.s.keep()
 	r.s.forgetPointer(removal.Pointer)
-	return nil
+	return r.s.removeUnheldTags(ctx)
 }
 
 func (r routerStack) Destroy(ctx context.Context) error {
