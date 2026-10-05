@@ -1,8 +1,12 @@
 package clitest
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
+
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 func DecodeResult(t *testing.T, out string) map[string]any {
@@ -22,4 +26,15 @@ func DecodeResult(t *testing.T, out string) map[string]any {
 		t.Fatalf("envelope = %v, want a data object", envelope)
 	}
 	return data
+}
+
+func DecodeResultInto(t *testing.T, out string, result proto.Message) {
+	t.Helper()
+	data, err := json.Marshal(DecodeResult(t, out))
+	if err != nil {
+		t.Fatalf("re-encode the result data: %v", err)
+	}
+	if err := protojson.Unmarshal(data, result); err != nil {
+		t.Fatalf("data is not a %s: %v\n%s", result.ProtoReflect().Descriptor().FullName(), err, data)
+	}
 }

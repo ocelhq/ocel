@@ -3,7 +3,6 @@ package cost
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"path/filepath"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
@@ -49,30 +49,11 @@ func scan(t *testing.T, dependencies Dependencies, root string, opts Options) st
 	return stdout.String()
 }
 
-type scanEnvelope struct {
-	OK   bool     `json:"ok"`
-	Data scanJSON `json:"data"`
-}
-
-func decodeScan(t *testing.T, out string) scanJSON {
+func decodeScan(t *testing.T, out string) *resultv1.CostScanResult {
 	t.Helper()
-	if strings.Count(strings.TrimSuffix(out, "\n"), "\n") != 0 || !strings.HasSuffix(out, "\n") {
-		t.Fatalf("stdout = %q, want exactly one newline-terminated line", out)
-	}
-	var envelope scanEnvelope
-	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
-		t.Fatalf("stdout is not one JSON envelope: %v\n%s", err, out)
-	}
-	if !envelope.OK {
-		t.Fatalf("stdout = %q, want ok true", out)
-	}
-	return envelope.Data
-}
-
-type scanJSON struct {
-	Resources   json.RawMessage `json:"resources"`
-	Estimate    json.RawMessage `json:"estimate"`
-	Assumptions []string        `json:"assumptions"`
+	var result resultv1.CostScanResult
+	clitest.DecodeResultInto(t, out, &result)
+	return &result
 }
 
 func TestCostScanPricesEveryResourceUnderTheProfileAskedFor(t *testing.T) {
@@ -149,16 +130,16 @@ func TestCostScanPricesEveryResourceUnderTheProfileAskedFor(t *testing.T) {
 		}
 
 		built := decodeScan(t, scan(t, dependencies, root, Options{}))
-		if len(built.Assumptions) != 0 {
-			t.Errorf("assumptions with a build = %v, want none", built.Assumptions)
+		if len(built.GetAssumptions()) != 0 {
+			t.Errorf("assumptions with a build = %v, want none", built.GetAssumptions())
 		}
 
 		dependencies.ReadFunctions = func(string) ([]build.Function, error) {
 			return nil, build.ErrNoBuildOutput
 		}
 		unbuilt := decodeScan(t, scan(t, dependencies, root, Options{}))
-		if len(unbuilt.Assumptions) != 1 || !strings.Contains(unbuilt.Assumptions[0], "one function") {
-			t.Errorf("assumptions without a build = %v, want the one-function-per-app assumption", unbuilt.Assumptions)
+		if len(unbuilt.GetAssumptions()) != 1 || !strings.Contains(unbuilt.GetAssumptions()[0], "one function") {
+			t.Errorf("assumptions without a build = %v, want the one-function-per-app assumption", unbuilt.GetAssumptions())
 		}
 	})
 
@@ -215,16 +196,9 @@ export default {
 		out := scan(t, dependencies, root, Options{})
 
 		got := decodeScan(t, out)
-		var set costv1.ResourceSet
-		if err := protojson.Unmarshal(got.Resources, &set); err != nil {
-			t.Fatalf("resources is not a ResourceSet: %v", err)
-		}
-		var estimate costv1.Estimate
-		if err := protojson.Unmarshal(got.Estimate, &estimate); err != nil {
-			t.Fatalf("estimate is not an Estimate: %v", err)
-		}
+		set, estimate := got.GetResources(), got.GetEstimate()
 		if set.GetSource() != "ocel" || len(set.GetResources()) != 2 {
-			t.Errorf("resources = %v, want the ocel source with the function and the postgres", &set)
+			t.Errorf("resources = %v, want the ocel source with the function and the postgres", set)
 		}
 		if estimate.GetProfile() != costv1.Profile_PROFILE_MODERATE || estimate.GetMonthlyFixed() != "14.60" || estimate.GetMonthlyUsage() != "1.00" {
 			t.Errorf("estimate = profile %q fixed %q usage %q, want moderate 14.60 1.00", estimate.GetProfile(), estimate.GetMonthlyFixed(), estimate.GetMonthlyUsage())
