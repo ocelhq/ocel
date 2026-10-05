@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
@@ -30,10 +31,11 @@ func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts
 		if err != nil {
 			return err
 		}
-		resp, err := variableStore.ListValues(ctx, &variablestorev1.ListValuesRequest{
+		req := &variablestorev1.ListValuesRequest{
 			Tier: opts.tier(),
 			Slug: cfg.Slug,
-		})
+		}
+		resp, err := variableStore.ListValues(ctx, req)
 		if err != nil {
 			return err
 		}
@@ -43,9 +45,33 @@ func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts
 				return err
 			}
 		}
+		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+			return writeEnvListJSON(stdout, req, resp.GetValues(), environments, definitions)
+		}
 		renderValues(stdout, resp.GetValues(), environments, definitions, groups)
 		return nil
 	})
+}
+
+func writeEnvListJSON(stdout io.Writer, req *variablestorev1.ListValuesRequest, values []*variablestorev1.ValueMetadata, environments []string, definitions []*resourcesv1.VariableDefinition) error {
+	described := descriptions(definitions)
+	belongs := membership(definitions)
+	result := &resultv1.EnvListResult{Tier: req.GetTier(), Values: make([]*resultv1.EnvValueSummary, 0, len(values))}
+	for _, v := range values {
+		c := v.GetCoordinate()
+		result.Values = append(result.Values, &resultv1.EnvValueSummary{
+			Coordinate:  newResultCoordinate(c),
+			Description: described[c.GetKey()],
+			Group:       belongs[c.GetKey()],
+			Orphaned:    variables.IsOrphaned(environments, c.GetEnvironment()),
+			Version:     v.GetVersion(),
+			Size:        v.GetSize(),
+			UpdatedAt:   terminal.EpochRFC3339(v.GetUpdatedAt()),
+			EnvSource:   envSourceOrBuiltin(v),
+			Target:      newResultCoordinate(v.GetTarget()),
+		})
+	}
+	return terminal.WriteResultJSON(stdout, result)
 }
 
 func overridden(values []*variablestorev1.ValueMetadata) bool {
@@ -107,10 +133,7 @@ func valueRow(v *variablestorev1.ValueMetadata, lead string, descriptions map[st
 		environment += " (orphaned)"
 	}
 	size := fmt.Sprint(v.GetSize())
-	source := v.GetEnvSource()
-	if source == "" {
-		source = envsource.Builtin
-	}
+	source := envSourceOrBuiltin(v)
 	if target := v.GetTarget(); target != nil {
 		size, source = "—", describeCoordinate(target)
 	}
@@ -191,6 +214,13 @@ func folderOrRoot(folder string) string {
 		return "(project root)"
 	}
 	return folder
+}
+
+func envSourceOrBuiltin(v *variablestorev1.ValueMetadata) string {
+	if source := v.GetEnvSource(); source != "" {
+		return source
+	}
+	return envsource.Builtin
 }
 
 func environmentOrAll(environment string) string {

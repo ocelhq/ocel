@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/envsource"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
@@ -97,15 +98,43 @@ func runEnvSource(ctx context.Context, dependencies Dependencies, cwd string, op
 		if err != nil {
 			return err
 		}
-		described, err := variableStore.DescribeEnvSource(ctx, &variablestorev1.DescribeEnvSourceRequest{Tier: opts.tier(), Slug: cfg.Slug})
+		req := &variablestorev1.DescribeEnvSourceRequest{Tier: opts.tier(), Slug: cfg.Slug}
+		described, err := variableStore.DescribeEnvSource(ctx, req)
 		if err != nil {
 			return err
 		}
+		configured := variablescope.EnvSourceDescriptor(cfg, opts.tier())
+		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+			return writeEnvSourceJSON(stdout, req, described.GetStatus(), configured, cfg.EnvSource.Dev.ID())
+		}
 		renderEnvSource(stdout, tierName(opts), described.GetStatus(), time.Now())
-		renderConfiguredEnvSource(stdout, described.GetStatus(), variablescope.EnvSourceDescriptor(cfg, opts.tier()), opts)
+		renderConfiguredEnvSource(stdout, described.GetStatus(), configured, opts)
 		fmt.Fprintf(stdout, "dev reads from %s, then %s on top\n", cfg.EnvSource.Dev.ID(), dotfile.LocalFileName)
 		return nil
 	})
+}
+
+func writeEnvSourceJSON(stdout io.Writer, req *variablestorev1.DescribeEnvSourceRequest, status *variablestorev1.EnvSourceStatus, configured envsource.Descriptor, devEnvSource string) error {
+	result := &resultv1.EnvSourceResult{
+		Tier:                req.GetTier(),
+		EnvSource:           status.GetEnvSource(),
+		OwnsValues:          valuestore.EnvSourceOfStatus(status).OwnsValues(),
+		Scheduled:           status.GetScheduled(),
+		CanCreate:           status.GetCanCreate(),
+		CanUpdate:           status.GetCanUpdate(),
+		LastAttemptAt:       terminal.EpochRFC3339(status.GetLastAttemptAt()),
+		LastSuccessAt:       terminal.EpochRFC3339(status.GetLastSuccessAt()),
+		LastError:           status.GetLastError(),
+		Links:               make([]*resultv1.EnvSourceLink, 0, len(status.GetLinks())),
+		Credentials:         status.GetCredentials(),
+		ConfiguredEnvSource: configured.ID(),
+		DevEnvSource:        devEnvSource,
+		DevLocalFile:        dotfile.LocalFileName,
+	}
+	for _, link := range status.GetLinks() {
+		result.Links = append(result.Links, &resultv1.EnvSourceLink{Folder: link.GetFolder(), Url: link.GetUrl()})
+	}
+	return terminal.WriteResultJSON(stdout, result)
 }
 
 func renderEnvSource(stdout io.Writer, tier string, status *variablestorev1.EnvSourceStatus, now time.Time) {

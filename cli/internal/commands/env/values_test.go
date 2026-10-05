@@ -55,6 +55,13 @@ func newStreamedDependencies(stream io.Writer) Dependencies {
 	return dependencies
 }
 
+func newJSONDependencies(stream io.Writer) Dependencies {
+	dependencies := newTestDependencies()
+	dependencies.Presentation = clitest.ResolveJSONPresentation
+	clitest.AttachTerminalSink(dependencies.Invocation, stream)
+	return dependencies
+}
+
 func envSet(t *testing.T, root, key, value string, opts envOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
@@ -1037,4 +1044,171 @@ func TestAProviderWithoutTheVariablesKeyFeatureIsOfferedNothing(t *testing.T) {
 			t.Errorf("the provider was bootstrapped for a feature it does not offer: %v", requested)
 		}
 	})
+}
+
+func TestGettingAValueAsJSONPrintsItsMetadataAndRevealsAValueOnlyOnRequest(t *testing.T) {
+	t.Run("a secret is absent without --reveal", func(t *testing.T) {
+		root := setUpEnvFixture(t).Root
+		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{folder: "/web"})
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvGet(context.Background(), newJSONDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{folder: "/web"}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvGet err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		got := clitest.DecodeResult(t, stdout.String())
+		if got["revealed"] != false {
+			t.Errorf("get json revealed = %v, want false", got["revealed"])
+		}
+		if _, present := got["value"]; present {
+			t.Errorf("get json = %v, want no value field without --reveal", got)
+		}
+		if strings.Contains(stdout.String()+stderr.String(), "sk_live_secret") {
+			t.Errorf("stdout = %q, stream = %q, want the secret nowhere", stdout.String(), stderr.String())
+		}
+		if got["tier"] != "TIER_PRODUCTION" || got["version"] != "1" {
+			t.Errorf("get json = %v, want the production tier and version 1", got)
+		}
+		coordinate, _ := got["coordinate"].(map[string]any)
+		for field, want := range map[string]any{"project": clitest.FixtureSlug, "folder": "/web", "key": "STRIPE_API_KEY", "environment": ""} {
+			if coordinate[field] != want {
+				t.Errorf("get json coordinate %s = %v, want %v", field, coordinate[field], want)
+			}
+		}
+		if got["size"] != "14" {
+			t.Errorf("get json size = %v, want the 14 bytes of the value", got["size"])
+		}
+		if len(clitest.RunEvents(t, stderr.String())) == 0 {
+			t.Errorf("stream = %q, want the run's events there", stderr.String())
+		}
+	})
+
+	t.Run("a plain value appears when revealed", func(t *testing.T) {
+		root := setUpEnvFixture(t).Root
+		envSet(t, root, "LOG_LEVEL", "debug", envOptions{})
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvGet(context.Background(), newJSONDependencies(&stderr), root, "LOG_LEVEL", envOptions{reveal: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvGet --reveal err = %v; stderr=%s", err, stderr.String())
+		}
+		got := clitest.DecodeResult(t, stdout.String())
+		if got["revealed"] != true || got["value"] != "debug" {
+			t.Errorf("get json = %v, want revealed true and the value", got)
+		}
+	})
+
+	t.Run("a secret appears only when revealed with --yes", func(t *testing.T) {
+		root := setUpEnvFixture(t).Root
+		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+
+		var refused, refusedStream bytes.Buffer
+		if err := runEnvGet(context.Background(), newJSONDependencies(&refusedStream), root, "STRIPE_API_KEY", envOptions{reveal: true}, &refused, &refusedStream); err == nil {
+			t.Fatal("runEnvGet --reveal on a secret err = nil, want it refused")
+		}
+		if refused.Len() != 0 || strings.Contains(refusedStream.String(), "sk_live_secret") {
+			t.Errorf("stdout = %q, stream = %q, want nothing printed and no plaintext on a refusal", refused.String(), refusedStream.String())
+		}
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvGet(context.Background(), newJSONDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvGet --reveal --yes err = %v; stderr=%s", err, stderr.String())
+		}
+		got := clitest.DecodeResult(t, stdout.String())
+		if got["revealed"] != true || got["value"] != "sk_live_secret" {
+			t.Errorf("get json = %v, want revealed true and the secret", got)
+		}
+		if strings.Contains(stderr.String(), "sk_live_secret") {
+			t.Errorf("stream = %q, want the plaintext only on stdout", stderr.String())
+		}
+	})
+
+	t.Run("a reference names its target as a coordinate", func(t *testing.T) {
+		project := setUpEnvFixture(t)
+		ownedElsewhere(t, project, "LOG_LEVEL", "warn")
+		envRef(t, project.Root, "LOG_LEVEL", envOptions{}, envRefOptions{project: "platform"})
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvGet(context.Background(), newJSONDependencies(&stderr), project.Root, "LOG_LEVEL", envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvGet err = %v; stderr=%s", err, stderr.String())
+		}
+		got := clitest.DecodeResult(t, stdout.String())
+		target, _ := got["target"].(map[string]any)
+		if target["project"] != "platform" || target["key"] != "LOG_LEVEL" || target["folder"] != "" {
+			t.Errorf("get json target = %v, want platform's LOG_LEVEL as a coordinate", got["target"])
+		}
+		if _, present := got["value"]; present {
+			t.Errorf("get json = %v, want no value without --reveal", got)
+		}
+	})
+
+	t.Run("a value that is not a reference carries no target", func(t *testing.T) {
+		root := setUpEnvFixture(t).Root
+		envSet(t, root, "LOG_LEVEL", "debug", envOptions{})
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvGet(context.Background(), newJSONDependencies(&stderr), root, "LOG_LEVEL", envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvGet err = %v", err)
+		}
+		if got := clitest.DecodeResult(t, stdout.String()); got["target"] != nil {
+			t.Errorf("get json target = %v, want none", got["target"])
+		}
+	})
+
+	t.Run("an unset key leaves the error document to the root", func(t *testing.T) {
+		root := setUpEnvFixture(t).Root
+
+		var stdout, stderr bytes.Buffer
+		if err := runEnvGet(context.Background(), newJSONDependencies(&stderr), root, "NEVER_SET", envOptions{}, &stdout, &stderr); err == nil {
+			t.Fatal("runEnvGet on an unset key err = nil, want a failure")
+		}
+		if stdout.Len() != 0 {
+			t.Errorf("stdout = %q, want nothing", stdout.String())
+		}
+	})
+}
+
+func TestHistoryAsJSONListsVersionsNewestFirstAndNeverAValue(t *testing.T) {
+	root := setUpEnvFixture(t).Root
+	for _, v := range []string{"sk_first", "sk_second", "sk_third"} {
+		envSet(t, root, "STRIPE_API_KEY", v, envOptions{})
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := runEnvHistory(context.Background(), newJSONDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{reveal: true}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvHistory err = %v; stderr=%s", err, stderr.String())
+	}
+
+	got := clitest.DecodeResult(t, stdout.String())
+	if strings.Contains(stdout.String(), "sk_") {
+		t.Errorf("stdout = %q, want no plaintext", stdout.String())
+	}
+	versions, _ := got["versions"].([]any)
+	if len(versions) != 3 {
+		t.Fatalf("history json versions = %v, want three", got["versions"])
+	}
+	for i, want := range []struct{ version, size string }{{"3", "8"}, {"2", "9"}, {"1", "8"}} {
+		version, _ := versions[i].(map[string]any)
+		if version["version"] != want.version || version["size"] != want.size || version["createdAt"] == "" {
+			t.Errorf("history json versions[%d] = %v, want version %s of %s bytes with a creation time", i, version, want.version, want.size)
+		}
+	}
+	coordinate, _ := got["coordinate"].(map[string]any)
+	if coordinate["key"] != "STRIPE_API_KEY" || got["tier"] != "TIER_PRODUCTION" {
+		t.Errorf("history json = %v, want the key and tier it read", got)
+	}
+	if len(clitest.RunEvents(t, stderr.String())) == 0 {
+		t.Errorf("stream = %q, want the run's events there", stderr.String())
+	}
+}
+
+func TestHistoryAsJSONOfAnUnsetKeyListsNoVersions(t *testing.T) {
+	root := setUpEnvFixture(t).Root
+
+	var stdout, stderr bytes.Buffer
+	if err := runEnvHistory(context.Background(), newJSONDependencies(&stderr), root, "LOG_LEVEL", envOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvHistory err = %v; stderr=%s", err, stderr.String())
+	}
+	if versions, ok := clitest.DecodeResult(t, stdout.String())["versions"].([]any); !ok || len(versions) != 0 {
+		t.Errorf("history json = %q, want an empty versions list", stdout.String())
+	}
 }

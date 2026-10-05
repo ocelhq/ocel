@@ -9,7 +9,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
@@ -55,16 +57,32 @@ func runEnvRefs(ctx context.Context, dependencies Dependencies, cwd, key string,
 		if err != nil {
 			return err
 		}
-		resp, err := variableStore.ListReferences(ctx, &variablestorev1.ListReferencesRequest{
+		req := &variablestorev1.ListReferencesRequest{
 			Tier:       opts.tier(),
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
-		})
+		}
+		resp, err := variableStore.ListReferences(ctx, req)
 		if err != nil {
 			return err
+		}
+		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+			return writeEnvRefsJSON(stdout, req, resp.GetReferences())
 		}
 		renderReferences(stdout, describeCell(key, opts), resp.GetReferences())
 		return nil
 	})
+}
+
+func writeEnvRefsJSON(stdout io.Writer, req *variablestorev1.ListReferencesRequest, references []*variablestorev1.Coordinate) error {
+	result := &resultv1.EnvRefsResult{
+		Tier:       req.GetTier(),
+		Coordinate: newResultCoordinate(req.GetCoordinate()),
+		References: make([]*resultv1.EnvCoordinate, 0, len(references)),
+	}
+	for _, reference := range references {
+		result.References = append(result.References, newResultCoordinate(reference))
+	}
+	return terminal.WriteResultJSON(stdout, result)
 }
 
 func renderReferences(stdout io.Writer, cell string, references []*variablestorev1.Coordinate) {
