@@ -264,3 +264,48 @@ func TestABareTelemetryCommandFailsAsAnUnknownCommandDoes(t *testing.T) {
 		}
 	}
 }
+
+func timeAnInvocation(args ...string) time.Duration {
+	ocel := newCommand()
+	ocel.root.SetOut(io.Discard)
+	ocel.root.SetErr(io.Discard)
+	started := time.Now()
+	ocel.executeAndReport(args)
+	return time.Since(started)
+}
+
+func TestACommandWithTelemetryOnTakesAtMostASmallMarginLongerThanWithItOff(t *testing.T) {
+	const margin = 500 * time.Millisecond
+	withTelemetryBuild(t)
+	withBannerShown(t)
+	arrived := make(chan struct{}, 1)
+	release := make(chan struct{})
+	hanging := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		select {
+		case arrived <- struct{}{}:
+		default:
+		}
+		<-release
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(hanging.Close)
+	t.Cleanup(func() { close(release) })
+	withTelemetryEndpoint(t, hanging.URL)
+	t.Setenv(rootArgsEnvVar, "telemetry flush")
+	t.Setenv(telemetryKeyEnvVar, telemetry.WriteKey)
+	t.Setenv(telemetryEndpointEnvVar, hanging.URL)
+
+	t.Setenv("OCEL_TELEMETRY", "0")
+	off := min(timeAnInvocation("--version"), timeAnInvocation("--version"))
+	t.Setenv("OCEL_TELEMETRY", "")
+	on := timeAnInvocation("--version")
+
+	if on-off > margin {
+		t.Errorf("with telemetry on the command took %s, off %s, want at most %s more", on, off, margin)
+	}
+	select {
+	case <-arrived:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the flush child never reached the endpoint, so the run with telemetry on started no real flush")
+	}
+}
