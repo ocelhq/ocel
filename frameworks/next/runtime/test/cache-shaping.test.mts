@@ -5,9 +5,9 @@ import {
   originShaping,
   releaseOf,
   shapeOriginCache,
-} from "../src/next/cache-shaping.mjs";
-import { noteTags } from "../src/next/origin-tags.mjs";
-import type { ProjectManifest } from "../src/next/project-manifest.mjs";
+} from "../src/cache-shaping.mjs";
+import { noteTags } from "../src/origin-tags.mjs";
+import type { ProjectManifest } from "../src/project-manifest.mjs";
 
 const prefix = "prod/shop/web/r0a1b2c3d/isr";
 

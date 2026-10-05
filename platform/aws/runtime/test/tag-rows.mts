@@ -1,5 +1,5 @@
 import type { TagRecord } from "@framework/next-cache";
-import type { TagRecordUpdate } from "../src/next/tag-index.mjs";
+import type { TagRecordUpdate } from "@framework/next-runtime/use-cache-store";
 
 export type TagRow = TagRecordUpdate & { tag: string };
 

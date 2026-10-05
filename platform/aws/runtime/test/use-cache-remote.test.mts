@@ -1,10 +1,10 @@
-import { afterEach, expect, test, vi } from "vitest";
-import type { TagRecordUpdate } from "../src/next/tag-index.mjs";
 import type {
+  TagRecordUpdate,
   TagSnapshotRead,
   UseCacheEntry,
   UseCacheStore,
-} from "../src/next/use-cache-store.mjs";
+} from "@framework/next-runtime/use-cache-store";
+import { afterEach, expect, test, vi } from "vitest";
 import { publishedRecords, type TagRow } from "./tag-rows.mjs";
 
 function fakeStore() {
@@ -66,7 +66,7 @@ afterEach(() => {
 
 async function load(store: UseCacheStore | null) {
   vi.resetModules();
-  const clock = await import("../src/next/tag-clock.mjs");
+  const clock = await import("@framework/next-runtime/tag-clock");
   const handler = (await import("../src/next/use-cache-remote.mjs")).default;
   clock.setTagClockStore(store);
   return { tagClock: clock.tagClock, handler };

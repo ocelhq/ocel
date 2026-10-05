@@ -1,20 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  boundCacheTags,
+  type CacheEntryFile,
   cacheKey,
   deserialize as deserializeBytes,
   refreshHeader,
+  type TagRecord,
   tagsOf,
   variantHeadersFile,
 } from "@framework/next-cache";
 import { background } from "@framework/node-runtime/background";
-import {
-  awsCacheStore,
-  type CacheEntryFile,
-  type CacheStore,
-  type TagRecord,
-} from "./cache-store.mjs";
+import type { CacheStore } from "./cache-store.mjs";
+import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
 import { noteRevalidation } from "./revalidation-signal.mjs";
 import { recordTags, tagsExpireEntry } from "./tag-clock.mjs";
@@ -112,7 +109,7 @@ function toBuffer(bytes: Uint8Array): Buffer {
 }
 
 export default class OcelCacheHandler {
-  static store: CacheStore | undefined;
+  static store: Promise<CacheStore> | undefined;
 
   static variantHeaders: Record<string, Record<string, unknown>> | undefined;
 
@@ -131,8 +128,16 @@ export default class OcelCacheHandler {
     return Number.isFinite(generation) ? generation : undefined;
   }
 
-  private get store(): CacheStore {
-    return (OcelCacheHandler.store ??= awsCacheStore());
+  private openStore(): Promise<CacheStore> {
+    if (OcelCacheHandler.store) return OcelCacheHandler.store;
+    const newStore = getNextHost().newCacheStore;
+    if (!newStore) {
+      return Promise.reject(new Error("ocel cache handler: the host installed no cache store"));
+    }
+    return (OcelCacheHandler.store = newStore().catch((err) => {
+      OcelCacheHandler.store = undefined;
+      throw err;
+    }));
   }
 
   private get variantHeaders(): Record<string, Record<string, unknown>> {
@@ -141,10 +146,9 @@ export default class OcelCacheHandler {
 
   async get(key: string, ctx: any): Promise<CacheEntryFile | null> {
     try {
+      const store = await this.openStore();
       const entry =
-        ctx?.kind === "FETCH"
-          ? await this.store.readFetch(key)
-          : await this.store.readEntry(cacheKey(key));
+        ctx?.kind === "FETCH" ? await store.readFetch(key) : await store.readEntry(cacheKey(key));
       if (!entry) return null;
       if (ctx?.kind !== "FETCH" && entry.lastModified <= (this.refreshing ?? -Infinity)) {
         return null;
@@ -165,7 +169,7 @@ export default class OcelCacheHandler {
   async set(key: string, data: any, ctx: any): Promise<void> {
     if (!data) return;
     try {
-      const store = this.store;
+      const store = this.openStore();
       const value = serialize(data);
       if (data.kind === "FETCH") value.tags = ctx?.tags ?? [];
       if (data.kind === "APP_PAGE") {
@@ -179,8 +183,10 @@ export default class OcelCacheHandler {
         value,
         ...(cacheControl && { cacheControl }),
       };
-      background(() =>
-        isFetch ? store.writeFetch(key, entry) : store.writeEntry(cacheKey(key), entry),
+      background(async () =>
+        isFetch
+          ? (await store).writeFetch(key, entry)
+          : (await store).writeEntry(cacheKey(key), entry),
       );
     } catch {}
   }
@@ -199,13 +205,12 @@ export default class OcelCacheHandler {
 
     noteRevalidation();
     recordTags(list, record);
-    await this.store.writeTags(list, record);
+    await (await this.openStore()).writeTags(list, record);
   }
 
   private noteOriginTags(tags: string[]): void {
     if (tags.length === 0) return;
-    const union = [...notedTags(this.requestHeaders), ...tags];
-    noteTags(this.requestHeaders, boundCacheTags(union).tags);
+    noteTags(this.requestHeaders, [...new Set([...notedTags(this.requestHeaders), ...tags])]);
   }
 
   resetRequestCache(): void {}

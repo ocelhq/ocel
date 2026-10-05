@@ -1,5 +1,11 @@
-import { clockMethods, tagClock, useCacheStore } from "./tag-clock.mjs";
-import { bufferValue, type CacheEntry, now, pendingSets, streamOf } from "./use-cache-entry.mjs";
+import { clockMethods, tagClock, useCacheStore } from "@framework/next-runtime/tag-clock";
+import {
+  bufferValue,
+  type CacheEntry,
+  now,
+  pendingSets,
+  streamOf,
+} from "@framework/next-runtime/use-cache-entry";
 
 const pending = pendingSets();
 
@@ -10,7 +16,7 @@ const handler = {
 
       if (!tagClock.hasSynced) return undefined;
 
-      const store = useCacheStore();
+      const store = await useCacheStore();
       if (!store) return undefined;
 
       const stored = await store.readEntry(cacheKey);
@@ -35,7 +41,7 @@ const handler = {
   async set(cacheKey: string, pendingEntry: Promise<CacheEntry>): Promise<void> {
     await pending.run(cacheKey, async () => {
       try {
-        const store = useCacheStore();
+        const store = await useCacheStore();
         if (!store) return;
 
         const entry = await pendingEntry;

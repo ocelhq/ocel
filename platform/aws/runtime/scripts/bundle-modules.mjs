@@ -11,20 +11,21 @@ const distNode = join(dist, "node");
 
 const nodeEntrypoint = join(distNode, "entrypoint.mjs");
 
-const handlers = ["cache-handler", "use-cache-default", "use-cache-remote"];
+const handlers = {
+  "cache-handler": Bun.resolveSync("@framework/next-runtime/cache-handler", pkgDir),
+  "use-cache-default": join(pkgDir, "src/next/use-cache-default.mts"),
+  "use-cache-remote": join(pkgDir, "src/next/use-cache-remote.mts"),
+};
 
-const internalModules = [
-  "cache-store",
+const bundledModules = ["cache-store", "dispatch-host", "use-cache-store"];
+
+const bundledInternals = [
+  "dispatch-assets",
+  "dispatch-signing",
   "isr-writer",
   "object-store",
-  "tag-clock",
-  "use-cache-entry",
-  "use-cache-store",
+  "tag-index",
 ];
-
-const bundledModules = ["dispatch-host"];
-
-const bundledInternals = ["dispatch-assets", "dispatch-signing"];
 
 const cjsInterop = [
   'import { createRequire as ocelCreateRequire } from "node:module";',
@@ -53,8 +54,8 @@ await rm(dist, { recursive: true, force: true });
 execFileSync("tsc", ["--outDir", dist], { cwd: pkgDir, stdio: "inherit" });
 
 await Promise.all(
-  handlers.map((name) =>
-    bundle(join(pkgDir, `src/next/${name}.mts`), join(distNext, `${name}.cjs`), {
+  Object.entries(handlers).map(([name, entry]) =>
+    bundle(entry, join(distNext, `${name}.cjs`), {
       format: "cjs",
       minify: true,
       footer: "module.exports = module.exports.default;",
@@ -63,9 +64,7 @@ await Promise.all(
 );
 
 await Promise.all(
-  [...handlers, ...internalModules].map((name) =>
-    rm(join(distNext, `${name}.mjs`), { force: true }),
-  ),
+  Object.keys(handlers).map((name) => rm(join(distNext, `${name}.mjs`), { force: true })),
 );
 
 await Promise.all(

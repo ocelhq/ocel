@@ -2,56 +2,13 @@ import { createHash } from "node:crypto";
 import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
-import {
-  readableSnapshot,
-  type TagRecord,
-  type TagSnapshot,
-  tagSnapshotKey,
-} from "@framework/next-cache";
-import { isGuardRejection, type TagRecordUpdate, tagRecordUpdate } from "./tag-index.mjs";
-
-export interface UseCacheEntry {
-  tags: string[];
-  stale: number;
-  timestamp: number;
-  expire: number;
-  revalidate: number;
-  body: string;
-}
-
-export type TagSnapshotRead =
-  | { status: "fresh"; records: Record<string, TagRecord>; etag: string | null }
-  | { status: "unchanged" }
-  | { status: "unusable" };
-
-export interface UseCacheStore {
-  readEntry(key: string): Promise<UseCacheEntry | null>;
-  writeEntry(key: string, entry: UseCacheEntry): Promise<void>;
-  readTagSnapshot(etag: string | null): Promise<TagSnapshotRead>;
-  writeTag(tag: string, record: TagRecordUpdate): Promise<boolean>;
-}
+import { readableSnapshot, type TagSnapshot, tagSnapshotKey } from "@framework/next-cache";
+import type { UseCacheStore } from "@framework/next-runtime/use-cache-store";
+import { isNotFound, readBodyText, requireEnv } from "./object-store.mjs";
+import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
 
 function objectName(key: string): string {
   return createHash("sha256").update(key).digest("hex");
-}
-
-async function streamToString(body: any): Promise<string> {
-  if (typeof body?.transformToString === "function") {
-    return body.transformToString();
-  }
-  const chunks: Buffer[] = [];
-  for await (const chunk of body) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks).toString("utf8");
-}
-
-function env(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`ocel use cache: ${name} is not set`);
-  return value;
-}
-
-function isNotFound(err: any): boolean {
-  return err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404;
 }
 
 function isNotModified(err: any): boolean {
@@ -59,10 +16,10 @@ function isNotModified(err: any): boolean {
 }
 
 export function awsUseCacheStore(): UseCacheStore {
-  const table = env("OCEL_STATE_TABLE");
-  const tagNamespace = env("OCEL_ISR_TAG_NAMESPACE");
-  const bucket = env("OCEL_ISR_BUCKET");
-  const prefix = env("OCEL_ISR_PREFIX");
+  const table = requireEnv("OCEL_STATE_TABLE");
+  const tagNamespace = requireEnv("OCEL_ISR_TAG_NAMESPACE");
+  const bucket = requireEnv("OCEL_ISR_BUCKET");
+  const prefix = requireEnv("OCEL_ISR_PREFIX");
 
   const ddb = new DynamoDBClient({});
   const s3 = new S3Client({});
@@ -73,7 +30,7 @@ export function awsUseCacheStore(): UseCacheStore {
     async readEntry(key) {
       try {
         const out = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: objectKey(key) }));
-        return JSON.parse(await streamToString(out.Body));
+        return JSON.parse(await readBodyText(out.Body));
       } catch (err: any) {
         if (isNotFound(err)) return null;
         throw err;
@@ -109,7 +66,7 @@ export function awsUseCacheStore(): UseCacheStore {
 
       let snapshot: TagSnapshot | null = null;
       try {
-        snapshot = readableSnapshot(JSON.parse(await streamToString(out.Body)));
+        snapshot = readableSnapshot(JSON.parse(await readBodyText(out.Body)));
       } catch {
         snapshot = null;
       }

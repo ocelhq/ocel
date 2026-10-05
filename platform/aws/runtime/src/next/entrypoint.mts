@@ -1,6 +1,12 @@
 import type http from "node:http";
 import { dirname, isAbsolute, relative } from "node:path";
 import { pathToFileURL } from "node:url";
+import { originShaping, shapeOriginCache } from "@framework/next-runtime/cache-shaping";
+import { installNextHost } from "@framework/next-runtime/host";
+import { loadIncrementalCacheFactory } from "@framework/next-runtime/incremental-cache";
+import { loadProjectManifest } from "@framework/next-runtime/project-manifest";
+import { revalidatedHeader, revalidationTicks } from "@framework/next-runtime/revalidation-signal";
+import { loadTagsManifest, mirrorTagsInto } from "@framework/next-runtime/tags-manifest";
 import { runWithWaitUntil } from "@framework/node-runtime/background";
 import {
   dispatchesAtOrigin,
@@ -13,11 +19,6 @@ import {
   serveLocal,
 } from "@framework/node-runtime/host";
 import { awaitLiveValues } from "@framework/node-runtime/live-values";
-import { originShaping, shapeOriginCache } from "./cache-shaping.mjs";
-import { loadIncrementalCacheFactory } from "./incremental-cache.mjs";
-import { loadProjectManifest } from "./project-manifest.mjs";
-import { revalidatedHeader, revalidationTicks } from "./revalidation-signal.mjs";
-import { loadTagsManifest, mirrorTagsInto } from "./tags-manifest.mjs";
 
 const RSC_REQUEST = Symbol.for("ocel.rsc-request");
 
@@ -38,6 +39,10 @@ function announceRevalidations(res: http.ServerResponse): void {
 
 async function boot(): Promise<void> {
   installCompileCacheFlush();
+  installNextHost({
+    newCacheStore: async () => (await import("./cache-store.mjs")).awsCacheStore(),
+    newUseCacheStore: async () => (await import("./use-cache-store.mjs")).awsUseCacheStore(),
+  });
 
   const handlerPath = process.env.OCEL_HANDLER!;
   const href = isAbsolute(handlerPath) ? pathToFileURL(handlerPath).href : handlerPath;

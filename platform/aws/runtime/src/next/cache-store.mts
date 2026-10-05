@@ -1,39 +1,22 @@
 import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { type CacheEntryFile, entryObjectKey, type TagRecord } from "@framework/next-cache";
+import { type CacheEntryFile, entryObjectKey } from "@framework/next-cache";
+import type { CacheStore } from "@framework/next-runtime/cache-store";
 import { type EntryStore, isrEntryStore } from "./isr-writer.mjs";
-import { entriesAdopted, type ObjectStore, providerObjectStore } from "./object-store.mjs";
+import {
+  entriesAdopted,
+  isNotFound,
+  type ObjectStore,
+  providerObjectStore,
+  readBodyText,
+  requireEnv,
+} from "./object-store.mjs";
 import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
 
-export type { CacheEntryFile, TagRecord } from "@framework/next-cache";
-
-export interface CacheStore {
-  readEntry(key: string): Promise<CacheEntryFile | null>;
-  writeEntry(key: string, entry: CacheEntryFile): Promise<void>;
-  readFetch(hash: string): Promise<CacheEntryFile | null>;
-  writeFetch(hash: string, entry: CacheEntryFile): Promise<void>;
-  writeTags(tags: string[], record: TagRecord): Promise<void>;
-}
-
-function env(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`ocel cache handler: ${name} is not set`);
-  return value;
-}
-
-async function streamToString(body: any): Promise<string> {
-  if (typeof body?.transformToString === "function") {
-    return body.transformToString();
-  }
-  const chunks: Buffer[] = [];
-  for await (const chunk of body) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks).toString("utf8");
-}
-
 export function awsCacheStore(): CacheStore {
-  const prefix = env("OCEL_ISR_PREFIX");
-  const table = env("OCEL_STATE_TABLE");
-  const tagNamespace = env("OCEL_ISR_TAG_NAMESPACE");
+  const prefix = requireEnv("OCEL_ISR_PREFIX");
+  const table = requireEnv("OCEL_STATE_TABLE");
+  const tagNamespace = requireEnv("OCEL_ISR_TAG_NAMESPACE");
 
   const provider = providerObjectStore();
 
@@ -53,11 +36,9 @@ export function awsCacheStore(): CacheStore {
   async function read(from: ObjectStore, key: string): Promise<CacheEntryFile | null> {
     try {
       const out = await from.client.send(new GetObjectCommand({ Bucket: from.bucket, Key: key }));
-      return JSON.parse(await streamToString(out.Body));
+      return JSON.parse(await readBodyText(out.Body));
     } catch (err: any) {
-      if (err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404) {
-        return null;
-      }
+      if (isNotFound(err)) return null;
       throw err;
     }
   }
