@@ -1,6 +1,8 @@
 package proto_test
 
 import (
+	"io/fs"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -12,11 +14,42 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/app/realtime/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/cli/help/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
+
+func ocelProtoPaths(t *testing.T) []string {
+	t.Helper()
+
+	const root = "../../proto"
+	var paths []string
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || filepath.Ext(path) != ".proto" {
+			return err
+		}
+		relative, err := filepath.Rel(root, path)
+		paths = append(paths, filepath.ToSlash(relative))
+		return err
+	})
+	if err != nil {
+		t.Fatalf("walking %s: %v", root, err)
+	}
+	if len(paths) == 0 {
+		t.Fatalf("no .proto file under %s, so this test would pass over nothing", root)
+	}
+	return paths
+}
 
 type stringRule struct {
 	field      protoreflect.FullName
@@ -60,13 +93,13 @@ func shippedStringRules(t *testing.T) []stringRule {
 		}
 	}
 
-	protoregistry.GlobalFiles.RangeFiles(func(file protoreflect.FileDescriptor) bool {
-		path := file.Path()
-		if strings.HasPrefix(path, "app/") || strings.HasPrefix(path, "cli/") || strings.HasPrefix(path, "provider/") {
-			walk(file.Messages())
+	for _, path := range ocelProtoPaths(t) {
+		file, err := protoregistry.GlobalFiles.FindFileByPath(path)
+		if err != nil {
+			t.Fatalf("%s is not registered: blank-import its generated package here so its buf.validate rules are checked", path)
 		}
-		return true
-	})
+		walk(file.Messages())
+	}
 	if len(rules) == 0 {
 		t.Fatal("no buf.validate rule was found in any shipped descriptor, so this test would pass over nothing")
 	}
@@ -91,7 +124,7 @@ var controlsAndSpaces = []string{
 	"a@b", "a:b", "a?b", "/a?b", "/a@b", "/a:b", "/up?ready=1", "/up#ready", "/healthz",
 }
 
-func TestAChangedStringPatternAdmitsWhatItAdmittedBeforeTheRewrite(t *testing.T) {
+func TestEachShippedPatternAdmitsExactlyWhatItsRE2PosixClassSpellingAdmits(t *testing.T) {
 	const digest = "@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 	cases := []struct {

@@ -28,42 +28,10 @@ const patternsOf = (message: DescMessage): { field: string; pattern: string }[] 
 const shipped = files.flatMap((file) => file.messages.flatMap(patternsOf));
 
 describe("buf.validate string patterns the generated bindings carry", () => {
-  it("are found in the descriptors", () => {
-    expect(shipped.length).toBeGreaterThan(0);
-  });
-
   it("compile as ECMA-262 regular expressions with the u flag", () => {
+    expect(shipped.length).toBeGreaterThan(0);
     for (const { field: name, pattern } of shipped) {
       expect(() => new RegExp(pattern, "u"), `${name}: ${pattern}`).not.toThrow();
-    }
-  });
-
-  it("refuse a control character and a hash and admit ordinary text", () => {
-    const name = shipped.find((p) => p.pattern === "^[^#\\x00-\\x1f\\x7f]*$");
-    expect(name).toBeDefined();
-    const re = new RegExp(name?.pattern ?? "", "u");
-    for (const text of ["", "a", "a b", "a/b", "é", "a@b"]) expect(re.test(text), text).toBe(true);
-    for (const text of [
-      "#",
-      "a#b",
-      "a\x00b",
-      "a\x1fb",
-      "a\x7fb",
-      "a\tb",
-      "a\nb",
-      "a\vb",
-      "a\fb",
-      "a\rb",
-    ]) {
-      expect(re.test(text), JSON.stringify(text)).toBe(false);
-    }
-
-    const folder = shipped.find((p) => p.pattern === "^(/[^/#\\x00-\\x1f\\x7f]+)+$");
-    expect(folder).toBeDefined();
-    const folderRe = new RegExp(folder?.pattern ?? "", "u");
-    for (const text of ["/a", "/a/b", "/a b"]) expect(folderRe.test(text), text).toBe(true);
-    for (const text of ["", "/", "a", "//a", "/a#b", "/a\x00", "/a\x7f", "/a\n"]) {
-      expect(folderRe.test(text), JSON.stringify(text)).toBe(false);
     }
   });
 });

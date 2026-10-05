@@ -122,9 +122,11 @@ func (o InfisicalOptions) secretPath(folder string) (string, error) {
 	return path.Join(o.Path, "/"+strings.TrimPrefix(folder, "/")), nil
 }
 
+const VariableNamePattern = `^[^#\x00-\x1f\x7f]*$`
+
 var (
 	infisicalHost    = regexp.MustCompile(`^(https?://.+)?$`)
-	variableNameText = regexp.MustCompile(`^[^#\x00-\x1f\x7f]*$`)
+	variableNameText = regexp.MustCompile(VariableNamePattern)
 )
 
 func refuseMalformedInfisical(options InfisicalOptions) error {
