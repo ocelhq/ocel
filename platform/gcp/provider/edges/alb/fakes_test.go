@@ -228,6 +228,10 @@ func (w *world) Pin(ctx context.Context, service, revision string, stillActive r
 	}
 }
 
+func (w *world) ReadServing(_ context.Context, service string) (string, error) {
+	return w.pinnedRevision(service), nil
+}
+
 func (w *world) ReadTag(_ context.Context, service, revision string) (string, error) {
 	return w.tagOf(service, revision), nil
 }
