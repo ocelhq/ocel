@@ -3,6 +3,7 @@ package root
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/dev/leader"
+	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/telemetry"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 func TestASuccessfulInitPrintsAnInitCompletedEventBeforeItsCommandCompletedEvent(t *testing.T) {
@@ -97,9 +100,39 @@ func (b *lockedBuffer) String() string {
 	return b.buf.String()
 }
 
-func TestAnInterruptedDevSessionPrintsADevSessionEndedEventBeforeItsCommandCompletedEvent(t *testing.T) {
+func declareRealtimeScript(name string) string {
+	return fmt.Sprintf(`
+declare global {
+  var __ocelRegister: Promise<unknown>[];
+}
+globalThis.__ocelRegister ??= [];
+globalThis.__ocelRegister.push(
+  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.%s), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.%s },
+    body: JSON.stringify({ resource: { type: "RESOURCE_TYPE_REALTIME", name: %q }, realtime: {} }),
+  }),
+);
+export {};
+`, processenv.DevServerEnvVar, processenv.DevServerTokenEnvVar, name)
+}
+
+func waitForFileContaining(t *testing.T, path, want string) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		if content, err := os.ReadFile(path); err == nil && strings.Contains(string(content), want) {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("%s never contained %q", path, want)
+}
+
+func TestAnInterruptedDevSessionPrintsADevSessionEndedEventWithItsDeclaredKindsBeforeItsCommandCompletedEvent(t *testing.T) {
 	debugTelemetry(t)
-	root := t.TempDir()
+	root := filepath.Join(t.TempDir(), "my-secret-project")
+	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareRealtimeScript("mysecretfeed"))
 	t.Chdir(root)
 	ctx, interrupt := context.WithCancel(context.Background())
 	defer interrupt()
@@ -108,16 +141,12 @@ func TestAnInterruptedDevSessionPrintsADevSessionEndedEventBeforeItsCommandCompl
 	ocel.root.SetContext(ctx)
 	ocel.root.SetOut(&stdout)
 	ocel.root.SetErr(&stderr)
+	envDumpPath := filepath.Join(root, "env.out")
 	done := make(chan int, 1)
-	go func() { done <- ocel.executeAndReport([]string{"dev", "--", "sleep", "30"}) }()
-	deadline := time.Now().Add(20 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, found, _ := leader.Find(root); found {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	time.Sleep(200 * time.Millisecond)
+	go func() {
+		done <- ocel.executeAndReport([]string{"dev", "--", "sh", "-c", "env > " + envDumpPath + "; sleep 30"})
+	}()
+	waitForFileContaining(t, envDumpPath, "OCEL_RESOURCE_REALTIME_mysecretfeed=")
 
 	interrupt()
 
@@ -131,8 +160,11 @@ func TestAnInterruptedDevSessionPrintsADevSessionEndedEventBeforeItsCommandCompl
 		t.Fatalf("events = %+v, want dev_session_ended then command_completed", events)
 	}
 	session := events[0].Properties
-	if session["reloads"] != float64(0) || len(session["resource_kinds"].([]any)) != 0 || len(session["error_codes"].(map[string]any)) != 0 {
-		t.Errorf("properties = %v, want no reloads, kinds or error codes", session)
+	if kinds, _ := session["resource_kinds"].([]any); len(kinds) != 1 || kinds[0] != "realtime" {
+		t.Errorf("resource_kinds = %v, want [realtime]", session["resource_kinds"])
+	}
+	if session["reloads"] != float64(0) || len(session["error_codes"].(map[string]any)) != 0 {
+		t.Errorf("properties = %v, want no reloads or error codes", session)
 	}
 	if duration, _ := session["duration_ms"].(float64); duration <= 0 {
 		t.Errorf("duration_ms = %v, want a positive number", session["duration_ms"])
@@ -141,8 +173,13 @@ func TestAnInterruptedDevSessionPrintsADevSessionEndedEventBeforeItsCommandCompl
 		t.Errorf("command_completed error_code = %v, want interrupted", events[1].Properties["error_code"])
 	}
 	for _, line := range strings.Split(stderr.String(), "\n") {
-		if strings.HasPrefix(line, "[telemetry] ") && strings.Contains(line, root) {
-			t.Errorf("event %s names the project path", line)
+		if !strings.HasPrefix(line, telemetry.DebugPrefix) {
+			continue
+		}
+		for _, leaked := range []string{"secret", root, os.TempDir()} {
+			if strings.Contains(line, leaked) {
+				t.Errorf("event %s contains %q", line, leaked)
+			}
 		}
 	}
 }
