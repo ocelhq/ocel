@@ -39,6 +39,7 @@ type world struct {
 	invalidatedTags  [][]string
 	invalidatedHosts []string
 	invalidating     error
+	untags           []string
 	onUp             func()
 }
 
@@ -229,6 +230,19 @@ func (w *world) Pin(ctx context.Context, service, revision string, stillActive r
 
 func (w *world) ReadTag(_ context.Context, service, revision string) (string, error) {
 	return w.tagOf(service, revision), nil
+}
+
+func (w *world) Untag(_ context.Context, service, tag string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.untags = append(w.untags, service+"#"+tag)
+	return nil
+}
+
+func (w *world) untagged() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return slices.Clone(w.untags)
 }
 
 func (w *world) tagOf(service, revision string) string {

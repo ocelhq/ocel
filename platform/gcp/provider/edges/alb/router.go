@@ -110,7 +110,10 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 	return nil
 }
 
-func (r routerStack) RemovePointer(_ context.Context, removal router.PointerRemoval, _ progress.Log) error {
+func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRemoval, _ progress.Log) error {
+	if err := r.s.withdrawPointer(ctx, removal); err != nil {
+		return err
+	}
 	r.s.forgetPointer(removal.Pointer)
 	return nil
 }

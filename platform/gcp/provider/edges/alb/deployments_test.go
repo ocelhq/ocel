@@ -3,6 +3,7 @@ package alb
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -98,5 +99,38 @@ func TestADeploymentHostnameTheUrlMapHasNoHostRuleLeftForIsRefusedBeforeAnything
 	}
 	if _, declared := w.declarations(BindingStack("shop", environment.TierPreview))[negName("shop", environment.TierPreview, deploymentHost)]; declared {
 		t.Errorf("the binding declares a neg for %s, want nothing raised: Compute refuses the host rule only after the neg and backend service exist", deploymentHost)
+	}
+}
+
+func TestRemovingADeploymentUnroutesItsHostnameAndTakesTheTagOffItsRevision(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	record := previewRecord("b1")
+	move := deploymentMove(deploymentFirst, deploymentHost, record)
+	if err := stack.MovePointer(ctx, move, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(deployment) = %v", err)
+	}
+
+	removal := router.PointerRemoval{Pointer: move.Pointer, Hosts: move.Hosts}
+	for range 2 {
+		if err := stack.RemovePointer(ctx, removal, progress.Discard()); err != nil {
+			t.Fatalf("RemovePointer(deployment) = %v", err)
+		}
+	}
+
+	if got, routed := w.hosts(tierRoutes)[deploymentHost]; routed {
+		t.Errorf("%s is still routed to %q after its deployment was removed", deploymentHost, got)
+	}
+	if got := w.torn(); !slices.Contains(got, BindingStack("shop", environment.TierPreview)) {
+		t.Errorf("the router tore down %v, want the project's binding stack: its last backend served the removed deployment", got)
+	}
+	tag := w.tagOf(previewService, record.Revisions[previewService])
+	if got := w.untagged(); !slices.Equal(got, []string{previewService + "#" + tag}) {
+		t.Errorf("the removal untagged %v, want %s#%s once: a tag no hostname reaches keeps a revision prune would otherwise delete", got, previewService, tag)
+	}
+	if _, recorded := stack.s.recorded.Hosts[deploymentHost]; recorded {
+		t.Errorf("the router still records %s after its deployment was removed", deploymentHost)
 	}
 }

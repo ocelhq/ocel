@@ -153,3 +153,58 @@ func (s *stack) refuseFullURLMap(ctx context.Context, hostnames []string) error 
 			"remove previews this tier no longer needs with `ocel destroy preview`, then promote again",
 		strings.Join(adding, ", "), s.recorded.LoadBalancer.URLMap, ruled, maxHostRules)
 }
+
+func (s *stack) withdrawPointer(ctx context.Context, removal router.PointerRemoval) error {
+	going := s.listPointerHosts(removal)
+	if len(going) == 0 {
+		return nil
+	}
+	hosts := maps.Clone(s.recorded.Hosts)
+	for _, hostname := range going {
+		if err := s.e.deps.Routes.Unroute(ctx, s.recorded.LoadBalancer.URLMap, hostname); err != nil {
+			return err
+		}
+		delete(hosts, hostname)
+	}
+	if err := s.raise(ctx, hosts); err != nil {
+		return err
+	}
+	if len(hosts) == 0 {
+		hosts = nil
+	}
+	withdrawn := s.recorded.Hosts
+	s.recorded.Hosts = hosts
+	s.keep()
+	var errs []error
+	for _, hostname := range going {
+		errs = append(errs, s.untagUnroutedRevision(ctx, withdrawn[hostname], hosts))
+	}
+	return errors.Join(errs...)
+}
+
+func (s *stack) listPointerHosts(removal router.PointerRemoval) []string {
+	named := edge.ListPreviewHostnames(removal.Hosts)
+	var going []string
+	for _, hostname := range slices.Sorted(maps.Keys(s.recorded.Hosts)) {
+		host := s.recorded.Hosts[hostname]
+		if host.Pointer == "" {
+			continue
+		}
+		if host.Pointer == removal.Pointer || slices.Contains(named, hostname) {
+			going = append(going, hostname)
+		}
+	}
+	return going
+}
+
+func (s *stack) untagUnroutedRevision(ctx context.Context, gone Host, kept map[string]Host) error {
+	if gone.Tag == "" {
+		return nil
+	}
+	for _, host := range kept {
+		if host.Service == gone.Service && host.Tag == gone.Tag {
+			return nil
+		}
+	}
+	return s.e.deps.Pins.Untag(ctx, gone.Service, gone.Tag)
+}
