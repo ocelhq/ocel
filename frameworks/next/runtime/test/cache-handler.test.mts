@@ -13,7 +13,7 @@ import OcelCacheHandler from "../src/cache-handler.mjs";
 import type { CacheStore } from "../src/cache-store.mjs";
 import { installNextHost } from "../src/host.mjs";
 import { collectTags, notedTags } from "../src/origin-tags.mjs";
-import { readServedEntry } from "../src/refresh.mjs";
+import { noteServedRoute, readStaleEntry } from "../src/refresh.mjs";
 import { revalidationTicks } from "../src/revalidation-signal.mjs";
 import { setTagClockStore } from "../src/tag-clock.mjs";
 
@@ -115,7 +115,11 @@ async function invocation(fn: () => Promise<unknown>): Promise<Promise<unknown>[
 function seedPage(
   store: ReturnType<typeof fakeStore>,
   key: string,
-  opts: { tags?: string; lastModified?: number } = {},
+  opts: {
+    tags?: string;
+    lastModified?: number;
+    cacheControl?: { revalidate: number | false };
+  } = {},
 ) {
   store.entries.set(key, {
     lastModified: opts.lastModified ?? 1_000,
@@ -126,6 +130,7 @@ function seedPage(
       status: 200,
       headers: opts.tags ? { "x-next-cache-tags": opts.tags } : {},
     },
+    ...(opts.cacheControl && { cacheControl: opts.cacheControl }),
   });
 }
 
@@ -323,14 +328,109 @@ test("serves a refresh the generation newer than the one it has", async () => {
   expect(entry?.lastModified).toBe(2_000);
 });
 
-test("notes the generation of the page it served, so a stale hit can be refreshed", async () => {
+function servedBy(route: { revalidate: number | false; readsNoEntry?: boolean }) {
+  const requestHeaders: any = {};
+  noteServedRoute(requestHeaders, { readsNoEntry: false, ...route });
+  return { requestHeaders, handler: new OcelCacheHandler({ _requestHeaders: requestHeaders }) };
+}
+
+test("notes a stale page entry it serves so the host can refresh it", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", { lastModified: 1_000 });
+  const { requestHeaders, handler } = servedBy({ revalidate: 60 });
+
+  const entry = await handler.get("/", { kind: "APP_PAGE" });
+
+  expect(entry?.lastModified).toBe(1_000);
+  expect(readStaleEntry(requestHeaders)).toBe(1_000);
+});
+
+test("notes a page entry that outlived the window its own render recorded", async () => {
+  const store = fakeStore();
+  const writtenAt = Date.now() - 5_000;
+  seedPage(store, "index", { lastModified: writtenAt, cacheControl: { revalidate: 1 } });
+  const { requestHeaders, handler } = servedBy({ revalidate: 3600 });
+
+  await handler.get("/", { kind: "APP_PAGE" });
+
+  expect(readStaleEntry(requestHeaders)).toBe(writtenAt);
+});
+
+test("notes nothing for a page entry within the window its own render recorded", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", {
+    lastModified: Date.now() - 5_000,
+    cacheControl: { revalidate: 3600 },
+  });
+  const { requestHeaders, handler } = servedBy({ revalidate: 1 });
+
+  await handler.get("/", { kind: "APP_PAGE" });
+
+  expect(readStaleEntry(requestHeaders)).toBeUndefined();
+});
+
+test("notes nothing for a page entry within its window", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", { lastModified: Date.now() });
+  const { requestHeaders, handler } = servedBy({ revalidate: 60 });
+
+  await handler.get("/", { kind: "APP_PAGE" });
+
+  expect(readStaleEntry(requestHeaders)).toBeUndefined();
+});
+
+test("notes a page entry whose tag went stale after it was written", async () => {
+  const store = fakeStore();
+  const writtenAt = Date.now() - 1000;
+  seedPage(store, "index", { tags: "products", lastModified: writtenAt });
+  await new OcelCacheHandler().revalidateTag("products", { expire: 3600 });
+  const { requestHeaders, handler } = servedBy({ revalidate: false });
+
+  const entry = await handler.get("/", { kind: "APP_PAGE" });
+
+  expect(entry).not.toBeNull();
+  expect(readStaleEntry(requestHeaders)).toBe(writtenAt);
+});
+
+test("reads no page entry for a request that resumes from it, and notes the stale one", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", { lastModified: 1_000 });
+  const { requestHeaders, handler } = servedBy({ revalidate: 60, readsNoEntry: true });
+
+  expect(await handler.get("/", { kind: "APP_PAGE" })).toBeNull();
+  expect(readStaleEntry(requestHeaders)).toBe(1_000);
+});
+
+test("reads no page entry for a request that resumes from it, even a fresh one", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", { lastModified: Date.now() });
+  const { requestHeaders, handler } = servedBy({ revalidate: 60, readsNoEntry: true });
+
+  expect(await handler.get("/", { kind: "APP_PAGE" })).toBeNull();
+  expect(readStaleEntry(requestHeaders)).toBeUndefined();
+});
+
+test("notes nothing for a request the host does not refresh", async () => {
   const store = fakeStore();
   seedPage(store, "index", { lastModified: 1_000 });
   const requestHeaders: any = {};
 
-  await new OcelCacheHandler({ _requestHeaders: requestHeaders }).get("/", { kind: "APP_PAGE" });
+  const entry = await new OcelCacheHandler({ _requestHeaders: requestHeaders }).get("/", {
+    kind: "APP_PAGE",
+  });
 
-  expect(readServedEntry(requestHeaders)).toBe(1_000);
+  expect(entry).not.toBeNull();
+  expect(readStaleEntry(requestHeaders)).toBeUndefined();
+});
+
+test("serves a fetch entry to a request that resumes from its page entry", async () => {
+  const store = fakeStore();
+  seedFetch(store, 10_000);
+  const { handler } = servedBy({ revalidate: 60, readsNoEntry: true });
+
+  const entry = await handler.get("abc", { kind: "FETCH", tags: [], revalidate: 60 });
+
+  expect(entry?.value.data.body).toBe("cached");
 });
 
 test("a refresh's render resolves only once its entry is written", async () => {

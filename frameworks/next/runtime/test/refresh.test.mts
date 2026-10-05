@@ -1,18 +1,40 @@
 import http from "node:http";
 import { refreshHeader } from "@framework/next-cache";
 import { afterEach, expect, test } from "vitest";
-import { revalidatingRoutes } from "../src/cache-shaping.mjs";
-import { noteServedEntry, type Refresh, routeStaleHitsToRefresh } from "../src/refresh.mjs";
+import { prerenderedRoutes } from "../src/prerendered-routes.mjs";
+import {
+  noteStaleEntry,
+  type Refresh,
+  readServedRoute,
+  routeStaleHitsToRefresh,
+} from "../src/refresh.mjs";
 
-const routes = revalidatingRoutes({
+const prerender = {
+  routes: {
+    "/blog": { initialRevalidateSeconds: 60 },
+    "/shop": { initialRevalidateSeconds: 60, renderingMode: "PARTIALLY_STATIC" },
+    "/catalog": {
+      initialRevalidateSeconds: 60,
+      renderingMode: "PARTIALLY_STATIC",
+      prefetchDataRoute: "/catalog.prefetch.rsc",
+    },
+    "/about": { initialRevalidateSeconds: false },
+  },
+  dynamicRoutes: {
+    "/posts/[slug]": { routeRegex: "^/posts/([^/]+?)(?:/)?$", fallbackRevalidate: 60 },
+  },
+};
+
+const routes = prerenderedRoutes({
+  config: { cacheComponents: true },
+  distDir: ".next",
+  prerender,
+});
+
+const routesWithoutCacheComponents = prerenderedRoutes({
   config: {},
   distDir: ".next",
-  prerender: {
-    routes: { "/blog": { initialRevalidateSeconds: 60 } },
-    dynamicRoutes: {
-      "/posts/[slug]": { routeRegex: "^/posts/([^/]+?)(?:/)?$", fallbackRevalidate: 60 },
-    },
-  },
+  prerender,
 });
 
 let server: http.Server | undefined;
@@ -24,6 +46,7 @@ afterEach(async () => {
 
 interface Seen {
   purpose: string | undefined;
+  served: ReturnType<typeof readServedRoute>;
   scheduled: Refresh[];
   waited: Promise<unknown>[];
   status: number | undefined;
@@ -36,13 +59,21 @@ async function serving(
   path = "/blog?page=2",
   method = "GET",
   schedule?: (refresh: Refresh) => Promise<void>,
+  hostRoutes = routes,
 ): Promise<Seen> {
-  const seen: Seen = { purpose: undefined, scheduled: [], waited: [], status: undefined, body: "" };
+  const seen: Seen = {
+    purpose: undefined,
+    served: undefined,
+    scheduled: [],
+    waited: [],
+    status: undefined,
+    body: "",
+  };
   server = http.createServer((req, res) => {
     routeStaleHitsToRefresh(
       req,
       res,
-      routes,
+      hostRoutes,
       schedule ??
         (async (refresh) => {
           seen.scheduled.push(refresh);
@@ -50,6 +81,7 @@ async function serving(
       (promise) => seen.waited.push(promise),
     );
     seen.purpose = req.headers.purpose as string | undefined;
+    seen.served = readServedRoute(req.headers as Record<string | symbol, any>);
     render(req, res);
   });
   await new Promise<void>((resolve) => server!.listen({ host: "127.0.0.1", port: 0 }, resolve));
@@ -75,8 +107,7 @@ async function serving(
 
 function staleHit(lastModified: number) {
   return (req: http.IncomingMessage, res: http.ServerResponse) => {
-    noteServedEntry(req.headers as Record<string | symbol, any>, lastModified);
-    res.setHeader("x-nextjs-cache", "STALE");
+    noteStaleEntry(req.headers as Record<string | symbol, any>, lastModified);
     res.end("stale page");
   };
 }
@@ -117,8 +148,7 @@ test("refreshes the page, not the flight data, a stale RSC hit was served from",
 });
 
 test("schedules nothing for a fresh hit", async () => {
-  const seen = await serving((req, res) => {
-    noteServedEntry(req.headers as Record<string | symbol, any>, 1_000);
+  const seen = await serving((_req, res) => {
     res.setHeader("x-nextjs-cache", "HIT");
     res.end("fresh page");
   });
@@ -139,7 +169,7 @@ test("asks Next to serve a stale hit of a dynamic route that revalidates as it i
   expect(seen.purpose).toBe("prefetch");
 });
 
-test("leaves a request to a route that never revalidates as Next would see it", async () => {
+test("leaves a request to a route Next did not prerender as Next would see it", async () => {
   const seen = await serving((_req, res) => res.end("dynamic page"), {}, "/dashboard");
 
   expect(seen.purpose).toBeUndefined();
@@ -149,4 +179,78 @@ test("leaves a server action posted to a revalidating route as Next would see it
   const seen = await serving((_req, res) => res.end("action result"), {}, "/blog", "POST");
 
   expect(seen.purpose).toBeUndefined();
+});
+
+test("schedules a refresh of a stale entry Next serves without saying it is stale", async () => {
+  const seen = await serving(staleHit(1_000));
+
+  expect(seen.scheduled).toHaveLength(1);
+});
+
+test("schedules nothing when Next says a hit is stale but the cache handler noted none", async () => {
+  const seen = await serving((_req, res) => {
+    res.setHeader("x-nextjs-cache", "STALE");
+    res.end("stale page");
+  });
+
+  expect(seen.scheduled).toEqual([]);
+});
+
+test("has the cache handler read no page entry for a dynamic navigation of a partially static page", async () => {
+  const seen = await serving(staleHit(1_000), { rsc: "1" }, "/shop?_rsc=x");
+
+  expect(seen.served?.readsNoEntry).toBe(true);
+});
+
+test("schedules a refresh of the page after a dynamic navigation that read no page entry", async () => {
+  const seen = await serving(staleHit(1_000), { rsc: "1" }, "/shop?_rsc=x");
+
+  expect(seen.scheduled.map(({ url }) => url)).toEqual(["/shop"]);
+});
+
+test("lets a prefetch of a partially static page read its page entry", async () => {
+  const seen = await serving(
+    (_req, res) => res.end("shell"),
+    { rsc: "1", "next-router-prefetch": "1" },
+    "/shop?_rsc=x",
+  );
+
+  expect(seen.served?.readsNoEntry).toBe(false);
+});
+
+test("lets a navigation to a partially static page with static flight data read its page entry", async () => {
+  const seen = await serving((_req, res) => res.end("flight"), { rsc: "1" }, "/catalog?_rsc=x");
+
+  expect(seen.served?.readsNoEntry).toBe(false);
+});
+
+test("has the cache handler read no page entry for a server action posted to a partially static page", async () => {
+  const seen = await serving(
+    (_req, res) => res.end("action result"),
+    { "next-action": "abc" },
+    "/shop",
+    "POST",
+  );
+
+  expect(seen.served?.readsNoEntry).toBe(true);
+  expect(seen.purpose).toBeUndefined();
+});
+
+test("lets a dynamic navigation read its page entry where cache components are off", async () => {
+  const seen = await serving(
+    (_req, res) => res.end("flight"),
+    { rsc: "1" },
+    "/shop?_rsc=x",
+    "GET",
+    undefined,
+    routesWithoutCacheComponents,
+  );
+
+  expect(seen.served?.readsNoEntry).toBe(false);
+});
+
+test("asks Next to serve a stale hit as it is on a page that never revalidates by time", async () => {
+  const seen = await serving((_req, res) => res.end("page"), {}, "/about");
+
+  expect(seen.purpose).toBe("prefetch");
 });

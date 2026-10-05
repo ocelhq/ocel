@@ -16,6 +16,7 @@ import { awaitLiveValues } from "@framework/node-runtime/live-values";
 import { originShaping, revalidatingRoutes, shapeOriginCache } from "./cache-shaping.mjs";
 import { getNextHost, refuseIncompleteHost } from "./host.mjs";
 import { loadIncrementalCacheFactory } from "./incremental-cache.mjs";
+import { prerenderedRoutes } from "./prerendered-routes.mjs";
 import { loadProjectManifest } from "./project-manifest.mjs";
 import { routeStaleHitsToRefresh } from "./refresh.mjs";
 import { revalidatedHeader, revalidationTicks } from "./revalidation-signal.mjs";
@@ -62,6 +63,7 @@ async function boot(): Promise<void> {
   const manifest = await loadProjectManifest(dirname(handlerPath));
   const newIncrementalCache = loadIncrementalCacheFactory(dirname(handlerPath), manifest);
   const routes = revalidatingRoutes(manifest);
+  const prerendered = prerenderedRoutes(manifest);
   const shaping = originShaping(routes, process.env, getNextHost().cacheTagsPerObject);
 
   const invoke: Invoke = (req, res, ocel) => {
@@ -69,7 +71,8 @@ async function boot(): Promise<void> {
     if (shaping) shapeOriginCache(req, res, shaping);
     announceRevalidations(res);
     const { scheduleRefresh } = getNextHost();
-    if (scheduleRefresh) routeStaleHitsToRefresh(req, res, routes, scheduleRefresh, ocel.holdEnd);
+    if (scheduleRefresh)
+      routeStaleHitsToRefresh(req, res, prerendered, scheduleRefresh, ocel.holdEnd);
     if (newIncrementalCache) {
       (globalThis as any).__incrementalCache = newIncrementalCache(req);
     }
