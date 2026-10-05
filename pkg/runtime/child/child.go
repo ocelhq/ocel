@@ -61,6 +61,8 @@ func Start(opts Options) (*Process, error) {
 
 func (p *Process) PID() int { return p.pid }
 
+func (p *Process) Command() string { return p.what }
+
 func (p *Process) Exited() <-chan Exit { return p.exited }
 
 func (p *Process) Signal(sig os.Signal) error {

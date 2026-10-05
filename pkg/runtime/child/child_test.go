@@ -191,6 +191,9 @@ func TestExited(t *testing.T) {
 		if proc.PID() <= 0 {
 			t.Errorf("PID() = %d, want the pid signals are addressed to", proc.PID())
 		}
+		if !strings.HasSuffix(proc.Command(), " -test.run=^TestChildHelper$") {
+			t.Errorf("Command() = %q, want the command line it ran, so an app that exits says what was run", proc.Command())
+		}
 		waitExit(t, proc)
 	})
 }
