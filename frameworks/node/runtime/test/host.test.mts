@@ -294,6 +294,275 @@ describe("invocation lifecycle", () => {
   });
 });
 
+describe("a host whose CPU stops when the response ends", () => {
+  function settlingAfter(ms: number, done: () => void): Promise<void> {
+    return new Promise<void>((r) =>
+      setTimeout(() => {
+        done();
+        r();
+      }, ms),
+    );
+  }
+
+  function holdingFor(ms: number, done: () => void): Invoke {
+    return (_req, res, ocel) =>
+      runWithWaitUntil(ocel.holdEnd, async () => {
+        background(() => settlingAfter(ms, done));
+        res.end("ok");
+      });
+  }
+
+  async function startDeclaring(capMs: string | undefined, invoke: Invoke): Promise<number> {
+    if (capMs === undefined) delete process.env.OCEL_FINISH_BEFORE_RESPONSE_MS;
+    else process.env.OCEL_FINISH_BEFORE_RESPONSE_MS = capMs;
+    try {
+      return await start(invoke);
+    } finally {
+      delete process.env.OCEL_FINISH_BEFORE_RESPONSE_MS;
+    }
+  }
+
+  test("holds the last byte until the runtime's own background work settles", async () => {
+    let settled = false;
+    const port = await startDeclaring(
+      "5000",
+      holdingFor(80, () => {
+        settled = true;
+      }),
+    );
+
+    await request(port, "req-finish");
+
+    expect(settled).toBe(true);
+  });
+
+  test("holds the last byte for work that work it held defers in turn", async () => {
+    let settled = false;
+    const port = await startDeclaring("5000", (_req, res, ocel) =>
+      runWithWaitUntil(ocel.holdEnd, async () => {
+        background(async () => {
+          await Promise.resolve();
+          background(() =>
+            settlingAfter(60, () => {
+              settled = true;
+            }),
+          );
+        });
+        res.end("ok");
+      }),
+    );
+
+    await request(port, "req-finish-nested");
+
+    expect(settled).toBe(true);
+  });
+
+  test("holds the last byte for work registered as the end writes the response's head", async () => {
+    let settled = false;
+    const port = await startDeclaring("5000", (_req, res, ocel) => {
+      const writeHead = res.writeHead;
+      res.writeHead = function (this: http.ServerResponse, ...args: any[]) {
+        ocel.holdEnd(
+          settlingAfter(80, () => {
+            settled = true;
+          }),
+        );
+        return (writeHead as any).apply(this, args);
+      } as typeof res.writeHead;
+      res.end("ok");
+    });
+
+    const res = await fetch(`http://127.0.0.1:${port}/`);
+    const body = await res.text();
+
+    expect(settled).toBe(true);
+    expect(body).toBe("ok");
+    expect(res.headers.get("content-length")).toBe("2");
+  });
+
+  test("does not hold the last byte for app work that settles only once the response closes", async () => {
+    const port = await startDeclaring("5000", (_req, res, ocel) => {
+      ocel.waitUntil(new Promise((resolve) => res.once("close", resolve)));
+      res.end("ok");
+    });
+    const started = performance.now();
+
+    await request(port, "req-after-close");
+
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
+  test("a second end while the first is held does not send the last byte early", async () => {
+    let settled = false;
+    const port = await startDeclaring("5000", (_req, res, ocel) => {
+      ocel.holdEnd(
+        settlingAfter(80, () => {
+          settled = true;
+        }),
+      );
+      res.end("ok");
+      res.end();
+    });
+
+    const body = await requestBody(port, "req-second-end");
+
+    expect(settled).toBe(true);
+    expect(body).toBe("ok");
+  });
+
+  test("holds the last byte of a body whose length the app declared and wrote before ending", async () => {
+    let settled = false;
+    const port = await startDeclaring("5000", (_req, res, ocel) => {
+      ocel.holdEnd(
+        settlingAfter(80, () => {
+          settled = true;
+        }),
+      );
+      res.setHeader("content-length", "4");
+      res.write("ok");
+      res.write("ok");
+      res.end();
+    });
+
+    const body = await requestBody(port, "req-sized");
+
+    expect(settled).toBe(true);
+    expect(body).toBe("okok");
+  });
+
+  test("holds the last byte of a body whose length the app declared through writeHead", async () => {
+    let settled = false;
+    const port = await startDeclaring("5000", (_req, res, ocel) => {
+      ocel.holdEnd(
+        settlingAfter(80, () => {
+          settled = true;
+        }),
+      );
+      res.writeHead(200, { "content-length": "4" });
+      res.write("okok");
+      res.end();
+    });
+
+    const body = await requestBody(port, "req-sized-head");
+
+    expect(settled).toBe(true);
+    expect(body).toBe("okok");
+  });
+
+  test("sends every write that follows the one completing a declared body, and calls its callback", async () => {
+    let settled = false;
+    let emptyWriteDone = false;
+    const port = await startDeclaring("5000", (_req, res, ocel) => {
+      ocel.holdEnd(
+        settlingAfter(80, () => {
+          settled = true;
+        }),
+      );
+      res.setHeader("content-length", "4");
+      res.write("okok");
+      res.write("", () => {
+        emptyWriteDone = true;
+      });
+      res.end();
+    });
+
+    const body = await requestBody(port, "req-sized-empty-write");
+
+    expect(settled).toBe(true);
+    expect(body).toBe("okok");
+    expect(emptyWriteDone).toBe(true);
+  });
+
+  test("a second end while the first is held calls its callback once the response finishes", async () => {
+    let settledBeforeCallback: boolean | undefined;
+    let settled = false;
+    let finished = false;
+    const port = await startDeclaring("5000", (_req, res, ocel) => {
+      ocel.holdEnd(
+        settlingAfter(80, () => {
+          settled = true;
+        }),
+      );
+      res.end("ok");
+      res.end(() => {
+        settledBeforeCallback = settled;
+        finished = res.writableFinished;
+      });
+    });
+
+    await requestBody(port, "req-second-end-callback");
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(settledBeforeCallback).toBe(true);
+    expect(finished).toBe(true);
+  });
+
+  test("a write after a held end fails as a write after end does", async () => {
+    let failure: (Error & { code?: string }) | null | undefined;
+    const port = await startDeclaring("5000", (_req, res, ocel) => {
+      ocel.holdEnd(settlingAfter(40, () => {}));
+      res.on("error", () => {});
+      res.end("ok");
+      res.write("late", (err) => {
+        failure = err;
+      });
+    });
+
+    const body = await requestBody(port, "req-write-after-held-end");
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(body).toBe("ok");
+    expect(failure?.code).toBe("ERR_STREAM_WRITE_AFTER_END");
+  });
+
+  test("ends the response at its cap when held work outlasts it", async () => {
+    const port = await startDeclaring("50", (_req, res, ocel) => {
+      ocel.holdEnd(new Promise(() => {}));
+      res.end("ok");
+    });
+    const started = performance.now();
+
+    await request(port, "req-capped");
+
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
+  test("completes the invocation only once held work that outlasted the cap settles", async () => {
+    let settled = false;
+    const port = await startDeclaring("30", (_req, res, ocel) => {
+      ocel.holdEnd(
+        settlingAfter(200, () => {
+          settled = true;
+        }),
+      );
+      res.end("ok");
+    });
+
+    await request(port, "req-capped-complete");
+    await waitFor(() =>
+      messages.some(
+        (m) => m.type === "invocation-complete" && m.payload.requestId === "req-capped-complete",
+      ),
+    );
+
+    expect(settled).toBe(true);
+  });
+
+  test("ends the response first on a host that declares no such thing", async () => {
+    let settled = false;
+    const port = await startDeclaring(
+      undefined,
+      holdingFor(80, () => {
+        settled = true;
+      }),
+    );
+
+    await request(port, "req-unheld");
+
+    expect(settled).toBe(false);
+  });
+});
+
 describe("an app that calls listen() instead of exporting a handler", () => {
   async function startServed(server: http.Server): Promise<number> {
     const before = messages.filter((m) => m.type === "server-ready").length;
@@ -407,6 +676,23 @@ function request(port: number, requestId: string): Promise<void> {
       (res) => {
         res.on("data", () => {});
         res.on("end", () => resolve());
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+function requestBody(port: number, requestId: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const req = http.request(
+      { host: "127.0.0.1", port, path: "/", headers: { "x-ocel-request-id": requestId } },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => {
+          body += chunk;
+        });
+        res.on("end", () => resolve(body));
       },
     );
     req.on("error", reject);

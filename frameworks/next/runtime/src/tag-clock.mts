@@ -1,4 +1,5 @@
 import { areTagsExpired, mergeRecord, type TagRecord } from "@framework/next-cache";
+import { holdEnd } from "@framework/node-runtime/background";
 import { getNextHost } from "./host.mjs";
 import { noteRevalidation } from "./revalidation-signal.mjs";
 import { mirrorTag } from "./tags-manifest.mjs";
@@ -100,6 +101,20 @@ function startSync(): Promise<void> {
   }));
 }
 
+async function writeTags(tags: string[], at: number): Promise<void> {
+  const backend = await useCacheStore();
+  if (!backend) return;
+
+  await Promise.all(
+    tags.map(async (tag) => {
+      const record = state.records.get(tag)!;
+      try {
+        await backend.writeTag(tag, { ...record, writtenAt: at });
+      } catch {}
+    }),
+  );
+}
+
 export function recordTags(tags: string[], record: TagRecord): void {
   for (const tag of tags) observe(tag, record);
 }
@@ -121,17 +136,7 @@ export const tagClock: TagClock = {
     }
     if (tags.length > 0) noteRevalidation();
 
-    const backend = await useCacheStore();
-    if (!backend) return;
-
-    await Promise.all(
-      tags.map(async (tag) => {
-        const record = state.records.get(tag)!;
-        try {
-          await backend.writeTag(tag, { ...record, writtenAt: at });
-        } catch {}
-      }),
-    );
+    await holdEnd(writeTags(tags, at));
   },
 
   async refreshTags() {

@@ -518,3 +518,17 @@ test("mirrors an invalidation raised elsewhere once it syncs", async () => {
 
   expect(manifest.get("products")).toEqual({ stale: 4_000, expired: 9_000 });
 });
+
+test("holds the request's last byte for the tag writes an update makes", async () => {
+  const store = fakeStore();
+  const { tagClock } = await loadBoth(store);
+  let updated: Promise<void> | undefined;
+
+  const held = await invocation(async () => {
+    updated = tagClock.updateTags(["products"]);
+  });
+  await updated;
+
+  expect(held).toHaveLength(1);
+  expect(store.rows.get("products")!.expired).toBeGreaterThan(0);
+});

@@ -9,7 +9,7 @@ import {
   tagsOf,
   variantHeadersFile,
 } from "@framework/next-cache";
-import { background } from "@framework/node-runtime/background";
+import { background, holdEnd } from "@framework/node-runtime/background";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
@@ -205,7 +205,7 @@ export default class OcelCacheHandler {
 
     noteRevalidation();
     recordTags(list, record);
-    await (await this.openStore()).writeTags(list, record);
+    await holdEnd(this.openStore().then((store) => store.writeTags(list, record)));
   }
 
   private noteOriginTags(tags: string[]): void {

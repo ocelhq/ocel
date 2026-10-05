@@ -1,3 +1,4 @@
+import { holdEnd } from "@framework/node-runtime/background";
 import { clockMethods, tagClock, useCacheStore } from "./tag-clock.mjs";
 import { bufferValue, type CacheEntry, now, pendingSets, streamOf } from "./use-cache-entry.mjs";
 
@@ -33,25 +34,27 @@ const handler = {
   },
 
   async set(cacheKey: string, pendingEntry: Promise<CacheEntry>): Promise<void> {
-    await pending.run(cacheKey, async () => {
-      try {
-        const store = await useCacheStore();
-        if (!store) return;
+    await holdEnd(
+      pending.run(cacheKey, async () => {
+        try {
+          const store = await useCacheStore();
+          if (!store) return;
 
-        const entry = await pendingEntry;
-        const bytes = await bufferValue(entry);
-        if (!bytes) return;
+          const entry = await pendingEntry;
+          const bytes = await bufferValue(entry);
+          if (!bytes) return;
 
-        await store.writeEntry(cacheKey, {
-          tags: entry.tags,
-          stale: entry.stale,
-          timestamp: entry.timestamp,
-          expire: entry.expire,
-          revalidate: entry.revalidate,
-          body: Buffer.from(bytes).toString("base64"),
-        });
-      } catch {}
-    });
+          await store.writeEntry(cacheKey, {
+            tags: entry.tags,
+            stale: entry.stale,
+            timestamp: entry.timestamp,
+            expire: entry.expire,
+            revalidate: entry.revalidate,
+            body: Buffer.from(bytes).toString("base64"),
+          });
+        } catch {}
+      }),
+    );
   },
 
   ...clockMethods,
