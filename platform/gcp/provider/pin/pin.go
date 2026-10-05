@@ -230,16 +230,17 @@ func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error 
 				continue
 			}
 			if !errors.Is(err, ErrRevisionServed) {
-				left = append(left, each.service+" is put back on "+each.revision+" if the promotion that pinned it since fails")
+				left = append(left, formatPendingRollback(each))
 				continue
 			}
 		}
+		closed := false
 		if rollback.Opened {
-			recorded, err := untilRecorded(ctx, pins, each, rollback, func() error {
+			recorded, err := putBackOrRecordRollback(ctx, pins, each, rollback, func() error {
 				return pins.Close(ctx, each.service, stillPinned(pins, each))
 			})
 			if errors.Is(err, errNotRecorded) {
-				left = append(left, each.service+" is put back on "+each.revision+" if the promotion that pinned it since fails")
+				left = append(left, formatPendingRollback(each))
 				continue
 			}
 			if recorded {
@@ -249,6 +250,7 @@ func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error 
 				left = append(left, each.service+" answers everyone on "+each.revision)
 				continue
 			}
+			closed = true
 		}
 		switch rollback.Previous {
 		case each.revision:
@@ -257,11 +259,15 @@ func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error 
 				left = append(left, each.service+" serves "+each.revision)
 			}
 		default:
-			_, err := untilRecorded(ctx, pins, each, rollback, func() error {
+			owed := rollback
+			if closed {
+				owed.Opened = false
+			}
+			_, err := putBackOrRecordRollback(ctx, pins, each, owed, func() error {
 				return pins.Restore(ctx, each.service, rollback.Previous, stillPinned(pins, each))
 			})
 			if errors.Is(err, errNotRecorded) {
-				left = append(left, each.service+" is put back on "+each.revision+" if the promotion that pinned it since fails")
+				left = append(left, formatPendingRollback(each))
 			} else if err != nil {
 				left = append(left, each.service+" serves "+each.revision)
 			}
@@ -278,7 +284,11 @@ const repinAttempts = 3
 
 var errNotRecorded = errors.New("the rollback this promotion owes could not be recorded")
 
-func untilRecorded(ctx context.Context, pins Pins, each pinned, rollback Rollback, put func() error) (recorded bool, err error) {
+func formatPendingRollback(each pinned) string {
+	return each.service + " is put back on " + each.revision + " if the promotion that pinned it since fails"
+}
+
+func putBackOrRecordRollback(ctx context.Context, pins Pins, each pinned, rollback Rollback, put func() error) (recorded bool, err error) {
 	for range repinAttempts {
 		err = put()
 		if !errors.Is(err, errRepinned) {
@@ -292,7 +302,7 @@ func untilRecorded(ctx context.Context, pins Pins, each pinned, rollback Rollbac
 			return false, fmt.Errorf("%w: %w", errNotRecorded, err)
 		}
 	}
-	return false, errNotRecorded
+	return false, err
 }
 
 func readRollback(ctx context.Context, pins Pins, each pinned) (Rollback, error) {

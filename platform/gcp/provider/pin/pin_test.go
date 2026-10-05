@@ -566,7 +566,76 @@ func TestAPromotionThatOthersRepinWithoutEndNamesTheServiceItCouldNotPutBack(t *
 
 	_, err := pin.MovePointer(context.Background(), cloudRun, nil, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
 
+	if err == nil || !strings.Contains(err.Error(), api+" answers everyone on api-2") {
+		t.Errorf("MovePointer = %v, want it to say %s answers everyone on api-2: nothing is recorded, so no later promotion closes it", err, api)
+	}
+	if strings.Contains(err.Error(), "if the promotion that pinned it since fails") {
+		t.Errorf("MovePointer = %v, want no rollback promised: none was recorded", err)
+	}
+}
+
+func TestAPromotionThatOthersRepinWithoutEndNamesTheServiceItCouldNotPutBackOnItsPreviousRevision(t *testing.T) {
+	const api = "ocel-shop-prod-api"
+	refused := errors.New("cloud run refused the pin")
+	cloudRun := &services{
+		serving:     map[string]string{api: "api-1", "ocel-shop-prod-web": "web-1"},
+		refuse:      map[string]error{"ocel-shop-prod-web": refused},
+		checkActive: true,
+	}
+	cloudRun.beforeRestore = func(service string) { cloudRun.serving[service] = "api-3" }
+	cloudRun.beforeRecordRollback = map[string]func(){api: func() { cloudRun.serving[api] = "api-2" }}
+
+	_, err := pin.MovePointer(context.Background(), cloudRun, nil, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
+
+	if err == nil || !strings.Contains(err.Error(), api+" serves api-2") {
+		t.Errorf("MovePointer = %v, want it to say %s serves api-2: nothing is recorded, so no later promotion puts it back", err, api)
+	}
+	if err != nil && strings.Contains(err.Error(), "if the promotion that pinned it since fails") {
+		t.Errorf("MovePointer = %v, want no rollback promised: none was recorded", err)
+	}
+}
+
+type recordRefusing struct{ *services }
+
+func (recordRefusing) RecordRollback(context.Context, string, string, pin.Rollback) error {
+	return errors.New("the record store is down")
+}
+
+func TestAPromotionWhoseRollbackCannotBeRecordedNamesTheRollbackItOwes(t *testing.T) {
+	const api = "ocel-shop-prod-api"
+	refused := errors.New("cloud run refused the pin")
+	cloudRun := &services{
+		serving:     map[string]string{api: "api-1", "ocel-shop-prod-web": "web-1"},
+		refuse:      map[string]error{"ocel-shop-prod-web": refused},
+		checkActive: true,
+	}
+	cloudRun.beforeRestore = func(service string) { cloudRun.serving[service] = "api-3" }
+
+	_, err := pin.MovePointer(context.Background(), recordRefusing{services: cloudRun}, nil, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
+
 	if err == nil || !strings.Contains(err.Error(), api+" is put back on api-2 if the promotion that pinned it since fails") {
 		t.Errorf("MovePointer = %v, want it to name %s as put back on api-2 only if the promotion that pinned it since fails", err, api)
+	}
+}
+
+func TestAPromotionThatClosedAServiceAndIsRepinnedWhilePuttingItBackRecordsARollbackThatDoesNotCloseItAgain(t *testing.T) {
+	const api = "ocel-shop-prod-api"
+	refused := errors.New("cloud run refused the pin")
+	cloudRun := &services{
+		serving:     map[string]string{api: "api-1", "ocel-shop-prod-web": "web-1"},
+		closed:      map[string]bool{api: true},
+		refuse:      map[string]error{"ocel-shop-prod-web": refused},
+		checkActive: true,
+	}
+	cloudRun.beforeRestore = func(service string) { cloudRun.serving[service] = "api-3" }
+
+	_, err := pin.MovePointer(context.Background(), cloudRun, nil, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
+
+	if !errors.Is(err, refused) {
+		t.Fatalf("MovePointer = %v, want the refusal that stopped it", err)
+	}
+	got, ok := cloudRun.rollbacks[api]["api-2"]
+	if !ok || got.Previous != "api-1" || got.Opened {
+		t.Errorf("api rollbacks = %+v, want api-2 recorded as put back on api-1 without Opened: this promotion already closed the service", cloudRun.rollbacks[api])
 	}
 }
