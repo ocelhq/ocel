@@ -164,6 +164,30 @@ func TestRemovingADeploymentUnroutesItsHostnameAndTakesTheTagOffItsRevision(t *t
 	}
 }
 
+func TestRemovingADeploymentTakesTheTagOffEveryServiceItsDeployTagged(t *testing.T) {
+	t.Parallel()
+
+	const fnService = "ocel-shop-prod-fn--web--api"
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	record := previewRecord("b1")
+	record.Revisions[fnService] = fnService + "-b1"
+	move := deploymentMove(deploymentFirst, deploymentHost, record)
+	if err := stack.MovePointer(ctx, move, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(deployment) = %v", err)
+	}
+	if err := stack.RemovePointer(ctx, router.PointerRemoval{Pointer: move.Pointer, Hosts: move.Hosts}, progress.Discard()); err != nil {
+		t.Fatalf("RemovePointer(deployment) = %v", err)
+	}
+	got := w.untagged()
+	for _, service := range []string{previewService, fnService} {
+		want := service + "#" + w.tagOf(service, record.Revisions[service])
+		if !slices.Contains(got, want) {
+			t.Errorf("the removal untagged %v, want it to include %s", got, want)
+		}
+	}
+}
+
 const (
 	aliasHost      = "shop-bbbbbbbbbbbbbbbb.preview.example.com"
 	rotatedAlias   = "shop-cccccccccccccccc.preview.example.com"

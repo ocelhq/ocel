@@ -162,11 +162,12 @@ func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
 }
 
 type edgeRecord struct {
-	LoadBalancer LoadBalancer    `json:"loadBalancer,omitzero"`
-	Hosts        map[string]Host `json:"hosts,omitempty"`
+	LoadBalancer   LoadBalancer        `json:"loadBalancer,omitzero"`
+	Hosts          map[string]Host     `json:"hosts,omitempty"`
+	DeploymentTags map[string]pin.Tags `json:"deploymentTags,omitempty"`
+	Pointers       pin.Pointers        `json:"pointers,omitempty"`
 
-	Served   map[string]servedRelease `json:"served,omitempty"`
-	Pointers pin.Pointers             `json:"pointers,omitempty"`
+	Served map[string]servedRelease `json:"served,omitempty"`
 }
 
 type Host struct {
