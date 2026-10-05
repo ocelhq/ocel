@@ -54,7 +54,7 @@ func (q *questions) pose(err error) error {
 	if idErr != nil {
 		return errors.Join(err, idErr)
 	}
-	detail, detailErr := connect.NewErrorDetail(&contractv1.Question{Id: id, Finding: question.Finding, Prompt: question.Prompt})
+	detail, detailErr := connect.NewErrorDetail(&contractv1.Question{Id: id, Finding: question.Finding, Prompt: question.Prompt, Remedy: question.Remedy})
 	if detailErr != nil {
 		return errors.Join(err, detailErr)
 	}

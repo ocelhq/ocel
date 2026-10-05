@@ -55,3 +55,32 @@ func TestQuestionsKeepOnlyTheMostRecentOnesUnanswered(t *testing.T) {
 		t.Errorf("confirming the latest question = %v, confirmed %d times, want it answered once", err, confirmed)
 	}
 }
+
+func TestAQuestionPosedOverTheWireKeepsItsRemedy(t *testing.T) {
+	q := newQuestions()
+	const remedy = "ssh-keyscan -t ssh-ed25519 203.0.113.10 >> ~/.ssh/known_hosts"
+	asked := provider.Ask("confirm this", provider.Question{
+		Finding: "a finding",
+		Prompt:  "go ahead?",
+		Remedy:  remedy,
+		Confirm: func(context.Context) error { return nil },
+	})
+
+	var rpcErr *connect.Error
+	if !errors.As(q.pose(provider.RefusalError(asked)), &rpcErr) {
+		t.Fatal("pose() did not return a connect error")
+	}
+	for _, detail := range rpcErr.Details() {
+		value, err := detail.Value()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if question, ok := value.(*contractv1.Question); ok {
+			if question.GetRemedy() != remedy {
+				t.Errorf("remedy = %q, want %q", question.GetRemedy(), remedy)
+			}
+			return
+		}
+	}
+	t.Fatal("pose() attached no question")
+}

@@ -164,6 +164,7 @@ func newRecordHostKeyQuestion(trust HostTrust) (provider.Question, error) {
 	return provider.Question{
 		Finding: trust.Offer(),
 		Prompt:  fmt.Sprintf("Trust that key and record %s in %s?", entry, store),
+		Remedy:  trust.Remedy,
 		Confirm: func(context.Context) error {
 			if err := record(store, line); err != nil {
 				return fmt.Errorf("record the host key in %s: %w", store, err)
