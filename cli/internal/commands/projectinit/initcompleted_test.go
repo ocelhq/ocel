@@ -12,7 +12,10 @@ import (
 
 func recordInits(dependencies *Dependencies) *[]telemetry.Payload {
 	var recorded []telemetry.Payload
-	dependencies.RecordEvent = func(payload telemetry.Payload) { recorded = append(recorded, payload) }
+	dependencies.RecordEvent = func(payload telemetry.Payload) bool {
+		recorded = append(recorded, payload)
+		return true
+	}
 	return &recorded
 }
 

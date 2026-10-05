@@ -34,7 +34,7 @@ type Options struct {
 	Stderr          io.Writer
 	StdinIsTerminal bool
 	Run             *run.Run
-	RecordEvent     func(telemetry.Payload)
+	RecordEvent     func(telemetry.Payload) bool
 }
 
 func (o Options) session() *run.Span {

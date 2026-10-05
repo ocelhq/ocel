@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/configdoc"
@@ -41,6 +42,7 @@ func NewInvocation() commands.Invocation {
 		Presentation:    func(io.Writer) terminal.Presentation { return terminal.Resolve(terminal.Conditions{}) },
 		StdinIsTerminal: func(io.Reader) bool { return false },
 		ConfigPath:      func() string { return os.Getenv(commands.ConfigEnvVar) },
+		RecordEvent:     func(telemetry.Payload) bool { return false },
 	}
 }
 

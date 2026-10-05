@@ -10,22 +10,21 @@ import (
 
 const DebugPrefix = "[telemetry] "
 
-func Submit(w io.Writer, resolution Resolution, event Event) {
+func Submit(w io.Writer, resolution Resolution, event Event) bool {
 	if !resolution.Enabled {
-		return
+		return false
 	}
 	if !resolution.Debug {
 		if !isBannerShown(userconfig.Read()) {
-			return
+			return false
 		}
-		if spool, err := OpenSpool(); err == nil {
-			_ = spool.Append(event)
-		}
-		return
+		spool, err := OpenSpool()
+		return err == nil && spool.Append(event) == nil
 	}
 	line, err := json.Marshal(event)
 	if err != nil {
-		return
+		return false
 	}
-	fmt.Fprintf(w, "%s%s\n", DebugPrefix, line)
+	_, err = fmt.Fprintf(w, "%s%s\n", DebugPrefix, line)
+	return err == nil
 }

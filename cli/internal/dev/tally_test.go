@@ -23,10 +23,11 @@ type sessionLog struct {
 	payloads []telemetry.Payload
 }
 
-func (l *sessionLog) record(payload telemetry.Payload) {
+func (l *sessionLog) record(payload telemetry.Payload) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.payloads = append(l.payloads, payload)
+	return true
 }
 
 func (l *sessionLog) theOnlySession(t *testing.T) telemetry.DevSession {

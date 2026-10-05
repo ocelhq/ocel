@@ -32,7 +32,7 @@ type Invocation struct {
 	Questions       providerprocess.Questions
 	ConfigPath      func() string
 	Setups          prerequisite.Setups
-	RecordEvent     func(telemetry.Payload)
+	RecordEvent     func(telemetry.Payload) bool
 }
 
 func (i Invocation) LoadProject(ctx context.Context, cwd string) (*project.Project, error) {

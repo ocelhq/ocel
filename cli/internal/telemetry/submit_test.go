@@ -12,20 +12,24 @@ import (
 
 func TestSubmitSpoolsTheEventInTheUserCacheOnlyWhenEnabledOutsideDebugMode(t *testing.T) {
 	cases := map[string]struct {
-		resolution  telemetry.Resolution
-		wantSpooled bool
+		resolution   telemetry.Resolution
+		wantSpooled  bool
+		wantRecorded bool
 	}{
-		"enabled":  {telemetry.Resolution{Enabled: true}, true},
-		"debug":    {telemetry.Resolution{Enabled: true, Debug: true}, false},
-		"disabled": {telemetry.Resolution{}, false},
+		"enabled":  {telemetry.Resolution{Enabled: true}, true, true},
+		"debug":    {telemetry.Resolution{Enabled: true, Debug: true}, false, true},
+		"disabled": {telemetry.Resolution{}, false, false},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			confighome.Isolate(t)
 			telemetry.PrintBannerOnce(io.Discard, telemetry.Resolution{Enabled: true})
 
-			telemetry.Submit(io.Discard, tc.resolution, aCompletedEvent(t, "deploy"))
+			recorded := telemetry.Submit(io.Discard, tc.resolution, aCompletedEvent(t, "deploy"))
 
+			if recorded != tc.wantRecorded {
+				t.Errorf("recorded = %v, want %v", recorded, tc.wantRecorded)
+			}
 			spool, err := telemetry.OpenSpool()
 			if err != nil {
 				t.Fatal(err)
@@ -46,13 +50,33 @@ func TestSubmitSpoolsTheEventInTheUserCacheOnlyWhenEnabledOutsideDebugMode(t *te
 func TestSubmitSpoolsNothingBeforeTheFirstRunBannerIsShown(t *testing.T) {
 	confighome.Isolate(t)
 
-	telemetry.Submit(io.Discard, telemetry.Resolution{Enabled: true}, aCompletedEvent(t, "deploy"))
+	recorded := telemetry.Submit(io.Discard, telemetry.Resolution{Enabled: true}, aCompletedEvent(t, "deploy"))
 
 	spool, err := telemetry.OpenSpool()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spool.HasEvents() {
-		t.Error("the spool holds an event recorded before the banner told the user about telemetry")
+	if recorded || spool.HasEvents() {
+		t.Errorf("recorded = %v, spool has events = %v, want neither before the banner told the user about telemetry", recorded, spool.HasEvents())
+	}
+}
+
+func TestSubmitReportsNothingRecordedWhenTheSpoolCannotBeWritten(t *testing.T) {
+	confighome.Isolate(t)
+	resolution := telemetry.Resolution{Enabled: true}
+	telemetry.PrintBannerOnce(io.Discard, resolution)
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cache, "ocel"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if telemetry.Submit(io.Discard, resolution, aCompletedEvent(t, "deploy")) {
+		t.Error("recorded = true, want false when the spool directory cannot be created")
 	}
 }

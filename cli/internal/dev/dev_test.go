@@ -854,11 +854,11 @@ func toMap(env []string) map[string]string {
 type testDeps struct {
 	OpenDocker  docker.OpenFunc
 	Format      terminal.Format
-	RecordEvent func(telemetry.Payload)
+	RecordEvent func(telemetry.Payload) bool
 }
 
 func devDeps() testDeps {
-	return testDeps{OpenDocker: (&dockertest.Engine{}).OpenFunc(), Format: terminal.FormatHuman}
+	return testDeps{OpenDocker: (&dockertest.Engine{}).OpenFunc(), Format: terminal.FormatHuman, RecordEvent: func(telemetry.Payload) bool { return false }}
 }
 
 func options(ctx context.Context, deps testDeps, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) (Options, error) {
