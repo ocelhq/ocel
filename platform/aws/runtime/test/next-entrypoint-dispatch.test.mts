@@ -59,7 +59,7 @@ const routingManifest = {
     fallback: [],
   },
   dispatch: Object.fromEntries(
-    dispatchedPaths.map((path) => [path, { kind: "lambda", id: ENTRY_BUNDLE, entryKey: path }]),
+    dispatchedPaths.map((path) => [path, { kind: "function", id: ENTRY_BUNDLE, entryKey: path }]),
   ),
 };
 

@@ -377,7 +377,7 @@ async function expectManifestJoinsLaunchers(projectDir: string) {
   >;
   let joined = 0;
   for (const [pathname, target] of Object.entries(dispatch)) {
-    if (target.kind !== "lambda" && target.kind !== "prerender") continue;
+    if (target.kind !== "function" && target.kind !== "prerender") continue;
     if (target.kind === "prerender" && target.edgeEntryKey !== undefined) {
       expect(target.entryKey).toBeUndefined();
       continue;
@@ -711,7 +711,7 @@ test("gives variants one shared bundle id and one shared entry key", async () =>
   });
   expect(manifest.dispatch["/index.rsc"]).toEqual(manifest.dispatch["/"]);
   expect(manifest.dispatch["/api/documents"]).toEqual({
-    kind: "lambda",
+    kind: "function",
     id: "bundle-0",
     entryKey: "/api/documents",
   });
@@ -1461,7 +1461,7 @@ test("treats a prerendered PAGES_API output as the pages route it really is", as
 
   const manifest = await readManifest(projectDir);
   expect(manifest.dispatch["/api-docs/[...slug]"]).toMatchObject({
-    kind: "lambda",
+    kind: "function",
     page: true,
   });
 });
@@ -1487,7 +1487,7 @@ test("leaves an API route that parents no prerender out of the pages dispatch", 
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  expect(manifest.dispatch["/api/hello"]).toMatchObject({ kind: "lambda" });
+  expect(manifest.dispatch["/api/hello"]).toMatchObject({ kind: "function" });
   expect(manifest.dispatch["/api/hello"]).not.toHaveProperty("page");
 });
 
@@ -1899,7 +1899,7 @@ test("two apps exposing the same route path do not overwrite each other", async 
     const manifest = JSON.parse(await readFile(join(outputRoot, "routing-manifest.json"), "utf8"));
     expect(manifest.appName).toBe(app);
     expect(manifest.dispatch["/api/documents"]).toEqual({
-      kind: "lambda",
+      kind: "function",
       id: "bundle-0",
       entryKey: "/api/documents",
     });
@@ -2045,7 +2045,7 @@ test("un-normalizes a getServerSideProps root's dispatch key, keeping its own id
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  expect(manifest.dispatch["/"]).toMatchObject({ kind: "lambda", entryKey: "/index" });
+  expect(manifest.dispatch["/"]).toMatchObject({ kind: "function", entryKey: "/index" });
   expect(manifest.dispatch["/index"]).toBeUndefined();
   await expectManifestJoinsLaunchers(projectDir);
 });
@@ -2115,7 +2115,7 @@ test("un-normalizes a nested pages/index/foo output by dropping one leading /ind
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  expect(manifest.dispatch["/index/foo"]).toMatchObject({ kind: "lambda" });
+  expect(manifest.dispatch["/index/foo"]).toMatchObject({ kind: "function" });
   expect(manifest.dispatch["/index/index/foo"]).toBeUndefined();
   expect(manifest.pathnames).toContain("/index/foo");
 });
@@ -2231,7 +2231,7 @@ test("resolves the App Router not-found page (/_not-found) as errorRoutes.notFou
 
   const manifest = await readManifest(projectDir);
   expect(manifest.dispatch["/_not-found"]).toMatchObject({
-    kind: "lambda",
+    kind: "function",
     page: true,
   });
   expect(manifest.errorRoutes).toMatchObject({ notFound: "/_not-found" });
@@ -2329,7 +2329,7 @@ test("leaves an App Router route literally named /index untouched", async () => 
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  expect(manifest.dispatch["/index"]).toMatchObject({ kind: "lambda" });
+  expect(manifest.dispatch["/index"]).toMatchObject({ kind: "function" });
   expect(manifest.dispatch["/"]).toBeUndefined();
   expect(manifest.pathnames).toContain("/index");
   expect(manifest.pathnames).not.toContain("/");
@@ -2360,7 +2360,7 @@ test("keeps a dynamic pages/index/[...slug] route addressable by its own name", 
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  expect(manifest.dispatch["/index/[...slug]"]).toMatchObject({ kind: "lambda" });
+  expect(manifest.dispatch["/index/[...slug]"]).toMatchObject({ kind: "function" });
   expect(manifest.dispatch["/[...slug]"]).toBeUndefined();
   expect(manifest.pathnames).toContain("/index/[...slug]");
 

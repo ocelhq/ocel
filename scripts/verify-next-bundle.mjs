@@ -64,10 +64,10 @@ function verify() {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const dispatch = manifest.dispatch ?? {};
 
-  const lambdaEntries = Object.entries(dispatch).filter(([, v]) => v.kind === "lambda");
+  const functionEntries = Object.entries(dispatch).filter(([, v]) => v.kind === "function");
   check(
-    lambdaEntries.length > 1,
-    `app routes to ${lambdaEntries.length} lambda pathname(s) — not a multi-route app, so "one bundle" proves nothing`,
+    functionEntries.length > 1,
+    `app routes to ${functionEntries.length} function pathname(s) — not a multi-route app, so "one bundle" proves nothing`,
   );
 
   check(
@@ -173,7 +173,7 @@ function verifyDispatch(dispatch, bundles) {
       );
       continue;
     }
-    if (entry.kind !== "lambda" && entry.kind !== "prerender") continue;
+    if (entry.kind !== "function" && entry.kind !== "prerender") continue;
 
     if (!check(typeof entry.id === "string", `${where}: no id`)) continue;
     if (!check(typeof entry.entryKey === "string", `${where}: no entryKey`)) continue;

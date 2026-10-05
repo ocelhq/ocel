@@ -109,7 +109,7 @@ function bundleOf(hosted: Hosted): string {
 
 function manifestFor(hosted: Hosted, middleware: unknown) {
   const target = {
-    kind: "lambda",
+    kind: "function",
     id: bundleOf(hosted),
     entryKey: PAGE_ENTRY,
   };

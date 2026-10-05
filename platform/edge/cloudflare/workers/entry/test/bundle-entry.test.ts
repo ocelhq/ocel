@@ -79,7 +79,7 @@ describe("a lambda route's bundle entry", () => {
           routes: {},
           dispatch: {
             "/blog/hello": {
-              kind: "lambda",
+              kind: "function",
               id: "bundle-0",
               entryKey: "app/blog/[slug]/page",
             },
@@ -105,7 +105,7 @@ describe("a lambda route's bundle entry", () => {
           basePath: "",
           pathnames: [],
           routes: {},
-          dispatch: { "/api/documents": { kind: "lambda", id: "/api/documents" } },
+          dispatch: { "/api/documents": { kind: "function", id: "/api/documents" } },
         },
         functionUrls: { "/api/documents": "https://fn.example.com" },
         fetch: origin.fetch,
@@ -126,7 +126,7 @@ describe("a lambda route's bundle entry", () => {
           pathnames: [],
           routes: {},
           dispatch: {
-            "/blog/hello": { kind: "lambda", id: "bundle-0", entryKey: "" },
+            "/blog/hello": { kind: "function", id: "bundle-0", entryKey: "" },
           },
         },
         functionUrls: { "bundle-0": "https://fn.example.com" },
@@ -153,7 +153,7 @@ describe("a lambda route's bundle entry", () => {
           routes: {},
           dispatch: {
             "/api/documents": {
-              kind: "lambda",
+              kind: "function",
               id: "bundle-0",
               entryKey: "app/api/documents/route",
             },
@@ -181,10 +181,10 @@ describe("a lambda route's bundle entry", () => {
         pathnames: [],
         routes: {},
         dispatch: {
-          "/": { kind: "lambda", id: "bundle-0", entryKey: "app/page" },
-          "/about": { kind: "lambda", id: "bundle-0", entryKey: "app/about/page" },
+          "/": { kind: "function", id: "bundle-0", entryKey: "app/page" },
+          "/about": { kind: "function", id: "bundle-0", entryKey: "app/about/page" },
           "/api/hook": {
-            kind: "lambda",
+            kind: "function",
             id: "bundle-0",
             entryKey: "app/api/hook/route",
           },
@@ -415,7 +415,7 @@ describe("a client-supplied control header", () => {
     const origin = recorder();
     await dispatchTo(
       "/blog/hello",
-      lambdaDeps(origin, { kind: "lambda", id: "legacy" }),
+      lambdaDeps(origin, { kind: "function", id: "legacy" }),
       smuggled({ [ENTRY_HEADER]: "attacker/admin/page" }),
     );
 
@@ -427,7 +427,7 @@ describe("a client-supplied control header", () => {
     await dispatchTo(
       "/blog/hello",
       lambdaDeps(origin, {
-        kind: "lambda",
+        kind: "function",
         id: "bundle-0",
         entryKey: "app/blog/[slug]/page",
       }),
@@ -442,7 +442,7 @@ describe("a client-supplied control header", () => {
     const origin = recorder();
     await dispatchTo(
       "/blog/hello",
-      lambdaDeps(origin, { kind: "lambda", id: "legacy" }),
+      lambdaDeps(origin, { kind: "function", id: "legacy" }),
       smuggled({
         [ENTRY_HEADER]: "attacker/admin/page",
         "next-resume": "1",

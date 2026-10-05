@@ -511,7 +511,7 @@ test("dispatches each edge pathname to its entry key", async () => {
     entryKey: "middleware_app/api/edge/route",
   });
   expect(manifest.dispatch["/api/docs"]).toEqual({
-    kind: "lambda",
+    kind: "function",
     id: "bundle-0",
     entryKey: "app/api/docs/route",
   });
