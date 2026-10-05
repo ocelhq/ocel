@@ -20,6 +20,13 @@ type Engine struct {
 	Closed   bool
 	Answer   func(argv []string) (string, error)
 	RunError error
+	Exits    map[string]*docker.Exited
+}
+
+func (e *Engine) ReadExit(_ context.Context, id string) (*docker.Exited, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.Exits[id], nil
 }
 
 func (e *Engine) Run(_ context.Context, spec docker.Spec) (docker.Container, error) {

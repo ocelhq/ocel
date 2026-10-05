@@ -32,6 +32,8 @@ const (
 	StopsWithin = stopGrace + 3*time.Second
 
 	concurrentStartWithin = 10 * time.Second
+
+	exitLogLines = 20
 )
 
 type Spec struct {
@@ -53,6 +55,7 @@ type Container struct {
 
 type Engine interface {
 	Run(ctx context.Context, spec Spec) (Container, error)
+	ReadExit(ctx context.Context, id string) (*Exited, error)
 	Exec(ctx context.Context, id string, argv ...string) (string, error)
 	ExecInput(ctx context.Context, id, input string, argv ...string) (string, error)
 	Stop(ctx context.Context, id string) error
@@ -103,6 +106,35 @@ type ExecFailed struct {
 
 func (e *ExecFailed) Error() string {
 	return fmt.Sprintf("%s exited %d: %s", e.Argv[0], e.Code, e.Output)
+}
+
+type Exited struct {
+	Container string
+	Code      int
+	OOMKilled bool
+	Removed   bool
+	Logs      string
+}
+
+func (e *Exited) Error() string {
+	if e.Removed {
+		return fmt.Sprintf("the container %s was removed before it was ready", e.Container)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "the container %s exited %d before it was ready", e.Container, e.Code)
+	if e.OOMKilled {
+		b.WriteString(", killed for running out of memory")
+	}
+	logs := strings.TrimRight(e.Logs, "\n")
+	if logs == "" {
+		b.WriteString(", and printed nothing")
+		return b.String()
+	}
+	b.WriteString(", and the last lines it printed were:")
+	for line := range strings.SplitSeq(logs, "\n") {
+		b.WriteString("\n    " + line)
+	}
+	return b.String()
 }
 
 type daemon struct {
@@ -223,7 +255,7 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 
 func (d *daemon) waitForConcurrentStart(ctx context.Context, spec Spec, port network.Port) (Container, error) {
 	var started container.InspectResponse
-	err := WaitReady(ctx, concurrentStartWithin, func(ctx context.Context) error {
+	err := poll(ctx, concurrentStartWithin, func(ctx context.Context) error {
 		inspected, err := d.api.ContainerInspect(ctx, spec.Name, client.ContainerInspectOptions{})
 		if err != nil {
 			return err
@@ -288,6 +320,43 @@ func (d *daemon) pull(ctx context.Context, image string) error {
 		return fmt.Errorf("pull %s: %w", image, err)
 	}
 	return nil
+}
+
+func (d *daemon) ReadExit(ctx context.Context, id string) (*Exited, error) {
+	inspected, err := d.api.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
+	if cerrdefs.IsNotFound(err) {
+		return &Exited{Container: id, Removed: true}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read whether the container %s is running: %w", id, err)
+	}
+	state := inspected.Container.State
+	if state == nil || state.Running || state.Restarting || state.Status == container.StateCreated {
+		return nil, nil
+	}
+	exited := &Exited{
+		Container: cmp.Or(strings.TrimPrefix(inspected.Container.Name, "/"), id),
+		Code:      state.ExitCode,
+		OOMKilled: state.OOMKilled,
+	}
+	exited.Logs, err = d.readLastLines(ctx, id)
+	if err != nil {
+		exited.Logs = err.Error()
+	}
+	return exited, nil
+}
+
+func (d *daemon) readLastLines(ctx context.Context, id string) (string, error) {
+	logs, err := d.api.ContainerLogs(ctx, id, client.ContainerLogsOptions{ShowStdout: true, ShowStderr: true, Tail: strconv.Itoa(exitLogLines)})
+	if err != nil {
+		return "", fmt.Errorf("read what the container printed: %w", err)
+	}
+	defer func() { _ = logs.Close() }()
+	var printed bytes.Buffer
+	if _, err := stdcopy.StdCopy(&printed, &printed, logs); err != nil {
+		return "", fmt.Errorf("read what the container printed: %w", err)
+	}
+	return printed.String(), nil
 }
 
 func (d *daemon) Exec(ctx context.Context, id string, argv ...string) (string, error) {

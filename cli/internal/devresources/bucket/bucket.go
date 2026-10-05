@@ -122,11 +122,11 @@ func (c *Backend) running(ctx context.Context, project string) (*s3store.Store, 
 	if err != nil {
 		return nil, err
 	}
+	engine, err := c.open(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if c.container == nil {
-		engine, err := c.open(ctx)
-		if err != nil {
-			return nil, err
-		}
 		name := docker.Name(project, backend)
 		container, err := engine.Run(ctx, docker.Spec{
 			Name:  name,
@@ -156,7 +156,7 @@ func (c *Backend) running(ctx context.Context, project string) (*s3store.Store, 
 		SecretAccessKey: key,
 		PathStyle:       true,
 	}
-	if err := waitReady(ctx, store.Endpoint); err != nil {
+	if err := waitReady(ctx, engine, c.container.ID, store.Endpoint); err != nil {
 		return nil, err
 	}
 	if err := store.EnsureBucket(ctx, s3store.SessionsBucket()); err != nil {
@@ -166,8 +166,8 @@ func (c *Backend) running(ctx context.Context, project string) (*s3store.Store, 
 	return c.store, nil
 }
 
-func waitReady(ctx context.Context, endpoint string) error {
-	err := docker.WaitReady(ctx, readyIn, func(ctx context.Context) error {
+func waitReady(ctx context.Context, engine docker.Engine, id, endpoint string) error {
+	err := docker.WaitReady(ctx, engine, id, readyIn, func(ctx context.Context) error {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+healthPath, nil)
 		if err != nil {
 			return err
