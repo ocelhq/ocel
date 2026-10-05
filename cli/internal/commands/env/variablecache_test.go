@@ -5,18 +5,18 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/clitest/confighome"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func TestTheVariableCacheLivesInTheVariableCacheDirectoryOfTheUserConfigDirectory(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", home)
+	configDir := confighome.Isolate(t)
 
 	cache, err := openVariableCache()
 	if err != nil {
 		t.Fatalf("openVariableCache err = %v", err)
 	}
-	if want := filepath.Join(home, "ocel", "variable-cache"); cache.dir != want {
+	if want := filepath.Join(configDir, "variable-cache"); cache.dir != want {
 		t.Errorf("cache dir = %q, want %q", cache.dir, want)
 	}
 }

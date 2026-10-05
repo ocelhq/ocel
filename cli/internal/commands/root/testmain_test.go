@@ -29,16 +29,11 @@ func TestMain(m *testing.M) {
 		os.Exit(runRootSubprocess(strings.Split(args, " ")))
 	}
 
-	dir, err := os.MkdirTemp("", "ocel-cli-test-config-")
-	if err != nil {
-		panic(err)
-	}
-	os.Setenv("XDG_CONFIG_HOME", dir)
-	os.Unsetenv("OCEL_CONFIG")
+	done := clitest.IsolateConfigHome()
 	os.Unsetenv("OCEL_JSON")
 	os.Unsetenv("OCEL_DEBUG")
 	clitest.UnsetColorEnv()
 	code := m.Run()
-	os.RemoveAll(dir)
+	done()
 	os.Exit(code)
 }

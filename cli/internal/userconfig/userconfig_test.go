@@ -14,15 +14,9 @@ import (
 	"github.com/gofrs/flock"
 	"github.com/google/uuid"
 
+	"github.com/ocelhq/ocel/cli/internal/clitest/confighome"
 	"github.com/ocelhq/ocel/cli/internal/userconfig"
 )
-
-func isolatedHome(t *testing.T) string {
-	t.Helper()
-	home := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", home)
-	return home
-}
 
 func settingsPath(t *testing.T) string {
 	t.Helper()
@@ -59,7 +53,7 @@ func holdSettingsLock(t *testing.T) func() {
 }
 
 func TestReadWaitsForAWriterHoldingTheSettingsLock(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	writeSettingsFile(t, `{"k":"v"}`)
 	release := holdSettingsLock(t)
 
@@ -78,7 +72,7 @@ func TestReadWaitsForAWriterHoldingTheSettingsLock(t *testing.T) {
 }
 
 func TestReadWithoutALockFileReadsTheSettingsFile(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	writeSettingsFile(t, `{"k":"v"}`)
 	if got := userconfig.Read(); string(got["k"]) != `"v"` {
 		t.Errorf("Read() = %v, want k=\"v\"", got)
@@ -93,7 +87,7 @@ func TestReadWithoutALockFileReadsTheSettingsFile(t *testing.T) {
 }
 
 func TestReadWithoutAConfigDirectoryIsEmptyAndCreatesNothing(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	if got := userconfig.Read(); len(got) != 0 {
 		t.Errorf("Read() = %v, want empty", got)
 	}
@@ -107,7 +101,7 @@ func TestReadWithoutAConfigDirectoryIsEmptyAndCreatesNothing(t *testing.T) {
 }
 
 func TestConcurrentReadsAndUpdatesAlwaysSeeAWholeFile(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	if err := userconfig.Update(func(s userconfig.Settings) { s["k"] = json.RawMessage(`"v"`) }); err != nil {
 		t.Fatal(err)
 	}
@@ -135,20 +129,12 @@ func TestConcurrentReadsAndUpdatesAlwaysSeeAWholeFile(t *testing.T) {
 }
 
 func TestDirIsOcelUnderTheUserConfigDirectory(t *testing.T) {
-	home := isolatedHome(t)
-	base, err := os.UserConfigDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if base != home {
-		t.Fatalf("test setup: user config dir = %q, want %q", base, home)
-	}
-
+	want := confighome.Isolate(t)
 	dir, err := userconfig.Dir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Join(home, "ocel"); dir != want {
+	if dir != want {
 		t.Errorf("Dir() = %q, want %q", dir, want)
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
@@ -157,7 +143,7 @@ func TestDirIsOcelUnderTheUserConfigDirectory(t *testing.T) {
 }
 
 func TestEnsureDirCreatesTheDirectoryReadableOnlyByTheUser(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	dir, err := userconfig.EnsureDir()
 	if err != nil {
 		t.Fatal(err)
@@ -179,7 +165,7 @@ func TestEnsureDirCreatesTheDirectoryReadableOnlyByTheUser(t *testing.T) {
 }
 
 func TestEnsureInstallIDIsAUUIDAndStable(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	first, err := userconfig.EnsureInstallID()
 	if err != nil {
 		t.Fatal(err)
@@ -197,12 +183,12 @@ func TestEnsureInstallIDIsAUUIDAndStable(t *testing.T) {
 }
 
 func TestEnsureInstallIDDiffersBetweenConfigHomes(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	a, err := userconfig.EnsureInstallID()
 	if err != nil {
 		t.Fatal(err)
 	}
-	isolatedHome(t)
+	confighome.Isolate(t)
 	b, err := userconfig.EnsureInstallID()
 	if err != nil {
 		t.Fatal(err)
@@ -213,7 +199,7 @@ func TestEnsureInstallIDDiffersBetweenConfigHomes(t *testing.T) {
 }
 
 func TestEnsureInstallIDIsReadFromTheSettingsFile(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	want := uuid.NewString()
 	writeSettingsFile(t, `{"install_id":"`+want+`"}`)
 	got, err := userconfig.EnsureInstallID()
@@ -226,7 +212,7 @@ func TestEnsureInstallIDIsReadFromTheSettingsFile(t *testing.T) {
 }
 
 func TestEnsureInstallIDIsReplacedWhenTheStoredOneIsNotAUUID(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	writeSettingsFile(t, `{"install_id":42}`)
 	got, err := userconfig.EnsureInstallID()
 	if err != nil {
@@ -245,7 +231,7 @@ func TestEnsureInstallIDIsReplacedWhenTheStoredOneIsNotAUUID(t *testing.T) {
 }
 
 func TestSettingsFileIsReadableOnlyByTheUser(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	if _, err := userconfig.EnsureInstallID(); err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +245,7 @@ func TestSettingsFileIsReadableOnlyByTheUser(t *testing.T) {
 }
 
 func TestCorruptFileReadsAsEmptyAndIsReplacedOnNextWrite(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	for _, corrupt := range []string{"{not json", "", "[1,2]", "null", "\x00\x01"} {
 		path := writeSettingsFile(t, corrupt)
 		if got := userconfig.Read(); len(got) != 0 {
@@ -280,7 +266,7 @@ func TestCorruptFileReadsAsEmptyAndIsReplacedOnNextWrite(t *testing.T) {
 }
 
 func TestUnreadableSettingsPathReadsAsEmpty(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	if _, err := userconfig.EnsureDir(); err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +279,7 @@ func TestUnreadableSettingsPathReadsAsEmpty(t *testing.T) {
 }
 
 func TestUpdatePreservesFieldsItDoesNotKnow(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	path := writeSettingsFile(t, `{"other":{"nested":[1,2]},"banner_shown":true}`)
 	if _, err := userconfig.EnsureInstallID(); err != nil {
 		t.Fatal(err)
@@ -319,7 +305,7 @@ func TestUpdatePreservesFieldsItDoesNotKnow(t *testing.T) {
 }
 
 func TestUpdateLeavesNoStagingFilesBehind(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	for i := 0; i < 5; i++ {
 		if err := userconfig.Update(func(s userconfig.Settings) { s["n"] = json.RawMessage(`1`) }); err != nil {
 			t.Fatal(err)
@@ -341,7 +327,7 @@ func TestUpdateLeavesNoStagingFilesBehind(t *testing.T) {
 }
 
 func TestConcurrentUpdatesLeaveAValidFile(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	var wg sync.WaitGroup
 	for i := 0; i < 32; i++ {
 		wg.Add(1)
@@ -366,7 +352,7 @@ func TestConcurrentUpdatesLeaveAValidFile(t *testing.T) {
 }
 
 func TestConcurrentFirstInstallIDCreationConverges(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	ids := make([]string, 32)
 	var wg sync.WaitGroup
 	for i := range ids {
@@ -396,7 +382,7 @@ func TestConcurrentFirstInstallIDCreationConverges(t *testing.T) {
 }
 
 func TestConcurrentFirstInstallIDCreationAcrossProcessesConverges(t *testing.T) {
-	isolatedHome(t)
+	confighome.Isolate(t)
 	t.Setenv(printInstallIDEnvVar, "1")
 	ids := make([]string, 8)
 	var wg sync.WaitGroup
