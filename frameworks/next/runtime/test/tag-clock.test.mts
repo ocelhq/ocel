@@ -222,6 +222,42 @@ test("swallows the rejection when a second writer loses the monotonic guard", as
   expect(store.rows.get("products")!.expired).toBe(later);
 });
 
+test("a use-cache tag write rejects when one tag's write fails, and the other tags are still written", async () => {
+  const store = fakeStore();
+  const { handler } = await load(store);
+  const write = store.writeTag.bind(store);
+  store.writeTag = async (tag, record) => {
+    if (tag === "cart") throw new Error("the store is down");
+    return write(tag, record);
+  };
+
+  await expect(handler.updateTags(["cart", "products", "users"])).rejects.toThrow(
+    "the store is down",
+  );
+
+  expect([...store.rows.keys()].sort()).toEqual(["products", "users"]);
+});
+
+test("a use-cache tag write rejects when the host's store fails to open, and succeeds once it opens", async () => {
+  const store = fakeStore();
+  let opens = 0;
+  vi.resetModules();
+  (await import("../src/host.mjs")).installNextHost({
+    async newUseCacheStore() {
+      if (++opens === 1) throw new Error("the store cannot open");
+      return store;
+    },
+  });
+  (await import("../src/tag-clock.mjs")).setTagClockStore(undefined);
+  const handler = (await import("../src/use-cache-default.mjs")).default;
+
+  await expect(handler.updateTags(["cart"])).rejects.toThrow("the store cannot open");
+  expect(store.rows.size).toBe(0);
+
+  await expect(handler.updateTags(["cart"])).resolves.toBeUndefined();
+  expect([...store.rows.keys()]).toEqual(["cart"]);
+});
+
 test("never overwrites a later expiry with an earlier one", async () => {
   const store = fakeStore();
   const { handler } = await load(store);
