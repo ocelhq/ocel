@@ -68,6 +68,7 @@ func onYourNetwork(t *testing.T) yourNetwork {
 	binary := switchboardBinary(arch)
 	runnable(t, filepath.Join(switching, switchboard.Name), binary, 0o755)
 	here := strings.NewReplacer(
+		unprivilegedHere(t), "",
 		switchboard.FrontDir, filepath.Join(dir, "front"),
 		switchboard.ControlDir, filepath.Join(dir, "control"),
 		SwitchboardDir, switching,
