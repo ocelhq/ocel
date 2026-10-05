@@ -368,15 +368,9 @@ test("reports having synced only once a sync has succeeded", async () => {
   expect(tagClock.hasSynced).toBe(true);
 });
 
-test("shares one clock between module graphs built from the same configuration", async () => {
-  const config = {
-    OCEL_STATE_TABLE: "state",
-    OCEL_ISR_TAG_NAMESPACE: "TAG#a#",
-    OCEL_ISR_BUCKET: "assets",
-    OCEL_ISR_PREFIX: "prod/proj/app/BID",
-  };
+test("shares one clock between module graphs built for the same release", async () => {
   const store = fakeStore();
-  const first = await load(store, config);
+  const first = await load(store, { OCEL_ISR_PREFIX: "prod/proj/app/BID" });
   await first.handler.updateTags(["products"]);
 
   vi.resetModules();
@@ -386,18 +380,28 @@ test("shares one clock between module graphs built from the same configuration",
   expect(await reloaded.getExpiration(["products"])).toBeGreaterThan(0);
 });
 
-test("refuses to adopt a shared clock built from different configuration", async () => {
+test("keys a shared clock by the release alone, not by any variable of the host's store", async () => {
   const store = fakeStore();
   const { handler } = await load(store, {
-    OCEL_STATE_TABLE: "state",
-    OCEL_ISR_TAG_NAMESPACE: "TAG#a#",
-    OCEL_ISR_BUCKET: "assets",
     OCEL_ISR_PREFIX: "prod/proj/app/BID",
+    OCEL_STATE_TABLE: "state",
   });
   await handler.updateTags(["products"]);
 
   vi.resetModules();
-  process.env.OCEL_ISR_TAG_NAMESPACE = "TAG#b#";
+  process.env.OCEL_STATE_TABLE = "another-state";
+  const same = (await import("../src/tag-clock.mjs")).tagClock;
+
+  expect(await same.getExpiration(["products"])).toBeGreaterThan(0);
+});
+
+test("refuses to adopt a shared clock built for a different release", async () => {
+  const store = fakeStore();
+  const { handler } = await load(store, { OCEL_ISR_PREFIX: "prod/proj/app/BID" });
+  await handler.updateTags(["products"]);
+
+  vi.resetModules();
+  process.env.OCEL_ISR_PREFIX = "prod/proj/app/OTHER";
   const other = (await import("../src/tag-clock.mjs")).tagClock;
 
   expect(await other.getExpiration(["products"])).toBe(0);

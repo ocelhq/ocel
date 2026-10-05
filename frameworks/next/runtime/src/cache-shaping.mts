@@ -7,8 +7,6 @@ import type { RequestHeaders } from "./request-headers.mjs";
 
 const cacheTagHeader = "cache-tag";
 
-const tagsPerObject = 50;
-
 const nextCacheHeader = "x-nextjs-cache";
 const staleCacheControl = "s-maxage=0, must-revalidate";
 
@@ -22,6 +20,7 @@ interface Window {
 
 export interface OriginShaping {
   release: string | null;
+  tagsPerObject: number;
   basePath: string;
   routes: ReadonlyMap<string, Window>;
   dynamicRoutes: readonly { pattern: RegExp; window: Window }[];
@@ -44,6 +43,7 @@ function windowOf(revalidate: unknown, expire: unknown): Window | null {
 export function originShaping(
   manifest: ProjectManifest | null,
   env: NodeJS.ProcessEnv,
+  tagsPerObject = Number.POSITIVE_INFINITY,
 ): OriginShaping | null {
   if (!dispatchesAtOrigin(env)) return null;
 
@@ -64,6 +64,7 @@ export function originShaping(
 
   return {
     release: invalidatesByCacheTag(env) ? releaseOf(env.OCEL_ISR_PREFIX) : null,
+    tagsPerObject,
     basePath: typeof manifest?.config?.basePath === "string" ? manifest.config.basePath : "",
     routes,
     dynamicRoutes,
@@ -88,12 +89,16 @@ function shape(req: http.IncomingMessage, res: http.ServerResponse, shaping: Ori
 
   if (shaping.release !== null) {
     const noted = notedTags(req.headers as RequestHeaders);
-    const { tags, unstorable, overflowed } = storedCacheTags(shaping.release, noted, tagsPerObject);
+    const { tags, unstorable, overflowed } = storedCacheTags(
+      shaping.release,
+      noted,
+      shaping.tagsPerObject,
+    );
     if (tags.length > 0) res.setHeader(cacheTagHeader, tags.join(","));
     const lost = [...unstorable, ...overflowed];
     if (lost.length > 0) {
       console.warn(
-        `ocel: ${req.url} has ${noted.length} cache tags and the front stores ${tagsPerObject} that fit its alphabet, so revalidating ${lost.join(", ")} will not reach it`,
+        `ocel: ${req.url} has ${noted.length} cache tags and the front stores ${shaping.tagsPerObject} that fit its alphabet, so revalidating ${lost.join(", ")} will not reach it`,
       );
     }
   }

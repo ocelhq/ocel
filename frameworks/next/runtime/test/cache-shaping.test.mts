@@ -60,13 +60,21 @@ const isrRoutes = {
   },
 };
 
-function shaping(env: Record<string, string> = {}, config: Record<string, unknown> = {}) {
-  return originShaping(manifest(isrRoutes, config), {
-    OCEL_ORIGIN_DISPATCH: "1",
-    OCEL_CACHE_TAG_PURGE: "1",
-    OCEL_ISR_PREFIX: prefix,
-    ...env,
-  } as NodeJS.ProcessEnv)!;
+function shaping(
+  env: Record<string, string> = {},
+  config: Record<string, unknown> = {},
+  tagsPerObject?: number,
+) {
+  return originShaping(
+    manifest(isrRoutes, config),
+    {
+      OCEL_ORIGIN_DISPATCH: "1",
+      OCEL_CACHE_TAG_PURGE: "1",
+      OCEL_ISR_PREFIX: prefix,
+      ...env,
+    } as NodeJS.ProcessEnv,
+    tagsPerObject,
+  )!;
 }
 
 test("the gate stays shut when the deploy declared no origin dispatch", () => {
@@ -245,11 +253,14 @@ test("tags an rsc response too, so a purge reaches both variants", () => {
   expect(headers["cache-tag"]).toBe("r0a1b2c3d|_N_T_/products,r0a1b2c3d|products");
 });
 
-test("stamps the soft tags first, since CloudFront keeps only the first fifty", () => {
+test("stamps the soft tags first, since the front keeps only as many as its host declares", () => {
   const many = Array.from({ length: 60 }, (_, i) => `t${i}`);
-  const headers = serve(shaping(), "/isr", fakeRes({ "content-type": "text/x-component" }), {
-    tags: [...many, "_N_T_/products"],
-  });
+  const headers = serve(
+    shaping({}, {}, 50),
+    "/isr",
+    fakeRes({ "content-type": "text/x-component" }),
+    { tags: [...many, "_N_T_/products"] },
+  );
 
   const stored = headers["cache-tag"]!.split(",");
   expect(stored).toHaveLength(50);
@@ -257,7 +268,16 @@ test("stamps the soft tags first, since CloudFront keeps only the first fifty", 
   expect(stored.at(-1)).toBe("r0a1b2c3d|t48");
 });
 
-test("leaves out a tag CloudFront could never store", () => {
+test("stamps every tag when the host declares no limit per object", () => {
+  const many = Array.from({ length: 60 }, (_, i) => `t${i}`);
+  const headers = serve(shaping(), "/isr", fakeRes({ "content-type": "text/x-component" }), {
+    tags: many,
+  });
+
+  expect(headers["cache-tag"]!.split(",")).toHaveLength(60);
+});
+
+test("leaves out a tag the front could never store", () => {
   const headers = serve(shaping(), "/isr", fakeRes({ "content-type": "text/x-component" }), {
     tags: ["with,comma", "x".repeat(256), "kept"],
   });

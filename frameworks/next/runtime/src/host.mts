@@ -6,6 +6,7 @@ export interface NextHost {
   newCacheStore?: () => Promise<CacheStore>;
   newUseCacheStore?: () => Promise<UseCacheStore>;
   newDispatchInvoke?: (localOrigin: string) => Promise<Invoke>;
+  cacheTagsPerObject?: number;
 }
 
 const hostKey = Symbol.for("ocel.next.host.v1");
