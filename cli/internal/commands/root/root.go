@@ -147,7 +147,9 @@ func newCommand() *command {
 		if err := set.readFromFlagsOrEnv(cmd); err != nil {
 			return err
 		}
-		telemetry.PrintBannerOnce(cmd.ErrOrStderr(), telemetry.Resolve(telemetry.WriteKey))
+		if !isShellCompletion(cmd) {
+			telemetry.PrintBannerOnce(cmd.ErrOrStderr(), telemetry.Resolve(telemetry.WriteKey))
+		}
 		invocation.AttachCommandSink(cmd)
 		install := installInterruptHandler
 		if cmd == devCmd || cmd == runCmd {
@@ -214,6 +216,10 @@ func newCommand() *command {
 
 	installHelpStyle(rootCmd, func() bool { return set.json })
 	return c
+}
+
+func isShellCompletion(cmd *cobra.Command) bool {
+	return cmd.Name() == cobra.ShellCompRequestCmd || cmd.Name() == cobra.ShellCompNoDescRequestCmd
 }
 
 func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
