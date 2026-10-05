@@ -333,9 +333,7 @@ const (
 	routingLock        = live.StateRoot
 )
 
-func routingLocked(mode string) string {
-	return "exec 9<" + quoted(routingLock) + "\nflock " + mode + " 9\n"
-}
+func routingLocked(mode string) string { return lockedWithin(routingLock, mode, routingLockSeconds) }
 
 func pairReading() string {
 	printed := func(path string) string {

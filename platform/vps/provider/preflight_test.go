@@ -442,7 +442,7 @@ func TestASwitchboardAPruneRemovedIsRestartedAndTheDeployGoesOn(t *testing.T) {
 			t.Errorf("the switchboard was restarted without %s (%s):\n%s", what, fragment, runCommand)
 		}
 	}
-	locked := strings.Index(runCommand, "flock -x 9\n")
+	locked := strings.Index(runCommand, "flock -x 9 ")
 	guarded := strings.Index(runCommand, `if [ "$(docker inspect --type container --format '{{.State.Running}}' 'ocel-switchboard' 2>/dev/null)" != true ]`)
 	removed := strings.Index(runCommand, "docker rm --force 'ocel-switchboard'")
 	run := strings.Index(runCommand, "'docker' 'create'")

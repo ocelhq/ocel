@@ -2,6 +2,7 @@ package session
 
 import (
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -25,6 +26,9 @@ func TestALoginThatMissesARequirementIsRefusedAndTold(t *testing.T) {
 		"neither root nor sudo": func(f *Facts) { f.Root, f.Sudo = false, false },
 		"no systemd":            func(f *Facts) { f.Systemd = false },
 		"no useradd":            func(f *Facts) { f.Tools = []string{"install"} },
+		"no timeout": func(f *Facts) {
+			f.Tools = slices.DeleteFunc(slices.Clone(bootstrapTools), func(tool string) bool { return tool == "timeout" })
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

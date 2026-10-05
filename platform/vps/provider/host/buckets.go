@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -212,8 +213,7 @@ func fedBody(body []byte) io.Reader {
 }
 
 func curlCommand(store string, req *http.Request, call storeCall) string {
-	argv := append([]string{"docker", "exec", "--interactive", store}, storeCurl...)
-	argv = append(argv, "--show-error", "--output", "/dev/null",
+	argv := append(storeExec(store), "--show-error", "--output", "/dev/null",
 		"--write-out", "%{http_code}", "--request", req.Method)
 	for _, name := range sortedHeaderNames(req.Header) {
 		argv = append(argv, "--header", name+": "+req.Header.Get(name))
@@ -225,14 +225,13 @@ func curlCommand(store string, req *http.Request, call storeCall) string {
 		accepted = append(accepted, "\""+code+"\"")
 	}
 	return "set -eu\n" +
-		"answered=$(base64 -d | " + words(argv) + ") || { printf '%s\\n' " + quoted("the store "+store+" gave no answer") + " >&2; exit 1; }\n" +
+		"answered=$(base64 -d | " + words(argv) + ") || { printf '%s\\n' " + quoted("the store "+store+" gave no answer") + " >&2; exit " + strconv.Itoa(storeBusyExit) + "; }\n" +
 		"case \"$answered\" in\n" +
 		strings.Join(accepted, "|") + ") ;;\n" +
+		"000|429|5??) printf '%s\\n' " + quoted("the store answered ") + "\"$answered\" >&2; exit " + strconv.Itoa(storeBusyExit) + " ;;\n" +
 		"*) printf '%s\\n' " + quoted("the store answered ") + "\"$answered\" >&2; exit 1 ;;\n" +
 		"esac"
 }
-
-var storeCurl = []string{"curl", "--silent", "--connect-timeout", "10", "--max-time", "60"}
 
 func sortedHeaderNames(header http.Header) []string {
 	names := make([]string, 0, len(header))
@@ -279,9 +278,8 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStat
 		if err != nil {
 			return BucketState{}, fmt.Errorf("sign %s: %w", call.what, err)
 		}
-		if _, err := h.ran(ctx, call.what, curlCommand(spec.Store, req, call), fedBody(call.body), elevation); err != nil {
-			return BucketState{}, refusal.Refuse(refusal.CodeNotReady,
-				"could not %s on %s: %v", call.what, h.named(), err)
+		if err := h.calledStore(ctx, call.what, curlCommand(spec.Store, req, call), call.body, elevation); err != nil {
+			return BucketState{}, err
 		}
 	}
 	return current, nil
@@ -301,10 +299,7 @@ func (h *Host) ApplyOrigins(ctx context.Context, spec BucketSpec) error {
 	if err != nil {
 		return fmt.Errorf("sign %s: %w", call.what, err)
 	}
-	if _, err := h.ran(ctx, call.what, curlCommand(spec.Store, req, call), fedBody(call.body), elevation); err != nil {
-		return refusal.Refuse(refusal.CodeNotReady, "could not %s on %s: %v", call.what, h.named(), err)
-	}
-	return nil
+	return h.calledStore(ctx, call.what, curlCommand(spec.Store, req, call), call.body, elevation)
 }
 
 type BucketRef struct {

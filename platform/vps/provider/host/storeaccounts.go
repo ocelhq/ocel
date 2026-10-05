@@ -179,11 +179,7 @@ func (h *Host) RevokeStoreAccount(ctx context.Context, account StoreAccount) err
 	if err != nil {
 		return fmt.Errorf("sign %s: %w", call.what, err)
 	}
-	if _, err := h.ran(ctx, call.what, script, fedBody(call.body), elevation); err != nil {
-		return refusal.Refuse(refusal.CodeNotReady,
-			"could not %s on %s: %v", call.what, h.named(), err)
-	}
-	return nil
+	return h.calledStore(ctx, call.what, script, call.body, elevation)
 }
 
 func (h *Host) GrantStoreAccount(ctx context.Context, account StoreAccount) error {
@@ -202,9 +198,8 @@ func (h *Host) GrantStoreAccount(ctx context.Context, account StoreAccount) erro
 		if err != nil {
 			return fmt.Errorf("sign %s: %w", call.what, err)
 		}
-		if _, err := h.ran(ctx, call.what, script, fedBody(call.body), elevation); err != nil {
-			return refusal.Refuse(refusal.CodeNotReady,
-				"could not %s on %s: %v", call.what, h.named(), err)
+		if err := h.calledStore(ctx, call.what, script, call.body, elevation); err != nil {
+			return err
 		}
 	}
 	return nil

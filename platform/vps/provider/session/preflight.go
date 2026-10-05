@@ -11,7 +11,7 @@ import (
 )
 
 var bootstrapTools = []string{
-	"install", "stat", "sha256sum", "flock", "getent", "groupadd", "useradd", "usermod", "userdel",
+	"install", "stat", "sha256sum", "flock", "timeout", "getent", "groupadd", "useradd", "usermod", "userdel",
 }
 
 var survey = `printf 'uid=%s\n' "$(id -u)"

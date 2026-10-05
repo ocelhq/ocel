@@ -181,7 +181,8 @@ func ContainerName(stack, app, deployment, image string) string {
 const appPulls = 5
 
 func runContainerScript(spec Container, env handoff) string {
-	return imagePulled(spec.Image, appPulls) + words(containerRun(spec, env)) + " >/dev/null"
+	return imagePulled(spec.Image, appPulls, pullAttemptSeconds) +
+		boundedStep(dockerStepSeconds, "docker run of "+spec.Name, words(containerRun(spec, env))+" >/dev/null")
 }
 
 func containerRun(spec Container, env handoff) []string {
@@ -325,8 +326,8 @@ func (h *Host) TakeDown(ctx context.Context, tier environment.Tier, name string)
 		return err
 	}
 	_, err = h.ran(ctx, "take down "+name,
-		"docker stop "+quoted(name)+" >/dev/null 2>&1 || true\n"+
-			"docker rm --force "+quoted(name)+" >/dev/null 2>&1 || true", nil, elevation)
+		within(dockerStepSeconds, "docker stop "+quoted(name))+" >/dev/null 2>&1 || true\n"+
+			boundedTolerated(dockerStepSeconds, "docker rm of "+name, "docker rm --force "+quoted(name)+" >/dev/null 2>&1"), nil, elevation)
 	if err != nil {
 		return err
 	}
@@ -343,7 +344,7 @@ func (h *Host) StopContainer(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "stop "+name, "docker stop "+quoted(name)+" >/dev/null", nil, elevation)
+	_, err = h.ran(ctx, "stop "+name, boundedStep(dockerStepSeconds, "docker stop of "+name, "docker stop "+quoted(name)+" >/dev/null"), nil, elevation)
 	return err
 }
 
@@ -352,7 +353,7 @@ func (h *Host) RemoveContainer(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "remove "+name, "docker rm --force "+quoted(name)+" >/dev/null", nil, elevation)
+	_, err = h.ran(ctx, "remove "+name, boundedStep(dockerStepSeconds, "docker rm of "+name, "docker rm --force "+quoted(name)+" >/dev/null"), nil, elevation)
 	return err
 }
 

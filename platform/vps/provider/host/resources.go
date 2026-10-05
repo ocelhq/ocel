@@ -21,9 +21,8 @@ import (
 )
 
 const (
-	nameTaken  = "is already in use"
-	readyTries = 120
-	keptDir    = "kept"
+	nameTaken = "is already in use"
+	keptDir   = "kept"
 
 	resourceNameMax = 63
 )
@@ -227,7 +226,8 @@ func volumeCreating(spec ResourceContainer) string {
 }
 
 func runResourceScript(spec ResourceContainer, digest, envFile string) string {
-	return imagePulled(spec.Image, appPulls) + words(resourceRun(spec, digest, envFile)) + " >/dev/null"
+	return imagePulled(spec.Image, appPulls, pullAttemptSeconds) +
+		boundedStep(dockerStepSeconds, "docker run of "+spec.Name, words(resourceRun(spec, digest, envFile))+" >/dev/null")
 }
 
 func resourceRun(spec ResourceContainer, digest, envFile string) []string {
@@ -306,12 +306,12 @@ func swapCommand(spec ResourceContainer, from, digest, envFile string, steps upg
 		"}\n" +
 		"trap back EXIT\n" +
 		"trap 'exit 1' HUP INT TERM\n" +
-		"docker stop " + name + " >/dev/null\n" +
+		boundedStep(dockerStepSeconds, "docker stop of "+spec.Name, "docker stop "+name+" >/dev/null") + "\n" +
 		"docker rename " + name + " " + retired + "\n" +
 		volumeCreating(spec) + "\n" +
 		steps.before +
-		words(resourceRun(spec, digest, envFile)) + " >/dev/null\n" +
-		readyCommand(spec) + "\n" +
+		boundedStep(dockerStepSeconds, "docker run of "+spec.Name, words(resourceRun(spec, digest, envFile))+" >/dev/null") + "\n" +
+		readyCommand(spec, readySeconds) + "\n" +
 		steps.after +
 		authenticated +
 		"swapped=1\n" +
@@ -390,14 +390,13 @@ func (h *Host) handResource(ctx context.Context, spec ResourceContainer, secret 
 	return delivery, err
 }
 
-func readyCommand(spec ResourceContainer) string {
-	probe := words(append([]string{"docker", "exec", spec.Name}, spec.Ready...))
-	return "tries=0\n" +
+func readyCommand(spec ResourceContainer, seconds int) string {
+	probe := within(min(probeSeconds, seconds), words(append([]string{"docker", "exec", spec.Name}, spec.Ready...)))
+	return "deadline=$(($(date +%s) + " + strconv.Itoa(seconds) + "))\n" +
 		"until " + probe + " >/dev/null 2>&1; do\n" +
-		"tries=$((tries+1))\n" +
-		"if [ \"$tries\" -ge " + strconv.Itoa(readyTries) + " ]; then\n" +
-		"printf '%s\\n' " + quoted(spec.Name+" never answered "+strings.Join(spec.Ready, " ")) + " >&2\n" +
-		"docker logs --tail " + appLogTail + " " + quoted(spec.Name) + " >&2 || true\n" +
+		"if [ \"$(date +%s)\" -ge \"$deadline\" ]; then\n" +
+		"printf '%s\\n' " + quoted(spec.Name+" never answered "+strings.Join(spec.Ready, " ")+" within "+spelledSeconds(seconds)) + " >&2\n" +
+		within(probeSeconds, "docker logs --tail "+appLogTail+" "+quoted(spec.Name)) + " >&2 || true\n" +
 		"exit 1\n" +
 		"fi\n" +
 		"sleep 1\n" +
@@ -435,7 +434,7 @@ func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret s
 	}
 	if said != "" {
 		if _, err := h.ran(ctx, "clear the name "+spec.Name,
-			"docker rm --force "+quoted(spec.Name)+" >/dev/null 2>&1 || true", nil, elevation); err != nil {
+			boundedTolerated(dockerStepSeconds, "docker rm of "+spec.Name, "docker rm --force "+quoted(spec.Name)+" >/dev/null 2>&1"), nil, elevation); err != nil {
 			return err
 		}
 	}
@@ -457,7 +456,7 @@ func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret s
 	if failed != nil && !strings.Contains(refused, nameTaken) {
 		return failed
 	}
-	if _, err := h.ran(ctx, "wait for "+spec.Resource+" to answer", readyCommand(spec), nil, elevation); err != nil {
+	if _, err := h.ran(ctx, "wait for "+spec.Resource+" to answer", readyCommand(spec, readySeconds), nil, elevation); err != nil {
 		return err
 	}
 	if spec.Credential.Reassert != nil {
@@ -484,8 +483,9 @@ func (h *Host) RemoveResource(ctx context.Context, ref ResourceRef) error {
 	}
 	volumes := volumesOf(ref.Tier, ref.Project, ref.Resource, ref.Name) + " --quiet"
 	_, err = h.ran(ctx, "take "+ref.Name+" and its data down",
-		"docker rm --force "+quoted(ref.Name)+" "+quoted(ref.Name+retiredSuffix)+" >/dev/null 2>&1 || true\n"+
-			volumes+" | xargs -r docker volume rm >/dev/null\n"+
+		boundedTolerated(dockerStepSeconds, "docker rm of "+ref.Name,
+			"docker rm --force "+quoted(ref.Name)+" "+quoted(ref.Name+retiredSuffix)+" >/dev/null 2>&1")+"\n"+
+			volumes+" | xargs -r "+within(dockerStepSeconds, "docker volume rm")+" >/dev/null\n"+
 			"[ -z \"$("+volumes+")\" ]", nil, elevation)
 	if err != nil {
 		return err

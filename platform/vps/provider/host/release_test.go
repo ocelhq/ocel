@@ -885,7 +885,7 @@ func TestTheTableAndItsConfigAreReadTogetherUnderTheLockAWriterHoldsAcrossBothMo
 		}
 	}
 	here := strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
-	if !strings.Contains(stagedWrite("a-digest", ProxyConfig, nil), "exec 9<"+quoted(routingLock)+"\nflock -x 9") {
+	if !strings.Contains(stagedWrite("a-digest", ProxyConfig, nil), strings.TrimSuffix(routingLocked("-x"), "\n")) {
 		t.Fatalf("the staged write is\n%s\nand does not hold %s exclusively, so a read under it serializes against nothing", stagedWrite("a-digest", ProxyConfig, nil), routingLock)
 	}
 
@@ -997,7 +997,7 @@ func TestAFailureAfterTheCutoverSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(
 	box := benched(t, session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"})
 	proxied := box.answer
 	box.answer = func(command string) (session.Result, bool) {
-		if command == "docker stop "+quoted(retiring)+" >/dev/null" {
+		if strings.Contains(command, "docker stop "+quoted(retiring)+" >/dev/null") {
 			return session.Result{Code: 1, Stderr: "no space left on device"}, true
 		}
 		return proxied(command)
@@ -1395,7 +1395,7 @@ func TestARetireeThatWouldNotStopSaysTheCutoverTookAndStillStopsEveryOther(t *te
 	box := benchedOn(t, twoAppsServing(t), session.Result{}, session.Result{})
 	proxied := box.answer
 	box.answer = func(command string) (session.Result, bool) {
-		if command == "docker stop "+quoted(apiRetiring)+" >/dev/null" {
+		if strings.Contains(command, "docker stop "+quoted(apiRetiring)+" >/dev/null") {
 			return session.Result{Code: 1, Stderr: "no space left on device"}, true
 		}
 		return proxied(command)
@@ -1442,7 +1442,7 @@ func TestARetireeAlreadyGoneFromTheBoxIsNoStopTheReleaseFailedToMake(t *testing.
 			proxied := box.answer
 			box.answer = func(command string) (session.Result, bool) {
 				switch {
-				case command == "docker stop "+quoted(retiring)+" >/dev/null":
+				case strings.Contains(command, "docker stop "+quoted(retiring)+" >/dev/null"):
 					return session.Result{Code: 1, Stderr: "Error response from daemon: No such container: " + retiring}, true
 				case strings.Contains(command, ".State.Running"):
 					return session.Result{Stdout: running}, true
