@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@framework/next-cache": "workspace:*",
+    "@framework/next-protocol": "workspace:*",
+    "@framework/next-router": "workspace:*",
     "@framework/next-runtime": "workspace:*",
     "@framework/node-runtime": "workspace:*"
   },

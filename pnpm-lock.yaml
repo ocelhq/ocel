@@ -989,6 +989,12 @@ importers:
       '@framework/next-cache':
         specifier: workspace:*
         version: link:../../../frameworks/next/cache
+      '@framework/next-protocol':
+        specifier: workspace:*
+        version: link:../../../frameworks/next/protocol
+      '@framework/next-router':
+        specifier: workspace:*
+        version: link:../../../frameworks/next/router
       '@framework/next-runtime':
         specifier: workspace:*
         version: link:../../../frameworks/next/runtime
