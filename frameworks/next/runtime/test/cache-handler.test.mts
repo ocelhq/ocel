@@ -742,3 +742,18 @@ test("marking a tag stale preserves an expiry set earlier", async () => {
   expect(store.tags.get("products")?.stale).toBeGreaterThan(0);
   expect(await handler.get("/", { kind: "APP_PAGE" })).toBeNull();
 });
+
+test("holds the request's last byte for the tag write a revalidation makes", async () => {
+  const store = fakeStore();
+  const release = store.holdWrites();
+  let revalidated: Promise<void> | undefined;
+
+  const held = await invocation(async () => {
+    revalidated = new OcelCacheHandler().revalidateTag("products");
+  });
+  release();
+  await revalidated;
+
+  expect(held).toHaveLength(1);
+  expect(store.tags.get("products")?.expired).toBeGreaterThan(0);
+});

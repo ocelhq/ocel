@@ -69,7 +69,7 @@ async function boot(): Promise<void> {
     if (newIncrementalCache) {
       (globalThis as any).__incrementalCache = newIncrementalCache(req);
     }
-    return runWithWaitUntil(ocel.waitUntil, () =>
+    return runWithWaitUntil(ocel.holdEnd, () =>
       handler(req, res, {
         waitUntil: ocel.waitUntil,
         requestMeta: {

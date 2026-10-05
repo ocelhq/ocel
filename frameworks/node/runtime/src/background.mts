@@ -17,3 +17,8 @@ export function background(task: () => Promise<unknown>): void {
   if (waitUntil) waitUntil(deferred);
   else void deferred.catch(() => {});
 }
+
+export function holdEnd<T>(task: Promise<T>): Promise<T> {
+  storage.getStore()?.(task);
+  return task;
+}

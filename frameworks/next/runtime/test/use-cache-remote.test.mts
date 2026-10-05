@@ -1,3 +1,4 @@
+import { runWithWaitUntil } from "@framework/node-runtime/background";
 import { afterEach, expect, test, vi } from "vitest";
 import type {
   TagRecordUpdate,
@@ -381,4 +382,24 @@ test("leaves the caller's copy of the value stream intact", async () => {
   await handler.set("k", Promise.resolve(pending));
 
   expect(await readAll(pending.value)).toBe("payload");
+});
+
+test("holds the request's last byte for the entry write", async () => {
+  const store = fakeStore();
+  const { handler } = await loadSynced(store);
+  const held: Promise<unknown>[] = [];
+  let written: Promise<void> | undefined;
+
+  runWithWaitUntil(
+    (task) => {
+      held.push(task);
+    },
+    () => {
+      written = handler.set("k", Promise.resolve(entry("v")));
+    },
+  );
+  await written;
+
+  expect(held).toHaveLength(1);
+  expect(store.objects.size).toBe(1);
 });
