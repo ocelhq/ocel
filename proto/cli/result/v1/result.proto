@@ -231,3 +231,117 @@ message DoctorCheck {
 
   string fix = 4;
 }
+
+message EnvCoordinate {
+  string project = 1;
+
+  string folder = 2;
+
+  string key = 3;
+
+  string environment = 4;
+}
+
+message EnvListResult {
+  common.environment.v1.Tier tier = 1;
+
+  repeated EnvValueSummary values = 2;
+}
+
+message EnvValueSummary {
+  EnvCoordinate coordinate = 1;
+
+  string description = 2;
+
+  string group = 3;
+
+  bool orphaned = 4;
+
+  int64 version = 5;
+
+  int64 size = 6;
+
+  string updated_at = 7;
+
+  string env_source = 8;
+
+  optional EnvCoordinate target = 9;
+}
+
+message EnvGetResult {
+  common.environment.v1.Tier tier = 1;
+
+  EnvCoordinate coordinate = 2;
+
+  int64 version = 3;
+
+  int64 size = 4;
+
+  string updated_at = 5;
+
+  optional EnvCoordinate target = 6;
+
+  bool revealed = 7;
+
+  optional string value = 8;
+}
+
+message EnvRefsResult {
+  common.environment.v1.Tier tier = 1;
+
+  EnvCoordinate coordinate = 2;
+
+  repeated EnvCoordinate references = 3;
+}
+
+message EnvHistoryResult {
+  common.environment.v1.Tier tier = 1;
+
+  EnvCoordinate coordinate = 2;
+
+  repeated EnvVersion versions = 3;
+}
+
+message EnvVersion {
+  int64 version = 1;
+
+  string created_at = 2;
+
+  int64 size = 3;
+}
+
+message EnvSourceResult {
+  common.environment.v1.Tier tier = 1;
+
+  string env_source = 2;
+
+  bool owns_values = 3;
+
+  bool scheduled = 4;
+
+  bool can_create = 5;
+
+  bool can_update = 6;
+
+  string last_attempt_at = 7;
+
+  string last_success_at = 8;
+
+  string last_error = 9;
+
+  repeated EnvSourceLink links = 10;
+
+  repeated string credentials = 11;
+
+  string configured_env_source = 12;
+
+  string dev_env_source = 13;
+
+  string dev_local_file = 14;
+}
+
+message EnvSourceLink {
+  string folder = 1;
+
+  string url = 2;
+}
