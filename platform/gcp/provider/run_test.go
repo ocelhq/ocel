@@ -737,6 +737,34 @@ func TestARecordedRollbackIsReadBackUntilARevisionIsPinnedAgain(t *testing.T) {
 	}
 }
 
+func TestARollbackRecordThatCannotBeDecodedIsReportedRatherThanReadAsNothing(t *testing.T) {
+	ctx := context.Background()
+	server := &runServer{}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+	second := app
+	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	_, two := released(t, server, second)
+	p := server.open(t)
+	server.mu.Lock()
+	server.service.Annotations = map[string]string{rollbacksAnnotation: "{not json"}
+	server.mu.Unlock()
+
+	if _, found, err := p.ReadRollback(ctx, app.service, one); err == nil || found {
+		t.Errorf("ReadRollback(%s) = found %v, %v, want an error: the record cannot be decoded", one, found, err)
+	}
+
+	if _, err := p.Pin(ctx, app.service, two, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v, want a pin to replace a record it cannot decode", two, err)
+	}
+	server.mu.Lock()
+	recorded := server.service.Annotations[rollbacksAnnotation]
+	server.mu.Unlock()
+	if recorded != "" {
+		t.Errorf("the service records %q after the pin, want the undecodable record gone", recorded)
+	}
+}
+
 func TestPinningAServiceNoPromotionOpensLeavesItsInvokerCheckOn(t *testing.T) {
 	server := &runServer{}
 	worker := serving{service: "ocel-shop-prod-worker", image: "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one", compute: provider.ComputeServerless}

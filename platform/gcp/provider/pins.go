@@ -92,7 +92,11 @@ func (p *Provider) ReadRollback(ctx context.Context, service, revision string) (
 	if err != nil {
 		return pin.Rollback{}, false, err
 	}
-	rollback, found := rollbacksOf(current)[revision]
+	rollbacks, err := rollbacksOf(current)
+	if err != nil {
+		return pin.Rollback{}, false, err
+	}
+	rollback, found := rollbacks[revision]
 	return rollback, found, nil
 }
 
@@ -110,7 +114,10 @@ func (p *Provider) RecordRollback(ctx context.Context, service, revision string,
 		if servedRevision(current) == revision {
 			return pin.ErrRevisionServed
 		}
-		rollbacks := rollbacksOf(current)
+		rollbacks, err := rollbacksOf(current)
+		if err != nil {
+			rollbacks = map[string]pin.Rollback{}
+		}
 		rollbacks[revision] = rollback
 		annotations, err := withRollbacks(current.Annotations, rollbacks)
 		if err != nil {
@@ -127,12 +134,14 @@ func (p *Provider) RecordRollback(ctx context.Context, service, revision string,
 	return err
 }
 
-func rollbacksOf(current *run.GoogleCloudRunV2Service) map[string]pin.Rollback {
+func rollbacksOf(current *run.GoogleCloudRunV2Service) (map[string]pin.Rollback, error) {
 	rollbacks := map[string]pin.Rollback{}
 	if recorded := current.Annotations[rollbacksAnnotation]; recorded != "" {
-		_ = json.Unmarshal([]byte(recorded), &rollbacks)
+		if err := json.Unmarshal([]byte(recorded), &rollbacks); err != nil {
+			return nil, fmt.Errorf("decode the rollbacks recorded on %s: %w", current.Name, err)
+		}
 	}
-	return rollbacks
+	return rollbacks, nil
 }
 
 func withRollbacks(annotations map[string]string, rollbacks map[string]pin.Rollback) (map[string]string, error) {
@@ -159,7 +168,11 @@ func withRollbacks(annotations map[string]string, rollbacks map[string]pin.Rollb
 }
 
 func withoutRollback(current *run.GoogleCloudRunV2Service, revision string) (map[string]string, bool, error) {
-	rollbacks := rollbacksOf(current)
+	rollbacks, err := rollbacksOf(current)
+	if err != nil {
+		annotations, err := withRollbacks(current.Annotations, map[string]pin.Rollback{})
+		return annotations, true, err
+	}
 	if _, recorded := rollbacks[revision]; !recorded {
 		return nil, false, nil
 	}
