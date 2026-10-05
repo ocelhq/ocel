@@ -36,6 +36,13 @@ func contractServed(t *testing.T, version string) (contractv1connect.ProviderSer
 func servedProvider(t *testing.T, version string, p provider.Provider) contractv1connect.ProviderServiceClient {
 	t.Helper()
 
+	client, _ := configuredProvider(t, version, p)
+	return client
+}
+
+func configuredProvider(t *testing.T, version string, p provider.Provider) (contractv1connect.ProviderServiceClient, *contractv1.ProviderFacts) {
+	t.Helper()
+
 	config := providerserver.Config{
 		Version: version,
 		New: func(context.Context, provider.Settings) (provider.Provider, error) {
@@ -46,10 +53,11 @@ func servedProvider(t *testing.T, version string, p provider.Provider) contractv
 	t.Cleanup(server.Close)
 
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
-	if _, err := client.Configure(context.Background(), configureInWorkingDir(t)); err != nil {
+	configured, err := client.Configure(context.Background(), configureInWorkingDir(t))
+	if err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
-	return client
+	return client, configured.GetFacts()
 }
 
 func drain(stream *connect.ServerStreamForClient[progressv1.OperationEvent]) (*progressv1.OperationResult, error) {

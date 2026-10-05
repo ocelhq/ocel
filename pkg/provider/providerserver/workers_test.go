@@ -11,7 +11,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -157,7 +156,7 @@ func TestADeployHandsEachAppStackTheWorkersThatJoinIt(t *testing.T) {
 	}
 }
 
-func TestPreflightNamesTheLongestAWorkerRunsOnEachCompute(t *testing.T) {
+func TestConfigureNamesTheLongestAWorkerRunsOnEachCompute(t *testing.T) {
 	t.Parallel()
 
 	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithFacts(func(facts *provider.Facts) {
@@ -166,18 +165,13 @@ func TestPreflightNamesTheLongestAWorkerRunsOnEachCompute(t *testing.T) {
 			{Compute: provider.ComputeContainer, Unbounded: true},
 		}
 	})
-	client := servedProvider(t, "1.0.0", vendor)
-
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
-	if err != nil {
-		t.Fatalf("Preflight() error = %v", err)
-	}
+	_, facts := configuredProvider(t, "1.0.0", vendor)
 	got := map[string]*durationpb.Duration{}
-	for _, ceiling := range resp.GetWorkerCeilings() {
+	for _, ceiling := range facts.GetWorkerCeilings() {
 		got[ceiling.GetCompute()] = ceiling.GetMaxDuration()
 	}
 	if len(got) != 2 {
-		t.Fatalf("Preflight() worker ceilings = %v, want one per compute the provider runs workers on", resp.GetWorkerCeilings())
+		t.Fatalf("Configure() worker ceilings = %v, want one per compute the provider runs workers on", facts.GetWorkerCeilings())
 	}
 	if serverless := got[string(provider.ComputeServerless)]; serverless.AsDuration() != 15*time.Minute {
 		t.Errorf("serverless ceiling = %v, want 15m", serverless)
@@ -187,15 +181,11 @@ func TestPreflightNamesTheLongestAWorkerRunsOnEachCompute(t *testing.T) {
 	}
 }
 
-func TestPreflightNamesNoWorkerCeilingForAProviderThatRunsNoWorkers(t *testing.T) {
+func TestConfigureNamesNoWorkerCeilingForAProviderThatRunsNoWorkers(t *testing.T) {
 	t.Parallel()
 
-	client, _ := contractServed(t, "1.0.0")
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
-	if err != nil {
-		t.Fatalf("Preflight() error = %v", err)
-	}
-	if ceilings := resp.GetWorkerCeilings(); len(ceilings) != 0 {
-		t.Errorf("Preflight() worker ceilings = %v, want none from a provider that runs no workers", ceilings)
+	_, facts := configuredProvider(t, "1.0.0", fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)))
+	if ceilings := facts.GetWorkerCeilings(); len(ceilings) != 0 {
+		t.Errorf("Configure() worker ceilings = %v, want none from a provider that runs no workers", ceilings)
 	}
 }
