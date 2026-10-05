@@ -480,23 +480,15 @@ func (x *DomainStatusResult) GetHosts() []*DomainHostStatus {
 }
 
 type DomainHostStatus struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Hostname          string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	Declared          bool                   `protobuf:"varint,2,opt,name=declared,proto3" json:"declared,omitempty"`
-	Ready             bool                   `protobuf:"varint,3,opt,name=ready,proto3" json:"ready,omitempty"`
-	Pending           string                 `protobuf:"bytes,4,opt,name=pending,proto3" json:"pending,omitempty"`
-	CertificateId     string                 `protobuf:"bytes,5,opt,name=certificate_id,json=certificateId,proto3" json:"certificate_id,omitempty"`
-	CertificateStatus string                 `protobuf:"bytes,6,opt,name=certificate_status,json=certificateStatus,proto3" json:"certificate_status,omitempty"`
-	RenewalStatus     string                 `protobuf:"bytes,7,opt,name=renewal_status,json=renewalStatus,proto3" json:"renewal_status,omitempty"`
-	ExpiresAt         string                 `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	ExpiringSoon      bool                   `protobuf:"varint,9,opt,name=expiring_soon,json=expiringSoon,proto3" json:"expiring_soon,omitempty"`
-	RecordsWritten    []string               `protobuf:"bytes,10,rep,name=records_written,json=recordsWritten,proto3" json:"records_written,omitempty"`
-	ManualRecords     []string               `protobuf:"bytes,11,rep,name=manual_records,json=manualRecords,proto3" json:"manual_records,omitempty"`
-	LastProbeAt       string                 `protobuf:"bytes,12,opt,name=last_probe_at,json=lastProbeAt,proto3" json:"last_probe_at,omitempty"`
-	LastProbeOk       bool                   `protobuf:"varint,13,opt,name=last_probe_ok,json=lastProbeOk,proto3" json:"last_probe_ok,omitempty"`
-	ServingPointer    string                 `protobuf:"bytes,14,opt,name=serving_pointer,json=servingPointer,proto3" json:"serving_pointer,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Hostname       string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Declared       bool                   `protobuf:"varint,2,opt,name=declared,proto3" json:"declared,omitempty"`
+	Ready          bool                   `protobuf:"varint,3,opt,name=ready,proto3" json:"ready,omitempty"`
+	Pending        string                 `protobuf:"bytes,4,opt,name=pending,proto3" json:"pending,omitempty"`
+	Certificate    *Certificate           `protobuf:"bytes,5,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	ServingPointer string                 `protobuf:"bytes,6,opt,name=serving_pointer,json=servingPointer,proto3" json:"serving_pointer,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DomainHostStatus) Reset() {
@@ -557,67 +549,11 @@ func (x *DomainHostStatus) GetPending() string {
 	return ""
 }
 
-func (x *DomainHostStatus) GetCertificateId() string {
+func (x *DomainHostStatus) GetCertificate() *Certificate {
 	if x != nil {
-		return x.CertificateId
-	}
-	return ""
-}
-
-func (x *DomainHostStatus) GetCertificateStatus() string {
-	if x != nil {
-		return x.CertificateStatus
-	}
-	return ""
-}
-
-func (x *DomainHostStatus) GetRenewalStatus() string {
-	if x != nil {
-		return x.RenewalStatus
-	}
-	return ""
-}
-
-func (x *DomainHostStatus) GetExpiresAt() string {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return ""
-}
-
-func (x *DomainHostStatus) GetExpiringSoon() bool {
-	if x != nil {
-		return x.ExpiringSoon
-	}
-	return false
-}
-
-func (x *DomainHostStatus) GetRecordsWritten() []string {
-	if x != nil {
-		return x.RecordsWritten
+		return x.Certificate
 	}
 	return nil
-}
-
-func (x *DomainHostStatus) GetManualRecords() []string {
-	if x != nil {
-		return x.ManualRecords
-	}
-	return nil
-}
-
-func (x *DomainHostStatus) GetLastProbeAt() string {
-	if x != nil {
-		return x.LastProbeAt
-	}
-	return ""
-}
-
-func (x *DomainHostStatus) GetLastProbeOk() bool {
-	if x != nil {
-		return x.LastProbeOk
-	}
-	return false
 }
 
 func (x *DomainHostStatus) GetServingPointer() string {
@@ -625,6 +561,114 @@ func (x *DomainHostStatus) GetServingPointer() string {
 		return x.ServingPointer
 	}
 	return ""
+}
+
+type Certificate struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Status         string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	RenewalStatus  string                 `protobuf:"bytes,3,opt,name=renewal_status,json=renewalStatus,proto3" json:"renewal_status,omitempty"`
+	ExpiresAt      string                 `protobuf:"bytes,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	ExpiringSoon   bool                   `protobuf:"varint,5,opt,name=expiring_soon,json=expiringSoon,proto3" json:"expiring_soon,omitempty"`
+	RecordsWritten []string               `protobuf:"bytes,6,rep,name=records_written,json=recordsWritten,proto3" json:"records_written,omitempty"`
+	ManualRecords  []string               `protobuf:"bytes,7,rep,name=manual_records,json=manualRecords,proto3" json:"manual_records,omitempty"`
+	LastProbeAt    string                 `protobuf:"bytes,8,opt,name=last_probe_at,json=lastProbeAt,proto3" json:"last_probe_at,omitempty"`
+	LastProbeOk    bool                   `protobuf:"varint,9,opt,name=last_probe_ok,json=lastProbeOk,proto3" json:"last_probe_ok,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *Certificate) Reset() {
+	*x = Certificate{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Certificate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Certificate) ProtoMessage() {}
+
+func (x *Certificate) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Certificate.ProtoReflect.Descriptor instead.
+func (*Certificate) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *Certificate) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Certificate) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *Certificate) GetRenewalStatus() string {
+	if x != nil {
+		return x.RenewalStatus
+	}
+	return ""
+}
+
+func (x *Certificate) GetExpiresAt() string {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return ""
+}
+
+func (x *Certificate) GetExpiringSoon() bool {
+	if x != nil {
+		return x.ExpiringSoon
+	}
+	return false
+}
+
+func (x *Certificate) GetRecordsWritten() []string {
+	if x != nil {
+		return x.RecordsWritten
+	}
+	return nil
+}
+
+func (x *Certificate) GetManualRecords() []string {
+	if x != nil {
+		return x.ManualRecords
+	}
+	return nil
+}
+
+func (x *Certificate) GetLastProbeAt() string {
+	if x != nil {
+		return x.LastProbeAt
+	}
+	return ""
+}
+
+func (x *Certificate) GetLastProbeOk() bool {
+	if x != nil {
+		return x.LastProbeOk
+	}
+	return false
 }
 
 type CostScanResult struct {
@@ -638,7 +682,7 @@ type CostScanResult struct {
 
 func (x *CostScanResult) Reset() {
 	*x = CostScanResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[7]
+	mi := &file_cli_result_v1_result_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -650,7 +694,7 @@ func (x *CostScanResult) String() string {
 func (*CostScanResult) ProtoMessage() {}
 
 func (x *CostScanResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[7]
+	mi := &file_cli_result_v1_result_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -663,7 +707,7 @@ func (x *CostScanResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CostScanResult.ProtoReflect.Descriptor instead.
 func (*CostScanResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{7}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CostScanResult) GetResources() *v1.ResourceSet {
@@ -696,7 +740,7 @@ type DeploymentListResult struct {
 
 func (x *DeploymentListResult) Reset() {
 	*x = DeploymentListResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[8]
+	mi := &file_cli_result_v1_result_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -708,7 +752,7 @@ func (x *DeploymentListResult) String() string {
 func (*DeploymentListResult) ProtoMessage() {}
 
 func (x *DeploymentListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[8]
+	mi := &file_cli_result_v1_result_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -721,7 +765,7 @@ func (x *DeploymentListResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentListResult.ProtoReflect.Descriptor instead.
 func (*DeploymentListResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{8}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DeploymentListResult) GetDeployments() []*DeploymentSummary {
@@ -744,7 +788,7 @@ type DeploymentSummary struct {
 
 func (x *DeploymentSummary) Reset() {
 	*x = DeploymentSummary{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[9]
+	mi := &file_cli_result_v1_result_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -756,7 +800,7 @@ func (x *DeploymentSummary) String() string {
 func (*DeploymentSummary) ProtoMessage() {}
 
 func (x *DeploymentSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[9]
+	mi := &file_cli_result_v1_result_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -769,7 +813,7 @@ func (x *DeploymentSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentSummary.ProtoReflect.Descriptor instead.
 func (*DeploymentSummary) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{9}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DeploymentSummary) GetPromotionId() string {
@@ -816,7 +860,7 @@ type PreviewListResult struct {
 
 func (x *PreviewListResult) Reset() {
 	*x = PreviewListResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[10]
+	mi := &file_cli_result_v1_result_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -828,7 +872,7 @@ func (x *PreviewListResult) String() string {
 func (*PreviewListResult) ProtoMessage() {}
 
 func (x *PreviewListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[10]
+	mi := &file_cli_result_v1_result_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -841,7 +885,7 @@ func (x *PreviewListResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewListResult.ProtoReflect.Descriptor instead.
 func (*PreviewListResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{10}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PreviewListResult) GetPreviews() []*PreviewSummary {
@@ -864,7 +908,7 @@ type PreviewSummary struct {
 
 func (x *PreviewSummary) Reset() {
 	*x = PreviewSummary{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[11]
+	mi := &file_cli_result_v1_result_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -876,7 +920,7 @@ func (x *PreviewSummary) String() string {
 func (*PreviewSummary) ProtoMessage() {}
 
 func (x *PreviewSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[11]
+	mi := &file_cli_result_v1_result_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -889,7 +933,7 @@ func (x *PreviewSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewSummary.ProtoReflect.Descriptor instead.
 func (*PreviewSummary) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{11}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *PreviewSummary) GetIdentity() string {
@@ -936,7 +980,7 @@ type DomainListResult struct {
 
 func (x *DomainListResult) Reset() {
 	*x = DomainListResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[12]
+	mi := &file_cli_result_v1_result_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -948,7 +992,7 @@ func (x *DomainListResult) String() string {
 func (*DomainListResult) ProtoMessage() {}
 
 func (x *DomainListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[12]
+	mi := &file_cli_result_v1_result_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -961,7 +1005,7 @@ func (x *DomainListResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainListResult.ProtoReflect.Descriptor instead.
 func (*DomainListResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{12}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DomainListResult) GetHosts() []*DomainHostStatus {
@@ -972,27 +1016,19 @@ func (x *DomainListResult) GetHosts() []*DomainHostStatus {
 }
 
 type PreviewDomainResult struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	BaseDomain        string                 `protobuf:"bytes,1,opt,name=base_domain,json=baseDomain,proto3" json:"base_domain,omitempty"`
-	EdgeScope         string                 `protobuf:"bytes,2,opt,name=edge_scope,json=edgeScope,proto3" json:"edge_scope,omitempty"`
-	RouteInstalled    bool                   `protobuf:"varint,3,opt,name=route_installed,json=routeInstalled,proto3" json:"route_installed,omitempty"`
-	CertificateId     string                 `protobuf:"bytes,4,opt,name=certificate_id,json=certificateId,proto3" json:"certificate_id,omitempty"`
-	CertificateStatus string                 `protobuf:"bytes,5,opt,name=certificate_status,json=certificateStatus,proto3" json:"certificate_status,omitempty"`
-	RenewalStatus     string                 `protobuf:"bytes,6,opt,name=renewal_status,json=renewalStatus,proto3" json:"renewal_status,omitempty"`
-	ExpiresAt         string                 `protobuf:"bytes,7,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	ExpiringSoon      bool                   `protobuf:"varint,8,opt,name=expiring_soon,json=expiringSoon,proto3" json:"expiring_soon,omitempty"`
-	RecordsWritten    []string               `protobuf:"bytes,9,rep,name=records_written,json=recordsWritten,proto3" json:"records_written,omitempty"`
-	ManualRecords     []string               `protobuf:"bytes,10,rep,name=manual_records,json=manualRecords,proto3" json:"manual_records,omitempty"`
-	LastProbeAt       string                 `protobuf:"bytes,11,opt,name=last_probe_at,json=lastProbeAt,proto3" json:"last_probe_at,omitempty"`
-	LastProbeOk       bool                   `protobuf:"varint,12,opt,name=last_probe_ok,json=lastProbeOk,proto3" json:"last_probe_ok,omitempty"`
-	Projects          []string               `protobuf:"bytes,13,rep,name=projects,proto3" json:"projects,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	BaseDomain     string                 `protobuf:"bytes,1,opt,name=base_domain,json=baseDomain,proto3" json:"base_domain,omitempty"`
+	EdgeScope      string                 `protobuf:"bytes,2,opt,name=edge_scope,json=edgeScope,proto3" json:"edge_scope,omitempty"`
+	RouteInstalled bool                   `protobuf:"varint,3,opt,name=route_installed,json=routeInstalled,proto3" json:"route_installed,omitempty"`
+	Certificate    *Certificate           `protobuf:"bytes,4,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	Projects       []string               `protobuf:"bytes,5,rep,name=projects,proto3" json:"projects,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *PreviewDomainResult) Reset() {
 	*x = PreviewDomainResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[13]
+	mi := &file_cli_result_v1_result_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1004,7 +1040,7 @@ func (x *PreviewDomainResult) String() string {
 func (*PreviewDomainResult) ProtoMessage() {}
 
 func (x *PreviewDomainResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[13]
+	mi := &file_cli_result_v1_result_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1017,7 +1053,7 @@ func (x *PreviewDomainResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewDomainResult.ProtoReflect.Descriptor instead.
 func (*PreviewDomainResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{13}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *PreviewDomainResult) GetBaseDomain() string {
@@ -1041,67 +1077,11 @@ func (x *PreviewDomainResult) GetRouteInstalled() bool {
 	return false
 }
 
-func (x *PreviewDomainResult) GetCertificateId() string {
+func (x *PreviewDomainResult) GetCertificate() *Certificate {
 	if x != nil {
-		return x.CertificateId
-	}
-	return ""
-}
-
-func (x *PreviewDomainResult) GetCertificateStatus() string {
-	if x != nil {
-		return x.CertificateStatus
-	}
-	return ""
-}
-
-func (x *PreviewDomainResult) GetRenewalStatus() string {
-	if x != nil {
-		return x.RenewalStatus
-	}
-	return ""
-}
-
-func (x *PreviewDomainResult) GetExpiresAt() string {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return ""
-}
-
-func (x *PreviewDomainResult) GetExpiringSoon() bool {
-	if x != nil {
-		return x.ExpiringSoon
-	}
-	return false
-}
-
-func (x *PreviewDomainResult) GetRecordsWritten() []string {
-	if x != nil {
-		return x.RecordsWritten
+		return x.Certificate
 	}
 	return nil
-}
-
-func (x *PreviewDomainResult) GetManualRecords() []string {
-	if x != nil {
-		return x.ManualRecords
-	}
-	return nil
-}
-
-func (x *PreviewDomainResult) GetLastProbeAt() string {
-	if x != nil {
-		return x.LastProbeAt
-	}
-	return ""
-}
-
-func (x *PreviewDomainResult) GetLastProbeOk() bool {
-	if x != nil {
-		return x.LastProbeOk
-	}
-	return false
 }
 
 func (x *PreviewDomainResult) GetProjects() []string {
@@ -1120,7 +1100,7 @@ type ConnectorStatusResult struct {
 
 func (x *ConnectorStatusResult) Reset() {
 	*x = ConnectorStatusResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[14]
+	mi := &file_cli_result_v1_result_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1132,7 +1112,7 @@ func (x *ConnectorStatusResult) String() string {
 func (*ConnectorStatusResult) ProtoMessage() {}
 
 func (x *ConnectorStatusResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[14]
+	mi := &file_cli_result_v1_result_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1145,7 +1125,7 @@ func (x *ConnectorStatusResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectorStatusResult.ProtoReflect.Descriptor instead.
 func (*ConnectorStatusResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{14}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ConnectorStatusResult) GetConnectors() []*ConnectorStatus {
@@ -1174,7 +1154,7 @@ type ConnectorStatus struct {
 
 func (x *ConnectorStatus) Reset() {
 	*x = ConnectorStatus{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[15]
+	mi := &file_cli_result_v1_result_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1186,7 +1166,7 @@ func (x *ConnectorStatus) String() string {
 func (*ConnectorStatus) ProtoMessage() {}
 
 func (x *ConnectorStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[15]
+	mi := &file_cli_result_v1_result_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1199,7 +1179,7 @@ func (x *ConnectorStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectorStatus.ProtoReflect.Descriptor instead.
 func (*ConnectorStatus) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{15}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ConnectorStatus) GetTarget() string {
@@ -1290,7 +1270,7 @@ type ConnectorDenial struct {
 
 func (x *ConnectorDenial) Reset() {
 	*x = ConnectorDenial{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[16]
+	mi := &file_cli_result_v1_result_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1302,7 +1282,7 @@ func (x *ConnectorDenial) String() string {
 func (*ConnectorDenial) ProtoMessage() {}
 
 func (x *ConnectorDenial) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[16]
+	mi := &file_cli_result_v1_result_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1315,7 +1295,7 @@ func (x *ConnectorDenial) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectorDenial.ProtoReflect.Descriptor instead.
 func (*ConnectorDenial) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{16}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ConnectorDenial) GetVerb() string {
@@ -1366,24 +1346,25 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12'\n" +
 	"\x0frecords_written\x18\x02 \x03(\tR\x0erecordsWritten\x12%\n" +
 	"\x0emanual_records\x18\x03 \x03(\tR\rmanualRecords\x125\n" +
-	"\x05hosts\x18\x04 \x03(\v2\x1f.cli.result.v1.DomainHostStatusR\x05hosts\"\xfc\x03\n" +
+	"\x05hosts\x18\x04 \x03(\v2\x1f.cli.result.v1.DomainHostStatusR\x05hosts\"\xe1\x01\n" +
 	"\x10DomainHostStatus\x12\x1a\n" +
 	"\bhostname\x18\x01 \x01(\tR\bhostname\x12\x1a\n" +
 	"\bdeclared\x18\x02 \x01(\bR\bdeclared\x12\x14\n" +
 	"\x05ready\x18\x03 \x01(\bR\x05ready\x12\x18\n" +
-	"\apending\x18\x04 \x01(\tR\apending\x12%\n" +
-	"\x0ecertificate_id\x18\x05 \x01(\tR\rcertificateId\x12-\n" +
-	"\x12certificate_status\x18\x06 \x01(\tR\x11certificateStatus\x12%\n" +
-	"\x0erenewal_status\x18\a \x01(\tR\rrenewalStatus\x12\x1d\n" +
+	"\apending\x18\x04 \x01(\tR\apending\x12<\n" +
+	"\vcertificate\x18\x05 \x01(\v2\x1a.cli.result.v1.CertificateR\vcertificate\x12'\n" +
+	"\x0fserving_pointer\x18\x06 \x01(\tR\x0eservingPointer\"\xb8\x02\n" +
+	"\vCertificate\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\x12%\n" +
+	"\x0erenewal_status\x18\x03 \x01(\tR\rrenewalStatus\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\b \x01(\tR\texpiresAt\x12#\n" +
-	"\rexpiring_soon\x18\t \x01(\bR\fexpiringSoon\x12'\n" +
-	"\x0frecords_written\x18\n" +
-	" \x03(\tR\x0erecordsWritten\x12%\n" +
-	"\x0emanual_records\x18\v \x03(\tR\rmanualRecords\x12\"\n" +
-	"\rlast_probe_at\x18\f \x01(\tR\vlastProbeAt\x12\"\n" +
-	"\rlast_probe_ok\x18\r \x01(\bR\vlastProbeOk\x12'\n" +
-	"\x0fserving_pointer\x18\x0e \x01(\tR\x0eservingPointer\"\xa7\x01\n" +
+	"expires_at\x18\x04 \x01(\tR\texpiresAt\x12#\n" +
+	"\rexpiring_soon\x18\x05 \x01(\bR\fexpiringSoon\x12'\n" +
+	"\x0frecords_written\x18\x06 \x03(\tR\x0erecordsWritten\x12%\n" +
+	"\x0emanual_records\x18\a \x03(\tR\rmanualRecords\x12\"\n" +
+	"\rlast_probe_at\x18\b \x01(\tR\vlastProbeAt\x12\"\n" +
+	"\rlast_probe_ok\x18\t \x01(\bR\vlastProbeOk\"\xa7\x01\n" +
 	"\x0eCostScanResult\x12;\n" +
 	"\tresources\x18\x01 \x01(\v2\x1d.provider.cost.v1.ResourceSetR\tresources\x126\n" +
 	"\bestimate\x18\x02 \x01(\v2\x1a.provider.cost.v1.EstimateR\bestimate\x12 \n" +
@@ -1411,25 +1392,15 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\n" +
 	"alias_urls\x18\x05 \x03(\tR\taliasUrls\"I\n" +
 	"\x10DomainListResult\x125\n" +
-	"\x05hosts\x18\x01 \x03(\v2\x1f.cli.result.v1.DomainHostStatusR\x05hosts\"\xf3\x03\n" +
+	"\x05hosts\x18\x01 \x03(\v2\x1f.cli.result.v1.DomainHostStatusR\x05hosts\"\xd8\x01\n" +
 	"\x13PreviewDomainResult\x12\x1f\n" +
 	"\vbase_domain\x18\x01 \x01(\tR\n" +
 	"baseDomain\x12\x1d\n" +
 	"\n" +
 	"edge_scope\x18\x02 \x01(\tR\tedgeScope\x12'\n" +
-	"\x0froute_installed\x18\x03 \x01(\bR\x0erouteInstalled\x12%\n" +
-	"\x0ecertificate_id\x18\x04 \x01(\tR\rcertificateId\x12-\n" +
-	"\x12certificate_status\x18\x05 \x01(\tR\x11certificateStatus\x12%\n" +
-	"\x0erenewal_status\x18\x06 \x01(\tR\rrenewalStatus\x12\x1d\n" +
-	"\n" +
-	"expires_at\x18\a \x01(\tR\texpiresAt\x12#\n" +
-	"\rexpiring_soon\x18\b \x01(\bR\fexpiringSoon\x12'\n" +
-	"\x0frecords_written\x18\t \x03(\tR\x0erecordsWritten\x12%\n" +
-	"\x0emanual_records\x18\n" +
-	" \x03(\tR\rmanualRecords\x12\"\n" +
-	"\rlast_probe_at\x18\v \x01(\tR\vlastProbeAt\x12\"\n" +
-	"\rlast_probe_ok\x18\f \x01(\bR\vlastProbeOk\x12\x1a\n" +
-	"\bprojects\x18\r \x03(\tR\bprojects\"W\n" +
+	"\x0froute_installed\x18\x03 \x01(\bR\x0erouteInstalled\x12<\n" +
+	"\vcertificate\x18\x04 \x01(\v2\x1a.cli.result.v1.CertificateR\vcertificate\x12\x1a\n" +
+	"\bprojects\x18\x05 \x03(\tR\bprojects\"W\n" +
 	"\x15ConnectorStatusResult\x12>\n" +
 	"\n" +
 	"connectors\x18\x01 \x03(\v2\x1e.cli.result.v1.ConnectorStatusR\n" +
@@ -1477,7 +1448,7 @@ func file_cli_result_v1_result_proto_rawDescGZIP() []byte {
 }
 
 var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_cli_result_v1_result_proto_goTypes = []any{
 	(DeploymentState)(0),          // 0: cli.result.v1.DeploymentState
 	(ConnectorLiveness)(0),        // 1: cli.result.v1.ConnectorLiveness
@@ -1488,41 +1459,44 @@ var file_cli_result_v1_result_proto_goTypes = []any{
 	(*BindingSummary)(nil),        // 6: cli.result.v1.BindingSummary
 	(*DomainStatusResult)(nil),    // 7: cli.result.v1.DomainStatusResult
 	(*DomainHostStatus)(nil),      // 8: cli.result.v1.DomainHostStatus
-	(*CostScanResult)(nil),        // 9: cli.result.v1.CostScanResult
-	(*DeploymentListResult)(nil),  // 10: cli.result.v1.DeploymentListResult
-	(*DeploymentSummary)(nil),     // 11: cli.result.v1.DeploymentSummary
-	(*PreviewListResult)(nil),     // 12: cli.result.v1.PreviewListResult
-	(*PreviewSummary)(nil),        // 13: cli.result.v1.PreviewSummary
-	(*DomainListResult)(nil),      // 14: cli.result.v1.DomainListResult
-	(*PreviewDomainResult)(nil),   // 15: cli.result.v1.PreviewDomainResult
-	(*ConnectorStatusResult)(nil), // 16: cli.result.v1.ConnectorStatusResult
-	(*ConnectorStatus)(nil),       // 17: cli.result.v1.ConnectorStatus
-	(*ConnectorDenial)(nil),       // 18: cli.result.v1.ConnectorDenial
-	nil,                           // 19: cli.result.v1.DeploymentSummary.BuildsEntry
-	(*v1.ResourceSet)(nil),        // 20: provider.cost.v1.ResourceSet
-	(*v1.Estimate)(nil),           // 21: provider.cost.v1.Estimate
-	(v11.Lifecycle)(0),            // 22: common.environment.v1.Lifecycle
+	(*Certificate)(nil),           // 9: cli.result.v1.Certificate
+	(*CostScanResult)(nil),        // 10: cli.result.v1.CostScanResult
+	(*DeploymentListResult)(nil),  // 11: cli.result.v1.DeploymentListResult
+	(*DeploymentSummary)(nil),     // 12: cli.result.v1.DeploymentSummary
+	(*PreviewListResult)(nil),     // 13: cli.result.v1.PreviewListResult
+	(*PreviewSummary)(nil),        // 14: cli.result.v1.PreviewSummary
+	(*DomainListResult)(nil),      // 15: cli.result.v1.DomainListResult
+	(*PreviewDomainResult)(nil),   // 16: cli.result.v1.PreviewDomainResult
+	(*ConnectorStatusResult)(nil), // 17: cli.result.v1.ConnectorStatusResult
+	(*ConnectorStatus)(nil),       // 18: cli.result.v1.ConnectorStatus
+	(*ConnectorDenial)(nil),       // 19: cli.result.v1.ConnectorDenial
+	nil,                           // 20: cli.result.v1.DeploymentSummary.BuildsEntry
+	(*v1.ResourceSet)(nil),        // 21: provider.cost.v1.ResourceSet
+	(*v1.Estimate)(nil),           // 22: provider.cost.v1.Estimate
+	(v11.Lifecycle)(0),            // 23: common.environment.v1.Lifecycle
 }
 var file_cli_result_v1_result_proto_depIdxs = []int32{
 	6,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
 	6,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
 	8,  // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
-	20, // 3: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
-	21, // 4: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
-	11, // 5: cli.result.v1.DeploymentListResult.deployments:type_name -> cli.result.v1.DeploymentSummary
-	19, // 6: cli.result.v1.DeploymentSummary.builds:type_name -> cli.result.v1.DeploymentSummary.BuildsEntry
-	0,  // 7: cli.result.v1.DeploymentSummary.state:type_name -> cli.result.v1.DeploymentState
-	13, // 8: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
-	22, // 9: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
-	8,  // 10: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
-	17, // 11: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
-	1,  // 12: cli.result.v1.ConnectorStatus.liveness:type_name -> cli.result.v1.ConnectorLiveness
-	18, // 13: cli.result.v1.ConnectorStatus.last_denied:type_name -> cli.result.v1.ConnectorDenial
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	9,  // 3: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
+	21, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
+	22, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
+	12, // 6: cli.result.v1.DeploymentListResult.deployments:type_name -> cli.result.v1.DeploymentSummary
+	20, // 7: cli.result.v1.DeploymentSummary.builds:type_name -> cli.result.v1.DeploymentSummary.BuildsEntry
+	0,  // 8: cli.result.v1.DeploymentSummary.state:type_name -> cli.result.v1.DeploymentState
+	14, // 9: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
+	23, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
+	8,  // 11: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
+	9,  // 12: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
+	18, // 13: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
+	1,  // 14: cli.result.v1.ConnectorStatus.liveness:type_name -> cli.result.v1.ConnectorLiveness
+	19, // 15: cli.result.v1.ConnectorStatus.last_denied:type_name -> cli.result.v1.ConnectorDenial
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_cli_result_v1_result_proto_init() }
@@ -1536,7 +1510,7 @@ func file_cli_result_v1_result_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_result_v1_result_proto_rawDesc), len(file_cli_result_v1_result_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   18,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

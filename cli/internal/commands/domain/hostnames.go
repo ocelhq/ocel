@@ -64,21 +64,12 @@ func domainListResult(resp *contractv1.GetHostnameStatusResponse) *resultv1.Doma
 
 func previewDomainResult(resp *contractv1.GetPreviewWildcardResponse) *resultv1.PreviewDomainResult {
 	domain := resp.GetWildcard()
-	cert := domain.GetCertificate()
 	return &resultv1.PreviewDomainResult{
-		BaseDomain:        domain.GetBaseDomain(),
-		EdgeScope:         domain.GetEdgeScope(),
-		RouteInstalled:    domain.GetRouteInstalled(),
-		CertificateId:     cert.GetCertificateId(),
-		CertificateStatus: cert.GetCertificateStatus(),
-		RenewalStatus:     domain.GetRenewalStatus(),
-		ExpiresAt:         terminal.EpochRFC3339(domain.GetExpiresAt()),
-		ExpiringSoon:      domain.GetExpiringSoon(),
-		RecordsWritten:    cert.GetRecordsWritten(),
-		ManualRecords:     cert.GetManualRecords(),
-		LastProbeAt:       terminal.EpochRFC3339(cert.GetLastProbeAt()),
-		LastProbeOk:       cert.GetLastProbeOk(),
-		Projects:          resp.GetProjects(),
+		BaseDomain:     domain.GetBaseDomain(),
+		EdgeScope:      domain.GetEdgeScope(),
+		RouteInstalled: domain.GetRouteInstalled(),
+		Certificate:    newResultCertificate(domain),
+		Projects:       resp.GetProjects(),
 	}
 }
 

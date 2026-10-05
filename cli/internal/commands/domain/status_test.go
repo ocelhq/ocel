@@ -53,26 +53,33 @@ func TestDomainStatusAsJSONIsOneDocumentPerHostname(t *testing.T) {
 	}
 	host, _ := hosts[0].(map[string]any)
 	for field, want := range map[string]any{
-		"hostname":          "shop.app.com",
-		"declared":          true,
-		"ready":             true,
-		"certificateId":     "issued-for-shop.app.com",
-		"certificateStatus": "ISSUED",
-		"expiresAt":         "2025-09-04T15:33:20Z",
-		"lastProbeOk":       true,
-		"servingPointer":    "relay",
+		"hostname":       "shop.app.com",
+		"declared":       true,
+		"ready":          true,
+		"servingPointer": "relay",
 	} {
 		if host[field] != want {
 			t.Errorf("json host %s = %v, want %v", field, host[field], want)
 		}
 	}
-	if probed, _ := host["lastProbeAt"].(string); probed == "" {
-		t.Errorf("json lastProbeAt = %v, want when the probe ran", host["lastProbeAt"])
+	certificate, _ := host["certificate"].(map[string]any)
+	for field, want := range map[string]any{
+		"id":          "issued-for-shop.app.com",
+		"status":      "ISSUED",
+		"expiresAt":   "2025-09-04T15:33:20Z",
+		"lastProbeOk": true,
+	} {
+		if certificate[field] != want {
+			t.Errorf("json host certificate %s = %v, want %v", field, certificate[field], want)
+		}
 	}
-	written, _ := host["recordsWritten"].([]any)
+	if probed, _ := certificate["lastProbeAt"].(string); probed == "" {
+		t.Errorf("json certificate lastProbeAt = %v, want when the probe ran", certificate["lastProbeAt"])
+	}
+	written, _ := certificate["recordsWritten"].([]any)
 	for _, want := range []string{"_ocel.shop.app.com CNAME _target.validations.fake.invalid", "shop.app.com CNAME test-app.relay.fake.invalid"} {
 		if !slices.Contains(written, any(want)) {
-			t.Errorf("json recordsWritten = %v, want it to hold %q", written, want)
+			t.Errorf("json certificate recordsWritten = %v, want it to hold %q", written, want)
 		}
 	}
 }
