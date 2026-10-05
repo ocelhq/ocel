@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/naming"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
@@ -204,7 +205,7 @@ func runBindingsSet(ctx context.Context, invocation commands.Invocation, cwd str
 		}
 		headline := fmt.Sprintf("Published %s as %s (version %d)", describeBinding(binding.GetName(), opts), owner, resp.GetVersion())
 		if invocation.Presentation(stdout).Format == terminal.FormatJSON {
-			return headline, writeBindingJSON(stdout, bindingSetReport{Name: binding.GetName(), Owner: owner, Version: resp.GetVersion()})
+			return headline, terminal.WriteResultJSON(stdout, &resultv1.BindingSetResult{Name: binding.GetName(), Owner: owner, Version: resp.GetVersion()})
 		}
 		return headline, nil
 	})
@@ -325,7 +326,7 @@ func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd,
 			headline = fmt.Sprintf("No binding named %s is published", describeBinding(name, opts))
 		}
 		if invocation.Presentation(stdout).Format == terminal.FormatJSON {
-			return headline, writeBindingJSON(stdout, bindingRemoveReport{Name: name, Removed: resp.GetRemoved()})
+			return headline, terminal.WriteResultJSON(stdout, &resultv1.BindingRemoveResult{Name: name, Removed: resp.GetRemoved()})
 		}
 		return headline, nil
 	})
@@ -346,7 +347,7 @@ func runBindingsList(ctx context.Context, invocation commands.Invocation, cwd st
 			return "", err
 		}
 		if invocation.Presentation(stdout).Format == terminal.FormatJSON {
-			return "", writeBindingJSON(stdout, bindingListReport{Bindings: bindingReports(resp.GetBindings())})
+			return "", terminal.WriteResultJSON(stdout, &resultv1.BindingListResult{Bindings: bindingEntries(resp.GetBindings())})
 		}
 		renderBindings(stdout, resp.GetBindings())
 		return "", nil
@@ -378,7 +379,7 @@ func runBindingsGenerate(ctx context.Context, invocation commands.Invocation, cw
 			headline = fmt.Sprintf("Nothing is published to %s; wrote %s, which names no record and so leaves no binding name open", describeBindingCoordinate(opts), path)
 		}
 		if invocation.Presentation(stdout).Format == terminal.FormatJSON {
-			return headline, writeBindingJSON(stdout, bindingGenerateReport{Path: path, Bindings: bindingReports(resp.GetBindings())})
+			return headline, terminal.WriteResultJSON(stdout, &resultv1.BindingGenerateResult{Path: path, Bindings: bindingEntries(resp.GetBindings())})
 		}
 		return headline, nil
 	})
@@ -394,38 +395,10 @@ func describeBindingCoordinate(opts bindingsOptions) string {
 	return "the preview environment " + opts.environment
 }
 
-type bindingGenerateReport struct {
-	Path     string          `json:"path"`
-	Bindings []bindingReport `json:"bindings"`
-}
-
-type bindingSetReport struct {
-	Name    string `json:"name"`
-	Owner   string `json:"owner"`
-	Version uint64 `json:"version"`
-}
-
-type bindingRemoveReport struct {
-	Name    string `json:"name"`
-	Removed bool   `json:"removed"`
-}
-
-type bindingListReport struct {
-	Bindings []bindingReport `json:"bindings"`
-}
-
-type bindingReport struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Source  string `json:"source"`
-	Owner   string `json:"owner"`
-	Version uint64 `json:"version"`
-}
-
-func bindingReports(bindings []*variablestorev1.BindingSummary) []bindingReport {
-	out := make([]bindingReport, 0, len(bindings))
+func bindingEntries(bindings []*variablestorev1.BindingSummary) []*resultv1.BindingEntry {
+	out := make([]*resultv1.BindingEntry, 0, len(bindings))
 	for _, l := range bindings {
-		out = append(out, bindingReport{
+		out = append(out, &resultv1.BindingEntry{
 			Name:    l.GetName(),
 			Type:    bindingTypeName(l.GetType()),
 			Source:  l.GetSource(),
@@ -434,12 +407,6 @@ func bindingReports(bindings []*variablestorev1.BindingSummary) []bindingReport 
 		})
 	}
 	return out
-}
-
-func writeBindingJSON(stdout io.Writer, report any) error {
-	encoder := json.NewEncoder(stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(report)
 }
 
 func renderBindings(stdout io.Writer, bindings []*variablestorev1.BindingSummary) {

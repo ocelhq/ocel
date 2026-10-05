@@ -43,7 +43,7 @@ func TestDomainStatusAsJSONIsOneDocumentPerHostname(t *testing.T) {
 	if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout); err != nil {
 		t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	report := clitest.DecodeJSON(t, stdout.String())
+	report := clitest.DecodeResult(t, stdout.String())
 	if report["ready"] != true {
 		t.Errorf("json = %v, want it to report the project ready", report)
 	}
@@ -86,7 +86,7 @@ func TestDomainStatusAsJSONCarriesTheProjectsValidationRecords(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	report := clitest.DecodeJSON(t, out.String())
+	report := clitest.DecodeResult(t, out.String())
 	if owned, _ := report["manualRecords"].([]any); len(owned) != 1 || owned[0] != "_ocel.shop.app.com CNAME _target.validations.fake.invalid" {
 		t.Errorf("json manualRecords = %v, want the project's records the user has to write", report["manualRecords"])
 	}

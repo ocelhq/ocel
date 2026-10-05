@@ -2,7 +2,6 @@ package cost
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +10,6 @@ import (
 	"slices"
 	"strings"
 
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
 
@@ -26,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -255,25 +254,5 @@ func unbuiltFunctions(cfg *project.Project) []build.Function {
 }
 
 func writeJSON(stdout io.Writer, set *costv1.ResourceSet, estimate *costv1.Estimate, assumptions []string) error {
-	resources, err := protojson.Marshal(set)
-	if err != nil {
-		return err
-	}
-	priced, err := protojson.Marshal(estimate)
-	if err != nil {
-		return err
-	}
-	if assumptions == nil {
-		assumptions = []string{}
-	}
-	encoded, err := json.Marshal(struct {
-		Resources   json.RawMessage `json:"resources"`
-		Estimate    json.RawMessage `json:"estimate"`
-		Assumptions []string        `json:"assumptions"`
-	}{resources, priced, assumptions})
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintln(stdout, string(encoded))
-	return err
+	return terminal.WriteResultJSON(stdout, &resultv1.CostScanResult{Resources: set, Estimate: estimate, Assumptions: assumptions})
 }

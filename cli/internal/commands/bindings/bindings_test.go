@@ -457,18 +457,18 @@ func TestRunBindingsJSONOutput(t *testing.T) {
 	if err := runBindingsSet(context.Background(), newStreamedInvocation(&setLog), root, strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{}, &published); err != nil {
 		t.Fatalf("runBindingsSet err = %v; stderr=%s", err, setLog.String())
 	}
-	set := clitest.DecodeJSON(t, published.String())
-	if set["name"] != "main" || set["version"] != float64(1) {
+	set := clitest.DecodeResult(t, published.String())
+	if set["name"] != "main" || set["version"] != "1" {
 		t.Errorf("set json = %v, want the name and version it published", set)
 	}
 
-	listed := clitest.DecodeJSON(t, bindingList(t, root, bindingsOptions{}))
+	listed := clitest.DecodeResult(t, bindingList(t, root, bindingsOptions{}))
 	bindings, ok := listed["bindings"].([]any)
 	if !ok || len(bindings) != 1 {
 		t.Fatalf("ls json = %v, want one binding", listed)
 	}
 	binding, _ := bindings[0].(map[string]any)
-	for field, want := range map[string]any{"name": "main", "type": "postgres", "source": "fake:postgres:main", "owner": defaultBindingOwner, "version": float64(1)} {
+	for field, want := range map[string]any{"name": "main", "type": "postgres", "source": "fake:postgres:main", "owner": defaultBindingOwner, "version": "1"} {
 		if binding[field] != want {
 			t.Errorf("ls json binding %s = %v, want %v", field, binding[field], want)
 		}
@@ -478,7 +478,7 @@ func TestRunBindingsJSONOutput(t *testing.T) {
 	if err := runBindingsRemove(context.Background(), newStreamedInvocation(&stderr), root, "main", bindingsOptions{}, &rm); err != nil {
 		t.Fatalf("runBindingsRemove err = %v; stderr=%s", err, stderr.String())
 	}
-	removed := clitest.DecodeJSON(t, rm.String())
+	removed := clitest.DecodeResult(t, rm.String())
 	if removed["name"] != "main" || removed["removed"] != true {
 		t.Errorf("rm json = %v, want the name it removed and that it was there", removed)
 	}
@@ -555,7 +555,30 @@ func TestListingBindingsAsJSONSaysWhoItActsAsOnItsRunAndPrintsOneJSONDocumentAlo
 	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() {
 		t.Errorf("result = %v, want the listing's run to succeed", result)
 	}
-	if listed := clitest.DecodeJSON(t, stdout.String()); listed["bindings"] == nil {
+	if listed := clitest.DecodeResult(t, stdout.String()); listed["bindings"] == nil {
 		t.Errorf("stdout = %q, want the listing as one JSON document", stdout.String())
+	}
+}
+
+func TestRunBindingsGenerateAsJSONPrintsTheFileItWroteAndTheBindingsItTyped(t *testing.T) {
+	root := setUpBindingFixture(t)
+	bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{})
+	useJSONOutput(t)
+
+	var stdout, stderr bytes.Buffer
+	if err := runBindingsGenerate(context.Background(), newStreamedInvocation(&stderr), root, bindingsOptions{}, &stdout); err != nil {
+		t.Fatalf("runBindingsGenerate err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	generated := clitest.DecodeResult(t, stdout.String())
+	if path, _ := generated["path"].(string); !strings.HasSuffix(path, bindingTypesFileName) {
+		t.Errorf("generate json path = %v, want the file it wrote, %s", generated["path"], bindingTypesFileName)
+	}
+	bindings, _ := generated["bindings"].([]any)
+	if len(bindings) != 1 {
+		t.Fatalf("generate json bindings = %v, want the one it typed", generated["bindings"])
+	}
+	if binding, _ := bindings[0].(map[string]any); binding["name"] != "main" {
+		t.Errorf("generate json binding = %v, want main", bindings[0])
 	}
 }
