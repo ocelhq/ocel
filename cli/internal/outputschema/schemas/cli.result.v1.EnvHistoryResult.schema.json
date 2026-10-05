@@ -38,7 +38,10 @@
               "type": "string"
             },
             {
-              "enum": ["TIER_PREVIEW", "TIER_PRODUCTION"],
+              "enum": [
+                "TIER_PREVIEW",
+                "TIER_PRODUCTION"
+              ],
               "type": "string"
             },
             {

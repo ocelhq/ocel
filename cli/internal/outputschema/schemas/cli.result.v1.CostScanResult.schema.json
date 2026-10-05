@@ -283,7 +283,11 @@
               "type": "string"
             },
             {
-              "enum": ["PROFILE_LIGHT", "PROFILE_MODERATE", "PROFILE_HEAVY"],
+              "enum": [
+                "PROFILE_LIGHT",
+                "PROFILE_MODERATE",
+                "PROFILE_HEAVY"
+              ],
               "type": "string"
             },
             {
@@ -408,7 +412,12 @@
               "type": "string"
             },
             {
-              "enum": ["STATUS_PRICED", "STATUS_FREE", "STATUS_UNSUPPORTED", "STATUS_NO_PRICE"],
+              "enum": [
+                "STATUS_PRICED",
+                "STATUS_FREE",
+                "STATUS_UNSUPPORTED",
+                "STATUS_NO_PRICE"
+              ],
               "type": "string"
             },
             {

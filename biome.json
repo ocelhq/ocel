@@ -16,6 +16,7 @@
       "!**/.ocel",
       "!**/.source",
       "!**/public",
+      "!cli/internal/outputschema/schemas",
       "!**/testdata",
       "!**/drizzle/meta",
       "!**/fixtures/**/*.json",

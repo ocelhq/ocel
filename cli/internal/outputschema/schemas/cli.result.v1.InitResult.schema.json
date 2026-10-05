@@ -24,7 +24,11 @@
               "type": "string"
             },
             {
-              "enum": ["CONFIG_FORMAT_JSON", "CONFIG_FORMAT_YAML", "CONFIG_FORMAT_TYPESCRIPT"],
+              "enum": [
+                "CONFIG_FORMAT_JSON",
+                "CONFIG_FORMAT_YAML",
+                "CONFIG_FORMAT_TYPESCRIPT"
+              ],
               "type": "string"
             },
             {

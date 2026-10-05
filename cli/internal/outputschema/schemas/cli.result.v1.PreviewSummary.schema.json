@@ -41,7 +41,10 @@
               "type": "string"
             },
             {
-              "enum": ["LIFECYCLE_EPHEMERAL", "LIFECYCLE_PERSISTENT"],
+              "enum": [
+                "LIFECYCLE_EPHEMERAL",
+                "LIFECYCLE_PERSISTENT"
+              ],
               "type": "string"
             },
             {
