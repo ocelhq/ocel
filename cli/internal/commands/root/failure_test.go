@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
 func executeAndReportRoot(t *testing.T, args ...string) (code int, stdout, stderr string) {
@@ -123,8 +125,8 @@ func TestACommandThatNeverStartsARunPrintsItsFailureAsOneCodedDocument(t *testin
 			code, stdout, stderr := executeAndReportRoot(t, "--json", command)
 
 			failure := requireOneFailureDocument(t, stdout)
-			if failure["code"] != "project.no_config" || failure["hint"] != "ocel init" {
-				t.Errorf("error code = %v, hint = %v, want project.no_config and ocel init", failure["code"], failure["hint"])
+			if failure["code"] != "project.no_config" || failure["hint"] != "ocel init --provider <id>" {
+				t.Errorf("error code = %v, hint = %v, want project.no_config and ocel init --provider <id>", failure["code"], failure["hint"])
 			}
 			if code != 1 {
 				t.Errorf("exit code = %d, want 1", code)
@@ -369,8 +371,12 @@ func TestAMissingProjectUnderJSONOnATerminalFailsInsteadOfOfferingASetup(t *test
 			if strings.Contains(stdout, "Set up a project here?") {
 				t.Errorf("stdout = %q, want no prompt text in the JSON stream", stdout)
 			}
-			if failure := requireOneFailureDocument(t, stdout); failure["code"] != "project.no_config" {
-				t.Errorf("error = %v, want project.no_config", failure)
+			failure := requireOneFailureDocument(t, stdout)
+			if failure["code"] != "project.no_config" || failure["hint"] != "ocel init --provider <id>" {
+				t.Errorf("error = %v, want project.no_config hinting ocel init --provider <id>", failure)
+			}
+			if message, _ := failure["message"].(string); !strings.Contains(message, strings.Join(configdoc.ProviderIDs(), ", ")) {
+				t.Errorf("message = %q, want the providers the setup offer would have listed", message)
 			}
 		})
 	}

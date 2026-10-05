@@ -42,7 +42,8 @@ func find(ctx context.Context, startDir, explicitPath string, optional bool) (*P
 			}
 			return &Project{Dir: root, Path: filepath.Join(root, DefaultFileName), EnvSource: envsource.DefaultTiers(), Apps: apps}, nil
 		}
-		return nil, newNoConfigError(NoConfigError{Names: fileNames(""), StartDir: startDir}, initCommand)
+		missing := NoConfigError{Names: fileNames(""), StartDir: startDir}
+		return nil, newNoConfigError(missing, missing.Hint())
 	}
 	return load(ctx, configPath)
 }
