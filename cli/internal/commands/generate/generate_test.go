@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	"github.com/ocelhq/ocel/pkg/statedir"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
@@ -213,5 +215,126 @@ func TestGenerateWritesTheRealtimeChannelTypesBesideTheConfig(t *testing.T) {
 	}
 	if want := "Generated the realtime channel types in ocel-realtime.d.ts\n"; !strings.Contains(stdout.String(), want) {
 		t.Errorf("stdout = %q, want it to say %q", stdout.String(), want)
+	}
+}
+
+func TestGenerateAsJSONPrintsTheFilesItWrote(t *testing.T) {
+	root := setUpGenerateFixture(t, `
+export default {
+  slug: "test-app",
+  apps: [{ name: "web", path: ".", framework: "next" }],
+};
+`, "{}\n")
+	dependencies := newTestDependencies()
+	dependencies.Presentation = clitest.ResolveJSONPresentation
+	dependencies.CollectDeclarations = func(ctx context.Context, _ *project.Project, declarations *variables.Declarations, _, _ io.Writer) ([]declaration.Resource, error) {
+		if _, err := declarations.DeclareEnv(ctx, &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{plainClient("NEXT_PUBLIC_SITE_URL")}}); err != nil {
+			return nil, err
+		}
+		return []declaration.Resource{{
+			Name: "app",
+			Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME,
+			Realtime: &resourcesv1.RealtimeConfig{Channels: []*resourcesv1.RealtimeChannel{{
+				Pattern: "orders/:orderId",
+				Schema:  `{"type":"object"}`,
+				Publish: resourcesv1.RealtimePublish_REALTIME_PUBLISH_SERVER,
+			}}},
+		}}, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := runGenerate(context.Background(), dependencies, root, &stdout, &stderr); err != nil {
+		t.Fatalf("runGenerate err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var got resultv1.GenerateResult
+	clitest.DecodeResultInto(t, stdout.String(), &got)
+	wantFiles := []string{
+		filepath.Join(root, statedir.Name, "env-client.ts"),
+		filepath.Join(root, "tsconfig.json"),
+		filepath.Join(root, "ocel-realtime.d.ts"),
+	}
+	if !slices.Equal(got.GetFiles(), wantFiles) {
+		t.Errorf("files = %v, want %v", got.GetFiles(), wantFiles)
+	}
+	if got.GetClientVariableCount() != 2 {
+		t.Errorf("client_variable_count = %d, want the declared one and the built-in deployment url", got.GetClientVariableCount())
+	}
+	for _, file := range got.GetFiles() {
+		if _, err := os.Stat(file); err != nil {
+			t.Errorf("file %s is reported written but %v", file, err)
+		}
+	}
+}
+
+func TestGenerateAsJSONOfAProjectWithoutRealtimeNamesOnlyTheAccessor(t *testing.T) {
+	root := setUpGenerateFixture(t, generateSoloConfig, "")
+	dependencies := newTestDependencies()
+	dependencies.Presentation = clitest.ResolveJSONPresentation
+	declaring(&dependencies)
+
+	var stdout, stderr bytes.Buffer
+	if err := runGenerate(context.Background(), dependencies, root, &stdout, &stderr); err != nil {
+		t.Fatalf("runGenerate err = %v", err)
+	}
+
+	var got resultv1.GenerateResult
+	clitest.DecodeResultInto(t, stdout.String(), &got)
+	if want := []string{filepath.Join(root, statedir.Name, "env-client.ts")}; !slices.Equal(got.GetFiles(), want) {
+		t.Errorf("files = %v, want %v", got.GetFiles(), want)
+	}
+}
+
+func TestGenerateAsJSONNamesTheTsconfigOnlyWhenItRewritesIt(t *testing.T) {
+	root := setUpGenerateFixture(t, generateSoloConfig, "{\n  \"compilerOptions\": {}\n}\n")
+	dependencies := newTestDependencies()
+	dependencies.Presentation = clitest.ResolveJSONPresentation
+	declaring(&dependencies, plainClient("NEXT_PUBLIC_SITE_URL"))
+
+	var first bytes.Buffer
+	if err := runGenerate(context.Background(), dependencies, root, &first, io.Discard); err != nil {
+		t.Fatalf("runGenerate err = %v", err)
+	}
+	var rewrote resultv1.GenerateResult
+	clitest.DecodeResultInto(t, first.String(), &rewrote)
+	if want := []string{filepath.Join(root, statedir.Name, "env-client.ts"), filepath.Join(root, "tsconfig.json")}; !slices.Equal(rewrote.GetFiles(), want) {
+		t.Errorf("files after mapping the tsconfig = %v, want %v", rewrote.GetFiles(), want)
+	}
+
+	var second bytes.Buffer
+	if err := runGenerate(context.Background(), dependencies, root, &second, io.Discard); err != nil {
+		t.Fatalf("runGenerate err = %v", err)
+	}
+	var unchanged resultv1.GenerateResult
+	clitest.DecodeResultInto(t, second.String(), &unchanged)
+	if want := []string{filepath.Join(root, statedir.Name, "env-client.ts")}; !slices.Equal(unchanged.GetFiles(), want) {
+		t.Errorf("files with the tsconfig already mapped = %v, want %v", unchanged.GetFiles(), want)
+	}
+}
+
+func TestGenerateReportsTheClientAccessorBeforeTheRealtimeTypesFail(t *testing.T) {
+	root := setUpGenerateFixture(t, generateSoloConfig, "")
+	if err := os.Mkdir(filepath.Join(root, "ocel-realtime.d.ts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dependencies := newTestDependencies()
+	dependencies.CollectDeclarations = func(context.Context, *project.Project, *variables.Declarations, io.Writer, io.Writer) ([]declaration.Resource, error) {
+		return []declaration.Resource{{
+			Name: "app",
+			Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME,
+			Realtime: &resourcesv1.RealtimeConfig{Channels: []*resourcesv1.RealtimeChannel{{
+				Pattern: "orders/:orderId",
+				Schema:  `{"type":"object"}`,
+				Publish: resourcesv1.RealtimePublish_REALTIME_PUBLISH_SERVER,
+			}}},
+		}}, nil
+	}
+
+	var stdout bytes.Buffer
+	if err := runGenerate(context.Background(), dependencies, root, &stdout, io.Discard); err == nil {
+		t.Fatal("runGenerate succeeded writing the realtime types over a directory")
+	}
+	if got, want := stdout.String(), "Generated the client accessor for 1 client-accessible variable\n"; got != want {
+		t.Errorf("stdout = %q, want %q", got, want)
 	}
 }

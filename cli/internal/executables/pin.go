@@ -47,13 +47,12 @@ func EnsureConnector(ctx context.Context, projectDir, name string, platform Plat
 	return read, nil
 }
 
-func Pin(ctx context.Context, projectDir string) error {
+func Pin(ctx context.Context, projectDir string) (lockfile.Lock, error) {
 	store, err := New(version.Version)
 	if err != nil {
-		return err
+		return lockfile.Lock{}, err
 	}
-	_, err = writeReleaseLock(ctx, store, projectDir)
-	return err
+	return writeReleaseLock(ctx, store, projectDir)
 }
 
 func ensurePinned(ctx context.Context, store *Store, kind Kind, projectDir, name string, platform Platform, pinning Pinning) (string, error) {

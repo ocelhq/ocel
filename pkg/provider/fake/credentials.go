@@ -10,9 +10,10 @@ import (
 )
 
 type Credentials struct {
-	mu      sync.Mutex
-	region  string
-	refusal error
+	mu          sync.Mutex
+	region      string
+	refusal     error
+	permissions *edge.CredentialDocument
 }
 
 func NewCredentials(region string) *Credentials { return &Credentials{region: region} }
@@ -49,7 +50,18 @@ func (c *Credentials) Whoami(context.Context) (provider.Principal, error) {
 	}, nil
 }
 
+func (c *Credentials) DocumentsPermissions(document edge.CredentialDocument) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.permissions = &document
+}
+
 func (c *Credentials) Permissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.permissions != nil {
+		return *c.permissions, nil
+	}
 	return edge.CredentialDocument{
 		Heading:  "fake credentials",
 		Document: "fake permissions for " + string(purpose),

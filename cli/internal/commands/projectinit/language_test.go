@@ -45,7 +45,7 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 
 			var stdout bytes.Buffer
 			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-			if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
+			if _, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
 				t.Fatalf("runInit: %v — %s", err, stdout.String())
 			}
 
@@ -68,7 +68,7 @@ func TestInitWritesTheSchemaThisCLIShipsWith(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
+	if _, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
@@ -92,7 +92,7 @@ func TestInitWritesTypeScriptOnRequest(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake", ts: true}); err != nil {
+	if _, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake", ts: true}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
@@ -113,7 +113,7 @@ func TestInitWritesYAMLOnRequest(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), dependencies, dir, "007", initOptions{provider: "fake", yaml: true}); err != nil {
+	if _, err := runInit(context.Background(), dependencies, dir, "007", initOptions{provider: "fake", yaml: true}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
@@ -156,7 +156,7 @@ func TestInitRefusesToWriteASecondFormOfTheConfig(t *testing.T) {
 			dependencies := newTestDependencies()
 			stubPackageManager(&dependencies, nil)
 
-			err := runInit(context.Background(), dependencies, dir, "acme", tc.opts)
+			_, err := runInit(context.Background(), dependencies, dir, "acme", tc.opts)
 			if err == nil || !strings.Contains(err.Error(), tc.existing) {
 				t.Fatalf("error %v does not name the %s already there", err, tc.existing)
 			}
@@ -183,7 +183,7 @@ func TestInitRefusesAFormFlagTheExplicitPathContradicts(t *testing.T) {
 			stubPackageManager(&dependencies, nil)
 			tc.opts.configPath = tc.path
 
-			err := runInit(context.Background(), dependencies, dir, "acme", tc.opts)
+			_, err := runInit(context.Background(), dependencies, dir, "acme", tc.opts)
 			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), tc.path) {
 				t.Fatalf("error %v names neither %s nor %s", err, tc.want, tc.path)
 			}
@@ -200,7 +200,7 @@ func TestInitWritesYAMLToAnExplicitYAMLPath(t *testing.T) {
 	stubPackageManager(&dependencies, nil)
 
 	opts := initOptions{provider: "fake", yaml: true, configPath: "ocel.staging.yml"}
-	if err := runInit(context.Background(), dependencies, dir, "acme", opts); err != nil {
+	if _, err := runInit(context.Background(), dependencies, dir, "acme", opts); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	cfg, err := project.Load(context.Background(), dir, "ocel.staging.yml")
@@ -220,7 +220,7 @@ func TestInitRefusesADirectoryOfSeveralLanguages(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"})
+	_, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"})
 	if err == nil {
 		t.Fatal("init picked a language from two manifests")
 	}
@@ -239,7 +239,7 @@ func TestInitReadsACrateBesideAPackageJSONAsANodeProject(t *testing.T) {
 	dependencies := newTestDependencies()
 	argv := stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
+	if _, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	if want := "npm install ocel"; strings.Join(*argv, " ") != want {
@@ -255,7 +255,7 @@ func TestInitTakesTheLanguageItIsGiven(t *testing.T) {
 	dependencies := newTestDependencies()
 	argv := stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake", language: "rust"}); err != nil {
+	if _, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake", language: "rust"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	if strings.Join(*argv, " ") != "cargo add ocel-sdk" {
@@ -268,7 +268,7 @@ func TestInitWritesOnlyTheConfigWhenNoManifestNamesALanguage(t *testing.T) {
 	dependencies := newTestDependencies()
 	argv := stubPackageManager(&dependencies, nil)
 
-	if err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
+	if _, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "fake"}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	if len(*argv) != 0 {
@@ -300,7 +300,7 @@ func TestInitNamesTheProviderAloneWhereItNeedsNoOptionsAndKeysItElsewhere(t *tes
 			dependencies := newTestDependencies()
 			stubPackageManager(&dependencies, nil)
 
-			if err := runInit(context.Background(), dependencies, dir, "acme", tc.opts); err != nil {
+			if _, err := runInit(context.Background(), dependencies, dir, "acme", tc.opts); err != nil {
 				t.Fatalf("runInit: %v", err)
 			}
 			written, err := os.ReadFile(filepath.Join(dir, tc.written))
@@ -319,7 +319,7 @@ func TestInitRefusesAProviderOcelDoesNotShip(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
 
-	err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "unshipped"})
+	_, err := runInit(context.Background(), dependencies, dir, "acme", initOptions{provider: "unshipped"})
 	if err == nil {
 		t.Fatal("init wrote a config naming a provider nothing ships")
 	}

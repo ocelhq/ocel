@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 )
 
 type Dependencies struct {
@@ -34,18 +35,27 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 			"  $ OCEL_CONSOLE_URL=https://console.example.com ocel login",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return run(cmd.Context(), dependencies, force, cmd.InOrStdin(), cmd.OutOrStdout())
+			return run(cmd.Context(), dependencies, force, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "Log in again even if already logged in")
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareMutating(commands.ReserveStdout(cmd))
 }
 
-func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Reader, out io.Writer) error {
+func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Reader, out, stderr io.Writer) error {
+	asJSON := dependencies.Presentation(out).Format == terminal.FormatJSON
+	prompts := out
+	if asJSON {
+		prompts = stderr
+	}
+
 	existing, loadErr := dependencies.LoadCredentials()
 	apiURL := console.BaseURL(existing.APIURL)
 
 	if loadErr == nil && !force && sameConsole(existing.APIURL, apiURL) {
+		if asJSON {
+			return terminal.WriteResultJSON(out, &resultv1.LoginResult{Email: existing.Email, ConsoleUrl: apiURL})
+		}
 		fmt.Fprintf(out, "Already logged in as %s at %s. Pass --force to log in again.\n", identity(existing), apiURL)
 		return nil
 	}
@@ -65,13 +75,13 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 		confirmURL = device.VerificationURI
 	}
 
-	p := terminal.PaletteFor(out)
-	fmt.Fprintf(out, "Code     %s\n", p.Bold(code))
-	fmt.Fprintf(out, "Confirm  %s\n\n", p.Link(confirmURL))
+	p := terminal.PaletteFor(prompts)
+	fmt.Fprintf(prompts, "Code     %s\n", p.Bold(code))
+	fmt.Fprintf(prompts, "Confirm  %s\n\n", p.Link(confirmURL))
 	if dependencies.IsBrowserReachable(stdin) {
 		_ = dependencies.OpenBrowser(confirmURL)
 	}
-	fmt.Fprintln(out, p.Faint("Waiting for you to confirm the code…"))
+	fmt.Fprintln(prompts, p.Faint("Waiting for you to confirm the code…"))
 
 	token, err := pollForToken(ctx, client, device)
 	if err != nil {
@@ -92,6 +102,9 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 		return fmt.Errorf("logged in, but failed to save credentials: %w", err)
 	}
 
+	if asJSON {
+		return terminal.WriteResultJSON(out, &resultv1.LoginResult{Email: creds.Email, ConsoleUrl: apiURL})
+	}
 	fmt.Fprintf(out, "%s Logged in as %s\n", p.PassMark(), identity(creds))
 	if store == console.FileStore {
 		fmt.Fprintln(out, p.Faint("  No OS keyring, so the token is saved to a file only you can read."))

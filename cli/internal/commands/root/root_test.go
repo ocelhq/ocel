@@ -437,6 +437,7 @@ func TestEveryCommandWhoseStdoutIsItsDataIsMarkedToDrawItsRunOnStderr(t *testing
 		{"permissions"},
 		{"connector", "status"},
 		{"doctor"},
+		{"login"}, {"logout"}, {"link"}, {"unlink"}, {"lock"}, {"generate"}, {"init"},
 	} {
 		cmd, _, err := newCommand().root.Find(path)
 		if err != nil {

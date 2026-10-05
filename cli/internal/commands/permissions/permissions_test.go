@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/edge"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -166,5 +167,64 @@ func TestPermissionsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheDocument
 	}
 	if strings.TrimSpace(stdout.String()) == "" || strings.Contains(stderr.String(), "fake permissions for deploy") {
 		t.Errorf("stdout = %q, stream = %q: want the document on stdout and not on the stream", stdout.String(), stderr.String())
+	}
+}
+
+func TestPermissionsAsJSONPrintsEveryGroupInOneEnvelope(t *testing.T) {
+	project := clitest.SetUpProject(t)
+	project.Provider.Credentials().(*fake.Credentials).DocumentsPermissions(edge.CredentialDocument{
+		Heading:  "fake credentials",
+		Document: `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*"}]}`,
+	})
+	project.Provider.Edges().(*fake.Edges).Edge(fake.KindRelay).DocumentsPermissions(edge.CredentialDocument{
+		Heading:  "relay token",
+		Document: "Account · Relay Scripts · Edit",
+	})
+	invocation := clitest.NewInvocation()
+	invocation.Presentation = clitest.ResolveJSONPresentation
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, project.Root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
+		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var got resultv1.PermissionsResult
+	clitest.DecodeResultInto(t, stdout.String(), &got)
+	if len(got.GetGroups()) != 2 {
+		t.Fatalf("groups = %v, want the provider's group and the relay's", got.GetGroups())
+	}
+	policy := got.GetGroups()[0]
+	statements := policy.GetDocument().GetStructValue().GetFields()["Statement"].GetListValue().GetValues()
+	if policy.GetHeading() != "fake credentials" || len(statements) != 1 || statements[0].GetStructValue().GetFields()["Action"].GetStringValue() != "s3:*" {
+		t.Errorf("group 0 = %v, want the provider's JSON policy as a JSON object", policy)
+	}
+	relay := got.GetGroups()[1]
+	if relay.GetHeading() != "relay token" || relay.GetDocument().GetStringValue() != "Account · Relay Scripts · Edit for deploy" {
+		t.Errorf("group 1 = %v, want the relay's text document as a string", relay)
+	}
+	if len(clitest.RunEvents(t, stderr.String())) == 0 {
+		t.Errorf("stream = %q, want the run's events there", stderr.String())
+	}
+}
+
+func TestPermissionsDocumentIsAJSONValueOnlyWhenItIsAJSONObjectOrArray(t *testing.T) {
+	t.Parallel()
+
+	policy := documentValue(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"s3:*"}]}`)
+	statements := policy.GetStructValue().GetFields()["Statement"].GetListValue().GetValues()
+	if len(statements) != 1 || statements[0].GetStructValue().GetFields()["Action"].GetStringValue() != "s3:*" {
+		t.Errorf("document value = %v, want the policy as a JSON object, not a string", policy)
+	}
+
+	actions := documentValue(`["s3:GetObject","s3:PutObject"]`).GetListValue().GetValues()
+	if len(actions) != 2 || actions[1].GetStringValue() != "s3:PutObject" {
+		t.Errorf("document value = %v, want the array as a JSON array", actions)
+	}
+
+	for _, text := range []string{"Account · Relay Scripts · Edit", "42", "true", "null", `"quoted"`, " 7 "} {
+		if got := documentValue(text); got.GetKind() == nil || got.GetStringValue() != text {
+			t.Errorf("documentValue(%q) = %v, want the document kept as its text", text, got)
+		}
 	}
 }

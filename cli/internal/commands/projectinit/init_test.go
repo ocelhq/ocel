@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/configdoc"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
@@ -52,7 +53,7 @@ func TestAddingTheSDKIsASpanOnTheInitRunAndThePackageManagerSpeaksThroughIt(t *t
 		t.Fatalf("write lockfile: %v", err)
 	}
 
-	if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
+	if _, err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
 		t.Fatalf("runInit err = %v", err)
 	}
 
@@ -115,7 +116,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runInit(context.Background(), dependencies, dir, "", initOptions{provider: "fake"}); err != nil {
+		if _, err := runInit(context.Background(), dependencies, dir, "", initOptions{provider: "fake"}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -134,7 +135,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
+		if _, err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -157,7 +158,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 				argv := stubPackageManager(&dependencies, nil)
 				dir := initTestDir(t, "proj")
 
-				err := runInit(context.Background(), dependencies, dir, slug, initOptions{provider: "fake"})
+				_, err := runInit(context.Background(), dependencies, dir, slug, initOptions{provider: "fake"})
 				if err == nil {
 					t.Fatal("runInit err = nil, want error")
 				}
@@ -178,7 +179,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		stubPackageManager(&dependencies, nil)
 		dir := initTestDir(t, "!!!")
 
-		err := runInit(context.Background(), dependencies, dir, "", initOptions{provider: "fake"})
+		_, err := runInit(context.Background(), dependencies, dir, "", initOptions{provider: "fake"})
 		if err == nil || !strings.Contains(err.Error(), "ocel init my-app") {
 			t.Fatalf("err = %v, want it to ask for a slug", err)
 		}
@@ -195,7 +196,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 			t.Fatalf("write existing config: %v", err)
 		}
 
-		err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"})
+		_, err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"})
 		if err == nil || !strings.Contains(err.Error(), project.DefaultFileName) {
 			t.Fatalf("err = %v, want it to name the config already there", err)
 		}
@@ -217,7 +218,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 
 		keyed := providerKeyed()
 		opts := initOptions{provider: keyed}
-		if err := runInit(context.Background(), dependencies, dir, "my-app", opts); err != nil {
+		if _, err := runInit(context.Background(), dependencies, dir, "my-app", opts); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
 
@@ -234,7 +235,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		argv := stubPackageManager(&dependencies, nil)
 		dir := initTestDir(t, "proj")
 
-		err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{})
+		_, err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{})
 		if err == nil || !strings.Contains(err.Error(), "--provider") {
 			t.Fatalf("err = %v, want it to ask for --provider", err)
 		}
@@ -272,7 +273,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 					t.Fatalf("write lockfile: %v", err)
 				}
 
-				if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
+				if _, err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
 					t.Fatalf("runInit err = %v", err)
 				}
 				if got := *argv; !slices.Equal(got, want) {
@@ -294,7 +295,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
+		if _, err := runInit(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}); err != nil {
 			t.Fatalf("runInit err = %v, want the failed install to be non-fatal", err)
 		}
 		if !strings.Contains(readConfig(t, dir), `"slug": "my-app"`) {
@@ -329,7 +330,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runInit(context.Background(), dependencies, cwd, "", opts); err != nil {
+		if _, err := runInit(context.Background(), dependencies, cwd, "", opts); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -356,7 +357,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		dir := initTestDir(t, "proj")
 
 		opts := initOptions{provider: "fake", configPath: filepath.Join("nested", "deep", project.DefaultFileName)}
-		if err := runInit(context.Background(), dependencies, dir, "my-app", opts); err != nil {
+		if _, err := runInit(context.Background(), dependencies, dir, "my-app", opts); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(dir, "nested", "deep", project.DefaultFileName)); err != nil {
@@ -396,4 +397,136 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+func TestInitAsJSONPrintsWhatItWrote(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		opts       initOptions
+		wantFile   string
+		wantFormat resultv1.ConfigFormat
+	}{
+		"json":       {initOptions{provider: "fake"}, project.DefaultFileName, resultv1.ConfigFormat_CONFIG_FORMAT_JSON},
+		"yaml":       {initOptions{provider: "fake", yaml: true}, project.YAMLFileName, resultv1.ConfigFormat_CONFIG_FORMAT_YAML},
+		"typescript": {initOptions{provider: "fake", ts: true}, project.TSFileName, resultv1.ConfigFormat_CONFIG_FORMAT_TYPESCRIPT},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dependencies := newTestDependencies()
+			dependencies.Presentation = clitest.ResolveJSONPresentation
+			argv := stubPackageManager(&dependencies, nil)
+			dir := initTestDir(t, "proj")
+
+			var stdout, stderr bytes.Buffer
+			clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+			if err := runInitCommand(context.Background(), dependencies, dir, "my-app", tc.opts, &stdout); err != nil {
+				t.Fatalf("runInitCommand err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+			}
+
+			var got resultv1.InitResult
+			clitest.DecodeResultInto(t, stdout.String(), &got)
+			if got.GetConfigPath() != filepath.Join(dir, tc.wantFile) || got.GetFormat() != tc.wantFormat {
+				t.Errorf("init result = %v, want %s written as %v", &got, filepath.Join(dir, tc.wantFile), tc.wantFormat)
+			}
+			if got.GetSlug() != "my-app" || got.GetProvider() != "fake" || got.GetLanguage() != "node" {
+				t.Errorf("init result = %v, want the slug, provider and language it set up", &got)
+			}
+			if got.GetSdkPackage() != sdkPackage || !slices.Contains(*argv, sdkPackage) {
+				t.Errorf("sdk_package = %q after running %q, want %q", got.GetSdkPackage(), *argv, sdkPackage)
+			}
+			if len(clitest.RunEvents(t, stderr.String())) == 0 {
+				t.Errorf("stream = %q, want the run's events there", stderr.String())
+			}
+		})
+	}
+}
+
+func TestInitAsJSONNamesNoSDKPackageWhenNoneWasAdded(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the package manager failed", func(t *testing.T) {
+		t.Parallel()
+
+		dependencies := newTestDependencies()
+		dependencies.Presentation = clitest.ResolveJSONPresentation
+		stubPackageManager(&dependencies, errors.New("offline"))
+		dir := initTestDir(t, "proj")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+		if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}, &stdout); err != nil {
+			t.Fatalf("runInitCommand err = %v", err)
+		}
+
+		data := clitest.DecodeResult(t, stdout.String())
+		if _, present := data["sdkPackage"]; present {
+			t.Errorf("init json = %v, want no sdkPackage", data)
+		}
+	})
+
+	t.Run("no manifest says which SDK to add", func(t *testing.T) {
+		t.Parallel()
+
+		dependencies := newTestDependencies()
+		dependencies.Presentation = clitest.ResolveJSONPresentation
+		stubPackageManager(&dependencies, nil)
+		dir := filepath.Join(t.TempDir(), "bare")
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+		if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}, &stdout); err != nil {
+			t.Fatalf("runInitCommand err = %v", err)
+		}
+
+		data := clitest.DecodeResult(t, stdout.String())
+		if _, present := data["sdkPackage"]; present || data["language"] != "" {
+			t.Errorf("init json = %v, want no language and no sdkPackage", data)
+		}
+	})
+}
+
+func TestInitAsJSONNamesTheSDKPackageOfTheLanguageItAdded(t *testing.T) {
+	t.Parallel()
+
+	for lang, want := range map[string]string{"go": goSDKModule, "rust": rustSDKCrate, "python": sdkPackage} {
+		t.Run(lang, func(t *testing.T) {
+			t.Parallel()
+
+			dependencies := newTestDependencies()
+			dependencies.Presentation = clitest.ResolveJSONPresentation
+			stubPackageManager(&dependencies, nil)
+			dir := initTestDir(t, "proj")
+
+			var stdout, stderr bytes.Buffer
+			clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+			if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake", language: lang}, &stdout); err != nil {
+				t.Fatalf("runInitCommand err = %v", err)
+			}
+
+			var got resultv1.InitResult
+			clitest.DecodeResultInto(t, stdout.String(), &got)
+			if got.GetLanguage() != lang || got.GetSdkPackage() != want {
+				t.Errorf("init result = %v, want %s with the %s package", &got, lang, want)
+			}
+		})
+	}
+}
+
+func TestInitInHumanModePrintsNoResult(t *testing.T) {
+	t.Parallel()
+
+	dependencies := newTestDependencies()
+	stubPackageManager(&dependencies, nil)
+	dir := initTestDir(t, "proj")
+
+	var stdout, stream bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
+	if err := runInitCommand(context.Background(), dependencies, dir, "my-app", initOptions{provider: "fake"}, &stdout); err != nil {
+		t.Fatalf("runInitCommand err = %v", err)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want the run's own output to be all a person sees", stdout.String())
+	}
 }

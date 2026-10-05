@@ -12,10 +12,11 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 )
 
 func NewUnlinkCommand(dependencies Dependencies) *cobra.Command {
-	return commands.DeclareMutating(&cobra.Command{
+	return commands.DeclareMutating(commands.ReserveStdout(&cobra.Command{
 		Use:     "unlink",
 		Short:   "Unlink this directory from its console project",
 		Example: "  $ ocel unlink",
@@ -29,9 +30,9 @@ func NewUnlinkCommand(dependencies Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runUnlink(dir, cmd.OutOrStdout())
+			return runUnlink(dependencies, dir, cmd.OutOrStdout())
 		},
-	})
+	}))
 }
 
 func projectDir(ctx context.Context, dependencies Dependencies, cwd string) (string, error) {
@@ -42,10 +43,13 @@ func projectDir(ctx context.Context, dependencies Dependencies, cwd string) (str
 	return cfg.Dir, nil
 }
 
-func runUnlink(projectDir string, stdout io.Writer) error {
+func runUnlink(dependencies Dependencies, projectDir string, stdout io.Writer) error {
 	removed, err := console.DeleteLink(projectDir)
 	if err != nil {
 		return err
+	}
+	if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+		return terminal.WriteResultJSON(stdout, &resultv1.UnlinkResult{Unlinked: removed})
 	}
 	if !removed {
 		fmt.Fprintln(stdout, "This directory isn't linked to a console project.")

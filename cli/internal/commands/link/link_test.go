@@ -24,6 +24,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
@@ -433,8 +434,8 @@ func TestLinkingShowsEachConsoleWaitAsASpanOnItsRunAndNothingElseWritesTheTermin
 	dependencies.Presentation = func(io.Writer) terminal.Presentation {
 		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON, TTY: true, Width: 80})
 	}
-	var stdout safeBuffer
-	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	var stdout, stream safeBuffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
 	srv := newCloudServer(t, projectRow("p1", "My App", "my-app"), projectRow("p2", "Other", "other"))
 	srv.slow = 300 * time.Millisecond
 
@@ -442,7 +443,7 @@ func TestLinkingShowsEachConsoleWaitAsASpanOnItsRunAndNothingElseWritesTheTermin
 		t.Fatalf("run err = %v", err)
 	}
 
-	evs := runEvents(t, stdout.String())
+	evs := runEvents(t, stream.String())
 	var spans []string
 	ended := map[string]bool{}
 	for _, ev := range evs {
@@ -531,7 +532,7 @@ func TestUnlinkRemovesTheLinkRecord(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
-		if err := runUnlink(dir, &stdout); err != nil {
+		if err := runUnlink(newTestDependencies(), dir, &stdout); err != nil {
 			t.Fatalf("runUnlink err = %v", err)
 		}
 		if !strings.Contains(stdout.String(), "Unlinked") {
@@ -546,7 +547,7 @@ func TestUnlinkRemovesTheLinkRecord(t *testing.T) {
 		t.Parallel()
 
 		var stdout bytes.Buffer
-		if err := runUnlink(t.TempDir(), &stdout); err != nil {
+		if err := runUnlink(newTestDependencies(), t.TempDir(), &stdout); err != nil {
 			t.Fatalf("runUnlink err = %v, want nil", err)
 		}
 		if !strings.Contains(stdout.String(), "isn't linked") {
@@ -578,4 +579,98 @@ func TestASubdirectoryLinksTheProjectRoot(t *testing.T) {
 			t.Fatalf("projectDir = %q, want the project root %q", got, root)
 		}
 	})
+}
+
+func TestLinkAsJSONPrintsTheOrganizationAndProjectItLinked(t *testing.T) {
+	t.Parallel()
+
+	dependencies := newTestDependencies()
+	dependencies.Presentation = clitest.ResolveJSONPresentation
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	srv := newCloudServer(t, projectRow("p1", "My App", "my-app"), projectRow("p2", "Other", "other"))
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	if err := runLink(context.Background(), dependencies, t.TempDir(), "other", options{apiURL: srv.URL}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runLink err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var got resultv1.LinkResult
+	clitest.DecodeResultInto(t, stdout.String(), &got)
+	if org := got.GetOrganization(); org.GetId() != "org_1" || org.GetName() != "Acme Inc" || org.GetSlug() != "acme-inc" {
+		t.Errorf("organization = %v, want the one linked through", org)
+	}
+	if project := got.GetProject(); project.GetId() != "p2" || project.GetName() != "Other" || project.GetSlug() != "other" {
+		t.Errorf("project = %v, want the one selected", project)
+	}
+	if len(runEvents(t, stderr.String())) == 0 {
+		t.Errorf("stream = %q, want the run's events there", stderr.String())
+	}
+}
+
+func TestLinkAsJSONOfACreatedProjectPrintsTheNewProject(t *testing.T) {
+	t.Parallel()
+
+	dependencies := newTestDependencies()
+	dependencies.Presentation = clitest.ResolveJSONPresentation
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	srv := newCloudServer(t)
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	if err := runLink(context.Background(), dependencies, t.TempDir(), "My Cool App", options{apiURL: srv.URL, create: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runLink err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var got resultv1.LinkResult
+	clitest.DecodeResultInto(t, stdout.String(), &got)
+	if project := got.GetProject(); project.GetId() != "proj_new" || project.GetName() != "My Cool App" || project.GetSlug() != "my-cool-app" {
+		t.Errorf("project = %v, want the one created", project)
+	}
+}
+
+func TestUnlinkAsJSONSaysWhetherALinkWasRemoved(t *testing.T) {
+	t.Parallel()
+
+	dependencies := newTestDependencies()
+	dependencies.Presentation = clitest.ResolveJSONPresentation
+	dir := t.TempDir()
+	if err := console.WriteLink(dir, console.Link{APIURL: "https://ocel.app", ProjectID: "p1"}); err != nil {
+		t.Fatalf("seed link: %v", err)
+	}
+
+	for i, want := range []bool{true, false} {
+		var stdout bytes.Buffer
+		if err := runUnlink(dependencies, dir, &stdout); err != nil {
+			t.Fatalf("runUnlink err = %v", err)
+		}
+		var got resultv1.UnlinkResult
+		clitest.DecodeResultInto(t, stdout.String(), &got)
+		if got.GetUnlinked() != want {
+			t.Errorf("unlink %d: unlinked = %v, want %v", i+1, got.GetUnlinked(), want)
+		}
+	}
+}
+
+func TestLinkAsksItsQuestionsWhereItsRunRendersAndLeavesStdoutEmpty(t *testing.T) {
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
+	srv := newCloudServer(t, projectRow("p1", "My App", "my-app"))
+	srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
+
+	var stdout, stderr safeBuffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	if err := runLink(context.Background(), dependencies, t.TempDir(), "", options{apiURL: srv.URL}, &stdout, &stderr, strings.NewReader("acme-inc\n1\n")); err != nil {
+		t.Fatalf("runLink err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	if stdout.String() != "" {
+		t.Errorf("stdout = %q, want nothing there in human mode", stdout.String())
+	}
+	for _, question := range []string{"Select an organization (number or slug): ", "Select a project (number, slug, or n): "} {
+		if !strings.Contains(stderr.String(), question) {
+			t.Errorf("stderr = %q, want it to ask %q", stderr.String(), question)
+		}
+	}
 }

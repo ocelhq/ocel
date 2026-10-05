@@ -2,15 +2,19 @@ package permissions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -51,6 +55,9 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, purpos
 	if err != nil {
 		return err
 	}
+	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
+		return writePermissionsJSON(stdout, groups)
+	}
 	if len(groups) == 1 {
 		fmt.Fprintln(stdout, groups[0].GetDocument())
 		return nil
@@ -66,6 +73,31 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, purpos
 		fmt.Fprintln(stdout, group.GetDocument())
 	}
 	return nil
+}
+
+func writePermissionsJSON(stdout io.Writer, groups []*contractv1.CredentialGroup) error {
+	result := &resultv1.PermissionsResult{Groups: make([]*resultv1.PermissionGroup, 0, len(groups))}
+	for _, group := range groups {
+		result.Groups = append(result.Groups, &resultv1.PermissionGroup{
+			Heading:  group.GetHeading(),
+			Document: documentValue(group.GetDocument()),
+		})
+	}
+	return terminal.WriteResultJSON(stdout, result)
+}
+
+func documentValue(document string) *structpb.Value {
+	var decoded any
+	if err := json.Unmarshal([]byte(document), &decoded); err != nil {
+		return structpb.NewStringValue(document)
+	}
+	switch decoded.(type) {
+	case map[string]any, []any:
+		if value, err := structpb.NewValue(decoded); err == nil {
+			return value
+		}
+	}
+	return structpb.NewStringValue(document)
 }
 
 func credentialPermissions(ctx context.Context, invocation commands.Invocation, cfg *project.Project, purpose contractv1.CredentialPurpose) (groups []*contractv1.CredentialGroup, err error) {
