@@ -35,6 +35,7 @@ import {
   sseSilenceCheck,
   streamCheck,
   taskConcurrencyCheck,
+  todoAndDocumentChecks,
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
@@ -68,7 +69,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws", "aws.floci"],
-        fixtures: RUNTIME_NEUTRAL_DEPLOYS,
+        fixtures: [...RUNTIME_NEUTRAL_DEPLOYS, sdk.node],
         variants: [apiGateway],
         fails: [check(rewrittenQueryCheck)],
       },
@@ -81,7 +82,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        fixtures: RUNTIME_NEUTRAL_DEPLOYS,
+        fixtures: [...RUNTIME_NEUTRAL_DEPLOYS, sdk.node],
         variants: [apiGateway],
         fails: [
           check(TIMED_STREAMS),
@@ -100,7 +101,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        fixtures: [deploy.node],
+        fixtures: [deploy.node, sdk.node],
         variants: [apiGateway],
         fails: [check(nodeRuntimeChecks)],
       },
@@ -202,9 +203,31 @@ export const gaps: Gap[] = [
   {
     id: "migrate-needs-binding",
     reason:
-      "the aws journey migrates through ocel run, which needs a console binding the lane never has",
+      "the aws journey migrates through ocel run, which migrates the local dev database rather than the deployed one",
     issue: 911,
-    where: [{ on: ["aws"], fixtures: [sdk.node], fails: [step.deploy], skipsCell: true }],
+    where: [
+      { on: ["aws"], fixtures: [sdk.node], fails: [step.deploy], skipsCell: true },
+      {
+        on: ["aws.floci"],
+        fixtures: [sdk.node],
+        variants: [apiGateway],
+        fails: [check(todoAndDocumentChecks)],
+      },
+    ],
+  },
+  {
+    id: "destroy-keeps-a-full-bucket",
+    reason:
+      "ocel destroy deletes an app bucket without emptying it, and S3 refuses to delete a bucket that holds an object",
+    issue: 1712,
+    where: [
+      {
+        on: ["aws.floci"],
+        fixtures: [sdk.node],
+        variants: [apiGateway],
+        fails: [step.destroy],
+      },
+    ],
   },
   {
     id: "build-needs-postgres",
@@ -249,7 +272,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws", "aws.floci"],
-        fixtures: [deploy.node, deploy.python, deploy.go, deploy.rust],
+        fixtures: [deploy.node, deploy.python, deploy.go, deploy.rust, sdk.node],
         variants: [apiGateway],
         fails: [check(emptyBodyCheck)],
       },
@@ -280,21 +303,6 @@ export const gaps: Gap[] = [
         fixtures: [sdk.withTransforms],
         variants: [apiGateway],
         fails: [check(bindingCheck, ["redeploy"])],
-      },
-    ],
-  },
-  {
-    id: "no-master-secret",
-    reason:
-      "an RDS cluster with ManageMasterUserPassword reports no master user secret under floci",
-    issue: 884,
-    where: [
-      {
-        on: ["aws.floci"],
-        fixtures: [sdk.node, sdk.withTransforms],
-        variants: [apiGateway],
-        fails: [step.deploy],
-        skipsCell: true,
       },
     ],
   },
