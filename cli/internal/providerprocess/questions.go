@@ -37,29 +37,36 @@ func (q Questions) holding(ask func() error) error {
 	return q.run.Ask(ask)
 }
 
-func (q Questions) answer(ctx context.Context, process *Process, err error) (bool, error) {
-	question, asked := questionIn(err)
+func (q Questions) answer(ctx context.Context, process *Process, refused error) (bool, error) {
+	question, asked := questionIn(refused)
 	if !asked {
-		return false, err
+		return false, refused
 	}
 	if !q.attended() {
-		return false, clierror.NewInputRequired(err, "")
+		return false, clierror.NewInputRequired(refused, "")
 	}
-	confirmed, askErr := q.ask(ctx, question)
-	if askErr != nil {
-		return false, errors.Join(err, askErr)
+	client, err := process.Client()
+	if err != nil {
+		return false, errors.Join(refused, fmt.Errorf("provider: confirm: %w", err))
 	}
-	if !confirmed {
-		return false, clierror.NewConfirmationRequired(err, "")
+	for {
+		confirmed, askErr := q.ask(ctx, question)
+		if askErr != nil {
+			return false, errors.Join(refused, askErr)
+		}
+		if !confirmed {
+			return false, clierror.NewConfirmationRequired(refused, "")
+		}
+		_, confirmErr := client.Confirm(ctx, &contractv1.ConfirmRequest{QuestionId: question.GetId()})
+		if next, again := questionIn(confirmErr); again {
+			question, refused = next, confirmErr
+			continue
+		}
+		if confirmErr != nil {
+			return false, errors.Join(refused, fmt.Errorf("provider: confirm: %w", confirmErr))
+		}
+		return true, nil
 	}
-	client, confirmErr := process.Client()
-	if confirmErr == nil {
-		_, confirmErr = client.Confirm(ctx, &contractv1.ConfirmRequest{QuestionId: question.GetId()})
-	}
-	if confirmErr != nil {
-		return false, errors.Join(err, fmt.Errorf("provider: confirm: %w", confirmErr))
-	}
-	return true, nil
 }
 
 func (q Questions) ask(ctx context.Context, question *contractv1.Question) (bool, error) {

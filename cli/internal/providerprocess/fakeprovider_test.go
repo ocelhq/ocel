@@ -336,6 +336,7 @@ func recordDrive() error {
 
 const (
 	fakeQuestionID      = "fake-question"
+	fakeQuestionAgainID = "fake-question-again"
 	fakeHostFingerprint = "SHA256:fake-host-key"
 )
 
@@ -382,6 +383,9 @@ func askedOver(err error) error {
 }
 
 func (s *fakeProviderServer) Confirm(_ context.Context, req *contractv1.ConfirmRequest) (*contractv1.ConfirmResponse, error) {
+	if s.mode == "asks-again-on-confirm" {
+		return s.confirmAskingAgain(req)
+	}
 	if req.GetQuestionId() != fakeQuestionID {
 		return nil, provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "this provider is waiting on no question %q", req.GetQuestionId()))
 	}
@@ -401,6 +405,23 @@ func (s *fakeProviderServer) Confirm(_ context.Context, req *contractv1.ConfirmR
 		return nil, err
 	}
 	return &contractv1.ConfirmResponse{}, nil
+}
+
+func (s *fakeProviderServer) confirmAskingAgain(req *contractv1.ConfirmRequest) (*contractv1.ConfirmResponse, error) {
+	switch req.GetQuestionId() {
+	case fakeQuestionID:
+		wire := connect.NewError(connect.CodePermissionDenied, errors.New("port 443 is still closed"))
+		detail, err := connect.NewErrorDetail(&contractv1.Question{Id: fakeQuestionAgainID, Finding: "port 443 is still closed", Prompt: "Have you opened port 443?"})
+		if err != nil {
+			return nil, err
+		}
+		wire.AddDetail(detail)
+		return nil, wire
+	case fakeQuestionAgainID:
+		return &contractv1.ConfirmResponse{}, nil
+	default:
+		return nil, provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "this provider is waiting on no question %q", req.GetQuestionId()))
+	}
 }
 
 func alreadyRecorded(store string) bool {
