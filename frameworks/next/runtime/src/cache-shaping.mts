@@ -2,12 +2,12 @@ import type http from "node:http";
 import { storedCacheTags } from "@framework/next-cache";
 import { dispatchesAtOrigin, invalidatesByCacheTag } from "@framework/node-runtime/host";
 import { collectTags, notedTags } from "./origin-tags.mjs";
-import type { ProjectManifest } from "./project-manifest.mjs";
+import { type ProjectManifest, walkPrerender } from "./project-manifest.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 
 const cacheTagHeader = "cache-tag";
 
-export const nextCacheHeader = "x-nextjs-cache";
+const nextCacheHeader = "x-nextjs-cache";
 const staleCacheControl = "s-maxage=0, must-revalidate";
 
 const releasePattern = /^r[0-9a-f]{8}$/;
@@ -44,30 +44,16 @@ function windowOf(revalidate: unknown, expire: unknown): Window | null {
 }
 
 export function revalidatingRoutes(manifest: ProjectManifest | null): RevalidatingRoutes {
-  const routes = new Map<string, Window>();
-  for (const [route, entry] of Object.entries<any>(manifest?.prerender?.routes ?? {})) {
-    const window = windowOf(entry?.initialRevalidateSeconds, entry?.initialExpireSeconds);
-    if (window) routes.set(route, window);
-  }
-
-  const dynamicRoutes: { pattern: RegExp; window: Window }[] = [];
-  for (const entry of Object.values<any>(manifest?.prerender?.dynamicRoutes ?? {})) {
-    const window = windowOf(entry?.fallbackRevalidate, entry?.fallbackExpire);
-    if (!window || typeof entry?.routeRegex !== "string") continue;
-    try {
-      dynamicRoutes.push({ pattern: new RegExp(entry.routeRegex), window });
-    } catch {}
-  }
-
+  const { basePath, routes, dynamicRoutes } = walkPrerender(
+    manifest,
+    (entry) => windowOf(entry?.initialRevalidateSeconds, entry?.initialExpireSeconds),
+    (entry) => windowOf(entry.fallbackRevalidate, entry.fallbackExpire),
+  );
   return {
-    basePath: typeof manifest?.config?.basePath === "string" ? manifest.config.basePath : "",
+    basePath,
     routes,
-    dynamicRoutes,
+    dynamicRoutes: dynamicRoutes.map(({ pattern, value }) => ({ pattern, window: value })),
   };
-}
-
-export function isRevalidatingRoute(url: string | undefined, routes: RevalidatingRoutes): boolean {
-  return windowFor(url, routes) !== undefined;
 }
 
 export function originShaping(
@@ -165,7 +151,7 @@ function windowFor(url: string | undefined, routes: RevalidatingRoutes): Window 
   return routes.dynamicRoutes.find(({ pattern }) => pattern.test(route))?.window;
 }
 
-function routeOf(url: string | undefined, basePath: string): string {
+export function routeOf(url: string | undefined, basePath: string): string {
   let pathname = (url ?? "/").split("?")[0]!;
   if (basePath !== "" && pathname.startsWith(basePath)) {
     pathname = pathname.slice(basePath.length) || "/";

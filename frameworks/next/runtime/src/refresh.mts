@@ -1,6 +1,10 @@
 import type http from "node:http";
 import { refreshHeader } from "@framework/next-cache";
-import { isRevalidatingRoute, nextCacheHeader, type RevalidatingRoutes } from "./cache-shaping.mjs";
+import {
+  findPrerenderedRoute,
+  type PrerenderedRoute,
+  type PrerenderedRoutes,
+} from "./prerendered-routes.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 
 export interface Refresh {
@@ -11,21 +15,35 @@ export interface Refresh {
 
 export type ScheduleRefresh = (refresh: Refresh) => Promise<void>;
 
-const servedEntryKey = Symbol.for("ocel.next.served-entry.v1");
+export interface ServedRoute {
+  revalidate: number | false;
+  readsNoEntry: boolean;
+}
+
+const staleEntryKey = Symbol.for("ocel.next.stale-entry.v1");
+
+const servedRouteKey = Symbol.for("ocel.next.served-route.v1");
 
 const prefetchPurpose = "prefetch";
 
 const rscQuery = "_rsc";
 
-export function noteServedEntry(headers: RequestHeaders, lastModified: number): void {
-  const noted = headers[servedEntryKey];
-  headers[servedEntryKey] =
-    typeof noted === "number" ? Math.max(noted, lastModified) : lastModified;
+export function noteStaleEntry(headers: RequestHeaders, lastModified: number): void {
+  const noted = headers[staleEntryKey];
+  headers[staleEntryKey] = typeof noted === "number" ? Math.max(noted, lastModified) : lastModified;
 }
 
-export function readServedEntry(headers: RequestHeaders): number | undefined {
-  const noted = headers[servedEntryKey];
+export function readStaleEntry(headers: RequestHeaders): number | undefined {
+  const noted = headers[staleEntryKey];
   return typeof noted === "number" ? noted : undefined;
+}
+
+export function noteServedRoute(headers: RequestHeaders, route: ServedRoute): void {
+  headers[servedRouteKey] = route;
+}
+
+export function readServedRoute(headers: RequestHeaders): ServedRoute | undefined {
+  return headers[servedRouteKey];
 }
 
 function pageUrl(url: string | undefined): string {
@@ -34,30 +52,46 @@ function pageUrl(url: string | undefined): string {
   return parsed.pathname + parsed.search;
 }
 
-function servesStaleAsIs(req: http.IncomingMessage, routes: RevalidatingRoutes): boolean {
-  if (req.method !== "GET" && req.method !== "HEAD") return false;
-  if (req.headers[refreshHeader] !== undefined) return false;
-  return isRevalidatingRoute(req.url, routes);
+export function resumesFromPageEntry(
+  req: http.IncomingMessage,
+  route: PrerenderedRoute,
+  cacheComponents: boolean,
+): boolean {
+  if (!cacheComponents || !route.partiallyStatic) return false;
+  const contentType = req.headers["content-type"] ?? "";
+  const isDynamicNavigation =
+    (req.method === "GET" || req.method === "HEAD") &&
+    req.headers.rsc === "1" &&
+    req.headers["next-router-prefetch"] !== "1" &&
+    !route.hasPrefetchData;
+  const isServerAction =
+    req.method === "POST" &&
+    (typeof req.headers["next-action"] === "string" ||
+      contentType === "application/x-www-form-urlencoded" ||
+      contentType.startsWith("multipart/form-data"));
+  return isDynamicNavigation || isServerAction;
 }
 
 export function routeStaleHitsToRefresh(
   req: http.IncomingMessage,
   res: http.ServerResponse,
-  routes: RevalidatingRoutes,
+  routes: PrerenderedRoutes,
   schedule: ScheduleRefresh,
   holdEnd: (promise: Promise<unknown>) => void,
 ): void {
-  if (!servesStaleAsIs(req, routes)) return;
-  req.headers.purpose = prefetchPurpose;
+  if (req.headers[refreshHeader] !== undefined) return;
+  const route = findPrerenderedRoute(req.url, routes);
+  if (!route) return;
+  const readsNoEntry = resumesFromPageEntry(req, route, routes.cacheComponents);
+  const isRead = req.method === "GET" || req.method === "HEAD";
+  if (!isRead && !readsNoEntry) return;
+  if (isRead) req.headers.purpose = prefetchPurpose;
+  noteServedRoute(req.headers as RequestHeaders, { revalidate: route.revalidate, readsNoEntry });
 
   const writeHead = res.writeHead;
   res.writeHead = function (this: http.ServerResponse, ...args: any[]) {
-    const lastModified = readServedEntry(req.headers as RequestHeaders);
-    if (
-      !this.headersSent &&
-      lastModified !== undefined &&
-      String(this.getHeader(nextCacheHeader) ?? "") === "STALE"
-    ) {
+    const lastModified = readStaleEntry(req.headers as RequestHeaders);
+    if (!this.headersSent && lastModified !== undefined) {
       const refresh: Refresh = {
         url: pageUrl(req.url),
         lastModified,

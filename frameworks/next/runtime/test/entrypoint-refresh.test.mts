@@ -9,8 +9,7 @@ import { writeNextProjectFixture } from "../test-support/next-project-fixture.mj
 
 const launcherModule = `module.exports = {
   async handler(req, res) {
-    req.headers[Symbol.for("ocel.next.served-entry.v1")] = 1000;
-    res.setHeader("x-nextjs-cache", "STALE");
+    req.headers[Symbol.for("ocel.next.stale-entry.v1")] = 1000;
     res.end(String(req.headers.purpose));
   },
 };

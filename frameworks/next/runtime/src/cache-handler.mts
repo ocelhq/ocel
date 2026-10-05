@@ -14,7 +14,7 @@ import { finishBeforeResponseMs } from "@framework/node-runtime/host";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
-import { noteServedEntry } from "./refresh.mjs";
+import { noteStaleEntry, readServedRoute } from "./refresh.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 import { noteRevalidation } from "./revalidation-signal.mjs";
 import { isRscRequest } from "./rsc-request.mjs";
@@ -110,6 +110,14 @@ function toBuffer(bytes: Uint8Array): Buffer {
   return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
 
+function isStaleEntry(lastModified: number, tags: string[], revalidate: unknown): boolean {
+  const timeStale =
+    typeof revalidate === "number" &&
+    revalidate > 0 &&
+    Date.now() - lastModified > revalidate * 1000;
+  return timeStale || tagClock.areTagsStale(tags, lastModified);
+}
+
 export default class OcelCacheHandler {
   static store: Promise<CacheStore> | undefined;
 
@@ -161,17 +169,24 @@ export default class OcelCacheHandler {
         return null;
       }
       if (ctx?.kind === "FETCH" && finishBeforeResponseMs(process.env) > 0) {
-        const window = ctx.revalidate || entry.value.revalidate;
-        const timeStale =
-          typeof window === "number" &&
-          window > 0 &&
-          Date.now() - entry.lastModified > window * 1000;
-        if (timeStale || tagClock.areTagsStale(tags, entry.lastModified)) return null;
+        if (isStaleEntry(entry.lastModified, tags, ctx.revalidate || entry.value.revalidate)) {
+          return null;
+        }
       }
-      if (ctx?.kind !== "FETCH") {
-        this.noteOriginTags(tags);
-        noteServedEntry(this.requestHeaders, entry.lastModified);
+      const served = readServedRoute(this.requestHeaders);
+      if (ctx?.kind !== "FETCH" && served) {
+        if (
+          isStaleEntry(
+            entry.lastModified,
+            tags,
+            entry.cacheControl?.revalidate ?? served.revalidate,
+          )
+        ) {
+          noteStaleEntry(this.requestHeaders, entry.lastModified);
+        }
+        if (served.readsNoEntry) return null;
       }
+      if (ctx?.kind !== "FETCH") this.noteOriginTags(tags);
       const value = negotiateVariant(entry.value, this.isRscRequest);
       return { lastModified: entry.lastModified, value: deserialize(value) };
     } catch {
