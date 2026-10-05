@@ -3,6 +3,8 @@ package alb
 import (
 	"context"
 	"errors"
+	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -585,6 +587,41 @@ func TestATagWhoseUntagFailedIsTakenOffWhenItsDeploymentIsRemovedAgain(t *testin
 	}
 	if got := stack.s.recorded.TagsToRemove; len(got) != 0 {
 		t.Errorf("the router still records %v to remove", got)
+	}
+}
+
+func TestADeploymentHostnameWhoseMoveFailsToPinKeepsTheTagsItsDeploymentRecorded(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack, record, _, tag := failingAnUntag(t)
+	w.failUntags(nil)
+	hosts := maps.Clone(stack.s.recorded.Hosts)
+	tags := cloneDeploymentTags(stack.s.recorded.DeploymentTags)
+	if len(tags[deploymentHost]) == 0 {
+		t.Fatalf("the router records %v, want tags for %s", tags, deploymentHost)
+	}
+
+	w.refusePins(errors.New("cloud run would not pin the revision"))
+	err := stack.MovePointer(ctx, aliasMove("p2", deploymentHost, record), progress.Discard())
+
+	var unserved router.Unserved
+	if !errors.As(err, &unserved) {
+		t.Fatalf("MovePointer(alias) = %v, want it unserved", err)
+	}
+	if got := stack.s.recorded.Hosts; !maps.Equal(got, hosts) {
+		t.Errorf("the router records hosts %v, want %v", got, hosts)
+	}
+	if got := stack.s.recorded.DeploymentTags; !reflect.DeepEqual(got, tags) {
+		t.Errorf("the router records tags %v, want %v", got, tags)
+	}
+
+	w.refusePins(nil)
+	if err := stack.MovePointer(ctx, deploymentMove(deploymentFirst, deploymentHost, record), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(deployment) again = %v", err)
+	}
+	if slices.Contains(w.untagged(), previewService+"#"+tag) {
+		t.Errorf("the router untagged %s#%s while %s still holds it", previewService, tag, deploymentHost)
 	}
 }
 
