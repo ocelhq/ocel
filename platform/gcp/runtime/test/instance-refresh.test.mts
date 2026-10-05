@@ -1,5 +1,5 @@
 import http from "node:http";
-import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { newInstanceRefresh } from "../src/next/instance-refresh.mjs";
 
 let server: http.Server;
@@ -91,4 +91,16 @@ test("a refresh whose origin cannot be read rejects instead of throwing", async 
     rejected = refresh(blog);
   }).not.toThrow();
   await expect(rejected).rejects.toThrow(/no server/);
+});
+
+test("a refresh whose origin is not a url rejects and leaves no timer to fire", async () => {
+  const uncaught = vi.fn();
+  process.on("uncaughtException", uncaught);
+  try {
+    await expect(newInstanceRefresh(() => "not a url", 50)(blog)).rejects.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(uncaught).not.toHaveBeenCalled();
+  } finally {
+    process.off("uncaughtException", uncaught);
+  }
 });
