@@ -336,3 +336,19 @@ func TestTheProxyAdmitsTheAccountThePreviewRunsAsBesideTheViewersSoAPromotionCan
 		t.Errorf("the proxy admits %v, want %v: a promotion warms a preview with a token signed as that account", admitted, want)
 	}
 }
+
+func TestAPreviewBehindIdentityAwareProxyTagsTheRevisionItsReleaseCreated(t *testing.T) {
+	p := pushing(t, "")
+	preview := previewSpec()
+	preview.Ref.Name.Release = naming.NewRelease("d1", "f1")
+
+	if got, want := p.revisionTag(preview), preview.Ref.Name.Release.String(); got != want {
+		t.Errorf("revisionTag() = %q, want %q: each preview deployment is answered on its own revision's tag, behind the service's proxy", got, want)
+	}
+
+	production := preview
+	production.Ref.Tier = environment.TierProduction
+	if got := p.revisionTag(production); got != "" {
+		t.Errorf("revisionTag() of a production release with no edge in front = %q, want none: the service answers anyone, so a tag would publish every unpromoted revision", got)
+	}
+}

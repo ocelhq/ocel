@@ -233,8 +233,9 @@ func trafficTo(revision string, current []*run.GoogleCloudRunV2TrafficTarget) []
 }
 
 type release struct {
-	url      string
-	revision string
+	url        string
+	deployment string
+	revision   string
 }
 
 func (p *Provider) openRun(ctx context.Context) (*clients, *run.Service, error) {
@@ -279,12 +280,29 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress progre
 	if err != nil {
 		return release{}, err
 	}
-	if s.tag != "" {
-		if err := p.tagRevision(ctx, services, path, s.service, revision, s.tag); err != nil {
-			return release{}, err
+	if s.tag == "" {
+		return release{url: deployed.Uri, revision: revision}, nil
+	}
+	if err := p.tagRevision(ctx, services, path, s.service, revision, s.tag); err != nil {
+		return release{}, err
+	}
+	if !s.iap {
+		return release{url: deployed.Uri, revision: revision}, nil
+	}
+	tagged, err := p.read(ctx, services, path, s.service)
+	if err != nil {
+		return release{}, err
+	}
+	return release{url: deployed.Uri, deployment: taggedAddress(tagged, s.tag), revision: revision}, nil
+}
+
+func taggedAddress(current *run.GoogleCloudRunV2Service, tag string) string {
+	for _, status := range current.TrafficStatuses {
+		if status.Tag == tag {
+			return status.Uri
 		}
 	}
-	return release{url: deployed.Uri, revision: revision}, nil
+	return ""
 }
 
 func (p *Provider) writeRelease(ctx context.Context, clients *clients, services *run.Service, s serving, desired *run.GoogleCloudRunV2Service, progress progress.Log) error {

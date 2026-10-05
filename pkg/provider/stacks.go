@@ -216,16 +216,18 @@ type GrantCondition struct {
 }
 
 type Function struct {
-	Name     string `json:"name"`
-	Physical string `json:"physical,omitempty"`
-	URL      string `json:"url,omitempty"`
-	Revision string `json:"revision,omitempty"`
+	Name          string `json:"name"`
+	Physical      string `json:"physical,omitempty"`
+	URL           string `json:"url,omitempty"`
+	DeploymentURL string `json:"deploymentUrl,omitempty"`
+	Revision      string `json:"revision,omitempty"`
 }
 
 type AppContainer struct {
 	Name                      string `json:"name"`
 	Physical                  string `json:"physical,omitempty"`
 	URL                       string `json:"url,omitempty"`
+	DeploymentURL             string `json:"deploymentUrl,omitempty"`
 	Image                     string `json:"image,omitempty"`
 	Revision                  string `json:"revision,omitempty"`
 	DiscoveredHealthCheckPath string `json:"discoveredHealthCheckPath,omitempty"`

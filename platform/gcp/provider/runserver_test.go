@@ -205,6 +205,7 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 		fields := strings.Split(mask, ",")
 		if slices.Contains(fields, "traffic") {
 			s.service.Traffic = allocated(desired.Traffic)
+			s.service.TrafficStatuses = taggedStatuses(s.service)
 		}
 		if slices.Contains(fields, "invoker_iam_disabled") {
 			s.service.InvokerIamDisabled = desired.InvokerIamDisabled
@@ -399,6 +400,20 @@ func (s *runServer) deleteRevision(w http.ResponseWriter, revision string) {
 	}
 	s.revisions = slices.DeleteFunc(s.revisions, func(name string) bool { return name == revision })
 	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/delete-revision", Done: true})
+}
+
+func taggedStatuses(service *run.GoogleCloudRunV2Service) []*run.GoogleCloudRunV2TrafficTargetStatus {
+	var statuses []*run.GoogleCloudRunV2TrafficTargetStatus
+	for _, target := range service.Traffic {
+		if target.Tag == "" {
+			continue
+		}
+		statuses = append(statuses, &run.GoogleCloudRunV2TrafficTargetStatus{
+			Type: target.Type, Revision: target.Revision, Percent: target.Percent, Tag: target.Tag,
+			Uri: "https://" + target.Tag + "---" + strings.TrimPrefix(service.Uri, "https://"),
+		})
+	}
+	return statuses
 }
 
 func allocated(traffic []*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudRunV2TrafficTarget {

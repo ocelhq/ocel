@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1096,6 +1097,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				return err
 			}
 			r.recordAddress(entry.App, ownAddress(entry, facts, result))
+			r.recordDeploymentAddress(entry.App, ownDeploymentAddress(entry, facts, result))
 			if err := r.warmFunctions(ctx, result.Functions, progress); err != nil {
 				return err
 			}
@@ -1300,20 +1302,53 @@ func (r *deployRun) readAddress(app string) string {
 	return r.addresses[app]
 }
 
+func (r *deployRun) recordDeploymentAddress(app, address string) {
+	if address == "" || r.spec.Tier != environment.TierPreview || r.previewOn != "" || !r.readPairedRouter(app).Facts().AddressesItself {
+		return
+	}
+	parsed, err := url.Parse(address)
+	if err != nil || parsed.Host == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.deployment = append(r.deployment, edge.PreviewHost{Hostname: parsed.Host, App: normalizeAppName(app)})
+}
+
 func ownAddress(entry provider.AppEntry, facts AppServing, result provider.StackResult) string {
-	if origin := originOf(result.Containers, entry.App); origin != "" {
-		return origin
+	if container, found := findOwnContainer(result.Containers, entry.App); found {
+		return container.URL
 	}
-	named := entryLogicalName(entry.Manifest, facts.Entry)
-	if functions := entry.Manifest.GetServerless().GetFunctions(); named == "" && len(functions) == 1 {
-		named = functions[0].GetLogicalName()
+	return findOwnFunction(entry, facts, result.Functions).URL
+}
+
+func ownDeploymentAddress(entry provider.AppEntry, facts AppServing, result provider.StackResult) string {
+	if container, found := findOwnContainer(result.Containers, entry.App); found {
+		return container.DeploymentURL
 	}
-	for _, fn := range result.Functions {
-		if named != "" && fn.Name == named {
-			return fn.URL
+	return findOwnFunction(entry, facts, result.Functions).DeploymentURL
+}
+
+func findOwnContainer(containers []provider.AppContainer, app string) (provider.AppContainer, bool) {
+	for _, container := range containers {
+		if container.Name == app && container.URL != "" {
+			return container, true
 		}
 	}
-	return ""
+	return provider.AppContainer{}, false
+}
+
+func findOwnFunction(entry provider.AppEntry, facts AppServing, functions []provider.Function) provider.Function {
+	named := entryLogicalName(entry.Manifest, facts.Entry)
+	if declared := entry.Manifest.GetServerless().GetFunctions(); named == "" && len(declared) == 1 {
+		named = declared[0].GetLogicalName()
+	}
+	for _, fn := range functions {
+		if named != "" && fn.Name == named {
+			return fn
+		}
+	}
+	return provider.Function{}
 }
 
 func entryLogicalName(app *contractv1.ManifestApp, entry string) string {

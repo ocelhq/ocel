@@ -68,6 +68,9 @@ only ever serves a release the project promoted.
 A preview with no edge in front is answered on its own `run.app` URL, which the deploy
 prints, behind Identity-Aware Proxy: only the people `previewViewers` names get through,
 signed in with their Google account. Name nobody and nobody may open it; the deploy says so.
+Each deploy of the preview is also answered on a URL of its own, the `run.app` URL of the
+revision tag its release gave it, behind the same proxy; the deploy prints it, and it keeps
+serving that deploy after later ones until a prune drops it.
 
 ```json title="ocel.json"
 {

@@ -9,6 +9,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -155,15 +157,25 @@ func ProvisionedFunctions(spec provider.StackSpec) []provider.Function {
 	for _, function := range spec.App.Functions {
 		physical := spec.Ref.Name.String() + "-" + function.Name
 		functions = append(functions, provider.Function{
-			Name:     function.Name,
-			Physical: physical,
-			URL:      "https://" + physical + ".fn.fake.invalid",
+			Name:          function.Name,
+			Physical:      physical,
+			URL:           "https://" + physical + ".fn.fake.invalid",
+			DeploymentURL: deploymentURL(spec, physical),
 		})
 	}
 	if len(functions) == 0 {
 		return nil
 	}
 	return functions
+}
+
+const DeploymentURLMarker = ".deployment."
+
+func deploymentURL(spec provider.StackSpec, physical string) string {
+	if spec.Ref.Tier != environment.TierPreview {
+		return ""
+	}
+	return "https://" + naming.Sanitize(physical) + DeploymentURLMarker + "fake.invalid"
 }
 
 const DiscoveredHealthPath = "/up"
@@ -177,6 +189,7 @@ func ProvisionedContainers(spec provider.StackSpec) []provider.AppContainer {
 		Name:                      spec.App.App,
 		Physical:                  physical,
 		URL:                       "https://" + physical + ".ctr.fake.invalid",
+		DeploymentURL:             deploymentURL(spec, physical),
 		Image:                     spec.App.Image,
 		DiscoveredHealthCheckPath: discoveredHealthPath(spec.App),
 	}}
