@@ -214,7 +214,8 @@ which you can drive by hand:
 gcloud auth application-default login
 gcloud services enable firestore.googleapis.com storage.googleapis.com \
   cloudkms.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com \
-  iam.googleapis.com run.googleapis.com cloudscheduler.googleapis.com --project <project>
+  iam.googleapis.com run.googleapis.com cloudscheduler.googleapis.com iap.googleapis.com \
+  --project <project>
 OCEL_NAMESPACE=ocel-live OCEL_GCP_LIVE_PROJECT=<project> \
   go test -C platform/gcp/provider -count=1 -tags integration -run '^Test(Live|Project)' ./...
 ```

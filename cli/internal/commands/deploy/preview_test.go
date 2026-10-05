@@ -937,7 +937,7 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		err := refuseMissingPreviewDomain(bare, nil, nil, checkSpan(t, &out))
+		err := refuseMissingPreviewDomain(bare, nil, nil, true, checkSpan(t, &out))
 		if err == nil {
 			t.Fatal("refuseMissingPreviewDomain err = nil, want a refusal")
 		}
@@ -948,11 +948,23 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 		}
 	})
 
+	t.Run("an edge that gives each release its own address serves a preview with no domain, and says so", func(t *testing.T) {
+		t.Parallel()
+
+		var out bytes.Buffer
+		if err := refuseMissingPreviewDomain(bare, nil, nil, false, checkSpan(t, &out)); err != nil {
+			t.Fatalf("refuseMissingPreviewDomain err = %v, want nil: no hostname is needed where the router addresses each release", err)
+		}
+		if want := "Serving previews on the address each app's release is given"; !strings.Contains(out.String(), want) {
+			t.Errorf("out = %q, want it to contain %q", out.String(), want)
+		}
+	})
+
 	t.Run("a global domain and no declared one serves globally, and says so", func(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		if err := refuseMissingPreviewDomain(bare, global, nil, checkSpan(t, &out)); err != nil {
+		if err := refuseMissingPreviewDomain(bare, global, nil, true, checkSpan(t, &out)); err != nil {
 			t.Fatalf("refuseMissingPreviewDomain err = %v, want nil", err)
 		}
 		for _, want := range []string{"Serving previews on global *.preview.ocel.app"} {
@@ -966,7 +978,7 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		if err := refuseMissingPreviewDomain(declared, nil, nil, checkSpan(t, &out)); err != nil {
+		if err := refuseMissingPreviewDomain(declared, nil, nil, true, checkSpan(t, &out)); err != nil {
 			t.Fatalf("refuseMissingPreviewDomain err = %v, want nil", err)
 		}
 		if out.String() != "" {
@@ -978,7 +990,7 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		if err := refuseMissingPreviewDomain(declared, global, nil, checkSpan(t, &out)); err != nil {
+		if err := refuseMissingPreviewDomain(declared, global, nil, true, checkSpan(t, &out)); err != nil {
 			t.Fatalf("refuseMissingPreviewDomain err = %v, want nil", err)
 		}
 		for _, want := range []string{"*.preview.acme.com", "*.preview.ocel.app", "ignored"} {
@@ -993,7 +1005,7 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 
 		same := &project.Project{Slug: "acme", Domains: project.Domains{Preview: "*.preview.ocel.app"}}
 		var out bytes.Buffer
-		if err := refuseMissingPreviewDomain(same, global, nil, checkSpan(t, &out)); err != nil {
+		if err := refuseMissingPreviewDomain(same, global, nil, true, checkSpan(t, &out)); err != nil {
 			t.Fatalf("refuseMissingPreviewDomain err = %v, want nil", err)
 		}
 		if got := out.String(); !strings.Contains(got, "Serving previews on project-level *.preview.ocel.app, also the global preview domain") || strings.Contains(got, "ignored") {
@@ -1006,7 +1018,7 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 
 		elsewhere := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", EdgeScope: "edge-owner", RouteInstalled: true}
 		var out bytes.Buffer
-		err := refuseMissingPreviewDomain(bare, elsewhere, &contractv1.Identity{EdgeScope: "edge-other"}, checkSpan(t, &out))
+		err := refuseMissingPreviewDomain(bare, elsewhere, &contractv1.Identity{EdgeScope: "edge-other"}, true, checkSpan(t, &out))
 		if err == nil {
 			t.Fatal("refuseMissingPreviewDomain err = nil, want an account refusal")
 		}
@@ -1022,7 +1034,7 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 
 		uninstalled := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app"}
 		var out bytes.Buffer
-		err := refuseMissingPreviewDomain(bare, uninstalled, nil, checkSpan(t, &out))
+		err := refuseMissingPreviewDomain(bare, uninstalled, nil, true, checkSpan(t, &out))
 		if err == nil {
 			t.Fatal("refuseMissingPreviewDomain err = nil, want a route refusal")
 		}
@@ -1127,5 +1139,33 @@ func TestAFirstPreviewUpWhoseBuildFailsLeavesNoPreviewBehind(t *testing.T) {
 	_, err := fixture.Provider.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, clitest.FixtureSlug, "staging"))
 	if !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("reading staging's record after its first preview up failed to build = %v, want nothing recorded: `ocel preview ls` would list a preview that was never deployed", err)
+	}
+}
+
+func TestAPreviewAliasIsAssignedOnlyWhereAHostnameServesIt(t *testing.T) {
+	t.Parallel()
+
+	declared := &project.Project{Domains: project.Domains{Preview: "*.preview.acme.com"}}
+	bare := &project.Project{}
+	global := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app"}
+
+	for name, tc := range map[string]struct {
+		cfg              *project.Project
+		wildcard         *contractv1.PreviewWildcard
+		hostnameRequired bool
+		want             bool
+	}{
+		"a router that addresses each release and no domain has no hostname to assign":     {bare, nil, false, false},
+		"a declared domain is assigned an alias even where the router addresses itself":    {declared, nil, false, true},
+		"a global domain is assigned an alias even where the router addresses itself":      {bare, global, false, true},
+		"a router that needs a hostname asks the provider, which refuses a missing domain": {bare, nil, true, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := assignsPreviewAlias(tc.cfg, tc.wildcard, tc.hostnameRequired); got != tc.want {
+				t.Errorf("assignsPreviewAlias() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

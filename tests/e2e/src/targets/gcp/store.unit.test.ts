@@ -6,6 +6,7 @@ import {
   BOOTSTRAP_APIS,
   exposedServices,
   hasAnyService,
+  PREVIEW_APIS,
   reachable,
   readServices,
   servedBy,
@@ -25,6 +26,20 @@ describe("the apis a bootstrap wants on", () => {
     expect(listed).not.toBeNull();
     const declared = [...(listed?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((one) => one[1]);
     expect(declared).toEqual(BOOTSTRAP_APIS);
+  });
+
+  it("include the ones a preview bootstrap refuses without", async () => {
+    const go = await readFile(
+      path.join(repoRoot, "platform", "gcp", "provider", "bootstrapitems.go"),
+      "utf8",
+    );
+    expect(go).toContain(`var PreviewAPIs = []string{proxyAPI}`);
+    const iap = await readFile(
+      path.join(repoRoot, "platform", "gcp", "provider", "iap.go"),
+      "utf8",
+    );
+    const named = iap.match(/proxyAPI\s*=\s*"([^"]+)"/);
+    expect(named?.[1] ? [named[1]] : []).toEqual(PREVIEW_APIS);
   });
 });
 

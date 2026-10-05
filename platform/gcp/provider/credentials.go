@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -158,14 +159,14 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose) (edge.Credentia
 		if err != nil {
 			return edge.CredentialDocument{}, err
 		}
-		roles := rolesFor(purpose)
-		heading := fmt.Sprintf("the roles a %s credential is granted on project %s", purpose, project)
+		names := Names{namespace: c.Namespace, project: project}
+		roles := slices.Concat(rolesFor(purpose), []string{proxyViewersGrant(names, c.Region)})
 		if purpose == edge.PurposeDeploy {
-			names := Names{namespace: c.Namespace, project: project}
 			roles = append(roles, realtimeSecretsGrant(names), appGrantsGrant(names), names.AppAccountsRolePath())
 			roles = append(roles, queueGrants(names, c.Region)...)
-			heading += fmt.Sprintf(", where %s is the number `gcloud projects describe %s --format='value(projectNumber)'` prints", projectNumberHole, project)
 		}
+		heading := fmt.Sprintf("the roles a %s credential is granted on project %s, where %s is the number `gcloud projects describe %s --format='value(projectNumber)'` prints",
+			purpose, project, projectNumberHole, project)
 		return edge.CredentialDocument{
 			Heading:  heading,
 			Document: strings.Join(roles, "\n"),

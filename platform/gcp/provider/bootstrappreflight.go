@@ -146,6 +146,17 @@ func queueGrants(names Names, region string) []string {
 	return grants
 }
 
+const (
+	proxyAdminRole  = "roles/iap.admin"
+	proxiedService  = "iap.googleapis.com/WebService"
+	proxiedServices = "projects/%s/iap_web/cloud_run-%s/services/%s-"
+)
+
+func proxyViewersGrant(names Names, region string) string {
+	return fmt.Sprintf("%s, on the condition resource.type == %q && resource.name.startsWith(%q)",
+		proxyAdminRole, proxiedService, fmt.Sprintf(proxiedServices, projectNumberHole, region, names.Namespace()))
+}
+
 func rolesFor(purpose edge.CredentialPurpose) []string {
 	if purpose != edge.PurposeBootstrap {
 		return deployRoles
@@ -160,7 +171,7 @@ func rolesFor(purpose edge.CredentialPurpose) []string {
 }
 
 func (b bootstrap) preflight(ctx context.Context, read survey, features []string) error {
-	if err := b.servicesOn(ctx, features); err != nil {
+	if err := b.servicesOn(ctx, read.Tier, features); err != nil {
 		return err
 	}
 	if err := b.permitted(ctx, features); err != nil {
@@ -203,13 +214,13 @@ func rolesCovering(features []string) []string {
 	return roles
 }
 
-func (b bootstrap) servicesOn(ctx context.Context, features []string) error {
+func (b bootstrap) servicesOn(ctx context.Context, tier environment.Tier, features []string) error {
 	service, err := b.clients.Services()
 	if err != nil {
 		return err
 	}
 	var off []string
-	for _, api := range apisFor(features) {
+	for _, api := range apisFor(tier, features) {
 		name := "projects/" + b.clients.project + "/services/" + api
 		apiService, err := attempted(ctx, service.Services.Get(name).Context(ctx).Do)
 		if err != nil {

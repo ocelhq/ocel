@@ -43,13 +43,13 @@ func TestTheKVNetworkChecksTheServicesAndPermissionsItIsRaisedWith(t *testing.T)
 	t.Parallel()
 
 	for _, api := range []string{"memorystore.googleapis.com", "networkconnectivity.googleapis.com", "serviceconsumermanagement.googleapis.com", "compute.googleapis.com"} {
-		if !slices.Contains(apisFor([]string{kvFeature}), api) {
-			t.Errorf("a %q bootstrap checks %v, want %s among them", kvFeature, apisFor([]string{kvFeature}), api)
+		if !slices.Contains(apisFor(environment.TierProduction, []string{kvFeature}), api) {
+			t.Errorf("a %q bootstrap checks %v, want %s among them", kvFeature, apisFor(environment.TierProduction, []string{kvFeature}), api)
 		}
 	}
 	both := []string{albFeature, kvFeature}
-	if !slices.Contains(apisFor(both), "certificatemanager.googleapis.com") || !slices.Contains(apisFor(both), "memorystore.googleapis.com") {
-		t.Errorf("a bootstrap with the load balancer and the kv network checks %v, want the services of both", apisFor(both))
+	if !slices.Contains(apisFor(environment.TierProduction, both), "certificatemanager.googleapis.com") || !slices.Contains(apisFor(environment.TierProduction, both), "memorystore.googleapis.com") {
+		t.Errorf("a bootstrap with the load balancer and the kv network checks %v, want the services of both", apisFor(environment.TierProduction, both))
 	}
 	for _, permission := range []string{"networkconnectivity.serviceConnectionPolicies.create", "compute.subnetworks.setIamPolicy", "compute.networks.create"} {
 		if !slices.Contains(permissionsFor([]string{kvFeature}), permission) {

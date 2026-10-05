@@ -22,6 +22,7 @@ const (
 	KindRole           Kind = "iam:role"
 	KindService        Kind = "run:service"
 	KindSchedule       Kind = "cloudscheduler:job"
+	KindServiceAgent   Kind = "serviceusage:serviceidentity"
 )
 
 const StampObject = "ocel/bootstrap.json"
@@ -36,6 +37,8 @@ var BootstrapAPIs = []string{
 	"run.googleapis.com",
 	"cloudscheduler.googleapis.com",
 }
+
+var PreviewAPIs = []string{proxyAPI}
 
 type item struct {
 	Kind      Kind
@@ -57,12 +60,13 @@ var kindNouns = map[Kind]string{
 	KindRepository:     "Artifact Registry repository",
 	KindServiceAccount: "service account",
 	KindRole:           "custom role",
+	KindServiceAgent:   "service agent of",
 }
 
 func (i item) phrase() string { return kindNouns[i.Kind] + " " + i.Name }
 
 func provisioned(kind Kind, emulated bool) bool {
-	return !emulated || (kind != KindRepository && kind != KindRole)
+	return !emulated || (kind != KindRepository && kind != KindRole && kind != KindServiceAgent)
 }
 
 func stackItems(names Names, tier environment.Tier, emulated bool) []item {
@@ -115,6 +119,12 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 			Kind: KindSchedule, Name: names.EnvSourceSync(tier),
 			Note: "calls the env source sync once a minute, with no retry because the next minute is the retry",
 		},
+	}
+	if tier == environment.TierPreview {
+		items = append(items, item{
+			Kind: KindServiceAgent, Name: proxyAPI,
+			Note: "the identity Identity-Aware Proxy calls a preview with no edge in front as, which each such preview lets invoke its service",
+		})
 	}
 	return slices.DeleteFunc(items, func(each item) bool { return !provisioned(each.Kind, emulated) })
 }

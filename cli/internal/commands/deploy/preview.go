@@ -303,12 +303,15 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 	return err
 }
 
-func refuseMissingPreviewDomain(cfg *project.Project, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, check *run.Span) error {
+func refuseMissingPreviewDomain(cfg *project.Project, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, hostnameRequired bool, check *run.Span) error {
 	declared := cfg.Domains.Preview
 	base := wildcard.GetBaseDomain()
 	configName := filepath.Base(cfg.Path)
 
 	switch {
+	case declared == "" && base == "" && !hostnameRequired:
+		check.Say("Serving previews on the address each app's release is given")
+
 	case declared == "" && base == "":
 		return fmt.Errorf("this project declares no preview domain and this bootstrap has no global one, so a preview deploy has nowhere to serve: "+
 			"add a project-level domains.preview wildcard (e.g. `domains: { preview: \"*.preview.acme.com\" }`) to %s, "+

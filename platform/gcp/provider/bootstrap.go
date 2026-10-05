@@ -39,6 +39,7 @@ const (
 	reasonSharedDB     = "the %s bootstrap is still installed and shares it, so only the records this tier keeps in it are deleted"
 	reasonKeyScheduled = "Cloud KMS destroys each version once the key's scheduled-destruction period passes, 30 days unless the key sets another"
 	reasonAbsent       = "nothing is provisioned here"
+	reasonAgentKept    = "Google offers no way to delete a service agent, so this one outlives every bootstrap that created it"
 
 	reasonUngranted = "it exists, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
 	reasonUnpruned  = "it exists with cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
@@ -268,6 +269,7 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		Writer:   req.WrittenBy.String(),
 		Digest:   digestOf(read.Names.Namespace(), items),
 		Features: installedFeatures(b.Catalogue(), read.Stamp.Features, req),
+		Agents:   agentsOf(items),
 	}
 	generation, err := b.stampWith(ctx, read, written, read.Generation)
 	if err != nil {
@@ -289,6 +291,16 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		return err
 	}
 	return b.deleteUnusedAccounts(ctx, req, progress)
+}
+
+func agentsOf(items []item) []string {
+	var agents []string
+	for _, each := range items {
+		if each.Kind == KindServiceAgent {
+			agents = append(agents, each.Name)
+		}
+	}
+	return agents
 }
 
 func stampItem(items []item, stampBucket item) item {
@@ -368,6 +380,8 @@ func (b bootstrap) make(ctx context.Context, read survey, target item) error {
 		return b.makeService(ctx, read.Tier, target.Name)
 	case KindSchedule:
 		return b.makeSchedule(ctx, read.Tier, target.Name)
+	case KindServiceAgent:
+		return b.makeServiceAgent(ctx, target.Name)
 	default:
 		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing provisions a %s", target.Kind)
 	}
@@ -904,6 +918,8 @@ func removing(read survey, target item) removal {
 		taking.action, taking.reason = provider.ActionKeep, reasonRingKept
 	case target.Kind == KindRole:
 		taking.action, taking.reason = provider.ActionKeep, reasonRoleKept
+	case target.Kind == KindServiceAgent:
+		taking.action, taking.reason = provider.ActionKeep, reasonAgentKept
 	case target.Kind == KindDatabase && target.Shared && read.sibling:
 		taking.action, taking.reason = provider.ActionKeep, fmt.Sprintf(reasonSharedDB, read.Tier.Sibling())
 	case target.Shared && read.sibling:
