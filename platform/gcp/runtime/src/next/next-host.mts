@@ -1,11 +1,12 @@
 import type { NextHost } from "@framework/next-runtime/host";
 import { instanceCacheBytes, newInstanceCache } from "@framework/next-runtime/instance-cache";
-import { readPortBind } from "@framework/node-runtime/host";
+import { finishBeforeResponseMs, readPortBind } from "@framework/node-runtime/host";
 import { newGcpDispatchInvoke } from "./dispatch-host.mjs";
 import { newInstanceRefresh } from "./instance-refresh.mjs";
 import { newInstanceCacheStore, newInstanceUseCacheStore } from "./instance-stores.mjs";
 
 const renderOriginVar = "__NEXT_PRIVATE_ORIGIN";
+const defaultRefreshTimeoutMs = 10_000;
 
 function instanceOrigin(env: NodeJS.ProcessEnv): string {
   const origin = env[renderOriginVar];
@@ -27,6 +28,9 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
     newCacheStore: async () => newInstanceCacheStore(cache),
     newUseCacheStore: async () => newInstanceUseCacheStore(cache),
     newDispatchInvoke: async (localOrigin) => newGcpDispatchInvoke(localOrigin),
-    scheduleRefresh: newInstanceRefresh(() => instanceOrigin(env)),
+    scheduleRefresh: newInstanceRefresh(
+      () => instanceOrigin(env),
+      finishBeforeResponseMs(env) || defaultRefreshTimeoutMs,
+    ),
   };
 }
