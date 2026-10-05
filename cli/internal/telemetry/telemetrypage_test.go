@@ -57,7 +57,7 @@ func TestTheTelemetryPageNeverMentionsDoNotTrack(t *testing.T) {
 	}
 }
 
-func TestTheTelemetryPageNamesTheSwitchesTheBannerPromises(t *testing.T) {
+func TestTheTelemetryPageNamesEverySettingThatTurnsTelemetryOffOrPrintsEvents(t *testing.T) {
 	page := readTelemetryPage(t)
 
 	for _, want := range []string{EnvVar + "=0", EnvVar + "=false", EnvVar + "=" + debugValue} {
