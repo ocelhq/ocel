@@ -66,7 +66,7 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 	}
 	for i, hostname := range withdrawn {
 		if err := s.e.deps.Routes.Unroute(ctx, s.recorded.LoadBalancer.URLMap, hostname); err != nil {
-			return router.Unserved{Err: errors.Join(err, s.restoreRecordedRoutes(ctx, nil, withdrawn[:i]))}
+			return router.Unserved{Err: errors.Join(err, s.restoreRecordedRoutes(ctx, nil, withdrawn[:i+1]))}
 		}
 		delete(hosts, hostname)
 		delete(tags, hostname)
@@ -144,6 +144,31 @@ func (s *stack) restoreRecordedRoutes(ctx context.Context, took, withdrawn []str
 		s.raise(ctx, s.recorded.Hosts),
 		s.routeRecorded(ctx, slices.Concat(took, withdrawn)),
 	)
+}
+
+func (s *stack) restorePreviewHosts(ctx context.Context, hosts map[string]Host, tags map[string]pin.Tags) error {
+	named := map[string]Host{}
+	maps.Copy(named, s.recorded.Hosts)
+	maps.Copy(named, hosts)
+	var changed []string
+	for _, hostname := range slices.Sorted(maps.Keys(named)) {
+		if s.recorded.Hosts[hostname] != hosts[hostname] {
+			changed = append(changed, hostname)
+		}
+	}
+	s.recordPreviewHosts(hosts, tags)
+	return s.restoreRecordedRoutes(ctx, changed, nil)
+}
+
+func cloneDeploymentTags(tags map[string]pin.Tags) map[string]pin.Tags {
+	if tags == nil {
+		return nil
+	}
+	cloned := make(map[string]pin.Tags, len(tags))
+	for hostname, held := range tags {
+		cloned[hostname] = maps.Clone(held)
+	}
+	return cloned
 }
 
 func (s *stack) routeRecorded(ctx context.Context, hostnames []string) error {

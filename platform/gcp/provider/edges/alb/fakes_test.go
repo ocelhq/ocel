@@ -37,8 +37,9 @@ type world struct {
 	breaks   map[string]error
 	pinning  error
 
-	routeFails   map[string]error
-	unrouteFails map[string]error
+	routeFails          map[string]error
+	unrouteFails        map[string]error
+	unrouteAppliedFails map[string]error
 
 	invalidatedTags  [][]string
 	invalidatedHosts []string
@@ -75,13 +76,14 @@ func newWorld() *world {
 			LoadBalancerStack(environment.TierProduction): balancer(),
 			LoadBalancerStack(environment.TierPreview):    balancer(),
 		},
-		routed:       map[string]map[string]string{},
-		backends:     map[string]map[string]bool{"": {notFoundBackend: true}},
-		entries:      map[string]map[string]bool{},
-		declared:     map[string]map[string]declaration{},
-		breaks:       map[string]error{},
-		routeFails:   map[string]error{},
-		unrouteFails: map[string]error{},
+		routed:              map[string]map[string]string{},
+		backends:            map[string]map[string]bool{"": {notFoundBackend: true}},
+		entries:             map[string]map[string]bool{},
+		declared:            map[string]map[string]declaration{},
+		breaks:              map[string]error{},
+		routeFails:          map[string]error{},
+		unrouteFails:        map[string]error{},
+		unrouteAppliedFails: map[string]error{},
 	}
 }
 
@@ -238,7 +240,7 @@ func (w *world) Unroute(_ context.Context, urlMap, hostname string) error {
 		return err
 	}
 	delete(w.routed[urlMap], hostname)
-	return nil
+	return w.unrouteAppliedFails[hostname]
 }
 
 func (w *world) Entered(_ context.Context, certificateMap string) ([]string, error) {
@@ -484,4 +486,10 @@ func (w *world) refuseUnroute(hostname string, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.unrouteFails[hostname] = err
+}
+
+func (w *world) refuseUnrouteAfterApplying(hostname string, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.unrouteAppliedFails[hostname] = err
 }
