@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"crypto/x509"
 	"slices"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ type Provider struct {
 	tokens    TokenSource
 	endpoint  string
 	namespace provider.Namespace
+	warmRoots *x509.CertPool
 
 	projectDir string
 
