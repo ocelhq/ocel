@@ -70,7 +70,7 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving) ma
 	if s.compute == provider.ComputeServerless {
 		env[finishBeforeResponseEnvVar] = strconv.FormatInt(finishBeforeResponseCap.Milliseconds(), 10)
 	}
-	if routing := app.Routing; routing != nil && routeOf(fn) == routing.Entry {
+	if routing := app.Routing; routing != nil && resolveRouteID(fn) == routing.Entry {
 		if !factsOf(spec.Edge).RunsCode {
 			env[edge.OriginDispatchVar] = "1"
 			env[edge.OriginSignedVar] = "1"
@@ -89,7 +89,7 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving) ma
 	return env
 }
 
-func routeOf(fn provider.FunctionSpec) string {
+func resolveRouteID(fn provider.FunctionSpec) string {
 	if fn.Route != "" {
 		return fn.Route
 	}
