@@ -100,7 +100,7 @@ func connectorDenial(denied *console.Denial) *resultv1.ConnectorDenial {
 	if denied == nil {
 		return nil
 	}
-	return &resultv1.ConnectorDenial{Verb: denied.Verb, At: denied.At, Message: denied.Message}
+	return &resultv1.ConnectorDenial{Verb: denied.Verb, At: terminal.NormalizeRFC3339(denied.At), Message: denied.Message}
 }
 
 func sortedCapabilities(values []string) []string {
