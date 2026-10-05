@@ -522,6 +522,42 @@ func TestAPersistentPreviewIsNotTornDownUnasked(t *testing.T) {
 				t.Errorf("the CLI removed %v, want nothing torn down without a terminal to ask on", removed)
 			}
 		})
+
+		t.Run(tc.name+", under --json on a terminal, is refused and nothing enters the stream", func(t *testing.T) {
+			fixture := setUpPreviewProject(t)
+			tc.create(t, fixture)
+			dependencies := previewDependencies("feature/login", "")
+			tty, screen := clitest.UnderJSONOnATerminal(t, &dependencies.Invocation)
+			var stdout bytes.Buffer
+			dependencies.Events.Attach(terminal.NewJSONLines(&stdout))
+
+			err := clitest.FinishWithin(t, 20*time.Second, func(ctx context.Context) error {
+				return runPreviewRemove(ctx, dependencies, fixture.Root, previewRemoveOptions{name: "staging"}, &stdout, &stdout, tty)
+			})
+
+			if err == nil {
+				t.Error("runPreviewRemove err = nil, want a refusal")
+			}
+			if asked := screen(); asked != "" {
+				t.Errorf("terminal = %q, want nothing asked under --json", asked)
+			}
+			for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+				if !json.Valid([]byte(line)) {
+					t.Errorf("stdout line %q is not JSON, want only the JSON stream", line)
+				}
+			}
+			evs := clitest.RunEvents(t, stdout.String())
+			got := evs[len(evs)-1].GetSummary().GetError()
+			if got.GetCode() != clierror.CodeConfirmationRequired || got.GetHint() != "--yes" {
+				t.Errorf("summary error = %v, want code confirmation_required with the hint --yes", got)
+			}
+			if !strings.Contains(got.GetMessage(), "needs a terminal, without --json,") {
+				t.Errorf("summary error message = %q, want a refusal true under --json on a terminal", got.GetMessage())
+			}
+			if removed := removedEnvironments(t, fixture); len(removed) != 0 {
+				t.Errorf("the CLI removed %v, want nothing torn down under --json", removed)
+			}
+		})
 	}
 }
 

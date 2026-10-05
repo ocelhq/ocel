@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/creack/pty"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
@@ -293,28 +292,18 @@ func TestLinkSelectsOrCreatesAConsoleProjectForThisDirectory(t *testing.T) {
 		projects []map[string]string
 		opts     options
 		hint     string
+		lists    []string
 	}{
-		{"several organizations", 2, nil, options{create: true}, "--org <slug>"},
-		{"an organization with projects", 1, []map[string]string{projectRow("p1", "My App", "my-app")}, options{}, "ocel link <project>"},
-		{"an organization with no projects", 1, nil, options{}, "--create"},
+		{"several organizations", 2, nil, options{create: true}, "--org <slug>", []string{"acme-inc", "other-co"}},
+		{"an organization with projects", 1, []map[string]string{projectRow("p1", "My App", "my-app"), projectRow("p2", "Shop", "shop")}, options{}, "ocel link <project>", []string{"my-app", "shop"}},
+		{"an organization with no projects", 1, nil, options{}, "--create", nil},
 	} {
 		t.Run("under --json a terminal is not asked about "+tc.name+" and input_required names "+tc.hint, func(t *testing.T) {
 			t.Parallel()
 
-			ptmx, tty, err := pty.Open()
-			if err != nil {
-				t.Skipf("no pty available: %v", err)
-			}
-			t.Cleanup(func() {
-				ptmx.Close()
-				tty.Close()
-			})
-			var asked bytes.Buffer
-			go func() { _, _ = io.Copy(&asked, ptmx) }()
 			dependencies := newTestDependencies()
 			dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
-			dependencies.StdinIsTerminal = func(r io.Reader) bool { return terminal.IsTerminal(r) }
-			dependencies.IsJSON = func() bool { return true }
+			tty, screen := clitest.UnderJSONOnATerminal(t, &dependencies.Invocation)
 			srv := newCloudServer(t, tc.projects...)
 			if tc.orgs > 1 {
 				srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
@@ -324,12 +313,22 @@ func TestLinkSelectsOrCreatesAConsoleProjectForThisDirectory(t *testing.T) {
 			opts := tc.opts
 			opts.apiURL = srv.URL
 
-			_ = runLink(context.Background(), dependencies, t.TempDir(), "", opts, &stream, &bytes.Buffer{}, tty)
+			_ = clitest.FinishWithin(t, 20*time.Second, func(ctx context.Context) error {
+				return runLink(ctx, dependencies, t.TempDir(), "", opts, &stream, &bytes.Buffer{}, tty)
+			})
 
+			if asked := screen(); asked != "" {
+				t.Errorf("terminal = %q, want nothing asked under --json", asked)
+			}
 			evs := clitest.RunEvents(t, stream.String())
 			failure := evs[len(evs)-1].GetSummary().GetError()
 			if failure.GetCode() != clierror.CodeInputRequired || failure.GetHint() != tc.hint {
 				t.Errorf("summary error = %v, want input_required with the hint %s", failure, tc.hint)
+			}
+			for _, choice := range tc.lists {
+				if !strings.Contains(failure.GetMessage(), choice) {
+					t.Errorf("message = %q, want it to list the choice %s", failure.GetMessage(), choice)
+				}
 			}
 		})
 	}

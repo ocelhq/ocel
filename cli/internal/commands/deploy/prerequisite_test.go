@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
@@ -21,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -189,6 +191,53 @@ export default {
 	}
 	if got := sentPreflights(t, fixture); len(got) == 0 || !slices.Contains(got[len(got)-1].GetDomains(), productionDomain) {
 		t.Errorf("the last preflight named %v, want the hostname the reloaded config declares", got)
+	}
+}
+
+func TestADeployUnderJSONOnATerminalOffersNoSetupAndFailsWithTheMissingPrerequisite(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		prepare func(t *testing.T, fixture clitest.FakeProject)
+		code    string
+	}{
+		{"no infrastructure", func(t *testing.T, fixture clitest.FakeProject) {
+			removeBootstrap(t, fixture, environment.TierProduction)
+		}, "bootstrap.missing"},
+		{"no production hostname", func(t *testing.T, fixture clitest.FakeProject) {
+			clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), "export default {\n  slug: \""+clitest.FixtureSlug+"\",\n  provider: { fake: {} },\n};\n")
+		}, "prerequisite.missing"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := setUpDeployProject(t)
+			tc.prepare(t, fixture)
+			dependencies := newTestDependencies()
+			withSetups(&dependencies)
+			stubBuild(&dependencies, nil)
+			tty, screen := clitest.UnderJSONOnATerminal(t, &dependencies.Invocation)
+			var stdout bytes.Buffer
+			dependencies.Events.Attach(terminal.NewJSONLines(&stdout))
+
+			err := clitest.FinishWithin(t, 20*time.Second, func(ctx context.Context) error {
+				return runDeploy(ctx, dependencies, fixture.Root, deployOptions{}, &stdout, &stdout, tty)
+			})
+
+			if err == nil {
+				t.Error("runDeploy err = nil, want the missing prerequisite refused")
+			}
+			if asked := screen(); asked != "" {
+				t.Errorf("terminal = %q, want nothing asked under --json", asked)
+			}
+			evs := clitest.RunEvents(t, stdout.String())
+			if got := evs[len(evs)-1].GetSummary().GetError(); got.GetCode() != tc.code {
+				t.Errorf("summary error = %v, want %s", got, tc.code)
+			}
+			if bootstraps := clitest.RequestsTo[*contractv1.BootstrapRequest](t, fixture.Requests, contractv1connect.ProviderServiceBootstrapProcedure); len(bootstraps) != 0 {
+				t.Errorf("the provider was sent %d bootstraps under --json, want none", len(bootstraps))
+			}
+			if sent := sentDeploys(t, fixture); len(sent) != 0 {
+				t.Errorf("the CLI sent %d deploys, want none", len(sent))
+			}
+		})
 	}
 }
 
