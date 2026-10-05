@@ -30,3 +30,15 @@ func TestAResultKeepsListsAndFlagsHoldingTheirZeroValue(t *testing.T) {
 		t.Errorf("output = %q, want %q", got, want)
 	}
 }
+
+func TestAResultOmitsAnUnsetMessageInsteadOfPrintingNull(t *testing.T) {
+	var out bytes.Buffer
+	if err := WriteResultJSON(&out, &resultv1.PreviewDomainResult{BaseDomain: "preview.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+
+	want := `{"ok":true,"data":{"baseDomain":"preview.example.com","edgeScope":"","routeInstalled":false,"projects":[]}}` + "\n"
+	if got := out.String(); got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+}

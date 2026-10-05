@@ -10,7 +10,7 @@ import (
 )
 
 func marshalEnvelope(ok bool, payload proto.Message) ([]byte, error) {
-	body, err := protojson.MarshalOptions{EmitUnpopulated: true}.Marshal(payload)
+	body, err := protojson.MarshalOptions{EmitDefaultValues: true}.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
