@@ -401,7 +401,7 @@ func (b bootstrap) accountPresence(ctx context.Context, tier environment.Tier, n
 	if err != nil {
 		return presence{}, err
 	}
-	if !granted(policy, runAsRole, memberOf(member)) {
+	if !hasBinding(policy, runAsRole, memberOf(member)) {
 		return presence{present: true, mends: reasonUngranted}, nil
 	}
 	purpose, err := b.purposeOf(tier, name)
@@ -430,7 +430,7 @@ func (b bootstrap) accountPolicy(ctx context.Context, name string) (*iam.Policy,
 	return policy, nil
 }
 
-func granted(policy *iam.Policy, role, member string) bool {
+func hasBinding(policy *iam.Policy, role, member string) bool {
 	for _, binding := range policy.Bindings {
 		if binding.Role == role && binding.Condition == nil && slices.Contains(binding.Members, member) {
 			return true

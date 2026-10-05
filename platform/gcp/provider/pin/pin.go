@@ -219,20 +219,20 @@ func stillPinned(pins Pins, each pinned) router.StillActive {
 func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error {
 	var left []string
 	for _, each := range slices.Backward(moved) {
-		owed, err := readOwed(ctx, pins, each)
+		rollback, err := readRollback(ctx, pins, each)
 		if err != nil {
 			left = append(left, each.service+" serves "+each.revision)
 			continue
 		}
 		if serving, err := pins.ReadServing(ctx, each.service); err == nil && serving != each.revision {
-			if recorded := recordRollback(ctx, pins, each, owed, &left); recorded {
+			if recorded := recordRollback(ctx, pins, each, rollback, &left); recorded {
 				continue
 			}
 		}
-		if owed.Opened {
+		if rollback.Opened {
 			err := pins.Close(ctx, each.service, stillPinned(pins, each))
 			if errors.Is(err, errRepinned) {
-				if recorded := recordRollback(ctx, pins, each, owed, &left); recorded {
+				if recorded := recordRollback(ctx, pins, each, rollback, &left); recorded {
 					continue
 				}
 				err = pins.Close(ctx, each.service, stillPinned(pins, each))
@@ -242,14 +242,14 @@ func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error 
 				continue
 			}
 		}
-		switch owed.Previous {
+		switch rollback.Previous {
 		case each.revision:
 		case "":
-			if !owed.Opened {
+			if !rollback.Opened {
 				left = append(left, each.service+" serves "+each.revision)
 			}
 		default:
-			err := pins.Restore(ctx, each.service, owed.Previous, stillPinned(pins, each))
+			err := pins.Restore(ctx, each.service, rollback.Previous, stillPinned(pins, each))
 			if err != nil && !errors.Is(err, errRepinned) {
 				left = append(left, each.service+" serves "+each.revision)
 			}
@@ -262,8 +262,8 @@ func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error 
 		cause, strings.Join(left, ", "))
 }
 
-func recordRollback(ctx context.Context, pins Pins, each pinned, owed Rollback, left *[]string) bool {
-	err := pins.RecordRollback(ctx, each.service, each.revision, owed)
+func recordRollback(ctx context.Context, pins Pins, each pinned, rollback Rollback, left *[]string) bool {
+	err := pins.RecordRollback(ctx, each.service, each.revision, rollback)
 	if errors.Is(err, ErrRevisionServed) {
 		return false
 	}
@@ -273,14 +273,14 @@ func recordRollback(ctx context.Context, pins Pins, each pinned, owed Rollback, 
 	return true
 }
 
-func readOwed(ctx context.Context, pins Pins, each pinned) (Rollback, error) {
-	owed := Rollback{Previous: each.previous, Opened: each.opened}
+func readRollback(ctx context.Context, pins Pins, each pinned) (Rollback, error) {
+	rollback := Rollback{Previous: each.previous, Opened: each.opened}
 	if each.previous == "" || each.previous == each.revision {
-		return owed, nil
+		return rollback, nil
 	}
 	earlier, found, err := pins.ReadRollback(ctx, each.service, each.previous)
 	if err != nil || !found {
-		return owed, err
+		return rollback, err
 	}
-	return Rollback{Previous: earlier.Previous, Opened: owed.Opened || earlier.Opened}, nil
+	return Rollback{Previous: earlier.Previous, Opened: rollback.Opened || earlier.Opened}, nil
 }

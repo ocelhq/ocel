@@ -242,9 +242,9 @@ func trafficTo(revision string, current []*run.GoogleCloudRunV2TrafficTarget) []
 }
 
 type release struct {
-	url        string
-	deployment string
-	revision   string
+	url           string
+	deploymentURL string
+	revision      string
 }
 
 func (p *Provider) openRun(ctx context.Context) (*clients, *run.Service, error) {
@@ -302,7 +302,7 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress progre
 	if err != nil {
 		return release{}, err
 	}
-	return release{url: deployed.Uri, deployment: taggedAddress(tagged, s.tag), revision: revision}, nil
+	return release{url: deployed.Uri, deploymentURL: taggedAddress(tagged, s.tag), revision: revision}, nil
 }
 
 func taggedAddress(current *run.GoogleCloudRunV2Service, tag string) string {
