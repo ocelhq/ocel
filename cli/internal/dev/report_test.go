@@ -143,10 +143,20 @@ func TestTheDevValueReportTestsLeaveAnInheritedGitDirUntouched(t *testing.T) {
 	t.Parallel()
 
 	inherited := filepath.Join(t.TempDir(), "inherited.git")
-	child := exec.Command(os.Args[0], "-test.run", "^TestTheDevValueReport(NamesWhereEachKeyCameFromAndNeverAValue|AsksGitWhetherItIgnoresEachFile)$")
+	selected := []string{
+		"TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue",
+		"TestTheDevValueReportAsksGitWhetherItIgnoresEachFile",
+	}
+	child := exec.Command(os.Args[0], "-test.v", "-test.run", "^("+strings.Join(selected, "|")+")$")
 	child.Env = append(os.Environ(), "GIT_DIR="+inherited)
-	if out, err := child.CombinedOutput(); err != nil {
+	out, err := child.CombinedOutput()
+	if err != nil {
 		t.Errorf("the report tests under GIT_DIR=%s failed: %v\n%s", inherited, err, out)
+	}
+	for _, name := range selected {
+		if !strings.Contains(string(out), "\n--- PASS: "+name+" (") {
+			t.Errorf("the child run has no passing %s, want it run and passed\n%s", name, out)
+		}
 	}
 	if _, err := os.Stat(inherited); !os.IsNotExist(err) {
 		t.Errorf("the report tests wrote to the inherited GIT_DIR %s (stat: %v), want it untouched", inherited, err)
