@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"net/url"
 	"strconv"
 	"testing"
 
@@ -147,6 +148,36 @@ func TestANextServiceIsToldWhereItsIncrementalCacheLives(t *testing.T) {
 	}
 	if got := env["OCEL_ISR_TAG_NAMESPACE"]; got != "PROJECT#shop#STACK#prod--web--r1#TAG#" {
 		t.Errorf("the Next service reads OCEL_ISR_TAG_NAMESPACE=%q, want the namespace its spec names", got)
+	}
+}
+
+func TestANextServiceIsToldTheCacheBucketAndTheObjectPrefixItsEntriesLiveUnder(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+	env := envOf(server.created[0].Template.Containers[0])
+
+	if got, want := env["OCEL_ISR_BUCKET"], names(t, p).Bucket(environment.TierProduction); got != want {
+		t.Errorf("the Next service reads OCEL_ISR_BUCKET=%q, want its tier's bucket %q", got, want)
+	}
+	if got, want := env["OCEL_ISR_OBJECT_PREFIX"], "cache/shop/web/prod/r1/isr"; got != want {
+		t.Errorf("the Next service reads OCEL_ISR_OBJECT_PREFIX=%q, want %q", got, want)
+	}
+	endpoint, err := url.Parse(env["OCEL_STORAGE_ENDPOINT"])
+	if err != nil || endpoint.Hostname() != "host.docker.internal" {
+		t.Errorf("the Next service reads OCEL_STORAGE_ENDPOINT=%q, want an address on host.docker.internal", env["OCEL_STORAGE_ENDPOINT"])
+	}
+}
+
+func TestANextServiceWithoutAnIncrementalCacheIsToldNoCacheLocation(t *testing.T) {
+	env := envOf(releasedNext(t, nextSpec()))
+
+	for _, name := range []string{"OCEL_ISR_BUCKET", "OCEL_ISR_OBJECT_PREFIX", "OCEL_STORAGE_ENDPOINT"} {
+		if got, told := env[name]; told {
+			t.Errorf("a Next service with no incremental cache reads %s=%q", name, got)
+		}
 	}
 }
 

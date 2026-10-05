@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/googleapi"
@@ -40,6 +41,9 @@ func (a artifacts) bucket(ctx context.Context, tier environment.Tier) (*storage.
 }
 
 func objectName(ref provider.ArtifactRef) (string, error) {
+	if ref.Bucket == provider.StoreCache {
+		return cacheObjectName(ref.Key), nil
+	}
 	for _, store := range artifactStores {
 		if ref.Bucket == store {
 			return store + "/" + ref.Key, nil
@@ -48,6 +52,37 @@ func objectName(ref provider.ArtifactRef) (string, error) {
 	return "", refusal.Refuse(refusal.CodeInvalid,
 		"this provider keeps no %q store; it keeps %q, %q and %q",
 		ref.Bucket, provider.StoreFunctions, provider.StoreAssets, provider.StoreCache)
+}
+
+func cacheObjectName(key string) string {
+	segments := strings.SplitN(key, "/", 4)
+	if len(segments) < 3 {
+		return provider.StoreCache + "/" + key
+	}
+	env, project, app := segments[0], segments[1], segments[2]
+	name := provider.StoreCache + "/" + project + "/" + app + "/" + env
+	if len(segments) == 4 {
+		name += "/" + segments[3]
+	}
+	return name
+}
+
+func cacheSweep(prefix string) (list string, keeps func(name string) bool, err error) {
+	keepAll := func(string) bool { return true }
+	segments := strings.Split(strings.TrimSuffix(prefix, "/"), "/")
+	closed := strings.HasSuffix(prefix, "/")
+	switch {
+	case len(segments) >= 4, len(segments) == 3 && closed:
+		return cacheObjectName(prefix), keepAll, nil
+	case len(segments) == 2 && closed:
+		env, project := segments[0], segments[1]
+		return provider.StoreCache + "/" + project + "/", func(name string) bool {
+			parts := strings.Split(name, "/")
+			return len(parts) > 3 && parts[3] == env
+		}, nil
+	}
+	return "", nil, refusal.Refuse(refusal.CodeInvalid,
+		"the cache store keeps its objects by project, then app, then environment, and %q names no whole project and environment to sweep", prefix)
 }
 
 func (a artifacts) object(ctx context.Context, ref provider.ArtifactRef) (*storage.ObjectHandle, error) {
@@ -112,13 +147,21 @@ func (a artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, pref
 		return refusal.Refuse(refusal.CodeInvalid,
 			"an empty prefix names every artifact this project keeps")
 	}
+	cacheList, cacheKeeps, err := cacheSweep(prefix)
+	if err != nil {
+		return err
+	}
 	bucket, err := a.bucket(ctx, tier)
 	if err != nil {
 		return err
 	}
 	var errs []error
 	for _, store := range artifactStores {
-		if err := sweep(ctx, bucket, store+"/"+prefix); err != nil {
+		list, keeps := store+"/"+prefix, func(string) bool { return true }
+		if store == provider.StoreCache {
+			list, keeps = cacheList, cacheKeeps
+		}
+		if err := sweep(ctx, bucket, list, keeps); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -129,7 +172,7 @@ func (a artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, pref
 	return nil
 }
 
-func sweep(ctx context.Context, bucket *storage.BucketHandle, prefix string) error {
+func sweep(ctx context.Context, bucket *storage.BucketHandle, prefix string, keeps func(name string) bool) error {
 	objects := bucket.Objects(ctx, &storage.Query{Prefix: prefix})
 	for {
 		attrs, err := objects.Next()
@@ -141,6 +184,9 @@ func sweep(ctx context.Context, bucket *storage.BucketHandle, prefix string) err
 				return nil
 			}
 			return fmt.Errorf("list %s: %w", prefix, err)
+		}
+		if !keeps(attrs.Name) {
+			continue
 		}
 		if err := bucket.Object(attrs.Name).Delete(ctx); err != nil &&
 			!errors.Is(err, storage.ErrObjectNotExist) && !errors.Is(err, storage.ErrBucketNotExist) {
