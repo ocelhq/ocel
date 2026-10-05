@@ -25,6 +25,7 @@ import (
 var (
 	nodeRuntime = buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: "x86_64"}
 	goRuntime   = buildoutput.Framework{Name: buildoutput.FrameworkGo, Arch: "x86_64"}
+	nextRuntime = buildoutput.Framework{Name: buildoutput.FrameworkNext, Arch: "x86_64"}
 )
 
 func stagedFunc(t *testing.T, files map[string]string) string {
@@ -95,7 +96,7 @@ func TestFunctionImageIncludesTheStagedTreeUnderTheRootTheRuntimeRunsFrom(t *tes
 		"config.json":  functionConfig(t, nil),
 	})
 
-	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, nil)
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, images.FunctionImageOptions{})
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -120,7 +121,7 @@ func TestFunctionImageBootsANodeFunctionThroughTheRuntime(t *testing.T) {
 		"config.json": functionConfig(t, nil),
 	})
 
-	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, nil)
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, images.FunctionImageOptions{})
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -131,13 +132,48 @@ func TestFunctionImageBootsANodeFunctionThroughTheRuntime(t *testing.T) {
 	}
 }
 
+func TestFunctionImageBootsANextFunctionThroughTheNextRuntimeEntrypoint(t *testing.T) {
+	dir := stagedFunc(t, map[string]string{
+		"index.mjs":   "module.exports = {}",
+		"config.json": frameworkConfig(t, buildoutput.FrameworkNext, nil),
+	})
+
+	image, err := images.FunctionImage(empty.Image, nextRuntime, dir, images.FunctionImageOptions{NextRuntimeDir: "/ocel/next"})
+	if err != nil {
+		t.Fatalf("FunctionImage() error = %v", err)
+	}
+
+	config := configOf(t, image)
+	if want := []string{"node", "/ocel/next/entrypoint.mjs"}; !slices.Equal(config.Cmd, want) {
+		t.Errorf("the image runs %v, want %v: a Next function is served through the Next runtime, which shapes its cache and boots its launcher", config.Cmd, want)
+	}
+	if !slices.Contains(config.Env, images.HandlerName+"="+images.FunctionImageRoot+"/index.mjs") {
+		t.Errorf("the image's env is %v, want it to name the launcher the Next runtime boots", config.Env)
+	}
+}
+
+func TestFunctionImageRefusesANextFunctionWhereTheProviderNamesNoNextRuntimeDirectory(t *testing.T) {
+	dir := stagedFunc(t, map[string]string{
+		"index.mjs":   "module.exports = {}",
+		"config.json": frameworkConfig(t, buildoutput.FrameworkNext, nil),
+	})
+
+	_, err := images.FunctionImage(empty.Image, nextRuntime, dir, images.FunctionImageOptions{})
+	if err == nil {
+		t.Fatal("FunctionImage() built a Next function's image with no Next runtime to boot, want it refused")
+	}
+	if !strings.Contains(err.Error(), "Next runtime") {
+		t.Errorf("FunctionImage() = %v, want it to name the Next runtime the provider ships no directory for", err)
+	}
+}
+
 func TestFunctionImageRefusesAFunctionThatNamesNoCommandAndBootsThroughNoRuntime(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"server":      "a built binary",
 		"config.json": frameworkConfig(t, buildoutput.FrameworkGo, nil),
 	})
 
-	_, err := images.FunctionImage(empty.Image, goRuntime, dir, nil)
+	_, err := images.FunctionImage(empty.Image, goRuntime, dir, images.FunctionImageOptions{})
 	if err == nil {
 		t.Fatal("FunctionImage() built an image for a go function with no command, want it refused: the image would boot node over a binary that is never run")
 	}
@@ -152,7 +188,7 @@ func TestFunctionImageRunsWhatTheRuntimeItIsBuiltAgainstNames(t *testing.T) {
 		"config.json": frameworkConfig(t, buildoutput.FrameworkNode, nil),
 	})
 
-	_, err := images.FunctionImage(empty.Image, goRuntime, dir, nil)
+	_, err := images.FunctionImage(empty.Image, goRuntime, dir, images.FunctionImageOptions{})
 	if err == nil {
 		t.Fatal("FunctionImage() built a go image booting the node runtime because the staged config said node, want the runtime the base was chosen for to decide")
 	}
@@ -171,7 +207,7 @@ func TestFunctionImageTellsTheFunctionWhichPortToBind(t *testing.T) {
 		"config.json": functionConfig(t, nil),
 	})
 
-	image, err := images.FunctionImage(base, nodeRuntime, dir, nil)
+	image, err := images.FunctionImage(base, nodeRuntime, dir, images.FunctionImageOptions{})
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -191,7 +227,7 @@ func TestFunctionImageTellsTheFunctionWhichPortToBind(t *testing.T) {
 
 func builtDigest(t *testing.T, files map[string]string) string {
 	t.Helper()
-	image, err := images.FunctionImage(empty.Image, nodeRuntime, stagedFunc(t, files), nil)
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, stagedFunc(t, files), images.FunctionImageOptions{})
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -237,7 +273,7 @@ func TestFunctionImageRunsTheCommandTheFunctionsConfigNames(t *testing.T) {
 		"config.json": functionConfig(t, []string{"./server"}),
 	})
 
-	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, nil)
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, images.FunctionImageOptions{})
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -259,7 +295,7 @@ func TestFunctionImageIncludesTheRuntimeAtThePathItBootsFrom(t *testing.T) {
 	runtime := []byte("export const runtime = 1")
 
 	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
-		map[string][]byte{images.NodeRuntimePath: runtime})
+		images.FunctionImageOptions{Overlay: map[string][]byte{images.NodeRuntimePath: runtime}})
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -284,7 +320,7 @@ func TestFunctionImageTellsTheRuntimeWhichHandlerToServe(t *testing.T) {
 		"config.json": functionConfig(t, nil),
 	})
 
-	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, nil)
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, images.FunctionImageOptions{})
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -310,7 +346,7 @@ func TestFunctionImageRunsANodeFunctionInProductionUnlessTheBaseNamesItsOwnNodeE
 		empty.Image: {"NODE_ENV=production"},
 		staging:     {"NODE_ENV=staging"},
 	} {
-		image, err := images.FunctionImage(base, nodeRuntime, dir, nil)
+		image, err := images.FunctionImage(base, nodeRuntime, dir, images.FunctionImageOptions{})
 		if err != nil {
 			t.Fatalf("FunctionImage() error = %v", err)
 		}
@@ -334,7 +370,7 @@ func TestFunctionImageRefusesAnOverlayThatWritesOutsideTheFunctionAndItsRuntime(
 
 	for _, rel := range []string{"/etc/passwd", "../../../etc/passwd", "/ocel/runtimes/entrypoint.mjs"} {
 		_, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
-			map[string][]byte{rel: []byte("root::0:0::/:/bin/sh")})
+			images.FunctionImageOptions{Overlay: map[string][]byte{rel: []byte("root::0:0::/:/bin/sh")}})
 		if err == nil {
 			t.Fatalf("FunctionImage() included an overlay at %s, want it refused: a function's image may not write over the base image it is built on", rel)
 		}
@@ -352,7 +388,7 @@ func TestFunctionImageIncludesAnOverlayAlongsideTheRuntimeItBootsFrom(t *testing
 	beside := path.Join(path.Dir(images.NodeRuntimePath), "lib/shim.mjs")
 
 	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
-		map[string][]byte{beside: []byte("export const shim = 1")})
+		images.FunctionImageOptions{Overlay: map[string][]byte{beside: []byte("export const shim = 1")}})
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v, want the runtime's own directory included: it is the one place outside the function's tree the image is built to contain", err)
 	}
@@ -381,12 +417,12 @@ func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageContains(t *testi
 		"config.json": functionConfig(t, nil),
 	})
 	if _, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
-		map[string][]byte{containerimage.RuntimePath: []byte("theirs")}); err == nil {
+		images.FunctionImageOptions{Overlay: map[string][]byte{containerimage.RuntimePath: []byte("theirs")}}); err == nil {
 		t.Errorf("FunctionImage() included an overlay at %s, want it refused: a function's overlay may not write over the runtime its image is later wrapped in", containerimage.RuntimePath)
 	}
 
 	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
-		map[string][]byte{images.NodeRuntimePath: []byte("export const runtime = 1")})
+		images.FunctionImageOptions{Overlay: map[string][]byte{images.NodeRuntimePath: []byte("export const runtime = 1")}})
 	if err != nil {
 		t.Fatal(err)
 	}

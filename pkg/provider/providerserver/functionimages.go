@@ -75,7 +75,10 @@ func (r *deployRun) imageFunction(
 	if err != nil {
 		return provider.ImagePush{}, err
 	}
-	image, err := images.FunctionImage(base, framework, dir, files)
+	image, err := images.FunctionImage(base, framework, dir, images.FunctionImageOptions{
+		Overlay:        files,
+		NextRuntimeDir: r.provider.Facts().NextRuntimeDir,
+	})
 	if err != nil {
 		return provider.ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
 	}
@@ -128,7 +131,7 @@ func runtimeOverlay(
 	name string,
 	overlay map[string][]byte,
 ) (map[string][]byte, error) {
-	if !images.BootsThroughRuntime(framework) {
+	if !images.BootsThroughNodeRuntime(framework) {
 		return overlay, nil
 	}
 	body, err := hooks.FunctionImages.ReadRuntime(ctx, framework)

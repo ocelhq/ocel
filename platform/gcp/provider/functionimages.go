@@ -115,7 +115,7 @@ func runsX8664(architecture, what string) error {
 }
 
 func (p *Provider) ReadFunctionRuntime(_ context.Context, framework buildoutput.Framework) ([]byte, error) {
-	if !images.BootsThroughRuntime(framework) {
+	if !images.BootsThroughNodeRuntime(framework) {
 		return nil, nil
 	}
 	return payloads.NodeRuntime(), nil

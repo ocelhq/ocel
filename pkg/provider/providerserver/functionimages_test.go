@@ -231,6 +231,49 @@ func TestANodeFunctionsImageIncludesTheRuntimeTheProviderHandsIt(t *testing.T) {
 	}
 }
 
+func TestANextFunctionsImageBootsTheNextRuntimeInTheDirectoryTheProviderNames(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	dir := filepath.Join(workingOutputRoot(t), filepath.FromSlash(appArtifactPath("web")))
+	raw, err := json.Marshal(map[string]any{
+		"framework": map[string]string{"name": "next", "arch": "x86_64"},
+		"entryFile": "__next_launcher.cjs",
+		"id":        "server",
+		"app":       "web",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	served, vendor := imagingServed(t)
+	req := imagingDeployRequest()
+	webFunctions(req).Functions[0].Framework = &contractv1.Framework{Name: "next", Arch: "x86_64"}
+
+	result, _ := deploy(t, served, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	pushed := vendor.ImageStore().Pushed()
+	if len(pushed) != 1 {
+		t.Fatalf("the deploy pushed %v, want the one image the app's function runs", pushed)
+	}
+	config := configOf(t, pushed[0].Built)
+	if want := []string{"node", vendor.Facts().NextRuntimeDir + "/entrypoint.mjs"}; !slices.Equal(config.Cmd, want) {
+		t.Errorf("the image runs %v, want %v: a Next function boots the Next runtime from the directory its provider names", config.Cmd, want)
+	}
+	layers, err := pushed[0].Built.Layers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, layer := range layers {
+		if slices.Contains(tarNames(t, layer), strings.TrimPrefix(images.NodeRuntimePath, "/")) {
+			t.Errorf("the image includes the node runtime at %s, which a Next function never boots", images.NodeRuntimePath)
+		}
+	}
+}
+
 type imagingWithoutRuntime struct{ imaging }
 
 func (w imagingWithoutRuntime) Hooks() provider.Hooks {
