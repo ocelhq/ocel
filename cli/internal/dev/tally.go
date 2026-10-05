@@ -10,7 +10,7 @@ import (
 )
 
 type tally struct {
-	record  func(telemetry.DevSession)
+	record  func(telemetry.Payload)
 	started time.Time
 
 	mu      sync.Mutex
@@ -19,7 +19,7 @@ type tally struct {
 	codes   map[string]int
 }
 
-func newTally(record func(telemetry.DevSession)) *tally {
+func newTally(record func(telemetry.Payload)) *tally {
 	return &tally{record: record, started: time.Now(), codes: map[string]int{}}
 }
 

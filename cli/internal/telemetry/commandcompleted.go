@@ -12,12 +12,14 @@ type CommandCompletion struct {
 	TTY       bool
 }
 
-func NewCommandCompleted(identity Identity, at time.Time, completion CommandCompletion) (Event, error) {
+func (CommandCompletion) name() string { return "command_completed" }
+
+func (completion CommandCompletion) properties() map[string]any {
 	flags := completion.Flags
 	if flags == nil {
 		flags = []string{}
 	}
-	return newEvent("command_completed", identity, at, map[string]any{
+	return map[string]any{
 		"command":     completion.Command,
 		"flags":       flags,
 		"exit_code":   completion.ExitCode,
@@ -25,5 +27,5 @@ func NewCommandCompleted(identity Identity, at time.Time, completion CommandComp
 		"duration_ms": completion.Duration.Milliseconds(),
 		"json":        completion.JSON,
 		"tty":         completion.TTY,
-	})
+	}
 }

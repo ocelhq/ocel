@@ -10,9 +10,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 )
 
-func recordInits(dependencies *Dependencies) *[]telemetry.InitCompletion {
-	var recorded []telemetry.InitCompletion
-	dependencies.RecordInit = func(completion telemetry.InitCompletion) { recorded = append(recorded, completion) }
+func recordInits(dependencies *Dependencies) *[]telemetry.Payload {
+	var recorded []telemetry.Payload
+	dependencies.RecordEvent = func(payload telemetry.Payload) { recorded = append(recorded, payload) }
 	return &recorded
 }
 
@@ -112,7 +112,7 @@ func TestNoNameOrPathReachesTheInitCompletion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	completion := (*recorded)[0]
+	completion := (*recorded)[0].(telemetry.InitCompletion)
 	for _, value := range []string{completion.Language, completion.PackageManager, completion.Provider, completion.ConfigFormat} {
 		if strings.Contains(value, "secret") || strings.Contains(value, string(filepath.Separator)) {
 			t.Errorf("completion value %q names the project or a path", value)

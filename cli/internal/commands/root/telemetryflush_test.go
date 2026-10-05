@@ -72,7 +72,7 @@ func spooledCommands(t *testing.T) []string {
 
 func aSpooledEvent(t *testing.T, command string) {
 	t.Helper()
-	event, err := telemetry.NewCommandCompleted(telemetry.Identity{InstallID: "an-id"}, time.Now(), telemetry.CommandCompletion{Command: command})
+	event, err := telemetry.NewEvent(telemetry.Identity{InstallID: "an-id"}, time.Now(), telemetry.CommandCompletion{Command: command})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/cli/internal/userconfig"
 )
 
 const bareCommandName = "help"
@@ -22,34 +21,16 @@ func (c *command) recordCommandCompleted(args []string, err error, exitCode int,
 	if !resolution.Enabled || !c.isRecorded() {
 		return
 	}
-	c.recordEvent(func(identity telemetry.Identity, at time.Time) (telemetry.Event, error) {
-		return telemetry.NewCommandCompleted(identity, at, telemetry.CommandCompletion{
-			Command:   c.formatCommandPath(),
-			Flags:     c.listSetFlagNames(),
-			ExitCode:  exitCode,
-			ErrorCode: clierror.NewRunError(err).GetCode(),
-			Duration:  elapsed,
-			JSON:      jsonRequested(args),
-			TTY:       terminal.IsTerminal(c.root.OutOrStdout()),
-		})
+	c.recordEvent(telemetry.CommandCompletion{
+		Command:   c.formatCommandPath(),
+		Flags:     c.listSetFlagNames(),
+		ExitCode:  exitCode,
+		ErrorCode: clierror.NewRunError(err).GetCode(),
+		Duration:  elapsed,
+		JSON:      jsonRequested(args),
+		TTY:       terminal.IsTerminal(c.root.OutOrStdout()),
 	})
 	c.startFlush(resolution)
-}
-
-func (c *command) recordEvent(build func(identity telemetry.Identity, at time.Time) (telemetry.Event, error)) {
-	resolution := telemetry.Resolve(telemetry.WriteKey, telemetry.Endpoint)
-	if !resolution.Enabled {
-		return
-	}
-	installID, idErr := userconfig.EnsureInstallID()
-	if idErr != nil {
-		return
-	}
-	event, buildErr := build(telemetry.NewIdentity(installID), time.Now())
-	if buildErr != nil {
-		return
-	}
-	telemetry.Submit(c.root.ErrOrStderr(), resolution, event)
 }
 
 func (c *command) isRecorded() bool {

@@ -140,16 +140,7 @@ func newCommand() *command {
 	set := &flags{}
 	invocation := newInvocation(c.bus, set)
 	invocation.Setups = prerequisite.Setups{}
-	invocation.RecordDevSession = func(session telemetry.DevSession) {
-		c.recordEvent(func(identity telemetry.Identity, at time.Time) (telemetry.Event, error) {
-			return telemetry.NewDevSessionEnded(identity, at, session)
-		})
-	}
-	invocation.RecordInit = func(completion telemetry.InitCompletion) {
-		c.recordEvent(func(identity telemetry.Identity, at time.Time) (telemetry.Event, error) {
-			return telemetry.NewInitCompleted(identity, at, completion)
-		})
-	}
+	invocation.RecordEvent = c.recordEvent
 
 	rootCmd.PersistentFlags().BoolVarP(&set.verbose, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
 	rootCmd.PersistentFlags().StringVarP(&set.config, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")

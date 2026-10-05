@@ -34,7 +34,7 @@ type Options struct {
 	Stderr          io.Writer
 	StdinIsTerminal bool
 	Run             *run.Run
-	RecordSession   func(telemetry.DevSession)
+	RecordEvent     func(telemetry.Payload)
 }
 
 func (o Options) session() *run.Span {
@@ -80,7 +80,7 @@ func RunOnce(ctx context.Context, opts Options, cwd string) error {
 
 func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	cfg := opts.Project
-	tally := newTally(opts.RecordSession)
+	tally := newTally(opts.RecordEvent)
 	defer func() {
 		if !errors.Is(err, leader.ErrAlreadyRunning) {
 			tally.end(err)
@@ -178,7 +178,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 }
 
 func follow(ctx context.Context, opts Options, running leader.Leader) (err error) {
-	tally := newTally(opts.RecordSession)
+	tally := newTally(opts.RecordEvent)
 	defer func() { tally.end(err) }()
 	stream, first, err := subscribe(ctx, opts, running)
 	if err != nil {
