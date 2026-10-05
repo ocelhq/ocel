@@ -55,6 +55,16 @@ func TestAFailureUnderJSONIsOneLineHoldingTheErrorObject(t *testing.T) {
 	}
 }
 
+func TestAFailureUnderJSONSaysItIsNotRetryableAsAResultKeepsItsZeroValues(t *testing.T) {
+	var out bytes.Buffer
+	PrintFailureJSON(&out, &streamv1.RunError{Code: "internal", Message: "boom"})
+
+	want := `{"ok":false,"error":{"code":"internal","message":"boom","retryable":false}}` + "\n"
+	if got := out.String(); got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+}
+
 func TestAFailureUnderJSONThatCannotBeEncodedStillPrintsOneInternalDocument(t *testing.T) {
 	var out bytes.Buffer
 	PrintFailureJSON(&out, &streamv1.RunError{Code: "project.no_config", Message: "no \xff.json"})
