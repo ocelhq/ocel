@@ -44,6 +44,10 @@ func NewInvocation() commands.Invocation {
 	}
 }
 
+func ResolveJSONPresentation(io.Writer) terminal.Presentation {
+	return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
+}
+
 func WritePrebuiltFunction(t *testing.T, root, app, route string) {
 	t.Helper()
 	dir := filepath.Join(root, statedir.Name, "output", "apps", app, "functions", route+".func")
