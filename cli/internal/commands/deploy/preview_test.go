@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -26,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -706,8 +708,65 @@ func TestListingPreviewsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheList
 	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() {
 		t.Errorf("result = %v, want the listing's run to succeed", result)
 	}
-	if !strings.Contains(stdout.String(), identity) || strings.Contains(stderr.String(), identity) {
-		t.Errorf("stdout = %q, stream = %q: want the listing on stdout and not on the stream", stdout.String(), stderr.String())
+	var listed resultv1.PreviewListResult
+	clitest.DecodeResultInto(t, stdout.String(), &listed)
+	if len(listed.GetPreviews()) != 1 || listed.GetPreviews()[0].GetIdentity() != identity || strings.Contains(stderr.String(), identity) {
+		t.Errorf("stdout = %q, stream = %q: want the listing as an envelope on stdout and not on the stream", stdout.String(), stderr.String())
+	}
+}
+
+func TestPreviewListAsJSONCarriesEachPreviewsLifecycleLabelAndAliases(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	addAppToFixtureConfig(t, fixture.Root)
+	previewUp(t, fixture, previewAppDependencies("feature/login", ""), previewUpOptions{})
+	previewUp(t, fixture, previewAppDependencies("feature/login", ""), previewUpOptions{name: "staging", persistent: true})
+	dependencies := newTestDependencies()
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
+	}
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	if err := runPreviewList(context.Background(), dependencies, fixture.Root, &stdout); err != nil {
+		t.Fatalf("runPreviewList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var listed resultv1.PreviewListResult
+	clitest.DecodeResultInto(t, stdout.String(), &listed)
+	byIdentity := map[string]*resultv1.PreviewSummary{}
+	for _, preview := range listed.GetPreviews() {
+		byIdentity[preview.GetIdentity()] = preview
+	}
+	staging, ephemeral := byIdentity["staging"], byIdentity[previewKey(t, "feature/login")]
+	if staging == nil || ephemeral == nil {
+		t.Fatalf("previews = %v, want staging and the branch's preview", listed.GetPreviews())
+	}
+	if staging.GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_PERSISTENT || ephemeral.GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
+		t.Errorf("lifecycles = %v and %v, want persistent and ephemeral", staging.GetLifecycle(), ephemeral.GetLifecycle())
+	}
+	if _, err := time.Parse(time.RFC3339, staging.GetCreatedAt()); err != nil {
+		t.Errorf("createdAt = %q, want an RFC 3339 timestamp: %v", staging.GetCreatedAt(), err)
+	}
+	if len(staging.GetAliasUrls()) == 0 || !strings.HasPrefix(staging.GetAliasUrls()[0], "https://staging-") {
+		t.Errorf("aliasUrls = %v, want the preview's alias", staging.GetAliasUrls())
+	}
+}
+
+func TestPreviewListAsJSONPrintsAnEmptyListWhenThereAreNoPreviews(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	dependencies := newTestDependencies()
+	dependencies.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
+	}
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	if err := runPreviewList(context.Background(), dependencies, fixture.Root, &stdout); err != nil {
+		t.Fatalf("runPreviewList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	if data := clitest.DecodeResult(t, stdout.String()); !reflect.DeepEqual(data["previews"], []any{}) {
+		t.Errorf("data = %v, want an empty previews list", data)
 	}
 }
 
