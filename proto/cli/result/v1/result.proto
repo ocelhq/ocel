@@ -20,16 +20,16 @@ message BindingRemoveResult {
 }
 
 message BindingListResult {
-  repeated BindingEntry bindings = 1;
+  repeated BindingSummary bindings = 1;
 }
 
 message BindingGenerateResult {
   string path = 1;
 
-  repeated BindingEntry bindings = 2;
+  repeated BindingSummary bindings = 2;
 }
 
-message BindingEntry {
+message BindingSummary {
   string name = 1;
 
   string type = 2;
@@ -60,11 +60,11 @@ message DomainHostStatus {
 
   string pending = 4;
 
-  string certificate = 5;
+  string certificate_id = 5;
 
   string certificate_status = 6;
 
-  string renewal = 7;
+  string renewal_status = 7;
 
   string expires_at = 8;
 

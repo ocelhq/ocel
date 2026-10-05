@@ -56,7 +56,7 @@ func TestDomainStatusAsJSONIsOneDocumentPerHostname(t *testing.T) {
 		"hostname":          "shop.app.com",
 		"declared":          true,
 		"ready":             true,
-		"certificate":       "issued-for-shop.app.com",
+		"certificateId":     "issued-for-shop.app.com",
 		"certificateStatus": "ISSUED",
 		"expiresAt":         "2025-09-04T15:33:20Z",
 		"lastProbeOk":       true,

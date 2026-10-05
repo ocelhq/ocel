@@ -136,7 +136,7 @@ func (x *BindingRemoveResult) GetRemoved() bool {
 
 type BindingListResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bindings      []*BindingEntry        `protobuf:"bytes,1,rep,name=bindings,proto3" json:"bindings,omitempty"`
+	Bindings      []*BindingSummary      `protobuf:"bytes,1,rep,name=bindings,proto3" json:"bindings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -171,7 +171,7 @@ func (*BindingListResult) Descriptor() ([]byte, []int) {
 	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *BindingListResult) GetBindings() []*BindingEntry {
+func (x *BindingListResult) GetBindings() []*BindingSummary {
 	if x != nil {
 		return x.Bindings
 	}
@@ -181,7 +181,7 @@ func (x *BindingListResult) GetBindings() []*BindingEntry {
 type BindingGenerateResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Bindings      []*BindingEntry        `protobuf:"bytes,2,rep,name=bindings,proto3" json:"bindings,omitempty"`
+	Bindings      []*BindingSummary      `protobuf:"bytes,2,rep,name=bindings,proto3" json:"bindings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -223,14 +223,14 @@ func (x *BindingGenerateResult) GetPath() string {
 	return ""
 }
 
-func (x *BindingGenerateResult) GetBindings() []*BindingEntry {
+func (x *BindingGenerateResult) GetBindings() []*BindingSummary {
 	if x != nil {
 		return x.Bindings
 	}
 	return nil
 }
 
-type BindingEntry struct {
+type BindingSummary struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
@@ -241,20 +241,20 @@ type BindingEntry struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BindingEntry) Reset() {
-	*x = BindingEntry{}
+func (x *BindingSummary) Reset() {
+	*x = BindingSummary{}
 	mi := &file_cli_result_v1_result_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BindingEntry) String() string {
+func (x *BindingSummary) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BindingEntry) ProtoMessage() {}
+func (*BindingSummary) ProtoMessage() {}
 
-func (x *BindingEntry) ProtoReflect() protoreflect.Message {
+func (x *BindingSummary) ProtoReflect() protoreflect.Message {
 	mi := &file_cli_result_v1_result_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -266,40 +266,40 @@ func (x *BindingEntry) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BindingEntry.ProtoReflect.Descriptor instead.
-func (*BindingEntry) Descriptor() ([]byte, []int) {
+// Deprecated: Use BindingSummary.ProtoReflect.Descriptor instead.
+func (*BindingSummary) Descriptor() ([]byte, []int) {
 	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *BindingEntry) GetName() string {
+func (x *BindingSummary) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *BindingEntry) GetType() string {
+func (x *BindingSummary) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *BindingEntry) GetSource() string {
+func (x *BindingSummary) GetSource() string {
 	if x != nil {
 		return x.Source
 	}
 	return ""
 }
 
-func (x *BindingEntry) GetOwner() string {
+func (x *BindingSummary) GetOwner() string {
 	if x != nil {
 		return x.Owner
 	}
 	return ""
 }
 
-func (x *BindingEntry) GetVersion() uint64 {
+func (x *BindingSummary) GetVersion() uint64 {
 	if x != nil {
 		return x.Version
 	}
@@ -380,9 +380,9 @@ type DomainHostStatus struct {
 	Declared          bool                   `protobuf:"varint,2,opt,name=declared,proto3" json:"declared,omitempty"`
 	Ready             bool                   `protobuf:"varint,3,opt,name=ready,proto3" json:"ready,omitempty"`
 	Pending           string                 `protobuf:"bytes,4,opt,name=pending,proto3" json:"pending,omitempty"`
-	Certificate       string                 `protobuf:"bytes,5,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	CertificateId     string                 `protobuf:"bytes,5,opt,name=certificate_id,json=certificateId,proto3" json:"certificate_id,omitempty"`
 	CertificateStatus string                 `protobuf:"bytes,6,opt,name=certificate_status,json=certificateStatus,proto3" json:"certificate_status,omitempty"`
-	Renewal           string                 `protobuf:"bytes,7,opt,name=renewal,proto3" json:"renewal,omitempty"`
+	RenewalStatus     string                 `protobuf:"bytes,7,opt,name=renewal_status,json=renewalStatus,proto3" json:"renewal_status,omitempty"`
 	ExpiresAt         string                 `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	ExpiringSoon      bool                   `protobuf:"varint,9,opt,name=expiring_soon,json=expiringSoon,proto3" json:"expiring_soon,omitempty"`
 	RecordsWritten    []string               `protobuf:"bytes,10,rep,name=records_written,json=recordsWritten,proto3" json:"records_written,omitempty"`
@@ -452,9 +452,9 @@ func (x *DomainHostStatus) GetPending() string {
 	return ""
 }
 
-func (x *DomainHostStatus) GetCertificate() string {
+func (x *DomainHostStatus) GetCertificateId() string {
 	if x != nil {
-		return x.Certificate
+		return x.CertificateId
 	}
 	return ""
 }
@@ -466,9 +466,9 @@ func (x *DomainHostStatus) GetCertificateStatus() string {
 	return ""
 }
 
-func (x *DomainHostStatus) GetRenewal() string {
+func (x *DomainHostStatus) GetRenewalStatus() string {
 	if x != nil {
-		return x.Renewal
+		return x.RenewalStatus
 	}
 	return ""
 }
@@ -593,13 +593,13 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\aversion\x18\x03 \x01(\x04R\aversion\"C\n" +
 	"\x13BindingRemoveResult\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aremoved\x18\x02 \x01(\bR\aremoved\"L\n" +
-	"\x11BindingListResult\x127\n" +
-	"\bbindings\x18\x01 \x03(\v2\x1b.cli.result.v1.BindingEntryR\bbindings\"d\n" +
+	"\aremoved\x18\x02 \x01(\bR\aremoved\"N\n" +
+	"\x11BindingListResult\x129\n" +
+	"\bbindings\x18\x01 \x03(\v2\x1d.cli.result.v1.BindingSummaryR\bbindings\"f\n" +
 	"\x15BindingGenerateResult\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\x127\n" +
-	"\bbindings\x18\x02 \x03(\v2\x1b.cli.result.v1.BindingEntryR\bbindings\"~\n" +
-	"\fBindingEntry\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x129\n" +
+	"\bbindings\x18\x02 \x03(\v2\x1d.cli.result.v1.BindingSummaryR\bbindings\"\x80\x01\n" +
+	"\x0eBindingSummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x16\n" +
 	"\x06source\x18\x03 \x01(\tR\x06source\x12\x14\n" +
@@ -609,15 +609,15 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12'\n" +
 	"\x0frecords_written\x18\x02 \x03(\tR\x0erecordsWritten\x12%\n" +
 	"\x0emanual_records\x18\x03 \x03(\tR\rmanualRecords\x125\n" +
-	"\x05hosts\x18\x04 \x03(\v2\x1f.cli.result.v1.DomainHostStatusR\x05hosts\"\xea\x03\n" +
+	"\x05hosts\x18\x04 \x03(\v2\x1f.cli.result.v1.DomainHostStatusR\x05hosts\"\xfc\x03\n" +
 	"\x10DomainHostStatus\x12\x1a\n" +
 	"\bhostname\x18\x01 \x01(\tR\bhostname\x12\x1a\n" +
 	"\bdeclared\x18\x02 \x01(\bR\bdeclared\x12\x14\n" +
 	"\x05ready\x18\x03 \x01(\bR\x05ready\x12\x18\n" +
-	"\apending\x18\x04 \x01(\tR\apending\x12 \n" +
-	"\vcertificate\x18\x05 \x01(\tR\vcertificate\x12-\n" +
-	"\x12certificate_status\x18\x06 \x01(\tR\x11certificateStatus\x12\x18\n" +
-	"\arenewal\x18\a \x01(\tR\arenewal\x12\x1d\n" +
+	"\apending\x18\x04 \x01(\tR\apending\x12%\n" +
+	"\x0ecertificate_id\x18\x05 \x01(\tR\rcertificateId\x12-\n" +
+	"\x12certificate_status\x18\x06 \x01(\tR\x11certificateStatus\x12%\n" +
+	"\x0erenewal_status\x18\a \x01(\tR\rrenewalStatus\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\b \x01(\tR\texpiresAt\x12#\n" +
 	"\rexpiring_soon\x18\t \x01(\bR\fexpiringSoon\x12'\n" +
@@ -650,7 +650,7 @@ var file_cli_result_v1_result_proto_goTypes = []any{
 	(*BindingRemoveResult)(nil),   // 1: cli.result.v1.BindingRemoveResult
 	(*BindingListResult)(nil),     // 2: cli.result.v1.BindingListResult
 	(*BindingGenerateResult)(nil), // 3: cli.result.v1.BindingGenerateResult
-	(*BindingEntry)(nil),          // 4: cli.result.v1.BindingEntry
+	(*BindingSummary)(nil),        // 4: cli.result.v1.BindingSummary
 	(*DomainStatusResult)(nil),    // 5: cli.result.v1.DomainStatusResult
 	(*DomainHostStatus)(nil),      // 6: cli.result.v1.DomainHostStatus
 	(*CostScanResult)(nil),        // 7: cli.result.v1.CostScanResult
@@ -658,8 +658,8 @@ var file_cli_result_v1_result_proto_goTypes = []any{
 	(*v1.Estimate)(nil),           // 9: provider.cost.v1.Estimate
 }
 var file_cli_result_v1_result_proto_depIdxs = []int32{
-	4, // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingEntry
-	4, // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingEntry
+	4, // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
+	4, // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
 	6, // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
 	8, // 3: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
 	9, // 4: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
