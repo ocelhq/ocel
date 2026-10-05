@@ -15,6 +15,10 @@ on:
         description: A docker release series, such as 28.0, installed on a vps box before bootstrap adopts it. Empty leaves the box without docker.
         type: string
         default: ""
+      upgrade:
+        description: true bootstraps the account with the ocel the previous commit builds, then deploys with this one, which must either go ahead or refuse until bootstrap is rerun.
+        type: boolean
+        default: false
       suite:
         description: The name an emulator run's pass is recorded under, so a run over the same inputs skips it.
         type: string
@@ -59,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.cloud && 120 || 75 }}
     concurrency:
-      group: ${{ inputs.cloud && format('real-{0}{1}', inputs.target, inputs.docker != '' && '-engine' || '') || format('e2e-{0}-{1}-{2}{3}', github.run_id, github.run_attempt, inputs.target, inputs.docker != '' && '-engine' || '') }}
+      group: ${{ inputs.cloud && format('real-{0}{1}', inputs.target, inputs.docker != '' && '-engine' || '') || format('e2e-{0}-{1}-{2}{3}{4}', github.run_id, github.run_attempt, inputs.target, inputs.docker != '' && '-engine' || '', inputs.upgrade && '-upgrade' || '') }}
       cancel-in-progress: false
     env:
       OCEL_TARGET: ${{ inputs.target == 'next' && 'aws' || inputs.target }}
@@ -93,13 +97,36 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
+      - name: Name the previous commit, whose ocel bootstraps the account
+        id: previous
+        if: inputs.upgrade
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          previous=
+          case "$EVENT" in
+            push) previous=$BEFORE ;;
+            pull_request) previous=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BASE...$HEAD" --jq .merge_base_commit.sha) ;;
+          esac
+          if [ -z "$previous" ] || [ -z "${previous//0/}" ]; then
+            previous=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD" --jq '.parents[0].sha')
+          fi
+          echo "the account is bootstrapped by the ocel $previous builds"
+          echo "sha=$previous" >> "$GITHUB_OUTPUT"
+          echo "OCEL_E2E_BOOTSTRAP_COMMIT=$previous" >> "$GITHUB_ENV"
+
       - name: Has this target already passed what it reads
         id: gate
         if: env.GATED == 'true'
         uses: ./.github/actions/suite-gate
         with:
           suite: ${{ inputs.suite }}
-          task: "@ocel-tests/e2e#e2e:${{ inputs.target }}${{ inputs.docker != '' && '-engine' || '' }}"
+          task: "@ocel-tests/e2e#e2e:${{ inputs.target }}${{ inputs.docker != '' && '-engine' || '' }}${{ inputs.upgrade && '-upgrade' || '' }}"
 
       - name: Say whether anything is left to prove
         id: due
@@ -241,6 +268,40 @@ jobs:
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
+      - name: Check out the previous commit
+        if: steps.due.outputs.run == 'true' && inputs.upgrade
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ steps.previous.outputs.sha }}
+          path: previous
+          persist-credentials: false
+
+      - name: The go the previous commit's ocel builds with
+        if: steps.due.outputs.run == 'true' && inputs.upgrade
+        uses: ./.github/actions/go
+        with:
+          go-version-file: previous/go.work
+          caches: modules,build
+          build-scope: binaries
+
+      - uses: ./.github/actions/goreleaser
+        if: steps.due.outputs.run == 'true' && inputs.upgrade
+
+      - name: Build the previous commit's ocel and the providers of its version
+        if: steps.due.outputs.run == 'true' && inputs.upgrade
+        working-directory: previous
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm turbo run build --filter=ocel
+          node scripts/snapshot.mjs > "$RUNNER_TEMP/previous.env"
+          . "$RUNNER_TEMP/previous.env"
+          "$OCEL_BIN" --version
+          {
+            echo "OCEL_E2E_BOOTSTRAP_BIN=$OCEL_BIN"
+            echo "OCEL_E2E_BOOTSTRAP_PROVIDERS_DIR=$OCEL_PROVIDERS_DIR"
+          } >> "$GITHUB_ENV"
+
       - name: Take the binaries this run built, and the ocel bundle the sweeps import
         if: steps.due.outputs.run == 'true'
         uses: ./.github/actions/binaries
@@ -314,4 +375,4 @@ jobs:
         if: always() && steps.due.outputs.run == 'true' && inputs.target != 'vps'
         uses: ./.github/actions/evidence
         with:
-          name: e2e-evidence-${{ inputs.target }}${{ inputs.cloud && '-cloud' || '' }}
+          name: e2e-evidence-${{ inputs.target }}${{ inputs.upgrade && '-upgrade' || '' }}${{ inputs.cloud && '-cloud' || '' }}

@@ -39,6 +39,43 @@
         "!$TURBO_ROOT$/platform/**/*_test.go"
       ]
     },
+    "e2e:aws-upgrade": {
+      "cache": false,
+      "env": ["OCEL_E2E_*"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/cli/**",
+        "$TURBO_ROOT$/sdk/**",
+        "$TURBO_ROOT$/pkg/**",
+        "$TURBO_ROOT$/proto/**",
+        "$TURBO_ROOT$/packages/**",
+        "$TURBO_ROOT$/frameworks/**",
+        "$TURBO_ROOT$/platform/s3/**",
+        "$TURBO_ROOT$/platform/pgmq/**",
+        "$TURBO_ROOT$/platform/realtime/**",
+        "$TURBO_ROOT$/platform/aws/**",
+        "$TURBO_ROOT$/platform/edge/**",
+        "$TURBO_ROOT$/tests/fixtures/**",
+        "$TURBO_ROOT$/tests/shared/**",
+        "$TURBO_ROOT$/scripts/snapshot.mjs",
+        "$TURBO_ROOT$/.goreleaser.yaml",
+        "$TURBO_ROOT$/scripts/floci.sh",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/go.work.sum",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/.github/workflows/build.yml",
+        "$TURBO_ROOT$/.github/workflows/smoke.yml",
+        "$TURBO_ROOT$/.github/workflows/e2e.yml",
+        "$TURBO_ROOT$/.github/workflows/e2e-target.yml",
+        "$TURBO_ROOT$/.github/actions/**",
+        "!**/*.md",
+        "!$TURBO_ROOT$/packages/**/*.md",
+        "!$TURBO_ROOT$/cli/**/*_test.go",
+        "!$TURBO_ROOT$/sdk/**/*_test.go",
+        "!$TURBO_ROOT$/pkg/**/*_test.go",
+        "!$TURBO_ROOT$/platform/**/*_test.go"
+      ]
+    },
     "e2e:gcp": {
       "cache": false,
       "env": ["OCEL_E2E_*"],

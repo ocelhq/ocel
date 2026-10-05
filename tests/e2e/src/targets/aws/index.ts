@@ -15,6 +15,7 @@ import type { PrepareFailures } from "../../prepare";
 import type { CellUnderTest } from "../../run/cellRun";
 import { migrateCommand } from "../../workspace";
 import type { Deployment, Exposure, ReleaseCycle, Restart, Target } from "../types";
+import { bootstrapBuild, deployOverOlderBootstrap } from "../upgrade";
 import { AwsBootstrap } from "./bootstrap";
 import { AwsDispatch } from "./dispatch";
 import { describeExposed, failOver, keepPersistedGroups, listTaggedGroups } from "./kv";
@@ -102,7 +103,16 @@ export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
         env,
       );
     }
-    await this.run(cell, dir, "deploy", "deploy", ["deploy", "--yes"], env);
+    if (bootstrapBuild(process.env)) {
+      const outcome = await deployOverOlderBootstrap({
+        deploy: (name) => this.run(cell, dir, "deploy", name, ["deploy", "--yes"], env),
+        bootstrap: () => this.bootstrap.rebootstrapCell(cell, dir),
+        projectExists: () => this.sweeper.exists(cell.slug),
+      });
+      await cell.evidence.write("deploy", "upgrade.txt", `${outcome}\n`);
+    } else {
+      await this.run(cell, dir, "deploy", "deploy", ["deploy", "--yes"], env);
+    }
     await this.run(cell, dir, "deploy", "domain-add", ["domain", "add"], env);
 
     const deployed = await this.deployment(cell);

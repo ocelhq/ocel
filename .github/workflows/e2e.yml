@@ -14,8 +14,8 @@ on:
   workflow_dispatch:
     inputs:
       targets:
-        description: "Targets to drive on their emulators, space separated: aws, gcp, vps, vps-docker-28 and dev."
-        default: "aws gcp vps vps-docker-28 dev"
+        description: "Targets to drive on their emulators, space separated: aws, aws-upgrade, gcp, vps, vps-docker-28 and dev."
+        default: "aws aws-upgrade gcp vps vps-docker-28 dev"
         type: string
       variants:
         description: "Variants each target enumerates, space separated, default among them. Empty runs every variant a fixture lists."
@@ -67,6 +67,21 @@ jobs:
       variants: ${{ inputs.variants }}
       coverage: ${{ inputs.coverage || 'sampled' }}
       skips: ${{ inputs.skips || 'skip' }}
+    secrets: inherit
+
+  aws-upgrade:
+    name: AWS (upgrade)
+    if: github.event_name != 'workflow_dispatch' || contains(format(' {0} ', inputs.targets), ' aws-upgrade ')
+    uses: ./.github/workflows/e2e-target.yml
+    with:
+      target: aws
+      upgrade: true
+      suite: ${{ github.event_name != 'workflow_dispatch' && 'e2e-aws-upgrade' || '' }}
+      concern: deploy
+      fixtures: deploy/node
+      variants: api-gateway
+      coverage: every-cell
+      skips: skip
     secrets: inherit
 
   gcp:
