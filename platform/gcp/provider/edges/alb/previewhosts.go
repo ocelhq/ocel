@@ -27,7 +27,7 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 	}
 	var took []string
 	for _, host := range move.Hosts {
-		served, read, err := s.previewHost(ctx, move, host, deployment)
+		served, deploymentTags, err := s.previewHost(ctx, move, host, deployment)
 		if err != nil {
 			return router.Unserved{Err: err}
 		}
@@ -35,8 +35,8 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 			continue
 		}
 		hosts[host.Hostname] = served
-		if read != nil {
-			tags[host.Hostname] = read
+		if deploymentTags != nil {
+			tags[host.Hostname] = deploymentTags
 		} else {
 			delete(tags, host.Hostname)
 		}
@@ -227,15 +227,15 @@ func (s *stack) withdrawPointer(ctx context.Context, removal router.PointerRemov
 		return err
 	}
 	withdrawn := s.recorded.Hosts
-	owed := s.recorded.DeploymentTags
-	kept := maps.Clone(owed)
+	recorded := s.recorded.DeploymentTags
+	kept := maps.Clone(recorded)
 	for _, hostname := range going {
 		delete(kept, hostname)
 	}
 	s.recordPreviewHosts(hosts, kept)
 	var errs []error
 	for _, hostname := range going {
-		errs = append(errs, s.untagUnroutedRevisions(ctx, tagsOf(withdrawn[hostname], owed[hostname]), hosts, kept))
+		errs = append(errs, s.untagUnroutedRevisions(ctx, tagsOf(withdrawn[hostname], recorded[hostname]), hosts, kept))
 	}
 	return errors.Join(errs...)
 }
