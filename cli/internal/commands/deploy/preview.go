@@ -352,7 +352,7 @@ func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string
 		return err
 	}
 
-	policy := consent.NewPolicy("ocel preview rm", opts.yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
+	policy := consent.NewPolicy("ocel preview rm", opts.yes, dependencies.CanAsk(stdin), stdout, stdin)
 
 	return dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider := p.Run, p.Check, p.Provider

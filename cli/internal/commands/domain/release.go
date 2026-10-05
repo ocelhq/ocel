@@ -28,7 +28,7 @@ func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd s
 	if err != nil {
 		return err
 	}
-	policy := consent.NewPlanPolicy("ocel domain release", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
+	policy := consent.NewPlanPolicy("ocel domain release", opts.yes, invocation.CanAsk(stdin), stdout, stdin)
 	if err := policy.Refuse(); err != nil {
 		return err
 	}

@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -92,7 +91,7 @@ func runLink(ctx context.Context, dependencies Dependencies, projectDir, project
 	}
 
 	client := console.New(apiURL)
-	lr := linkRun{run: linking, stdout: stdout, stdin: stdin, scanner: scanner}
+	lr := linkRun{run: linking, stdout: stdout, stdin: stdin, scanner: scanner, canAsk: dependencies.CanAsk(stdin)}
 
 	org, err := pickOrganization(ctx, lr, client, creds.AccessToken, apiURL, opts)
 	if err != nil {
@@ -135,6 +134,7 @@ type linkRun struct {
 	stdout  io.Writer
 	stdin   io.Reader
 	scanner *bufio.Scanner
+	canAsk  bool
 }
 
 func (c linkRun) wait(phase progressv1.Phase, subject string, title progress.Title, fn func() error) error {
@@ -204,7 +204,7 @@ func selectOrCreateProject(
 		return nil, fmt.Errorf("no project with slug %q in %s; available: %s (or pass --create)", projectRef, org.Name, joinProjectSlugs(projects))
 	}
 
-	if !terminal.IsTerminal(lr.stdin) {
+	if !lr.canAsk {
 		if len(projects) == 0 {
 			return nil, clierror.NewInputRequired(errors.New("no project selected — pass --create to make one"), "--create")
 		}
@@ -333,7 +333,7 @@ func pickOrganization(ctx context.Context, lr linkRun, client *console.Client, a
 		return &orgs[0], nil
 	}
 
-	if !terminal.IsTerminal(lr.stdin) {
+	if !lr.canAsk {
 		return nil, clierror.NewInputRequired(
 			fmt.Errorf("multiple organizations found; pass --org <slug>. available: %s", joinOrgSlugs(orgs)),
 			"--org <slug>",
