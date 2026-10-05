@@ -32,6 +32,8 @@ func TestMain(m *testing.M) {
 	done := clitest.IsolateConfigHome()
 	os.Unsetenv("OCEL_JSON")
 	os.Unsetenv("OCEL_DEBUG")
+	os.Unsetenv("OCEL_TELEMETRY")
+	os.Unsetenv("DO_NOT_TRACK")
 	clitest.UnsetColorEnv()
 	code := m.Run()
 	done()

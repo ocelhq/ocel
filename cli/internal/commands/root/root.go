@@ -41,6 +41,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
@@ -146,6 +147,7 @@ func newCommand() *command {
 		if err := set.readFromFlagsOrEnv(cmd); err != nil {
 			return err
 		}
+		telemetry.AnnounceOnce(cmd.ErrOrStderr(), telemetry.Resolve(telemetry.Key))
 		invocation.AttachCommandSink(cmd)
 		install := installInterruptHandler
 		if cmd == devCmd || cmd == runCmd {
