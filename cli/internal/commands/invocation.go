@@ -59,7 +59,7 @@ func (i Invocation) CanAsk(stdin io.Reader) bool {
 }
 
 func (i Invocation) IsBrowserReachable(stdin io.Reader) bool {
-	return os.Getenv(NoBrowserEnvVar) == "" && i.StdinIsTerminal(stdin)
+	return os.Getenv(NoBrowserEnvVar) == "" && i.CanAsk(stdin)
 }
 
 func (i Invocation) AttachCommandSink(cmd *cobra.Command) {

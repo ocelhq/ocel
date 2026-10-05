@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -959,6 +960,72 @@ func TestVariablesRecoveryTracesEachAttemptAndTheHumanWait(t *testing.T) {
 }
 
 const stripeRequired = `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`
+
+func TestMissingVariablesUnderJSONOnATerminalFailWithTheirRemedyAndWaitForNobody(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		run  func(ctx context.Context, t *testing.T, dependencies Dependencies, fixture clitest.FakeProject, stdout io.Writer, stdin io.Reader) error
+		set  func(t *testing.T) (clitest.FakeProject, Dependencies)
+	}{
+		{
+			name: "ocel deploy",
+			set: func(t *testing.T) (clitest.FakeProject, Dependencies) {
+				fixture := setUpVariablesProject(t, stripeRequired)
+				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
+				return fixture, newTestDependencies()
+			},
+			run: func(ctx context.Context, t *testing.T, dependencies Dependencies, fixture clitest.FakeProject, stdout io.Writer, stdin io.Reader) error {
+				return runDeploy(ctx, dependencies, fixture.Root, deployOptions{yes: true}, stdout, stdout, stdin)
+			},
+		},
+		{
+			name: "ocel preview up",
+			set: func(t *testing.T) (clitest.FakeProject, Dependencies) {
+				fixture, dependencies := setUpPreviewVariablesProject(t, stripeRequired)
+				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
+				return fixture, dependencies
+			},
+			run: func(ctx context.Context, t *testing.T, dependencies Dependencies, fixture clitest.FakeProject, stdout io.Writer, stdin io.Reader) error {
+				return runPreviewUp(ctx, dependencies, fixture.Root, previewUpOptions{name: "staging", persistent: true, yes: true}, stdout, stdout, stdin)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(commands.NoBrowserEnvVar, "")
+			fixture, dependencies := tc.set(t)
+			var mu sync.Mutex
+			var opened []string
+			recordBrowser(&dependencies, &opened, &mu)
+			tty, screen := clitest.UnderJSONOnATerminal(t, &dependencies.Invocation)
+			var stdout syncBuffer
+			dependencies.Events.Attach(terminal.NewJSONLines(&stdout))
+
+			err := clitest.FinishWithin(t, 20*time.Second, func(ctx context.Context) error {
+				return tc.run(ctx, t, dependencies, fixture, &stdout, tty)
+			})
+
+			if err == nil {
+				t.Fatal("err = nil, want the missing variable refused")
+			}
+			if asked := screen(); asked != "" {
+				t.Errorf("terminal = %q, want nothing asked under --json", asked)
+			}
+			evs := clitest.RunEvents(t, stdout.String())
+			got := evs[len(evs)-1].GetSummary().GetError()
+			if got.GetCode() != "variables.missing" || !strings.HasPrefix(got.GetHint(), "ocel env set STRIPE_API_KEY=<VALUE>") {
+				t.Errorf("summary error = %v, want variables.missing hinting ocel env set", got)
+			}
+			if slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil }) {
+				t.Errorf("the run was held for a person under --json: %s", stdout.String())
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if len(opened) != 0 {
+				t.Errorf("opened %v in a browser, want nothing opened under --json", opened)
+			}
+		})
+	}
+}
 
 func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 	t.Run("a missing value refuses before anything is built", func(t *testing.T) {
