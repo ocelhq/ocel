@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -26,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -470,6 +472,93 @@ func TestStatusSaysSoWhenTheOrganizationHasNoConnector(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "ocel connector add") {
 		t.Errorf("stdout = %q, want it to point at the command that adds one", stdout.String())
+	}
+}
+
+func TestStatusAsJSONPrintsEveryRegisteredConnectorAsOneEnvelope(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	seen := time.Date(2026, 10, 5, 8, 0, 0, 0, time.UTC)
+	srv := newConsoleServer(t,
+		map[string]any{
+			"id": "con_2", "target": "zzz/sha256:bbbb/ocel", "vendor": "fake", "reach": "dial", "capabilities": []string{},
+		},
+		map[string]any{
+			"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
+			"url": "https://" + hostname + "/" + statedir.Name + "/connector", "capabilities": []string{"variables.write", "variables.read"},
+			"connectedAt": seen, "lastSeenAt": seen, "online": true,
+			"lastDenied": map[string]any{"verb": "variables.write", "at": "2026-10-05T07:00:00Z", "message": "not allowed"},
+		})
+	linked(t, root, srv.URL)
+
+	dependencies := newJSONDependencies()
+	dependencies.ConfigPath = func() string { return "" }
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	if err := runStatus(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
+		t.Fatalf("runStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var status resultv1.ConnectorStatusResult
+	clitest.DecodeResultInto(t, stdout.String(), &status)
+	if len(status.GetConnectors()) != 2 {
+		t.Fatalf("connectors = %v, want both registered", status.GetConnectors())
+	}
+	first, second := status.GetConnectors()[0], status.GetConnectors()[1]
+	if first.GetTarget() != fingerprint || first.GetCompute() != "container" || first.GetReach() != "dial" {
+		t.Errorf("first = %v, want the connector sorted by target", first)
+	}
+	if first.GetLiveness() != resultv1.ConnectorLiveness_CONNECTOR_LIVENESS_ONLINE || first.GetLastSeenAt() != "2026-10-05T08:00:00Z" {
+		t.Errorf("first = %v, want it online and last seen at an RFC 3339 time", first)
+	}
+	if !slices.Equal(first.GetCapabilities(), []string{"variables.read", "variables.write"}) {
+		t.Errorf("capabilities = %v, want them sorted", first.GetCapabilities())
+	}
+	if first.GetLastDenied().GetVerb() != "variables.write" || first.GetLastDenied().GetMessage() != "not allowed" {
+		t.Errorf("lastDenied = %v, want the refusal the console recorded", first.GetLastDenied())
+	}
+	if second.GetLiveness() != resultv1.ConnectorLiveness_CONNECTOR_LIVENESS_NEVER_CONNECTED || second.GetLastDenied() != nil {
+		t.Errorf("second = %v, want a connector that never connected and was never refused", second)
+	}
+}
+
+func TestStatusAsJSONPrintsAnEmptyListWhenTheOrganizationHasNoConnector(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	dependencies := newJSONDependencies()
+	dependencies.ConfigPath = func() string { return "" }
+
+	var stdout bytes.Buffer
+	if err := runStatus(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
+		t.Fatalf("runStatus err = %v", err)
+	}
+
+	if data := clitest.DecodeResult(t, stdout.String()); !reflect.DeepEqual(data["connectors"], []any{}) {
+		t.Errorf("data = %v, want an empty connectors list", data)
+	}
+}
+
+func TestStatusForAConfigAsJSONPrintsAnEmptyListWhenItsTargetIsNotRegistered(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t, map[string]any{"id": "con_9", "target": "other/sha256:cccc/ocel", "vendor": "fake", "reach": "dial"})
+	linked(t, root, srv.URL)
+
+	dependencies := newJSONDependencies()
+	dependencies.ConfigPath = func() string { return filepath.Join(root, "ocel.fake.json") }
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
+	if err := runStatus(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
+		t.Fatalf("runStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	if data := clitest.DecodeResult(t, stdout.String()); !reflect.DeepEqual(data["connectors"], []any{}) {
+		t.Errorf("data = %v, want an empty connectors list", data)
 	}
 }
 
