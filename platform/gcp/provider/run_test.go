@@ -949,3 +949,27 @@ func TestAReleaseBehindTheLoadBalancerRecordsNoDeploymentUrl(t *testing.T) {
 		t.Errorf("the release recorded deployment url %q, and its ingress turns away everything but the load balancer, which answers the deployment on a hostname of its own", deployed.deployment)
 	}
 }
+
+func TestAReleaseRetriedAfterAConflictKeepsOnlyTheRollbacksTheServiceRecordsOnTheRetry(t *testing.T) {
+	ctx := context.Background()
+	server := &runServer{}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+	p := server.open(t)
+	if _, err := p.Pin(ctx, app.service, one, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", one, err)
+	}
+	if err := p.RecordRollback(ctx, app.service, "rev-x", pin.Rollback{Previous: one}); err != nil {
+		t.Fatalf("RecordRollback(rev-x) = %v", err)
+	}
+	server.patchConflicts = 1
+	server.onConflict = func(s *run.GoogleCloudRunV2Service) { s.Annotations = nil }
+
+	second := app
+	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	released(t, server, second)
+
+	if got := server.serving().Annotations[rollbacksAnnotation]; got != "" {
+		t.Errorf("the service records rollbacks %q after the retried release, want none: the retry read a service that recorded none", got)
+	}
+}
