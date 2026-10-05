@@ -130,6 +130,48 @@ func TestBindingAHostnameRaisesTheProjectsStackAndRoutesItThroughTheTierUrlMap(t
 	}
 }
 
+func TestBindingAHostnameTheUrlMapHasNoHostRuleLeftForIsRefusedBeforeAnythingIsRaised(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	w.fillHostRules("ocel-alb-production-routes", maxHostRules)
+	err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.example.com", App: "web", Certificate: "projects/acme-prod/locations/global/certificates/shop"})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
+		t.Fatalf("BindDomain onto a url map with %d host rules = %v, want a refusal", maxHostRules, err)
+	}
+	if got := w.raised(); slices.Contains(got, BindingStack("shop", environment.TierProduction)) {
+		t.Errorf("the refused bind raised %v, want nothing: Compute refuses the host rule only after the neg and backend service exist", got)
+	}
+}
+
+func TestBindingAHostnameTheProjectHasNoBackendServiceQuotaLeftForIsRefusedBeforeAnythingIsRaised(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	w.setBackendServiceQuota(BackendServiceQuota{Usage: 50, Limit: 50})
+	err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.example.com", App: "web", Certificate: "projects/acme-prod/locations/global/certificates/shop"})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
+		t.Fatalf("BindDomain with every backend service the quota allows in use = %v, want a refusal", err)
+	}
+	if got := w.raised(); slices.Contains(got, BindingStack("shop", environment.TierProduction)) {
+		t.Errorf("the refused bind raised %v, want nothing: Compute refuses the backend service only after the neg exists", got)
+	}
+}
+
+func TestBindingTheWildcardOntoAFullUrlMapIsNotRefused(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	w.fillHostRules("ocel-alb-production-routes", maxHostRules)
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{
+		Hostname: edge.PreviewWildcard(previewBase), App: "web", Certificate: previewCertificate,
+	}); err != nil {
+		t.Fatalf("BindDomain(wildcard) onto a full url map = %v, want it bound: a wildcard writes no host rule", err)
+	}
+}
+
 func TestTwoProjectsClaimingOneHostnameAtOnceLeaveItWithExactlyOne(t *testing.T) {
 	t.Parallel()
 

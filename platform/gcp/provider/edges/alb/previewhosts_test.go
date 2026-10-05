@@ -199,6 +199,30 @@ func TestAnAliasTheNextPromotionNoLongerNamesIsUnrouted(t *testing.T) {
 	}
 }
 
+func TestAnAliasRotatedOntoAFullUrlMapIsRoutedInPlaceOfTheOneItSupersedes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	if err := stack.MovePointer(ctx, aliasMove("p1", aliasHost, previewRecord("b1")), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p1) = %v", err)
+	}
+	w.fillHostRules(tierRoutes, maxHostRules)
+	rotated := aliasMove("p2", rotatedAlias, previewRecord("b2"))
+	rotated.Superseded = []edge.PreviewHost{{Hostname: aliasHost, App: "web"}}
+	if err := stack.MovePointer(ctx, rotated, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p2) onto a full url map = %v, want it routed: the alias it supersedes frees its host rule", err)
+	}
+
+	routed := w.hosts(tierRoutes)
+	if _, still := routed[aliasHost]; still {
+		t.Errorf("the tier url map routes %s, want it gone", aliasHost)
+	}
+	if routed[rotatedAlias] == "" {
+		t.Errorf("the tier url map routes no %s, want it routed", rotatedAlias)
+	}
+}
+
 func TestRemovingAPreviewPointerUnroutesItsAlias(t *testing.T) {
 	t.Parallel()
 
