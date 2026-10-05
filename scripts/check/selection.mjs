@@ -2,6 +2,8 @@ import derived from "./derived.json" with { type: "json" };
 
 const WORKSPACE_FILES = ["go.work", "go.work.sum", ".golangci.yml"];
 
+const MODULE_WHOSE_TESTS_READ_FILE = new Map([["www/content/docs/telemetry.mdx", "cli"]]);
+
 export function touches(changed, dir) {
   return changed.some((file) => file.startsWith(`${dir}/`));
 }
@@ -24,6 +26,8 @@ export function derivesFrom(changed) {
 }
 
 function moduleOf(file, modules) {
+  const readBy = MODULE_WHOSE_TESTS_READ_FILE.get(file);
+  if (readBy) return modules.find((module) => module.dir === readBy);
   return modules
     .filter((module) => file.startsWith(`${module.dir}/`))
     .sort((a, b) => b.dir.length - a.dir.length)[0];

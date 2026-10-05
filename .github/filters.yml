@@ -20,6 +20,7 @@ go:
   - "scripts/floci.sh"
   - "scripts/flocidispatch/**"
   - "scripts/redactvet/**"
+  - "www/content/docs/telemetry.mdx"
   - ".golangci.yml"
   - ".github/workflows/unit.yml"
   - ".github/go-groups.json"
