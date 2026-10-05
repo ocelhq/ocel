@@ -136,6 +136,7 @@ func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, o
 		return nil, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)}
 	}
 
+	completion := newInitCompletion(configPath, provider, projectDir, lang, detected)
 	ctx, initializing, err := dependencies.Events.Begin(ctx, "ocel init", "")
 	if err != nil {
 		return nil, err
@@ -143,6 +144,9 @@ func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, o
 	added, err := writeProject(ctx, dependencies, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, opts.settings, lang, detected)
 	if err == nil {
 		initializing.Succeed("Initialized project " + slug)
+		if dependencies.RecordInit != nil {
+			dependencies.RecordInit(completion)
+		}
 	}
 	initializing.End(&err)
 	if err != nil {

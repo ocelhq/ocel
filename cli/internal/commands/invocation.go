@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
 
@@ -24,13 +25,15 @@ const DebugEnvVar = "OCEL_DEBUG"
 const JSONEnvVar = "OCEL_JSON"
 
 type Invocation struct {
-	Events          *run.Bus
-	Presentation    func(w io.Writer) terminal.Presentation
-	StdinIsTerminal func(r io.Reader) bool
-	IsJSON          func() bool
-	Questions       providerprocess.Questions
-	ConfigPath      func() string
-	Setups          prerequisite.Setups
+	Events           *run.Bus
+	Presentation     func(w io.Writer) terminal.Presentation
+	StdinIsTerminal  func(r io.Reader) bool
+	IsJSON           func() bool
+	Questions        providerprocess.Questions
+	ConfigPath       func() string
+	Setups           prerequisite.Setups
+	RecordDevSession func(telemetry.DevSession)
+	RecordInit       func(telemetry.InitCompletion)
 }
 
 func (i Invocation) LoadProject(ctx context.Context, cwd string) (*project.Project, error) {

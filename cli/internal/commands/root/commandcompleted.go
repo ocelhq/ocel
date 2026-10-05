@@ -22,24 +22,34 @@ func (c *command) recordCommandCompleted(args []string, err error, exitCode int,
 	if !resolution.Enabled || !c.isRecorded() {
 		return
 	}
+	c.recordEvent(func(identity telemetry.Identity, at time.Time) (telemetry.Event, error) {
+		return telemetry.NewCommandCompleted(identity, at, telemetry.CommandCompletion{
+			Command:   c.formatCommandPath(),
+			Flags:     c.listSetFlagNames(),
+			ExitCode:  exitCode,
+			ErrorCode: clierror.NewRunError(err).GetCode(),
+			Duration:  elapsed,
+			JSON:      jsonRequested(args),
+			TTY:       terminal.IsTerminal(c.root.OutOrStdout()),
+		})
+	})
+	c.startFlush(resolution)
+}
+
+func (c *command) recordEvent(build func(identity telemetry.Identity, at time.Time) (telemetry.Event, error)) {
+	resolution := telemetry.Resolve(telemetry.WriteKey, telemetry.Endpoint)
+	if !resolution.Enabled {
+		return
+	}
 	installID, idErr := userconfig.EnsureInstallID()
 	if idErr != nil {
 		return
 	}
-	event, buildErr := telemetry.NewCommandCompleted(telemetry.NewIdentity(installID), time.Now(), telemetry.CommandCompletion{
-		Command:   c.formatCommandPath(),
-		Flags:     c.listSetFlagNames(),
-		ExitCode:  exitCode,
-		ErrorCode: clierror.NewRunError(err).GetCode(),
-		Duration:  elapsed,
-		JSON:      jsonRequested(args),
-		TTY:       terminal.IsTerminal(c.root.OutOrStdout()),
-	})
+	event, buildErr := build(telemetry.NewIdentity(installID), time.Now())
 	if buildErr != nil {
 		return
 	}
 	telemetry.Submit(c.root.ErrOrStderr(), resolution, event)
-	c.startFlush(resolution)
 }
 
 func (c *command) isRecorded() bool {
