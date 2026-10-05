@@ -62,7 +62,7 @@ async function answer(port: number): Promise<string> {
   throw new Error(`nothing answered on port ${port}`);
 }
 
-test("the runtime dir holds the entrypoint and every cache handler a Next build names", async () => {
+test("the runtime directory holds the entrypoint and every cache handler a Next build names", async () => {
   expect(await shippedFiles()).toEqual(
     expect.arrayContaining([
       "cache-handler.cjs",
@@ -73,7 +73,7 @@ test("the runtime dir holds the entrypoint and every cache handler a Next build 
   );
 });
 
-test("the entrypoint imports nothing but Node's own modules and the sharp the dir ships", async () => {
+test("the entrypoint imports nothing but Node's own modules and the sharp the directory ships", async () => {
   await init;
   const [imports] = parse(await readFile(join(dir, "entrypoint.mjs"), "utf8"));
   const bare = imports
@@ -82,7 +82,7 @@ test("the entrypoint imports nothing but Node's own modules and the sharp the di
   expect([...new Set(bare)]).toEqual(["sharp"]);
 });
 
-test("the runtime dir ships sharp built for the Linux x64 Cloud Run runs", async () => {
+test("the runtime directory ships sharp built for the Linux x64 Cloud Run runs", async () => {
   expect(await shippedFiles()).toEqual(
     expect.arrayContaining([
       "node_modules/sharp/package.json",
@@ -92,7 +92,7 @@ test("the runtime dir ships sharp built for the Linux x64 Cloud Run runs", async
   );
 });
 
-test("no file in the runtime dir contains a path of the checkout it was built in", async () => {
+test("no file in the runtime directory contains a path of the checkout it was built in", async () => {
   const checkout = resolve(pkgDir, "..", "..", "..");
   const leaking: string[] = [];
   for (const file of await shippedFiles()) {

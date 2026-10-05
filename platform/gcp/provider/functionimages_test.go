@@ -126,7 +126,7 @@ func TestARuntimeNoBaseIsShippedForIsRefused(t *testing.T) {
 	}
 }
 
-func TestANextFunctionRunsOnTheNodeBaseWithTheNextRuntimeInTheDirItsFactsName(t *testing.T) {
+func TestANextFunctionRunsOnTheNodeBaseWithTheNextRuntimeInTheDirectoryItsFactsName(t *testing.T) {
 	p, asked := basedOn(t, v1.Config{Env: []string{"PATH=/usr/bin"}})
 
 	base, err := p.ResolveFunctionBase(context.Background(), buildoutput.Framework{Name: buildoutput.FrameworkNext})
@@ -152,7 +152,7 @@ func TestANextFunctionRunsOnTheNodeBaseWithTheNextRuntimeInTheDirItsFactsName(t 
 	}
 }
 
-func TestCloudRunNamesAnAbsoluteDirForTheNextRuntime(t *testing.T) {
+func TestCloudRunNamesAnAbsoluteDirectoryForTheNextRuntime(t *testing.T) {
 	if dir := pushing(t, "").Facts().NextRuntimeDir; !path.IsAbs(dir) {
 		t.Errorf("Facts().NextRuntimeDir = %q, want the absolute dir the Next base holds the runtime in", dir)
 	}
