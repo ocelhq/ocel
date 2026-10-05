@@ -86,8 +86,7 @@ func storeScript(store string, runs []*http.Request, calls []storeCall) string {
 	for i, req := range runs {
 		call := calls[i]
 		codeFile := "\"$tmp/" + strconv.Itoa(i) + "\""
-		argv := append([]string{"docker", "exec", "--interactive", store}, storeCurl...)
-		argv = append(argv, "--output", "-", "--write-out", "%{stderr}%{http_code}",
+		argv := append(storeExec(store), "--output", "-", "--write-out", "%{stderr}%{http_code}",
 			"--request", req.Method)
 		for _, name := range sortedHeaderNames(req.Header) {
 			argv = append(argv, "--header", name+": "+req.Header.Get(name))

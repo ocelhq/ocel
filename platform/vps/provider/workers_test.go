@@ -71,7 +71,7 @@ func TestEachWorkerJoiningAnAppRunsAsASecondContainerFromItsImage(t *testing.T) 
 		if run == "" {
 			t.Fatalf("worker %s's container %s was never started:\n%s", name, worker.Container, strings.Join(machine.commands(), "\n"))
 		}
-		if !strings.HasSuffix(strings.TrimSuffix(run, " >/dev/null"), "'"+loadedImageRef+"'") {
+		if !strings.Contains(run, " '"+loadedImageRef+"' >/dev/null") {
 			t.Errorf("worker %s runs %q, want the app's own image: its runtime runs the worker entry OCEL_WORKER asks for", name, run)
 		}
 		if !strings.Contains(run, "'--network' 'ocel-production-shop'") || strings.Contains(run, "--publish") {

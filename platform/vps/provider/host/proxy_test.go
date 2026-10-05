@@ -542,7 +542,7 @@ func TestTheRoutingTableAndItsConfigAreRemovedUnderTheLockEveryWriterTakes(t *te
 			continue
 		}
 		command := removal.command()
-		locked := strings.Index(command, "exec 9<"+quoted(routingLock)+"\nflock -x 9")
+		locked := strings.Index(command, strings.TrimSuffix(routingLocked("-x"), "\n"))
 		if locked < 0 || strings.Index(command, "rm ") < locked {
 			t.Errorf("%s is removed by\n%s\nwhich does not hold %s first, so a deploy mid-write moves a file back beside a removal", removal.path, command, routingLock)
 		}

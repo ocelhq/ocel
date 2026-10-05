@@ -429,7 +429,7 @@ func (s boxContainer) prepared() string {
 	return "set -e\n" +
 		s.networksPresent() +
 		bindsPresent(s.files) +
-		imagePulled(s.image, containerPulls)
+		imagePulled(s.image, containerPulls, pullAttemptSeconds)
 }
 
 func (s boxContainer) replaced() string {
@@ -476,13 +476,13 @@ func rejoining(name string) string {
 		"done\n"
 }
 
-func imagePulled(imageRef string, attempts int) string {
+func imagePulled(imageRef string, attempts, attemptSeconds int) string {
 	image := quoted(imageRef)
 	return "at=0\n" + scriptPullBackoff.start() +
-		"until docker image inspect " + image + " >/dev/null 2>&1 || docker pull " + image + " >/dev/null; do\n" +
+		"until docker image inspect " + image + " >/dev/null 2>&1 || " + within(attemptSeconds, "docker pull "+image) + " >/dev/null; do\n" +
 		"at=$((at + 1))\n" +
 		"if [ \"$at\" -ge " + fmt.Sprint(attempts) + " ]; then\n" +
-		"printf '%s\\n' " + quoted(fmt.Sprintf("%s was not pulled in %d attempts", imageRef, attempts)) + " >&2\n" +
+		"printf '%s\\n' " + quoted(fmt.Sprintf("%s was not pulled in %d attempts of at most %s each", imageRef, attempts, spelledSeconds(attemptSeconds))) + " >&2\n" +
 		"exit 1\n" +
 		"fi\n" +
 		scriptPullBackoff.again() +
@@ -496,7 +496,7 @@ func (s boxContainer) readiness() []string {
 func (s boxContainer) rising(attempts int) string {
 	name := quoted(s.name)
 	inspect := "docker inspect --type container --format "
-	answering := words(s.readiness()) + " >/dev/null 2>&1"
+	answering := within(probeSeconds, words(s.readiness())) + " >/dev/null 2>&1"
 	return "at=0\n" +
 		"while :; do\n" +
 		"if [ \"$(" + inspect + quoted("{{.State.Status}}") + " " + name + " 2>/dev/null)\" = running ] && " + answering + "; then exit 0; fi\n" +

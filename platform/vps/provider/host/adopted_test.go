@@ -274,7 +274,7 @@ func mustPlace(t *testing.T, state RoutingTable) []byte {
 
 func placedUnderLock(t *testing.T, command string) {
 	t.Helper()
-	locked := strings.Index(command, "exec 9<"+quoted(routingLock)+"\nflock -x 9")
+	locked := strings.Index(command, strings.TrimSuffix(routingLocked("-x"), "\n"))
 	compared := strings.Index(command, `if [ "$current" != `)
 	placing := strings.Index(command, words(placementFed(coolifyDynamic, "place", coolifyFile)))
 	if locked < 0 || compared < locked || placing < compared {

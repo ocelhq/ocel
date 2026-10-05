@@ -496,7 +496,7 @@ func TestATunnelIsStartedAndRemovedOnlyUnderTheLockEveryRoutingWriterTakes(t *te
 			t.Fatalf("the tunnel was never %s: %v", what, box.commands())
 		}
 		command := box.commands()[at]
-		locked := strings.Index(command, "exec 9<"+quoted(routingLock)+"\nflock -x 9")
+		locked := strings.Index(command, strings.TrimSuffix(routingLocked("-x"), "\n"))
 		if locked < 0 || strings.Index(command, "docker rm") < locked {
 			t.Errorf("the tunnel is %s by\n%s\nwhich does not hold %s first, so a release and a claim's start interleave and one removes the other's container", what, command, routingLock)
 		}
