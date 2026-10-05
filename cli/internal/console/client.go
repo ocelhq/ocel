@@ -8,20 +8,33 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/ocelhq/ocel/cli/internal/invocation"
 )
 
 type Client struct {
-	baseURL string
-	http    *http.Client
+	baseURL   string
+	userAgent string
+	http      *http.Client
 }
 
 func New(baseURL string) *Client {
 	return &Client{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		http:    &http.Client{Timeout: 30 * time.Second},
+		baseURL:   strings.TrimRight(baseURL, "/"),
+		userAgent: composeUserAgent(os.Getenv),
+		http:      &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+func composeUserAgent(getenv func(string) string) string {
+	agent, _ := invocation.Detect(getenv)
+	if agent == "" {
+		return "ocel-cli"
+	}
+	return "ocel-cli agent/" + agent
 }
 
 type Error struct {
@@ -63,7 +76,7 @@ func (c *Client) send(ctx context.Context, method, path, accessToken string, bod
 	if accessToken != "" {
 		req.Header.Set("Authorization", "Bearer "+accessToken)
 	}
-	req.Header.Set("User-Agent", "ocel-cli")
+	req.Header.Set("User-Agent", c.userAgent)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
