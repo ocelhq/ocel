@@ -39,6 +39,7 @@ func (c *command) recordCommandCompleted(args []string, err error, exitCode int,
 		return
 	}
 	telemetry.Submit(c.root.ErrOrStderr(), resolution, event)
+	c.startFlush()
 }
 
 func (c *command) isRecorded() bool {
