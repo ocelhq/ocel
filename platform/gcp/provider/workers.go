@@ -56,7 +56,7 @@ func tasksManifest(c *clients, ref provider.StackRef, declared map[string]*provi
 		Environment:  ref.Name.Env,
 		Topics:       pinned,
 		DelayQueue:   c.DelayQueuePath(c.region, ref.Tier),
-		DelayAccount: c.WorkloadAccountEmail(ref.Tier),
+		DelayAccount: c.DelayAccountEmail(ref.Tier),
 		PublishURL:   publishURL(c),
 	}
 }

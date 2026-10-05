@@ -86,6 +86,6 @@ func TestAnAppReachingTopicsIsPinnedEveryTopicItsWorkersAndProxyServe(t *testing
 	}
 	if tasks.DelayQueue != "projects/acme-prod/locations/europe-west1/queues/ocel-production-delays" ||
 		tasks.DelayAccount != "ocel-production@acme-prod.iam.gserviceaccount.com" || tasks.PublishURL != "https://pubsub.googleapis.com" {
-		t.Errorf("tasksManifest() = %+v, want the tier's delay queue, its workload account and Pub/Sub's own url", tasks)
+		t.Errorf("tasksManifest() = %+v, want the tier's delay queue, its delay account and Pub/Sub's own url", tasks)
 	}
 }

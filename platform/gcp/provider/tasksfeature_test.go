@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/api/iam/v1"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
@@ -130,5 +132,37 @@ func TestTheRunsOfATierAreListedByTopicStatusAndTagThroughItsIndexes(t *testing.
 		if !shapes[want] {
 			t.Errorf("the runs indexes are %v, want one on %s", shapes, want)
 		}
+	}
+}
+
+func TestOnlyCloudTasksMayActAsTheDelayAccount(t *testing.T) {
+	t.Parallel()
+	server := grantedIAM()
+	server.accountPolicies = map[string]*iam.Policy{}
+	b := bootstrap{clients: server.open(t)}
+
+	if err := b.grantTaskWrites(context.Background(), environment.TierProduction); err != nil {
+		t.Fatalf("grantTaskWrites() = %v", err)
+	}
+
+	delay := "/v1/projects/acme-prod/serviceAccounts/" + b.clients.DelayAccountEmail(environment.TierProduction)
+	var actors []string
+	for _, binding := range policyOrEmpty(server.accountPolicies[delay]) {
+		if binding.Role == runAsRole {
+			actors = append(actors, binding.Members...)
+		}
+	}
+	if want := []string{"serviceAccount:service-123456789" + cloudTasksAgentDomain}; !slices.Equal(actors, want) {
+		t.Errorf("%v may act as the delay account, want the Cloud Tasks agent alone %v", actors, want)
+	}
+	const member = "serviceAccount:ocel-production@acme-prod.iam.gserviceaccount.com"
+	if bound, _ := server.projectMembers(taskRecordsRole); slices.Contains(bound, member) {
+		t.Errorf("the project binds the delay account to %s, and a delayed message writes no run", taskRecordsRole)
+	}
+	if err := b.ensureDelayQueue(context.Background(), environment.TierProduction); err != nil {
+		t.Fatalf("ensureDelayQueue() = %v", err)
+	}
+	if server.queueWrites != 0 {
+		t.Errorf("%d queue policies were written, want none: apps are granted the queue as they deploy", server.queueWrites)
 	}
 }

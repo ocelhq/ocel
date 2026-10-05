@@ -133,7 +133,7 @@ func accountAdminGrant(email string) string {
 func delayGrants(names Names, region string) []string {
 	var grants []string
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		grants = append(grants, accountAdminGrant(names.WorkloadAccountEmail(tier)), queueAdminGrant(names.DelayQueuePath(region, tier)))
+		grants = append(grants, accountAdminGrant(names.DelayAccountEmail(tier)), queueAdminGrant(names.DelayQueuePath(region, tier)))
 	}
 	return grants
 }

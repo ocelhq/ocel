@@ -567,12 +567,11 @@ func (b bootstrap) purposeOf(tier environment.Tier, name string) accountPurpose 
 		return b.realtimePurpose(tier)
 	}
 	return accountPurpose{
-		displayName: "ocel " + string(tier) + " apps",
-		description: "the identity every app ocel deploys in the " + string(tier) + " tier runs as",
-		ungranted:   reasonUnread,
-		grant:       b.grantReads,
-		forget:      b.forgetReads,
-		granted:     b.readsGranted,
+		displayName: "ocel " + string(tier) + " delayed messages",
+		description: "the identity a delayed message of the " + string(tier) + " tier is published to its topic as",
+		grant:       func(context.Context, environment.Tier) error { return nil },
+		forget:      func(context.Context, environment.Tier) error { return nil },
+		granted:     func(context.Context, environment.Tier) (bool, error) { return true, nil },
 	}
 }
 

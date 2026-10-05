@@ -172,7 +172,7 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 	}
 	rows := map[string]string{
 		"firestore:database/" + liveNames(t).Database():                 provider.StackGroupKind,
-		"iam:serviceaccount/" + liveNames(t).WorkloadAccount(tier):      provider.StackGroupKind,
+		"iam:serviceaccount/" + liveNames(t).DelayAccount(tier):         provider.StackGroupKind,
 		"storage:bucket/" + liveNames(t).Bucket(tier):                   provider.StackGroupKind,
 		"storage:bucket/" + liveNames(t).StateBucket(tier):              provider.StackGroupKind,
 		"kms:keyring/" + liveNames(t).KeyRing():                         provider.StackGroupKind,
@@ -824,16 +824,16 @@ func accounts(t *testing.T) *iam.Service {
 	return service
 }
 
-func TestLiveTheRuntimeAccountExistsWithTheGrantADeployNeeds(t *testing.T) {
+func TestLiveTheDelayAccountExistsWithTheGrantADeployNeeds(t *testing.T) {
 	p := live(t)
 	tier := environment.TierProduction
 	bootstrapped(t, p, tier)
 
 	ctx := context.Background()
 	service := accounts(t)
-	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).WorkloadAccountEmail(tier)
+	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).DelayAccountEmail(tier)
 	if _, err := service.Projects.ServiceAccounts.Get(path).Context(ctx).Do(); err != nil {
-		t.Fatalf("Get(%s) after a bootstrap = %v, want the account every app in the tier runs as", path, err)
+		t.Fatalf("Get(%s) after a bootstrap = %v, want the account a delayed message of the tier is published as", path, err)
 	}
 
 	policy, err := service.Projects.ServiceAccounts.GetIamPolicy(path).Context(ctx).Do()
@@ -847,12 +847,12 @@ func TestLiveTheRuntimeAccountExistsWithTheGrantADeployNeeds(t *testing.T) {
 		}
 	}
 	if !granted {
-		t.Errorf("the policy on %s is %+v, want the bootstrapping principal bound to roles/iam.serviceAccountUser: without it no deploy may hand an app to Cloud Run to run as this account",
+		t.Errorf("the policy on %s is %+v, want the bootstrapping principal bound to roles/iam.serviceAccountUser: without it no deploy may hand a delayed message to Cloud Tasks to publish as this account",
 			path, policy.Bindings)
 	}
 }
 
-func TestLiveRemovingABootstrapTakesTheRuntimeAccountWithIt(t *testing.T) {
+func TestLiveRemovingABootstrapTakesTheDelayAccountWithIt(t *testing.T) {
 	p := live(t)
 	servicesEnabled(t)
 	tier := environment.TierPreview
@@ -866,7 +866,7 @@ func TestLiveRemovingABootstrapTakesTheRuntimeAccountWithIt(t *testing.T) {
 		t.Fatalf("Remove(%s) = %v", tier, err)
 	}
 
-	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).WorkloadAccountEmail(tier)
+	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).DelayAccountEmail(tier)
 	if _, err := accounts(t).Projects.ServiceAccounts.Get(path).Context(ctx).Do(); err == nil {
 		t.Errorf("%s still exists after the bootstrap that named it was removed, and an identity nothing runs as is one more thing to explain", path)
 	}
