@@ -114,7 +114,7 @@ func (c *Backend) ensureServer(ctx context.Context, engine docker.Engine, projec
 }
 
 func prepare(ctx context.Context, engine docker.Engine, server *server, version string) error {
-	err := docker.WaitReady(ctx, readyIn, func(ctx context.Context) error {
+	err := docker.WaitReady(ctx, engine, server.container.ID, readyIn, func(ctx context.Context) error {
 		_, err := engine.Exec(ctx, server.container.ID, "pg_isready", "-h", "127.0.0.1", "-U", superuser)
 		return err
 	})

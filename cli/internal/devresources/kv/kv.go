@@ -122,7 +122,7 @@ func (b *Backend) runStore(ctx context.Context, engine docker.Engine, project, n
 	}
 	container := running.container
 	if !running.ready {
-		err := docker.WaitReady(ctx, readyIn, func(ctx context.Context) error {
+		err := docker.WaitReady(ctx, engine, container.ID, readyIn, func(ctx context.Context) error {
 			_, err := engine.ExecInput(ctx, container.ID, password, kvstore.ValkeyReadyProbe()...)
 			return err
 		})

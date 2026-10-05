@@ -199,7 +199,7 @@ func (b *Backend) running(ctx context.Context, project string) (*pgmq.Engine, er
 		}
 		b.container = &container
 	}
-	err = docker.WaitReady(ctx, readyIn, func(ctx context.Context) error {
+	err = docker.WaitReady(ctx, dockerEngine, b.container.ID, readyIn, func(ctx context.Context) error {
 		_, err := dockerEngine.Exec(ctx, b.container.ID, "pg_isready", "-h", "127.0.0.1", "-U", superuser)
 		return err
 	})

@@ -2,6 +2,7 @@ package docker_test
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/moby/moby/api/pkg/stdcopy"
 
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 )
@@ -25,6 +28,8 @@ type fakeDaemon struct {
 	listed    []string
 	volumes   []string
 	stuck     string
+	printed   string
+	tail      string
 }
 
 var versionPrefix = regexp.MustCompile(`^/v[0-9.]+`)
@@ -96,6 +101,15 @@ func (f *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		delete(f.inspected, strings.TrimPrefix(path, "/containers/"))
 		f.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
+	case r.Method == http.MethodGet && strings.HasSuffix(path, "/logs"):
+		f.mu.Lock()
+		printed := f.printed
+		f.tail = r.URL.Query().Get("tail")
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", "application/vnd.docker.multiplexed-stream")
+		w.WriteHeader(http.StatusOK)
+		frame := binary.BigEndian.AppendUint32([]byte{byte(stdcopy.Stderr), 0, 0, 0}, uint32(len(printed)))
+		_, _ = w.Write(append(frame, printed...))
 	case r.Method == http.MethodGet && strings.HasSuffix(path, "/json"):
 		f.mu.Lock()
 		found, ok := f.inspected[strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/json")]
@@ -337,5 +351,49 @@ func TestRunAdoptsARunningContainerWhoseArgsAreTheSpecs(t *testing.T) {
 	running, err := engine.Run(context.Background(), argued)
 	if err != nil || running.ID != "theirs" {
 		t.Fatalf("Run = %+v, %v, want the running container adopted", running, err)
+	}
+}
+
+func TestReadExitNamesTheExitCodeTheOOMKillAndTheLastLinesOfAContainerThatStopped(t *testing.T) {
+	stopped := inspected("dead", false, map[string]any{"Image": spec.Image})
+	stopped["Name"] = "/" + spec.Name
+	stopped["State"] = map[string]any{"Status": "exited", "Running": false, "ExitCode": 137, "OOMKilled": true}
+	daemon := &fakeDaemon{
+		inspected: map[string]map[string]any{"dead": stopped},
+		printed:   "initdb: creating directories\nFATAL:  could not map anonymous shared memory\n",
+	}
+	engine := openFake(t, daemon)
+
+	exited, err := engine.ReadExit(context.Background(), "dead")
+	if err != nil {
+		t.Fatalf("ReadExit = %v", err)
+	}
+	if exited == nil || exited.Container != spec.Name || exited.Code != 137 || !exited.OOMKilled {
+		t.Fatalf("ReadExit = %+v, want the container's name, exit code 137 and the OOM kill", exited)
+	}
+	if !strings.Contains(exited.Logs, "could not map anonymous shared memory") {
+		t.Errorf("Logs = %q, want what the container printed last", exited.Logs)
+	}
+	if daemon.tail == "" || daemon.tail == "all" {
+		t.Errorf("logs tail = %q, want only the last lines asked for", daemon.tail)
+	}
+}
+
+func TestReadExitIsNilWhileTheContainerRuns(t *testing.T) {
+	daemon := &fakeDaemon{inspected: map[string]map[string]any{"up": inspected("up", true, map[string]any{"Image": spec.Image})}}
+	engine := openFake(t, daemon)
+
+	exited, err := engine.ReadExit(context.Background(), "up")
+	if err != nil || exited != nil {
+		t.Fatalf("ReadExit = %+v, %v, want nil for a running container", exited, err)
+	}
+}
+
+func TestReadExitSaysAContainerThatIsGoneWasRemoved(t *testing.T) {
+	engine := openFake(t, &fakeDaemon{})
+
+	exited, err := engine.ReadExit(context.Background(), "gone")
+	if err != nil || exited == nil || !exited.Removed {
+		t.Fatalf("ReadExit = %+v, %v, want a removal: a container that is gone never becomes ready", exited, err)
 	}
 }

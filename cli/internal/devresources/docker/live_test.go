@@ -31,6 +31,38 @@ func requireDocker(t *testing.T) docker.Engine {
 	return engine
 }
 
+func TestDockerWaitingOnAContainerThatExitedStopsAtOnceWithItsExitCodeAndLastLines(t *testing.T) {
+	engine := requireDocker(t)
+	ctx := context.Background()
+	labels := map[string]string{"dev.ocel.project": "docker-live-exit-test", "dev.ocel.backend": "postgres"}
+	t.Cleanup(func() { _ = engine.Wipe(ctx, labels) })
+
+	running, err := engine.Run(ctx, docker.Spec{
+		Name:   "ocel-dev-docker-live-exit-test",
+		Image:  liveImage,
+		Port:   5432,
+		Labels: labels,
+	})
+	if err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+	started := time.Now()
+	err = docker.WaitReady(ctx, engine, running.ID, time.Minute, func(ctx context.Context) error {
+		_, err := engine.Exec(ctx, running.ID, "pg_isready", "-h", "127.0.0.1")
+		return err
+	})
+	if waited := time.Since(started); waited > 30*time.Second {
+		t.Errorf("WaitReady waited %s on a container that exits as soon as it starts", waited)
+	}
+	var exited *docker.Exited
+	if !errors.As(err, &exited) || exited.Code != 1 || exited.OOMKilled {
+		t.Fatalf("WaitReady = %v, want the exit code 1 postgres exits with when it has no superuser password", err)
+	}
+	if !strings.Contains(err.Error(), "superuser password is not specified") {
+		t.Errorf("WaitReady = %q, want the line postgres printed before it exited", err)
+	}
+}
+
 func TestDockerAContainerRunsOnALoopbackPortAndItsVolumeOutlivesIt(t *testing.T) {
 	engine := requireDocker(t)
 	ctx := context.Background()
@@ -53,7 +85,7 @@ func TestDockerAContainerRunsOnALoopbackPortAndItsVolumeOutlivesIt(t *testing.T)
 	if !strings.HasPrefix(running.Address, "127.0.0.1:") {
 		t.Fatalf("Addr = %q, want a loopback address docker chose", running.Address)
 	}
-	err = docker.WaitReady(ctx, time.Minute, func(ctx context.Context) error {
+	err = docker.WaitReady(ctx, engine, running.ID, time.Minute, func(ctx context.Context) error {
 		_, err := engine.Exec(ctx, running.ID, "pg_isready", "-h", "127.0.0.1")
 		return err
 	})
