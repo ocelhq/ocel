@@ -11,6 +11,7 @@ import (
 	v1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -180,6 +181,58 @@ func (x DoctorVerdict) Number() protoreflect.EnumNumber {
 // Deprecated: Use DoctorVerdict.Descriptor instead.
 func (DoctorVerdict) EnumDescriptor() ([]byte, []int) {
 	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{2}
+}
+
+type ConfigFormat int32
+
+const (
+	ConfigFormat_CONFIG_FORMAT_UNSPECIFIED ConfigFormat = 0
+	ConfigFormat_CONFIG_FORMAT_JSON        ConfigFormat = 1
+	ConfigFormat_CONFIG_FORMAT_YAML        ConfigFormat = 2
+	ConfigFormat_CONFIG_FORMAT_TYPESCRIPT  ConfigFormat = 3
+)
+
+// Enum value maps for ConfigFormat.
+var (
+	ConfigFormat_name = map[int32]string{
+		0: "CONFIG_FORMAT_UNSPECIFIED",
+		1: "CONFIG_FORMAT_JSON",
+		2: "CONFIG_FORMAT_YAML",
+		3: "CONFIG_FORMAT_TYPESCRIPT",
+	}
+	ConfigFormat_value = map[string]int32{
+		"CONFIG_FORMAT_UNSPECIFIED": 0,
+		"CONFIG_FORMAT_JSON":        1,
+		"CONFIG_FORMAT_YAML":        2,
+		"CONFIG_FORMAT_TYPESCRIPT":  3,
+	}
+)
+
+func (x ConfigFormat) Enum() *ConfigFormat {
+	p := new(ConfigFormat)
+	*p = x
+	return p
+}
+
+func (x ConfigFormat) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ConfigFormat) Descriptor() protoreflect.EnumDescriptor {
+	return file_cli_result_v1_result_proto_enumTypes[3].Descriptor()
+}
+
+func (ConfigFormat) Type() protoreflect.EnumType {
+	return &file_cli_result_v1_result_proto_enumTypes[3]
+}
+
+func (x ConfigFormat) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ConfigFormat.Descriptor instead.
+func (ConfigFormat) EnumDescriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{3}
 }
 
 type BindingSetResult struct {
@@ -2278,11 +2331,683 @@ func (x *EnvSourceLink) GetUrl() string {
 	return ""
 }
 
+type PermissionsResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Groups        []*PermissionGroup     `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PermissionsResult) Reset() {
+	*x = PermissionsResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PermissionsResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PermissionsResult) ProtoMessage() {}
+
+func (x *PermissionsResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PermissionsResult.ProtoReflect.Descriptor instead.
+func (*PermissionsResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *PermissionsResult) GetGroups() []*PermissionGroup {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+type PermissionGroup struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Heading       string                 `protobuf:"bytes,1,opt,name=heading,proto3" json:"heading,omitempty"`
+	Document      *structpb.Value        `protobuf:"bytes,2,opt,name=document,proto3" json:"document,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PermissionGroup) Reset() {
+	*x = PermissionGroup{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PermissionGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PermissionGroup) ProtoMessage() {}
+
+func (x *PermissionGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PermissionGroup.ProtoReflect.Descriptor instead.
+func (*PermissionGroup) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *PermissionGroup) GetHeading() string {
+	if x != nil {
+		return x.Heading
+	}
+	return ""
+}
+
+func (x *PermissionGroup) GetDocument() *structpb.Value {
+	if x != nil {
+		return x.Document
+	}
+	return nil
+}
+
+type LoginResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
+	ConsoleUrl    string                 `protobuf:"bytes,2,opt,name=console_url,json=consoleUrl,proto3" json:"console_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LoginResult) Reset() {
+	*x = LoginResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LoginResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LoginResult) ProtoMessage() {}
+
+func (x *LoginResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LoginResult.ProtoReflect.Descriptor instead.
+func (*LoginResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *LoginResult) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *LoginResult) GetConsoleUrl() string {
+	if x != nil {
+		return x.ConsoleUrl
+	}
+	return ""
+}
+
+type LogoutResult struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	LoggedOut      bool                   `protobuf:"varint,1,opt,name=logged_out,json=loggedOut,proto3" json:"logged_out,omitempty"`
+	SessionRevoked bool                   `protobuf:"varint,2,opt,name=session_revoked,json=sessionRevoked,proto3" json:"session_revoked,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *LogoutResult) Reset() {
+	*x = LogoutResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogoutResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogoutResult) ProtoMessage() {}
+
+func (x *LogoutResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogoutResult.ProtoReflect.Descriptor instead.
+func (*LogoutResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *LogoutResult) GetLoggedOut() bool {
+	if x != nil {
+		return x.LoggedOut
+	}
+	return false
+}
+
+func (x *LogoutResult) GetSessionRevoked() bool {
+	if x != nil {
+		return x.SessionRevoked
+	}
+	return false
+}
+
+type LinkResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Organization  *ConsoleOrganization   `protobuf:"bytes,1,opt,name=organization,proto3" json:"organization,omitempty"`
+	Project       *ConsoleProject        `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkResult) Reset() {
+	*x = LinkResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkResult) ProtoMessage() {}
+
+func (x *LinkResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkResult.ProtoReflect.Descriptor instead.
+func (*LinkResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *LinkResult) GetOrganization() *ConsoleOrganization {
+	if x != nil {
+		return x.Organization
+	}
+	return nil
+}
+
+func (x *LinkResult) GetProject() *ConsoleProject {
+	if x != nil {
+		return x.Project
+	}
+	return nil
+}
+
+type ConsoleOrganization struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Slug          string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConsoleOrganization) Reset() {
+	*x = ConsoleOrganization{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsoleOrganization) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsoleOrganization) ProtoMessage() {}
+
+func (x *ConsoleOrganization) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsoleOrganization.ProtoReflect.Descriptor instead.
+func (*ConsoleOrganization) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *ConsoleOrganization) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ConsoleOrganization) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ConsoleOrganization) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+type ConsoleProject struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Slug          string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConsoleProject) Reset() {
+	*x = ConsoleProject{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsoleProject) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsoleProject) ProtoMessage() {}
+
+func (x *ConsoleProject) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsoleProject.ProtoReflect.Descriptor instead.
+func (*ConsoleProject) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *ConsoleProject) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ConsoleProject) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ConsoleProject) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+type UnlinkResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Unlinked      bool                   `protobuf:"varint,1,opt,name=unlinked,proto3" json:"unlinked,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnlinkResult) Reset() {
+	*x = UnlinkResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnlinkResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnlinkResult) ProtoMessage() {}
+
+func (x *UnlinkResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnlinkResult.ProtoReflect.Descriptor instead.
+func (*UnlinkResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *UnlinkResult) GetUnlinked() bool {
+	if x != nil {
+		return x.Unlinked
+	}
+	return false
+}
+
+type LockResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	CliVersion    string                 `protobuf:"bytes,2,opt,name=cli_version,json=cliVersion,proto3" json:"cli_version,omitempty"`
+	Providers     []*PinnedExecutable    `protobuf:"bytes,3,rep,name=providers,proto3" json:"providers,omitempty"`
+	Connectors    []*PinnedExecutable    `protobuf:"bytes,4,rep,name=connectors,proto3" json:"connectors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LockResult) Reset() {
+	*x = LockResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LockResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LockResult) ProtoMessage() {}
+
+func (x *LockResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LockResult.ProtoReflect.Descriptor instead.
+func (*LockResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *LockResult) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *LockResult) GetCliVersion() string {
+	if x != nil {
+		return x.CliVersion
+	}
+	return ""
+}
+
+func (x *LockResult) GetProviders() []*PinnedExecutable {
+	if x != nil {
+		return x.Providers
+	}
+	return nil
+}
+
+func (x *LockResult) GetConnectors() []*PinnedExecutable {
+	if x != nil {
+		return x.Connectors
+	}
+	return nil
+}
+
+type PinnedExecutable struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Digests       map[string]string      `protobuf:"bytes,2,rep,name=digests,proto3" json:"digests,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PinnedExecutable) Reset() {
+	*x = PinnedExecutable{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PinnedExecutable) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PinnedExecutable) ProtoMessage() {}
+
+func (x *PinnedExecutable) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PinnedExecutable.ProtoReflect.Descriptor instead.
+func (*PinnedExecutable) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *PinnedExecutable) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PinnedExecutable) GetDigests() map[string]string {
+	if x != nil {
+		return x.Digests
+	}
+	return nil
+}
+
+type GenerateResult struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Files               []string               `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
+	ClientVariableCount int32                  `protobuf:"varint,2,opt,name=client_variable_count,json=clientVariableCount,proto3" json:"client_variable_count,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *GenerateResult) Reset() {
+	*x = GenerateResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerateResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerateResult) ProtoMessage() {}
+
+func (x *GenerateResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerateResult.ProtoReflect.Descriptor instead.
+func (*GenerateResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *GenerateResult) GetFiles() []string {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *GenerateResult) GetClientVariableCount() int32 {
+	if x != nil {
+		return x.ClientVariableCount
+	}
+	return 0
+}
+
+type InitResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ConfigPath    string                 `protobuf:"bytes,1,opt,name=config_path,json=configPath,proto3" json:"config_path,omitempty"`
+	Format        ConfigFormat           `protobuf:"varint,2,opt,name=format,proto3,enum=cli.result.v1.ConfigFormat" json:"format,omitempty"`
+	Slug          string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	Provider      string                 `protobuf:"bytes,4,opt,name=provider,proto3" json:"provider,omitempty"`
+	Language      string                 `protobuf:"bytes,5,opt,name=language,proto3" json:"language,omitempty"`
+	SdkPackage    *string                `protobuf:"bytes,6,opt,name=sdk_package,json=sdkPackage,proto3,oneof" json:"sdk_package,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InitResult) Reset() {
+	*x = InitResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InitResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InitResult) ProtoMessage() {}
+
+func (x *InitResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InitResult.ProtoReflect.Descriptor instead.
+func (*InitResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *InitResult) GetConfigPath() string {
+	if x != nil {
+		return x.ConfigPath
+	}
+	return ""
+}
+
+func (x *InitResult) GetFormat() ConfigFormat {
+	if x != nil {
+		return x.Format
+	}
+	return ConfigFormat_CONFIG_FORMAT_UNSPECIFIED
+}
+
+func (x *InitResult) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *InitResult) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *InitResult) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *InitResult) GetSdkPackage() string {
+	if x != nil && x.SdkPackage != nil {
+		return *x.SdkPackage
+	}
+	return ""
+}
+
 var File_cli_result_v1_result_proto protoreflect.FileDescriptor
 
 const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\n" +
-	"\x1acli/result/v1/result.proto\x12\rcli.result.v1\x1a'common/environment/v1/environment.proto\x1a\x1bprovider/cost/v1/cost.proto\"V\n" +
+	"\x1acli/result/v1/result.proto\x12\rcli.result.v1\x1a'common/environment/v1/environment.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1bprovider/cost/v1/cost.proto\"V\n" +
 	"\x10BindingSetResult\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05owner\x18\x02 \x01(\tR\x05owner\x12\x18\n" +
@@ -2477,7 +3202,63 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x0edev_local_file\x18\x0e \x01(\tR\fdevLocalFile\"9\n" +
 	"\rEnvSourceLink\x12\x16\n" +
 	"\x06folder\x18\x01 \x01(\tR\x06folder\x12\x10\n" +
-	"\x03url\x18\x02 \x01(\tR\x03url*\x92\x01\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\"K\n" +
+	"\x11PermissionsResult\x126\n" +
+	"\x06groups\x18\x01 \x03(\v2\x1e.cli.result.v1.PermissionGroupR\x06groups\"_\n" +
+	"\x0fPermissionGroup\x12\x18\n" +
+	"\aheading\x18\x01 \x01(\tR\aheading\x122\n" +
+	"\bdocument\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\bdocument\"D\n" +
+	"\vLoginResult\x12\x14\n" +
+	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1f\n" +
+	"\vconsole_url\x18\x02 \x01(\tR\n" +
+	"consoleUrl\"V\n" +
+	"\fLogoutResult\x12\x1d\n" +
+	"\n" +
+	"logged_out\x18\x01 \x01(\bR\tloggedOut\x12'\n" +
+	"\x0fsession_revoked\x18\x02 \x01(\bR\x0esessionRevoked\"\x8d\x01\n" +
+	"\n" +
+	"LinkResult\x12F\n" +
+	"\forganization\x18\x01 \x01(\v2\".cli.result.v1.ConsoleOrganizationR\forganization\x127\n" +
+	"\aproject\x18\x02 \x01(\v2\x1d.cli.result.v1.ConsoleProjectR\aproject\"M\n" +
+	"\x13ConsoleOrganization\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\"H\n" +
+	"\x0eConsoleProject\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\"*\n" +
+	"\fUnlinkResult\x12\x1a\n" +
+	"\bunlinked\x18\x01 \x01(\bR\bunlinked\"\xc1\x01\n" +
+	"\n" +
+	"LockResult\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1f\n" +
+	"\vcli_version\x18\x02 \x01(\tR\n" +
+	"cliVersion\x12=\n" +
+	"\tproviders\x18\x03 \x03(\v2\x1f.cli.result.v1.PinnedExecutableR\tproviders\x12?\n" +
+	"\n" +
+	"connectors\x18\x04 \x03(\v2\x1f.cli.result.v1.PinnedExecutableR\n" +
+	"connectors\"\xaa\x01\n" +
+	"\x10PinnedExecutable\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12F\n" +
+	"\adigests\x18\x02 \x03(\v2,.cli.result.v1.PinnedExecutable.DigestsEntryR\adigests\x1a:\n" +
+	"\fDigestsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Z\n" +
+	"\x0eGenerateResult\x12\x14\n" +
+	"\x05files\x18\x01 \x03(\tR\x05files\x122\n" +
+	"\x15client_variable_count\x18\x02 \x01(\x05R\x13clientVariableCount\"\xe4\x01\n" +
+	"\n" +
+	"InitResult\x12\x1f\n" +
+	"\vconfig_path\x18\x01 \x01(\tR\n" +
+	"configPath\x123\n" +
+	"\x06format\x18\x02 \x01(\x0e2\x1b.cli.result.v1.ConfigFormatR\x06format\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12\x1a\n" +
+	"\bprovider\x18\x04 \x01(\tR\bprovider\x12\x1a\n" +
+	"\blanguage\x18\x05 \x01(\tR\blanguage\x12$\n" +
+	"\vsdk_package\x18\x06 \x01(\tH\x00R\n" +
+	"sdkPackage\x88\x01\x01B\x0e\n" +
+	"\f_sdk_package*\x92\x01\n" +
 	"\x0fDeploymentState\x12 \n" +
 	"\x1cDEPLOYMENT_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOYMENT_STATE_ACTIVE\x10\x01\x12\x1f\n" +
@@ -2493,7 +3274,12 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x13DOCTOR_VERDICT_PASS\x10\x01\x12\x17\n" +
 	"\x13DOCTOR_VERDICT_WARN\x10\x02\x12\x17\n" +
 	"\x13DOCTOR_VERDICT_FAIL\x10\x03\x12\x1a\n" +
-	"\x16DOCTOR_VERDICT_NEUTRAL\x10\x04B9Z7github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1b\x06proto3"
+	"\x16DOCTOR_VERDICT_NEUTRAL\x10\x04*{\n" +
+	"\fConfigFormat\x12\x1d\n" +
+	"\x19CONFIG_FORMAT_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12CONFIG_FORMAT_JSON\x10\x01\x12\x16\n" +
+	"\x12CONFIG_FORMAT_YAML\x10\x02\x12\x1c\n" +
+	"\x18CONFIG_FORMAT_TYPESCRIPT\x10\x03B9Z7github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1b\x06proto3"
 
 var (
 	file_cli_result_v1_result_proto_rawDescOnce sync.Once
@@ -2507,89 +3293,112 @@ func file_cli_result_v1_result_proto_rawDescGZIP() []byte {
 	return file_cli_result_v1_result_proto_rawDescData
 }
 
-var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_cli_result_v1_result_proto_goTypes = []any{
 	(DeploymentState)(0),          // 0: cli.result.v1.DeploymentState
 	(ConnectorLiveness)(0),        // 1: cli.result.v1.ConnectorLiveness
 	(DoctorVerdict)(0),            // 2: cli.result.v1.DoctorVerdict
-	(*BindingSetResult)(nil),      // 3: cli.result.v1.BindingSetResult
-	(*BindingRemoveResult)(nil),   // 4: cli.result.v1.BindingRemoveResult
-	(*BindingListResult)(nil),     // 5: cli.result.v1.BindingListResult
-	(*BindingGenerateResult)(nil), // 6: cli.result.v1.BindingGenerateResult
-	(*BindingSummary)(nil),        // 7: cli.result.v1.BindingSummary
-	(*DomainStatusResult)(nil),    // 8: cli.result.v1.DomainStatusResult
-	(*DomainHostStatus)(nil),      // 9: cli.result.v1.DomainHostStatus
-	(*Certificate)(nil),           // 10: cli.result.v1.Certificate
-	(*CostScanResult)(nil),        // 11: cli.result.v1.CostScanResult
-	(*DeploymentListResult)(nil),  // 12: cli.result.v1.DeploymentListResult
-	(*DeploymentSummary)(nil),     // 13: cli.result.v1.DeploymentSummary
-	(*PreviewListResult)(nil),     // 14: cli.result.v1.PreviewListResult
-	(*PreviewSummary)(nil),        // 15: cli.result.v1.PreviewSummary
-	(*DomainListResult)(nil),      // 16: cli.result.v1.DomainListResult
-	(*PreviewDomainResult)(nil),   // 17: cli.result.v1.PreviewDomainResult
-	(*ConnectorStatusResult)(nil), // 18: cli.result.v1.ConnectorStatusResult
-	(*ConnectorStatus)(nil),       // 19: cli.result.v1.ConnectorStatus
-	(*ConnectorDenial)(nil),       // 20: cli.result.v1.ConnectorDenial
-	(*DoctorResult)(nil),          // 21: cli.result.v1.DoctorResult
-	(*DoctorSection)(nil),         // 22: cli.result.v1.DoctorSection
-	(*DoctorCheck)(nil),           // 23: cli.result.v1.DoctorCheck
-	(*EnvCoordinate)(nil),         // 24: cli.result.v1.EnvCoordinate
-	(*EnvListResult)(nil),         // 25: cli.result.v1.EnvListResult
-	(*EnvValueSummary)(nil),       // 26: cli.result.v1.EnvValueSummary
-	(*EnvGetResult)(nil),          // 27: cli.result.v1.EnvGetResult
-	(*EnvRefsResult)(nil),         // 28: cli.result.v1.EnvRefsResult
-	(*EnvHistoryResult)(nil),      // 29: cli.result.v1.EnvHistoryResult
-	(*EnvVersion)(nil),            // 30: cli.result.v1.EnvVersion
-	(*EnvSourceResult)(nil),       // 31: cli.result.v1.EnvSourceResult
-	(*EnvSourceLink)(nil),         // 32: cli.result.v1.EnvSourceLink
-	nil,                           // 33: cli.result.v1.DeploymentSummary.BuildsEntry
-	(*v1.ResourceSet)(nil),        // 34: provider.cost.v1.ResourceSet
-	(*v1.Estimate)(nil),           // 35: provider.cost.v1.Estimate
-	(v11.Lifecycle)(0),            // 36: common.environment.v1.Lifecycle
-	(v11.Tier)(0),                 // 37: common.environment.v1.Tier
+	(ConfigFormat)(0),             // 3: cli.result.v1.ConfigFormat
+	(*BindingSetResult)(nil),      // 4: cli.result.v1.BindingSetResult
+	(*BindingRemoveResult)(nil),   // 5: cli.result.v1.BindingRemoveResult
+	(*BindingListResult)(nil),     // 6: cli.result.v1.BindingListResult
+	(*BindingGenerateResult)(nil), // 7: cli.result.v1.BindingGenerateResult
+	(*BindingSummary)(nil),        // 8: cli.result.v1.BindingSummary
+	(*DomainStatusResult)(nil),    // 9: cli.result.v1.DomainStatusResult
+	(*DomainHostStatus)(nil),      // 10: cli.result.v1.DomainHostStatus
+	(*Certificate)(nil),           // 11: cli.result.v1.Certificate
+	(*CostScanResult)(nil),        // 12: cli.result.v1.CostScanResult
+	(*DeploymentListResult)(nil),  // 13: cli.result.v1.DeploymentListResult
+	(*DeploymentSummary)(nil),     // 14: cli.result.v1.DeploymentSummary
+	(*PreviewListResult)(nil),     // 15: cli.result.v1.PreviewListResult
+	(*PreviewSummary)(nil),        // 16: cli.result.v1.PreviewSummary
+	(*DomainListResult)(nil),      // 17: cli.result.v1.DomainListResult
+	(*PreviewDomainResult)(nil),   // 18: cli.result.v1.PreviewDomainResult
+	(*ConnectorStatusResult)(nil), // 19: cli.result.v1.ConnectorStatusResult
+	(*ConnectorStatus)(nil),       // 20: cli.result.v1.ConnectorStatus
+	(*ConnectorDenial)(nil),       // 21: cli.result.v1.ConnectorDenial
+	(*DoctorResult)(nil),          // 22: cli.result.v1.DoctorResult
+	(*DoctorSection)(nil),         // 23: cli.result.v1.DoctorSection
+	(*DoctorCheck)(nil),           // 24: cli.result.v1.DoctorCheck
+	(*EnvCoordinate)(nil),         // 25: cli.result.v1.EnvCoordinate
+	(*EnvListResult)(nil),         // 26: cli.result.v1.EnvListResult
+	(*EnvValueSummary)(nil),       // 27: cli.result.v1.EnvValueSummary
+	(*EnvGetResult)(nil),          // 28: cli.result.v1.EnvGetResult
+	(*EnvRefsResult)(nil),         // 29: cli.result.v1.EnvRefsResult
+	(*EnvHistoryResult)(nil),      // 30: cli.result.v1.EnvHistoryResult
+	(*EnvVersion)(nil),            // 31: cli.result.v1.EnvVersion
+	(*EnvSourceResult)(nil),       // 32: cli.result.v1.EnvSourceResult
+	(*EnvSourceLink)(nil),         // 33: cli.result.v1.EnvSourceLink
+	(*PermissionsResult)(nil),     // 34: cli.result.v1.PermissionsResult
+	(*PermissionGroup)(nil),       // 35: cli.result.v1.PermissionGroup
+	(*LoginResult)(nil),           // 36: cli.result.v1.LoginResult
+	(*LogoutResult)(nil),          // 37: cli.result.v1.LogoutResult
+	(*LinkResult)(nil),            // 38: cli.result.v1.LinkResult
+	(*ConsoleOrganization)(nil),   // 39: cli.result.v1.ConsoleOrganization
+	(*ConsoleProject)(nil),        // 40: cli.result.v1.ConsoleProject
+	(*UnlinkResult)(nil),          // 41: cli.result.v1.UnlinkResult
+	(*LockResult)(nil),            // 42: cli.result.v1.LockResult
+	(*PinnedExecutable)(nil),      // 43: cli.result.v1.PinnedExecutable
+	(*GenerateResult)(nil),        // 44: cli.result.v1.GenerateResult
+	(*InitResult)(nil),            // 45: cli.result.v1.InitResult
+	nil,                           // 46: cli.result.v1.DeploymentSummary.BuildsEntry
+	nil,                           // 47: cli.result.v1.PinnedExecutable.DigestsEntry
+	(*v1.ResourceSet)(nil),        // 48: provider.cost.v1.ResourceSet
+	(*v1.Estimate)(nil),           // 49: provider.cost.v1.Estimate
+	(v11.Lifecycle)(0),            // 50: common.environment.v1.Lifecycle
+	(v11.Tier)(0),                 // 51: common.environment.v1.Tier
+	(*structpb.Value)(nil),        // 52: google.protobuf.Value
 }
 var file_cli_result_v1_result_proto_depIdxs = []int32{
-	7,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
-	7,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
-	9,  // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
-	10, // 3: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
-	34, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
-	35, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
-	13, // 6: cli.result.v1.DeploymentListResult.deployments:type_name -> cli.result.v1.DeploymentSummary
-	33, // 7: cli.result.v1.DeploymentSummary.builds:type_name -> cli.result.v1.DeploymentSummary.BuildsEntry
+	8,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
+	8,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
+	10, // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
+	11, // 3: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
+	48, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
+	49, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
+	14, // 6: cli.result.v1.DeploymentListResult.deployments:type_name -> cli.result.v1.DeploymentSummary
+	46, // 7: cli.result.v1.DeploymentSummary.builds:type_name -> cli.result.v1.DeploymentSummary.BuildsEntry
 	0,  // 8: cli.result.v1.DeploymentSummary.state:type_name -> cli.result.v1.DeploymentState
-	15, // 9: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
-	36, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
-	9,  // 11: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
-	10, // 12: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
-	19, // 13: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
+	16, // 9: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
+	50, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
+	10, // 11: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
+	11, // 12: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
+	20, // 13: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
 	1,  // 14: cli.result.v1.ConnectorStatus.liveness:type_name -> cli.result.v1.ConnectorLiveness
-	20, // 15: cli.result.v1.ConnectorStatus.last_denied:type_name -> cli.result.v1.ConnectorDenial
+	21, // 15: cli.result.v1.ConnectorStatus.last_denied:type_name -> cli.result.v1.ConnectorDenial
 	2,  // 16: cli.result.v1.DoctorResult.verdict:type_name -> cli.result.v1.DoctorVerdict
-	22, // 17: cli.result.v1.DoctorResult.sections:type_name -> cli.result.v1.DoctorSection
-	23, // 18: cli.result.v1.DoctorSection.checks:type_name -> cli.result.v1.DoctorCheck
+	23, // 17: cli.result.v1.DoctorResult.sections:type_name -> cli.result.v1.DoctorSection
+	24, // 18: cli.result.v1.DoctorSection.checks:type_name -> cli.result.v1.DoctorCheck
 	2,  // 19: cli.result.v1.DoctorCheck.verdict:type_name -> cli.result.v1.DoctorVerdict
-	37, // 20: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
-	26, // 21: cli.result.v1.EnvListResult.values:type_name -> cli.result.v1.EnvValueSummary
-	24, // 22: cli.result.v1.EnvValueSummary.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	24, // 23: cli.result.v1.EnvValueSummary.target:type_name -> cli.result.v1.EnvCoordinate
-	37, // 24: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
-	24, // 25: cli.result.v1.EnvGetResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	24, // 26: cli.result.v1.EnvGetResult.target:type_name -> cli.result.v1.EnvCoordinate
-	37, // 27: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
-	24, // 28: cli.result.v1.EnvRefsResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	24, // 29: cli.result.v1.EnvRefsResult.references:type_name -> cli.result.v1.EnvCoordinate
-	37, // 30: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
-	24, // 31: cli.result.v1.EnvHistoryResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	30, // 32: cli.result.v1.EnvHistoryResult.versions:type_name -> cli.result.v1.EnvVersion
-	37, // 33: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
-	32, // 34: cli.result.v1.EnvSourceResult.links:type_name -> cli.result.v1.EnvSourceLink
-	35, // [35:35] is the sub-list for method output_type
-	35, // [35:35] is the sub-list for method input_type
-	35, // [35:35] is the sub-list for extension type_name
-	35, // [35:35] is the sub-list for extension extendee
-	0,  // [0:35] is the sub-list for field type_name
+	51, // 20: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
+	27, // 21: cli.result.v1.EnvListResult.values:type_name -> cli.result.v1.EnvValueSummary
+	25, // 22: cli.result.v1.EnvValueSummary.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	25, // 23: cli.result.v1.EnvValueSummary.target:type_name -> cli.result.v1.EnvCoordinate
+	51, // 24: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
+	25, // 25: cli.result.v1.EnvGetResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	25, // 26: cli.result.v1.EnvGetResult.target:type_name -> cli.result.v1.EnvCoordinate
+	51, // 27: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
+	25, // 28: cli.result.v1.EnvRefsResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	25, // 29: cli.result.v1.EnvRefsResult.references:type_name -> cli.result.v1.EnvCoordinate
+	51, // 30: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
+	25, // 31: cli.result.v1.EnvHistoryResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	31, // 32: cli.result.v1.EnvHistoryResult.versions:type_name -> cli.result.v1.EnvVersion
+	51, // 33: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
+	33, // 34: cli.result.v1.EnvSourceResult.links:type_name -> cli.result.v1.EnvSourceLink
+	35, // 35: cli.result.v1.PermissionsResult.groups:type_name -> cli.result.v1.PermissionGroup
+	52, // 36: cli.result.v1.PermissionGroup.document:type_name -> google.protobuf.Value
+	39, // 37: cli.result.v1.LinkResult.organization:type_name -> cli.result.v1.ConsoleOrganization
+	40, // 38: cli.result.v1.LinkResult.project:type_name -> cli.result.v1.ConsoleProject
+	43, // 39: cli.result.v1.LockResult.providers:type_name -> cli.result.v1.PinnedExecutable
+	43, // 40: cli.result.v1.LockResult.connectors:type_name -> cli.result.v1.PinnedExecutable
+	47, // 41: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
+	3,  // 42: cli.result.v1.InitResult.format:type_name -> cli.result.v1.ConfigFormat
+	43, // [43:43] is the sub-list for method output_type
+	43, // [43:43] is the sub-list for method input_type
+	43, // [43:43] is the sub-list for extension type_name
+	43, // [43:43] is the sub-list for extension extendee
+	0,  // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_cli_result_v1_result_proto_init() }
@@ -2599,13 +3408,14 @@ func file_cli_result_v1_result_proto_init() {
 	}
 	file_cli_result_v1_result_proto_msgTypes[23].OneofWrappers = []any{}
 	file_cli_result_v1_result_proto_msgTypes[24].OneofWrappers = []any{}
+	file_cli_result_v1_result_proto_msgTypes[41].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_result_v1_result_proto_rawDesc), len(file_cli_result_v1_result_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   31,
+			NumEnums:      4,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -4,6 +4,7 @@ package cli.result.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1";
 
 import "common/environment/v1/environment.proto";
+import "google/protobuf/struct.proto";
 import "provider/cost/v1/cost.proto";
 
 message BindingSetResult {
@@ -344,4 +345,95 @@ message EnvSourceLink {
   string folder = 1;
 
   string url = 2;
+}
+
+message PermissionsResult {
+  repeated PermissionGroup groups = 1;
+}
+
+message PermissionGroup {
+  string heading = 1;
+
+  google.protobuf.Value document = 2;
+}
+
+message LoginResult {
+  string email = 1;
+
+  string console_url = 2;
+}
+
+message LogoutResult {
+  bool logged_out = 1;
+
+  bool session_revoked = 2;
+}
+
+message LinkResult {
+  ConsoleOrganization organization = 1;
+
+  ConsoleProject project = 2;
+}
+
+message ConsoleOrganization {
+  string id = 1;
+
+  string name = 2;
+
+  string slug = 3;
+}
+
+message ConsoleProject {
+  string id = 1;
+
+  string name = 2;
+
+  string slug = 3;
+}
+
+message UnlinkResult {
+  bool unlinked = 1;
+}
+
+message LockResult {
+  string path = 1;
+
+  string cli_version = 2;
+
+  repeated PinnedExecutable providers = 3;
+
+  repeated PinnedExecutable connectors = 4;
+}
+
+message PinnedExecutable {
+  string name = 1;
+
+  map<string, string> digests = 2;
+}
+
+message GenerateResult {
+  repeated string files = 1;
+
+  int32 client_variable_count = 2;
+}
+
+enum ConfigFormat {
+  CONFIG_FORMAT_UNSPECIFIED = 0;
+  CONFIG_FORMAT_JSON = 1;
+  CONFIG_FORMAT_YAML = 2;
+  CONFIG_FORMAT_TYPESCRIPT = 3;
+}
+
+message InitResult {
+  string config_path = 1;
+
+  ConfigFormat format = 2;
+
+  string slug = 3;
+
+  string provider = 4;
+
+  string language = 5;
+
+  optional string sdk_package = 6;
 }
