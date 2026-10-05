@@ -1,0 +1,112 @@
+{
+  "$defs": {
+    "cli.result.v1.EnvCoordinate.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "environment": {
+          "default": "",
+          "type": "string"
+        },
+        "folder": {
+          "default": "",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "type": "string"
+        },
+        "project": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Env Coordinate",
+      "type": "object"
+    },
+    "cli.result.v1.EnvHistoryResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "coordinate": {
+          "$ref": "#/$defs/cli.result.v1.EnvCoordinate.jsonschema.json"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "pattern": "^TIER_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "TIER_PREVIEW",
+                "TIER_PRODUCTION"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Tier"
+        },
+        "versions": {
+          "items": {
+            "$ref": "#/$defs/cli.result.v1.EnvVersion.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Env History Result",
+      "type": "object"
+    },
+    "cli.result.v1.EnvVersion.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(created_at)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "createdAt": {
+          "default": "",
+          "type": "string"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        }
+      },
+      "title": "Env Version",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.EnvHistoryResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.EnvHistoryResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

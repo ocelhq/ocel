@@ -1,0 +1,151 @@
+{
+  "$defs": {
+    "cli.result.v1.EnvSourceLink.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "folder": {
+          "default": "",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Env Source Link",
+      "type": "object"
+    },
+    "cli.result.v1.EnvSourceResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(can_create)$": {
+          "default": false,
+          "type": "boolean"
+        },
+        "^(can_update)$": {
+          "default": false,
+          "type": "boolean"
+        },
+        "^(configured_env_source)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(dev_env_source)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(dev_local_file)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(env_source)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(last_attempt_at)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(last_error)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(last_success_at)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(owns_values)$": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "properties": {
+        "canCreate": {
+          "default": false,
+          "type": "boolean"
+        },
+        "canUpdate": {
+          "default": false,
+          "type": "boolean"
+        },
+        "configuredEnvSource": {
+          "default": "",
+          "type": "string"
+        },
+        "credentials": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "devEnvSource": {
+          "default": "",
+          "type": "string"
+        },
+        "devLocalFile": {
+          "default": "",
+          "type": "string"
+        },
+        "envSource": {
+          "default": "",
+          "type": "string"
+        },
+        "lastAttemptAt": {
+          "default": "",
+          "type": "string"
+        },
+        "lastError": {
+          "default": "",
+          "type": "string"
+        },
+        "lastSuccessAt": {
+          "default": "",
+          "type": "string"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/cli.result.v1.EnvSourceLink.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "ownsValues": {
+          "default": false,
+          "type": "boolean"
+        },
+        "scheduled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "pattern": "^TIER_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "TIER_PREVIEW",
+                "TIER_PRODUCTION"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Tier"
+        }
+      },
+      "title": "Env Source Result",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.EnvSourceResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.EnvSourceResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,126 @@
+{
+  "$defs": {
+    "cli.result.v1.Certificate.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(expires_at)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(expiring_soon)$": {
+          "default": false,
+          "type": "boolean"
+        },
+        "^(last_probe_at)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(last_probe_ok)$": {
+          "default": false,
+          "type": "boolean"
+        },
+        "^(manual_records)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "^(records_written)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "^(renewal_status)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "expiresAt": {
+          "default": "",
+          "type": "string"
+        },
+        "expiringSoon": {
+          "default": false,
+          "type": "boolean"
+        },
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "lastProbeAt": {
+          "default": "",
+          "type": "string"
+        },
+        "lastProbeOk": {
+          "default": false,
+          "type": "boolean"
+        },
+        "manualRecords": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "recordsWritten": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "renewalStatus": {
+          "default": "",
+          "type": "string"
+        },
+        "status": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Certificate",
+      "type": "object"
+    },
+    "cli.result.v1.DomainHostStatus.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(serving_pointer)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "certificate": {
+          "$ref": "#/$defs/cli.result.v1.Certificate.jsonschema.json"
+        },
+        "declared": {
+          "default": false,
+          "type": "boolean"
+        },
+        "hostname": {
+          "default": "",
+          "type": "string"
+        },
+        "pending": {
+          "default": "",
+          "type": "string"
+        },
+        "ready": {
+          "default": false,
+          "type": "boolean"
+        },
+        "servingPointer": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Domain Host Status",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.DomainHostStatus.schema.json",
+  "$ref": "#/$defs/cli.result.v1.DomainHostStatus.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,108 @@
+{
+  "$defs": {
+    "cli.result.v1.EnvCoordinate.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "environment": {
+          "default": "",
+          "type": "string"
+        },
+        "folder": {
+          "default": "",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "type": "string"
+        },
+        "project": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Env Coordinate",
+      "type": "object"
+    },
+    "cli.result.v1.EnvGetResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(updated_at)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "coordinate": {
+          "$ref": "#/$defs/cli.result.v1.EnvCoordinate.jsonschema.json"
+        },
+        "revealed": {
+          "default": false,
+          "type": "boolean"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        },
+        "target": {
+          "$ref": "#/$defs/cli.result.v1.EnvCoordinate.jsonschema.json"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "pattern": "^TIER_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "TIER_PREVIEW",
+                "TIER_PRODUCTION"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Tier"
+        },
+        "updatedAt": {
+          "default": "",
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        }
+      },
+      "title": "Env Get Result",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.EnvGetResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.EnvGetResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

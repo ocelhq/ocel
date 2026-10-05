@@ -1,0 +1,26 @@
+{
+  "$defs": {
+    "cli.result.v1.PermissionGroup.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "$ref": "#/$defs/google.protobuf.Value.jsonschema.json"
+        },
+        "heading": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Permission Group",
+      "type": "object"
+    },
+    "google.protobuf.Value.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Value"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.PermissionGroup.schema.json",
+  "$ref": "#/$defs/cli.result.v1.PermissionGroup.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

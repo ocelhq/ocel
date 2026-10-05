@@ -1,0 +1,11 @@
+version: v2
+inputs:
+  - directory: proto
+    paths:
+      - proto/cli/stream
+      - proto/cli/result
+plugins:
+  - remote: buf.build/bufbuild/protoschema-jsonschema:v0.6.0
+    out: .
+    opt:
+      - target=json-bundle

@@ -1,0 +1,27 @@
+{
+  "$defs": {
+    "cli.result.v1.ConnectorDenial.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "default": "",
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "type": "string"
+        },
+        "verb": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Connector Denial",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.ConnectorDenial.schema.json",
+  "$ref": "#/$defs/cli.result.v1.ConnectorDenial.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

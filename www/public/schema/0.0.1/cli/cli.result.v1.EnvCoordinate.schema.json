@@ -1,0 +1,31 @@
+{
+  "$defs": {
+    "cli.result.v1.EnvCoordinate.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "environment": {
+          "default": "",
+          "type": "string"
+        },
+        "folder": {
+          "default": "",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "type": "string"
+        },
+        "project": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Env Coordinate",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.EnvCoordinate.schema.json",
+  "$ref": "#/$defs/cli.result.v1.EnvCoordinate.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

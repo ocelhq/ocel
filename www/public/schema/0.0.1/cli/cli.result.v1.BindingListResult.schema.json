@@ -1,0 +1,58 @@
+{
+  "$defs": {
+    "cli.result.v1.BindingListResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "bindings": {
+          "items": {
+            "$ref": "#/$defs/cli.result.v1.BindingSummary.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Binding List Result",
+      "type": "object"
+    },
+    "cli.result.v1.BindingSummary.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "default": "",
+          "type": "string"
+        },
+        "owner": {
+          "default": "",
+          "type": "string"
+        },
+        "source": {
+          "default": "",
+          "type": "string"
+        },
+        "type": {
+          "default": "",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        }
+      },
+      "title": "Binding Summary",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.BindingListResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.BindingListResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

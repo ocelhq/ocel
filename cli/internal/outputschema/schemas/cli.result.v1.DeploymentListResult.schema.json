@@ -1,0 +1,83 @@
+{
+  "$defs": {
+    "cli.result.v1.DeploymentListResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "deployments": {
+          "items": {
+            "$ref": "#/$defs/cli.result.v1.DeploymentSummary.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Deployment List Result",
+      "type": "object"
+    },
+    "cli.result.v1.DeploymentSummary.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(created_at)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(promotion_id)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "builds": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "createdAt": {
+          "default": "",
+          "type": "string"
+        },
+        "promotionId": {
+          "default": "",
+          "type": "string"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "pattern": "^DEPLOYMENT_STATE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "DEPLOYMENT_STATE_ACTIVE",
+                "DEPLOYMENT_STATE_UNPROMOTED",
+                "DEPLOYMENT_STATE_SUPERSEDED"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Deployment State"
+        },
+        "tag": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Deployment Summary",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.DeploymentListResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.DeploymentListResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,23 @@
+{
+  "$defs": {
+    "cli.stream.v1.Assumption.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "warning": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Assumption",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.stream.v1.Assumption.schema.json",
+  "$ref": "#/$defs/cli.stream.v1.Assumption.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

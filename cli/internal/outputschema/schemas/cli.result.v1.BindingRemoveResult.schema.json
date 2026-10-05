@@ -1,0 +1,23 @@
+{
+  "$defs": {
+    "cli.result.v1.BindingRemoveResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "default": "",
+          "type": "string"
+        },
+        "removed": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "Binding Remove Result",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.BindingRemoveResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.BindingRemoveResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
