@@ -95,6 +95,7 @@ func plant(t *testing.T, of string) planted {
 	t.Cleanup(func() {
 		exec.Command(engine, "rm", "--force", "--volumes", left.labelled).Run()
 	})
+	defer sweepingAlone()()
 	does(append(append([]string{"run", "--detach", "--name", left.labelled}, labelledAs(of)...),
 		"--network", "none", "--entrypoint", "sleep", images.ObjectStore(), "600")...)
 
