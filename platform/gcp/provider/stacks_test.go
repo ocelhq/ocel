@@ -214,7 +214,7 @@ func TestReclaimingADroppedFunctionReleaseLeavesTheServiceServingTheActiveReleas
 	if !servedBy(service.Traffic, active.Revision) {
 		t.Errorf("the service serves %+v after the reclaim, want all of it still on the active release's %s", service.Traffic, active.Revision)
 	}
-	if revisions := server.standing(); !slices.Equal(revisions, []string{active.Revision}) {
+	if revisions := server.remaining(); !slices.Equal(revisions, []string{active.Revision}) {
 		t.Errorf("the service keeps revisions %v after the reclaim, want only %s: the dropped release's revision is its own to reclaim", revisions, active.Revision)
 	}
 }
@@ -405,5 +405,140 @@ func TestAReleaseWithNoEdgeInFrontTagsNoRevision(t *testing.T) {
 			t.Errorf("the service carries %+v, want no tag: with nothing in front, Cloud Run answers a tag on its own run.app url, "+
 				"so a tag would publish each unpromoted revision to anyone once the service is open", server.serving().Traffic)
 		}
+	}
+}
+
+func TestPruningAReleaseUntagsTheImageNoRemainingRevisionRuns(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	released := newReleasedStacks(p)
+	dropped := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout@sha256:one")
+	released.provision(t, dropped)
+	unchanged := functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout@sha256:one")
+	released.provision(t, unchanged)
+	active := released.provision(t, functionRelease("d3", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout@sha256:two"))
+	if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", active.Revision, err)
+	}
+
+	released.destroy(t, dropped.Ref)
+	if got := server.untags(); len(got) != 0 {
+		t.Fatalf("pruning d1 untagged %v, want nothing: d2 still runs the same image", got)
+	}
+	released.destroy(t, unchanged.Ref)
+
+	want := []string{"projects/acme/locations/europe-west1/repositories/ocel-preview/packages/web-checkout/tags/sha256-one"}
+	if got := server.untags(); !slices.Equal(got, want) {
+		t.Errorf("pruning the last release on sha256-one untagged %v, want %v: the repository's cleanup policy deletes an untagged image a week on, "+
+			"and a tag no release runs keeps it forever", got, want)
+	}
+}
+
+func TestDestroyingEveryReleaseOfAFunctionUntagsEveryImageItsRevisionsRan(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	released := newReleasedStacks(p)
+	only := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout@sha256:one")
+	released.provision(t, only)
+
+	released.destroy(t, only.Ref)
+
+	want := []string{"projects/acme/locations/europe-west1/repositories/ocel-preview/packages/web-checkout/tags/sha256-one"}
+	if got := server.untags(); !slices.Equal(got, want) {
+		t.Errorf("destroying the service untagged %v, want %v", got, want)
+	}
+}
+
+func TestDestroyingAServiceLeavesTaggedAnImageAnotherServiceInTheRegionRuns(t *testing.T) {
+	server := &runServer{elsewhere: map[string]string{
+		"ocel-shop-prod-web-w-media-00001": "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one",
+	}}
+	p := server.open(t)
+	released := newReleasedStacks(p)
+	only := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one")
+	released.provision(t, only)
+
+	released.destroy(t, only.Ref)
+
+	if got := server.untags(); len(got) != 0 {
+		t.Errorf("destroying the service untagged %v, want nothing: a worker in the region still runs that image, "+
+			"and the repository would delete it from under the worker a week on", got)
+	}
+}
+
+func TestPruningAsksAfterEachImageByItsLabelAndListsNothingOfTheRegion(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	released := newReleasedStacks(p)
+	first := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one")
+	one := released.provision(t, first)
+	second := functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-two")
+	two := released.provision(t, second)
+	active := released.provision(t, functionRelease("d3", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-three"))
+	if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", active.Revision, err)
+	}
+
+	if _, err := p.RemoveFunctionRevisions(context.Background(), first.Ref, []provider.Function{one, two}, nil); err != nil {
+		t.Fatalf("RemoveFunctionRevisions = %v", err)
+	}
+
+	if got := server.regionListings(); got != 0 {
+		t.Errorf("pruning listed every revision in the region %d times, want none: that listing grows with every service in the account", got)
+	}
+	if got := server.labelQueries(); len(got) != 2 {
+		t.Errorf("pruning asked %v, want one question per image it would untag, each naming the image's label", got)
+	}
+	if got := server.untags(); len(got) != 2 {
+		t.Errorf("pruning untagged %v, want both images no remaining revision runs", got)
+	}
+}
+
+func TestAReleaseTagsItsImageAgainWhenAPruneUntaggedItSinceThePush(t *testing.T) {
+	image := "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one"
+	server := &runServer{missing: []string{"projects/acme/locations/europe-west1/repositories/ocel-preview/packages/web-checkout/tags/sha256-one"}}
+	p := server.open(t)
+
+	newReleasedStacks(p).provision(t, functionRelease("d1", image))
+
+	want := []string{"projects/acme/locations/europe-west1/repositories/ocel-preview/packages/web-checkout/tags/sha256-one -> " +
+		"projects/acme/locations/europe-west1/repositories/ocel-preview/packages/web-checkout/versions/sha256:one"}
+	if got := server.retags(); !slices.Equal(got, want) {
+		t.Errorf("the release tagged %v, want %v: a deploy that skipped its push because the tag was there hands Cloud Run a tag a prune may have taken since", got, want)
+	}
+}
+
+func TestAReleaseLeavesATagThatIsStillThereAlone(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+
+	newReleasedStacks(p).provision(t, functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one"))
+
+	if got := server.retags(); len(got) != 0 {
+		t.Errorf("the release tagged %v, want nothing: the tag it hands Cloud Run is there", got)
+	}
+}
+
+func TestPruningLeavesTaggedAnImageARemainingReleaseOfTheServiceRuns(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	released := newReleasedStacks(p)
+	image := "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one"
+	first := functionRelease("d1", image)
+	one := released.provision(t, first)
+	second := functionRelease("d2", image)
+	second.App.Functions[0].Env = map[string]string{"GREETING": "hello"}
+	released.provision(t, second)
+	active := released.provision(t, functionRelease("d3", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-three"))
+	if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", active.Revision, err)
+	}
+
+	if _, err := p.RemoveFunctionRevisions(context.Background(), first.Ref, []provider.Function{one}, nil); err != nil {
+		t.Fatalf("RemoveFunctionRevisions = %v", err)
+	}
+
+	if got := server.untags(); len(got) != 0 {
+		t.Errorf("pruning d1 untagged %v, want nothing: d2's revision runs the same image, and its release labels the revision with it", got)
 	}
 }

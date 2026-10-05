@@ -164,6 +164,7 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose) (edge.Credentia
 		if purpose == edge.PurposeDeploy {
 			roles = append(roles, realtimeSecretsGrant(names), appGrantsGrant(names), names.AppAccountsRolePath())
 			roles = append(roles, queueGrants(names, c.Region)...)
+			roles = append(roles, untaggingGrants(names, c.Region)...)
 		}
 		heading := fmt.Sprintf("the roles a %s credential is granted on project %s, where %s is the number `gcloud projects describe %s --format='value(projectNumber)'` prints",
 			purpose, project, projectNumberHole, project)

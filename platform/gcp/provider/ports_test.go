@@ -236,6 +236,7 @@ func TestTheCredentialsPortNamesTheRolesEachPurposeIsGranted(t *testing.T) {
 			"roles/storage.objectAdmin",
 			"roles/artifactregistry.writer",
 			"roles/iam.serviceAccountUser",
+			"roles/iap.admin",
 		},
 		edge.PurposeBootstrap: {
 			"roles/run.admin",
@@ -361,6 +362,28 @@ func TestADeployMayLetViewersThroughToTheCloudRunServicesOfItsNamespaceAndNoOthe
 	for _, line := range strings.Split(document.Document, "\n") {
 		if line == "roles/iap.admin" {
 			t.Errorf("Permissions(deploy) grants roles/iap.admin unconditioned, which rewrites who reaches every app, VM and tunnel the proxy guards in the project")
+		}
+	}
+}
+
+func TestADeployMayUntagImagesInItsOwnRepositoriesAndNoOther(t *testing.T) {
+	t.Parallel()
+
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	if err != nil {
+		t.Fatalf("Permissions(deploy) = %v", err)
+	}
+	for _, line := range strings.Split(document.Document, "\n") {
+		if line == "roles/artifactregistry.repoAdmin" {
+			t.Errorf("Permissions(deploy) grants roles/artifactregistry.repoAdmin on the project, which deletes images in every repository in it")
+		}
+	}
+	for _, repository := range []string{
+		"projects/acme-prod/locations/europe-west1/repositories/ocel-acme-prod-preview",
+		"projects/acme-prod/locations/europe-west1/repositories/ocel-acme-prod-production",
+	} {
+		if want := "roles/artifactregistry.repoAdmin, on the repository " + repository; !strings.Contains(document.Document, want) {
+			t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a prune untags the images no revision runs any more", document.Document, want)
 		}
 	}
 }

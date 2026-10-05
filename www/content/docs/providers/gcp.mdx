@@ -364,6 +364,21 @@ gcloud projects add-iam-policy-binding my-project \
 Secret Manager checks creating a secret against the project, so the condition cannot narrow
 what a deploy may create; it narrows every read, write and deletion of a secret that exists.
 
+A prune or a destroy untags the images no Cloud Run revision runs any more, and the
+repository deletes an untagged image a week later. A deploy that finds its image already
+pushed tags it again if a prune untagged it since. Artifact Registry takes no condition on
+an image's name, so grant `roles/artifactregistry.repoAdmin` on the two repositories the
+bootstrap makes, one per tier, and nowhere else:
+
+```bash
+for tier in preview production; do
+  gcloud artifacts repositories add-iam-policy-binding ocel-my-project-$tier \
+    --location=europe-west1 --project=my-project \
+    --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+    --role=roles/artifactregistry.repoAdmin
+done
+```
+
 A bootstrap needs those, with `roles/secretmanager.admin` unconditioned in place of the
 realtime grant, plus `roles/datastore.owner`, `roles/storage.admin`,
 `roles/cloudkms.admin`, `roles/artifactregistry.admin`,

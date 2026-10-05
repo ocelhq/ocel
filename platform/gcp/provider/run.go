@@ -158,6 +158,7 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 		Volumes:                       volumes,
 		MaxInstanceRequestConcurrency: int64(s.concurrency),
 		ExecutionEnvironment:          s.generation,
+		Labels:                        map[string]string{imageLabel: imageLabelValue(s.image)},
 	}
 	if s.egress != nil {
 		template.VpcAccess = &run.GoogleCloudRunV2VpcAccess{
@@ -266,35 +267,17 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress progre
 	if err != nil {
 		return release{}, err
 	}
-
-	_, err = attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
-		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
-	})
-	switch {
-	case absent(err):
-		ensureProgress(progress).Say("Creating Cloud Run service " + s.service + " in " + clients.region)
-		err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-			return services.Projects.Locations.Services.
-				Create(clients.location(), desired).ServiceId(s.service).Context(ctx).Do(call...)
-		})
-	case err != nil:
-		return release{}, fmt.Errorf("read the Cloud Run service %s: %w", s.service, err)
-	default:
-		ensureProgress(progress).Say("Releasing a new revision of Cloud Run service " + s.service + " in " + clients.region)
-		err = p.retryWrite(ctx, "release "+s.service+" onto Cloud Run", func() error {
-			current, err := p.read(ctx, services, path, s.service)
-			if err != nil {
-				return err
-			}
-			desired.Etag = current.Etag
-			desired.Traffic = heldTraffic(current)
-			if opened, _ := openingOf(desired); opened != nil && isOpen(current) {
-				desired.InvokerIamDisabled, desired.IapEnabled = opened.InvokerIamDisabled, opened.IapEnabled
-			}
-			return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-				return services.Projects.Locations.Services.Patch(path, desired).Context(ctx).Do(call...)
-			})
-		})
+	if err := p.ensureImageTag(ctx, clients, s.image); err != nil {
+		return release{}, err
+	}
+	err = p.writeRelease(ctx, clients, services, s, desired, progress)
+	if isImageMissing(err, s.image) {
+		ensureProgress(progress).Say("Cloud Run found no image " + s.image + ", which a prune untagged during this release: tagging it again and releasing " + s.service + " once more")
+		if err := p.ensureImageTag(ctx, clients, s.image); err != nil {
+			return release{}, err
+		}
+		desired.Template.Labels[imageRetaggedLabel] = "true"
+		err = p.writeRelease(ctx, clients, services, s, desired, progress)
 	}
 	if err != nil {
 		return release{}, err
@@ -313,6 +296,40 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress progre
 		}
 	}
 	return release{url: deployed.Uri, revision: revision}, nil
+}
+
+func (p *Provider) writeRelease(ctx context.Context, clients *clients, services *run.Service, s serving, desired *run.GoogleCloudRunV2Service, progress progress.Log) error {
+	path := clients.servicePath(s.service)
+	_, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
+	})
+	switch {
+	case absent(err):
+		ensureProgress(progress).Say("Creating Cloud Run service " + s.service + " in " + clients.region)
+		err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+			return services.Projects.Locations.Services.
+				Create(clients.location(), desired).ServiceId(s.service).Context(ctx).Do(call...)
+		})
+	case err != nil:
+		return fmt.Errorf("read the Cloud Run service %s: %w", s.service, err)
+	default:
+		ensureProgress(progress).Say("Releasing a new revision of Cloud Run service " + s.service + " in " + clients.region)
+		err = p.retryWrite(ctx, "release "+s.service+" onto Cloud Run", func() error {
+			current, err := p.read(ctx, services, path, s.service)
+			if err != nil {
+				return err
+			}
+			desired.Etag = current.Etag
+			desired.Traffic = heldTraffic(current)
+			if opened, _ := openingOf(desired); opened != nil && isOpen(current) {
+				desired.InvokerIamDisabled, desired.IapEnabled = opened.InvokerIamDisabled, opened.IapEnabled
+			}
+			return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+				return services.Projects.Locations.Services.Patch(path, desired).Context(ctx).Do(call...)
+			})
+		})
+	}
+	return err
 }
 
 func (p *Provider) tagRevision(ctx context.Context, services *run.Service, path, service, revision, tag string) error {
@@ -525,50 +542,77 @@ func (p *Provider) await(ctx context.Context, services *run.Service, call func(.
 }
 
 func (p *Provider) tearDown(ctx context.Context, service string, progress progress.Log) error {
-	clients, services, err := p.openRun(ctx)
+	images, err := p.deleteService(ctx, service, progress)
 	if err != nil {
 		return err
 	}
-	ensureProgress(progress).Say("Deleting Cloud Run service " + service + " in " + clients.region)
-	err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-		return services.Projects.Locations.Services.Delete(clients.servicePath(service)).Context(ctx).Do(call...)
-	})
-	if absent(err) {
-		return nil
-	}
-	return err
+	p.untagUnusedImages(ctx, images, progress)
+	return nil
 }
 
-func (p *Provider) removeRevision(ctx context.Context, service, revision string, progress progress.Log) (bool, error) {
+func (p *Provider) deleteService(ctx context.Context, service string, progress progress.Log) ([]string, error) {
+	clients, services, err := p.openRun(ctx)
+	if err != nil {
+		return nil, err
+	}
+	path := clients.servicePath(service)
+	images, err := p.listServiceImages(ctx, services, path)
+	if err != nil && !absent(err) {
+		ensureProgress(progress).Warn(fmt.Sprintf("Leaving the images %s ran tagged, as which ones could not be read: %v", service, err))
+	}
+	ensureProgress(progress).Say("Deleting Cloud Run service " + service + " in " + clients.region)
+	err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+		return services.Projects.Locations.Services.Delete(path).Context(ctx).Do(call...)
+	})
+	if absent(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return images, nil
+}
+
+func (p *Provider) removeRevision(ctx context.Context, service, revision string, progress progress.Log) (bool, []string, error) {
 	if service == "" || revision == "" {
-		return false, nil
+		return false, nil, nil
 	}
 	clients, services, err := p.openRun(ctx)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	path := clients.servicePath(service)
 	current, err := p.read(ctx, services, path, service)
 	if absent(err) {
-		return false, nil
+		return false, nil, nil
 	}
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	if isLatestOrRouted(current, revision) {
-		return true, nil
+		return true, nil, nil
+	}
+	images, err := p.readRevisionImages(ctx, services, path+"/revisions/"+revision)
+	if absent(err) {
+		return false, nil, nil
+	}
+	if err != nil {
+		return false, nil, fmt.Errorf("read which image revision %s of %s runs: %w", revision, service, err)
 	}
 	if err := p.untagRevision(ctx, services, path, service, revision); err != nil {
-		return false, err
+		return false, nil, err
 	}
 	ensureProgress(progress).Say("Deleting revision " + revision + " of Cloud Run service " + service + " in " + clients.region)
 	err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 		return services.Projects.Locations.Services.Revisions.Delete(path + "/revisions/" + revision).Context(ctx).Do(call...)
 	})
 	if absent(err) {
-		return false, nil
+		return false, nil, nil
 	}
-	return false, err
+	if err != nil {
+		return false, nil, err
+	}
+	return false, images, nil
 }
 
 func isLatestOrRouted(service *run.GoogleCloudRunV2Service, revision string) bool {

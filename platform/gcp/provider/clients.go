@@ -22,6 +22,8 @@ import (
 	iap "google.golang.org/api/iap/v1"
 	loggingrest "google.golang.org/api/logging/v2"
 	"google.golang.org/api/networkconnectivity/v1"
+	"google.golang.org/api/option"
+	runv1 "google.golang.org/api/run/v1"
 	run "google.golang.org/api/run/v2"
 	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/api/serviceusage/v1"
@@ -55,6 +57,7 @@ type clients struct {
 	images        memo[*artifactregistry.Service]
 	accounts      memo[*iam.Service]
 	runs          memo[*run.Service]
+	runsV1        memo[*runv1.APIService]
 	schedules     memo[*cloudscheduler.Service]
 	loggingREST   memo[*loggingrest.Service]
 	compute       memo[*compute.Service]
@@ -123,6 +126,16 @@ func (c *clients) Repositories() (*artifactregistry.Service, error) {
 func (c *clients) Run() (*run.Service, error) {
 	return opened(c, &c.runs, "Cloud Run", func() (*run.Service, error) {
 		return run.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) RunV1() (*runv1.APIService, error) {
+	return opened(c, &c.runsV1, "Cloud Run v1", func() (*runv1.APIService, error) {
+		options := ports.EmulatorREST(c.endpoint)
+		if len(options) == 0 {
+			options = []option.ClientOption{option.WithEndpoint("https://" + c.region + "-run.googleapis.com/")}
+		}
+		return runv1.NewService(context.Background(), options...)
 	})
 }
 

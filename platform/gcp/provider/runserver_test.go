@@ -2,16 +2,19 @@ package gcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
+	runv1 "google.golang.org/api/run/v1"
 	run "google.golang.org/api/run/v2"
 )
 
@@ -37,6 +40,18 @@ type runServer struct {
 	events  []string
 
 	iam *iamServer
+
+	images    map[string]string
+	labels    map[string]map[string]string
+	elsewhere map[string]string
+	untagged  []string
+	regional  int
+	asked     []string
+	missing   []string
+	retagged  []string
+
+	untagAtRelease    string
+	untagEveryRelease bool
 }
 
 type upload struct {
@@ -69,7 +84,7 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 			s.iam = grantedIAM()
 		}
 		switch {
-		case strings.HasPrefix(path, "/v1/"):
+		case strings.HasPrefix(path, "/v1/") && !strings.Contains(path, "/packages/"):
 			s.iam.rest(t)(w, r)
 		case r.Method == http.MethodPost && strings.HasPrefix(path, "/upload/storage/v1/b/"):
 			s.store(t, w, r)
@@ -81,8 +96,23 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 			s.create(w, r)
 		case r.Method == http.MethodPatch:
 			s.patch(w, r)
+		case r.Method == http.MethodDelete && strings.Contains(path, "/packages/") && strings.Contains(path, "/tags/"):
+			s.untagged = append(s.untagged, strings.TrimPrefix(r.URL.EscapedPath(), "/v1/"))
+			writeBody(w, map[string]any{})
 		case r.Method == http.MethodDelete && strings.Contains(path, "/revisions/"):
 			s.deleteRevision(w, revisionName(path))
+		case r.Method == http.MethodGet && strings.HasSuffix(path, "/services/-/revisions"):
+			s.listRegionRevisions(w)
+		case r.Method == http.MethodGet && strings.HasPrefix(path, "/apis/serving.knative.dev/v1/namespaces/") && strings.HasSuffix(path, "/revisions"):
+			s.listLabelled(w, r.URL.Query().Get("labelSelector"))
+		case r.Method == http.MethodGet && strings.Contains(path, "/packages/") && strings.Contains(path, "/tags/"):
+			s.getTag(w, strings.TrimPrefix(r.URL.EscapedPath(), "/v1/"))
+		case r.Method == http.MethodPost && strings.Contains(path, "/packages/") && strings.HasSuffix(path, "/tags"):
+			s.createTag(w, r)
+		case r.Method == http.MethodGet && strings.HasSuffix(path, "/revisions"):
+			s.listRevisions(w)
+		case r.Method == http.MethodGet && strings.Contains(path, "/revisions/"):
+			s.getRevision(w, revisionName(path))
 		case r.Method == http.MethodDelete:
 			s.service = nil
 			s.revisions = nil
@@ -115,6 +145,10 @@ func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
 		IapEnabled:         desired.IapEnabled,
 		Labels:             desired.Labels,
 		Uri:                "https://" + name + ".run.app",
+	}
+	if failed := s.untagUnderRelease(desired.Template); failed != nil {
+		writeBody(w, failed)
+		return
 	}
 	s.revised()
 	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/create", Done: true})
@@ -158,6 +192,10 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 	}
 	replaced := !sameTemplate(s.service.Template, desired.Template)
 	s.service.Template = desired.Template
+	if failed := s.untagUnderRelease(desired.Template); failed != nil {
+		writeBody(w, failed)
+		return
+	}
 	s.service.Traffic = allocated(desired.Traffic)
 	s.service.Ingress = desired.Ingress
 	s.service.InvokerIamDisabled = desired.InvokerIamDisabled
@@ -171,6 +209,20 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/release", Done: true})
 }
 
+func (s *runServer) untagUnderRelease(template *run.GoogleCloudRunV2RevisionTemplate) *run.GoogleLongrunningOperation {
+	if s.untagAtRelease == "" {
+		return nil
+	}
+	s.missing = append(s.missing, s.untagAtRelease)
+	if !s.untagEveryRelease {
+		s.untagAtRelease = ""
+	}
+	return &run.GoogleLongrunningOperation{Name: "operations/release", Done: true, Error: &run.GoogleRpcStatus{
+		Code:    9,
+		Message: "Revision '" + revisionName(s.service.Name) + "-failed' is not ready and cannot serve traffic. Image '" + template.Containers[0].Image + "' not found.",
+	}}
+}
+
 func (s *runServer) revised() {
 	s.revision++
 	s.writes++
@@ -180,6 +232,123 @@ func (s *runServer) revised() {
 	}
 	s.service.Etag = "etag-" + strconv.Itoa(s.writes)
 	s.revisions = append(s.revisions, revisionName(s.service.LatestReadyRevision))
+	if s.images == nil {
+		s.images = map[string]string{}
+	}
+	if s.service.Template != nil && len(s.service.Template.Containers) > 0 {
+		s.images[revisionName(s.service.LatestReadyRevision)] = s.service.Template.Containers[0].Image
+	}
+	if s.labels == nil {
+		s.labels = map[string]map[string]string{}
+	}
+	if s.service.Template != nil {
+		s.labels[revisionName(s.service.LatestReadyRevision)] = s.service.Template.Labels
+	}
+}
+
+func (s *runServer) listLabelled(w http.ResponseWriter, selector string) {
+	s.asked = append(s.asked, selector)
+	key, value, _ := strings.Cut(selector, "=")
+	listed := &runv1.ListRevisionsResponse{}
+	if s.service != nil {
+		for _, name := range s.revisions {
+			if s.labels[name][key] == value {
+				listed.Items = append(listed.Items, &runv1.Revision{Metadata: &runv1.ObjectMeta{Name: name}})
+			}
+		}
+	}
+	for name, image := range s.elsewhere {
+		if imageLabelValue(image) == value {
+			listed.Items = append(listed.Items, &runv1.Revision{Metadata: &runv1.ObjectMeta{Name: name}})
+		}
+	}
+	writeBody(w, listed)
+}
+
+func (s *runServer) getTag(w http.ResponseWriter, name string) {
+	unescaped, _ := url.PathUnescape(name)
+	if slices.Contains(s.missing, unescaped) || slices.Contains(s.untagged, name) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":{"code":404,"message":"tag not found"}}`))
+		return
+	}
+	writeBody(w, map[string]any{"name": unescaped})
+}
+
+func (s *runServer) createTag(w http.ResponseWriter, r *http.Request) {
+	tag := readBody[map[string]any](w, r)
+	if tag == nil {
+		return
+	}
+	name := strings.TrimPrefix(r.URL.Path, "/v1/") + "/" + r.URL.Query().Get("tagId")
+	s.retagged = append(s.retagged, name+" -> "+fmt.Sprint((*tag)["version"]))
+	s.missing = slices.DeleteFunc(s.missing, func(missing string) bool { return missing == name })
+	writeBody(w, tag)
+}
+
+func (s *runServer) labelQueries() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.asked)
+}
+
+func (s *runServer) retags() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.retagged)
+}
+
+func (s *runServer) revisionOf(name string) *run.GoogleCloudRunV2Revision {
+	return &run.GoogleCloudRunV2Revision{
+		Name:       s.service.Name + "/revisions/" + name,
+		Containers: []*run.GoogleCloudRunV2Container{{Image: s.images[name]}},
+	}
+}
+
+func (s *runServer) getRevision(w http.ResponseWriter, name string) {
+	if s.service == nil || !slices.Contains(s.revisions, name) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":{"code":404,"message":"revision not found"}}`))
+		return
+	}
+	writeBody(w, s.revisionOf(name))
+}
+
+func (s *runServer) listRevisions(w http.ResponseWriter) {
+	listed := &run.GoogleCloudRunV2ListRevisionsResponse{}
+	for _, name := range s.revisions {
+		listed.Revisions = append(listed.Revisions, s.revisionOf(name))
+	}
+	writeBody(w, listed)
+}
+
+func (s *runServer) listRegionRevisions(w http.ResponseWriter) {
+	s.regional++
+	listed := &run.GoogleCloudRunV2ListRevisionsResponse{}
+	if s.service != nil {
+		for _, name := range s.revisions {
+			listed.Revisions = append(listed.Revisions, s.revisionOf(name))
+		}
+	}
+	for name, image := range s.elsewhere {
+		listed.Revisions = append(listed.Revisions, &run.GoogleCloudRunV2Revision{
+			Name:       "projects/acme/locations/europe-west1/services/elsewhere/revisions/" + name,
+			Containers: []*run.GoogleCloudRunV2Container{{Image: image}},
+		})
+	}
+	writeBody(w, listed)
+}
+
+func (s *runServer) regionListings() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.regional
+}
+
+func (s *runServer) untags() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.untagged)
 }
 
 func (s *runServer) deleteRevision(w http.ResponseWriter, revision string) {
@@ -197,7 +366,7 @@ func (s *runServer) deleteRevision(w http.ResponseWriter, revision string) {
 		w.Write([]byte(`{"error":{"code":400,"status":"FAILED_PRECONDITION","message":"revision ` + revision + ` is the latest or can receive traffic"}}`))
 		return
 	}
-	s.revisions = slices.DeleteFunc(s.revisions, func(standing string) bool { return standing == revision })
+	s.revisions = slices.DeleteFunc(s.revisions, func(name string) bool { return name == revision })
 	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/delete-revision", Done: true})
 }
 
@@ -279,7 +448,7 @@ func (s *runServer) releases() []*run.GoogleCloudRunV2Service {
 	return slices.Clone(s.patched)
 }
 
-func (s *runServer) standing() []string {
+func (s *runServer) remaining() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.revisions)
