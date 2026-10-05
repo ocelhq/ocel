@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -323,5 +324,54 @@ func TestAMissingRequiredFlagUnderJSONPrintsAUsageDocumentWithoutRunningTheComma
 	}
 	if code != 1 || stderr.Len() != 0 || ran {
 		t.Errorf("exit code = %d, stderr = %q, ran = %v, want 1, nothing, and the command not run", code, stderr.String(), ran)
+	}
+}
+
+func executeOnATerminal(t *testing.T, args ...string) (code int, stdout string) {
+	t.Helper()
+	tty, screen := aTerminal(t, "xterm", 80)
+	var out bytes.Buffer
+	ocel := newCommand()
+	ocel.root.SetIn(tty)
+	ocel.root.SetOut(&out)
+	ocel.root.SetErr(&bytes.Buffer{})
+	finished := make(chan int, 1)
+	go func() { finished <- ocel.executeAndReport(args) }()
+	select {
+	case code = <-finished:
+	case <-time.After(20 * time.Second):
+		t.Fatalf("ocel %s is waiting for an answer on the terminal", strings.Join(args, " "))
+	}
+	if asked := screen(); strings.TrimSpace(asked) != "" {
+		t.Errorf("terminal = %q, want nothing asked under --json", asked)
+	}
+	return code, out.String()
+}
+
+func TestAMissingProjectUnderJSONOnATerminalFailsInsteadOfOfferingASetup(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		env  string
+		args []string
+	}{
+		{"--json", "", []string{"--json", "deploy"}},
+		{"OCEL_JSON=1", "1", []string{"deploy"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			t.Setenv("OCEL_JSON", tc.env)
+
+			code, stdout := executeOnATerminal(t, tc.args...)
+
+			if code != 1 {
+				t.Errorf("exit code = %d, want 1", code)
+			}
+			if strings.Contains(stdout, "Set up a project here?") {
+				t.Errorf("stdout = %q, want no prompt text in the JSON stream", stdout)
+			}
+			if failure := requireOneFailureDocument(t, stdout); failure["code"] != "project.no_config" {
+				t.Errorf("error = %v, want project.no_config", failure)
+			}
+		})
 	}
 }
