@@ -73,6 +73,48 @@ func TestAKVBindingReadBackFromItsRecordIsTheSameRecord(t *testing.T) {
 	}
 }
 
+func TestAPostgresBindingReadBackFromItsRecordKeepsHowItIsReached(t *testing.T) {
+	t.Parallel()
+
+	for _, record := range []*bindingsv1.Binding{
+		{Name: "orders", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
+			Host: "10.240.0.9", Port: 5432, Database: "ocel", Username: "ocel", Password: "fixture-password",
+			TlsMode: bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_REQUIRE,
+		}}},
+		{Name: "ledger", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
+			Host: "db.example.com", Port: 5432, Database: "ledger", Username: "app", Password: "fixture-password",
+			Url:     "postgres://app:fixture-password@db.example.com:5432/ledger",
+			TlsMode: bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL, TlsCa: "-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n",
+		}}},
+	} {
+		message, err := provider.BindingMessage(provider.BindingOf(record))
+		if err != nil {
+			t.Fatalf("BindingMessage(%s): %v", record.GetName(), err)
+		}
+		if !proto.Equal(message, record) {
+			got := message.GetPostgres()
+			t.Errorf("BindingMessage(BindingOf(%s)) reaches %s:%d under tls %v with ca %q and url %q, want the record it was read from: "+
+				"a database that refuses plaintext is unreachable without its tls mode", record.GetName(), got.GetHost(), got.GetPort(), got.GetTlsMode(), got.GetTlsCa(), got.GetUrl())
+		}
+	}
+}
+
+func TestAPostgresBindingOnATLSModeNoClientSpeaksIsRefused(t *testing.T) {
+	t.Parallel()
+
+	_, err := provider.BindingMessage(provider.Binding{
+		Type: provider.BindingPostgres,
+		Name: "orders",
+		Properties: map[string]string{
+			provider.PropertyHost: "10.240.0.9", provider.PropertyPort: "5432", provider.PropertyDatabase: "ocel",
+			provider.PropertyUsername: "ocel", provider.PropertyPassword: "fixture-password", provider.PropertyTLSMode: "SOMETIMES",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "SOMETIMES") {
+		t.Errorf("BindingMessage() = %v, want a tls mode no client speaks refused by name", err)
+	}
+}
+
 func TestAKVBindingWithNoPasswordIsRefused(t *testing.T) {
 	t.Parallel()
 

@@ -60,6 +60,8 @@ const (
 	PropertyPublic        = "public"
 	PropertyEndpoint      = "endpoint"
 	PropertyTLS           = "tls"
+	PropertyTLSMode       = "tlsMode"
+	PropertyTLSCA         = "tlsCa"
 	PropertyCAPEM         = "caPem"
 	PropertyTransport     = "transport"
 	PropertyURL           = "url"
@@ -105,7 +107,24 @@ func VerifyProperties(binding Binding) error {
 	if binding.Type == BindingRealtime {
 		return verifyRealtimeProperties(binding)
 	}
+	if binding.Type == BindingPostgres {
+		if _, err := postgresTLSMode(binding); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func postgresTLSMode(binding Binding) (bindingsv1.PostgresTlsMode, error) {
+	named := binding.Properties[PropertyTLSMode]
+	if named == "" {
+		return bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_UNSPECIFIED, nil
+	}
+	mode, known := bindingsv1.PostgresTlsMode_value[named]
+	if !known {
+		return 0, refusal.Refuse(refusal.CodeInvalid, "binding %s came back under tls mode %q, which no client connects under", binding.Name, named)
+	}
+	return bindingsv1.PostgresTlsMode(mode), nil
 }
 
 func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
@@ -116,12 +135,16 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 	switch binding.Type {
 	case BindingPostgres:
 		port, _ := strconv.Atoi(binding.Properties[PropertyPort])
+		mode, _ := postgresTLSMode(binding)
 		message.Properties = &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 			Host:     binding.Properties[PropertyHost],
 			Port:     int32(port),
 			Database: binding.Properties[PropertyDatabase],
 			Username: binding.Properties[PropertyUsername],
 			Password: binding.Properties[PropertyPassword],
+			Url:      binding.Properties[PropertyURL],
+			TlsMode:  mode,
+			TlsCa:    binding.Properties[PropertyTLSCA],
 		}}
 	case BindingBucket:
 		message.Properties = &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{
