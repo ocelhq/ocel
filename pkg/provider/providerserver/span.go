@@ -78,7 +78,7 @@ func (u *spanRun) recordPartial(result string) { u.partial = result }
 func (u *spanRun) phase(do func(progress.Log) error) error {
 	progress := newSpanLog(u.events.sender, u.span)
 	err := do(progress)
-	if err != nil {
+	if _, asked := provider.QuestionOf(err); err != nil && !asked {
 		progress.Error(err.Error())
 		u.said = err
 	}
@@ -98,6 +98,10 @@ func (t *spanEvents) run(span Span, do func(*spanRun) error) error {
 	t.Start(start, span)
 	run := &spanRun{events: t, span: span}
 	err := do(run)
+	if _, asked := provider.QuestionOf(err); asked {
+		t.EndPartial(span, start, time.Now(), span.Title.Started+": waiting on your answer")
+		return err
+	}
 	if err != nil && !errors.Is(err, run.said) {
 		newSpanLog(t.sender, span).Error(err.Error())
 	}
