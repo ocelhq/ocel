@@ -6,19 +6,25 @@ import type { UseCacheEntry, UseCacheStore } from "@framework/next-runtime/use-c
 const bytesPerCharacter = 2;
 
 function writeEntry(cache: InstanceCache, key: string, entry: unknown): void {
-  cache.write(key, entry, JSON.stringify(entry).length * bytesPerCharacter);
+  const json = JSON.stringify(entry);
+  cache.write(key, json, json.length * bytesPerCharacter);
+}
+
+function readEntry<T>(cache: InstanceCache, key: string): T | null {
+  const json = cache.read<string>(key);
+  return json === undefined ? null : (JSON.parse(json) as T);
 }
 
 export function newInstanceCacheStore(cache: InstanceCache): CacheStore {
   return {
     async readEntry(key) {
-      return cache.read<CacheEntryFile>(`entry:${key}`) ?? null;
+      return readEntry<CacheEntryFile>(cache, `entry:${key}`);
     },
     async writeEntry(key, entry) {
       writeEntry(cache, `entry:${key}`, entry);
     },
     async readFetch(hash) {
-      return cache.read<CacheEntryFile>(`fetch:${hash}`) ?? null;
+      return readEntry<CacheEntryFile>(cache, `fetch:${hash}`);
     },
     async writeFetch(hash, entry) {
       writeEntry(cache, `fetch:${hash}`, entry);
@@ -30,7 +36,7 @@ export function newInstanceCacheStore(cache: InstanceCache): CacheStore {
 export function newInstanceUseCacheStore(cache: InstanceCache): UseCacheStore {
   return {
     async readEntry(key) {
-      return cache.read<UseCacheEntry>(`use-cache:${key}`) ?? null;
+      return readEntry<UseCacheEntry>(cache, `use-cache:${key}`);
     },
     async writeEntry(key, entry) {
       writeEntry(cache, `use-cache:${key}`, entry);
