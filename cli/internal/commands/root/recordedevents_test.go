@@ -3,9 +3,12 @@ package root
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -69,6 +72,81 @@ func TestAnInitThatFailsPrintsNoInitCompletedEvent(t *testing.T) {
 	events := telemetryEvents(t, stderr)
 	if code == 0 || len(events) != 1 || events[0].Name != "command_completed" {
 		t.Errorf("code = %d, events = %+v, want only command_completed", code, events)
+	}
+}
+
+func spooledEventNames(t *testing.T) []string {
+	t.Helper()
+	spool, err := telemetry.OpenSpool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := spool.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, raw := range events {
+		var event telemetry.Event
+		if err := json.Unmarshal(raw, &event); err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, event.Name)
+	}
+	return names
+}
+
+func TestAnInitOutsideDebugModeSpoolsInitCompletedThenCommandCompletedAndStartsOneFlushAfterBoth(t *testing.T) {
+	withTelemetryBuild(t)
+	withBannerShown(t)
+	t.Chdir(t.TempDir())
+	ocel := newCommand()
+	ocel.root.SetOut(io.Discard)
+	ocel.root.SetErr(io.Discard)
+	var spooledAtStart [][]string
+	ocel.startFlush = func(telemetry.Resolution) { spooledAtStart = append(spooledAtStart, spooledEventNames(t)) }
+
+	code := ocel.executeAndReport([]string{"init", "--provider", "fake"})
+
+	want := []string{"init_completed", "command_completed"}
+	if got := spooledEventNames(t); code != 0 || !slices.Equal(got, want) {
+		t.Errorf("code = %d, spooled events = %v, want %v", code, got, want)
+	}
+	if len(spooledAtStart) != 1 || !slices.Equal(spooledAtStart[0], want) {
+		t.Errorf("spooled events at each flush start = %v, want one start after %v", spooledAtStart, want)
+	}
+}
+
+func TestAnInitUnderJSONPrintsItsEventsOnStderrAndOnlyItsResultOnStdout(t *testing.T) {
+	debugTelemetry(t)
+	t.Chdir(t.TempDir())
+
+	code, stdout, stderr := executeAndReportRoot(t, "--json", "init", "--provider", "fake")
+
+	events := telemetryEvents(t, stderr)
+	if code != 0 || len(events) != 2 || events[0].Name != "init_completed" {
+		t.Fatalf("code = %d, events = %+v, want init_completed then command_completed on stderr", code, events)
+	}
+	decoder := json.NewDecoder(strings.NewReader(stdout))
+	var result map[string]any
+	if err := decoder.Decode(&result); err != nil {
+		t.Fatalf("stdout %q is not a JSON document: %v", stdout, err)
+	}
+	if decoder.More() || strings.Contains(stdout, telemetry.DebugPrefix) {
+		t.Errorf("stdout = %q, want the init result alone", stdout)
+	}
+}
+
+func TestAnInitFromABuildWithoutATelemetryEndpointSpoolsNothing(t *testing.T) {
+	withTelemetryBuild(t)
+	withBannerShown(t)
+	withTelemetryEndpoint(t, "")
+	t.Chdir(t.TempDir())
+
+	code, _, _ := executeAndReportRoot(t, "init", "--provider", "fake")
+
+	if got := spooledEventNames(t); code != 0 || len(got) != 0 {
+		t.Errorf("code = %d, spooled events = %v, want nothing from a build without an endpoint", code, got)
 	}
 }
 
