@@ -471,6 +471,54 @@ func TestASupersededAliasThatFailsToUnrouteLeavesTheAliasesBeforeItRouted(t *tes
 	wantAliasRouted(t, w, siblingAlias)
 }
 
+func TestASupersededAliasIsRoutedAgainWhenItsMoveFailsToPin(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	if err := stack.MovePointer(ctx, aliasMove("p1", aliasHost, previewRecord("b1")), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p1) = %v", err)
+	}
+	w.refusePins(errors.New("cloud run would not pin the revision"))
+	err := stack.MovePointer(ctx, rotatedMove("p2", previewRecord("b2"), aliasHost), progress.Discard())
+
+	var unserved router.Unserved
+	if !errors.As(err, &unserved) {
+		t.Fatalf("MovePointer(p2) = %v, want it unserved", err)
+	}
+	wantAliasRouted(t, w, aliasHost)
+	if got, routed := w.hosts(tierRoutes)[rotatedAlias]; routed {
+		t.Errorf("%s is routed to %q, want nothing", rotatedAlias, got)
+	}
+	if _, recorded := stack.s.recorded.Hosts[aliasHost]; !recorded {
+		t.Errorf("the router records %v, want %s still recorded", stack.s.recorded.Hosts, aliasHost)
+	}
+	if _, recorded := stack.s.recorded.Hosts[rotatedAlias]; recorded {
+		t.Errorf("the router records %v, want %s not recorded", stack.s.recorded.Hosts, rotatedAlias)
+	}
+}
+
+func TestASupersededAliasWhoseUnrouteAppliedBeforeItFailedIsRoutedAgain(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	first := aliasMove("p1", aliasHost, previewRecord("b1"))
+	first.Hosts = append(first.Hosts, edge.PreviewHost{Hostname: siblingAlias, App: "web"})
+	if err := stack.MovePointer(ctx, first, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p1) = %v", err)
+	}
+	w.refuseUnrouteAfterApplying(siblingAlias, errors.New("compute dropped the host rule and then lost the reply"))
+	err := stack.MovePointer(ctx, rotatedMove("p2", previewRecord("b2"), aliasHost, siblingAlias), progress.Discard())
+
+	var unserved router.Unserved
+	if !errors.As(err, &unserved) {
+		t.Fatalf("MovePointer(p2) = %v, want it unserved", err)
+	}
+	wantAliasRouted(t, w, aliasHost)
+	wantAliasRouted(t, w, siblingAlias)
+}
+
 var errUntagRefused = errors.New("cloud run refused to remove the tag")
 
 func owingATag(t *testing.T) (*world, routerStack, router.DeploymentRecord, router.PointerMove, string) {

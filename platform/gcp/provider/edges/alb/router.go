@@ -2,6 +2,7 @@ package alb
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
 
@@ -105,6 +106,7 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 }
 
 func (r routerStack) moveTraffic(ctx context.Context, move router.PointerMove, progress progress.Log) error {
+	hosts, tags := maps.Clone(r.s.recorded.Hosts), cloneDeploymentTags(r.s.recorded.DeploymentTags)
 	if err := r.s.routePreviewHosts(ctx, move, progress); err != nil {
 		return err
 	}
@@ -114,6 +116,10 @@ func (r routerStack) moveTraffic(ctx context.Context, move router.PointerMove, p
 	pointers, err := pin.MovePointer(ctx, r.s.e.deps.Pins, r.s.recorded.Pointers, move, progress)
 	r.s.recorded.Pointers = pointers
 	r.s.keep()
+	var unserved router.Unserved
+	if errors.As(err, &unserved) {
+		return router.Unserved{Err: errors.Join(err, r.s.restorePreviewHosts(ctx, hosts, tags))}
+	}
 	if err != nil {
 		return err
 	}
