@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	run "google.golang.org/api/run/v2"
@@ -177,6 +178,64 @@ func TestAGuardedNextServiceBehindAnEdgeThatShieldsNothingIsRefused(t *testing.T
 	}
 	if len(server.created) != 0 {
 		t.Errorf("released %d services before refusing, want none", len(server.created))
+	}
+}
+
+func TestANextServiceBehindAnEdgeThatRunsNoCodeRoutesItsOwnRequests(t *testing.T) {
+	for _, kind := range []edge.Kind{edge.None, alb.Kind} {
+		t.Run(string(kind), func(t *testing.T) {
+			server := &runServer{}
+			p := server.open(t)
+			front, err := p.Edges().Open(kind, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			spec := routedNextSpec()
+			spec.Edge = front
+			spec.App.Guard = &provider.OriginGuard{Entry: "bundle-0"}
+			if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
+				t.Fatalf("ProvisionFunctions() = %v", err)
+			}
+
+			env := envOf(server.created[0].Template.Containers[0])
+			if env[edge.OriginDispatchVar] != "1" {
+				t.Errorf("the Next service reads %s=%q, want 1: nothing in front of it routes a request to a route", edge.OriginDispatchVar, env[edge.OriginDispatchVar])
+			}
+			if env[edge.OriginSignedVar] != "1" {
+				t.Errorf("the Next service reads %s=%q, want 1: its ingress keeps clients from going around its edge, and it holds no secret a forward could present", edge.OriginSignedVar, env[edge.OriginSignedVar])
+			}
+		})
+	}
+}
+
+func TestANextServiceBehindAnEdgeThatRunsCodeLeavesRoutingToIt(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := routedNextSpec()
+	spec.Edge = front
+
+	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+	if got, told := envOf(server.created[0].Template.Containers[0])[edge.OriginDispatchVar]; told {
+		t.Errorf("a Next service behind an edge that routes reads %s=%q", edge.OriginDispatchVar, got)
+	}
+}
+
+func TestANextServiceBilledPerRequestFinishesItsWorkBeforeItsResponseEnds(t *testing.T) {
+	container := releasedNext(t, routedNextSpec())
+
+	capMs, err := strconv.Atoi(envOf(container)[finishBeforeResponseEnvVar])
+	if err != nil || capMs <= 0 {
+		t.Fatalf("the Next service reads %s=%q, want a cap in milliseconds: Cloud Run takes an instance's CPU away once a request billed per request is answered",
+			finishBeforeResponseEnvVar, envOf(container)[finishBeforeResponseEnvVar])
+	}
+	if limit := int(nextRequestTimeout.Milliseconds()); capMs >= limit {
+		t.Errorf("the Next service holds its response's end for up to %dms, want well under the %dms Cloud Run lets a request run", capMs, limit)
 	}
 }
 

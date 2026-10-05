@@ -27,7 +27,11 @@ const (
 	deploymentIDEnvVar    = "OCEL_DEPLOYMENT_ID"
 	isrPrefixEnvVar       = "OCEL_ISR_PREFIX"
 	isrTagNamespaceEnvVar = "OCEL_ISR_TAG_NAMESPACE"
+
+	finishBeforeResponseEnvVar = "OCEL_FINISH_BEFORE_RESPONSE_MS"
 )
+
+const finishBeforeResponseCap = 10 * time.Second
 
 var routingManifestInImage = path.Join(images.FunctionImageRoot, edge.RoutingManifestFile)
 
@@ -62,7 +66,14 @@ func nextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving) map[s
 	if app.Router != "" {
 		env[routerKindEnvVar] = string(app.Router)
 	}
+	if s.compute == provider.ComputeServerless {
+		env[finishBeforeResponseEnvVar] = strconv.FormatInt(finishBeforeResponseCap.Milliseconds(), 10)
+	}
 	if routing := app.Routing; routing != nil && routeOf(fn) == routing.Entry {
+		if !factsOf(spec.Edge).RunsCode {
+			env[edge.OriginDispatchVar] = "1"
+			env[edge.OriginSignedVar] = "1"
+		}
 		env[routingManifestEnvVar] = routingManifestInImage
 		env[assetPrefixEnvVar] = app.AssetPrefix
 		env[slugEnvVar] = spec.Ref.Project
