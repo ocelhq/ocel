@@ -501,10 +501,10 @@ func TestDomainListWithPreviewAsJSONPrintsTheGlobalDomainAndItsProjects(t *testi
 	if domain.GetBaseDomain() != "preview.acme.com" || !domain.GetRouteInstalled() || domain.GetEdgeScope() != "fake-account" {
 		t.Errorf("domain = %v, want preview.acme.com with its route installed on fake-account", &domain)
 	}
-	if domain.GetCertificateStatus() != "ISSUED" || domain.GetExpiresAt() != "2025-08-18T06:53:20Z" || !domain.GetExpiringSoon() {
+	if certificate := domain.GetCertificate(); certificate.GetStatus() != "ISSUED" || certificate.GetExpiresAt() != "2025-08-18T06:53:20Z" || !certificate.GetExpiringSoon() {
 		t.Errorf("domain = %v, want the issued certificate expiring soon at an RFC 3339 time", &domain)
 	}
-	if !slices.Contains(domain.GetProjects(), "shop") || !slices.Contains(domain.GetRecordsWritten(), "_ocel.preview.acme.com CNAME _target.validations.fake.invalid") {
+	if !slices.Contains(domain.GetProjects(), "shop") || !slices.Contains(domain.GetCertificate().GetRecordsWritten(), "_ocel.preview.acme.com CNAME _target.validations.fake.invalid") {
 		t.Errorf("domain = %v, want the projects served and the records ocel wrote", &domain)
 	}
 }
@@ -523,6 +523,9 @@ func TestDomainListWithPreviewAsJSONNamesNoDomainWhenNoneIsConfigured(t *testing
 	data := clitest.DecodeResult(t, stdout.String())
 	if data["baseDomain"] != "" || !reflect.DeepEqual(data["projects"], []any{}) {
 		t.Errorf("data = %v, want no base domain and no projects", data)
+	}
+	if certificate, _ := data["certificate"].(map[string]any); certificate["status"] != "" {
+		t.Errorf("data = %v, want a certificate object with no status rather than null", data)
 	}
 }
 

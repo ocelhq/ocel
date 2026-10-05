@@ -61,25 +61,29 @@ message DomainHostStatus {
 
   string pending = 4;
 
-  string certificate_id = 5;
+  Certificate certificate = 5;
 
-  string certificate_status = 6;
+  string serving_pointer = 6;
+}
 
-  string renewal_status = 7;
+message Certificate {
+  string id = 1;
 
-  string expires_at = 8;
+  string status = 2;
 
-  bool expiring_soon = 9;
+  string renewal_status = 3;
 
-  repeated string records_written = 10;
+  string expires_at = 4;
 
-  repeated string manual_records = 11;
+  bool expiring_soon = 5;
 
-  string last_probe_at = 12;
+  repeated string records_written = 6;
 
-  bool last_probe_ok = 13;
+  repeated string manual_records = 7;
 
-  string serving_pointer = 14;
+  string last_probe_at = 8;
+
+  bool last_probe_ok = 9;
 }
 
 message CostScanResult {
@@ -140,25 +144,9 @@ message PreviewDomainResult {
 
   bool route_installed = 3;
 
-  string certificate_id = 4;
+  Certificate certificate = 4;
 
-  string certificate_status = 5;
-
-  string renewal_status = 6;
-
-  string expires_at = 7;
-
-  bool expiring_soon = 8;
-
-  repeated string records_written = 9;
-
-  repeated string manual_records = 10;
-
-  string last_probe_at = 11;
-
-  bool last_probe_ok = 12;
-
-  repeated string projects = 13;
+  repeated string projects = 5;
 }
 
 message ConnectorStatusResult {

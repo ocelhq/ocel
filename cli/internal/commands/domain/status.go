@@ -164,22 +164,35 @@ func outstandingHosts(resp *contractv1.GetHostnameStatusResponse) string {
 }
 
 func domainHostStatus(host *contractv1.ProductionHostname) *resultv1.DomainHostStatus {
-	cert := host.GetCertificate()
 	return &resultv1.DomainHostStatus{
-		Hostname:          host.GetHostname(),
-		Declared:          host.GetDeclared(),
-		Ready:             host.GetReady(),
-		Pending:           host.GetPending(),
-		CertificateId:     cert.GetCertificateId(),
-		CertificateStatus: cert.GetCertificateStatus(),
-		RenewalStatus:     host.GetRenewalStatus(),
-		ExpiresAt:         terminal.EpochRFC3339(host.GetExpiresAt()),
-		ExpiringSoon:      host.GetExpiringSoon(),
-		RecordsWritten:    cert.GetRecordsWritten(),
-		ManualRecords:     cert.GetManualRecords(),
-		LastProbeAt:       terminal.EpochRFC3339(cert.GetLastProbeAt()),
-		LastProbeOk:       cert.GetLastProbeOk(),
-		ServingPointer:    host.GetServingPointer(),
+		Hostname:       host.GetHostname(),
+		Declared:       host.GetDeclared(),
+		Ready:          host.GetReady(),
+		Pending:        host.GetPending(),
+		Certificate:    newResultCertificate(host),
+		ServingPointer: host.GetServingPointer(),
+	}
+}
+
+type certifiedDomain interface {
+	GetCertificate() *contractv1.CertificateState
+	GetRenewalStatus() string
+	GetExpiresAt() int64
+	GetExpiringSoon() bool
+}
+
+func newResultCertificate(domain certifiedDomain) *resultv1.Certificate {
+	cert := domain.GetCertificate()
+	return &resultv1.Certificate{
+		Id:             cert.GetCertificateId(),
+		Status:         cert.GetCertificateStatus(),
+		RenewalStatus:  domain.GetRenewalStatus(),
+		ExpiresAt:      terminal.EpochRFC3339(domain.GetExpiresAt()),
+		ExpiringSoon:   domain.GetExpiringSoon(),
+		RecordsWritten: cert.GetRecordsWritten(),
+		ManualRecords:  cert.GetManualRecords(),
+		LastProbeAt:    terminal.EpochRFC3339(cert.GetLastProbeAt()),
+		LastProbeOk:    cert.GetLastProbeOk(),
 	}
 }
 
