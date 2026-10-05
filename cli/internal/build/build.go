@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -115,6 +116,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 	preferTracing := os.Getenv(toolchain.PreferTracingEnv) == "1"
 	var req nodeBuildRequest
 	var traced []toolchain.Target
+	var nextApps []project.App
 	for _, a := range FunctionApps(cfg.Apps) {
 		switch name := a.Framework(); {
 		case compiledFromSource(name):
@@ -125,6 +127,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 				return err
 			}
 		case name == buildoutput.FrameworkNext:
+			nextApps = append(nextApps, a)
 			req.Apps = append(req.Apps, nodeAppBuild{
 				Framework:     buildoutput.FrameworkNext,
 				Name:          a.Name,
@@ -183,12 +186,63 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 			return err
 		}
 	}
+	variants := toolchain.NewPlatformVariantCache()
+	defer variants.Close()
 	for _, target := range traced {
+		if err := variants.InstallTraced(ctx, target.App, target.Source, target.FunctionDir, target.Framework.Arch); err != nil {
+			return err
+		}
 		if err := toolchain.DescribeTrace(target); err != nil {
 			return err
 		}
 	}
+	for _, a := range nextApps {
+		if err := installNextPlatformVariants(ctx, variants, cfg, a, outputDir, host.MaxFunctionBytes); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func installNextPlatformVariants(ctx context.Context, variants *toolchain.PlatformVariantCache, cfg *project.Project, a project.App, outputDir string, maxFunctionBytes int64) error {
+	functionDirs, err := filepath.Glob(filepath.Join(buildoutput.AppRoot(outputDir, a.Name), functionsDirName, "*"+functionDirSuffix))
+	if err != nil {
+		return err
+	}
+	for _, functionDir := range functionDirs {
+		if err := variants.InstallTraced(ctx, a.Name, filepath.Join(cfg.Dir, a.Path), functionDir, a.Architecture()); err != nil {
+			return err
+		}
+		if maxFunctionBytes > 0 {
+			size, err := dirBytes(functionDir)
+			if err != nil {
+				return err
+			}
+			if size > maxFunctionBytes {
+				return fmt.Errorf("app %q: function %s is %d bytes once its platform variants are installed, over the %d-byte budget its provider sets for one function", a.Name, filepath.Base(functionDir), size, maxFunctionBytes)
+			}
+		}
+	}
+	return nil
+}
+
+func dirBytes(dir string) (int64, error) {
+	var total int64
+	err := filepath.WalkDir(dir, func(_ string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		total += info.Size()
+		return nil
+	})
+	return total, err
 }
 
 func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchain.Target, error) {

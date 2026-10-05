@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -223,6 +224,134 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
+	t.Run("installs sharp's linux build once for every bundle of a next app", func(t *testing.T) {
+		runs := installLinuxArm64SharpNpm(t)
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		web := nextApp("web", "apps/web")
+		web.Arch = "arm64"
+		cfg := &project.Project{Dir: root, Apps: []project.App{web}}
+
+		var functionDirs []string
+		builder := nodeOnly{host: servingNext, node: func(_ context.Context, _ string, request []byte, _ Log) error {
+			var got nodeBuildRequest
+			if err := json.Unmarshal(request, &got); err != nil {
+				return err
+			}
+			out := got.Apps[0].OutputDir
+			for _, bundle := range []string{"bundle-0.func", "bundle-1.func"} {
+				writeFuncConfig(t, filepath.Dir(filepath.Dir(out)), "web", bundle,
+					buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+				functionDir := filepath.Join(out, functionsDirName, bundle)
+				writeDarwinSharp(t, functionDir)
+				functionDirs = append(functionDirs, functionDir)
+			}
+			return nil
+		}}
+		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+
+		recorded, err := os.ReadFile(runs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Count(string(recorded), "run"); got != 1 {
+			t.Errorf("npm ran %d times for two bundles tracing the same sharp, want once", got)
+		}
+		for _, functionDir := range functionDirs {
+			assertLinuxArm64Sharp(t, functionDir)
+		}
+	})
+
+	t.Run("ships each next function sharp built for the linux architecture its app declares", func(t *testing.T) {
+		installLinuxArm64SharpNpm(t)
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		web := nextApp("web", "apps/web")
+		web.Arch = "arm64"
+		cfg := &project.Project{Dir: root, Apps: []project.App{web}}
+
+		var functionDir string
+		builder := nodeOnly{host: servingNext, node: func(_ context.Context, _ string, request []byte, _ Log) error {
+			var got nodeBuildRequest
+			if err := json.Unmarshal(request, &got); err != nil {
+				return err
+			}
+			out := got.Apps[0].OutputDir
+			writeFuncConfig(t, filepath.Dir(filepath.Dir(out)), "web", "bundle-0.func",
+				buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+			functionDir = filepath.Join(out, functionsDirName, "bundle-0.func")
+			writeDarwinSharp(t, functionDir)
+			return nil
+		}}
+		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+
+		assertLinuxArm64Sharp(t, functionDir)
+	})
+
+	t.Run("refuses a next function that goes over its host's size budget once the target's variants are installed", func(t *testing.T) {
+		installLinuxArm64SharpNpmWeighing(t, 1000)
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		web := nextApp("web", "apps/web")
+		web.Arch = "arm64"
+		cfg := &project.Project{Dir: root, Apps: []project.App{web}}
+
+		builder := nodeOnly{host: Host{NextRuntimeDir: "/var/host/next", MaxFunctionBytes: 2000}, node: func(_ context.Context, _ string, request []byte, _ Log) error {
+			var got nodeBuildRequest
+			if err := json.Unmarshal(request, &got); err != nil {
+				return err
+			}
+			out := got.Apps[0].OutputDir
+			writeFuncConfig(t, filepath.Dir(filepath.Dir(out)), "web", "bundle-0.func",
+				buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+			functionDir := filepath.Join(out, functionsDirName, "bundle-0.func")
+			writeDarwinSharp(t, functionDir)
+			writeFile(t, filepath.Join(functionDir, "server.js"), strings.Repeat("x", 1500))
+			return nil
+		}}
+		err := builder.Build(context.Background(), cfg, nil, Log{})
+		if err == nil {
+			t.Fatal("Build = nil error, want the function refused: it fits its budget before the linux sharp is installed and not after")
+		}
+		for _, want := range []string{"bundle-0.func", "2000"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("Build error = %q, want it to name %q", err, want)
+			}
+		}
+	})
+
+	t.Run("ships a next function that fits its host's size budget once the target's variants are installed", func(t *testing.T) {
+		installLinuxArm64SharpNpmWeighing(t, 1000)
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		web := nextApp("web", "apps/web")
+		web.Arch = "arm64"
+		cfg := &project.Project{Dir: root, Apps: []project.App{web}}
+
+		builder := nodeOnly{host: Host{NextRuntimeDir: "/var/host/next", MaxFunctionBytes: 1 << 20}, node: func(_ context.Context, _ string, request []byte, _ Log) error {
+			var got nodeBuildRequest
+			if err := json.Unmarshal(request, &got); err != nil {
+				return err
+			}
+			out := got.Apps[0].OutputDir
+			writeFuncConfig(t, filepath.Dir(filepath.Dir(out)), "web", "bundle-0.func",
+				buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+			writeDarwinSharp(t, filepath.Join(out, functionsDirName, "bundle-0.func"))
+			return nil
+		}}
+		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+	})
+
 	t.Run("names the missing build script when none was materialized", func(t *testing.T) {
 		t.Parallel()
 
@@ -383,6 +512,44 @@ func TestBuild(t *testing.T) {
 
 }
 
+func installLinuxArm64SharpNpm(t *testing.T) (runs string) {
+	t.Helper()
+	return installLinuxArm64SharpNpmWeighing(t, 0)
+}
+
+func installLinuxArm64SharpNpmWeighing(t *testing.T, ballastBytes int) (runs string) {
+	t.Helper()
+	bin := t.TempDir()
+	runs = filepath.Join(t.TempDir(), "runs")
+	npm := "#!/bin/sh\necho run >> '" + runs + "'\nmkdir -p node_modules/sharp node_modules/@img/sharp-linux-arm64\n" +
+		"head -c " + strconv.Itoa(ballastBytes) + " /dev/zero > node_modules/@img/sharp-linux-arm64/libvips.node\n" +
+		"printf '%s' '{\"name\":\"sharp\",\"version\":\"0.34.5\"}' > node_modules/sharp/package.json\n" +
+		"printf '%s' '{\"name\":\"@img/sharp-linux-arm64\",\"version\":\"0.34.5\",\"os\":[\"linux\"],\"cpu\":[\"arm64\"],\"libc\":[\"glibc\"]}' > node_modules/@img/sharp-linux-arm64/package.json\n"
+	if err := os.WriteFile(filepath.Join(bin, "npm"), []byte(npm), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return runs
+}
+
+func writeDarwinSharp(t *testing.T, functionDir string) {
+	t.Helper()
+	writeFile(t, filepath.Join(functionDir, "node_modules", "sharp", "package.json"),
+		`{"name":"sharp","version":"0.34.5","optionalDependencies":{"@img/sharp-darwin-arm64":"0.34.5","@img/sharp-linux-arm64":"0.34.5"}}`)
+	writeFile(t, filepath.Join(functionDir, "node_modules", "@img", "sharp-darwin-arm64", "package.json"),
+		`{"name":"@img/sharp-darwin-arm64","version":"0.34.5","os":["darwin"],"cpu":["arm64"]}`)
+}
+
+func assertLinuxArm64Sharp(t *testing.T, functionDir string) {
+	t.Helper()
+	if _, err := os.Stat(filepath.Join(functionDir, "node_modules", "@img", "sharp-linux-arm64", "package.json")); err != nil {
+		t.Errorf("the function holds no sharp build for linux/arm64: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(functionDir, "node_modules", "@img", "sharp-darwin-arm64")); err == nil {
+		t.Error("the function still ships the build host's darwin sharp")
+	}
+}
+
 func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 	t.Setenv(toolchain.PreferTracingEnv, "1")
 
@@ -448,6 +615,31 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		if ran {
 			t.Error("the node build script ran for an entrypoint it cannot serve")
 		}
+	})
+
+	t.Run("ships the traced function sharp built for the linux architecture its app declares", func(t *testing.T) {
+		installLinuxArm64SharpNpm(t)
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		writeFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export default {};\n")
+
+		var functionDir string
+		builder := nodeOnly{host: servingNext, node: func(_ context.Context, _ string, request []byte, _ Log) error {
+			var got nodeBuildRequest
+			if err := json.Unmarshal(request, &got); err != nil {
+				return err
+			}
+			functionDir = got.Apps[0].FunctionDir
+			writeFile(t, filepath.Join(functionDir, "src", "server.js"), "export default {};\n")
+			writeDarwinSharp(t, functionDir)
+			return nil
+		}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}, Arch: "arm64"}}}
+		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+
+		assertLinuxArm64Sharp(t, functionDir)
 	})
 
 	t.Run("over real node, traces the fixture app into its own module tree", func(t *testing.T) {

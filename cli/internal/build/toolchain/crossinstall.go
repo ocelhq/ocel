@@ -23,7 +23,7 @@ const (
 	npmConfigFile = ".npmrc"
 )
 
-type resolvingForSplit struct{}
+type resolvingForPerPlatformPackage struct{}
 
 type manifest struct {
 	Name                 string            `json:"name"`
@@ -38,10 +38,10 @@ type manifest struct {
 type crossInstall struct {
 	arch string
 
-	mu       sync.Mutex
-	split    map[string]*manifest
-	wanted   map[string][]string
-	imported map[string]string
+	mu          sync.Mutex
+	perPlatform map[string]*manifest
+	wanted      map[string][]string
+	imported    map[string]string
 }
 
 func (p *crossInstall) plugin() api.Plugin {
@@ -49,20 +49,20 @@ func (p *crossInstall) plugin() api.Plugin {
 		Name: "ocel-platform-package",
 		Setup: func(build api.PluginBuild) {
 			build.OnResolve(api.OnResolveOptions{Filter: `^[^./]`}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-				if _, again := args.PluginData.(resolvingForSplit); again || args.Kind == api.ResolveEntryPoint {
+				if _, again := args.PluginData.(resolvingForPerPlatformPackage); again || args.Kind == api.ResolveEntryPoint {
 					return api.OnResolveResult{}, nil
 				}
 				resolved := build.Resolve(args.Path, api.ResolveOptions{
 					Importer:   args.Importer,
 					ResolveDir: args.ResolveDir,
 					Kind:       args.Kind,
-					PluginData: resolvingForSplit{},
+					PluginData: resolvingForPerPlatformPackage{},
 				})
 				if len(resolved.Errors) > 0 || resolved.External || !filepath.IsAbs(resolved.Path) {
 					return api.OnResolveResult{}, nil
 				}
 				root, _, inPackage := packageRoot(filepath.Dir(resolved.Path))
-				if !inPackage || !p.splitsByPlatform(root, specifierPackage(args.Path)) {
+				if !inPackage || !p.recordIfPerPlatformPackage(root, specifierPackage(args.Path)) {
 					return api.OnResolveResult{}, nil
 				}
 				return api.OnResolveResult{Path: args.Path, External: true}, nil
@@ -71,18 +71,18 @@ func (p *crossInstall) plugin() api.Plugin {
 	}
 }
 
-func (p *crossInstall) splitsByPlatform(root, imported string) bool {
+func (p *crossInstall) recordIfPerPlatformPackage(root, imported string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.split == nil {
-		p.split = map[string]*manifest{}
+	if p.perPlatform == nil {
+		p.perPlatform = map[string]*manifest{}
 		p.wanted = map[string][]string{}
 		p.imported = map[string]string{}
 	}
-	pkg, seen := p.split[root]
+	pkg, seen := p.perPlatform[root]
 	if !seen {
-		pkg = platformSplit(root)
-		p.split[root] = pkg
+		pkg = readPerPlatformManifest(root)
+		p.perPlatform[root] = pkg
 	}
 	if pkg == nil {
 		return false
@@ -98,7 +98,7 @@ func (p *crossInstall) splitsByPlatform(root, imported string) bool {
 	return true
 }
 
-func platformSplit(root string) *manifest {
+func readPerPlatformManifest(root string) *manifest {
 	pkg, err := readManifest(root)
 	if err != nil || pkg.Version == "" {
 		return nil
@@ -156,7 +156,7 @@ func (p *crossInstall) pins() map[string]any {
 	defer p.mu.Unlock()
 	pins := map[string]any{}
 	for imported, root := range p.imported {
-		pkg := p.split[root]
+		pkg := p.perPlatform[root]
 		pinned := installedGraph(root, *pkg, []string{root})
 		if len(pinned) == 0 {
 			continue
@@ -228,23 +228,24 @@ func (p *crossInstall) installInto(ctx context.Context, app, source, functionDir
 	if err := writeJSON(filepath.Join(staging, "package.json"), map[string]any{"private": true, "dependencies": wanted, "overrides": p.pins()}); err != nil {
 		return err
 	}
-	if config, found := projectNpmConfig(source); found {
+	config, hasConfig := projectNpmConfig(source)
+	if hasConfig {
 		if err := copyFile(config, filepath.Join(staging, npmConfigFile), 0o600); err != nil {
 			return err
 		}
 	}
 	cmd := exec.CommandContext(ctx, npmCommand, npmInstallArgs(cpu)...)
 	cmd.Dir = staging
-	var said bytes.Buffer
-	cmd.Stdout = &said
-	cmd.Stderr = &said
+	var npmOutput bytes.Buffer
+	cmd.Stdout = &npmOutput
+	cmd.Stderr = &npmOutput
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("install %s for app %q on %s/%s (%w):\n%s", names, app, arch.NodePackageOS, cpu, err, said.String())
+		return fmt.Errorf("install %s for app %q on %s/%s with %s (%w):\n%s", names, app, arch.NodePackageOS, cpu, describeNpmConfig(config, hasConfig), err, npmOutput.String())
 	}
 	for _, name := range slices.Sorted(maps.Keys(wanted)) {
 		if !installedForTarget(filepath.Join(staging, nodeModulesDir), name, cpu) {
 			return fmt.Errorf("npm installed %s for app %q without a package built for %s/%s/%s, so the function would fail at its first require of it; npm reported:\n%s",
-				name, app, arch.NodePackageOS, cpu, arch.NodePackageLibc, said.String())
+				name, app, arch.NodePackageOS, cpu, arch.NodePackageLibc, npmOutput.String())
 		}
 	}
 	staged := filepath.Join(staging, nodeModulesDir)
@@ -312,6 +313,13 @@ func projectNpmConfig(from string) (string, bool) {
 			return "", false
 		}
 	}
+}
+
+func describeNpmConfig(config string, hasConfig bool) string {
+	if hasConfig {
+		return "the project's npm config at " + config + " copied into the install"
+	}
+	return "no project .npmrc, so npm used its own user, global and environment configuration"
 }
 
 func hasAny(dir string, names ...string) bool {
