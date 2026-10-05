@@ -190,6 +190,7 @@ export const nativeModuleChecks: Check[] = [
 export const nodeRuntimeChecks: Check[] = [
   {
     title: "GET /api/probes/runtime runs as production in UTC",
+    assertsDeployment: true,
     run: async (ctx) => {
       const { res, text, body } = await json(ctx, "/api/probes/runtime");
       assert.equal(res.status, 200, describeResponse(res, text));
@@ -281,6 +282,7 @@ export const streamCheck: Check = {
 
 export const clientAddressCheck: Check = {
   title: "GET /api/probes/headers sees the real client address behind a forged one",
+  assertsDeployment: true,
   run: async (ctx) => {
     const forged = await readHeaderDump(ctx, { "x-forwarded-for": FORGED_CLIENT });
     const chain = forwardedChain(forged);

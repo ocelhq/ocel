@@ -130,29 +130,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "dev-runs-as-development",
-    reason:
-      "ocel dev runs the app as development on the runner's clock, never as production in UTC",
-    where: [{ on: ["dev"], fails: [check(nodeRuntimeChecks)] }],
-  },
-  {
-    id: "no-hop-in-front-of-dev",
-    reason: "ocel dev fronts the app with no proxy, so nothing appends the client address",
-    where: [{ on: ["dev"], fails: [check(clientAddressCheck)] }],
-  },
-  {
-    id: "no-router-in-front-of-dev",
-    reason: "ocel dev does not front a Next app with the router, so no cache tier is observable",
-    issue: 898,
-    where: [
-      {
-        on: ["dev"],
-        fixtures: [deploy.next, sdk.next],
-        fails: [check(NEXT_CACHE, ["verify"])],
-      },
-    ],
-  },
-  {
     id: "cloudflare-proxies-a-box-uncached",
     reason: "Cloudflare in front of a box proxies container apps without caching them",
     issue: 1457,

@@ -87,6 +87,7 @@ export function cellsOn(fixture: Fixture, target: TargetName): Cell[] {
     fixture,
     variant,
     cacheLayer: cacheLayerOf(target, variant),
+    target,
   }));
 }
 

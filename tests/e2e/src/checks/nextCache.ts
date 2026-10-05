@@ -53,7 +53,7 @@ function assertRenderedOutsideNextCache(res: Response, what: string) {
 }
 
 function holdAt(cacheLayer: CacheLayer, checks: Check[]): Check[] {
-  return checks.map((one) => ({ ...one, cacheLayer }));
+  return checks.map((one) => ({ ...one, cacheLayer, assertsDeployment: true }));
 }
 
 function assertCacheControl(res: Response, expected: string, what: string) {
