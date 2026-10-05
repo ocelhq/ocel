@@ -14,14 +14,14 @@ const pkgDir = resolve(import.meta.dirname, "..");
 
 const children: ChildProcess[] = [];
 let dist: string;
-let folder: string;
+let dir: string;
 
 beforeAll(async () => {
   dist = await mkdtemp(join(tmpdir(), "ocel-gcp-next-"));
   await execFileAsync("bun", ["scripts/bundle-next.mjs", relative(pkgDir, dist)], {
     cwd: pkgDir,
   });
-  folder = join(dist, "next");
+  dir = join(dist, "next");
 }, 120_000);
 
 afterAll(async () => {
@@ -33,10 +33,10 @@ afterEach(() => {
 });
 
 async function shippedFiles(): Promise<string[]> {
-  const entries = await readdir(folder, { recursive: true, withFileTypes: true });
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
   return entries
     .filter((entry) => entry.isFile())
-    .map((entry) => relative(folder, join(entry.parentPath, entry.name)))
+    .map((entry) => relative(dir, join(entry.parentPath, entry.name)))
     .sort();
 }
 
@@ -62,7 +62,7 @@ async function answer(port: number): Promise<string> {
   throw new Error(`nothing answered on port ${port}`);
 }
 
-test("the runtime folder holds the entrypoint and every cache handler a Next build names", async () => {
+test("the runtime dir holds the entrypoint and every cache handler a Next build names", async () => {
   expect(await shippedFiles()).toEqual(
     expect.arrayContaining([
       "cache-handler.cjs",
@@ -73,16 +73,16 @@ test("the runtime folder holds the entrypoint and every cache handler a Next bui
   );
 });
 
-test("the entrypoint imports nothing but Node's own modules and the sharp the folder ships", async () => {
+test("the entrypoint imports nothing but Node's own modules and the sharp the dir ships", async () => {
   await init;
-  const [imports] = parse(await readFile(join(folder, "entrypoint.mjs"), "utf8"));
+  const [imports] = parse(await readFile(join(dir, "entrypoint.mjs"), "utf8"));
   const bare = imports
     .flatMap((found) => (found.n === undefined ? [] : [found.n]))
     .filter((specifier) => !isBuiltin(specifier));
   expect([...new Set(bare)]).toEqual(["sharp"]);
 });
 
-test("the runtime folder ships sharp built for the Linux x64 Cloud Run runs", async () => {
+test("the runtime dir ships sharp built for the Linux x64 Cloud Run runs", async () => {
   expect(await shippedFiles()).toEqual(
     expect.arrayContaining([
       "node_modules/sharp/package.json",
@@ -92,11 +92,11 @@ test("the runtime folder ships sharp built for the Linux x64 Cloud Run runs", as
   );
 });
 
-test("no file in the runtime folder contains a path of the checkout it was built in", async () => {
+test("no file in the runtime dir contains a path of the checkout it was built in", async () => {
   const checkout = resolve(pkgDir, "..", "..", "..");
   const leaking: string[] = [];
   for (const file of await shippedFiles()) {
-    if ((await readFile(join(folder, file), "utf8")).includes(checkout)) leaking.push(file);
+    if ((await readFile(join(dir, file), "utf8")).includes(checkout)) leaking.push(file);
   }
   expect(leaking).toEqual([]);
 });
@@ -149,7 +149,7 @@ test("a stale page served by a Next service billed per request is re-rendered be
   );
   const port = await freePort();
 
-  const child = spawn(process.execPath, [join(folder, "entrypoint.mjs")], {
+  const child = spawn(process.execPath, [join(dir, "entrypoint.mjs")], {
     cwd: projectDir,
     env: {
       PATH: process.env.PATH,
@@ -182,7 +182,7 @@ test("the entrypoint serves a Next app on the port Cloud Run names", async () =>
   );
   const port = await freePort();
 
-  const child = spawn(process.execPath, [join(folder, "entrypoint.mjs")], {
+  const child = spawn(process.execPath, [join(dir, "entrypoint.mjs")], {
     cwd: projectDir,
     env: { PATH: process.env.PATH, OCEL_HANDLER: launcher, PORT: String(port) },
     stdio: ["ignore", "inherit", "inherit"],
