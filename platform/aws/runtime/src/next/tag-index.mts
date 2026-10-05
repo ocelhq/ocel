@@ -1,3 +1,5 @@
+import type { TagRecordUpdate } from "@framework/next-runtime/use-cache-store";
+
 export type TagAttribute = { S: string } | { N: string };
 
 export interface TagUpdateItem {
@@ -6,12 +8,6 @@ export interface TagUpdateItem {
   ConditionExpression: string;
   UpdateExpression: string;
   ExpressionAttributeValues: Record<string, TagAttribute>;
-}
-
-export interface TagRecordUpdate {
-  stale?: number;
-  expired?: number;
-  writtenAt: number;
 }
 
 const sortKeyWidth = 15;

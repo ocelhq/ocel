@@ -1,7 +1,11 @@
+import type { CacheEntryFile } from "@framework/next-cache";
+import type { CacheStore } from "@framework/next-runtime/cache-store";
+import type {
+  TagRecordUpdate,
+  TagSnapshotRead,
+  UseCacheStore,
+} from "@framework/next-runtime/use-cache-store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { CacheEntryFile, CacheStore } from "../src/next/cache-store.mjs";
-import type { TagRecordUpdate } from "../src/next/tag-index.mjs";
-import type { TagSnapshotRead, UseCacheStore } from "../src/next/use-cache-store.mjs";
 import { publishedRecords, type TagRow } from "./tag-rows.mjs";
 
 function fakeStore() {
@@ -71,7 +75,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  (await import("../src/next/tags-manifest.mjs")).mirrorTagsInto(null);
+  (await import("@framework/next-runtime/tags-manifest")).mirrorTagsInto(null);
   vi.restoreAllMocks();
   for (const v of [
     "OCEL_STATE_TABLE",
@@ -90,7 +94,7 @@ function advance(ms: number) {
 async function load(store: UseCacheStore | null, env: Record<string, string> = {}) {
   vi.resetModules();
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
-  const clock = await import("../src/next/tag-clock.mjs");
+  const clock = await import("@framework/next-runtime/tag-clock");
   const handler = (await import("../src/next/use-cache-default.mjs")).default;
   clock.setTagClockStore(store);
   return { tagClock: clock.tagClock, handler };
@@ -133,12 +137,12 @@ function seedPage(isr: FakeIsrStore, tag: string, lastModified = 1_000) {
 
 async function loadBoth(store: ReturnType<typeof fakeStore>, published = true) {
   vi.resetModules();
-  const clock = await import("../src/next/tag-clock.mjs");
+  const clock = await import("@framework/next-runtime/tag-clock");
   const handler = (await import("../src/next/use-cache-default.mjs")).default;
-  const CacheHandler = (await import("../src/next/cache-handler.mjs")).default;
+  const CacheHandler = (await import("@framework/next-runtime/cache-handler")).default;
   clock.setTagClockStore(store);
   const entries = fakeIsrStore(published ? store : null);
-  CacheHandler.store = entries;
+  CacheHandler.store = Promise.resolve(entries);
   return { tagClock: clock.tagClock, handler, isr: new CacheHandler(), entries };
 }
 
@@ -376,7 +380,7 @@ test("shares one clock between module graphs built from the same configuration",
   await first.handler.updateTags(["products"]);
 
   vi.resetModules();
-  const reloaded = (await import("../src/next/tag-clock.mjs")).tagClock;
+  const reloaded = (await import("@framework/next-runtime/tag-clock")).tagClock;
 
   expect(reloaded).not.toBe(first.tagClock);
   expect(await reloaded.getExpiration(["products"])).toBeGreaterThan(0);
@@ -394,7 +398,7 @@ test("refuses to adopt a shared clock built from different configuration", async
 
   vi.resetModules();
   process.env.OCEL_ISR_TAG_NAMESPACE = "TAG#b#";
-  const other = (await import("../src/next/tag-clock.mjs")).tagClock;
+  const other = (await import("@framework/next-runtime/tag-clock")).tagClock;
 
   expect(await other.getExpiration(["products"])).toBe(0);
 });
@@ -490,7 +494,7 @@ test("mirrors an invalidation it raises into Next's own tags manifest", async ()
   const store = fakeStore();
   const manifest = new Map<string, { stale?: number; expired?: number }>();
   const { handler } = await load(store);
-  (await import("../src/next/tags-manifest.mjs")).mirrorTagsInto(manifest);
+  (await import("@framework/next-runtime/tags-manifest")).mirrorTagsInto(manifest);
 
   await handler.updateTags(["products"], { expire: 3600 });
 
@@ -503,7 +507,7 @@ test("mirrors an invalidation raised elsewhere once it syncs", async () => {
   const store = fakeStore();
   const manifest = new Map<string, { stale?: number; expired?: number }>();
   const { tagClock } = await load(store);
-  (await import("../src/next/tags-manifest.mjs")).mirrorTagsInto(manifest);
+  (await import("@framework/next-runtime/tags-manifest")).mirrorTagsInto(manifest);
 
   store.seed("products", { stale: 4_000, expired: 9_000, writtenAt: 4_000 });
   await tagClock.refreshTags();

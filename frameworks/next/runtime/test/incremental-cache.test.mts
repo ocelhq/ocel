@@ -4,9 +4,9 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { loadIncrementalCacheFactory } from "../src/next/incremental-cache.mjs";
-import { loadProjectManifest } from "../src/next/project-manifest.mjs";
-import { previewModeId, writeNextProjectFixture } from "./next-project-fixture.mjs";
+import { loadIncrementalCacheFactory } from "../src/incremental-cache.mjs";
+import { loadProjectManifest } from "../src/project-manifest.mjs";
+import { previewModeId, writeNextProjectFixture } from "../test-support/next-project-fixture.mjs";
 
 let dir: string;
 

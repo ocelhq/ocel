@@ -1,8 +1,9 @@
 import { areTagsExpired, mergeRecord, type TagRecord } from "@framework/next-cache";
+import { getNextHost } from "./host.mjs";
 import { noteRevalidation } from "./revalidation-signal.mjs";
 import { mirrorTag } from "./tags-manifest.mjs";
 import { now } from "./use-cache-entry.mjs";
-import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
+import type { UseCacheStore } from "./use-cache-store.mjs";
 
 export interface TagClock {
   updateTags(tags: string[], durations?: { expire?: number }): Promise<void>;
@@ -16,7 +17,7 @@ export interface TagClock {
 interface ClockState {
   fingerprint: string;
   records: Map<string, TagRecord>;
-  store: UseCacheStore | null | undefined;
+  store: Promise<UseCacheStore | null> | undefined;
   etag: string | null;
   hasSynced: boolean;
   lastAttemptAt: number;
@@ -56,19 +57,22 @@ function sharedState(): ClockState {
 
 const state = sharedState();
 
-export function useCacheStore(): UseCacheStore | null {
-  if (state.store === undefined) {
-    try {
-      state.store = awsUseCacheStore();
-    } catch {
-      state.store = null;
-    }
-  }
-  return state.store;
+export function useCacheStore(): Promise<UseCacheStore | null> {
+  if (state.store !== undefined) return state.store;
+  const newStore = getNextHost().newUseCacheStore;
+  if (!newStore) return Promise.resolve(null);
+  const opening = newStore().catch(() => {
+    if (state.store === opening) state.store = undefined;
+    return null;
+  });
+  state.store = opening;
+  return opening;
 }
 
-export function setTagClockStore(next: UseCacheStore | null): void {
-  Object.assign(state, initialState(state.fingerprint), { store: next });
+export function setTagClockStore(next: UseCacheStore | null | undefined): void {
+  Object.assign(state, initialState(state.fingerprint), {
+    store: next === undefined ? undefined : Promise.resolve(next),
+  });
 }
 
 function observe(tag: string, incoming: TagRecord): void {
@@ -78,7 +82,7 @@ function observe(tag: string, incoming: TagRecord): void {
 }
 
 async function sync(): Promise<void> {
-  const backend = useCacheStore();
+  const backend = await useCacheStore();
   if (!backend) return;
 
   try {
@@ -122,7 +126,7 @@ export const tagClock: TagClock = {
     }
     if (tags.length > 0) noteRevalidation();
 
-    const backend = useCacheStore();
+    const backend = await useCacheStore();
     if (!backend) return;
 
     await Promise.all(

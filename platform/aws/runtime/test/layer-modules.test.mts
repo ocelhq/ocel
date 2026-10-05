@@ -3,13 +3,11 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
+import { init, parse } from "es-module-lexer";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
 const execFileAsync = promisify(execFile);
 const pkgDir = resolve(import.meta.dirname, "..");
-
-const specifierPattern =
-  /\b(?:import|export)\b[^"'`;]*?\bfrom\s*["']([^"']+)["']|\bimport\s*["']([^"']+)["']/g;
 
 let dist: string;
 
@@ -33,8 +31,9 @@ async function looseModules(): Promise<string[]> {
 }
 
 async function specifiersOf(file: string): Promise<string[]> {
-  const source = await readFile(file, "utf8");
-  return [...source.matchAll(specifierPattern)].map((match) => match[1] ?? match[2]!);
+  await init;
+  const [imports] = parse(await readFile(file, "utf8"));
+  return imports.flatMap((found) => (found.n === undefined ? [] : [found.n]));
 }
 
 test("no loose layer module imports a package the layer does not ship", async () => {

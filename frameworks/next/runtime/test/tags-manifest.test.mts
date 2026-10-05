@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 
-import { loadTagsManifest, mirrorTag, mirrorTagsInto } from "../src/next/tags-manifest.mjs";
+import { loadTagsManifest, mirrorTag, mirrorTagsInto } from "../src/tags-manifest.mjs";
 
 const manifestModule = "next/dist/server/lib/incremental-cache/tags-manifest.external.js";
 const adapterDir = join(import.meta.dirname, "../../../../../frameworks/next/adapter");

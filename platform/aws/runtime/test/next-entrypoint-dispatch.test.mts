@@ -3,8 +3,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { writeNextProjectFixture } from "@framework/next-runtime/test-support/next-project-fixture";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { writeNextProjectFixture } from "./next-project-fixture.mjs";
 
 const ENTRY_BUNDLE = "page-bundle";
 

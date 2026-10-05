@@ -1,14 +1,19 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { refreshHeader, type TagRecord, variantHeadersFile } from "@framework/next-cache";
+import {
+  type CacheEntryFile,
+  refreshHeader,
+  type TagRecord,
+  variantHeadersFile,
+} from "@framework/next-cache";
 import { runWithWaitUntil } from "@framework/node-runtime/background";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import OcelCacheHandler from "../src/next/cache-handler.mjs";
-import type { CacheEntryFile, CacheStore } from "../src/next/cache-store.mjs";
-import { collectTags, notedTags } from "../src/next/origin-tags.mjs";
-import { revalidationTicks } from "../src/next/revalidation-signal.mjs";
-import { setTagClockStore } from "../src/next/tag-clock.mjs";
+import OcelCacheHandler from "../src/cache-handler.mjs";
+import type { CacheStore } from "../src/cache-store.mjs";
+import { collectTags, notedTags } from "../src/origin-tags.mjs";
+import { revalidationTicks } from "../src/revalidation-signal.mjs";
+import { setTagClockStore } from "../src/tag-clock.mjs";
 
 function fakeStore() {
   const entries = new Map<string, CacheEntryFile>();
@@ -43,7 +48,7 @@ function fakeStore() {
     },
     async readEntry(key) {
       calls.readEntry++;
-      if (failReads) throw new Error("s3 is down");
+      if (failReads) throw new Error("the store is down");
       return entries.get(key) ?? null;
     },
     async writeEntry(key, entry) {
@@ -52,7 +57,7 @@ function fakeStore() {
       entries.set(key, entry);
     },
     async readFetch(hash) {
-      if (failReads) throw new Error("s3 is down");
+      if (failReads) throw new Error("the store is down");
       return fetches.get(hash) ?? null;
     },
     async writeFetch(hash, entry) {
@@ -64,7 +69,7 @@ function fakeStore() {
       for (const n of names) tags.set(n, { ...tags.get(n), ...record });
     },
   };
-  OcelCacheHandler.store = store;
+  OcelCacheHandler.store = Promise.resolve(store);
   return store;
 }
 
@@ -253,6 +258,20 @@ test("unions the tags of every entry a request composed", async () => {
   await handler.get("/cart", { kind: "APP_PAGE" });
 
   expect(notedTags(requestHeaders)).toEqual(["products", "_N_T_/layout", "cart"]);
+});
+
+test("notes a tag in Next's spelling, leaving each edge to apply its own tag limits", async () => {
+  const store = fakeStore();
+  const many = Array.from({ length: 1_200 }, (_, i) => `t${i}`);
+  seedPage(store, "index", { tags: ["two words", ...many].join(",") });
+  const requestHeaders: any = {};
+  collectTags(requestHeaders);
+
+  await new OcelCacheHandler({ _requestHeaders: requestHeaders }).get("/", {
+    kind: "APP_PAGE",
+  });
+
+  expect(notedTags(requestHeaders)).toEqual(["two words", ...many]);
 });
 
 test("notes nothing on a request the entrypoint never installed a collector on", async () => {

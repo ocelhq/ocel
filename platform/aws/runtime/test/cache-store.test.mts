@@ -1,5 +1,5 @@
+import type { CacheStore } from "@framework/next-runtime/cache-store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { CacheStore } from "../src/next/cache-store.mjs";
 
 const storeEnv = {
   OCEL_ISR_STORE_BUCKET: "isr",
@@ -24,7 +24,7 @@ const adoptWriter = () =>
   });
 
 afterEach(async () => {
-  (await import("../src/next/tag-clock.mjs")).setTagClockStore(null);
+  (await import("@framework/next-runtime/tag-clock")).setTagClockStore(null);
   vi.useRealTimers();
   vi.resetModules();
   vi.restoreAllMocks();
@@ -66,8 +66,8 @@ async function storeWithResponses(responses: any[]) {
 }
 
 async function handlerOver(store: CacheStore) {
-  const { default: OcelCacheHandler } = await import("../src/next/cache-handler.mjs");
-  OcelCacheHandler.store = store;
+  const { default: OcelCacheHandler } = await import("@framework/next-runtime/cache-handler");
+  OcelCacheHandler.store = Promise.resolve(store);
   return new OcelCacheHandler();
 }
 
@@ -245,7 +245,7 @@ test("serves a tagged entry off the snapshot, sending nothing to the table", asy
     { Body: { transformToString: async () => entryBody } },
     { Body: { transformToString: async () => snapshotBody }, ETag: '"v1"' },
   ]);
-  const clock = await import("../src/next/tag-clock.mjs");
+  const clock = await import("@framework/next-runtime/tag-clock");
   const { awsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
   clock.setTagClockStore(awsUseCacheStore());
 

@@ -1,0 +1,36 @@
+{
+  "name": "@framework/next-runtime",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "description": "the host-neutral runtime a Next app is served through",
+  "exports": {
+    "./cache-handler": "./src/cache-handler.mts",
+    "./cache-shaping": "./src/cache-shaping.mts",
+    "./cache-store": "./src/cache-store.mts",
+    "./host": "./src/host.mts",
+    "./incremental-cache": "./src/incremental-cache.mts",
+    "./origin-tags": "./src/origin-tags.mts",
+    "./project-manifest": "./src/project-manifest.mts",
+    "./revalidation-signal": "./src/revalidation-signal.mts",
+    "./tag-clock": "./src/tag-clock.mts",
+    "./tags-manifest": "./src/tags-manifest.mts",
+    "./test-support/*": "./test-support/*.mts",
+    "./use-cache-entry": "./src/use-cache-entry.mts",
+    "./use-cache-store": "./src/use-cache-store.mts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@framework/next-cache": "workspace:*",
+    "@framework/node-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

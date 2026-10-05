@@ -2,8 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { writeNextProjectFixture } from "@framework/next-runtime/test-support/next-project-fixture";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { writeNextProjectFixture } from "./next-project-fixture.mjs";
 
 const LIVE_VALUES = Symbol.for("ocel.env.liveValues");
 
