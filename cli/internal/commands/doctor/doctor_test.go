@@ -723,10 +723,13 @@ func TestDoctorPrintsALineForEachStepOfItsCheckAsTheStepEnds(t *testing.T) {
 	}
 	want := []string{
 		"Loaded the provider",
-		"Checked your credentials and the production bootstrap for my-shop",
+		"Checked your credentials",
+		"Read the production bootstrap",
+		"Checked the hosts",
 		"Read what production has set up",
 		"Checked the production hostnames",
-		"Checked your credentials and the preview bootstrap for my-shop",
+		"Checked your credentials",
+		"Read the preview bootstrap",
 		"Read what preview has set up",
 	}
 	if !slices.Equal(steps, want) {
@@ -734,7 +737,25 @@ func TestDoctorPrintsALineForEachStepOfItsCheckAsTheStepEnds(t *testing.T) {
 	}
 }
 
-func TestDoctorPrintsTheStepThatFailedAndBeginsNoOther(t *testing.T) {
+func TestDoctorPrintsTheStepThatFailed(t *testing.T) {
+	project := healthyProject(t)
+	project.Provider.Credentials().(*fake.Credentials).Deny("the fake account refuses this key")
+
+	invocation := clitest.NewInvocation()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	_ = Run(context.Background(), invocation, project.Root, &stdout)
+
+	got := stderr.String()
+	if !strings.Contains(got, "[check] ✗ fake: Checking your credentials failed") {
+		t.Errorf("stderr = %s, want the credential check named as the step that failed", got)
+	}
+	if strings.Contains(got, "Read the production bootstrap") {
+		t.Errorf("stderr = %s, want no bootstrap read after the credentials it needs were refused", got)
+	}
+}
+
+func TestDoctorBeginsNoRemoteStepForAnAppTheProviderCannotRun(t *testing.T) {
 	project := healthyProject(t)
 	project.Provider.WithFacts(func(facts *provider.Facts) {
 		facts.Computes = []provider.Compute{provider.ComputeServerless}
@@ -754,11 +775,11 @@ export default {
 	_ = Run(context.Background(), invocation, project.Root, &stdout)
 
 	got := stderr.String()
-	if !strings.Contains(got, "[check] ✗ fake: Checking your credentials and the production bootstrap for my-shop failed") {
-		t.Errorf("stderr = %s, want the production check named as the step that failed", got)
+	if strings.Contains(got, "Checked your credentials") || strings.Contains(got, "preview") {
+		t.Errorf("stderr = %s, want no remote step begun for a config this provider cannot run", got)
 	}
-	if strings.Contains(got, "preview") {
-		t.Errorf("stderr = %s, want no step begun after the one that failed", got)
+	if !strings.Contains(stdout.String(), `✗ app "api"`) {
+		t.Errorf("stdout = %s, want the report to name api as what fake cannot run", stdout.String())
 	}
 }
 

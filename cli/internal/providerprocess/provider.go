@@ -88,6 +88,15 @@ func ReadLogs(ctx context.Context, p *Provider, req *contractv1.ReadLogsRequest,
 	})
 }
 
+func Preflight(ctx context.Context, p *Provider, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
+	var resp *contractv1.PreflightResponse
+	err := p.callAnswering(ctx, func(r *Process) (err error) {
+		resp, err = r.preflight(ctx, req, p.span.Forward)
+		return err
+	})
+	return resp, err
+}
+
 func Plan[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req]) (*planv1.ChangePlan, error) {
 	var plan *planv1.ChangePlan
 	_, err := forward(ctx, p, rpc, req, call, func(event *progressv1.OperationEvent) {

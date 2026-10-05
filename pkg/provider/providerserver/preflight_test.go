@@ -35,7 +35,7 @@ func TestPreflightReportsWhoThisRunIsAndWhatItIncludes(t *testing.T) {
 	})
 	recordProject(t, vendor, "blog")
 
-	resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
+	resp, err := preflight(ctx, client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 	})
@@ -72,7 +72,7 @@ func TestPreflightNamesTheArchitectureContainerImagesAreBuiltFor(t *testing.T) {
 	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
 	client := servedBy(t, vendor.WrappingContainers("arm64", []byte("runtime")))
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 		Containers: []*contractv1.ContainerApp{
@@ -92,7 +92,7 @@ func TestPreflightNamesNoContainerArchitectureForAProviderThatWrapsNone(t *testi
 	t.Parallel()
 
 	client, _ := contractServed(t, "1.2.3")
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 	})
@@ -129,7 +129,7 @@ func TestPreflightReportsCredentialsThatWereDenied(t *testing.T) {
 	client, vendor := contractServed(t, "1.2.3")
 	vendor.Credentials().(*fake.Credentials).Deny("run `fake login` and try again")
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	if err != nil {
@@ -187,7 +187,7 @@ func TestPreflightRefusesWithTheQuestionTheProviderAskedAndConfirmRunsWhatAYesDo
 	confirmed := 0
 	askingCredentials(vendor, &confirmed)
 
-	_, err := client.Preflight(ctx, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
+	_, err := preflight(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
 	question := questionIn(err)
 	if question == nil || question.GetId() == "" {
 		t.Fatalf("Preflight() error = %v, want a refusal carrying a question with an id to answer", err)
@@ -208,7 +208,7 @@ func TestPreflightRefusesWithTheQuestionTheProviderAskedAndConfirmRunsWhatAYesDo
 	if confirmed != 1 {
 		t.Errorf("Confirm() ran the provider's action %d times, want once", confirmed)
 	}
-	if _, err := client.Preflight(ctx, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION}); err != nil {
+	if _, err := preflight(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION}); err != nil {
 		t.Errorf("Preflight() after the answer = %v, want the retried call to go through", err)
 	}
 	if _, err := client.Confirm(ctx, &contractv1.ConfirmRequest{QuestionId: question.GetId()}); connect.CodeOf(err) != connect.CodeInvalidArgument {
@@ -232,7 +232,7 @@ func TestPreflightReportsAPlainCredentialRefusalAsAProblemAndAsksNothing(t *test
 	client, vendor := contractServed(t, "1.2.3")
 	vendor.Credentials().(*fake.Credentials).Deny("the host key for 203.0.113.7 changed")
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil || questionIn(err) != nil {
 		t.Fatalf("Preflight() error = %v, want the refusal reported in the answer", err)
 	}
@@ -251,7 +251,7 @@ func TestPreflightRequiresTheFeaturesTheEdgeNeeds(t *testing.T) {
 		Features: []string{fake.FeatureCache},
 	})
 
-	resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
+	resp, err := preflight(ctx, client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Edge:         &contractv1.EdgeSelection{Kind: "relay"},
 	})
@@ -269,7 +269,7 @@ func TestPreflightWithNoBootstrapYetReportsEveryFeatureTheProjectNeeds(t *testin
 	t.Parallel()
 
 	client, _ := contractServed(t, "1.2.3")
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Frameworks:   []string{"next"},
 		Edge:         &contractv1.EdgeSelection{Kind: "direct"},
@@ -293,7 +293,7 @@ func TestPreflightReportsEveryFeatureTheProjectNeedsThatABootstrapLacks(t *testi
 
 	client, _ := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: &contractv1.EdgeSelection{Kind: "direct"}})
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Frameworks:   []string{"next"},
 		Edge:         &contractv1.EdgeSelection{Kind: "direct"},
@@ -319,7 +319,7 @@ func TestPreflightReturnsTheGlobalPreviewWildcard(t *testing.T) {
 	client, _ := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
 
-	resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW})
+	resp, err := preflight(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW})
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)
 	}
@@ -331,7 +331,7 @@ func TestPreflightReturnsTheGlobalPreviewWildcard(t *testing.T) {
 		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
 	}
 
-	resp, err = client.Preflight(ctx, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW})
+	resp, err = preflight(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW})
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)
 	}
@@ -351,7 +351,7 @@ func TestPreflightFallsBackToTheSiblingTier(t *testing.T) {
 	client, _ := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
-	resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW})
+	resp, err := preflight(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW})
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)
 	}
@@ -370,7 +370,7 @@ func TestPreflightNamesWhoAlreadyServesEachHostnameThisProjectDeclares(t *testin
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-other-production")
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 		Domains:      []string{"acme.com", "free.example.com"},
@@ -404,7 +404,7 @@ func TestPreflightDoesNotReportThisProjectsOwnHostnameAsSomeoneElsesClaim(t *tes
 	})
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-shop-production")
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 		Domains:      []string{"acme.com"},
@@ -428,7 +428,7 @@ func TestPreflightDoesNotRefuseAHostnameThisProjectAlreadyClaimsButNeverRecorded
 	})
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-shop-production")
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 		Domains:      []string{"acme.com"},
@@ -449,7 +449,7 @@ func TestPreflightReportsAnUnreadableOwnerRatherThanStoppingTheDeploy(t *testing
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).OwnersUnreadable(errors.New("the edge was throttled listing what it serves"))
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 		Domains:      []string{"acme.com"},
@@ -474,7 +474,7 @@ func TestPreflightTreatsTheSharedPreviewEntryAsNobodysClaim(t *testing.T) {
 	wildcard := edge.PreviewWildcard("previews.example.com")
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns(wildcard, edge.PreviewEntryOwner)
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PREVIEW,
 		Slug:         "shop",
 		Domains:      []string{wildcard},
@@ -494,7 +494,7 @@ func TestPreflightNamesTheEdgeScopeTheEdgeCredentialsReach(t *testing.T) {
 	client, vendor := contractServed(t, "1.2.3")
 	vendor.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{Account: "acct-42"}, nil)
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	if err != nil {
@@ -514,7 +514,7 @@ func TestPreflightReportsEdgeCredentialsThatWouldNotAnswer(t *testing.T) {
 	client, vendor := contractServed(t, "1.2.3")
 	vendor.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{}, errors.New("token expired"))
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	if err != nil {
@@ -543,7 +543,7 @@ func TestPreflightLeavesTheEdgeScopeEmptyWhenNoEdgeVerifiesCredentials(t *testin
 
 	client, _ := contractServed(t, "1.2.3")
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	if err != nil {
@@ -569,7 +569,7 @@ func TestPreflightNamesNoEdgeScopeForAnEdgeThatChecksNoCredentials(t *testing.T)
 		t.Fatal("the reference edge checks its credentials, so it cannot represent one that checks none")
 	}
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	if err != nil {
@@ -589,7 +589,7 @@ func TestPreflightSaysWhetherTheTierNeedsAHostnameToServeOn(t *testing.T) {
 	t.Run("a router that serves only on hostnames it is given needs one", func(t *testing.T) {
 		t.Parallel()
 		client, _ := contractServed(t, "1.2.3")
-		resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
+		resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
 		if err != nil {
 			t.Fatalf("Preflight() error = %v", err)
 		}
@@ -602,7 +602,7 @@ func TestPreflightSaysWhetherTheTierNeedsAHostnameToServeOn(t *testing.T) {
 		t.Parallel()
 		client, vendor := contractServed(t, "1.2.3")
 		vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).AddressesItself(true)
-		resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
+		resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
 		if err != nil {
 			t.Fatalf("Preflight() error = %v", err)
 		}
@@ -622,7 +622,7 @@ func TestPreflightReportsDNSCredentialsThatFailVerification(t *testing.T) {
 	client, vendor := contractServed(t, "1.2.3")
 	vendor.DNS().(*fake.DNS).Verifies(errors.New("token revoked"))
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Edge:         dnsSelection(fake.KindZone),
 	})
@@ -650,7 +650,7 @@ func TestPreflightChecksNoDNSCredentialsWhenTheProjectSelectsNoDNS(t *testing.T)
 	client, vendor := contractServed(t, "1.2.3")
 	vendor.DNS().(*fake.DNS).Verifies(errors.New("token revoked"))
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	if err != nil {
@@ -666,7 +666,7 @@ func TestPreflightRefusesADNSWriterTheProviderDoesNotHave(t *testing.T) {
 
 	client, _ := contractServed(t, "1.2.3")
 
-	_, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	_, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Edge:         dnsSelection("no-such-dns"),
 	})
@@ -697,7 +697,7 @@ func TestPreflightReportsCredentialsTheEdgeAndItsDNSShareOnce(t *testing.T) {
 
 	selection := dnsSelection(provider.DNSKind(fake.KindRelay))
 	selection.Kind = string(fake.KindRelay)
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Edge:         selection,
 	})
@@ -720,7 +720,7 @@ func TestPreflightChecksNoDNSCredentialsTheEdgeOfTheSameVendorAlreadyPassed(t *t
 
 	selection := dnsSelection(provider.DNSKind(fake.KindRelay))
 	selection.Kind = string(fake.KindRelay)
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Edge:         selection,
 	})
@@ -756,7 +756,7 @@ func TestPreflightRefusesADNSWriterThatCannotServeTheSelectedEdge(t *testing.T) 
 
 	selection := dnsSelection(fake.KindZone)
 	selection.Kind = string(fake.KindRelay)
-	_, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	_, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Edge:         selection,
 	})
@@ -777,7 +777,7 @@ func TestPreflightNamesNoKnownSlugsForAProjectThatIsAlreadyRecorded(t *testing.T
 	recordProject(t, vendor, "blog")
 	recordProject(t, vendor, "shop")
 
-	resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
+	resp, err := preflight(ctx, client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 	})
@@ -834,7 +834,7 @@ func TestPreflightOfARecordedProjectReadsItsRecordWithoutListingTheOthers(t *tes
 	recordProject(t, vendor.Provider, "shop")
 	before := vendor.projectListings()
 
-	if _, err := client.Preflight(ctx, &contractv1.PreflightRequest{
+	if _, err := preflight(ctx, client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 	}); err != nil {

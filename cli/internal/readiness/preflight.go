@@ -6,7 +6,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 type Preflight struct {
@@ -31,10 +30,5 @@ func ResolveComputes(provider *providerprocess.Provider, cfg *project.Project) (
 }
 
 func preflight(ctx context.Context, provider *providerprocess.Provider, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
-	var resp *contractv1.PreflightResponse
-	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		resp, err = client.Preflight(ctx, req)
-		return err
-	})
-	return resp, err
+	return providerprocess.Preflight(ctx, provider, req)
 }

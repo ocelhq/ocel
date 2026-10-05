@@ -42,7 +42,7 @@ func hostChecksServed(t *testing.T, answer []provider.HostCheck, refusal error) 
 	client := servedProvider(t, "1.2.3", p)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier:     environmentv1.Tier_TIER_PRODUCTION,
 		Slug:             "shop",
 		Domains:          []string{"shop.example.com"},
@@ -93,7 +93,7 @@ func TestAPreflightThatWillRenderNoHostCheckSectionAsksTheBoxForNone(t *testing.
 	client := servedProvider(t, "1.2.3", p)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 		Domains:      []string{"shop.example.com", "www.example.com"},
@@ -175,7 +175,7 @@ func TestPreflightReturnsNoHostChecksFromAProviderThatAnswersNone(t *testing.T) 
 	client, _ := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 		Domains:      []string{"shop.example.com"},
@@ -223,7 +223,7 @@ func TestADeployProceedsAgainstABoxWhoseHostCheckFailed(t *testing.T) {
 	client := servedProvider(t, "1.2.3", p)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 		Domains:      []string{"shop.example.com"},
