@@ -3,6 +3,7 @@ package providerserver
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -16,6 +17,7 @@ func posedQuestionID(t *testing.T, q *questions, confirmed *int) string {
 	asked := provider.Ask("confirm this", provider.Question{
 		Finding: "a finding",
 		Prompt:  "go ahead?",
+		Remedy:  "ocel bootstrap production",
 		Confirm: func(context.Context) error { *confirmed++; return nil },
 	})
 	err := q.pose(provider.RefusalError(asked))
@@ -83,4 +85,35 @@ func TestAQuestionPosedOverTheWireKeepsItsRemedy(t *testing.T) {
 		}
 	}
 	t.Fatal("pose() attached no question")
+}
+
+func TestAQuestionWithoutARemedyIsRefusedRatherThanPosed(t *testing.T) {
+	q := newQuestions()
+	asked := provider.Ask("confirm this", provider.Question{
+		Finding: "a finding",
+		Prompt:  "go ahead?",
+		Confirm: func(context.Context) error { return nil },
+	})
+
+	err := q.pose(provider.RefusalError(asked))
+	var rpcErr *connect.Error
+	if !errors.As(err, &rpcErr) {
+		t.Fatalf("pose() = %T, want a connect error", err)
+	}
+	if rpcErr.Code() != connect.CodeInternal {
+		t.Errorf("code = %v, want %v: a question with nothing to type where nobody can answer is a provider bug", rpcErr.Code(), connect.CodeInternal)
+	}
+	if !strings.Contains(rpcErr.Message(), "remedy") || !strings.Contains(rpcErr.Message(), "go ahead?") {
+		t.Errorf("message = %q, want the question named as carrying no remedy", rpcErr.Message())
+	}
+	for _, detail := range rpcErr.Details() {
+		if value, _ := detail.Value(); value != nil {
+			if _, ok := value.(*contractv1.Question); ok {
+				t.Error("pose() attached the question, want it withheld until it carries a remedy")
+			}
+		}
+	}
+	if len(q.pending) != 0 {
+		t.Errorf("%d questions pending, want none", len(q.pending))
+	}
 }
