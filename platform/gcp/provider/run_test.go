@@ -339,6 +339,27 @@ func TestUntaggingTakesTheTagOffItsRevisionAndLeavesTheTrafficWhereItWas(t *test
 	}
 }
 
+func TestWhatAServicePinsIsTheRevisionTakingAllOfItsTraffic(t *testing.T) {
+	server := &runServer{}
+	first := serves("ocel-shop-prod-app")
+	_, one := released(t, server, first)
+	p := server.open(t)
+	ctx := context.Background()
+
+	if pinned, err := p.ReadServing(ctx, first.service); err != nil || pinned != one {
+		t.Errorf("ReadServing() of a service following its latest revision = %q, %v, want %s, the revision it serves", pinned, err, one)
+	}
+	second := first
+	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	_, two := released(t, server, second)
+	if err := p.Pin(ctx, first.service, two, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", two, err)
+	}
+	if pinned, err := p.ReadServing(ctx, first.service); err != nil || pinned != two {
+		t.Errorf("ReadServing() = %q, %v, want %s", pinned, err, two)
+	}
+}
+
 func TestAReleaseOntoAServiceThatServesItsLatestRevisionKeepsServingThatRevision(t *testing.T) {
 	server := &runServer{}
 	first := serves("ocel-shop-prod-app")

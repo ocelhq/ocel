@@ -362,6 +362,39 @@ func (p *Provider) Pin(ctx context.Context, service, revision string, stillActiv
 	return err
 }
 
+func (p *Provider) ReadServing(ctx context.Context, service string) (string, error) {
+	clients, services, err := p.openRun(ctx)
+	if err != nil {
+		return "", err
+	}
+	current, err := p.read(ctx, services, clients.servicePath(service), service)
+	if absent(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return servedRevision(current), nil
+}
+
+func servedRevision(current *run.GoogleCloudRunV2Service) string {
+	var serving string
+	for _, target := range allocatedTraffic(current) {
+		if target.Percent == 0 {
+			continue
+		}
+		revision := revisionName(target.Revision)
+		if target.Type == trafficByLatest {
+			revision = revisionName(current.LatestReadyRevision)
+		}
+		if serving != "" && serving != revision {
+			return ""
+		}
+		serving = revision
+	}
+	return serving
+}
+
 func (p *Provider) ReadTag(ctx context.Context, service, revision string) (string, error) {
 	clients, services, err := p.openRun(ctx)
 	if err != nil {
