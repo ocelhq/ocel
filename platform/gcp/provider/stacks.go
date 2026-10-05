@@ -42,7 +42,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		return nil, nil
 	}
 	if servesNext(app) {
-		if err := refuseUnguardedNext(spec); err != nil {
+		if err := refuseGuardWithoutShieldingEdge(spec); err != nil {
 			return nil, err
 		}
 	}
@@ -91,8 +91,8 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			egress:  p.egressFor(names, spec),
 		}
 		if servesNext(app) {
-			served = nextServing(served)
-			if values, err = mergedValues(fn.Name, values, nextEnv(spec, fn, served)); err != nil {
+			served = fillNextServingDefaults(served)
+			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served)); err != nil {
 				return nil, err
 			}
 		}

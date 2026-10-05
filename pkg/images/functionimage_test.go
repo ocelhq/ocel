@@ -173,7 +173,7 @@ func TestFunctionImageServesTheAppsStaticAssetsAndImageConfigFromTheStaticRoot(t
 		}
 	}
 
-	image, err := images.FunctionImage(empty.Image, nextRuntime, dir, images.FunctionImageOptions{NextRuntimeDir: "/ocel/next", AppDir: app})
+	image, err := images.FunctionImage(empty.Image, nextRuntime, dir, images.FunctionImageOptions{NextRuntimeDir: "/ocel/next", StaticSourceDir: app})
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
