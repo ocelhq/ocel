@@ -407,3 +407,44 @@ func TestConcurrentFirstInstallIDCreationAcrossProcessesConverges(t *testing.T) 
 		t.Errorf("stored ID %q, %v; want %q", stored, err, ids[0])
 	}
 }
+
+func TestAFreshInstallHasNotDeployed(t *testing.T) {
+	confighome.Isolate(t)
+
+	if userconfig.HasDeployed() {
+		t.Error("HasDeployed = true on a fresh install, want false")
+	}
+}
+
+func TestMarkingADeployIsRemembered(t *testing.T) {
+	confighome.Isolate(t)
+
+	if err := userconfig.MarkDeployed(); err != nil {
+		t.Fatal(err)
+	}
+
+	if !userconfig.HasDeployed() {
+		t.Error("HasDeployed = false after MarkDeployed, want true")
+	}
+}
+
+func TestMarkingADeployKeepsTheInstallIDAndTheOtherSettings(t *testing.T) {
+	confighome.Isolate(t)
+	writeSettingsFile(t, `{"k":"v"}`)
+	id, err := userconfig.EnsureInstallID()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := userconfig.MarkDeployed(); err != nil {
+		t.Fatal(err)
+	}
+
+	again, err := userconfig.EnsureInstallID()
+	if err != nil || again != id {
+		t.Errorf("install ID = %q, %v, want the %q it had", again, err, id)
+	}
+	if got := string(userconfig.Read()["k"]); got != `"v"` {
+		t.Errorf("setting k = %s, want it kept", got)
+	}
+}
