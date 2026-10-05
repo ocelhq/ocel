@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -48,16 +49,19 @@ func (s Spool) Append(event Event) error {
 	if int64(len(line)) > s.maxBytes {
 		return fmt.Errorf("telemetry event is %d bytes, over the %d byte spool", len(line), s.maxBytes)
 	}
-	unlock, err := s.lockEntries()
+	unlock, err := s.lockEvents()
 	if err != nil {
 		return err
 	}
 	defer unlock()
 
-	if info, err := os.Stat(s.entriesPath()); err != nil || info.Size()+int64(len(line)) <= s.maxBytes {
+	if info, err := os.Stat(s.eventsPath()); err != nil || info.Size()+int64(len(line)) <= s.maxBytes {
 		return s.appendLine(line)
 	}
-	kept := s.readLines()
+	kept, err := s.readLines()
+	if err != nil {
+		return err
+	}
 	var size int64
 	for _, existing := range kept {
 		size += int64(len(existing)) + 1
@@ -70,15 +74,10 @@ func (s Spool) Append(event Event) error {
 }
 
 func (s Spool) Read() ([]json.RawMessage, error) {
-	if _, err := os.Stat(s.entriesPath()); err != nil {
-		return nil, nil
-	}
-	unlock, err := s.lockEntries()
+	lines, err := s.readLines()
 	if err != nil {
 		return nil, err
 	}
-	defer unlock()
-	lines := s.readLines()
 	events := make([]json.RawMessage, len(lines))
 	for i, line := range lines {
 		events[i] = line
@@ -87,12 +86,12 @@ func (s Spool) Read() ([]json.RawMessage, error) {
 }
 
 func (s Spool) HasEvents() bool {
-	events, err := s.Read()
-	return err == nil && len(events) > 0
+	info, err := os.Stat(s.eventsPath())
+	return err == nil && info.Size() > 0
 }
 
 func (s Spool) remove(sent []json.RawMessage) error {
-	unlock, err := s.lockEntries()
+	unlock, err := s.lockEvents()
 	if err != nil {
 		return err
 	}
@@ -101,8 +100,12 @@ func (s Spool) remove(sent []json.RawMessage) error {
 	for _, event := range sent {
 		gone[string(event)] = true
 	}
+	lines, err := s.readLines()
+	if err != nil {
+		return err
+	}
 	var kept [][]byte
-	for _, line := range s.readLines() {
+	for _, line := range lines {
 		if !gone[string(line)] {
 			kept = append(kept, line)
 		}
@@ -110,7 +113,19 @@ func (s Spool) remove(sent []json.RawMessage) error {
 	return s.replaceLines(kept)
 }
 
-func (s Spool) entriesPath() string { return filepath.Join(s.dir, spoolFileName) }
+func (s Spool) lockSending() (unlock func(), locked bool, err error) {
+	lock := flock.New(filepath.Join(s.dir, flushLockName))
+	locked, err = lock.TryLock()
+	if err != nil {
+		return nil, false, fmt.Errorf("lock telemetry flush: %w", err)
+	}
+	if !locked {
+		return nil, false, nil
+	}
+	return func() { _ = lock.Unlock() }, true, nil
+}
+
+func (s Spool) eventsPath() string { return filepath.Join(s.dir, spoolFileName) }
 
 func (s Spool) ensureDir() error {
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
@@ -119,7 +134,7 @@ func (s Spool) ensureDir() error {
 	return nil
 }
 
-func (s Spool) lockEntries() (func(), error) {
+func (s Spool) lockEvents() (func(), error) {
 	if err := s.ensureDir(); err != nil {
 		return nil, err
 	}
@@ -136,10 +151,13 @@ func (s Spool) lockEntries() (func(), error) {
 	return func() { _ = lock.Unlock() }, nil
 }
 
-func (s Spool) readLines() [][]byte {
-	raw, err := os.ReadFile(s.entriesPath())
+func (s Spool) readLines() ([][]byte, error) {
+	raw, err := os.ReadFile(s.eventsPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("read telemetry spool: %w", err)
 	}
 	var lines [][]byte
 	for _, line := range bytes.Split(raw, []byte{'\n'}) {
@@ -147,11 +165,11 @@ func (s Spool) readLines() [][]byte {
 			lines = append(lines, line)
 		}
 	}
-	return lines
+	return lines, nil
 }
 
 func (s Spool) appendLine(line []byte) error {
-	file, err := os.OpenFile(s.entriesPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	file, err := os.OpenFile(s.eventsPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open telemetry spool: %w", err)
 	}
@@ -177,7 +195,7 @@ func (s Spool) replaceLines(lines [][]byte) error {
 	if err := staged.Close(); err != nil {
 		return fmt.Errorf("write telemetry spool: %w", err)
 	}
-	if err := os.Rename(staged.Name(), s.entriesPath()); err != nil {
+	if err := os.Rename(staged.Name(), s.eventsPath()); err != nil {
 		return fmt.Errorf("replace telemetry spool: %w", err)
 	}
 	return nil
