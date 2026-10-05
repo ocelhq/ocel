@@ -13,7 +13,7 @@ import (
 func TestABypassNamingAnotherSubjectOnATerminalFallsBackToConfirmingAndSaysWhy(t *testing.T) {
 	t.Setenv(consent.BypassEnv, "shop")
 
-	granted, notice, err := consent.Bypass{Noun: "project", Subject: "acme", Action: "destroying production", Verb: "destroyed", TTY: true}.Granted()
+	granted, notice, err := consent.Bypass{Noun: "project", Subject: "acme", Action: "destroying production", Verb: "destroyed", Interactive: true}.Granted()
 
 	if err != nil || granted {
 		t.Fatalf("Granted() = %v, %v, want no grant and no error", granted, err)

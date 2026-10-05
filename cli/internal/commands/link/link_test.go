@@ -314,7 +314,7 @@ func TestLinkSelectsOrCreatesAConsoleProjectForThisDirectory(t *testing.T) {
 			dependencies := newTestDependencies()
 			dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
 			dependencies.StdinIsTerminal = func(r io.Reader) bool { return terminal.IsTerminal(r) }
-			dependencies.JSON = func() bool { return true }
+			dependencies.IsJSON = func() bool { return true }
 			srv := newCloudServer(t, tc.projects...)
 			if tc.orgs > 1 {
 				srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})

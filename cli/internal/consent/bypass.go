@@ -18,7 +18,7 @@ type Bypass struct {
 	Yes          bool
 	DryRun       bool
 	GrantsDryRun bool
-	TTY          bool
+	Interactive  bool
 }
 
 func (b Bypass) Granted() (granted bool, notice string, err error) {
@@ -29,7 +29,7 @@ func (b Bypass) Granted() (granted bool, notice string, err error) {
 	case requested == b.Subject:
 		return true, fmt.Sprintf("%s=%s: %s without confirmation", BypassEnv, b.Subject, b.Action), nil
 	case requested == "" || b.Yes:
-	case !b.TTY:
+	case !b.Interactive:
 		return false, "", clierror.NewConfirmationBypassMismatch(
 			fmt.Errorf("%s is set to %q, but this %s is %q; it must name the %s being %s",
 				BypassEnv, requested, b.Noun, b.Subject, b.Noun, b.Verb),
