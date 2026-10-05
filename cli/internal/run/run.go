@@ -71,7 +71,7 @@ func (r *Run) End(errp *error) {
 		}
 		r.bus.finish(r)
 		if code != 0 {
-			*errp = &exitcode.ExitError{Code: code}
+			*errp = &exitcode.ExitError{Code: code, Err: err}
 		}
 	})
 }

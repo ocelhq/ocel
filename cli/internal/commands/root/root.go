@@ -97,6 +97,7 @@ type command struct {
 	bus                  *run.Bus
 	stopInterruptHandler context.CancelFunc
 	preRunReached        bool
+	invoked              *cobra.Command
 }
 
 func Execute() int {
@@ -105,6 +106,7 @@ func Execute() int {
 
 func (c *command) execute() error {
 	invoked, err := c.root.ExecuteC()
+	c.invoked = invoked
 	if err != nil && !c.preRunReached {
 		err = &clierror.Error{Code: usageCode, Hint: invoked.UseLine(), Cause: err}
 	}

@@ -1,6 +1,7 @@
 package root
 
 import (
+	"errors"
 	"io"
 
 	"github.com/spf13/pflag"
@@ -20,6 +21,9 @@ func (c *command) executeAndReport(args []string) (exitCode int) {
 		return 0
 	}
 	if code, ok := exitcode.Of(err); ok {
+		if jsonRequested(args) && c.invoked != nil && commands.PrintsData(c.invoked) && hasUnreportedCause(err) {
+			terminal.PrintFailureJSON(c.root.OutOrStdout(), clierror.NewRunError(err))
+		}
 		return code
 	}
 	if jsonRequested(args) {
@@ -28,6 +32,14 @@ func (c *command) executeAndReport(args []string) (exitCode int) {
 		terminal.PrintFailure(c.root.ErrOrStderr(), err)
 	}
 	return 1
+}
+
+func hasUnreportedCause(err error) bool {
+	var exit *exitcode.ExitError
+	for errors.As(err, &exit) {
+		err = exit.Err
+	}
+	return err != nil
 }
 
 func jsonRequested(args []string) bool {
