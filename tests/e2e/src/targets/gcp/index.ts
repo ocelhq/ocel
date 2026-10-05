@@ -34,11 +34,11 @@ import {
   storeFilter,
   strayStores,
 } from "./memorystore";
-import { fittedSlug, gcpSlug, namespaceOf, roomForSlug, serviceLead } from "./names";
+import { fittedSlug, gcpSlug, namespaceOf, roomForSlug, serviceNames } from "./names";
 import {
   deleteService,
   exposedServices,
-  hasServicesUnder,
+  hasAnyService,
   listServices,
   reachable,
   readServices,
@@ -91,10 +91,10 @@ function childEnv(dir: string): NodeJS.ProcessEnv {
   };
 }
 
-function leadsFor(slug: string, apps: string[]): string[] {
+function namesFor(slug: string, apps: string[]): string[][] {
   const namespace = namespaceOf(process.env);
   const fitted = fittedSlug(slug, roomForSlug(namespace, apps));
-  return apps.map((app) => serviceLead(namespace, fitted, app));
+  return apps.map((app) => serviceNames(namespace, fitted, app));
 }
 
 function gcpCells(): Cell[] {
@@ -147,7 +147,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     list: () => this.deployedSlugs(),
     exists: async (slug) => {
       const cell = cellOfSlug(gcpCells(), slug);
-      return hasServicesUnder(await this.services(), leadsFor(slug, cell.fixture.apps));
+      return hasAnyService(await this.services(), namesFor(slug, cell.fixture.apps).flat());
     },
     sweepStale: (runId) => this.sweepStale(runId),
     sweepRun: (runId) => this.sweepRun(runId),
@@ -304,7 +304,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
   async readExposed(cell: CellUnderTest): Promise<string> {
     const services = exposedServices(
       await readServices(await this.where()),
-      leadsFor(cell.slug, cell.fixture.apps),
+      namesFor(cell.slug, cell.fixture.apps).flat(),
     );
     return [...this.outputFor(cell), services].join("\n");
   }
@@ -372,13 +372,12 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
 
   private async deployment(cell: CellUnderTest, phase: Phase): Promise<Deployment> {
     const found = await this.services();
-    const leads = leadsFor(cell.slug, cell.fixture.apps);
+    const named = namesFor(cell.slug, cell.fixture.apps);
     const urls =
       cloudflareUrls(cell, process.env.OCEL_E2E_ZONE?.trim() || undefined) ??
       new Map(
         cell.fixture.apps.map((app, at) => {
-          const lead = leads[at] ?? "";
-          return [app, reachable(servedBy(found, lead), endpoint())];
+          return [app, reachable(servedBy(found, named[at] ?? []), endpoint())];
         }),
       );
     await cell.evidence.write(
@@ -413,7 +412,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     const found = await this.services();
     return gcpCells()
       .map((cell) => ({ cell, slug: projectSlug(cell.name, runId) }))
-      .filter(({ cell, slug }) => hasServicesUnder(found, leadsFor(slug, cell.fixture.apps)))
+      .filter(({ cell, slug }) => hasAnyService(found, namesFor(slug, cell.fixture.apps).flat()))
       .map(({ slug }) => slug);
   }
 
@@ -448,7 +447,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
       complaints.push(error instanceof Error ? error.message : String(error));
     }
     const mine = gcpCells().flatMap((cell) =>
-      leadsFor(projectSlug(cell.name, runId), cell.fixture.apps),
+      namesFor(projectSlug(cell.name, runId), cell.fixture.apps).flat(),
     );
     const found = await this.services();
     const at = await this.where();

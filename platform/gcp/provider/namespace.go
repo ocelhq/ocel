@@ -31,8 +31,12 @@ const (
 	maxAccountID         = 30
 	minDatabaseID        = 4
 	maxServiceNameLength = 49
-	serviceHashLength    = 6
-	accountHashLen       = 10
+	maxTaggedLabelLength = 46
+	revisionTagLength    = 9
+
+	maxAppServiceNameLength = maxTaggedLabelLength - revisionTagLength
+	serviceHashLength       = 6
+	accountHashLen          = 10
 )
 
 var uuidLike = regexp.MustCompile(`[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}`)
@@ -95,16 +99,26 @@ func (n Names) Service(project, env, app, function string) (string, error) {
 	if function != app {
 		parts = append(parts, images.FunctionRoute(app, function))
 	}
-	service := strings.Join(parts, "-") + "-" + serviceHash(string(n.namespace), project, env, app, function)
-	if len(service) > maxServiceNameLength {
+	room := maxAppServiceNameLength - serviceHashLength - 1
+	if len(n.namespace) >= room {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"the Cloud Run service %s would be named %s, which is %d characters and Cloud Run builds a url from %d: "+
-				"a service is named for the namespace, the project, the environment and the app it serves, "+
-				"and ends in %d characters of a hash of the four, because every one of them may contain a dash and a name joined by dashes alone would read two ways.\n"+
-				"Name a shorter namespace in %s, a shorter project slug, or a shorter app",
-			app, service, len(service), maxServiceNameLength, serviceHashLength, provider.NamespaceEnvVar)
+			"the Cloud Run service of %s would start with the namespace %s, and a service a release tags has %d characters before its %d-character hash, "+
+				"so Cloud Run can put the %d-character revision tag in front of it in a url: name a shorter namespace in %s",
+			app, n.namespace, room, serviceHashLength, revisionTagLength, provider.NamespaceEnvVar)
 	}
-	return service, nil
+	return fitReadable(parts, room) + "-" + serviceHash(string(n.namespace), project, env, app, function), nil
+}
+
+func fitReadable(parts []string, room int) string {
+	for _, cut := range []int{1, 2} {
+		over := len(strings.Join(parts, "-")) - room
+		if over <= 0 {
+			break
+		}
+		parts[cut] = strings.Trim(parts[cut][:max(len(parts[cut])-over, 1)], "-")
+	}
+	readable := strings.Join(parts, "-")
+	return strings.TrimRight(readable[:min(len(readable), room)], "-")
 }
 
 const workerInfix = "w"

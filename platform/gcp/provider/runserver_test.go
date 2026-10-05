@@ -15,8 +15,6 @@ import (
 	run "google.golang.org/api/run/v2"
 )
 
-const trafficByLatest = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
-
 type runServer struct {
 	mu        sync.Mutex
 	service   *run.GoogleCloudRunV2Service

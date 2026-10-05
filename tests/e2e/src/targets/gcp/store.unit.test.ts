@@ -5,7 +5,7 @@ import { repoRoot } from "../../paths";
 import {
   BOOTSTRAP_APIS,
   exposedServices,
-  hasServicesUnder,
+  hasAnyService,
   reachable,
   readServices,
   servedBy,
@@ -65,33 +65,39 @@ describe("servicesIn", () => {
 });
 
 describe("servedBy", () => {
-  it("is the url of the service named for the app itself, not one named for a function under it", () => {
-    expect(servedBy(servicesIn({ services: [api, web] }), "ocel-j-1-deploy-node-prod-web")).toBe(
-      web.uri,
-    );
+  it("is the url of the first of the app's names that is deployed", () => {
+    const names = [
+      "ocel-j-1-deploy-node-prod-web-a1b2c3",
+      "ocel-j-1-deploy-node-prod-web-api-d4e5f6",
+    ];
+    expect(servedBy(servicesIn({ services: [api, web] }), names)).toBe(web.uri);
+    expect(servedBy(servicesIn({ services: [api] }), names)).toBe(api.uri);
   });
 
-  it("tells an app apart from one whose name it is a prefix of", () => {
+  it("tells an app apart from another cell's whose name is cut to the same lead", () => {
     const other = {
-      name: "projects/p/locations/l/services/ocel-j-1-deploy-node-prod-website-a1b2c3",
-      uri: "http://website",
+      name: "projects/p/locations/l/services/ocel-j-1-deploy-node-prod-web-ffffff",
+      uri: "http://other",
     };
     expect(() =>
-      servedBy(servicesIn({ services: [other] }), "ocel-j-1-deploy-node-prod-web"),
+      servedBy(servicesIn({ services: [other] }), ["ocel-j-1-deploy-node-prod-web-a1b2c3"]),
     ).toThrow(/no Cloud Run service/);
   });
 });
 
-describe("hasServicesUnder", () => {
+describe("hasAnyService", () => {
   it("is true while any service of the project exists", () => {
     const services = servicesIn({ services: [web, api] });
-    expect(hasServicesUnder(services, ["ocel-j-1-deploy-node-prod-web"])).toBe(true);
-    expect(hasServicesUnder(services, ["ocel-j-1-deploy-next-prod-web"])).toBe(false);
+    expect(hasAnyService(services, ["ocel-j-1-deploy-node-prod-web-a1b2c3"])).toBe(true);
+    expect(hasAnyService(services, ["ocel-j-1-deploy-next-prod-web-a1b2c3"])).toBe(false);
   });
 });
 
 describe("strayServices", () => {
-  const mine = ["ocel-nightly-j-1-deploy-node-prod-web"];
+  const mine = [
+    "ocel-nightly-j-1-deploy-node-prod-web-a1b2c3",
+    "ocel-nightly-j-1-deploy-node-prod-web-index-a1b2c3",
+  ];
   const names = [
     "ocel-nightly-j-1-deploy-node-prod-web-a1b2c3",
     "ocel-nightly-j-1-deploy-node-prod-web-index-a1b2c3",
@@ -112,7 +118,7 @@ describe("strayServices", () => {
     );
   });
 
-  it("tells an app apart from one whose lead is a prefix of its name", () => {
+  it("tells an app apart from one whose name its own is a prefix of", () => {
     expect(
       strayServices(["ocel-nightly-j-1-deploy-node-prod-website-a1b2c3"], "ocel-nightly", mine),
     ).toEqual(["ocel-nightly-j-1-deploy-node-prod-website-a1b2c3"]);
@@ -144,7 +150,8 @@ describe("exposedServices", () => {
       name: "projects/floci-local/locations/europe-west1/services/ocel-j-2-deploy-node-prod-web-a1b2c3",
     };
     const exposed = exposedServices({ services: [held, api, other] }, [
-      "ocel-j-1-deploy-node-prod-web",
+      "ocel-j-1-deploy-node-prod-web-a1b2c3",
+      "ocel-j-1-deploy-node-prod-web-api-d4e5f6",
     ]);
 
     expect(JSON.parse(exposed)).toEqual([held, api]);

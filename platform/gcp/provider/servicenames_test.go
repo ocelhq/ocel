@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -88,18 +89,25 @@ func TestAFunctionIsNamedByItsRouteAndNotByTheCoordinateItNames(t *testing.T) {
 	}
 }
 
-func TestANameCloudRunWouldNotBuildAUrlFromIsRefused(t *testing.T) {
+func TestAServiceNameTooLongToSpellOutIsCutToLeaveItsRevisionTagRoomInTheRunAppLabel(t *testing.T) {
 	names := serviceNames(t)
+	const longestRunAppLabel = 46
+	tag := naming.NewRelease("d1", "f1").String()
 
-	_, err := names.Service(strings.Repeat("shopfront", 5), stackrecords.ProductionEnv, "web", "web")
-	if err == nil {
-		t.Fatal("Service() named a service too long for Cloud Run to build a url from")
+	long, err := names.Service(strings.Repeat("shopfront", 5), stackrecords.ProductionEnv, "web", "fn--web--checkout")
+	if err != nil {
+		t.Fatalf("Service() = %v", err)
 	}
-	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
-		t.Errorf("Service() code = %v, want %v", code, refusal.CodeInvalid)
+	longer, err := names.Service(strings.Repeat("shopfront", 5)+"s", stackrecords.ProductionEnv, "web", "fn--web--checkout")
+	if err != nil {
+		t.Fatalf("Service() = %v", err)
 	}
-	if !strings.Contains(err.Error(), provider.NamespaceEnvVar) {
-		t.Errorf("Service() = %v, want it to say what a user can shorten", err)
+	if len(long)+len(tag) > longestRunAppLabel {
+		t.Errorf("Service() = %q (%d characters), and with the %d-character revision tag %s it is more than the %d Cloud Run takes "+
+			"in the label of a tagged revision's url", long, len(long), len(tag), tag, longestRunAppLabel)
+	}
+	if long == longer || !cloudRunName.MatchString(long) || !strings.HasPrefix(long, "ocel-shop") || !strings.Contains(long, "-checkout-") {
+		t.Errorf("Service() of projects too long to spell out = %q and %q, want the project cut before the app and its route, and each kept apart by its hash", long, longer)
 	}
 }
 

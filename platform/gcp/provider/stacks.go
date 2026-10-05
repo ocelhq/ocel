@@ -27,6 +27,13 @@ func serviceFor(names Names, spec provider.StackSpec, app *provider.AppSpec, fun
 
 const rootHealthPath = "/"
 
+func revisionTag(spec provider.StackSpec) string {
+	if !factsOf(spec.Edge).ShieldsOrigin {
+		return ""
+	}
+	return spec.Ref.Name.Release.String()
+}
+
 const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: nothing in front of it shields it, " +
 	"and Cloud Run's invoker check would shut browsers out too. Front previews with an edge that shields the origin, or keep their urls to yourselves"
 
@@ -119,6 +126,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			ingress: ingressFor(factsOf(spec.Edge)),
 			memory:  fn.Memory,
 			egress:  p.egressFor(names, spec),
+			tag:     revisionTag(spec),
 		}
 		if servesNext(app) {
 			served = fillNextServingDefaults(served)
@@ -274,6 +282,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		public:    true,
 		ingress:   ingressFor(factsOf(spec.Edge)),
 		egress:    p.egressFor(names, spec),
+		tag:       revisionTag(spec),
 	}, progress)
 	if err != nil {
 		return nil, err

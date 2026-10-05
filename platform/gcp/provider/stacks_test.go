@@ -393,3 +393,56 @@ func TestAnAppBoundToNoRealtimeIsToldOfNoGateway(t *testing.T) {
 		t.Errorf("the manifest names %q as where to publish, want nothing", manifest.RealtimePublishURL)
 	}
 }
+
+func behindTheLoadBalancer(t *testing.T, p *Provider, spec provider.StackSpec) provider.StackSpec {
+	t.Helper()
+	front, err := p.Edges().Open(alb.Kind, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec.Edge = front
+	return spec
+}
+
+func TestEachReleaseBehindTheLoadBalancerTagsTheRevisionItCreatedWithItsReleaseToken(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	released := newReleasedStacks(p)
+	first := behindTheLoadBalancer(t, p, functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"))
+	one := released.provision(t, first)
+	if err := p.Pin(context.Background(), one.Physical, one.Revision, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", one.Revision, err)
+	}
+	second := behindTheLoadBalancer(t, p, functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two"))
+	two := released.provision(t, second)
+
+	traffic := server.serving().Traffic
+	for tag, revision := range map[string]string{first.Ref.Name.Release.String(): one.Revision, second.Ref.Name.Release.String(): two.Revision} {
+		if !slices.ContainsFunc(traffic, func(target *run.GoogleCloudRunV2TrafficTarget) bool {
+			return target.Tag == tag && revisionName(target.Revision) == revision
+		}) {
+			t.Errorf("the service carries %+v, want revision %s tagged %s: a deployment reaches the revision it released by that tag", traffic, revision, tag)
+		}
+	}
+	if !servedBy(traffic, one.Revision) {
+		t.Errorf("the service serves %+v after the second release tagged its revision, want all of it still on %s: a tag takes no traffic", traffic, one.Revision)
+	}
+}
+
+func TestAReleaseWithNoEdgeInFrontTagsNoRevision(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	released := newReleasedStacks(p)
+	one := released.provision(t, functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"))
+	if err := p.Pin(context.Background(), one.Physical, one.Revision, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", one.Revision, err)
+	}
+	released.provision(t, functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two"))
+
+	for _, target := range server.serving().Traffic {
+		if target.Tag != "" {
+			t.Errorf("the service carries %+v, want no tag: with nothing in front, Cloud Run answers a tag on its own run.app url, "+
+				"so a tag would publish each unpromoted revision to anyone once the service is open", server.serving().Traffic)
+		}
+	}
+}
