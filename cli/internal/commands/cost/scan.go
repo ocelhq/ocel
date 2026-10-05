@@ -99,7 +99,7 @@ func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Option
 			return err
 		}
 		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
-			return writeJSON(stdout, set, estimates[profile], assumptions)
+			return terminal.WriteResultJSON(stdout, &resultv1.CostScanResult{Resources: set, Estimate: estimates[profile], Assumptions: assumptions})
 		}
 		return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
 	})
@@ -251,8 +251,4 @@ func unbuiltFunctions(cfg *project.Project) []build.Function {
 		functions = append(functions, build.Function{Route: a.Name, App: a.Name, Framework: buildoutput.Framework{Name: a.Framework(), Arch: a.Arch}})
 	}
 	return functions
-}
-
-func writeJSON(stdout io.Writer, set *costv1.ResourceSet, estimate *costv1.Estimate, assumptions []string) error {
-	return terminal.WriteResultJSON(stdout, &resultv1.CostScanResult{Resources: set, Estimate: estimate, Assumptions: assumptions})
 }

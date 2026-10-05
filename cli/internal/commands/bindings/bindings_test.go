@@ -449,7 +449,7 @@ func TestABindingBelongsToTheBootstrapItsFlagsAddress(t *testing.T) {
 	})
 }
 
-func TestRunBindingsJSONOutput(t *testing.T) {
+func TestSettingListingAndRemovingABindingAsJSONEachPrintOneResultDocument(t *testing.T) {
 	root := setUpBindingFixture(t)
 	useJSONOutput(t)
 
@@ -570,6 +570,9 @@ func TestRunBindingsGenerateAsJSONPrintsTheFileItWroteAndTheBindingsItTyped(t *t
 		t.Fatalf("runBindingsGenerate err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
+	if evs := clitest.RunEvents(t, stderr.String()); len(evs) == 0 || !evs[len(evs)-1].GetSummary().GetSuccess() {
+		t.Errorf("stderr = %q, want the run's events ending in its summary", stderr.String())
+	}
 	generated := clitest.DecodeResult(t, stdout.String())
 	if path, _ := generated["path"].(string); !strings.HasSuffix(path, bindingTypesFileName) {
 		t.Errorf("generate json path = %v, want the file it wrote, %s", generated["path"], bindingTypesFileName)
