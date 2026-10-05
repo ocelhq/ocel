@@ -904,8 +904,8 @@ func TestAReleaseBehindIdentityAwareProxyRecordsTheUrlOfTheTagItGaveItsRevision(
 	if err != nil {
 		t.Fatalf("deployService() = %v", err)
 	}
-	if want := "https://r00000001---ocel-shop-pr-7-web.run.app"; deployed.deployment != want {
-		t.Errorf("the release recorded deployment url %q, want %q: Cloud Run answers the tagged revision there, behind the service's proxy", deployed.deployment, want)
+	if want := "https://r00000001---ocel-shop-pr-7-web.run.app"; deployed.deploymentURL != want {
+		t.Errorf("the release recorded deployment url %q, want %q: Cloud Run answers the tagged revision there, behind the service's proxy", deployed.deploymentURL, want)
 	}
 }
 
@@ -919,8 +919,8 @@ func TestAReleaseBehindTheLoadBalancerRecordsNoDeploymentUrl(t *testing.T) {
 	if err != nil {
 		t.Fatalf("deployService() = %v", err)
 	}
-	if deployed.deployment != "" {
-		t.Errorf("the release recorded deployment url %q, and its ingress turns away everything but the load balancer, which answers the deployment on a hostname of its own", deployed.deployment)
+	if deployed.deploymentURL != "" {
+		t.Errorf("the release recorded deployment url %q, and its ingress turns away everything but the load balancer, which answers the deployment on a hostname of its own", deployed.deploymentURL)
 	}
 }
 

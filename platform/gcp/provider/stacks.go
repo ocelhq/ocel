@@ -169,7 +169,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			return nil, err
 		}
 		deployed = append(deployed, provider.Function{
-			Name: fn.Name, Physical: service, URL: ran.url, DeploymentURL: ran.deployment, Revision: ran.revision,
+			Name: fn.Name, Physical: service, URL: ran.url, DeploymentURL: ran.deploymentURL, Revision: ran.revision,
 		})
 	}
 	if !hostsWorkers(app) {
@@ -319,7 +319,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		return nil, err
 	}
 	deployed := []provider.AppContainer{{
-		Name: app.App, Physical: service, URL: ran.url, DeploymentURL: ran.deployment, Image: app.Image, Revision: ran.revision,
+		Name: app.App, Physical: service, URL: ran.url, DeploymentURL: ran.deploymentURL, Image: app.Image, Revision: ran.revision,
 	}}
 	workers, err := p.provisionWorkers(ctx, c, spec, app.Image, account, values, declared, progress)
 	if err != nil {
