@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/prerender"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -212,7 +213,7 @@ func isrKeyFor(app, deploymentID, rest string) string {
 func entryPuts(puts []string) []string {
 	var out []string
 	for _, key := range puts {
-		if !strings.HasSuffix(key, tagSnapshotSuffix) {
+		if !strings.HasSuffix(key, "/tag-clock.json") {
 			out = append(out, key)
 		}
 	}
@@ -327,12 +328,12 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			if !ok {
 				t.Fatalf("no snapshot seeded at %q; puts = %v", key, store.puts)
 			}
-			var snap tagSnapshot
+			var snap prerender.TagSnapshot
 			if err := json.Unmarshal([]byte(body), &snap); err != nil {
 				t.Fatalf("parse seeded snapshot %s: %v", key, err)
 			}
-			if snap.Version != tagSnapshotVersion {
-				t.Errorf("%s version = %d, want %d", key, snap.Version, tagSnapshotVersion)
+			if snap.Version != prerender.TagSnapshotVersion {
+				t.Errorf("%s version = %d, want %d", key, snap.Version, prerender.TagSnapshotVersion)
 			}
 			if snap.DeployedAt < before || snap.DeployedAt > after {
 				t.Errorf("%s deployedAt = %d, want the deploy's own clock in [%d,%d]", key, snap.DeployedAt, before, after)
@@ -519,42 +520,6 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			if strings.Contains(k, "fetch-cache") {
 				t.Errorf("fetch entry %q leaked into the adopted store", k)
 			}
-		}
-	})
-}
-
-func TestGenesisSnapshot(t *testing.T) {
-	t.Parallel()
-
-	t.Run("matches the publishers format", func(t *testing.T) {
-		t.Parallel()
-		at := time.UnixMilli(1750000000000)
-		got, err := json.Marshal(genesisSnapshot(at))
-		if err != nil {
-			t.Fatalf("marshal genesis snapshot: %v", err)
-		}
-
-		want := nextCacheFixture(t, "genesis-tag-snapshot.json")
-		if string(got) != strings.TrimSpace(string(want)) {
-			t.Errorf("genesis snapshot = %s, want %s", got, strings.TrimSpace(string(want)))
-		}
-	})
-}
-
-func TestTagSnapshotSuffix(t *testing.T) {
-	t.Parallel()
-
-	t.Run("matches the edge contract", func(t *testing.T) {
-		t.Parallel()
-		body := nextCacheFixture(t, "edge-contract.json")
-		var contract struct {
-			TagSnapshotSuffix string `json:"tagSnapshotSuffix"`
-		}
-		if err := json.Unmarshal(body, &contract); err != nil {
-			t.Fatalf("parse fixture: %v", err)
-		}
-		if tagSnapshotSuffix != contract.TagSnapshotSuffix {
-			t.Errorf("tagSnapshotSuffix = %q, want %q", tagSnapshotSuffix, contract.TagSnapshotSuffix)
 		}
 	})
 }

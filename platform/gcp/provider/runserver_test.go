@@ -2,6 +2,9 @@ package gcp
 
 import (
 	"encoding/json"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -30,6 +33,15 @@ type runServer struct {
 	patchTries     int
 
 	uriEachRevision bool
+
+	uploads []upload
+	present map[string]bool
+	events  []string
+}
+
+type upload struct {
+	name, ifGenerationMatch string
+	body                    []byte
 }
 
 func (s *runServer) open(t *testing.T) *Provider {
@@ -47,6 +59,8 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		path := r.URL.Path
 		switch {
+		case r.Method == http.MethodPost && strings.HasPrefix(path, "/upload/storage/v1/b/"):
+			s.store(t, w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(path, ":setIamPolicy"):
 			s.setPolicy(w, r)
 		case r.Method == http.MethodGet && strings.HasSuffix(path, ":getIamPolicy"):
@@ -78,6 +92,7 @@ func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.created = append(s.created, desired)
+	s.events = append(s.events, "create")
 	name := r.URL.Query().Get("serviceId")
 	s.service = &run.GoogleCloudRunV2Service{
 		Name:               strings.TrimPrefix(r.URL.Path, "/v2/") + "/" + name,
@@ -247,4 +262,47 @@ func (s *runServer) tries() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.patchTries
+}
+
+func (s *runServer) store(t *testing.T, w http.ResponseWriter, r *http.Request) {
+	t.Helper()
+	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil {
+		t.Errorf("an upload carried no content type: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	parts := multipart.NewReader(r.Body, params["boundary"])
+	var body []byte
+	for i := 0; ; i++ {
+		part, err := parts.NextPart()
+		if err != nil {
+			break
+		}
+		if i == 1 {
+			body, _ = io.ReadAll(part)
+		}
+	}
+	query := r.URL.Query()
+	name := query.Get("name")
+	s.uploads = append(s.uploads, upload{name: name, ifGenerationMatch: query.Get("ifGenerationMatch"), body: body})
+	s.events = append(s.events, "upload "+name)
+	if query.Get("ifGenerationMatch") == "0" && s.present[name] {
+		w.WriteHeader(http.StatusPreconditionFailed)
+		w.Write([]byte(`{"error":{"code":412,"message":"conditionNotMet"}}`))
+		return
+	}
+	writeBody(w, map[string]string{"bucket": "b", "name": name, "generation": "1"})
+}
+
+func (s *runServer) stored() []upload {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.uploads)
+}
+
+func (s *runServer) happened() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.events)
 }

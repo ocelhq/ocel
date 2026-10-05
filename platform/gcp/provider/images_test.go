@@ -17,11 +17,12 @@ func pushing(t *testing.T, endpoint string) *Provider {
 	t.Helper()
 	names := Names{namespace: provider.Namespace("ocel"), project: "acme-prod"}
 	return &Provider{
-		options:   Options{Project: names.project, Region: "europe-west1"},
-		tokens:    handedToken("ya29.stub"),
-		endpoint:  endpoint,
-		namespace: names.namespace,
-		resolved:  &clients{Names: names, region: "europe-west1", endpoint: endpoint},
+		options:    Options{Project: names.project, Region: "europe-west1"},
+		tokens:     handedToken("ya29.stub"),
+		endpoint:   endpoint,
+		projectDir: t.TempDir(),
+		namespace:  names.namespace,
+		resolved:   &clients{Names: names, region: "europe-west1", endpoint: endpoint},
 	}
 }
 

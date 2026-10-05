@@ -60,6 +60,11 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err != nil {
 		return nil, err
 	}
+	if servesNext(app) && app.ISR != nil {
+		if err := p.seedPrerenders(ctx, spec, progress); err != nil {
+			return nil, err
+		}
+	}
 	deployed := make([]provider.Function, 0, len(app.Functions)+len(app.Workers))
 	for _, fn := range app.Functions {
 		if err := runsX8664(fn.Framework.Arch, "function "+fn.Name); err != nil {

@@ -31,6 +31,8 @@ type Provider struct {
 	endpoint  string
 	namespace provider.Namespace
 
+	projectDir string
+
 	mu       sync.Mutex
 	resolved *clients
 
@@ -50,6 +52,7 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 	if err != nil {
 		return nil, err
 	}
+	p.projectDir = settings.ProjectDir
 	return p, nil
 }
 
