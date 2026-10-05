@@ -50,7 +50,7 @@ func (q Questions) answer(ctx context.Context, process *Process, err error) (boo
 		return false, errors.Join(err, askErr)
 	}
 	if !confirmed {
-		return false, err
+		return false, clierror.NewConfirmationRequired(err, "")
 	}
 	client, confirmErr := process.Client()
 	if confirmErr == nil {
