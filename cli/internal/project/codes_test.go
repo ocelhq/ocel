@@ -35,8 +35,8 @@ func TestLoadingWithNoConfigReportsProjectNoConfigWithTheInitCommandAsItsHint(t 
 	_, err := Load(context.Background(), t.TempDir(), "")
 
 	code, hint := readCodeAndHint(err)
-	if code != "project.no_config" || hint != "ocel init" {
-		t.Fatalf("code, hint = %q, %q; want project.no_config, ocel init", code, hint)
+	if code != "project.no_config" || hint != "ocel init --provider <id>" {
+		t.Fatalf("code, hint = %q, %q; want project.no_config, ocel init --provider <id>", code, hint)
 	}
 }
 

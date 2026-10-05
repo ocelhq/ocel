@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
+	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
 const (
@@ -44,13 +45,16 @@ func IsYAML(path string) bool {
 
 const initCommand = "ocel init"
 
+const initWithProviderCommand = initCommand + " --provider <id>"
+
 type NoConfigError struct {
 	Names    []string
 	StartDir string
 }
 
 func (e NoConfigError) Error() string {
-	return fmt.Sprintf("no %s found in %s or any parent directory.\nRun `%s` and try again", english.Or(e.Names), e.StartDir, initCommand)
+	return fmt.Sprintf("no %s found in %s or any parent directory.\nRun `%s` and try again, where <id> is one of %s",
+		english.Or(e.Names), e.StartDir, initWithProviderCommand, strings.Join(configdoc.ProviderIDs(), ", "))
 }
 
 func (NoConfigError) Missing() prerequisite.Kind { return prerequisite.Project }
@@ -61,7 +65,7 @@ func (e NoConfigError) Finding() string {
 
 func (e NoConfigError) Remedy() string { return "`" + e.Hint() + "`" }
 
-func (NoConfigError) Hint() string { return initCommand }
+func (NoConfigError) Hint() string { return initWithProviderCommand }
 
 type form struct {
 	suffix string
