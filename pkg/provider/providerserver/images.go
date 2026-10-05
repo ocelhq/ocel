@@ -60,7 +60,7 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (p
 	return provider.ImagePush{
 		App:      app,
 		Source:   ref,
-		ImageRef: images.Ref(r.spec.Slug, repository, images.RuntimeTag(digest, runtime), r.registry),
+		ImageRef: images.FormatRef(r.spec.Slug, repository, images.RuntimeTag(digest, runtime), r.registry),
 		Wrap: func(ctx context.Context) (v1.Image, func(), error) {
 			return images.WrapFromDaemon(ctx, repository, digest, runtime)
 		},

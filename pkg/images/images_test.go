@@ -15,30 +15,36 @@ func TestAnImagePushedToARegistryIsNamedByItsProjectAndApp(t *testing.T) {
 		"ocel/shop/web":  "registry.invalid/ocel/shop.web:" + localTag,
 		"web-api-orders": "registry.invalid/ocel/shop.web-api-orders:" + localTag,
 	} {
-		if got := Ref("shop", repository, localTag, registry); got != want {
-			t.Errorf("Ref(shop, %s) = %q, want %q", repository, got, want)
+		if got := FormatRef("shop", repository, localTag, registry); got != want {
+			t.Errorf("FormatRef(shop, %s) = %q, want %q", repository, got, want)
 		}
 	}
 }
 
 func TestTheSameAppInTwoProjectsIsPushedToTwoRepositories(t *testing.T) {
-	shop := Ref("shop", "web", localTag, registry)
-	blog := Ref("blog", "web", localTag, registry)
+	shop := FormatRef("shop", "web", localTag, registry)
+	blog := FormatRef("blog", "web", localTag, registry)
 	if shop == blog {
 		t.Errorf("projects shop and blog both push web to %q: retention of one would remove what the other still runs", shop)
 	}
 }
 
 func TestAProjectAndAppThatJoinToTheSameWordsStayApart(t *testing.T) {
-	if a, b := Ref("a-b", "c", localTag, registry), Ref("a", "b-c", localTag, registry); a == b {
+	if a, b := FormatRef("a-b", "c", localTag, registry), FormatRef("a", "b-c", localTag, registry); a == b {
 		t.Errorf("project a-b's app c and project a's app b-c both push to %q", a)
 	}
 }
 
 func TestAProjectSlugIsSanitizedIntoTheRepositoryName(t *testing.T) {
 	want := "registry.invalid/ocel/my-shop.web:" + localTag
-	if got := Ref("My Shop", "web", localTag, registry); got != want {
-		t.Errorf("Ref(My Shop, web) = %q, want %q", got, want)
+	if got := FormatRef("My Shop", "web", localTag, registry); got != want {
+		t.Errorf("FormatRef(My Shop, web) = %q, want %q", got, want)
+	}
+}
+
+func TestTheLocalRepositoryOfAnImageIsItsProjectAndAppUnderTheOcelNamespace(t *testing.T) {
+	if got, want := LocalRepository("My Shop", "web"), "ocel/my-shop/web"; got != want {
+		t.Errorf("LocalRepository(My Shop, web) = %q, want %q", got, want)
 	}
 }
 
@@ -47,8 +53,8 @@ func TestAnImageLoadedStraightOntoABoxIsNamedUnderItsProject(t *testing.T) {
 		"ocel/shop/web":  "ocel/shop/web:" + localTag,
 		"web-api-orders": "ocel/shop/web-api-orders:" + localTag,
 	} {
-		if got := Ref("shop", repository, localTag, provider.RegistryTarget{}); got != want {
-			t.Errorf("Ref(shop, %s) with no registry = %q, want %q", repository, got, want)
+		if got := FormatRef("shop", repository, localTag, provider.RegistryTarget{}); got != want {
+			t.Errorf("FormatRef(shop, %s) with no registry = %q, want %q", repository, got, want)
 		}
 	}
 }
