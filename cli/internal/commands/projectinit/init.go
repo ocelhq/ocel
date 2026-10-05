@@ -100,7 +100,10 @@ func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, o
 	provider := strings.TrimSpace(opts.provider)
 	shipped := configdoc.ProviderIDs()
 	if provider == "" {
-		return fmt.Errorf("name the provider this project deploys through, e.g. `ocel init --provider <id>` — ocel ships %s", strings.Join(shipped, ", "))
+		return clierror.NewInputRequired(
+			fmt.Errorf("name the provider this project deploys through, e.g. `ocel init --provider <id>` — ocel ships %s", strings.Join(shipped, ", ")),
+			"--provider <id>",
+		)
 	}
 	if !slices.Contains(shipped, provider) {
 		return fmt.Errorf("--provider names %q, and ocel ships no such provider — name one of %s", provider, strings.Join(shipped, ", "))

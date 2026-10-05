@@ -16,6 +16,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -226,7 +227,7 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		}
 	})
 
-	t.Run("no provider is refused, naming the flag, and nothing is written", func(t *testing.T) {
+	t.Run("no provider is refused with input_required, naming the flag, and nothing is written", func(t *testing.T) {
 		t.Parallel()
 
 		dependencies := newTestDependencies()
@@ -239,6 +240,9 @@ func TestInitWritesADeployableConfigForTheSlugAndProviderItIsGiven(t *testing.T)
 		}
 		if !strings.Contains(err.Error(), strings.Join(configdoc.ProviderIDs(), ", ")) {
 			t.Fatalf("err = %v, want it to name the providers ocel ships", err)
+		}
+		if got := clierror.NewRunError(err); got.GetCode() != clierror.CodeInputRequired || got.GetHint() != "--provider <id>" {
+			t.Errorf("run error = %v, want input_required with the hint --provider <id>", got)
 		}
 		if _, statErr := os.Stat(filepath.Join(dir, project.DefaultFileName)); statErr == nil {
 			t.Fatal("a config was written with no provider named")
