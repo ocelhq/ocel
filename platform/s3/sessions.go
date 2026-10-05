@@ -53,7 +53,7 @@ type session struct {
 var errSessionNotFound = errors.New("session not found")
 
 func sessionKey(id string) string {
-	return sessionPrefix + id
+	return SessionKeyPrefix + id
 }
 
 func (s *Service) createSession(ctx context.Context, sess session) error {

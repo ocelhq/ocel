@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -16,11 +17,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
+	"github.com/ocelhq/ocel/platform/gcp/runtime/bucket"
 	source "github.com/ocelhq/ocel/platform/gcp/runtime/live"
 	realtimeproxy "github.com/ocelhq/ocel/platform/realtime/proxy"
 	s3store "github.com/ocelhq/ocel/platform/s3"
@@ -81,7 +84,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	if err != nil {
 		return fatal(fmt.Sprintf("find a loopback port for the app: %v", err))
 	}
-	fronting, err := serveProxy(values, pinned, "127.0.0.1:"+strconv.Itoa(internal))
+	fronting, err := serveProxy(ctx, values, pinned, "127.0.0.1:"+strconv.Itoa(internal))
 	if err != nil {
 		return fatal(err.Error())
 	}
@@ -177,10 +180,16 @@ func readManifest(raw string) (variables.Manifest, error) {
 	return manifest, nil
 }
 
-func serveProxy(values *live.Values, manifest variables.Manifest, app string) (bindingproxy.Served, error) {
+func serveProxy(ctx context.Context, values *live.Values, manifest variables.Manifest, app string) (bindingproxy.Served, error) {
 	var services bindingproxy.Services
-	if values != nil {
-		services.Buckets = s3store.NewBoundDispatch(values, app)
+	if values != nil && bindsBuckets(values) {
+		store, err := bucket.Open(ctx, manifest.Endpoint)
+		if err != nil {
+			return bindingproxy.Served{}, err
+		}
+		if services.Buckets, err = bucket.NewDispatch(ctx, store, values, s3store.HTTPPoster{App: app}); err != nil {
+			return bindingproxy.Served{}, err
+		}
 	}
 	if manifest.Tasks != nil {
 		deployment := deploymentOf(manifest)
@@ -193,6 +202,12 @@ func serveProxy(values *live.Values, manifest variables.Manifest, app string) (b
 		return bindingproxy.Served{}, nil
 	}
 	return bindingproxy.Serve(services)
+}
+
+func bindsBuckets(values *live.Values) bool {
+	return slices.ContainsFunc(values.Bindings(), func(bound live.Binding) bool {
+		return bound.Type == bindingsv1.BindingType_BINDING_TYPE_BUCKET
+	})
 }
 
 func resolve(ctx context.Context, manifest string) (*live.Values, error) {

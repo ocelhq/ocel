@@ -49,7 +49,7 @@ func TestABoundBucketIsServedUnderItsBindingsKeyAndThePrefixItNames(t *testing.T
 	if !strings.HasPrefix(resp.GetSessionId(), "sess_b0_") {
 		t.Errorf("session = %q, want it tagged", resp.GetSessionId())
 	}
-	if _, kept := store.objects["acme"]["uploads/"+sessionPrefix+resp.GetSessionId()]; !kept {
+	if _, kept := store.objects["acme"]["uploads/"+SessionKeyPrefix+resp.GetSessionId()]; !kept {
 		t.Errorf("store = %v, want the session kept under the binding's prefix", store.objects["acme"])
 	}
 	target, err := url.Parse(resp.GetFiles()[0].GetUrl())

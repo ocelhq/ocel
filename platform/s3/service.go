@@ -28,7 +28,7 @@ const (
 
 	ReservedKeyPrefix = statedir.Name + "/"
 
-	sessionPrefix = ReservedKeyPrefix + "sessions/"
+	SessionKeyPrefix = ReservedKeyPrefix + "sessions/"
 )
 
 type ObjectAPI interface {
@@ -68,6 +68,17 @@ type Config struct {
 	SweepUploads bool
 	Sessions     string
 	Granted      []string
+
+	MetadataPrefix string
+}
+
+const defaultMetadataPrefix = "x-amz-meta-"
+
+func (c Config) metadataPrefix() string {
+	if c.MetadataPrefix == "" {
+		return defaultMetadataPrefix
+	}
+	return c.MetadataPrefix
 }
 
 type Service struct {

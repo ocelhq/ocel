@@ -133,12 +133,6 @@ func (s kvStore) changes(current *memorystoreInstance) []string {
 	return mask
 }
 
-func labelsFor(names Names, ref provider.StackRef, store string) map[string]string {
-	labels := stackLabels(names, ref)
-	labels[kvLabel] = labelValue(store)
-	return labels
-}
-
 type kvInstance struct {
 	id        string
 	path      string
@@ -170,7 +164,7 @@ func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionReques
 	current, err := instance.service.readInstance(ctx, instance.path)
 	switch {
 	case absent(err):
-		desired := store.instance(clients.project, clients.NetworkPath(in.Ref.Tier), labelsFor(clients.Names, in.Ref, in.Resource.Name))
+		desired := store.instance(clients.project, clients.NetworkPath(in.Ref.Tier), labelsFor(clients.Names, in.Ref, kvLabel, in.Resource.Name))
 		current, err = instance.create(ctx, clients, desired, progress)
 	case err != nil:
 		return provider.Binding{}, fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)

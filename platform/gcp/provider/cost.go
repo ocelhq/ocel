@@ -119,12 +119,23 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(true, 0, revisionMemory, ingressInternal))
 		}
 	}
+	shapeBuckets(tree, names, req, region, environment)
 	if err := shapeStores(tree, names, req, region, shared, environment); err != nil {
 		return nil, err
 	}
 	shapeTopicsAndRefreshes(tree, names, req, factsOf(front), gated, region, shared, environment)
 	shapeRealtime(tree, names, req, region, environment)
 	return tree.Set(provider.CostSource)
+}
+
+func shapeBuckets(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, environment string) {
+	for _, resource := range req.Resources {
+		if resource.Type != provider.BindingBucket {
+			continue
+		}
+		bucket := names.AppBucket(req.Deploy.Slug, req.Deploy.Env, resource.Name)
+		tree.Add(environment, string(Vendor), tfStorageBucket, bucket, region, itemProperties(item{Kind: KindBucket}, region))
+	}
 }
 
 func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, shared, environment string) error {

@@ -18,7 +18,7 @@ func neighbours(t *testing.T) *harness {
 	})
 	h.store.put("customer", "shop/production/uploads/mine.png", []byte("abc"), "image/png")
 	h.store.put("customer", "other/production/theirs/secret.png", []byte("xyz"), "image/png")
-	h.store.put(SessionsBucket(), sessionPrefix+"sess_theirs", []byte(`{"secret":"theirs"}`), "application/json")
+	h.store.put(SessionsBucket(), SessionKeyPrefix+"sess_theirs", []byte(`{"secret":"theirs"}`), "application/json")
 	return h
 }
 

@@ -24,6 +24,7 @@ import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
 import { cloudflareUrls } from "../cloudflare";
 import type { Deployment, Exposure, ReleaseCycle, Restart, Sweeper, Target } from "../types";
+import { appBucketPrefix, deleteAppBucket, listAppBuckets, strayBuckets } from "./buckets";
 import { startDispatch, stopDispatch } from "./dispatch";
 import {
   createTimesIn,
@@ -463,6 +464,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     const at = await this.where();
     if (!endpoint()) {
       complaints.push(...(await this.sweepStores(at, runId)));
+      complaints.push(...(await this.sweepBuckets(at, runId)));
     }
     for (const name of strayServices(found, namespaceOf(process.env), mine)) {
       try {
@@ -477,13 +479,32 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     }
   }
 
-  private async sweepStores(at: Where, runId: string): Promise<string[]> {
-    const namespace = namespaceOf(process.env);
-    const mine = gcpCells().map((cell) =>
+  private sweptProjects(runId: string): string[] {
+    return gcpCells().map((cell) =>
       sanitize(
         gcpSlug({ slug: projectSlug(cell.name, runId), fixture: cell.fixture }, process.env),
       ),
     );
+  }
+
+  private async sweepBuckets(at: Where, runId: string): Promise<string[]> {
+    const mine = this.sweptProjects(runId);
+    const complaints: string[] = [];
+    const buckets = await listAppBuckets(at, appBucketPrefix(namespaceOf(process.env)));
+    for (const name of strayBuckets(buckets, mine)) {
+      try {
+        await deleteAppBucket(at, name);
+        process.stdout.write(`swept ${name}\n`);
+      } catch (error) {
+        complaints.push(`${name}: ${String(error)}`);
+      }
+    }
+    return complaints;
+  }
+
+  private async sweepStores(at: Where, runId: string): Promise<string[]> {
+    const namespace = namespaceOf(process.env);
+    const mine = this.sweptProjects(runId);
     const complaints: string[] = [];
     const stores = await listStores(at, `labels.ocel-namespace="${sanitize(namespace)}"`);
     for (const name of strayStores(stores, mine)) {

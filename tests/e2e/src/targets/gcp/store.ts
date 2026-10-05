@@ -82,6 +82,7 @@ export const BOOTSTRAP_APIS = [
   "iam.googleapis.com",
   "run.googleapis.com",
   "cloudscheduler.googleapis.com",
+  "iamcredentials.googleapis.com",
 ];
 
 export const PREVIEW_APIS = ["iap.googleapis.com"];

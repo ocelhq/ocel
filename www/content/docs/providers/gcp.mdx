@@ -202,6 +202,15 @@ gcloud services enable compute.googleapis.com certificatemanager.googleapis.com 
   --project my-project
 ```
 
+## Buckets
+
+`bucket("uploads")` is one Cloud Storage bucket per environment, in the bootstrap's region, under
+uniform bucket-level access with public access prevention enforced. Only the service accounts of the
+apps that bind it may read and write its objects. An app has one account per tier, shared by its
+environments there, so access is per app across the tier's environments: `web` running in one preview can
+reach another preview's buckets of `web`, and no other app's. See [Buckets](/docs/sdk/bucket#on-google-cloud) for how
+signed urls and uploads work there.
+
 ## KV stores
 
 `kv("cache")` runs as one Memorystore for Valkey instance per store: cluster mode off, one
@@ -315,10 +324,12 @@ Turn the services on once:
 gcloud services enable firestore.googleapis.com storage.googleapis.com \
   cloudkms.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com \
   iam.googleapis.com run.googleapis.com cloudscheduler.googleapis.com \
-  --project my-project
+  iamcredentials.googleapis.com --project my-project
 ```
 
 A preview tier also needs `iap.googleapis.com`.
+
+Apps sign their buckets' urls through `iamcredentials.googleapis.com`.
 
 A deploy needs `roles/datastore.user`, `roles/storage.objectAdmin`,
 `roles/cloudkms.cryptoKeyEncrypterDecrypter`, `roles/secretmanager.secretAccessor`,
@@ -409,6 +420,29 @@ for tier in preview production; do
     --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
     --role=roles/artifactregistry.repoAdmin
 done
+```
+
+A deploy also creates and deletes the buckets an app declares, and lets the apps that bind them use
+their objects, which is a binding on each bucket and not a project role. The buckets are named for
+the namespace and two dashes, which no namespace contains: grant `roles/storage.admin` under a
+condition naming them.
+
+```bash
+gcloud projects add-iam-policy-binding my-project \
+  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --role=roles/storage.admin \
+  --condition="title=ocel buckets,expression=resource.name.startsWith('projects/_/buckets/ocel--')"
+```
+
+Cloud Storage checks creating a bucket against the project, where no name condition admits it,
+so a deploy also needs a custom role holding that one permission:
+
+```bash
+gcloud iam roles create ocelDeployCreates --project my-project \
+  --permissions=storage.buckets.create
+gcloud projects add-iam-policy-binding my-project \
+  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --role=projects/my-project/roles/ocelDeployCreates --condition=None
 ```
 
 A bootstrap needs those, with `roles/secretmanager.admin` unconditioned in place of the

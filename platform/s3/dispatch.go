@@ -15,14 +15,19 @@ import (
 )
 
 type dispatch struct {
-	own   bucketv1connect.BucketServiceHandler
-	bound func() ([]*Service, error)
+	own             bucketv1connect.BucketServiceHandler
+	bound           func() ([]*Service, error)
+	servesOnlyBound bool
 }
 
 var _ bucketv1connect.BucketServiceHandler = (*dispatch)(nil)
 
 func newFixedDispatch(own bucketv1connect.BucketServiceHandler, bound ...*Service) bucketv1connect.BucketServiceHandler {
 	return &dispatch{own: own, bound: func() ([]*Service, error) { return bound, nil }}
+}
+
+func NewGrantedDispatch(services ...*Service) bucketv1connect.BucketServiceHandler {
+	return &dispatch{bound: func() ([]*Service, error) { return services, nil }, servesOnlyBound: true}
 }
 
 func NewDispatch(own bucketv1connect.BucketServiceHandler, records Records, callbacks Poster) bucketv1connect.BucketServiceHandler {
@@ -71,6 +76,9 @@ func (r *dispatch) forBucket(name string) (bucketv1connect.BucketServiceHandler,
 		if backend.hasBucket(name) {
 			return backend, nil
 		}
+	}
+	if r.servesOnlyBound {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("this app was granted no bucket called %q", name))
 	}
 	if r.own == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this runtime has no bucket store of its own and serves only buckets bound to a store by endpoint, and %q is not one: bind it with an endpoint under `bindings.bucket`", name))
