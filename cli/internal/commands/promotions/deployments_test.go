@@ -313,7 +313,7 @@ func assertKeptEveryPromotion(t *testing.T, project clitest.FakeProject) {
 	}
 }
 
-func TestListingDeploymentsSaysWhoItActsAsInTheCheckPhaseAndPrintsItsTableBesideTheStream(t *testing.T) {
+func TestListingDeploymentsAsJSONSaysWhoItActsAsInTheCheckPhaseAndKeepsItsEnvelopeOffTheStream(t *testing.T) {
 	project := promotedTwice(t)
 	invocation := clitest.NewInvocation()
 	invocation.Presentation = clitest.ResolveJSONPresentation
@@ -335,8 +335,13 @@ func TestListingDeploymentsSaysWhoItActsAsInTheCheckPhaseAndPrintsItsTableBeside
 	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() {
 		t.Errorf("result = %v, want the listing's run to succeed", result)
 	}
-	if !strings.Contains(stdout.String(), "promo-2") || strings.Contains(stream.String(), "promo-2") {
-		t.Errorf("stdout = %q, stream = %q: want the table on stdout and not on the stream", stdout.String(), stream.String())
+	var listed resultv1.DeploymentListResult
+	clitest.DecodeResultInto(t, stdout.String(), &listed)
+	if len(listed.GetDeployments()) != 2 {
+		t.Errorf("deployments = %v, want both promotions in the envelope on stdout", listed.GetDeployments())
+	}
+	if strings.Contains(stream.String(), "promo-2") {
+		t.Errorf("stream = %q, want the listing only in the envelope on stdout", stream.String())
 	}
 }
 
