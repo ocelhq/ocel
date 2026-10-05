@@ -23,6 +23,8 @@ type networkServer struct {
 	iam      map[string]*compute.Policy
 	writes   []string
 	unnamed  bool
+
+	databases *cloudSQLServer
 }
 
 func servingNetworksAndStores(t *testing.T) (bootstrap, *networkServer, *memorystoreServer) {
@@ -40,6 +42,8 @@ func servingNetworks(t *testing.T) (bootstrap, *networkServer) {
 		subnets:  map[string]*compute.Subnetwork{},
 		policies: map[string]*networkconnectivity.ServiceConnectionPolicy{},
 		iam:      map[string]*compute.Policy{},
+
+		databases: newCloudSQLServer(),
 	}
 	served := httptest.NewServer(server.serve(t))
 	t.Cleanup(served.Close)
@@ -57,6 +61,8 @@ func (s *networkServer) serve(t *testing.T) http.HandlerFunc {
 		at := r.URL.Path
 		name := path.Base(at)
 		switch {
+		case strings.Contains(at, "/instances"):
+			s.databases.serve(w, r)
 		case strings.Contains(at, "/operations/"):
 			writeBody(w, map[string]any{"name": at, "status": operationDone, "done": true})
 		case r.Method == http.MethodGet && strings.HasSuffix(at, "/v1/projects/acme-prod"):
@@ -198,11 +204,15 @@ func (s *networkServer) wrote() []string {
 	return append([]string(nil), s.writes...)
 }
 
-func (s *networkServer) installed() {
+func (s *networkServer) installed() { s.installedWithout("") }
+
+func (s *networkServer) installedWithout(policy string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.networks["ocel-production"] = &compute.Network{Name: "ocel-production"}
-	s.subnets["ocel-production"] = &compute.Subnetwork{Name: "ocel-production", IpCidrRange: kvSubnetRange}
+	s.subnets["ocel-production"] = &compute.Subnetwork{Name: "ocel-production", IpCidrRange: networkSubnetRange}
 	s.policies["ocel-production-memorystore"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: memorystoreServiceClass}
+	s.policies["ocel-production-cloudsql"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: cloudSQLServiceClass}
+	delete(s.policies, policy)
 	s.iam["ocel-production"] = &compute.Policy{Bindings: []*compute.Binding{{Role: networkUserRole, Members: []string{serviceAgent}}}}
 }

@@ -62,7 +62,7 @@ func bootstrapOf(t *testing.T, p *gcp.Provider) provider.Bootstrap {
 type emulatedBootstrap struct{ provider.Bootstrap }
 
 func (b emulatedBootstrap) Catalogue() []provider.Feature {
-	return slices.DeleteFunc(b.Bootstrap.Catalogue(), func(f provider.Feature) bool { return f.Name == gcp.KVFeature })
+	return slices.DeleteFunc(b.Bootstrap.Catalogue(), func(f provider.Feature) bool { return f.Name == gcp.NetworkFeature })
 }
 
 func conformingBootstrap(t *testing.T, p *gcp.Provider) provider.Bootstrap {

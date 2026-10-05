@@ -276,6 +276,21 @@ func boundToAStore(spec provider.StackSpec) provider.StackSpec {
 	return spec
 }
 
+func TestAnAppBoundToADatabaseReachesPrivateRangesOverTheTiersSubnetwork(t *testing.T) {
+	want := "PRIVATE_RANGES_ONLY projects/acme-prod/global/networks/ocel-preview projects/acme-prod/regions/europe-west1/subnetworks/ocel-preview"
+	server := &runServer{}
+	p := server.open(t)
+	spec := previewSpec()
+	spec.App.Values.Bindings = []provider.Binding{{Type: provider.BindingPostgres, Name: "orders"}}
+
+	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	if got := egressOf(server.created[len(server.created)-1]); got != want {
+		t.Errorf("a service bound to a database has egress %q, want %q", got, want)
+	}
+}
+
 func egressOf(service *run.GoogleCloudRunV2Service) string {
 	access := service.Template.VpcAccess
 	if access == nil || len(access.NetworkInterfaces) != 1 {

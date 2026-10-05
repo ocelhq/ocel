@@ -480,7 +480,9 @@ func (p *Provider) removeRevisions(ctx context.Context, going []serviceRevision,
 }
 
 func (p *Provider) egressFor(names Names, spec provider.StackSpec) *privateEgress {
-	if !slices.ContainsFunc(spec.App.Values.Bindings, func(binding provider.Binding) bool { return binding.Type == provider.BindingKV }) {
+	if !slices.ContainsFunc(spec.App.Values.Bindings, func(binding provider.Binding) bool {
+		return binding.Type == provider.BindingKV || binding.Type == provider.BindingPostgres
+	}) {
 		return nil
 	}
 	return &privateEgress{network: names.NetworkPath(spec.Ref.Tier), subnetwork: names.SubnetworkPath(p.options.Region, spec.Ref.Tier)}

@@ -84,6 +84,7 @@ var formulas = pricing.Table{
 	"google_compute_global_forwarding_rule":                 forwardingRule,
 	"google_compute_region_network_endpoint_group":          free,
 	"google_memorystore_instance":                           memorystoreInstance,
+	"google_sql_database_instance":                          sqlInstance,
 	"google_compute_network":                                free,
 	"google_compute_subnetwork":                             free,
 	"google_network_connectivity_service_connection_policy": free,
@@ -236,6 +237,14 @@ func memorystoreInstance(r *pricing.Subject) {
 			Quantity: r.Number("node_capacity_gb").Mul(nodes).Mul(pricing.MonthlyHours)})
 	}
 	r.Add(pricing.Component{Name: "Inter-zone data processed", Unit: "GiB", Rate: "gcp/psc/consumer-data-processing", Quantity: r.Usage(usageDataProcessed, egressBand), UsageBased: true})
+}
+
+func sqlInstance(r *pricing.Subject) {
+	r.Add(pricing.Component{Name: "Instance", Unit: "hours", Rate: "gcp/sql/" + r.String("settings.tier"), Quantity: pricing.MonthlyHours})
+	r.Add(pricing.Component{Name: "SSD storage", Unit: "GiB-month", Rate: "gcp/sql/ssd", Quantity: r.Number("settings.disk_size")})
+	r.Add(pricing.Component{Name: "Backups", Unit: "GiB-month", Rate: "gcp/sql/backup", Quantity: r.Usage(usageStorage, storageBand), UsageBased: true})
+	r.Add(pricing.Component{Name: "Private Service Connect endpoint", Unit: "hours", Rate: "gcp/psc/endpoint", Quantity: pricing.MonthlyHours})
+	r.Add(pricing.Component{Name: "Data processed", Unit: "GiB", Rate: "gcp/psc/consumer-data-processing", Quantity: r.Usage(usageDataProcessed, egressBand), UsageBased: true})
 }
 
 func forwardingRule(r *pricing.Subject) {

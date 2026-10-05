@@ -12,6 +12,7 @@ const (
 	environmentLabel = "ocel-environment"
 	kvLabel          = "ocel-kv"
 	bucketLabel      = "ocel-bucket"
+	postgresLabel    = "ocel-postgres"
 
 	maxLabelValue = 63
 )

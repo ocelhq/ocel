@@ -193,6 +193,7 @@ const (
 	maxInstanceNameLength = 63
 	instanceHashLength    = 6
 	memorystorePolicy     = "memorystore"
+	cloudSQLPolicy        = "cloudsql"
 )
 
 func (n Names) KVInstance(project, env, store string) (string, error) {
@@ -222,6 +223,15 @@ func (n Names) AppBucket(project, env, bucket string) string {
 	return readable + "-" + truncatedHash(appBucketHashLength, n.project, string(n.namespace), project, env, bucket)
 }
 
+const instanceSuffixBytes = 3
+
+func (n Names) PostgresInstancePrefix() string { return string(n.namespace) + namespaceEnd }
+
+func (n Names) PostgresInstance(project, env, database string) string {
+	readable := n.PostgresInstancePrefix() + strings.Join([]string{naming.Sanitize(project), naming.Sanitize(env), naming.Sanitize(database)}, "-")
+	return strings.TrimRight(readable[:min(len(readable), maxInstanceNameLength-2*instanceSuffixBytes-1)], "-")
+}
+
 func (n Names) Network(tier environment.Tier) string {
 	return string(n.namespace) + "-" + string(tier)
 }
@@ -236,8 +246,8 @@ func (n Names) SubnetworkPath(region string, tier environment.Tier) string {
 	return "projects/" + n.project + "/regions/" + region + "/subnetworks/" + n.Subnetwork(tier)
 }
 
-func (n Names) ConnectionPolicy(tier environment.Tier) string {
-	return n.Network(tier) + "-" + memorystorePolicy
+func (n Names) ConnectionPolicy(tier environment.Tier, service string) string {
+	return n.Network(tier) + "-" + service
 }
 
 const envSourceSyncName = "envsourcesync"
