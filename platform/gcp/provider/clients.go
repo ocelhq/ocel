@@ -29,6 +29,7 @@ import (
 	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/api/serviceusage/v1"
 	serviceidentities "google.golang.org/api/serviceusage/v1beta1"
+	sqladmin "google.golang.org/api/sqladmin/v1"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -67,6 +68,7 @@ type clients struct {
 	proxies       memo[*iap.Service]
 	signing       memo[*iamcredentials.Service]
 	identities    memo[*serviceidentities.APIService]
+	sql           memo[*sqladmin.Service]
 	principal     memo[string]
 	projects      memo[*cloudresourcemanager.Service]
 	logs          memo[*logging.Client]
@@ -186,6 +188,12 @@ func (c *clients) IAP() (*iap.Service, error) {
 func (c *clients) IAMCredentials() (*iamcredentials.Service, error) {
 	return opened(c, &c.signing, "IAM Service Account Credentials", func() (*iamcredentials.Service, error) {
 		return iamcredentials.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) SQL() (*sqladmin.Service, error) {
+	return opened(c, &c.sql, "Cloud SQL Admin", func() (*sqladmin.Service, error) {
+		return sqladmin.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 

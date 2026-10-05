@@ -127,6 +127,7 @@ func (p *Provider) Hooks() provider.Hooks {
 
 func (p *Provider) resourceHooks() resources.Hooks {
 	return resources.Hooks{
+		ProvisionPostgres: p.ProvisionPostgres,
 		ProvisionBucket:   p.ProvisionBucket,
 		ProvisionKV:       p.ProvisionKV,
 		ProvisionTopic:    p.ProvisionTopic,

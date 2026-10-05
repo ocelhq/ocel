@@ -51,6 +51,7 @@ const (
 	RootSharedPhysicals    Root = "sharedphysicals"
 	RootQueues             Root = "queues"
 	RootRealtime           Root = "realtime"
+	RootPostgres           Root = "postgres"
 )
 
 var variableRoots = []Root{RootValues, RootValueRefs, RootEnvSources, RootEnvSourceStatus, RootEnvSourceDigestKey}

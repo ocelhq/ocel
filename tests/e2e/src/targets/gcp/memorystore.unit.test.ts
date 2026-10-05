@@ -5,8 +5,8 @@ import { repoRoot } from "../../paths";
 import {
   createTimesIn,
   deleteStore,
-  KV_FEATURE,
   listStores,
+  NETWORK_FEATURE,
   storeFilter,
   storesIn,
   strayStores,
@@ -106,13 +106,13 @@ describe("strayStores", () => {
   });
 });
 
-describe("the kv network feature", () => {
+describe("the private network feature", () => {
   it("is the one the provider installs", async () => {
     const go = await readFile(
       path.join(repoRoot, "platform", "gcp", "provider", "bootstrapfeatures.go"),
       "utf8",
     );
-    expect(go).toContain(`kvFeature          = "${KV_FEATURE}"`);
+    expect(go).toContain(`networkFeature     = "${NETWORK_FEATURE}"`);
   });
 });
 

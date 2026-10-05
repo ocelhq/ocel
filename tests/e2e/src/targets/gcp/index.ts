@@ -25,12 +25,13 @@ import { migrateCommand } from "../../workspace";
 import { cloudflareUrls } from "../cloudflare";
 import type { Deployment, Exposure, ReleaseCycle, Restart, Sweeper, Target } from "../types";
 import { appBucketPrefix, deleteAppBucket, listAppBuckets, strayBuckets } from "./buckets";
+import { databaseFilter, deleteDatabase, listDatabases, strayDatabases } from "./cloudsql";
 import { startDispatch, stopDispatch } from "./dispatch";
 import {
   createTimesIn,
   deleteStore,
-  KV_FEATURE,
   listStores,
+  NETWORK_FEATURE,
   simulateMaintenance,
   storeFilter,
   strayStores,
@@ -187,7 +188,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
         base: GCP_BASE,
         slug: projectSlug(path.posix.basename(first.name), runId),
       });
-      const features = emulator ? [TASKS_FEATURE] : [KV_FEATURE, TASKS_FEATURE];
+      const features = emulator ? [TASKS_FEATURE] : [NETWORK_FEATURE, TASKS_FEATURE];
       await ocel(
         dir,
         ["bootstrap", "production", "--yes", "--features", features.join(",")],
@@ -465,6 +466,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     if (!endpoint()) {
       complaints.push(...(await this.sweepStores(at, runId)));
       complaints.push(...(await this.sweepBuckets(at, runId)));
+      complaints.push(...(await this.sweepDatabases(at, runId)));
     }
     for (const name of strayServices(found, namespaceOf(process.env), mine)) {
       try {
@@ -485,6 +487,21 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
         gcpSlug({ slug: projectSlug(cell.name, runId), fixture: cell.fixture }, process.env),
       ),
     );
+  }
+
+  private async sweepDatabases(at: Where, runId: string): Promise<string[]> {
+    const mine = this.sweptProjects(runId);
+    const complaints: string[] = [];
+    const databases = await listDatabases(at, databaseFilter(namespaceOf(process.env)));
+    for (const name of strayDatabases(databases, mine)) {
+      try {
+        await deleteDatabase(at, name);
+        process.stdout.write(`swept ${name}\n`);
+      } catch (error) {
+        complaints.push(`${name}: ${String(error)}`);
+      }
+    }
+    return complaints;
   }
 
   private async sweepBuckets(at: Where, runId: string): Promise<string[]> {

@@ -279,6 +279,73 @@ func TestPriceOfAStoreBillsItsNodeAndItsAppendOnlyFileEveryHourAndTrafficFromOth
 	}
 }
 
+func shapeOfADatabase(t *testing.T) (*costv1.ResourceSet, *costv1.Estimate) {
+	t.Helper()
+	client, costs := costServedIn(t, "us-central1")
+	manifest := shopManifest()
+	manifest.Resources = append(manifest.Resources, &contractv1.ManifestResource{
+		LogicalName: "postgres--orders",
+		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders"},
+		Config:      &contractv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{Version: "17"}},
+	})
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    manifest,
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	if err != nil {
+		t.Fatalf("Price() = %v", err)
+	}
+	return set, est
+}
+
+func TestShapeOfADeclaredDatabaseIsOneCloudSQLInstanceOnTheTiersNetwork(t *testing.T) {
+	set, _ := shapeOfADatabase(t)
+
+	instance := resourceOfType(t, set, "google_sql_database_instance")
+	if instance.GetScope() != "project:shop/environment:prod" {
+		t.Errorf("the database is shaped under %s, want the environment that declares it", instance.GetScope())
+	}
+	properties := instance.GetProperties().AsMap()
+	settings, _ := properties["settings"].(map[string]any)
+	if properties["database_version"] != "POSTGRES_17" || settings["tier"] != "db-f1-micro" || settings["disk_size"] != float64(10) {
+		t.Errorf("the database is shaped as %v, want POSTGRES_17 on a db-f1-micro with 10 GB of disk", properties)
+	}
+	for _, typ := range []string{"google_compute_network", "google_compute_subnetwork", "google_network_connectivity_service_connection_policy"} {
+		if scope := resourceOfType(t, set, typ).GetScope(); scope != "project:shop/shared:production" {
+			t.Errorf("the %s is shaped under %s, want the tier it is bootstrapped for", typ, scope)
+		}
+	}
+	if counts := typeCounts(set); counts["google_network_connectivity_service_connection_policy"] != 2 {
+		t.Errorf("counts = %v, want the network's two connection policies, Memorystore's and Cloud SQL's", counts)
+	}
+}
+
+func TestPriceOfADatabaseBillsItsInstanceEveryHourAndItsDiskByTheGiB(t *testing.T) {
+	set, est := shapeOfADatabase(t)
+
+	database := estimateOfType(t, est, set, "google_sql_database_instance", "project:shop/environment:prod")
+	if got := componentNamed(t, est, database.GetResource(), "Instance").GetMonthlyCost(); got != "7.67" {
+		t.Errorf("the instance costs %s, want 7.67 (730 h of db-f1-micro at 0.0105)", got)
+	}
+	if got := componentNamed(t, est, database.GetResource(), "SSD storage").GetMonthlyCost(); got != "1.70" {
+		t.Errorf("the disk costs %s, want 1.70 (10 GiB at 0.17)", got)
+	}
+	backups := componentNamed(t, est, database.GetResource(), "Backups")
+	if !backups.GetUsageBased() {
+		t.Errorf("backups are priced %+v, want them billed by what they store", backups)
+	}
+	if got := componentNamed(t, est, database.GetResource(), "Private Service Connect endpoint").GetMonthlyCost(); got != "7.30" {
+		t.Errorf("the endpoint apps reach the instance through costs %s, want 7.30 (730 h at 0.01)", got)
+	}
+	if processed := componentNamed(t, est, database.GetResource(), "Data processed"); !processed.GetUsageBased() {
+		t.Errorf("data through the endpoint is priced %+v, want it billed by the GiB processed", processed)
+	}
+}
+
 func topicsManifest() *contractv1.Manifest {
 	manifest := shopManifest()
 	manifest.Workers = []*contractv1.ManifestWorker{{Name: "media", App: "web", Compute: string(provider.ComputeServerless), Concurrency: 4}}

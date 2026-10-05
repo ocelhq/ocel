@@ -78,7 +78,7 @@ func TestLiveStacks(t *testing.T) {
 		facts.Bindings = slices.DeleteFunc(slices.Clone(facts.Bindings), func(b provider.BindingType) bool { return b == provider.BindingKV })
 		bootstrapped(t, p, environment.TierPreview, gcp.TasksFeature)
 	} else {
-		bootstrapped(t, p, environment.TierPreview, gcp.KVFeature, gcp.TasksFeature)
+		bootstrapped(t, p, environment.TierPreview, gcp.NetworkFeature, gcp.TasksFeature)
 	}
 
 	conformance.RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues())

@@ -168,18 +168,32 @@ func untaggingGrants(names Names, region string) []string {
 	return grants
 }
 
-const bucketsRole = "roles/storage.admin"
+const (
+	bucketsRole   = "roles/storage.admin"
+	databasesRole = "roles/cloudsql.admin"
+)
 
-var projectCreatePermissions = []string{"storage.buckets.create"}
+var projectPermissions = []string{
+	"storage.buckets.create",
+	"cloudsql.instances.create",
+	"cloudsql.instances.list",
+	"cloudsql.instances.get",
+}
 
 func appBucketsGrant(names Names) string {
 	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q)",
 		bucketsRole, "projects/_/buckets/"+names.AppBucketPrefix())
 }
 
-func projectCreatesGrant() string {
-	return "a custom role holding " + strings.Join(projectCreatePermissions, ", ") +
-		", unconditioned: Google checks each of them against the project, where no name condition can admit it"
+func databasesGrant(names Names) string {
+	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q), where a tier installs %s",
+		databasesRole, "projects/"+names.project+"/instances/"+names.PostgresInstancePrefix(), networkFeature)
+}
+
+func projectPermissionsGrant() string {
+	return "a custom role holding " + strings.Join(projectPermissions, ", ") +
+		", unconditioned: Google checks creating a bucket or an instance, listing instances and reading Cloud SQL operations against the project, " +
+		"where no name condition admits them"
 }
 
 func rolesFor(purpose edge.CredentialPurpose) []string {
@@ -213,8 +227,8 @@ func permissionsFor(features []string) []string {
 	case slices.Contains(features, albFeature):
 		permissions = appendMissing(permissions, alb.Permissions)
 	}
-	if slices.Contains(features, kvFeature) {
-		permissions = appendMissing(permissions, kvPermissions)
+	if slices.Contains(features, networkFeature) {
+		permissions = appendMissing(permissions, networkPermissions)
 	}
 	if slices.Contains(features, tasksFeature) {
 		permissions = appendMissing(permissions, tasksPermissions)
@@ -230,8 +244,8 @@ func rolesCovering(features []string) []string {
 	case slices.Contains(features, albFeature):
 		roles = appendMissing(roles, alb.Roles())
 	}
-	if slices.Contains(features, kvFeature) {
-		roles = appendMissing(roles, kvRoles)
+	if slices.Contains(features, networkFeature) {
+		roles = appendMissing(roles, networkRoles)
 	}
 	if slices.Contains(features, tasksFeature) {
 		roles = appendMissing(roles, tasksRoles)

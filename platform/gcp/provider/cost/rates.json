@@ -868,6 +868,19 @@
       "verified": "2026-10-01"
     },
     {
+      "id": "gcp/psc/endpoint",
+      "region": "",
+      "unit": "hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.01"
+        }
+      ],
+      "source": "https://cloud.google.com/vpc/pricing#psc-pricing",
+      "verified": "2026-10-05"
+    },
+    {
       "id": "gcp/pubsub/throughput",
       "region": "",
       "unit": "GiB",
@@ -903,6 +916,45 @@
       ],
       "source": "https://cloud.google.com/tasks/pricing",
       "verified": "2026-10-02"
+    },
+    {
+      "id": "gcp/sql/db-f1-micro",
+      "region": "us-central1",
+      "unit": "hours",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0105"
+        }
+      ],
+      "source": "https://cloud.google.com/sql/pricing",
+      "verified": "2026-10-05"
+    },
+    {
+      "id": "gcp/sql/ssd",
+      "region": "us-central1",
+      "unit": "GiB-month",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.17"
+        }
+      ],
+      "source": "https://cloud.google.com/sql/pricing",
+      "verified": "2026-10-05"
+    },
+    {
+      "id": "gcp/sql/backup",
+      "region": "us-central1",
+      "unit": "GiB-month",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.08"
+        }
+      ],
+      "source": "https://cloud.google.com/sql/pricing",
+      "verified": "2026-10-05"
     }
   ]
 }
