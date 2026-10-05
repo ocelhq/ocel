@@ -10,17 +10,17 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 )
 
-func withTelemetryKey(t *testing.T) {
+func withTelemetryBuild(t *testing.T) {
 	t.Helper()
 	confighome.Isolate(t)
-	previous := telemetry.WriteKey
-	telemetry.WriteKey = "a-key"
-	t.Cleanup(func() { telemetry.WriteKey = previous })
+	previousKey, previousEndpoint := telemetry.WriteKey, telemetry.Endpoint
+	telemetry.WriteKey, telemetry.Endpoint = "a-key", "http://127.0.0.1:1"
+	t.Cleanup(func() { telemetry.WriteKey, telemetry.Endpoint = previousKey, previousEndpoint })
 }
 
 func TestTheTelemetryBannerPrintsOnStderrOnceAcrossInvocations(t *testing.T) {
 	inADeployedProject(t)
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 
 	firstOut, firstErr := executeRoot(t, "deployments", "prune", "--yes")
 	secondOut, secondErr := executeRoot(t, "deployments", "prune", "--yes")
@@ -38,7 +38,7 @@ func TestTheTelemetryBannerPrintsOnStderrOnceAcrossInvocations(t *testing.T) {
 
 func TestTheTelemetryBannerLeavesJSONStdoutAlone(t *testing.T) {
 	inADeployedProject(t)
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 
 	stdout, stderr := executeRoot(t, "--json", "deployments", "prune", "--yes")
 
@@ -62,7 +62,7 @@ func TestNoTelemetryBannerWhenTheBuildCarriesNoKey(t *testing.T) {
 
 func TestNoTelemetryBannerWhenOptedOut(t *testing.T) {
 	inADeployedProject(t)
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 	t.Setenv("OCEL_TELEMETRY", "0")
 
 	_, stderr := executeRoot(t, "deployments", "prune", "--yes")
@@ -73,7 +73,7 @@ func TestNoTelemetryBannerWhenOptedOut(t *testing.T) {
 }
 
 func TestHelpNeverMentionsDoNotTrack(t *testing.T) {
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 
 	for _, path := range commandPaths(newCommand().root) {
 		stdout, stderr := executeRoot(t, append(path, "--help")...)
@@ -96,7 +96,7 @@ func commandPaths(cmd *cobra.Command) [][]string {
 
 func TestShellCompletionLeavesTheTelemetryBannerForTheNextCommand(t *testing.T) {
 	inADeployedProject(t)
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 
 	for _, completion := range []string{cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd} {
 		_, completionErr := executeRoot(t, completion, "deploy", "")

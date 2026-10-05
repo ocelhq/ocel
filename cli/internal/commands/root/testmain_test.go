@@ -2,6 +2,7 @@ package root
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -27,6 +28,9 @@ func TestMain(m *testing.M) {
 	}
 	if args, ok := os.LookupEnv(rootArgsEnvVar); ok {
 		os.Exit(runRootSubprocess(strings.Split(args, " ")))
+	}
+	if slices.Equal(os.Args[1:], []string{"telemetry", "flush"}) {
+		os.Exit(0)
 	}
 
 	done := clitest.IsolateConfigHome()

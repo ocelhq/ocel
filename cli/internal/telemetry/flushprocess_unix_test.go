@@ -161,7 +161,7 @@ func TestStartFlushSkipsTheChildUnlessThereIsSomethingToSend(t *testing.T) {
 			dir := aFlushableSetup(t)
 			spoil(t)
 
-			resolution := telemetry.Resolve(telemetry.WriteKey)
+			resolution := telemetry.Resolve(telemetry.WriteKey, telemetry.Endpoint)
 			if telemetry.StartFlush(os.Args[0], resolution) {
 				t.Error("StartFlush() = true, want no child")
 			}

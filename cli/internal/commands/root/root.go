@@ -100,7 +100,7 @@ type command struct {
 	stopInterruptHandler context.CancelFunc
 	preRunReached        bool
 	invoked              *cobra.Command
-	startFlush           func()
+	startFlush           func(telemetry.Resolution)
 }
 
 func Execute() int {
@@ -151,7 +151,7 @@ func newCommand() *command {
 			return err
 		}
 		if !isShellCompletion(cmd) {
-			telemetry.PrintBannerOnce(cmd.ErrOrStderr(), telemetry.Resolve(telemetry.WriteKey))
+			telemetry.PrintBannerOnce(cmd.ErrOrStderr(), telemetry.Resolve(telemetry.WriteKey, telemetry.Endpoint))
 		}
 		invocation.AttachCommandSink(cmd)
 		install := installInterruptHandler
@@ -222,12 +222,12 @@ func newCommand() *command {
 	return c
 }
 
-func startTelemetryFlush() {
+func startTelemetryFlush(resolution telemetry.Resolution) {
 	executable, err := os.Executable()
 	if err != nil {
 		return
 	}
-	telemetry.StartFlush(executable, telemetry.Resolve(telemetry.WriteKey))
+	telemetry.StartFlush(executable, resolution)
 }
 
 func isShellCompletion(cmd *cobra.Command) bool {

@@ -6,14 +6,17 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 )
 
-const aKey = "a-key"
+const (
+	aKey       = "a-key"
+	anEndpoint = "https://events.example"
+)
 
 func resolveWith(t *testing.T, key string, env map[string]string) telemetry.Resolution {
 	t.Helper()
 	for name, value := range env {
 		t.Setenv(name, value)
 	}
-	return telemetry.Resolve(key)
+	return telemetry.Resolve(key, anEndpoint)
 }
 
 func TestTelemetryIsEnabledWhenNothingDisablesIt(t *testing.T) {
@@ -109,5 +112,39 @@ func TestOptOutsBeatDebugModeWithoutAKey(t *testing.T) {
 
 	if got.Enabled || got.Debug || got.Rule != telemetry.RuleDoNotTrack {
 		t.Errorf("Resolve = %+v, want DO_NOT_TRACK to win over debug mode in a keyless build", got)
+	}
+}
+
+func TestABuildWithoutAnEndpointDisablesTelemetry(t *testing.T) {
+	got := telemetry.Resolve(aKey, "")
+
+	if got.Enabled || got.Rule != telemetry.RuleNoEndpoint {
+		t.Errorf("Resolve = %+v, want disabled by the missing endpoint", got)
+	}
+}
+
+func TestDebugModeWorksWithoutAnEndpoint(t *testing.T) {
+	t.Setenv("OCEL_TELEMETRY", "debug")
+
+	got := telemetry.Resolve(aKey, "")
+
+	if !got.Enabled || !got.Debug || got.Rule != telemetry.RuleDebug {
+		t.Errorf("Resolve = %+v, want debug mode in a build without an endpoint, since debug prints instead of sending", got)
+	}
+}
+
+func TestOnlyAnEnabledResolutionOutsideDebugModeCollects(t *testing.T) {
+	cases := map[string]struct {
+		resolution telemetry.Resolution
+		want       bool
+	}{
+		"enabled":  {telemetry.Resolution{Enabled: true}, true},
+		"debug":    {telemetry.Resolution{Enabled: true, Debug: true}, false},
+		"disabled": {telemetry.Resolution{}, false},
+	}
+	for name, tc := range cases {
+		if got := tc.resolution.IsCollecting(); got != tc.want {
+			t.Errorf("%s: IsCollecting() = %v, want %v", name, got, tc.want)
+		}
 	}
 }
