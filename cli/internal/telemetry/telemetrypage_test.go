@@ -11,13 +11,20 @@ import (
 
 var tableRowName = regexp.MustCompile("(?m)^\\| `([^`]+)`\\s*\\|")
 
-func readTelemetryPage(t *testing.T) string {
+const repoRoot = "../../.."
+
+func readRepoFile(t *testing.T, elems ...string) string {
 	t.Helper()
-	page, err := os.ReadFile(filepath.Join("..", "..", "..", "www", "content", "docs", "telemetry.mdx"))
+	content, err := os.ReadFile(filepath.Join(append([]string{repoRoot}, elems...)...))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(page)
+	return string(content)
+}
+
+func readTelemetryPage(t *testing.T) string {
+	t.Helper()
+	return readRepoFile(t, "www", "content", "docs", "telemetry.mdx")
 }
 
 func listNamesUnder(t *testing.T, page, heading string) []string {

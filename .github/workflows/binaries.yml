@@ -129,8 +129,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           GORELEASER_PREVIOUS_TAG: ${{ steps.version.outputs.previous }}
-          PH_PROJECT_KEY: ${{ secrets.PH_PROJECT_KEY }}
-          PH_API_HOST: ${{ secrets.PH_API_HOST }}
+          TELEMETRY_WRITE_KEY: ${{ secrets.PH_PROJECT_KEY }}
+          TELEMETRY_ENDPOINT: ${{ secrets.PH_API_HOST }}
         run: goreleaser release --clean --parallelism 2 --release-notes "$RUNNER_TEMP/notes.md"
 
   npm:

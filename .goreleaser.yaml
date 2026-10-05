@@ -20,8 +20,8 @@ builds:
       - -trimpath
     ldflags:
       - -s -w -X github.com/ocelhq/ocel/cli/internal/version.Version={{ .Version }}
-      - -X github.com/ocelhq/ocel/cli/internal/telemetry.WriteKey={{ envOrDefault "PH_PROJECT_KEY" "" }}
-      - -X github.com/ocelhq/ocel/cli/internal/telemetry.Endpoint={{ envOrDefault "PH_API_HOST" "" }}
+      - -X github.com/ocelhq/ocel/cli/internal/telemetry.WriteKey={{ envOrDefault "TELEMETRY_WRITE_KEY" "" }}
+      - -X github.com/ocelhq/ocel/cli/internal/telemetry.Endpoint={{ envOrDefault "TELEMETRY_ENDPOINT" "" }}
     goos: [darwin, linux, windows]
     goarch: [amd64, arm64]
     ignore:
