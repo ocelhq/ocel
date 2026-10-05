@@ -124,7 +124,7 @@ func (o InfisicalOptions) secretPath(folder string) (string, error) {
 
 var (
 	infisicalHost    = regexp.MustCompile(`^(https?://.+)?$`)
-	variableNameText = regexp.MustCompile(`^[^#[:cntrl:]]*$`)
+	variableNameText = regexp.MustCompile(`^[^#\x00-\x1f\x7f]*$`)
 )
 
 func refuseMalformedInfisical(options InfisicalOptions) error {

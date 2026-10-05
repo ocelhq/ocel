@@ -610,38 +610,38 @@ var File_app_resources_v1_variables_proto protoreflect.FileDescriptor
 
 const file_app_resources_v1_variables_proto_rawDesc = "" +
 	"\n" +
-	" app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto\"\xec\x04\n" +
-	"\x12VariableDefinition\x12+\n" +
-	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12?\n" +
+	" app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto\"\xff\x04\n" +
+	"\x12VariableDefinition\x12/\n" +
+	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12?\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12+\n" +
 	"\x11client_accessible\x18\x03 \x01(\bR\x10clientAccessible\x12\x1a\n" +
-	"\brequired\x18\x04 \x01(\bR\brequired\x12=\n" +
-	"\afolders\x18\x05 \x03(\tB#\xbaH \x92\x01\x1d\x18\x01\"\x19r\x172\x15^(/[^/#[:cntrl:]]+)+$R\afolders\x12\x16\n" +
+	"\brequired\x18\x04 \x01(\bR\brequired\x12A\n" +
+	"\afolders\x18\x05 \x03(\tB'\xbaH$\x92\x01!\x18\x01\"\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)+$R\afolders\x12\x16\n" +
 	"\x06source\x18\x06 \x01(\tR\x06source\x12#\n" +
 	"\rschema_source\x18\a \x01(\tR\fschemaSource\x12\x1d\n" +
 	"\n" +
-	"has_schema\x18\b \x01(\bR\thasSchema\x12\xd4\x01\n" +
-	"\vdescription\x18\t \x01(\tB\xb1\x01\xbaH\xad\x01\xba\x01\xa9\x01\n" +
-	" variables.definition.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a8size(bytes(this)) <= 120 && !this.matches('[[:cntrl:]]')R\vdescription\x12-\n" +
+	"has_schema\x18\b \x01(\bR\thasSchema\x12\xdb\x01\n" +
+	"\vdescription\x18\t \x01(\tB\xb8\x01\xbaH\xb4\x01\xba\x01\xb0\x01\n" +
+	" variables.definition.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a?size(bytes(this)) <= 120 && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]')R\vdescription\x121\n" +
 	"\x05group\x18\n" +
-	" \x01(\tB\x17\xbaH\x14r\x122\x10^[^#[:cntrl:]]*$R\x05group\"\xac\x02\n" +
-	"\x0fGroupDefinition\x12+\n" +
-	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12\x1a\n" +
-	"\brequired\x18\x02 \x01(\bR\brequired\x12\xcf\x01\n" +
-	"\vdescription\x18\x03 \x01(\tB\xac\x01\xbaH\xa8\x01\xba\x01\xa4\x01\n" +
-	"\x1bvariables.group.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a8size(bytes(this)) <= 120 && !this.matches('[[:cntrl:]]')R\vdescription\"\x96\x01\n" +
+	" \x01(\tB\x1b\xbaH\x18r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\x05group\"\xb7\x02\n" +
+	"\x0fGroupDefinition\x12/\n" +
+	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12\x1a\n" +
+	"\brequired\x18\x02 \x01(\bR\brequired\x12\xd6\x01\n" +
+	"\vdescription\x18\x03 \x01(\tB\xb3\x01\xbaH\xaf\x01\xba\x01\xab\x01\n" +
+	"\x1bvariables.group.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a?size(bytes(this)) <= 120 && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]')R\vdescription\"\x96\x01\n" +
 	"\x11DeclareEnvRequest\x12F\n" +
 	"\vdefinitions\x18\x01 \x03(\v2$.app.resources.v1.VariableDefinitionR\vdefinitions\x129\n" +
-	"\x06groups\x18\x02 \x03(\v2!.app.resources.v1.GroupDefinitionR\x06groups\"\x87\x01\n" +
-	"\fVariableCell\x12+\n" +
-	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x124\n" +
-	"\x06folder\x18\x02 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12\x14\n" +
+	"\x06groups\x18\x02 \x03(\v2!.app.resources.v1.GroupDefinitionR\x06groups\"\x8f\x01\n" +
+	"\fVariableCell\x12/\n" +
+	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x128\n" +
+	"\x06folder\x18\x02 \x01(\tB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$R\x06folder\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\tR\x05value\"J\n" +
 	"\x12DeclareEnvResponse\x124\n" +
-	"\x05cells\x18\x01 \x03(\v2\x1e.app.resources.v1.VariableCellR\x05cells\"\xf9\x01\n" +
+	"\x05cells\x18\x01 \x03(\v2\x1e.app.resources.v1.VariableCellR\x05cells\"\xfd\x01\n" +
 	"\x0fVariableProblem\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x124\n" +
-	"\x06folder\x18\x02 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12D\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x128\n" +
+	"\x06folder\x18\x02 \x01(\tB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$R\x06folder\x12D\n" +
 	"\x04kind\x18\x03 \x01(\x0e2&.app.resources.v1.VariableProblem.KindB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04kind\x12\x16\n" +
 	"\x06detail\x18\x04 \x01(\tR\x06detail\"@\n" +
 	"\x04Kind\x12\x14\n" +

@@ -5,9 +5,9 @@ import (
 	"strconv"
 )
 
-const PinnedPattern = `^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$`
+const PinnedPattern = `^([^/@: \t\n\v\f\r]+(:[0-9]+)?/)?[^/@: \t\n\v\f\r]+(/[^/@: \t\n\v\f\r]+)*@sha256:[0-9a-f]{64}$`
 
-const HealthCheckPathPattern = `^/[^#?[:space:][:cntrl:]]*$`
+const HealthCheckPathPattern = `^/[^#? \t\n\v\f\r\x00-\x1f\x7f]*$`
 
 var (
 	pinned          = regexp.MustCompile(PinnedPattern)
