@@ -27,7 +27,16 @@ type Pins interface {
 
 	Close(ctx context.Context, service string) error
 
+	ReadRollback(ctx context.Context, service, revision string) (Rollback, bool, error)
+
+	RecordRollback(ctx context.Context, service, revision string, rollback Rollback) error
+
 	Warm(ctx context.Context, service, revision, path string) error
+}
+
+type Rollback struct {
+	Previous string `json:"previous,omitempty"`
+	Opened   bool   `json:"opened,omitempty"`
 }
 
 type Pointers map[string][]string
@@ -190,23 +199,31 @@ func stillPinned(pins Pins, each pinned) router.StillActive {
 func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error {
 	var left []string
 	for _, each := range slices.Backward(moved) {
-		if serving, err := pins.ReadServing(ctx, each.service); err == nil && serving != each.revision {
+		owed, err := readOwed(ctx, pins, each)
+		if err != nil {
+			left = append(left, each.service+" serves "+each.revision)
 			continue
 		}
-		if each.opened {
+		if serving, err := pins.ReadServing(ctx, each.service); err == nil && serving != each.revision {
+			if err := pins.RecordRollback(ctx, each.service, each.revision, owed); err != nil {
+				left = append(left, each.service+" is put back on "+each.revision+" if the promotion that pinned it since fails")
+			}
+			continue
+		}
+		if owed.Opened {
 			if err := pins.Close(ctx, each.service); err != nil {
 				left = append(left, each.service+" answers everyone on "+each.revision)
 				continue
 			}
 		}
-		switch each.previous {
+		switch owed.Previous {
 		case each.revision:
 		case "":
-			if !each.opened {
+			if !owed.Opened {
 				left = append(left, each.service+" serves "+each.revision)
 			}
 		default:
-			err := pins.Restore(ctx, each.service, each.previous, stillPinned(pins, each))
+			err := pins.Restore(ctx, each.service, owed.Previous, stillPinned(pins, each))
 			if err != nil && !errors.Is(err, errRepinned) {
 				left = append(left, each.service+" serves "+each.revision)
 			}
@@ -217,4 +234,16 @@ func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error 
 	}
 	return fmt.Errorf("%w; the services this promotion had already pinned could not all be put back, so %s, while every other service serves what it served before",
 		cause, strings.Join(left, ", "))
+}
+
+func readOwed(ctx context.Context, pins Pins, each pinned) (Rollback, error) {
+	owed := Rollback{Previous: each.previous, Opened: each.opened}
+	if each.previous == "" || each.previous == each.revision {
+		return owed, nil
+	}
+	earlier, found, err := pins.ReadRollback(ctx, each.service, each.previous)
+	if err != nil || !found {
+		return owed, err
+	}
+	return Rollback{Previous: earlier.Previous, Opened: owed.Opened || earlier.Opened}, nil
 }

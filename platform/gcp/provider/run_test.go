@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
 func desiredOf(t *testing.T, s serving) *run.GoogleCloudRunV2Service {
@@ -656,6 +657,39 @@ func TestPinningBackWithoutOpeningLeavesAClosedServiceClosed(t *testing.T) {
 	}
 	if !servedBy(server.serving().Traffic, one) {
 		t.Errorf("the service serves %+v, want all of it on %s", server.serving().Traffic, one)
+	}
+}
+
+func TestARecordedRollbackIsReadBackUntilARevisionIsPinnedAgain(t *testing.T) {
+	ctx := context.Background()
+	server := &runServer{}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+	second := app
+	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	_, two := released(t, server, second)
+	p := server.open(t)
+
+	recorded := pin.Rollback{Previous: one, Opened: true}
+	if err := p.RecordRollback(ctx, app.service, two, recorded); err != nil {
+		t.Fatalf("RecordRollback(%s) = %v", two, err)
+	}
+	third := app
+	third.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:three"
+	released(t, server, third)
+	if got, found, err := p.ReadRollback(ctx, app.service, two); err != nil || !found || got != recorded {
+		t.Fatalf("ReadRollback(%s) after another release = %+v, %v, %v, want %+v: a release keeps what rollbacks the service records", two, got, found, err, recorded)
+	}
+	if _, found, err := p.ReadRollback(ctx, app.service, one); err != nil || found {
+		t.Errorf("ReadRollback(%s) = found %v, %v, want nothing recorded for a revision no promotion rolled back", one, found, err)
+	}
+
+	if _, err := p.Pin(ctx, app.service, two, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", two, err)
+	}
+	if _, found, err := p.ReadRollback(ctx, app.service, two); err != nil || found {
+		t.Errorf("ReadRollback(%s) after a promotion pinned it again = found %v, %v, want nothing: a promotion that lands on it makes it what the service serves",
+			two, found, err)
 	}
 }
 

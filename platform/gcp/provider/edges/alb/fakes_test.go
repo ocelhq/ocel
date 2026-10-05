@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
 const loadBalancerAddress = "34.117.0.7"
@@ -277,6 +278,12 @@ func (w *world) ReadServing(_ context.Context, service string) (string, error) {
 func (w *world) ReadTag(_ context.Context, service, revision string) (string, error) {
 	return w.tagOf(service, revision), nil
 }
+
+func (w *world) ReadRollback(context.Context, string, string) (pin.Rollback, bool, error) {
+	return pin.Rollback{}, false, nil
+}
+
+func (w *world) RecordRollback(context.Context, string, string, pin.Rollback) error { return nil }
 
 func (w *world) Close(_ context.Context, service string) error {
 	w.mu.Lock()

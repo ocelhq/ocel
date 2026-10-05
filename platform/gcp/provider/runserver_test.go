@@ -213,6 +213,9 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 		if slices.Contains(fields, "iap_enabled") {
 			s.service.IapEnabled = desired.IapEnabled
 		}
+		if slices.Contains(fields, "annotations") {
+			s.service.Annotations = desired.Annotations
+		}
 		s.writes++
 		s.service.Etag = "etag-" + strconv.Itoa(s.writes)
 		if s.failRouting {
@@ -233,6 +236,7 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 	s.service.InvokerIamDisabled = desired.InvokerIamDisabled
 	s.service.IapEnabled = desired.IapEnabled
 	s.service.Labels = desired.Labels
+	s.service.Annotations = desired.Annotations
 	s.writes++
 	s.service.Etag = "etag-" + strconv.Itoa(s.writes)
 	if replaced {
