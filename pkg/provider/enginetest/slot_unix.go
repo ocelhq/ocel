@@ -30,7 +30,10 @@ func leaseSlot(dir string, count int) (int, *os.File, error) {
 }
 
 func lockSlot(dir string, slot, how int) (*os.File, error) {
-	at := filepath.Join(dir, fmt.Sprintf("slot-%d.lock", slot))
+	return lockFile(filepath.Join(dir, fmt.Sprintf("slot-%d.lock", slot)), how)
+}
+
+func lockFile(at string, how int) (*os.File, error) {
 	held, err := os.OpenFile(at, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, err
