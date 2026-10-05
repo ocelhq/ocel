@@ -109,6 +109,14 @@ func runProcessGone(of string) bool {
 }
 
 func sweep(owned func(of string) bool) error {
+	held, err := os.OpenFile(filepath.Join(os.TempDir(), rootPrefix+"sweep.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("open the lock every run sweeps under: %w", err)
+	}
+	defer held.Close()
+	if err := syscall.Flock(int(held.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("take the lock every run sweeps under: %w", err)
+	}
 	var failed []error
 	containers, err := listLabelled("ps", "--all")
 	if err != nil {
