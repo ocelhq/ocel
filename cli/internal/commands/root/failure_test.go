@@ -12,6 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
@@ -179,6 +182,53 @@ func TestAFailureThatAlreadyEndedInARunSummaryPrintsNothingMore(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Errorf("stderr = %q, want nothing", stderr.String())
+	}
+}
+
+func executeAndReportDataCommand(t *testing.T, fail func() error) (code int, stdout, stderr string) {
+	t.Helper()
+	ocel := newCommand()
+	ocel.root.AddCommand(commands.ReserveStdout(&cobra.Command{
+		Use: "fetch",
+		RunE: func(cmd *cobra.Command, _ []string) (err error) {
+			_, running, err := ocel.bus.Begin(cmd.Context(), "ocel fetch", "")
+			if err != nil {
+				return err
+			}
+			defer running.End(&err)
+			return fail()
+		},
+	}))
+	var out, errOut bytes.Buffer
+	ocel.root.SetOut(&out)
+	ocel.root.SetErr(&errOut)
+	code = ocel.executeAndReport([]string{"--json", "fetch"})
+	return code, out.String(), errOut.String()
+}
+
+func TestADataCommandThatFailsInsideItsRunPrintsOneErrorDocumentOnStdout(t *testing.T) {
+	code, stdout, stderr := executeAndReportDataCommand(t, func() error { return errors.New("the bindings table is unreachable") })
+
+	failure := requireOneFailureDocument(t, stdout)
+	if failure["message"] != "the bindings table is unreachable" || failure["code"] != "internal" {
+		t.Errorf("error = %v, want the run's failure coded internal", failure)
+	}
+	if evs := clitest.RunEvents(t, stderr); len(evs) == 0 || evs[len(evs)-1].GetSummary() == nil || evs[len(evs)-1].GetSummary().GetSuccess() {
+		t.Errorf("stderr = %q, want the run's events ending in its failed summary", stderr)
+	}
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+}
+
+func TestADataCommandThatAlreadyReportedItsFailureKeepsItsExitCodeAndPrintsNoDocument(t *testing.T) {
+	code, stdout, _ := executeAndReportDataCommand(t, func() error { return &exitcode.ExitError{Code: 3} })
+
+	if stdout != "" {
+		t.Errorf("stdout = %q, want nothing beside what the command already printed", stdout)
+	}
+	if code != 3 {
+		t.Errorf("exit code = %d, want 3", code)
 	}
 }
 
