@@ -21,12 +21,17 @@ import (
 
 const FunctionImageRoot = "/ocel/app"
 
-func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, overlay map[string][]byte) (v1.Image, error) {
+type FunctionImageOptions struct {
+	Overlay        map[string][]byte
+	NextRuntimeDir string
+}
+
+func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, opts FunctionImageOptions) (v1.Image, error) {
 	rels, err := ArtifactFiles(dir)
 	if err != nil {
 		return nil, err
 	}
-	packed, err := functionLayer(dir, rels, overlay)
+	packed, err := functionLayer(dir, rels, opts.Overlay)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +53,7 @@ func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, o
 	if err != nil {
 		return nil, err
 	}
-	command, err := functionCommand(framework, staged)
+	command, err := functionCommand(framework, staged, opts.NextRuntimeDir)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +81,9 @@ func functionStaging(dir string) (buildoutput.FunctionDescriptor, error) {
 
 const NodeRuntimeRoot = "/ocel/runtime"
 
-const NodeRuntimePath = NodeRuntimeRoot + "/entrypoint.mjs"
+const entrypointFile = "entrypoint.mjs"
+
+const NodeRuntimePath = NodeRuntimeRoot + "/" + entrypointFile
 
 const HandlerName = "OCEL_HANDLER"
 
@@ -84,6 +91,10 @@ const nodeEnvName = "NODE_ENV"
 
 func BootsThroughRuntime(framework buildoutput.Framework) bool {
 	return framework.Name == buildoutput.FrameworkNode || framework.Name == buildoutput.FrameworkNext
+}
+
+func BootsThroughNodeRuntime(framework buildoutput.Framework) bool {
+	return framework.Name == buildoutput.FrameworkNode
 }
 
 func servedHandler(staged buildoutput.FunctionDescriptor) string {
@@ -110,12 +121,18 @@ func boundPort(env []string) []string {
 	return append(kept, containerimage.PortEnvVar+"="+containerimage.PortText)
 }
 
-func functionCommand(framework buildoutput.Framework, staged buildoutput.FunctionDescriptor) ([]string, error) {
+func functionCommand(framework buildoutput.Framework, staged buildoutput.FunctionDescriptor, nextRuntimeDir string) ([]string, error) {
 	switch {
 	case len(staged.Command) > 0:
 		return staged.Command, nil
-	case BootsThroughRuntime(framework):
+	case BootsThroughNodeRuntime(framework):
 		return []string{"node", NodeRuntimePath}, nil
+	case framework.Name == buildoutput.FrameworkNext && nextRuntimeDir == "":
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"the Next function staged at %s is served through the Next runtime, and this provider names no directory its images hold the Next runtime in",
+			staged.ID)
+	case framework.Name == buildoutput.FrameworkNext:
+		return []string{"node", path.Join(nextRuntimeDir, entrypointFile)}, nil
 	default:
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the %s function staged at %s names no command to run, and only a node function boots through a runtime this image could run in its place",

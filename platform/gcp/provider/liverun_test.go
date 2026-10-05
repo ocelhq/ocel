@@ -200,7 +200,10 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, framework b
 	if len(payload) > 0 {
 		overlay[images.NodeRuntimePath] = payload
 	}
-	image, err := images.FunctionImage(base, framework, dir, overlay)
+	image, err := images.FunctionImage(base, framework, dir, images.FunctionImageOptions{
+		Overlay:        overlay,
+		NextRuntimeDir: p.Facts().NextRuntimeDir,
+	})
 	if err != nil {
 		t.Fatalf("build the %s function's image: %v", framework.Name, err)
 	}

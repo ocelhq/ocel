@@ -173,6 +173,13 @@ func TestTheRuntimeIsShippedForTheRuntimeThatBootsThroughOne(t *testing.T) {
 	if len(compiled) != 0 {
 		t.Error("ReadFunctionRuntime(go) returned a node runtime for an image that runs a compiled binary")
 	}
+	next, err := p.ReadFunctionRuntime(ctx, buildoutput.Framework{Name: buildoutput.FrameworkNext})
+	if err != nil {
+		t.Fatalf("ReadFunctionRuntime(next) = %v", err)
+	}
+	if len(next) != 0 {
+		t.Error("ReadFunctionRuntime(next) returned the node runtime for an image that boots the Next runtime")
+	}
 }
 
 func TestOneBaseIsFetchedOnceHoweverManyFunctionsRunOnIt(t *testing.T) {
