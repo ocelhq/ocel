@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest/confighome"
@@ -85,5 +86,26 @@ func TestTheBannerStillPrintsWhenTheSettingsFileCannotBeWritten(t *testing.T) {
 
 	if printBanner(enabled) == "" {
 		t.Error("banner absent, want it shown even when the shown flag cannot be recorded")
+	}
+}
+
+func TestConcurrentInvocationsPrintTheBannerOnce(t *testing.T) {
+	confighome.Isolate(t)
+	const invocations = 16
+	banners := make([]string, invocations)
+	var wg sync.WaitGroup
+	for i := range banners {
+		wg.Go(func() { banners[i] = printBanner(enabled) })
+	}
+	wg.Wait()
+
+	printed := 0
+	for _, banner := range banners {
+		if banner != "" {
+			printed++
+		}
+	}
+	if printed != 1 {
+		t.Errorf("%d of %d concurrent invocations printed the banner, want exactly 1", printed, invocations)
 	}
 }
