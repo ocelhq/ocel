@@ -1,6 +1,8 @@
 package gcp
 
 import (
+	"context"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -20,6 +22,7 @@ type edges struct {
 	stacks    alb.Stacks
 	routes    alb.Routes
 	entries   alb.Entries
+	warmURL   func(ctx context.Context, url, address string) error
 	project   string
 	region    string
 }
@@ -34,6 +37,7 @@ func (p *Provider) edges() edges {
 		stacks:    albStacks{p: p},
 		routes:    p,
 		entries:   p,
+		warmURL:   p.warmThrough,
 		project:   p.options.Project,
 		region:    p.options.Region,
 	}
@@ -48,7 +52,7 @@ func (e edges) openALB() *alb.Edge {
 		Routes:    e.routes,
 		Entries:   e.entries,
 		Pins:      e.pins,
-		Warm:      warmThrough,
+		WarmURL:   e.warmURL,
 		Project:   e.project,
 		Region:    e.region,
 	})

@@ -316,8 +316,8 @@ func negName(slug string, tier environment.Tier, hostname string) string {
 
 func isWildcard(hostname string) bool { return strings.HasPrefix(hostname, "*.") }
 
-func (s *stack) warmThroughLoadBalancer(ctx context.Context, service, _, path string) error {
-	if s.e.deps.Warm == nil {
+func (s *stack) warmThroughLoadBalancer(ctx context.Context, service, revision, path string) error {
+	if s.e.deps.WarmURL == nil {
 		return nil
 	}
 	hostname := s.findHostnameServing(service)
@@ -328,7 +328,10 @@ func (s *stack) warmThroughLoadBalancer(ctx context.Context, service, _, path st
 	if s.recorded.LoadBalancer.Shielded {
 		address = ""
 	}
-	return s.e.deps.Warm(ctx, "https://"+hostname+path, address)
+	if err := s.e.deps.WarmURL(ctx, "https://"+hostname+path, address); err != nil {
+		return fmt.Errorf("revision %s of %s: %w", revision, service, err)
+	}
+	return nil
 }
 
 func (s *stack) findHostnameServing(service string) string {

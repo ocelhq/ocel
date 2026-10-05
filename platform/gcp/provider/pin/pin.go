@@ -169,9 +169,7 @@ func pinRecords(ctx context.Context, pins Pins, move router.PointerMove, progres
 	return nil
 }
 
-type Warm func(ctx context.Context, service, revision, path string) error
-
-func WarmRevisions(ctx context.Context, warm Warm, records map[string]router.DeploymentRecord, progress progress.Log) {
+func WarmRevisions(ctx context.Context, warm func(ctx context.Context, service, revision, path string) error, records map[string]router.DeploymentRecord, progress progress.Log) {
 	var (
 		waiting sync.WaitGroup
 		mu      sync.Mutex

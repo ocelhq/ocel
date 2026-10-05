@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -30,7 +31,7 @@ func balancing(t *testing.T) (*Edge, *world) {
 		Routes:    w,
 		Entries:   w,
 		Pins:      w,
-		Warm:      w.warmThrough,
+		WarmURL:   w.warmThrough,
 		Project:   "acme-prod",
 		Region:    "europe-west1",
 	}), w
@@ -860,5 +861,44 @@ func TestAPromotionNoHostnameReachesWarmsNothing(t *testing.T) {
 
 	if got := w.warmedThrough(); len(got) != 0 {
 		t.Errorf("the promotion warmed %v, and no hostname routes to the service, so nothing could admit the request", got)
+	}
+}
+
+type warnings struct {
+	progress.Log
+	mu   sync.Mutex
+	said []string
+}
+
+func (w *warnings) Warn(message string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.said = append(w.said, message)
+}
+
+func TestAWarmThatFailsThroughTheLoadBalancerNamesTheRevisionItWarmed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	_, w, stack := reconciled(t)
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
+		t.Fatalf("BindDomain = %v", err)
+	}
+	w.warmFails = errors.New("connection refused")
+	if err := openRouter(stack).Ledger.PutStaged(ctx, router.DeploymentRecord{
+		App: "web", Build: "b1", Physical: "ocel-shop-prod-web", HealthPath: "/healthz",
+		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
+	}); err != nil {
+		t.Fatalf("PutStaged = %v", err)
+	}
+	log := &warnings{Log: progress.Discard()}
+
+	move := router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}
+	if err := openRouter(stack).MovePointer(ctx, move, log); err != nil {
+		t.Fatalf("MovePointer = %v", err)
+	}
+
+	if len(log.said) != 1 || !strings.Contains(log.said[0], "revision ocel-shop-prod-web-00001 of ocel-shop-prod-web") {
+		t.Errorf("the promotion warned %v, want one warning naming the revision it could not warm", log.said)
 	}
 }

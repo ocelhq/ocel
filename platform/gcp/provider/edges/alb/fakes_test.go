@@ -44,6 +44,7 @@ type world struct {
 	closed           map[string]bool
 	onUp             func()
 	through          []string
+	warmFails        error
 
 	backendServiceQuota *BackendServiceQuota
 }
@@ -55,7 +56,7 @@ func (w *world) warmThrough(_ context.Context, url, address string) error {
 		address = "the hostname's own address"
 	}
 	w.through = append(w.through, url+" via "+address)
-	return nil
+	return w.warmFails
 }
 
 func (w *world) warmedThrough() []string {
