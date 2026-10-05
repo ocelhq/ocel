@@ -59,6 +59,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err != nil {
 		return nil, err
 	}
+	if err := grantCache(ctx, c, spec, account); err != nil {
+		return nil, err
+	}
 	own, err := p.runtimeEnv(names, spec, tasks)
 	if err != nil {
 		return nil, err
@@ -210,6 +213,9 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	account, err := p.ensureAppAccount(ctx, c, spec, declared)
 	if err != nil {
+		return nil, err
+	}
+	if err := grantCache(ctx, c, spec, account); err != nil {
 		return nil, err
 	}
 	own, err := p.runtimeEnv(names, spec, tasks)

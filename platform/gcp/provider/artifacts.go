@@ -56,15 +56,24 @@ func objectName(ref provider.ArtifactRef) (string, error) {
 
 func cacheObjectName(key string) string {
 	segments := strings.SplitN(key, "/", 4)
-	if len(segments) < 3 {
+	appPrefix, err := cacheAppPrefix(key)
+	if err != nil {
 		return provider.StoreCache + "/" + key
 	}
-	env, project, app := segments[0], segments[1], segments[2]
-	name := provider.StoreCache + "/" + project + "/" + app + "/" + env
+	name := appPrefix + segments[0]
 	if len(segments) == 4 {
 		name += "/" + segments[3]
 	}
 	return name
+}
+
+func cacheAppPrefix(key string) (string, error) {
+	segments := strings.SplitN(key, "/", 4)
+	if len(segments) < 3 {
+		return "", refusal.Refuse(refusal.CodeInvalid,
+			"the cache store keeps its objects by project, then app, then environment, and %q names no app", key)
+	}
+	return provider.StoreCache + "/" + segments[1] + "/" + segments[2] + "/", nil
 }
 
 func cacheSweep(prefix string) (list string, keeps func(name string) bool, err error) {
