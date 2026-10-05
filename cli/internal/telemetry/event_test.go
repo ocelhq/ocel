@@ -58,9 +58,13 @@ func TestTheAllowlistHoldsExactlyWhatTheEventsSend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	deployCompleted, err := NewEvent(anIdentity, aTime, DeployCompletion{})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	sent := map[string]bool{}
-	for _, event := range []Event{completed, devEnded, initCompleted} {
+	for _, event := range []Event{completed, devEnded, initCompleted, deployCompleted} {
 		for property := range event.Properties {
 			sent[property] = true
 		}
@@ -68,7 +72,7 @@ func TestTheAllowlistHoldsExactlyWhatTheEventsSend(t *testing.T) {
 	if got := slices.Sorted(maps.Keys(sent)); !slices.Equal(got, slices.Sorted(slices.Values(allowedProperties))) {
 		t.Errorf("event properties = %v, want exactly the allowlist %v", got, allowedProperties)
 	}
-	names := []string{completed.Name, devEnded.Name, initCompleted.Name}
+	names := []string{completed.Name, devEnded.Name, initCompleted.Name, deployCompleted.Name}
 	if !slices.Equal(slices.Sorted(slices.Values(allowedEvents)), slices.Sorted(slices.Values(names))) {
 		t.Errorf("allowed events = %v, want exactly %v", allowedEvents, names)
 	}
@@ -317,6 +321,115 @@ func TestSubmitPrintsOneJSONLineOnlyInDebugMode(t *testing.T) {
 				t.Errorf("line = %q, want the event as JSON: %v", rest, err)
 			}
 		})
+	}
+}
+
+func TestADeployCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testing.T) {
+	event, err := NewEvent(anIdentity, aTime, DeployCompletion{
+		Success:        false,
+		Target:         DeployTargetPreview,
+		Provider:       "aws",
+		Frameworks:     []string{"node", "next"},
+		Languages:      []string{"js"},
+		AppCount:       2,
+		ResourceCounts: map[string]int{"bucket": 1, "topic": 3},
+		PlanActions:    PlanActions{Create: 4, Update: 2, Delete: 1},
+		PhaseDurations: map[string]time.Duration{"build": 1500 * time.Millisecond, "provision": 90 * time.Second},
+		FirstDeploy:    true,
+		ErrorCode:      "provider.refused",
+		Assumed:        []string{"new_project"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(marshal(t, event), &got); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := uuid.Parse(fmt.Sprint(got["uuid"])); err != nil || id.Version() != 7 {
+		t.Errorf("uuid = %v, want a version 7 UUID: %v", got["uuid"], err)
+	}
+	delete(got, "uuid")
+	want := map[string]any{
+		"event":       "deploy_completed",
+		"distinct_id": anIdentity.InstallID,
+		"timestamp":   "2026-10-05T12:30:45.123Z",
+		"properties": map[string]any{
+			"success":                 false,
+			"target":                  "preview",
+			"provider":                "aws",
+			"frameworks":              []any{"next", "node"},
+			"languages":               []any{"js"},
+			"app_count":               float64(2),
+			"resource_counts":         map[string]any{"bucket": float64(1), "topic": float64(3)},
+			"plan_actions":            map[string]any{"create": float64(4), "update": float64(2), "delete": float64(1)},
+			"phase_ms":                map[string]any{"build": float64(1500), "provision": float64(90000)},
+			"first_deploy":            true,
+			"error_code":              "provider.refused",
+			"assumed":                 []any{"new_project"},
+			"cli_version":             "1.2.3",
+			"os":                      "linux",
+			"arch":                    "amd64",
+			"agent":                   "claude-code",
+			"ci":                      "github-actions",
+			"$process_person_profile": false,
+		},
+	}
+	if !bytes.Equal(marshal(t, got), marshal(t, want)) {
+		t.Errorf("event = %v, want %v", got, want)
+	}
+}
+
+func TestADeployCompletedEventSortsAndDeduplicatesItsLists(t *testing.T) {
+	event, err := NewEvent(anIdentity, aTime, DeployCompletion{
+		Frameworks: []string{"python", "node", "python", "go", "node"},
+		Languages:  []string{"rust", "js", "rust"},
+		Assumed:    []string{"new_project", "domains", "new_project"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for property, want := range map[string][]string{
+		"frameworks": {"go", "node", "python"},
+		"languages":  {"js", "rust"},
+		"assumed":    {"domains", "new_project"},
+	} {
+		if got := event.Properties[property]; !slices.Equal(got.([]string), want) {
+			t.Errorf("%s = %v, want %v", property, got, want)
+		}
+	}
+}
+
+func TestADeployCompletedEventWithNothingRecordedKeepsItsShape(t *testing.T) {
+	event, err := NewEvent(anIdentity, aTime, DeployCompletion{Target: DeployTargetProduction})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	line := string(marshal(t, event))
+	for _, want := range []string{
+		`"frameworks":[]`, `"languages":[]`, `"assumed":[]`, `"resource_counts":{}`, `"phase_ms":{}`,
+		`"plan_actions":{"create":0,"delete":0,"update":0}`, `"error_code":""`, `"first_deploy":false`, `"success":false`,
+	} {
+		if !strings.Contains(line, want) {
+			t.Errorf("event = %s, want %s", line, want)
+		}
+	}
+}
+
+func TestADeployCompletedEventDoesNotShareItsMapsWithTheCompletion(t *testing.T) {
+	counts := map[string]int{"bucket": 1}
+	event, err := NewEvent(anIdentity, aTime, DeployCompletion{ResourceCounts: counts})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	counts["bucket"] = 9
+
+	if got := event.Properties["resource_counts"].(map[string]int)["bucket"]; got != 1 {
+		t.Errorf("resource_counts bucket = %d, want the 1 it was built with", got)
 	}
 }
 
