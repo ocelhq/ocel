@@ -37,6 +37,8 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 		hosts[host.Hostname] = served
 		if read != nil {
 			tags[host.Hostname] = read
+		} else {
+			delete(tags, host.Hostname)
 		}
 		took = append(took, host.Hostname)
 	}
