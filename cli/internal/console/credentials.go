@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
+	"github.com/ocelhq/ocel/cli/internal/userconfig"
 )
 
 const (
@@ -39,20 +40,8 @@ type Credentials struct {
 	ExpiresAt   time.Time `json:"expires_at,omitempty"`
 }
 
-func ensureConfigDir() (string, error) {
-	base, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve user config directory: %w", err)
-	}
-	dir := filepath.Join(base, "ocel")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("create config directory: %w", err)
-	}
-	return dir, nil
-}
-
 func ensureCredentialsFilePath() (string, error) {
-	dir, err := ensureConfigDir()
+	dir, err := userconfig.EnsureDir()
 	if err != nil {
 		return "", err
 	}
