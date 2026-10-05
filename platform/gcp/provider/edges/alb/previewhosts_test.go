@@ -134,3 +134,59 @@ func TestRemovingADeploymentUnroutesItsHostnameAndTakesTheTagOffItsRevision(t *t
 		t.Errorf("the router still records %s after its deployment was removed", deploymentHost)
 	}
 }
+
+const (
+	aliasHost      = "shop-bbbbbbbbbbbbbbbb.preview.example.com"
+	rotatedAlias   = "shop-cccccccccccccccc.preview.example.com"
+	previewPointer = "pr-7"
+)
+
+func aliasMove(promotionID, hostname string, record router.DeploymentRecord) router.PointerMove {
+	move := deploymentMove(promotionID, hostname, record)
+	move.Pointer = previewPointer
+	return move
+}
+
+func TestAnAliasTheNextPromotionNoLongerNamesIsUnrouted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	if err := stack.MovePointer(ctx, aliasMove("p1", aliasHost, previewRecord("b1")), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p1) = %v", err)
+	}
+	rotated := aliasMove("p2", rotatedAlias, previewRecord("b2"))
+	rotated.Superseded = []edge.PreviewHost{{Hostname: aliasHost, App: "web"}}
+	if err := stack.MovePointer(ctx, rotated, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p2) = %v", err)
+	}
+
+	routed := w.hosts(tierRoutes)
+	if _, still := routed[aliasHost]; still {
+		t.Errorf("the tier url map routes %v, want %s gone: the promotion that rotated the alias superseded it", routed, aliasHost)
+	}
+	if routed[rotatedAlias] == "" {
+		t.Errorf("the tier url map routes %v, want %s routed", routed, rotatedAlias)
+	}
+}
+
+func TestRemovingAPreviewPointerUnroutesItsAlias(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	move := aliasMove("p1", aliasHost, previewRecord("b1"))
+	if err := stack.MovePointer(ctx, move, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p1) = %v", err)
+	}
+	if err := stack.RemovePointer(ctx, router.PointerRemoval{Pointer: previewPointer, Hosts: move.Hosts}, progress.Discard()); err != nil {
+		t.Fatalf("RemovePointer = %v", err)
+	}
+
+	if routed := w.hosts(tierRoutes); len(routed) != 0 {
+		t.Errorf("the tier url map routes %v once the preview was removed, want nothing", routed)
+	}
+	if got := w.untagged(); len(got) != 0 {
+		t.Errorf("removing the alias untagged %v, want nothing: an alias reaches its service, not a tag", got)
+	}
+}

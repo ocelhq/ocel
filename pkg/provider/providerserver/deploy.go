@@ -781,13 +781,6 @@ func (r *deployRun) previewSite() edge.PreviewSite {
 	return edge.NewProjectPreviewSite(r.previewOn, r.previewKey)
 }
 
-func (r *deployRun) previewLabel(slot int) string {
-	if r.hostingMode() != hostingGlobalPreview || !r.readPairedRouter(r.spec.Apps[slot].App).Facts().RoutesPreviewsByLabel {
-		return ""
-	}
-	return findAppHost(r.aliases, r.spec.Apps[slot].App).ReadLabel()
-}
-
 func findAppHost(hosts []edge.PreviewHost, app string) edge.PreviewHost {
 	name := normalizeAppName(app)
 	for _, host := range hosts {
@@ -1087,7 +1080,6 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					ISR:                       facts.ISR,
 					Bytecode:                  facts.Bytecode,
 					AssetPrefix:               facts.AssetPrefix,
-					PreviewLabel:              r.previewLabel(slot),
 					Guard:                     facts.Guard,
 					VendorState:               pack.VendorState,
 					Proxied:                   anyProxied(proxied, grants),

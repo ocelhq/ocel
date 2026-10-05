@@ -4,10 +4,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-
-	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const (
@@ -49,31 +45,6 @@ func TestABindingsBackendKeepsHostProtocolAndQueryStringInItsKey(t *testing.T) {
 		if value, _ := key[field].(bool); !value {
 			t.Errorf("cacheKeyPolicy.%s = %v, want true", field, key[field])
 		}
-	}
-}
-
-func TestThePreviewWildcardBackendKeysWhatABindingsBackendKeys(t *testing.T) {
-	t.Parallel()
-
-	bound, err := declared(cdnBinding())
-	if err != nil {
-		t.Fatalf("the binding program = %v", err)
-	}
-	preview, err := declared(func(ctx *pulumi.Context, project string) error {
-		return previewWildcardResources(ctx, loadBalancerSpec{
-			Region:  "europe-west1",
-			Names:   loadBalancerNames(environment.TierPreview, false),
-			Preview: previewEntry{BaseDomain: previewBase, Certificate: previewCertificate},
-		}, project)
-	})
-	if err != nil {
-		t.Fatalf("previewWildcardResources = %v", err)
-	}
-
-	want := cacheKeyPolicy(bound[cdnBackend])
-	got := cacheKeyPolicy(preview[previewBackendName(previewBase)])
-	if want == nil || !reflect.DeepEqual(got, want) {
-		t.Errorf("preview wildcard cacheKeyPolicy = %v, want the binding's %v", got, want)
 	}
 }
 
@@ -156,24 +127,11 @@ func TestAShieldedBindingsBackendKeysNoHeaderOrCookieSoNextPagesStayUncachedTher
 	}
 }
 
-func TestAShieldedPreviewWildcardBackendKeysNoHeaderOrCookie(t *testing.T) {
-	t.Parallel()
-
-	seen, err := declared(func(ctx *pulumi.Context, project string) error {
-		return previewWildcardResources(ctx, loadBalancerSpec{
-			Region:  "europe-west1",
-			Names:   loadBalancerNames(environment.TierPreview, true),
-			Preview: previewEntry{BaseDomain: previewBase, Certificate: previewCertificate, Shielded: true},
-		}, project)
-	})
-	if err != nil {
-		t.Fatalf("previewWildcardResources = %v", err)
+func cacheKeyPolicy(backend declaration) map[string]any {
+	policy, ok := backend.Args["cdnPolicy"].(map[string]any)
+	if !ok {
+		return nil
 	}
-
-	key := cacheKeyPolicy(seen[previewBackendName(previewBase)])
-	for _, field := range []string{"includeHttpHeaders", "includeNamedCookies"} {
-		if named, _ := key[field].([]any); len(named) > 0 {
-			t.Errorf("cacheKeyPolicy.%s = %v, want none", field, named)
-		}
-	}
+	key, _ := policy["cacheKeyPolicy"].(map[string]any)
+	return key
 }

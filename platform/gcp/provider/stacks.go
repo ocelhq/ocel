@@ -19,9 +19,6 @@ import (
 )
 
 func serviceFor(names Names, spec provider.StackSpec, app *provider.AppSpec, function string) (string, error) {
-	if app.PreviewLabel != "" {
-		return names.PreviewService(app.PreviewLabel, app.App, function)
-	}
 	return names.Service(spec.Ref.Project, spec.Ref.Name.Env, app.App, function)
 }
 

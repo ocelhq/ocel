@@ -33,7 +33,6 @@ type Facts struct {
 	Propagation                 Propagation
 	Supported                   []edge.Need
 	CachesRecords               bool
-	RoutesPreviewsByLabel       bool
 	AddressesItself             bool
 	SignsOriginForwards         bool
 	ReachesFunctions            bool

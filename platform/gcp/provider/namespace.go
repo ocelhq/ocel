@@ -3,11 +3,9 @@ package gcp
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"regexp"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -179,32 +177,7 @@ func (n Names) RealtimeAccountEmail(tier environment.Tier) string {
 	return n.RealtimeAccount(tier) + "@" + n.project + accountDomain
 }
 
-const functionSuffix = "fn"
-
 var cloudRunService = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
-
-func (n Names) PreviewService(label, app, function string) (string, error) {
-	service, suffix := label, ""
-	if function != app {
-		suffix = naming.FieldSeparator + images.FunctionRoute(app, function) + naming.FieldSeparator + functionSuffix
-		service += suffix
-	}
-	if len(service) <= maxServiceNameLength && cloudRunService.MatchString(service) {
-		return service, nil
-	}
-	slug := edge.PreviewHost{Hostname: label}.ReadPrefix()
-	shape := fmt.Sprintf("the project slug %q (%d characters) and a %d-character token", slug, len(slug), len("-")+edge.PreviewTailLen)
-	if suffix != "" {
-		shape += fmt.Sprintf(", and a function's service adds %q", suffix)
-	}
-	return "", refusal.Refuse(refusal.CodeInvalid,
-		"the preview %s would be served by a Cloud Run service named %q (%d characters), which Cloud Run will not take: "+
-			"Cloud Run takes at most %d characters of lowercase letters, digits and dashes, starting with a letter and ending with a letter or a digit. "+
-			"On a shared preview wildcard the load balancer hands Cloud Run the label a hostname begins with as the service name, "+
-			"and that label is %s.\n"+
-			"Use a project slug that starts with a letter and leaves the name within %d characters, and deploy again",
-		app, service, len(service), maxServiceNameLength, shape, maxServiceNameLength)
-}
 
 func serviceHash(parts ...string) string { return truncatedHash(serviceHashLength, parts...) }
 

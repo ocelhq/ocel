@@ -287,9 +287,6 @@ func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.Plan
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanDelete,
 		Changes: []edge.PlanChange{
-			{Kind: "compute.URLMap host rule", Name: wildcard, Action: edge.PlanDelete},
-			{Kind: "compute.BackendService", Name: previewBackendName(base), Action: edge.PlanDelete},
-			{Kind: "compute.RegionNetworkEndpointGroup", Name: previewNEGName(base), Action: edge.PlanDelete},
 			{Kind: "certificatemanager.CertificateMapEntry", Name: previewEntryName(base), Action: edge.PlanDelete},
 		},
 	}, e.SharedPreviewRemoval()
@@ -301,7 +298,7 @@ func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 		Name:   edge.EdgeGroupName(Kind) + "/load-balancer",
 		Action: edge.PlanKeep,
 		Reason: "previews are answered by the same load balancer production is, one per bootstrap tier at " + BaselineCost + ", " +
-			"so releasing a wildcard takes its host rule and leaves the balancer in place",
+			"so releasing a wildcard takes its certificate and leaves the balancer in place",
 	}
 }
 

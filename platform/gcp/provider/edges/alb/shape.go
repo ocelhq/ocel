@@ -58,8 +58,6 @@ func ShapeLoadBalancer(tier environment.Tier, previewBaseDomain string) []pricin
 	if previewBaseDomain != "" {
 		shaped = append(shaped,
 			pricing.Shaped{Name: previewEntryName(previewBaseDomain), Type: tfCertificateMapEntry, Properties: map[string]any{}},
-			pricing.Shaped{Name: previewNEGName(previewBaseDomain), Type: tfNetworkEndpointGroup, Properties: map[string]any{"network_endpoint_type": serverlessNEG}},
-			pricing.Shaped{Name: previewBackendName(previewBaseDomain), Type: tfBackendService, Properties: backendProperties(true)},
 		)
 	}
 	return shaped
