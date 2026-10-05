@@ -163,7 +163,7 @@ func appOn(t *testing.T, network, named, body string) string {
 func anApp(t *testing.T, body string) (network, upstream string) {
 	t.Helper()
 
-	network = enginetest.Network(t)
+	network = enginetest.Network(t, "box")
 	return network, appOn(t, network, "app", body)
 }
 

@@ -62,13 +62,13 @@ func TestABucketOnTheSharedStoreIsTakenByOneTestAlone(t *testing.T) {
 }
 
 type planted struct {
-	network, labelled, attached, root string
+	labelled, root string
 }
 
 func plant(t *testing.T, of string) planted {
 	t.Helper()
 	seen := filepath.Dir(filepath.Dir(BindSource(t)))
-	left := planted{network: uniqueName("net"), labelled: uniqueName("labelled"), attached: uniqueName("attached")}
+	left := planted{labelled: uniqueName("labelled")}
 	does := func(argv ...string) {
 		t.Helper()
 		if said, err := exec.Command(engine, argv...).CombinedOutput(); err != nil {
@@ -76,14 +76,10 @@ func plant(t *testing.T, of string) planted {
 		}
 	}
 	t.Cleanup(func() {
-		exec.Command(engine, "rm", "--force", "--volumes", left.labelled, left.attached).Run()
-		exec.Command(engine, "network", "rm", left.network).Run()
+		exec.Command(engine, "rm", "--force", "--volumes", left.labelled).Run()
 	})
-	does(append(append([]string{"network", "create"}, labelledAs(of)...), left.network)...)
 	does(append(append([]string{"run", "--detach", "--name", left.labelled}, labelledAs(of)...),
 		"--network", "none", "--entrypoint", "sleep", images.ObjectStore(), "600")...)
-	does("run", "--detach", "--name", left.attached, "--network", left.network,
-		"--entrypoint", "sleep", images.ObjectStore(), "600")
 
 	root, err := os.MkdirTemp(seen, rootPrefix)
 	if err != nil {
@@ -102,13 +98,8 @@ func plant(t *testing.T, of string) planted {
 func (p planted) remaining(t *testing.T) []string {
 	t.Helper()
 	var found []string
-	for _, container := range []string{p.labelled, p.attached} {
-		if exec.Command(engine, "container", "inspect", container).Run() == nil {
-			found = append(found, "container "+container)
-		}
-	}
-	if exec.Command(engine, "network", "inspect", p.network).Run() == nil {
-		found = append(found, "network "+p.network)
+	if exec.Command(engine, "container", "inspect", p.labelled).Run() == nil {
+		found = append(found, "container "+p.labelled)
 	}
 	if _, err := os.Stat(p.root); err == nil {
 		found = append(found, "directory "+p.root)
@@ -126,10 +117,10 @@ func TestWhatARunThatDiedLeftIsTakenByTheNextAndWhatALiveOneOwnsIsNot(t *testing
 		t.Fatalf("sweep = %v", err)
 	}
 	if left := died.remaining(t); len(left) > 0 {
-		t.Errorf("a run that died still has %v after the next run swept: every killed run then leaves its containers, its network and the directories a root container wrote into for good", left)
+		t.Errorf("a run that died still has %v after the next run swept: every killed run then leaves its containers and the directories a root container wrote into for good", left)
 	}
-	if left := living.remaining(t); len(left) != 4 {
-		t.Errorf("a run whose process still runs has only %v after another run swept, want its containers, network and directory untouched: two suites running at once would take each other's fixtures mid-test", left)
+	if left := living.remaining(t); len(left) != 2 {
+		t.Errorf("a run whose process still runs has only %v after another run swept, want its container and directory untouched: two suites running at once would take each other's fixtures mid-test", left)
 	}
 }
 

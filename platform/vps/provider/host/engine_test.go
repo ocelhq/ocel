@@ -62,8 +62,8 @@ func aLiveProxy(t *testing.T) liveProxy {
 	t.Helper()
 
 	engineOrSkip(t)
-	name, network := probeName(t), enginetest.Network(t)
-	tunneling := aTunnelNetwork(t)
+	name, network := probeName(t), enginetest.Network(t, "box")
+	tunneling := enginetest.Network(t, "tunnel")
 	board := name + "-board"
 	t.Cleanup(func() { taken(t, name) })
 	t.Cleanup(func() { taken(t, board) })
@@ -118,16 +118,6 @@ func aLiveProxy(t *testing.T) liveProxy {
 		}
 	}
 	return proxy
-}
-
-func aTunnelNetwork(t *testing.T) string {
-	t.Helper()
-	name := probeName(t) + "-tunnel"
-	if said, err := exec.Command(dockerEngine, append(append([]string{"network", "create"}, enginetest.RunLabelArgs(t)...), name)...).CombinedOutput(); err != nil {
-		t.Fatalf("create %s: %v\n%s", name, err, said)
-	}
-	t.Cleanup(func() { _ = exec.Command(dockerEngine, "network", "rm", name).Run() })
-	return name
 }
 
 func unprivilegedHere(t *testing.T) string {
