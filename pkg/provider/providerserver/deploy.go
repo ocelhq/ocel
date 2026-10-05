@@ -194,6 +194,7 @@ type deployRun struct {
 	appRouters     map[string]router.Kind
 	bindings       []provider.Binding
 	provisioning   map[string]bool
+	origins        map[string]string
 }
 
 func (r *deployRun) recordArtifact(logical string, ref provider.ArtifactRef) {
@@ -207,6 +208,18 @@ func (r *deployRun) artifact(logical string) (provider.ArtifactRef, bool) {
 	defer r.mu.Unlock()
 	ref, ok := r.artifacts[logical]
 	return ref, ok
+}
+
+func (r *deployRun) recordOrigin(app, origin string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.origins[app] = origin
+}
+
+func (r *deployRun) readOrigin(app string) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.origins[app]
 }
 
 func (r *deployRun) recordProvisioning(app string) {
@@ -272,6 +285,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		artifacts:      map[string]provider.ArtifactRef{},
 		functionImages: map[string]string{},
 		provisioning:   map[string]bool{},
+		origins:        map[string]string{},
 		inline:         inline,
 
 		dry:           req.GetDry(),
@@ -1368,6 +1382,7 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 		}
 	}
 	coordinate := appCoordinate(r.spec, entry.App, entry.Build.Release())
+	r.recordOrigin(entry.App, originOf(result.Containers, entry.App))
 	var routing any
 	if facts.EdgeDispatch != nil {
 		routing = json.RawMessage(facts.EdgeDispatch.Manifest)
@@ -1547,6 +1562,11 @@ func (r *deployRun) result(promotion router.Promotion, propagation router.Propag
 		}
 	}
 	for slot, entry := range r.spec.Apps {
+		if r.hostingMode() == hostingProduction && len(r.outcomes[slot].Urls) == 0 && r.addressesItself(entry.App) {
+			if origin := r.readOrigin(entry.App); origin != "" {
+				r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, origin)
+			}
+		}
 		if host := findAppHost(r.listDeploymentHosts(), entry.App); host.Hostname != "" {
 			r.outcomes[slot].DeploymentUrl = "https://" + host.Hostname
 		}
@@ -1812,6 +1832,11 @@ func frameworkOf(fn *contractv1.ManifestFunction) buildoutput.Framework {
 
 func (r *deployRun) readPairedRouter(app string) router.Router {
 	return r.routers[r.appRouters[app]]
+}
+
+func (r *deployRun) addressesItself(app string) bool {
+	paired := r.readPairedRouter(app)
+	return paired != nil && paired.Facts().AddressesItself
 }
 
 func (r *deployRun) readConfiguredRouter(app string) router.Kind {

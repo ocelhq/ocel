@@ -2,6 +2,7 @@ package providerserver_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -11,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -206,4 +208,36 @@ func TestTheLedgerRecordAContainerDeployStagesIsTheOneItsPromotionLooksUp(t *tes
 	if record.Origin == "" || record.Origin != "https://"+record.Physical+".ctr.fake.invalid" {
 		t.Errorf("the record under %q names origin %q for container %q, want the URL the provider serves the container on: an edge that fronts a container by URL has nothing else to reach", build, record.Origin, record.Physical)
 	}
+}
+
+func TestAContainerARouterAddressesItselfIsReportedAtItsOwnURLWhenNoDomainIsDeclared(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	client, vendor := deployServed(t)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).AddressesItself(true)
+
+	req := namingARegistry(containerDeployRequest("/"))
+	req.Manifest.Domains = nil
+	result, _ := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	record := activeRecord(t, vendor, "web")
+	if got, want := servedAppURLs(result, "web"), []string{record.Origin}; record.Origin == "" || !slices.Equal(got, want) {
+		t.Errorf("the deploy reported %v, want %v: with no domain declared, the address the router gave the app is the only one it is served on", got, want)
+	}
+}
+
+func activeRecord(t *testing.T, vendor *fake.Provider, app string) router.DeploymentRecord {
+	t.Helper()
+	releases := ledger.New(vendor.KeyValues(), environment.TierProduction, "shop")
+	active, promoted, err := releases.ReadActive(context.Background(), "")
+	if err != nil || !promoted {
+		t.Fatalf("ReadActive() = %v, %v, want the promotion the deploy made", promoted, err)
+	}
+	record, found, err := releases.Record(context.Background(), app, active.Builds[app])
+	if err != nil || !found {
+		t.Fatalf("Record(%q) = %v, %v, want the record the promotion names", app, found, err)
+	}
+	return record
 }
