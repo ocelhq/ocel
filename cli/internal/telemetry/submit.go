@@ -9,7 +9,13 @@ import (
 const DebugPrefix = "[telemetry] "
 
 func Submit(w io.Writer, resolution Resolution, event Event) {
+	if !resolution.Enabled {
+		return
+	}
 	if !resolution.Debug {
+		if spool, err := OpenSpool(); err == nil {
+			_ = spool.Append(event)
+		}
 		return
 	}
 	line, err := json.Marshal(event)

@@ -11,7 +11,10 @@ const (
 	debugValue    = "debug"
 )
 
-var WriteKey = ""
+var (
+	WriteKey = ""
+	Endpoint = ""
+)
 
 type Rule string
 
