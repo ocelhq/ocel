@@ -22,6 +22,7 @@ import (
 type pinRecorder struct {
 	mu     sync.Mutex
 	pinned []string
+	warmed []string
 	closed map[string]bool
 	refuse error
 }
@@ -65,7 +66,12 @@ func (p *pinRecorder) ReadServing(context.Context, string) (string, error) { ret
 
 func (p *pinRecorder) Untag(context.Context, string, string) error { return nil }
 
-func (p *pinRecorder) Warm(context.Context, string, string, string) error { return nil }
+func (p *pinRecorder) Warm(_ context.Context, service, revision, path string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.warmed = append(p.warmed, service+"@"+revision+path)
+	return nil
+}
 
 func (p *pinRecorder) Close(_ context.Context, service string) error {
 	p.mu.Lock()
@@ -241,5 +247,22 @@ func TestAPromotionThatCannotPinIsUnserved(t *testing.T) {
 	var unserved router.Unserved
 	if !errors.As(err, &unserved) {
 		t.Fatalf("Promote(p2) = %v, want router.Unserved: nothing was pinned, so the ledger must take the promotion back", err)
+	}
+}
+
+func TestAPromotionWarmsTheRevisionItPinnedOnItsOwnUrl(t *testing.T) {
+	t.Parallel()
+
+	pins := &pinRecorder{}
+	stack := fronting(t, pins)
+	staged(t, stack, "b1", "web-00001-abc")
+
+	if err := promoted(t, stack, "p1", "b1"); err != nil {
+		t.Fatalf("Promote(p1) = %v", err)
+	}
+	pins.mu.Lock()
+	defer pins.mu.Unlock()
+	if want := []string{webService + "@web-00001-abc/"}; !slices.Equal(pins.warmed, want) {
+		t.Errorf("the promotion warmed %v, want %v: the first visitor after it pays the cold start", pins.warmed, want)
 	}
 }

@@ -48,6 +48,7 @@ func (e edges) openALB() *alb.Edge {
 		Routes:    e.routes,
 		Entries:   e.entries,
 		Pins:      e.pins,
+		Warm:      warmThrough,
 		Project:   e.project,
 		Region:    e.region,
 	})

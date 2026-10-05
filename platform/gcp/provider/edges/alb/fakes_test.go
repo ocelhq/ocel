@@ -42,6 +42,23 @@ type world struct {
 	untags           []string
 	closed           map[string]bool
 	onUp             func()
+	through          []string
+}
+
+func (w *world) warmThrough(_ context.Context, url, address string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if address == "" {
+		address = "the hostname's own address"
+	}
+	w.through = append(w.through, url+" via "+address)
+	return nil
+}
+
+func (w *world) warmedThrough() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return slices.Clone(w.through)
 }
 
 func newWorld() *world {

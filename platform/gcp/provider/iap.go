@@ -41,7 +41,7 @@ func refuseViewersWithoutKind(viewers []string) error {
 	return nil
 }
 
-func (p *Provider) grantViewers(ctx context.Context, c *clients, service string, progress progress.Log) error {
+func (p *Provider) grantViewers(ctx context.Context, c *clients, service, account string, progress progress.Log) error {
 	agent, err := c.ReadServiceAgent(ctx, iapAgentDomain)
 	if err != nil {
 		return err
@@ -53,7 +53,7 @@ func (p *Provider) grantViewers(ctx context.Context, c *clients, service string,
 			service, err)
 	}
 	viewers := p.options.PreviewViewers
-	err = p.setViewers(ctx, c, service, viewers)
+	err = p.setViewers(ctx, c, service, admittedMembers(account, viewers))
 	if answeredCode(err) == http.StatusForbidden {
 		return refusal.Refuse(refusal.CodeDenied,
 			"%s is a preview behind Identity-Aware Proxy, and this credential may not set who the proxy lets through to it: %v.\n"+
@@ -68,6 +68,21 @@ func (p *Provider) grantViewers(ctx context.Context, c *clients, service string,
 			"so nobody may open it: name the people or groups who may in the gcp provider's previewViewers")
 	}
 	return nil
+}
+
+func admittedMembers(account string, viewers []string) []string {
+	return append(slices.Clone(viewers), "serviceAccount:"+account)
+}
+
+func allowWarming(ctx context.Context, c *clients, app, account string, progress progress.Log) {
+	principal, err := c.Principal(ctx)
+	if err == nil {
+		name := strings.TrimSuffix(account, "@"+c.project+accountDomain)
+		err = c.bindAccountRole(ctx, name, tokenCreatorRole, memberOf(principal), true)
+	}
+	if err != nil {
+		ensureProgress(progress).Warn("a promotion cannot warm app " + app + " behind Identity-Aware Proxy until the credential may sign tokens as " + account + ": " + err.Error())
+	}
 }
 
 func (p *Provider) setViewers(ctx context.Context, c *clients, service string, viewers []string) error {

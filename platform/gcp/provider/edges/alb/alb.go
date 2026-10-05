@@ -27,6 +27,7 @@ type Deps struct {
 	Routes    Routes
 	Entries   Entries
 	Pins      pin.Pins
+	Warm      func(ctx context.Context, url, address string) error
 	Project   string
 	Region    string
 	Shielded  bool

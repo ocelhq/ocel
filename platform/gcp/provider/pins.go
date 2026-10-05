@@ -2,12 +2,17 @@ package gcp
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
 
 	"google.golang.org/api/googleapi"
+	"google.golang.org/api/iamcredentials/v1"
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -61,9 +66,15 @@ func (p *Provider) Close(ctx context.Context, service string) error {
 	return err
 }
 
-const warmTimeout = 20 * time.Second
+const (
+	warmTimeout       = 20 * time.Second
+	warmTokenLifetime = 5 * time.Minute
+	httpsPort         = "443"
+)
 
 var warmClient = &http.Client{Timeout: warmTimeout}
+
+var warmRoots *x509.CertPool
 
 func (p *Provider) Warm(ctx context.Context, service, revision, path string) error {
 	clients, services, err := p.openRun(ctx)
@@ -78,19 +89,84 @@ func (p *Provider) Warm(ctx context.Context, service, revision, path string) err
 	if address == "" {
 		return nil
 	}
-	asked, err := http.NewRequestWithContext(ctx, http.MethodHead, strings.TrimSuffix(address, "/")+path, nil)
+	address = strings.TrimSuffix(address, "/")
+	asked, err := http.NewRequestWithContext(ctx, http.MethodHead, address+path, nil)
 	if err != nil {
 		return err
+	}
+	if current.IapEnabled {
+		token, err := p.signProxyToken(ctx, clients, runsAs(current), address)
+		if err != nil {
+			return fmt.Errorf("warm revision %s of %s: %w", revision, service, err)
+		}
+		asked.Header.Set("Authorization", "Bearer "+token)
 	}
 	answered, err := warmClient.Do(asked)
 	if err != nil {
 		return fmt.Errorf("warm revision %s of %s: %w", revision, service, err)
 	}
+	defer answered.Body.Close()
+	if answered.StatusCode == http.StatusUnauthorized || answered.StatusCode == http.StatusForbidden || answered.StatusCode >= http.StatusInternalServerError {
+		return fmt.Errorf("warm revision %s of %s: it answered %s", revision, service, answered.Status)
+	}
+	return nil
+}
+
+func (p *Provider) signProxyToken(ctx context.Context, c *clients, account, address string) (string, error) {
+	now := time.Now()
+	claims, err := json.Marshal(map[string]any{
+		"iss": account,
+		"sub": account,
+		"aud": address + "/*",
+		"iat": now.Unix(),
+		"exp": now.Add(warmTokenLifetime).Unix(),
+	})
+	if err != nil {
+		return "", err
+	}
+	signing, err := c.IAMCredentials()
+	if err != nil {
+		return "", err
+	}
+	signed, err := attempted(ctx, func(call ...googleapi.CallOption) (*iamcredentials.SignJwtResponse, error) {
+		return signing.Projects.ServiceAccounts.SignJwt("projects/-/serviceAccounts/"+account,
+			&iamcredentials.SignJwtRequest{Payload: string(claims)}).Context(ctx).Do(call...)
+	})
+	if answeredCode(err) == http.StatusForbidden {
+		return "", fmt.Errorf("the warm passes Identity-Aware Proxy with a token signed as %s, which this credential may not sign: "+
+			"the deploy grants its own credential that on the account, so promote with the credential that deployed", account)
+	}
+	if err != nil {
+		return "", fmt.Errorf("sign a token Identity-Aware Proxy admits as %s: %w", account, err)
+	}
+	return signed.SignedJwt, nil
+}
+
+func warmThrough(ctx context.Context, url, address string) error {
+	asked, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		return err
+	}
+	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: warmRoots}}
+	if address != "" {
+		if _, _, err := net.SplitHostPort(address); err != nil {
+			address = net.JoinHostPort(address, httpsPort)
+		}
+		var dialer net.Dialer
+		transport.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return dialer.DialContext(ctx, network, address)
+		}
+	}
+	defer transport.CloseIdleConnections()
+	answered, err := (&http.Client{Timeout: warmTimeout, Transport: transport}).Do(asked)
+	if err != nil {
+		return fmt.Errorf("warm %s: %w", url, err)
+	}
 	return answered.Body.Close()
 }
 
 func warmAddress(current *run.GoogleCloudRunV2Service, revision string) string {
-	if current.Ingress != ingressEverywhere || !current.InvokerIamDisabled || current.IapEnabled {
+	if current.Ingress != ingressEverywhere || !isOpen(current) {
 		return ""
 	}
 	for _, status := range current.TrafficStatuses {
@@ -184,4 +260,11 @@ func withoutTag(traffic []*run.GoogleCloudRunV2TrafficTarget, tag string) []*run
 		}
 	}
 	return kept
+}
+
+func runsAs(service *run.GoogleCloudRunV2Service) string {
+	if service.Template == nil {
+		return ""
+	}
+	return service.Template.ServiceAccount
 }

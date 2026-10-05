@@ -22,6 +22,7 @@ type revokedGrants struct {
 	tasks   bool
 	refresh bool
 	topics  []topics.Topology
+	signers []string
 }
 
 func findOtherRunningStack(recorded []stackrecords.NamedStack, ref provider.StackRef) (naming.StackName, bool) {
@@ -77,6 +78,9 @@ func revokeUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 	if err := ignoreAbsent(c.bindAccountRole(ctx, c.RefreshAccount(ref.Tier), runAsRole, member, false)); err != nil {
 		return err
 	}
+	if revoked.signers, err = c.unbindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), tokenCreatorRole); ignoreAbsent(err) != nil {
+		return err
+	}
 	if revoked.topics, err = c.revokeTopicPublisher(ctx, recorded, ref, member); err != nil {
 		return err
 	}
@@ -120,6 +124,11 @@ func (c *clients) restoreGrants(ctx context.Context, ref provider.StackRef, memb
 			}
 		}
 		if err := ignoreAbsent(c.bindAccountRole(ctx, c.RefreshAccount(ref.Tier), runAsRole, member, true)); err != nil {
+			return err
+		}
+	}
+	for _, signer := range revoked.signers {
+		if err := ignoreAbsent(c.bindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), tokenCreatorRole, signer, true)); err != nil {
 			return err
 		}
 	}

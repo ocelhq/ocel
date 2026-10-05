@@ -57,9 +57,11 @@ the URL Cloud Run gives it, which costs nothing while it serves nothing and bind
 hostname of your own.
 
 A promotion pins all of a service's traffic to the revision its release created, and a
-rollback pins it back. Where a service answers on its own URL, the promotion then asks each
-revision it pinned once, on the app's health path, so the first visitor does not wait for
-it to start. A service a deploy creates answers nobody until its first promotion
+rollback pins it back. The promotion then asks each revision it pinned once, on the app's
+health path, so the first visitor does not wait for it to start. It asks the way a visitor
+gets in: on the service's own URL with no edge in front, with a token signed as the
+app's own service account when Identity-Aware Proxy guards it, and through the load
+balancer on a hostname routed to the service when the `alb` edge serves it. A service a deploy creates answers nobody until its first promotion
 opens it, and a first promotion that is taken back closes it again, so a service's default traffic
 only ever serves a release the project promoted.
 
@@ -347,7 +349,10 @@ A deploy also keeps the realtime secrets of its namespace, and nothing else: gra
 starts with the namespace and `_realtime-`, and IAM names a secret by the project's number.
 To let the people `previewViewers` names through to a preview, a deploy sets who the proxy
 admits to the Cloud Run services of its namespace and to nothing else the proxy guards:
-grant `roles/iap.admin` under a condition naming them.
+grant `roles/iap.admin` under a condition naming them. The proxy also admits the preview
+apps' service account, so a promotion can warm a preview: grant
+`roles/iam.serviceAccountTokenCreator` on that one account, and a deploy signs a short-lived
+token as it.
 
 ```bash
 NUMBER=$(gcloud projects describe my-project --format='value(projectNumber)')
@@ -359,6 +364,9 @@ gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=roles/iap.admin \
   --condition="title=ocel previews,expression=resource.type == 'iap.googleapis.com/WebService' && resource.name.startsWith('projects/$NUMBER/iap_web/cloud_run-europe-west1/services/ocel-')"
+gcloud iam service-accounts add-iam-policy-binding ocel-preview@my-project.iam.gserviceaccount.com \
+  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --role=roles/iam.serviceAccountTokenCreator --project=my-project
 ```
 
 Secret Manager checks creating a secret against the project, so the condition cannot narrow
