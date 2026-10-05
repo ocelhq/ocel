@@ -30,7 +30,7 @@ import (
 )
 
 func NewCommand(invocation commands.Invocation) *cobra.Command {
-	return commands.DeclareReadOnly(commands.ReserveStdoutForReport(&cobra.Command{
+	return commands.DeclareReadOnly(commands.ReserveStdout(&cobra.Command{
 		Use:   "doctor",
 		Short: "Check that everything is good to go",
 		Long: "Check that everything is good to go.\n\n" +

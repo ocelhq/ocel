@@ -29,6 +29,7 @@ type LiveTranscript struct {
 	width   int
 	drawn   string
 	held    bool
+	midRow  bool
 	closed  bool
 	ticking bool
 	pace    func(running bool)
@@ -144,7 +145,7 @@ func (s *LiveTranscript) draw() {
 		s.width = width
 	}
 	line := ""
-	if !s.held {
+	if !s.held && !s.midRow {
 		line = s.live.render(s.width)
 	}
 	s.tickWhile(line != "")
@@ -157,13 +158,13 @@ func (s *LiveTranscript) draw() {
 	switch {
 	case rowsAbove > 0:
 		fmt.Fprintf(&frame, "\x1b[%dA\r\x1b[J", rowsAbove)
-	case flushed || line == "":
+	case (flushed || line == "") && !s.midRow:
 		frame.WriteString(eraseLine)
 	}
 	frame.Write(s.commits.Bytes())
 	s.commits.Reset()
 	if line != "" {
-		if flushed || rowsAbove == 0 {
+		if flushed && !s.midRow || rowsAbove == 0 {
 			frame.WriteString(eraseLine)
 		}
 		frame.WriteString(line)
@@ -189,4 +190,31 @@ func (s *LiveTranscript) Close() error {
 	s.held, s.closed = true, true
 	s.draw()
 	return err
+}
+
+func (s *LiveTranscript) Above(stdout File) File {
+	return aboveLive{live: s, stdout: stdout}
+}
+
+type aboveLive struct {
+	live   *LiveTranscript
+	stdout File
+}
+
+func (a aboveLive) Fd() uintptr { return a.stdout.Fd() }
+
+func (a aboveLive) Write(p []byte) (int, error) {
+	s := a.live
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.drawn != "" {
+		_, _ = io.WriteString(s.w, syncStart+eraseLine+syncEnd)
+		s.drawn = ""
+	}
+	n, err := a.stdout.Write(p)
+	if n > 0 {
+		s.midRow = p[n-1] != '\n'
+	}
+	s.draw()
+	return n, err
 }
