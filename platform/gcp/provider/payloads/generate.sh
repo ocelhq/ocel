@@ -10,6 +10,7 @@ dist="$payloads_dir/dist"
 rm -rf "$dist"
 mkdir -p "$dist"
 cp "$root/frameworks/node/runtime/dist/serve.mjs" "$dist/serve.mjs"
+cp -R "$runtime_dir/dist/next" "$dist/next"
 
 (
   cd "$runtime_dir"

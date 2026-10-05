@@ -421,11 +421,12 @@ export function serveInvoke(invoke: Invoke, onListening?: OnListening, bind?: Bi
   );
 }
 
-export function serveEntry(invoke: Invoke): Promise<void> {
+export function serveEntry(invoke: Invoke, bind?: Bind): Promise<void> {
   return startServer(
     http.createServer(wrapWithOcelContext(invoke, { guard: originGuard(process.env) })),
     undefined,
     true,
+    bind,
   );
 }
 
@@ -530,6 +531,20 @@ export interface Bind {
 }
 
 const loopback: Bind = { host: "127.0.0.1", port: 0 };
+
+const everyNetwork = "0.0.0.0";
+
+export function readPortBind(env: NodeJS.ProcessEnv): Bind {
+  const declared = env.PORT;
+  if (!declared) {
+    throw new Error("ocel: nothing set PORT, so there is no port to serve this function on");
+  }
+  const port = Number(declared);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`ocel: PORT is ${declared}, which is not a port to serve this function on`);
+  }
+  return { host: everyNetwork, port };
+}
 
 function listen(server: http.Server, bind: Bind): Promise<number> {
   server.keepAliveTimeout = 0;

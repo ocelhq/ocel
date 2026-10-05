@@ -88,10 +88,15 @@ async function boot(): Promise<void> {
     );
   };
 
+  const { bind } = getNextHost();
   if (!dispatchesAtOrigin(process.env)) {
-    await serveInvoke(invoke, (port) => {
-      process.env.__NEXT_PRIVATE_ORIGIN = `http://127.0.0.1:${port}`;
-    });
+    await serveInvoke(
+      invoke,
+      (port) => {
+        process.env.__NEXT_PRIVATE_ORIGIN = `http://127.0.0.1:${port}`;
+      },
+      bind,
+    );
     return;
   }
 
@@ -99,7 +104,7 @@ async function boot(): Promise<void> {
   process.env.__NEXT_PRIVATE_ORIGIN = localOrigin;
 
   const { newDispatchInvoke } = getNextHost();
-  await serveEntry(await newDispatchInvoke!(localOrigin));
+  await serveEntry(await newDispatchInvoke!(localOrigin), bind);
 }
 
 boot().catch((err) => {

@@ -1,8 +1,14 @@
 package gcp
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
+	"fmt"
+	"io"
+	"io/fs"
 	"maps"
+	"path"
 	"slices"
 	"strings"
 
@@ -11,6 +17,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/google"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/images"
@@ -26,16 +33,25 @@ const (
 
 const nodeBinDir = "/nodejs/bin"
 
+const nextRuntimeDir = "/ocel/next"
+
 const pathVariable = "PATH"
 
 type base struct {
-	ref  string
-	bins []string
+	ref    string
+	bins   []string
+	folder *runtimeFolder
+}
+
+type runtimeFolder struct {
+	dir   string
+	files fs.FS
 }
 
 func functionBases() map[string]base {
 	return map[string]base{
 		buildoutput.FrameworkNode:   {ref: nodeImage, bins: []string{nodeBinDir}},
+		buildoutput.FrameworkNext:   {ref: nodeImage, bins: []string{nodeBinDir}, folder: &runtimeFolder{dir: nextRuntimeDir, files: payloads.NextRuntime()}},
 		buildoutput.FrameworkGo:     {ref: staticImage},
 		buildoutput.FrameworkPython: {ref: pythonImage},
 		buildoutput.FrameworkRust:   {ref: staticImage},
@@ -69,7 +85,49 @@ func (p *Provider) ResolveFunctionBase(ctx context.Context, framework buildoutpu
 	if err != nil {
 		return nil, err
 	}
+	if on.folder != nil {
+		if image, err = withFolder(image, *on.folder); err != nil {
+			return nil, err
+		}
+	}
 	return commandable(image, on.bins)
+}
+
+func withFolder(image v1.Image, folder runtimeFolder) (v1.Image, error) {
+	var packed bytes.Buffer
+	archive := tar.NewWriter(&packed)
+	err := fs.WalkDir(folder.files, ".", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		body, err := fs.ReadFile(folder.files, name)
+		if err != nil {
+			return err
+		}
+		if err := archive.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeReg,
+			Name:     strings.TrimPrefix(path.Join(folder.dir, name), "/"),
+			Mode:     0o644,
+			Size:     int64(len(body)),
+		}); err != nil {
+			return err
+		}
+		_, err = archive.Write(body)
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("pack the runtime folder %s: %w", folder.dir, err)
+	}
+	if err := archive.Close(); err != nil {
+		return nil, err
+	}
+	layer, err := tarball.LayerFromOpener(func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(packed.Bytes())), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mutate.Append(image, mutate.Addendum{Layer: layer})
 }
 
 func (p *Provider) based(ctx context.Context, ref string) (v1.Image, error) {

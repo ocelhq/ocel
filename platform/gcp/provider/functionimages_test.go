@@ -1,7 +1,11 @@
 package gcp
 
 import (
+	"archive/tar"
 	"context"
+	"errors"
+	"io"
+	"path"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -122,18 +126,51 @@ func TestARuntimeNoBaseIsShippedForIsRefused(t *testing.T) {
 	}
 }
 
-func TestANextFunctionIsRefusedLikeAnyOtherRuntimeNoBaseIsShippedFor(t *testing.T) {
-	p, _ := basedOn(t, v1.Config{})
+func TestANextFunctionRunsOnTheNodeBaseWithTheNextRuntimeInTheFolderItsFactsName(t *testing.T) {
+	p, asked := basedOn(t, v1.Config{Env: []string{"PATH=/usr/bin"}})
 
-	_, err := p.ResolveFunctionBase(context.Background(), buildoutput.Framework{Name: buildoutput.FrameworkNext})
-	if err == nil {
-		t.Fatal("FunctionBase(next) built an image, and Next on Cloud Run is not something this provider serves")
+	base, err := p.ResolveFunctionBase(context.Background(), buildoutput.Framework{Name: buildoutput.FrameworkNext})
+	if err != nil {
+		t.Fatalf("FunctionBase(next) = %v", err)
 	}
-	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
-		t.Errorf("FunctionBase(next) code = %v, want %v", code, refusal.CodeInvalid)
+	if *asked != nodeImage {
+		t.Errorf("FunctionBase(next) read %q, want the node base %q: a Next function runs on node", *asked, nodeImage)
 	}
-	if !strings.Contains(err.Error(), buildoutput.FrameworkNext) {
-		t.Errorf("FunctionBase(next) = %v, want the runtime named", err)
+	folder := strings.TrimPrefix(p.Facts().NextRuntimeDir, "/")
+	files := filesIn(t, base)
+	for _, want := range []string{"entrypoint.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"} {
+		if !slices.Contains(files, folder+"/"+want) {
+			t.Errorf("the Next base holds %v, want %s in %s, where the image boots the Next runtime from and the build points Next's cache handlers", files, want, folder)
+		}
+	}
+	file, err := base.ConfigFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(file.Config.Env, func(entry string) bool { return strings.HasPrefix(entry, "PATH="+nodeBinDir) }) {
+		t.Errorf("the Next base has env %v, and its command is `node`, which is only at %s", file.Config.Env, nodeBinDir)
+	}
+}
+
+func TestCloudRunNamesAnAbsoluteFolderForTheNextRuntime(t *testing.T) {
+	if dir := pushing(t, "").Facts().NextRuntimeDir; !path.IsAbs(dir) {
+		t.Errorf("Facts().NextRuntimeDir = %q, want the absolute folder the Next base holds the runtime in", dir)
+	}
+}
+
+func filesIn(t *testing.T, image v1.Image) []string {
+	t.Helper()
+	reader := tar.NewReader(mutate.Extract(image))
+	var files []string
+	for {
+		header, err := reader.Next()
+		if errors.Is(err, io.EOF) {
+			return files
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, header.Name)
 	}
 }
 
