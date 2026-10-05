@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
@@ -151,7 +152,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			Tier:      environmentv1.Tier_TIER_PRODUCTION,
 			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
 		}
-		registry, err := projectRegistry(cfg)
+		registry, err := readiness.ProjectRegistry(cfg)
 		if err != nil {
 			return err
 		}

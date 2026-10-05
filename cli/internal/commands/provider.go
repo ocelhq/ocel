@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type OpenOptions struct {
@@ -23,6 +24,7 @@ type OpenOptions struct {
 	ClaimsDomains   bool
 	RequireHostname bool
 	Feature         string
+	ProjectRegistry bool
 	Policy          consent.Policy
 }
 
@@ -36,6 +38,13 @@ func (i Invocation) OpenProvider(ctx context.Context, check *run.Span, cfg *proj
 }
 
 func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, readiness.Preflight, error) {
+	var registry *contractv1.ImageRegistry
+	if opts.ProjectRegistry {
+		var err error
+		if registry, err = readiness.ProjectRegistry(cfg); err != nil {
+			return nil, readiness.Preflight{}, err
+		}
+	}
 	loading := check.Child(providerID(cfg), progress.Loading.Title("the provider"))
 	provider, err := providerprocess.Start(ctx, cfg, check, i.Questions, opts.Pinning)
 	loading.End(err)
@@ -51,6 +60,7 @@ func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *proje
 		Slug:            opts.Slug,
 		RequireHostname: opts.RequireHostname,
 		Feature:         opts.Feature,
+		Registry:        registry,
 	}
 	if opts.ClaimsDomains {
 		req.Domains = cfg.HostnameNames(opts.Tier)

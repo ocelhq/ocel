@@ -1,4 +1,4 @@
-package deploy
+package readiness
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func projectRegistry(cfg *project.Project) (*contractv1.ImageRegistry, error) {
+func ProjectRegistry(cfg *project.Project) (*contractv1.ImageRegistry, error) {
 	if cfg.Registry == nil || len(cfg.Apps) == 0 {
 		return nil, nil
 	}
@@ -21,14 +21,6 @@ func projectRegistry(cfg *project.Project) (*contractv1.ImageRegistry, error) {
 		Username:  cfg.Registry.Username,
 		Password:  password,
 	}, nil
-}
-
-func requireProjectRegistryPassword(cfg *project.Project) error {
-	if cfg.Registry == nil || len(cfg.Apps) == 0 {
-		return nil
-	}
-	_, err := projectRegistryPassword(cfg)
-	return err
 }
 
 func projectRegistryPassword(cfg *project.Project) (string, error) {

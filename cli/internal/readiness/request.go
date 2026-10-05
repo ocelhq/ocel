@@ -19,6 +19,7 @@ func newPreflightRequest(cfg *project.Project, req Request) *contractv1.Prefligh
 		Edge:             cfg.EdgeSelection(),
 		CheckHosts:       req.CheckHosts,
 		HostCheckDomains: req.HostCheckDomains,
+		ProjectRegistry:  req.Registry,
 	}
 }
 

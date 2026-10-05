@@ -68,6 +68,9 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	if err := verifyDNSCredentials(ctx, steps, p, gate.Edge, edgeCredentialsChecked, req.GetEdge().GetDns(), resp); err != nil {
 		return nil, err
 	}
+	if err := verifyPushAccess(ctx, steps, p, req, resp); err != nil {
+		return nil, err
+	}
 	if len(resp.GetCredentialProblems()) > 0 {
 		return resp, nil
 	}
@@ -249,6 +252,39 @@ func verifyDNSCredentials(
 	}
 	if err != nil {
 		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(vendor, err))
+	}
+	return nil
+}
+
+func verifyPushAccess(ctx context.Context, steps preflightSteps, p provider.Provider, req *contractv1.PreflightRequest, resp *contractv1.PreflightResponse) error {
+	project := req.GetProjectRegistry()
+	if project.GetServer() == "" || len(req.GetContainers()) == 0 {
+		return nil
+	}
+	target := provider.RegistryTarget{
+		Server:    project.GetServer(),
+		Namespace: project.GetNamespace(),
+		Username:  project.GetUsername(),
+		Password:  project.GetPassword(),
+	}
+	named := strings.TrimSuffix(target.Server+"/"+strings.Trim(target.Namespace, "/"), "/")
+	err := steps.run(target.Server, progress.Checking.Title("push access to "+named), func() error {
+		store, err := imageStoreFor(ctx, p, target)
+		if err != nil || store == nil {
+			return err
+		}
+		for _, container := range req.GetContainers() {
+			if err := store.CheckPush(ctx, container.GetApp()); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if _, asked := provider.QuestionOf(err); asked {
+		return provider.RefusalError(err)
+	}
+	if err != nil {
+		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(provider.Vendor(target.Server), err))
 	}
 	return nil
 }

@@ -260,7 +260,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			return nil
 		}
 
-		registry, err := projectRegistry(cfg)
+		registry, err := readiness.ProjectRegistry(cfg)
 		if err != nil {
 			return err
 		}
