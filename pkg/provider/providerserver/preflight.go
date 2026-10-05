@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -267,7 +268,7 @@ func verifyProjectPushAccess(ctx context.Context, steps preflightSteps, p provid
 	if project.GetServer() == "" || len(req.GetContainers()) == 0 {
 		return nil
 	}
-	return verifyPushAccess(ctx, steps, p, provider.RegistryTarget{
+	return verifyPushAccess(ctx, steps, p, req.GetSlug(), provider.RegistryTarget{
 		Server:    project.GetServer(),
 		Namespace: project.GetNamespace(),
 		Username:  project.GetUsername(),
@@ -291,10 +292,10 @@ func verifyOwnPushAccess(ctx context.Context, steps preflightSteps, p provider.P
 	if !own.Named() {
 		return nil
 	}
-	return verifyPushAccess(ctx, steps, p, own, req.GetContainers(), resp)
+	return verifyPushAccess(ctx, steps, p, req.GetSlug(), own, req.GetContainers(), resp)
 }
 
-func verifyPushAccess(ctx context.Context, steps preflightSteps, p provider.Provider, target provider.RegistryTarget, containers []*contractv1.ContainerApp, resp *contractv1.PreflightResponse) error {
+func verifyPushAccess(ctx context.Context, steps preflightSteps, p provider.Provider, slug string, target provider.RegistryTarget, containers []*contractv1.ContainerApp, resp *contractv1.PreflightResponse) error {
 	named := strings.TrimSuffix(target.Server+"/"+strings.Trim(target.Namespace, "/"), "/")
 	err := steps.run(target.Server, progress.Checking.Title("push access to "+named), func() error {
 		store, err := imageStoreFor(ctx, p, target)
@@ -302,7 +303,7 @@ func verifyPushAccess(ctx context.Context, steps preflightSteps, p provider.Prov
 			return err
 		}
 		for _, container := range containers {
-			if err := store.ProbePush(ctx, container.GetApp()); err != nil {
+			if err := store.ProbePush(ctx, images.RegistryRepository(slug, container.GetApp())); err != nil {
 				return err
 			}
 		}

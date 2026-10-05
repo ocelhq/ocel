@@ -71,7 +71,7 @@ func TestADeployNamingNoRegistryPushesToTheProvidersOwn(t *testing.T) {
 		t.Fatalf("the registry was opened as %v, want the provider's own, resolved inside the deploy", opened)
 	}
 	pushed := vendor.ImageStore().Pushed()
-	if len(pushed) != 1 || !strings.HasPrefix(pushed[0].ImageRef, "registry.invalid/ocel/acme/web:") {
+	if len(pushed) != 1 || !strings.HasPrefix(pushed[0].ImageRef, "registry.invalid/ocel/acme/shop.web:") {
 		t.Errorf("the deploy pushed %v, want the image under the provider's own registry", pushed)
 	}
 	for _, event := range events {

@@ -14,7 +14,7 @@ import (
 
 func ProbePushAccess(ctx context.Context, target provider.RegistryTarget, repository string) error {
 	store := registryStore{target: target}
-	server, repo, _, err := splitImageRef(Ref(repository, "access", target))
+	server, repo, _, err := splitImageRef(target.ImageRef(repository, "access"))
 	if err != nil {
 		return err
 	}

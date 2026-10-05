@@ -25,8 +25,8 @@ func TestPreflightProbesPushAccessToTheProvidersOwnRegistryOnceItsBootstrapIsRea
 	if problems := resp.GetCredentialProblems(); len(problems) != 1 || problems[0].GetProvider() != ownRegistry.Server {
 		t.Errorf("credential problems = %v, want the provider's own registry refusing the push", problems)
 	}
-	if probed := vendor.ImageStore().Probed(); len(probed) != 1 || probed[0] != "web" {
-		t.Errorf("push access probed for %q, want web", probed)
+	if probed := vendor.ImageStore().Probed(); len(probed) != 1 || probed[0] != "x.web" {
+		t.Errorf("push access probed for %q, want the app in its project's repository", probed)
 	}
 	if steps := startedSteps(events); !slices.Contains(steps, "registry.invalid: Checking push access to registry.invalid/ocel/acme") {
 		t.Errorf("steps = %q, want the push probe as a step of its own", steps)

@@ -85,7 +85,7 @@ func TestARegistryThatRefusesThePushStopsTheDeployAtTheCheckBeforeAnythingIsBuil
 	if built() {
 		t.Error("the image was built before the deploy found the registry refuses the push")
 	}
-	if probed := fixture.Provider.ImageStore().Probed(); !slices.Equal(probed, []string{"api"}) {
+	if probed := fixture.Provider.ImageStore().Probed(); !slices.Equal(probed, []string{"test-app.api"}) {
 		t.Errorf("push access probed for %q, want the one container app", probed)
 	}
 	if strings.Contains(said, "hunter2") {
