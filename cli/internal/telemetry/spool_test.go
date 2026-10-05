@@ -16,7 +16,7 @@ var anIdentity = telemetry.Identity{InstallID: "5f0c7c5e-6a7c-4a43-9d7e-0d1e5d0f
 
 func aCompletedEvent(t *testing.T, command string) telemetry.Event {
 	t.Helper()
-	event, err := telemetry.NewCommandCompleted(anIdentity, time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC), telemetry.CommandCompletion{Command: command})
+	event, err := telemetry.NewEvent(anIdentity, time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC), telemetry.CommandCompletion{Command: command})
 	if err != nil {
 		t.Fatal(err)
 	}

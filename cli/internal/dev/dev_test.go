@@ -852,9 +852,9 @@ func toMap(env []string) map[string]string {
 }
 
 type testDeps struct {
-	OpenDocker    docker.OpenFunc
-	Format        terminal.Format
-	RecordSession func(telemetry.DevSession)
+	OpenDocker  docker.OpenFunc
+	Format      terminal.Format
+	RecordEvent func(telemetry.Payload)
 }
 
 func devDeps() testDeps {
@@ -866,7 +866,7 @@ func options(ctx context.Context, deps testDeps, cwd string, command []string, s
 	if err != nil {
 		return Options{}, err
 	}
-	return Options{Project: cfg, Command: command, OpenDocker: deps.OpenDocker, RecordSession: deps.RecordSession, Stdin: stdin, Stdout: stdout, Stderr: stderr}, nil
+	return Options{Project: cfg, Command: command, OpenDocker: deps.OpenDocker, RecordEvent: deps.RecordEvent, Stdin: stdin, Stdout: stdout, Stderr: stderr}, nil
 }
 
 func runDev(ctx context.Context, deps testDeps, reset bool, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) error {

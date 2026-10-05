@@ -20,28 +20,32 @@ import (
 
 type sessionLog struct {
 	mu       sync.Mutex
-	sessions []telemetry.DevSession
+	payloads []telemetry.Payload
 }
 
-func (l *sessionLog) record(session telemetry.DevSession) {
+func (l *sessionLog) record(payload telemetry.Payload) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.sessions = append(l.sessions, session)
+	l.payloads = append(l.payloads, payload)
 }
 
 func (l *sessionLog) theOnlySession(t *testing.T) telemetry.DevSession {
 	t.Helper()
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if len(l.sessions) != 1 {
-		t.Fatalf("recorded %d dev sessions, want exactly one: %+v", len(l.sessions), l.sessions)
+	if len(l.payloads) != 1 {
+		t.Fatalf("recorded %d events, want exactly one dev session: %+v", len(l.payloads), l.payloads)
 	}
-	return l.sessions[0]
+	session, ok := l.payloads[0].(telemetry.DevSession)
+	if !ok {
+		t.Fatalf("recorded %+v, want a dev session", l.payloads[0])
+	}
+	return session
 }
 
 func recordingDeps(log *sessionLog) testDeps {
 	deps := devDeps()
-	deps.RecordSession = log.record
+	deps.RecordEvent = log.record
 	return deps
 }
 
@@ -210,8 +214,8 @@ func TestADevSessionFollowingALeaderCountsItsRestartsAndKnowsNoKinds(t *testing.
 }
 
 func TestATallyCountsOnlyPublishedErrorCodesAndNotTheInterruptOrAnUncodedFailure(t *testing.T) {
-	var recorded telemetry.DevSession
-	tally := newTally(func(session telemetry.DevSession) { recorded = session })
+	var log sessionLog
+	tally := newTally(log.record)
 
 	tally.noteError(&clierror.Error{Code: "variables.missing", Cause: errors.New("a secret detail")})
 	tally.noteError(&clierror.Error{Code: "variables.missing", Cause: errors.New("another")})
@@ -221,7 +225,7 @@ func TestATallyCountsOnlyPublishedErrorCodesAndNotTheInterruptOrAnUncodedFailure
 	tally.noteError(nil)
 	tally.end(nil)
 
-	if len(recorded.ErrorCodes) != 1 || recorded.ErrorCodes["variables.missing"] != 2 {
+	if recorded := log.theOnlySession(t); len(recorded.ErrorCodes) != 1 || recorded.ErrorCodes["variables.missing"] != 2 {
 		t.Errorf("error codes = %v, want only variables.missing twice", recorded.ErrorCodes)
 	}
 }

@@ -36,6 +36,15 @@ type Event struct {
 	Properties map[string]any `json:"properties"`
 }
 
+type Payload interface {
+	name() string
+	properties() map[string]any
+}
+
+func NewEvent(identity Identity, at time.Time, payload Payload) (Event, error) {
+	return newEvent(payload.name(), identity, at, payload.properties())
+}
+
 func newEvent(name string, identity Identity, at time.Time, properties map[string]any) (Event, error) {
 	if !slices.Contains(allowedEvents, name) {
 		return Event{}, fmt.Errorf("telemetry event %q is not on the allowlist", name)

@@ -46,15 +46,15 @@ func TestAPropertyOutsideTheAllowlistIsRefused(t *testing.T) {
 }
 
 func TestTheAllowlistHoldsExactlyWhatTheEventsSend(t *testing.T) {
-	completed, err := NewCommandCompleted(anIdentity, aTime, CommandCompletion{Command: "help"})
+	completed, err := NewEvent(anIdentity, aTime, CommandCompletion{Command: "help"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	devEnded, err := NewDevSessionEnded(anIdentity, aTime, DevSession{})
+	devEnded, err := NewEvent(anIdentity, aTime, DevSession{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	initCompleted, err := NewInitCompleted(anIdentity, aTime, InitCompletion{})
+	initCompleted, err := NewEvent(anIdentity, aTime, InitCompletion{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestTheAllowlistHoldsExactlyWhatTheEventsSend(t *testing.T) {
 }
 
 func TestADevSessionEndedEventCarriesTheSessionAndTheBaseProperties(t *testing.T) {
-	event, err := NewDevSessionEnded(anIdentity, aTime, DevSession{
+	event, err := NewEvent(anIdentity, aTime, DevSession{
 		Duration:      90 * time.Second,
 		Reloads:       3,
 		ResourceKinds: []string{"bucket", "postgres"},
@@ -116,11 +116,11 @@ func TestADevSessionEndedEventCarriesTheSessionAndTheBaseProperties(t *testing.T
 }
 
 func TestADevSessionEndedEventSortsItsKindsAndSendsEmptyCollectionsNotNull(t *testing.T) {
-	sorted, err := NewDevSessionEnded(anIdentity, aTime, DevSession{ResourceKinds: []string{"postgres", "bucket", "kv"}})
+	sorted, err := NewEvent(anIdentity, aTime, DevSession{ResourceKinds: []string{"postgres", "bucket", "kv"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	empty, err := NewDevSessionEnded(anIdentity, aTime, DevSession{})
+	empty, err := NewEvent(anIdentity, aTime, DevSession{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestADevSessionEndedEventSortsItsKindsAndSendsEmptyCollectionsNotNull(t *te
 }
 
 func TestAnInitCompletedEventCarriesTheLanguagePackageManagerProviderAndConfigFormat(t *testing.T) {
-	event, err := NewInitCompleted(anIdentity, aTime, InitCompletion{Language: "node", PackageManager: "pnpm", Provider: "aws", ConfigFormat: "yaml"})
+	event, err := NewEvent(anIdentity, aTime, InitCompletion{Language: "node", PackageManager: "pnpm", Provider: "aws", ConfigFormat: "yaml"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestAnIdentityCarriesTheInstallIDTheBuildAndTheDetectedAgentAndCI(t *testin
 }
 
 func TestACommandCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testing.T) {
-	event, err := NewCommandCompleted(anIdentity, aTime, CommandCompletion{
+	event, err := NewEvent(anIdentity, aTime, CommandCompletion{
 		Command:   "env set",
 		Flags:     []string{"config", "json"},
 		ExitCode:  1,
@@ -235,11 +235,11 @@ func TestACommandCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testi
 }
 
 func TestTwoEventsOfTheSameCompletionCarryDifferentUUIDs(t *testing.T) {
-	first, err := NewCommandCompleted(anIdentity, aTime, CommandCompletion{Command: "help"})
+	first, err := NewEvent(anIdentity, aTime, CommandCompletion{Command: "help"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := NewCommandCompleted(anIdentity, aTime, CommandCompletion{Command: "help"})
+	second, err := NewEvent(anIdentity, aTime, CommandCompletion{Command: "help"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +253,7 @@ func TestAnEventWithNoFlagsCarriesAnEmptyListAndNoAgentAnEmptyString(t *testing.
 	identity := anIdentity
 	identity.Agent, identity.CI = "", ""
 
-	event, err := NewCommandCompleted(identity, aTime, CommandCompletion{Command: "help"})
+	event, err := NewEvent(identity, aTime, CommandCompletion{Command: "help"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestAnEventWithNoFlagsCarriesAnEmptyListAndNoAgentAnEmptyString(t *testing.
 func TestTheTimestampIsRFC3339InUTC(t *testing.T) {
 	local := time.Date(2026, 10, 5, 15, 30, 45, 0, time.FixedZone("EAT", 3*60*60))
 
-	event, err := NewCommandCompleted(anIdentity, local, CommandCompletion{Command: "help"})
+	event, err := NewEvent(anIdentity, local, CommandCompletion{Command: "help"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +284,7 @@ func TestTheTimestampIsRFC3339InUTC(t *testing.T) {
 }
 
 func TestSubmitPrintsOneJSONLineOnlyInDebugMode(t *testing.T) {
-	event, err := NewCommandCompleted(anIdentity, aTime, CommandCompletion{Command: "help"})
+	event, err := NewEvent(anIdentity, aTime, CommandCompletion{Command: "help"})
 	if err != nil {
 		t.Fatal(err)
 	}

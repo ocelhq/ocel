@@ -12,17 +12,19 @@ type DevSession struct {
 	ErrorCodes    map[string]int
 }
 
-func NewDevSessionEnded(identity Identity, at time.Time, session DevSession) (Event, error) {
+func (DevSession) name() string { return "dev_session_ended" }
+
+func (session DevSession) properties() map[string]any {
 	kinds := append([]string{}, session.ResourceKinds...)
 	slices.Sort(kinds)
 	codes := session.ErrorCodes
 	if codes == nil {
 		codes = map[string]int{}
 	}
-	return newEvent("dev_session_ended", identity, at, map[string]any{
+	return map[string]any{
 		"duration_ms":    session.Duration.Milliseconds(),
 		"reloads":        session.Reloads,
 		"resource_kinds": kinds,
 		"error_codes":    codes,
-	})
+	}
 }
