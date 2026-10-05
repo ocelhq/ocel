@@ -1,6 +1,10 @@
 import { publishTagSnapshot, type TagRecord } from "@framework/next-cache";
+import {
+  type S3Commands,
+  type S3Like,
+  S3TagSnapshotStore,
+} from "@platform/aws-runtime/tag-snapshot-store";
 import type { Raises } from "./records.mjs";
-import { type S3Commands, type S3Like, S3TagSnapshotStore } from "./snapshot.mjs";
 import { raise } from "./writer.mjs";
 
 export interface Publisher {
@@ -24,9 +28,7 @@ async function publishOne(
     publisher.assetBucket,
     isrPrefix,
   );
-  if (!(await publishTagSnapshot(store, records, at))) {
-    throw new Error(`publish ${isrPrefix}: every attempt lost the object's version`);
-  }
+  await publishTagSnapshot(store, records, at);
   await raise(publisher.fetch, publisher.endpoint, publisher.seed, isrPrefix, records);
 }
 

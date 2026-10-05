@@ -1,3 +1,4 @@
+import type { PublishTag } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
@@ -33,7 +34,9 @@ afterEach(async () => {
 
 const TABLE = "state";
 
-async function storeWithResponses(responses: any[]) {
+const publishNothing: PublishTag = async () => {};
+
+async function storeWithResponses(responses: any[], publish: PublishTag = publishNothing) {
   const sends: any[] = [];
   vi.doMock("@aws-sdk/client-dynamodb", async (orig) => {
     const actual = await orig<any>();
@@ -61,8 +64,8 @@ async function storeWithResponses(responses: any[]) {
       },
     };
   });
-  const { awsCacheStore } = await import("../src/next/cache-store.mjs");
-  return { store: awsCacheStore(), sends };
+  const { newAwsCacheStore } = await import("../src/next/cache-store.mjs");
+  return { store: newAwsCacheStore(publish), sends };
 }
 
 async function handlerOver(store: CacheStore) {
@@ -102,8 +105,8 @@ async function entryStore(responses: any[] = []) {
       },
     };
   });
-  const { awsCacheStore } = await import("../src/next/cache-store.mjs");
-  return { store: awsCacheStore(), built, sent, ddbSent };
+  const { newAwsCacheStore } = await import("../src/next/cache-store.mjs");
+  return { store: newAwsCacheStore(publishNothing), built, sent, ddbSent };
 }
 
 function writerAnswering(...responses: Response[]) {
@@ -246,8 +249,8 @@ test("serves a tagged entry off the snapshot, sending nothing to the table", asy
     { Body: { transformToString: async () => snapshotBody }, ETag: '"v1"' },
   ]);
   const clock = await import("@framework/next-runtime/tag-clock");
-  const { awsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
-  clock.setTagClockStore(awsUseCacheStore());
+  const { newAwsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
+  clock.setTagClockStore(newAwsUseCacheStore(publishNothing));
 
   const entry = await (await handlerOver(store)).get("/", { kind: "APP_PAGE" });
 
@@ -279,6 +282,20 @@ test("indexes the tag record a singular revalidateTag writes", async () => {
       ":expired": { N: "1700" },
     },
   });
+});
+
+test("publishes each revalidated tag's record to the instance's tag snapshot", async () => {
+  const published: Array<[string, unknown]> = [];
+  const { store } = await storeWithResponses([{}, {}], async (tag, record) => {
+    published.push([tag, record]);
+  });
+
+  await store.writeTags(["products", "cart"], { expired: 5_000 });
+
+  expect(published).toEqual([
+    ["products", { expired: 5_000 }],
+    ["cart", { expired: 5_000 }],
+  ]);
 });
 
 test("does not surface a rejected guard as a failure", async () => {
@@ -343,9 +360,13 @@ async function storesOverTable() {
       },
     };
   });
-  const { awsCacheStore } = await import("../src/next/cache-store.mjs");
-  const { awsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
-  return { store: awsCacheStore(), useStore: awsUseCacheStore(), items: table.items };
+  const { newAwsCacheStore } = await import("../src/next/cache-store.mjs");
+  const { newAwsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
+  return {
+    store: newAwsCacheStore(publishNothing),
+    useStore: newAwsUseCacheStore(publishNothing),
+    items: table.items,
+  };
 }
 
 test("makes a classic-model invalidation visible to the stream publisher", async () => {

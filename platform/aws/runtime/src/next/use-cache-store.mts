@@ -2,7 +2,12 @@ import { createHash } from "node:crypto";
 import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
-import { readableSnapshot, type TagSnapshot, tagSnapshotKey } from "@framework/next-cache";
+import {
+  type PublishTag,
+  readableSnapshot,
+  type TagSnapshot,
+  tagSnapshotKey,
+} from "@framework/next-cache";
 import type { UseCacheStore } from "@framework/next-runtime/use-cache-store";
 import { isNotFound, readBodyText, requireEnv } from "./object-store.mjs";
 import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
@@ -15,7 +20,7 @@ function isNotModified(err: any): boolean {
   return err?.name === "NotModified" || err?.$metadata?.httpStatusCode === 304;
 }
 
-export function awsUseCacheStore(): UseCacheStore {
+export function newAwsUseCacheStore(publish: PublishTag): UseCacheStore {
   const table = requireEnv("OCEL_STATE_TABLE");
   const tagNamespace = requireEnv("OCEL_ISR_TAG_NAMESPACE");
   const bucket = requireEnv("OCEL_ISR_BUCKET");
@@ -76,13 +81,18 @@ export function awsUseCacheStore(): UseCacheStore {
     },
 
     async writeTag(tag, record) {
-      try {
-        await ddb.send(new UpdateItemCommand(tagRecordUpdate(table, tagNamespace, tag, record)));
-        return true;
-      } catch (err) {
-        if (isGuardRejection(err)) return false;
-        throw err;
-      }
+      const indexed = async () => {
+        try {
+          await ddb.send(new UpdateItemCommand(tagRecordUpdate(table, tagNamespace, tag, record)));
+          return true;
+        } catch (err) {
+          if (isGuardRejection(err)) return false;
+          throw err;
+        }
+      };
+      const { writtenAt: _, ...published } = record;
+      const [written] = await Promise.all([indexed(), publish(tag, published)]);
+      return written;
     },
   };
 }

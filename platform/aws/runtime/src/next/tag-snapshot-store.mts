@@ -1,10 +1,14 @@
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
+  newTagPublisher,
+  type PublishTag,
   readableSnapshot,
   type StoredTagSnapshot,
   type TagSnapshot,
   type TagSnapshotStore,
   tagSnapshotKey,
 } from "@framework/next-cache";
+import { isNotFound, requireEnv } from "./object-store.mjs";
 
 export interface S3Like {
   send(command: any): Promise<any>;
@@ -15,12 +19,14 @@ export interface S3Commands {
   PutObjectCommand: new (input: any) => any;
 }
 
-function isNotFound(err: any): boolean {
-  return err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404;
-}
-
-function isPreconditionFailed(err: any): boolean {
-  return err?.name === "PreconditionFailed" || err?.$metadata?.httpStatusCode === 412;
+function isLostVersion(err: any): boolean {
+  const status = err?.$metadata?.httpStatusCode;
+  return (
+    err?.name === "PreconditionFailed" ||
+    err?.name === "ConditionalRequestConflict" ||
+    status === 412 ||
+    status === 409
+  );
 }
 
 export class S3TagSnapshotStore implements TagSnapshotStore {
@@ -61,13 +67,24 @@ export class S3TagSnapshotStore implements TagSnapshotStore {
           Key: this.key,
           Body: JSON.stringify(snapshot),
           ContentType: "application/json",
-          ...(prior.etag !== null ? { IfMatch: prior.etag } : {}),
+          IfMatch: prior.etag,
         }),
       );
       return true;
     } catch (err) {
-      if (isPreconditionFailed(err)) return false;
+      if (isLostVersion(err)) return false;
       throw err;
     }
   }
+}
+
+export function newAwsTagPublisher(): PublishTag {
+  return newTagPublisher(
+    new S3TagSnapshotStore(
+      new S3Client({}),
+      { GetObjectCommand, PutObjectCommand },
+      requireEnv("OCEL_ISR_BUCKET"),
+      requireEnv("OCEL_ISR_PREFIX"),
+    ),
+  );
 }

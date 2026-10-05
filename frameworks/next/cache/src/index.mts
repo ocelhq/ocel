@@ -10,6 +10,8 @@ export {
   latest,
   mergeRecord,
   mergeSnapshot,
+  newTagPublisher,
+  type PublishTag,
   publishTagSnapshot,
   readableSnapshot,
   type StoredTagSnapshot,

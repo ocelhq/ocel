@@ -51,17 +51,60 @@ export interface TagSnapshotStore {
   write(snapshot: TagSnapshot, prior: StoredTagSnapshot): Promise<boolean>;
 }
 
-const publishAttempts = 3;
+const publishRounds = 5;
+
+const backoffBaseMs = 25;
+
+const backoffCeilingMs = 400;
+
+async function publishOnce(
+  store: TagSnapshotStore,
+  records: Map<string, TagRecord>,
+  at: number,
+): Promise<boolean> {
+  const stored = await store.read();
+  if (stored === null) return true;
+  if (stored.etag === null) {
+    throw new Error(
+      "ocel: the tag snapshot was read with no version, so a write could not be conditioned on it",
+    );
+  }
+  return store.write(mergeSnapshot(stored.snapshot, records, at), stored);
+}
+
+function backoff(round: number): Promise<void> {
+  const ceiling = Math.min(backoffCeilingMs, backoffBaseMs * 2 ** round);
+  return new Promise((resolve) => setTimeout(resolve, Math.random() * ceiling));
+}
 
 export async function publishTagSnapshot(
   store: TagSnapshotStore,
   records: Map<string, TagRecord>,
   at: number,
-): Promise<boolean> {
-  for (let attempt = 0; attempt < publishAttempts; attempt++) {
-    const stored = await store.read();
-    if (stored === null) return true;
-    if (await store.write(mergeSnapshot(stored.snapshot, records, at), stored)) return true;
+): Promise<void> {
+  for (let round = 0; round < publishRounds; round++) {
+    if (await publishOnce(store, records, at)) return;
+    if (round < publishRounds - 1) await backoff(round);
   }
-  return false;
+  throw new Error(
+    `ocel: could not publish ${[...records.keys()].join(", ")} to the tag snapshot: every attempt lost its version to another writer`,
+  );
+}
+
+export type PublishTag = (tag: string, record: TagRecord) => Promise<void>;
+
+export function newTagPublisher(store: TagSnapshotStore): PublishTag {
+  let batch: { records: Map<string, TagRecord>; published: Promise<void> } | null = null;
+  return (tag, record) => {
+    if (batch === null) {
+      const records = new Map<string, TagRecord>();
+      const published = Promise.resolve().then(() => {
+        batch = null;
+        return publishTagSnapshot(store, records, Date.now());
+      });
+      batch = { records, published };
+    }
+    batch.records.set(tag, mergeRecord(batch.records.get(tag), record));
+    return batch.published;
+  };
 }

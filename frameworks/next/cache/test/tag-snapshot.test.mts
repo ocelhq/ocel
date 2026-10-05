@@ -4,8 +4,12 @@ import {
   latest,
   mergeRecord,
   mergeSnapshot,
+  newTagPublisher,
+  publishTagSnapshot,
   readableSnapshot,
+  type StoredTagSnapshot,
   type TagSnapshot,
+  type TagSnapshotStore,
 } from "../src/index.mjs";
 
 function snapshotOf(
@@ -97,5 +101,78 @@ describe("readableSnapshot", () => {
     for (const parsed of [undefined, 7, "a snapshot", true, [], [snapshotOf(1, {})]]) {
       expect(readableSnapshot(parsed)).toBeNull();
     }
+  });
+});
+
+function storeLosing(
+  losses: number,
+  stored: StoredTagSnapshot | null = {
+    snapshot: snapshotOf(1, {}),
+    etag: '"v1"',
+  },
+) {
+  const calls = { reads: 0, writes: 0 };
+  let written: TagSnapshot | null = null;
+  const store: TagSnapshotStore = {
+    async read() {
+      calls.reads++;
+      return stored;
+    },
+    async write(snapshot) {
+      calls.writes++;
+      if (calls.writes <= losses) return false;
+      written = snapshot;
+      return true;
+    },
+  };
+  return { store, calls, written: () => written };
+}
+
+describe("publishTagSnapshot", () => {
+  it("reads and writes once a round, trying again after losing the version", async () => {
+    const { store, calls, written } = storeLosing(2);
+
+    await publishTagSnapshot(store, new Map([["cart", { expired: 5 }]]), 10);
+
+    expect(calls).toEqual({ reads: 3, writes: 3 });
+    expect(written()?.records).toEqual({ cart: { stale: undefined, expired: 5 } });
+  });
+
+  it("gives up with an error after five rounds lost", async () => {
+    const { store, calls } = storeLosing(Number.POSITIVE_INFINITY);
+
+    await expect(
+      publishTagSnapshot(store, new Map([["cart", { expired: 5 }]]), 10),
+    ).rejects.toThrow(/cart/);
+    expect(calls).toEqual({ reads: 5, writes: 5 });
+  });
+
+  it("refuses to write a snapshot it read with no version to condition the write on", async () => {
+    const { store, calls } = storeLosing(0, { snapshot: snapshotOf(1, {}), etag: null });
+
+    await expect(
+      publishTagSnapshot(store, new Map([["cart", { expired: 5 }]]), 10),
+    ).rejects.toThrow(/version/);
+    expect(calls.writes).toBe(0);
+  });
+
+  it("publishes nothing where no snapshot was seeded", async () => {
+    const { store, calls } = storeLosing(0, null);
+
+    await publishTagSnapshot(store, new Map([["cart", { expired: 5 }]]), 10);
+
+    expect(calls.writes).toBe(0);
+  });
+});
+
+describe("newTagPublisher", () => {
+  it("merges tags published together into one write", async () => {
+    const { store, calls, written } = storeLosing(0);
+    const publish = newTagPublisher(store);
+
+    await Promise.all([publish("cart", { expired: 5 }), publish("products", { stale: 6 })]);
+
+    expect(calls.writes).toBe(1);
+    expect(Object.keys(written()?.records ?? {})).toEqual(["cart", "products"]);
   });
 });

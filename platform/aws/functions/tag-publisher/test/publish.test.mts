@@ -12,6 +12,7 @@ const SEED = "seed-1";
 class FakeS3 {
   objects = new Map<string, { body: string; etag: string }>();
   puts: any[] = [];
+  conflicts = 0;
   private version = 0;
 
   async send(command: any): Promise<any> {
@@ -24,6 +25,13 @@ class FakeS3 {
       return { ETag: object.etag, Body: { transformToString: async () => object.body } };
     }
     this.puts.push(input);
+    if (this.conflicts > 0) {
+      this.conflicts--;
+      throw Object.assign(new Error("ConditionalRequestConflict"), {
+        name: "ConditionalRequestConflict",
+        $metadata: { httpStatusCode: 409 },
+      });
+    }
     const existing = this.objects.get(input.Key);
     const lost =
       (input.IfNoneMatch === "*" && existing !== undefined) ||
@@ -156,6 +164,17 @@ describe("publishAll", () => {
 
     expect(await publishAll(publisher(s3, fetchImpl), both, 900)).toEqual(["3"]);
     expect(stored(s3).records.cart).toEqual({ stale: undefined, expired: 500 });
+  });
+
+  it("tries again when a concurrent write conflicts with its conditional put", async () => {
+    const s3 = seeded();
+    s3.conflicts = 1;
+
+    expect(await publishAll(publisher(s3, ok), raises({ cart: { expired: 500 } }), 900)).toEqual(
+      [],
+    );
+    expect(stored(s3).records.cart).toEqual({ stale: undefined, expired: 500 });
+    expect(s3.puts).toHaveLength(2);
   });
 
   it("refuses to write over a document it cannot read", async () => {

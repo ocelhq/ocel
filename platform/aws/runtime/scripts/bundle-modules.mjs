@@ -17,7 +17,7 @@ const handlers = {
   "use-cache-remote": Bun.resolveSync("@framework/next-runtime/use-cache-remote", pkgDir),
 };
 
-const bundledModules = ["cache-store", "dispatch-host", "use-cache-store"];
+const bundledModules = ["cache-store", "dispatch-host", "tag-snapshot-store", "use-cache-store"];
 
 const bundledInternals = [
   "dispatch-assets",
