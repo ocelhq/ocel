@@ -76,7 +76,7 @@ func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy c
 	facts := preflightFacts{
 		project:        resolved,
 		containerArchs: archs,
-		workerCeilings: provider.WorkerCeilingsOf(resp.GetWorkerCeilings()),
+		workerCeilings: provider.WorkerCeilingsOf(process.Facts().GetWorkerCeilings()),
 		urls:           appurl.FormatPreviewURLs(ensured.GetHostnames()),
 		builtAlias:     ensured.GetToken(),
 	}
@@ -123,7 +123,7 @@ func productionOpenOptions(policy consent.Policy, cfg *project.Project) commands
 	}
 }
 
-func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, cfg *project.Project, read readiness.Preflight, prebuilt bool) (preflightFacts, error) {
+func preflightDeploy(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, process *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool) (preflightFacts, error) {
 	resp := read.Response
 	resolved, archs, err := resolveContainers(ctx, dependencies, check, read, prebuilt)
 	if err != nil {
@@ -143,7 +143,7 @@ func preflightDeploy(ctx context.Context, dependencies Dependencies, policy cons
 		declined:       !proceed,
 		project:        resolved,
 		containerArchs: archs,
-		workerCeilings: provider.WorkerCeilingsOf(resp.GetWorkerCeilings()),
+		workerCeilings: provider.WorkerCeilingsOf(process.Facts().GetWorkerCeilings()),
 		urls:           appurl.FormatProductionURLs(resolved),
 	}, nil
 }

@@ -100,6 +100,10 @@ message ConfigureResponse {
 
 message ProviderFacts {
   bool prices_deploys = 1;
+
+  repeated string computes = 2;
+
+  repeated WorkerCeiling worker_ceilings = 3;
 }
 
 message UsePreviewWildcardRequest {
@@ -625,15 +629,11 @@ message PreflightResponse {
 
   BootstrapStatus bootstrap = 8;
 
-  repeated string computes = 9;
-
   repeated HostCheck host_checks = 10;
 
   map<string, string> container_archs = 12 [(buf.validate.field).map.values.string = {in: ["amd64", "arm64"]}];
 
   bool hostname_required = 13;
-
-  repeated WorkerCeiling worker_ceilings = 14;
 }
 
 message WorkerCeiling {

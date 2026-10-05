@@ -43,9 +43,9 @@ func runRPC(t *testing.T, suite Suite) {
 		t.Cleanup(server.Close)
 
 		served := client(server.Client(), server.URL)
-		enforcesTheSessionRules(t, served, suite.Options)
+		facts := enforcesTheSessionRules(t, served, suite.Options)
 		t.Run("names the computes it runs", func(t *testing.T) {
-			namesTheComputesItRuns(t, suite, served)
+			namesTheComputesItRuns(t, suite, facts)
 		})
 	})
 
@@ -71,9 +71,9 @@ func runRPC(t *testing.T, suite Suite) {
 
 		child.refusesAnUnpairedClient(t)
 		paired := client(child.http, providerURL)
-		enforcesTheSessionRules(t, paired, suite.Options)
+		facts := enforcesTheSessionRules(t, paired, suite.Options)
 		t.Run("names the computes it runs", func(t *testing.T) {
-			namesTheComputesItRuns(t, suite, paired)
+			namesTheComputesItRuns(t, suite, facts)
 		})
 
 		child.stopsOnSIGTERM(t)
@@ -114,7 +114,7 @@ func (s *spawned) refusesAnUnpairedClient(t *testing.T) {
 	}
 }
 
-func enforcesTheSessionRules(t *testing.T, providerClient contractv1connect.ProviderServiceClient, options provider.Options) {
+func enforcesTheSessionRules(t *testing.T, providerClient contractv1connect.ProviderServiceClient, options provider.Options) *contractv1.ProviderFacts {
 	t.Helper()
 	ctx := context.Background()
 
@@ -129,7 +129,8 @@ func enforcesTheSessionRules(t *testing.T, providerClient contractv1connect.Prov
 		t.Errorf("Configure() with an unknown option: code = %v, want %v", got, connect.CodeInvalidArgument)
 	}
 
-	if _, err := providerClient.Configure(ctx, configureWith(t, options)); err != nil {
+	configured, err := providerClient.Configure(ctx, configureWith(t, options))
+	if err != nil {
 		t.Fatalf("Configure() error = %v, want the session configured", err)
 	}
 
@@ -142,6 +143,7 @@ func enforcesTheSessionRules(t *testing.T, providerClient contractv1connect.Prov
 	if _, refused := provider.RefusedCode(err); connect.CodeOf(err) == connect.CodeFailedPrecondition && !refused {
 		t.Errorf("an RPC after Configure: %v, want the session to be past its precondition", err)
 	}
+	return configured.GetFacts()
 }
 
 func saysWhatItWouldChange(t *testing.T, client contractv1connect.ProviderServiceClient) {

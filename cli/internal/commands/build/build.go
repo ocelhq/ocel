@@ -140,7 +140,7 @@ func resolveBuiltComputes(ctx context.Context, dependencies Dependencies, buildi
 		return nil, err
 	}
 	defer provider.Close()
-	return readiness.ResolveComputes(ctx, provider, declared)
+	return readiness.ResolveComputes(provider, declared)
 }
 
 func appBuildLog(phase *run.Span) build.Log {
