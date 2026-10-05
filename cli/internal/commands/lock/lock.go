@@ -22,7 +22,7 @@ type Dependencies struct {
 }
 
 func NewCommand(dependencies Dependencies) *cobra.Command {
-	return commands.DeclareMutating(commands.ReserveStdout(&cobra.Command{
+	return commands.DeclareResult(commands.DeclareMutating(commands.ReserveStdout(&cobra.Command{
 		Use:   "lock",
 		Short: "Pin the provider binaries this CLI version runs",
 		Long: "Pin the provider binaries this CLI version runs.\n\n" +
@@ -37,7 +37,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 			}
 			return runLock(cmd.Context(), dependencies, cwd, cmd.OutOrStdout())
 		},
-	}))
+	})), &resultv1.LockResult{})
 }
 
 func runLock(ctx context.Context, dependencies Dependencies, cwd string, stdout io.Writer) error {

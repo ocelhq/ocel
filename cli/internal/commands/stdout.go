@@ -27,6 +27,10 @@ func PrintsData(cmd *cobra.Command) bool {
 	return isStdoutReserved(cmd) && !isTerminalSharedWithChild(cmd)
 }
 
+func DrawsRunOnStdout(cmd *cobra.Command) bool {
+	return !isStdoutReserved(cmd)
+}
+
 func isStdoutReserved(cmd *cobra.Command) bool {
 	for c := cmd; c != nil; c = c.Parent() {
 		if c.Annotations[stdoutAnnotation] != "" {

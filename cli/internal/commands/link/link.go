@@ -67,7 +67,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&opts.org, "org", "", "Organization `slug`, instead of picking one")
 	cmd.Flags().BoolVar(&opts.create, "create", false, "Create the project, named [project] or after this directory")
-	return commands.DeclareMutating(commands.ReserveStdout(cmd))
+	return commands.DeclareResult(commands.DeclareMutating(commands.ReserveStdout(cmd)), &resultv1.LinkResult{})
 }
 
 func runLink(ctx context.Context, dependencies Dependencies, projectDir, projectRef string, opts options, stdout, stderr io.Writer, stdin io.Reader) (err error) {

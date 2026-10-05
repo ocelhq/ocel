@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -114,7 +115,7 @@ func newStatusCommand(dependencies Dependencies) *cobra.Command {
 			})
 		},
 	}
-	return commands.DeclareReadOnly(commands.ReserveStdout(cmd))
+	return commands.DeclareResult(commands.DeclareReadOnly(commands.ReserveStdout(cmd)), &resultv1.ConnectorStatusResult{})
 }
 
 func withOptions(cmd *cobra.Command, dependencies Dependencies, opts *options,

@@ -37,7 +37,7 @@ func newEnvSourceCommand(dependencies Dependencies) *cobra.Command {
 		})
 	}
 	previewFlag(cmd, &opts)
-	return commands.DeclareReadOnly(cmd)
+	return commands.DeclareResult(commands.DeclareReadOnly(cmd), &resultv1.EnvSourceResult{})
 }
 
 func newSyncCommand(dependencies Dependencies) *cobra.Command {

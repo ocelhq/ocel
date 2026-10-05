@@ -27,7 +27,7 @@ type Dependencies struct {
 }
 
 func NewCommand(dependencies Dependencies) *cobra.Command {
-	return commands.DeclareMutating(commands.ReserveStdout(&cobra.Command{
+	return commands.DeclareResult(commands.DeclareMutating(commands.ReserveStdout(&cobra.Command{
 		Use:   "generate",
 		Short: "Generate the app-side files ocel derives from your declarations",
 		Long: "Generate the app-side files ocel derives from your declarations.\n\n" +
@@ -46,7 +46,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 
 			return runGenerate(cmd.Context(), dependencies, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
-	}))
+	})), &resultv1.GenerateResult{})
 }
 
 func runGenerate(ctx context.Context, dependencies Dependencies, cwd string, stdout, stderr io.Writer) error {

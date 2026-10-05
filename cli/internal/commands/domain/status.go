@@ -225,5 +225,5 @@ func newStatusCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&opts.wait, "wait", false, "Keep polling until every declared hostname is served, or give up")
-	return commands.DeclareReadOnly(cmd)
+	return commands.DeclareResult(commands.DeclareReadOnly(cmd), &resultv1.DomainStatusResult{})
 }
