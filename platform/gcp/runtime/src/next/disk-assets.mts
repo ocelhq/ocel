@@ -8,14 +8,17 @@ import type { AssetBucket, AssetObject } from "@framework/next-router/assets";
 
 const assetsSegment = "assets";
 
-function releaseRoot(assetPrefix: string): string {
+function trimAssetsSegment(assetPrefix: string): string {
   return assetPrefix.endsWith(assetsSegment)
     ? assetPrefix.slice(0, -assetsSegment.length)
     : `${assetPrefix}/`;
 }
 
-function diskFiles(dir: string, assetPrefix: string): (key: string) => Promise<string | null> {
-  const root = releaseRoot(assetPrefix);
+function newDiskFileLookup(
+  dir: string,
+  assetPrefix: string,
+): (key: string) => Promise<string | null> {
+  const root = trimAssetsSegment(assetPrefix);
   const within = dir.endsWith(sep) ? dir : dir + sep;
   return async (key) => {
     if (!key.startsWith(root) || key.includes("\0")) return null;
@@ -29,8 +32,8 @@ function diskFiles(dir: string, assetPrefix: string): (key: string) => Promise<s
   };
 }
 
-export function diskAssetBucket(dir: string, assetPrefix: string): AssetBucket {
-  const fileOf = diskFiles(dir, assetPrefix);
+export function newDiskAssetBucket(dir: string, assetPrefix: string): AssetBucket {
+  const fileOf = newDiskFileLookup(dir, assetPrefix);
   const etags = new Map<string, Promise<string>>();
   const etagOf = (file: string): Promise<string> => {
     let etag = etags.get(file);
@@ -54,8 +57,8 @@ export function diskAssetBucket(dir: string, assetPrefix: string): AssetBucket {
   };
 }
 
-export function diskObjectStore(dir: string, assetPrefix: string): ObjectStore {
-  const fileOf = diskFiles(dir, assetPrefix);
+export function newDiskObjectStore(dir: string, assetPrefix: string): ObjectStore {
+  const fileOf = newDiskFileLookup(dir, assetPrefix);
   return {
     async get(key, limit) {
       const file = await fileOf(key);

@@ -8,7 +8,7 @@ import { newInstanceCacheStore, newInstanceUseCacheStore } from "./instance-stor
 const renderOriginVar = "__NEXT_PRIVATE_ORIGIN";
 const defaultRefreshTimeoutMs = 10_000;
 
-function instanceOrigin(env: NodeJS.ProcessEnv): string {
+function readInstanceOrigin(env: NodeJS.ProcessEnv): string {
   const origin = env[renderOriginVar];
   if (!origin)
     throw new Error("ocel: the Next runtime has not started the server a refresh renders on");
@@ -29,7 +29,7 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
     newUseCacheStore: async () => newInstanceUseCacheStore(cache),
     newDispatchInvoke: async (localOrigin) => newGcpDispatchInvoke(localOrigin),
     scheduleRefresh: newInstanceRefresh(
-      () => instanceOrigin(env),
+      () => readInstanceOrigin(env),
       finishBeforeResponseMs(env) || defaultRefreshTimeoutMs,
     ),
   };

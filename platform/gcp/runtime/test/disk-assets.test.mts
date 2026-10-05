@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { diskAssetBucket } from "../src/next/disk-assets.mjs";
+import { newDiskAssetBucket } from "../src/next/disk-assets.mjs";
 
 const assetPrefix = "prod/shop/web/r1/assets";
 
@@ -27,7 +27,7 @@ afterAll(async () => {
 });
 
 async function read(key: string): Promise<string | null> {
-  const object = await diskAssetBucket(dir, assetPrefix).get(key);
+  const object = await newDiskAssetBucket(dir, assetPrefix).get(key);
   return object?.body ? new Response(object.body).text() : null;
 }
 
@@ -52,7 +52,7 @@ test("a key outside the release the service serves is missing", async () => {
 });
 
 test("an asset's etag names its content", async () => {
-  const bucket = diskAssetBucket(dir, assetPrefix);
+  const bucket = newDiskAssetBucket(dir, assetPrefix);
   const [chunk, again, page] = await Promise.all([
     bucket.get(`${assetPrefix}/_next/static/app.js`),
     bucket.get(`${assetPrefix}/_next/static/app.js`),

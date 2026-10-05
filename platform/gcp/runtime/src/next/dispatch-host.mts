@@ -5,10 +5,10 @@ import {
   readDispatchHost,
 } from "@framework/next-runtime/dispatch-host";
 import type { Invoke } from "@framework/node-runtime/host";
-import { diskAssetBucket, diskObjectStore } from "./disk-assets.mjs";
-import { inProcessImageOrigin } from "./image-origin.mjs";
+import { newDiskAssetBucket, newDiskObjectStore } from "./disk-assets.mjs";
+import { newInProcessImageOrigin } from "./image-origin.mjs";
 
-function functionIds(manifest: RoutingManifest): string[] {
+function listFunctionIds(manifest: RoutingManifest): string[] {
   const ids = new Set<string>([manifest.entry]);
   for (const target of Object.values(manifest.dispatch)) {
     if ((target.kind === "function" || target.kind === "prerender") && target.id) {
@@ -27,13 +27,13 @@ export function readGcpDispatchHost(env: NodeJS.ProcessEnv, localOrigin: string)
   const host = readDispatchHost(env, localOrigin, {
     originFetch: fetch,
     ...(staticDir && {
-      assetBucket: diskAssetBucket(staticDir, assetPrefix),
-      imageOrigin: inProcessImageOrigin(diskObjectStore(staticDir, assetPrefix)),
+      assetBucket: newDiskAssetBucket(staticDir, assetPrefix),
+      imageOrigin: newInProcessImageOrigin(newDiskObjectStore(staticDir, assetPrefix)),
     }),
   });
   return {
     ...host,
-    functionUrls: Object.fromEntries(functionIds(host.manifest).map((id) => [id, localOrigin])),
+    functionUrls: Object.fromEntries(listFunctionIds(host.manifest).map((id) => [id, localOrigin])),
   };
 }
 
