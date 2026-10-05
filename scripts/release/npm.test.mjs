@@ -1,9 +1,21 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { distTag, LICENSING, ORDER, published } from "./npm.mjs";
+import { distTag, LICENSING, ORDER, pack, published } from "./npm.mjs";
 
 const packages = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "packages");
 
@@ -106,5 +118,29 @@ describe("published", () => {
         published("@ocel/cli", "0.1.0", answering({ status: 1, stdout, stderr: "EBADDEVENGINES" })),
       /EBADDEVENGINES/,
     );
+  });
+});
+
+describe("pack", () => {
+  it("keeps every platform binary executable in the tarball", () => {
+    const root = mkdtempSync(join(tmpdir(), "ocel-pack-"));
+    try {
+      for (const dir of ORDER.filter((name) => name.startsWith("cli-"))) {
+        const binary = dir === "cli-win32-x64" ? "ocel.exe" : "ocel";
+        const cwd = join(root, dir);
+        mkdirSync(join(cwd, "bin"), { recursive: true });
+        copyFileSync(join(packages, dir, "package.json"), join(cwd, "package.json"));
+        for (const file of LICENSING) writeFileSync(join(cwd, file), "");
+        writeFileSync(join(cwd, "bin", binary), "#!/bin/sh\n");
+        chmodSync(join(cwd, "bin", binary), 0o755);
+        const destination = mkdtempSync(join(root, "pack-"));
+        const tarball = pack(cwd, destination);
+        const listing = execFileSync("tar", ["-tvzf", tarball], { encoding: "utf8" });
+        const entry = listing.split("\n").find((line) => line.endsWith(`package/bin/${binary}`));
+        assert.match(entry ?? "", /^-rwxr-xr-x/, dir);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

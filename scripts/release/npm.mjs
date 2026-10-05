@@ -3,7 +3,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "./version.mjs";
 
@@ -41,6 +41,22 @@ export function published(name, version, run = spawnSync) {
   throw new Error(`npm view ${name}@${version} failed: ${result.stderr || result.error}`);
 }
 
+export function pack(cwd, destination) {
+  if (basename(cwd).startsWith("cli-")) {
+    execFileSync("npm", ["pack", cwd, "--pack-destination", destination], {
+      cwd: destination,
+      stdio: ["ignore", 2, "inherit"],
+    });
+  } else {
+    execFileSync("pnpm", ["pack", "--pack-destination", destination], {
+      cwd,
+      stdio: ["ignore", 2, "inherit"],
+    });
+  }
+  const [tarball] = readdirSync(destination);
+  return join(destination, tarball);
+}
+
 function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
@@ -66,12 +82,8 @@ function main() {
       }
       for (const file of LICENSING) copyFileSync(join(REPO_ROOT, file), join(cwd, file));
       const destination = mkdtempSync(join(packed, "pack-"));
-      execFileSync("pnpm", ["pack", "--pack-destination", destination], {
-        cwd,
-        stdio: ["ignore", 2, "inherit"],
-      });
-      const [tarball] = readdirSync(destination);
-      const publish = ["publish", join(destination, tarball), "--access", "public", "--tag", tag];
+      const tarball = pack(cwd, destination);
+      const publish = ["publish", tarball, "--access", "public", "--tag", tag];
       publish.push(dryRun ? "--dry-run" : "--provenance");
       execFileSync("npm", publish, { cwd: destination, stdio: ["ignore", 2, "inherit"] });
     }
