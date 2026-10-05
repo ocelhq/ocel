@@ -15,7 +15,11 @@ import (
 	"sync/atomic"
 	"testing"
 
+	validate "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ocelhq/ocel/pkg/envsource"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -758,5 +762,21 @@ func TestInfisicalReadsWithAnAccessTokenAsIs(t *testing.T) {
 	}
 	if logins := fake.loginCount(); logins != 0 {
 		t.Errorf("an access token logged in %d times, want never", logins)
+	}
+}
+
+func TestADeclaredVariableKeyAndAnInfisicalCredentialVariableAdmitTheSameNames(t *testing.T) {
+	field := (&resourcesv1.VariableDefinition{}).ProtoReflect().Descriptor().Fields().ByName("key")
+	if field == nil {
+		t.Fatal("VariableDefinition has no key field, so nothing pins a variable name in the wire")
+	}
+
+	rules, ok := proto.GetExtension(field.Options(), validate.E_Field).(*validate.FieldRules)
+	if !ok || rules.GetString() == nil {
+		t.Fatal("VariableDefinition.key has no buf.validate string rule, so the wire admits any name at all")
+	}
+
+	if got := rules.GetString().GetPattern(); got != envsource.VariableNamePattern {
+		t.Errorf("VariableDefinition.key pins %q, envsource pins %q — an Infisical credential could name a variable no declaration can hold, or refuse one a declaration holds", got, envsource.VariableNamePattern)
 	}
 }
