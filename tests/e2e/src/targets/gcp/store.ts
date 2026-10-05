@@ -1,6 +1,5 @@
 import { HARNESS_PREFIX } from "../../identity";
-import { sanitize } from "../../naming";
-import { NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
+import { labelValue, NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
 
 export type Service = { name: string; uri: string; labels: Record<string, string> };
 
@@ -41,18 +40,18 @@ export function exposedServices(body: unknown, names: string[]): string {
 }
 
 function inNamespace(service: Service, namespace: string): boolean {
-  return service.labels[NAMESPACE_LABEL] === sanitize(namespace);
+  return service.labels[NAMESPACE_LABEL] === labelValue(namespace);
 }
 
 export function servicesOf(services: Service[], namespace: string, project: string): Service[] {
   return services.filter(
     (service) =>
-      inNamespace(service, namespace) && service.labels[PROJECT_LABEL] === sanitize(project),
+      inNamespace(service, namespace) && service.labels[PROJECT_LABEL] === labelValue(project),
   );
 }
 
 export function strayServices(services: Service[], namespace: string, mine: string[]): string[] {
-  const projects = mine.map(sanitize);
+  const projects = mine.map(labelValue);
   return services
     .filter((service) => {
       const project = service.labels[PROJECT_LABEL] ?? "";
