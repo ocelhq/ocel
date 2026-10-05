@@ -3,6 +3,7 @@ package payloads
 import (
 	"bytes"
 	"debug/elf"
+	"io/fs"
 	"strings"
 	"testing"
 )
@@ -15,6 +16,19 @@ func TestTheNodeRuntimeShipsAsOneBundle(t *testing.T) {
 	for _, relative := range []string{`from "./`, `from "../`} {
 		if strings.Contains(string(body), relative) {
 			t.Errorf("NodeRuntime() reads %s, and the image contains this file alone", relative)
+		}
+	}
+}
+
+func TestTheNextRuntimeShipsItsEntrypointAndEveryCacheHandler(t *testing.T) {
+	for _, name := range []string{"entrypoint.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"} {
+		body, err := fs.ReadFile(NextRuntime(), name)
+		if err != nil {
+			t.Errorf("NextRuntime() holds no %s: %v", name, err)
+			continue
+		}
+		if len(body) == 0 {
+			t.Errorf("NextRuntime()'s %s is empty", name)
 		}
 	}
 }

@@ -3,6 +3,7 @@ package payloads
 import (
 	"embed"
 	"fmt"
+	"io/fs"
 )
 
 //go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/gcp-payloads
@@ -20,6 +21,14 @@ var (
 )
 
 func NodeRuntime() []byte { return nodeRuntime }
+
+func NextRuntime() fs.FS {
+	folder, err := fs.Sub(embedded, "dist/next")
+	if err != nil {
+		panic(fmt.Sprintf("payloads: %v", err))
+	}
+	return folder
+}
 
 func ContainerRuntime(arch string) ([]byte, error) {
 	if arch != ContainerArch {

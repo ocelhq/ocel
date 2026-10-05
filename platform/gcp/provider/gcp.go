@@ -96,6 +96,7 @@ func (p *Provider) Facts() provider.Facts {
 		DNSKinds:        []provider.DNSKind{dnsCloudflare},
 		StoresArtifacts: true,
 		WorkerCeilings:  slices.Clone(workerCeilings),
+		NextRuntimeDir:  nextRuntimeDir,
 	}
 }
 

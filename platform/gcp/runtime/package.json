@@ -1,0 +1,22 @@
+{
+  "name": "@platform/gcp-runtime",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun scripts/bundle-next.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@framework/next-runtime": "workspace:*",
+    "@framework/node-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "es-module-lexer": "^1.7.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}
