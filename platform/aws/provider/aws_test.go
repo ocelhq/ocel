@@ -382,3 +382,12 @@ func TestAWSDeclaresTheDirectoryItsFunctionsLoadNextRuntimeFilesFrom(t *testing.
 		t.Errorf("Facts().NextRuntimeDir = %q, want /opt/ocel/next", got)
 	}
 }
+
+func TestLambdaDeclaresA200MiBFunctionSizeBudget(t *testing.T) {
+	t.Parallel()
+
+	p := NewProvider(Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
+	if got := p.Facts().MaxFunctionBytes; got != 200*1024*1024 {
+		t.Errorf("Facts().MaxFunctionBytes = %d, want 200 MiB, the room Lambda leaves under its 250 MB unzipped limit", got)
+	}
+}

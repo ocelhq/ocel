@@ -43,6 +43,7 @@ type Facts struct {
 
 	RetainsContainerReleases bool
 	NextRuntimeDir           string
+	MaxFunctionBytes         int64
 }
 
 type EdgeProgramRequest struct {

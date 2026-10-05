@@ -136,7 +136,8 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 				EdgeKind:      string(cfg.EdgeKind()),
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
 
-				NextRuntimeDir: host.NextRuntimeDir,
+				NextRuntimeDir:   host.NextRuntimeDir,
+				MaxFunctionBytes: host.MaxFunctionBytes,
 			})
 		case name == buildoutput.FrameworkNode:
 			target, err := nodeTarget(cfg, a, outputDir)

@@ -1729,9 +1729,12 @@ func recordingHost(dependencies *Dependencies) *build.Host {
 	return handed
 }
 
-func TestDeployBuildsAgainstTheNextCacheHandlerFolderItsProviderDeclares(t *testing.T) {
+func TestDeployBuildsForTheFunctionHostItsProviderDeclares(t *testing.T) {
 	fixture := setUpDeployProject(t)
-	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.NextRuntimeDir = "/var/host/next" })
+	fixture.Provider.WithFacts(func(facts *provider.Facts) {
+		facts.NextRuntimeDir = "/var/host/next"
+		facts.MaxFunctionBytes = 200 << 20
+	})
 	addAppToFixtureConfig(t, fixture.Root)
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, apiFunction())
@@ -1745,11 +1748,17 @@ func TestDeployBuildsAgainstTheNextCacheHandlerFolderItsProviderDeclares(t *test
 	if handed.NextRuntimeDir != "/var/host/next" {
 		t.Errorf("the build was handed the Next runtime directory %q, want the one the provider declares", handed.NextRuntimeDir)
 	}
+	if handed.MaxFunctionBytes != 200<<20 {
+		t.Errorf("the build was handed a size budget of %d bytes, want the one the provider declares", handed.MaxFunctionBytes)
+	}
 }
 
-func TestPreviewUpBuildsAgainstTheNextCacheHandlerFolderItsProviderDeclares(t *testing.T) {
+func TestPreviewUpBuildsForTheFunctionHostItsProviderDeclares(t *testing.T) {
 	fixture := setUpPreviewProject(t)
-	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.NextRuntimeDir = "/var/host/next" })
+	fixture.Provider.WithFacts(func(facts *provider.Facts) {
+		facts.NextRuntimeDir = "/var/host/next"
+		facts.MaxFunctionBytes = 200 << 20
+	})
 	addAppToFixtureConfig(t, fixture.Root)
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, apiFunction())
@@ -1759,5 +1768,8 @@ func TestPreviewUpBuildsAgainstTheNextCacheHandlerFolderItsProviderDeclares(t *t
 	previewUp(t, fixture, dependencies, previewUpOptions{name: "staging", persistent: true})
 	if handed.NextRuntimeDir != "/var/host/next" {
 		t.Errorf("the build was handed the Next runtime directory %q, want the one the provider declares", handed.NextRuntimeDir)
+	}
+	if handed.MaxFunctionBytes != 200<<20 {
+		t.Errorf("the build was handed a size budget of %d bytes, want the one the provider declares", handed.MaxFunctionBytes)
 	}
 }

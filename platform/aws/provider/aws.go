@@ -80,7 +80,8 @@ func (p *Provider) Facts() provider.Facts {
 		StoresArtifacts:   true,
 		WorkerCeilings:    deploy.WorkerCeilings,
 
-		NextRuntimeDir: awsports.NextRuntimeDir,
+		NextRuntimeDir:   awsports.NextRuntimeDir,
+		MaxFunctionBytes: deploy.MaxFunctionBytes,
 	}
 }
 

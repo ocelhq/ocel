@@ -1,8 +1,6 @@
 import { lstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-export const defaultBudgetBytes = 200 * 1024 * 1024;
-
 export interface PackedMember<T> {
   member: T;
   sizeBytes: number;
@@ -34,7 +32,7 @@ export function packBundles<T>(members: readonly T[], opts: PackOptions<T>): Pac
     entryKeyOf,
     assetsOf,
     partitionBy = () => "",
-    budgetBytes = defaultBudgetBytes,
+    budgetBytes = Number.POSITIVE_INFINITY,
     sizeOf = sizeOfPath,
   } = opts;
 

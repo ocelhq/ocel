@@ -124,6 +124,15 @@ describe("buildNext", () => {
     expect(env.OCEL_NEXT_RUNTIME_DIR).toBe("");
   });
 
+  it("passes the host's per-function size budget into the build", async () => {
+    const env = await envOf(app({ maxFunctionBytes: 209715200 }));
+    expect(env.OCEL_MAX_FUNCTION_BYTES).toBe("209715200");
+  });
+
+  it("sets no size budget when the host declares none", async () => {
+    expect((await envOf(app())).OCEL_MAX_FUNCTION_BYTES).toBe("");
+  });
+
   it("builds for production whatever NODE_ENV the shell sets", async () => {
     expect((await envOf(app({ env: { NODE_ENV: "development" } }))).NODE_ENV).toBe("production");
   });

@@ -2,7 +2,7 @@ import { lstat, mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { defaultBudgetBytes, packBundles } from "../src/pack.mts";
+import { packBundles } from "../src/pack.mts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -327,10 +327,6 @@ test("each source path is sized once however many members share it", () => {
   expect(sizeOf).toHaveBeenCalledTimes(1);
 });
 
-test("the default budget is Lambda's unzipped ceiling", () => {
-  expect(defaultBudgetBytes).toBe(200 * 1024 * 1024);
-});
-
 test("each member counts its own traced bytes", () => {
   const sizes = { "/abs/forest": mb(150), "/abs/a": mb(1), "/abs/b": mb(3) };
   const forest = { "node_modules/forest": "/abs/forest" };
@@ -392,8 +388,8 @@ test("the default sizer costs a path as the copy lands it", async () => {
   expect(missingAssets).toEqual(["gone.js"]);
 });
 
-test("the default budget applies when none is given", () => {
-  const sizes = { "/abs/a": defaultBudgetBytes, "/abs/b": 1 };
+test("with no budget every member packs into one bundle, however large", () => {
+  const sizes = { "/abs/a": mb(4096), "/abs/b": mb(4096) };
 
   const { bundles } = pack(
     [
@@ -403,7 +399,7 @@ test("the default budget applies when none is given", () => {
     sizes,
   );
 
-  expect(bundles).toHaveLength(2);
+  expect(bundles).toHaveLength(1);
 });
 
 test("seedAssets absorbs into bundles[0] through the packer's own accounting", () => {

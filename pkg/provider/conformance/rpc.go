@@ -47,8 +47,8 @@ func runRPC(t *testing.T, suite Suite) {
 		t.Run("names the computes it runs", func(t *testing.T) {
 			namesTheComputesItRuns(t, suite, facts)
 		})
-		t.Run("names the folder its functions load Next's runtime files from", func(t *testing.T) {
-			namesTheNextRuntimeDir(t, suite, facts)
+		t.Run("answers what a function build needs of it", func(t *testing.T) {
+			answersTheFunctionBuildFacts(t, suite, facts)
 		})
 	})
 
@@ -78,8 +78,8 @@ func runRPC(t *testing.T, suite Suite) {
 		t.Run("names the computes it runs", func(t *testing.T) {
 			namesTheComputesItRuns(t, suite, facts)
 		})
-		t.Run("names the folder its functions load Next's runtime files from", func(t *testing.T) {
-			namesTheNextRuntimeDir(t, suite, facts)
+		t.Run("answers what a function build needs of it", func(t *testing.T) {
+			answersTheFunctionBuildFacts(t, suite, facts)
 		})
 
 		child.stopsOnSIGTERM(t)

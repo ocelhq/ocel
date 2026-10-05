@@ -54,6 +54,18 @@ function resolveOutputRoot(): string {
   return process.env.OCEL_OUTPUT_DIR || join(process.cwd(), ".ocel/output");
 }
 
+function readMaxFunctionBytes(): number | undefined {
+  const declared = process.env.OCEL_MAX_FUNCTION_BYTES;
+  if (!declared) return undefined;
+  const bytes = Number(declared);
+  if (!Number.isSafeInteger(bytes) || bytes <= 0) {
+    throw new Error(
+      `ocel: OCEL_MAX_FUNCTION_BYTES is "${declared}", and a function's size budget is a positive whole number of bytes`,
+    );
+  }
+  return bytes;
+}
+
 function readNextRuntimeDir(): string {
   const dir = process.env.OCEL_NEXT_RUNTIME_DIR;
   if (!dir) {
@@ -197,10 +209,12 @@ const adapter = {
       ...(originEdge ? originEdge.seedAssets : {}),
     };
 
+    const budgetBytes = readMaxFunctionBytes();
     const { bundles, missingAssets } = packBundles(entryRoutes, {
       entryKeyOf: (route) => route.id,
       assetsOf,
       partitionBy: configClass,
+      ...(budgetBytes !== undefined && { budgetBytes }),
       ...(seeded && { seedAssets }),
     });
     const seededBundleId = seeded ? bundles[0]!.name : undefined;
