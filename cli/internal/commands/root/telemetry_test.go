@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/ocelhq/ocel/cli/internal/clitest/confighome"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 )
@@ -79,5 +81,22 @@ func TestHelpNeverMentionsDoNotTrack(t *testing.T) {
 		if strings.Contains(stdout+stderr, "DO_NOT_TRACK") {
 			t.Errorf("ocel %s mentions DO_NOT_TRACK", strings.Join(args, " "))
 		}
+	}
+}
+
+func TestShellCompletionLeavesTheTelemetryBannerForTheNextCommand(t *testing.T) {
+	inADeployedProject(t)
+	withTelemetryKey(t)
+
+	for _, completion := range []string{cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd} {
+		_, completionErr := executeRoot(t, completion, "deploy", "")
+		if strings.Contains(completionErr, "OCEL_TELEMETRY") {
+			t.Errorf("ocel %s stderr = %q, want no banner where the shell discards it", completion, completionErr)
+		}
+	}
+	_, stderr := executeRoot(t, "deployments", "prune", "--yes")
+
+	if !strings.Contains(stderr, "OCEL_TELEMETRY=0") {
+		t.Errorf("stderr = %q, want the banner on the first command after shell completion", stderr)
 	}
 }
