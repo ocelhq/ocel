@@ -126,7 +126,7 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 			conditions = append(conditions, map[string]string{"Cache-Control": c.GetCacheControl()})
 		}
 		for name, value := range c.GetMetadata() {
-			conditions = append(conditions, map[string]string{"x-amz-meta-" + name: value})
+			conditions = append(conditions, map[string]string{s.cfg.metadataPrefix() + name: value})
 		}
 		signed, err := signer.PresignPostObject(ctx, in, func(o *s3.PresignPostOptions) {
 			o.Expires = ttl
@@ -144,7 +144,7 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 			fields["Cache-Control"] = c.GetCacheControl()
 		}
 		for name, value := range c.GetMetadata() {
-			fields["x-amz-meta-"+name] = value
+			fields[s.cfg.metadataPrefix()+name] = value
 		}
 		return &bucketv1.SignResponse{Target: &bucketv1.PresignedTarget{
 			Url:    signed.URL,

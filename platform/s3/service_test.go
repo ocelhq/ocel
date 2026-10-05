@@ -265,7 +265,7 @@ func TestASessionLivesInTheStoreItGuards(t *testing.T) {
 
 	h.presign(t, "avatars/a.png", 3, "image/png")
 
-	if _, ok := h.store.objects["store"][sessionPrefix+"sess_fixed"]; !ok {
+	if _, ok := h.store.objects["store"][SessionKeyPrefix+"sess_fixed"]; !ok {
 		t.Fatalf("the session is not in the store: %v", h.store.objects["store"])
 	}
 	if _, err := h.svc.List(context.Background(), &bucketv1.ListRequest{Bucket: "store"}); err != nil {
@@ -576,6 +576,32 @@ func TestAStoreThatSignsNoPolicyStillBoundsAnUploadByHead(t *testing.T) {
 	}
 	if completed.GetState() != bucketv1.UploadState_UPLOAD_STATE_EXPIRED {
 		t.Fatalf("state = %v, want the oversized upload refused", completed.GetState())
+	}
+}
+
+func TestABrowserUploadCarriesItsMetadataUnderThePrefixTheStoreReads(t *testing.T) {
+	t.Parallel()
+	for prefix, other := range map[string]string{"": "x-goog-meta-", "x-goog-meta-": "x-amz-meta-"} {
+		h := newHarness(t, func(cfg *Config) { cfg.MetadataPrefix = prefix })
+
+		resp, err := h.svc.Sign(context.Background(), &bucketv1.SignRequest{
+			Bucket:      "store",
+			Key:         "a.png",
+			Operation:   bucketv1.SignedOperation_SIGNED_OPERATION_POST_UPLOAD,
+			Audience:    bucketv1.SignedAudience_SIGNED_AUDIENCE_EXTERNAL,
+			Constraints: &bucketv1.SignConstraints{Metadata: map[string]string{"owner": "ada"}},
+		})
+		if err != nil {
+			t.Fatalf("Sign(POST_UPLOAD) under prefix %q = %v", prefix, err)
+		}
+		want := prefix
+		if want == "" {
+			want = "x-amz-meta-"
+		}
+		fields := resp.GetTarget().GetFields()
+		if fields[want+"owner"] != "ada" || fields[other+"owner"] != "" {
+			t.Errorf("fields under prefix %q = %v, want the metadata as %sowner alone: a store refuses a form field its policy does not name", prefix, fields, want)
+		}
 	}
 }
 

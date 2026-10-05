@@ -67,7 +67,10 @@ describe("storeFilter", () => {
     expect(storeFilter("ocel", "J-1 kv/node")).toBe(
       'labels.ocel-namespace="ocel" AND labels.ocel-project="j-1-kv-node"',
     );
-    const go = await readFile(path.join(repoRoot, "platform", "gcp", "provider", "kv.go"), "utf8");
+    const go = await readFile(
+      path.join(repoRoot, "platform", "gcp", "provider", "labels.go"),
+      "utf8",
+    );
     expect(go).toContain("labels := stackLabels(names, ref)");
   });
 });

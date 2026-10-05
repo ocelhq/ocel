@@ -361,6 +361,21 @@
           }
         }
       }
+    },
+    {
+      "id": "project:shop/environment:pr-42/google_storage_bucket:ocel--shop-pr-42-uploads-9aeaf5ec",
+      "scope": "project:shop/environment:pr-42",
+      "vendor": "gcp",
+      "type": "google_storage_bucket",
+      "name": "ocel--shop-pr-42-uploads-9aeaf5ec",
+      "region": "europe-west1",
+      "properties": {
+        "location": "europe-west1",
+        "storage_class": "STANDARD",
+        "versioning": {
+          "enabled": false
+        }
+      }
     }
   ]
 }

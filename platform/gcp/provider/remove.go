@@ -9,6 +9,8 @@ import (
 
 func (p *Provider) RemoveResource(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	switch binding.Type {
+	case provider.BindingBucket:
+		return p.removeBucket(ctx, binding, progress)
 	case provider.BindingKV:
 		return p.removeKV(ctx, ref, binding, progress)
 	case provider.BindingTopic, provider.BindingTask:

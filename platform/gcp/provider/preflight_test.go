@@ -40,6 +40,29 @@ func declaringAStore(memory int64) provider.DeployPreflight {
 	}
 }
 
+func TestAPublicBucketIsRefusedBeforeAnythingIsReadAndAPrivateOneNeedsNoFeature(t *testing.T) {
+	served := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		t.Errorf("preflight called %s %s, and a bucket needs nothing of the tier's bootstrap to be judged", r.Method, r.URL.Path)
+	}))
+	t.Cleanup(served.Close)
+	p := pushing(t, served.URL)
+	declaring := func(spec provider.BucketSpec) provider.DeployPreflight {
+		return provider.DeployPreflight{
+			Deploy:    provider.DeploySpec{Tier: environment.TierProduction},
+			Resources: []provider.Resource{{Name: "avatars", Type: provider.BindingBucket, Bucket: &spec}},
+		}
+	}
+
+	err := p.PreflightDeploy(context.Background(), declaring(provider.BucketSpec{Public: true}))
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid || !strings.Contains(err.Error(), "avatars") {
+		t.Errorf("PreflightDeploy() of a public bucket = %v, want an %s refusal naming it", err, refusal.CodeInvalid)
+	}
+	if err := p.PreflightDeploy(context.Background(), declaring(provider.BucketSpec{AllowedOrigins: []string{"https://shop.example"}})); err != nil {
+		t.Errorf("PreflightDeploy() of a private bucket = %v, want it admitted", err)
+	}
+}
+
 func TestADeployDeclaringAStoreIsAdmittedOnceTheTierHasItsNetwork(t *testing.T) {
 	if err := withStamp(t, stamp{State: stateComplete, Features: []string{kvFeature}}).PreflightDeploy(context.Background(), declaringAStore(256<<20)); err != nil {
 		t.Errorf("PreflightDeploy() = %v, want a store admitted on a tier whose network is installed", err)

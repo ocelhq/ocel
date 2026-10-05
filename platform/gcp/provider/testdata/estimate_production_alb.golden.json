@@ -426,13 +426,51 @@
       ],
       "monthlyFixed": "49.93",
       "monthlyUsage": "0.00"
+    },
+    {
+      "resource": "project:shop/environment:prod/google_storage_bucket:ocel--shop-prod-uploads-0dd909b8",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Storage",
+          "unit": "GiB-month",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.02",
+          "monthlyCost": "0.20",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GiB-month",
+          "rateRef": "gcp/storage/standard"
+        },
+        {
+          "name": "Class A operations",
+          "unit": "operations",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.000005",
+          "monthlyCost": "0.05",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 operations",
+          "rateRef": "gcp/storage/class-a"
+        },
+        {
+          "name": "Class B operations",
+          "unit": "operations",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000004",
+          "monthlyCost": "0.04",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 operations",
+          "rateRef": "gcp/storage/class-b"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.29"
     }
   ],
   "scopes": [
     {
       "scope": "project:shop",
       "monthlyFixed": "68.46",
-      "monthlyUsage": "8.47"
+      "monthlyUsage": "8.76"
     },
     {
       "scope": "project:shop/shared:production",
@@ -442,7 +480,7 @@
     {
       "scope": "project:shop/environment:prod",
       "monthlyFixed": "49.93",
-      "monthlyUsage": "6.25"
+      "monthlyUsage": "6.54"
     },
     {
       "scope": "project:shop/environment:prod/app:web",
@@ -456,7 +494,7 @@
     }
   ],
   "coverage": {
-    "supported": 13,
+    "supported": 14,
     "free": 11,
     "supportedTypes": [
       "google_artifact_registry_repository",
@@ -487,5 +525,5 @@
     "a realtime gateway is priced at Cloud Run's request-based rate for every hour a socket is open, an upper bound on what an instance holding sockets bills"
   ],
   "monthlyFixed": "68.46",
-  "monthlyUsage": "8.47"
+  "monthlyUsage": "8.76"
 }
