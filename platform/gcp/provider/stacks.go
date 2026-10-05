@@ -51,8 +51,11 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		return nil, err
 	}
 	names := c.Names
-	account := names.WorkloadAccountEmail(spec.Ref.Tier)
 	tasks, declared, err := p.tasksFor(ctx, c, spec)
+	if err != nil {
+		return nil, err
+	}
+	account, err := p.ensureAppAccount(ctx, c, spec, declared)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +121,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err != nil {
 		return nil, err
 	}
-	workers, err := p.provisionWorkers(ctx, c, spec, workerImageOf(app), values, declared, progress)
+	workers, err := p.provisionWorkers(ctx, c, spec, workerImageOf(app), account, values, declared, progress)
 	if err != nil {
 		return nil, err
 	}
@@ -205,6 +208,10 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
+	account, err := p.ensureAppAccount(ctx, c, spec, declared)
+	if err != nil {
+		return nil, err
+	}
 	own, err := p.runtimeEnv(names, spec, tasks)
 	if err != nil {
 		return nil, err
@@ -217,7 +224,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		service:   service,
 		image:     app.Image,
 		env:       values,
-		account:   names.WorkloadAccountEmail(spec.Ref.Tier),
+		account:   account,
 		compute:   provider.ComputeContainer,
 		health:    app.HealthCheckPath,
 		instances: app.Instances,
@@ -232,7 +239,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	deployed := []provider.AppContainer{{
 		Name: app.App, Physical: service, URL: ran.url, Image: app.Image, Revision: ran.revision,
 	}}
-	workers, err := p.provisionWorkers(ctx, c, spec, app.Image, values, declared, progress)
+	workers, err := p.provisionWorkers(ctx, c, spec, app.Image, account, values, declared, progress)
 	if err != nil {
 		return nil, err
 	}

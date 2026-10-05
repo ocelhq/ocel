@@ -246,31 +246,49 @@ func (b bootstrap) readDelayQueue(ctx context.Context, tier environment.Tier) (*
 }
 
 func (b bootstrap) ensureDelayQueue(ctx context.Context, tier environment.Tier) error {
-	client, err := b.clients.Workload().CloudTasks()
+	if err := (topics.Delays{Queue: b.delayQueuePath(tier)}).Ensure(ctx, b.clients.Workload()); err != nil {
+		return err
+	}
+	return b.clients.bindQueueRoles(ctx, tier, workloadMember(b.clients, tier), queueRoles)
+}
+
+func (c *clients) bindQueueRoles(ctx context.Context, tier environment.Tier, member string, wanted []string) error {
+	client, err := c.Workload().CloudTasks()
 	if err != nil {
 		return err
 	}
-	path := b.delayQueuePath(tier)
-	if err := (topics.Delays{Queue: path}).Ensure(ctx, b.clients.Workload()); err != nil {
-		return err
+	path := c.DelayQueuePath(c.region, tier)
+	var refused error
+	for attempt := range bindAttempts {
+		if attempt > 0 && !waited(ctx, attempt) {
+			return ctx.Err()
+		}
+		policy, err := dialled(ctx, func() (*iampb.Policy, error) {
+			return client.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: path})
+		})
+		if err != nil {
+			return fmt.Errorf("read who may delay messages on %s: %w", c.DelayQueue(tier), err)
+		}
+		bindings, changed := boundKeyRoles(policy.GetBindings(), member, queueRoles, wanted)
+		if !changed {
+			return nil
+		}
+		policy.Bindings = bindings
+		_, refused = dialled(ctx, func() (*iampb.Policy, error) {
+			return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: path, Policy: policy})
+		})
+		if refused == nil {
+			return nil
+		}
+		if !isRaced(refused) {
+			break
+		}
 	}
-	policy, err := dialled(ctx, func() (*iampb.Policy, error) {
-		return client.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: path})
-	})
-	if err != nil {
-		return fmt.Errorf("read who may delay messages on %s: %w", b.clients.DelayQueue(tier), err)
-	}
-	bindings, changed := boundKeyRoles(policy.GetBindings(), workloadMember(b.clients, tier), queueRoles, queueRoles)
-	if !changed {
-		return nil
-	}
-	policy.Bindings = bindings
-	if _, err := dialled(ctx, func() (*iampb.Policy, error) {
-		return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: path, Policy: policy})
-	}); err != nil {
-		return fmt.Errorf("let the %s apps delay messages on %s: %w", tier, b.clients.DelayQueue(tier), err)
-	}
-	return nil
+	return fmt.Errorf("let %s delay messages on %s: %w", member, c.DelayQueue(tier), refused)
+}
+
+func isRaced(err error) bool {
+	return stale(err) || status.Code(err) == codes.Aborted || status.Code(err) == codes.FailedPrecondition
 }
 
 func (b bootstrap) purgeDelayQueue(ctx context.Context, tier environment.Tier) error {

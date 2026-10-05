@@ -187,6 +187,25 @@ batches of one, a task's own `concurrency` is not enforced (its worker's is), an
 is not atomic. A deploy that changes a topic's `ordered` is refused while any of its consumers is
 kept, since Pub/Sub cannot change a subscription's ordering: rename the consumers to change it.
 
+Once `tasks` is installed, a deploy also keeps the app's access to the tier's delay queue and to
+the tier's service account, and Google cannot narrow either grant by condition, so you give the
+deploy credential those two roles on exactly those resources, once per tier:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding \
+  ocel-production@my-project.iam.gserviceaccount.com \
+  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --role=roles/iam.serviceAccountAdmin
+gcloud tasks queues add-iam-policy-binding ocel-production-delays \
+  --location=europe-west1 --project=my-project \
+  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --role=roles/cloudtasks.queueAdmin
+```
+
+The account is `<namespace>-<tier>` and the queue `<namespace>-<tier>-delays`, so a project
+with a preview tier needs the same two grants for it. A deploy that lacks one is refused,
+naming it.
+
 ## Realtime
 
 Each environment's realtime resources share one Cloud Run service running the Ocel gateway,
@@ -214,7 +233,26 @@ gcloud services enable firestore.googleapis.com storage.googleapis.com \
 A deploy needs `roles/datastore.user`, `roles/storage.objectAdmin`,
 `roles/cloudkms.cryptoKeyEncrypterDecrypter`, `roles/secretmanager.secretAccessor`,
 `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`, `roles/run.admin`,
-`roles/memorystore.admin`, `roles/pubsub.admin` and `roles/cloudscheduler.admin`.
+`roles/memorystore.admin`, `roles/pubsub.admin`, `roles/cloudscheduler.admin` and
+`roles/iam.serviceAccountCreator`.
+
+Each app runs as a service account of its own, which a deploy creates the first time the app
+ships to a tier and grants only what the app's runtime reads: the namespace's database, the
+tier's key, and for an app that reaches topics, tasks or workers the tier's task database, the
+delay queue and its topics. Granting those takes `roles/resourcemanager.projectIamAdmin`, and
+a deploy holds it under a condition that lets it grant and revoke the four roles an app needs
+and no others:
+
+```bash
+gcloud projects add-iam-policy-binding my-project \
+  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --role=roles/resourcemanager.projectIamAdmin \
+  --condition="title=ocel app grants,expression=api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser'])"
+```
+
+Google limits how many service accounts a project may hold, and every app takes one per tier:
+a deploy that reaches the limit is refused, naming the quota.
+
 A deploy also keeps the realtime secrets of its namespace, and nothing else: grant
 `roles/secretmanager.editor` under a condition naming them. Every realtime secret's id
 starts with the namespace and `_realtime-`, and IAM names a secret by the project's number:

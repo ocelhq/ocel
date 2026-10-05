@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -99,6 +100,46 @@ func TestEveryPushIsSignedAsTheInvokerForTheWorkerItReaches(t *testing.T) {
 		if token == nil || token.ServiceAccountEmail != invoker || token.Audience != "https://worker.run.app/"+consumer.worker {
 			t.Errorf("%s/%s pushes with token %+v, want one minted for %s with the worker's url as audience: an internal Cloud Run service admits no unsigned push",
 				consumer.topic, consumer.consumer, token, invoker)
+		}
+	}
+}
+
+func TestGrantingAPublisherTouchesOnlyTheTopicsNotTheirDeadLetters(t *testing.T) {
+	var mu sync.Mutex
+	var calls []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"etag":"BwXhoLA="}`))
+	}))
+	t.Cleanup(server.Close)
+	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: server.URL}
+	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
+
+	err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: "serviceAccount:app@acme-prod.iam.gserviceaccount.com"}).GrantPublisher(context.Background(), clients)
+	if err != nil {
+		t.Fatalf("GrantPublisher() = %v", err)
+	}
+
+	var written []string
+	for _, call := range calls {
+		if strings.HasPrefix(call, "POST ") && strings.HasSuffix(call, ":setIamPolicy") {
+			written = append(written, call)
+		}
+	}
+	want := []string{
+		"POST /v1/projects/acme-prod/topics/" + names.Topic("orders") + ":setIamPolicy",
+		"POST /v1/projects/acme-prod/topics/" + names.Topic("resize") + ":setIamPolicy",
+	}
+	slices.Sort(written)
+	if !slices.Equal(written, want) {
+		t.Errorf("GrantPublisher() wrote %q, want the policies of the two topics alone", written)
+	}
+	for _, call := range calls {
+		if strings.HasPrefix(call, "PUT ") || strings.Contains(call, "/subscriptions/") || strings.Contains(call, "dead") {
+			t.Errorf("GrantPublisher() called %q, and granting a publisher creates and reads nothing else", call)
 		}
 	}
 }

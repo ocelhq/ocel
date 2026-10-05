@@ -70,6 +70,16 @@ func (n Names) WorkloadAccountEmail(tier environment.Tier) string {
 	return n.WorkloadAccount(tier) + "@" + n.project + accountDomain
 }
 
+const appAccountInfix = "app"
+
+func (n Names) AppAccount(tier environment.Tier, project, app string) string {
+	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), project, app, appAccountInfix)
+}
+
+func (n Names) AppAccountEmail(tier environment.Tier, project, app string) string {
+	return n.AppAccount(tier, project, app) + "@" + n.project + accountDomain
+}
+
 func (n Names) Service(project, env, app, function string) (string, error) {
 	parts := []string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), naming.Sanitize(app)}
 	if function != app {
