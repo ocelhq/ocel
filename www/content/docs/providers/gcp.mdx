@@ -100,8 +100,10 @@ rule comes down with the preview. Each preview hostname is a backend service of 
 the project's backend service quota bounds how many previews a tier answers at once. Each
 deployment of a preview is also answered on a hostname of its own, routed to the Cloud Run
 revision tag that deploy created, so an older deployment keeps serving what it shipped after
-the alias moves on, until `ocel preview prune` or `ocel preview rm` drops it. A project-level
-`domains.preview` is not served here.
+the alias moves on, until `ocel preview prune` or `ocel preview rm` drops it. A project that
+declares its own `domains.preview` wildcard is served the same way: the wildcard's
+certificate is entered on the preview tier's load balancer, and each of the project's
+previews is an exact host rule under it.
 
 [`cloudflare`](/docs/providers/cloudflare) is the edge bought independently of Google.
 Name it and a hostname is forwarded through Cloudflare to a load balancer of its own, which
