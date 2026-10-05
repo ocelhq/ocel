@@ -41,9 +41,12 @@ func (h *Host) FindHealthPath(ctx context.Context, search HealthPathSearch, prog
 	}
 	say(progress, fmt.Sprintf("Waiting up to %s for %s to answer HTTP, then probing %s in turn: %s sets no %s, so the first that answers anything but 404 or 405 is its health check",
 		search.Window, search.App, inWords(healthPathCandidates), search.App, healthKey))
-	found, err := h.stream(ctx, words(findHealthPathCommand(search)), nil, elevation)
+	found, err := h.stream(ctx, watchingStart([]string{containerOf(search.Target)}, findHealthPathCommand(search)), nil, elevation)
 	if err != nil {
-		return "", h.unfound(ctx, search, err.Error(), elevation)
+		return "", h.unfound(ctx, search, err.Error(), false, elevation)
+	}
+	if _, crashed := unstartedIn(found.Stdout); crashed {
+		return "", h.unfound(ctx, search, "", true, elevation)
 	}
 	answers := readPathAnswers(found.Stdout)
 	if found.Code == 0 && len(answers) > 0 && !answers[len(answers)-1].absent() {
@@ -68,18 +71,22 @@ func (h *Host) FindHealthPath(ctx context.Context, search HealthPathSearch, prog
 	if verdict == "" {
 		verdict = fmt.Sprintf("the probe exited %d", found.Code)
 	}
-	return "", h.unfound(ctx, search, verdict, elevation)
+	return "", h.unfound(ctx, search, verdict, false, elevation)
 }
 
-func (h *Host) unfound(ctx context.Context, search HealthPathSearch, verdict, elevation string) error {
+func (h *Host) unfound(ctx context.Context, search HealthPathSearch, verdict string, crashed bool, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	name := containerOf(search.Target)
+	state := h.said(ctx, stateCommand(name), elevation)
+	if crashed || unstartedState(state) {
+		return refusal.Refuse(refusal.CodeNotReady, "start %s on %s: %s%s",
+			search.App, h.named(), h.unstarted(ctx, search.App, name, state, elevation), h.abandon(ctx, search, elevation))
+	}
 	logs := h.said(ctx, logCommand(name), elevation)
 	if logs == "" {
 		logs = noLogOutput
 	}
-	state := h.said(ctx, stateCommand(name), elevation)
 	return refusal.Refuse(refusal.CodeNotReady,
 		"find %s's health path on %s: %s\nstate: %s\nlogs (last %s lines): %s\nSet %q on %s to skip probing, e.g. %s%s",
 		search.App, h.named(), verdict, state, appLogTail, logs, healthKey, search.App, healthPathExample, h.abandon(ctx, search, elevation))

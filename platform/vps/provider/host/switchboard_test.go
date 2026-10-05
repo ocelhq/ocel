@@ -170,7 +170,9 @@ func TestAReleaseGatesCutsOverAndDrainsInsideTheSwitchboardAndNeverReloadsTheFro
 	inside := words([]string{"docker", "exec", SwitchboardContainer, SwitchboardMounted})
 	for _, verb := range []string{"gate", "cutover", "idle"} {
 		at := slices.IndexFunc(box.commands(), func(command string) bool {
-			return strings.Contains(command, inside+" "+quoted(verb))
+			asked := inside + " " + quoted(verb)
+			watched := quoted(asked)
+			return strings.Contains(command, asked) || strings.Contains(command, watched[1:len(watched)-1])
 		})
 		if at < 0 {
 			t.Errorf("the release never ran %s inside %s: %q", verb, SwitchboardContainer, box.commands())
