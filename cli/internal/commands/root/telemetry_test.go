@@ -75,13 +75,23 @@ func TestNoTelemetryBannerWhenOptedOut(t *testing.T) {
 func TestHelpNeverMentionsDoNotTrack(t *testing.T) {
 	withTelemetryKey(t)
 
-	for _, args := range [][]string{{"--help"}, {"deploy", "--help"}, {"deployments", "--help"}} {
-		stdout, stderr := executeRoot(t, args...)
+	for _, path := range commandPaths(newCommand().root) {
+		stdout, stderr := executeRoot(t, append(path, "--help")...)
 
 		if strings.Contains(stdout+stderr, "DO_NOT_TRACK") {
-			t.Errorf("ocel %s mentions DO_NOT_TRACK", strings.Join(args, " "))
+			t.Errorf("ocel %s --help mentions DO_NOT_TRACK", strings.Join(path, " "))
 		}
 	}
+}
+
+func commandPaths(cmd *cobra.Command) [][]string {
+	paths := [][]string{{}}
+	for _, child := range cmd.Commands() {
+		for _, path := range commandPaths(child) {
+			paths = append(paths, append([]string{child.Name()}, path...))
+		}
+	}
+	return paths
 }
 
 func TestShellCompletionLeavesTheTelemetryBannerForTheNextCommand(t *testing.T) {
