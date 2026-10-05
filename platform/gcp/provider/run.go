@@ -335,16 +335,17 @@ func (p *Provider) writeRelease(ctx context.Context, clients *clients, services 
 			if err != nil {
 				return err
 			}
-			desired.Etag = current.Etag
-			desired.Traffic = heldTraffic(current)
+			attempt := *desired
+			attempt.Etag = current.Etag
+			attempt.Traffic = heldTraffic(current)
 			if recorded, found := current.Annotations[rollbacksAnnotation]; found {
-				desired.Annotations = map[string]string{rollbacksAnnotation: recorded}
+				attempt.Annotations = map[string]string{rollbacksAnnotation: recorded}
 			}
 			if opened, _ := openingOf(desired); opened != nil && isOpen(current) {
-				desired.InvokerIamDisabled, desired.IapEnabled = opened.InvokerIamDisabled, opened.IapEnabled
+				attempt.InvokerIamDisabled, attempt.IapEnabled = opened.InvokerIamDisabled, opened.IapEnabled
 			}
 			return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-				return services.Projects.Locations.Services.Patch(path, desired).Context(ctx).Do(call...)
+				return services.Projects.Locations.Services.Patch(path, &attempt).Context(ctx).Do(call...)
 			})
 		})
 	}

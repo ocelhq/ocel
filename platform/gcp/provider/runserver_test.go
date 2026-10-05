@@ -31,6 +31,7 @@ type runServer struct {
 	policies []*run.GoogleIamV1Policy
 
 	patchConflicts int
+	onConflict     func(*run.GoogleCloudRunV2Service)
 	patchTries     int
 
 	uriEachRevision bool
@@ -197,6 +198,9 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.patchConflicts > 0 {
 		s.patchConflicts--
+		if s.onConflict != nil {
+			s.onConflict(s.service)
+		}
 		conflicted(w, "the service was changed under this release")
 		return
 	}
