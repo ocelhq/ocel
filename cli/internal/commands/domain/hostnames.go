@@ -16,7 +16,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -29,10 +31,14 @@ func runDomainList(ctx context.Context, invocation commands.Invocation, cwd stri
 		return err
 	}
 
+	asJSON := invocation.Presentation(stdout).Format == terminal.FormatJSON
 	if !opts.preview {
 		resp, err := listProductionHostnames(ctx, invocation, cfg)
 		if err != nil {
 			return err
+		}
+		if asJSON {
+			return terminal.WriteResultJSON(stdout, domainListResult(resp))
 		}
 		renderBoundHostnames(stdout, resp, filepath.Base(cfg.Path))
 		return nil
@@ -41,8 +47,39 @@ func runDomainList(ctx context.Context, invocation commands.Invocation, cwd stri
 	if err != nil {
 		return err
 	}
+	if asJSON {
+		return terminal.WriteResultJSON(stdout, previewDomainResult(resp))
+	}
 	renderGlobalDomain(stdout, resp)
 	return nil
+}
+
+func domainListResult(resp *contractv1.GetHostnameStatusResponse) *resultv1.DomainListResult {
+	result := &resultv1.DomainListResult{Hosts: make([]*resultv1.DomainHostStatus, 0, len(resp.GetHostnames()))}
+	for _, host := range resp.GetHostnames() {
+		result.Hosts = append(result.Hosts, domainHostStatus(host))
+	}
+	return result
+}
+
+func previewDomainResult(resp *contractv1.GetPreviewWildcardResponse) *resultv1.PreviewDomainResult {
+	domain := resp.GetWildcard()
+	cert := domain.GetCertificate()
+	return &resultv1.PreviewDomainResult{
+		BaseDomain:        domain.GetBaseDomain(),
+		EdgeScope:         domain.GetEdgeScope(),
+		RouteInstalled:    domain.GetRouteInstalled(),
+		CertificateId:     cert.GetCertificateId(),
+		CertificateStatus: cert.GetCertificateStatus(),
+		RenewalStatus:     domain.GetRenewalStatus(),
+		ExpiresAt:         terminal.EpochRFC3339(domain.GetExpiresAt()),
+		ExpiringSoon:      domain.GetExpiringSoon(),
+		RecordsWritten:    cert.GetRecordsWritten(),
+		ManualRecords:     cert.GetManualRecords(),
+		LastProbeAt:       terminal.EpochRFC3339(cert.GetLastProbeAt()),
+		LastProbeOk:       cert.GetLastProbeOk(),
+		Projects:          resp.GetProjects(),
+	}
 }
 
 func listProductionHostnames(ctx context.Context, invocation commands.Invocation, cfg *project.Project) (resp *contractv1.GetHostnameStatusResponse, err error) {

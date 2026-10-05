@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -426,6 +428,101 @@ func TestDomainListListsThisProjectsOwnHostnamesWithoutPreview(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout = %q, want it to name %q: `ocel domain ls` lists what this project has bound", out, want)
 		}
+	}
+}
+
+func TestDomainListAsJSONPrintsThisProjectsHostnamesAsOneEnvelope(t *testing.T) {
+	project := deployedProject(t, productionConfig("zone", "shop.app.com"))
+	attach(t, project)
+	useJSONOutput(t)
+	invocation := newTestInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{}, &stdout); err != nil {
+		t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var listed resultv1.DomainListResult
+	clitest.DecodeResultInto(t, stdout.String(), &listed)
+	if len(listed.GetHosts()) != 1 {
+		t.Fatalf("hosts = %v, want the one hostname the project binds", listed.GetHosts())
+	}
+	if host := listed.GetHosts()[0]; host.GetHostname() != "shop.app.com" || !host.GetDeclared() || !host.GetReady() {
+		t.Errorf("host = %v, want shop.app.com declared and ready", host)
+	}
+	if evs := clitest.RunEvents(t, stderr.String()); len(evs) == 0 || !evs[len(evs)-1].GetSummary().GetSuccess() {
+		t.Errorf("stderr = %q, want the run's events ending in a successful summary", stderr.String())
+	}
+}
+
+func TestDomainListAsJSONPrintsAnEmptyListForAProjectThatServesNoHostname(t *testing.T) {
+	project := deployedProject(t, productionConfig("zone"))
+	useJSONOutput(t)
+	invocation := newTestInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{}, &stdout); err != nil {
+		t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	if data := clitest.DecodeResult(t, stdout.String()); !reflect.DeepEqual(data["hosts"], []any{}) {
+		t.Errorf("data = %v, want an empty hosts list", data)
+	}
+}
+
+func TestDomainListWithPreviewAsJSONPrintsTheGlobalDomainAndItsProjects(t *testing.T) {
+	project := previewProject(t)
+	writeZonedPreviewConfig(t, project.Root)
+	requireValidation(project, "preview.acme.com")
+	project.Provider.ReportCertificate(provider.CertificateHealth{
+		Terminates:   true,
+		Issued:       true,
+		Covers:       true,
+		Status:       "ISSUED",
+		Renewal:      "you placed it on this box and you renew it",
+		ExpiresAt:    1755500000,
+		ExpiringSoon: true,
+	})
+	useWildcard(t, project)
+	servedOnWildcard(t, project, "shop")
+	useJSONOutput(t)
+	invocation := newTestInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout); err != nil {
+		t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var domain resultv1.PreviewDomainResult
+	clitest.DecodeResultInto(t, stdout.String(), &domain)
+	if domain.GetBaseDomain() != "preview.acme.com" || !domain.GetRouteInstalled() || domain.GetEdgeScope() != "fake-account" {
+		t.Errorf("domain = %v, want preview.acme.com with its route installed on fake-account", &domain)
+	}
+	if domain.GetCertificateStatus() != "ISSUED" || domain.GetExpiresAt() != "2025-08-18T06:53:20Z" || !domain.GetExpiringSoon() {
+		t.Errorf("domain = %v, want the issued certificate expiring soon at an RFC 3339 time", &domain)
+	}
+	if !slices.Contains(domain.GetProjects(), "shop") || !slices.Contains(domain.GetRecordsWritten(), "_ocel.preview.acme.com CNAME _target.validations.fake.invalid") {
+		t.Errorf("domain = %v, want the projects served and the records ocel wrote", &domain)
+	}
+}
+
+func TestDomainListWithPreviewAsJSONNamesNoDomainWhenNoneIsConfigured(t *testing.T) {
+	project := previewProject(t)
+	useJSONOutput(t)
+	invocation := newTestInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{preview: true}, &stdout); err != nil {
+		t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	data := clitest.DecodeResult(t, stdout.String())
+	if data["baseDomain"] != "" || !reflect.DeepEqual(data["projects"], []any{}) {
+		t.Errorf("data = %v, want no base domain and no projects", data)
 	}
 }
 
