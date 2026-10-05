@@ -8,8 +8,8 @@ import { resetConfigMemo } from "../src/config.mjs";
 import { IMAGE_PASSTHROUGH } from "../src/contract.mjs";
 import { optimize } from "../src/optimize.mjs";
 import type { UpstreamDeps } from "../src/upstream.mjs";
-import { configHash, imageConfig, payload, storeWithConfig } from "./fixtures.mjs";
-import { animatedGif, solid } from "./images.mjs";
+import { configHash, imageConfig, payload, storeWithConfig } from "../test-support/fixtures.mjs";
+import { animatedGif, solid } from "../test-support/images.mjs";
 
 type LookupCallback = (err: Error | null, addresses: LookupAddress[]) => void;
 

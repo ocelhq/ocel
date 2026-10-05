@@ -1,8 +1,12 @@
+import { resetConfigMemo } from "@framework/next-image-optimizer/config";
+import {
+  imageConfig,
+  payload,
+  storeWithConfig,
+} from "@framework/next-image-optimizer/test-support/fixtures";
+import { solid } from "@framework/next-image-optimizer/test-support/images";
 import { beforeEach, expect, test } from "vitest";
-import { resetConfigMemo } from "../src/config.mjs";
 import { handle } from "../src/index.mjs";
-import { imageConfig, payload, storeWithConfig } from "./fixtures.mjs";
-import { solid } from "./images.mjs";
 
 beforeEach(() => resetConfigMemo());
 

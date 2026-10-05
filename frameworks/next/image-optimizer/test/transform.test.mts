@@ -3,8 +3,8 @@ import { BootstrapError, ImageError } from "../src/errors.mjs";
 import { sharp } from "../src/sharp.mjs";
 import { AVIF, GIF, ICO, JPEG, PNG, SVG, WEBP } from "../src/sniff.mjs";
 import { fallbackOr400, transform } from "../src/transform.mjs";
-import { imageConfig } from "./fixtures.mjs";
-import { animatedGif, ico, solid, svg } from "./images.mjs";
+import { imageConfig } from "../test-support/fixtures.mjs";
+import { animatedGif, ico, solid, svg } from "../test-support/images.mjs";
 
 function input(bytes: Uint8Array, overrides: Record<string, unknown> = {}) {
   return {

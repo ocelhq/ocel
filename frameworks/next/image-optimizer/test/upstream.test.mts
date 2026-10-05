@@ -4,8 +4,8 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, test } from "vitest";
 import { isReachableAddress } from "../src/addresses.mjs";
 import { fetchUpstream, guardedLookup, type UpstreamDeps } from "../src/upstream.mjs";
-import { imageConfig } from "./fixtures.mjs";
-import { solid } from "./images.mjs";
+import { imageConfig } from "../test-support/fixtures.mjs";
+import { solid } from "../test-support/images.mjs";
 
 type LookupCallback = (err: Error | null, addresses: LookupAddress[]) => void;
 
@@ -285,7 +285,7 @@ describe("the lookup's all contract", () => {
   test("a resolver failure is relayed rather than swallowed", async () => {
     const failing: UpstreamDeps = {
       lookup: ((_h: string, _o: unknown, cb: LookupCallback) =>
-        cb(new Error("ENOTFOUND"))) as UpstreamDeps["lookup"],
+        cb(new Error("ENOTFOUND"), [])) as UpstreamDeps["lookup"],
       isReachable: allowLoopback,
     };
     const error = await new Promise<unknown>((resolve) =>
