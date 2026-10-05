@@ -56,6 +56,7 @@ func RunPorts(t *testing.T, p provider.Provider) {
 	t.Run("Routers", func(t *testing.T) { RunRouters(t, facts, p.Edges(), p.Routers()) })
 	t.Run("DNS", func(t *testing.T) { RunDNS(t, facts, p.DNS()) })
 	t.Run("Workers", func(t *testing.T) { RunWorkers(t, facts) })
+	t.Run("FunctionBuild", func(t *testing.T) { RunFunctionBuild(t, facts) })
 	t.Run("KVStores", func(t *testing.T) { RunKVStores(t, facts) })
 	t.Run("Realtime", func(t *testing.T) { RunRealtime(t, facts) })
 	t.Run("Logs", func(t *testing.T) { RunLogs(t, facts, p.Logs()) })

@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployrecord"
@@ -244,6 +245,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			command:        "ocel preview up",
 			containerArchs: facts.containerArchs,
 			workerCeilings: facts.workerCeilings,
+			host:           build.ReadHost(provider.Facts()),
 			urls:           facts.urls,
 			dry:            opts.dry,
 			enabled:        !opts.dry && browser,

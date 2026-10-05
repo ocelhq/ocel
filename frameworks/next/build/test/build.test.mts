@@ -31,6 +31,7 @@ function app(overrides: Partial<NextBuild> = {}): NextBuild {
     cwd: nextApp(),
     outputDir: "/out/apps/web",
     deploymentId: "0123456789abcdef0123456789abcdef",
+    nextRuntimeDir: "/var/host/next",
     ...overrides,
   };
 }
@@ -110,6 +111,17 @@ describe("buildNext", () => {
     const env = await envOf(app());
     expect(env.OCEL_EDGE_KIND).toBe("");
     expect(env.OCEL_ALLOW_DEGRADED).toBe("");
+  });
+
+  it("passes the directory the host loads Next's runtime files from into the build", async () => {
+    const env = await envOf(app({ nextRuntimeDir: "/opt/elsewhere/next" }));
+    expect(env.OCEL_NEXT_RUNTIME_DIR).toBe("/opt/elsewhere/next");
+  });
+
+  it("names no Next runtime directory when the build request names none, for the adapter to refuse", async () => {
+    const { nextRuntimeDir: _, ...unnamed } = app();
+    const env = await envOf(unnamed);
+    expect(env.OCEL_NEXT_RUNTIME_DIR).toBe("");
   });
 
   it("builds for production whatever NODE_ENV the shell sets", async () => {

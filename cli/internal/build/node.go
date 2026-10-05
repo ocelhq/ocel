@@ -32,6 +32,8 @@ type nodeAppBuild struct {
 	AllowDegraded []string          `json:"allowDegraded,omitempty"`
 	Entrypoint    string            `json:"entrypoint,omitempty"`
 	FunctionDir   string            `json:"functionDir,omitempty"`
+
+	NextRuntimeDir string `json:"nextRuntimeDir,omitempty"`
 }
 
 var buildOwnedNames = []string{processenv.AppFolderEnvVar, processenv.PhaseEnvVar, "PATH"}

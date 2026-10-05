@@ -373,3 +373,12 @@ func TestAVariablesKeyThatNamesNoKMSKeyIsRefused(t *testing.T) {
 		t.Errorf("error = %q, want it to name the option", err)
 	}
 }
+
+func TestAWSDeclaresTheDirectoryItsFunctionsLoadNextRuntimeFilesFrom(t *testing.T) {
+	t.Parallel()
+
+	p := NewProvider(Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
+	if got := p.Facts().NextRuntimeDir; got != "/opt/ocel/next" {
+		t.Errorf("Facts().NextRuntimeDir = %q, want /opt/ocel/next", got)
+	}
+}

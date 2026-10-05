@@ -35,6 +35,7 @@ import (
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/statedir"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -1678,7 +1679,7 @@ export default {
 
 func stubAppBuildRecorder(dependencies *Dependencies, built *bool) {
 	stubRecordedDeploymentIDs(dependencies)
-	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 		*built = true
 		return functionsOnDisk(cfg)
 	}
@@ -1687,7 +1688,7 @@ func stubAppBuildRecorder(dependencies *Dependencies, built *bool) {
 func captureBuildEnv(dependencies *Dependencies) *map[string]map[string]string {
 	stubRecordedDeploymentIDs(dependencies)
 	var got map[string]map[string]string
-	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, envByApp map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, envByApp map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 		got = envByApp
 		return functionsOnDisk(cfg)
 	}
@@ -1716,4 +1717,47 @@ func storedValue(t *testing.T, fixture clitest.FakeProject, key string) variable
 		t.Fatalf("read %s: %v", key, err)
 	}
 	return value
+}
+
+func recordingHost(dependencies *Dependencies) *build.Host {
+	handed := &build.Host{}
+	buildApps := dependencies.BuildApps
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
+		*handed = host
+		return buildApps(ctx, cfg, env, archs, workers, host, log)
+	}
+	return handed
+}
+
+func TestDeployBuildsAgainstTheNextCacheHandlerFolderItsProviderDeclares(t *testing.T) {
+	fixture := setUpDeployProject(t)
+	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.NextRuntimeDir = "/var/host/next" })
+	addAppToFixtureConfig(t, fixture.Root)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, apiFunction())
+	handed := recordingHost(&dependencies)
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if handed.NextRuntimeDir != "/var/host/next" {
+		t.Errorf("the build was handed the Next runtime directory %q, want the one the provider declares", handed.NextRuntimeDir)
+	}
+}
+
+func TestPreviewUpBuildsAgainstTheNextCacheHandlerFolderItsProviderDeclares(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.NextRuntimeDir = "/var/host/next" })
+	addAppToFixtureConfig(t, fixture.Root)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, apiFunction())
+	stubGit(&dependencies, "feature", "")
+	handed := recordingHost(&dependencies)
+
+	previewUp(t, fixture, dependencies, previewUpOptions{name: "staging", persistent: true})
+	if handed.NextRuntimeDir != "/var/host/next" {
+		t.Errorf("the build was handed the Next runtime directory %q, want the one the provider declares", handed.NextRuntimeDir)
+	}
 }

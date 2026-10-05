@@ -13,7 +13,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { boundCacheTags } from "@framework/next-cache/cache-tags";
 import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
@@ -54,11 +54,15 @@ function resolveOutputRoot(): string {
   return process.env.OCEL_OUTPUT_DIR || join(process.cwd(), ".ocel/output");
 }
 
-const cacheHandlerPath = "/opt/ocel/next/cache-handler.cjs";
-const useCacheHandlerPaths = {
-  default: "/opt/ocel/next/use-cache-default.cjs",
-  remote: "/opt/ocel/next/use-cache-remote.cjs",
-};
+function readNextRuntimeDir(): string {
+  const dir = process.env.OCEL_NEXT_RUNTIME_DIR;
+  if (!dir) {
+    throw new Error(
+      "ocel: OCEL_NEXT_RUNTIME_DIR names no directory the host loads Next's runtime files from, so this build could not be served — build through `ocel build` or `ocel deploy` for a provider that serves Next apps",
+    );
+  }
+  return dir;
+}
 
 async function installCacheHandler(): Promise<string> {
   const dest = join(process.cwd(), ".ocel", "cache-handler.cjs");
@@ -966,10 +970,12 @@ async function patchCacheHandlers(distDir: string): Promise<void> {
     return;
   }
   if (!manifest.config) return;
-  manifest.config.cacheHandler = cacheHandlerPath;
+  const dir = readNextRuntimeDir();
+  manifest.config.cacheHandler = posix.join(dir, "cache-handler.cjs");
   manifest.config.cacheHandlers = {
     ...(manifest.config.cacheHandlers as Record<string, string> | undefined),
-    ...useCacheHandlerPaths,
+    default: posix.join(dir, "use-cache-default.cjs"),
+    remote: posix.join(dir, "use-cache-remote.cjs"),
   };
   await writeFile(manifestPath, JSON.stringify(manifest));
 }

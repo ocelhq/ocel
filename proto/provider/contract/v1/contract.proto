@@ -104,6 +104,8 @@ message ProviderFacts {
   repeated string computes = 2;
 
   repeated WorkerCeiling worker_ceilings = 3;
+
+  string next_runtime_dir = 4;
 }
 
 message UsePreviewWildcardRequest {

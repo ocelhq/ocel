@@ -45,7 +45,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) 
 	}
 
 	ran := false
-	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
 		ran = true
 		return nil
 	}}
@@ -103,7 +103,7 @@ func TestAGoAppWhoseModuleDeclaresTasksCarriesTheWorkerAsASecondBinary(t *testin
 		Apps: []project.App{{Name: "worker", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
 	}
 
-	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
+	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
 	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestAGoAppWhoseDiscoveryFolderIsAModuleOfItsOwnCarriesNoWorkerAndGetsNothin
 		Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
 	}
 
-	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
+	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
 	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	}
 
 	ran := false
-	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
 		ran = true
 		return nil
 	}}
@@ -222,7 +222,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	}
 
 	ran := false
-	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
 		ran = true
 		return nil
 	}}

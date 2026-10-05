@@ -55,7 +55,7 @@ func buildingWithWorkers(t *testing.T, cfg *project.Project, workers HostedWorke
 			}
 			return image.Image{Ref: base.Repository + "@sha256:" + strings.Repeat("b", 64)}, nil
 		},
-	}.apps(context.Background(), cfg, nil, map[string]string{"web": ""}, workers, Log{})
+	}.apps(context.Background(), cfg, nil, map[string]string{"web": ""}, workers, Host{}, Log{})
 	return built, added, err
 }
 

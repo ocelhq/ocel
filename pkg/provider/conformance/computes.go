@@ -28,21 +28,21 @@ func namesTheComputesItRuns(t *testing.T, suite Suite, facts *contractv1.Provide
 		}
 	}
 
-	declared := computesDeclared(t, suite)
+	declared := readDeclaredFacts(t, suite).Computes
 	if want := provider.ComputeNames(declared); !slices.Equal(served, want) {
 		t.Errorf("ProviderFacts.computes = %v, want %v — the RPC answers what Computes() answers, order included", served, want)
 	}
 }
 
-func computesDeclared(t *testing.T, suite Suite) []provider.Compute {
+func readDeclaredFacts(t *testing.T, suite Suite) provider.Facts {
 	t.Helper()
 
 	if suite.Server.New == nil {
-		t.Fatal("the suite has no Spec.New, so nothing can read Computes() back off the provider the RPC server is serving")
+		t.Fatal("the suite has no Spec.New, so nothing can read Facts() back off the provider the RPC server is serving")
 	}
 	p, err := suite.Server.New(context.Background(), provider.Settings{Options: suite.Options})
 	if err != nil {
-		t.Fatalf("New() error = %v, want a provider to read Computes() from", err)
+		t.Fatalf("New() error = %v, want a provider to read Facts() from", err)
 	}
-	return p.Facts().Computes
+	return p.Facts()
 }
