@@ -74,7 +74,7 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 			return result, nil
 		}
 	}
-	if b.unsocket && strings.Contains(command, "docker version") {
+	if b.unsocket && strings.HasPrefix(command, "docker version") {
 		return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, nil
 	}
 	if read, named := b.proxying(command, input); named {
