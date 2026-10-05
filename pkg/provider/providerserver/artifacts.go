@@ -88,7 +88,7 @@ func discardStaged(staged []provider.Upload) {
 }
 
 func overlayFor(base map[string][]byte, fn *contractv1.ManifestFunction, routing *provider.RoutingSpec) map[string][]byte {
-	if routing == nil || routeOf(fn) != routing.Entry {
+	if routing == nil || resolveRouteID(fn) != routing.Entry {
 		return base
 	}
 	overlay := make(map[string][]byte, len(base)+1)
@@ -97,7 +97,7 @@ func overlayFor(base map[string][]byte, fn *contractv1.ManifestFunction, routing
 	return overlay
 }
 
-func routeOf(fn *contractv1.ManifestFunction) string {
+func resolveRouteID(fn *contractv1.ManifestFunction) string {
 	if route := fn.GetRouteId(); route != "" {
 		return route
 	}

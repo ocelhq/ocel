@@ -105,7 +105,7 @@ func (r *deployRun) imageFunction(
 }
 
 func findStaticSourceDir(root string, entry provider.AppEntry, fn *contractv1.ManifestFunction, routing *provider.RoutingSpec) string {
-	if routing == nil || routeOf(fn) != routing.Entry {
+	if routing == nil || resolveRouteID(fn) != routing.Entry {
 		return ""
 	}
 	return buildoutput.AppRoot(root, entry.App)

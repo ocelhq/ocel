@@ -1307,7 +1307,7 @@ func entryLogicalName(app *contractv1.ManifestApp, entry string) string {
 		return ""
 	}
 	for _, fn := range app.GetServerless().GetFunctions() {
-		if routeOf(fn) == entry {
+		if resolveRouteID(fn) == entry {
 			return fn.GetLogicalName()
 		}
 	}
@@ -1378,7 +1378,7 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 	for _, fn := range entry.Manifest.GetServerless().GetFunctions() {
 		logical = append(logical, fn.GetLogicalName())
 		if url := urlByLogical[fn.GetLogicalName()]; url != "" {
-			urls[routeOf(fn)] = url
+			urls[resolveRouteID(fn)] = url
 		}
 	}
 	coordinate := appCoordinate(r.spec, entry.App, entry.Build.Release())
