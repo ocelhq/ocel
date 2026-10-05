@@ -3,6 +3,7 @@ package env
 import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
@@ -42,6 +43,13 @@ func (o envOptions) tier() environmentv1.Tier {
 
 func wireCoordinate(slug, key string, opts envOptions) *variablestorev1.Coordinate {
 	return &variablestorev1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
+}
+
+func newResultCoordinate(c *variablestorev1.Coordinate) *resultv1.EnvCoordinate {
+	if c == nil {
+		return nil
+	}
+	return &resultv1.EnvCoordinate{Project: c.GetSlug(), Folder: c.GetFolder(), Key: c.GetKey(), Environment: c.GetEnvironment()}
 }
 
 func envCoordinate(key string, opts envOptions) variables.Coordinate {

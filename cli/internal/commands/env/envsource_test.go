@@ -401,3 +401,67 @@ func execDescriptor(t *testing.T) envsource.Descriptor {
 	}
 	return descriptor
 }
+
+func TestEnvSourceAsJSONDescribesWhereATierReadsFromAndHowItsLastSyncWent(t *testing.T) {
+	project := setUpEnvSourceFixture(t)
+	root := project.Root
+	source := serveInfisicalProject(t, map[string]string{"STRIPE_API_KEY": "sk"})
+	setCredentials(t, root)
+	registerEnvSource(t, project, environment.TierProduction, source.at(envsource.WriteValues))
+	envSync(t, root)
+
+	var stdout, stderr bytes.Buffer
+	if err := runEnvSource(context.Background(), newJSONDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvSource err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	got := clitest.DecodeResult(t, stdout.String())
+	for field, want := range map[string]any{
+		"tier":                "TIER_PRODUCTION",
+		"envSource":           "infisical:p-1/prod",
+		"ownsValues":          true,
+		"scheduled":           true,
+		"canUpdate":           true,
+		"canCreate":           true,
+		"lastError":           "",
+		"configuredEnvSource": "infisical:p-1/prod",
+		"devEnvSource":        "dotenv",
+		"devLocalFile":        ".env.local",
+	} {
+		if got[field] != want {
+			t.Errorf("source json %s = %v, want %v", field, got[field], want)
+		}
+	}
+	if synced, _ := got["lastSuccessAt"].(string); synced == "" {
+		t.Errorf("source json = %v, want the time of the last sync", got)
+	}
+	links, _ := got["links"].([]any)
+	if len(links) == 0 {
+		t.Fatalf("source json links = %v, want the env source's links", got["links"])
+	}
+	if link, _ := links[0].(map[string]any); link["folder"] != "" || !strings.HasPrefix(link["url"].(string), source.URL) {
+		t.Errorf("source json link = %v, want the root folder's URL as fields", links[0])
+	}
+	if credentials, _ := got["credentials"].([]any); !slices.Contains(credentials, any("INFISICAL_CLIENT_SECRET")) {
+		t.Errorf("source json credentials = %v, want the key its login is stored under", got["credentials"])
+	}
+	if strings.Contains(stdout.String(), "client-secret") {
+		t.Errorf("stdout = %q, want the credential's name and never its value", stdout.String())
+	}
+	if len(clitest.RunEvents(t, stderr.String())) == 0 {
+		t.Errorf("stream = %q, want the run's events there", stderr.String())
+	}
+}
+
+func TestEnvSourceAsJSONNamesTheEnvSourceTheConfigNamesInstead(t *testing.T) {
+	project := setUpEnvSourceFixture(t)
+
+	var stdout, stderr bytes.Buffer
+	if err := runEnvSource(context.Background(), newJSONDependencies(&stderr), project.Root, envOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvSource err = %v; stderr=%s", err, stderr.String())
+	}
+	got := clitest.DecodeResult(t, stdout.String())
+	if got["envSource"] != "builtin" || got["ownsValues"] != false || got["configuredEnvSource"] != "infisical:p-1/prod" {
+		t.Errorf("source json = %v, want builtin read while the config names infisical", got)
+	}
+}

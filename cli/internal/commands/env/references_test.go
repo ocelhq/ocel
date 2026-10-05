@@ -212,3 +212,54 @@ func TestEveryEnvCommandTreatsAReferenceAsAPointer(t *testing.T) {
 		}
 	})
 }
+
+func TestListingReferencesAsJSONNamesTheCellAndWhatReadsIt(t *testing.T) {
+	project := setUpEnvFixture(t)
+	root := project.Root
+	envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+	billing := variablestore.Scope{Project: "billing", Tier: environment.TierProduction}
+	consumer := variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/api", Key: "STRIPE_API_KEY"}}
+	target := variablestore.Target{Project: clitest.FixtureSlug, Cell: variablestore.Cell{Key: "STRIPE_API_KEY"}}
+	if _, err := valuesOf(project).SetReference(context.Background(), billing, consumer, target); err != nil {
+		t.Fatalf("seed the consumer: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := runEnvRefs(context.Background(), newJSONDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvRefs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	got := clitest.DecodeResult(t, stdout.String())
+	if strings.Contains(stdout.String(), "sk_live_secret") {
+		t.Errorf("stdout = %q, want no value", stdout.String())
+	}
+	cell, _ := got["coordinate"].(map[string]any)
+	if cell["project"] != clitest.FixtureSlug || cell["key"] != "STRIPE_API_KEY" || got["tier"] != "TIER_PRODUCTION" {
+		t.Errorf("refs json = %v, want the cell and tier asked about", got)
+	}
+	references, _ := got["references"].([]any)
+	if len(references) != 1 {
+		t.Fatalf("refs json references = %v, want the one consumer", got["references"])
+	}
+	reference, _ := references[0].(map[string]any)
+	for field, want := range map[string]any{"project": "billing", "folder": "/api", "key": "STRIPE_API_KEY", "environment": ""} {
+		if reference[field] != want {
+			t.Errorf("refs json reference %s = %v, want %v", field, reference[field], want)
+		}
+	}
+	if len(clitest.RunEvents(t, stderr.String())) == 0 {
+		t.Errorf("stream = %q, want the run's events there", stderr.String())
+	}
+}
+
+func TestListingReferencesAsJSONOfAnUnreferencedValueListsNone(t *testing.T) {
+	root := setUpEnvFixture(t).Root
+
+	var stdout, stderr bytes.Buffer
+	if err := runEnvRefs(context.Background(), newJSONDependencies(&stderr), root, "POSTHOG_ID", envOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvRefs err = %v; stderr=%s", err, stderr.String())
+	}
+	if references, ok := clitest.DecodeResult(t, stdout.String())["references"].([]any); !ok || len(references) != 0 {
+		t.Errorf("refs json = %q, want an empty references list", stdout.String())
+	}
+}

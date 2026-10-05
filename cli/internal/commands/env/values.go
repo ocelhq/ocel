@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
@@ -127,11 +128,12 @@ func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, 
 		if err != nil {
 			return err
 		}
-		resp, err := variableStore.GetValue(ctx, &variablestorev1.GetValueRequest{
+		req := &variablestorev1.GetValueRequest{
 			Tier:       opts.tier(),
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 			Reveal:     opts.reveal,
-		})
+		}
+		resp, err := variableStore.GetValue(ctx, req)
 		if err != nil {
 			return err
 		}
@@ -143,10 +145,15 @@ func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, 
 			if err := consentToReveal(definitions, key, opts, run.Phase(progressv1.Phase_PHASE_CHECK).Warn); err != nil {
 				return err
 			}
+		}
+		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+			return writeEnvGetJSON(stdout, req, resp)
+		}
+		m := resp.GetMetadata()
+		if opts.reveal {
 			fmt.Fprintln(stdout, resp.GetValue())
 			return nil
 		}
-		m := resp.GetMetadata()
 		if target := m.GetTarget(); target != nil {
 			fmt.Fprintf(stdout, "%s references %s — version %d, pointed %s\n", describeCell(key, opts), describeCoordinate(target), m.GetVersion(), terminal.EpochDate(m.GetUpdatedAt()))
 			fmt.Fprintln(stdout, "Pass --reveal to print the value it reads. Edit that value where it is set.")
@@ -211,22 +218,56 @@ func runEnvRemove(ctx context.Context, dependencies Dependencies, cwd, key strin
 	})
 }
 
+func writeEnvGetJSON(stdout io.Writer, req *variablestorev1.GetValueRequest, resp *variablestorev1.GetValueResponse) error {
+	m := resp.GetMetadata()
+	result := &resultv1.EnvGetResult{
+		Tier:       req.GetTier(),
+		Coordinate: newResultCoordinate(req.GetCoordinate()),
+		Version:    m.GetVersion(),
+		Size:       m.GetSize(),
+		UpdatedAt:  terminal.EpochRFC3339(m.GetUpdatedAt()),
+		Target:     newResultCoordinate(m.GetTarget()),
+		Revealed:   req.GetReveal(),
+	}
+	if req.GetReveal() {
+		value := resp.GetValue()
+		result.Value = &value
+	}
+	return terminal.WriteResultJSON(stdout, result)
+}
+
 func runEnvHistory(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
 	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env history", stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
 		}
-		resp, err := variableStore.ListVersions(ctx, &variablestorev1.ListVersionsRequest{
+		req := &variablestorev1.ListVersionsRequest{
 			Tier:       opts.tier(),
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
-		})
+		}
+		resp, err := variableStore.ListVersions(ctx, req)
 		if err != nil {
 			return err
+		}
+		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+			return writeEnvHistoryJSON(stdout, req, resp.GetVersions())
 		}
 		renderVersions(stdout, describeCell(key, opts), resp.GetVersions())
 		return nil
 	})
+}
+
+func writeEnvHistoryJSON(stdout io.Writer, req *variablestorev1.ListVersionsRequest, versions []*variablestorev1.VersionEntry) error {
+	result := &resultv1.EnvHistoryResult{
+		Tier:       req.GetTier(),
+		Coordinate: newResultCoordinate(req.GetCoordinate()),
+		Versions:   make([]*resultv1.EnvVersion, 0, len(versions)),
+	}
+	for _, v := range versions {
+		result.Versions = append(result.Versions, &resultv1.EnvVersion{Version: v.GetVersion(), CreatedAt: terminal.EpochRFC3339(v.GetCreatedAt()), Size: v.GetSize()})
+	}
+	return terminal.WriteResultJSON(stdout, result)
 }
 
 func renderVersions(stdout io.Writer, cell string, versions []*variablestorev1.VersionEntry) {
