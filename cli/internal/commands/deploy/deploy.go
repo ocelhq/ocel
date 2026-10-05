@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -95,7 +96,8 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 		}
 	}
 
-	return dependencies.WithProvider(ctx, cfg, "ocel deploy", productionOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) error {
+	deployTelemetry := watchDeploy(dependencies.Events, cfg, telemetry.DeployTargetProduction, opts.dry)
+	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", productionOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider, read := p.Run, p.Check, p.Provider, p.Preflight
 		cfg := p.Project
 		facts, err := preflightDeploy(ctx, dependencies, policy, check, cfg, read, opts.prebuilt)
@@ -139,6 +141,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 		if err != nil {
 			return err
 		}
+		deployTelemetry.noteManifest(manifest)
 		if manifest == nil {
 			run.Succeed(nothingToDeploy(cfg))
 			return nil
@@ -172,6 +175,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 		if err != nil {
 			return err
 		}
+		deployTelemetry.noteDeployed()
 
 		record, err := deployrecord.New(cfg, manifest, env, opts.tag, out.promotionID, out.apps)
 		if err != nil {
@@ -183,4 +187,6 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 		run.Succeed(fmt.Sprintf("Deployed %s to production", cfg.Slug))
 		return nil
 	})
+	deployTelemetry.record(dependencies.RecordEvent, err)
+	return err
 }
