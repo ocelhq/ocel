@@ -53,16 +53,20 @@ function sharedState(): ClockState {
 
 const state = sharedState();
 
-export function useCacheStore(): Promise<UseCacheStore | null> {
+function openUseCacheStore(): Promise<UseCacheStore | null> {
   if (state.store !== undefined) return state.store;
   const newStore = getNextHost().newUseCacheStore;
   if (!newStore) return Promise.resolve(null);
-  const opening = newStore().catch(() => {
+  const opening = newStore().catch((err) => {
     if (state.store === opening) state.store = undefined;
-    return null;
+    throw err;
   });
   state.store = opening;
   return opening;
+}
+
+export function useCacheStore(): Promise<UseCacheStore | null> {
+  return openUseCacheStore().catch(() => null);
 }
 
 export function setTagClockStore(next: UseCacheStore | null | undefined): void {
@@ -102,17 +106,14 @@ function startSync(): Promise<void> {
 }
 
 async function writeTags(tags: string[], at: number): Promise<void> {
-  const backend = await useCacheStore();
+  const backend = await openUseCacheStore();
   if (!backend) return;
 
-  await Promise.all(
-    tags.map(async (tag) => {
-      const record = state.records.get(tag)!;
-      try {
-        await backend.writeTag(tag, { ...record, writtenAt: at });
-      } catch {}
-    }),
+  const writes = await Promise.allSettled(
+    tags.map((tag) => backend.writeTag(tag, { ...state.records.get(tag)!, writtenAt: at })),
   );
+  const failed = writes.find((write) => write.status === "rejected");
+  if (failed) throw failed.reason;
 }
 
 export function recordTags(tags: string[], record: TagRecord): void {
