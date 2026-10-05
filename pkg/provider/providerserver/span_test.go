@@ -331,6 +331,37 @@ func TestAFailedSpanSaysWhyAtErrorInItsSpanOnceBeforeTheSpanEnds(t *testing.T) {
 	}
 }
 
+func TestASpanWhoseWorkAsksAQuestionNeitherFailsNorSaysItAtError(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	root := RootSpan("web", "web", progress.Updating.Title("bootstrap stack box"), progressv1.Phase_PHASE_PROVISION)
+	err := newSpanEvents(sender).run(root, func(u *spanRun) error {
+		return u.phase(func(progress.Log) error {
+			return provider.Ask("ports 80 and 443 are closed", provider.Question{Finding: "ports 80 and 443 are closed", Prompt: "Have you opened them?"})
+		})
+	})
+	if _, asked := provider.QuestionOf(err); !asked {
+		t.Fatalf("run() = %v, want the question handed back to ask", err)
+	}
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	events := stream.recorded()
+	if said := reasonsSaid(events); len(said) != 0 {
+		t.Errorf("said %q at error, want nothing: the finding is shown with the question, and nothing failed yet", said[0].GetMessage())
+	}
+	ended := events[len(events)-1].GetEnded()
+	if ended == nil || ended.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR {
+		t.Fatalf("the span ended %v, want it ended without failing while it waits on an answer", ended)
+	}
+	if !strings.Contains(ended.GetTitle(), "waiting on your answer") {
+		t.Errorf("the span ended titled %q, want it to say it waits on your answer", ended.GetTitle())
+	}
+}
+
 func TestASpansWorkSpeaksInTheSpansOwnSpanWithNoSpanOfItsOwn(t *testing.T) {
 	t.Parallel()
 
