@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { REDACTED } from "../checks/context";
 import {
   appOrigin,
+  boxDiagnosis,
   boxLane,
   entryFile,
   heldProbe,
@@ -113,6 +114,33 @@ describe("projectLeftovers", () => {
       "sudo docker ps -a --filter label=ocel.project=j-kv --format 'the container {{.Names}}'; " +
         "sudo docker volume ls --filter label=ocel.project=j-kv --format 'the volume {{.Name}}'",
     );
+  });
+});
+
+describe("boxDiagnosis", () => {
+  const said = boxDiagnosis("j-kv");
+
+  it("lists every container on the box, the project's or not", () => {
+    expect(said).toContain("docker ps --all");
+  });
+
+  it("tails the logs of each container the project's resources run in", () => {
+    expect(said).toContain(
+      "docker ps --all --filter label=ocel.project=j-kv --filter label=ocel.resource --format '{{.Names}}'",
+    );
+    expect(said).toContain("docker logs --timestamps --tail 200");
+  });
+
+  it("lists the box's processes with how long each has run", () => {
+    expect(said).toContain("ps -eo pid,ppid,etime,stat,args");
+  });
+
+  it("bounds every docker call, so a docker that stopped answering cannot hang the diagnosis too", () => {
+    const calls = said.match(/[^\n;|]*docker (ps|logs)[^\n;|]*/g) ?? [];
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(call).toContain("timeout ");
+    }
   });
 });
 

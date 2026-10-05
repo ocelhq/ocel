@@ -59,6 +59,9 @@ const OCEL_PATHS = [
   "/etc/sudoers.d/ocel-seal-production",
 ];
 const STAMP = "/etc/ocel/production/stamp.json";
+const BOX_READ_SECONDS = 30;
+const RESOURCE_LOG_LINES = 200;
+const BOX_LOG = "box.log";
 const ENV_FILES = "sudo find /var/lib/ocel -maxdepth 2 -type f -name '*.env'";
 const DECOY = "ocel-journey-decoy";
 const DECOY_DATA = "/var/lib/ocel-journey-decoy";
@@ -143,6 +146,23 @@ export function projectLeftovers(slug: string): string {
     `sudo docker ps -a ${filter} --format 'the container {{.Names}}'`,
     `sudo docker volume ls ${filter} --format 'the volume {{.Name}}'`,
   ].join("; ");
+}
+
+export function boxDiagnosis(slug: string): string {
+  const docker = `sudo timeout ${BOX_READ_SECONDS} docker`;
+  const resources = `--filter label=ocel.project=${slug} --filter label=ocel.resource --format '{{.Names}}'`;
+  return [
+    "echo '## containers'",
+    `${docker} ps --all --no-trunc 2>&1`,
+    "echo '## resource container logs'",
+    `for name in $(${docker} ps --all ${resources} 2>/dev/null); do`,
+    `echo "### $name"`,
+    `${docker} logs --timestamps --tail ${RESOURCE_LOG_LINES} "$name" 2>&1`,
+    "done",
+    "echo '## processes'",
+    "ps -eo pid,ppid,etime,stat,args --forest",
+    "true",
+  ].join("\n");
 }
 
 export function resourceRestart(slug: string): string {
@@ -497,7 +517,9 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
     if (setsJourneyNonce(cell.fixture.checks)) {
       await drive("env-journey-nonce", ["env", "set", `${JOURNEY_NONCE_ENV}=${cell.journeyNonce}`]);
     }
-    const deployed = await drive("deploy", ["deploy", "--yes"]);
+    const deployed = await this.diagnosedOnFailure(cell, "deploy", () =>
+      drive("deploy", ["deploy", "--yes"]),
+    );
     const transcript = `${deployed.stdout}\n${deployed.stderr}`;
     if (setsSecret(cell.fixture.checks) && transcript.includes(SECRET_TOKEN)) {
       throw new Error(
@@ -524,7 +546,7 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
     if (setsEnv(cell.fixture.checks)) {
       await drive("env-greeting", ["env", "set", `GREETING=${greeting}`]);
     }
-    await drive("deploy", ["deploy", "--yes"]);
+    await this.diagnosedOnFailure(cell, "redeploy", () => drive("deploy", ["deploy", "--yes"]));
     return this.deployment(cell, session);
   }
 
@@ -563,7 +585,9 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
     this.sessions.delete(cell.slug);
     const args = ["--config", journeyConfigIn(session.dir), "destroy", "production", "--yes"];
     try {
-      await runOcel(cell, session.dir, "destroy", "destroy", args, session.env);
+      await this.diagnosedOnFailure(cell, "destroy", () =>
+        runOcel(cell, session.dir, "destroy", "destroy", args, session.env),
+      );
     } catch (refused) {
       if (await this.stillRecorded(cell.slug)) {
         throw refused;
@@ -581,6 +605,24 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
       throw new Error(
         `the box still holds ${left.join(", ")} after \`ocel destroy production\` took ${cell.slug} down, and a destroy reclaims everything the project's deploys wrote`,
       );
+    }
+  }
+
+  private async diagnosedOnFailure<T>(
+    cell: CellUnderTest,
+    phase: Phase,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await work();
+    } catch (error) {
+      const target = this.box();
+      const said = await ssh(target, target.user, boxDiagnosis(cell.slug)).catch(
+        (unread: unknown) =>
+          `the box could not be read: ${unread instanceof Error ? unread.message : String(unread)}\n`,
+      );
+      await cell.evidence.write(phase, BOX_LOG, said).catch(() => undefined);
+      throw error;
     }
   }
 
