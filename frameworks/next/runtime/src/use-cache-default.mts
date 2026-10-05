@@ -1,12 +1,7 @@
+import { getNextHost } from "./host.mjs";
+import { type InstanceCache, instanceCacheBytes, newInstanceCache } from "./instance-cache.mjs";
 import { clockMethods, tagClock } from "./tag-clock.mjs";
-import {
-  bufferValue,
-  type CacheEntry,
-  MB,
-  now,
-  pendingSets,
-  streamOf,
-} from "./use-cache-entry.mjs";
+import { bufferValue, type CacheEntry, now, pendingSets, streamOf } from "./use-cache-entry.mjs";
 
 interface StoredEntry {
   bytes: Uint8Array;
@@ -17,37 +12,15 @@ interface StoredEntry {
   revalidate: number;
 }
 
-function resolveBudget(): number {
-  const override = Number(process.env.OCEL_USE_CACHE_MAX_BYTES);
-  if (override > 0) return override;
-  const memoryMb = Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE);
-  if (memoryMb > 0) return Math.floor(memoryMb * MB * 0.1);
-  return 50 * MB;
-}
+const keyPrefix = "use-cache-default:";
 
-const maxBytes = resolveBudget();
-
-const entries = new Map<string, StoredEntry>();
 const pending = pendingSets();
-let usedBytes = 0;
 
-function touch(key: string, stored: StoredEntry): void {
-  entries.delete(key);
-  entries.set(key, stored);
-}
+let cache: InstanceCache | undefined;
 
-function store(key: string, stored: StoredEntry): void {
-  const existing = entries.get(key);
-  if (existing) usedBytes -= existing.bytes.byteLength;
-  touch(key, stored);
-  usedBytes += stored.bytes.byteLength;
-
-  while (usedBytes > maxBytes) {
-    const oldest = entries.keys().next().value;
-    if (oldest === undefined) break;
-    usedBytes -= entries.get(oldest)!.bytes.byteLength;
-    entries.delete(oldest);
-  }
+function instanceCache(): InstanceCache {
+  cache ??= getNextHost().instanceCache ?? newInstanceCache(instanceCacheBytes(undefined));
+  return cache;
 }
 
 const handler = {
@@ -55,12 +28,10 @@ const handler = {
     try {
       await pending.wait(cacheKey);
 
-      const stored = entries.get(cacheKey);
+      const stored = instanceCache().read<StoredEntry>(keyPrefix + cacheKey);
       if (!stored) return undefined;
       if (now() > stored.timestamp + stored.revalidate * 1000) return undefined;
       if (tagClock.areTagsExpired(stored.tags, stored.timestamp)) return undefined;
-
-      touch(cacheKey, stored);
 
       return {
         value: streamOf(stored.bytes),
@@ -82,14 +53,15 @@ const handler = {
         const bytes = await bufferValue(entry);
         if (!bytes) return;
 
-        store(cacheKey, {
+        const stored: StoredEntry = {
           bytes,
           tags: entry.tags,
           stale: entry.stale,
           timestamp: entry.timestamp,
           expire: entry.expire,
           revalidate: entry.revalidate,
-        });
+        };
+        instanceCache().write(keyPrefix + cacheKey, stored, bytes.byteLength);
       } catch {}
     });
   },

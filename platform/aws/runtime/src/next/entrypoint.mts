@@ -1,13 +1,6 @@
 import { installNextHost } from "@framework/next-runtime/host";
+import { newAwsNextHost } from "./next-host.mjs";
 
-const cloudFrontTagsPerObject = 50;
-
-installNextHost({
-  newCacheStore: async () => (await import("./cache-store.mjs")).awsCacheStore(),
-  newUseCacheStore: async () => (await import("./use-cache-store.mjs")).awsUseCacheStore(),
-  newDispatchInvoke: async (localOrigin) =>
-    (await import("./dispatch-host.mjs")).newAwsDispatchInvoke(localOrigin),
-  cacheTagsPerObject: cloudFrontTagsPerObject,
-});
+installNextHost(newAwsNextHost(process.env));
 
 await import("@framework/next-runtime/entrypoint");

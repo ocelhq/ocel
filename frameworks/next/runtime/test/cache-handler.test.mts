@@ -11,6 +11,7 @@ import { runWithWaitUntil } from "@framework/node-runtime/background";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import OcelCacheHandler from "../src/cache-handler.mjs";
 import type { CacheStore } from "../src/cache-store.mjs";
+import { installNextHost } from "../src/host.mjs";
 import { collectTags, notedTags } from "../src/origin-tags.mjs";
 import { revalidationTicks } from "../src/revalidation-signal.mjs";
 import { setTagClockStore } from "../src/tag-clock.mjs";
@@ -80,7 +81,7 @@ beforeEach(() => {
 afterEach(() => {
   OcelCacheHandler.store = undefined;
   OcelCacheHandler.variantHeaders = undefined;
-  delete process.env.LAMBDA_TASK_ROOT;
+  installNextHost({});
 });
 
 function fakeSnapshot(records: Record<string, TagRecord> = {}) {
@@ -476,7 +477,7 @@ function seedProjection(projection: Record<string, Record<string, unknown>>): vo
 
 function bundleProjection(contents: string | null): void {
   bundleRoot ??= mkdtempSync(join(tmpdir(), "ocel-bundle-"));
-  process.env.LAMBDA_TASK_ROOT = bundleRoot;
+  installNextHost({ functionDir: bundleRoot });
   const path = join(bundleRoot, variantHeadersFile);
   rmSync(path, { force: true });
   if (contents !== null) writeFileSync(path, contents);
@@ -596,6 +597,19 @@ for (const [name, contents] of bundles) {
     expect(written?.value.segmentHeaders).toBeUndefined();
   });
 }
+
+test("reads the build's variant headers from the function directory its host declares", async () => {
+  const store = fakeStore();
+  bundleProjection(
+    JSON.stringify({ blog: { rscHeaders: { "content-type": "text/x-component" } } }),
+  );
+
+  await revalidate("/blog");
+
+  expect(store.entries.get("blog")?.value.rscHeaders).toEqual({
+    "content-type": "text/x-component",
+  });
+});
 
 test("reads an unreadable projection once", async () => {
   const store = fakeStore();

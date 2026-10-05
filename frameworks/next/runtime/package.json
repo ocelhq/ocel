@@ -13,6 +13,7 @@
     "./entrypoint": "./src/entrypoint.mts",
     "./host": "./src/host.mts",
     "./incremental-cache": "./src/incremental-cache.mts",
+    "./instance-cache": "./src/instance-cache.mts",
     "./origin-tags": "./src/origin-tags.mts",
     "./project-manifest": "./src/project-manifest.mts",
     "./revalidation-signal": "./src/revalidation-signal.mts",
