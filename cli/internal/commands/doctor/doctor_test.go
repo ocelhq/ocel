@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
@@ -156,6 +157,9 @@ func TestRunDoctorWithoutAConfig(t *testing.T) {
 	err := Run(context.Background(), invocation, root, &stdout)
 	if code := exitCode(t, err); code != 1 {
 		t.Fatalf("exit code = %d, want 1; stdout=%s", code, stdout.String())
+	}
+	if code := clierror.NewRunError(err).GetCode(); code != "doctor.checks_failed" {
+		t.Errorf("error code = %q, want doctor.checks_failed", code)
 	}
 
 	out := rendered(t, stdout.String())

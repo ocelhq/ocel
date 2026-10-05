@@ -13,8 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
 
-const usageCode = "usage"
-
 func (c *command) executeAndReport(args []string) int {
 	started := time.Now()
 	c.root.SetArgs(args)

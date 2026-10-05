@@ -1,6 +1,7 @@
 package clierror_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
@@ -92,6 +94,20 @@ func TestAMissingInputReportsInputRequiredWithTheFlagOrEnvVarThatSuppliesIt(t *t
 	}
 	if !proto.Equal(got, want) {
 		t.Fatalf("run error = %s, want %s", protojson.Format(got), protojson.Format(want))
+	}
+}
+
+func TestAnInterruptBecomesAnInterruptedRunErrorWhateverCodeItWraps(t *testing.T) {
+	for name, err := range map[string]error{
+		"cancelled":           fmt.Errorf("read ocel.config.ts: %w", context.Canceled),
+		"exit 130":            &exitcode.ExitError{Code: exitcode.Interrupt},
+		"coded and cancelled": &clierror.Error{Code: "provider.unavailable", Hint: "retry", Cause: context.Canceled},
+	} {
+		got := clierror.NewRunError(err)
+
+		if got.GetCode() != "interrupted" || got.DocsUrl != nil || got.Hint != nil {
+			t.Errorf("%s: run error = %s, want code interrupted with no docs page or hint", name, protojson.Format(got))
+		}
 	}
 }
 

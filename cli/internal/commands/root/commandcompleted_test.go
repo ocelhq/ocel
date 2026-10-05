@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest/confighome"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/userconfig"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -275,21 +276,49 @@ func TestTheTTYPropertyIsWhetherStdoutIsATerminal(t *testing.T) {
 	}
 }
 
-func TestAnInterruptedCommandRecordsItsExitCode(t *testing.T) {
+func TestAnInterruptedCommandRecordsExit130AndTheInterruptedCode(t *testing.T) {
 	debugTelemetry(t)
 
-	ocel := newCommand()
-	var errOut bytes.Buffer
-	ocel.root.SetOut(&bytes.Buffer{})
-	ocel.root.SetErr(&errOut)
-	hidden := &cobra.Command{Use: "interrupted", RunE: func(*cobra.Command, []string) error { return context.Canceled }}
-	ocel.root.AddCommand(hidden)
+	for name, interrupt := range map[string]error{
+		"cancelled":                context.Canceled,
+		"exit 130 already printed": &exitcode.ExitError{Code: exitcode.Interrupt},
+	} {
+		ocel := newCommand()
+		var errOut bytes.Buffer
+		ocel.root.SetOut(&bytes.Buffer{})
+		ocel.root.SetErr(&errOut)
+		ocel.root.AddCommand(&cobra.Command{Use: "interrupted", RunE: func(*cobra.Command, []string) error { return interrupt }})
 
-	code := ocel.executeAndReport([]string{"interrupted"})
+		code := ocel.executeAndReport([]string{"interrupted"})
 
-	event := theOnlyEvent(t, errOut.String())
-	if code != 130 || event.Properties["exit_code"] != float64(130) {
-		t.Errorf("code = %d, exit_code = %#v, want 130", code, event.Properties["exit_code"])
+		event := theOnlyEvent(t, errOut.String())
+		if code != 130 || event.Properties["exit_code"] != float64(130) || event.Properties["error_code"] != "interrupted" {
+			t.Errorf("%s: code = %d, event = %v, want exit 130 and error_code interrupted", name, code, event.Properties)
+		}
+	}
+}
+
+func TestAnInterruptUnderJSONRecordsTheCodeItsErrorDocumentCarries(t *testing.T) {
+	debugTelemetry(t)
+
+	_, stdout, stderr := executeAndReportDataCommand(t, func() error { return context.Canceled })
+
+	document := requireOneFailureDocument(t, stdout)
+	if got := theOnlyEvent(t, stderr).Properties["error_code"]; got != "interrupted" || document["code"] != got {
+		t.Errorf("error_code = %#v, document code = %#v, want both interrupted", got, document["code"])
+	}
+}
+
+func TestACommandGroupRunWithoutASubcommandRecordsAUsageError(t *testing.T) {
+	debugTelemetry(t)
+
+	for _, group := range []string{"env", "bootstrap", "connector"} {
+		code, _, stderr := executeAndReportRoot(t, group)
+
+		event := theOnlyEvent(t, stderr)
+		if code != 1 || event.Properties["error_code"] != "usage" {
+			t.Errorf("ocel %s: code = %d, event = %v, want exit 1 and error_code usage", group, code, event.Properties)
+		}
 	}
 }
 

@@ -58,7 +58,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		Example: "  $ ocel connector add --config ocel.staging.json\n  $ ocel connector status\n  $ ocel connector rm --config ocel.staging.json",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			_ = cmd.Help()
-			return &exitcode.ExitError{Code: 1}
+			return &clierror.Error{Code: clierror.CodeUsage, Cause: &exitcode.ExitError{Code: 1}}
 		},
 	}
 	cmd.AddCommand(newAddCommand(dependencies), newRemoveCommand(dependencies), newStatusCommand(dependencies))

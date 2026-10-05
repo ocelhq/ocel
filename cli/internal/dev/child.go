@@ -7,6 +7,7 @@ import (
 	"os/exec"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
@@ -36,7 +37,7 @@ func exitError(ctx context.Context, err error) error {
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return &exitcode.ExitError{Code: childprocess.ExitCode(exitErr)}
+		return &clierror.Error{Code: "dev.command_failed", Cause: &exitcode.ExitError{Code: childprocess.ExitCode(exitErr)}}
 	}
 	return err
 }

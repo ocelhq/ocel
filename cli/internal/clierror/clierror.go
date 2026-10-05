@@ -1,17 +1,21 @@
 package clierror
 
 import (
+	"context"
 	"errors"
 
 	"buf.build/go/protovalidate"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/docsurl"
+	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
 const (
 	internalCode                   = "internal"
+	CodeUsage                      = "usage"
+	CodeInterrupted                = "interrupted"
 	CodeConfirmationRequired       = "confirmation_required"
 	CodeConfirmationBypassMismatch = "confirmation_bypass_mismatch"
 	CodeInputRequired              = "input_required"
@@ -37,6 +41,9 @@ func (e *Error) Unwrap() error { return e.Cause }
 func NewRunError(err error) *streamv1.RunError {
 	if err == nil {
 		return nil
+	}
+	if isInterrupt(err) {
+		return &streamv1.RunError{Code: CodeInterrupted, Message: err.Error()}
 	}
 	runError := &streamv1.RunError{Code: internalCode, Message: err.Error()}
 	var coded *Error
@@ -67,6 +74,11 @@ func NewConfirmationBypassMismatch(cause error) *Error {
 
 func NewInputRequired(cause error, typedInput string) *Error {
 	return &Error{Code: CodeInputRequired, Hint: typedInput, Cause: cause}
+}
+
+func isInterrupt(err error) bool {
+	code, _ := exitcode.Of(err)
+	return code == exitcode.Interrupt || errors.Is(err, context.Canceled)
 }
 
 func isPublishedCode(code string) bool {

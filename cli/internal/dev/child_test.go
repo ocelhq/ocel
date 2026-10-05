@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess/childprocesstest"
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
@@ -209,6 +210,9 @@ func TestExitErrorKeepsTheChildsCodeWhenNotCancelled(t *testing.T) {
 	var exitErr *exitcode.ExitError
 	if !errors.As(got, &exitErr) || exitErr.Code != 3 {
 		t.Fatalf("exitError = %v, want *exitcode.ExitError with code 3", got)
+	}
+	if code := clierror.NewRunError(got).GetCode(); code != "dev.command_failed" {
+		t.Errorf("error code = %q, want dev.command_failed", code)
 	}
 	if got := exitError(context.Background(), nil); got != nil {
 		t.Errorf("exitError(nil) = %v, want nil", got)

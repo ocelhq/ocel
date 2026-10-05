@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -29,7 +30,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		Example: "  $ ocel env ls\n  $ ocel env set LOG_LEVEL=debug\n  $ ocel env ui --preview",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = cmd.Help()
-			return &exitcode.ExitError{Code: 1}
+			return &clierror.Error{Code: clierror.CodeUsage, Cause: &exitcode.ExitError{Code: 1}}
 		},
 	}
 	cmd.AddCommand(
