@@ -21,6 +21,7 @@ type Rule string
 const (
 	RuleDefault    Rule = "default"
 	RuleNoKey      Rule = "no-key"
+	RuleNoEndpoint Rule = "no-endpoint"
 	RuleOptedOut   Rule = "opted-out"
 	RuleDoNotTrack Rule = "do-not-track"
 	RuleDebug      Rule = "debug"
@@ -32,7 +33,7 @@ type Resolution struct {
 	Rule    Rule
 }
 
-func Resolve(key string) Resolution {
+func Resolve(key, endpoint string) Resolution {
 	setting := strings.ToLower(os.Getenv(EnvVar))
 	switch {
 	case setting == "0" || setting == "false":
@@ -43,8 +44,14 @@ func Resolve(key string) Resolution {
 		return Resolution{Enabled: true, Debug: true, Rule: RuleDebug}
 	case key == "":
 		return Resolution{Rule: RuleNoKey}
+	case endpoint == "":
+		return Resolution{Rule: RuleNoEndpoint}
 	}
 	return Resolution{Enabled: true, Rule: RuleDefault}
+}
+
+func (r Resolution) IsCollecting() bool {
+	return r.Enabled && !r.Debug
 }
 
 func isTruthy(value string) bool {

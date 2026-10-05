@@ -18,7 +18,7 @@ const bareCommandName = "help"
 var commandsThatRecordNothing = []string{"telemetry flush"}
 
 func (c *command) recordCommandCompleted(args []string, err error, exitCode int, elapsed time.Duration) {
-	resolution := telemetry.Resolve(telemetry.WriteKey)
+	resolution := telemetry.Resolve(telemetry.WriteKey, telemetry.Endpoint)
 	if !resolution.Enabled || !c.isRecorded() {
 		return
 	}
@@ -39,7 +39,7 @@ func (c *command) recordCommandCompleted(args []string, err error, exitCode int,
 		return
 	}
 	telemetry.Submit(c.root.ErrOrStderr(), resolution, event)
-	c.startFlush()
+	c.startFlush(resolution)
 }
 
 func (c *command) isRecorded() bool {

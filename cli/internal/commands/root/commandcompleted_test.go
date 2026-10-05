@@ -354,7 +354,7 @@ func TestDisabledTelemetryNeverCreatesAnInstallID(t *testing.T) {
 }
 
 func TestEnabledTelemetryWithoutDebugPrintsNothing(t *testing.T) {
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 	t.Setenv("OCEL_TELEMETRY", "")
 
 	_, stdout, stderr := executeAndReportRoot(t, "--help")

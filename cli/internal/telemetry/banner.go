@@ -12,7 +12,7 @@ import (
 const bannerShownKey = "telemetry_banner_shown"
 
 func PrintBannerOnce(w io.Writer, resolution Resolution) {
-	if !resolution.Enabled || resolution.Debug || isBannerShown(userconfig.Read()) {
+	if !resolution.IsCollecting() || isBannerShown(userconfig.Read()) {
 		return
 	}
 	shownElsewhere := false

@@ -9,7 +9,7 @@ import (
 )
 
 func StartFlush(executable string, resolution Resolution) bool {
-	if !resolution.Enabled || resolution.Debug || Endpoint == "" || !isBannerShown(userconfig.Read()) {
+	if !resolution.IsCollecting() || !isBannerShown(userconfig.Read()) {
 		return false
 	}
 	spool, err := OpenSpool()

@@ -18,8 +18,7 @@ type batch struct {
 }
 
 func Flush(ctx context.Context) {
-	resolution := Resolve(WriteKey)
-	if !resolution.Enabled || resolution.Debug || Endpoint == "" {
+	if !Resolve(WriteKey, Endpoint).IsCollecting() {
 		return
 	}
 	spool, err := OpenSpool()

@@ -86,7 +86,7 @@ func aSpooledEvent(t *testing.T, command string) {
 }
 
 func TestAnInvocationSpoolsItsCommandCompletedEventOutsideDebugMode(t *testing.T) {
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 
 	executeAndReportRoot(t, "--help")
 
@@ -96,7 +96,7 @@ func TestAnInvocationSpoolsItsCommandCompletedEventOutsideDebugMode(t *testing.T
 }
 
 func TestADebugInvocationSpoolsNothing(t *testing.T) {
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 	debugTelemetry(t)
 
 	executeAndReportRoot(t, "--help")
@@ -107,13 +107,13 @@ func TestADebugInvocationSpoolsNothing(t *testing.T) {
 }
 
 func TestARecordedCommandStartsTheFlushOnlyAfterItsOutputIsWritten(t *testing.T) {
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 	ocel := newCommand()
 	var out bytes.Buffer
 	ocel.root.SetOut(&out)
 	ocel.root.SetErr(io.Discard)
 	var outputAtStart []int
-	ocel.startFlush = func() { outputAtStart = append(outputAtStart, out.Len()) }
+	ocel.startFlush = func(telemetry.Resolution) { outputAtStart = append(outputAtStart, out.Len()) }
 
 	ocel.executeAndReport([]string{"--help"})
 
@@ -123,13 +123,13 @@ func TestARecordedCommandStartsTheFlushOnlyAfterItsOutputIsWritten(t *testing.T)
 }
 
 func TestTheFlushCommandAndShellCompletionStartNoFlush(t *testing.T) {
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 	for _, args := range [][]string{{"telemetry", "flush"}, {cobra.ShellCompRequestCmd, ""}} {
 		ocel := newCommand()
 		ocel.root.SetOut(io.Discard)
 		ocel.root.SetErr(io.Discard)
 		started := 0
-		ocel.startFlush = func() { started++ }
+		ocel.startFlush = func(telemetry.Resolution) { started++ }
 
 		ocel.executeAndReport(args)
 
@@ -140,7 +140,7 @@ func TestTheFlushCommandAndShellCompletionStartNoFlush(t *testing.T) {
 }
 
 func TestTheFlushCommandSendsTheSpoolAsOneBatchAndRecordsNoEventOfItsOwn(t *testing.T) {
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 	url, batches := aBatchServer(t, http.StatusOK)
 	withTelemetryEndpoint(t, url)
 	aSpooledEvent(t, "deploy")
@@ -159,7 +159,7 @@ func TestTheFlushCommandSendsTheSpoolAsOneBatchAndRecordsNoEventOfItsOwn(t *test
 }
 
 func TestTheFlushCommandKeepsTheSpoolAndRecordsNoEventWhenTheEndpointRefuses(t *testing.T) {
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 	url, batches := aBatchServer(t, http.StatusInternalServerError)
 	withTelemetryEndpoint(t, url)
 	aSpooledEvent(t, "deploy")
@@ -193,7 +193,7 @@ func TestTheFlushCommandExitsZeroAndPrintsNothingWhateverItIsGiven(t *testing.T)
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			withTelemetryKey(t)
+			withTelemetryBuild(t)
 			if name == "unreachable" {
 				closed := httptest.NewServer(http.NotFoundHandler())
 				closed.Close()
@@ -217,7 +217,7 @@ func TestTheFlushCommandExitsZeroAndPrintsNothingWhateverItIsGiven(t *testing.T)
 }
 
 func TestTheFlushCommandNeitherPrintsNorMarksTheBanner(t *testing.T) {
-	withTelemetryKey(t)
+	withTelemetryBuild(t)
 
 	_, _, stderr := executeAndReportRoot(t, "telemetry", "flush")
 
