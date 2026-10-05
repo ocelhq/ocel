@@ -103,6 +103,34 @@ func TestADeploymentHostnameTheUrlMapHasNoHostRuleLeftForIsRefusedBeforeAnything
 	}
 }
 
+func TestADeploymentHostnameTheProjectHasNoBackendServiceQuotaLeftForIsRefusedBeforeAnythingIsProvisioned(t *testing.T) {
+	t.Parallel()
+
+	w, stack := previewRouter(t)
+	w.setBackendServiceQuota(BackendServiceQuota{Usage: 50, Limit: 50})
+	err := stack.MovePointer(context.Background(), deploymentMove(deploymentFirst, deploymentHost, previewRecord("b1")), progress.Discard())
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
+		t.Fatalf("MovePointer with every backend service the project's quota allows in use = %v, want a refusal", err)
+	}
+	if _, declared := w.declarations(BindingStack("shop", environment.TierPreview))[negName("shop", environment.TierPreview, deploymentHost)]; declared {
+		t.Errorf("the binding declares a neg for %s, want nothing raised: Compute refuses the backend service only after the neg exists", deploymentHost)
+	}
+}
+
+func TestADeploymentHostnameIsRoutedOntoTheLastBackendServiceTheProjectQuotaAllows(t *testing.T) {
+	t.Parallel()
+
+	w, stack := previewRouter(t)
+	w.setBackendServiceQuota(BackendServiceQuota{Usage: 49, Limit: 50})
+	if err := stack.MovePointer(context.Background(), deploymentMove(deploymentFirst, deploymentHost, previewRecord("b1")), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer with one backend service of quota left = %v", err)
+	}
+	if _, routed := w.hosts(tierRoutes)[deploymentHost]; !routed {
+		t.Errorf("%s is not routed, want it routed onto the last backend service the quota allows", deploymentHost)
+	}
+}
+
 func TestRemovingADeploymentUnroutesItsHostnameAndTakesTheTagOffItsRevision(t *testing.T) {
 	t.Parallel()
 

@@ -53,6 +53,7 @@ var Permissions = []string{
 	"compute.regionNetworkEndpointGroups.create",
 	"compute.regionNetworkEndpointGroups.delete",
 	"compute.globalOperations.get",
+	"compute.projects.get",
 	"certificatemanager.certmaps.create",
 	"certificatemanager.certmaps.delete",
 	"certificatemanager.certmaps.get",

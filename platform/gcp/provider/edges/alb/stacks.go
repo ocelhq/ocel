@@ -50,10 +50,17 @@ type Routes interface {
 
 	CountHostRules(ctx context.Context, urlMap string) (int, error)
 
+	ReadBackendServiceQuota(ctx context.Context) (BackendServiceQuota, bool, error)
+
 	Unroute(ctx context.Context, urlMap, hostname string) error
 
 	InvalidateTags(ctx context.Context, urlMap string, tags []string) error
 	InvalidateHostnames(ctx context.Context, urlMap string, hostnames []string) error
+}
+
+type BackendServiceQuota struct {
+	Usage float64
+	Limit float64
 }
 
 type Entries interface {
