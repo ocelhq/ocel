@@ -201,8 +201,8 @@ func TestOnlyANonEmulatedAlbBootstrapKeepsTheCDNPurgeRole(t *testing.T) {
 		"alb against Google":       {[]string{albFeature}, false, true},
 		"alb against an emulator":  {[]string{albFeature}, true, false},
 		"no feature":               {nil, false, false},
-		"another feature":          {[]string{kvFeature}, false, false},
-		"alb among other features": {[]string{kvFeature, albFeature}, false, true},
+		"another feature":          {[]string{networkFeature}, false, false},
+		"alb among other features": {[]string{networkFeature, albFeature}, false, true},
 	} {
 		if got := keepsCDNPurgeRole(test.features, test.emulated); got != test.want {
 			t.Errorf("%s: keepsCDNPurgeRole = %t, want %t", name, got, test.want)

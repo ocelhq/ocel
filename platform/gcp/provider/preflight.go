@@ -32,11 +32,17 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 						"serve the objects through your app or a signed url instead, or drop `public` from %s",
 					resource.Name, resource.Name)
 			}
+		case provider.BindingPostgres:
+			if _, err := readPostgres(resource); err != nil {
+				return err
+			}
+			needs = append(needs, featureNeed{feature: networkFeature, declares: "postgres " + resource.Name,
+				reason: "a database on gcp is reached over the tier's network, which its bootstrap has not installed"})
 		case provider.BindingKV:
 			if _, err := readKVStore(resource); err != nil {
 				return err
 			}
-			needs = append(needs, featureNeed{feature: kvFeature, declares: "kv " + resource.Name,
+			needs = append(needs, featureNeed{feature: networkFeature, declares: "kv " + resource.Name,
 				reason: "a store on gcp is reached over the tier's network, which its bootstrap has not installed"})
 		case provider.BindingTopic, provider.BindingTask:
 			declared := declaredTopicOf(resource).declared

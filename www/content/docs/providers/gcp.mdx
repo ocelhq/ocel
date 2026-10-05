@@ -211,6 +211,24 @@ environments there, so access is per app across the tier's environments: `web` r
 reach another preview's buckets of `web`, and no other app's. See [Buckets](/docs/sdk/bucket#on-google-cloud) for how
 signed urls and uploads work there.
 
+## Postgres
+
+`postgres("orders")` is one Cloud SQL for PostgreSQL instance per environment: the Enterprise
+edition's shared-core `db-f1-micro` (about $7.70 a month in `us-central1`) in one zone, with
+10 GB of SSD that grows as it fills (about $0.17 per GB a month) and daily backups. It bills by
+the hour whether it serves anything or not, and Google's SLA does not cover shared-core
+instances. `version` `"14"` to `"17"` picks the major version, `"17"` when you leave it out; a
+major version is not changed in place, so a deploy asking for another one is refused.
+
+The instance has no public address. It is reached at a private address on the tier's
+[private network](#private-network), made for it by a Private Service Connect endpoint that
+bills about $7.30 a month of its own, and refuses any connection that is not encrypted. Apps connect as the `ocel` user to the `ocel` database with a
+password ocel generates, keeps sealed under the tier key, and hands each app in its binding.
+
+Creating an instance takes several minutes. `ocel destroy`, or dropping the database from the
+code, deletes the instance and its data; a database created again afterwards is
+a new, empty instance.
+
 ## KV stores
 
 `kv("cache")` runs as one Memorystore for Valkey instance per store: cluster mode off, one
@@ -229,25 +247,31 @@ Apps authenticate with the token Memorystore generates for the default user, whi
 reads back on every deploy, and reach the store over TLS under the instance's own certificate
 authority, which every SDK's client trusts from the binding.
 
-A store is reached over a network of the tier's own, which a bootstrap installs once:
+A store is reached over the tier's [private network](#private-network). `ocel destroy` deletes
+the instance and its data.
+
+## Private network
+
+KV stores and databases are reached over a network of the tier's own, which a bootstrap installs
+once:
 
 ```bash
-gcloud services enable compute.googleapis.com memorystore.googleapis.com \
+gcloud services enable compute.googleapis.com memorystore.googleapis.com sqladmin.googleapis.com \
   networkconnectivity.googleapis.com serviceconsumermanagement.googleapis.com \
-  --project my-project
-ocel bootstrap production --features kv-network
+  servicenetworking.googleapis.com --project my-project
+ocel bootstrap production --features private-network
 ```
 
 That is one VPC network with one subnetwork, `10.240.0.0/20`, in the bootstrap's region, and
-the service connection policy Memorystore connects each instance through. None of it bills.
-The bootstrap credential also needs `roles/compute.networkAdmin`. A deploy declaring a store
-on a tier without it is refused, naming that command. Cloud Run services and functions bound
-to a store reach private addresses over that subnetwork through direct VPC egress; the rest
-of their traffic leaves as before.
+the service connection policies Memorystore and Cloud SQL connect each instance through. None of
+it bills. The bootstrap credential also needs `roles/compute.networkAdmin` and
+`roles/cloudsql.viewer`. A deploy declaring a store or a database on a tier without it is
+refused, naming that command. Cloud Run services and functions bound to one reach private
+addresses over that subnetwork through direct VPC egress; the rest of their traffic leaves as
+before.
 
-**Removing it.** `ocel destroy` deletes the instance and its data. Dropping `kv-network` from
-a bootstrap, or removing the bootstrap, is refused while any store is still on the tier's
-network, naming those stores.
+**Removing it.** Dropping `private-network` from a bootstrap, or removing the bootstrap, is
+refused while any store or database is still on the tier's network, naming them.
 
 ## Topics, tasks and workers
 
@@ -434,12 +458,26 @@ gcloud projects add-iam-policy-binding my-project \
   --condition="title=ocel buckets,expression=resource.name.startsWith('projects/_/buckets/ocel--')"
 ```
 
-Cloud Storage checks creating a bucket against the project, where no name condition admits it,
-so a deploy also needs a custom role holding that one permission:
+On a tier with the [private network](#private-network), a deploy also creates, changes and
+deletes the Cloud SQL instances its databases run on, named the same way: grant
+`roles/cloudsql.admin` under a condition naming them. Cloud SQL names an instance by the
+project's id:
+
+```bash
+gcloud projects add-iam-policy-binding my-project \
+  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --role=roles/cloudsql.admin \
+  --condition="title=ocel databases,expression=resource.name.startsWith('projects/my-project/instances/ocel--')"
+```
+
+Cloud Storage and Cloud SQL check creating a bucket or an instance, listing instances and
+reading Cloud SQL's operations against the project, where no name condition admits them, so a
+deploy also needs a custom role holding those permissions alone. It reads the settings of
+every instance in the project, and changes none of them:
 
 ```bash
 gcloud iam roles create ocelDeployCreates --project my-project \
-  --permissions=storage.buckets.create
+  --permissions=storage.buckets.create,cloudsql.instances.create,cloudsql.instances.list,cloudsql.instances.get
 gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=projects/my-project/roles/ocelDeployCreates --condition=None

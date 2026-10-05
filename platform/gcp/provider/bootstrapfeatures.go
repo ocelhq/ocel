@@ -17,7 +17,7 @@ import (
 const (
 	albFeature         = "alb-edge"
 	albShieldedFeature = "alb-cloudflare-origin"
-	kvFeature          = "kv-network"
+	networkFeature     = "private-network"
 )
 
 var (
@@ -38,9 +38,9 @@ func (bootstrap) Catalogue() []provider.Feature {
 			"a recurring cost, about $18 a month plus egress",
 		Edges: []edge.Kind{cloudflare.Kind},
 	}, {
-		Name: kvFeature,
-		Summary: "a network of the tier's own with one subnetwork, " + kvSubnetRange + ", and the service connection policy Memorystore reaches it through: " +
-			"what kv stores and the apps bound to them are connected over, with no recurring cost of its own",
+		Name: networkFeature,
+		Summary: "a network of the tier's own with one subnetwork, " + networkSubnetRange + ", and the service connection policies Memorystore and Cloud SQL reach it through: " +
+			"what kv stores, databases and the apps bound to them are connected over, with no recurring cost of its own",
 	}, {
 		Name:    tasksFeature,
 		Summary: tasksSummary(),
@@ -104,10 +104,10 @@ func (b bootstrap) raiseFeatures(ctx context.Context, req provider.BootstrapRequ
 			return err
 		}
 	}
-	if !slices.Contains(req.Features, kvFeature) {
+	if !slices.Contains(req.Features, networkFeature) {
 		return nil
 	}
-	ensureProgress(progress).Say("Installing feature " + kvFeature + " for " + string(req.Tier) + ": " + b.summaryOf(kvFeature))
+	ensureProgress(progress).Say("Installing feature " + networkFeature + " for " + string(req.Tier) + ": " + b.summaryOf(networkFeature))
 	return b.raiseNetwork(ctx, req.Tier, progress)
 }
 
@@ -156,7 +156,7 @@ func (b bootstrap) dropFronts(
 }
 
 func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.BootstrapRequest, progress progress.Log) error {
-	if err := b.networkFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
+	if err := b.refuseNetworkInUse(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
 		return err
 	}
 	if err := b.tasksFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
@@ -174,10 +174,10 @@ func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.B
 			return err
 		}
 	}
-	if !slices.Contains(droppedFeatures(read.Stamp.Features, req), kvFeature) {
+	if !slices.Contains(droppedFeatures(read.Stamp.Features, req), networkFeature) {
 		return nil
 	}
-	ensureProgress(progress).Say("Taking down the " + string(req.Tier) + " kv network: this bootstrap no longer requests feature " + kvFeature)
+	ensureProgress(progress).Say("Taking down the " + string(req.Tier) + " private network: this bootstrap no longer requests feature " + networkFeature)
 	return b.tearNetwork(ctx, req.Tier)
 }
 
@@ -190,7 +190,7 @@ func (b bootstrap) tearFeatures(ctx context.Context, tier environment.Tier, feat
 			return err
 		}
 	}
-	if !slices.Contains(features, kvFeature) {
+	if !slices.Contains(features, networkFeature) {
 		return nil
 	}
 	return b.tearNetwork(ctx, tier)
@@ -198,7 +198,7 @@ func (b bootstrap) tearFeatures(ctx context.Context, tier environment.Tier, feat
 
 func (b bootstrap) featureInstalled(ctx context.Context, tier environment.Tier, feature string) (bool, error) {
 	switch feature {
-	case kvFeature:
+	case networkFeature:
 		return b.networkInstalled(ctx, tier)
 	case tasksFeature:
 		return b.tasksInstalled(ctx, tier)
@@ -247,7 +247,7 @@ func (b bootstrap) frontsFree(ctx context.Context, tier environment.Tier, featur
 }
 
 func (b bootstrap) featuresFree(ctx context.Context, tier environment.Tier, features []string) error {
-	if err := b.networkFree(ctx, tier, features); err != nil {
+	if err := b.refuseNetworkInUse(ctx, tier, features); err != nil {
 		return err
 	}
 	return b.frontsFree(ctx, tier, features)
@@ -264,8 +264,8 @@ func apisFor(tier environment.Tier, features []string) []string {
 	case slices.Contains(features, albFeature):
 		apis = appendMissing(apis, albAPIs)
 	}
-	if slices.Contains(features, kvFeature) {
-		apis = appendMissing(apis, kvAPIs)
+	if slices.Contains(features, networkFeature) {
+		apis = appendMissing(apis, networkAPIs)
 	}
 	if slices.Contains(features, tasksFeature) {
 		apis = appendMissing(apis, TasksAPIs)

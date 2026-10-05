@@ -62,8 +62,40 @@ func TestAPublicBucketIsRefusedBeforeAnythingIsReadAndAPrivateOneNeedsNoFeature(
 	}
 }
 
+func declaringADatabase(version string) provider.DeployPreflight {
+	return provider.DeployPreflight{
+		Deploy:    provider.DeploySpec{Tier: environment.TierProduction},
+		Resources: []provider.Resource{{Name: "orders", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{Version: version}}},
+	}
+}
+
+func TestADeployDeclaringADatabaseIsRefusedUntilTheTierHasItsNetwork(t *testing.T) {
+	err := withStamp(t, stamp{State: stateComplete}).PreflightDeploy(context.Background(), declaringADatabase("17"))
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(err.Error(), "postgres orders") ||
+		!strings.Contains(err.Error(), "ocel bootstrap production --features "+networkFeature) {
+		t.Errorf("PreflightDeploy() = %v, want it refused naming the database and the bootstrap that installs the network", err)
+	}
+	if err := withStamp(t, stamp{State: stateComplete, Features: []string{networkFeature}}).PreflightDeploy(context.Background(), declaringADatabase("17")); err != nil {
+		t.Errorf("PreflightDeploy() = %v, want a database admitted on a tier whose network is installed", err)
+	}
+}
+
+func TestADeployDeclaringADatabaseOnAVersionCloudSQLDoesNotRunIsRefusedBeforeAnythingIsRead(t *testing.T) {
+	served := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		t.Errorf("preflight called %s %s before refusing a version Cloud SQL does not run", r.Method, r.URL.Path)
+	}))
+	t.Cleanup(served.Close)
+
+	err := pushing(t, served.URL).PreflightDeploy(context.Background(), declaringADatabase("12"))
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Errorf("PreflightDeploy() = %v, want an %s refusal", err, refusal.CodeInvalid)
+	}
+}
+
 func TestADeployDeclaringAStoreIsAdmittedOnceTheTierHasItsNetwork(t *testing.T) {
-	if err := withStamp(t, stamp{State: stateComplete, Features: []string{kvFeature}}).PreflightDeploy(context.Background(), declaringAStore(256<<20)); err != nil {
+	if err := withStamp(t, stamp{State: stateComplete, Features: []string{networkFeature}}).PreflightDeploy(context.Background(), declaringAStore(256<<20)); err != nil {
 		t.Errorf("PreflightDeploy() = %v, want a store admitted on a tier whose network is installed", err)
 	}
 }
@@ -71,12 +103,12 @@ func TestADeployDeclaringAStoreIsAdmittedOnceTheTierHasItsNetwork(t *testing.T) 
 func TestADeployDeclaringAStoreIsRefusedUntilTheTierHasItsNetwork(t *testing.T) {
 	for _, written := range []stamp{
 		{State: stateComplete},
-		{State: stateApplying, Features: []string{kvFeature}},
+		{State: stateApplying, Features: []string{networkFeature}},
 	} {
 		err := withStamp(t, written).PreflightDeploy(context.Background(), declaringAStore(256<<20))
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady ||
-			!strings.Contains(err.Error(), "ocel bootstrap production --features "+kvFeature) {
+			!strings.Contains(err.Error(), "ocel bootstrap production --features "+networkFeature) {
 			t.Errorf("PreflightDeploy() under stamp %+v = %v, want it refused naming the bootstrap that installs the network", written, err)
 		}
 	}

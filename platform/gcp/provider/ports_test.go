@@ -210,11 +210,11 @@ func TestSealingAValueThatNamesNoTierIsTheCallersMistake(t *testing.T) {
 	}
 }
 
-func TestServesBucketsKVStoresTopicsTasksAndRealtimeAmongTheResourcePrimitives(t *testing.T) {
+func TestServesEveryResourcePrimitive(t *testing.T) {
 	t.Parallel()
 
 	p := testProvider(t)
-	if got, want := p.Facts().Bindings, []provider.BindingType{provider.BindingBucket, provider.BindingKV, provider.BindingTopic, provider.BindingTask, provider.BindingRealtime}; !slices.Equal(got, want) {
+	if got, want := p.Facts().Bindings, []provider.BindingType{provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTopic, provider.BindingTask, provider.BindingRealtime}; !slices.Equal(got, want) {
 		t.Errorf("Facts().Bindings = %v, want %v: the resource primitives this provider provisions", got, want)
 	}
 	want := []provider.Compute{provider.ComputeServerless, provider.ComputeContainer}
@@ -403,6 +403,29 @@ func TestADeployAdministersTheBucketsOfItsNamespaceAndNoOtherBucket(t *testing.T
 	}
 	if !strings.Contains(document.Document, "a custom role holding storage.buckets.create") {
 		t.Errorf("Permissions(deploy) =\n%s\nwant a custom role holding storage.buckets.create: Cloud Storage checks creating a bucket against the project, where no bucket name condition can admit it", document.Document)
+	}
+}
+
+func TestADeployAdministersTheDatabasesOfItsNamespaceAndNoOtherInstance(t *testing.T) {
+	t.Parallel()
+
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	if err != nil {
+		t.Fatalf("Permissions(deploy) = %v", err)
+	}
+	const databases = `roles/cloudsql.admin, on the condition resource.name.startsWith("projects/acme-prod/instances/ocel--")`
+	if !strings.Contains(document.Document, databases) {
+		t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a deploy creates, changes and deletes the instances its namespace's databases run on, and no others", document.Document, databases)
+	}
+	for line := range strings.SplitSeq(document.Document, "\n") {
+		if line == "roles/cloudsql.admin" {
+			t.Errorf("Permissions(deploy) =\n%s\ngrants roles/cloudsql.admin unconditioned, over every Cloud SQL instance in the project", document.Document)
+		}
+	}
+	for _, permission := range []string{"cloudsql.instances.create", "cloudsql.instances.list"} {
+		if !strings.Contains(document.Document, permission) {
+			t.Errorf("Permissions(deploy) =\n%s\nwant %s in the custom role: Cloud SQL checks it against the project, where no instance name condition admits it", document.Document, permission)
+		}
 	}
 }
 

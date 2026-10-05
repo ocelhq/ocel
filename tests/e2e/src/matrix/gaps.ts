@@ -415,7 +415,7 @@ export const gaps: Gap[] = [
   {
     id: "floci-serves-no-memorystore",
     reason:
-      "floci serves no Memorystore, and the floci lane's bootstrap installs no kv network, so the gcp provider refuses a deploy that declares a store at preflight",
+      "floci serves no Memorystore, and the floci lane's bootstrap installs no private network, so the gcp provider refuses a deploy that declares a store at preflight",
     where: [
       {
         on: ["gcp.floci"],

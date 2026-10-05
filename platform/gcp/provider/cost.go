@@ -30,6 +30,7 @@ const (
 	tfSchedulerJob        = "google_cloud_scheduler_job"
 	tfServiceIdentity     = "google_project_service_identity"
 	tfMemorystoreInstance = "google_memorystore_instance"
+	tfSQLInstance         = "google_sql_database_instance"
 	tfNetwork             = "google_compute_network"
 	tfSubnetwork          = "google_compute_subnetwork"
 	tfConnectionPolicy    = "google_network_connectivity_service_connection_policy"
@@ -141,18 +142,27 @@ func shapeBuckets(tree *pricing.Tree, names Names, req provider.ShapeRequest, re
 func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, shared, environment string) error {
 	declared := false
 	for _, resource := range req.Resources {
-		if resource.Type != provider.BindingKV {
+		switch resource.Type {
+		case provider.BindingKV:
+			store, err := readKVStore(resource)
+			if err != nil {
+				return err
+			}
+			instance, err := names.KVInstance(req.Deploy.Slug, req.Deploy.Env, resource.Name)
+			if err != nil {
+				return err
+			}
+			tree.Add(environment, string(Vendor), tfMemorystoreInstance, instance, region, store.shapeProperties(region))
+		case provider.BindingPostgres:
+			spec, err := readPostgres(resource)
+			if err != nil {
+				return err
+			}
+			instance := names.PostgresInstance(req.Deploy.Slug, req.Deploy.Env, resource.Name)
+			tree.Add(environment, string(Vendor), tfSQLInstance, instance, region, spec.shapeProperties(region))
+		default:
 			continue
 		}
-		store, err := readKVStore(resource)
-		if err != nil {
-			return err
-		}
-		instance, err := names.KVInstance(req.Deploy.Slug, req.Deploy.Env, resource.Name)
-		if err != nil {
-			return err
-		}
-		tree.Add(environment, string(Vendor), tfMemorystoreInstance, instance, region, store.shapeProperties(region))
 		declared = true
 	}
 	if !declared {
@@ -160,8 +170,10 @@ func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 	}
 	tier := req.Deploy.Tier
 	tree.Add(shared, string(Vendor), tfNetwork, names.Network(tier), region, map[string]any{"auto_create_subnetworks": false})
-	tree.Add(shared, string(Vendor), tfSubnetwork, names.Subnetwork(tier), region, map[string]any{"region": region, "ip_cidr_range": kvSubnetRange})
-	tree.Add(shared, string(Vendor), tfConnectionPolicy, names.ConnectionPolicy(tier), region, map[string]any{"location": region, "service_class": memorystoreServiceClass})
+	tree.Add(shared, string(Vendor), tfSubnetwork, names.Subnetwork(tier), region, map[string]any{"region": region, "ip_cidr_range": networkSubnetRange})
+	for _, policy := range connectionPolicies {
+		tree.Add(shared, string(Vendor), tfConnectionPolicy, names.ConnectionPolicy(tier, policy.name), region, map[string]any{"location": region, "service_class": policy.class})
+	}
 	return nil
 }
 
