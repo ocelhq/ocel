@@ -21,8 +21,6 @@ type release struct {
 
 const Header = "Ocel-Sdk-Version"
 
-const codeVersionMismatch = "sdk.version_mismatch"
-
 const core = `(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)`
 
 var (
@@ -145,7 +143,7 @@ func Check(written language.Language, sdk, cli string) error {
 		return nil
 	}
 	mismatch := &MismatchError{Language: written, SDK: sdk, CLI: cli}
-	return &clierror.Error{Code: codeVersionMismatch, Hint: Upgrade(written, cli), Cause: mismatch}
+	return &clierror.Error{Code: clierror.CodeSDKVersionMismatch, Hint: Upgrade(written, cli), Cause: mismatch}
 }
 
 func Parse(header string) (written language.Language, version string, ok bool) {

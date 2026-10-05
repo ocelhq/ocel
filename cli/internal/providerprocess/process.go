@@ -40,8 +40,6 @@ const DefaultReapTimeout = 2 * time.Second
 
 const MaxMessageBytes = 128 << 20
 
-const unavailableCode = "provider.unavailable"
-
 type LaunchSpec struct {
 	BinaryPath      string
 	Args            []string
@@ -171,7 +169,7 @@ func Spawn(ctx context.Context, spec LaunchSpec) (*Process, error) {
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, &clierror.Error{Code: unavailableCode, Cause: fmt.Errorf("provider: spawn provider %q: %w", spec.BinaryPath, err)}
+		return nil, &clierror.Error{Code: clierror.CodeProviderUnavailable, Cause: fmt.Errorf("provider: spawn provider %q: %w", spec.BinaryPath, err)}
 	}
 
 	r := &Process{
@@ -264,9 +262,9 @@ func (r *Process) Ready(ctx context.Context) error {
 		r.stderrMu.Lock()
 		stderr := r.stderrBuf.String()
 		r.stderrMu.Unlock()
-		return &clierror.Error{Code: unavailableCode, Cause: &EarlyExitError{Err: r.waitErr, Stderr: stderr}}
+		return &clierror.Error{Code: clierror.CodeProviderUnavailable, Cause: &EarlyExitError{Err: r.waitErr, Stderr: stderr}}
 	case <-timer.C:
-		return &clierror.Error{Code: unavailableCode, Cause: &ReadyTimeoutError{Timeout: r.readyTimeout}}
+		return &clierror.Error{Code: clierror.CodeProviderUnavailable, Cause: &ReadyTimeoutError{Timeout: r.readyTimeout}}
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -274,10 +272,10 @@ func (r *Process) Ready(ctx context.Context) error {
 
 func (r *Process) open(ctx context.Context, ready localrpc.Readiness) error {
 	if ready.Version != version.Version {
-		return &clierror.Error{Code: "provider.version_mismatch", Cause: &VersionMismatchError{Name: r.providerName, Announced: ready.Version, Expected: version.Version}}
+		return &clierror.Error{Code: clierror.CodeProviderVersionMismatch, Cause: &VersionMismatchError{Name: r.providerName, Announced: ready.Version, Expected: version.Version}}
 	}
 	if err := r.dial(ready); err != nil {
-		return &clierror.Error{Code: unavailableCode, Cause: err}
+		return &clierror.Error{Code: clierror.CodeProviderUnavailable, Cause: err}
 	}
 	return r.configure(ctx)
 }
@@ -604,7 +602,7 @@ func (r *Process) drainStdout(stdout io.Reader) {
 		r.record(wrapped.Error())
 		if !ready {
 			select {
-			case r.scanErr <- &clierror.Error{Code: unavailableCode, Cause: wrapped}:
+			case r.scanErr <- &clierror.Error{Code: clierror.CodeProviderUnavailable, Cause: wrapped}:
 			default:
 			}
 		}

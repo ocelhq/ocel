@@ -124,7 +124,7 @@ func RequireLogin(load func() (Credentials, error), stderr io.Writer) (Credentia
 	creds, err := load()
 	if errors.Is(err, ErrNotLoggedIn) {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return Credentials{}, &clierror.Error{Code: "console.not_logged_in", Hint: "ocel login", Cause: &exitcode.ExitError{Code: 1, Err: err}}
+		return Credentials{}, &clierror.Error{Code: clierror.CodeConsoleNotLoggedIn, Hint: "ocel login", Cause: &exitcode.ExitError{Code: 1, Err: err}}
 	}
 	if err != nil {
 		return Credentials{}, fmt.Errorf("your saved login could not be read: %w\nRun `ocel login` to sign in again", err)

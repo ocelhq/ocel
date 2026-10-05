@@ -80,14 +80,14 @@ func refuseMissing(found error, missing MissingError) error {
 	if errors.As(found, new(*clierror.Error)) {
 		return found
 	}
-	return &clierror.Error{Code: "prerequisite.missing", Message: missing.Finding(), Hint: missing.Hint(), Cause: found}
+	return &clierror.Error{Code: clierror.CodePrerequisiteMissing, Message: missing.Finding(), Hint: missing.Hint(), Cause: found}
 }
 
 func refuseDeclined(found error, missing MissingError) error {
 	declined := SetupDeclinedError{Missing: missing}
 	var coded *clierror.Error
 	if !errors.As(found, &coded) {
-		return &clierror.Error{Code: "prerequisite.missing", Message: missing.Finding(), Hint: missing.Hint(), Cause: declined}
+		return &clierror.Error{Code: clierror.CodePrerequisiteMissing, Message: missing.Finding(), Hint: missing.Hint(), Cause: declined}
 	}
 	refusal := *coded
 	refusal.Cause = declined

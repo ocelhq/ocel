@@ -37,7 +37,7 @@ func exitError(ctx context.Context, err error) error {
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return &clierror.Error{Code: "dev.command_failed", Cause: &exitcode.ExitError{Code: childprocess.ExitCode(exitErr)}}
+		return &clierror.Error{Code: clierror.CodeDevCommandFailed, Cause: &exitcode.ExitError{Code: childprocess.ExitCode(exitErr)}}
 	}
 	return err
 }

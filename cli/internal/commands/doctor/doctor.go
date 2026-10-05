@@ -61,7 +61,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, stdout
 		found.render(stdout, terminal.PaletteFor(stdout))
 	}
 	if found.failures() > 0 {
-		return &clierror.Error{Code: "doctor.checks_failed", Cause: &exitcode.ExitError{Code: 1}}
+		return &clierror.Error{Code: clierror.CodeDoctorChecksFailed, Cause: &exitcode.ExitError{Code: 1}}
 	}
 	return nil
 }

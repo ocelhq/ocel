@@ -95,7 +95,7 @@ func refuseAbsentInfrastructure(resp *contractv1.PreflightResponse, provider *pr
 	if resp.GetInfrastructurePresent() {
 		absent.PresentTier = infra
 	}
-	return &clierror.Error{Code: "bootstrap.missing", Hint: absent.Hint(), Cause: absent}
+	return &clierror.Error{Code: clierror.CodeBootstrapMissing, Hint: absent.Hint(), Cause: absent}
 }
 
 func refuseMissingFeatures(gap Gap, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) error {

@@ -25,7 +25,7 @@ func (r *MissingError) Error() string {
 }
 
 func refuse(missing *MissingError) error {
-	return &clierror.Error{Code: "variables.missing", Hint: missing.remedy(), Cause: missing}
+	return &clierror.Error{Code: clierror.CodeVariablesMissing, Hint: missing.remedy(), Cause: missing}
 }
 
 func (r *MissingError) Detail() string { return "" }

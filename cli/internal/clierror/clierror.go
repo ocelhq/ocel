@@ -3,22 +3,13 @@ package clierror
 import (
 	"context"
 	"errors"
+	"slices"
 
-	"buf.build/go/protovalidate"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/docsurl"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-)
-
-const (
-	internalCode                   = "internal"
-	CodeUsage                      = "usage"
-	CodeInterrupted                = "interrupted"
-	CodeConfirmationRequired       = "confirmation_required"
-	CodeConfirmationBypassMismatch = "confirmation_bypass_mismatch"
-	CodeInputRequired              = "input_required"
 )
 
 type Error struct {
@@ -82,5 +73,5 @@ func isInterrupt(err error) bool {
 }
 
 func isPublishedCode(code string) bool {
-	return code != internalCode && protovalidate.Validate(&streamv1.RunError{Code: code}) == nil
+	return slices.Contains(Codes(), code)
 }
