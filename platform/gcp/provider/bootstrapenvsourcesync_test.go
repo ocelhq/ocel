@@ -22,7 +22,7 @@ func longestNames() Names {
 	return Names{namespace: provider.Namespace(strings.Repeat("a", maxAccountID-len("-"+string(longestTier)))), project: "acme-prod"}
 }
 
-func TestTheSyncAccountFitsTheLongestNamespaceTheWorkloadAccountLeavesRoomFor(t *testing.T) {
+func TestTheSyncAccountFitsTheLongestNamespaceTheDelayAccountLeavesRoomFor(t *testing.T) {
 	t.Parallel()
 	names := longestNames()
 	if err := names.fit(); err != nil {
@@ -54,7 +54,7 @@ func TestEachTierSyncsAsAnAccountOfItsOwnThatEveryReadNamesTheSame(t *testing.T)
 		t.Errorf("the production sync account is %s once and %s again, and a survey could not find the account an apply made", production, again)
 	}
 	for _, tier := range bothTiers {
-		if names.EnvSourceSyncAccount(tier) == names.WorkloadAccount(tier) {
+		if names.EnvSourceSyncAccount(tier) == names.DelayAccount(tier) {
 			t.Errorf("the %s sync runs as the account every app runs as, and an app would then write every value", tier)
 		}
 	}
@@ -96,8 +96,8 @@ func TestTheSyncAccountMayWriteThisDatabaseAndSealAndOpenUnderItsTierKeyAlone(t 
 			t.Errorf("the production key binds %v to %s, want the sync account: it opens its credentials and seals what it copies", granted, role)
 		}
 	}
-	if readers, _ := server.projectMembers(workloadRecordsRole); slices.Contains(readers, member) {
-		t.Errorf("the sync account has the workload's %s too, and one grant is what it needs", workloadRecordsRole)
+	if readers, _ := server.projectMembers(appRecordsRole); slices.Contains(readers, member) {
+		t.Errorf("the sync account has the workload's %s too, and one grant is what it needs", appRecordsRole)
 	}
 
 	found, err := b.accountPresence(ctx, environment.TierProduction, name)
@@ -588,7 +588,7 @@ func TestRemovingATierStopsTheScheduleAndTheServiceBeforeTheKeyAndTheAccounts(t 
 	for _, later := range []item{
 		{Kind: KindKey, Name: string(tier)},
 		{Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(tier)},
-		{Kind: KindServiceAccount, Name: names.WorkloadAccount(tier)},
+		{Kind: KindServiceAccount, Name: names.DelayAccount(tier)},
 		{Kind: KindRepository, Name: names.Repository(tier)},
 	} {
 		if schedule < 0 || service < 0 || schedule > service || service > at(later) {

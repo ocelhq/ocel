@@ -72,7 +72,7 @@ func (c *clients) taskGrants(ctx context.Context, spec provider.StackSpec, membe
 			return lacking(c.bindQueueRoles(ctx, tier, member, queueRoles), queueAdminGrant(c.DelayQueuePath(c.region, tier)))
 		},
 		func() error {
-			return lacking(c.bindAccountRole(ctx, c.WorkloadAccount(tier), runAsRole, member, true), accountAdminGrant(c.WorkloadAccountEmail(tier)))
+			return lacking(c.bindAccountRole(ctx, c.DelayAccount(tier), runAsRole, member, true), accountAdminGrant(c.DelayAccountEmail(tier)))
 		},
 		func() error {
 			return topics.Topology{Names: taskNames(c.Names, spec.Ref), Topics: declared, Publisher: member}.GrantPublisher(ctx, c.Workload())

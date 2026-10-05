@@ -84,7 +84,7 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 			Note: "the key every value this tier stores is sealed under",
 		},
 		{
-			Kind: KindServiceAccount, Name: names.WorkloadAccount(tier),
+			Kind: KindServiceAccount, Name: names.DelayAccount(tier),
 			Note: "the identity every app in this tier runs as, and the one the deploy hands Cloud Run",
 		},
 		{

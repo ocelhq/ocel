@@ -208,20 +208,15 @@ func (b bootstrap) forgetTaskWrites(ctx context.Context, tier environment.Tier) 
 }
 
 func (b bootstrap) bindTaskWrites(ctx context.Context, tier environment.Tier, granting bool) error {
-	member := workloadMember(b.clients, tier)
-	if err := b.clients.bindProjectRole(ctx, member, taskRecordsRole, taskDatabaseCondition(b.clients, tier), granting); err != nil {
-		return fmt.Errorf("let %s read and write the runs in %s: %w", member, b.clients.TaskDatabase(tier), err)
-	}
 	agent, err := b.clients.ReadServiceAgent(ctx, cloudTasksAgentDomain)
 	if err != nil {
 		return err
 	}
-	for _, actor := range []string{member, agent} {
-		if err := b.clients.bindAccountRole(ctx, b.clients.WorkloadAccount(tier), runAsRole, actor, granting); err != nil {
-			return err
-		}
-	}
-	return nil
+	return b.clients.bindAccountRole(ctx, b.clients.DelayAccount(tier), runAsRole, agent, granting)
+}
+
+func delayMember(c *clients, tier environment.Tier) string {
+	return "serviceAccount:" + c.DelayAccountEmail(tier)
 }
 
 func (b bootstrap) delayQueuePath(tier environment.Tier) string {
@@ -249,7 +244,7 @@ func (b bootstrap) ensureDelayQueue(ctx context.Context, tier environment.Tier) 
 	if err := (topics.Delays{Queue: b.delayQueuePath(tier)}).Ensure(ctx, b.clients.Workload()); err != nil {
 		return err
 	}
-	return b.clients.bindQueueRoles(ctx, tier, workloadMember(b.clients, tier), queueRoles)
+	return nil
 }
 
 func (c *clients) bindQueueRoles(ctx context.Context, tier environment.Tier, member string, wanted []string) error {

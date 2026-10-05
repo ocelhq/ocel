@@ -62,12 +62,12 @@ func (n Names) RepositoryPath(region string, tier environment.Tier) string {
 	return region + dockerRegistryHost + "/" + n.project + "/" + n.Repository(tier)
 }
 
-func (n Names) WorkloadAccount(tier environment.Tier) string {
+func (n Names) DelayAccount(tier environment.Tier) string {
 	return string(n.namespace) + "-" + string(tier)
 }
 
-func (n Names) WorkloadAccountEmail(tier environment.Tier) string {
-	return n.WorkloadAccount(tier) + "@" + n.project + accountDomain
+func (n Names) DelayAccountEmail(tier environment.Tier) string {
+	return n.DelayAccount(tier) + "@" + n.project + accountDomain
 }
 
 const appAccountInfix = "app"
@@ -318,10 +318,10 @@ func (n Names) fit() error {
 				"Name a namespace in %s that does not",
 			n.Database(), provider.NamespaceEnvVar)
 	}
-	if account := n.WorkloadAccount(longestTier); len(account) > maxAccountID {
+	if account := n.DelayAccount(longestTier); len(account) > maxAccountID {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %s service account this bootstrap names is %d characters and Google takes %d: "+
-				"every app in the %s tier runs as it, so the tier is part of its name.\n"+
+				"a delayed message of the %s tier is published as it, so the tier is part of its name.\n"+
 				"Name a shorter namespace in %s",
 			account, len(account), maxAccountID, longestTier, provider.NamespaceEnvVar)
 	}

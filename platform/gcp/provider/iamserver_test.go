@@ -19,8 +19,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type iamServer struct {
@@ -56,6 +54,10 @@ type iamServer struct {
 type delayQueues struct {
 	cloudtaskspb.UnimplementedCloudTasksServer
 	server *iamServer
+}
+
+func (q delayQueues) CreateQueue(_ context.Context, req *cloudtaskspb.CreateQueueRequest) (*cloudtaskspb.Queue, error) {
+	return req.GetQueue(), nil
 }
 
 func (q delayQueues) GetIamPolicy(_ context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
@@ -265,96 +267,14 @@ func grantedIAM() *iamServer {
 	}
 }
 
-func TestTheRuntimeAccountIsLimitedToReadingThisDatabaseAndOpeningUnderTheTierKeyAlone(t *testing.T) {
-	t.Parallel()
-	server := grantedIAM()
-	b := bootstrap{clients: server.open(t)}
-	read := survey{Tier: environment.TierProduction, Names: b.clients.Names}
-	ctx := context.Background()
-
-	if err := b.makeAccount(ctx, read, "ocel-production"); err != nil {
-		t.Fatalf("makeAccount() = %v", err)
-	}
-	const member = "serviceAccount:ocel-production@acme-prod.iam.gserviceaccount.com"
-	members, condition := server.projectMembers(workloadRecordsRole)
-	if !slices.Contains(members, member) {
-		t.Errorf("the project binds %v to %s, want the runtime account: a container's runtime reads its records with it", members, workloadRecordsRole)
-	}
-	if condition == nil || !strings.Contains(condition.Expression, "projects/acme-prod/databases/ocel") {
-		t.Errorf("the read is conditioned on %+v, want this namespace's one database: IAM fences Firestore no finer than a database", condition)
-	}
-	if writers, _ := server.projectMembers("roles/datastore.user"); len(writers) > 0 {
-		t.Errorf("the runtime account has roles/datastore.user, and a runtime writes nothing")
-	}
-	key := "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"
-	if openers := server.keyMembers(key, workloadOpeningRole); !slices.Contains(openers, member) {
-		t.Errorf("the production key binds %v to %s, want the runtime account: it opens what the deploy sealed", openers, workloadOpeningRole)
-	}
-	if sealers := server.keyMembers(key, connectorSealingRole); len(sealers) > 0 {
-		t.Errorf("the runtime account has %s, and a runtime seals nothing", connectorSealingRole)
-	}
-
-	found, err := b.accountPresence(ctx, environment.TierProduction, "ocel-production")
-	if err != nil {
-		t.Fatalf("accountPresence() = %v", err)
-	}
-	if !found.present || found.mends != "" {
-		t.Errorf("accountPresence() = %+v after the grants landed, want it present with nothing to mend", found)
-	}
-	written := server.writes
-	if err := b.makeAccount(ctx, read, "ocel-production"); err != nil {
-		t.Fatalf("makeAccount() again = %v", err)
-	}
-	if server.writes != written {
-		t.Errorf("a second bootstrap wrote %d more policies, want none: the grants are already in place", server.writes-written)
-	}
-}
-
-func TestAnAccountThatMayNotReadIsSurveyedAsMendable(t *testing.T) {
-	t.Parallel()
-	server := grantedIAM()
-	b := bootstrap{clients: server.open(t)}
-
-	found, err := b.accountPresence(context.Background(), environment.TierProduction, "ocel-production")
-	if err != nil {
-		t.Fatalf("accountPresence() = %v", err)
-	}
-	if !found.present || found.mends != reasonUnread {
-		t.Errorf("accountPresence() = %+v, want it present and mended for the read it lacks: a bootstrap made before the runtime read live would otherwise never grant it", found)
-	}
-}
-
-func TestRemovingTheAccountTakesItsReadsOffTheProjectAndTheKeyFirst(t *testing.T) {
-	t.Parallel()
-	server := grantedIAM()
-	b := bootstrap{clients: server.open(t)}
-	read := survey{Tier: environment.TierProduction, Names: b.clients.Names}
-	ctx := context.Background()
-	if err := b.makeAccount(ctx, read, "ocel-production"); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := b.takeAccount(ctx, environment.TierProduction, "ocel-production"); err != nil {
-		t.Fatalf("takeAccount() = %v", err)
-	}
-	const member = "serviceAccount:ocel-production@acme-prod.iam.gserviceaccount.com"
-	if readers, _ := server.projectMembers(workloadRecordsRole); slices.Contains(readers, member) {
-		t.Errorf("the project still binds the deleted account to %s, and a deleted principal's binding lingers in the policy for anyone to read", workloadRecordsRole)
-	}
-	key := "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"
-	if openers := server.keyMembers(key, workloadOpeningRole); slices.Contains(openers, member) {
-		t.Errorf("the key still binds the deleted account to %s", workloadOpeningRole)
-	}
-}
-
-func TestABootstrapChecksThePermissionsTheRuntimeGrantsNeed(t *testing.T) {
+func TestABootstrapChecksThePermissionsItsAccountGrantsNeed(t *testing.T) {
 	t.Parallel()
 	for _, permission := range []string{
 		"resourcemanager.projects.getIamPolicy", "resourcemanager.projects.setIamPolicy",
 		"cloudkms.cryptoKeys.getIamPolicy", "cloudkms.cryptoKeys.setIamPolicy",
 	} {
 		if !slices.Contains(bootstrapPermissions, permission) {
-			t.Errorf("a bootstrap does not check %s, and the apply would fail at the runtime account's grant", permission)
+			t.Errorf("a bootstrap does not check %s, and the apply would fail at an account's grant", permission)
 		}
 	}
 	if !slices.Contains(rolesCovering(nil), "roles/resourcemanager.projectIamAdmin") {

@@ -130,7 +130,7 @@ func TestAFunctionServiceRunsAsItsAppsOwnAccountNotTheTiers(t *testing.T) {
 			}
 			for _, service := range server.created {
 				if got := service.Template.ServiceAccount; got != want {
-					t.Errorf("%s runs as %q, want its app's own %q and not the tier's %q", service.Name, got, want, p.resolved.WorkloadAccountEmail(environment.TierProduction))
+					t.Errorf("%s runs as %q, want its app's own %q and not the tier's %q", service.Name, got, want, p.resolved.DelayAccountEmail(environment.TierProduction))
 				}
 			}
 		})
@@ -248,7 +248,7 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsTheTierAndPublishToItsTo
 	if !slices.Equal(queueRoles, []string{"roles/cloudtasks.enqueuer", "roles/cloudtasks.taskDeleter"}) {
 		t.Errorf("the app holds %v on the delay queue, want enqueuer and taskDeleter", queueRoles)
 	}
-	tier := "/v1/projects/acme-prod/serviceAccounts/" + c.WorkloadAccountEmail(environment.TierProduction)
+	tier := "/v1/projects/acme-prod/serviceAccounts/" + c.DelayAccountEmail(environment.TierProduction)
 	actAs := false
 	for _, binding := range policyOrEmpty(server.accountPolicies[tier]) {
 		actAs = actAs || binding.Role == runAsRole && slices.Contains(binding.Members, member)

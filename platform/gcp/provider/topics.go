@@ -65,7 +65,7 @@ func topologyOf(ctx context.Context, c *clients, ref provider.StackRef, declared
 	return topics.Topology{
 		Names:     taskNames(c.Names, ref),
 		Topics:    declared,
-		Publisher: workloadMember(c, ref.Tier),
+		Publisher: delayMember(c, ref.Tier),
 		Agent:     agent,
 	}, nil
 }

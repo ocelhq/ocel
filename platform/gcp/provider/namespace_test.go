@@ -32,7 +32,7 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 				"key ring":          names.KeyRing(),
 				"passphrase secret": names.PassphraseSecret(environment.TierProduction),
 				"image repository":  names.Repository(environment.TierProduction),
-				"runtime account":   names.WorkloadAccount(environment.TierProduction),
+				"delay account":     names.DelayAccount(environment.TierProduction),
 				"task database":     names.TaskDatabase(environment.TierProduction),
 				"delay queue":       names.DelayQueue(environment.TierProduction),
 				"push account":      names.PushAccount(environment.TierProduction),
@@ -56,11 +56,11 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 			if got, want := names.RepositoryPath("europe-west1", environment.TierPreview), "europe-west1-docker.pkg.dev/acme-prod/"+tc.stem+"-acme-prod-preview"; got != want {
 				t.Errorf("RepositoryPath() = %q, want %q: the deploy pushes images to that host", got, want)
 			}
-			if got, want := names.WorkloadAccount(environment.TierProduction), tc.stem+"-production"; got != want {
-				t.Errorf("WorkloadAccount() = %q, want %q", got, want)
+			if got, want := names.DelayAccount(environment.TierProduction), tc.stem+"-production"; got != want {
+				t.Errorf("DelayAccount() = %q, want %q", got, want)
 			}
-			if got, want := names.WorkloadAccountEmail(environment.TierProduction), tc.stem+"-production@acme-prod.iam.gserviceaccount.com"; got != want {
-				t.Errorf("WorkloadAccountEmail() = %q, want %q: a service runs as the account that address names", got, want)
+			if got, want := names.DelayAccountEmail(environment.TierProduction), tc.stem+"-production@acme-prod.iam.gserviceaccount.com"; got != want {
+				t.Errorf("DelayAccountEmail() = %q, want %q: a delayed message is published as the account that address names", got, want)
 			}
 			if got, want := names.TaskDatabase(environment.TierPreview), tc.stem+"-preview-tasks"; got != want {
 				t.Errorf("TaskDatabase() = %q, want %q", got, want)
@@ -247,7 +247,7 @@ func TestEachTierRunsItsGatewaysAsAnAccountOfItsOwn(t *testing.T) {
 			t.Errorf("RealtimeAccount() = %q, which IAM will not take as an account id", account)
 		}
 	}
-	if production == preview || production == names.WorkloadAccount(environment.TierProduction) {
+	if production == preview || production == names.DelayAccount(environment.TierProduction) {
 		t.Errorf("the production gateway runs as %q, which is not an account of its own", production)
 	}
 }
