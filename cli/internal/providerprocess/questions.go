@@ -43,7 +43,7 @@ func (q Questions) answer(ctx context.Context, process *Process, refused error) 
 		return false, refused
 	}
 	if !q.attended() {
-		return false, clierror.NewInputRequired(refused, "")
+		return false, clierror.NewInputRequired(refused, printable(question.GetRemedy()))
 	}
 	client, err := process.Client()
 	if err != nil {
