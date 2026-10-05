@@ -114,7 +114,7 @@ func twoAppsOfOneBranch(web, api string) RoutingTable {
 }
 
 func TestARealProxyServesOnePreviewHostPerAppAndOnePerBranch(t *testing.T) {
-	network := enginetest.Network(t)
+	network := enginetest.Network(t, "box")
 	web := appOn(t, network, "web", "the web preview answered")
 	api := appOn(t, network, "api", "the api preview answered")
 

@@ -46,13 +46,9 @@ func onYourNetwork(t *testing.T) yourNetwork {
 	if err != nil {
 		t.Skipf("no switchboard is built for a machine reporting %q", runtime.GOARCH)
 	}
-	boxNetwork := enginetest.Network(t)
-	yours, board := probeName(t), probeName(t)+"-board"
-	if said, err := exec.Command(dockerEngine, append(append([]string{"network", "create"}, enginetest.RunLabelArgs(t)...), yours)...).CombinedOutput(); err != nil {
-		t.Fatalf("create %s: %v\n%s", yours, err, said)
-	}
-	t.Cleanup(func() { _ = exec.Command(dockerEngine, "network", "rm", yours).Run() })
-	tunneling := aTunnelNetwork(t)
+	boxNetwork := enginetest.Network(t, "box")
+	yours, board := enginetest.Network(t, "yours"), probeName(t)+"-board"
+	tunneling := enginetest.Network(t, "tunnel")
 	t.Cleanup(func() { taken(t, board) })
 
 	dir := enginetest.BindSource(t)

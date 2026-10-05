@@ -50,7 +50,11 @@ func Main(m *testing.M) int {
 	if !engaged.Load() {
 		return code
 	}
-	if err := sweep(func(of string) bool { return of == run }); err != nil {
+	err := sweep(func(of string) bool { return of == run })
+	if lease.held != nil {
+		err = errors.Join(err, emptySlot(lease.slot))
+	}
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "this run leaves behind what it started on the engine, and every run after it inherits the leftovers:\n%v\n", err)
 		if code == 0 {
 			return 1
@@ -113,13 +117,6 @@ func sweep(owned func(of string) bool) error {
 	if taken := ownedBy(containers, owned); len(taken) > 0 {
 		failed = append(failed, docker(append([]string{"rm", "--force", "--volumes"}, taken...)...))
 	}
-	networks, err := listLabelled("network", "ls")
-	if err != nil {
-		return errors.Join(append(failed, err)...)
-	}
-	for _, network := range ownedBy(networks, owned) {
-		failed = append(failed, removeNetwork(network))
-	}
 	for _, root := range roots(owned) {
 		failed = append(failed, removeRunRoot(root))
 	}
@@ -149,19 +146,6 @@ func ownedBy(found map[string]string, owned func(of string) bool) []string {
 		}
 	}
 	return taken
-}
-
-func removeNetwork(network string) error {
-	said, err := exec.Command(engine, "network", "inspect", "--format", `{{range .Containers}}{{.Name}} {{end}}`, network).Output()
-	if err != nil {
-		return fmt.Errorf("read what is attached to network %s: %w", network, err)
-	}
-	if attached := strings.Fields(string(said)); len(attached) > 0 {
-		if err := docker(append([]string{"rm", "--force", "--volumes"}, attached...)...); err != nil {
-			return err
-		}
-	}
-	return docker("network", "rm", network)
 }
 
 func docker(argv ...string) error {
@@ -257,21 +241,6 @@ func (l *onceOrSkip[T]) get(t *testing.T, provision func() (T, string)) T {
 		t.Skip(l.refused)
 	}
 	return l.value
-}
-
-var network onceOrSkip[string]
-
-func Network(t *testing.T) string {
-	t.Helper()
-	labels := RunLabelArgs(t)
-	return network.get(t, func() (string, string) {
-		name := uniqueName("net")
-		argv := append(append([]string{"network", "create"}, labels...), name)
-		if said, err := exec.Command(engine, argv...).CombinedOutput(); err != nil {
-			return "", fmt.Sprintf("this machine's engine will not create the network the run's containers resolve each other across: %s", said)
-		}
-		return name, ""
-	})
 }
 
 var bound onceOrSkip[string]

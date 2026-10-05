@@ -105,6 +105,10 @@ or extend a comment Signal does not allow, and delete it when you change the cod
   E2E Tests, and a release pull request E2E Tests (Cloud).
 - A Go test that drives docker, an emulator or a VM builds only under the `integration` tag,
   and fails rather than skips where that environment is missing.
+- A Go test that drives docker takes its networks from `enginetest.Network(t, role)`, which
+  every run reuses, and labels its containers with `enginetest.RunLabelArgs(t)`. Every
+  network created and removed is a host bridge whose address coming and going reads to
+  browsers on the machine as the network changing, failing their requests.
 - The VM and emulator suites (`scripts/incus.sh`, `scripts/incus-fanout.sh`,
   `scripts/floci.sh` and the `scripts/act.sh` replays) run in CI. Run one locally only to
   reproduce a failure CI reported.
