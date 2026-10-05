@@ -3,6 +3,7 @@ package root
 import (
 	"errors"
 	"io"
+	"time"
 
 	"github.com/spf13/pflag"
 
@@ -14,9 +15,17 @@ import (
 
 const usageCode = "usage"
 
-func (c *command) executeAndReport(args []string) (exitCode int) {
+func (c *command) executeAndReport(args []string) int {
+	started := time.Now()
 	c.root.SetArgs(args)
 	err := c.execute()
+	elapsed := time.Since(started)
+	exitCode := c.reportFailure(args, err)
+	c.recordCommandCompleted(args, err, exitCode, elapsed)
+	return exitCode
+}
+
+func (c *command) reportFailure(args []string, err error) int {
 	if err == nil {
 		return 0
 	}
