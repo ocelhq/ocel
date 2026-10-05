@@ -45,17 +45,130 @@ func TestAPropertyOutsideTheAllowlistIsRefused(t *testing.T) {
 	}
 }
 
-func TestTheAllowlistHoldsOnlyWhatACommandCompletedEventSends(t *testing.T) {
-	event, err := NewCommandCompleted(anIdentity, aTime, CommandCompletion{Command: "help"})
+func TestTheAllowlistHoldsExactlyWhatTheEventsSend(t *testing.T) {
+	completed, err := NewCommandCompleted(anIdentity, aTime, CommandCompletion{Command: "help"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	devEnded, err := NewDevSessionEnded(anIdentity, aTime, DevSession{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	initCompleted, err := NewInitCompleted(anIdentity, aTime, InitCompletion{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if got := slices.Sorted(maps.Keys(event.Properties)); !slices.Equal(got, slices.Sorted(slices.Values(allowedProperties))) {
+	sent := map[string]bool{}
+	for _, event := range []Event{completed, devEnded, initCompleted} {
+		for property := range event.Properties {
+			sent[property] = true
+		}
+	}
+	if got := slices.Sorted(maps.Keys(sent)); !slices.Equal(got, slices.Sorted(slices.Values(allowedProperties))) {
 		t.Errorf("event properties = %v, want exactly the allowlist %v", got, allowedProperties)
 	}
-	if !slices.Equal(allowedEvents, []string{event.Name}) {
-		t.Errorf("allowed events = %v, want only %q", allowedEvents, event.Name)
+	names := []string{completed.Name, devEnded.Name, initCompleted.Name}
+	if !slices.Equal(slices.Sorted(slices.Values(allowedEvents)), slices.Sorted(slices.Values(names))) {
+		t.Errorf("allowed events = %v, want exactly %v", allowedEvents, names)
+	}
+}
+
+func TestADevSessionEndedEventCarriesTheSessionAndTheBaseProperties(t *testing.T) {
+	event, err := NewDevSessionEnded(anIdentity, aTime, DevSession{
+		Duration:      90 * time.Second,
+		Reloads:       3,
+		ResourceKinds: []string{"bucket", "postgres"},
+		ErrorCodes:    map[string]int{"dev.command_failed": 1, "env.missing": 2},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(marshal(t, event), &got); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := uuid.Parse(fmt.Sprint(got["uuid"])); err != nil || id.Version() != 7 {
+		t.Errorf("uuid = %v, want a version 7 UUID: %v", got["uuid"], err)
+	}
+	delete(got, "uuid")
+	want := map[string]any{
+		"event":       "dev_session_ended",
+		"distinct_id": anIdentity.InstallID,
+		"timestamp":   "2026-10-05T12:30:45.123Z",
+		"properties": map[string]any{
+			"duration_ms":             float64(90000),
+			"reloads":                 float64(3),
+			"resource_kinds":          []any{"bucket", "postgres"},
+			"error_codes":             map[string]any{"dev.command_failed": float64(1), "env.missing": float64(2)},
+			"cli_version":             "1.2.3",
+			"os":                      "linux",
+			"arch":                    "amd64",
+			"agent":                   "claude-code",
+			"ci":                      "github-actions",
+			"$process_person_profile": false,
+		},
+	}
+	if !bytes.Equal(marshal(t, got), marshal(t, want)) {
+		t.Errorf("event = %v, want %v", got, want)
+	}
+}
+
+func TestADevSessionEndedEventSortsItsKindsAndSendsEmptyCollectionsNotNull(t *testing.T) {
+	sorted, err := NewDevSessionEnded(anIdentity, aTime, DevSession{ResourceKinds: []string{"postgres", "bucket", "kv"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty, err := NewDevSessionEnded(anIdentity, aTime, DevSession{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if line := string(marshal(t, sorted)); !strings.Contains(line, `"resource_kinds":["bucket","kv","postgres"]`) {
+		t.Errorf("event = %s, want the kinds sorted", line)
+	}
+	line := string(marshal(t, empty))
+	for _, want := range []string{`"resource_kinds":[]`, `"error_codes":{}`, `"reloads":0`, `"duration_ms":0`} {
+		if !strings.Contains(line, want) {
+			t.Errorf("event = %s, want %s", line, want)
+		}
+	}
+}
+
+func TestAnInitCompletedEventCarriesTheLanguagePackageManagerProviderAndConfigFormat(t *testing.T) {
+	event, err := NewInitCompleted(anIdentity, aTime, InitCompletion{Language: "node", PackageManager: "pnpm", Provider: "aws", ConfigFormat: "yaml"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(marshal(t, event), &got); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := uuid.Parse(fmt.Sprint(got["uuid"])); err != nil || id.Version() != 7 {
+		t.Errorf("uuid = %v, want a version 7 UUID: %v", got["uuid"], err)
+	}
+	delete(got, "uuid")
+	want := map[string]any{
+		"event":       "init_completed",
+		"distinct_id": anIdentity.InstallID,
+		"timestamp":   "2026-10-05T12:30:45.123Z",
+		"properties": map[string]any{
+			"language":                "node",
+			"package_manager":         "pnpm",
+			"provider":                "aws",
+			"config_format":           "yaml",
+			"cli_version":             "1.2.3",
+			"os":                      "linux",
+			"arch":                    "amd64",
+			"agent":                   "claude-code",
+			"ci":                      "github-actions",
+			"$process_person_profile": false,
+		},
+	}
+	if !bytes.Equal(marshal(t, got), marshal(t, want)) {
+		t.Errorf("event = %v, want %v", got, want)
 	}
 }
 
