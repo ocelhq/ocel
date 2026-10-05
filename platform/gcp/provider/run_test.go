@@ -764,6 +764,22 @@ func TestARollbackRecordThatCannotBeDecodedIsReportedRatherThanReadAsNothing(t *
 	}
 }
 
+func TestAPinThatFindsTheServiceOpenedOnItsRetryDoesNotClaimToHaveOpenedIt(t *testing.T) {
+	server := &runServer{}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+	server.patchConflicts = 1
+	server.onConflict = func(s *run.GoogleCloudRunV2Service) { s.InvokerIamDisabled = true }
+
+	opened, err := server.open(t).Pin(context.Background(), app.service, one, nil)
+	if err != nil {
+		t.Fatalf("Pin(%s) = %v", one, err)
+	}
+	if opened {
+		t.Error("Pin says it opened a service another promotion opened while it retried, and a failed promotion would close what that one opened")
+	}
+}
+
 func TestPinningAServiceNoPromotionOpensLeavesItsInvokerCheckOn(t *testing.T) {
 	server := &runServer{}
 	worker := serving{service: "ocel-shop-prod-worker", image: "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one", compute: provider.ComputeServerless}
