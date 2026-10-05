@@ -547,7 +547,7 @@ func TestAnAssumptionIsWarnedOnTheStreamAndListedOnTheSummary(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	check.Assume("new_project", `creating new project "x" without confirmation (no terminal)`)
+	check.Assume("new_project", `creating new project "x" without confirmation (nobody to ask)`)
 
 	var err error
 	run.End(&err)
@@ -555,7 +555,7 @@ func TestAnAssumptionIsWarnedOnTheStreamAndListedOnTheSummary(t *testing.T) {
 	got := sink.received()
 	var warned bool
 	for _, ev := range got {
-		if ev.GetOperation().GetLevel() == progressv1.Level_LEVEL_WARN && ev.GetOperation().GetMessage() == `creating new project "x" without confirmation (no terminal)` {
+		if ev.GetOperation().GetLevel() == progressv1.Level_LEVEL_WARN && ev.GetOperation().GetMessage() == `creating new project "x" without confirmation (nobody to ask)` {
 			warned = true
 		}
 	}
@@ -563,7 +563,7 @@ func TestAnAssumptionIsWarnedOnTheStreamAndListedOnTheSummary(t *testing.T) {
 		t.Errorf("no WARN event carried the assumption's text")
 	}
 	assumed := got[len(got)-1].GetSummary().GetAssumed()
-	if len(assumed) != 1 || assumed[0].GetId() != "new_project" || assumed[0].GetWarning() != `creating new project "x" without confirmation (no terminal)` {
+	if len(assumed) != 1 || assumed[0].GetId() != "new_project" || assumed[0].GetWarning() != `creating new project "x" without confirmation (nobody to ask)` {
 		t.Fatalf("assumed = %v, want the one assumption with its id and warning", assumed)
 	}
 }

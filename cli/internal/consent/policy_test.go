@@ -181,7 +181,7 @@ var newProjectGuard = consent.Guard{
 	Action:   `creating new project "shop"`,
 }
 
-const newProjectAssumption = `creating new project "shop" without confirmation (no terminal)`
+const newProjectAssumption = `creating new project "shop" without confirmation (nobody to ask)`
 
 func summaryOf(t *testing.T, term *terminal, span *run.Span) *streamv1.RunSummary {
 	t.Helper()
@@ -487,7 +487,7 @@ func TestAQuestionWithNoTerminalToAskOnIsRefusedWithConfirmationRequiredNamingYe
 
 	err := g.RefuseQuestion(teardown, "before it tears the preview down")
 
-	want := "`ocel preview rm`" + ` needs a terminal to ask "Tear down the named preview \"staging\"?" before it tears the preview down; to run it unattended, pass --yes`
+	want := "`ocel preview rm`" + ` needs a terminal, without --json, to ask "Tear down the named preview \"staging\"?" before it tears the preview down; to run it unattended, pass --yes`
 	if err == nil || err.Error() != want {
 		t.Fatalf("RefuseQuestion() = %v, want %s", err, want)
 	}
