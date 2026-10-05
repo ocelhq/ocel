@@ -6,14 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/gofrs/flock"
 )
 
-const FlushTimeout = 3 * time.Second
+const flushTimeout = 3 * time.Second
 
 type batch struct {
 	APIKey string            `json:"api_key"`
@@ -29,29 +26,32 @@ func Flush(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(ctx, FlushTimeout)
+	ctx, cancel := context.WithTimeout(ctx, flushTimeout)
 	defer cancel()
-	_ = spool.Send(ctx, &http.Client{Timeout: FlushTimeout}, Endpoint, WriteKey)
+	_ = Send(ctx, &http.Client{Timeout: flushTimeout}, spool, Endpoint, WriteKey)
 }
 
-func (s Spool) Send(ctx context.Context, client *http.Client, endpoint, key string) error {
-	if err := s.ensureDir(); err != nil {
-		return err
-	}
-	lock := flock.New(filepath.Join(s.dir, flushLockName))
-	locked, err := lock.TryLock()
-	if err != nil {
-		return fmt.Errorf("lock telemetry flush: %w", err)
-	}
-	if !locked {
+func Send(ctx context.Context, client *http.Client, spool Spool, endpoint, key string) error {
+	if !spool.HasEvents() {
 		return nil
 	}
-	defer func() { _ = lock.Unlock() }()
+	unlock, locked, err := spool.lockSending()
+	if err != nil || !locked {
+		return err
+	}
+	defer unlock()
 
-	events, err := s.Read()
+	events, err := spool.Read()
 	if err != nil || len(events) == 0 {
 		return err
 	}
+	if err := postBatch(ctx, client, endpoint, key, events); err != nil {
+		return err
+	}
+	return spool.remove(events)
+}
+
+func postBatch(ctx context.Context, client *http.Client, endpoint, key string, events []json.RawMessage) error {
 	body, err := json.Marshal(batch{APIKey: key, Events: events})
 	if err != nil {
 		return fmt.Errorf("encode telemetry batch: %w", err)
@@ -69,5 +69,5 @@ func (s Spool) Send(ctx context.Context, client *http.Client, endpoint, key stri
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return fmt.Errorf("send telemetry batch: status %d", resp.StatusCode)
 	}
-	return s.remove(events)
+	return nil
 }

@@ -75,14 +75,52 @@ func TestAnAppendedEventReadsBackInOrderOneJSONLinePerEvent(t *testing.T) {
 	}
 }
 
-func TestASpoolNothingWasAppendedToIsEmpty(t *testing.T) {
-	spool := telemetry.NewSpool(filepath.Join(t.TempDir(), "never-created"), 1<<20)
+func TestASpoolNothingWasAppendedToIsEmptyAndReadingItCreatesNothing(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "never-created")
+	spool := telemetry.NewSpool(dir, 1<<20)
 
 	lines, err := spool.Read()
 
 	if err != nil || len(lines) != 0 || spool.HasEvents() {
 		t.Errorf("Read() = %v, %v, HasEvents() = %v, want an empty spool", lines, err, spool.HasEvents())
 	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Errorf("stat %s = %v, want reading the spool to leave its directory uncreated", dir, err)
+	}
+}
+
+func TestReadingASpoolWritesNoFileBesideTheEvents(t *testing.T) {
+	dir := t.TempDir()
+	spool := telemetry.NewSpool(dir, 1<<20)
+	if err := spool.Append(aCompletedEvent(t, "deploy")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, "events.lock")); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	before := filesIn(t, dir)
+
+	if _, err := spool.Read(); err != nil {
+		t.Fatal(err)
+	}
+	spool.HasEvents()
+
+	if after := filesIn(t, dir); fmt.Sprint(after) != fmt.Sprint(before) {
+		t.Errorf("files after reading = %v, want %v unchanged", after, before)
+	}
+}
+
+func filesIn(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	return names
 }
 
 func TestTheSpoolDropsTheOldestEventsWhenAnAppendWouldExceedItsCap(t *testing.T) {

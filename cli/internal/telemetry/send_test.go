@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -65,7 +67,7 @@ func TestSendPostsOneBatchWithTheKeyAndEveryEventThenEmptiesTheSpool(t *testing.
 		t.Fatal(err)
 	}
 
-	if err := spool.Send(context.Background(), http.DefaultClient, url, "a-key"); err != nil {
+	if err := telemetry.Send(context.Background(), http.DefaultClient, spool, url, "a-key"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -91,7 +93,7 @@ func TestSendJoinsATrailingSlashEndpointToTheBatchPathOnce(t *testing.T) {
 	url, received := aCapturingServer(t, http.StatusOK)
 	spool := aSpoolHolding(t, "deploy")
 
-	if err := spool.Send(context.Background(), http.DefaultClient, url+"/", "a-key"); err != nil {
+	if err := telemetry.Send(context.Background(), http.DefaultClient, spool, url+"/", "a-key"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -105,7 +107,7 @@ func TestSendLeavesTheEventsInTheSpoolOnAnyNon2xxResponse(t *testing.T) {
 		url, received := aCapturingServer(t, status)
 		spool := aSpoolHolding(t, "deploy")
 
-		err := spool.Send(context.Background(), http.DefaultClient, url, "a-key")
+		err := telemetry.Send(context.Background(), http.DefaultClient, spool, url, "a-key")
 
 		if err == nil {
 			t.Errorf("status %d: Send() = nil, want the failure", status)
@@ -124,7 +126,7 @@ func TestSendLeavesTheEventsInTheSpoolWhenTheEndpointIsUnreachable(t *testing.T)
 	closed := httptest.NewServer(http.NotFoundHandler())
 	closed.Close()
 
-	err := spool.Send(context.Background(), http.DefaultClient, closed.URL, "a-key")
+	err := telemetry.Send(context.Background(), http.DefaultClient, spool, closed.URL, "a-key")
 
 	if err == nil || len(commandsOf(t, spool)) != 1 {
 		t.Errorf("Send() = %v, spool = %v, want the failure and the event kept", err, commandsOf(t, spool))
@@ -139,7 +141,7 @@ func TestSendGivesUpOnAnEndpointThatNeverAnswersWithinItsTimeout(t *testing.T) {
 	spool := aSpoolHolding(t, "deploy")
 	started := time.Now()
 
-	err := spool.Send(context.Background(), &http.Client{Timeout: 200 * time.Millisecond}, server.URL, "a-key")
+	err := telemetry.Send(context.Background(), &http.Client{Timeout: 200 * time.Millisecond}, spool, server.URL, "a-key")
 
 	if err == nil {
 		t.Error("Send() = nil, want the timeout")
@@ -162,7 +164,7 @@ func TestSendKeepsEventsAppendedWhileTheBatchWasInFlight(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	if err := spool.Send(context.Background(), http.DefaultClient, server.URL, "a-key"); err != nil {
+	if err := telemetry.Send(context.Background(), http.DefaultClient, spool, server.URL, "a-key"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -185,10 +187,10 @@ func TestTwoSendsAtOnceDeliverEachEventOnce(t *testing.T) {
 	t.Cleanup(server.Close)
 	spool := aSpoolHolding(t, "deploy")
 	first := make(chan error, 1)
-	go func() { first <- spool.Send(context.Background(), http.DefaultClient, server.URL, "a-key") }()
+	go func() { first <- telemetry.Send(context.Background(), http.DefaultClient, spool, server.URL, "a-key") }()
 	<-inFlight
 
-	secondErr := spool.Send(context.Background(), http.DefaultClient, server.URL, "a-key")
+	secondErr := telemetry.Send(context.Background(), http.DefaultClient, spool, server.URL, "a-key")
 	close(release)
 
 	if secondErr != nil || <-first != nil {
@@ -199,15 +201,19 @@ func TestTwoSendsAtOnceDeliverEachEventOnce(t *testing.T) {
 	}
 }
 
-func TestSendWithAnEmptySpoolMakesNoRequest(t *testing.T) {
+func TestSendWithAnEmptySpoolMakesNoRequestAndCreatesNothing(t *testing.T) {
 	url, received := aCapturingServer(t, http.StatusOK)
-	spool := telemetry.NewSpool(t.TempDir(), 1<<20)
+	dir := filepath.Join(t.TempDir(), "never-created")
+	spool := telemetry.NewSpool(dir, 1<<20)
 
-	if err := spool.Send(context.Background(), http.DefaultClient, url, "a-key"); err != nil {
+	if err := telemetry.Send(context.Background(), http.DefaultClient, spool, url, "a-key"); err != nil {
 		t.Fatal(err)
 	}
 
 	if got := received(); len(got) != 0 {
 		t.Errorf("server received %+v, want no request for an empty spool", got)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Errorf("stat %s = %v, want an empty spool's directory left uncreated", dir, err)
 	}
 }
