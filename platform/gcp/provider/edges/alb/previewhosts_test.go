@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -188,5 +189,58 @@ func TestRemovingAPreviewPointerUnroutesItsAlias(t *testing.T) {
 	}
 	if got := w.untagged(); len(got) != 0 {
 		t.Errorf("removing the alias untagged %v, want nothing: an alias reaches its service, not a tag", got)
+	}
+}
+
+type movedHosts struct {
+	mu    sync.Mutex
+	hosts map[string][]string
+}
+
+func (m *movedHosts) record(move router.PointerMove) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(move.Hosts) > 0 {
+		m.hosts[move.Pointer] = edge.ListPreviewHostnames(move.Hosts)
+	}
+}
+
+func (m *movedHosts) listHostsOf(pointer string) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.hosts[pointer]
+}
+
+type hostRecordingRouter struct {
+	Router
+	moved *movedHosts
+}
+
+func (r hostRecordingRouter) Reconcile(ctx context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {
+	stack, err := r.Router.Reconcile(ctx, spec, prior)
+	return hostRecordingStack{Stack: stack, moved: r.moved}, err
+}
+
+func (r hostRecordingRouter) Open(state router.StackState) (router.Stack, error) {
+	stack, err := r.Router.Open(state)
+	return hostRecordingStack{Stack: stack, moved: r.moved}, err
+}
+
+type hostRecordingStack struct {
+	router.Stack
+	moved *movedHosts
+}
+
+func (s hostRecordingStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
+	s.moved.record(move)
+	return s.Stack.MovePointer(ctx, move, progress)
+}
+
+func TestARouterThatServesEachPreviewDeploymentOnItsOwnHostnameSaysSo(t *testing.T) {
+	t.Parallel()
+
+	balancer, _ := balancing(t)
+	if !NewRouter(balancer).Facts().ServesPreviewDeployments {
+		t.Error("Facts() says the alb router serves no preview deployment on its own hostname, so a deploy would never announce one")
 	}
 }

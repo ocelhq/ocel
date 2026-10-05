@@ -249,6 +249,25 @@ func (w *world) tagOf(service, revision string) string {
 	return "tag-" + strings.TrimPrefix(revision, service+"-")
 }
 
+func (w *world) servedRevision(slug string, tier environment.Tier, hostnames []string) string {
+	declared := w.declarations(BindingStack(slug, tier))
+	routed := w.hosts(balancer()["urlMap"])
+	for _, hostname := range hostnames {
+		backend, ok := routed[hostname]
+		if !ok || backend == notFoundBackend {
+			continue
+		}
+		run, _ := declared[negName(slug, tier, hostname)].Args["cloudRun"].(map[string]any)
+		service, _ := run["service"].(string)
+		tag, _ := run["tag"].(string)
+		if tag == "" {
+			return w.pinnedRevision(service)
+		}
+		return strings.TrimPrefix(tag, "tag-")
+	}
+	return ""
+}
+
 func (w *world) beforeNextUp(fn func()) {
 	w.mu.Lock()
 	defer w.mu.Unlock()

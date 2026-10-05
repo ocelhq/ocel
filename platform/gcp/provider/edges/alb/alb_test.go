@@ -70,10 +70,27 @@ func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 				FailNextPointerMove: w.refusePins,
 			}
 		},
+		Previews: func(t *testing.T) routerconformance.Fixture {
+			balancer, w, shared := reconciledPreview(t)
+			state := shared.State()
+			moved := &movedHosts{hosts: map[string][]string{}}
+			return routerconformance.Fixture{
+				Router: hostRecordingRouter{Router: NewRouter(balancer), moved: moved},
+				Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
+				Prior:  router.NewStackState(state),
+				Serving: func(pointer string) string {
+					return strings.TrimPrefix(w.servedRevision(state.Slug, state.Tier, moved.listHostsOf(pointer)), "rev-")
+				},
+				FailNextPointerMove: w.refusePins,
+			}
+		},
 		Hostname:    "shop.example.com",
 		PreviewBase: "preview.example.com",
 		Record: func(app, build string) router.DeploymentRecord {
-			return router.DeploymentRecord{App: app, Build: build, Revisions: map[string]string{conformanceService: "rev-" + build}}
+			return router.DeploymentRecord{
+				App: app, Build: build, Physical: conformanceService,
+				Revisions: map[string]string{conformanceService: "rev-" + build},
+			}
 		},
 	})
 }

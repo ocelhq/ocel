@@ -67,9 +67,9 @@ func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {
 	if routes.Facts().AddressesItself {
 		t.Error("Facts() says the alb router addresses itself, and a deploy would then never be asked for the hostname it fronts")
 	}
-	if routes.Facts().ServesPreviewDeployments {
-		t.Error("Facts() says the alb edge serves each preview deployment on its own hostname, and the url mask maps a label to " +
-			"the one Cloud Run service of that name, which a deployment's own label never names")
+	if !routes.Facts().ServesPreviewDeployments {
+		t.Error("Facts() says the alb edge serves no preview deployment on its own hostname, and each one is an exact host rule " +
+			"onto the revision tag its deploy created")
 	}
 	for _, need := range []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming} {
 		if !edge.Supports(front, need) {
