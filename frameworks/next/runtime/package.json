@@ -17,7 +17,9 @@
     "./tag-clock": "./src/tag-clock.mts",
     "./tags-manifest": "./src/tags-manifest.mts",
     "./test-support/*": "./test-support/*.mts",
+    "./use-cache-default": "./src/use-cache-default.mts",
     "./use-cache-entry": "./src/use-cache-entry.mts",
+    "./use-cache-remote": "./src/use-cache-remote.mts",
     "./use-cache-store": "./src/use-cache-store.mts"
   },
   "scripts": {

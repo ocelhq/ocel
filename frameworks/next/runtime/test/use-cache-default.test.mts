@@ -3,8 +3,8 @@ import { afterEach, expect, test, vi } from "vitest";
 async function loadHandler(env: Record<string, string> = {}) {
   vi.resetModules();
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
-  (await import("@framework/next-runtime/tag-clock")).setTagClockStore(null);
-  return (await import("../src/next/use-cache-default.mjs")).default;
+  (await import("../src/tag-clock.mjs")).setTagClockStore(null);
+  return (await import("../src/use-cache-default.mjs")).default;
 }
 
 const budgetVariables = [

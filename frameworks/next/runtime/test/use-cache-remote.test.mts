@@ -1,10 +1,10 @@
+import { afterEach, expect, test, vi } from "vitest";
 import type {
   TagRecordUpdate,
   TagSnapshotRead,
   UseCacheEntry,
   UseCacheStore,
-} from "@framework/next-runtime/use-cache-store";
-import { afterEach, expect, test, vi } from "vitest";
+} from "../src/use-cache-store.mjs";
 import { publishedRecords, type TagRow } from "./tag-rows.mjs";
 
 function fakeStore() {
@@ -26,10 +26,10 @@ function fakeStore() {
       rows.set(tag, { tag, ...row });
     },
     breakObjects() {
-      objectFailure = new Error("s3 is down");
+      objectFailure = new Error("the store is down");
     },
     breakSnapshot() {
-      snapshotFailure = new Error("s3 is down");
+      snapshotFailure = new Error("the store is down");
     },
 
     async readEntry(key) {
@@ -66,8 +66,8 @@ afterEach(() => {
 
 async function load(store: UseCacheStore | null) {
   vi.resetModules();
-  const clock = await import("@framework/next-runtime/tag-clock");
-  const handler = (await import("../src/next/use-cache-remote.mjs")).default;
+  const clock = await import("../src/tag-clock.mjs");
+  const handler = (await import("../src/use-cache-remote.mjs")).default;
   clock.setTagClockStore(store);
   return { tagClock: clock.tagClock, handler };
 }

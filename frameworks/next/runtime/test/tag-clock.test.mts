@@ -1,11 +1,7 @@
 import type { CacheEntryFile } from "@framework/next-cache";
-import type { CacheStore } from "@framework/next-runtime/cache-store";
-import type {
-  TagRecordUpdate,
-  TagSnapshotRead,
-  UseCacheStore,
-} from "@framework/next-runtime/use-cache-store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import type { CacheStore } from "../src/cache-store.mjs";
+import type { TagRecordUpdate, TagSnapshotRead, UseCacheStore } from "../src/use-cache-store.mjs";
 import { publishedRecords, type TagRow } from "./tag-rows.mjs";
 
 function fakeStore() {
@@ -25,6 +21,10 @@ function fakeStore() {
     fixReads(): void;
   } = {
     rows,
+    async readEntry() {
+      return null;
+    },
+    async writeEntry() {},
     get gets() {
       return conditions.length;
     },
@@ -36,7 +36,7 @@ function fakeStore() {
     unpublish() {
       published = false;
     },
-    breakReads(err = new Error("s3 is down")) {
+    breakReads(err = new Error("the store is down")) {
       failure = err;
     },
     fixReads() {
@@ -75,7 +75,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  (await import("@framework/next-runtime/tags-manifest")).mirrorTagsInto(null);
+  (await import("../src/tags-manifest.mjs")).mirrorTagsInto(null);
   vi.restoreAllMocks();
   for (const v of [
     "OCEL_STATE_TABLE",
@@ -94,8 +94,8 @@ function advance(ms: number) {
 async function load(store: UseCacheStore | null, env: Record<string, string> = {}) {
   vi.resetModules();
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
-  const clock = await import("@framework/next-runtime/tag-clock");
-  const handler = (await import("../src/next/use-cache-default.mjs")).default;
+  const clock = await import("../src/tag-clock.mjs");
+  const handler = (await import("../src/use-cache-default.mjs")).default;
   clock.setTagClockStore(store);
   return { tagClock: clock.tagClock, handler };
 }
@@ -137,9 +137,9 @@ function seedPage(isr: FakeIsrStore, tag: string, lastModified = 1_000) {
 
 async function loadBoth(store: ReturnType<typeof fakeStore>, published = true) {
   vi.resetModules();
-  const clock = await import("@framework/next-runtime/tag-clock");
-  const handler = (await import("../src/next/use-cache-default.mjs")).default;
-  const CacheHandler = (await import("@framework/next-runtime/cache-handler")).default;
+  const clock = await import("../src/tag-clock.mjs");
+  const handler = (await import("../src/use-cache-default.mjs")).default;
+  const CacheHandler = (await import("../src/cache-handler.mjs")).default;
   clock.setTagClockStore(store);
   const entries = fakeIsrStore(published ? store : null);
   CacheHandler.store = Promise.resolve(entries);
@@ -380,7 +380,7 @@ test("shares one clock between module graphs built from the same configuration",
   await first.handler.updateTags(["products"]);
 
   vi.resetModules();
-  const reloaded = (await import("@framework/next-runtime/tag-clock")).tagClock;
+  const reloaded = (await import("../src/tag-clock.mjs")).tagClock;
 
   expect(reloaded).not.toBe(first.tagClock);
   expect(await reloaded.getExpiration(["products"])).toBeGreaterThan(0);
@@ -398,7 +398,7 @@ test("refuses to adopt a shared clock built from different configuration", async
 
   vi.resetModules();
   process.env.OCEL_ISR_TAG_NAMESPACE = "TAG#b#";
-  const other = (await import("@framework/next-runtime/tag-clock")).tagClock;
+  const other = (await import("../src/tag-clock.mjs")).tagClock;
 
   expect(await other.getExpiration(["products"])).toBe(0);
 });
@@ -494,7 +494,7 @@ test("mirrors an invalidation it raises into Next's own tags manifest", async ()
   const store = fakeStore();
   const manifest = new Map<string, { stale?: number; expired?: number }>();
   const { handler } = await load(store);
-  (await import("@framework/next-runtime/tags-manifest")).mirrorTagsInto(manifest);
+  (await import("../src/tags-manifest.mjs")).mirrorTagsInto(manifest);
 
   await handler.updateTags(["products"], { expire: 3600 });
 
@@ -507,7 +507,7 @@ test("mirrors an invalidation raised elsewhere once it syncs", async () => {
   const store = fakeStore();
   const manifest = new Map<string, { stale?: number; expired?: number }>();
   const { tagClock } = await load(store);
-  (await import("@framework/next-runtime/tags-manifest")).mirrorTagsInto(manifest);
+  (await import("../src/tags-manifest.mjs")).mirrorTagsInto(manifest);
 
   store.seed("products", { stale: 4_000, expired: 9_000, writtenAt: 4_000 });
   await tagClock.refreshTags();
