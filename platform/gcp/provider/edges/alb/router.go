@@ -97,6 +97,9 @@ func (r routerStack) Disclaim(ctx context.Context, hostname string) error {
 }
 
 func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
+	if _, _, deployment := router.ParseDeploymentPointer(move.Pointer); deployment {
+		return r.s.serveDeployment(ctx, move, progress)
+	}
 	if err := pin.MovePointer(ctx, r.s.e.deps.Pins, move, progress); err != nil {
 		return err
 	}

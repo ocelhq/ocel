@@ -49,6 +49,10 @@ func (p *pinRecorder) Pin(ctx context.Context, service, revision string, stillAc
 	}
 }
 
+func (p *pinRecorder) ReadTag(_ context.Context, _, revision string) (string, error) {
+	return "tag-" + revision, nil
+}
+
 func (p *pinRecorder) calls() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()

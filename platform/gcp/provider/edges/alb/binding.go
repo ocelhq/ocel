@@ -49,6 +49,7 @@ func bindingProgram(spec bindingSpec) Program {
 				NetworkEndpointType: pulumi.String(serverlessNEG),
 				CloudRun: &compute.RegionNetworkEndpointGroupCloudRunArgs{
 					Service: pulumi.String(host.Service),
+					Tag:     pulumi.StringPtrFromPtr(omitEmpty(host.Tag)),
 				},
 			})
 			if err != nil {
@@ -70,4 +71,11 @@ func bindingProgram(spec bindingSpec) Program {
 		}
 		return nil
 	}
+}
+
+func omitEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }

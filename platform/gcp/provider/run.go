@@ -372,6 +372,25 @@ func (p *Provider) Pin(ctx context.Context, service, revision string, stillActiv
 	return err
 }
 
+func (p *Provider) ReadTag(ctx context.Context, service, revision string) (string, error) {
+	clients, services, err := p.openRun(ctx)
+	if err != nil {
+		return "", err
+	}
+	current, err := p.read(ctx, services, clients.servicePath(service), service)
+	if err != nil {
+		return "", err
+	}
+	for _, target := range current.Traffic {
+		if target.Tag != "" && target.Type == trafficByRevision && revisionName(target.Revision) == revision {
+			return target.Tag, nil
+		}
+	}
+	return "", refusal.Refuse(refusal.CodeNotReady,
+		"revision %s of Cloud Run service %s carries no tag, and a deployment hostname reaches its revision through the tag its release gave it: "+
+			"re-deploy so the release tags the revision it creates", revision, service)
+}
+
 func latestReady(service string) func(*run.GoogleCloudRunV2Service) (string, error) {
 	return func(current *run.GoogleCloudRunV2Service) (string, error) {
 		revision := revisionName(current.LatestReadyRevision)
