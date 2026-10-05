@@ -13,6 +13,7 @@ import { background, holdEnd } from "@framework/node-runtime/background";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
+import { noteServedEntry } from "./refresh.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 import { noteRevalidation } from "./revalidation-signal.mjs";
 import { isRscRequest } from "./rsc-request.mjs";
@@ -158,7 +159,10 @@ export default class OcelCacheHandler {
       if (tags.length > 0 && (await tagsExpireEntry(tags, entry.lastModified))) {
         return null;
       }
-      if (ctx?.kind !== "FETCH") this.noteOriginTags(tags);
+      if (ctx?.kind !== "FETCH") {
+        this.noteOriginTags(tags);
+        noteServedEntry(this.requestHeaders, entry.lastModified);
+      }
       const value = negotiateVariant(entry.value, this.isRscRequest);
       return { lastModified: entry.lastModified, value: deserialize(value) };
     } catch {
@@ -183,11 +187,12 @@ export default class OcelCacheHandler {
         value,
         ...(cacheControl && { cacheControl }),
       };
-      background(async () =>
+      const write = async () =>
         isFetch
           ? (await store).writeFetch(key, entry)
-          : (await store).writeEntry(cacheKey(key), entry),
-      );
+          : (await store).writeEntry(cacheKey(key), entry);
+      if (this.refreshing !== undefined && !isFetch) await write();
+      else background(write);
     } catch {}
   }
 

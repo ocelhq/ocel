@@ -13,6 +13,7 @@ import OcelCacheHandler from "../src/cache-handler.mjs";
 import type { CacheStore } from "../src/cache-store.mjs";
 import { installNextHost } from "../src/host.mjs";
 import { collectTags, notedTags } from "../src/origin-tags.mjs";
+import { readServedEntry } from "../src/refresh.mjs";
 import { revalidationTicks } from "../src/revalidation-signal.mjs";
 import { setTagClockStore } from "../src/tag-clock.mjs";
 
@@ -319,6 +320,35 @@ test("serves a refresh the generation newer than the one it has", async () => {
   const entry = await handler.get("/", { kind: "APP_PAGE" });
 
   expect(entry?.lastModified).toBe(2_000);
+});
+
+test("notes the generation of the page it served, so a stale hit can be refreshed", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", { lastModified: 1_000 });
+  const requestHeaders: any = {};
+
+  await new OcelCacheHandler({ _requestHeaders: requestHeaders }).get("/", { kind: "APP_PAGE" });
+
+  expect(readServedEntry(requestHeaders)).toBe(1_000);
+});
+
+test("a refresh's render resolves only once its entry is written", async () => {
+  const store = fakeStore();
+  const release = store.holdWrites();
+  const handler = new OcelCacheHandler({ _requestHeaders: { [refreshHeader]: "1000" } });
+  let resolved = false;
+
+  const written = handler
+    .set("/blog", { kind: "PAGES", html: "<html>blog</html>", pageData: {} }, {})
+    .then(() => {
+      resolved = true;
+    });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  expect(resolved).toBe(false);
+  release();
+  await written;
+  expect(store.entries.get("blog")?.value.html).toBe("<html>blog</html>");
 });
 
 test("a refresh leaves fetch entries to their own windows", async () => {

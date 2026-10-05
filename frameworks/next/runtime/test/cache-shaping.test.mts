@@ -4,6 +4,7 @@ import {
   type OriginShaping,
   originShaping,
   releaseOf,
+  revalidatingRoutes,
   shapeOriginCache,
 } from "../src/cache-shaping.mjs";
 import { noteTags } from "../src/origin-tags.mjs";
@@ -66,7 +67,7 @@ function shaping(
   tagsPerObject?: number,
 ) {
   return originShaping(
-    manifest(isrRoutes, config),
+    revalidatingRoutes(manifest(isrRoutes, config)),
     {
       OCEL_ORIGIN_DISPATCH: "1",
       OCEL_CACHE_TAG_PURGE: "1",
@@ -80,12 +81,14 @@ function shaping(
 test("the gate stays shut when the deploy declared no origin dispatch", () => {
   expect(dispatchesAtOrigin({} as NodeJS.ProcessEnv)).toBe(false);
   expect(dispatchesAtOrigin({ OCEL_ORIGIN_DISPATCH: "" } as NodeJS.ProcessEnv)).toBe(false);
-  expect(originShaping(manifest(isrRoutes), {} as any)).toBeNull();
+  expect(originShaping(revalidatingRoutes(manifest(isrRoutes)), {} as any)).toBeNull();
 });
 
 test("the gate opens when the deploy declared the origin hosts dispatch", () => {
   expect(dispatchesAtOrigin({ OCEL_ORIGIN_DISPATCH: "1" } as NodeJS.ProcessEnv)).toBe(true);
-  expect(originShaping(manifest(isrRoutes), { OCEL_ORIGIN_DISPATCH: "1" } as any)).not.toBeNull();
+  expect(
+    originShaping(revalidatingRoutes(manifest(isrRoutes)), { OCEL_ORIGIN_DISPATCH: "1" } as any),
+  ).not.toBeNull();
 });
 
 test("only a front the deploy declared tag-purging is given cache tags", () => {
