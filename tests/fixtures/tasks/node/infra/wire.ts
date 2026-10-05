@@ -5,22 +5,22 @@ export type Sighting = { kind: string; name: string; topic: string; payload: str
 
 export const sighting = task("sighting", { run: (seen: Sighting) => seen });
 
-async function recordSighting(tag: string, payload: unknown, { ctx }: RunOptions): Promise<void> {
+async function recordSighting(tag: string, { ctx, payloadJson }: RunOptions): Promise<void> {
   await sighting.trigger(
-    { kind: ctx.kind, name: ctx.name, topic: ctx.topic, payload: JSON.stringify(payload) },
+    { kind: ctx.kind, name: ctx.name, topic: ctx.topic, payload: payloadJson.text },
     { tags: [tag] },
   );
 }
 
 export const verbatim = task("verbatim", {
-  run: async (payload: unknown, options) => {
-    await recordSighting(options.ctx.id, payload, options);
-    return payload;
+  run: async (_payload: unknown, options) => {
+    await recordSighting(options.ctx.id, options);
+    return options.payloadJson;
   },
 });
 
 export const notices = topic<unknown>("notices");
 
-export const noticeLog = notices.consumer("notice-log", (payload, options) =>
-  recordSighting(options.ctx.message.id, payload, options),
+export const noticeLog = notices.consumer("notice-log", (_payload, options) =>
+  recordSighting(options.ctx.message.id, options),
 );

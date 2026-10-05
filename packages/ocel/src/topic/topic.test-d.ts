@@ -1,5 +1,6 @@
 import { describe, expectTypeOf, it } from "vitest";
 import { z } from "zod";
+import type { JsonText } from "../delivery/json-text.js";
 import { type Topic, topic } from "./topic.js";
 
 describe("a topic's payload typed from its schema", () => {
@@ -30,13 +31,14 @@ describe("a topic's payload typed from its schema", () => {
 });
 
 describe("a topic typed by its type argument", () => {
-  it("sends and consumes that type", () => {
+  it("sends that type or JSON text, and consumes that type", () => {
     const clicks = topic<{ x: number }>("clicks");
 
-    expectTypeOf(clicks.send).parameter(0).toEqualTypeOf<{ x: number }>();
-    clicks.consumer("count", (payload, { ctx }) => {
+    expectTypeOf(clicks.send).parameter(0).toEqualTypeOf<{ x: number } | JsonText>();
+    clicks.consumer("count", (payload, { ctx, payloadJson }) => {
       expectTypeOf(payload).toEqualTypeOf<{ x: number }>();
       expectTypeOf(ctx.kind).toEqualTypeOf<"task" | "consumer">();
+      expectTypeOf(payloadJson).toEqualTypeOf<JsonText>();
     });
   });
 

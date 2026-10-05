@@ -1,5 +1,6 @@
 export { UnprovisionedResourceError } from "../binding/unprovisioned.js";
 export type { Duration } from "../delivery/duration.js";
+export { JsonText } from "../delivery/json-text.js";
 export type { Lane } from "../delivery/lane.js";
 export type { RetryOptions } from "../delivery/retry.js";
 export type { RunContext, RunOptions } from "../worker/context.js";

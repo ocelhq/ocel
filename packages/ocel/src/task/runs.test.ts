@@ -8,13 +8,14 @@ import {
   RunStatus,
   TaskService,
 } from "../gen/proto/app/task/v1/task_pb.js";
+import { EXACT_JSON } from "../testing/exact-json.js";
 import { type RuntimeProxy, serveRuntimeProxy } from "../testing/runtime-proxy.js";
 
 vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 
-const { runs, task } = await import("./index.js");
+const { JsonText, runs, task } = await import("./index.js");
 
 const storedRun = create(RunSchema, {
   id: "run_1",
@@ -28,6 +29,23 @@ const storedRun = create(RunSchema, {
   createdAt: timestampFromDate(new Date("2026-01-01T00:00:00Z")),
   finishedAt: timestampFromDate(new Date("2026-01-01T00:01:00Z")),
 });
+
+const exactRun = create(RunSchema, {
+  ...storedRun,
+  id: "run_exact",
+  payload: new TextEncoder().encode(EXACT_JSON),
+  output: new TextEncoder().encode(EXACT_JSON),
+});
+
+const queuedRun = create(RunSchema, {
+  ...storedRun,
+  id: "run_queued",
+  status: RunStatus.QUEUED,
+  output: new Uint8Array(),
+  finishedAt: undefined,
+});
+
+const storedRuns = new Map([storedRun, exactRun, queuedRun].map((run) => [run.id, run]));
 
 describe("runs", () => {
   let proxy: RuntimeProxy;
@@ -48,7 +66,7 @@ describe("runs", () => {
       router.service(TaskService, {
         retrieveRun: ({ id }) => {
           ids.push(id);
-          return { run: storedRun };
+          return { run: storedRuns.get(id) };
         },
         listRuns: (req) => {
           lists.push(req);
@@ -81,7 +99,9 @@ describe("runs", () => {
       task: "resize-image",
       status: "COMPLETED",
       payload: { url: "a.png", width: 2 },
+      payloadJson: new JsonText('{"url":"a.png","width":2.0}'),
       output: 3,
+      outputJson: new JsonText("3"),
       error: undefined,
       attempts: 2,
       tags: ["user:1"],
@@ -94,6 +114,20 @@ describe("runs", () => {
     });
     expect(ids).toEqual(["run_1"]);
     expect(proxy.authorizations).toEqual(["Bearer session-token"]);
+  });
+
+  it("retrieves a run's payload and output as the JSON text they were recorded as", async () => {
+    const run = await runs.retrieve("run_exact");
+
+    expect(run.payloadJson.text).toBe(EXACT_JSON);
+    expect(run.outputJson?.text).toBe(EXACT_JSON);
+  });
+
+  it("retrieves a run that has recorded no output with no output JSON text", async () => {
+    const run = await runs.retrieve("run_queued");
+
+    expect(run.output).toBeNull();
+    expect(run.outputJson).toBeUndefined();
   });
 
   it("lists the runs of a task handle by its declared name, with statuses, tags and paging", async () => {

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
 import { Lane, type SendRequest, TopicService } from "../gen/proto/app/topic/v1/topic_pb.js";
-import { EXACT_JSON, parseKeepingNumberText } from "../testing/exact-json.js";
+import { EXACT_JSON } from "../testing/exact-json.js";
 import { type RuntimeProxy, serveRuntimeProxy } from "../testing/runtime-proxy.js";
 
 const declareMock = vi.hoisted(() => vi.fn((_req: unknown) => Promise.resolve({})));
@@ -12,7 +12,7 @@ vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: declareMock } },
 }));
 
-const { topic, UnprovisionedResourceError } = await import("./index.js");
+const { JsonText, topic, UnprovisionedResourceError } = await import("./index.js");
 const { worker } = await import("../worker/index.js");
 
 describe("topic discovery declare", () => {
@@ -160,7 +160,7 @@ describe("a topic at runtime", () => {
       JSON.stringify({ name: "physical-measures", topic: {} }),
     );
 
-    await topic("measures").send(parseKeepingNumberText(EXACT_JSON));
+    await topic("measures").send(new JsonText(EXACT_JSON));
 
     expect(sends[0]?.topic).toBe("measures");
     expect(new TextDecoder().decode(sends[0]?.payload)).toBe(EXACT_JSON);

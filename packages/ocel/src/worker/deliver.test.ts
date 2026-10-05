@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { EXACT_JSON } from "../testing/exact-json.js";
 
 vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 
-const { task, AbortTaskRunError } = await import("../task/index.js");
+const { task, AbortTaskRunError, JsonText } = await import("../task/index.js");
 const { topic } = await import("../topic/index.js");
 const { worker, deliver } = await import("./index.js");
 
@@ -40,6 +41,18 @@ function batchEnvelope(topicName: string, consumer: string, payloads: unknown[])
       payload,
     })),
   });
+}
+
+function envelopeText(topicName: string, consumer: string, payloadText: string) {
+  return `{"v":1, "topic":${JSON.stringify(topicName)}, "consumer":${JSON.stringify(consumer)}, "execution":"run-1", "message":{"id":"m-1", "publishedAt":"2026-01-02T03:04:05Z"}, "attempt":{"number":1, "of":3}, "payload": ${payloadText} }`;
+}
+
+function batchEnvelopeText(topicName: string, consumer: string, payloadTexts: string[]) {
+  const messages = payloadTexts.map(
+    (text, i) =>
+      `{ "execution":"execution-${i}", "message":{"id":"m-${i}"}, "attempt":{"number":1,"of":3}, "payload" : ${text} }`,
+  );
+  return `{"v":1,"topic":${JSON.stringify(topicName)},"consumer":${JSON.stringify(consumer)},"messages":[ ${messages.join(" , ")} ]}`;
 }
 
 afterEach(() => {
@@ -561,6 +574,111 @@ describe("deliver's worker", () => {
     expect((await holding).status).toBe(200);
     expect((await deliver("single", envelope("single-task", "single-task", 3))).status).toBe(200);
     expect(payloads).toEqual([1, 3]);
+  });
+});
+
+describe("deliver's JSON text", () => {
+  it("hands a task its payload as a value, and as the JSON text it was sent as", async () => {
+    let seen: { payload: unknown; text: string } | undefined;
+    task("measure-exact", {
+      run: async (payload, { payloadJson }) => {
+        seen = { payload, text: payloadJson.text };
+      },
+    });
+
+    await deliver("worker", envelopeText("measure-exact", "measure-exact", EXACT_JSON));
+
+    expect(seen).toEqual({
+      payload: { ratio: 2, id: 9007199254740992, count: 2 },
+      text: EXACT_JSON,
+    });
+  });
+
+  it("keeps a payload's text when its strings hold JSON punctuation and the envelope's own keys", async () => {
+    const tricky = '{"s":"}], \\"payload\\": [1,{","t":[{"u":"\\\\"}],"n":-1.50e+3}';
+    let text: string | undefined;
+    task("tricky", {
+      run: async (_payload, { payloadJson }) => {
+        text = payloadJson.text;
+      },
+    });
+
+    await deliver("worker", envelopeText("tricky", "tricky", tricky));
+
+    expect(text).toBe(tricky);
+  });
+
+  it("hands a task whose envelope carries no payload the text null", async () => {
+    let text: string | undefined;
+    task("no-payload", {
+      run: async (_payload, { payloadJson }) => {
+        text = payloadJson.text;
+      },
+    });
+
+    await deliver(
+      "worker",
+      JSON.stringify({ v: 1, topic: "no-payload", consumer: "no-payload", execution: "run-1" }),
+    );
+
+    expect(text).toBe("null");
+  });
+
+  it("answers the JsonText a run returns as its output byte for byte", async () => {
+    task("echo-exact", { run: async (_payload, { payloadJson }) => payloadJson });
+
+    expect(await deliver("worker", envelopeText("echo-exact", "echo-exact", EXACT_JSON))).toEqual({
+      status: 200,
+      body: EXACT_JSON,
+    });
+  });
+
+  it("answers a JsonText nested in a run's output as the value it holds", async () => {
+    task("nest-exact", { run: async () => ({ nested: new JsonText('{ "a": 1 }') }) });
+
+    expect(await deliver("worker", envelopeText("nest-exact", "nest-exact", "1"))).toEqual({
+      status: 200,
+      body: '{"nested":{"a":1}}',
+    });
+  });
+
+  it("hands a batch task the list's JSON text, each payload byte for byte", async () => {
+    let text: string | undefined;
+    task("batch-exact", {
+      batch: { size: 10 },
+      run: async (_payloads, { payloadJson }) => {
+        text = payloadJson.text;
+      },
+    });
+
+    await deliver("worker", batchEnvelopeText("batch-exact", "batch-exact", [EXACT_JSON, "2.0"]));
+
+    expect(text).toBe(`[${EXACT_JSON},2.0]`);
+  });
+
+  it("hands a consumer its payload's JSON text byte for byte", async () => {
+    let text: string | undefined;
+    topic("measures-exact").consumer("log-exact", async (_payload, { payloadJson }) => {
+      text = payloadJson.text;
+    });
+
+    await deliver("worker", envelopeText("measures-exact", "log-exact", EXACT_JSON));
+
+    expect(text).toBe(EXACT_JSON);
+  });
+
+  it("hands a schema's output as the payload, and the text as it was sent", async () => {
+    let seen: { payload: unknown; text: string } | undefined;
+    task("schema-exact", {
+      schema: z.object({ ratio: z.number() }),
+      run: async (payload, { payloadJson }) => {
+        seen = { payload, text: payloadJson.text };
+      },
+    });
+
+    await deliver("worker", envelopeText("schema-exact", "schema-exact", EXACT_JSON));
+
+    expect(seen).toEqual({ payload: { ratio: 2 }, text: EXACT_JSON });
   });
 });
 

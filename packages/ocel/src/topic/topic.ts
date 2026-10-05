@@ -5,6 +5,7 @@ import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
 import { declarationSite } from "../declaration/callsite.js";
 import { defer } from "../declaration/defer.js";
 import { type Duration, encodeDueAt, encodeDuration } from "../delivery/duration.js";
+import type { JsonText } from "../delivery/json-text.js";
 import { encodeLane, type Lane } from "../delivery/lane.js";
 import { encodePayload } from "../delivery/payload.js";
 import { encodeRetryPolicy, type RetryOptions } from "../delivery/retry.js";
@@ -114,8 +115,8 @@ export class Topic<TInput = unknown, TOutput = TInput> {
     return (this.client ??= createClient(TopicService, createRuntimeTransport()));
   }
 
-  /** Sends `payload` to every consumer of this topic, and answers the message's id. */
-  async send(payload: TInput, options: SendOptions = {}): Promise<string> {
+  /** Sends `payload`, or a {@link JsonText} byte for byte, to every consumer of this topic, and answers the message's id. */
+  async send(payload: TInput | JsonText, options: SendOptions = {}): Promise<string> {
     const client = this.ensureClient("send");
     const { messageId } = await client.send({
       topic: this.name,

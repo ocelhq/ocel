@@ -3,7 +3,8 @@ import { type Timestamp, timestampDate } from "@bufbuild/protobuf/wkt";
 import { type Client, createClient } from "@connectrpc/connect";
 import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
 import { type Duration, encodeDueAt } from "../delivery/duration.js";
-import { decodeJson } from "../delivery/payload.js";
+import { JsonText } from "../delivery/json-text.js";
+import { decodeJson, decodeJsonText } from "../delivery/payload.js";
 import {
   type Run as ProtoRun,
   RunStatus as ProtoRunStatus,
@@ -33,8 +34,12 @@ export interface Run {
   status: RunStatus;
   /** The payload it was triggered with. */
   payload: unknown;
+  /** The JSON text the payload was triggered with, byte for byte. */
+  payloadJson: JsonText;
   /** The output its `run` returned, once it completed. */
   output: unknown;
+  /** The JSON text of the output its `run` returned, byte for byte, once it completed. */
+  outputJson: JsonText | undefined;
   /** The error that failed it, once it failed. */
   error: string | undefined;
   /** How many attempts were made. */
@@ -93,7 +98,9 @@ function decodeRun(run: ProtoRun | undefined): Run {
     task: run.task,
     status: ProtoRunStatus[run.status] as RunStatus,
     payload: decodeJson(run.payload),
+    payloadJson: decodeJsonText(run.payload) ?? new JsonText("null"),
     output: decodeJson(run.output),
+    outputJson: decodeJsonText(run.output),
     error: run.error || undefined,
     attempts: run.attempts,
     tags: run.tags,

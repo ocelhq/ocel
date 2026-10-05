@@ -16,10 +16,10 @@ reschedule runs, send to any topic, and list, redrive and purge a consumer's dea
 
 `wire.ts`, beside the other declarations, is what the wire checks read, as in `tasks/go`: the
 task `verbatim` and the topic `notices` with its consumer `notice-log`, whose handlers trigger
-`sighting` with the kind, name and topic their run context reports and the payload as JSON
-text. The routes under `/api/wire` take the request body as the payload, parsing it with each
-number kept as its source text, and answer the run's or message's id, a run's payload and
-output as JSON text, and what a handler recorded under a tag. Their names hold no hyphen,
+`sighting` with the kind, name and topic their run context reports and the payload's JSON
+text, and `verbatim` returns that text as its output. The routes under `/api/wire` send the
+request body as the payload's JSON text, and answer the run's or message's id, a run's payload
+and output as JSON text, and what a handler recorded under a tag. Their names hold no hyphen,
 since the app runs through `pnpm dev` (#1526).
 
 ## Run it

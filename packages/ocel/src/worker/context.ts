@@ -1,3 +1,5 @@
+import type { JsonText } from "../delivery/json-text.js";
+
 /** What a run, its hooks and every middleware know about the attempt in progress. */
 export interface RunContext {
   /** Whether a task's run or a topic consumer is being served. */
@@ -34,4 +36,6 @@ export interface RunOptions {
   ctx: RunContext;
   /** Aborted when the run is canceled while this attempt is in progress. */
   signal: AbortSignal;
+  /** The JSON text the payload was sent as, byte for byte; a batch's is the list of its payloads' texts. */
+  payloadJson: JsonText;
 }
