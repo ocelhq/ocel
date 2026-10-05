@@ -47,7 +47,7 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 		s.recorded.LoadBalancer = balancer
 		s.keep()
 	}
-	if err := s.refuseExhaustedLimits(ctx, took); err != nil {
+	if err := s.refuseExhaustedLimits(ctx, took, withdrawn); err != nil {
 		return router.Unserved{Err: err}
 	}
 	for _, hostname := range withdrawn {
@@ -157,7 +157,7 @@ func (s *stack) readLoadBalancer(ctx context.Context) (LoadBalancer, error) {
 
 const maxHostRules = 1000
 
-func (s *stack) refuseExhaustedLimits(ctx context.Context, hostnames []string) error {
+func (s *stack) refuseExhaustedLimits(ctx context.Context, hostnames, freeing []string) error {
 	var adding []string
 	for _, hostname := range hostnames {
 		if _, routed := s.recorded.Hosts[hostname]; !routed {
@@ -167,7 +167,13 @@ func (s *stack) refuseExhaustedLimits(ctx context.Context, hostnames []string) e
 	if len(adding) == 0 {
 		return nil
 	}
-	if err := s.refuseFullURLMap(ctx, adding); err != nil {
+	var freed int
+	for _, hostname := range freeing {
+		if _, routed := s.recorded.Hosts[hostname]; routed {
+			freed++
+		}
+	}
+	if err := s.refuseFullURLMap(ctx, adding, freed); err != nil {
 		return err
 	}
 	return s.refuseExhaustedBackendServiceQuota(ctx, adding)
@@ -187,12 +193,12 @@ func (s *stack) refuseExhaustedBackendServiceQuota(ctx context.Context, adding [
 		strings.Join(adding, ", "), s.e.deps.Project, quota.Usage, quota.Limit)
 }
 
-func (s *stack) refuseFullURLMap(ctx context.Context, adding []string) error {
+func (s *stack) refuseFullURLMap(ctx context.Context, adding []string, freed int) error {
 	ruled, err := s.e.deps.Routes.CountHostRules(ctx, s.recorded.LoadBalancer.URLMap)
 	if err != nil {
 		return err
 	}
-	if ruled+len(adding) <= maxHostRules {
+	if ruled+len(adding)-freed <= maxHostRules {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,

@@ -100,6 +100,11 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if isWildcard(binding.Hostname) {
 		service = ""
 	}
+	if !isWildcard(binding.Hostname) {
+		if err := s.refuseExhaustedLimits(ctx, []string{binding.Hostname}, nil); err != nil {
+			return err
+		}
+	}
 	hosts := maps.Clone(s.recorded.Hosts)
 	if hosts == nil {
 		hosts = map[string]Host{}
