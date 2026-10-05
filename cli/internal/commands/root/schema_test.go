@@ -74,7 +74,7 @@ func TestTheSchemaPrintedForADataCommandAlsoDescribesItsFailure(t *testing.T) {
 
 func TestTheSchemaPrintedForARunCommandIsTheRunEventSchema(t *testing.T) {
 	stdout, _ := executeRoot(t, "schema", "deploy")
-	want, err := outputschema.RunEvent()
+	want, err := outputschema.ReadRunEvent()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestEveryDeclaredResultHasAPublishedSchema(t *testing.T) {
 		if !declared {
 			continue
 		}
-		schema, err := outputschema.Result(results...)
+		schema, err := outputschema.ComposeResult(results...)
 		if err != nil {
 			t.Errorf("ocel %s: %v", commandPath(cmd), err)
 			continue

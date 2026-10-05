@@ -18,11 +18,11 @@ const (
 	draft2020       string                = "https://json-schema.org/draft/2020-12/schema"
 )
 
-func RunEvent() ([]byte, error) {
+func ReadRunEvent() ([]byte, error) {
 	return readSchema(runEventMessage)
 }
 
-func Result(messages ...protoreflect.FullName) ([]byte, error) {
+func ComposeResult(messages ...protoreflect.FullName) ([]byte, error) {
 	if len(messages) == 0 {
 		return nil, errors.New("a result schema needs at least one result message")
 	}

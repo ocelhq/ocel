@@ -35,7 +35,7 @@ func printResultDocument(t *testing.T, result proto.Message) []byte {
 
 func buildEnvListSchema(t *testing.T) []byte {
 	t.Helper()
-	schema, err := outputschema.Result(new(resultv1.EnvListResult).ProtoReflect().Descriptor().FullName())
+	schema, err := outputschema.ComposeResult(new(resultv1.EnvListResult).ProtoReflect().Descriptor().FullName())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestTheResultSchemaRejectsAMisspelledFieldAndAMalformedEnvelope(t *testing.
 }
 
 func TestTheResultSchemaOfSeveralResultsAcceptsAnyOfThemAndNothingElse(t *testing.T) {
-	schema, err := outputschema.Result(
+	schema, err := outputschema.ComposeResult(
 		new(resultv1.DomainListResult).ProtoReflect().Descriptor().FullName(),
 		new(resultv1.PreviewDomainResult).ProtoReflect().Descriptor().FullName(),
 	)
@@ -107,19 +107,19 @@ func TestTheResultSchemaOfSeveralResultsAcceptsAnyOfThemAndNothingElse(t *testin
 }
 
 func TestTheResultSchemaOfAnUnknownMessageIsRefused(t *testing.T) {
-	if _, err := outputschema.Result("cli.result.v1.NoSuchResult"); err == nil || !strings.Contains(err.Error(), "cli.result.v1.NoSuchResult") {
+	if _, err := outputschema.ComposeResult("cli.result.v1.NoSuchResult"); err == nil || !strings.Contains(err.Error(), "cli.result.v1.NoSuchResult") {
 		t.Fatalf("err = %v, want one naming the message", err)
 	}
 }
 
 func TestTheResultSchemaOfNoMessageIsRefused(t *testing.T) {
-	if _, err := outputschema.Result(); err == nil {
+	if _, err := outputschema.ComposeResult(); err == nil {
 		t.Fatal("err = nil, want the empty list of results refused")
 	}
 }
 
 func TestTheRunEventSchemaAcceptsARunEventAndRejectsAMisspelledField(t *testing.T) {
-	schema, err := outputschema.RunEvent()
+	schema, err := outputschema.ReadRunEvent()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestTheRunEventSchemaAcceptsARunEventAndRejectsAMisspelledField(t *testing.
 
 func TestTheRunEventSchemaAcceptsEveryLineTheNDJSONStreamPrints(t *testing.T) {
 	compiled := func() *jsonschema.Schema {
-		schema, err := outputschema.RunEvent()
+		schema, err := outputschema.ReadRunEvent()
 		if err != nil {
 			t.Fatal(err)
 		}

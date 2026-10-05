@@ -40,10 +40,10 @@ func requireUsageError(t *testing.T, err error, want string) {
 	}
 }
 
-func noop(*cobra.Command, []string) error { return nil }
+func runNothing(*cobra.Command, []string) error { return nil }
 
 func TestSchemaOfACommandThatDeclaresNeitherAResultNorRunEventsFailsWithUsage(t *testing.T) {
-	root := newRootWith(&cobra.Command{Use: "plain", RunE: noop})
+	root := newRootWith(&cobra.Command{Use: "plain", RunE: runNothing})
 
 	stdout, err := runSchema(root, "plain")
 
@@ -55,7 +55,7 @@ func TestSchemaOfACommandThatDeclaresNeitherAResultNorRunEventsFailsWithUsage(t 
 
 func TestSchemaOfACommandUnderAHiddenCommandFailsWithUsage(t *testing.T) {
 	hidden := &cobra.Command{Use: "completion", Hidden: true}
-	hidden.AddCommand(commands.DeclareRunEvents(&cobra.Command{Use: "bash", RunE: noop}))
+	hidden.AddCommand(commands.DeclareRunEvents(&cobra.Command{Use: "bash", RunE: runNothing}))
 	root := newRootWith(hidden)
 
 	for _, path := range [][]string{{"completion", "bash"}, {"completion"}} {
@@ -69,7 +69,7 @@ func TestSchemaOfACommandUnderAHiddenCommandFailsWithUsage(t *testing.T) {
 }
 
 func TestSchemaOfACommandDeclaringRunEventsPrintsTheRunEventSchema(t *testing.T) {
-	root := newRootWith(commands.DeclareRunEvents(&cobra.Command{Use: "deploy", RunE: noop}))
+	root := newRootWith(commands.DeclareRunEvents(&cobra.Command{Use: "deploy", RunE: runNothing}))
 
 	stdout, err := runSchema(root, "deploy")
 	if err != nil {
@@ -81,7 +81,7 @@ func TestSchemaOfACommandDeclaringRunEventsPrintsTheRunEventSchema(t *testing.T)
 }
 
 func TestSchemaOfAnUnknownCommandKeepsWhyItWasNotFound(t *testing.T) {
-	root := newRootWith(&cobra.Command{Use: "env"}, &cobra.Command{Use: "deploy", RunE: noop})
+	root := newRootWith(&cobra.Command{Use: "env"}, &cobra.Command{Use: "deploy", RunE: runNothing})
 
 	_, err := runSchema(root, "deplyo")
 
