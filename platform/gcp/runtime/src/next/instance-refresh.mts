@@ -17,10 +17,6 @@ export function newInstanceRefresh(origin: () => string, timeoutMs: number): Sch
 
 function render(origin: string, refresh: Refresh, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`the re-render of ${refresh.url} did not answer within ${timeoutMs}ms`));
-      request.destroy();
-    }, timeoutMs);
     const settle = (done: () => void) => {
       clearTimeout(timer);
       done();
@@ -34,6 +30,10 @@ function render(origin: string, refresh: Refresh, timeoutMs: number): Promise<vo
         else settle(() => reject(new Error(`the re-render of ${refresh.url} answered ${status}`)));
       });
     });
+    const timer = setTimeout(() => {
+      reject(new Error(`the re-render of ${refresh.url} did not answer within ${timeoutMs}ms`));
+      request.destroy();
+    }, timeoutMs);
     request.on("error", (err) => settle(() => reject(err)));
   });
 }

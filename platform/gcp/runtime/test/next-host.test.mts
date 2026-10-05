@@ -1,3 +1,4 @@
+import http from "node:http";
 import { installNextHost, refuseIncompleteHost } from "@framework/next-runtime/host";
 import { expect, test, vi } from "vitest";
 import { newGcpNextHost } from "../src/next/next-host.mjs";
@@ -74,6 +75,38 @@ test("the GCP host's cache store and use-cache store share one tenth of the serv
   });
 
   expect(await pages.readEntry("/a")).toBeNull();
+  expect(await useCache.readEntry("key")).toEqual({
+    tags: [],
+    stale: 1,
+    timestamp: 2,
+    expire: 3,
+    revalidate: 4,
+    body: html,
+  });
+});
+
+test("the GCP host's refresh gives up on a re-render once the time the service has to answer runs short", async () => {
+  const slow = http.createServer((_req, res) => {
+    setTimeout(() => res.end("rendered"), 300);
+  });
+  await new Promise<void>((resolve) => slow.listen({ host: "127.0.0.1", port: 0 }, resolve));
+  const { port } = slow.address() as { port: number };
+  const host = newGcpNextHost({
+    PORT: "8080",
+    OCEL_FINISH_BEFORE_RESPONSE_MS: "50",
+    __NEXT_PRIVATE_ORIGIN: `http://127.0.0.1:${port}`,
+  });
+  const started = Date.now();
+
+  try {
+    await expect(
+      host.scheduleRefresh!({ url: "/blog", lastModified: 1, headers: {} }),
+    ).rejects.toThrow(/did not answer within 50ms/);
+    expect(Date.now() - started).toBeLessThan(250);
+  } finally {
+    slow.closeAllConnections();
+    await new Promise<void>((resolve) => slow.close(() => resolve()));
+  }
 });
 
 test("the GCP host's cache store and the cache the default use-cache handler fills share one tenth of the service's memory", async () => {
