@@ -162,6 +162,25 @@ func (w *world) ServeNotFound(_ context.Context, urlMap, hostname string) error 
 	return nil
 }
 
+func (w *world) CountHostRules(_ context.Context, urlMap string) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.routed[urlMap]), nil
+}
+
+func (w *world) fillHostRules(urlMap string, count int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	hosts := w.routed[urlMap]
+	if hosts == nil {
+		hosts = map[string]string{}
+		w.routed[urlMap] = hosts
+	}
+	for i := len(hosts); i < count; i++ {
+		hosts[fmt.Sprintf("host-%d.example.com", i)] = notFoundBackend
+	}
+}
+
 func (w *world) Unroute(_ context.Context, urlMap, hostname string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -206,6 +225,14 @@ func (w *world) Pin(ctx context.Context, service, revision string, stillActive r
 		w.mu.Unlock()
 		return nil
 	}
+}
+
+func (w *world) ReadTag(_ context.Context, service, revision string) (string, error) {
+	return w.tagOf(service, revision), nil
+}
+
+func (w *world) tagOf(service, revision string) string {
+	return "tag-" + strings.TrimPrefix(revision, service+"-")
 }
 
 func (w *world) beforeNextUp(fn func()) {

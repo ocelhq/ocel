@@ -48,6 +48,8 @@ type Routes interface {
 
 	ServeNotFound(ctx context.Context, urlMap, hostname string) error
 
+	CountHostRules(ctx context.Context, urlMap string) (int, error)
+
 	Unroute(ctx context.Context, urlMap, hostname string) error
 
 	InvalidateTags(ctx context.Context, urlMap string, tags []string) error

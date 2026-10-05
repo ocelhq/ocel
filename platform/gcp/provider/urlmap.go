@@ -35,6 +35,24 @@ func (p *Provider) ServeNotFound(ctx context.Context, urlMap, hostname string) e
 	})
 }
 
+func (p *Provider) CountHostRules(ctx context.Context, urlMap string) (int, error) {
+	clients, err := p.openClients(ctx)
+	if err != nil {
+		return 0, err
+	}
+	engine, err := clients.Compute()
+	if err != nil {
+		return 0, err
+	}
+	current, err := attempted(ctx, func(call ...googleapi.CallOption) (*compute.UrlMap, error) {
+		return engine.UrlMaps.Get(clients.project, urlMap).Context(ctx).Do(call...)
+	})
+	if err != nil {
+		return 0, fmt.Errorf("read the url map %s: %w", urlMap, err)
+	}
+	return len(current.HostRules), nil
+}
+
 func (p *Provider) Unroute(ctx context.Context, urlMap, hostname string) error {
 	if urlMap == "" || hostname == "" {
 		return nil

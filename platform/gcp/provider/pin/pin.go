@@ -12,6 +12,8 @@ import (
 
 type Pins interface {
 	Pin(ctx context.Context, service, revision string, stillActive router.StillActive) error
+
+	ReadTag(ctx context.Context, service, revision string) (string, error)
 }
 
 func MovePointer(ctx context.Context, pins Pins, move router.PointerMove, progress progress.Log) error {

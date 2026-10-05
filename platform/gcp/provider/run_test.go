@@ -295,6 +295,25 @@ func TestPinningTrafficKeepsEveryTagTheServiceCarries(t *testing.T) {
 	}
 }
 
+func TestTheTagOfARevisionIsReadFromTheServiceAndAnUntaggedRevisionIsRefused(t *testing.T) {
+	server := &runServer{}
+	tagged := serves("ocel-shop-prod-app")
+	tagged.tag = "r1a2b3c4d"
+	_, one := released(t, server, tagged)
+	untagged := serves("ocel-shop-prod-app")
+	untagged.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	_, two := released(t, server, untagged)
+	p := server.open(t)
+
+	if tag, err := p.ReadTag(context.Background(), tagged.service, one); err != nil || tag != "r1a2b3c4d" {
+		t.Errorf("ReadTag(%s) = %q, %v, want r1a2b3c4d", one, tag, err)
+	}
+	var refused refusal.Refusal
+	if _, err := p.ReadTag(context.Background(), tagged.service, two); !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Errorf("ReadTag(%s) of a revision no release tagged = %v, want a %s refusal", two, err, refusal.CodeNotReady)
+	}
+}
+
 func TestAReleaseOntoAServiceThatServesItsLatestRevisionKeepsServingThatRevision(t *testing.T) {
 	server := &runServer{}
 	first := serves("ocel-shop-prod-app")
