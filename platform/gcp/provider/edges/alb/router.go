@@ -102,7 +102,10 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 	if err := r.moveTraffic(ctx, move, progress); err != nil {
 		return err
 	}
-	return r.s.removeUnheldTags(ctx)
+	if err := r.s.removeUnheldTags(ctx); err != nil && progress != nil {
+		progress.Warn("Could not remove a Cloud Run revision tag, the next move will try again: " + err.Error())
+	}
+	return nil
 }
 
 func (r routerStack) moveTraffic(ctx context.Context, move router.PointerMove, progress progress.Log) error {
