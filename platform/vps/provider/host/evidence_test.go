@@ -14,6 +14,8 @@ func inspecting() map[string]string {
 		"what a release reads to see if the app is already serving":              servingCommand(physical),
 		"what a release that fell over captures as evidence":                     stateCommand(physical),
 		"what a release that fell over captures as logs":                         logCommand(physical),
+		"what a container that failed to start gives as its last run's logs":     lastRunLogsCommand(physical),
+		"what a probe watches its container with while it waits":                 watchingStart([]string{physical}, []string{"true"}),
 		"what a proxy that did not come up reports":                              frontProxy().rising(3),
 		"what a switchboard that did not come up reports":                        switchboardBox(nil, Front{}).rising(3),
 		"what a bootstrap probes the proxy with":                                 frontProxy().probe(),
@@ -77,7 +79,7 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 
 func inspectRosters() map[string][]string {
 	return map[string][]string{
-		"docker inspect":         {"caddyReloadCommand", "probe", "renderTunnelInspect", "renderTunnelRemoval", "restoredCommand", "restoring", "rising", "runningCommand", "servingCommand", "stateCommand"},
+		"docker inspect":         {"caddyReloadCommand", "probe", "renderTunnelInspect", "renderTunnelRemoval", "restoredCommand", "restoring", "rising", "lastRunLogsCommand", "runningCommand", "servingCommand", "stateCommand", "watchingStart"},
 		"docker network inspect": {"command", "joinNetworkScript", "networkCreating", "networkEnsured", "networkForgetting", "networkProbe", "networksPresent"},
 		"docker image inspect":   {"imagePulled"},
 	}
