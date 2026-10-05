@@ -92,7 +92,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		}
 		if servesNext(app) {
 			served = fillNextServingDefaults(served)
-			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served)); err != nil {
+			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, names.Bucket(spec.Ref.Tier), p.containerEndpoint())); err != nil {
 				return nil, err
 			}
 		}

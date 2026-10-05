@@ -55,6 +55,42 @@ test("the GCP host's cache store keeps an entry for the next request the instanc
   expect(await store.readFetch("hash")).toEqual(entry);
 });
 
+test("the GCP host keeps a fetch entry in the bucket and under the object prefix its service is told", async () => {
+  const requests: { method?: string; url?: string }[] = [];
+  const server = http.createServer((req, res) => {
+    requests.push({ method: req.method, url: req.url });
+    req.resume();
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ generation: "1" }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const { port } = server.address() as { port: number };
+    const env = {
+      PORT: "8080",
+      OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
+      OCEL_ISR_BUCKET: "b",
+      OCEL_ISR_OBJECT_PREFIX: "cache/shop/web/prod/r1/isr",
+      OCEL_STORAGE_ENDPOINT: `http://127.0.0.1:${port}`,
+    };
+    const host = newGcpNextHost(env);
+    const store = await host.newCacheStore!();
+
+    await store.writeFetch("abc", { lastModified: 1, value: { kind: "FETCH", data: {} } });
+
+    expect(requests).toHaveLength(1);
+    const url = new URL(requests[0]!.url!, "http://x");
+    expect(requests[0]!.method).toBe("POST");
+    expect(url.pathname).toBe("/upload/storage/v1/b/b/o");
+    expect(url.searchParams.get("name")).toBe(
+      "cache/shop/web/prod/r1/isr/fetch-cache/abc.cache.json",
+    );
+    expect(refuseIncompleteHost(host, env)).toBeUndefined();
+  } finally {
+    server.close();
+  }
+});
+
 test("the GCP host's cache store and use-cache store share one tenth of the service's memory", async () => {
   const host = newGcpNextHost({ PORT: "8080", OCEL_FUNCTION_MEMORY_MB: "1" });
   const pages = await host.newCacheStore!();

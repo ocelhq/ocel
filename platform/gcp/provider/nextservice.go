@@ -3,6 +3,7 @@ package gcp
 import (
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -27,6 +28,9 @@ const (
 	deploymentIDEnvVar    = "OCEL_DEPLOYMENT_ID"
 	isrPrefixEnvVar       = "OCEL_ISR_PREFIX"
 	isrTagNamespaceEnvVar = "OCEL_ISR_TAG_NAMESPACE"
+	isrBucketEnvVar       = "OCEL_ISR_BUCKET"
+	isrObjectPrefixEnvVar = "OCEL_ISR_OBJECT_PREFIX"
+	storageEndpointEnvVar = "OCEL_STORAGE_ENDPOINT"
 	staticDirEnvVar       = "OCEL_STATIC_DIR"
 
 	finishBeforeResponseEnvVar = "OCEL_FINISH_BEFORE_RESPONSE_MS"
@@ -61,7 +65,7 @@ func refuseGuardWithoutShieldingEdge(spec provider.StackSpec) error {
 		app.App, spec.Edge.Kind())
 }
 
-func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving) map[string]string {
+func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, bucket, storageEndpoint string) map[string]string {
 	app := spec.App
 	env := map[string]string{memoryEnvVar: strconv.Itoa(s.memory)}
 	if app.Router != "" {
@@ -85,6 +89,11 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving) ma
 	if isr := app.ISR; isr != nil {
 		env[isrPrefixEnvVar] = isr.Prefix
 		env[isrTagNamespaceEnvVar] = isr.TagNamespace
+		env[isrBucketEnvVar] = bucket
+		env[isrObjectPrefixEnvVar] = strings.TrimSuffix(cacheObjectName(isr.Prefix+"/"), "/")
+		if storageEndpoint != "" {
+			env[storageEndpointEnvVar] = storageEndpoint
+		}
 	}
 	return env
 }
