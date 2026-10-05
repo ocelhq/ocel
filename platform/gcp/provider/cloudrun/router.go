@@ -2,6 +2,8 @@ package cloudrun
 
 import (
 	"context"
+	"maps"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 
@@ -26,6 +28,7 @@ func (r Router) Facts() router.Facts {
 		ReachesFunctions:            true,
 		ReachesContainers:           true,
 		StopsServingRemovedPointers: true,
+		ServesPreviewDeployments:    true,
 	}
 }
 
@@ -60,6 +63,9 @@ func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
 func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
+	if _, _, deployment := router.ParseDeploymentPointer(move.Pointer); deployment {
+		return r.serveDeployment(ctx, move)
+	}
 	pointers, err := pin.MovePointer(ctx, r.s.e.pins, r.s.recorded.Pointers, move, progress)
 	r.s.recorded.Pointers = pointers
 	r.s.keep()
@@ -71,6 +77,9 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 }
 
 func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRemoval, _ progress.Log) error {
+	if _, _, deployment := router.ParseDeploymentPointer(removal.Pointer); deployment {
+		return r.removeDeployment(ctx, removal.Pointer)
+	}
 	kept, err := pin.ClosePointer(ctx, r.s.e.pins, r.s.recorded.Pointers, removal.Pointer)
 	if err != nil {
 		return err
@@ -81,3 +90,65 @@ func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRe
 }
 
 func (r routerStack) Destroy(context.Context) error { return nil }
+
+func (r routerStack) serveDeployment(ctx context.Context, move router.PointerMove) error {
+	tags := map[string]string{}
+	for _, app := range slices.Sorted(maps.Keys(move.Records)) {
+		record := move.Records[app]
+		revision := record.Revisions[record.Physical]
+		if revision == "" {
+			return router.Unserved{Err: refusal.Refuse(refusal.CodeInvalid,
+				"build %s of %s recorded no revision of the service it answers on, and a preview deployment is answered on the tag of the revision its deploy created: "+
+					"re-deploy %s so its release records one",
+				record.Build, app, app)}
+		}
+		tag, err := r.s.e.pins.ReadTag(ctx, record.Physical, revision)
+		if err != nil {
+			return router.Unserved{Err: err}
+		}
+		tags[record.Physical] = tag
+	}
+	if err := move.RefuseInactive(ctx); err != nil {
+		return err
+	}
+	deployments := maps.Clone(r.s.recorded.Deployments)
+	if deployments == nil {
+		deployments = map[string]map[string]string{}
+	}
+	deployments[move.Pointer] = tags
+	r.s.recorded.Deployments = deployments
+	r.s.keep()
+	return nil
+}
+
+func (r routerStack) removeDeployment(ctx context.Context, pointer string) error {
+	tags, recorded := r.s.recorded.Deployments[pointer]
+	if !recorded {
+		return nil
+	}
+	kept := maps.Clone(r.s.recorded.Deployments)
+	delete(kept, pointer)
+	for _, service := range slices.Sorted(maps.Keys(tags)) {
+		if isTagServed(kept, service, tags[service]) {
+			continue
+		}
+		if err := r.s.e.pins.Untag(ctx, service, tags[service]); err != nil {
+			return err
+		}
+	}
+	if len(kept) == 0 {
+		kept = nil
+	}
+	r.s.recorded.Deployments = kept
+	r.s.keep()
+	return nil
+}
+
+func isTagServed(deployments map[string]map[string]string, service, tag string) bool {
+	for _, tags := range deployments {
+		if tags[service] == tag {
+			return true
+		}
+	}
+	return false
+}

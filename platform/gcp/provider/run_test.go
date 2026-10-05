@@ -812,3 +812,34 @@ func TestWarmingThroughALoadBalancerDialsItsAddressAndAsksForTheHostname(t *test
 		t.Error("warming asked the load balancer nothing")
 	}
 }
+
+func TestAReleaseBehindIdentityAwareProxyRecordsTheUrlOfTheTagItGaveItsRevision(t *testing.T) {
+	server := &runServer{}
+	preview := serves("ocel-shop-pr-7-web")
+	preview.public = false
+	preview.iap = true
+	preview.tag = "r00000001"
+
+	deployed, err := server.open(t).deployService(context.Background(), preview, nil)
+	if err != nil {
+		t.Fatalf("deployService() = %v", err)
+	}
+	if want := "https://r00000001---ocel-shop-pr-7-web.run.app"; deployed.deployment != want {
+		t.Errorf("the release recorded deployment url %q, want %q: Cloud Run answers the tagged revision there, behind the service's proxy", deployed.deployment, want)
+	}
+}
+
+func TestAReleaseBehindTheLoadBalancerRecordsNoDeploymentUrl(t *testing.T) {
+	server := &runServer{}
+	behind := serves("ocel-shop-pr-7-web")
+	behind.ingress = ingressLoadBalancer
+	behind.tag = "r00000001"
+
+	deployed, err := server.open(t).deployService(context.Background(), behind, nil)
+	if err != nil {
+		t.Fatalf("deployService() = %v", err)
+	}
+	if deployed.deployment != "" {
+		t.Errorf("the release recorded deployment url %q, and its ingress turns away everything but the load balancer, which answers the deployment on a hostname of its own", deployed.deployment)
+	}
+}

@@ -2106,3 +2106,43 @@ func TestAProductionReleaseOnARouterThatAddressesItselfAnnouncesItsOwnURL(t *tes
 		t.Errorf("the deploy announced %v, want the one url its release recorded", urls)
 	}
 }
+
+func TestAPreviewOnARouterThatAddressesItselfServesEachDeploymentOnTheURLItsReleaseRecordedUntilAPruneDropsIt(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).AddressesItself(true)
+	host := func(url string) string { return strings.TrimPrefix(url, "https://") }
+
+	first, _ := deploy(t, client, previewDeployRequest())
+	deploy(t, client, previewDeployRequest())
+	second, _ := deploy(t, client, previewDeployRequest())
+	if !first.GetSuccess() || !second.GetSuccess() {
+		t.Fatalf("Deploy() = %q, %q", first.GetError(), second.GetError())
+	}
+	firstDeployment, secondDeployment := findDeploymentURL(first, "web"), findDeploymentURL(second, "web")
+	if !strings.Contains(firstDeployment, fake.DeploymentURLMarker) || firstDeployment == secondDeployment {
+		t.Fatalf("the deploys announced deployment urls %q and %q, want each the url its own release recorded", firstDeployment, secondDeployment)
+	}
+	plane := vendor.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
+	want := router.FormatDeploymentPointer("pr-7", first.GetPromotionId())
+	if pointer, builds := plane.FindServingPointer(host(firstDeployment)); pointer != want || builds["web"] == "" {
+		t.Errorf("the first deployment's url is served by %q with %v after the next deploy, want %s still serving it", pointer, builds, want)
+	}
+
+	pruning, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
+		Slug: "shop", KeepN: 1, Environment: previewDeployRequest().GetEnvironment(), Edge: previewDeployRequest().GetEdge(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(pruning); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveStalePromotions() = %q, %v", result.GetError(), err)
+	}
+	if pointer, _ := plane.FindServingPointer(host(firstDeployment)); pointer != "" {
+		t.Errorf("the pruned deployment's url is still served by %q, want nothing", pointer)
+	}
+	if pointer, _ := plane.FindServingPointer(host(secondDeployment)); pointer == "" {
+		t.Errorf("%s stopped serving, want the deployment the prune kept still served", secondDeployment)
+	}
+}

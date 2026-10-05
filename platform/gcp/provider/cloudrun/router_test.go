@@ -20,11 +20,12 @@ import (
 )
 
 type pinRecorder struct {
-	mu     sync.Mutex
-	pinned []string
-	warmed []string
-	closed map[string]bool
-	refuse error
+	mu       sync.Mutex
+	pinned   []string
+	warmed   []string
+	closed   map[string]bool
+	untagged map[string]bool
+	refuse   error
 }
 
 func (p *pinRecorder) Restore(ctx context.Context, service, revision string, stillActive router.StillActive) error {
@@ -64,7 +65,21 @@ func (p *pinRecorder) ReadTag(_ context.Context, _, revision string) (string, er
 
 func (p *pinRecorder) ReadServing(context.Context, string) (string, error) { return "", nil }
 
-func (p *pinRecorder) Untag(context.Context, string, string) error { return nil }
+func (p *pinRecorder) Untag(_ context.Context, service, tag string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.untagged == nil {
+		p.untagged = map[string]bool{}
+	}
+	p.untagged[service+"@"+tag] = true
+	return nil
+}
+
+func (p *pinRecorder) isUntagged(service, tag string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.untagged[service+"@"+tag]
+}
 
 func (p *pinRecorder) Warm(_ context.Context, service, revision, path string) error {
 	p.mu.Lock()
@@ -97,32 +112,108 @@ func (p *pinRecorder) calls() []string {
 
 const webService = "ocel-shop-prod-web"
 
+func pinnedLast(pins *pinRecorder) string {
+	calls := pins.calls()
+	if len(calls) == 0 || pins.isClosed(webService) {
+		return ""
+	}
+	return strings.TrimPrefix(calls[len(calls)-1], webService+"@rev-")
+}
+
+func refusingPins(pins *pinRecorder) func(error) {
+	return func(err error) {
+		pins.mu.Lock()
+		defer pins.mu.Unlock()
+		pins.refuse = err
+	}
+}
+
+func reconciledFront(t *testing.T, pins *pinRecorder, tier environment.Tier) (*cloudrun.Edge, edge.StackState) {
+	t.Helper()
+	front := cloudrun.New(pins)
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: tier}, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile(shop) = %v", err)
+	}
+	return front, stack.State()
+}
+
+type askedRevisions struct {
+	mu        sync.Mutex
+	revisions map[string]string
+}
+
+func (a *askedRevisions) record(move router.PointerMove) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, record := range move.Records {
+		a.revisions[move.Pointer] = record.Revisions[record.Physical]
+	}
+}
+
+func (a *askedRevisions) revisionOf(pointer string) string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.revisions[pointer]
+}
+
+type revisionRecordingRouter struct {
+	cloudrun.Router
+	asked *askedRevisions
+}
+
+func (r revisionRecordingRouter) Reconcile(ctx context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {
+	stack, err := r.Router.Reconcile(ctx, spec, prior)
+	return revisionRecordingStack{Stack: stack, asked: r.asked}, err
+}
+
+func (r revisionRecordingRouter) Open(state router.StackState) (router.Stack, error) {
+	stack, err := r.Router.Open(state)
+	return revisionRecordingStack{Stack: stack, asked: r.asked}, err
+}
+
+type revisionRecordingStack struct {
+	router.Stack
+	asked *askedRevisions
+}
+
+func (s revisionRecordingStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
+	s.asked.record(move)
+	return s.Stack.MovePointer(ctx, move, progress)
+}
+
 func TestTheCloudRunRouterBehavesAsEveryRouterMust(t *testing.T) {
 	routerconformance.Run(t, routerconformance.Suite{
 		New: func(t *testing.T) routerconformance.Fixture {
 			pins := &pinRecorder{}
-			front := cloudrun.New(pins)
-			stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
-			if err != nil {
-				t.Fatalf("Reconcile(shop) = %v", err)
-			}
-			state := stack.State()
+			front, state := reconciledFront(t, pins, environment.TierProduction)
 			return routerconformance.Fixture{
-				Router: cloudrun.NewRouter(front),
+				Router:              cloudrun.NewRouter(front),
+				Spec:                router.StackSpec{Tier: state.Tier, Slug: state.Slug},
+				Prior:               router.NewStackState(state),
+				Serving:             func(string) string { return pinnedLast(pins) },
+				FailNextPointerMove: refusingPins(pins),
+			}
+		},
+		Previews: func(t *testing.T) routerconformance.Fixture {
+			pins := &pinRecorder{}
+			front, state := reconciledFront(t, pins, environment.TierPreview)
+			asked := &askedRevisions{revisions: map[string]string{}}
+			return routerconformance.Fixture{
+				Router: revisionRecordingRouter{Router: cloudrun.NewRouter(front), asked: asked},
 				Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
 				Prior:  router.NewStackState(state),
-				Serving: func(string) string {
-					calls := pins.calls()
-					if len(calls) == 0 || pins.isClosed(webService) {
+				Serving: func(pointer string) string {
+					if _, _, deployment := router.ParseDeploymentPointer(pointer); !deployment {
+						return pinnedLast(pins)
+					}
+					revision := asked.revisionOf(pointer)
+					if revision == "" || pins.isClosed(webService) || pins.isUntagged(webService, "tag-"+revision) {
 						return ""
 					}
-					return strings.TrimPrefix(calls[len(calls)-1], webService+"@rev-")
+					return strings.TrimPrefix(revision, "rev-")
 				},
-				FailNextPointerMove: func(err error) {
-					pins.mu.Lock()
-					defer pins.mu.Unlock()
-					pins.refuse = err
-				},
+				FailNextPointerMove: refusingPins(pins),
 			}
 		},
 		Hostname: "shop.example.com",
@@ -132,9 +223,72 @@ func TestTheCloudRunRouterBehavesAsEveryRouterMust(t *testing.T) {
 	})
 }
 
-func TestTheCloudRunRouterServesNoPreviewDeploymentOnAHostnameOfItsOwn(t *testing.T) {
-	if cloudrun.NewRouter(cloudrun.New(&pinRecorder{})).Facts().ServesPreviewDeployments {
-		t.Error("Facts() says Cloud Run serves each preview deployment on its own hostname, and a service answers on its own url alone")
+func TestTheCloudRunRouterServesEachPreviewDeploymentOnItsOwnUrlAndSaysSo(t *testing.T) {
+	if !cloudrun.NewRouter(cloudrun.New(&pinRecorder{})).Facts().ServesPreviewDeployments {
+		t.Error("Facts() says Cloud Run serves no preview deployment of its own, and each tagged revision answers on its own run.app url")
+	}
+}
+
+func previewStack(t *testing.T, pins *pinRecorder) router.Stack {
+	t.Helper()
+	front, state := reconciledFront(t, pins, environment.TierPreview)
+	opened, err := cloudrun.NewRouter(front).Open(router.NewStackState(state))
+	if err != nil {
+		t.Fatalf("Open the router = %v", err)
+	}
+	return opened
+}
+
+func deploymentMove(pointer, promotionID, revision string) router.PointerMove {
+	return router.PointerMove{
+		Pointer:   router.FormatDeploymentPointer(pointer, promotionID),
+		Promotion: router.Promotion{PromotionID: promotionID, Builds: map[string]string{"web": "b-" + revision}},
+		Records: map[string]router.DeploymentRecord{"web": {
+			App: "web", Build: "b-" + revision, Physical: webService, Revisions: map[string]string{webService: revision},
+		}},
+	}
+}
+
+func TestServingAPreviewDeploymentPinsNoTraffic(t *testing.T) {
+	t.Parallel()
+
+	pins := &pinRecorder{}
+	stack := previewStack(t, pins)
+
+	if err := stack.MovePointer(context.Background(), deploymentMove("pr-7", "p1", "web-00001-abc"), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(deployment) = %v", err)
+	}
+	if got := pins.calls(); len(got) != 0 {
+		t.Errorf("serving a preview deployment pinned %v, want nothing: the deployment answers on its revision's tag, and the preview's own url keeps what it was promoted to", got)
+	}
+}
+
+func TestRemovingAPreviewDeploymentUntagsItsRevisionUnlessAnotherDeploymentStillServesIt(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pins := &pinRecorder{}
+	stack := previewStack(t, pins)
+	for _, id := range []string{"p1", "p2"} {
+		if err := stack.MovePointer(ctx, deploymentMove("pr-7", id, "web-00001-abc"), progress.Discard()); err != nil {
+			t.Fatalf("MovePointer(%s) = %v", id, err)
+		}
+	}
+
+	if err := stack.RemovePointer(ctx, router.PointerRemoval{Pointer: router.FormatDeploymentPointer("pr-7", "p1")}, progress.Discard()); err != nil {
+		t.Fatalf("RemovePointer(p1) = %v", err)
+	}
+	if pins.isUntagged(webService, "tag-web-00001-abc") {
+		t.Error("removing p1 untagged the revision p2 still serves on that tag")
+	}
+	if err := stack.RemovePointer(ctx, router.PointerRemoval{Pointer: router.FormatDeploymentPointer("pr-7", "p2")}, progress.Discard()); err != nil {
+		t.Fatalf("RemovePointer(p2) = %v", err)
+	}
+	if !pins.isUntagged(webService, "tag-web-00001-abc") {
+		t.Error("removing the last deployment on the tag left it, and its url keeps answering")
+	}
+	if pins.isClosed(webService) {
+		t.Error("removing a deployment closed the service, and the preview's own url stops answering")
 	}
 }
 

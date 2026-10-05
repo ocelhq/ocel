@@ -24,8 +24,8 @@ func serviceFor(names Names, spec provider.StackSpec, app *provider.AppSpec, fun
 
 const rootHealthPath = "/"
 
-func revisionTag(spec provider.StackSpec) string {
-	if !factsOf(spec.Edge).ShieldsOrigin {
+func (p *Provider) revisionTag(spec provider.StackSpec) string {
+	if !factsOf(spec.Edge).ShieldsOrigin && !p.servesBehindIAP(spec) {
 		return ""
 	}
 	return spec.Ref.Name.Release.String()
@@ -139,7 +139,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			ingress:          ingressFor(factsOf(spec.Edge)),
 			memory:           fn.Memory,
 			egress:           p.egressFor(names, spec),
-			tag:              revisionTag(spec),
+			tag:              p.revisionTag(spec),
 			opensOnPromotion: true,
 		}
 		if servesNext(app) {
@@ -168,7 +168,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			return nil, err
 		}
 		deployed = append(deployed, provider.Function{
-			Name: fn.Name, Physical: service, URL: ran.url, Revision: ran.revision,
+			Name: fn.Name, Physical: service, URL: ran.url, DeploymentURL: ran.deployment, Revision: ran.revision,
 		})
 	}
 	if !hostsWorkers(app) {
@@ -306,7 +306,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		iap:       gated,
 		ingress:   ingressFor(factsOf(spec.Edge)),
 		egress:    p.egressFor(names, spec),
-		tag:       revisionTag(spec),
+		tag:       p.revisionTag(spec),
 
 		opensOnPromotion: true,
 	}, progress)
@@ -317,7 +317,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		return nil, err
 	}
 	deployed := []provider.AppContainer{{
-		Name: app.App, Physical: service, URL: ran.url, Image: app.Image, Revision: ran.revision,
+		Name: app.App, Physical: service, URL: ran.url, DeploymentURL: ran.deployment, Image: app.Image, Revision: ran.revision,
 	}}
 	workers, err := p.provisionWorkers(ctx, c, spec, app.Image, account, values, declared, progress)
 	if err != nil {

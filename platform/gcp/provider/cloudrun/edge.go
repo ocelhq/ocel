@@ -100,7 +100,8 @@ type stack struct {
 }
 
 type record struct {
-	Pointers pin.Pointers `json:"pointers,omitempty"`
+	Pointers    pin.Pointers                 `json:"pointers,omitempty"`
+	Deployments map[string]map[string]string `json:"deployments,omitempty"`
 }
 
 func (s *stack) keep() { s.state.Private = edge.Own(s.recorded) }
