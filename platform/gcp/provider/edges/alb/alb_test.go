@@ -489,19 +489,37 @@ func TestAPreviewAliasIsAnsweredOnAnExactHostRuleOntoItsAppsService(t *testing.T
 	}
 }
 
-func TestAProjectsOwnPreviewWildcardIsRefusedOnTheLoadBalancer(t *testing.T) {
+func TestAProjectsOwnPreviewWildcardEntersItsCertificateAndEachPreviewIsRoutedExactly(t *testing.T) {
 	t.Parallel()
 
-	_, _, stack := reconciledPreview(t)
-	var refused refusal.Refusal
-	err := stack.BindDomain(context.Background(), edge.DomainBinding{
-		Hostname: edge.PreviewWildcard("preview.shop.example"), App: "web", Certificate: previewCertificate,
-	})
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("BindDomain of a project's own preview wildcard = %v, want an %s refusal", err, refusal.CodeInvalid)
+	ctx := context.Background()
+	_, w, shared := reconciledPreview(t)
+	wildcard := edge.PreviewWildcard("preview.shop.example")
+	if err := shared.BindDomain(ctx, edge.DomainBinding{Hostname: wildcard, Certificate: previewCertificate}); err != nil {
+		t.Fatalf("BindDomain(%s) = %v", wildcard, err)
 	}
-	if !strings.Contains(refused.Message, "domains.preview") {
-		t.Errorf("the refusal reads %q, want what the project declared named: it is what has to be removed", refused.Message)
+
+	declared := w.declarations(BindingStack("shop", environment.TierPreview))
+	entry, entered := declared[entryName("shop", environment.TierPreview, wildcard)]
+	if !entered || entry.Args["hostname"] != wildcard {
+		t.Fatalf("the binding declares %v, want a certificate map entry for %s: it is what terminates TLS for every preview under it", keys(declared), wildcard)
+	}
+	if routed, ruled := w.hosts(tierRoutes)[wildcard]; ruled {
+		t.Errorf("the tier url map routes %s to %q, want no rule for the wildcard: each preview under it is an exact host rule its promotion writes", wildcard, routed)
+	}
+
+	stack := routerStack{s: shared.(*stack)}
+	alias := "pr-7-bbbbbbbbbbbbbbbb.preview.shop.example"
+	record := previewRecord("b1")
+	record.Physical = "ocel-shop-pr-7-web"
+	if err := stack.MovePointer(ctx, aliasMove("p1", alias, record), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(pr-7) = %v", err)
+	}
+	if got := w.hosts(tierRoutes)[alias]; got != backendName("shop", environment.TierPreview, alias) {
+		t.Errorf("%s is routed to %q, want its own backend", alias, got)
+	}
+	if routed, ruled := w.hosts(tierRoutes)[wildcard]; ruled {
+		t.Errorf("the promotion routed the wildcard to %q, want it left to its certificate alone", routed)
 	}
 }
 

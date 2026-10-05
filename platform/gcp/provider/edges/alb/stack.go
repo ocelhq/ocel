@@ -36,7 +36,7 @@ func (s *stack) released(ctx context.Context, records map[string]router.Deployme
 	var took []string
 	for _, hostname := range slices.Sorted(maps.Keys(hosts)) {
 		host := hosts[hostname]
-		if host.Service != "" {
+		if host.Service != "" || isWildcard(hostname) {
 			continue
 		}
 		service := records[host.App].Physical
@@ -88,15 +88,6 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if binding.Hostname == "" {
 		return refusal.Refuse(refusal.CodeInvalid, "the %q edge is asked to bind a hostname nothing named", Kind)
 	}
-	if base, wild := strings.CutPrefix(binding.Hostname, "*."); wild {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"this project declares %s as its own preview domain, and the %q edge cannot serve one: it resolves a preview by handing the "+
-				"hostname's first label to Cloud Run as a service name, and a project's own wildcard leaves the project out of that label, "+
-				"so two projects previewing the same branch would name one service and one would answer for the other.\n"+
-				"Remove domains.preview from this project and run `ocel domain use '%s' --preview` against the bootstrap instead, "+
-				"which serves every project's previews from one wildcard with the project in the label",
-			edge.PreviewWildcard(base), Kind, edge.PreviewWildcard(base))
-	}
 	if !s.recorded.LoadBalancer.provisioned() {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s load balancer is provisioned for tier %s, and %s is served by writing a host rule into its url map: run `ocel bootstrap` for this tier first",
@@ -105,6 +96,9 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	service, err := s.serving(ctx, binding.App)
 	if err != nil {
 		return err
+	}
+	if isWildcard(binding.Hostname) {
+		service = ""
 	}
 	hosts := maps.Clone(s.recorded.Hosts)
 	if hosts == nil {
@@ -129,8 +123,10 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err := s.raise(ctx, hosts); err != nil {
 		return errors.Join(err, release())
 	}
-	if err := s.reach(ctx, hosts[binding.Hostname], binding.Hostname); err != nil {
-		return errors.Join(err, s.raise(ctx, s.recorded.Hosts), release())
+	if !isWildcard(binding.Hostname) {
+		if err := s.reach(ctx, hosts[binding.Hostname], binding.Hostname); err != nil {
+			return errors.Join(err, s.raise(ctx, s.recorded.Hosts), release())
+		}
 	}
 	s.recorded.Hosts = hosts
 	s.keep()
@@ -312,3 +308,5 @@ func entryName(slug string, tier environment.Tier, hostname string) string {
 func negName(slug string, tier environment.Tier, hostname string) string {
 	return resourceName(slug, tier, hostname, "neg")
 }
+
+func isWildcard(hostname string) bool { return strings.HasPrefix(hostname, "*.") }
