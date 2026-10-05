@@ -36,6 +36,7 @@ func TestMain(m *testing.M) {
 		os.Exit(clitest.RunFakeSession())
 	}
 	clitest.UnsetColorEnv()
+	os.Unsetenv("REGISTRY_TOKEN")
 	done := clitest.IsolateConfigHome()
 	code := m.Run()
 	done()
