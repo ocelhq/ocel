@@ -40,6 +40,9 @@ func TestAnUnknownHostKeyAsksTheUserAndAYesRecordsItInTheirKnownHosts(t *testing
 	if !strings.Contains(question.Finding, "SHA256:") || !strings.Contains(question.Prompt, store) {
 		t.Errorf("question = %+v, want the fingerprint shown and the file it would write named", question)
 	}
+	if question.Remedy != trust.Remedy || !strings.HasPrefix(question.Remedy, "ssh-keyscan ") {
+		t.Errorf("question remedy = %q, want the ssh-keyscan line %q a user types", question.Remedy, trust.Remedy)
+	}
 	if _, err := os.Stat(store); err == nil {
 		t.Fatal("known_hosts was written before anyone answered")
 	}

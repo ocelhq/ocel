@@ -10,6 +10,7 @@ import (
 type Question struct {
 	Finding string
 	Prompt  string
+	Remedy  string
 	Confirm func(ctx context.Context) error
 }
 
