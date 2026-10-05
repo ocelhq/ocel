@@ -181,10 +181,20 @@ func environmentOf(values map[string]string) []*run.GoogleCloudRunV2EnvVar {
 	return entries
 }
 
-func trafficTo(revision string) []*run.GoogleCloudRunV2TrafficTarget {
-	return []*run.GoogleCloudRunV2TrafficTarget{
-		{Type: trafficByRevision, Revision: revision, Percent: 100},
+func trafficTo(revision string, current []*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudRunV2TrafficTarget {
+	pinned := &run.GoogleCloudRunV2TrafficTarget{Type: trafficByRevision, Revision: revision, Percent: 100}
+	traffic := []*run.GoogleCloudRunV2TrafficTarget{pinned}
+	for _, target := range current {
+		if target.Tag == "" {
+			continue
+		}
+		if pinned.Tag == "" && target.Type == trafficByRevision && revisionName(target.Revision) == revision {
+			pinned.Tag = target.Tag
+			continue
+		}
+		traffic = append(traffic, &run.GoogleCloudRunV2TrafficTarget{Type: target.Type, Revision: target.Revision, Tag: target.Tag})
 	}
+	return traffic
 }
 
 func (p *Provider) storedAs(image string) string {
@@ -268,7 +278,7 @@ func heldTraffic(current *run.GoogleCloudRunV2Service) []*run.GoogleCloudRunV2Tr
 	}) {
 		return current.Traffic
 	}
-	return trafficTo(serving)
+	return trafficTo(serving, current.Traffic)
 }
 
 func (p *Provider) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) error {
@@ -331,7 +341,7 @@ func (p *Provider) route(
 		}
 		routed := &run.GoogleCloudRunV2Service{
 			Etag:    current.Etag,
-			Traffic: trafficTo(revision),
+			Traffic: trafficTo(revision, current.Traffic),
 		}
 		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Services.Patch(path, routed).UpdateMask(trafficField).Context(ctx).Do(call...)
@@ -375,10 +385,17 @@ func stale(err error) bool {
 }
 
 func servedBy(traffic []*run.GoogleCloudRunV2TrafficTarget, revision string) bool {
-	return len(traffic) == 1 &&
-		traffic[0].Type == trafficByRevision &&
-		revisionName(traffic[0].Revision) == revision &&
-		traffic[0].Percent == 100
+	var served int64
+	for _, target := range traffic {
+		if target.Percent == 0 {
+			continue
+		}
+		if target.Type != trafficByRevision || revisionName(target.Revision) != revision {
+			return false
+		}
+		served += target.Percent
+	}
+	return served == 100
 }
 
 func revisionName(path string) string {
