@@ -235,6 +235,55 @@ func (ConfigFormat) EnumDescriptor() ([]byte, []int) {
 	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{3}
 }
 
+type CommandOutput int32
+
+const (
+	CommandOutput_COMMAND_OUTPUT_UNSPECIFIED CommandOutput = 0
+	CommandOutput_COMMAND_OUTPUT_RESULT      CommandOutput = 1
+	CommandOutput_COMMAND_OUTPUT_RUN_EVENTS  CommandOutput = 2
+)
+
+// Enum value maps for CommandOutput.
+var (
+	CommandOutput_name = map[int32]string{
+		0: "COMMAND_OUTPUT_UNSPECIFIED",
+		1: "COMMAND_OUTPUT_RESULT",
+		2: "COMMAND_OUTPUT_RUN_EVENTS",
+	}
+	CommandOutput_value = map[string]int32{
+		"COMMAND_OUTPUT_UNSPECIFIED": 0,
+		"COMMAND_OUTPUT_RESULT":      1,
+		"COMMAND_OUTPUT_RUN_EVENTS":  2,
+	}
+)
+
+func (x CommandOutput) Enum() *CommandOutput {
+	p := new(CommandOutput)
+	*p = x
+	return p
+}
+
+func (x CommandOutput) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CommandOutput) Descriptor() protoreflect.EnumDescriptor {
+	return file_cli_result_v1_result_proto_enumTypes[4].Descriptor()
+}
+
+func (CommandOutput) Type() protoreflect.EnumType {
+	return &file_cli_result_v1_result_proto_enumTypes[4]
+}
+
+func (x CommandOutput) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CommandOutput.Descriptor instead.
+func (CommandOutput) EnumDescriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{4}
+}
+
 type BindingSetResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -3003,6 +3052,102 @@ func (x *InitResult) GetSdkPackage() string {
 	return ""
 }
 
+type SchemaListResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Commands      []*CommandSchema       `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SchemaListResult) Reset() {
+	*x = SchemaListResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SchemaListResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SchemaListResult) ProtoMessage() {}
+
+func (x *SchemaListResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SchemaListResult.ProtoReflect.Descriptor instead.
+func (*SchemaListResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *SchemaListResult) GetCommands() []*CommandSchema {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
+}
+
+type CommandSchema struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Output        CommandOutput          `protobuf:"varint,2,opt,name=output,proto3,enum=cli.result.v1.CommandOutput" json:"output,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandSchema) Reset() {
+	*x = CommandSchema{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandSchema) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandSchema) ProtoMessage() {}
+
+func (x *CommandSchema) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandSchema.ProtoReflect.Descriptor instead.
+func (*CommandSchema) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *CommandSchema) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *CommandSchema) GetOutput() CommandOutput {
+	if x != nil {
+		return x.Output
+	}
+	return CommandOutput_COMMAND_OUTPUT_UNSPECIFIED
+}
+
 var File_cli_result_v1_result_proto protoreflect.FileDescriptor
 
 const file_cli_result_v1_result_proto_rawDesc = "" +
@@ -3258,7 +3403,12 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\blanguage\x18\x05 \x01(\tR\blanguage\x12$\n" +
 	"\vsdk_package\x18\x06 \x01(\tH\x00R\n" +
 	"sdkPackage\x88\x01\x01B\x0e\n" +
-	"\f_sdk_package*\x92\x01\n" +
+	"\f_sdk_package\"L\n" +
+	"\x10SchemaListResult\x128\n" +
+	"\bcommands\x18\x01 \x03(\v2\x1c.cli.result.v1.CommandSchemaR\bcommands\"Y\n" +
+	"\rCommandSchema\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x124\n" +
+	"\x06output\x18\x02 \x01(\x0e2\x1c.cli.result.v1.CommandOutputR\x06output*\x92\x01\n" +
 	"\x0fDeploymentState\x12 \n" +
 	"\x1cDEPLOYMENT_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOYMENT_STATE_ACTIVE\x10\x01\x12\x1f\n" +
@@ -3279,7 +3429,11 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x19CONFIG_FORMAT_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12CONFIG_FORMAT_JSON\x10\x01\x12\x16\n" +
 	"\x12CONFIG_FORMAT_YAML\x10\x02\x12\x1c\n" +
-	"\x18CONFIG_FORMAT_TYPESCRIPT\x10\x03B9Z7github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1b\x06proto3"
+	"\x18CONFIG_FORMAT_TYPESCRIPT\x10\x03*i\n" +
+	"\rCommandOutput\x12\x1e\n" +
+	"\x1aCOMMAND_OUTPUT_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15COMMAND_OUTPUT_RESULT\x10\x01\x12\x1d\n" +
+	"\x19COMMAND_OUTPUT_RUN_EVENTS\x10\x02B9Z7github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1b\x06proto3"
 
 var (
 	file_cli_result_v1_result_proto_rawDescOnce sync.Once
@@ -3293,112 +3447,117 @@ func file_cli_result_v1_result_proto_rawDescGZIP() []byte {
 	return file_cli_result_v1_result_proto_rawDescData
 }
 
-var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
+var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_cli_result_v1_result_proto_goTypes = []any{
 	(DeploymentState)(0),          // 0: cli.result.v1.DeploymentState
 	(ConnectorLiveness)(0),        // 1: cli.result.v1.ConnectorLiveness
 	(DoctorVerdict)(0),            // 2: cli.result.v1.DoctorVerdict
 	(ConfigFormat)(0),             // 3: cli.result.v1.ConfigFormat
-	(*BindingSetResult)(nil),      // 4: cli.result.v1.BindingSetResult
-	(*BindingRemoveResult)(nil),   // 5: cli.result.v1.BindingRemoveResult
-	(*BindingListResult)(nil),     // 6: cli.result.v1.BindingListResult
-	(*BindingGenerateResult)(nil), // 7: cli.result.v1.BindingGenerateResult
-	(*BindingSummary)(nil),        // 8: cli.result.v1.BindingSummary
-	(*DomainStatusResult)(nil),    // 9: cli.result.v1.DomainStatusResult
-	(*DomainHostStatus)(nil),      // 10: cli.result.v1.DomainHostStatus
-	(*Certificate)(nil),           // 11: cli.result.v1.Certificate
-	(*CostScanResult)(nil),        // 12: cli.result.v1.CostScanResult
-	(*DeploymentListResult)(nil),  // 13: cli.result.v1.DeploymentListResult
-	(*DeploymentSummary)(nil),     // 14: cli.result.v1.DeploymentSummary
-	(*PreviewListResult)(nil),     // 15: cli.result.v1.PreviewListResult
-	(*PreviewSummary)(nil),        // 16: cli.result.v1.PreviewSummary
-	(*DomainListResult)(nil),      // 17: cli.result.v1.DomainListResult
-	(*PreviewDomainResult)(nil),   // 18: cli.result.v1.PreviewDomainResult
-	(*ConnectorStatusResult)(nil), // 19: cli.result.v1.ConnectorStatusResult
-	(*ConnectorStatus)(nil),       // 20: cli.result.v1.ConnectorStatus
-	(*ConnectorDenial)(nil),       // 21: cli.result.v1.ConnectorDenial
-	(*DoctorResult)(nil),          // 22: cli.result.v1.DoctorResult
-	(*DoctorSection)(nil),         // 23: cli.result.v1.DoctorSection
-	(*DoctorCheck)(nil),           // 24: cli.result.v1.DoctorCheck
-	(*EnvCoordinate)(nil),         // 25: cli.result.v1.EnvCoordinate
-	(*EnvListResult)(nil),         // 26: cli.result.v1.EnvListResult
-	(*EnvValueSummary)(nil),       // 27: cli.result.v1.EnvValueSummary
-	(*EnvGetResult)(nil),          // 28: cli.result.v1.EnvGetResult
-	(*EnvRefsResult)(nil),         // 29: cli.result.v1.EnvRefsResult
-	(*EnvHistoryResult)(nil),      // 30: cli.result.v1.EnvHistoryResult
-	(*EnvVersion)(nil),            // 31: cli.result.v1.EnvVersion
-	(*EnvSourceResult)(nil),       // 32: cli.result.v1.EnvSourceResult
-	(*EnvSourceLink)(nil),         // 33: cli.result.v1.EnvSourceLink
-	(*PermissionsResult)(nil),     // 34: cli.result.v1.PermissionsResult
-	(*PermissionGroup)(nil),       // 35: cli.result.v1.PermissionGroup
-	(*LoginResult)(nil),           // 36: cli.result.v1.LoginResult
-	(*LogoutResult)(nil),          // 37: cli.result.v1.LogoutResult
-	(*LinkResult)(nil),            // 38: cli.result.v1.LinkResult
-	(*ConsoleOrganization)(nil),   // 39: cli.result.v1.ConsoleOrganization
-	(*ConsoleProject)(nil),        // 40: cli.result.v1.ConsoleProject
-	(*UnlinkResult)(nil),          // 41: cli.result.v1.UnlinkResult
-	(*LockResult)(nil),            // 42: cli.result.v1.LockResult
-	(*PinnedExecutable)(nil),      // 43: cli.result.v1.PinnedExecutable
-	(*GenerateResult)(nil),        // 44: cli.result.v1.GenerateResult
-	(*InitResult)(nil),            // 45: cli.result.v1.InitResult
-	nil,                           // 46: cli.result.v1.DeploymentSummary.BuildsEntry
-	nil,                           // 47: cli.result.v1.PinnedExecutable.DigestsEntry
-	(*v1.ResourceSet)(nil),        // 48: provider.cost.v1.ResourceSet
-	(*v1.Estimate)(nil),           // 49: provider.cost.v1.Estimate
-	(v11.Lifecycle)(0),            // 50: common.environment.v1.Lifecycle
-	(v11.Tier)(0),                 // 51: common.environment.v1.Tier
-	(*structpb.Value)(nil),        // 52: google.protobuf.Value
+	(CommandOutput)(0),            // 4: cli.result.v1.CommandOutput
+	(*BindingSetResult)(nil),      // 5: cli.result.v1.BindingSetResult
+	(*BindingRemoveResult)(nil),   // 6: cli.result.v1.BindingRemoveResult
+	(*BindingListResult)(nil),     // 7: cli.result.v1.BindingListResult
+	(*BindingGenerateResult)(nil), // 8: cli.result.v1.BindingGenerateResult
+	(*BindingSummary)(nil),        // 9: cli.result.v1.BindingSummary
+	(*DomainStatusResult)(nil),    // 10: cli.result.v1.DomainStatusResult
+	(*DomainHostStatus)(nil),      // 11: cli.result.v1.DomainHostStatus
+	(*Certificate)(nil),           // 12: cli.result.v1.Certificate
+	(*CostScanResult)(nil),        // 13: cli.result.v1.CostScanResult
+	(*DeploymentListResult)(nil),  // 14: cli.result.v1.DeploymentListResult
+	(*DeploymentSummary)(nil),     // 15: cli.result.v1.DeploymentSummary
+	(*PreviewListResult)(nil),     // 16: cli.result.v1.PreviewListResult
+	(*PreviewSummary)(nil),        // 17: cli.result.v1.PreviewSummary
+	(*DomainListResult)(nil),      // 18: cli.result.v1.DomainListResult
+	(*PreviewDomainResult)(nil),   // 19: cli.result.v1.PreviewDomainResult
+	(*ConnectorStatusResult)(nil), // 20: cli.result.v1.ConnectorStatusResult
+	(*ConnectorStatus)(nil),       // 21: cli.result.v1.ConnectorStatus
+	(*ConnectorDenial)(nil),       // 22: cli.result.v1.ConnectorDenial
+	(*DoctorResult)(nil),          // 23: cli.result.v1.DoctorResult
+	(*DoctorSection)(nil),         // 24: cli.result.v1.DoctorSection
+	(*DoctorCheck)(nil),           // 25: cli.result.v1.DoctorCheck
+	(*EnvCoordinate)(nil),         // 26: cli.result.v1.EnvCoordinate
+	(*EnvListResult)(nil),         // 27: cli.result.v1.EnvListResult
+	(*EnvValueSummary)(nil),       // 28: cli.result.v1.EnvValueSummary
+	(*EnvGetResult)(nil),          // 29: cli.result.v1.EnvGetResult
+	(*EnvRefsResult)(nil),         // 30: cli.result.v1.EnvRefsResult
+	(*EnvHistoryResult)(nil),      // 31: cli.result.v1.EnvHistoryResult
+	(*EnvVersion)(nil),            // 32: cli.result.v1.EnvVersion
+	(*EnvSourceResult)(nil),       // 33: cli.result.v1.EnvSourceResult
+	(*EnvSourceLink)(nil),         // 34: cli.result.v1.EnvSourceLink
+	(*PermissionsResult)(nil),     // 35: cli.result.v1.PermissionsResult
+	(*PermissionGroup)(nil),       // 36: cli.result.v1.PermissionGroup
+	(*LoginResult)(nil),           // 37: cli.result.v1.LoginResult
+	(*LogoutResult)(nil),          // 38: cli.result.v1.LogoutResult
+	(*LinkResult)(nil),            // 39: cli.result.v1.LinkResult
+	(*ConsoleOrganization)(nil),   // 40: cli.result.v1.ConsoleOrganization
+	(*ConsoleProject)(nil),        // 41: cli.result.v1.ConsoleProject
+	(*UnlinkResult)(nil),          // 42: cli.result.v1.UnlinkResult
+	(*LockResult)(nil),            // 43: cli.result.v1.LockResult
+	(*PinnedExecutable)(nil),      // 44: cli.result.v1.PinnedExecutable
+	(*GenerateResult)(nil),        // 45: cli.result.v1.GenerateResult
+	(*InitResult)(nil),            // 46: cli.result.v1.InitResult
+	(*SchemaListResult)(nil),      // 47: cli.result.v1.SchemaListResult
+	(*CommandSchema)(nil),         // 48: cli.result.v1.CommandSchema
+	nil,                           // 49: cli.result.v1.DeploymentSummary.BuildsEntry
+	nil,                           // 50: cli.result.v1.PinnedExecutable.DigestsEntry
+	(*v1.ResourceSet)(nil),        // 51: provider.cost.v1.ResourceSet
+	(*v1.Estimate)(nil),           // 52: provider.cost.v1.Estimate
+	(v11.Lifecycle)(0),            // 53: common.environment.v1.Lifecycle
+	(v11.Tier)(0),                 // 54: common.environment.v1.Tier
+	(*structpb.Value)(nil),        // 55: google.protobuf.Value
 }
 var file_cli_result_v1_result_proto_depIdxs = []int32{
-	8,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
-	8,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
-	10, // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
-	11, // 3: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
-	48, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
-	49, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
-	14, // 6: cli.result.v1.DeploymentListResult.deployments:type_name -> cli.result.v1.DeploymentSummary
-	46, // 7: cli.result.v1.DeploymentSummary.builds:type_name -> cli.result.v1.DeploymentSummary.BuildsEntry
+	9,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
+	9,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
+	11, // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
+	12, // 3: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
+	51, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
+	52, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
+	15, // 6: cli.result.v1.DeploymentListResult.deployments:type_name -> cli.result.v1.DeploymentSummary
+	49, // 7: cli.result.v1.DeploymentSummary.builds:type_name -> cli.result.v1.DeploymentSummary.BuildsEntry
 	0,  // 8: cli.result.v1.DeploymentSummary.state:type_name -> cli.result.v1.DeploymentState
-	16, // 9: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
-	50, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
-	10, // 11: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
-	11, // 12: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
-	20, // 13: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
+	17, // 9: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
+	53, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
+	11, // 11: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
+	12, // 12: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
+	21, // 13: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
 	1,  // 14: cli.result.v1.ConnectorStatus.liveness:type_name -> cli.result.v1.ConnectorLiveness
-	21, // 15: cli.result.v1.ConnectorStatus.last_denied:type_name -> cli.result.v1.ConnectorDenial
+	22, // 15: cli.result.v1.ConnectorStatus.last_denied:type_name -> cli.result.v1.ConnectorDenial
 	2,  // 16: cli.result.v1.DoctorResult.verdict:type_name -> cli.result.v1.DoctorVerdict
-	23, // 17: cli.result.v1.DoctorResult.sections:type_name -> cli.result.v1.DoctorSection
-	24, // 18: cli.result.v1.DoctorSection.checks:type_name -> cli.result.v1.DoctorCheck
+	24, // 17: cli.result.v1.DoctorResult.sections:type_name -> cli.result.v1.DoctorSection
+	25, // 18: cli.result.v1.DoctorSection.checks:type_name -> cli.result.v1.DoctorCheck
 	2,  // 19: cli.result.v1.DoctorCheck.verdict:type_name -> cli.result.v1.DoctorVerdict
-	51, // 20: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
-	27, // 21: cli.result.v1.EnvListResult.values:type_name -> cli.result.v1.EnvValueSummary
-	25, // 22: cli.result.v1.EnvValueSummary.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	25, // 23: cli.result.v1.EnvValueSummary.target:type_name -> cli.result.v1.EnvCoordinate
-	51, // 24: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
-	25, // 25: cli.result.v1.EnvGetResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	25, // 26: cli.result.v1.EnvGetResult.target:type_name -> cli.result.v1.EnvCoordinate
-	51, // 27: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
-	25, // 28: cli.result.v1.EnvRefsResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	25, // 29: cli.result.v1.EnvRefsResult.references:type_name -> cli.result.v1.EnvCoordinate
-	51, // 30: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
-	25, // 31: cli.result.v1.EnvHistoryResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	31, // 32: cli.result.v1.EnvHistoryResult.versions:type_name -> cli.result.v1.EnvVersion
-	51, // 33: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
-	33, // 34: cli.result.v1.EnvSourceResult.links:type_name -> cli.result.v1.EnvSourceLink
-	35, // 35: cli.result.v1.PermissionsResult.groups:type_name -> cli.result.v1.PermissionGroup
-	52, // 36: cli.result.v1.PermissionGroup.document:type_name -> google.protobuf.Value
-	39, // 37: cli.result.v1.LinkResult.organization:type_name -> cli.result.v1.ConsoleOrganization
-	40, // 38: cli.result.v1.LinkResult.project:type_name -> cli.result.v1.ConsoleProject
-	43, // 39: cli.result.v1.LockResult.providers:type_name -> cli.result.v1.PinnedExecutable
-	43, // 40: cli.result.v1.LockResult.connectors:type_name -> cli.result.v1.PinnedExecutable
-	47, // 41: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
+	54, // 20: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
+	28, // 21: cli.result.v1.EnvListResult.values:type_name -> cli.result.v1.EnvValueSummary
+	26, // 22: cli.result.v1.EnvValueSummary.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	26, // 23: cli.result.v1.EnvValueSummary.target:type_name -> cli.result.v1.EnvCoordinate
+	54, // 24: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
+	26, // 25: cli.result.v1.EnvGetResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	26, // 26: cli.result.v1.EnvGetResult.target:type_name -> cli.result.v1.EnvCoordinate
+	54, // 27: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
+	26, // 28: cli.result.v1.EnvRefsResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	26, // 29: cli.result.v1.EnvRefsResult.references:type_name -> cli.result.v1.EnvCoordinate
+	54, // 30: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
+	26, // 31: cli.result.v1.EnvHistoryResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	32, // 32: cli.result.v1.EnvHistoryResult.versions:type_name -> cli.result.v1.EnvVersion
+	54, // 33: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
+	34, // 34: cli.result.v1.EnvSourceResult.links:type_name -> cli.result.v1.EnvSourceLink
+	36, // 35: cli.result.v1.PermissionsResult.groups:type_name -> cli.result.v1.PermissionGroup
+	55, // 36: cli.result.v1.PermissionGroup.document:type_name -> google.protobuf.Value
+	40, // 37: cli.result.v1.LinkResult.organization:type_name -> cli.result.v1.ConsoleOrganization
+	41, // 38: cli.result.v1.LinkResult.project:type_name -> cli.result.v1.ConsoleProject
+	44, // 39: cli.result.v1.LockResult.providers:type_name -> cli.result.v1.PinnedExecutable
+	44, // 40: cli.result.v1.LockResult.connectors:type_name -> cli.result.v1.PinnedExecutable
+	50, // 41: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
 	3,  // 42: cli.result.v1.InitResult.format:type_name -> cli.result.v1.ConfigFormat
-	43, // [43:43] is the sub-list for method output_type
-	43, // [43:43] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	48, // 43: cli.result.v1.SchemaListResult.commands:type_name -> cli.result.v1.CommandSchema
+	4,  // 44: cli.result.v1.CommandSchema.output:type_name -> cli.result.v1.CommandOutput
+	45, // [45:45] is the sub-list for method output_type
+	45, // [45:45] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_cli_result_v1_result_proto_init() }
@@ -3414,8 +3573,8 @@ func file_cli_result_v1_result_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_result_v1_result_proto_rawDesc), len(file_cli_result_v1_result_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   44,
+			NumEnums:      5,
+			NumMessages:   46,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
