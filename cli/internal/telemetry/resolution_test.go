@@ -115,6 +115,14 @@ func TestOptOutsBeatDebugModeWithoutAKey(t *testing.T) {
 	}
 }
 
+func TestABuildWithoutLinkerValuesResolvesTelemetryOffForWantOfAKey(t *testing.T) {
+	got := telemetry.Resolve(telemetry.WriteKey, telemetry.Endpoint)
+
+	if got.Enabled || got.Rule != telemetry.RuleNoKey {
+		t.Errorf("Resolve(WriteKey, Endpoint) = %+v, want disabled by the missing key in a build with no linker values", got)
+	}
+}
+
 func TestABuildWithoutAnEndpointDisablesTelemetry(t *testing.T) {
 	got := telemetry.Resolve(aKey, "")
 
