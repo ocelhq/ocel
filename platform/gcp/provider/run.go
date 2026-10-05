@@ -324,22 +324,12 @@ func allocatedTraffic(current *run.GoogleCloudRunV2Service) []*run.GoogleCloudRu
 }
 
 func withTag(traffic []*run.GoogleCloudRunV2TrafficTarget, revision, tag string) []*run.GoogleCloudRunV2TrafficTarget {
-	tagged := make([]*run.GoogleCloudRunV2TrafficTarget, 0, len(traffic)+1)
-	for _, target := range traffic {
-		if target.Tag != tag {
-			tagged = append(tagged, target)
-			continue
-		}
-		if target.Type == trafficByRevision && revisionName(target.Revision) == revision {
-			return traffic
-		}
-		if target.Percent > 0 {
-			untagged := *target
-			untagged.Tag = ""
-			tagged = append(tagged, &untagged)
-		}
+	if slices.ContainsFunc(traffic, func(target *run.GoogleCloudRunV2TrafficTarget) bool {
+		return target.Tag == tag && target.Type == trafficByRevision && revisionName(target.Revision) == revision
+	}) {
+		return traffic
 	}
-	return append(tagged, &run.GoogleCloudRunV2TrafficTarget{Type: trafficByRevision, Revision: revision, Tag: tag})
+	return append(withoutTag(traffic, tag), &run.GoogleCloudRunV2TrafficTarget{Type: trafficByRevision, Revision: revision, Tag: tag})
 }
 
 func sameTraffic(a, b []*run.GoogleCloudRunV2TrafficTarget) bool {
@@ -389,6 +379,36 @@ func (p *Provider) ReadTag(ctx context.Context, service, revision string) (strin
 	return "", refusal.Refuse(refusal.CodeNotReady,
 		"revision %s of Cloud Run service %s carries no tag, and a deployment hostname reaches its revision through the tag its release gave it: "+
 			"re-deploy so the release tags the revision it creates", revision, service)
+}
+
+func (p *Provider) Untag(ctx context.Context, service, tag string) error {
+	clients, services, err := p.openRun(ctx)
+	if err != nil {
+		return err
+	}
+	err = p.rewriteTraffic(ctx, services, clients.servicePath(service), service, "take tag "+tag+" off "+service,
+		func(traffic []*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudRunV2TrafficTarget {
+			return withoutTag(traffic, tag)
+		})
+	if absent(err) {
+		return nil
+	}
+	return err
+}
+
+func withoutTag(traffic []*run.GoogleCloudRunV2TrafficTarget, tag string) []*run.GoogleCloudRunV2TrafficTarget {
+	kept := make([]*run.GoogleCloudRunV2TrafficTarget, 0, len(traffic))
+	for _, target := range traffic {
+		switch {
+		case target.Tag != tag:
+			kept = append(kept, target)
+		case target.Percent > 0:
+			untagged := *target
+			untagged.Tag = ""
+			kept = append(kept, &untagged)
+		}
+	}
+	return kept
 }
 
 func latestReady(service string) func(*run.GoogleCloudRunV2Service) (string, error) {

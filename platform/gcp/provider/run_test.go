@@ -314,6 +314,31 @@ func TestTheTagOfARevisionIsReadFromTheServiceAndAnUntaggedRevisionIsRefused(t *
 	}
 }
 
+func TestUntaggingTakesTheTagOffItsRevisionAndLeavesTheTrafficWhereItWas(t *testing.T) {
+	server := &runServer{}
+	first := serves("ocel-shop-prod-app")
+	first.tag = "r00000001"
+	_, one := released(t, server, first)
+	p := server.open(t)
+	if err := p.Pin(context.Background(), first.service, one, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", one, err)
+	}
+
+	for range 2 {
+		if err := p.Untag(context.Background(), first.service, "r00000001"); err != nil {
+			t.Fatalf("Untag() = %v", err)
+		}
+	}
+
+	traffic := server.serving().Traffic
+	if slices.ContainsFunc(traffic, func(target *run.GoogleCloudRunV2TrafficTarget) bool { return target.Tag == "r00000001" }) {
+		t.Errorf("the service carries %+v after the untag, want tag r00000001 gone", traffic)
+	}
+	if !servedBy(traffic, one) {
+		t.Errorf("the service serves %+v after the untag, want all of it still on %s", traffic, one)
+	}
+}
+
 func TestAReleaseOntoAServiceThatServesItsLatestRevisionKeepsServingThatRevision(t *testing.T) {
 	server := &runServer{}
 	first := serves("ocel-shop-prod-app")

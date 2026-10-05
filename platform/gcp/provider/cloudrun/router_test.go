@@ -53,6 +53,8 @@ func (p *pinRecorder) ReadTag(_ context.Context, _, revision string) (string, er
 	return "tag-" + revision, nil
 }
 
+func (p *pinRecorder) Untag(context.Context, string, string) error { return nil }
+
 func (p *pinRecorder) calls() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
