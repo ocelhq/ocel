@@ -1,0 +1,10 @@
+---
+title: provider.version_mismatch
+description: The provider is not the release of this CLI.
+---
+
+A provider ships with the CLI it runs under. The provider that started announced a different version from the CLI, so Ocel refuses to use it.
+
+## Fix
+
+Reinstall the CLI so the CLI and its providers come from one release, and check that no other `ocel` earlier on your `PATH` is the one running.

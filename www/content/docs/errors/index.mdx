@@ -1,0 +1,53 @@
+---
+title: Errors
+description: Every error code the CLI reports, what it means and how to recover.
+---
+
+A failed run carries a `code`, and with it a `docs_url` that points at the page below; an interrupted run has none. The code stays the same between releases, so a script or an agent can branch on it. The message and the `hint` change.
+
+A failure with no code reports `internal`. It has no page, because it means Ocel itself broke.
+
+## Confirmation and input
+
+| Code | Meaning |
+| --- | --- |
+| [`confirmation_required`](/docs/errors/confirmation_required) | A command needs a confirmation it cannot ask for. |
+| [`confirmation_bypass_mismatch`](/docs/errors/confirmation_bypass_mismatch) | `OCEL_DESTROY_BYPASS_CONFIRMATION` is set, but not to the thing being destroyed. |
+| [`input_required`](/docs/errors/input_required) | A command needs a value it cannot ask for. |
+| [`usage`](/docs/errors/usage) | The command line did not parse. |
+
+## Project
+
+| Code | Meaning |
+| --- | --- |
+| [`project.no_config`](/docs/errors/project.no_config) | Ocel found no config file to read. |
+| [`project.invalid_config`](/docs/errors/project.invalid_config) | The project's config is not valid. |
+| [`init.config_exists`](/docs/errors/init.config_exists) | The directory already has a config. |
+| [`init.ambiguous_language`](/docs/errors/init.ambiguous_language) | The directory holds the manifests of more than one language. |
+| [`sdk.version_mismatch`](/docs/errors/sdk.version_mismatch) | The SDK in your project is not the release of this CLI. |
+| [`variables.missing`](/docs/errors/variables.missing) | The app needs variables that have no valid value. |
+
+## Provider and account
+
+| Code | Meaning |
+| --- | --- |
+| [`provider.unavailable`](/docs/errors/provider.unavailable) | The provider process did not start. |
+| [`provider.version_mismatch`](/docs/errors/provider.version_mismatch) | The provider is not the release of this CLI. |
+| [`prerequisite.missing`](/docs/errors/prerequisite.missing) | Something this command needs is not set up. |
+| [`bootstrap.missing`](/docs/errors/bootstrap.missing) | The account has no Ocel infrastructure for this tier. |
+| [`bootstrap.features_missing`](/docs/errors/bootstrap.features_missing) | The bootstrap lacks something the project needs. |
+
+## Console
+
+| Code | Meaning |
+| --- | --- |
+| [`console.not_logged_in`](/docs/errors/console.not_logged_in) | You are not logged in to the console. |
+| [`console.not_linked`](/docs/errors/console.not_linked) | This directory is not linked to a console project. |
+
+## Runs
+
+| Code | Meaning |
+| --- | --- |
+| [`interrupted`](/docs/errors/interrupted) | The run was stopped before it finished. |
+| [`dev.command_failed`](/docs/errors/dev.command_failed) | The command that `ocel dev` or `ocel run` started exited with an error. |
+| [`doctor.checks_failed`](/docs/errors/doctor.checks_failed) | `ocel doctor` found a problem. |

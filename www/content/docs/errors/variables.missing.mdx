@@ -1,0 +1,10 @@
+---
+title: variables.missing
+description: The app needs variables that have no valid value.
+---
+
+The app declares variables, and some have no value in this environment, or have one that does not satisfy the variable's schema. The message lists each key and why. The run stops before it deploys or starts the app.
+
+## Fix
+
+Set the values with the command in the error's `hint`, for example `ocel env set <KEY>=<VALUE>`, with `--preview` or `--folder` as the hint adds them. When the environment reads from an [env source](/docs/env-sources), set them there instead.

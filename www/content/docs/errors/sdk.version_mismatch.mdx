@@ -1,0 +1,10 @@
+---
+title: sdk.version_mismatch
+description: The SDK in your project is not the release of this CLI.
+---
+
+An SDK works with the CLI of its own release. The SDK your project depends on is a different one from the CLI you ran, so Ocel refuses to build against it.
+
+## Fix
+
+Install the SDK at the CLI's version. The error's `hint` is the command for your language, for example `npm i ocel@<version>`, `uv add ocel==<version>`, `cargo add ocel-sdk@<version>` or `go get ocel.dev@v<version>`. Or install the CLI release that matches the SDK.

@@ -1,0 +1,10 @@
+---
+title: prerequisite.missing
+description: Something this command needs is not set up.
+---
+
+The command depends on a setup step that has not happened: the project's config, the account's bootstrap, or a production hostname. In a terminal, Ocel offers to do the step and carries on. Without a terminal, or when you decline, it stops and says what is missing. The error's `hint` names the fix.
+
+## Fix
+
+Do the step the message names, then run the command again. A missing hostname is fixed by adding one under `domains.production` in the config.

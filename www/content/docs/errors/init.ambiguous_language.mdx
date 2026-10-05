@@ -1,0 +1,10 @@
+---
+title: init.ambiguous_language
+description: The directory holds the manifests of more than one language.
+---
+
+`ocel init` picks the SDK to install from the manifests in the directory, such as `package.json` or `go.mod`. Finding the manifests of several languages, it cannot tell which one the project is.
+
+## Fix
+
+Name the language with `ocel init --lang <language>`. The message lists the ones it found.

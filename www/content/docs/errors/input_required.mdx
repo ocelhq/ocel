@@ -1,0 +1,10 @@
+---
+title: input_required
+description: A command needs a value it cannot ask for.
+---
+
+The command needs a choice or a value that you did not pass, and this run has no terminal to ask on, or it is writing `--json`. The command stops and changes nothing.
+
+## Fix
+
+Pass the value up front. The error's `hint` names what to pass, for example `--provider <id>` for `ocel init`, a project slug or `--create` for `ocel link`, or `--org <slug>` when you belong to several organizations. Or run the command in a terminal and answer the prompt.
