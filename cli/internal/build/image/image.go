@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
-
-const LocalNamespace = "ocel"
 
 const maxRepository = 255
 
@@ -24,7 +23,7 @@ type Image struct {
 func Repository(slug, app string) (string, error) {
 	project := naming.Sanitize(slug)
 	name := naming.Sanitize(app)
-	repository := LocalNamespace + "/" + project + "/" + name
+	repository := images.LocalNamespace + "/" + project + "/" + name
 	if !naming.IsRepositorySegment(project) || !naming.IsRepositorySegment(name) || len(repository) > maxRepository {
 		return "", fmt.Errorf("project %q and app %q name an image repository of %q, which docker rejects as a repository name: name them something a repository can be derived from", slug, app, repository)
 	}

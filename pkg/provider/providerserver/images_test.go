@@ -36,7 +36,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-var pushedCoordinate = "ghcr.io/acme/web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary))
+var pushedCoordinate = "ghcr.io/acme/shop.web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary))
 
 func registryDeployRequest() *contractv1.DeployRequest {
 	return namingARegistry(containerDeployRequest("/"))
@@ -162,6 +162,30 @@ func TestADigestTheRegistryAlreadyHasIsNotPushedAgain(t *testing.T) {
 	}
 	if pushed := vendor.ImageStore().Pushed(); len(pushed) != 0 {
 		t.Errorf("the deploy pushed %v that the registry already has", pushed)
+	}
+}
+
+func TestTheSameAppInTwoProjectsIsPushedWhereOneProjectsRetentionNeverReachesTheOther(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
+	builtProject(t)
+	client, vendor := deployServed(t)
+
+	for _, slug := range []string{"shop", "blog"} {
+		req := registryDeployRequest()
+		req.Manifest.Slug = slug
+		if result, _ := deploy(t, client, req); result == nil || !result.GetSuccess() {
+			t.Fatalf("Deploy() of %s = %q, want it to succeed", slug, result.GetError())
+		}
+	}
+
+	pushed := vendor.ImageStore().Pushed()
+	if len(pushed) != 2 {
+		t.Fatalf("the deploys pushed %v, want one image per project although both run the same content", pushed)
+	}
+	shop, _, _ := strings.Cut(pushed[0].ImageRef, ":sha256-")
+	blog, _, _ := strings.Cut(pushed[1].ImageRef, ":sha256-")
+	if shop == blog {
+		t.Errorf("projects shop and blog both pushed web to %s: retention sweeps an app's repository, so pruning one project would remove what the other still runs", shop)
 	}
 }
 
@@ -782,7 +806,7 @@ func wrappingServedOn(t *testing.T, architecture string) (contractv1connect.Prov
 
 func wrappedCoordinate() string {
 	_, digest, _ := strings.Cut(containerTestImage, "@")
-	return "ghcr.io/acme/web:" + images.RuntimeTag(digest, containerRuntimeBytes)
+	return "ghcr.io/acme/shop.web:" + images.RuntimeTag(digest, containerRuntimeBytes)
 }
 
 func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItShipsNames(t *testing.T) {

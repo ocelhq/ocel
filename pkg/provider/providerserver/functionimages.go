@@ -92,7 +92,7 @@ func (r *deployRun) imageFunction(
 		return provider.ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
 	}
 	repository := functionRepository(entry.App, name)
-	target := images.Ref(repository, naming.DigestTag(digest.String()), r.registry)
+	target := images.Ref(r.spec.Slug, repository, naming.DigestTag(digest.String()), r.registry)
 	return provider.ImagePush{
 		App:      name,
 		ImageRef: target,
