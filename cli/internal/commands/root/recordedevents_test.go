@@ -161,6 +161,44 @@ func TestAnInitWithTelemetryOffPrintsNoEvent(t *testing.T) {
 	}
 }
 
+func TestTheRecorderReportsWhetherItRecordedTheEvent(t *testing.T) {
+	cases := map[string]struct {
+		arrange func(t *testing.T)
+		want    bool
+	}{
+		"telemetry off": {func(t *testing.T) {
+			withTelemetryBuild(t)
+			withBannerShown(t)
+			t.Setenv("OCEL_TELEMETRY", "0")
+		}, false},
+		"a build without an endpoint": {func(t *testing.T) {
+			withTelemetryBuild(t)
+			withBannerShown(t)
+			withTelemetryEndpoint(t, "")
+		}, false},
+		"before the first-run banner": {withTelemetryBuild, false},
+		"debug mode prints it": {func(t *testing.T) {
+			withTelemetryBuild(t)
+			debugTelemetry(t)
+		}, true},
+		"spooled": {func(t *testing.T) {
+			withTelemetryBuild(t)
+			withBannerShown(t)
+		}, true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			tc.arrange(t)
+			ocel := newCommand()
+			ocel.root.SetErr(io.Discard)
+
+			if got := ocel.recordEvent(telemetry.InitCompletion{Provider: "fake"}); got != tc.want {
+				t.Errorf("recorded = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 type lockedBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer

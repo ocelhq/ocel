@@ -144,9 +144,7 @@ func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, o
 	added, err := writeProject(ctx, dependencies, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, opts.settings, lang, detected)
 	if err == nil {
 		initializing.Succeed("Initialized project " + slug)
-		if dependencies.RecordEvent != nil {
-			dependencies.RecordEvent(completion)
-		}
+		dependencies.RecordEvent(completion)
 	}
 	initializing.End(&err)
 	if err != nil {

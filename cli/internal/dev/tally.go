@@ -11,7 +11,7 @@ import (
 )
 
 type tally struct {
-	record  func(telemetry.Payload)
+	record  func(telemetry.Payload) bool
 	started time.Time
 
 	mu      sync.Mutex
@@ -20,7 +20,7 @@ type tally struct {
 	codes   map[string]int
 }
 
-func newTally(record func(telemetry.Payload)) *tally {
+func newTally(record func(telemetry.Payload) bool) *tally {
 	return &tally{record: record, started: time.Now(), codes: map[string]int{}}
 }
 
@@ -50,9 +50,6 @@ func (t *tally) noteError(err error) {
 }
 
 func (t *tally) end(final error) {
-	if t.record == nil {
-		return
-	}
 	t.noteError(final)
 	t.mu.Lock()
 	session := telemetry.DevSession{Duration: time.Since(t.started), Reloads: t.reloads, ResourceKinds: slices.Clone(t.kinds), ErrorCodes: maps.Clone(t.codes)}
