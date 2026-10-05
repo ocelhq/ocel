@@ -93,3 +93,23 @@ func TestALoginWithoutSudoIsToldToDeployAsTheDeployLogin(t *testing.T) {
 		}
 	}
 }
+
+func TestADaemonThatIsDownIsReportedWhenTheDeployLoginIsActedAs(t *testing.T) {
+	rig := loggedInAs("ubuntu", session.Facts{Sudo: true, Systemd: true})
+	rig.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, dockerReach) {
+			return session.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"}, true
+		}
+		return session.Result{}, false
+	}
+
+	err := rig.host().TakeDown(context.Background(), environment.TierProduction, "shop-web")
+	if err == nil || !strings.Contains(err.Error(), "Is the docker daemon running?") {
+		t.Fatalf("TakeDown() over a daemon that is down = %v, want the probe's reason: take down ignores what docker stop and rm say, so without the probe a container still running reads as taken down", err)
+	}
+	for _, command := range rig.commands() {
+		if strings.Contains(command, "docker stop") {
+			t.Errorf("%q ran against a daemon the probe found down", command)
+		}
+	}
+}
