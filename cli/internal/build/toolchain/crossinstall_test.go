@@ -31,7 +31,7 @@ func installFakeNpm(t *testing.T, body string) fakeNpm {
 	return npm
 }
 
-func platformSplitApp() tree {
+func perPlatformDependencyApp() tree {
 	return tree{
 		"package.json": appPkg,
 		"server.js":    "import answer from 'plat-dep';\nconsole.log(answer);\n",
@@ -72,7 +72,7 @@ func TestAPackageShippingOnePackagePerPlatformIsInstalledForTheDeclaredArchitect
 	for architecture, cpu := range map[string]string{arch.X8664: "x64", arch.ARM64: "arm64"} {
 		t.Run(architecture, func(t *testing.T) {
 			npm := installFakeNpm(t, linuxInstall(t, cpu, "glibc"))
-			l := newLayout(t, platformSplitApp())
+			l := newLayout(t, perPlatformDependencyApp())
 			target := l.target("server.js")
 			target.Framework.Arch = architecture
 
@@ -125,7 +125,7 @@ func TestADependencyThatDoesNotSplitByPlatformIsBundledWithoutAnInstall(t *testi
 
 func TestAPlatformPackageInstallThatFailsFailsTheBuild(t *testing.T) {
 	installFakeNpm(t, "echo 'npm error 404 plat-dep@1.2.3 is not in this registry' >&2\nexit 1\n")
-	l := newLayout(t, platformSplitApp())
+	l := newLayout(t, perPlatformDependencyApp())
 
 	err := Bundle(context.Background(), l.target("server.js"))
 	if err == nil {
@@ -140,7 +140,7 @@ func TestAPlatformPackageInstallThatFailsFailsTheBuild(t *testing.T) {
 
 func TestAPlatformPackageWithNoNpmToInstallItFailsTheBuild(t *testing.T) {
 	t.Setenv("PATH", "")
-	l := newLayout(t, platformSplitApp())
+	l := newLayout(t, perPlatformDependencyApp())
 
 	err := Bundle(context.Background(), l.target("server.js"))
 	if err == nil {
@@ -155,7 +155,7 @@ func TestAPlatformPackageWithNoNpmToInstallItFailsTheBuild(t *testing.T) {
 
 func TestAPlatformPackageReachedAtTwoVersionsFailsTheBuild(t *testing.T) {
 	npm := installFakeNpm(t, linuxInstall(t, "x64", "glibc"))
-	files := platformSplitApp()
+	files := perPlatformDependencyApp()
 	files["server.js"] = "import answer from 'plat-dep';\nimport older from 'wrapper-dep';\nconsole.log(answer, older);\n"
 	files["node_modules/wrapper-dep/package.json"] = `{"name":"wrapper-dep","version":"1.0.0","main":"index.js"}`
 	files["node_modules/wrapper-dep/index.js"] = "module.exports = require('plat-dep');\n"
@@ -182,7 +182,7 @@ func TestAPlatformPackageReachedAtTwoVersionsFailsTheBuild(t *testing.T) {
 
 func TestAPlatformPackageInstallStopsWhenTheBuildIsCancelled(t *testing.T) {
 	npm := installFakeNpm(t, linuxInstall(t, "x64", "glibc"))
-	l := newLayout(t, platformSplitApp())
+	l := newLayout(t, perPlatformDependencyApp())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -202,7 +202,7 @@ func TestAPlatformPackageInstallThatBringsNoVariantForTheTargetFailsTheBuild(t *
 	} {
 		t.Run(name, func(t *testing.T) {
 			installFakeNpm(t, install(t))
-			l := newLayout(t, platformSplitApp())
+			l := newLayout(t, perPlatformDependencyApp())
 
 			err := Bundle(context.Background(), l.target("server.js"))
 			if err == nil {
@@ -240,7 +240,7 @@ func TestAPackageWhoseOnlyPlatformVariantIsForAnotherOSInstallsWithoutOne(t *tes
 
 func TestAPlatformPackageWhoseHostVariantWasNeverInstalledIsStillInstalledForTheTarget(t *testing.T) {
 	npm := installFakeNpm(t, linuxInstall(t, "x64", "glibc"))
-	files := platformSplitApp()
+	files := perPlatformDependencyApp()
 	delete(files, "node_modules/@plat-dep/darwin-arm64/package.json")
 	delete(files, "node_modules/@plat-dep/darwin-arm64/index.js")
 	files["node_modules/plat-dep/index.js"] = "module.exports = 'host build';\n"
@@ -265,7 +265,7 @@ func TestAPlatformPackageImportedThroughAnAliasIsInstalledUnderTheAlias(t *testi
 	delete(files, "node_modules/plat-dep/index.js")
 	files["node_modules/@plat-dep/linux-x64/package.json"] = `{"name":"@plat-dep/linux-x64","version":"1.2.3","os":["linux"],"cpu":["x64"]}`
 	npm := installFakeNpm(t, stagedInstall(t, files))
-	app := platformSplitApp()
+	app := perPlatformDependencyApp()
 	app["server.js"] = "import answer from 'img';\nconsole.log(answer);\n"
 	app["node_modules/img/package.json"] = `{"name":"plat-dep","version":"1.2.3","main":"index.js","dependencies":{"helper-dep":"^2.0.0"},` +
 		`"optionalDependencies":{"@plat-dep/darwin-arm64":"1.2.3","@plat-dep/linux-x64":"1.2.3"}}`
@@ -300,7 +300,7 @@ func TestAPlatformPackageInstallReadsTheProjectsNpmConfig(t *testing.T) {
 	const registry = "@plat-dep:registry=https://npm.internal.example/\n"
 	npm := installFakeNpm(t, linuxInstall(t, "x64", "glibc"))
 	files := tree{".npmrc": registry, "pnpm-workspace.yaml": "packages: [apps/*]\n"}
-	for rel, contents := range platformSplitApp() {
+	for rel, contents := range perPlatformDependencyApp() {
 		files["apps/api/"+rel] = contents
 	}
 	l := newLayout(t, files)
@@ -316,7 +316,7 @@ func TestAPlatformPackageInstallReadsTheProjectsNpmConfig(t *testing.T) {
 
 func TestAPlatformPackageInstallPinsWhatItDependsOnToTheVersionsTheAppInstalled(t *testing.T) {
 	npm := installFakeNpm(t, linuxInstall(t, "x64", "glibc"))
-	files := platformSplitApp()
+	files := perPlatformDependencyApp()
 	files["node_modules/plat-dep/package.json"] = `{"name":"plat-dep","version":"1.2.3","main":"index.js","dependencies":{"helper-dep":"^2.0.0"},` +
 		`"optionalDependencies":{"@plat-dep/darwin-arm64":"1.2.3","@plat-dep/linux-x64":"1.2.3"}}`
 	files["node_modules/helper-dep/package.json"] = `{"name":"helper-dep","version":"2.1.0","dependencies":{"deep-dep":"^1.0.0"}}`
@@ -354,7 +354,7 @@ func TestAPlatformPackageKeepsItsOwnDotfilesAndLeavesNpmsBookkeepingBehind(t *te
 	files["node_modules/.package-lock.json"] = `{}`
 	files["node_modules/.bin/plat"] = "#!/bin/sh\n"
 	installFakeNpm(t, stagedInstall(t, files))
-	l := newLayout(t, platformSplitApp())
+	l := newLayout(t, perPlatformDependencyApp())
 
 	if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 		t.Fatalf("Bundle: %v", err)
