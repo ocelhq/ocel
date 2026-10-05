@@ -11,8 +11,10 @@ func (c Coordinate) FunctionArtifactKey(sha string) string {
 }
 
 func (c Coordinate) AssetKey(assetPath string) string {
-	return c.StoragePrefix() + path("assets", strings.TrimPrefix(assetPath, PathSeparator))
+	return c.StoragePrefix() + path(AssetsSegment, strings.TrimPrefix(assetPath, PathSeparator))
 }
+
+const AssetsSegment = "assets"
 
 const ImageConfigFile = "image-config.json"
 

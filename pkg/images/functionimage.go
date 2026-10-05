@@ -26,12 +26,10 @@ const FunctionImageRoot = "/ocel/app"
 
 const StaticRoot = "/ocel/static"
 
-const staticAssetsDir = "assets"
-
 type FunctionImageOptions struct {
-	Overlay        map[string][]byte
-	NextRuntimeDir string
-	AppDir         string
+	Overlay         map[string][]byte
+	NextRuntimeDir  string
+	StaticSourceDir string
 }
 
 func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, opts FunctionImageOptions) (v1.Image, error) {
@@ -165,8 +163,8 @@ func functionLayer(dir string, rels []string, opts FunctionImageOptions) ([]byte
 			return nil, err
 		}
 	}
-	if opts.AppDir != "" {
-		if err := tarStatic(archive, opts.AppDir); err != nil {
+	if opts.StaticSourceDir != "" {
+		if err := tarStatic(archive, opts.StaticSourceDir); err != nil {
 			return nil, err
 		}
 	}
@@ -176,18 +174,18 @@ func functionLayer(dir string, rels []string, opts FunctionImageOptions) ([]byte
 	return packed.Bytes(), nil
 }
 
-func tarStatic(archive *tar.Writer, appDir string) error {
-	assets := filepath.Join(appDir, edge.StaticAssetDir)
+func tarStatic(archive *tar.Writer, staticSourceDir string) error {
+	assets := filepath.Join(staticSourceDir, edge.StaticAssetDir)
 	rels, err := ArtifactFiles(assets)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	for _, rel := range rels {
-		if err := tarFile(archive, filepath.Join(assets, filepath.FromSlash(rel)), path.Join(StaticRoot, staticAssetsDir, rel)); err != nil {
+		if err := tarFile(archive, filepath.Join(assets, filepath.FromSlash(rel)), path.Join(StaticRoot, naming.AssetsSegment, rel)); err != nil {
 			return err
 		}
 	}
-	err = tarFile(archive, filepath.Join(appDir, naming.ImageConfigFile), path.Join(StaticRoot, naming.ImageConfigFile))
+	err = tarFile(archive, filepath.Join(staticSourceDir, naming.ImageConfigFile), path.Join(StaticRoot, naming.ImageConfigFile))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}

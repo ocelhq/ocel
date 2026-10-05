@@ -126,7 +126,7 @@ func TestARuntimeNoBaseIsShippedForIsRefused(t *testing.T) {
 	}
 }
 
-func TestANextFunctionRunsOnTheNodeBaseWithTheNextRuntimeInTheFolderItsFactsName(t *testing.T) {
+func TestANextFunctionRunsOnTheNodeBaseWithTheNextRuntimeInTheDirItsFactsName(t *testing.T) {
 	p, asked := basedOn(t, v1.Config{Env: []string{"PATH=/usr/bin"}})
 
 	base, err := p.ResolveFunctionBase(context.Background(), buildoutput.Framework{Name: buildoutput.FrameworkNext})
@@ -136,11 +136,11 @@ func TestANextFunctionRunsOnTheNodeBaseWithTheNextRuntimeInTheFolderItsFactsName
 	if *asked != nodeImage {
 		t.Errorf("FunctionBase(next) read %q, want the node base %q: a Next function runs on node", *asked, nodeImage)
 	}
-	folder := strings.TrimPrefix(p.Facts().NextRuntimeDir, "/")
+	dir := strings.TrimPrefix(p.Facts().NextRuntimeDir, "/")
 	files := filesIn(t, base)
 	for _, want := range []string{"entrypoint.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"} {
-		if !slices.Contains(files, folder+"/"+want) {
-			t.Errorf("the Next base holds %v, want %s in %s, where the image boots the Next runtime from and the build points Next's cache handlers", files, want, folder)
+		if !slices.Contains(files, dir+"/"+want) {
+			t.Errorf("the Next base holds %v, want %s in %s, where the image boots the Next runtime from and the build points Next's cache handlers", files, want, dir)
 		}
 	}
 	file, err := base.ConfigFile()
@@ -152,9 +152,9 @@ func TestANextFunctionRunsOnTheNodeBaseWithTheNextRuntimeInTheFolderItsFactsName
 	}
 }
 
-func TestCloudRunNamesAnAbsoluteFolderForTheNextRuntime(t *testing.T) {
+func TestCloudRunNamesAnAbsoluteDirForTheNextRuntime(t *testing.T) {
 	if dir := pushing(t, "").Facts().NextRuntimeDir; !path.IsAbs(dir) {
-		t.Errorf("Facts().NextRuntimeDir = %q, want the absolute folder the Next base holds the runtime in", dir)
+		t.Errorf("Facts().NextRuntimeDir = %q, want the absolute dir the Next base holds the runtime in", dir)
 	}
 }
 

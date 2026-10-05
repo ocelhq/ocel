@@ -40,7 +40,7 @@ func servesNext(app *provider.AppSpec) bool {
 	return app.Framework == buildoutput.FrameworkNext
 }
 
-func nextServing(s serving) serving {
+func fillNextServingDefaults(s serving) serving {
 	if s.memory == 0 {
 		s.memory = nextMemoryMB
 	}
@@ -50,7 +50,7 @@ func nextServing(s serving) serving {
 	return s
 }
 
-func refuseUnguardedNext(spec provider.StackSpec) error {
+func refuseGuardWithoutShieldingEdge(spec provider.StackSpec) error {
 	app := spec.App
 	if app.Guard == nil || spec.Edge == nil || spec.Edge.Kind() == edge.None || spec.Edge.Facts().ShieldsOrigin {
 		return nil
@@ -61,7 +61,7 @@ func refuseUnguardedNext(spec provider.StackSpec) error {
 		app.App, spec.Edge.Kind())
 }
 
-func nextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving) map[string]string {
+func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving) map[string]string {
 	app := spec.App
 	env := map[string]string{memoryEnvVar: strconv.Itoa(s.memory)}
 	if app.Router != "" {
