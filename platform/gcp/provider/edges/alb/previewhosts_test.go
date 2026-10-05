@@ -188,6 +188,31 @@ func TestRemovingADeploymentTakesTheTagOffEveryServiceItsDeployTagged(t *testing
 	}
 }
 
+func TestAHostnameAPromotionTakesFromADeploymentLeavesItsTagToBeUntaggedWhenTheDeploymentGoes(t *testing.T) {
+	t.Parallel()
+
+	const retaken = "shop-dddddddddddddddd.preview.example.com"
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	record := previewRecord("b1")
+	move := deploymentMove(deploymentFirst, deploymentHost, record)
+	move.Hosts = append(move.Hosts, edge.PreviewHost{Hostname: retaken, App: record.App})
+	if err := stack.MovePointer(ctx, move, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(deployment) = %v", err)
+	}
+	if err := stack.MovePointer(ctx, aliasMove("p2", retaken, record), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(alias) = %v", err)
+	}
+	if err := stack.RemovePointer(ctx, router.PointerRemoval{Pointer: move.Pointer, Hosts: move.Hosts[:1]}, progress.Discard()); err != nil {
+		t.Fatalf("RemovePointer(deployment) = %v", err)
+	}
+
+	tag := w.tagOf(previewService, record.Revisions[previewService])
+	if got := w.untagged(); !slices.Contains(got, previewService+"#"+tag) {
+		t.Errorf("the removal untagged %v, want %s#%s: %s now serves the alias, so no hostname holds the deployment's tag", got, previewService, tag, retaken)
+	}
+}
+
 const (
 	aliasHost      = "shop-bbbbbbbbbbbbbbbb.preview.example.com"
 	rotatedAlias   = "shop-cccccccccccccccc.preview.example.com"
