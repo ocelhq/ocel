@@ -107,6 +107,9 @@ func (p *Provider) RecordRollback(ctx context.Context, service, revision string,
 		if err != nil {
 			return err
 		}
+		if servedRevision(current) == revision {
+			return pin.ErrRevisionServed
+		}
 		rollbacks := rollbacksOf(current)
 		rollbacks[revision] = rollback
 		annotations, err := withRollbacks(current.Annotations, rollbacks)

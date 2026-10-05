@@ -684,6 +684,26 @@ func TestPinningBackWithoutOpeningLeavesAClosedServiceClosed(t *testing.T) {
 	}
 }
 
+func TestARollbackIsNotRecordedOnTheRevisionTheServiceServes(t *testing.T) {
+	ctx := context.Background()
+	server := &runServer{}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+	p := server.open(t)
+	if _, err := p.Pin(ctx, app.service, one, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", one, err)
+	}
+
+	err := p.RecordRollback(ctx, app.service, one, pin.Rollback{Previous: "x"})
+
+	if !errors.Is(err, pin.ErrRevisionServed) {
+		t.Errorf("RecordRollback(%s) = %v, want %v: the service serves it", one, err, pin.ErrRevisionServed)
+	}
+	if _, found, err := p.ReadRollback(ctx, app.service, one); err != nil || found {
+		t.Errorf("ReadRollback(%s) = found %v, %v, want nothing recorded for the revision the service serves", one, found, err)
+	}
+}
+
 func TestARecordedRollbackIsReadBackUntilARevisionIsPinnedAgain(t *testing.T) {
 	ctx := context.Background()
 	server := &runServer{}

@@ -24,6 +24,8 @@ type services struct {
 	coldStart   error
 	rollbacks   map[string]map[string]pin.Rollback
 	beforeClose func(service string)
+
+	beforeRecordRollback map[string]func()
 }
 
 func (s *services) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) (bool, error) {
@@ -66,6 +68,12 @@ func (s *services) ReadRollback(_ context.Context, service, revision string) (pi
 }
 
 func (s *services) RecordRollback(_ context.Context, service, revision string, rollback pin.Rollback) error {
+	if hook := s.beforeRecordRollback[service]; hook != nil {
+		hook()
+	}
+	if s.serving[service] == revision {
+		return pin.ErrRevisionServed
+	}
 	if s.rollbacks == nil {
 		s.rollbacks = map[string]map[string]pin.Rollback{}
 	}
@@ -161,6 +169,35 @@ func TestAPromotionDisplacedPartWayLeavesWhatTheDisplacingPromotionPinned(t *tes
 	}
 	if got := cloudRun.serving["ocel-shop-prod-api"]; got != "api-3" {
 		t.Errorf("api serves %s, want the api-3 the displacing promotion pinned: putting a service back must not land over a promotion that moved it since", got)
+	}
+}
+
+func TestAPromotionThatFailsAfterAnotherHandedItsServiceBackPutsTheServiceBackOnWhatItServedBefore(t *testing.T) {
+	const api = "ocel-shop-prod-api"
+	cloudRun := &services{serving: map[string]string{api: "api-1", "ocel-shop-prod-web": "web-1"}, checkActive: true}
+	displaced := errors.New("another promotion displaced this one")
+	move := promotion(map[string]string{"api": "api-2", "web": "web-2"})
+	checks := 0
+	move.StillActive = func(context.Context) error {
+		checks++
+		if checks < 3 {
+			return nil
+		}
+		cloudRun.serving[api] = "api-3"
+		return displaced
+	}
+	cloudRun.beforeRecordRollback = map[string]func(){api: func() { cloudRun.serving[api] = "api-2" }}
+
+	_, err := pin.MovePointer(context.Background(), cloudRun, nil, move, progress.Discard())
+
+	if !errors.Is(err, displaced) {
+		t.Fatalf("MovePointer = %v, want the displacement", err)
+	}
+	if got := cloudRun.serving[api]; got != "api-1" {
+		t.Errorf("api serves %s, want the api-1 it served before: another promotion handed it back to api-2, which this promotion's failure must undo", got)
+	}
+	if _, recorded := cloudRun.rollbacks[api]["api-2"]; recorded {
+		t.Error("a rollback is recorded on api-2, a revision the service serves again")
 	}
 }
 
