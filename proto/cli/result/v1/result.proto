@@ -437,3 +437,19 @@ message InitResult {
 
   optional string sdk_package = 6;
 }
+
+message SchemaListResult {
+  repeated CommandSchema commands = 1;
+}
+
+message CommandSchema {
+  string path = 1;
+
+  CommandOutput output = 2;
+}
+
+enum CommandOutput {
+  COMMAND_OUTPUT_UNSPECIFIED = 0;
+  COMMAND_OUTPUT_RESULT = 1;
+  COMMAND_OUTPUT_RUN_EVENTS = 2;
+}

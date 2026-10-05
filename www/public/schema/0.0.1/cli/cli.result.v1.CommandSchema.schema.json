@@ -1,0 +1,41 @@
+{
+  "$defs": {
+    "cli.result.v1.CommandSchema.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "output": {
+          "anyOf": [
+            {
+              "pattern": "^COMMAND_OUTPUT_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "COMMAND_OUTPUT_RESULT",
+                "COMMAND_OUTPUT_RUN_EVENTS"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Command Output"
+        },
+        "path": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Command Schema",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.CommandSchema.schema.json",
+  "$ref": "#/$defs/cli.result.v1.CommandSchema.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
