@@ -485,7 +485,7 @@ func TestStatusAsJSONPrintsEveryRegisteredConnectorAsOneEnvelope(t *testing.T) {
 			"id": "con_1", "target": fingerprint, "vendor": "fake", "compute": "container", "reach": "dial",
 			"url": "https://" + hostname + "/" + statedir.Name + "/connector", "capabilities": []string{"variables.write", "variables.read"},
 			"connectedAt": seen, "lastSeenAt": seen, "online": true,
-			"lastDenied": map[string]any{"verb": "variables.write", "at": "2026-10-05T07:00:00Z", "message": "not allowed"},
+			"lastDenied": map[string]any{"verb": "variables.write", "at": "2026-10-05T07:00:00.123Z", "message": "not allowed"},
 		})
 	linked(t, root, srv.URL)
 
@@ -516,8 +516,36 @@ func TestStatusAsJSONPrintsEveryRegisteredConnectorAsOneEnvelope(t *testing.T) {
 	if first.GetLastDenied().GetVerb() != "variables.write" || first.GetLastDenied().GetMessage() != "not allowed" {
 		t.Errorf("lastDenied = %v, want the refusal the console recorded", first.GetLastDenied())
 	}
+	if first.GetLastDenied().GetAt() != "2026-10-05T07:00:00Z" {
+		t.Errorf("lastDenied.at = %q, want the console's millisecond time as UTC RFC 3339 to the second", first.GetLastDenied().GetAt())
+	}
 	if second.GetLiveness() != resultv1.ConnectorLiveness_CONNECTOR_LIVENESS_NEVER_CONNECTED || second.GetLastDenied() != nil {
 		t.Errorf("second = %v, want a connector that never connected and was never refused", second)
+	}
+}
+
+func TestStatusAsJSONKeepsARefusalButLeavesItsTimeEmptyWhenTheConsoleTimeIsNotRFC3339(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t, map[string]any{
+		"id": "con_1", "target": fingerprint, "vendor": "fake", "reach": "dial", "capabilities": []string{},
+		"lastDenied": map[string]any{"verb": "variables.write", "at": "yesterday", "message": "not allowed"},
+	})
+	linked(t, root, srv.URL)
+
+	dependencies := newJSONDependencies()
+	dependencies.ConfigPath = func() string { return "" }
+
+	var stdout bytes.Buffer
+	if err := runStatus(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
+		t.Fatalf("runStatus err = %v", err)
+	}
+
+	var status resultv1.ConnectorStatusResult
+	clitest.DecodeResultInto(t, stdout.String(), &status)
+	denied := status.GetConnectors()[0].GetLastDenied()
+	if denied.GetVerb() != "variables.write" || denied.GetMessage() != "not allowed" || denied.GetAt() != "" {
+		t.Errorf("lastDenied = %v, want the refusal kept and its unreadable time left empty", denied)
 	}
 }
 
