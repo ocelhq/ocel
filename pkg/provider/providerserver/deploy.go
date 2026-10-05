@@ -1096,8 +1096,9 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err := r.recordAppStack(ctx, entry, result); err != nil {
 				return err
 			}
-			r.recordAddress(entry.App, ownAddress(entry, facts, result))
-			r.recordDeploymentAddress(entry.App, ownDeploymentAddress(entry, facts, result))
+			address, deployment := findOwnAddresses(entry, facts, result)
+			r.recordAddress(entry.App, address)
+			r.recordDeploymentAddress(entry.App, deployment)
 			if err := r.warmFunctions(ctx, result.Functions, progress); err != nil {
 				return err
 			}
@@ -1315,18 +1316,12 @@ func (r *deployRun) recordDeploymentAddress(app, address string) {
 	r.deployment = append(r.deployment, edge.PreviewHost{Hostname: parsed.Host, App: normalizeAppName(app)})
 }
 
-func ownAddress(entry provider.AppEntry, facts AppServing, result provider.StackResult) string {
+func findOwnAddresses(entry provider.AppEntry, facts AppServing, result provider.StackResult) (address, deployment string) {
 	if container, found := findOwnContainer(result.Containers, entry.App); found {
-		return container.URL
+		return container.URL, container.DeploymentURL
 	}
-	return findOwnFunction(entry, facts, result.Functions).URL
-}
-
-func ownDeploymentAddress(entry provider.AppEntry, facts AppServing, result provider.StackResult) string {
-	if container, found := findOwnContainer(result.Containers, entry.App); found {
-		return container.DeploymentURL
-	}
-	return findOwnFunction(entry, facts, result.Functions).DeploymentURL
+	function := findOwnFunction(entry, facts, result.Functions)
+	return function.URL, function.DeploymentURL
 }
 
 func findOwnContainer(containers []provider.AppContainer, app string) (provider.AppContainer, bool) {
