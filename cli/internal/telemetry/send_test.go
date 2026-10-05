@@ -173,6 +173,25 @@ func TestSendKeepsEventsAppendedWhileTheBatchWasInFlight(t *testing.T) {
 	}
 }
 
+func TestSendKeepsAnIdenticalEventAppendedWhileTheBatchWasInFlight(t *testing.T) {
+	spool := aSpoolHolding(t, "deploy")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := spool.Append(aCompletedEvent(t, "deploy")); err != nil {
+			t.Error(err)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	if err := telemetry.Send(context.Background(), http.DefaultClient, spool, server.URL, "a-key"); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := commandsOf(t, spool); len(got) != 1 || got[0] != "deploy" {
+		t.Errorf("spool holds %v, want the second deploy event, appended during the send, kept", got)
+	}
+}
+
 func TestTwoSendsAtOnceDeliverEachEventOnce(t *testing.T) {
 	var requests atomic.Int32
 	inFlight := make(chan struct{})
