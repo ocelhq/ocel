@@ -80,7 +80,7 @@ func RunOnce(ctx context.Context, opts Options, cwd string) error {
 
 func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	cfg := opts.Project
-	tally := newSession(opts.RecordSession)
+	tally := newTally(opts.RecordSession)
 	defer func() {
 		if !errors.Is(err, leader.ErrAlreadyRunning) {
 			tally.end(err)
@@ -178,7 +178,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 }
 
 func follow(ctx context.Context, opts Options, running leader.Leader) (err error) {
-	tally := newSession(opts.RecordSession)
+	tally := newTally(opts.RecordSession)
 	defer func() { tally.end(err) }()
 	stream, first, err := subscribe(ctx, opts, running)
 	if err != nil {
