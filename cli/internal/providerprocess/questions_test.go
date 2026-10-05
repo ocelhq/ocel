@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/creack/pty"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -140,6 +141,55 @@ func TestAQuestionNobodyCanSeeIsNeverAskedAndTheRefusalCarriesTheRemedy(t *testi
 	}
 	if strings.Contains(err.Error(), "connection lost") {
 		t.Errorf("err = %v, want a refusal read as a refusal, not a dropped provider", err)
+	}
+	if got := fake.recorded(t); got != "" {
+		t.Errorf("known_hosts = %q, want nothing recorded", got)
+	}
+	if got := fake.drivenTimes(t); got != 1 {
+		t.Errorf("the call ran %d times, want 1", got)
+	}
+}
+
+func TestAQuestionNobodyCanAnswerReportsInputRequired(t *testing.T) {
+	t.Parallel()
+
+	for name, questions := range map[string]Questions{
+		"no terminal":      answering(&scriptedPrompt{attended: false, answer: true}, io.Discard),
+		"under --json":     {Prompt: &scriptedPrompt{attended: true, answer: true}, Out: io.Discard, JSON: func() bool { return true }},
+		"no prompt at all": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			fake := newQuestionFake(t, "unknown-host-key")
+
+			err := fake.call(t, questions)
+			if err == nil {
+				t.Fatal("call error = nil, want a refusal")
+			}
+			if got := clierror.NewRunError(err).GetCode(); got != clierror.CodeInputRequired {
+				t.Errorf("code = %q, want %q", got, clierror.CodeInputRequired)
+			}
+			if !strings.Contains(err.Error(), "ssh-keyscan") {
+				t.Errorf("err = %v, want the provider's remedy kept", err)
+			}
+		})
+	}
+}
+
+func TestAQuestionUnderJSONIsNeverAskedOnATerminal(t *testing.T) {
+	t.Parallel()
+
+	fake := newQuestionFake(t, "unknown-host-key")
+	asker := &scriptedPrompt{attended: true, answer: true}
+	var out bytes.Buffer
+
+	err := fake.call(t, Questions{Prompt: asker, Out: &out, JSON: func() bool { return true }})
+	if err == nil {
+		t.Fatal("call error = nil, want a refusal")
+	}
+	if len(asker.asked) != 0 || out.Len() != 0 {
+		t.Errorf("asked %v and wrote %q, want nothing asked", asker.asked, out.String())
 	}
 	if got := fake.recorded(t); got != "" {
 		t.Errorf("known_hosts = %q, want nothing recorded", got)
