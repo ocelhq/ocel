@@ -38,7 +38,7 @@ const blog = {
 };
 
 test("a refresh re-renders the page on the instance that served it stale", async () => {
-  await newInstanceRefresh(() => origin)(blog);
+  await newInstanceRefresh(() => origin, 1_000)(blog);
 
   expect(received).toEqual([{ url: "/blog?page=2", refresh: "1000", host: "shop.example" }]);
 });
@@ -47,14 +47,14 @@ test("a refresh settles only once the re-render has answered", async () => {
   answer = { status: 200, delayMs: 50 };
   const started = Date.now();
 
-  await newInstanceRefresh(() => origin)(blog);
+  await newInstanceRefresh(() => origin, 1_000)(blog);
 
   expect(Date.now() - started).toBeGreaterThanOrEqual(45);
 });
 
 test("refreshes of one entry asked for at once re-render it once", async () => {
   answer = { status: 200, delayMs: 20 };
-  const refresh = newInstanceRefresh(() => origin);
+  const refresh = newInstanceRefresh(() => origin, 1_000);
 
   await Promise.all([refresh(blog), refresh(blog), refresh({ ...blog, url: "/about" })]);
 
@@ -63,10 +63,32 @@ test("refreshes of one entry asked for at once re-render it once", async () => {
 
 test("a refresh the re-render fails rejects, so the stale entry is refreshed by the next hit", async () => {
   answer = { status: 500, delayMs: 0 };
-  const refresh = newInstanceRefresh(() => origin);
+  const refresh = newInstanceRefresh(() => origin, 1_000);
 
   await expect(refresh(blog)).rejects.toThrow(/500/);
   answer = { status: 200, delayMs: 0 };
   await refresh(blog);
   expect(received).toHaveLength(2);
+});
+
+test("a refresh whose re-render outlasts its timeout rejects naming the timeout", async () => {
+  answer = { status: 200, delayMs: 200 };
+  const started = Date.now();
+
+  await expect(newInstanceRefresh(() => origin, 50)(blog)).rejects.toThrow(
+    /did not answer within 50ms/,
+  );
+  expect(Date.now() - started).toBeLessThan(150);
+});
+
+test("a refresh whose origin cannot be read rejects instead of throwing", async () => {
+  const refresh = newInstanceRefresh(() => {
+    throw new Error("no server");
+  }, 1_000);
+  let rejected: Promise<void> | undefined;
+
+  expect(() => {
+    rejected = refresh(blog);
+  }).not.toThrow();
+  await expect(rejected).rejects.toThrow(/no server/);
 });
