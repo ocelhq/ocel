@@ -773,6 +773,8 @@ message Question {
   string finding = 2;
 
   string prompt = 3;
+
+  string remedy = 4;
 }
 
 message ConfirmRequest {
