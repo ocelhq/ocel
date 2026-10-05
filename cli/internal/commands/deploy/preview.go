@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/edge"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -419,8 +420,25 @@ func runPreviewList(ctx context.Context, dependencies Dependencies, cwd string, 
 	if err != nil {
 		return err
 	}
+	if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+		return terminal.WriteResultJSON(stdout, previewListResult(previews))
+	}
 	renderEnvironments(stdout, previews)
 	return nil
+}
+
+func previewListResult(previews []*contractv1.PreviewEnvironment) *resultv1.PreviewListResult {
+	result := &resultv1.PreviewListResult{Previews: make([]*resultv1.PreviewSummary, 0, len(previews))}
+	for _, preview := range previews {
+		result.Previews = append(result.Previews, &resultv1.PreviewSummary{
+			Identity:  preview.GetIdentity(),
+			Lifecycle: preview.GetLifecycle(),
+			Label:     preview.GetLabel(),
+			CreatedAt: terminal.EpochRFC3339(preview.GetCreatedAt()),
+			AliasUrls: preview.GetAliasUrls(),
+		})
+	}
+	return result
 }
 
 func listPreviews(ctx context.Context, dependencies Dependencies, cfg *project.Project) (previews []*contractv1.PreviewEnvironment, err error) {
