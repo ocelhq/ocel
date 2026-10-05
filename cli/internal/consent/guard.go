@@ -15,5 +15,5 @@ type Guard struct {
 }
 
 func (g Guard) assumption() string {
-	return g.Action + " without confirmation (no terminal)"
+	return g.Action + " without confirmation (nobody to ask)"
 }

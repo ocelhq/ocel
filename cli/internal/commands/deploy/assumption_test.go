@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
-const newProjectWarning = `creating new project "test-app" without confirmation (no terminal)`
+const newProjectWarning = `creating new project "test-app" without confirmation (nobody to ask)`
 
 func summaryAssumed(t *testing.T, stream string) []*streamv1.Assumption {
 	t.Helper()

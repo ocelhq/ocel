@@ -58,7 +58,7 @@ func (p Policy) refuseUnattended(need string) error {
 		remedy = "pass --yes"
 	}
 	return clierror.NewConfirmationRequired(
-		fmt.Errorf("`%s` needs a terminal to %s; to run it unattended, %s", p.Command, need, remedy),
+		fmt.Errorf("`%s` needs a terminal, without --json, to %s; to run it unattended, %s", p.Command, need, remedy),
 		"--yes",
 	)
 }
