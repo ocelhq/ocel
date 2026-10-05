@@ -37,6 +37,8 @@ const (
 
 	execWrapper = "/opt/" + providedHandler
 
+	MaxFunctionBytes = 200 << 20
+
 	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
 
 	bytecodeEmbedEnv = "OCEL_BYTECODE_EMBED"

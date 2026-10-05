@@ -723,6 +723,34 @@ test("gives variants one shared bundle id and one shared entry key", async () =>
   expect(manifest.pathnames).toContain("/api/documents.rsc");
 });
 
+test("packs every route into one bundle when the host sets no size budget", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const filler = join(projectDir, ".next/server/chunks/filler.js");
+  await writeFile(filler, "x".repeat(4096));
+  (args.outputs.appRoutes[0] as Record<string, unknown>).assets = {
+    "chunks/filler.js": filler,
+  };
+  args.outputs.appRoutes[1]!.assets = args.outputs.appRoutes[0]!.assets;
+  await writeFile(args.outputs.appPages[0]!.assets["chunks/shared.js"]!, "x".repeat(4096));
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  const { real } = await partitionFuncDirs(projectDir);
+  expect(real).toEqual(["bundle-0.func"]);
+});
+
+test.each(["200MB", "0", "-1"])(
+  "refuses a size budget of %s, which is not a positive whole number of bytes",
+  async (budget) => {
+    const { projectDir, args } = await synthDedupProject();
+    vi.stubEnv("OCEL_MAX_FUNCTION_BYTES", budget);
+    const adapter = await loadAdapterIn(projectDir);
+
+    await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(/OCEL_MAX_FUNCTION_BYTES/);
+  },
+);
+
 test("splits over the budget and points each route at its own bundle", async () => {
   const { projectDir, args } = await synthDedupProject();
   const filler = join(projectDir, ".next/server/chunks/filler.js");
@@ -734,23 +762,9 @@ test("splits over the budget and points each route at its own bundle", async () 
   const shared = args.outputs.appPages[0]!.assets["chunks/shared.js"]!;
   await writeFile(shared, "x".repeat(4096));
 
-  process.chdir(projectDir);
-  vi.resetModules();
-  vi.doMock("../src/pack.mts", async () => {
-    const actual = await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
-    return {
-      ...actual,
-      packBundles: (members: never, opts: never) =>
-        actual.packBundles(members, { ...(opts as object), budgetBytes: 6000 }),
-    };
-  });
-  try {
-    const { default: adapter } = await import("../src/next-adapter.mts");
-    await adapter.onBuildComplete(args as never);
-  } finally {
-    vi.doUnmock("../src/pack.mts");
-    vi.resetModules();
-  }
+  vi.stubEnv("OCEL_MAX_FUNCTION_BYTES", "6000");
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
 
   const { real } = await partitionFuncDirs(projectDir);
   expect(real).toEqual(["bundle-0.func", "bundle-1.func"]);
@@ -1751,23 +1765,9 @@ test("names the root route's bundle in a build split across several bundles", as
   await writeFile(shared, "x".repeat(4096));
   await withNodeMiddleware(projectDir, args as never);
 
-  process.chdir(projectDir);
-  vi.resetModules();
-  vi.doMock("../src/pack.mts", async () => {
-    const actual = await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
-    return {
-      ...actual,
-      packBundles: (members: never, opts: never) =>
-        actual.packBundles(members, { ...(opts as object), budgetBytes: 6000 }),
-    };
-  });
-  try {
-    const { default: adapter } = await import("../src/next-adapter.mts");
-    await adapter.onBuildComplete(args as never);
-  } finally {
-    vi.doUnmock("../src/pack.mts");
-    vi.resetModules();
-  }
+  vi.stubEnv("OCEL_MAX_FUNCTION_BYTES", "6000");
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
 
   const { real } = await partitionFuncDirs(projectDir);
   expect(real).toEqual(["bundle-0.func", "bundle-1.func"]);
@@ -2510,23 +2510,9 @@ test("injects node middleware's entry and assets into bundle-0 only, including a
   await writeFile(shared, "x".repeat(4096));
   await withNodeMiddleware(projectDir, args as never);
 
-  process.chdir(projectDir);
-  vi.resetModules();
-  vi.doMock("../src/pack.mts", async () => {
-    const actual = await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
-    return {
-      ...actual,
-      packBundles: (members: never, opts: never) =>
-        actual.packBundles(members, { ...(opts as object), budgetBytes: 6000 }),
-    };
-  });
-  try {
-    const { default: adapter } = await import("../src/next-adapter.mts");
-    await adapter.onBuildComplete(args as never);
-  } finally {
-    vi.doUnmock("../src/pack.mts");
-    vi.resetModules();
-  }
+  vi.stubEnv("OCEL_MAX_FUNCTION_BYTES", "6000");
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
 
   const { real } = await partitionFuncDirs(projectDir);
   expect(real).toEqual(["bundle-0.func", "bundle-1.func"]);
@@ -2597,26 +2583,15 @@ test("warns when node middleware's assets push a bundle over the budget", async 
   const filePath = (args.outputs.middleware as { filePath: string }).filePath;
   await writeFile(filePath, "x".repeat(8192));
 
-  process.chdir(projectDir);
-  vi.resetModules();
-  vi.doMock("../src/pack.mts", async () => {
-    const actual = await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
-    return {
-      ...actual,
-      packBundles: (members: never, opts: never) =>
-        actual.packBundles(members, { ...(opts as object), budgetBytes: 100 }),
-    };
-  });
+  vi.stubEnv("OCEL_MAX_FUNCTION_BYTES", "100");
+  const adapter = await loadAdapterIn(projectDir);
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   let lines: string[];
   try {
-    const { default: adapter } = await import("../src/next-adapter.mts");
     await adapter.onBuildComplete(args as never);
   } finally {
     lines = warn.mock.calls.map((c) => String(c[0]));
     warn.mockRestore();
-    vi.doUnmock("../src/pack.mts");
-    vi.resetModules();
   }
 
   expect(lines.some((l) => l.includes("over the") && l.includes("function limit"))).toBe(true);

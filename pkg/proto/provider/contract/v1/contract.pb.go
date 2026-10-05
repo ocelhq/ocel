@@ -504,13 +504,14 @@ func (x *ConfigureResponse) GetFacts() *ProviderFacts {
 }
 
 type ProviderFacts struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	PricesDeploys  bool                   `protobuf:"varint,1,opt,name=prices_deploys,json=pricesDeploys,proto3" json:"prices_deploys,omitempty"`
-	Computes       []string               `protobuf:"bytes,2,rep,name=computes,proto3" json:"computes,omitempty"`
-	WorkerCeilings []*WorkerCeiling       `protobuf:"bytes,3,rep,name=worker_ceilings,json=workerCeilings,proto3" json:"worker_ceilings,omitempty"`
-	NextRuntimeDir string                 `protobuf:"bytes,4,opt,name=next_runtime_dir,json=nextRuntimeDir,proto3" json:"next_runtime_dir,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	PricesDeploys    bool                   `protobuf:"varint,1,opt,name=prices_deploys,json=pricesDeploys,proto3" json:"prices_deploys,omitempty"`
+	Computes         []string               `protobuf:"bytes,2,rep,name=computes,proto3" json:"computes,omitempty"`
+	WorkerCeilings   []*WorkerCeiling       `protobuf:"bytes,3,rep,name=worker_ceilings,json=workerCeilings,proto3" json:"worker_ceilings,omitempty"`
+	NextRuntimeDir   string                 `protobuf:"bytes,4,opt,name=next_runtime_dir,json=nextRuntimeDir,proto3" json:"next_runtime_dir,omitempty"`
+	MaxFunctionBytes int64                  `protobuf:"varint,5,opt,name=max_function_bytes,json=maxFunctionBytes,proto3" json:"max_function_bytes,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ProviderFacts) Reset() {
@@ -569,6 +570,13 @@ func (x *ProviderFacts) GetNextRuntimeDir() string {
 		return x.NextRuntimeDir
 	}
 	return ""
+}
+
+func (x *ProviderFacts) GetMaxFunctionBytes() int64 {
+	if x != nil {
+		return x.MaxFunctionBytes
+	}
+	return 0
 }
 
 type UsePreviewWildcardRequest struct {
@@ -6020,12 +6028,13 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x10ConfigureRequest\x12D\n" +
 	"\x06config\x18\x01 \x01(\v2$.provider.contract.v1.ProviderConfigB\x06\xbaH\x03\xc8\x01\x01R\x06config\"N\n" +
 	"\x11ConfigureResponse\x129\n" +
-	"\x05facts\x18\x01 \x01(\v2#.provider.contract.v1.ProviderFactsR\x05facts\"\xca\x01\n" +
+	"\x05facts\x18\x01 \x01(\v2#.provider.contract.v1.ProviderFactsR\x05facts\"\x81\x02\n" +
 	"\rProviderFacts\x12%\n" +
 	"\x0eprices_deploys\x18\x01 \x01(\bR\rpricesDeploys\x12\x1a\n" +
 	"\bcomputes\x18\x02 \x03(\tR\bcomputes\x12L\n" +
 	"\x0fworker_ceilings\x18\x03 \x03(\v2#.provider.contract.v1.WorkerCeilingR\x0eworkerCeilings\x12(\n" +
-	"\x10next_runtime_dir\x18\x04 \x01(\tR\x0enextRuntimeDir\"\xb0\x01\n" +
+	"\x10next_runtime_dir\x18\x04 \x01(\tR\x0enextRuntimeDir\x125\n" +
+	"\x12max_function_bytes\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x10maxFunctionBytes\"\xb0\x01\n" +
 	"\x19UsePreviewWildcardRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\b\x01R\x04tier\x12\x1f\n" +
 	"\vbase_domain\x18\x02 \x01(\tR\n" +

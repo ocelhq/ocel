@@ -46,6 +46,7 @@ function buildApp() {
     OCEL_APP_NAME: appName,
     OCEL_OUTPUT_DIR: appOut,
     OCEL_NEXT_RUNTIME_DIR: "/opt/ocel/next",
+    OCEL_MAX_FUNCTION_BYTES: String(200 * 1024 * 1024),
   });
 }
 

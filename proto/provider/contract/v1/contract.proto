@@ -106,6 +106,8 @@ message ProviderFacts {
   repeated WorkerCeiling worker_ceilings = 3;
 
   string next_runtime_dir = 4;
+
+  int64 max_function_bytes = 5 [(buf.validate.field).int64.gte = 0];
 }
 
 message UsePreviewWildcardRequest {
