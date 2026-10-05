@@ -77,6 +77,14 @@ func (l *Net) ServingRouter(ctx context.Context, hostname string) (router.Kind, 
 	}
 }
 
+func (l *Net) Host(ctx context.Context, host string) ([]string, error) {
+	return l.system().Host(ctx, host)
+}
+
+func (l *Net) CNAME(ctx context.Context, host string) (string, error) {
+	return l.system().CNAME(ctx, host)
+}
+
 func (l *Net) LastProbeFailure(hostname string) string {
 	l.mu.Lock()
 	defer l.mu.Unlock()

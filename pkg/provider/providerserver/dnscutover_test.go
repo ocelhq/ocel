@@ -436,3 +436,83 @@ func TestManualRecordsTheEdgeProxiesCarryTheEdgesOwnNoteOnThem(t *testing.T) {
 		})
 	}
 }
+
+type resolving map[string][]string
+
+func (r resolving) Host(_ context.Context, host string) ([]string, error) {
+	return r[host], nil
+}
+
+func (r resolving) CNAME(_ context.Context, host string) (string, error) {
+	if names := r[host]; len(names) > 0 {
+		return names[0], nil
+	}
+	return host + ".", nil
+}
+
+func TestRecordsTheHostnameAlreadyResolvesToAreNeitherReportedNorAwaited(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		record   edge.Record
+		resolves resolving
+	}{
+		{"an A record", edge.Record{Name: "shop.app.com", Type: edge.RecordTypeA, Value: "203.0.113.7"}, resolving{"shop.app.com": {"203.0.113.7"}}},
+		{"an AAAA record", edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: "2001:db8::7"}, resolving{"shop.app.com": {"2001:db8:0::7"}}},
+		{"a CNAME", edge.Record{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "front.example.net"}, resolving{"shop.app.com": {"Front.example.net."}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			reported := false
+			cutover := dnsCutover{
+				lookup: tc.resolves,
+				manual: manualRecordPolicy{fail: true, report: func(string, []edge.Record, ...string) { reported = true }},
+			}
+			written, err := cutover.write(context.Background(), []edge.Record{tc.record}, "add these", func(string) {})
+			if err != nil {
+				t.Fatalf("write() = %v, want nil once %s already resolves", err, tc.record)
+			}
+			if reported || len(written.Manual) > 0 || len(written.Written) > 0 {
+				t.Errorf("write() = %+v, reported = %v, want nothing written, reported or left manual", written, reported)
+			}
+		})
+	}
+}
+
+type resolvingLiveness struct {
+	answering
+	resolving
+}
+
+func TestACutoverChecksRecordsThroughTheResolverItsProvidersLivenessUses(t *testing.T) {
+	t.Parallel()
+
+	record := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeA, Value: "203.0.113.7"}
+	cutover := newDNSCutover(frontOf{kind: edge.None}, nil, "", &resolvingLiveness{resolving: resolving{"shop.app.com": {"203.0.113.7"}}})
+	cutover.manual.fail = true
+	if _, err := cutover.write(context.Background(), []edge.Record{record}, "add these", func(string) {}); err != nil {
+		t.Errorf("write() = %v, want nil once the provider's resolver sees %s", err, record)
+	}
+}
+
+func TestARecordTheHostnameResolvesElsewhereStillWaitsOnTheUser(t *testing.T) {
+	t.Parallel()
+
+	resolved := edge.Record{Name: "api.app.com", Type: edge.RecordTypeA, Value: "203.0.113.7"}
+	elsewhere := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeA, Value: "203.0.113.7"}
+	var reported []edge.Record
+	cutover := dnsCutover{
+		lookup: resolving{"api.app.com": {"203.0.113.7"}, "shop.app.com": {"198.51.100.1"}},
+		manual: manualRecordPolicy{fail: true, report: func(_ string, records []edge.Record, _ ...string) { reported = records }},
+	}
+	written, err := cutover.write(context.Background(), []edge.Record{resolved, elsewhere}, "add these", func(string) {})
+	var pending manualRecordsPending
+	if !errors.As(err, &pending) {
+		t.Fatalf("write() = %v, want the records still pending", err)
+	}
+	if !slices.Equal(written.Manual, []edge.Record{elsewhere}) || !slices.Equal(reported, []edge.Record{elsewhere}) {
+		t.Errorf("manual = %v, reported = %v, want only %v", written.Manual, reported, elsewhere)
+	}
+}
