@@ -66,7 +66,7 @@ export function filterFrom(env: NodeJS.ProcessEnv): RunFilter {
   const draw = drawFrom(env);
   return {
     concerns: concernsNamed(env.OCEL_E2E_CONCERN),
-    fixtures: listed(env.OCEL_E2E_FIXTURES, /,/),
+    fixtures: listed(env.OCEL_E2E_FIXTURES, /[\s,]+/),
     variants: listed(env.OCEL_E2E_VARIANTS, /[\s,]+/),
     coverage: coverageFrom(env),
     ...(draw === undefined ? {} : { draw }),
