@@ -281,7 +281,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
 
   async rollback(cell: CellUnderTest): Promise<Deployment> {
     const dir = await cellTree(cell);
-    await this.run(cell, dir, "rollback", "rollback", ["rollback"], childEnv(dir));
+    await this.run(cell, dir, "rollback", "rollback", ["rollback", "--yes"], childEnv(dir));
     return this.deployment(cell, "rollback");
   }
 

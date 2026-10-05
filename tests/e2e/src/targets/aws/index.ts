@@ -150,7 +150,7 @@ export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
   async rollback(cell: CellUnderTest): Promise<Deployment> {
     const dir = await cellTree(cell);
     const env = ocelEnvIn(dir, await this.bootstrap.namespaceOf(cell));
-    await this.run(cell, dir, "rollback", "rollback", ["rollback"], env);
+    await this.run(cell, dir, "rollback", "rollback", ["rollback", "--yes"], env);
     const deployed = await this.deployment(cell);
     await this.awaitEdge(cell, "rollback", deployed);
     return deployed;
@@ -166,7 +166,14 @@ export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
       const env = ocelEnvIn(dir, namespace);
       for (const [app, host] of hosts) {
         try {
-          await this.run(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
+          await this.run(
+            cell,
+            dir,
+            "destroy",
+            `domain-rm-${app}`,
+            ["domain", "rm", host, "--yes"],
+            env,
+          );
         } catch (error) {
           unbound.push(error instanceof Error ? error.message : String(error));
         }
