@@ -1,0 +1,62 @@
+---
+title: Telemetry
+description: What the ocel CLI sends, what it never sends, and how to turn it off.
+---
+
+The CLI records one event each time a command finishes: which command ran, how long it took and whether it succeeded. We use it to see which commands people use and which ones fail, so we know where to spend time.
+
+Events are tied to a random install ID kept in your user config directory. No account, email or machine name is attached, and no person profile is created.
+
+## Events
+
+| Event               | Meaning                                              |
+| ------------------- | ---------------------------------------------------- |
+| `command_completed` | An `ocel` command finished, whether it passed or not. |
+
+## Properties
+
+Every property on every event is in this table. The CLI refuses to send one that is not.
+
+| Property                  | Meaning                                                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `command`                 | The command path, such as `deploy` or `env pull`. `help` when you run `ocel` with no command.             |
+| `flags`                   | The names of the flags you set, sorted. Never their values.                                                |
+| `exit_code`               | The process exit code.                                                                                     |
+| `error_code`              | The stable error code of the failure, such as `internal`. Empty when the command succeeded.                |
+| `duration_ms`             | How long the command ran, in milliseconds.                                                                 |
+| `json`                    | Whether JSON output was requested.                                                                         |
+| `tty`                     | Whether standard output was a terminal.                                                                    |
+| `cli_version`             | The version of the CLI.                                                                                    |
+| `os`                      | The operating system, such as `linux`.                                                                     |
+| `arch`                    | The CPU architecture, such as `arm64`.                                                                     |
+| `agent`                   | The coding agent that ran the command, such as `claude-code`. Empty when none was detected.                |
+| `ci`                      | The CI system the command ran in, such as `github-actions`. Empty outside CI.                              |
+| `$process_person_profile` | Always `false`. It tells the analytics service not to build a profile for the install ID.                  |
+
+## What is never sent
+
+- Error text, or the detail of a run summary.
+- File paths.
+- Project, app, resource or variable names.
+- Flag values. Only the flag names are sent.
+- Emails or tokens.
+
+The provider is sent only as the opaque ID from your config, never as a name.
+
+## Turn it off
+
+Set `OCEL_TELEMETRY=0` or `OCEL_TELEMETRY=false`:
+
+```bash
+export OCEL_TELEMETRY=0
+```
+
+With telemetry off, the CLI records and sends nothing.
+
+## See what would be sent
+
+Set `OCEL_TELEMETRY=debug` and the CLI prints each event to stderr instead of sending it:
+
+```bash
+OCEL_TELEMETRY=debug ocel deploy
+```
