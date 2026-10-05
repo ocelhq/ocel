@@ -2,14 +2,13 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import {
   type EdgeCacheRpc,
   type FetchCacheEntry,
-  isGuardRejection,
   type TagRecord,
   tagNamespace,
-  tagRecordUpdate,
 } from "@framework/next-cache";
 import type { CacheEntrypointProps, Env, IsrWriterBinding } from "./env";
 import { type AwsServiceFetch, awsServiceFetch } from "./signing";
 import { createTagClock, dropSnapshotMemo, type ObjectStoreReader, parseJson } from "./tag-clock";
+import { isGuardRejection, tagRecordUpdate } from "./tag-index";
 
 export type SnapshotRaiser = (scope: string, records: Record<string, TagRecord>) => Promise<void>;
 

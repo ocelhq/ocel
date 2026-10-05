@@ -7,14 +7,6 @@ export {
 export type { EdgeCacheRpc, FetchCacheEntry } from "./edge-cache-rpc.mjs";
 export { cacheKey, variantHeadersFile } from "./naming.mjs";
 export {
-  isGuardRejection,
-  type TagAttribute,
-  type TagRecordUpdate,
-  type TagUpdateItem,
-  tagRecordUpdate,
-  tagSortKey,
-} from "./tag-index.mjs";
-export {
   latest,
   mergeRecord,
   mergeSnapshot,

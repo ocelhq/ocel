@@ -1,5 +1,5 @@
-import type { TagRecordUpdate } from "@framework/next-cache";
 import { afterEach, expect, test, vi } from "vitest";
+import type { TagRecordUpdate } from "../src/next/tag-index.mjs";
 import type {
   TagSnapshotRead,
   UseCacheEntry,

@@ -3,14 +3,12 @@ import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 import {
-  isGuardRejection,
   readableSnapshot,
   type TagRecord,
-  type TagRecordUpdate,
   type TagSnapshot,
-  tagRecordUpdate,
   tagSnapshotKey,
 } from "@framework/next-cache";
+import { isGuardRejection, type TagRecordUpdate, tagRecordUpdate } from "./tag-index.mjs";
 
 export interface UseCacheEntry {
   tags: string[];
