@@ -1,4 +1,4 @@
-import { clockMethods, tagClock } from "@framework/next-runtime/tag-clock";
+import { clockMethods, tagClock } from "./tag-clock.mjs";
 import {
   bufferValue,
   type CacheEntry,
@@ -6,7 +6,7 @@ import {
   now,
   pendingSets,
   streamOf,
-} from "@framework/next-runtime/use-cache-entry";
+} from "./use-cache-entry.mjs";
 
 interface StoredEntry {
   bytes: Uint8Array;

@@ -1,11 +1,5 @@
-import { clockMethods, tagClock, useCacheStore } from "@framework/next-runtime/tag-clock";
-import {
-  bufferValue,
-  type CacheEntry,
-  now,
-  pendingSets,
-  streamOf,
-} from "@framework/next-runtime/use-cache-entry";
+import { clockMethods, tagClock, useCacheStore } from "./tag-clock.mjs";
+import { bufferValue, type CacheEntry, now, pendingSets, streamOf } from "./use-cache-entry.mjs";
 
 const pending = pendingSets();
 

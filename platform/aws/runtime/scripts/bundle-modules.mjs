@@ -13,8 +13,8 @@ const nodeEntrypoint = join(distNode, "entrypoint.mjs");
 
 const handlers = {
   "cache-handler": Bun.resolveSync("@framework/next-runtime/cache-handler", pkgDir),
-  "use-cache-default": join(pkgDir, "src/next/use-cache-default.mts"),
-  "use-cache-remote": join(pkgDir, "src/next/use-cache-remote.mts"),
+  "use-cache-default": Bun.resolveSync("@framework/next-runtime/use-cache-default", pkgDir),
+  "use-cache-remote": Bun.resolveSync("@framework/next-runtime/use-cache-remote", pkgDir),
 };
 
 const bundledModules = ["cache-store", "dispatch-host", "use-cache-store"];
