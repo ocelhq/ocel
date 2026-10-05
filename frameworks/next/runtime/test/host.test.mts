@@ -1,5 +1,5 @@
 import type { CacheEntryFile } from "@framework/next-cache";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { CacheStore } from "../src/cache-store.mjs";
 import type { UseCacheStore } from "../src/use-cache-store.mjs";
 
@@ -117,4 +117,53 @@ test("a use-cache store that failed to open is opened again on the next read", a
 
   expect(await useCacheStore()).toBeNull();
   expect(await useCacheStore()).toBe(store);
+});
+
+describe("a host the Next runtime starts on", () => {
+  const stores = {
+    newCacheStore: async () => storeHolding("index", { lastModified: 1, value: {} }),
+    newUseCacheStore: async () => ({}) as UseCacheStore,
+  };
+
+  test("is refused when the app has a cache prefix and the host installed no cache store", async () => {
+    const { refuseIncompleteHost } = await import("../src/host.mjs");
+
+    const refused = refuseIncompleteHost(
+      { newUseCacheStore: stores.newUseCacheStore },
+      { OCEL_ISR_PREFIX: "app/isr" },
+    );
+
+    expect(refused?.message).toMatch(/installed no cache store/);
+  });
+
+  test("is refused when the app has a cache prefix and the host installed no use-cache store", async () => {
+    const { refuseIncompleteHost } = await import("../src/host.mjs");
+
+    const refused = refuseIncompleteHost(
+      { newCacheStore: stores.newCacheStore },
+      { OCEL_ISR_PREFIX: "app/isr" },
+    );
+
+    expect(refused?.message).toMatch(/installed no use-cache store/);
+  });
+
+  test("is refused when its origin dispatches and the host installed no dispatcher", async () => {
+    const { refuseIncompleteHost } = await import("../src/host.mjs");
+
+    const refused = refuseIncompleteHost({}, { OCEL_ORIGIN_DISPATCH: "1" });
+
+    expect(refused?.message).toMatch(/installed no dispatcher/);
+  });
+
+  test("starts without stores when the app has no cache prefix", async () => {
+    const { refuseIncompleteHost } = await import("../src/host.mjs");
+
+    expect(refuseIncompleteHost({}, {})).toBeUndefined();
+  });
+
+  test("starts when it installed every store the app's cache prefix needs", async () => {
+    const { refuseIncompleteHost } = await import("../src/host.mjs");
+
+    expect(refuseIncompleteHost(stores, { OCEL_ISR_PREFIX: "app/isr" })).toBeUndefined();
+  });
 });

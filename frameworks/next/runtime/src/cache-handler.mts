@@ -13,7 +13,9 @@ import { background } from "@framework/node-runtime/background";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
+import type { RequestHeaders } from "./request-headers.mjs";
 import { noteRevalidation } from "./revalidation-signal.mjs";
+import { isRscRequest } from "./rsc-request.mjs";
 import { recordTags, tagsExpireEntry } from "./tag-clock.mjs";
 
 function unchunk(html: any): string {
@@ -83,10 +85,8 @@ function isProjection(parsed: unknown): parsed is Record<string, Record<string, 
   return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed);
 }
 
-const RSC_REQUEST = Symbol.for("ocel.rsc-request");
-
-function negotiateVariant(value: Record<string, any>, isRscRequest: boolean): Record<string, any> {
-  if (!isRscRequest || value.kind !== "APP_PAGE") return value;
+function negotiateVariant(value: Record<string, any>, rsc: boolean): Record<string, any> {
+  if (!rsc || value.kind !== "APP_PAGE") return value;
   if (value.rscHeaders) return { ...value, headers: value.rscHeaders };
   const { "content-type": _dropped, ...headers } = value.headers ?? {};
   return { ...value, headers };
@@ -113,14 +113,14 @@ export default class OcelCacheHandler {
 
   static variantHeaders: Record<string, Record<string, unknown>> | undefined;
 
-  private readonly requestHeaders: Record<string | symbol, any>;
+  private readonly requestHeaders: RequestHeaders;
 
   constructor(ctx?: { _requestHeaders?: Record<string, any> }) {
     this.requestHeaders = ctx?._requestHeaders ?? {};
   }
 
   private get isRscRequest(): boolean {
-    return this.requestHeaders[RSC_REQUEST] === true || this.requestHeaders.rsc === "1";
+    return isRscRequest(this.requestHeaders);
   }
 
   private get refreshing(): number | undefined {

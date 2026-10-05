@@ -2,16 +2,15 @@ import http from "node:http";
 import v8 from "node:v8";
 import vm from "node:vm";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
-import { dispatchesAtOrigin } from "@framework/node-runtime/host";
-import { afterAll, beforeAll, expect, test } from "vitest";
-import { s3AssetBucket } from "../src/next/dispatch-assets.mjs";
 import {
   type DispatchHost,
   dispatchRequest,
-  readDispatchHost,
-  siblingFunctionUrls,
   withoutClientControl,
-} from "../src/next/dispatch-host.mjs";
+} from "@framework/next-runtime/dispatch-host";
+import { dispatchesAtOrigin } from "@framework/node-runtime/host";
+import { afterAll, beforeAll, expect, test } from "vitest";
+import { s3AssetBucket } from "../src/next/dispatch-assets.mjs";
+import { readDispatchHost, siblingFunctionUrls } from "../src/next/dispatch-host.mjs";
 import { isLoopback, siblingOriginFetch } from "../src/next/dispatch-signing.mjs";
 
 const LOCAL_BUNDLE = "local-bundle";

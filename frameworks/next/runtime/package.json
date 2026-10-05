@@ -9,6 +9,8 @@
     "./cache-handler": "./src/cache-handler.mts",
     "./cache-shaping": "./src/cache-shaping.mts",
     "./cache-store": "./src/cache-store.mts",
+    "./dispatch-host": "./src/dispatch-host.mts",
+    "./entrypoint": "./src/entrypoint.mts",
     "./host": "./src/host.mts",
     "./incremental-cache": "./src/incremental-cache.mts",
     "./origin-tags": "./src/origin-tags.mts",
@@ -17,6 +19,7 @@
     "./tag-clock": "./src/tag-clock.mts",
     "./tags-manifest": "./src/tags-manifest.mts",
     "./test-support/*": "./test-support/*.mts",
+    "./uncached-responses": "./src/uncached-responses.mts",
     "./use-cache-default": "./src/use-cache-default.mts",
     "./use-cache-entry": "./src/use-cache-entry.mts",
     "./use-cache-remote": "./src/use-cache-remote.mts",
@@ -28,6 +31,8 @@
   },
   "dependencies": {
     "@framework/next-cache": "workspace:*",
+    "@framework/next-protocol": "workspace:*",
+    "@framework/next-router": "workspace:*",
     "@framework/node-runtime": "workspace:*"
   },
   "devDependencies": {

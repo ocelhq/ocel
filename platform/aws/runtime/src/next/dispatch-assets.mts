@@ -1,5 +1,4 @@
 import type { AssetBucket, AssetObject } from "@framework/next-router/assets";
-import type { ResponseCache } from "@framework/next-router/http-cache";
 import { retainOwner } from "@framework/next-router/origin-response";
 
 const ABSENT = new Set([403, 404]);
@@ -25,13 +24,4 @@ function objectPath(key: string): string {
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
-}
-
-export function uncachedResponses(): ResponseCache {
-  return {
-    match: async () => undefined,
-    put: async (_request, response) => {
-      await response.body?.cancel();
-    },
-  };
 }

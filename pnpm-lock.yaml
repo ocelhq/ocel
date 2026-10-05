@@ -460,6 +460,12 @@ importers:
       '@framework/next-cache':
         specifier: workspace:*
         version: link:../cache
+      '@framework/next-protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@framework/next-router':
+        specifier: workspace:*
+        version: link:../router
       '@framework/node-runtime':
         specifier: workspace:*
         version: link:../../node/runtime

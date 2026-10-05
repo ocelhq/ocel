@@ -3,6 +3,7 @@ import { storedCacheTags } from "@framework/next-cache";
 import { dispatchesAtOrigin, invalidatesByCacheTag } from "@framework/node-runtime/host";
 import { collectTags, notedTags } from "./origin-tags.mjs";
 import type { ProjectManifest } from "./project-manifest.mjs";
+import type { RequestHeaders } from "./request-headers.mjs";
 
 const cacheTagHeader = "cache-tag";
 
@@ -74,7 +75,7 @@ export function shapeOriginCache(
   res: http.ServerResponse,
   shaping: OriginShaping,
 ): void {
-  collectTags(req.headers as Record<string | symbol, any>);
+  collectTags(req.headers as RequestHeaders);
   const writeHead = res.writeHead;
   res.writeHead = function (this: http.ServerResponse, ...args: any[]) {
     if (!this.headersSent) shape(req, this, shaping);
@@ -86,7 +87,7 @@ function shape(req: http.IncomingMessage, res: http.ServerResponse, shaping: Ori
   if (!cacheable(req, res)) return;
 
   if (shaping.release !== null) {
-    const noted = notedTags(req.headers as Record<string | symbol, any>);
+    const noted = notedTags(req.headers as RequestHeaders);
     const { tags, unstorable, overflowed } = storedCacheTags(shaping.release, noted, tagsPerObject);
     if (tags.length > 0) res.setHeader(cacheTagHeader, tags.join(","));
     const lost = [...unstorable, ...overflowed];
