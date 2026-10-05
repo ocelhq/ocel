@@ -25,7 +25,7 @@ type Pins interface {
 
 	Untag(ctx context.Context, service, tag string) error
 
-	Close(ctx context.Context, service string) error
+	Close(ctx context.Context, service string, stillActive router.StillActive) error
 
 	ReadRollback(ctx context.Context, service, revision string) (Rollback, bool, error)
 
@@ -60,7 +60,7 @@ func ReplacePointer(ctx context.Context, pins Pins, pointers Pointers, move rout
 		if recorded.pins(service) {
 			continue
 		}
-		if err := pins.Close(ctx, service); err != nil {
+		if err := pins.Close(ctx, service, nil); err != nil {
 			recorded[pointer] = append(recorded[pointer], service)
 			errs = append(errs, err)
 		}
@@ -80,7 +80,7 @@ func ClosePointer(ctx context.Context, pins Pins, pointers Pointers, pointer str
 		if kept.pins(service) {
 			continue
 		}
-		if err := pins.Close(ctx, service); err != nil {
+		if err := pins.Close(ctx, service, nil); err != nil {
 			return pointers, err
 		}
 	}
@@ -211,7 +211,13 @@ func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error 
 			continue
 		}
 		if owed.Opened {
-			if err := pins.Close(ctx, each.service); err != nil {
+			if err := pins.Close(ctx, each.service, stillPinned(pins, each)); err != nil {
+				if errors.Is(err, errRepinned) {
+					if err := pins.RecordRollback(ctx, each.service, each.revision, owed); err != nil {
+						left = append(left, each.service+" is put back on "+each.revision+" if the promotion that pinned it since fails")
+					}
+					continue
+				}
 				left = append(left, each.service+" answers everyone on "+each.revision)
 				continue
 			}

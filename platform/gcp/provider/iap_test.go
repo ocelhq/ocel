@@ -131,7 +131,7 @@ func TestAPreviewBehindIdentityAwareProxyLetsViewersInOnlyWhileAPointerPinsIt(t 
 		t.Error("a later release turned the proxy off, and every viewer would be refused until the next promotion")
 	}
 
-	if err := p.Close(context.Background(), preview.service); err != nil {
+	if err := p.Close(context.Background(), preview.service, nil); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
 	if server.serving().IapEnabled {

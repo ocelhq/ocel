@@ -23,6 +23,7 @@ type services struct {
 	warmed      []string
 	coldStart   error
 	rollbacks   map[string]map[string]pin.Rollback
+	beforeClose func(service string)
 }
 
 func (s *services) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) (bool, error) {
@@ -163,7 +164,15 @@ func TestAPromotionDisplacedPartWayLeavesWhatTheDisplacingPromotionPinned(t *tes
 	}
 }
 
-func (s *services) Close(_ context.Context, service string) error {
+func (s *services) Close(ctx context.Context, service string, stillActive router.StillActive) error {
+	if s.beforeClose != nil {
+		s.beforeClose(service)
+	}
+	if stillActive != nil {
+		if err := stillActive(ctx); err != nil {
+			return err
+		}
+	}
 	if s.closed == nil {
 		s.closed = map[string]bool{}
 	}
@@ -353,14 +362,39 @@ type closeRecording struct {
 	calls []string
 }
 
-func (c *closeRecording) Close(ctx context.Context, service string) error {
+func (c *closeRecording) Close(ctx context.Context, service string, stillActive router.StillActive) error {
 	c.calls = append(c.calls, "close "+service)
-	return c.services.Close(ctx, service)
+	return c.services.Close(ctx, service, stillActive)
 }
 
 func (c *closeRecording) Restore(ctx context.Context, service, revision string, stillActive router.StillActive) error {
 	c.calls = append(c.calls, "repin "+service)
 	return c.restoreRefusing.Restore(ctx, service, revision, stillActive)
+}
+
+func TestAPromotionThatFailsAfterAnotherRepinnedTheServiceItOpenedLeavesThatServiceOpen(t *testing.T) {
+	refused := errors.New("cloud run refused the pin")
+	cloudRun := &services{
+		serving: map[string]string{"ocel-shop-prod-api": "api-1", "ocel-shop-prod-web": "web-1"},
+		closed:  map[string]bool{"ocel-shop-prod-api": true},
+		refuse:  map[string]error{"ocel-shop-prod-web": refused},
+	}
+	cloudRun.beforeClose = func(service string) { cloudRun.serving[service] = "api-3" }
+
+	_, err := pin.MovePointer(context.Background(), cloudRun, nil, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
+
+	if !errors.Is(err, refused) {
+		t.Fatalf("MovePointer = %v, want the refusal that stopped it", err)
+	}
+	if cloudRun.closed["ocel-shop-prod-api"] {
+		t.Error("api was closed, but another promotion pinned it since the check: closing it refuses every visitor of that promotion")
+	}
+	if got := cloudRun.serving["ocel-shop-prod-api"]; got != "api-3" {
+		t.Errorf("api serves %s, want the api-3 the other promotion pinned", got)
+	}
+	if got, ok := cloudRun.rollbacks["ocel-shop-prod-api"]["api-2"]; !ok || !got.Opened {
+		t.Errorf("api rollbacks = %+v, want api-2 recorded as having opened the service, so the promotion that pinned it since closes it if it fails", cloudRun.rollbacks["ocel-shop-prod-api"])
+	}
 }
 
 func TestAPromotionThatCannotCloseAServiceItOpenedSaysItAnswersEveryone(t *testing.T) {
@@ -383,7 +417,7 @@ func TestAPromotionThatCannotCloseAServiceItOpenedSaysItAnswersEveryone(t *testi
 
 type closeRefusing struct{ *services }
 
-func (closeRefusing) Close(context.Context, string) error {
+func (closeRefusing) Close(context.Context, string, router.StillActive) error {
 	return errors.New("cloud run refused the close")
 }
 

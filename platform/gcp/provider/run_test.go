@@ -565,6 +565,30 @@ func TestABrandNewAppServiceAnswersNobodyUntilItsFirstPromotion(t *testing.T) {
 	}
 }
 
+func TestClosingAServiceAnotherPromotionRepinnedSinceLeavesItOpen(t *testing.T) {
+	server := &runServer{}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+	p := server.open(t)
+	if _, err := p.Pin(context.Background(), app.service, one, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", one, err)
+	}
+	writes := len(server.patched)
+	repinned := errors.New("another promotion pinned this service since")
+
+	err := p.Close(context.Background(), app.service, func(context.Context) error { return repinned })
+
+	if !errors.Is(err, repinned) {
+		t.Fatalf("Close() = %v, want the error that says the promotion is no longer the one pinned", err)
+	}
+	if !server.serving().InvokerIamDisabled {
+		t.Error("the service was closed although another promotion pinned it since the check")
+	}
+	if got := len(server.patched); got != writes {
+		t.Errorf("%d patches landed after the Close, want none", got-writes)
+	}
+}
+
 func TestClosingAPromotedServiceTurnsItsInvokerCheckBackOn(t *testing.T) {
 	server := &runServer{}
 	app := promotable("ocel-shop-prod-app")
@@ -575,7 +599,7 @@ func TestClosingAPromotedServiceTurnsItsInvokerCheckBackOn(t *testing.T) {
 	}
 
 	for range 2 {
-		if err := p.Close(context.Background(), app.service); err != nil {
+		if err := p.Close(context.Background(), app.service, nil); err != nil {
 			t.Fatalf("Close() = %v", err)
 		}
 	}
@@ -598,7 +622,7 @@ func TestClosingAnOpenServiceNoPromotionOpenedTurnsItsInvokerCheckBackOn(t *test
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 
-	if err := p.Close(context.Background(), app.service); err != nil {
+	if err := p.Close(context.Background(), app.service, nil); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
 
@@ -702,7 +726,7 @@ func TestPinningAServiceNoPromotionOpensLeavesItsInvokerCheckOn(t *testing.T) {
 	if _, err := p.Pin(context.Background(), worker.service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
-	if err := p.Close(context.Background(), worker.service); err != nil {
+	if err := p.Close(context.Background(), worker.service, nil); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
 

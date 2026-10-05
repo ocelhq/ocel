@@ -44,7 +44,7 @@ func (p *Provider) pin(ctx context.Context, service, revision string, stillActiv
 		"pin the traffic of "+service+" to "+revision, activeNamed(ctx, revision, stillActive), open)
 }
 
-func (p *Provider) Close(ctx context.Context, service string) error {
+func (p *Provider) Close(ctx context.Context, service string, stillActive router.StillActive) error {
 	clients, services, err := p.openRun(ctx)
 	if err != nil {
 		return err
@@ -57,6 +57,11 @@ func (p *Provider) Close(ctx context.Context, service string) error {
 		}
 		if !isOpen(current) {
 			return nil
+		}
+		if stillActive != nil {
+			if err := stillActive(ctx); err != nil {
+				return err
+			}
 		}
 		closed := &run.GoogleCloudRunV2Service{Etag: current.Etag, ForceSendFields: []string{"InvokerIamDisabled", "IapEnabled"}}
 		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
