@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -39,7 +38,7 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		envDumpPath := filepath.Join(root, "env.out")
-		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
+		appCmd := []string{"sh", "-c", dumpEnvAndLiveDir(envDumpPath) + "; exit 7"}
 
 		var stdout, stderr bytes.Buffer
 		err := runRun(context.Background(), deps, root, appCmd, &stdout, &stderr, strings.NewReader(""))
@@ -54,16 +53,13 @@ export default { slug: "test-app" };
 			}
 		})
 
-		t.Run("the resolved resource reaches the child's environment", func(t *testing.T) {
-			dumped, readErr := os.ReadFile(envDumpPath)
-			if readErr != nil {
-				t.Fatalf("read env dump: %v", readErr)
+		t.Run("the resolved resource reaches the child as a file under its live dir, and not through its environment", func(t *testing.T) {
+			if _, ok := readDump(t, envDumpPath)["OCEL_RESOURCE_POSTGRES_main"]; ok {
+				t.Errorf("the child's environment holds OCEL_RESOURCE_POSTGRES_main")
 			}
-			env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-
-			raw, ok := env["OCEL_RESOURCE_POSTGRES_main"]
+			raw, ok := readDump(t, envDumpPath+".live")["OCEL_RESOURCE_POSTGRES_main"]
 			if !ok {
-				t.Fatalf("app env missing OCEL_RESOURCE_POSTGRES_main, got: %s", dumped)
+				t.Fatalf("the live dir holds no OCEL_RESOURCE_POSTGRES_main")
 			}
 			if !strings.Contains(raw, `"postgres"`) {
 				t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain a postgres link", raw)
@@ -104,7 +100,7 @@ export default { slug: "test-app" };
 		waitForLeaderRecord(t, root)
 
 		envDumpPath := filepath.Join(root, "run-env.out")
-		runAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
+		runAppArgs := []string{"sh", "-c", dumpEnvAndLiveDir(envDumpPath) + "; exit 9"}
 
 		var stdout, stderr bytes.Buffer
 		err := runRun(context.Background(), deps, root, runAppArgs, &stdout, &stderr, strings.NewReader(""))
@@ -117,15 +113,12 @@ export default { slug: "test-app" };
 			t.Fatalf("ExitError.Code = %d, want 9", exitErr.Code)
 		}
 
-		dumped, err := os.ReadFile(envDumpPath)
-		if err != nil {
-			t.Fatalf("read run env dump: %v", err)
+		if _, ok := readDump(t, envDumpPath)["OCEL_RESOURCE_POSTGRES_main"]; ok {
+			t.Errorf("the run's environment holds OCEL_RESOURCE_POSTGRES_main")
 		}
-		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-
-		raw, ok := env["OCEL_RESOURCE_POSTGRES_main"]
+		raw, ok := readDump(t, envDumpPath+".live")["OCEL_RESOURCE_POSTGRES_main"]
 		if !ok {
-			t.Fatalf("run env missing OCEL_RESOURCE_POSTGRES_main, got: %s", dumped)
+			t.Fatalf("the run's live dir holds no OCEL_RESOURCE_POSTGRES_main")
 		}
 		if !strings.Contains(raw, `"postgres"`) {
 			t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain a postgres link", raw)

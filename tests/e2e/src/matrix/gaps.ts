@@ -6,8 +6,6 @@ import {
   corsCheck,
   emptyBodyCheck,
   encodedSlashCheck,
-  hyphenatedTaskCheck,
-  kvPasswordOutOfEnvironmentCheck,
   lanesCheck,
   malformedQueryCheck,
   nextCacheChecks,
@@ -415,13 +413,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "dev-binds-through-the-environment",
-    reason:
-      "ocel dev hands each binding to the app it runs as an environment variable, a kv store's password in clear among it",
-    issue: 1522,
-    where: [{ on: ["dev"], fixtures: [kv.node], fails: [check(kvPasswordOutOfEnvironmentCheck)] }],
-  },
-  {
     id: "floci-serves-no-memorystore",
     reason:
       "floci serves no Memorystore, and the floci lane's bootstrap installs no kv network, so the gcp provider refuses a deploy that declares a store at preflight",
@@ -433,13 +424,6 @@ export const gaps: Gap[] = [
         skipsCell: true,
       },
     ],
-  },
-  {
-    id: "hyphenated-binding-key-dropped-by-sh",
-    reason:
-      "a binding's env key holds the declared name, hyphen and all, and the sh that runs the app's dev script drops a variable whose name holds a hyphen",
-    issue: 1526,
-    where: [{ on: ["dev"], fixtures: [tasks.node], fails: [check(hyphenatedTaskCheck)] }],
   },
   {
     id: "go-image-built-from-the-app-path-alone",

@@ -53,7 +53,7 @@ func TestRunDev(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		envDumpPath := filepath.Join(root, "env.out")
-		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
+		appCmd := []string{"sh", "-c", dumpEnvAndLiveDir(envDumpPath) + "; exit 7"}
 
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
@@ -68,21 +68,58 @@ func TestRunDev(t *testing.T) {
 			}
 		})
 
-		t.Run("the resolved resource reaches the child's environment", func(t *testing.T) {
-			dumped, readErr := os.ReadFile(envDumpPath)
-			if readErr != nil {
-				t.Fatalf("read env dump: %v", readErr)
-			}
-			env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-
-			raw, ok := env["OCEL_RESOURCE_POSTGRES_main"]
+		t.Run("the resolved resource reaches the child as a file under its live dir", func(t *testing.T) {
+			raw, ok := readDump(t, envDumpPath+".live")["OCEL_RESOURCE_POSTGRES_main"]
 			if !ok {
-				t.Fatalf("app env missing OCEL_RESOURCE_POSTGRES_main, got: %s", dumped)
+				t.Fatalf("the live dir holds no OCEL_RESOURCE_POSTGRES_main")
 			}
 			if !strings.Contains(raw, `"postgres"`) {
 				t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain a postgres link", raw)
 			}
 		})
+
+		t.Run("no binding reaches the child's environment", func(t *testing.T) {
+			for key := range readDump(t, envDumpPath) {
+				if strings.HasPrefix(key, processenv.ResourceEnvVarPrefix) {
+					t.Errorf("the child's environment holds the binding %s", key)
+				}
+			}
+		})
+
+		t.Run("the live dir is gone once the run ends", func(t *testing.T) {
+			dir := readDump(t, envDumpPath)[processenv.LiveDirEnvVar]
+			if dir == "" {
+				t.Fatalf("the child got no %s", processenv.LiveDirEnvVar)
+			}
+			if _, err := os.Stat(dir); !errors.Is(err, fs.ErrNotExist) {
+				t.Errorf("stat %s = %v, want it removed", dir, err)
+			}
+		})
+	})
+
+	t.Run("a binding whose name holds a hyphen reaches an app run through sh", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses a POSIX shell fixture command")
+		}
+
+		deps := devDeps()
+
+		root := t.TempDir()
+		t.Cleanup(func() { releaseLeader(root) })
+
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("echo-name"))
+
+		envDumpPath := filepath.Join(root, "env.out")
+		appCmd := []string{"sh", "-c", dumpEnvAndLiveDir(envDumpPath)}
+
+		var stdout, stderr syncBuffer
+		if err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDev err = %v; stderr=%s", err, stderr.String())
+		}
+
+		if raw := readDump(t, envDumpPath+".live")["OCEL_RESOURCE_POSTGRES_echo-name"]; !strings.Contains(raw, `"echo-name"`) {
+			t.Errorf("OCEL_RESOURCE_POSTGRES_echo-name = %q, want the binding of the hyphenated resource", raw)
+		}
 	})
 
 	t.Run("it joins the watcher before it returns", func(t *testing.T) {
@@ -141,7 +178,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		waitForLeaderRecord(t, root)
 
 		envDumpPath := filepath.Join(root, "follower-env.out")
-		followerAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
+		followerAppArgs := []string{"sh", "-c", dumpEnvAndLiveDir(envDumpPath) + "; exit 9"}
 
 		subdir := filepath.Join(root, "apps", "web")
 		clitest.WriteFile(t, filepath.Join(subdir, "package.json"), `{"name":"web"}`)
@@ -158,15 +195,13 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Fatalf("follower ExitError.Code = %d, want 9", exitErr.Code)
 		}
 
-		dumped, err := os.ReadFile(envDumpPath)
-		if err != nil {
-			t.Fatalf("read follower env dump: %v", err)
+		env := readDump(t, envDumpPath)
+		if _, ok := env["OCEL_RESOURCE_POSTGRES_main"]; ok {
+			t.Errorf("the follower's environment holds OCEL_RESOURCE_POSTGRES_main")
 		}
-		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-
-		raw, ok := env["OCEL_RESOURCE_POSTGRES_main"]
+		raw, ok := readDump(t, envDumpPath+".live")["OCEL_RESOURCE_POSTGRES_main"]
 		if !ok {
-			t.Fatalf("follower env missing OCEL_RESOURCE_POSTGRES_main, got: %s", dumped)
+			t.Fatalf("the follower's live dir holds no OCEL_RESOURCE_POSTGRES_main")
 		}
 		if !strings.Contains(raw, `"postgres"`) {
 			t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain a postgres link", raw)
@@ -211,7 +246,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		waitForLeaderRecord(t, firstClone)
 
 		envDumpPath := filepath.Join(secondClone, "env.out")
-		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
+		appCmd := []string{"sh", "-c", dumpEnvAndLiveDir(envDumpPath) + "; exit 9"}
 
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), deps, false, secondClone, appCmd, &stdout, &stderr, strings.NewReader(""))
@@ -224,17 +259,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Fatalf("second clone ExitError.Code = %d, want 9", exitErr.Code)
 		}
 
-		dumped, err := os.ReadFile(envDumpPath)
-		if err != nil {
-			t.Fatalf("read env dump: %v", err)
+		live := readDump(t, envDumpPath+".live")
+		if _, ok := live["OCEL_RESOURCE_POSTGRES_second"]; !ok {
+			t.Fatalf("second clone's live dir is missing its own OCEL_RESOURCE_POSTGRES_second, got: %v", live)
 		}
-		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-
-		if _, ok := env["OCEL_RESOURCE_POSTGRES_second"]; !ok {
-			t.Fatalf("second clone env missing its own OCEL_RESOURCE_POSTGRES_second, got: %s", dumped)
-		}
-		if _, ok := env["OCEL_RESOURCE_POSTGRES_first"]; ok {
-			t.Fatalf("second clone inherited the other clone's resolved env, got: %s", dumped)
+		if _, ok := live["OCEL_RESOURCE_POSTGRES_first"]; ok {
+			t.Fatalf("second clone inherited the other clone's bindings, got: %v", live)
 		}
 
 		cancelLeader()
@@ -273,7 +303,7 @@ export default { slug: "test-app" };
 		waitForLeaderRecord(t, root)
 
 		envDumpPath := filepath.Join(root, "follower-env.out")
-		followerAppArgs := []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}
+		followerAppArgs := []string{"sh", "-c", "while true; do " + dumpEnvAndLiveDir(envDumpPath) + "; sleep 0.02; done"}
 
 		followerCtx, cancelFollower := context.WithCancel(context.Background())
 		defer cancelFollower()
@@ -283,11 +313,11 @@ export default { slug: "test-app" };
 			followerDone <- runDev(followerCtx, deps, false, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 		}()
 
-		waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_main")
+		waitForEnvVar(t, envDumpPath+".live", "OCEL_RESOURCE_POSTGRES_main")
 
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "second.ts"), declareResourceScript("second"))
 
-		waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_second")
+		waitForEnvVar(t, envDumpPath+".live", "OCEL_RESOURCE_POSTGRES_second")
 
 		cancelFollower()
 		select {
@@ -641,17 +671,12 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 
 		envDumpPath := filepath.Join(root, "env.out")
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, false, root, []string{"sh", "-c", "env > " + envDumpPath}, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, []string{"sh", "-c", dumpEnvAndLiveDir(envDumpPath)}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDev err = %v; stderr=%s", err, stderr.String())
 		}
 
-		dumped, readErr := os.ReadFile(envDumpPath)
-		if readErr != nil {
-			t.Fatalf("read env dump: %v", readErr)
-		}
-		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-		if raw := env["OCEL_RESOURCE_POSTGRES_main"]; !strings.Contains(raw, `"host":"127.0.0.1"`) || !strings.Contains(raw, `"database":"main"`) {
+		if raw := readDump(t, envDumpPath+".live")["OCEL_RESOURCE_POSTGRES_main"]; !strings.Contains(raw, `"host":"127.0.0.1"`) || !strings.Contains(raw, `"database":"main"`) {
 			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the binding of the container the run started", raw)
 		}
 		if !strings.Contains(stderr.String(), `postgres "main" → postgres:17 @ 127.0.0.1:`) {
@@ -736,15 +761,11 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 
 		envDumpPath := filepath.Join(root, "env.out")
 		var stdout, stderr syncBuffer
-		if err := runRun(context.Background(), deps, root, []string{"sh", "-c", "env > " + envDumpPath}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runRun(context.Background(), deps, root, []string{"sh", "-c", dumpEnvAndLiveDir(envDumpPath)}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runRun err = %v; stderr=%s", err, stderr.String())
 		}
-		dumped, readErr := os.ReadFile(envDumpPath)
-		if readErr != nil {
-			t.Fatalf("read env dump: %v", readErr)
-		}
-		if !strings.Contains(string(dumped), "OCEL_RESOURCE_POSTGRES_main=") {
-			t.Errorf("command env has no OCEL_RESOURCE_POSTGRES_main: %s", dumped)
+		if _, ok := readDump(t, envDumpPath+".live")["OCEL_RESOURCE_POSTGRES_main"]; !ok {
+			t.Errorf("the command's live dir holds no OCEL_RESOURCE_POSTGRES_main")
 		}
 		if len(engine.Stopped) != 1 {
 			t.Errorf("stopped %v, want the command's container stopped once it exited", engine.Stopped)
@@ -970,6 +991,19 @@ globalThis.__ocelRegister.push(
 );
 export {};
 `, processenv.DevServerEnvVar, name)
+}
+
+func dumpEnvAndLiveDir(path string) string {
+	return "env > " + path + `; for f in "${` + processenv.LiveDirEnvVar + `:?}"/*; do printf "%s=%s\n" "${f##*/}" "$(cat "$f")"; done > ` + path + ".live"
+}
+
+func readDump(t *testing.T, path string) map[string]string {
+	t.Helper()
+	dumped, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
 }
 
 func waitForEnvVar(t *testing.T, path, key string) {

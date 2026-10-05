@@ -73,9 +73,22 @@ func RunOnce(ctx context.Context, opts Options, cwd string) error {
 			return err
 		}
 		defer stream.Close()
-		return runChild(ctx, opts, env)
+		return runProjected(ctx, opts, env)
 	}
 	return runStandalone(ctx, opts, cwd)
+}
+
+func runProjected(ctx context.Context, opts Options, env map[string]string) error {
+	live, err := newLiveDir()
+	if err != nil {
+		return err
+	}
+	defer live.remove()
+	appEnv, err := live.project(env)
+	if err != nil {
+		return err
+	}
+	return runChild(ctx, opts, appEnv)
 }
 
 func lead(ctx context.Context, opts Options, reset bool) (err error) {
@@ -148,28 +161,41 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 		<-watching.Done()
 	}()
 	server.PushEnv(resolved)
+	live, err := newLiveDir()
+	if err != nil {
+		return err
+	}
+	defer live.remove()
+	appEnv, err := live.project(resolved)
+	if err != nil {
+		return err
+	}
 	startup.End(nil)
 
-	child, err := startChild(ctx, opts, resolved)
+	child, err := startChild(ctx, opts, appEnv)
 	if err != nil {
 		return err
 	}
 	workers := newWorkerProcesses(opts, host.resources.Queue())
 	defer workers.stop(ctx)
-	workers.restart(ctx, resolved)
+	workers.restart(ctx, appEnv)
 	for {
 		select {
 		case err := <-child.Exited():
 			return exitError(ctx, err)
 		case env := <-updates:
-			workers.restart(ctx, env)
+			appEnv, err := live.project(env)
+			if err != nil {
+				return err
+			}
+			workers.restart(ctx, appEnv)
 			if maps.Equal(env, resolved) {
 				continue
 			}
 			resolved = env
 			tally.noteReload()
 			child.Stop()
-			child, err = startChild(ctx, opts, resolved)
+			child, err = startChild(ctx, opts, appEnv)
 			if err != nil {
 				return err
 			}
@@ -186,7 +212,16 @@ func follow(ctx context.Context, opts Options, running leader.Leader) (err error
 	}
 	defer stream.Close()
 
-	child, err := startChild(ctx, opts, first)
+	live, err := newLiveDir()
+	if err != nil {
+		return err
+	}
+	defer live.remove()
+	appEnv, err := live.project(first)
+	if err != nil {
+		return err
+	}
+	child, err := startChild(ctx, opts, appEnv)
 	if err != nil {
 		return err
 	}
@@ -214,8 +249,12 @@ func follow(ctx context.Context, opts Options, running leader.Leader) (err error
 			return exitError(ctx, err)
 		case env := <-updates:
 			tally.noteReload()
+			appEnv, err := live.project(env)
+			if err != nil {
+				return err
+			}
 			child.Stop()
-			child, err = startChild(ctx, opts, env)
+			child, err = startChild(ctx, opts, appEnv)
 			if err != nil {
 				return err
 			}
@@ -274,5 +313,5 @@ func runStandalone(ctx context.Context, opts Options, cwd string) error {
 	}
 	startup.End(nil)
 
-	return runChild(ctx, opts, resolved)
+	return runProjected(ctx, opts, resolved)
 }
