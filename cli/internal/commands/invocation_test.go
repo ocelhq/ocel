@@ -47,20 +47,22 @@ func TestACommandSharingItsTerminalWithAChildReportsAPlainTranscriptOnStderr(t *
 	}
 }
 
-func TestTheBrowserIsReachableOnlyFromAnInteractiveTerminalThatHasNotOptedOut(t *testing.T) {
+func TestTheBrowserIsReachableOnlyFromATerminalThatCanBeAskedAndHasNotOptedOut(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		terminal  bool
+		json      bool
 		noBrowser string
 		want      bool
 	}{
 		{name: "an interactive terminal", terminal: true, want: true},
 		{name: "a redirected stdin", terminal: false, want: false},
 		{name: "an opted-out terminal", terminal: true, noBrowser: "1", want: false},
+		{name: "a terminal under --json", terminal: true, json: true, want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(commands.NoBrowserEnvVar, tc.noBrowser)
-			invocation := commands.Invocation{StdinIsTerminal: func(io.Reader) bool { return tc.terminal }}
+			invocation := commands.Invocation{StdinIsTerminal: func(io.Reader) bool { return tc.terminal }, IsJSON: func() bool { return tc.json }}
 			if got := invocation.IsBrowserReachable(strings.NewReader("")); got != tc.want {
 				t.Errorf("IsBrowserReachable() = %v, want %v", got, tc.want)
 			}
