@@ -1,5 +1,6 @@
 import { HARNESS_PREFIX } from "../../identity";
 import { sanitize } from "../../naming";
+import { NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
 import { bearer, type Where } from "./store";
 
 export const KV_FEATURE = "kv-network";
@@ -31,7 +32,7 @@ export function createTimesIn(output: string): CreateTime[] {
 }
 
 export function storeFilter(namespace: string, slug: string): string {
-  return `labels.ocel-namespace="${sanitize(namespace)}" AND labels.ocel-project="${sanitize(slug)}"`;
+  return `labels.${NAMESPACE_LABEL}="${sanitize(namespace)}" AND labels.${PROJECT_LABEL}="${sanitize(slug)}"`;
 }
 
 export type Store = { name: string; project: string };
@@ -44,7 +45,7 @@ type Listing = {
 export function storesIn(body: unknown): Store[] {
   return ((body as Listing).instances ?? []).map((instance) => ({
     name: instance.name ?? "",
-    project: instance.labels?.["ocel-project"] ?? "",
+    project: instance.labels?.[PROJECT_LABEL] ?? "",
   }));
 }
 

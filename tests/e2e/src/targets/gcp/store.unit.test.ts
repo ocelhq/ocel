@@ -2,15 +2,16 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { repoRoot } from "../../paths";
+import { NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
 import {
   BOOTSTRAP_APIS,
   exposedServices,
-  hasAnyService,
   PREVIEW_APIS,
   reachable,
   readServices,
   servedBy,
   servicesIn,
+  servicesOf,
   strayServices,
   TASKS_APIS,
   TASKS_FEATURE,
@@ -67,11 +68,24 @@ const api = {
   uri: "http://ocel-j-1-deploy-node-prod-web-api-d4e5f6-9f8.europe-west1.run.localhost.floci.io:4588",
 };
 
+const labelled = (project: string, namespace = "ocel-nightly") => ({
+  [NAMESPACE_LABEL]: namespace,
+  [PROJECT_LABEL]: project,
+});
+
 describe("servicesIn", () => {
-  it("reads a service down to the name Cloud Run knows it by", () => {
-    expect(servicesIn({ services: [web] })).toEqual([
-      { name: "ocel-j-1-deploy-node-prod-web-a1b2c3", uri: web.uri },
+  it("reads a service down to the name Cloud Run knows it by and the labels it carries", () => {
+    expect(servicesIn({ services: [{ ...web, labels: labelled("j-1-deploy-node") }] })).toEqual([
+      {
+        name: "ocel-j-1-deploy-node-prod-web-a1b2c3",
+        uri: web.uri,
+        labels: labelled("j-1-deploy-node"),
+      },
     ]);
+  });
+
+  it("reads a service that carries no label as one labelled with nothing", () => {
+    expect(servicesIn({ services: [web] })[0]?.labels).toEqual({});
   });
 
   it("reads the empty body a project with no service answers with", () => {
@@ -100,43 +114,54 @@ describe("servedBy", () => {
   });
 });
 
-describe("hasAnyService", () => {
-  it("is true while any service of the project exists", () => {
-    const services = servicesIn({ services: [web, api] });
-    expect(hasAnyService(services, ["ocel-j-1-deploy-node-prod-web-a1b2c3"])).toBe(true);
-    expect(hasAnyService(services, ["ocel-j-1-deploy-next-prod-web-a1b2c3"])).toBe(false);
+describe("servicesOf", () => {
+  const services = servicesIn({
+    services: [
+      { name: "a/worker-1", labels: labelled("j-1-deploy-node") },
+      { name: "a/checkout-2", labels: labelled("j-1-deploy-node") },
+      { name: "a/web-3", labels: labelled("j-1-deploy-node", "ocel") },
+      { name: "a/web-4", labels: labelled("j-1-deploy-next") },
+      { name: "a/web-5" },
+    ],
+  });
+
+  it("is every service labelled with the project, whatever the provider named it", () => {
+    expect(servicesOf(services, "ocel-nightly", "j-1-deploy-node").map((s) => s.name)).toEqual([
+      "worker-1",
+      "checkout-2",
+    ]);
+  });
+
+  it("matches the project and namespace as the provider sanitizes them into a label", () => {
+    expect(servicesOf(services, "Ocel Nightly", "J-1/Deploy Node")).toHaveLength(2);
+  });
+
+  it("is nothing once the project has no service left", () => {
+    expect(servicesOf(services, "ocel-nightly", "j-9-deploy-node")).toEqual([]);
   });
 });
 
 describe("strayServices", () => {
-  const mine = [
-    "ocel-nightly-j-1-deploy-node-prod-web-a1b2c3",
-    "ocel-nightly-j-1-deploy-node-prod-web-index-a1b2c3",
-  ];
-  const names = [
-    "ocel-nightly-j-1-deploy-node-prod-web-a1b2c3",
-    "ocel-nightly-j-1-deploy-node-prod-web-index-a1b2c3",
-    "ocel-nightly-j-2-deploy-node-prod-web-d4e5f6",
-    "ocel-nightly-orders-prod-web-d4e5f6",
-    "ocel-j-2-deploy-node-prod-web-d4e5f6",
-  ];
-
-  it("is what a run that died left deployed under this namespace", () => {
-    expect(strayServices(names, "ocel-nightly", mine)).toEqual([
-      "ocel-nightly-j-2-deploy-node-prod-web-d4e5f6",
-    ]);
+  const services = servicesIn({
+    services: [
+      { name: "a/mine-web", labels: labelled("j-1-deploy-node") },
+      { name: "a/mine-worker", labels: labelled("j-1-deploy-node") },
+      { name: "a/dead-run", labels: labelled("j-2-deploy-node") },
+      { name: "a/someone-elses", labels: labelled("orders") },
+      { name: "a/other-namespace", labels: labelled("j-2-deploy-node", "ocel") },
+      { name: "a/unlabelled" },
+    ],
   });
 
-  it("leaves the functions of an app this run deploys", () => {
-    expect(strayServices(names, "ocel-nightly", mine)).not.toContain(
-      "ocel-nightly-j-1-deploy-node-prod-web-index-a1b2c3",
-    );
+  it("is every service a run that died left labelled under this namespace", () => {
+    expect(strayServices(services, "ocel-nightly", ["j-1-deploy-node"])).toEqual(["dead-run"]);
   });
 
-  it("tells an app apart from one whose name its own is a prefix of", () => {
-    expect(
-      strayServices(["ocel-nightly-j-1-deploy-node-prod-website-a1b2c3"], "ocel-nightly", mine),
-    ).toEqual(["ocel-nightly-j-1-deploy-node-prod-website-a1b2c3"]);
+  it("tells a project apart from one whose slug its own is a prefix of", () => {
+    const longer = servicesIn({
+      services: [{ name: "a/longer", labels: labelled("j-1-deploy-node-container") }],
+    });
+    expect(strayServices(longer, "ocel-nightly", ["j-1-deploy-node"])).toEqual(["longer"]);
   });
 });
 

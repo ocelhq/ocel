@@ -1,13 +1,18 @@
 import { HARNESS_PREFIX } from "../../identity";
+import { sanitize } from "../../naming";
+import { NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
 
-export type Service = { name: string; uri: string };
+export type Service = { name: string; uri: string; labels: Record<string, string> };
 
-type Listing = { services?: Array<{ name?: string; uri?: string }> };
+type Listing = {
+  services?: Array<{ name?: string; uri?: string; labels?: Record<string, string> }>;
+};
 
 export function servicesIn(body: unknown): Service[] {
   return ((body as Listing).services ?? []).map((service) => ({
     name: (service.name ?? "").split("/").pop() ?? "",
     uri: service.uri ?? "",
+    labels: service.labels ?? {},
   }));
 }
 
@@ -35,13 +40,29 @@ export function exposedServices(body: unknown, names: string[]): string {
   return JSON.stringify(named);
 }
 
-export function hasAnyService(services: Service[], names: string[]): boolean {
-  return services.some((service) => names.includes(service.name));
+function inNamespace(service: Service, namespace: string): boolean {
+  return service.labels[NAMESPACE_LABEL] === sanitize(namespace);
 }
 
-export function strayServices(names: string[], namespace: string, mine: string[]): string[] {
-  const harness = `${namespace}-${HARNESS_PREFIX}`;
-  return names.filter((name) => name.startsWith(harness) && !mine.includes(name));
+export function servicesOf(services: Service[], namespace: string, project: string): Service[] {
+  return services.filter(
+    (service) =>
+      inNamespace(service, namespace) && service.labels[PROJECT_LABEL] === sanitize(project),
+  );
+}
+
+export function strayServices(services: Service[], namespace: string, mine: string[]): string[] {
+  const projects = mine.map(sanitize);
+  return services
+    .filter((service) => {
+      const project = service.labels[PROJECT_LABEL] ?? "";
+      return (
+        inNamespace(service, namespace) &&
+        project.startsWith(HARNESS_PREFIX) &&
+        !projects.includes(project)
+      );
+    })
+    .map((service) => service.name);
 }
 
 export function reachable(uri: string, endpoint: string | undefined): string {

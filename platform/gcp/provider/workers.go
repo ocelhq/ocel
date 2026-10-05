@@ -135,6 +135,7 @@ func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provid
 			env:     env,
 			account: account,
 			egress:  p.egressFor(c.Names, spec),
+			labels:  stackLabels(c.Names, spec.Ref),
 		}), progress)
 		if err != nil {
 			return nil, err

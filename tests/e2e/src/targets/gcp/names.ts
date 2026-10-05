@@ -6,6 +6,10 @@ export const NAMESPACE_ENV = "OCEL_NAMESPACE";
 
 export const DEFAULT_NAMESPACE = "ocel";
 
+export const NAMESPACE_LABEL = "ocel-namespace";
+
+export const PROJECT_LABEL = "ocel-project";
+
 const LONGEST_SERVICE = 49;
 const DIGEST_CHARS = 6;
 const PRODUCTION = "prod";
@@ -56,7 +60,7 @@ const FUNCTION_KIND = "fn";
 const FIELD_SEPARATOR = "--";
 
 export function serviceNames(namespace: string, slug: string, app: string): string[] {
-  const routed = [FUNCTION_KIND, app, ONLY_ROUTE].join(FIELD_SEPARATOR);
+  const routed = [FUNCTION_KIND, sanitize(app), ONLY_ROUTE].join(FIELD_SEPARATOR);
   return [serviceName(namespace, slug, app, app), serviceName(namespace, slug, app, routed)];
 }
 
@@ -64,7 +68,9 @@ function serviceName(namespace: string, slug: string, app: string, fn: string): 
   const parts = [namespace, sanitize(slug), PRODUCTION, sanitize(app)];
   if (fn !== app) {
     parts.push(
-      sanitize(fn.slice(`${FUNCTION_KIND}${FIELD_SEPARATOR}${app}${FIELD_SEPARATOR}`.length)),
+      sanitize(
+        fn.slice(`${FUNCTION_KIND}${FIELD_SEPARATOR}${sanitize(app)}${FIELD_SEPARATOR}`.length),
+      ),
     );
   }
   const hash = createHash("sha256")

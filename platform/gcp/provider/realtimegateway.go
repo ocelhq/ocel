@@ -47,6 +47,7 @@ var realtimeImageTag = sync.OnceValue(func() string {
 func realtimeGatewayServing(names Names, ref provider.StackRef, host, image, inlineKeys string) serving {
 	gateway := serving{
 		service:     names.RealtimeGateway(ref.Project, ref.Name.Env),
+		labels:      stackLabels(names, ref),
 		image:       image,
 		account:     names.RealtimeAccountEmail(ref.Tier),
 		compute:     provider.ComputeServerless,

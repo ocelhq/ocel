@@ -65,6 +65,7 @@ type serving struct {
 	egress      *privateEgress
 	tag         string
 	iap         bool
+	labels      map[string]string
 
 	opensOnPromotion bool
 }
@@ -183,13 +184,21 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 		InvokerIamDisabled: s.public && !s.opensOnPromotion && !s.iap,
 		IapEnabled:         s.iap && !s.opensOnPromotion,
 		ForceSendFields:    []string{"InvokerIamDisabled", "IapEnabled"},
+		Labels:             maps.Clone(s.labels),
 	}
+	opening := ""
 	switch {
 	case !s.opensOnPromotion:
 	case s.iap:
-		service.Labels = map[string]string{opensOnPromotionLabel: opensToViewers}
+		opening = opensToViewers
 	case s.public:
-		service.Labels = map[string]string{opensOnPromotionLabel: opensToEveryone}
+		opening = opensToEveryone
+	}
+	if opening != "" {
+		if service.Labels == nil {
+			service.Labels = map[string]string{}
+		}
+		service.Labels[opensOnPromotionLabel] = opening
 	}
 	return service, nil
 }
