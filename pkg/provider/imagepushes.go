@@ -30,6 +30,8 @@ type ImageStore interface {
 	Has(ctx context.Context, push ImagePush) (bool, error)
 
 	Push(ctx context.Context, push ImagePush, progress progress.Log) error
+
+	CheckPush(ctx context.Context, repository string) error
 }
 
 type ImagePushes struct {
