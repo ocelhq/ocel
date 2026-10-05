@@ -370,9 +370,6 @@ func TestTheTelemetryFlushCommandRecordsNoEvent(t *testing.T) {
 	var errOut bytes.Buffer
 	ocel.root.SetOut(&bytes.Buffer{})
 	ocel.root.SetErr(&errOut)
-	group := &cobra.Command{Use: "telemetry", Hidden: true}
-	group.AddCommand(&cobra.Command{Use: "flush", Hidden: true, RunE: func(*cobra.Command, []string) error { return nil }})
-	ocel.root.AddCommand(group)
 
 	code := ocel.executeAndReport([]string{"telemetry", "flush"})
 

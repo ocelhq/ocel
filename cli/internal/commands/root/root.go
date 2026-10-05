@@ -35,6 +35,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands/permissions"
 	"github.com/ocelhq/ocel/cli/internal/commands/projectinit"
 	"github.com/ocelhq/ocel/cli/internal/commands/promotions"
+	"github.com/ocelhq/ocel/cli/internal/commands/telemetryflush"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
@@ -99,6 +100,7 @@ type command struct {
 	stopInterruptHandler context.CancelFunc
 	preRunReached        bool
 	invoked              *cobra.Command
+	startFlush           func()
 }
 
 func Execute() int {
@@ -127,6 +129,7 @@ func newCommand() *command {
 		},
 		bus:                  run.NewBus(time.Now),
 		stopInterruptHandler: func() {},
+		startFlush:           startTelemetryFlush,
 	}
 	rootCmd := c.root
 	set := &flags{}
@@ -196,6 +199,7 @@ func newCommand() *command {
 	rootCmd.AddCommand(permissions.NewCommand(invocation))
 	rootCmd.AddCommand(cost.NewCommand(cost.Dependencies{Invocation: invocation, ReadFunctions: build.ReadFunctions, CollectDeclarations: declaration.Collect}))
 	rootCmd.AddCommand(doctor.NewCommand(invocation))
+	rootCmd.AddCommand(telemetryflush.NewCommand())
 
 	rootCmd.AddGroup(
 		&cobra.Group{ID: coreGroup, Title: "CORE COMMANDS"},
@@ -216,6 +220,14 @@ func newCommand() *command {
 
 	installHelpStyle(rootCmd, func() bool { return set.json })
 	return c
+}
+
+func startTelemetryFlush() {
+	executable, err := os.Executable()
+	if err != nil {
+		return
+	}
+	telemetry.StartFlush(executable, telemetry.Resolve(telemetry.WriteKey))
 }
 
 func isShellCompletion(cmd *cobra.Command) bool {
