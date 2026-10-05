@@ -74,9 +74,9 @@ func TestAnInterruptedDevSessionRecordsItsDurationAndDeclaredKindsAndNoErrorCode
 	var stdout, stderr syncBuffer
 	done := make(chan error, 1)
 	go func() {
-		done <- runDev(ctx, recordingDeps(&log), false, root, []string{"sh", "-c", "env > " + envDumpPath + "; sleep 10"}, &stdout, &stderr, strings.NewReader(""))
+		done <- runDev(ctx, recordingDeps(&log), false, root, []string{"sh", "-c", dumpEnvAndLiveDir(envDumpPath) + "; sleep 10"}, &stdout, &stderr, strings.NewReader(""))
 	}()
-	waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_orders")
+	waitForEnvVar(t, envDumpPath+".live", "OCEL_RESOURCE_POSTGRES_orders")
 
 	stopAndWait(t, cancel, done)
 
@@ -100,12 +100,12 @@ func TestADevSessionCountsEachEnvironmentDrivenRestart(t *testing.T) {
 	var stdout, stderr syncBuffer
 	done := make(chan error, 1)
 	go func() {
-		done <- runDev(ctx, recordingDeps(&log), false, root, []string{"sh", "-c", "env > " + envDumpPath + "; sleep 10"}, &stdout, &stderr, strings.NewReader(""))
+		done <- runDev(ctx, recordingDeps(&log), false, root, []string{"sh", "-c", dumpEnvAndLiveDir(envDumpPath) + "; sleep 10"}, &stdout, &stderr, strings.NewReader(""))
 	}()
-	waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_main")
+	waitForEnvVar(t, envDumpPath+".live", "OCEL_RESOURCE_POSTGRES_main")
 
 	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "second.ts"), declareResourceScript("second"))
-	waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_second")
+	waitForEnvVar(t, envDumpPath+".live", "OCEL_RESOURCE_POSTGRES_second")
 	stopAndWait(t, cancel, done)
 
 	if session := log.theOnlySession(t); session.Reloads != 1 {
@@ -131,7 +131,7 @@ export default { slug: "test-app" };
 	var stdout, stderr syncBuffer
 	done := make(chan error, 1)
 	go func() {
-		done <- runDev(ctx, recordingDeps(&log), false, root, []string{"sh", "-c", "env > " + envDumpPath + "; sleep 10"}, &stdout, &stderr, strings.NewReader(""))
+		done <- runDev(ctx, recordingDeps(&log), false, root, []string{"sh", "-c", dumpEnvAndLiveDir(envDumpPath) + "; sleep 10"}, &stdout, &stderr, strings.NewReader(""))
 	}()
 	waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
 
@@ -196,12 +196,12 @@ func TestADevSessionFollowingALeaderCountsItsRestartsAndKnowsNoKinds(t *testing.
 	var followerStdout, followerStderr syncBuffer
 	followerDone := make(chan error, 1)
 	go func() {
-		followerDone <- runDev(followerCtx, recordingDeps(&followers), false, root, []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}, &followerStdout, &followerStderr, strings.NewReader(""))
+		followerDone <- runDev(followerCtx, recordingDeps(&followers), false, root, []string{"sh", "-c", "while true; do " + dumpEnvAndLiveDir(envDumpPath) + "; sleep 0.02; done"}, &followerStdout, &followerStderr, strings.NewReader(""))
 	}()
-	waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_main")
+	waitForEnvVar(t, envDumpPath+".live", "OCEL_RESOURCE_POSTGRES_main")
 
 	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "second.ts"), declareResourceScript("second"))
-	waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_second")
+	waitForEnvVar(t, envDumpPath+".live", "OCEL_RESOURCE_POSTGRES_second")
 	stopAndWait(t, cancelFollower, followerDone)
 	stopAndWait(t, cancelLeader, leaderDone)
 

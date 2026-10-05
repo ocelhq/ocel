@@ -4,7 +4,6 @@ import path from "node:path";
 import stripJsonComments from "strip-json-comments";
 import {
   batchCheck,
-  hyphenatedTaskCheck,
   lanesCheck,
   nextCacheChecks,
   nextDataCacheChecks,
@@ -275,7 +274,7 @@ describe("the tasks concern", () => {
     expect(planned).toContain("tasks/go");
   });
 
-  it("expects only the hyphenated task red on tasks/node on dev, and nothing red on tasks/go", () => {
+  it("expects nothing red on tasks/node or tasks/go on dev", () => {
     const { expectedFailures } = planOn("dev");
     const issuesOf = (cell: string) =>
       Object.fromEntries(
@@ -284,9 +283,7 @@ describe("the tasks concern", () => {
           listed.map((gap) => gap.issue),
         ]),
       );
-    expect(issuesOf("tasks/node/web")).toEqual({
-      [hyphenatedTaskCheck.title]: [1526],
-    });
+    expect(issuesOf("tasks/node/web")).toEqual({});
     expect(issuesOf("tasks/go/web")).toEqual({});
   });
 

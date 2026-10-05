@@ -260,9 +260,9 @@ func TestAnInterruptedDevSessionPrintsADevSessionEndedEventWithItsDeclaredKindsB
 	envDumpPath := filepath.Join(root, "env.out")
 	done := make(chan int, 1)
 	go func() {
-		done <- ocel.executeAndReport([]string{"dev", "--", "sh", "-c", "env > " + envDumpPath + "; sleep 30"})
+		done <- ocel.executeAndReport([]string{"dev", "--", "sh", "-c", "ls \"$OCEL_LIVE_DIR\" > " + envDumpPath + "; sleep 30"})
 	}()
-	waitForFileContaining(t, envDumpPath, "OCEL_RESOURCE_REALTIME_mysecretfeed=")
+	waitForFileContaining(t, envDumpPath, "OCEL_RESOURCE_REALTIME_mysecretfeed")
 
 	interrupt()
 
