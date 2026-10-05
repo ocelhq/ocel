@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/router/routerconformance"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
+	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
 type pinRecorder struct {
@@ -87,6 +88,12 @@ func (p *pinRecorder) Warm(_ context.Context, service, revision, path string) er
 	p.warmed = append(p.warmed, service+"@"+revision+path)
 	return nil
 }
+
+func (p *pinRecorder) ReadRollback(context.Context, string, string) (pin.Rollback, bool, error) {
+	return pin.Rollback{}, false, nil
+}
+
+func (p *pinRecorder) RecordRollback(context.Context, string, string, pin.Rollback) error { return nil }
 
 func (p *pinRecorder) Close(_ context.Context, service string) error {
 	p.mu.Lock()

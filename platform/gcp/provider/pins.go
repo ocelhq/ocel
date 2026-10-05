@@ -6,8 +6,10 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
 func (p *Provider) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) (bool, error) {
@@ -64,6 +67,97 @@ func (p *Provider) Close(ctx context.Context, service string) error {
 		return nil
 	}
 	return err
+}
+
+const (
+	rollbacksAnnotation = "ocel.dev/rollbacks"
+	annotationsField    = "annotations"
+	maxRollbacks        = 32
+)
+
+func (p *Provider) ReadRollback(ctx context.Context, service, revision string) (pin.Rollback, bool, error) {
+	clients, services, err := p.openRun(ctx)
+	if err != nil {
+		return pin.Rollback{}, false, err
+	}
+	current, err := p.read(ctx, services, clients.servicePath(service), service)
+	if absent(err) {
+		return pin.Rollback{}, false, nil
+	}
+	if err != nil {
+		return pin.Rollback{}, false, err
+	}
+	rollback, found := rollbacksOf(current)[revision]
+	return rollback, found, nil
+}
+
+func (p *Provider) RecordRollback(ctx context.Context, service, revision string, rollback pin.Rollback) error {
+	clients, services, err := p.openRun(ctx)
+	if err != nil {
+		return err
+	}
+	path := clients.servicePath(service)
+	err = p.retryWrite(ctx, "record on "+service+" that the pin of "+revision+" was rolled back", func() error {
+		current, err := p.read(ctx, services, path, service)
+		if err != nil {
+			return err
+		}
+		rollbacks := rollbacksOf(current)
+		rollbacks[revision] = rollback
+		annotations, err := withRollbacks(current.Annotations, rollbacks)
+		if err != nil {
+			return err
+		}
+		recorded := &run.GoogleCloudRunV2Service{Etag: current.Etag, Annotations: annotations, ForceSendFields: []string{"Annotations"}}
+		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+			return services.Projects.Locations.Services.Patch(path, recorded).UpdateMask(annotationsField).Context(ctx).Do(call...)
+		})
+	})
+	if absent(err) {
+		return nil
+	}
+	return err
+}
+
+func rollbacksOf(current *run.GoogleCloudRunV2Service) map[string]pin.Rollback {
+	rollbacks := map[string]pin.Rollback{}
+	if recorded := current.Annotations[rollbacksAnnotation]; recorded != "" {
+		_ = json.Unmarshal([]byte(recorded), &rollbacks)
+	}
+	return rollbacks
+}
+
+func withRollbacks(annotations map[string]string, rollbacks map[string]pin.Rollback) (map[string]string, error) {
+	kept := maps.Clone(annotations)
+	if kept == nil {
+		kept = map[string]string{}
+	}
+	if len(rollbacks) == 0 {
+		delete(kept, rollbacksAnnotation)
+		return kept, nil
+	}
+	for _, revision := range slices.Sorted(maps.Keys(rollbacks)) {
+		if len(rollbacks) <= maxRollbacks {
+			break
+		}
+		delete(rollbacks, revision)
+	}
+	encoded, err := json.Marshal(rollbacks)
+	if err != nil {
+		return nil, err
+	}
+	kept[rollbacksAnnotation] = string(encoded)
+	return kept, nil
+}
+
+func withoutRollback(current *run.GoogleCloudRunV2Service, revision string) (map[string]string, bool, error) {
+	rollbacks := rollbacksOf(current)
+	if _, recorded := rollbacks[revision]; !recorded {
+		return nil, false, nil
+	}
+	delete(rollbacks, revision)
+	annotations, err := withRollbacks(current.Annotations, rollbacks)
+	return annotations, true, err
 }
 
 const (

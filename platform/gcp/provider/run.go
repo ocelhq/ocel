@@ -328,6 +328,9 @@ func (p *Provider) writeRelease(ctx context.Context, clients *clients, services 
 			}
 			desired.Etag = current.Etag
 			desired.Traffic = heldTraffic(current)
+			if recorded, found := current.Annotations[rollbacksAnnotation]; found {
+				desired.Annotations = map[string]string{rollbacksAnnotation: recorded}
+			}
 			if opened, _ := openingOf(desired); opened != nil && isOpen(current) {
 				desired.InvokerIamDisabled, desired.IapEnabled = opened.InvokerIamDisabled, opened.IapEnabled
 			}
@@ -451,7 +454,14 @@ func (p *Provider) route(
 		if !open || isOpen(current) {
 			routed, opening = nil, ""
 		}
-		if servedBy(current.Traffic, revision) && routed == nil {
+		var annotations map[string]string
+		cleared := false
+		if open {
+			if annotations, cleared, err = withoutRollback(current, revision); err != nil {
+				return err
+			}
+		}
+		if servedBy(current.Traffic, revision) && routed == nil && !cleared {
 			return nil
 		}
 		if routed == nil {
@@ -462,6 +472,11 @@ func (p *Provider) route(
 		mask := trafficField
 		if opening != "" {
 			mask += "," + opening
+		}
+		if cleared {
+			routed.Annotations = annotations
+			routed.ForceSendFields = append(routed.ForceSendFields, "Annotations")
+			mask += "," + annotationsField
 		}
 		opened = opened || opening != ""
 		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {

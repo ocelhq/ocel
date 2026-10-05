@@ -22,6 +22,7 @@ type services struct {
 	mu          sync.Mutex
 	warmed      []string
 	coldStart   error
+	rollbacks   map[string]map[string]pin.Rollback
 }
 
 func (s *services) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) (bool, error) {
@@ -34,6 +35,7 @@ func (s *services) Pin(ctx context.Context, service, revision string, stillActiv
 		}
 	}
 	s.serving[service] = revision
+	delete(s.rollbacks[service], revision)
 	opened := s.closed[service]
 	delete(s.closed, service)
 	if err := s.failAfter[service]; err != nil {
@@ -55,6 +57,22 @@ func (s *services) Restore(ctx context.Context, service, revision string, stillA
 
 func (s *services) ReadServing(_ context.Context, service string) (string, error) {
 	return s.serving[service], nil
+}
+
+func (s *services) ReadRollback(_ context.Context, service, revision string) (pin.Rollback, bool, error) {
+	rollback, found := s.rollbacks[service][revision]
+	return rollback, found, nil
+}
+
+func (s *services) RecordRollback(_ context.Context, service, revision string, rollback pin.Rollback) error {
+	if s.rollbacks == nil {
+		s.rollbacks = map[string]map[string]pin.Rollback{}
+	}
+	if s.rollbacks[service] == nil {
+		s.rollbacks[service] = map[string]pin.Rollback{}
+	}
+	s.rollbacks[service][revision] = rollback
+	return nil
 }
 
 func (s *services) ReadTag(context.Context, string, string) (string, error) { return "", nil }
@@ -168,6 +186,64 @@ func TestAPromotionThatFailsPartWayClosesAgainTheBrandNewServiceItOpened(t *test
 	}
 	if !cloudRun.closed["ocel-shop-prod-api"] {
 		t.Error("api answers everyone after the promotion that opened it failed on web, and no pointer the router records names it, so nothing would close it")
+	}
+}
+
+func TestTwoPromotionsThatBothFailLeaveClosedTheBrandNewServiceTheFirstOpenedAndTheSecondRepinned(t *testing.T) {
+	cloudRun := &services{
+		serving:     map[string]string{"ocel-shop-prod-api": "api-1", "ocel-shop-prod-web": "web-1"},
+		closed:      map[string]bool{"ocel-shop-prod-api": true},
+		checkActive: true,
+	}
+	displaced := errors.New("another promotion displaced this one")
+	first := promotion(map[string]string{"api": "api-2", "web": "web-2"})
+	second := promotion(map[string]string{"api": "api-3", "web": "web-3"})
+	second.Promotion.PromotionID = "p3"
+
+	secondPinnedAPI := make(chan struct{})
+	firstRolledBack := make(chan struct{})
+	secondDone := make(chan error)
+	secondChecks := 0
+	second.StillActive = func(context.Context) error {
+		secondChecks++
+		if secondChecks < 3 {
+			return nil
+		}
+		close(secondPinnedAPI)
+		<-firstRolledBack
+		return displaced
+	}
+	firstChecks := 0
+	first.StillActive = func(context.Context) error {
+		firstChecks++
+		if firstChecks < 3 {
+			return nil
+		}
+		go func() {
+			_, err := pin.MovePointer(context.Background(), cloudRun, nil, second, progress.Discard())
+			secondDone <- err
+		}()
+		<-secondPinnedAPI
+		return displaced
+	}
+
+	if _, err := pin.MovePointer(context.Background(), cloudRun, nil, first, progress.Discard()); !errors.Is(err, displaced) {
+		t.Fatalf("MovePointer(first) = %v, want the displacement", err)
+	}
+	if cloudRun.closed["ocel-shop-prod-api"] {
+		t.Fatal("the first promotion closed api while the second still had it pinned")
+	}
+	close(firstRolledBack)
+	if err := <-secondDone; !errors.Is(err, displaced) {
+		t.Fatalf("MovePointer(second) = %v, want the displacement", err)
+	}
+
+	if !cloudRun.closed["ocel-shop-prod-api"] {
+		t.Error("api answers everyone after both promotions that pinned it failed, want it closed: " +
+			"the first opened it, and the second put back a revision whose promotion had already failed")
+	}
+	if got := cloudRun.serving["ocel-shop-prod-api"]; got != "api-1" {
+		t.Errorf("api serves %s, want the api-1 it served before either promotion", got)
 	}
 }
 
