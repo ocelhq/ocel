@@ -75,17 +75,24 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		if values, err = mergedValues(fn.Name, values, own); err != nil {
 			return nil, err
 		}
-		ran, err := p.deployService(ctx, serving{
+		served := serving{
 			service: service,
 			image:   fn.Image,
-			env:     values,
 			account: account,
 			compute: provider.ComputeServerless,
 			public:  true,
 			ingress: ingressFor(factsOf(spec.Edge)),
 			memory:  fn.Memory,
 			egress:  p.egressFor(names, spec),
-		}, progress)
+		}
+		if servesNext(app) {
+			served = nextServing(served)
+			if values, err = mergedValues(fn.Name, values, nextEnv(served)); err != nil {
+				return nil, err
+			}
+		}
+		served.env = values
+		ran, err := p.deployService(ctx, served, progress)
 		if err != nil {
 			return nil, err
 		}
