@@ -1,6 +1,6 @@
 package telemetry
 
-var allowedEvents = []string{"command_completed", "dev_session_ended", "init_completed"}
+var allowedEvents = []string{"command_completed", "dev_session_ended", "init_completed", "deploy_completed"}
 
 var allowedProperties = []string{
 	"command",
@@ -17,6 +17,16 @@ var allowedProperties = []string{
 	"package_manager",
 	"provider",
 	"config_format",
+	"success",
+	"target",
+	"frameworks",
+	"languages",
+	"app_count",
+	"resource_counts",
+	"plan_actions",
+	"phase_ms",
+	"first_deploy",
+	"assumed",
 	"cli_version",
 	"os",
 	"arch",

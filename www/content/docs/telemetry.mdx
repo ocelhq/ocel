@@ -3,17 +3,18 @@ title: Telemetry
 description: What the ocel CLI sends, what it never sends, and how to turn it off.
 ---
 
-The CLI records one event each time a command finishes: which command ran, how long it took and whether it succeeded. `ocel init` and `ocel dev` each record one more, saying what kind of project was set up and how a dev session went. We use them to see which commands people use and which ones fail, so we know where to spend time.
+The CLI records one event each time a command finishes: which command ran, how long it took and whether it succeeded. `ocel init`, `ocel dev` and `ocel deploy` each record one more, saying what kind of project was set up, how a dev session went and what a deploy did. We use them to see which commands people use and which ones fail, so we know where to spend time.
 
 Each event carries a random install ID, kept in your user config directory, a random ID of its own, and the time it was recorded. No account, email or machine name is attached, and no person profile is created.
 
 ## Events
 
-| Event               | Meaning                                                                                                         |
-| ------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `command_completed` | An `ocel` command finished, whether it passed or not.                                                           |
-| `dev_session_ended` | An `ocel dev` session stopped, for whatever reason. A second `ocel dev` that joins a running one sends its own. |
-| `init_completed`    | `ocel init` wrote a project. It is not sent when init fails.                                                    |
+| Event               | Meaning                                                                                                          |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `command_completed` | An `ocel` command finished, whether it passed or not.                                                            |
+| `dev_session_ended` | An `ocel dev` session stopped, for whatever reason. A second `ocel dev` that joins a running one sends its own.  |
+| `init_completed`    | `ocel init` wrote a project. It is not sent when init fails.                                                     |
+| `deploy_completed`  | An `ocel deploy` or preview deploy ran, whether it succeeded or failed. Dry runs and declined runs send nothing. |
 
 ## Properties
 
@@ -33,8 +34,18 @@ Every property on every event is in this table. The CLI refuses to send one that
 | `error_codes`             | How many times each [error code](/docs/errors) was reported during the dev session, such as `{"variables.missing": 2}`. Stopping the session and failures with no code are not counted. |
 | `language`                | The language of the project `ocel init` set up: `node`, `go`, `python` or `rust`. Empty when none was named or detected.                                                                |
 | `package_manager`         | The tool that adds the SDK for that language: `npm`, `pnpm`, `yarn` or `bun` for node, otherwise `go`, `uv` or `cargo`. Empty with no language.                                         |
-| `provider`                | The provider the project deploys through: `aws`, `gcp` or `vps`.                                                                                                                        |
+| `provider`                | The provider the project deploys through: `aws`, `gcp` or `vps`. Set by `ocel init` and `ocel deploy`.                                                                                  |
 | `config_format`           | The format of the config file `ocel init` wrote: `json`, `ts` or `yaml`.                                                                                                                |
+| `success`                 | Whether the deploy succeeded.                                                                                                                                                           |
+| `target`                  | `production` for `ocel deploy`, `preview` for a preview deploy.                                                                                                                         |
+| `frameworks`              | The frameworks of the apps deployed, such as `next`, sorted and without repeats. Empty when no app uses one.                                                                            |
+| `languages`               | The languages of the apps deployed: `js`, `go`, `python` or `rust`, sorted and without repeats.                                                                                         |
+| `app_count`               | How many apps the project deploys.                                                                                                                                                      |
+| `resource_counts`         | How many resources of each kind the deploy manages, such as `{"bucket": 1}`. Never their names.                                                                                         |
+| `plan_actions`            | How many resources the plan creates, updates and deletes, as `{"create": 2, "update": 1, "delete": 0}`.                                                                                 |
+| `phase_ms`                | How long each phase of the deploy took in milliseconds, such as `{"build": 4200, "provision": 61000}`.                                                                                  |
+| `first_deploy`            | Whether this install had not deployed successfully before.                                                                                                                              |
+| `assumed`                 | The ids of the defaults the deploy assumed because you did not set them, sorted and without repeats.                                                                                    |
 | `cli_version`             | The version of the CLI.                                                                                                                                                                 |
 | `os`                      | The operating system, such as `linux`.                                                                                                                                                  |
 | `arch`                    | The CPU architecture, such as `arm64`.                                                                                                                                                  |
