@@ -23,6 +23,15 @@ func (h *Host) reachDocker(ctx context.Context) (string, error) {
 		return h.engine, nil
 	}
 	if acting, ok := h.actAsStateOwner(ctx); ok {
+		result, err := h.stream(ctx, dockerReach+" >/dev/null", nil, acting)
+		if err != nil {
+			return "", err
+		}
+		if result.Code != 0 {
+			return "", refusal.Refuse(refusal.CodeNotReady,
+				"%s cannot run docker as %s: %s",
+				h.named(), stateOwner, spoken(result))
+		}
 		h.engine, h.engined = acting, true
 		return h.engine, nil
 	}
