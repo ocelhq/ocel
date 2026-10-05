@@ -191,3 +191,43 @@ message ConnectorDenial {
 
   string message = 3;
 }
+
+enum DoctorVerdict {
+  DOCTOR_VERDICT_UNSPECIFIED = 0;
+
+  DOCTOR_VERDICT_PASS = 1;
+
+  DOCTOR_VERDICT_WARN = 2;
+
+  DOCTOR_VERDICT_FAIL = 3;
+
+  DOCTOR_VERDICT_NEUTRAL = 4;
+}
+
+message DoctorResult {
+  DoctorVerdict verdict = 1;
+
+  int32 problems = 2;
+
+  int32 warnings = 3;
+
+  repeated DoctorSection sections = 4;
+}
+
+message DoctorSection {
+  string name = 1;
+
+  string identity = 2;
+
+  repeated DoctorCheck checks = 3;
+}
+
+message DoctorCheck {
+  DoctorVerdict verdict = 1;
+
+  string text = 2;
+
+  repeated string detail = 3;
+
+  string fix = 4;
+}

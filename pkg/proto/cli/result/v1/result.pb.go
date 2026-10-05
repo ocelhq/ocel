@@ -127,6 +127,61 @@ func (ConnectorLiveness) EnumDescriptor() ([]byte, []int) {
 	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{1}
 }
 
+type DoctorVerdict int32
+
+const (
+	DoctorVerdict_DOCTOR_VERDICT_UNSPECIFIED DoctorVerdict = 0
+	DoctorVerdict_DOCTOR_VERDICT_PASS        DoctorVerdict = 1
+	DoctorVerdict_DOCTOR_VERDICT_WARN        DoctorVerdict = 2
+	DoctorVerdict_DOCTOR_VERDICT_FAIL        DoctorVerdict = 3
+	DoctorVerdict_DOCTOR_VERDICT_NEUTRAL     DoctorVerdict = 4
+)
+
+// Enum value maps for DoctorVerdict.
+var (
+	DoctorVerdict_name = map[int32]string{
+		0: "DOCTOR_VERDICT_UNSPECIFIED",
+		1: "DOCTOR_VERDICT_PASS",
+		2: "DOCTOR_VERDICT_WARN",
+		3: "DOCTOR_VERDICT_FAIL",
+		4: "DOCTOR_VERDICT_NEUTRAL",
+	}
+	DoctorVerdict_value = map[string]int32{
+		"DOCTOR_VERDICT_UNSPECIFIED": 0,
+		"DOCTOR_VERDICT_PASS":        1,
+		"DOCTOR_VERDICT_WARN":        2,
+		"DOCTOR_VERDICT_FAIL":        3,
+		"DOCTOR_VERDICT_NEUTRAL":     4,
+	}
+)
+
+func (x DoctorVerdict) Enum() *DoctorVerdict {
+	p := new(DoctorVerdict)
+	*p = x
+	return p
+}
+
+func (x DoctorVerdict) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DoctorVerdict) Descriptor() protoreflect.EnumDescriptor {
+	return file_cli_result_v1_result_proto_enumTypes[2].Descriptor()
+}
+
+func (DoctorVerdict) Type() protoreflect.EnumType {
+	return &file_cli_result_v1_result_proto_enumTypes[2]
+}
+
+func (x DoctorVerdict) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DoctorVerdict.Descriptor instead.
+func (DoctorVerdict) EnumDescriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{2}
+}
+
 type BindingSetResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1319,6 +1374,202 @@ func (x *ConnectorDenial) GetMessage() string {
 	return ""
 }
 
+type DoctorResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Verdict       DoctorVerdict          `protobuf:"varint,1,opt,name=verdict,proto3,enum=cli.result.v1.DoctorVerdict" json:"verdict,omitempty"`
+	Problems      int32                  `protobuf:"varint,2,opt,name=problems,proto3" json:"problems,omitempty"`
+	Warnings      int32                  `protobuf:"varint,3,opt,name=warnings,proto3" json:"warnings,omitempty"`
+	Sections      []*DoctorSection       `protobuf:"bytes,4,rep,name=sections,proto3" json:"sections,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DoctorResult) Reset() {
+	*x = DoctorResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DoctorResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DoctorResult) ProtoMessage() {}
+
+func (x *DoctorResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DoctorResult.ProtoReflect.Descriptor instead.
+func (*DoctorResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *DoctorResult) GetVerdict() DoctorVerdict {
+	if x != nil {
+		return x.Verdict
+	}
+	return DoctorVerdict_DOCTOR_VERDICT_UNSPECIFIED
+}
+
+func (x *DoctorResult) GetProblems() int32 {
+	if x != nil {
+		return x.Problems
+	}
+	return 0
+}
+
+func (x *DoctorResult) GetWarnings() int32 {
+	if x != nil {
+		return x.Warnings
+	}
+	return 0
+}
+
+func (x *DoctorResult) GetSections() []*DoctorSection {
+	if x != nil {
+		return x.Sections
+	}
+	return nil
+}
+
+type DoctorSection struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Identity      string                 `protobuf:"bytes,2,opt,name=identity,proto3" json:"identity,omitempty"`
+	Checks        []*DoctorCheck         `protobuf:"bytes,3,rep,name=checks,proto3" json:"checks,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DoctorSection) Reset() {
+	*x = DoctorSection{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DoctorSection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DoctorSection) ProtoMessage() {}
+
+func (x *DoctorSection) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DoctorSection.ProtoReflect.Descriptor instead.
+func (*DoctorSection) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *DoctorSection) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DoctorSection) GetIdentity() string {
+	if x != nil {
+		return x.Identity
+	}
+	return ""
+}
+
+func (x *DoctorSection) GetChecks() []*DoctorCheck {
+	if x != nil {
+		return x.Checks
+	}
+	return nil
+}
+
+type DoctorCheck struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Verdict       DoctorVerdict          `protobuf:"varint,1,opt,name=verdict,proto3,enum=cli.result.v1.DoctorVerdict" json:"verdict,omitempty"`
+	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	Detail        []string               `protobuf:"bytes,3,rep,name=detail,proto3" json:"detail,omitempty"`
+	Fix           string                 `protobuf:"bytes,4,opt,name=fix,proto3" json:"fix,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DoctorCheck) Reset() {
+	*x = DoctorCheck{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DoctorCheck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DoctorCheck) ProtoMessage() {}
+
+func (x *DoctorCheck) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DoctorCheck.ProtoReflect.Descriptor instead.
+func (*DoctorCheck) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *DoctorCheck) GetVerdict() DoctorVerdict {
+	if x != nil {
+		return x.Verdict
+	}
+	return DoctorVerdict_DOCTOR_VERDICT_UNSPECIFIED
+}
+
+func (x *DoctorCheck) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *DoctorCheck) GetDetail() []string {
+	if x != nil {
+		return x.Detail
+	}
+	return nil
+}
+
+func (x *DoctorCheck) GetFix() string {
+	if x != nil {
+		return x.Fix
+	}
+	return ""
+}
+
 var File_cli_result_v1_result_proto protoreflect.FileDescriptor
 
 const file_cli_result_v1_result_proto_rawDesc = "" +
@@ -1423,7 +1674,21 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x0fConnectorDenial\x12\x12\n" +
 	"\x04verb\x18\x01 \x01(\tR\x04verb\x12\x0e\n" +
 	"\x02at\x18\x02 \x01(\tR\x02at\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage*\x92\x01\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\"\xb8\x01\n" +
+	"\fDoctorResult\x126\n" +
+	"\averdict\x18\x01 \x01(\x0e2\x1c.cli.result.v1.DoctorVerdictR\averdict\x12\x1a\n" +
+	"\bproblems\x18\x02 \x01(\x05R\bproblems\x12\x1a\n" +
+	"\bwarnings\x18\x03 \x01(\x05R\bwarnings\x128\n" +
+	"\bsections\x18\x04 \x03(\v2\x1c.cli.result.v1.DoctorSectionR\bsections\"s\n" +
+	"\rDoctorSection\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
+	"\bidentity\x18\x02 \x01(\tR\bidentity\x122\n" +
+	"\x06checks\x18\x03 \x03(\v2\x1a.cli.result.v1.DoctorCheckR\x06checks\"\x83\x01\n" +
+	"\vDoctorCheck\x126\n" +
+	"\averdict\x18\x01 \x01(\x0e2\x1c.cli.result.v1.DoctorVerdictR\averdict\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12\x16\n" +
+	"\x06detail\x18\x03 \x03(\tR\x06detail\x12\x10\n" +
+	"\x03fix\x18\x04 \x01(\tR\x03fix*\x92\x01\n" +
 	"\x0fDeploymentState\x12 \n" +
 	"\x1cDEPLOYMENT_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOYMENT_STATE_ACTIVE\x10\x01\x12\x1f\n" +
@@ -1433,7 +1698,13 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x1eCONNECTOR_LIVENESS_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19CONNECTOR_LIVENESS_ONLINE\x10\x01\x12\x1e\n" +
 	"\x1aCONNECTOR_LIVENESS_OFFLINE\x10\x02\x12&\n" +
-	"\"CONNECTOR_LIVENESS_NEVER_CONNECTED\x10\x03B9Z7github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1b\x06proto3"
+	"\"CONNECTOR_LIVENESS_NEVER_CONNECTED\x10\x03*\x96\x01\n" +
+	"\rDoctorVerdict\x12\x1e\n" +
+	"\x1aDOCTOR_VERDICT_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13DOCTOR_VERDICT_PASS\x10\x01\x12\x17\n" +
+	"\x13DOCTOR_VERDICT_WARN\x10\x02\x12\x17\n" +
+	"\x13DOCTOR_VERDICT_FAIL\x10\x03\x12\x1a\n" +
+	"\x16DOCTOR_VERDICT_NEUTRAL\x10\x04B9Z7github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1b\x06proto3"
 
 var (
 	file_cli_result_v1_result_proto_rawDescOnce sync.Once
@@ -1447,56 +1718,64 @@ func file_cli_result_v1_result_proto_rawDescGZIP() []byte {
 	return file_cli_result_v1_result_proto_rawDescData
 }
 
-var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_cli_result_v1_result_proto_goTypes = []any{
 	(DeploymentState)(0),          // 0: cli.result.v1.DeploymentState
 	(ConnectorLiveness)(0),        // 1: cli.result.v1.ConnectorLiveness
-	(*BindingSetResult)(nil),      // 2: cli.result.v1.BindingSetResult
-	(*BindingRemoveResult)(nil),   // 3: cli.result.v1.BindingRemoveResult
-	(*BindingListResult)(nil),     // 4: cli.result.v1.BindingListResult
-	(*BindingGenerateResult)(nil), // 5: cli.result.v1.BindingGenerateResult
-	(*BindingSummary)(nil),        // 6: cli.result.v1.BindingSummary
-	(*DomainStatusResult)(nil),    // 7: cli.result.v1.DomainStatusResult
-	(*DomainHostStatus)(nil),      // 8: cli.result.v1.DomainHostStatus
-	(*Certificate)(nil),           // 9: cli.result.v1.Certificate
-	(*CostScanResult)(nil),        // 10: cli.result.v1.CostScanResult
-	(*DeploymentListResult)(nil),  // 11: cli.result.v1.DeploymentListResult
-	(*DeploymentSummary)(nil),     // 12: cli.result.v1.DeploymentSummary
-	(*PreviewListResult)(nil),     // 13: cli.result.v1.PreviewListResult
-	(*PreviewSummary)(nil),        // 14: cli.result.v1.PreviewSummary
-	(*DomainListResult)(nil),      // 15: cli.result.v1.DomainListResult
-	(*PreviewDomainResult)(nil),   // 16: cli.result.v1.PreviewDomainResult
-	(*ConnectorStatusResult)(nil), // 17: cli.result.v1.ConnectorStatusResult
-	(*ConnectorStatus)(nil),       // 18: cli.result.v1.ConnectorStatus
-	(*ConnectorDenial)(nil),       // 19: cli.result.v1.ConnectorDenial
-	nil,                           // 20: cli.result.v1.DeploymentSummary.BuildsEntry
-	(*v1.ResourceSet)(nil),        // 21: provider.cost.v1.ResourceSet
-	(*v1.Estimate)(nil),           // 22: provider.cost.v1.Estimate
-	(v11.Lifecycle)(0),            // 23: common.environment.v1.Lifecycle
+	(DoctorVerdict)(0),            // 2: cli.result.v1.DoctorVerdict
+	(*BindingSetResult)(nil),      // 3: cli.result.v1.BindingSetResult
+	(*BindingRemoveResult)(nil),   // 4: cli.result.v1.BindingRemoveResult
+	(*BindingListResult)(nil),     // 5: cli.result.v1.BindingListResult
+	(*BindingGenerateResult)(nil), // 6: cli.result.v1.BindingGenerateResult
+	(*BindingSummary)(nil),        // 7: cli.result.v1.BindingSummary
+	(*DomainStatusResult)(nil),    // 8: cli.result.v1.DomainStatusResult
+	(*DomainHostStatus)(nil),      // 9: cli.result.v1.DomainHostStatus
+	(*Certificate)(nil),           // 10: cli.result.v1.Certificate
+	(*CostScanResult)(nil),        // 11: cli.result.v1.CostScanResult
+	(*DeploymentListResult)(nil),  // 12: cli.result.v1.DeploymentListResult
+	(*DeploymentSummary)(nil),     // 13: cli.result.v1.DeploymentSummary
+	(*PreviewListResult)(nil),     // 14: cli.result.v1.PreviewListResult
+	(*PreviewSummary)(nil),        // 15: cli.result.v1.PreviewSummary
+	(*DomainListResult)(nil),      // 16: cli.result.v1.DomainListResult
+	(*PreviewDomainResult)(nil),   // 17: cli.result.v1.PreviewDomainResult
+	(*ConnectorStatusResult)(nil), // 18: cli.result.v1.ConnectorStatusResult
+	(*ConnectorStatus)(nil),       // 19: cli.result.v1.ConnectorStatus
+	(*ConnectorDenial)(nil),       // 20: cli.result.v1.ConnectorDenial
+	(*DoctorResult)(nil),          // 21: cli.result.v1.DoctorResult
+	(*DoctorSection)(nil),         // 22: cli.result.v1.DoctorSection
+	(*DoctorCheck)(nil),           // 23: cli.result.v1.DoctorCheck
+	nil,                           // 24: cli.result.v1.DeploymentSummary.BuildsEntry
+	(*v1.ResourceSet)(nil),        // 25: provider.cost.v1.ResourceSet
+	(*v1.Estimate)(nil),           // 26: provider.cost.v1.Estimate
+	(v11.Lifecycle)(0),            // 27: common.environment.v1.Lifecycle
 }
 var file_cli_result_v1_result_proto_depIdxs = []int32{
-	6,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
-	6,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
-	8,  // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
-	9,  // 3: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
-	21, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
-	22, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
-	12, // 6: cli.result.v1.DeploymentListResult.deployments:type_name -> cli.result.v1.DeploymentSummary
-	20, // 7: cli.result.v1.DeploymentSummary.builds:type_name -> cli.result.v1.DeploymentSummary.BuildsEntry
+	7,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
+	7,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
+	9,  // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
+	10, // 3: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
+	25, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
+	26, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
+	13, // 6: cli.result.v1.DeploymentListResult.deployments:type_name -> cli.result.v1.DeploymentSummary
+	24, // 7: cli.result.v1.DeploymentSummary.builds:type_name -> cli.result.v1.DeploymentSummary.BuildsEntry
 	0,  // 8: cli.result.v1.DeploymentSummary.state:type_name -> cli.result.v1.DeploymentState
-	14, // 9: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
-	23, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
-	8,  // 11: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
-	9,  // 12: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
-	18, // 13: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
+	15, // 9: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
+	27, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
+	9,  // 11: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
+	10, // 12: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
+	19, // 13: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
 	1,  // 14: cli.result.v1.ConnectorStatus.liveness:type_name -> cli.result.v1.ConnectorLiveness
-	19, // 15: cli.result.v1.ConnectorStatus.last_denied:type_name -> cli.result.v1.ConnectorDenial
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	20, // 15: cli.result.v1.ConnectorStatus.last_denied:type_name -> cli.result.v1.ConnectorDenial
+	2,  // 16: cli.result.v1.DoctorResult.verdict:type_name -> cli.result.v1.DoctorVerdict
+	22, // 17: cli.result.v1.DoctorResult.sections:type_name -> cli.result.v1.DoctorSection
+	23, // 18: cli.result.v1.DoctorSection.checks:type_name -> cli.result.v1.DoctorCheck
+	2,  // 19: cli.result.v1.DoctorCheck.verdict:type_name -> cli.result.v1.DoctorVerdict
+	20, // [20:20] is the sub-list for method output_type
+	20, // [20:20] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_cli_result_v1_result_proto_init() }
@@ -1509,8 +1788,8 @@ func file_cli_result_v1_result_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_result_v1_result_proto_rawDesc), len(file_cli_result_v1_result_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   19,
+			NumEnums:      3,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
