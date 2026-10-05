@@ -1,13 +1,9 @@
 package terminal
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
-
-	"google.golang.org/protobuf/encoding/protojson"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
@@ -18,19 +14,15 @@ func PrintFailure(w io.Writer, err error) {
 	}
 }
 
-const unencodableFailureJSON = `{"ok":false,"error":{"code":"internal","message":"the error could not be encoded as JSON"}}`
+const unencodableFailureJSON = `{"ok":false,"error":{"code":"internal","message":"the error could not be encoded as JSON","retryable":false}}`
 
 func PrintFailureJSON(w io.Writer, failure *streamv1.RunError) {
-	var document bytes.Buffer
-	body, err := protojson.Marshal(failure)
-	if err == nil {
-		err = json.Compact(&document, fmt.Appendf(nil, `{"ok":false,"error":%s}`, body))
-	}
+	document, err := marshalEnvelope(false, failure)
 	if err != nil {
 		fmt.Fprintln(w, unencodableFailureJSON)
 		return
 	}
-	fmt.Fprintln(w, document.String())
+	_, _ = w.Write(document)
 }
 
 func failureLines(p Palette, headline, detail string) []string {

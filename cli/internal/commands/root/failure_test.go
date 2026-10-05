@@ -330,7 +330,7 @@ func TestTheUsageDocumentCarriesTheStableCodeAndItsDocsURL(t *testing.T) {
 	if got := failure["docsUrl"]; got != "https://ocel.dev/docs/errors/usage" {
 		t.Errorf("docsUrl = %v, want the usage error page", got)
 	}
-	if got, want := slices.Sorted(maps.Keys(failure)), []string{"code", "docsUrl", "hint", "message"}; !slices.Equal(got, want) {
+	if got, want := slices.Sorted(maps.Keys(failure)), []string{"code", "docsUrl", "hint", "message", "retryable"}; !slices.Equal(got, want) {
 		t.Errorf("error keys = %v, want %v", got, want)
 	}
 }
