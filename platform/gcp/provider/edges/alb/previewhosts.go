@@ -26,6 +26,7 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 		tags = map[string]pin.Tags{}
 	}
 	var took []string
+	replaced := map[string]pin.Tags{}
 	for _, host := range move.Hosts {
 		served, deploymentTags, err := s.previewHost(ctx, move, host, deployment)
 		if err != nil {
@@ -33,6 +34,9 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 		}
 		if hosts[host.Hostname] == served {
 			continue
+		}
+		if held := tagsOf(hosts[host.Hostname], tags[host.Hostname]); held != nil {
+			replaced[host.Hostname] = held
 		}
 		hosts[host.Hostname] = served
 		if deploymentTags != nil {
@@ -79,7 +83,11 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 		}
 	}
 	s.recordPreviewHosts(hosts, tags)
-	return nil
+	var errs []error
+	for _, hostname := range slices.Sorted(maps.Keys(replaced)) {
+		errs = append(errs, s.untagUnroutedRevisions(ctx, replaced[hostname], hosts, tags))
+	}
+	return errors.Join(errs...)
 }
 
 func describeHost(host Host) string {
