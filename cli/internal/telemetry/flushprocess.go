@@ -16,12 +16,10 @@ func StartFlush(executable string, resolution Resolution) bool {
 	if err != nil || !spool.HasEvents() {
 		return false
 	}
-	cmd := exec.Command(executable, "telemetry", "flush")
-	cmd.Dir = os.TempDir()
-	childprocess.Detach(cmd)
-	if err := cmd.Start(); err != nil {
-		return false
-	}
-	_ = cmd.Process.Release()
-	return true
+	err = childprocess.StartDetached(func() *exec.Cmd {
+		cmd := exec.Command(executable, "telemetry", "flush")
+		cmd.Dir = os.TempDir()
+		return cmd
+	})
+	return err == nil
 }
