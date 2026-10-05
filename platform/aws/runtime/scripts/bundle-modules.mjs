@@ -71,6 +71,7 @@ await Promise.all(
   bundledModules.map((name) =>
     bundle(join(pkgDir, `src/next/${name}.mts`), join(distNext, `${name}.mjs`), {
       format: "esm",
+      minify: true,
       banner: cjsInterop,
       define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
     }),
