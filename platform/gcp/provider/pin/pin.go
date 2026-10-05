@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -25,6 +26,8 @@ type Pins interface {
 	Untag(ctx context.Context, service, tag string) error
 
 	Close(ctx context.Context, service string) error
+
+	Warm(ctx context.Context, service, revision, path string) error
 }
 
 type Pointers map[string][]string
@@ -134,7 +137,38 @@ func pinRecords(ctx context.Context, pins Pins, move router.PointerMove, progres
 			}
 		}
 	}
+	warm(ctx, pins, pinning, progress)
 	return nil
+}
+
+func warm(ctx context.Context, pins Pins, records []router.DeploymentRecord, progress progress.Log) {
+	var (
+		waiting sync.WaitGroup
+		mu      sync.Mutex
+		failed  []string
+	)
+	for _, record := range records {
+		for service, revision := range record.Revisions {
+			path := "/"
+			if service == record.Physical && record.HealthPath != "" {
+				path = record.HealthPath
+			}
+			waiting.Go(func() {
+				if err := pins.Warm(ctx, service, revision, path); err != nil {
+					mu.Lock()
+					failed = append(failed, err.Error())
+					mu.Unlock()
+				}
+			})
+		}
+	}
+	waiting.Wait()
+	if progress == nil {
+		return
+	}
+	for _, failure := range slices.Sorted(slices.Values(failed)) {
+		progress.Warn("Could not warm a promoted revision, so its first visitor waits for it to start: " + failure)
+	}
 }
 
 var errRepinned = errors.New("another promotion pinned this service since")

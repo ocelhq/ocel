@@ -57,7 +57,9 @@ the URL Cloud Run gives it, which costs nothing while it serves nothing and bind
 hostname of your own.
 
 A promotion pins all of a service's traffic to the revision its release created, and a
-rollback pins it back. A service a deploy creates answers nobody until its first promotion
+rollback pins it back. Where a service answers on its own URL, the promotion then asks each
+revision it pinned once, on the app's health path, so the first visitor does not wait for
+it to start. A service a deploy creates answers nobody until its first promotion
 opens it, and a first promotion that is taken back closes it again, so a service's default traffic
 only ever serves a release the project promoted.
 

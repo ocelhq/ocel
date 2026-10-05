@@ -65,6 +65,8 @@ func (p *pinRecorder) ReadServing(context.Context, string) (string, error) { ret
 
 func (p *pinRecorder) Untag(context.Context, string, string) error { return nil }
 
+func (p *pinRecorder) Warm(context.Context, string, string, string) error { return nil }
+
 func (p *pinRecorder) Close(_ context.Context, service string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()

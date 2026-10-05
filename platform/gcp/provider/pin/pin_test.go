@@ -3,7 +3,9 @@ package pin_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -17,6 +19,9 @@ type services struct {
 	refuse      map[string]error
 	failAfter   map[string]error
 	checkActive bool
+	mu          sync.Mutex
+	warmed      []string
+	coldStart   error
 }
 
 func (s *services) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) (bool, error) {
@@ -304,4 +309,49 @@ type closeRefusing struct{ *services }
 
 func (closeRefusing) Close(context.Context, string) error {
 	return errors.New("cloud run refused the close")
+}
+
+func (s *services) Warm(_ context.Context, service, revision, path string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.warmed = append(s.warmed, service+"@"+revision+path)
+	return s.coldStart
+}
+
+func TestAPromotionWarmsEveryRevisionItPinnedOnTheAppsHealthPath(t *testing.T) {
+	cloudRun := &services{serving: map[string]string{}}
+	move := promotion(map[string]string{"web": "web-2"})
+	web := move.Records["web"]
+	web.HealthPath = "/healthz"
+	web.Revisions["ocel-shop-prod-web-checkout"] = "checkout-2"
+	move.Records["web"] = web
+
+	if _, err := pin.MovePointer(context.Background(), cloudRun, nil, move, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer = %v", err)
+	}
+
+	want := []string{"ocel-shop-prod-web-checkout@checkout-2/", "ocel-shop-prod-web@web-2/healthz"}
+	if got := slices.Sorted(slices.Values(cloudRun.warmed)); !slices.Equal(got, want) {
+		t.Errorf("the promotion warmed %v, want %v", got, want)
+	}
+}
+
+type warnings struct {
+	progress.Log
+	said []string
+}
+
+func (w *warnings) Warn(message string) { w.said = append(w.said, message) }
+
+func TestAPromotionSaysWhichRevisionItCouldNotWarm(t *testing.T) {
+	cloudRun := &services{serving: map[string]string{}, coldStart: errors.New("warm revision web-2 of ocel-shop-prod-web: connection refused")}
+	log := &warnings{Log: progress.Discard()}
+
+	if _, err := pin.MovePointer(context.Background(), cloudRun, nil, promotion(map[string]string{"web": "web-2"}), log); err != nil {
+		t.Fatalf("MovePointer = %v, want a promotion that pinned everything to succeed whether or not a warm answered", err)
+	}
+
+	if len(log.said) != 1 || !strings.Contains(log.said[0], "web-2 of ocel-shop-prod-web") {
+		t.Errorf("the promotion warned %v, want one warning naming the revision it could not warm", log.said)
+	}
 }
