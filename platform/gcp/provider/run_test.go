@@ -216,7 +216,7 @@ func TestAReleaseOntoADeployedServiceLeavesItsTrafficOnTheRevisionItServed(t *te
 	server := &runServer{}
 	first := serves("ocel-shop-prod-app")
 	_, one := released(t, server, first)
-	if err := server.open(t).Pin(context.Background(), first.service, one, nil); err != nil {
+	if _, err := server.open(t).Pin(context.Background(), first.service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 
@@ -234,7 +234,7 @@ func TestAPinWhosePromotionWasDisplacedWhileTheServiceMovedPinsNothing(t *testin
 	first := serves("ocel-shop-prod-app")
 	_, one := released(t, server, first)
 	p := server.open(t)
-	if err := p.Pin(context.Background(), first.service, one, nil); err != nil {
+	if _, err := p.Pin(context.Background(), first.service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 	second := first
@@ -251,12 +251,12 @@ func TestAPinWhosePromotionWasDisplacedWhileTheServiceMovedPinsNothing(t *testin
 			return displaced
 		}
 		raced = true
-		if err := p.Pin(ctx, first.service, three, nil); err != nil {
+		if _, err := p.Pin(ctx, first.service, three, nil); err != nil {
 			t.Fatalf("the racing Pin(%s) = %v", three, err)
 		}
 		return nil
 	}
-	if err := p.Pin(context.Background(), first.service, two, stillActive); !errors.Is(err, displaced) {
+	if _, err := p.Pin(context.Background(), first.service, two, stillActive); !errors.Is(err, displaced) {
 		t.Fatalf("Pin(%s) raced by a pin that landed after its promotion was checked = %v, want that displacement", two, err)
 	}
 	if service := server.serving(); !servedBy(service.Traffic, three) {
@@ -277,7 +277,7 @@ func TestPinningTrafficKeepsEveryTagTheServiceCarries(t *testing.T) {
 		{Type: trafficByRevision, Revision: two, Tag: "r00000002"},
 	}
 
-	if err := server.open(t).Pin(context.Background(), first.service, two, nil); err != nil {
+	if _, err := server.open(t).Pin(context.Background(), first.service, two, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", two, err)
 	}
 
@@ -320,7 +320,7 @@ func TestUntaggingTakesTheTagOffItsRevisionAndLeavesTheTrafficWhereItWas(t *test
 	first.tag = "r00000001"
 	_, one := released(t, server, first)
 	p := server.open(t)
-	if err := p.Pin(context.Background(), first.service, one, nil); err != nil {
+	if _, err := p.Pin(context.Background(), first.service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 
@@ -352,7 +352,7 @@ func TestWhatAServicePinsIsTheRevisionTakingAllOfItsTraffic(t *testing.T) {
 	second := first
 	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	_, two := released(t, server, second)
-	if err := p.Pin(ctx, first.service, two, nil); err != nil {
+	if _, err := p.Pin(ctx, first.service, two, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", two, err)
 	}
 	if pinned, err := p.ReadServing(ctx, first.service); err != nil || pinned != two {
@@ -545,5 +545,147 @@ func TestAPolicyWriteRefusedAsConflictingPreconditionFailedOrAbortedIsStale(t *t
 		if stale(err) {
 			t.Errorf("stale(%s) = true, want false", name)
 		}
+	}
+}
+
+func promotable(service string) serving {
+	s := serves(service)
+	s.opensOnPromotion = true
+	return s
+}
+
+func TestABrandNewAppServiceAnswersNobodyUntilItsFirstPromotion(t *testing.T) {
+	server := &runServer{}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+
+	if server.serving().InvokerIamDisabled {
+		t.Fatal("a service its first release created answers anyone before a promotion pinned it, and the ledger names nothing it serves")
+	}
+	if _, err := server.open(t).Pin(context.Background(), app.service, one, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", one, err)
+	}
+	if !server.serving().InvokerIamDisabled {
+		t.Error("the service still checks its invoker once its first promotion pinned it, and every visitor to a public app would be refused")
+	}
+
+	second := app
+	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	released(t, server, second)
+	if !server.serving().InvokerIamDisabled {
+		t.Error("a later release closed the service its promotion opened, and every visitor would be refused until the next promotion")
+	}
+}
+
+func TestClosingAPromotedServiceTurnsItsInvokerCheckBackOn(t *testing.T) {
+	server := &runServer{}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+	p := server.open(t)
+	if _, err := p.Pin(context.Background(), app.service, one, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", one, err)
+	}
+
+	for range 2 {
+		if err := p.Close(context.Background(), app.service); err != nil {
+			t.Fatalf("Close() = %v", err)
+		}
+	}
+
+	if server.serving().InvokerIamDisabled {
+		t.Error("a closed service answers anyone, and the pointer that promoted it was taken back")
+	}
+	if !servedBy(server.serving().Traffic, one) {
+		t.Errorf("closing the service moved its traffic to %+v", server.serving().Traffic)
+	}
+}
+
+func TestClosingAnOpenServiceNoPromotionOpenedTurnsItsInvokerCheckBackOn(t *testing.T) {
+	server := &runServer{}
+	app := serves("ocel-shop-prod-app")
+	app.public = true
+	_, one := released(t, server, app)
+	p := server.open(t)
+	if _, err := p.Pin(context.Background(), app.service, one, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", one, err)
+	}
+
+	if err := p.Close(context.Background(), app.service); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+
+	if server.serving().InvokerIamDisabled {
+		t.Error("a closed service answers anyone because it carries no label saying a promotion opened it, and the router says a removed pointer is served no more")
+	}
+}
+
+func TestPinReportsWhetherItOpenedTheService(t *testing.T) {
+	server := &runServer{}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+	p := server.open(t)
+
+	opened, err := p.Pin(context.Background(), app.service, one, nil)
+	if err != nil || !opened {
+		t.Errorf("the first Pin(%s) = %v, %v, want it to say it opened the service: a promotion that fails later has to close it again", one, opened, err)
+	}
+	opened, err = p.Pin(context.Background(), app.service, one, nil)
+	if err != nil || opened {
+		t.Errorf("Pin(%s) of an open service = %v, %v, want it to say it opened nothing", one, opened, err)
+	}
+}
+
+func TestAPinWhoseOperationFailsStillReportsItOpenedTheService(t *testing.T) {
+	server := &runServer{failRouting: true}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+	p := server.open(t)
+
+	opened, err := p.Pin(context.Background(), app.service, one, nil)
+
+	if err == nil {
+		t.Fatal("Pin = nil, want the failed operation")
+	}
+	if !opened {
+		t.Error("Pin reports it opened nothing, and its patch opening the service was sent before the operation failed: a promotion putting services back would leave it open")
+	}
+}
+
+func TestPinningBackWithoutOpeningLeavesAClosedServiceClosed(t *testing.T) {
+	server := &runServer{}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+	second := app
+	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	released(t, server, second)
+	p := server.open(t)
+
+	if err := p.Restore(context.Background(), app.service, one, nil); err != nil {
+		t.Fatalf("Restore(%s) = %v", one, err)
+	}
+
+	if server.serving().InvokerIamDisabled {
+		t.Error("pinning a closed service back opened it to anyone, and a promotion putting a service back closes it first so its old revision answers nobody")
+	}
+	if !servedBy(server.serving().Traffic, one) {
+		t.Errorf("the service serves %+v, want all of it on %s", server.serving().Traffic, one)
+	}
+}
+
+func TestPinningAServiceNoPromotionOpensLeavesItsInvokerCheckOn(t *testing.T) {
+	server := &runServer{}
+	worker := serving{service: "ocel-shop-prod-worker", image: "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one", compute: provider.ComputeServerless}
+	_, one := released(t, server, worker)
+
+	p := server.open(t)
+	if _, err := p.Pin(context.Background(), worker.service, one, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", one, err)
+	}
+	if err := p.Close(context.Background(), worker.service); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+
+	if server.serving().InvokerIamDisabled {
+		t.Error("pinning a service that only its invokers may reach opened it to anyone")
 	}
 }

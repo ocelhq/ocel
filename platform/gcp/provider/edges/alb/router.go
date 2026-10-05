@@ -21,11 +21,12 @@ func (r Router) Kind() router.Kind { return router.Kind(Kind) }
 
 func (r Router) Facts() router.Facts {
 	return router.Facts{
-		Supported:                edge.AllNeeds(),
-		ReachesFunctions:         true,
-		ReachesContainers:        true,
-		AnswersHostnames:         true,
-		ServesPreviewDeployments: true,
+		Supported:                   edge.AllNeeds(),
+		ReachesFunctions:            true,
+		ReachesContainers:           true,
+		AnswersHostnames:            true,
+		StopsServingRemovedPointers: true,
+		ServesPreviewDeployments:    true,
 	}
 }
 
@@ -103,7 +104,10 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 	if _, _, deployment := router.ParseDeploymentPointer(move.Pointer); deployment {
 		return nil
 	}
-	if err := pin.MovePointer(ctx, r.s.e.deps.Pins, move, progress); err != nil {
+	pointers, err := pin.MovePointer(ctx, r.s.e.deps.Pins, r.s.recorded.Pointers, move, progress)
+	r.s.recorded.Pointers = pointers
+	r.s.keep()
+	if err != nil {
 		return err
 	}
 	if err := r.s.released(ctx, move.Records, progress); err != nil {
@@ -117,6 +121,12 @@ func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRe
 	if err := r.s.withdrawPointer(ctx, removal); err != nil {
 		return err
 	}
+	kept, err := pin.ClosePointer(ctx, r.s.e.deps.Pins, r.s.recorded.Pointers, removal.Pointer)
+	if err != nil {
+		return err
+	}
+	r.s.recorded.Pointers = kept
+	r.s.keep()
 	r.s.forgetPointer(removal.Pointer)
 	return nil
 }

@@ -26,6 +26,11 @@ import (
 )
 
 const (
+	opensOnPromotionLabel = "ocel-opens-on-promotion"
+	invokerCheckField     = "invoker_iam_disabled"
+)
+
+const (
 	trafficByRevision = "TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"
 	trafficByLatest   = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
 	trafficField      = "traffic"
@@ -58,6 +63,8 @@ type serving struct {
 	mounts      []secretMount
 	egress      *privateEgress
 	tag         string
+
+	opensOnPromotion bool
 }
 
 type privateEgress struct {
@@ -167,12 +174,20 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	if ingress == "" {
 		ingress = ingressEverywhere
 	}
-	return &run.GoogleCloudRunV2Service{
+	service := &run.GoogleCloudRunV2Service{
 		Template:           template,
 		Ingress:            ingress,
-		InvokerIamDisabled: s.public,
+		InvokerIamDisabled: s.public && !s.opensOnPromotion,
 		ForceSendFields:    []string{"InvokerIamDisabled"},
-	}, nil
+	}
+	if s.public && s.opensOnPromotion {
+		service.Labels = map[string]string{opensOnPromotionLabel: "true"}
+	}
+	return service, nil
+}
+
+func opensOnPromotion(service *run.GoogleCloudRunV2Service) bool {
+	return service.Labels[opensOnPromotionLabel] == "true"
 }
 
 func environmentOf(values map[string]string) []*run.GoogleCloudRunV2EnvVar {
@@ -254,6 +269,9 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress progre
 			}
 			desired.Etag = current.Etag
 			desired.Traffic = heldTraffic(current)
+			if opensOnPromotion(desired) {
+				desired.InvokerIamDisabled = current.InvokerIamDisabled
+			}
 			return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 				return services.Projects.Locations.Services.Patch(path, desired).Context(ctx).Do(call...)
 			})
@@ -348,17 +366,50 @@ func heldTraffic(current *run.GoogleCloudRunV2Service) []*run.GoogleCloudRunV2Tr
 	return trafficTo(serving, current.Traffic)
 }
 
-func (p *Provider) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) error {
+func (p *Provider) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) (bool, error) {
+	return p.pin(ctx, service, revision, stillActive, true)
+}
+
+func (p *Provider) Restore(ctx context.Context, service, revision string, stillActive router.StillActive) error {
+	_, err := p.pin(ctx, service, revision, stillActive, false)
+	return err
+}
+
+func (p *Provider) pin(ctx context.Context, service, revision string, stillActive router.StillActive, open bool) (bool, error) {
 	if revision == "" {
-		return refusal.Refuse(refusal.CodeInvalid,
+		return false, refusal.Refuse(refusal.CodeInvalid,
 			"%s is asked to serve a revision nothing named, and traffic is pinned to one revision by name", service)
 	}
 	clients, services, err := p.openRun(ctx)
 	if err != nil {
+		return false, err
+	}
+	return p.route(ctx, services, clients.servicePath(service), service,
+		"pin the traffic of "+service+" to "+revision, activeNamed(ctx, revision, stillActive), open)
+}
+
+func (p *Provider) Close(ctx context.Context, service string) error {
+	clients, services, err := p.openRun(ctx)
+	if err != nil {
 		return err
 	}
-	_, _, err = p.route(ctx, services, clients.servicePath(service), service,
-		"pin the traffic of "+service+" to "+revision, activeNamed(ctx, revision, stillActive))
+	path := clients.servicePath(service)
+	err = p.retryWrite(ctx, "close "+service+" to everyone but its invokers", func() error {
+		current, err := p.read(ctx, services, path, service)
+		if err != nil {
+			return err
+		}
+		if !current.InvokerIamDisabled {
+			return nil
+		}
+		closed := &run.GoogleCloudRunV2Service{Etag: current.Etag, ForceSendFields: []string{"InvokerIamDisabled"}}
+		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+			return services.Projects.Locations.Services.Patch(path, closed).UpdateMask(invokerCheckField).Context(ctx).Do(call...)
+		})
+	})
+	if absent(err) {
+		return nil
+	}
 	return err
 }
 
@@ -470,36 +521,37 @@ func (p *Provider) route(
 	services *run.Service,
 	path, service, doing string,
 	choose func(*run.GoogleCloudRunV2Service) (string, error),
-) (*run.GoogleCloudRunV2Service, string, error) {
-	var (
-		latest   *run.GoogleCloudRunV2Service
-		revision string
-	)
+	open bool,
+) (bool, error) {
+	var opened bool
 	err := p.retryWrite(ctx, doing, func() error {
 		current, err := p.read(ctx, services, path, service)
 		if err != nil {
 			return err
 		}
-		latest = current
-		revision, err = choose(current)
+		revision, err := choose(current)
 		if err != nil {
 			return err
 		}
-		if servedBy(current.Traffic, revision) {
+		opening := open && opensOnPromotion(current) && !current.InvokerIamDisabled
+		if servedBy(current.Traffic, revision) && !opening {
 			return nil
 		}
 		routed := &run.GoogleCloudRunV2Service{
 			Etag:    current.Etag,
 			Traffic: trafficTo(revision, current.Traffic),
 		}
+		mask := trafficField
+		if opening {
+			routed.InvokerIamDisabled = true
+			mask += "," + invokerCheckField
+		}
+		opened = opened || opening
 		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-			return services.Projects.Locations.Services.Patch(path, routed).UpdateMask(trafficField).Context(ctx).Do(call...)
+			return services.Projects.Locations.Services.Patch(path, routed).UpdateMask(mask).Context(ctx).Do(call...)
 		})
 	})
-	if err != nil {
-		return nil, "", err
-	}
-	return latest, revision, nil
+	return opened, err
 }
 
 func (p *Provider) read(ctx context.Context, services *run.Service, path, service string) (*run.GoogleCloudRunV2Service, error) {

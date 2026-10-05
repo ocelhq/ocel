@@ -164,7 +164,8 @@ type edgeRecord struct {
 	LoadBalancer LoadBalancer    `json:"loadBalancer,omitzero"`
 	Hosts        map[string]Host `json:"hosts,omitempty"`
 
-	Served map[string]servedRelease `json:"served,omitempty"`
+	Served   map[string]servedRelease `json:"served,omitempty"`
+	Pointers pin.Pointers             `json:"pointers,omitempty"`
 }
 
 type Host struct {

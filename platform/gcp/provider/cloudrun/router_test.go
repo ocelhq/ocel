@@ -22,20 +22,26 @@ import (
 type pinRecorder struct {
 	mu     sync.Mutex
 	pinned []string
+	closed map[string]bool
 	refuse error
 }
 
-func (p *pinRecorder) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) error {
+func (p *pinRecorder) Restore(ctx context.Context, service, revision string, stillActive router.StillActive) error {
+	_, err := p.Pin(ctx, service, revision, stillActive)
+	return err
+}
+
+func (p *pinRecorder) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) (bool, error) {
 	for {
 		p.mu.Lock()
 		read, refused := len(p.pinned), p.refuse
 		p.mu.Unlock()
 		if refused != nil {
-			return refused
+			return false, refused
 		}
 		if stillActive != nil {
 			if err := stillActive(ctx); err != nil {
-				return err
+				return false, err
 			}
 		}
 		p.mu.Lock()
@@ -44,8 +50,10 @@ func (p *pinRecorder) Pin(ctx context.Context, service, revision string, stillAc
 			continue
 		}
 		p.pinned = append(p.pinned, service+"@"+revision)
+		opened := p.closed[service]
+		delete(p.closed, service)
 		p.mu.Unlock()
-		return nil
+		return opened, nil
 	}
 }
 
@@ -56,6 +64,22 @@ func (p *pinRecorder) ReadTag(_ context.Context, _, revision string) (string, er
 func (p *pinRecorder) ReadServing(context.Context, string) (string, error) { return "", nil }
 
 func (p *pinRecorder) Untag(context.Context, string, string) error { return nil }
+
+func (p *pinRecorder) Close(_ context.Context, service string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed == nil {
+		p.closed = map[string]bool{}
+	}
+	p.closed[service] = true
+	return nil
+}
+
+func (p *pinRecorder) isClosed(service string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.closed[service]
+}
 
 func (p *pinRecorder) calls() []string {
 	p.mu.Lock()
@@ -81,7 +105,7 @@ func TestTheCloudRunRouterBehavesAsEveryRouterMust(t *testing.T) {
 				Prior:  router.NewStackState(state),
 				Serving: func(string) string {
 					calls := pins.calls()
-					if len(calls) == 0 {
+					if len(calls) == 0 || pins.isClosed(webService) {
 						return ""
 					}
 					return strings.TrimPrefix(calls[len(calls)-1], webService+"@rev-")

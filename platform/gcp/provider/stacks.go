@@ -115,15 +115,16 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			return nil, err
 		}
 		served := serving{
-			service: service,
-			image:   fn.Image,
-			account: account,
-			compute: provider.ComputeServerless,
-			public:  true,
-			ingress: ingressFor(factsOf(spec.Edge)),
-			memory:  fn.Memory,
-			egress:  p.egressFor(names, spec),
-			tag:     revisionTag(spec),
+			service:          service,
+			image:            fn.Image,
+			account:          account,
+			compute:          provider.ComputeServerless,
+			public:           true,
+			ingress:          ingressFor(factsOf(spec.Edge)),
+			memory:           fn.Memory,
+			egress:           p.egressFor(names, spec),
+			tag:              revisionTag(spec),
+			opensOnPromotion: true,
 		}
 		if servesNext(app) {
 			served = fillNextServingDefaults(served)
@@ -280,6 +281,8 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		ingress:   ingressFor(factsOf(spec.Edge)),
 		egress:    p.egressFor(names, spec),
 		tag:       revisionTag(spec),
+
+		opensOnPromotion: true,
 	}, progress)
 	if err != nil {
 		return nil, err

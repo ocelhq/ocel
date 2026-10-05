@@ -94,9 +94,16 @@ func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 }
 
 type stack struct {
-	e     *Edge
-	state edge.StackState
+	e        *Edge
+	state    edge.StackState
+	recorded record
 }
+
+type record struct {
+	Pointers pin.Pointers `json:"pointers,omitempty"`
+}
+
+func (s *stack) keep() { s.state.Private = edge.Own(s.recorded) }
 
 var (
 	_ edge.Edge      = (*Edge)(nil)
