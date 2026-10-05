@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -21,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -654,8 +656,13 @@ func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStd
 	if !result.GetSuccess() {
 		t.Errorf("result = %v, want the doctor's run to succeed", result)
 	}
-	if !strings.Contains(stdout.String(), "Good to go.") || strings.Contains(stderr.String(), "Good to go.") {
-		t.Errorf("stdout = %q, stream = %q: want the report on stdout and not on the stream", stdout.String(), stderr.String())
+	if strings.Contains(stderr.String(), "Good to go.") {
+		t.Errorf("stream = %q, want the report off the stream", stderr.String())
+	}
+	var report resultv1.DoctorResult
+	clitest.DecodeResultInto(t, stdout.String(), &report)
+	if report.GetVerdict() != resultv1.DoctorVerdict_DOCTOR_VERDICT_PASS {
+		t.Errorf("verdict = %v, want pass", report.GetVerdict())
 	}
 }
 
@@ -751,5 +758,126 @@ export default {
 	}
 	if strings.Contains(got, "preview") {
 		t.Errorf("stderr = %s, want no step begun after the one that failed", got)
+	}
+}
+
+func jsonInvocation() commands.Invocation {
+	invocation := clitest.NewInvocation()
+	invocation.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
+	}
+	return invocation
+}
+
+func TestDoctorAsJSONPrintsEverySectionAndCheckWithAnOverallVerdict(t *testing.T) {
+	project := healthyProject(t)
+	invocation := jsonInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, project.Root, &stdout); err != nil {
+		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var report resultv1.DoctorResult
+	clitest.DecodeResultInto(t, stdout.String(), &report)
+	if report.GetVerdict() != resultv1.DoctorVerdict_DOCTOR_VERDICT_PASS || report.GetProblems() != 0 || report.GetWarnings() != 0 {
+		t.Errorf("report = %v, want a passing verdict with no problems or warnings", &report)
+	}
+	var names []string
+	for _, section := range report.GetSections() {
+		names = append(names, section.GetName())
+	}
+	if want := []string{"Project", "Fake", "Production", "Preview"}; !slices.Equal(names, want) {
+		t.Fatalf("sections = %v, want %v", names, want)
+	}
+	first := report.GetSections()[0]
+	if first.GetIdentity() != "my-shop · ocel.config.ts" {
+		t.Errorf("identity = %q, want the project and its config file", first.GetIdentity())
+	}
+	last := first.GetChecks()[len(first.GetChecks())-1]
+	if last.GetVerdict() != resultv1.DoctorVerdict_DOCTOR_VERDICT_PASS || last.GetText() != "provider default edge" {
+		t.Errorf("last project check = %v, want the passing edge check", last)
+	}
+	if !strings.Contains(stderr.String(), `"summary"`) {
+		t.Errorf("stderr = %q, want the run events", stderr.String())
+	}
+}
+
+func TestDoctorAsJSONWithAFailingCheckStillPrintsAnOkEnvelopeAndExitsOne(t *testing.T) {
+	project := healthyProject(t)
+	project.Provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{}, refusal.Refuse(refusal.CodeDenied, "configure the credential and re-run"))
+	invocation := jsonInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	err := Run(context.Background(), invocation, project.Root, &stdout)
+	if code := exitCode(t, err); code != 1 {
+		t.Fatalf("exit code = %d, want 1; stdout=%s", code, stdout.String())
+	}
+
+	var report resultv1.DoctorResult
+	clitest.DecodeResultInto(t, stdout.String(), &report)
+	if report.GetVerdict() != resultv1.DoctorVerdict_DOCTOR_VERDICT_FAIL || report.GetProblems() != 1 {
+		t.Errorf("report = %v, want a failing verdict with one problem", &report)
+	}
+	var failed *resultv1.DoctorCheck
+	for _, section := range report.GetSections() {
+		if section.GetName() != "Relay" {
+			continue
+		}
+		failed = section.GetChecks()[0]
+	}
+	if failed == nil {
+		t.Fatalf("report = %v, want a Relay section", &report)
+	}
+	if failed.GetVerdict() != resultv1.DoctorVerdict_DOCTOR_VERDICT_FAIL || failed.GetText() != "could not authenticate" || failed.GetFix() != "configure the credential and re-run" {
+		t.Errorf("check = %v, want the failed credential with its fix", failed)
+	}
+}
+
+func TestDoctorAsJSONWithoutAConfigReportsTheFailureAsData(t *testing.T) {
+	invocation := jsonInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	err := Run(context.Background(), invocation, t.TempDir(), &stdout)
+	if code := exitCode(t, err); code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	var report resultv1.DoctorResult
+	clitest.DecodeResultInto(t, stdout.String(), &report)
+	if len(report.GetSections()) != 1 || report.GetSections()[0].GetChecks()[0].GetFix() != "run `ocel init` to set up this project" {
+		t.Errorf("report = %v, want the Project section naming `ocel init`", &report)
+	}
+}
+
+func TestDoctorAsJSONCountsWarningsWithoutFailing(t *testing.T) {
+	var found report
+	s := section{name: "Preview"}
+	s.warn("no preview domain", "run `ocel domain use`")
+	s.neutral("skipped")
+	found.add(s)
+
+	result := found.result()
+	if result.GetVerdict() != resultv1.DoctorVerdict_DOCTOR_VERDICT_WARN || result.GetWarnings() != 1 || result.GetProblems() != 0 {
+		t.Errorf("result = %v, want a warn verdict with one warning", result)
+	}
+	if got := result.GetSections()[0].GetChecks()[1].GetVerdict(); got != resultv1.DoctorVerdict_DOCTOR_VERDICT_NEUTRAL {
+		t.Errorf("neutral check verdict = %v, want neutral", got)
+	}
+}
+
+func TestDoctorHumanOutputIsUnchangedByTheJSONResult(t *testing.T) {
+	project := healthyProject(t)
+	invocation := clitest.NewInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := Run(context.Background(), invocation, project.Root, &stdout); err != nil {
+		t.Fatal(err)
+	}
+	if out := stdout.String(); strings.HasPrefix(out, "{") || !strings.Contains(out, "Good to go.") {
+		t.Errorf("stdout = %q, want the human report", out)
 	}
 }

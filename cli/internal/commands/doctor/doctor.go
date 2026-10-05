@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/progress"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -51,7 +52,13 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 
 func Run(ctx context.Context, invocation commands.Invocation, cwd string, stdout io.Writer) error {
 	found := diagnose(ctx, invocation, cwd)
-	found.render(stdout, terminal.PaletteFor(stdout))
+	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
+		if err := terminal.WriteResultJSON(stdout, found.result()); err != nil {
+			return err
+		}
+	} else {
+		found.render(stdout, terminal.PaletteFor(stdout))
+	}
 	if found.failures() > 0 {
 		return &exitcode.ExitError{Code: 1}
 	}
@@ -712,6 +719,49 @@ func (s section) render(out io.Writer, p terminal.Palette) {
 		if c.fix != "" {
 			fmt.Fprintf(out, "    %s %s\n", p.Faint("→"), p.Commands(c.fix))
 		}
+	}
+}
+
+func (r report) result() *resultv1.DoctorResult {
+	failures, warnings := r.count(verdictFail), r.count(verdictWarn)
+	overall := resultv1.DoctorVerdict_DOCTOR_VERDICT_PASS
+	switch {
+	case failures > 0:
+		overall = resultv1.DoctorVerdict_DOCTOR_VERDICT_FAIL
+	case warnings > 0:
+		overall = resultv1.DoctorVerdict_DOCTOR_VERDICT_WARN
+	}
+	sections := make([]*resultv1.DoctorSection, 0, len(r.sections))
+	for _, s := range r.sections {
+		checks := make([]*resultv1.DoctorCheck, 0, len(s.checks))
+		for _, c := range s.checks {
+			checks = append(checks, &resultv1.DoctorCheck{
+				Verdict: c.verdict.result(),
+				Text:    c.text,
+				Detail:  c.detail,
+				Fix:     c.fix,
+			})
+		}
+		sections = append(sections, &resultv1.DoctorSection{Name: s.name, Identity: s.identity, Checks: checks})
+	}
+	return &resultv1.DoctorResult{
+		Verdict:  overall,
+		Problems: int32(failures),
+		Warnings: int32(warnings),
+		Sections: sections,
+	}
+}
+
+func (v verdict) result() resultv1.DoctorVerdict {
+	switch v {
+	case verdictPass:
+		return resultv1.DoctorVerdict_DOCTOR_VERDICT_PASS
+	case verdictWarn:
+		return resultv1.DoctorVerdict_DOCTOR_VERDICT_WARN
+	case verdictFail:
+		return resultv1.DoctorVerdict_DOCTOR_VERDICT_FAIL
+	default:
+		return resultv1.DoctorVerdict_DOCTOR_VERDICT_NEUTRAL
 	}
 }
 
