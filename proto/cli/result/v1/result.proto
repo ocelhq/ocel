@@ -1,0 +1,90 @@
+syntax = "proto3";
+package cli.result.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1";
+
+import "provider/cost/v1/cost.proto";
+
+message BindingSetResult {
+  string name = 1;
+
+  string owner = 2;
+
+  uint64 version = 3;
+}
+
+message BindingRemoveResult {
+  string name = 1;
+
+  bool removed = 2;
+}
+
+message BindingListResult {
+  repeated BindingEntry bindings = 1;
+}
+
+message BindingGenerateResult {
+  string path = 1;
+
+  repeated BindingEntry bindings = 2;
+}
+
+message BindingEntry {
+  string name = 1;
+
+  string type = 2;
+
+  string source = 3;
+
+  string owner = 4;
+
+  uint64 version = 5;
+}
+
+message DomainStatusResult {
+  bool ready = 1;
+
+  repeated string records_written = 2;
+
+  repeated string manual_records = 3;
+
+  repeated DomainHostStatus hosts = 4;
+}
+
+message DomainHostStatus {
+  string hostname = 1;
+
+  bool declared = 2;
+
+  bool ready = 3;
+
+  string pending = 4;
+
+  string certificate = 5;
+
+  string certificate_status = 6;
+
+  string renewal = 7;
+
+  string expires_at = 8;
+
+  bool expiring_soon = 9;
+
+  repeated string records_written = 10;
+
+  repeated string manual_records = 11;
+
+  string last_probe_at = 12;
+
+  bool last_probe_ok = 13;
+
+  string serving_pointer = 14;
+}
+
+message CostScanResult {
+  provider.cost.v1.ResourceSet resources = 1;
+
+  provider.cost.v1.Estimate estimate = 2;
+
+  repeated string assumptions = 3;
+}
