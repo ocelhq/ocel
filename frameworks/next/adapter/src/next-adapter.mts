@@ -341,7 +341,7 @@ const adapter = {
         key: routeKey,
         original: o.pathname,
         value: {
-          kind: "lambda",
+          kind: "function",
           id: bundleNameOf(entryKey, routeKey),
           entryKey,
           ...(isDocumentRouteKind(routeKinds.get(o.id) ?? o.type) && {
@@ -396,7 +396,7 @@ const adapter = {
       const edgeEntryKey = edgeEntryByOutputId.get(p.parentOutputId);
       if (entryKey === undefined && edgeEntryKey === undefined) {
         throw new Error(
-          `ocel: prerender "${routeKey}" is parented by output "${p.parentOutputId}", which renders on neither a Lambda nor the edge — nothing can regenerate it`,
+          `ocel: prerender "${routeKey}" is parented by output "${p.parentOutputId}", which renders on neither a function nor the edge — nothing can regenerate it`,
         );
       }
 
@@ -428,7 +428,7 @@ const adapter = {
     const isDispatchedErrorPage = (key: string): boolean => {
       const target = dispatch[key];
       if (!target) return false;
-      if (target.kind === "lambda") return target.page === true;
+      if (target.kind === "function") return target.page === true;
       return target.kind === "prerender" || target.kind === "static";
     };
     const firstDispatchedErrorPage = (candidates: string[]): string | undefined =>

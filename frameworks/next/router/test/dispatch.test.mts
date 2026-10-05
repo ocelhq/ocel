@@ -254,7 +254,7 @@ describe("dispatchResult", () => {
           basePath: "",
           pathnames: [],
           routes: {},
-          dispatch: { "/status": { kind: "lambda", id: "/status" } },
+          dispatch: { "/status": { kind: "function", id: "/status" } },
         },
         functionUrls: { "/status": "https://fn.example.com" },
         fetch: (async () =>
@@ -277,18 +277,18 @@ describe("dispatchResult", () => {
     },
   );
 
-  it("strips x-next-cache-tags from a Lambda-forwarded response", async () => {
+  it("strips x-next-cache-tags from a function-forwarded response", async () => {
     const deps = baseDeps({
       manifest: {
         buildId: "t",
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/tags": { kind: "lambda", id: "/tags" } },
+        dispatch: { "/tags": { kind: "function", id: "/tags" } },
       },
       functionUrls: { "/tags": "https://fn.example.com" },
       fetch: (async () =>
-        new Response("from-lambda", {
+        new Response("from-function", {
           status: 200,
           headers: { "x-next-cache-tags": "tag1,tag2", "x-custom": "kept" },
         })) as unknown as typeof fetch,
@@ -301,7 +301,7 @@ describe("dispatchResult", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe("from-lambda");
+    expect(await res.text()).toBe("from-function");
     expect(res.headers.get("x-next-cache-tags")).toBeNull();
     expect(res.headers.get("x-custom")).toBe("kept");
   });
@@ -313,11 +313,11 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/tags": { kind: "lambda", id: "/tags" } },
+        dispatch: { "/tags": { kind: "function", id: "/tags" } },
       },
       functionUrls: { "/tags": "https://fn.example.com" },
       fetch: (async () =>
-        new Response("from-lambda", {
+        new Response("from-function", {
           status: 200,
           headers: { "cache-tag": "r0a1b2c3d|products", "x-custom": "kept" },
         })) as unknown as typeof fetch,
@@ -341,11 +341,11 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/tags": { kind: "lambda", id: "/tags" } },
+        dispatch: { "/tags": { kind: "function", id: "/tags" } },
       },
       functionUrls: { "/tags": "https://fn.example.com" },
       fetch: (async () =>
-        new Response("from-lambda", {
+        new Response("from-function", {
           status: 200,
           headers: {
             "cache-tag": "r0a1b2c3d|products",
@@ -371,7 +371,7 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/tiny": { kind: "lambda", id: "/tiny" } },
+        dispatch: { "/tiny": { kind: "function", id: "/tiny" } },
       },
       functionUrls: { "/tiny": "https://fn.example.com" },
       fetch: (async () => new Response("\n", { status: 200 })) as unknown as typeof fetch,
@@ -386,7 +386,7 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("\n");
   });
 
-  it("forwards a lambda route to its Function URL, preserving path and query", async () => {
+  it("forwards a function route to its function URL, preserving path and query", async () => {
     let captured: Request | undefined;
     const deps = baseDeps({
       manifest: {
@@ -394,12 +394,12 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/api/documents": { kind: "lambda", id: "/api/documents" } },
+        dispatch: { "/api/documents": { kind: "function", id: "/api/documents" } },
       },
       functionUrls: { "/api/documents": "https://fn.example.com" },
       fetch: (async (req: Request) => {
         captured = req;
-        return new Response("from-lambda", { status: 200 });
+        return new Response("from-function", { status: 200 });
       }) as unknown as typeof fetch,
     });
 
@@ -413,11 +413,11 @@ describe("dispatchResult", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe("from-lambda");
+    expect(await res.text()).toBe("from-function");
     expect(captured?.url).toBe("https://fn.example.com/api/documents?q=1");
   });
 
-  it("percent-encodes the request-target characters a Function URL rejects", async () => {
+  it("percent-encodes the request-target characters a function URL rejects", async () => {
     let captured: Request | undefined;
     const deps = baseDeps({
       manifest: {
@@ -425,12 +425,12 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/dynamic/[first]": { kind: "lambda", id: "fn" } },
+        dispatch: { "/dynamic/[first]": { kind: "function", id: "fn" } },
       },
       functionUrls: { fn: "https://fn.example.com" },
       fetch: (async (req: Request) => {
         captured = req;
-        return new Response("from-lambda", { status: 200 });
+        return new Response("from-function", { status: 200 });
       }) as unknown as typeof fetch,
     });
 
@@ -455,12 +455,12 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/favicon.ico": { kind: "lambda", id: "fn" } },
+        dispatch: { "/favicon.ico": { kind: "function", id: "fn" } },
       },
       functionUrls: { fn: "https://fn.example.com" },
       fetch: (async (req: Request) => {
         captured = req;
-        return new Response("from-lambda", { status: 200 });
+        return new Response("from-function", { status: 200 });
       }) as unknown as typeof fetch,
     });
 
@@ -478,7 +478,7 @@ describe("dispatchResult", () => {
     expect(forwarded.search).toBe("?favicon.abc.ico%3Fdpl=123");
   });
 
-  it("leaves an ordinary query untouched on its way to the Function URL", async () => {
+  it("leaves an ordinary query untouched on its way to the function URL", async () => {
     let captured: Request | undefined;
     const deps = baseDeps({
       manifest: {
@@ -486,12 +486,12 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/search": { kind: "lambda", id: "fn" } },
+        dispatch: { "/search": { kind: "function", id: "fn" } },
       },
       functionUrls: { fn: "https://fn.example.com" },
       fetch: (async (req: Request) => {
         captured = req;
-        return new Response("from-lambda", { status: 200 });
+        return new Response("from-function", { status: 200 });
       }) as unknown as typeof fetch,
     });
 
@@ -512,12 +512,12 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/caret": { kind: "lambda", id: "fn" } },
+        dispatch: { "/caret": { kind: "function", id: "fn" } },
       },
       functionUrls: { fn: "https://fn.example.com" },
       fetch: (async (req: Request) => {
         captured = req;
-        return new Response("from-lambda", { status: 200 });
+        return new Response("from-function", { status: 200 });
       }) as unknown as typeof fetch,
     });
 
@@ -541,7 +541,7 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/api/documents": { kind: "lambda", id: "/api/documents" } },
+        dispatch: { "/api/documents": { kind: "function", id: "/api/documents" } },
       },
       functionUrls: { "/api/documents": "https://fn.example.com" },
       fetch: (async (req: Request) => {
@@ -576,7 +576,7 @@ describe("dispatchResult", () => {
         routes: {},
         dispatch: {
           "/api/documents": {
-            kind: "lambda",
+            kind: "function",
             id: "/api/documents",
             entryKey: "/api/documents",
           },
@@ -617,7 +617,7 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/api/documents": { kind: "lambda", id: "/api/documents" } },
+        dispatch: { "/api/documents": { kind: "function", id: "/api/documents" } },
       },
       functionUrls: { "/api/documents": "https://fn.example.com" },
       fetch: (async (req: Request) => {
@@ -642,7 +642,7 @@ describe("dispatchResult", () => {
     expect(await captured?.text()).toBe(payload);
   });
 
-  it("forwards a lambda route through originFetch (signed), not plain fetch", async () => {
+  it("forwards a function route through originFetch (signed), not plain fetch", async () => {
     let signedUrl: string | undefined;
     let plainCalled = false;
     const deps = baseDeps({
@@ -651,7 +651,7 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/api/documents": { kind: "lambda", id: "/api/documents" } },
+        dispatch: { "/api/documents": { kind: "function", id: "/api/documents" } },
       },
       functionUrls: { "/api/documents": "https://fn.example.com" },
       fetch: (async () => {
@@ -688,7 +688,7 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/api/documents": { kind: "lambda", id: "/api/documents" } },
+        dispatch: { "/api/documents": { kind: "function", id: "/api/documents" } },
       },
       functionUrls: { "/api/documents": `http://127.0.0.1:${port}` },
     });
@@ -738,14 +738,14 @@ describe("dispatchResult", () => {
     expect(signedCalled).toBe(false);
   });
 
-  it("returns 502 when a lambda route has no Function URL", async () => {
+  it("returns 502 when a function route has no function URL", async () => {
     const deps = baseDeps({
       manifest: {
         buildId: "t",
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/api/x": { kind: "lambda", id: "/api/x" } },
+        dispatch: { "/api/x": { kind: "function", id: "/api/x" } },
       },
       functionUrls: {},
     });
@@ -757,6 +757,28 @@ describe("dispatchResult", () => {
     );
 
     expect(res.status).toBe(502);
+  });
+
+  it("refuses a route whose target kind it does not know rather than serving a static asset", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/ssr": { kind: "lambda", id: "/ssr" } as never },
+      },
+      functionUrls: { "/ssr": "https://fn.example" },
+      assetStore: assetStoreServing({ "/ssr": "a static file" }),
+    });
+
+    await expect(
+      dispatchResult(
+        { resolvedPathname: "/ssr", invocationTarget: { pathname: "/ssr" } },
+        new Request("https://app.example/ssr"),
+        deps,
+      ),
+    ).rejects.toThrow(/"\/ssr".*"lambda"/);
   });
 
   it("falls back to the R2 asset store when the path is not in the manifest", async () => {
@@ -853,14 +875,14 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("asset");
   });
 
-  it("answers a middleware-prefetch probe against a resolved lambda page with a 200 stub, never invoking the lambda", async () => {
+  it("answers a middleware-prefetch probe against a resolved function page with a 200 stub, never invoking the function", async () => {
     const deps = baseDeps({
       manifest: {
         buildId: "test",
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/dashboard": { kind: "lambda", id: "/dashboard" } },
+        dispatch: { "/dashboard": { kind: "function", id: "/dashboard" } },
       },
       functionUrls: { "/dashboard": "https://fn.example.com" },
       fetch: (async () => {
@@ -1153,7 +1175,7 @@ describe("dispatchResult", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/posts/[id]": { kind: "lambda", id: "/posts/[id]" } },
+        dispatch: { "/posts/[id]": { kind: "function", id: "/posts/[id]" } },
       },
       functionUrls: { "/posts/[id]": "https://fn.example.com" },
       fetch: (async () => new Response("ok", { status: 200 })) as unknown as typeof fetch,
@@ -1406,7 +1428,7 @@ describe("the service-worker chunk", () => {
 });
 
 describe("data-request invocation pathname", () => {
-  function lambdaDeps(manifest: Partial<RouteDeps["manifest"]> = {}): {
+  function functionDeps(manifest: Partial<RouteDeps["manifest"]> = {}): {
     deps: RouteDeps;
     invoked: () => URL;
   } {
@@ -1417,7 +1439,7 @@ describe("data-request invocation pathname", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/[...route]": { kind: "lambda", id: "fn", entryKey: "e" } },
+        dispatch: { "/[...route]": { kind: "function", id: "fn", entryKey: "e" } },
         ...manifest,
       },
       functionUrls: { fn: "https://fn.example.com" },
@@ -1429,8 +1451,8 @@ describe("data-request invocation pathname", () => {
     return { deps, invoked: () => captured! };
   }
 
-  it("forwards a _next/data request to the lambda under its data pathname", async () => {
-    const { deps, invoked } = lambdaDeps();
+  it("forwards a _next/data request to the function under its data pathname", async () => {
+    const { deps, invoked } = functionDeps();
 
     await dispatchResult(
       {
@@ -1445,7 +1467,7 @@ describe("data-request invocation pathname", () => {
   });
 
   it("keeps the locale prefix on a data pathname", async () => {
-    const { deps, invoked } = lambdaDeps();
+    const { deps, invoked } = functionDeps();
 
     await dispatchResult(
       {
@@ -1460,7 +1482,7 @@ describe("data-request invocation pathname", () => {
   });
 
   it("maps the root invocation pathname back to index.json", async () => {
-    const { deps, invoked } = lambdaDeps();
+    const { deps, invoked } = functionDeps();
 
     await dispatchResult(
       { resolvedPathname: "/[...route]", invocationTarget: { pathname: "/" } },
@@ -1472,7 +1494,7 @@ describe("data-request invocation pathname", () => {
   });
 
   it("drops a trailingSlash app's trailing slash from the data pathname", async () => {
-    const { deps, invoked } = lambdaDeps();
+    const { deps, invoked } = functionDeps();
 
     await dispatchResult(
       {
@@ -1487,7 +1509,7 @@ describe("data-request invocation pathname", () => {
   });
 
   it("wraps the data pathname under the app's basePath", async () => {
-    const { deps, invoked } = lambdaDeps({ basePath: "/docs" });
+    const { deps, invoked } = functionDeps({ basePath: "/docs" });
 
     await dispatchResult(
       {
@@ -1502,7 +1524,7 @@ describe("data-request invocation pathname", () => {
   });
 
   it("does not treat a lookalike prefix as the app's basePath", async () => {
-    const { deps, invoked } = lambdaDeps({ basePath: "/docs" });
+    const { deps, invoked } = functionDeps({ basePath: "/docs" });
 
     await dispatchResult(
       {
@@ -1578,7 +1600,7 @@ describe("data-request invocation pathname", () => {
   });
 
   it("preserves the query string of a data request", async () => {
-    const { deps, invoked } = lambdaDeps();
+    const { deps, invoked } = functionDeps();
 
     await dispatchResult(
       {
@@ -1594,7 +1616,7 @@ describe("data-request invocation pathname", () => {
   });
 
   it("forwards the query resolveRoutes merged onto invocationTarget, not just the client's own search string", async () => {
-    const { deps, invoked } = lambdaDeps();
+    const { deps, invoked } = functionDeps();
 
     await dispatchResult(
       {
@@ -1612,7 +1634,7 @@ describe("data-request invocation pathname", () => {
   });
 
   it("falls back to the client's own search string when invocationTarget has no query", async () => {
-    const { deps, invoked } = lambdaDeps();
+    const { deps, invoked } = functionDeps();
 
     await dispatchResult(
       {
@@ -1627,7 +1649,7 @@ describe("data-request invocation pathname", () => {
   });
 
   it("leaves a document request's invocation pathname untouched", async () => {
-    const { deps, invoked } = lambdaDeps();
+    const { deps, invoked } = functionDeps();
 
     await dispatchResult(
       {
@@ -1678,7 +1700,7 @@ describe("data-request invocation pathname", () => {
 });
 
 describe("x-nextjs-data on the origin forward", () => {
-  function lambdaDeps(): { deps: RouteDeps; headers: () => Headers } {
+  function functionDeps(): { deps: RouteDeps; headers: () => Headers } {
     let captured: Headers | undefined;
     const deps = baseDeps({
       manifest: {
@@ -1686,7 +1708,7 @@ describe("x-nextjs-data on the origin forward", () => {
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/[...route]": { kind: "lambda", id: "fn", entryKey: "e" } },
+        dispatch: { "/[...route]": { kind: "function", id: "fn", entryKey: "e" } },
       },
       functionUrls: { fn: "https://fn.example.com" },
       fetch: (async (req: Request) => {
@@ -1698,7 +1720,7 @@ describe("x-nextjs-data on the origin forward", () => {
   }
 
   it("stamps x-nextjs-data on a genuine data request's origin forward", async () => {
-    const { deps, headers } = lambdaDeps();
+    const { deps, headers } = functionDeps();
 
     await dispatchResult(
       {
@@ -1713,7 +1735,7 @@ describe("x-nextjs-data on the origin forward", () => {
   });
 
   it("does not stamp it on a document request's origin forward", async () => {
-    const { deps, headers } = lambdaDeps();
+    const { deps, headers } = functionDeps();
 
     await dispatchResult(
       {
@@ -1814,7 +1836,7 @@ describe("an afterFiles rewrite shadowed by a dynamic route", () => {
           fallback: [],
         },
         dispatch: {
-          "/ssr-page": { kind: "lambda", id: "/ssr-page" },
+          "/ssr-page": { kind: "function", id: "/ssr-page" },
           "/[id]": { kind: "static" },
         },
       },
@@ -1935,8 +1957,8 @@ describe("a concrete route shadowed by a dynamic sibling", () => {
           fallback: [],
         } as unknown as RouteDeps["manifest"]["routes"],
         dispatch: {
-          "/api/hello": { kind: "lambda", id: "/api/hello" },
-          "/api/[id]": { kind: "lambda", id: "/api/[id]" },
+          "/api/hello": { kind: "function", id: "/api/hello" },
+          "/api/[id]": { kind: "function", id: "/api/[id]" },
         },
       },
       functionUrls: {
@@ -1985,9 +2007,9 @@ describe("a concrete route shadowed by a dynamic sibling", () => {
           fallback: [],
         } as unknown as RouteDeps["manifest"]["routes"],
         dispatch: {
-          "/": { kind: "lambda", id: "/" },
-          "/_next/data/t/index.json": { kind: "lambda", id: "/" },
-          "/[id]": { kind: "lambda", id: "/[id]" },
+          "/": { kind: "function", id: "/" },
+          "/_next/data/t/index.json": { kind: "function", id: "/" },
+          "/[id]": { kind: "function", id: "/[id]" },
         },
       },
       functionUrls: {
@@ -2069,7 +2091,7 @@ describe("a concrete route shadowed by a dynamic sibling", () => {
           onMatch: [],
           fallback: [],
         } as unknown as RouteDeps["manifest"]["routes"],
-        dispatch: { "/": { kind: "lambda", id: "/" } },
+        dispatch: { "/": { kind: "function", id: "/" } },
       },
       functionUrls: { "/": "https://root.example.com" },
       fetch: (async (req: Request) => {
@@ -2110,8 +2132,8 @@ describe("the origin URL under a config rewrite", () => {
           fallback: [],
         },
         dispatch: {
-          "/blog/[post]": { kind: "lambda", id: "blog" },
-          "/rewrite-target": { kind: "lambda", id: "target" },
+          "/blog/[post]": { kind: "function", id: "blog" },
+          "/rewrite-target": { kind: "function", id: "target" },
         },
         ...overrides,
       },
@@ -2195,9 +2217,9 @@ describe("custom error page substitution", () => {
         pathnames: ["/not-found", "/404", "/500"],
         routes: {},
         dispatch: {
-          "/not-found": { kind: "lambda", id: "page", entryKey: "/not-found", page: true },
-          "/404": { kind: "lambda", id: "page", entryKey: "/404", page: true },
-          "/500": { kind: "lambda", id: "page", entryKey: "/500", page: true },
+          "/not-found": { kind: "function", id: "page", entryKey: "/not-found", page: true },
+          "/404": { kind: "function", id: "page", entryKey: "/404", page: true },
+          "/500": { kind: "function", id: "page", entryKey: "/500", page: true },
         },
         errorRoutes: { notFound: "/404", serverError: "/500" },
       },
@@ -2299,8 +2321,8 @@ describe("custom error page substitution", () => {
         pathnames: ["/api/missing", "/404"],
         routes: {},
         dispatch: {
-          "/api/missing": { kind: "lambda", id: "api", entryKey: "/api/missing" },
-          "/404": { kind: "lambda", id: "page", entryKey: "/404", page: true },
+          "/api/missing": { kind: "function", id: "api", entryKey: "/api/missing" },
+          "/404": { kind: "function", id: "page", entryKey: "/404", page: true },
         },
         errorRoutes: { notFound: "/404" },
       },
@@ -2338,7 +2360,7 @@ describe("custom error page substitution", () => {
     expect(await res.text()).toBe('<html id="__next_error__">origin error boundary</html>');
   });
 
-  it("passes through an origin 404 from a matched lambda+page target that already rendered a document", async () => {
+  it("passes through an origin 404 from a matched function+page target that already rendered a document", async () => {
     const deps = errorPageDeps(
       () =>
         new Response('<html id="__next_error__">route-specific not found</html>', {
@@ -2379,7 +2401,7 @@ describe("custom error page substitution", () => {
         pathnames: ["/not-found", "/500"],
         routes: {},
         dispatch: {
-          "/not-found": { kind: "lambda", id: "page", entryKey: "/not-found", page: true },
+          "/not-found": { kind: "function", id: "page", entryKey: "/not-found", page: true },
           "/500": { kind: "static" },
         },
         errorRoutes: { serverError: "/500" },
@@ -2417,7 +2439,7 @@ describe("not-found for an unresolved pathname under a flight header", () => {
           dispatch: {
             "/404": { kind: "static" },
             "/_not-found": {
-              kind: "lambda",
+              kind: "function",
               id: "page",
               entryKey: "/_not-found",
               page: true,
@@ -2504,7 +2526,7 @@ describe("not-found fallback for unmatched pathnames", () => {
         pathnames: ["/404"],
         routes: {},
         dispatch: {
-          "/404": { kind: "lambda", id: "page", entryKey: "/404", page: true },
+          "/404": { kind: "function", id: "page", entryKey: "/404", page: true },
         },
         errorRoutes: { notFound: "/404" },
       },
@@ -2548,7 +2570,7 @@ describe("not-found fallback for unmatched pathnames", () => {
         pathnames: ["/404"],
         routes: {},
         dispatch: {
-          "/404": { kind: "lambda", id: "page", entryKey: "/404", page: true },
+          "/404": { kind: "function", id: "page", entryKey: "/404", page: true },
         },
         errorRoutes: { notFound: "/404" },
       },
@@ -2581,7 +2603,7 @@ describe("not-found fallback for unmatched pathnames", () => {
         pathnames: ["/404"],
         routes: {},
         dispatch: {
-          "/404": { kind: "lambda", id: "page", entryKey: "/404", page: true },
+          "/404": { kind: "function", id: "page", entryKey: "/404", page: true },
         },
         errorRoutes: { notFound: "/404" },
       },
@@ -2612,7 +2634,7 @@ describe("not-found fallback for unmatched pathnames", () => {
         pathnames: ["/base/404"],
         routes: {},
         dispatch: {
-          "/base/404": { kind: "lambda", id: "page", entryKey: "/base/404", page: true },
+          "/base/404": { kind: "function", id: "page", entryKey: "/base/404", page: true },
         },
         errorRoutes: { notFound: "/base/404" },
       },
@@ -2650,7 +2672,7 @@ describe("not-found fallback for unmatched pathnames", () => {
           fallback: [],
         },
         dispatch: {
-          "/404": { kind: "lambda", id: "page", entryKey: "/404", page: true },
+          "/404": { kind: "function", id: "page", entryKey: "/404", page: true },
           "/dashboard": { kind: "static" },
         },
         errorRoutes: { notFound: "/404" },
@@ -2708,7 +2730,7 @@ describe("nested dynamic params with a prefix-colliding name", () => {
           onMatch: [],
           fallback: [],
         } as unknown as RouteDeps["manifest"]["routes"],
-        dispatch: { "/[id]/[id2]": { kind: "lambda", id: "page" } },
+        dispatch: { "/[id]/[id2]": { kind: "function", id: "page" } },
       },
       functionUrls: { page: "https://page.example.com" },
       fetch: (async (req: Request) => {
@@ -2725,18 +2747,18 @@ describe("nested dynamic params with a prefix-colliding name", () => {
 });
 
 describe("the tier a dispatched render is stamped with", () => {
-  it("stamps a lambda render a MISS and passes the origin's cache-control through", async () => {
+  it("stamps a function render a MISS and passes the origin's cache-control through", async () => {
     const deps = baseDeps({
       manifest: {
         buildId: "t",
         basePath: "",
         pathnames: [],
         routes: {},
-        dispatch: { "/profile": { kind: "lambda", id: "/profile" } },
+        dispatch: { "/profile": { kind: "function", id: "/profile" } },
       },
       functionUrls: { "/profile": "https://fn.example.com" },
       fetch: (async () =>
-        new Response("from-lambda", {
+        new Response("from-function", {
           status: 200,
           headers: { "cache-control": "s-maxage=60, stale-while-revalidate" },
         })) as unknown as typeof fetch,
@@ -2750,7 +2772,7 @@ describe("the tier a dispatched render is stamped with", () => {
 
     expect(res.headers.get("x-ocel-cache")).toBe("MISS");
     expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate");
-    expect(await res.text()).toBe("from-lambda");
+    expect(await res.text()).toBe("from-function");
   });
 
   it("stamps an edge render a MISS and passes the origin's cache-control through", async () => {

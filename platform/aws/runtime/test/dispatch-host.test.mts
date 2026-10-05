@@ -41,9 +41,9 @@ const manifest: RoutingManifest = {
   pathnames: ["/local", "/keyless", "/sibling"],
   routes: emptyRoutes,
   dispatch: {
-    "/local": { kind: "lambda", id: LOCAL_BUNDLE, entryKey: "/local" },
-    "/keyless": { kind: "lambda", id: LOCAL_BUNDLE },
-    "/sibling": { kind: "lambda", id: SIBLING_BUNDLE, entryKey: "/sibling" },
+    "/local": { kind: "function", id: LOCAL_BUNDLE, entryKey: "/local" },
+    "/keyless": { kind: "function", id: LOCAL_BUNDLE },
+    "/sibling": { kind: "function", id: SIBLING_BUNDLE, entryKey: "/sibling" },
   },
 };
 

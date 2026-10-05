@@ -288,7 +288,7 @@ describe("self-revalidation suppression", () => {
           basePath: "",
           pathnames: [],
           routes: {},
-          dispatch: { "/api/hook": { kind: "lambda", id: "/api/hook" } },
+          dispatch: { "/api/hook": { kind: "function", id: "/api/hook" } },
         },
         functionUrls: { "/api/hook": "https://fn.example.com" },
         slug: "p1",

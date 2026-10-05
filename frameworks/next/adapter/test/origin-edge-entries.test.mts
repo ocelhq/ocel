@@ -70,7 +70,7 @@ test("dispatches a waived edge route to the bundle that contains its compiled en
   });
 
   expect(app.manifest.dispatch["/api/edge"]).toEqual({
-    kind: "lambda",
+    kind: "function",
     id: app.manifest.middleware!.id,
     entryKey: "middleware_app/api/edge/route",
   });

@@ -71,9 +71,9 @@ function i18nDeps(
         ...Object.fromEntries(unlocalized.map((p) => [p, { kind: "static" as const }])),
         [page("/en/about")]: { kind: "static" },
         [page("/fr/about")]: { kind: "static" },
-        [page("/en/posts/[slug]")]: { kind: "lambda", id: "posts" },
-        [page("/fr/posts/[slug]")]: { kind: "lambda", id: "posts" },
-        "/api/hello": { kind: "lambda", id: "api" },
+        [page("/en/posts/[slug]")]: { kind: "function", id: "posts" },
+        [page("/fr/posts/[slug]")]: { kind: "function", id: "posts" },
+        "/api/hello": { kind: "function", id: "api" },
         "/_next/static/x.js": { kind: "static" },
       },
     },
@@ -281,7 +281,7 @@ describe("pages-router i18n", () => {
     deps.manifest.pathnames = deps.manifest.pathnames.filter((p) => p !== "/fr");
     delete deps.manifest.dispatch["/fr"];
     deps.manifest.pathnames.push("/fr/[[...slug]]");
-    deps.manifest.dispatch["/fr/[[...slug]]"] = { kind: "lambda", id: "posts" };
+    deps.manifest.dispatch["/fr/[[...slug]]"] = { kind: "function", id: "posts" };
     deps.fetch = (async (input: Request) => {
       searches.push(new URL(input.url).search);
       return new Response("origin", { status: 200 });
@@ -301,7 +301,7 @@ describe("pages-router i18n", () => {
       destination: "/$nextLocale/[[...slug]]?nxtPslug=$nxtPslug",
     });
     deps.manifest.pathnames.push("/fr/[[...slug]]");
-    deps.manifest.dispatch["/fr/[[...slug]]"] = { kind: "lambda", id: "posts" };
+    deps.manifest.dispatch["/fr/[[...slug]]"] = { kind: "function", id: "posts" };
     deps.fetch = (async (input: Request) => {
       searches.push(new URL(input.url).search);
       return new Response("origin", { status: 200 });
@@ -382,7 +382,7 @@ describe("pages-router i18n", () => {
     const deps = i18nDeps();
     deps.manifest.pathnames.push("/_next/data/b1/en/about.json");
     deps.manifest.dispatch["/_next/data/b1/en/about.json"] = {
-      kind: "lambda",
+      kind: "function",
       id: "posts",
     };
     (deps.manifest.routes as { shouldNormalizeNextData?: boolean }).shouldNormalizeNextData = true;

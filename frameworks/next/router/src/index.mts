@@ -741,7 +741,7 @@ async function dispatch(result: RouteResult, request: Request, deps: RouteDeps):
     return notFoundResponse(request, url, result, headers, deps, staticAsset, staticAsset);
   }
 
-  if (target.kind === "lambda") {
+  if (target.kind === "function") {
     const probe = middlewarePrefetchProbe(request, url.pathname, manifest);
     if (probe) return probe;
   }
@@ -758,7 +758,7 @@ async function dispatch(result: RouteResult, request: Request, deps: RouteDeps):
     deps,
     staticAsset,
   );
-  return target.kind === "lambda" && target.page
+  return target.kind === "function" && target.page
     ? substituteErrorPage(response, request, url, headers, manifest, deps)
     : response;
 }
@@ -801,7 +801,7 @@ async function renderDispatchTarget(
       return isFlightRequest(request.headers) ? withFlightVary(response) : response;
     }
 
-    case "lambda": {
+    case "function": {
       const fnUrl = functionUrls[target.id];
       if (!fnUrl) return noFunctionUrl(target.id);
       return withStatus(
@@ -830,8 +830,12 @@ async function renderDispatchTarget(
       );
     }
 
-    default:
-      return staticAsset();
+    default: {
+      const unknown: never = target;
+      throw new Error(
+        `ocel: the routing manifest dispatches "${result.resolvedPathname}" to target kind "${(unknown as { kind: unknown }).kind}", which this router does not serve`,
+      );
+    }
   }
 }
 
@@ -856,7 +860,7 @@ async function notFoundResponse(
   const notFoundPathname = notFoundRoute(request, deps.manifest);
   const notFoundTarget = notFoundPathname ? deps.manifest.dispatch[notFoundPathname] : undefined;
   if (!notFoundPathname || !notFoundTarget) return fallback();
-  if (notFoundTarget.kind === "lambda" && !deps.functionUrls[notFoundTarget.id]) {
+  if (notFoundTarget.kind === "function" && !deps.functionUrls[notFoundTarget.id]) {
     return fallback();
   }
 
@@ -912,7 +916,7 @@ async function substituteErrorPage(
   if (!errorPathname) return response;
   const errorTarget = manifest.dispatch[errorPathname];
   if (!errorTarget) return response;
-  if (errorTarget.kind === "lambda" && !deps.functionUrls[errorTarget.id]) {
+  if (errorTarget.kind === "function" && !deps.functionUrls[errorTarget.id]) {
     return response;
   }
 

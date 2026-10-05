@@ -47,7 +47,7 @@ export interface ImageConfig {
 export type DispatchTarget =
   | { kind: "static" }
   | {
-      kind: "lambda";
+      kind: "function";
       id: string;
       entryKey?: string;
       parent?: string;

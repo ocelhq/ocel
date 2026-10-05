@@ -324,8 +324,8 @@ describe("the resolved path is what keys the response", () => {
     });
   });
 
-  describe("a lambda route, forwarded to its Function URL", () => {
-    function lambdaScenario(overrides: Partial<Scenario> & { route: string }): {
+  describe("a function route, forwarded to its function URL", () => {
+    function functionScenario(overrides: Partial<Scenario> & { route: string }): {
       scenario: Scenario;
       forwarded: () => Request | undefined;
     } {
@@ -335,7 +335,7 @@ describe("the resolved path is what keys the response", () => {
         forwarded: () => captured,
         scenario: {
           pages: [route],
-          dispatch: { [route]: { kind: "lambda", id: "fn", entryKey: "page:ssr" } },
+          dispatch: { [route]: { kind: "function", id: "fn", entryKey: "page:ssr" } },
           functionUrls: { fn: "https://fn.example.com" },
           fetch: (async (input: Request) => {
             captured = input;
@@ -347,7 +347,7 @@ describe("the resolved path is what keys the response", () => {
     }
 
     it("forwards /ssr/ with its slash intact under trailingSlash: true", async () => {
-      const { scenario, forwarded } = lambdaScenario({
+      const { scenario, forwarded } = functionScenario({
         route: "/ssr",
         trailingSlash: true,
       });
@@ -364,7 +364,7 @@ describe("the resolved path is what keys the response", () => {
     });
 
     it("308s /ssr to /ssr/ under trailingSlash: true without forwarding", async () => {
-      const { scenario, forwarded } = lambdaScenario({
+      const { scenario, forwarded } = functionScenario({
         route: "/ssr",
         trailingSlash: true,
       });
@@ -377,7 +377,7 @@ describe("the resolved path is what keys the response", () => {
     });
 
     it("forwards /ssr on the same path under trailingSlash: false", async () => {
-      const { scenario, forwarded } = lambdaScenario({ route: "/ssr" });
+      const { scenario, forwarded } = functionScenario({ route: "/ssr" });
 
       const res = await serve(get("/ssr"), deps(scenario));
 
@@ -390,7 +390,7 @@ describe("the resolved path is what keys the response", () => {
     });
 
     it("forwards /docs/ssr/ with its slash intact under a basePath", async () => {
-      const { scenario, forwarded } = lambdaScenario({
+      const { scenario, forwarded } = functionScenario({
         route: "/docs/ssr",
         trailingSlash: true,
         basePath: "/docs",
