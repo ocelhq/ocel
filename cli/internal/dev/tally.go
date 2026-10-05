@@ -1,6 +1,7 @@
 package dev
 
 import (
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -54,6 +55,7 @@ func (t *tally) end(final error) {
 	}
 	t.noteError(final)
 	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.record(telemetry.DevSession{Duration: time.Since(t.started), Reloads: t.reloads, ResourceKinds: t.kinds, ErrorCodes: t.codes})
+	session := telemetry.DevSession{Duration: time.Since(t.started), Reloads: t.reloads, ResourceKinds: slices.Clone(t.kinds), ErrorCodes: maps.Clone(t.codes)}
+	t.mu.Unlock()
+	t.record(session)
 }
