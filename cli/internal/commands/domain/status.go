@@ -163,6 +163,26 @@ func outstandingHosts(resp *contractv1.GetHostnameStatusResponse) string {
 	return strings.Join(pending, "; ")
 }
 
+func domainHostStatus(host *contractv1.ProductionHostname) *resultv1.DomainHostStatus {
+	cert := host.GetCertificate()
+	return &resultv1.DomainHostStatus{
+		Hostname:          host.GetHostname(),
+		Declared:          host.GetDeclared(),
+		Ready:             host.GetReady(),
+		Pending:           host.GetPending(),
+		CertificateId:     cert.GetCertificateId(),
+		CertificateStatus: cert.GetCertificateStatus(),
+		RenewalStatus:     host.GetRenewalStatus(),
+		ExpiresAt:         terminal.EpochRFC3339(host.GetExpiresAt()),
+		ExpiringSoon:      host.GetExpiringSoon(),
+		RecordsWritten:    cert.GetRecordsWritten(),
+		ManualRecords:     cert.GetManualRecords(),
+		LastProbeAt:       terminal.EpochRFC3339(cert.GetLastProbeAt()),
+		LastProbeOk:       cert.GetLastProbeOk(),
+		ServingPointer:    host.GetServingPointer(),
+	}
+}
+
 func writeDomainStatusJSON(out io.Writer, resp *contractv1.GetHostnameStatusResponse) error {
 	result := &resultv1.DomainStatusResult{
 		Ready:          resp.GetReady(),
@@ -171,23 +191,7 @@ func writeDomainStatusJSON(out io.Writer, resp *contractv1.GetHostnameStatusResp
 		Hosts:          make([]*resultv1.DomainHostStatus, 0, len(resp.GetHostnames())),
 	}
 	for _, host := range resp.GetHostnames() {
-		cert := host.GetCertificate()
-		result.Hosts = append(result.Hosts, &resultv1.DomainHostStatus{
-			Hostname:          host.GetHostname(),
-			Declared:          host.GetDeclared(),
-			Ready:             host.GetReady(),
-			Pending:           host.GetPending(),
-			CertificateId:     cert.GetCertificateId(),
-			CertificateStatus: cert.GetCertificateStatus(),
-			RenewalStatus:     host.GetRenewalStatus(),
-			ExpiresAt:         terminal.EpochRFC3339(host.GetExpiresAt()),
-			ExpiringSoon:      host.GetExpiringSoon(),
-			RecordsWritten:    cert.GetRecordsWritten(),
-			ManualRecords:     cert.GetManualRecords(),
-			LastProbeAt:       terminal.EpochRFC3339(cert.GetLastProbeAt()),
-			LastProbeOk:       cert.GetLastProbeOk(),
-			ServingPointer:    host.GetServingPointer(),
-		})
+		result.Hosts = append(result.Hosts, domainHostStatus(host))
 	}
 	return terminal.WriteResultJSON(out, result)
 }
