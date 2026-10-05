@@ -181,6 +181,8 @@ func WarmRevisions(ctx context.Context, warm Warm, records map[string]router.Dep
 	}
 }
 
+var ErrRevisionServed = errors.New("the service serves this revision again")
+
 var errRepinned = errors.New("another promotion pinned this service since")
 
 func stillPinned(pins Pins, each pinned) router.StillActive {
@@ -205,19 +207,19 @@ func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error 
 			continue
 		}
 		if serving, err := pins.ReadServing(ctx, each.service); err == nil && serving != each.revision {
-			if err := pins.RecordRollback(ctx, each.service, each.revision, owed); err != nil {
-				left = append(left, each.service+" is put back on "+each.revision+" if the promotion that pinned it since fails")
+			if recorded := recordRollback(ctx, pins, each, owed, &left); recorded {
+				continue
 			}
-			continue
 		}
 		if owed.Opened {
-			if err := pins.Close(ctx, each.service, stillPinned(pins, each)); err != nil {
-				if errors.Is(err, errRepinned) {
-					if err := pins.RecordRollback(ctx, each.service, each.revision, owed); err != nil {
-						left = append(left, each.service+" is put back on "+each.revision+" if the promotion that pinned it since fails")
-					}
+			err := pins.Close(ctx, each.service, stillPinned(pins, each))
+			if errors.Is(err, errRepinned) {
+				if recorded := recordRollback(ctx, pins, each, owed, &left); recorded {
 					continue
 				}
+				err = pins.Close(ctx, each.service, stillPinned(pins, each))
+			}
+			if err != nil && !errors.Is(err, errRepinned) {
 				left = append(left, each.service+" answers everyone on "+each.revision)
 				continue
 			}
@@ -240,6 +242,17 @@ func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error 
 	}
 	return fmt.Errorf("%w; the services this promotion had already pinned could not all be put back, so %s, while every other service serves what it served before",
 		cause, strings.Join(left, ", "))
+}
+
+func recordRollback(ctx context.Context, pins Pins, each pinned, owed Rollback, left *[]string) bool {
+	err := pins.RecordRollback(ctx, each.service, each.revision, owed)
+	if errors.Is(err, ErrRevisionServed) {
+		return false
+	}
+	if err != nil {
+		*left = append(*left, each.service+" is put back on "+each.revision+" if the promotion that pinned it since fails")
+	}
+	return true
 }
 
 func readOwed(ctx context.Context, pins Pins, each pinned) (Rollback, error) {
