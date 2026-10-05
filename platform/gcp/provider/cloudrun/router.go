@@ -92,13 +92,13 @@ func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRe
 func (r routerStack) Destroy(context.Context) error { return nil }
 
 func (r routerStack) serveDeployment(ctx context.Context, move router.PointerMove) error {
-	tags := pin.Tags{}
+	served := pin.Tags{}
 	for _, app := range slices.Sorted(maps.Keys(move.Records)) {
-		read, err := pin.ReadTags(ctx, r.s.e.pins, move.Records[app])
+		tags, err := pin.ReadTags(ctx, r.s.e.pins, move.Records[app])
 		if err != nil {
 			return router.Unserved{Err: err}
 		}
-		maps.Copy(tags, read)
+		maps.Copy(served, tags)
 	}
 	if err := move.RefuseInactive(ctx); err != nil {
 		return err
@@ -107,7 +107,7 @@ func (r routerStack) serveDeployment(ctx context.Context, move router.PointerMov
 	if deployments == nil {
 		deployments = map[string]pin.Tags{}
 	}
-	deployments[move.Pointer] = tags
+	deployments[move.Pointer] = served
 	r.s.recorded.Deployments = deployments
 	r.s.keep()
 	return nil
