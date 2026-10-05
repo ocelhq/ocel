@@ -51,12 +51,12 @@ describe("the fixtures and variants a run narrows to", () => {
     });
   });
 
-  it("takes comma-separated fixtures and space- or comma-separated variants", () => {
+  it("takes fixtures and variants separated by spaces or commas", () => {
     const filter = filterFrom({
-      OCEL_E2E_FIXTURES: " sdk/node,deploy/next ",
+      OCEL_E2E_FIXTURES: " sdk/node deploy/next,kv/node ",
       OCEL_E2E_VARIANTS: "default cloudflare,container",
     });
-    expect(filter.fixtures).toEqual(["sdk/node", "deploy/next"]);
+    expect(filter.fixtures).toEqual(["sdk/node", "deploy/next", "kv/node"]);
     expect(filter.variants).toEqual(["default", "cloudflare", "container"]);
   });
 });
