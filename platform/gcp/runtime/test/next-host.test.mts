@@ -1,3 +1,4 @@
+import { refuseIncompleteHost } from "@framework/next-runtime/host";
 import { expect, test } from "vitest";
 import { newGcpNextHost } from "../src/next/next-host.mjs";
 
@@ -35,4 +36,20 @@ test("the GCP host's in-instance cache holds 50 MB where its service names no me
 
   expect(fits(cache, 50 * MB)).toBe(true);
   expect(fits(cache, 50 * MB + 1)).toBe(false);
+});
+
+test("the GCP host installs every store an app with an incremental cache boots with", () => {
+  const env = { PORT: "8080", OCEL_ISR_PREFIX: "prod/shop/web/r1/isr" };
+
+  expect(refuseIncompleteHost(newGcpNextHost(env), env)).toBeUndefined();
+});
+
+test("the GCP host's cache store keeps an entry for the next request the instance serves", async () => {
+  const host = newGcpNextHost({ PORT: "8080" });
+  const store = await host.newCacheStore!();
+  const entry = { lastModified: 1, value: { kind: "FETCH", data: {} } };
+
+  await store.writeFetch("hash", entry);
+
+  expect(await store.readFetch("hash")).toEqual(entry);
 });

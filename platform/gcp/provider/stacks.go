@@ -41,6 +41,11 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if app == nil {
 		return nil, nil
 	}
+	if servesNext(app) {
+		if err := refuseUnguardedNext(spec); err != nil {
+			return nil, err
+		}
+	}
 	c, err := p.openClients(ctx)
 	if err != nil {
 		return nil, err
@@ -87,7 +92,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		}
 		if servesNext(app) {
 			served = nextServing(served)
-			if values, err = mergedValues(fn.Name, values, nextEnv(served)); err != nil {
+			if values, err = mergedValues(fn.Name, values, nextEnv(spec, fn, served)); err != nil {
 				return nil, err
 			}
 		}

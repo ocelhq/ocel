@@ -8,10 +8,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 func nextSpec() provider.StackSpec {
@@ -104,5 +108,94 @@ func TestANodeFunctionKeepsTheProfileItRunsOn(t *testing.T) {
 	}
 	if _, told := envOf(container)[memoryEnvVar]; told {
 		t.Errorf("a node function is told %s, which only the Next runtime reads", memoryEnvVar)
+	}
+}
+
+func routedNextSpec() provider.StackSpec {
+	spec := nextSpec()
+	spec.App.Routing = &provider.RoutingSpec{Entry: "bundle-0", Manifest: []byte(`{"entry":"bundle-0"}`)}
+	spec.App.ISR = &provider.ISRSpec{Prefix: "prod/shop/web/r1/isr", TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"}
+	spec.App.AssetPrefix = "prod/shop/web/r1/assets"
+	return spec
+}
+
+func TestANextServiceThatRoutesItsOwnRequestsIsToldWhatItRoutesBy(t *testing.T) {
+	env := envOf(releasedNext(t, routedNextSpec()))
+
+	for name, want := range map[string]string{
+		"OCEL_ROUTING_MANIFEST": "/ocel/app/" + edge.RoutingManifestFile,
+		"OCEL_ASSET_PREFIX":     "prod/shop/web/r1/assets",
+		"OCEL_SLUG":             "shop",
+		"OCEL_APP":              "web",
+		"OCEL_DEPLOYMENT_ID":    "dpl_7",
+		"OCEL_ROUTER_KIND":      "cloudrun",
+	} {
+		if got := env[name]; got != want {
+			t.Errorf("the Next service reads %s=%q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestANextServiceIsToldWhereItsIncrementalCacheLives(t *testing.T) {
+	env := envOf(releasedNext(t, routedNextSpec()))
+
+	if got := env["OCEL_ISR_PREFIX"]; got != "prod/shop/web/r1/isr" {
+		t.Errorf("the Next service reads OCEL_ISR_PREFIX=%q, want the prefix its spec names", got)
+	}
+	if got := env["OCEL_ISR_TAG_NAMESPACE"]; got != "PROJECT#shop#STACK#prod--web--r1#TAG#" {
+		t.Errorf("the Next service reads OCEL_ISR_TAG_NAMESPACE=%q, want the namespace its spec names", got)
+	}
+}
+
+func TestANextServiceThatRoutesNothingIsToldNoRoutingManifest(t *testing.T) {
+	env := envOf(releasedNext(t, nextSpec()))
+
+	for _, name := range []string{"OCEL_ROUTING_MANIFEST", "OCEL_ISR_PREFIX", "OCEL_ASSET_PREFIX"} {
+		if got, told := env[name]; told {
+			t.Errorf("a Next service whose spec routes nothing reads %s=%q", name, got)
+		}
+	}
+}
+
+func TestAGuardedNextServiceBehindAnEdgeThatShieldsNothingIsRefused(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	front, err := fake.NewEdges().Open(fake.KindDirect, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := routedNextSpec()
+	spec.Edge = front
+	spec.App.Guard = &provider.OriginGuard{Entry: "bundle-0"}
+
+	_, err = p.ProvisionFunctions(context.Background(), spec, nil)
+	if err == nil {
+		t.Fatal("ProvisionFunctions() released a guarded Next service anyone could reach around its edge, want it refused")
+	}
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+		t.Errorf("ProvisionFunctions() code = %v, want %v", code, refusal.CodeInvalid)
+	}
+	if len(server.created) != 0 {
+		t.Errorf("released %d services before refusing, want none", len(server.created))
+	}
+}
+
+func TestAGuardedNextServiceIsReleasedWhereItsIngressKeepsClientsOffIt(t *testing.T) {
+	for _, kind := range []edge.Kind{edge.None, alb.Kind} {
+		t.Run(string(kind), func(t *testing.T) {
+			server := &runServer{}
+			p := server.open(t)
+			front, err := p.Edges().Open(kind, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			spec := routedNextSpec()
+			spec.Edge = front
+			spec.App.Guard = &provider.OriginGuard{Entry: "bundle-0"}
+
+			if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
+				t.Fatalf("ProvisionFunctions() = %v", err)
+			}
+		})
 	}
 }

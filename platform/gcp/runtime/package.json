@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@framework/next-cache": "workspace:*",
     "@framework/next-runtime": "workspace:*",
     "@framework/node-runtime": "workspace:*"
   },
