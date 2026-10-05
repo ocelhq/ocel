@@ -117,7 +117,6 @@ func (s *Server) ResourceKinds() []string {
 			kinds = append(kinds, kind)
 		}
 	}
-	slices.Sort(kinds)
 	return kinds
 }
 

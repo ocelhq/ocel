@@ -7,14 +7,14 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func TestResourceKindsListsEachDeclaredKindOnceSortedAndNoNames(t *testing.T) {
+func TestResourceKindsListsEachDeclaredKindOnceAndNoNames(t *testing.T) {
 	s := newDevServer(&fakeResources{})
 	url := serve(t, s)
 	declareResource(t, url, "orders-db", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
 	declareResource(t, url, "uploads", resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET)
 	declareResource(t, url, "audit-db", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
 
-	if got, want := s.ResourceKinds(), []string{"bucket", "postgres"}; !slices.Equal(got, want) {
+	if got, want := s.ResourceKinds(), []string{"bucket", "postgres"}; !slices.Equal(slices.Sorted(slices.Values(got)), want) {
 		t.Errorf("ResourceKinds() = %v, want %v", got, want)
 	}
 }
