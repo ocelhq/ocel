@@ -60,7 +60,7 @@ async function boot(): Promise<void> {
 
   const manifest = await loadProjectManifest(dirname(handlerPath));
   const newIncrementalCache = loadIncrementalCacheFactory(dirname(handlerPath), manifest);
-  const shaping = originShaping(manifest, process.env);
+  const shaping = originShaping(manifest, process.env, getNextHost().cacheTagsPerObject);
 
   const invoke: Invoke = (req, res, ocel) => {
     noteRscRequest(req.headers);

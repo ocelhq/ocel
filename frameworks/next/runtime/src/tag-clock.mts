@@ -41,12 +41,7 @@ function initialState(fingerprint: string): ClockState {
 }
 
 function sharedState(): ClockState {
-  const fingerprint = [
-    process.env.OCEL_STATE_TABLE,
-    process.env.OCEL_ISR_TAG_NAMESPACE,
-    process.env.OCEL_ISR_BUCKET,
-    process.env.OCEL_ISR_PREFIX,
-  ].join("\0");
+  const fingerprint = process.env.OCEL_ISR_PREFIX ?? "";
 
   const host = globalThis as Record<symbol, ClockState | undefined>;
   const existing = host[stateKey];
