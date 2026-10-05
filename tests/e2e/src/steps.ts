@@ -97,7 +97,9 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
     ]);
   }
   const checks = [...cell.fixture.checks, ...(cell.variant.checks ?? [])].filter(
-    (one) => one.cacheLayer === undefined || one.cacheLayer === cell.cacheLayer,
+    (one) =>
+      (one.cacheLayer === undefined || one.cacheLayer === cell.cacheLayer) &&
+      (!one.assertsDeployment || cell.target !== "dev"),
   );
   const at = (point: StackPoint) => stack?.checks[point] ?? [];
   const perApp = (make: (app: string) => Step[]): Step[] => apps.flatMap(make);

@@ -33,6 +33,7 @@ export type CheckContext = {
 export type Check = {
   title: string;
   cacheLayer?: CacheLayer;
+  assertsDeployment?: true;
   sendsJourneyNonce?: true;
   run: (ctx: CheckContext) => Promise<void>;
 };

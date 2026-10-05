@@ -220,6 +220,24 @@ describe("the registry variant", () => {
   });
 });
 
+describe("what only a deployment answers", () => {
+  const DEPLOYED_ONLY = [
+    "GET /api/probes/runtime runs as production in UTC",
+    "GET /api/probes/headers sees the real client address behind a forged one",
+    ...[...nextCacheChecks, ...nextDataCacheChecks].map((one) => one.title),
+  ];
+
+  it("is neither run nor listed red on dev, which serves the app's own dev server on the runner", () => {
+    const planned = planOn("dev");
+    for (const cell of ["deploy/next", "deploy/node", "sdk/next", "sdk/node"]) {
+      const listed = Object.keys(planned.expectedFailures[`${cell}/web`] ?? {});
+      expect(listed.filter((title) => DEPLOYED_ONLY.some((one) => title.endsWith(one)))).toEqual(
+        [],
+      );
+    }
+  });
+});
+
 describe("the kv concern", () => {
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
 

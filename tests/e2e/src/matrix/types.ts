@@ -114,7 +114,13 @@ export function fixture(name: string, shape: Omit<Fixture, "name" | "concern">):
   return { name, concern: concern as Concern, ...shape };
 }
 
-export type Cell = { name: string; fixture: Fixture; variant: Variant; cacheLayer: CacheLayer };
+export type Cell = {
+  name: string;
+  fixture: Fixture;
+  variant: Variant;
+  cacheLayer: CacheLayer;
+  target: TargetName;
+};
 
 export function cacheLayerOf(target: TargetName, variant: Variant): CacheLayer {
   if (variant.config.edge !== undefined) {

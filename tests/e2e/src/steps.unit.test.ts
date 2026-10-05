@@ -19,6 +19,7 @@ const cell: Cell = {
   fixture: living,
   variant: defaults,
   cacheLayer: "edge",
+  target: "aws",
 };
 const serving = {
   phases: ["deploy" as const, "verify" as const, "destroy" as const],
@@ -61,7 +62,13 @@ describe("the checks a variant adds", () => {
       checks: [{ title: "refused without the edge", run: async () => undefined }],
     });
     const titles = stepsOf(
-      { name: "lifecycle/next-shielded", fixture: living, variant: shielded, cacheLayer: "edge" },
+      {
+        name: "lifecycle/next-shielded",
+        fixture: living,
+        variant: shielded,
+        cacheLayer: "edge",
+        target: "aws",
+      },
       ["deploy", "verify", "redeploy"],
     ).map((step) => step.title);
     expect(titles).toEqual([
@@ -87,11 +94,32 @@ describe("the checks a cache layer holds", () => {
       on: { aws: [defaults] },
     });
     const titlesAt = (cacheLayer: Cell["cacheLayer"]) =>
-      stepsOf({ name: "deploy/next", fixture: layered, variant: defaults, cacheLayer }, [
-        "verify",
-      ]).map((step) => step.title);
+      stepsOf(
+        { name: "deploy/next", fixture: layered, variant: defaults, cacheLayer, target: "aws" },
+        ["verify"],
+      ).map((step) => step.title);
     expect(titlesAt("edge")).toEqual(["ping", "stamped by the edge"]);
     expect(titlesAt("origin")).toEqual(["ping", "stamped by the Next server"]);
+  });
+});
+
+describe("the checks only a deployment answers", () => {
+  it("runs a check that asserts how a deployment serves the app on every target but dev", () => {
+    const served = fixture("deploy/node", {
+      apps: ["web"],
+      checks: [
+        ping,
+        { title: "runs as production", assertsDeployment: true, run: async () => undefined },
+      ],
+      on: { aws: [defaults], dev: [defaults] },
+    });
+    const titlesOn = (target: Cell["target"]) =>
+      stepsOf(
+        { name: "deploy/node", fixture: served, variant: defaults, cacheLayer: "edge", target },
+        ["verify"],
+      ).map((step) => step.title);
+    expect(titlesOn("aws")).toEqual(["ping", "runs as production"]);
+    expect(titlesOn("dev")).toEqual(["ping"]);
   });
 });
 
@@ -133,7 +161,13 @@ describe("a fixture whose resources restart", () => {
     const phases = phasesOf(restarting, false);
     expect(phases).toEqual(["deploy", "verify", "restart", "redeploy", "rollback", "destroy"]);
     const titles = stepsOf(
-      { name: "kv/node", fixture: restarting, variant: defaults, cacheLayer: "origin" },
+      {
+        name: "kv/node",
+        fixture: restarting,
+        variant: defaults,
+        cacheLayer: "origin",
+        target: "vps",
+      },
       phases,
     ).map((step) => step.title);
     expect(titles).toEqual([
@@ -172,6 +206,7 @@ describe("a fixture whose resources restart", () => {
       fixture: restarting,
       variant: defaults,
       cacheLayer: "origin",
+      target: "vps",
     };
     const run = new CellRun({
       cell,
@@ -208,6 +243,7 @@ describe("a fixture whose build is refused", () => {
     fixture: refused,
     variant: defaults,
     cacheLayer: "edge",
+    target: "aws",
   };
   const runOn = (deploy: Target["deploy"]) =>
     new CellRun({
@@ -335,6 +371,7 @@ describe("a cell with an external stack", () => {
       fixture: stacked,
       variant: defaults,
       cacheLayer: "edge",
+      target: "aws",
     };
     const run = new CellRun({
       cell,
