@@ -7,6 +7,7 @@
 package resultv1
 
 import (
+	v11 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	v1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -21,6 +22,110 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+type DeploymentState int32
+
+const (
+	DeploymentState_DEPLOYMENT_STATE_UNSPECIFIED DeploymentState = 0
+	DeploymentState_DEPLOYMENT_STATE_ACTIVE      DeploymentState = 1
+	DeploymentState_DEPLOYMENT_STATE_UNPROMOTED  DeploymentState = 2
+	DeploymentState_DEPLOYMENT_STATE_SUPERSEDED  DeploymentState = 3
+)
+
+// Enum value maps for DeploymentState.
+var (
+	DeploymentState_name = map[int32]string{
+		0: "DEPLOYMENT_STATE_UNSPECIFIED",
+		1: "DEPLOYMENT_STATE_ACTIVE",
+		2: "DEPLOYMENT_STATE_UNPROMOTED",
+		3: "DEPLOYMENT_STATE_SUPERSEDED",
+	}
+	DeploymentState_value = map[string]int32{
+		"DEPLOYMENT_STATE_UNSPECIFIED": 0,
+		"DEPLOYMENT_STATE_ACTIVE":      1,
+		"DEPLOYMENT_STATE_UNPROMOTED":  2,
+		"DEPLOYMENT_STATE_SUPERSEDED":  3,
+	}
+)
+
+func (x DeploymentState) Enum() *DeploymentState {
+	p := new(DeploymentState)
+	*p = x
+	return p
+}
+
+func (x DeploymentState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DeploymentState) Descriptor() protoreflect.EnumDescriptor {
+	return file_cli_result_v1_result_proto_enumTypes[0].Descriptor()
+}
+
+func (DeploymentState) Type() protoreflect.EnumType {
+	return &file_cli_result_v1_result_proto_enumTypes[0]
+}
+
+func (x DeploymentState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DeploymentState.Descriptor instead.
+func (DeploymentState) EnumDescriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{0}
+}
+
+type ConnectorLiveness int32
+
+const (
+	ConnectorLiveness_CONNECTOR_LIVENESS_UNSPECIFIED     ConnectorLiveness = 0
+	ConnectorLiveness_CONNECTOR_LIVENESS_ONLINE          ConnectorLiveness = 1
+	ConnectorLiveness_CONNECTOR_LIVENESS_OFFLINE         ConnectorLiveness = 2
+	ConnectorLiveness_CONNECTOR_LIVENESS_NEVER_CONNECTED ConnectorLiveness = 3
+)
+
+// Enum value maps for ConnectorLiveness.
+var (
+	ConnectorLiveness_name = map[int32]string{
+		0: "CONNECTOR_LIVENESS_UNSPECIFIED",
+		1: "CONNECTOR_LIVENESS_ONLINE",
+		2: "CONNECTOR_LIVENESS_OFFLINE",
+		3: "CONNECTOR_LIVENESS_NEVER_CONNECTED",
+	}
+	ConnectorLiveness_value = map[string]int32{
+		"CONNECTOR_LIVENESS_UNSPECIFIED":     0,
+		"CONNECTOR_LIVENESS_ONLINE":          1,
+		"CONNECTOR_LIVENESS_OFFLINE":         2,
+		"CONNECTOR_LIVENESS_NEVER_CONNECTED": 3,
+	}
+)
+
+func (x ConnectorLiveness) Enum() *ConnectorLiveness {
+	p := new(ConnectorLiveness)
+	*p = x
+	return p
+}
+
+func (x ConnectorLiveness) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ConnectorLiveness) Descriptor() protoreflect.EnumDescriptor {
+	return file_cli_result_v1_result_proto_enumTypes[1].Descriptor()
+}
+
+func (ConnectorLiveness) Type() protoreflect.EnumType {
+	return &file_cli_result_v1_result_proto_enumTypes[1]
+}
+
+func (x ConnectorLiveness) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ConnectorLiveness.Descriptor instead.
+func (ConnectorLiveness) EnumDescriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{1}
+}
 
 type BindingSetResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -582,11 +687,663 @@ func (x *CostScanResult) GetAssumptions() []string {
 	return nil
 }
 
+type DeploymentListResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Deployments   []*DeploymentSummary   `protobuf:"bytes,1,rep,name=deployments,proto3" json:"deployments,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeploymentListResult) Reset() {
+	*x = DeploymentListResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeploymentListResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeploymentListResult) ProtoMessage() {}
+
+func (x *DeploymentListResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeploymentListResult.ProtoReflect.Descriptor instead.
+func (*DeploymentListResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *DeploymentListResult) GetDeployments() []*DeploymentSummary {
+	if x != nil {
+		return x.Deployments
+	}
+	return nil
+}
+
+type DeploymentSummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PromotionId   string                 `protobuf:"bytes,1,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	Tag           string                 `protobuf:"bytes,2,opt,name=tag,proto3" json:"tag,omitempty"`
+	CreatedAt     string                 `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Builds        map[string]string      `protobuf:"bytes,4,rep,name=builds,proto3" json:"builds,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	State         DeploymentState        `protobuf:"varint,5,opt,name=state,proto3,enum=cli.result.v1.DeploymentState" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeploymentSummary) Reset() {
+	*x = DeploymentSummary{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeploymentSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeploymentSummary) ProtoMessage() {}
+
+func (x *DeploymentSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeploymentSummary.ProtoReflect.Descriptor instead.
+func (*DeploymentSummary) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *DeploymentSummary) GetPromotionId() string {
+	if x != nil {
+		return x.PromotionId
+	}
+	return ""
+}
+
+func (x *DeploymentSummary) GetTag() string {
+	if x != nil {
+		return x.Tag
+	}
+	return ""
+}
+
+func (x *DeploymentSummary) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *DeploymentSummary) GetBuilds() map[string]string {
+	if x != nil {
+		return x.Builds
+	}
+	return nil
+}
+
+func (x *DeploymentSummary) GetState() DeploymentState {
+	if x != nil {
+		return x.State
+	}
+	return DeploymentState_DEPLOYMENT_STATE_UNSPECIFIED
+}
+
+type PreviewListResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Previews      []*PreviewSummary      `protobuf:"bytes,1,rep,name=previews,proto3" json:"previews,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreviewListResult) Reset() {
+	*x = PreviewListResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreviewListResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreviewListResult) ProtoMessage() {}
+
+func (x *PreviewListResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreviewListResult.ProtoReflect.Descriptor instead.
+func (*PreviewListResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *PreviewListResult) GetPreviews() []*PreviewSummary {
+	if x != nil {
+		return x.Previews
+	}
+	return nil
+}
+
+type PreviewSummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Identity      string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	Lifecycle     v11.Lifecycle          `protobuf:"varint,2,opt,name=lifecycle,proto3,enum=common.environment.v1.Lifecycle" json:"lifecycle,omitempty"`
+	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	CreatedAt     string                 `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	AliasUrls     []string               `protobuf:"bytes,5,rep,name=alias_urls,json=aliasUrls,proto3" json:"alias_urls,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreviewSummary) Reset() {
+	*x = PreviewSummary{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreviewSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreviewSummary) ProtoMessage() {}
+
+func (x *PreviewSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreviewSummary.ProtoReflect.Descriptor instead.
+func (*PreviewSummary) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *PreviewSummary) GetIdentity() string {
+	if x != nil {
+		return x.Identity
+	}
+	return ""
+}
+
+func (x *PreviewSummary) GetLifecycle() v11.Lifecycle {
+	if x != nil {
+		return x.Lifecycle
+	}
+	return v11.Lifecycle(0)
+}
+
+func (x *PreviewSummary) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *PreviewSummary) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *PreviewSummary) GetAliasUrls() []string {
+	if x != nil {
+		return x.AliasUrls
+	}
+	return nil
+}
+
+type DomainListResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Hosts         []*DomainHostStatus    `protobuf:"bytes,1,rep,name=hosts,proto3" json:"hosts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DomainListResult) Reset() {
+	*x = DomainListResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DomainListResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DomainListResult) ProtoMessage() {}
+
+func (x *DomainListResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DomainListResult.ProtoReflect.Descriptor instead.
+func (*DomainListResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *DomainListResult) GetHosts() []*DomainHostStatus {
+	if x != nil {
+		return x.Hosts
+	}
+	return nil
+}
+
+type PreviewDomainResult struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	BaseDomain        string                 `protobuf:"bytes,1,opt,name=base_domain,json=baseDomain,proto3" json:"base_domain,omitempty"`
+	EdgeScope         string                 `protobuf:"bytes,2,opt,name=edge_scope,json=edgeScope,proto3" json:"edge_scope,omitempty"`
+	RouteInstalled    bool                   `protobuf:"varint,3,opt,name=route_installed,json=routeInstalled,proto3" json:"route_installed,omitempty"`
+	CertificateId     string                 `protobuf:"bytes,4,opt,name=certificate_id,json=certificateId,proto3" json:"certificate_id,omitempty"`
+	CertificateStatus string                 `protobuf:"bytes,5,opt,name=certificate_status,json=certificateStatus,proto3" json:"certificate_status,omitempty"`
+	RenewalStatus     string                 `protobuf:"bytes,6,opt,name=renewal_status,json=renewalStatus,proto3" json:"renewal_status,omitempty"`
+	ExpiresAt         string                 `protobuf:"bytes,7,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	ExpiringSoon      bool                   `protobuf:"varint,8,opt,name=expiring_soon,json=expiringSoon,proto3" json:"expiring_soon,omitempty"`
+	RecordsWritten    []string               `protobuf:"bytes,9,rep,name=records_written,json=recordsWritten,proto3" json:"records_written,omitempty"`
+	ManualRecords     []string               `protobuf:"bytes,10,rep,name=manual_records,json=manualRecords,proto3" json:"manual_records,omitempty"`
+	LastProbeAt       string                 `protobuf:"bytes,11,opt,name=last_probe_at,json=lastProbeAt,proto3" json:"last_probe_at,omitempty"`
+	LastProbeOk       bool                   `protobuf:"varint,12,opt,name=last_probe_ok,json=lastProbeOk,proto3" json:"last_probe_ok,omitempty"`
+	Projects          []string               `protobuf:"bytes,13,rep,name=projects,proto3" json:"projects,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *PreviewDomainResult) Reset() {
+	*x = PreviewDomainResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreviewDomainResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreviewDomainResult) ProtoMessage() {}
+
+func (x *PreviewDomainResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreviewDomainResult.ProtoReflect.Descriptor instead.
+func (*PreviewDomainResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *PreviewDomainResult) GetBaseDomain() string {
+	if x != nil {
+		return x.BaseDomain
+	}
+	return ""
+}
+
+func (x *PreviewDomainResult) GetEdgeScope() string {
+	if x != nil {
+		return x.EdgeScope
+	}
+	return ""
+}
+
+func (x *PreviewDomainResult) GetRouteInstalled() bool {
+	if x != nil {
+		return x.RouteInstalled
+	}
+	return false
+}
+
+func (x *PreviewDomainResult) GetCertificateId() string {
+	if x != nil {
+		return x.CertificateId
+	}
+	return ""
+}
+
+func (x *PreviewDomainResult) GetCertificateStatus() string {
+	if x != nil {
+		return x.CertificateStatus
+	}
+	return ""
+}
+
+func (x *PreviewDomainResult) GetRenewalStatus() string {
+	if x != nil {
+		return x.RenewalStatus
+	}
+	return ""
+}
+
+func (x *PreviewDomainResult) GetExpiresAt() string {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return ""
+}
+
+func (x *PreviewDomainResult) GetExpiringSoon() bool {
+	if x != nil {
+		return x.ExpiringSoon
+	}
+	return false
+}
+
+func (x *PreviewDomainResult) GetRecordsWritten() []string {
+	if x != nil {
+		return x.RecordsWritten
+	}
+	return nil
+}
+
+func (x *PreviewDomainResult) GetManualRecords() []string {
+	if x != nil {
+		return x.ManualRecords
+	}
+	return nil
+}
+
+func (x *PreviewDomainResult) GetLastProbeAt() string {
+	if x != nil {
+		return x.LastProbeAt
+	}
+	return ""
+}
+
+func (x *PreviewDomainResult) GetLastProbeOk() bool {
+	if x != nil {
+		return x.LastProbeOk
+	}
+	return false
+}
+
+func (x *PreviewDomainResult) GetProjects() []string {
+	if x != nil {
+		return x.Projects
+	}
+	return nil
+}
+
+type ConnectorStatusResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Connectors    []*ConnectorStatus     `protobuf:"bytes,1,rep,name=connectors,proto3" json:"connectors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectorStatusResult) Reset() {
+	*x = ConnectorStatusResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectorStatusResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectorStatusResult) ProtoMessage() {}
+
+func (x *ConnectorStatusResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectorStatusResult.ProtoReflect.Descriptor instead.
+func (*ConnectorStatusResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ConnectorStatusResult) GetConnectors() []*ConnectorStatus {
+	if x != nil {
+		return x.Connectors
+	}
+	return nil
+}
+
+type ConnectorStatus struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Target        string                 `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	Vendor        string                 `protobuf:"bytes,2,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	Compute       string                 `protobuf:"bytes,3,opt,name=compute,proto3" json:"compute,omitempty"`
+	Reach         string                 `protobuf:"bytes,4,opt,name=reach,proto3" json:"reach,omitempty"`
+	Url           string                 `protobuf:"bytes,5,opt,name=url,proto3" json:"url,omitempty"`
+	Version       string                 `protobuf:"bytes,6,opt,name=version,proto3" json:"version,omitempty"`
+	Capabilities  []string               `protobuf:"bytes,7,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	Liveness      ConnectorLiveness      `protobuf:"varint,8,opt,name=liveness,proto3,enum=cli.result.v1.ConnectorLiveness" json:"liveness,omitempty"`
+	ConnectedAt   string                 `protobuf:"bytes,9,opt,name=connected_at,json=connectedAt,proto3" json:"connected_at,omitempty"`
+	LastSeenAt    string                 `protobuf:"bytes,10,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
+	LastDenied    *ConnectorDenial       `protobuf:"bytes,11,opt,name=last_denied,json=lastDenied,proto3" json:"last_denied,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectorStatus) Reset() {
+	*x = ConnectorStatus{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectorStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectorStatus) ProtoMessage() {}
+
+func (x *ConnectorStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectorStatus.ProtoReflect.Descriptor instead.
+func (*ConnectorStatus) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ConnectorStatus) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *ConnectorStatus) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *ConnectorStatus) GetCompute() string {
+	if x != nil {
+		return x.Compute
+	}
+	return ""
+}
+
+func (x *ConnectorStatus) GetReach() string {
+	if x != nil {
+		return x.Reach
+	}
+	return ""
+}
+
+func (x *ConnectorStatus) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *ConnectorStatus) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *ConnectorStatus) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
+func (x *ConnectorStatus) GetLiveness() ConnectorLiveness {
+	if x != nil {
+		return x.Liveness
+	}
+	return ConnectorLiveness_CONNECTOR_LIVENESS_UNSPECIFIED
+}
+
+func (x *ConnectorStatus) GetConnectedAt() string {
+	if x != nil {
+		return x.ConnectedAt
+	}
+	return ""
+}
+
+func (x *ConnectorStatus) GetLastSeenAt() string {
+	if x != nil {
+		return x.LastSeenAt
+	}
+	return ""
+}
+
+func (x *ConnectorStatus) GetLastDenied() *ConnectorDenial {
+	if x != nil {
+		return x.LastDenied
+	}
+	return nil
+}
+
+type ConnectorDenial struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Verb          string                 `protobuf:"bytes,1,opt,name=verb,proto3" json:"verb,omitempty"`
+	At            string                 `protobuf:"bytes,2,opt,name=at,proto3" json:"at,omitempty"`
+	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectorDenial) Reset() {
+	*x = ConnectorDenial{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectorDenial) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectorDenial) ProtoMessage() {}
+
+func (x *ConnectorDenial) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectorDenial.ProtoReflect.Descriptor instead.
+func (*ConnectorDenial) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ConnectorDenial) GetVerb() string {
+	if x != nil {
+		return x.Verb
+	}
+	return ""
+}
+
+func (x *ConnectorDenial) GetAt() string {
+	if x != nil {
+		return x.At
+	}
+	return ""
+}
+
+func (x *ConnectorDenial) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 var File_cli_result_v1_result_proto protoreflect.FileDescriptor
 
 const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\n" +
-	"\x1acli/result/v1/result.proto\x12\rcli.result.v1\x1a\x1bprovider/cost/v1/cost.proto\"V\n" +
+	"\x1acli/result/v1/result.proto\x12\rcli.result.v1\x1a'common/environment/v1/environment.proto\x1a\x1bprovider/cost/v1/cost.proto\"V\n" +
 	"\x10BindingSetResult\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05owner\x18\x02 \x01(\tR\x05owner\x12\x18\n" +
@@ -630,7 +1387,82 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x0eCostScanResult\x12;\n" +
 	"\tresources\x18\x01 \x01(\v2\x1d.provider.cost.v1.ResourceSetR\tresources\x126\n" +
 	"\bestimate\x18\x02 \x01(\v2\x1a.provider.cost.v1.EstimateR\bestimate\x12 \n" +
-	"\vassumptions\x18\x03 \x03(\tR\vassumptionsB9Z7github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1b\x06proto3"
+	"\vassumptions\x18\x03 \x03(\tR\vassumptions\"Z\n" +
+	"\x14DeploymentListResult\x12B\n" +
+	"\vdeployments\x18\x01 \x03(\v2 .cli.result.v1.DeploymentSummaryR\vdeployments\"\x9e\x02\n" +
+	"\x11DeploymentSummary\x12!\n" +
+	"\fpromotion_id\x18\x01 \x01(\tR\vpromotionId\x12\x10\n" +
+	"\x03tag\x18\x02 \x01(\tR\x03tag\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x03 \x01(\tR\tcreatedAt\x12D\n" +
+	"\x06builds\x18\x04 \x03(\v2,.cli.result.v1.DeploymentSummary.BuildsEntryR\x06builds\x124\n" +
+	"\x05state\x18\x05 \x01(\x0e2\x1e.cli.result.v1.DeploymentStateR\x05state\x1a9\n" +
+	"\vBuildsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"N\n" +
+	"\x11PreviewListResult\x129\n" +
+	"\bpreviews\x18\x01 \x03(\v2\x1d.cli.result.v1.PreviewSummaryR\bpreviews\"\xc0\x01\n" +
+	"\x0ePreviewSummary\x12\x1a\n" +
+	"\bidentity\x18\x01 \x01(\tR\bidentity\x12>\n" +
+	"\tlifecycle\x18\x02 \x01(\x0e2 .common.environment.v1.LifecycleR\tlifecycle\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x04 \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"alias_urls\x18\x05 \x03(\tR\taliasUrls\"I\n" +
+	"\x10DomainListResult\x125\n" +
+	"\x05hosts\x18\x01 \x03(\v2\x1f.cli.result.v1.DomainHostStatusR\x05hosts\"\xf3\x03\n" +
+	"\x13PreviewDomainResult\x12\x1f\n" +
+	"\vbase_domain\x18\x01 \x01(\tR\n" +
+	"baseDomain\x12\x1d\n" +
+	"\n" +
+	"edge_scope\x18\x02 \x01(\tR\tedgeScope\x12'\n" +
+	"\x0froute_installed\x18\x03 \x01(\bR\x0erouteInstalled\x12%\n" +
+	"\x0ecertificate_id\x18\x04 \x01(\tR\rcertificateId\x12-\n" +
+	"\x12certificate_status\x18\x05 \x01(\tR\x11certificateStatus\x12%\n" +
+	"\x0erenewal_status\x18\x06 \x01(\tR\rrenewalStatus\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\a \x01(\tR\texpiresAt\x12#\n" +
+	"\rexpiring_soon\x18\b \x01(\bR\fexpiringSoon\x12'\n" +
+	"\x0frecords_written\x18\t \x03(\tR\x0erecordsWritten\x12%\n" +
+	"\x0emanual_records\x18\n" +
+	" \x03(\tR\rmanualRecords\x12\"\n" +
+	"\rlast_probe_at\x18\v \x01(\tR\vlastProbeAt\x12\"\n" +
+	"\rlast_probe_ok\x18\f \x01(\bR\vlastProbeOk\x12\x1a\n" +
+	"\bprojects\x18\r \x03(\tR\bprojects\"W\n" +
+	"\x15ConnectorStatusResult\x12>\n" +
+	"\n" +
+	"connectors\x18\x01 \x03(\v2\x1e.cli.result.v1.ConnectorStatusR\n" +
+	"connectors\"\x85\x03\n" +
+	"\x0fConnectorStatus\x12\x16\n" +
+	"\x06target\x18\x01 \x01(\tR\x06target\x12\x16\n" +
+	"\x06vendor\x18\x02 \x01(\tR\x06vendor\x12\x18\n" +
+	"\acompute\x18\x03 \x01(\tR\acompute\x12\x14\n" +
+	"\x05reach\x18\x04 \x01(\tR\x05reach\x12\x10\n" +
+	"\x03url\x18\x05 \x01(\tR\x03url\x12\x18\n" +
+	"\aversion\x18\x06 \x01(\tR\aversion\x12\"\n" +
+	"\fcapabilities\x18\a \x03(\tR\fcapabilities\x12<\n" +
+	"\bliveness\x18\b \x01(\x0e2 .cli.result.v1.ConnectorLivenessR\bliveness\x12!\n" +
+	"\fconnected_at\x18\t \x01(\tR\vconnectedAt\x12 \n" +
+	"\flast_seen_at\x18\n" +
+	" \x01(\tR\n" +
+	"lastSeenAt\x12?\n" +
+	"\vlast_denied\x18\v \x01(\v2\x1e.cli.result.v1.ConnectorDenialR\n" +
+	"lastDenied\"O\n" +
+	"\x0fConnectorDenial\x12\x12\n" +
+	"\x04verb\x18\x01 \x01(\tR\x04verb\x12\x0e\n" +
+	"\x02at\x18\x02 \x01(\tR\x02at\x12\x18\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage*\x92\x01\n" +
+	"\x0fDeploymentState\x12 \n" +
+	"\x1cDEPLOYMENT_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17DEPLOYMENT_STATE_ACTIVE\x10\x01\x12\x1f\n" +
+	"\x1bDEPLOYMENT_STATE_UNPROMOTED\x10\x02\x12\x1f\n" +
+	"\x1bDEPLOYMENT_STATE_SUPERSEDED\x10\x03*\x9e\x01\n" +
+	"\x11ConnectorLiveness\x12\"\n" +
+	"\x1eCONNECTOR_LIVENESS_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19CONNECTOR_LIVENESS_ONLINE\x10\x01\x12\x1e\n" +
+	"\x1aCONNECTOR_LIVENESS_OFFLINE\x10\x02\x12&\n" +
+	"\"CONNECTOR_LIVENESS_NEVER_CONNECTED\x10\x03B9Z7github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1b\x06proto3"
 
 var (
 	file_cli_result_v1_result_proto_rawDescOnce sync.Once
@@ -644,30 +1476,53 @@ func file_cli_result_v1_result_proto_rawDescGZIP() []byte {
 	return file_cli_result_v1_result_proto_rawDescData
 }
 
-var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_cli_result_v1_result_proto_goTypes = []any{
-	(*BindingSetResult)(nil),      // 0: cli.result.v1.BindingSetResult
-	(*BindingRemoveResult)(nil),   // 1: cli.result.v1.BindingRemoveResult
-	(*BindingListResult)(nil),     // 2: cli.result.v1.BindingListResult
-	(*BindingGenerateResult)(nil), // 3: cli.result.v1.BindingGenerateResult
-	(*BindingSummary)(nil),        // 4: cli.result.v1.BindingSummary
-	(*DomainStatusResult)(nil),    // 5: cli.result.v1.DomainStatusResult
-	(*DomainHostStatus)(nil),      // 6: cli.result.v1.DomainHostStatus
-	(*CostScanResult)(nil),        // 7: cli.result.v1.CostScanResult
-	(*v1.ResourceSet)(nil),        // 8: provider.cost.v1.ResourceSet
-	(*v1.Estimate)(nil),           // 9: provider.cost.v1.Estimate
+	(DeploymentState)(0),          // 0: cli.result.v1.DeploymentState
+	(ConnectorLiveness)(0),        // 1: cli.result.v1.ConnectorLiveness
+	(*BindingSetResult)(nil),      // 2: cli.result.v1.BindingSetResult
+	(*BindingRemoveResult)(nil),   // 3: cli.result.v1.BindingRemoveResult
+	(*BindingListResult)(nil),     // 4: cli.result.v1.BindingListResult
+	(*BindingGenerateResult)(nil), // 5: cli.result.v1.BindingGenerateResult
+	(*BindingSummary)(nil),        // 6: cli.result.v1.BindingSummary
+	(*DomainStatusResult)(nil),    // 7: cli.result.v1.DomainStatusResult
+	(*DomainHostStatus)(nil),      // 8: cli.result.v1.DomainHostStatus
+	(*CostScanResult)(nil),        // 9: cli.result.v1.CostScanResult
+	(*DeploymentListResult)(nil),  // 10: cli.result.v1.DeploymentListResult
+	(*DeploymentSummary)(nil),     // 11: cli.result.v1.DeploymentSummary
+	(*PreviewListResult)(nil),     // 12: cli.result.v1.PreviewListResult
+	(*PreviewSummary)(nil),        // 13: cli.result.v1.PreviewSummary
+	(*DomainListResult)(nil),      // 14: cli.result.v1.DomainListResult
+	(*PreviewDomainResult)(nil),   // 15: cli.result.v1.PreviewDomainResult
+	(*ConnectorStatusResult)(nil), // 16: cli.result.v1.ConnectorStatusResult
+	(*ConnectorStatus)(nil),       // 17: cli.result.v1.ConnectorStatus
+	(*ConnectorDenial)(nil),       // 18: cli.result.v1.ConnectorDenial
+	nil,                           // 19: cli.result.v1.DeploymentSummary.BuildsEntry
+	(*v1.ResourceSet)(nil),        // 20: provider.cost.v1.ResourceSet
+	(*v1.Estimate)(nil),           // 21: provider.cost.v1.Estimate
+	(v11.Lifecycle)(0),            // 22: common.environment.v1.Lifecycle
 }
 var file_cli_result_v1_result_proto_depIdxs = []int32{
-	4, // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
-	4, // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
-	6, // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
-	8, // 3: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
-	9, // 4: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	6,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
+	6,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
+	8,  // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
+	20, // 3: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
+	21, // 4: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
+	11, // 5: cli.result.v1.DeploymentListResult.deployments:type_name -> cli.result.v1.DeploymentSummary
+	19, // 6: cli.result.v1.DeploymentSummary.builds:type_name -> cli.result.v1.DeploymentSummary.BuildsEntry
+	0,  // 7: cli.result.v1.DeploymentSummary.state:type_name -> cli.result.v1.DeploymentState
+	13, // 8: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
+	22, // 9: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
+	8,  // 10: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
+	17, // 11: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
+	1,  // 12: cli.result.v1.ConnectorStatus.liveness:type_name -> cli.result.v1.ConnectorLiveness
+	18, // 13: cli.result.v1.ConnectorStatus.last_denied:type_name -> cli.result.v1.ConnectorDenial
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_cli_result_v1_result_proto_init() }
@@ -680,13 +1535,14 @@ func file_cli_result_v1_result_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_result_v1_result_proto_rawDesc), len(file_cli_result_v1_result_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   8,
+			NumEnums:      2,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_cli_result_v1_result_proto_goTypes,
 		DependencyIndexes: file_cli_result_v1_result_proto_depIdxs,
+		EnumInfos:         file_cli_result_v1_result_proto_enumTypes,
 		MessageInfos:      file_cli_result_v1_result_proto_msgTypes,
 	}.Build()
 	File_cli_result_v1_result_proto = out.File
