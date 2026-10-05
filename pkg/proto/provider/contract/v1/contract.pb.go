@@ -5976,10 +5976,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04path\x18\x04 \x01(\tR\x04path\x12!\n" +
 	"\acompute\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\acompute\"Z\n" +
 	"\x12ServerlessArtifact\x12D\n" +
-	"\tfunctions\x18\x01 \x03(\v2&.provider.contract.v1.ManifestFunctionR\tfunctions\"\x98\x04\n" +
-	"\x11ContainerArtifact\x12u\n" +
-	"\x05image\x18\x01 \x01(\tB_\xbaH\\rZ2X^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$R\x05image\x12Q\n" +
-	"\x11health_check_path\x18\x02 \x01(\tB%\xbaH\"\xd8\x01\x01r\x1d2\x1b^/[^#?[:space:][:cntrl:]]*$R\x0fhealthCheckPath\x12+\n" +
+	"\tfunctions\x18\x01 \x03(\v2&.provider.contract.v1.ManifestFunctionR\tfunctions\"\xa4\x04\n" +
+	"\x11ContainerArtifact\x12{\n" +
+	"\x05image\x18\x01 \x01(\tBe\xbaHbr`2^^([^/@: \\t\\n\\v\\f\\r]+(:[0-9]+)?/)?[^/@: \\t\\n\\v\\f\\r]+(/[^/@: \\t\\n\\v\\f\\r]+)*@sha256:[0-9a-f]{64}$R\x05image\x12W\n" +
+	"\x11health_check_path\x18\x02 \x01(\tB+\xbaH(\xd8\x01\x01r#2!^/[^#? \\t\\n\\v\\f\\r\\x00-\\x1f\\x7f]*$R\x0fhealthCheckPath\x12+\n" +
 	"\x04arch\x18\x03 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\x12#\n" +
 	"\rmin_instances\x18\x04 \x01(\rR\fminInstances\x12,\n" +
 	"\rmax_instances\x18\x05 \x01(\rB\a\xbaH\x04*\x02(\x01R\fmaxInstances:\xb8\x01\xbaH\xb4\x01\x1a\xb1\x01\n" +
@@ -5994,13 +5994,13 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\thostnames\x18\x02 \x03(\tR\thostnames\"q\n" +
 	"\tFramework\x127\n" +
 	"\x04name\x18\x01 \x01(\tB#\xbaH r\x1eR\x04nodeR\x04nextR\x02goR\x06pythonR\x04rustR\x04name\x12+\n" +
-	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\x8b\x04\n" +
+	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\x8f\x04\n" +
 	"\vManifestApp\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12=\n" +
 	"\tframework\x18\x02 \x01(\v2\x1f.provider.contract.v1.FrameworkR\tframework\x12;\n" +
 	"\adomains\x18\x03 \x03(\v2!.provider.contract.v1.TierDomainsR\adomains\x12D\n" +
-	"\tvariables\x18\x04 \x03(\v2&.provider.contract.v1.ManifestVariableR\tvariables\x124\n" +
-	"\x06folder\x18\x05 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12#\n" +
+	"\tvariables\x18\x04 \x03(\v2&.provider.contract.v1.ManifestVariableR\tvariables\x128\n" +
+	"\x06folder\x18\x05 \x01(\tB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$R\x06folder\x12#\n" +
 	"\rdeployment_id\x18\x06 \x01(\tR\fdeploymentId\x12#\n" +
 	"\rclient_bundle\x18\b \x01(\bR\fclientBundle\x12J\n" +
 	"\n" +
@@ -6008,12 +6008,12 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"serverless\x12G\n" +
 	"\tcontainer\x18\n" +
 	" \x01(\v2'.provider.contract.v1.ContainerArtifactH\x00R\tcontainerB\x11\n" +
-	"\bartifact\x12\x05\xbaH\x02\b\x01\"\x8d\x02\n" +
-	"\x10ManifestVariable\x12+\n" +
-	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12?\n" +
+	"\bartifact\x12\x05\xbaH\x02\b\x01\"\x95\x02\n" +
+	"\x10ManifestVariable\x12/\n" +
+	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12?\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12\x19\n" +
-	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\x124\n" +
-	"\x06folder\x18\x04 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12\x18\n" +
+	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\x128\n" +
+	"\x06folder\x18\x04 \x01(\tB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$R\x06folder\x12\x18\n" +
 	"\aversion\x18\x05 \x01(\x03R\aversion\x12 \n" +
 	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xd3\x01\n" +
 	"\x10ManifestFunction\x12!\n" +

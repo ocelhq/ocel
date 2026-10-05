@@ -2482,15 +2482,15 @@ var File_provider_variablestore_v1_variablestore_proto protoreflect.FileDescript
 
 const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\n" +
-	"-provider/variablestore/v1/variablestore.proto\x12\x19provider.variablestore.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a!common/bindings/v1/bindings.proto\"\xbe\x04\n" +
+	"-provider/variablestore/v1/variablestore.proto\x12\x19provider.variablestore.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a!common/bindings/v1/bindings.proto\"\xda\x04\n" +
 	"\n" +
 	"Coordinate\x125\n" +
-	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x96\x02\n" +
-	"\x06folder\x18\x02 \x01(\tB\xfd\x01\xbaH\xf9\x01\xba\x01\x96\x01\n" +
-	"$variablestore.coordinate.folder.root\x12a\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead\x1a\vthis != '/'r]2[^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$R\x06folder\x12+\n" +
-	"\x03key\x18\x03 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12\xb2\x01\n" +
-	"\venvironment\x18\x04 \x01(\tB\x8f\x01\xbaH\x8b\x01\xba\x01t\n" +
-	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"\x91\x02\n" +
+	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xaa\x02\n" +
+	"\x06folder\x18\x02 \x01(\tB\x91\x02\xbaH\x8d\x02\xba\x01\x96\x01\n" +
+	"$variablestore.coordinate.folder.root\x12a\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead\x1a\vthis != '/'rq2o^(/([^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.[^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.\\.[^/#\\x00-\\x1f\\x7f]+))*$R\x06folder\x12/\n" +
+	"\x03key\x18\x03 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12\xb6\x01\n" +
+	"\venvironment\x18\x04 \x01(\tB\x93\x01\xbaH\x8f\x01\xba\x01t\n" +
+	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\venvironment\"\x91\x02\n" +
 	"\rValueMetadata\x12E\n" +
 	"\n" +
 	"coordinate\x18\x01 \x01(\v2%.provider.variablestore.v1.CoordinateR\n" +
@@ -2574,32 +2574,32 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"coordinate\x18\x02 \x01(\v2%.provider.variablestore.v1.CoordinateB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"coordinate\"[\n" +
 	"\x14ListVersionsResponse\x12C\n" +
-	"\bversions\x18\x01 \x03(\v2'.provider.variablestore.v1.VersionEntryR\bversions\"\xb6\x04\n" +
+	"\bversions\x18\x01 \x03(\v2'.provider.variablestore.v1.VersionEntryR\bversions\"\xba\x04\n" +
 	"\x11SetBindingRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xdf\x01\n" +
 	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xad\x01\xbaH\xa9\x01\xba\x01\xa5\x01\n" +
-	"\x1avariablestore.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xb2\x01\n" +
-	"\venvironment\x18\x03 \x01(\tB\x8f\x01\xbaH\x8b\x01\xba\x01t\n" +
-	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\x12=\n" +
+	"\x1avariablestore.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xb6\x01\n" +
+	"\venvironment\x18\x03 \x01(\tB\x93\x01\xbaH\x8f\x01\xba\x01t\n" +
+	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\venvironment\x12=\n" +
 	"\abinding\x18\x04 \x01(\v2\x1b.common.bindings.v1.BindingB\x06\xbaH\x03\xc8\x01\x01R\abinding\x12\x14\n" +
 	"\x05owner\x18\x05 \x01(\tR\x05owner\".\n" +
 	"\x12SetBindingResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x04R\aversion\"\x93\x04\n" +
+	"\aversion\x18\x01 \x01(\x04R\aversion\"\x9b\x04\n" +
 	"\x14RemoveBindingRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xdf\x01\n" +
 	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xad\x01\xbaH\xa9\x01\xba\x01\xa5\x01\n" +
-	"\x1avariablestore.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xb2\x01\n" +
-	"\venvironment\x18\x03 \x01(\tB\x8f\x01\xbaH\x8b\x01\xba\x01t\n" +
-	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\x12-\n" +
-	"\x04name\x18\x04 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x04name\"1\n" +
+	"\x1avariablestore.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xb6\x01\n" +
+	"\venvironment\x18\x03 \x01(\tB\x93\x01\xbaH\x8f\x01\xba\x01t\n" +
+	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\venvironment\x121\n" +
+	"\x04name\x18\x04 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x04name\"1\n" +
 	"\x15RemoveBindingResponse\x12\x18\n" +
-	"\aremoved\x18\x01 \x01(\bR\aremoved\"\xe3\x03\n" +
+	"\aremoved\x18\x01 \x01(\bR\aremoved\"\xe7\x03\n" +
 	"\x13ListBindingsRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xdf\x01\n" +
 	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xad\x01\xbaH\xa9\x01\xba\x01\xa5\x01\n" +
-	"\x1avariablestore.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xb2\x01\n" +
-	"\venvironment\x18\x03 \x01(\tB\x8f\x01\xbaH\x8b\x01\xba\x01t\n" +
-	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"]\n" +
+	"\x1avariablestore.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xb6\x01\n" +
+	"\venvironment\x18\x03 \x01(\tB\x93\x01\xbaH\x8f\x01\xba\x01t\n" +
+	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\venvironment\"]\n" +
 	"\x14ListBindingsResponse\x12E\n" +
 	"\bbindings\x18\x01 \x03(\v2).provider.variablestore.v1.BindingSummaryR\bbindings\"\xeb\x01\n" +
 	"\x0eBindingSummary\x12\x12\n" +
@@ -2621,10 +2621,10 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\x06values\x18\x03 \x03(\v2).provider.variablestore.v1.EnvSourceValueR\x06values\"h\n" +
 	"\x0eEnvSourceValue\x12;\n" +
 	"\x04cell\x18\x01 \x01(\v2\x1f.provider.variablestore.v1.CellB\x06\xbaH\x03\xc8\x01\x01R\x04cell\x12\x19\n" +
-	"\x05value\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05value\"\xaf\x01\n" +
-	"\x04Cell\x12z\n" +
-	"\x06folder\x18\x01 \x01(\tBb\xbaH_r]2[^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$R\x06folder\x12+\n" +
-	"\x03key\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\"\xda\x02\n" +
+	"\x05value\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05value\"\xc8\x01\n" +
+	"\x04Cell\x12\x8e\x01\n" +
+	"\x06folder\x18\x01 \x01(\tBv\xbaHsrq2o^(/([^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.[^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.\\.[^/#\\x00-\\x1f\\x7f]+))*$R\x06folder\x12/\n" +
+	"\x03key\x18\x02 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\"\xda\x02\n" +
 	"\x0fEnvSourceStatus\x12\x1d\n" +
 	"\n" +
 	"env_source\x18\x01 \x01(\tR\tenvSource\x12\x1c\n" +
@@ -2649,7 +2649,7 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\x11CredentialRefusal\x12\x1a\n" +
 	"\bvariable\x18\x01 \x01(\tR\bvariable\x12\x14\n" +
 	"\x05unset\x18\x02 \x01(\bR\x05unset\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xb8\x04\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xcc\x04\n" +
 	"\x14SyncEnvSourceRequest\x12\xba\x01\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\x88\x01\xbaH\x84\x01\xba\x01\x80\x01\n" +
 	"\x1cvariablestore.envsource.tier\x12Pan env source is kept per deployed tier: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x125\n" +
@@ -2658,8 +2658,8 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"env_source\x18\x03 \x01(\v2$.provider.variablestore.v1.EnvSourceH\x00R\tenvSource\x12P\n" +
 	"\n" +
 	"registered\x18\x05 \x01(\v2..provider.variablestore.v1.RegisteredEnvSourceH\x00R\n" +
-	"registered\x12\x83\x01\n" +
-	"\afolders\x18\x04 \x03(\tBi\xbaHf\x92\x01c\x18\x01\"_r]2[^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$R\afoldersB\r\n" +
+	"registered\x12\x97\x01\n" +
+	"\afolders\x18\x04 \x03(\tB}\xbaHz\x92\x01w\x18\x01\"srq2o^(/([^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.[^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.\\.[^/#\\x00-\\x1f\\x7f]+))*$R\afoldersB\r\n" +
 	"\x04from\x12\x05\xbaH\x02\b\x01\"\x15\n" +
 	"\x13RegisteredEnvSource\"\x8c\x02\n" +
 	"\x15SyncEnvSourceResponse\x12B\n" +

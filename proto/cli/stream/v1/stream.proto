@@ -55,17 +55,17 @@ message MissingVariables {
 message MissingVariable {
   string key = 1;
 
-  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
+  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#\\x00-\\x1f\\x7f]+)*$"];
 
   string reason = 3;
 
   string description = 4;
 
-  string group = 5 [(buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$"];
+  string group = 5 [(buf.validate.field).string.pattern = "^[^#\\x00-\\x1f\\x7f]*$"];
 }
 
 message MissingGroup {
-  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
 
   string description = 2;
 }

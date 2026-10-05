@@ -18,7 +18,7 @@ enum VariableClass {
 }
 
 message VariableDefinition {
-  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
   VariableClass class = 2 [(buf.validate.field).enum.defined_only = true];
 
   bool client_accessible = 3;
@@ -27,7 +27,7 @@ message VariableDefinition {
 
   repeated string folders = 5 [(buf.validate.field).repeated = {
     unique: true
-    items: {string: {pattern: "^(/[^/#[:cntrl:]]+)+$"}}
+    items: {string: {pattern: "^(/[^/#\\x00-\\x1f\\x7f]+)+$"}}
   }];
 
   string source = 6;
@@ -39,21 +39,21 @@ message VariableDefinition {
   string description = 9 [(buf.validate.field).cel = {
     id: "variables.definition.description"
     message: "a description is at most 120 bytes, one line, and has no control characters"
-    expression: "size(bytes(this)) <= 120 && !this.matches('[[:cntrl:]]')"
+    expression: "size(bytes(this)) <= 120 && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]')"
   }];
 
-  string group = 10 [(buf.validate.field).string = {pattern: "^[^#[:cntrl:]]*$"}];
+  string group = 10 [(buf.validate.field).string = {pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
 }
 
 message GroupDefinition {
-  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
 
   bool required = 2;
 
   string description = 3 [(buf.validate.field).cel = {
     id: "variables.group.description"
     message: "a description is at most 120 bytes, one line, and has no control characters"
-    expression: "size(bytes(this)) <= 120 && !this.matches('[[:cntrl:]]')"
+    expression: "size(bytes(this)) <= 120 && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]')"
   }];
 }
 
@@ -64,9 +64,9 @@ message DeclareEnvRequest {
 }
 
 message VariableCell {
-  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
 
-  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
+  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#\\x00-\\x1f\\x7f]+)*$"];
 
   string value = 3;
 }
@@ -83,7 +83,7 @@ message VariableProblem {
   }
 
   string key = 1;
-  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
+  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#\\x00-\\x1f\\x7f]+)*$"];
   Kind kind = 3 [(buf.validate.field).enum.defined_only = true];
 
   string detail = 4;

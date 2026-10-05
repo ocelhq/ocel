@@ -221,9 +221,9 @@ message ContainerArtifact {
     expression: "this.min_instances <= this.max_instances"
   };
 
-  string image = 1 [(buf.validate.field).string.pattern = "^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$"];
+  string image = 1 [(buf.validate.field).string.pattern = "^([^/@: \\t\\n\\v\\f\\r]+(:[0-9]+)?/)?[^/@: \\t\\n\\v\\f\\r]+(/[^/@: \\t\\n\\v\\f\\r]+)*@sha256:[0-9a-f]{64}$"];
 
-  string health_check_path = 2 [(buf.validate.field).string.pattern = "^/[^#?[:space:][:cntrl:]]*$", (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+  string health_check_path = 2 [(buf.validate.field).string.pattern = "^/[^#? \\t\\n\\v\\f\\r\\x00-\\x1f\\x7f]*$", (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
   string arch = 3 [(buf.validate.field).string = {in: ["x86_64", "arm64"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
@@ -257,7 +257,7 @@ message ManifestApp {
 
   repeated ManifestVariable variables = 4;
 
-  string folder = 5 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
+  string folder = 5 [(buf.validate.field).string.pattern = "^(/[^/#\\x00-\\x1f\\x7f]+)*$"];
 
   string deployment_id = 6;
 
@@ -273,12 +273,12 @@ message ManifestApp {
 }
 
 message ManifestVariable {
-  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
   app.resources.v1.VariableClass class = 2 [(buf.validate.field).enum.defined_only = true];
 
   string value = 3 [debug_redact = true];
 
-  string folder = 4 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
+  string folder = 4 [(buf.validate.field).string.pattern = "^(/[^/#\\x00-\\x1f\\x7f]+)*$"];
 
   int64 version = 5;
 

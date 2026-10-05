@@ -41,7 +41,7 @@ message Coordinate {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   string folder = 2 [
-    (buf.validate.field).string.pattern = "^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$",
+    (buf.validate.field).string.pattern = "^(/([^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.[^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.\\.[^/#\\x00-\\x1f\\x7f]+))*$",
     (buf.validate.field).cel = {
       id: "variablestore.coordinate.folder.root"
       message: "\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead"
@@ -49,10 +49,10 @@ message Coordinate {
     }
   ];
 
-  string key = 3 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+  string key = 3 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
 
   string environment = 4 [
-    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).string.pattern = "^[^#\\x00-\\x1f\\x7f]*$",
     (buf.validate.field).cel = {
       id: "variablestore.environment.tier_wide"
       message: "\"*\" is reserved: it names the value that binds tier-wide"
@@ -185,7 +185,7 @@ message SetBindingRequest {
   }];
 
   string environment = 3 [
-    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).string.pattern = "^[^#\\x00-\\x1f\\x7f]*$",
     (buf.validate.field).cel = {
       id: "variablestore.environment.tier_wide"
       message: "\"*\" is reserved: it names the value that binds tier-wide"
@@ -212,7 +212,7 @@ message RemoveBindingRequest {
   }];
 
   string environment = 3 [
-    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).string.pattern = "^[^#\\x00-\\x1f\\x7f]*$",
     (buf.validate.field).cel = {
       id: "variablestore.environment.tier_wide"
       message: "\"*\" is reserved: it names the value that binds tier-wide"
@@ -220,7 +220,7 @@ message RemoveBindingRequest {
     }
   ];
 
-  string name = 4 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+  string name = 4 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
 }
 
 message RemoveBindingResponse {
@@ -237,7 +237,7 @@ message ListBindingsRequest {
   }];
 
   string environment = 3 [
-    (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
+    (buf.validate.field).string.pattern = "^[^#\\x00-\\x1f\\x7f]*$",
     (buf.validate.field).cel = {
       id: "variablestore.environment.tier_wide"
       message: "\"*\" is reserved: it names the value that binds tier-wide"
@@ -287,9 +287,9 @@ message EnvSourceValue {
 }
 
 message Cell {
-  string folder = 1 [(buf.validate.field).string.pattern = "^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$"];
+  string folder = 1 [(buf.validate.field).string.pattern = "^(/([^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.[^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.\\.[^/#\\x00-\\x1f\\x7f]+))*$"];
 
-  string key = 2 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+  string key = 2 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
 }
 
 message EnvSourceStatus {
@@ -351,7 +351,7 @@ message SyncEnvSourceRequest {
 
   repeated string folders = 4 [(buf.validate.field).repeated = {
     unique: true
-    items: {string: {pattern: "^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$"}}
+    items: {string: {pattern: "^(/([^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.[^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.\\.[^/#\\x00-\\x1f\\x7f]+))*$"}}
   }];
 }
 

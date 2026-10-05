@@ -61,7 +61,7 @@ message PresignFile {
     (buf.validate.field).cel = {
       id: "buckets.presign_file.key"
       message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
-      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]') && !this.startsWith('.ocel/')"
     }
   ];
   string name = 2;
@@ -157,7 +157,7 @@ message HeadRequest {
     (buf.validate.field).cel = {
       id: "buckets.head.key"
       message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
-      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]') && !this.startsWith('.ocel/')"
     }
   ];
 }
@@ -173,7 +173,7 @@ message ListRequest {
     (buf.validate.field).cel = {
       id: "buckets.list.prefix"
       message: "a prefix names where under the bucket's prefix to look: no segment may be \".\" or \"..\", it may contain no backslash and no control character, and \".ocel\" is reserved"
-      expression: "this.split('/').all(segment, segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel')"
+      expression: "this.split('/').all(segment, segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]') && !this.startsWith('.ocel')"
     }
   ];
   string cursor = 3;
@@ -198,7 +198,7 @@ message DeleteRequest {
       cel: {
         id: "buckets.delete.key"
         message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
-        expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+        expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]') && !this.startsWith('.ocel/')"
       }
     }
   ];
@@ -213,7 +213,7 @@ message CopyRequest {
     (buf.validate.field).cel = {
       id: "buckets.copy.source_key"
       message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
-      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]') && !this.startsWith('.ocel/')"
     }
   ];
   string destination_key = 3 [
@@ -221,7 +221,7 @@ message CopyRequest {
     (buf.validate.field).cel = {
       id: "buckets.copy.destination_key"
       message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
-      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]') && !this.startsWith('.ocel/')"
     }
   ];
 }
@@ -247,7 +247,7 @@ message SignRequest {
     (buf.validate.field).cel = {
       id: "buckets.sign.key"
       message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
-      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]') && !this.startsWith('.ocel/')"
     }
   ];
   SignedOperation operation = 3 [(buf.validate.field).enum.defined_only = true];
@@ -267,7 +267,7 @@ message CreateMultipartRequest {
     (buf.validate.field).cel = {
       id: "buckets.create_multipart.key"
       message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
-      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]') && !this.startsWith('.ocel/')"
     }
   ];
   string content_type = 3;
@@ -286,7 +286,7 @@ message SignPartsRequest {
     (buf.validate.field).cel = {
       id: "buckets.sign_parts.key"
       message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
-      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]') && !this.startsWith('.ocel/')"
     }
   ];
   string upload_id = 3 [(buf.validate.field).string.min_len = 1];
@@ -320,7 +320,7 @@ message CompleteMultipartRequest {
     (buf.validate.field).cel = {
       id: "buckets.complete_multipart.key"
       message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
-      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]') && !this.startsWith('.ocel/')"
     }
   ];
   string upload_id = 3 [(buf.validate.field).string.min_len = 1];
@@ -340,7 +340,7 @@ message AbortMultipartRequest {
     (buf.validate.field).cel = {
       id: "buckets.abort_multipart.key"
       message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
-      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]') && !this.startsWith('.ocel/')"
     }
   ];
   string upload_id = 3 [(buf.validate.field).string.min_len = 1];
