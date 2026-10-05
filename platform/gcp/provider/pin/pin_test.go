@@ -13,25 +13,38 @@ import (
 
 type services struct {
 	serving     map[string]string
+	closed      map[string]bool
 	refuse      map[string]error
 	failAfter   map[string]error
 	checkActive bool
 }
 
-func (s *services) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) error {
+func (s *services) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) (bool, error) {
 	if err := s.refuse[service]; err != nil {
-		return err
+		return false, err
 	}
+	if s.checkActive && stillActive != nil {
+		if err := stillActive(ctx); err != nil {
+			return false, err
+		}
+	}
+	s.serving[service] = revision
+	opened := s.closed[service]
+	delete(s.closed, service)
+	if err := s.failAfter[service]; err != nil {
+		delete(s.failAfter, service)
+		return opened, err
+	}
+	return opened, nil
+}
+
+func (s *services) Restore(ctx context.Context, service, revision string, stillActive router.StillActive) error {
 	if s.checkActive && stillActive != nil {
 		if err := stillActive(ctx); err != nil {
 			return err
 		}
 	}
 	s.serving[service] = revision
-	if err := s.failAfter[service]; err != nil {
-		delete(s.failAfter, service)
-		return err
-	}
 	return nil
 }
 
@@ -63,7 +76,7 @@ func TestAPromotionThatFailsPartWayPutsEveryServiceItPinnedBackOnWhatItServed(t 
 		refuse:  map[string]error{"ocel-shop-prod-web": refused},
 	}
 
-	err := pin.MovePointer(context.Background(), cloudRun, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
+	_, err := pin.MovePointer(context.Background(), cloudRun, nil, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
 
 	if !errors.Is(err, refused) {
 		t.Fatalf("MovePointer = %v, want the refusal that stopped it", err)
@@ -83,9 +96,9 @@ func TestAPromotionThatCannotPutAServiceBackSaysWhatEachServiceServes(t *testing
 		serving: map[string]string{"ocel-shop-prod-api": "api-1", "ocel-shop-prod-web": "web-1"},
 		refuse:  map[string]error{"ocel-shop-prod-web": refused},
 	}
-	flaky := &restoreRefusing{services: cloudRun, refuseAfter: 1}
+	flaky := restoreRefusing{services: cloudRun}
 
-	err := pin.MovePointer(context.Background(), flaky, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
+	_, err := pin.MovePointer(context.Background(), flaky, nil, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
 
 	var unserved router.Unserved
 	if errors.As(err, &unserved) {
@@ -96,18 +109,10 @@ func TestAPromotionThatCannotPutAServiceBackSaysWhatEachServiceServes(t *testing
 	}
 }
 
-type restoreRefusing struct {
-	*services
-	refuseAfter int
-	pins        int
-}
+type restoreRefusing struct{ *services }
 
-func (r *restoreRefusing) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) error {
-	r.pins++
-	if r.pins > r.refuseAfter+1 {
-		return errors.New("cloud run refused the restore")
-	}
-	return r.services.Pin(ctx, service, revision, stillActive)
+func (r restoreRefusing) Restore(context.Context, string, string, router.StillActive) error {
+	return errors.New("cloud run refused the restore")
 }
 
 func TestAPromotionDisplacedPartWayLeavesWhatTheDisplacingPromotionPinned(t *testing.T) {
@@ -125,7 +130,7 @@ func TestAPromotionDisplacedPartWayLeavesWhatTheDisplacingPromotionPinned(t *tes
 		return displaced
 	}
 
-	err := pin.MovePointer(context.Background(), cloudRun, move, progress.Discard())
+	_, err := pin.MovePointer(context.Background(), cloudRun, nil, move, progress.Discard())
 
 	if !errors.Is(err, displaced) {
 		t.Fatalf("MovePointer = %v, want the displacement", err)
@@ -135,19 +140,168 @@ func TestAPromotionDisplacedPartWayLeavesWhatTheDisplacingPromotionPinned(t *tes
 	}
 }
 
+func (s *services) Close(_ context.Context, service string) error {
+	if s.closed == nil {
+		s.closed = map[string]bool{}
+	}
+	s.closed[service] = true
+	return nil
+}
+
+func TestAPromotionThatFailsPartWayClosesAgainTheBrandNewServiceItOpened(t *testing.T) {
+	refused := errors.New("cloud run refused the pin")
+	cloudRun := &services{
+		serving: map[string]string{"ocel-shop-prod-api": "api-2", "ocel-shop-prod-web": "web-1"},
+		closed:  map[string]bool{"ocel-shop-prod-api": true},
+		refuse:  map[string]error{"ocel-shop-prod-web": refused},
+	}
+
+	_, err := pin.MovePointer(context.Background(), cloudRun, nil, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
+
+	if !errors.Is(err, refused) {
+		t.Fatalf("MovePointer = %v, want the refusal that stopped it", err)
+	}
+	if !cloudRun.closed["ocel-shop-prod-api"] {
+		t.Error("api answers everyone after the promotion that opened it failed on web, and no pointer the router records names it, so nothing would close it")
+	}
+}
+
+func TestMovingAPointerOffAServiceClosesItWhenNoOtherPointerPinsIt(t *testing.T) {
+	ctx := context.Background()
+	cloudRun := &services{serving: map[string]string{}}
+	both := promotion(map[string]string{"api": "api-2", "web": "web-2"})
+	pointers, err := pin.ReplacePointer(ctx, cloudRun, nil, both)
+	if err != nil {
+		t.Fatalf("ReplacePointer = %v", err)
+	}
+	other := promotion(map[string]string{"web": "web-2"})
+	other.Pointer = "pr-7"
+	if pointers, err = pin.ReplacePointer(ctx, cloudRun, pointers, other); err != nil {
+		t.Fatalf("ReplacePointer(pr-7) = %v", err)
+	}
+
+	if _, err := pin.ReplacePointer(ctx, cloudRun, pointers, promotion(map[string]string{"admin": "admin-1"})); err != nil {
+		t.Fatalf("ReplacePointer = %v", err)
+	}
+
+	if !cloudRun.closed["ocel-shop-prod-api"] {
+		t.Error("api answers everyone after the pointer that pinned it moved to releases that leave it out")
+	}
+	if cloudRun.closed["ocel-shop-prod-web"] || cloudRun.closed["ocel-shop-prod-admin"] {
+		t.Errorf("the move closed %v, want only api: web is still pinned by pr-7 and admin by the move itself", cloudRun.closed)
+	}
+}
+
+func TestRemovingAPointerClosesEveryServiceItPinnedAndNoOtherPointerPins(t *testing.T) {
+	cloudRun := &services{serving: map[string]string{}}
+	move := promotion(map[string]string{"api": "api-2", "web": "web-2"})
+	pointers, err := pin.MovePointer(context.Background(), cloudRun, nil, move, progress.Discard())
+	if err != nil {
+		t.Fatalf("MovePointer = %v", err)
+	}
+	other := promotion(map[string]string{"admin": "admin-1"})
+	other.Pointer = "pr-7"
+	if pointers, err = pin.MovePointer(context.Background(), cloudRun, pointers, other, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(pr-7) = %v", err)
+	}
+
+	pointers, err = pin.ClosePointer(context.Background(), cloudRun, pointers, "")
+	if err != nil {
+		t.Fatalf("ClosePointer = %v", err)
+	}
+
+	for _, service := range []string{"ocel-shop-prod-api", "ocel-shop-prod-web"} {
+		if !cloudRun.closed[service] {
+			t.Errorf("%s answers everyone after its pointer was removed, want it closed", service)
+		}
+	}
+	if cloudRun.closed["ocel-shop-prod-admin"] {
+		t.Error("admin was closed when another pointer was removed, and its own pointer still pins it")
+	}
+	if _, again := pin.ClosePointer(context.Background(), cloudRun, pointers, ""); again != nil {
+		t.Errorf("ClosePointer again = %v, want a removal to be re-entrant", again)
+	}
+}
+
 func TestAPinThatLandsButFailsWhileWaitingIsPutBackWithTheRest(t *testing.T) {
 	lost := errors.New("waiting on the cloud run operation failed")
 	cloudRun := &services{
 		serving:   map[string]string{"ocel-shop-prod-api": "api-1", "ocel-shop-prod-web": "web-1"},
-		failAfter: map[string]error{"ocel-shop-prod-api": lost},
+		closed:    map[string]bool{"ocel-shop-prod-web": true},
+		failAfter: map[string]error{"ocel-shop-prod-web": lost},
 	}
 
-	err := pin.MovePointer(context.Background(), cloudRun, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
+	_, err := pin.MovePointer(context.Background(), cloudRun, nil, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
 
 	if !errors.Is(err, lost) {
 		t.Fatalf("MovePointer = %v, want the failure it stopped on", err)
 	}
-	if got := cloudRun.serving["ocel-shop-prod-api"]; got != "api-1" {
-		t.Errorf("api serves %s, want the api-1 it served before: its pin landed before the wait on it failed, so it is put back like any other", got)
+	if got := cloudRun.serving["ocel-shop-prod-web"]; got != "web-1" {
+		t.Errorf("web serves %s, want the web-1 it served before: its pin landed before the wait on it failed, so it is put back like any other", got)
 	}
+	if !cloudRun.closed["ocel-shop-prod-web"] {
+		t.Error("web answers everyone after the promotion whose pin opened it failed while waiting, want it closed again")
+	}
+}
+
+func TestAPromotionThatCannotPutBackAServiceItOpenedStillClosesItFirst(t *testing.T) {
+	refused := errors.New("cloud run refused the pin")
+	cloudRun := &services{
+		serving: map[string]string{"ocel-shop-prod-api": "api-1", "ocel-shop-prod-web": "web-1"},
+		closed:  map[string]bool{"ocel-shop-prod-api": true},
+		refuse:  map[string]error{"ocel-shop-prod-web": refused},
+	}
+	recorder := &closeRecording{restoreRefusing: restoreRefusing{services: cloudRun}}
+
+	_, err := pin.MovePointer(context.Background(), recorder, nil, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
+
+	if !cloudRun.closed["ocel-shop-prod-api"] {
+		t.Error("api answers everyone on api-2 after the promotion that opened it failed and api-1 could not be pinned back, want it closed")
+	}
+	if err == nil || strings.Contains(err.Error(), "answers everyone") {
+		t.Errorf("MovePointer = %v, want it to say api is left on api-2, and not that it answers everyone: it was closed", err)
+	}
+	if want := []string{"close ocel-shop-prod-api", "repin ocel-shop-prod-api"}; strings.Join(recorder.calls, ",") != strings.Join(want, ",") {
+		t.Errorf("restoring api ran %v, want %v: a service closed before the promotion is closed before it is pinned back, "+
+			"or it answers everyone on its old revision in between", recorder.calls, want)
+	}
+}
+
+type closeRecording struct {
+	restoreRefusing
+	calls []string
+}
+
+func (c *closeRecording) Close(ctx context.Context, service string) error {
+	c.calls = append(c.calls, "close "+service)
+	return c.services.Close(ctx, service)
+}
+
+func (c *closeRecording) Restore(ctx context.Context, service, revision string, stillActive router.StillActive) error {
+	c.calls = append(c.calls, "repin "+service)
+	return c.restoreRefusing.Restore(ctx, service, revision, stillActive)
+}
+
+func TestAPromotionThatCannotCloseAServiceItOpenedSaysItAnswersEveryone(t *testing.T) {
+	refused := errors.New("cloud run refused the pin")
+	cloudRun := &services{
+		serving: map[string]string{"ocel-shop-prod-api": "api-1", "ocel-shop-prod-web": "web-1"},
+		closed:  map[string]bool{"ocel-shop-prod-api": true},
+		refuse:  map[string]error{"ocel-shop-prod-web": refused},
+	}
+
+	_, err := pin.MovePointer(context.Background(), closeRefusing{services: cloudRun}, nil, promotion(map[string]string{"api": "api-2", "web": "web-2"}), progress.Discard())
+
+	if err == nil || !strings.Contains(err.Error(), "ocel-shop-prod-api answers everyone on api-2") {
+		t.Errorf("MovePointer = %v, want it to say ocel-shop-prod-api answers everyone on api-2", err)
+	}
+	if got := cloudRun.serving["ocel-shop-prod-api"]; got != "api-2" {
+		t.Errorf("api serves %s, want api-2 left as it is: pinning api-1 back on a service that could not be closed would open the old revision to everyone", got)
+	}
+}
+
+type closeRefusing struct{ *services }
+
+func (closeRefusing) Close(context.Context, string) error {
+	return errors.New("cloud run refused the close")
 }

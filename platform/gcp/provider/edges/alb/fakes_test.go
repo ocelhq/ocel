@@ -40,6 +40,7 @@ type world struct {
 	invalidatedHosts []string
 	invalidating     error
 	untags           []string
+	closed           map[string]bool
 	onUp             func()
 }
 
@@ -204,17 +205,22 @@ func (w *world) enter(certificateMap, hostname string) {
 	w.entries[certificateMap][hostname] = true
 }
 
-func (w *world) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) error {
+func (w *world) Restore(ctx context.Context, service, revision string, stillActive router.StillActive) error {
+	_, err := w.Pin(ctx, service, revision, stillActive)
+	return err
+}
+
+func (w *world) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) (bool, error) {
 	for {
 		w.mu.Lock()
 		read, refused := len(w.pinned), w.pinning
 		w.mu.Unlock()
 		if refused != nil {
-			return refused
+			return false, refused
 		}
 		if stillActive != nil {
 			if err := stillActive(ctx); err != nil {
-				return err
+				return false, err
 			}
 		}
 		w.mu.Lock()
@@ -223,8 +229,10 @@ func (w *world) Pin(ctx context.Context, service, revision string, stillActive r
 			continue
 		}
 		w.pinned = append(w.pinned, service+"@"+revision)
+		opened := w.closed[service]
+		delete(w.closed, service)
 		w.mu.Unlock()
-		return nil
+		return opened, nil
 	}
 }
 
@@ -234,6 +242,16 @@ func (w *world) ReadServing(_ context.Context, service string) (string, error) {
 
 func (w *world) ReadTag(_ context.Context, service, revision string) (string, error) {
 	return w.tagOf(service, revision), nil
+}
+
+func (w *world) Close(_ context.Context, service string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed == nil {
+		w.closed = map[string]bool{}
+	}
+	w.closed[service] = true
+	return nil
 }
 
 func (w *world) Untag(_ context.Context, service, tag string) error {
@@ -287,6 +305,9 @@ func (w *world) refusePins(err error) {
 func (w *world) pinnedRevision(service string) string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.closed[service] {
+		return ""
+	}
 	for _, pin := range slices.Backward(w.pinned) {
 		if pinned, revision, _ := strings.Cut(pin, "@"); pinned == service {
 			return revision

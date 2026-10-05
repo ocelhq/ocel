@@ -201,7 +201,7 @@ func TestReclaimingADroppedFunctionReleaseLeavesTheServiceServingTheActiveReleas
 	if gone.Physical != active.Physical {
 		t.Fatalf("the releases deployed %q and %q, want one Cloud Run service per function that every release revises", gone.Physical, active.Physical)
 	}
-	if err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+	if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 
@@ -229,7 +229,7 @@ func TestDestroyingEveryReleaseOfAFunctionDeletesItsServiceWhicheverGoesFirst(t 
 			later := functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two")
 			released.provision(t, earlier)
 			active := released.provision(t, later)
-			if err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+			if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 				t.Fatalf("Pin(%s) = %v", active.Revision, err)
 			}
 
@@ -371,7 +371,7 @@ func TestEachReleaseBehindTheLoadBalancerTagsTheRevisionItCreatedWithItsReleaseT
 	released := newReleasedStacks(p)
 	first := behindTheLoadBalancer(t, p, functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"))
 	one := released.provision(t, first)
-	if err := p.Pin(context.Background(), one.Physical, one.Revision, nil); err != nil {
+	if _, err := p.Pin(context.Background(), one.Physical, one.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one.Revision, err)
 	}
 	second := behindTheLoadBalancer(t, p, functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two"))
@@ -395,7 +395,7 @@ func TestAReleaseWithNoEdgeInFrontTagsNoRevision(t *testing.T) {
 	p := server.open(t)
 	released := newReleasedStacks(p)
 	one := released.provision(t, functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"))
-	if err := p.Pin(context.Background(), one.Physical, one.Revision, nil); err != nil {
+	if _, err := p.Pin(context.Background(), one.Physical, one.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one.Revision, err)
 	}
 	released.provision(t, functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two"))

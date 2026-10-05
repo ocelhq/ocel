@@ -30,6 +30,7 @@ type runServer struct {
 	patchTries     int
 
 	uriEachRevision bool
+	failRouting     bool
 
 	uploads []upload
 	present map[string]bool
@@ -111,6 +112,7 @@ func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
 		Traffic:            allocated(desired.Traffic),
 		Ingress:            desired.Ingress,
 		InvokerIamDisabled: desired.InvokerIamDisabled,
+		Labels:             desired.Labels,
 		Uri:                "https://" + name + ".run.app",
 	}
 	s.revised()
@@ -134,11 +136,19 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 	}
 	s.patched = append(s.patched, desired)
 	if mask := r.URL.Query().Get("updateMask"); mask != "" {
-		if slices.Contains(strings.Split(mask, ","), "traffic") {
+		fields := strings.Split(mask, ",")
+		if slices.Contains(fields, "traffic") {
 			s.service.Traffic = allocated(desired.Traffic)
+		}
+		if slices.Contains(fields, "invoker_iam_disabled") {
+			s.service.InvokerIamDisabled = desired.InvokerIamDisabled
 		}
 		s.writes++
 		s.service.Etag = "etag-" + strconv.Itoa(s.writes)
+		if s.failRouting {
+			writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/release", Done: true, Error: &run.GoogleRpcStatus{Message: "the operation failed"}})
+			return
+		}
 		writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/release", Done: true})
 		return
 	}
@@ -147,6 +157,7 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 	s.service.Traffic = allocated(desired.Traffic)
 	s.service.Ingress = desired.Ingress
 	s.service.InvokerIamDisabled = desired.InvokerIamDisabled
+	s.service.Labels = desired.Labels
 	s.writes++
 	s.service.Etag = "etag-" + strconv.Itoa(s.writes)
 	if replaced {

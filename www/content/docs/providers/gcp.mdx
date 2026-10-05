@@ -56,6 +56,11 @@ Leave `edge` out and a deployment has no edge in front of it: each service is an
 the URL Cloud Run gives it, which costs nothing while it serves nothing and binds no
 hostname of your own.
 
+A promotion pins all of a service's traffic to the revision its release created, and a
+rollback pins it back. A service a deploy creates answers nobody until its first promotion
+opens it, and a first promotion that is taken back closes it again, so a service's default traffic
+only ever serves a release the project promoted.
+
 A hostname on Google Cloud costs a load balancer. Name the `alb` edge and `ocel bootstrap`
 provisions one global external Application Load Balancer per tier — one address, one
 certificate map, one URL map, Cloud CDN on every backend — and every project in that tier

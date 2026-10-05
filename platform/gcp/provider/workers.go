@@ -139,7 +139,7 @@ func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provid
 		if err != nil {
 			return nil, err
 		}
-		if err := p.Pin(ctx, worker.service, ran.revision, nil); err != nil {
+		if _, err := p.Pin(ctx, worker.service, ran.revision, nil); err != nil {
 			return nil, err
 		}
 		if err := p.grantInvoker(ctx, c, worker.service, "serviceAccount:"+pushAccount); err != nil {
