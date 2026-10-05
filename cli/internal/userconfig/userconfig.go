@@ -16,6 +16,7 @@ const (
 	settingsFileName = "settings.json"
 	lockFileName     = "settings.lock"
 	installIDKey     = "install_id"
+	deployedKey      = "deployed"
 )
 
 type Settings map[string]json.RawMessage
@@ -85,6 +86,15 @@ func EnsureInstallID() (string, error) {
 		return "", err
 	}
 	return id, nil
+}
+
+func HasDeployed() bool {
+	var deployed bool
+	return json.Unmarshal(Read()[deployedKey], &deployed) == nil && deployed
+}
+
+func MarkDeployed() error {
+	return Update(func(s Settings) { s[deployedKey] = json.RawMessage("true") })
 }
 
 func storedInstallID(s Settings) (string, bool) {
