@@ -90,6 +90,7 @@ const forged = {
   "x-middleware-rewrite": "/admin",
   "x-middleware-subrequest": "middleware",
   "next-resume": "1",
+  "x-ocel-refresh": "1000",
   "x-keep": "yes",
 };
 
@@ -114,6 +115,7 @@ test("a sibling route goes out through the origin fetch its host handed it", asy
   expect(request.headers.get("x-ocel-entry")).toBe("/sibling");
   expect(request.headers.get("x-middleware-rewrite")).toBeNull();
   expect(request.headers.get("next-resume")).toBeNull();
+  expect(request.headers.get("x-ocel-refresh")).toBeNull();
 });
 
 test("a dispatch host serves assets from the bucket its host handed it", async () => {

@@ -1,10 +1,10 @@
+import { refreshHeader } from "@framework/next-cache";
 import type {
   DispatchTarget,
   MiddlewareMatcher,
   RouteHas,
   RoutingManifest,
 } from "@framework/next-protocol/routing-manifest";
-
 import { resolveRoutes, responseToMiddlewareResult } from "@next/routing";
 import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 
@@ -71,7 +71,7 @@ function withFlightVary(response: Response): Response {
 
 export const ENTRY_HEADER = "x-ocel-entry";
 
-export const CONTROL_HEADERS = [ENTRY_HEADER, "next-resume"];
+export const CONTROL_HEADERS = [ENTRY_HEADER, "next-resume", refreshHeader];
 
 function withoutControlHeaders(headers: Headers): Headers {
   const kept = new Headers(headers);

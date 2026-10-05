@@ -7,7 +7,7 @@ import type { RequestHeaders } from "./request-headers.mjs";
 
 const cacheTagHeader = "cache-tag";
 
-const nextCacheHeader = "x-nextjs-cache";
+export const nextCacheHeader = "x-nextjs-cache";
 const staleCacheControl = "s-maxage=0, must-revalidate";
 
 const releasePattern = /^r[0-9a-f]{8}$/;
@@ -18,12 +18,15 @@ interface Window {
   expire?: number;
 }
 
-export interface OriginShaping {
-  release: string | null;
-  tagsPerObject: number;
+export interface RevalidatingRoutes {
   basePath: string;
   routes: ReadonlyMap<string, Window>;
   dynamicRoutes: readonly { pattern: RegExp; window: Window }[];
+}
+
+export interface OriginShaping extends RevalidatingRoutes {
+  release: string | null;
+  tagsPerObject: number;
 }
 
 export function releaseOf(isrPrefix: string | undefined): string | null {
@@ -40,13 +43,7 @@ function windowOf(revalidate: unknown, expire: unknown): Window | null {
   };
 }
 
-export function originShaping(
-  manifest: ProjectManifest | null,
-  env: NodeJS.ProcessEnv,
-  tagsPerObject = Number.POSITIVE_INFINITY,
-): OriginShaping | null {
-  if (!dispatchesAtOrigin(env)) return null;
-
+export function revalidatingRoutes(manifest: ProjectManifest | null): RevalidatingRoutes {
   const routes = new Map<string, Window>();
   for (const [route, entry] of Object.entries<any>(manifest?.prerender?.routes ?? {})) {
     const window = windowOf(entry?.initialRevalidateSeconds, entry?.initialExpireSeconds);
@@ -63,11 +60,27 @@ export function originShaping(
   }
 
   return {
-    release: invalidatesByCacheTag(env) ? releaseOf(env.OCEL_ISR_PREFIX) : null,
-    tagsPerObject,
     basePath: typeof manifest?.config?.basePath === "string" ? manifest.config.basePath : "",
     routes,
     dynamicRoutes,
+  };
+}
+
+export function isRevalidatingRoute(url: string | undefined, routes: RevalidatingRoutes): boolean {
+  return windowFor(url, routes) !== undefined;
+}
+
+export function originShaping(
+  routes: RevalidatingRoutes,
+  env: NodeJS.ProcessEnv,
+  tagsPerObject = Number.POSITIVE_INFINITY,
+): OriginShaping | null {
+  if (!dispatchesAtOrigin(env)) return null;
+
+  return {
+    ...routes,
+    release: invalidatesByCacheTag(env) ? releaseOf(env.OCEL_ISR_PREFIX) : null,
+    tagsPerObject,
   };
 }
 
@@ -145,11 +158,11 @@ function cacheControlOf({ revalidate, expire }: Window): string {
     : `s-maxage=${revalidate}`;
 }
 
-function windowFor(url: string | undefined, shaping: OriginShaping): Window | undefined {
-  const route = routeOf(url, shaping.basePath);
-  const exact = shaping.routes.get(route);
+function windowFor(url: string | undefined, routes: RevalidatingRoutes): Window | undefined {
+  const route = routeOf(url, routes.basePath);
+  const exact = routes.routes.get(route);
   if (exact) return exact;
-  return shaping.dynamicRoutes.find(({ pattern }) => pattern.test(route))?.window;
+  return routes.dynamicRoutes.find(({ pattern }) => pattern.test(route))?.window;
 }
 
 function routeOf(url: string | undefined, basePath: string): string {
