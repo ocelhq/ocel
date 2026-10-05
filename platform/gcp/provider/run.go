@@ -28,6 +28,9 @@ import (
 const (
 	opensOnPromotionLabel = "ocel-opens-on-promotion"
 	invokerCheckField     = "invoker_iam_disabled"
+	proxyField            = "iap_enabled"
+	opensToEveryone       = "everyone"
+	opensToViewers        = "viewers"
 )
 
 const (
@@ -63,6 +66,7 @@ type serving struct {
 	mounts      []secretMount
 	egress      *privateEgress
 	tag         string
+	iap         bool
 
 	opensOnPromotion bool
 }
@@ -177,17 +181,32 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	service := &run.GoogleCloudRunV2Service{
 		Template:           template,
 		Ingress:            ingress,
-		InvokerIamDisabled: s.public && !s.opensOnPromotion,
-		ForceSendFields:    []string{"InvokerIamDisabled"},
+		InvokerIamDisabled: s.public && !s.opensOnPromotion && !s.iap,
+		IapEnabled:         s.iap && !s.opensOnPromotion,
+		ForceSendFields:    []string{"InvokerIamDisabled", "IapEnabled"},
 	}
-	if s.public && s.opensOnPromotion {
-		service.Labels = map[string]string{opensOnPromotionLabel: "true"}
+	switch {
+	case !s.opensOnPromotion:
+	case s.iap:
+		service.Labels = map[string]string{opensOnPromotionLabel: opensToViewers}
+	case s.public:
+		service.Labels = map[string]string{opensOnPromotionLabel: opensToEveryone}
 	}
 	return service, nil
 }
 
-func opensOnPromotion(service *run.GoogleCloudRunV2Service) bool {
-	return service.Labels[opensOnPromotionLabel] == "true"
+func isOpen(service *run.GoogleCloudRunV2Service) bool {
+	return service.InvokerIamDisabled || service.IapEnabled
+}
+
+func openingOf(service *run.GoogleCloudRunV2Service) (*run.GoogleCloudRunV2Service, string) {
+	switch service.Labels[opensOnPromotionLabel] {
+	case opensToEveryone:
+		return &run.GoogleCloudRunV2Service{InvokerIamDisabled: true}, invokerCheckField
+	case opensToViewers:
+		return &run.GoogleCloudRunV2Service{IapEnabled: true}, proxyField
+	}
+	return nil, ""
 }
 
 func environmentOf(values map[string]string) []*run.GoogleCloudRunV2EnvVar {
@@ -269,8 +288,8 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress progre
 			}
 			desired.Etag = current.Etag
 			desired.Traffic = heldTraffic(current)
-			if opensOnPromotion(desired) {
-				desired.InvokerIamDisabled = current.InvokerIamDisabled
+			if opened, _ := openingOf(desired); opened != nil && isOpen(current) {
+				desired.InvokerIamDisabled, desired.IapEnabled = opened.InvokerIamDisabled, opened.IapEnabled
 			}
 			return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 				return services.Projects.Locations.Services.Patch(path, desired).Context(ctx).Do(call...)
@@ -399,12 +418,12 @@ func (p *Provider) Close(ctx context.Context, service string) error {
 		if err != nil {
 			return err
 		}
-		if !current.InvokerIamDisabled {
+		if !isOpen(current) {
 			return nil
 		}
-		closed := &run.GoogleCloudRunV2Service{Etag: current.Etag, ForceSendFields: []string{"InvokerIamDisabled"}}
+		closed := &run.GoogleCloudRunV2Service{Etag: current.Etag, ForceSendFields: []string{"InvokerIamDisabled", "IapEnabled"}}
 		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-			return services.Projects.Locations.Services.Patch(path, closed).UpdateMask(invokerCheckField).Context(ctx).Do(call...)
+			return services.Projects.Locations.Services.Patch(path, closed).UpdateMask(invokerCheckField + "," + proxyField).Context(ctx).Do(call...)
 		})
 	})
 	if absent(err) {
@@ -533,20 +552,23 @@ func (p *Provider) route(
 		if err != nil {
 			return err
 		}
-		opening := open && opensOnPromotion(current) && !current.InvokerIamDisabled
-		if servedBy(current.Traffic, revision) && !opening {
+		routed, opening := openingOf(current)
+		if !open || isOpen(current) {
+			routed, opening = nil, ""
+		}
+		if servedBy(current.Traffic, revision) && routed == nil {
 			return nil
 		}
-		routed := &run.GoogleCloudRunV2Service{
-			Etag:    current.Etag,
-			Traffic: trafficTo(revision, current.Traffic),
+		if routed == nil {
+			routed = &run.GoogleCloudRunV2Service{}
 		}
+		routed.Etag = current.Etag
+		routed.Traffic = trafficTo(revision, current.Traffic)
 		mask := trafficField
-		if opening {
-			routed.InvokerIamDisabled = true
-			mask += "," + invokerCheckField
+		if opening != "" {
+			mask += "," + opening
 		}
-		opened = opened || opening
+		opened = opened || opening != ""
 		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Services.Patch(path, routed).UpdateMask(mask).Context(ctx).Do(call...)
 		})

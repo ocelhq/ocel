@@ -181,6 +181,15 @@
       }
     },
     {
+      "id": "project:shop/shared:preview/google_project_service_identity:iap.googleapis.com",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_project_service_identity",
+      "name": "iap.googleapis.com",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/shared:preview/google_secret_manager_secret:ocel-preview-pulumi-passphrase",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",

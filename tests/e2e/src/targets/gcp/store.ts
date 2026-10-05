@@ -64,12 +64,14 @@ export const BOOTSTRAP_APIS = [
   "cloudscheduler.googleapis.com",
 ];
 
+export const PREVIEW_APIS = ["iap.googleapis.com"];
+
 export const TASKS_FEATURE = "tasks";
 
 export const TASKS_APIS = ["pubsub.googleapis.com", "cloudtasks.googleapis.com"];
 
 export async function switchOn(endpoint: string, project: string): Promise<void> {
-  for (const api of [...BOOTSTRAP_APIS, ...TASKS_APIS]) {
+  for (const api of [...BOOTSTRAP_APIS, ...PREVIEW_APIS, ...TASKS_APIS]) {
     const at = `${endpoint}/v1/projects/${project}/services/${api}:enable`;
     const answered = await fetch(at, {
       method: "POST",

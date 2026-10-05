@@ -27,6 +27,7 @@ const (
 	tfArtifactRepository  = "google_artifact_registry_repository"
 	tfSecretManagerSecret = "google_secret_manager_secret"
 	tfSchedulerJob        = "google_cloud_scheduler_job"
+	tfServiceIdentity     = "google_project_service_identity"
 	tfMemorystoreInstance = "google_memorystore_instance"
 	tfNetwork             = "google_compute_network"
 	tfSubnetwork          = "google_compute_subnetwork"
@@ -47,6 +48,7 @@ var itemTypes = map[Kind]string{
 	KindSecret:         tfSecretManagerSecret,
 	KindService:        tfCloudRunService,
 	KindSchedule:       tfSchedulerJob,
+	KindServiceAgent:   tfServiceIdentity,
 }
 
 func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {

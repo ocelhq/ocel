@@ -18,6 +18,10 @@ type featureNeed struct {
 }
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
+	proxied, err := p.proxiesPreviews(pre)
+	if err != nil {
+		return err
+	}
 	var needs []featureNeed
 	for _, resource := range pre.Resources {
 		switch resource.Type {
@@ -57,7 +61,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 				reason: "a Next app billed per request on Cloud Run refreshes a stale page through the tier's Cloud Tasks queue, which its bootstrap has not installed"})
 		}
 	}
-	if len(needs) == 0 {
+	if len(needs) == 0 && !proxied {
 		return nil
 	}
 	clients, err := p.openClients(ctx)
@@ -68,6 +72,11 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	read, err := bootstrap{clients: clients}.stamped(ctx, clients.Bucket(tier))
 	if err != nil {
 		return err
+	}
+	if proxied {
+		if err := refuseMissingProxyAgent(tier, read.stamp); err != nil {
+			return err
+		}
 	}
 	for _, need := range needs {
 		if read.stamp.State == stateComplete && slices.Contains(read.stamp.Features, need.feature) {
@@ -82,4 +91,25 @@ func refuseUninstalled(tier environment.Tier, region string, need featureNeed) e
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this project declares %s, and %s in %s.\nRun `%s %s`, then deploy again",
 		need.declares, need.reason, region, provider.BootstrapFeaturesCommand(tier), need.feature)
+}
+
+func (p *Provider) proxiesPreviews(pre provider.DeployPreflight) (bool, error) {
+	if pre.Deploy.Tier != environment.TierPreview || p.emulated() {
+		return false, nil
+	}
+	front, err := p.Edges().Open(pre.Edge, nil)
+	if err != nil {
+		return false, err
+	}
+	return p.servesBehindIAP(provider.StackSpec{Ref: provider.StackRef{Tier: pre.Deploy.Tier}, Edge: front}), nil
+}
+
+func refuseMissingProxyAgent(tier environment.Tier, written stamp) error {
+	if written.hasAgent(proxyAPI) {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"this preview has no edge in front, so it is served behind Identity-Aware Proxy, and no bootstrap of tier %s has checked %s is on "+
+			"and created the proxy's service agent.\nRun `%s`, then deploy again",
+		tier, proxyAPI, provider.BootstrapCommand(tier))
 }

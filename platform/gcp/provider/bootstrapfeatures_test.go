@@ -71,8 +71,8 @@ func TestTheShieldedLoadBalancerIsAFeatureOnlyTheCloudflareEdgePullsIn(t *testin
 	}
 
 	for _, api := range []string{"compute.googleapis.com", "certificatemanager.googleapis.com", "networksecurity.googleapis.com"} {
-		if !slices.Contains(apisFor([]string{albShieldedFeature}), api) {
-			t.Errorf("a %q bootstrap checks %v, want %s among them", albShieldedFeature, apisFor([]string{albShieldedFeature}), api)
+		if !slices.Contains(apisFor(environment.TierProduction, []string{albShieldedFeature}), api) {
+			t.Errorf("a %q bootstrap checks %v, want %s among them", albShieldedFeature, apisFor(environment.TierProduction, []string{albShieldedFeature}), api)
 		}
 	}
 	if !slices.Contains(permissionsFor([]string{albShieldedFeature}), "networksecurity.serverTlsPolicies.create") {
@@ -86,14 +86,14 @@ func TestTheShieldedLoadBalancerIsAFeatureOnlyTheCloudflareEdgePullsIn(t *testin
 func TestTheServicesTheLoadBalancerNeedsAreOnlyDemandedWhenItIsBeingProvisioned(t *testing.T) {
 	t.Parallel()
 
-	fronted := apisFor([]string{albFeature})
+	fronted := apisFor(environment.TierProduction, []string{albFeature})
 	for _, api := range []string{"compute.googleapis.com", "certificatemanager.googleapis.com"} {
 		if !slices.Contains(fronted, api) {
 			t.Errorf("an %q bootstrap checks %v, want %s among them: the apply would fail on the first resource that needs it",
 				alb.Kind, fronted, api)
 		}
 	}
-	plain := apisFor(nil)
+	plain := apisFor(environment.TierProduction, nil)
 	for _, api := range []string{"compute.googleapis.com", "certificatemanager.googleapis.com"} {
 		if slices.Contains(plain, api) {
 			t.Errorf("a bootstrap provisioning no load balancer demands %s, and it would be refused for a service it never calls", api)

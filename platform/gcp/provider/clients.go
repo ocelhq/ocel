@@ -19,11 +19,13 @@ import (
 	"google.golang.org/api/compute/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/api/iam/v1"
+	iap "google.golang.org/api/iap/v1"
 	loggingrest "google.golang.org/api/logging/v2"
 	"google.golang.org/api/networkconnectivity/v1"
 	run "google.golang.org/api/run/v2"
 	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/api/serviceusage/v1"
+	serviceidentities "google.golang.org/api/serviceusage/v1beta1"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -58,6 +60,8 @@ type clients struct {
 	compute       memo[*compute.Service]
 	certs         memo[*certmanager.Service]
 	connectivity  memo[*networkconnectivity.Service]
+	proxies       memo[*iap.Service]
+	identities    memo[*serviceidentities.APIService]
 	principal     memo[string]
 	projects      memo[*cloudresourcemanager.Service]
 	logs          memo[*logging.Client]
@@ -149,6 +153,18 @@ func (c *clients) Certificates() (*certmanager.Service, error) {
 func (c *clients) Connectivity() (*networkconnectivity.Service, error) {
 	return opened(c, &c.connectivity, "Network Connectivity", func() (*networkconnectivity.Service, error) {
 		return networkconnectivity.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) ServiceIdentities() (*serviceidentities.APIService, error) {
+	return opened(c, &c.identities, "Service Usage", func() (*serviceidentities.APIService, error) {
+		return serviceidentities.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) IAP() (*iap.Service, error) {
+	return opened(c, &c.proxies, "Identity-Aware Proxy", func() (*iap.Service, error) {
+		return iap.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 

@@ -194,7 +194,7 @@ type deployRun struct {
 	appRouters     map[string]router.Kind
 	bindings       []provider.Binding
 	provisioning   map[string]bool
-	origins        map[string]string
+	addresses      map[string]string
 }
 
 func (r *deployRun) recordArtifact(logical string, ref provider.ArtifactRef) {
@@ -208,18 +208,6 @@ func (r *deployRun) artifact(logical string) (provider.ArtifactRef, bool) {
 	defer r.mu.Unlock()
 	ref, ok := r.artifacts[logical]
 	return ref, ok
-}
-
-func (r *deployRun) recordOrigin(app, origin string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.origins[app] = origin
-}
-
-func (r *deployRun) readOrigin(app string) string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.origins[app]
 }
 
 func (r *deployRun) recordProvisioning(app string) {
@@ -285,7 +273,6 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		artifacts:      map[string]provider.ArtifactRef{},
 		functionImages: map[string]string{},
 		provisioning:   map[string]bool{},
-		origins:        map[string]string{},
 		inline:         inline,
 
 		dry:           req.GetDry(),
@@ -435,6 +422,9 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 		}
 		if wildcard.BaseDomain != "" {
 			r.previewOn = wildcard.BaseDomain
+			return nil
+		}
+		if r.edgeRouter().Facts().AddressesItself {
 			return nil
 		}
 		return refuseNoPreviewDomain()
@@ -1105,6 +1095,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err := r.recordAppStack(ctx, entry, result); err != nil {
 				return err
 			}
+			r.recordAddress(entry.App, ownAddress(entry, facts, result))
 			if err := r.warmFunctions(ctx, result.Functions, progress); err != nil {
 				return err
 			}
@@ -1294,6 +1285,37 @@ func frameworksOf(manifest *contractv1.Manifest) []string {
 	return frameworks
 }
 
+func (r *deployRun) recordAddress(app, address string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.addresses == nil {
+		r.addresses = map[string]string{}
+	}
+	r.addresses[app] = address
+}
+
+func (r *deployRun) readAddress(app string) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.addresses[app]
+}
+
+func ownAddress(entry provider.AppEntry, facts AppServing, result provider.StackResult) string {
+	if origin := originOf(result.Containers, entry.App); origin != "" {
+		return origin
+	}
+	named := entryLogicalName(entry.Manifest, facts.Entry)
+	if functions := entry.Manifest.GetServerless().GetFunctions(); named == "" && len(functions) == 1 {
+		named = functions[0].GetLogicalName()
+	}
+	for _, fn := range result.Functions {
+		if named != "" && fn.Name == named {
+			return fn.URL
+		}
+	}
+	return ""
+}
+
 func entryLogicalName(app *contractv1.ManifestApp, entry string) string {
 	if entry == "" {
 		return ""
@@ -1374,7 +1396,6 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 		}
 	}
 	coordinate := appCoordinate(r.spec, entry.App, entry.Build.Release())
-	r.recordOrigin(entry.App, originOf(result.Containers, entry.App))
 	var routing any
 	if facts.EdgeDispatch != nil {
 		routing = json.RawMessage(facts.EdgeDispatch.Manifest)
@@ -1554,9 +1575,9 @@ func (r *deployRun) result(promotion router.Promotion, propagation router.Propag
 		}
 	}
 	for slot, entry := range r.spec.Apps {
-		if r.hostingMode() == hostingProduction && len(r.outcomes[slot].Urls) == 0 && r.addressesItself(entry.App) {
-			if origin := r.readOrigin(entry.App); origin != "" {
-				r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, origin)
+		if len(r.outcomes[slot].Urls) == 0 && r.addressesItself(entry.App) {
+			if address := r.readAddress(entry.App); address != "" {
+				r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, address)
 			}
 		}
 		if host := findAppHost(r.listDeploymentHosts(), entry.App); host.Hostname != "" {

@@ -2073,3 +2073,36 @@ func TestAPreviewRemovedAfterItsDeployClaimedItStaysRemoved(t *testing.T) {
 		})
 	}
 }
+
+func TestAPreviewOnARouterThatAddressesItselfDeploysWithNoPreviewDomainAndAnnouncesItsOwnURL(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).AddressesItself(true)
+
+	result, _ := deploy(t, client, previewDeployRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the preview released on the address its router gives it", result.GetError())
+	}
+	urls := servedURLs(result)
+	if len(urls) != 1 || !strings.HasSuffix(urls[0], ".fake.invalid") {
+		t.Errorf("the preview deploy announced %v, want the one url its release recorded: the router answers on it and no hostname is bound", urls)
+	}
+}
+
+func TestAProductionReleaseOnARouterThatAddressesItselfAnnouncesItsOwnURL(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).AddressesItself(true)
+	req := deployRequest()
+	req.Manifest.Domains = nil
+	req.Edge = edged(fake.KindRelay, "")
+
+	result, _ := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	if urls := servedURLs(result); len(urls) != 1 || !strings.HasSuffix(urls[0], ".fake.invalid") {
+		t.Errorf("the deploy announced %v, want the one url its release recorded", urls)
+	}
+}

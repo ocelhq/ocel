@@ -248,12 +248,12 @@ func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreRaisedWith(t *testin
 	t.Parallel()
 
 	for _, api := range []string{"pubsub.googleapis.com", "cloudtasks.googleapis.com", "firestore.googleapis.com", "cloudscheduler.googleapis.com"} {
-		if !slices.Contains(apisFor([]string{tasksFeature}), api) {
-			t.Errorf("a %q bootstrap checks %v, want %s among them", tasksFeature, apisFor([]string{tasksFeature}), api)
+		if !slices.Contains(apisFor(environment.TierProduction, []string{tasksFeature}), api) {
+			t.Errorf("a %q bootstrap checks %v, want %s among them", tasksFeature, apisFor(environment.TierProduction, []string{tasksFeature}), api)
 		}
 	}
-	if slices.Contains(apisFor(nil), "pubsub.googleapis.com") {
-		t.Errorf("a bootstrap with no feature checks %v, and a project that runs no topic needs no Pub/Sub switched on", apisFor(nil))
+	if slices.Contains(apisFor(environment.TierProduction, nil), "pubsub.googleapis.com") {
+		t.Errorf("a bootstrap with no feature checks %v, and a project that runs no topic needs no Pub/Sub switched on", apisFor(environment.TierProduction, nil))
 	}
 	for _, permission := range []string{"cloudtasks.queues.create", "cloudtasks.queues.setIamPolicy", "datastore.schemas.create", "resourcemanager.projects.get"} {
 		if !slices.Contains(permissionsFor([]string{tasksFeature}), permission) {

@@ -112,6 +112,7 @@ func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
 		Traffic:            allocated(desired.Traffic),
 		Ingress:            desired.Ingress,
 		InvokerIamDisabled: desired.InvokerIamDisabled,
+		IapEnabled:         desired.IapEnabled,
 		Labels:             desired.Labels,
 		Uri:                "https://" + name + ".run.app",
 	}
@@ -143,6 +144,9 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 		if slices.Contains(fields, "invoker_iam_disabled") {
 			s.service.InvokerIamDisabled = desired.InvokerIamDisabled
 		}
+		if slices.Contains(fields, "iap_enabled") {
+			s.service.IapEnabled = desired.IapEnabled
+		}
 		s.writes++
 		s.service.Etag = "etag-" + strconv.Itoa(s.writes)
 		if s.failRouting {
@@ -157,6 +161,7 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 	s.service.Traffic = allocated(desired.Traffic)
 	s.service.Ingress = desired.Ingress
 	s.service.InvokerIamDisabled = desired.InvokerIamDisabled
+	s.service.IapEnabled = desired.IapEnabled
 	s.service.Labels = desired.Labels
 	s.writes++
 	s.service.Etag = "etag-" + strconv.Itoa(s.writes)

@@ -56,7 +56,7 @@ func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy c
 	if err := refuseStaleBootstrap(policy, check, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW); err != nil {
 		return preflightFacts{}, err
 	}
-	if err := refuseMissingPreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), check); err != nil {
+	if err := refuseMissingPreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), resp.GetHostnameRequired(), check); err != nil {
 		return preflightFacts{}, err
 	}
 	proceed, err := guardNewProject(ctx, policy, check, cfg, resp.GetKnownSlugs())
@@ -70,21 +70,28 @@ func preflightPreviewUp(ctx context.Context, dependencies Dependencies, policy c
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	ensured, err := ensurePreviewAlias(ctx, process, resolved, env, token, policy.DryRun)
-	if err != nil {
-		return preflightFacts{}, err
-	}
 	facts := preflightFacts{
 		project:        resolved,
 		containerArchs: archs,
 		workerCeilings: provider.WorkerCeilingsOf(process.Facts().GetWorkerCeilings()),
-		urls:           appurl.FormatPreviewURLs(ensured.GetHostnames()),
-		builtAlias:     ensured.GetToken(),
 	}
+	if !assignsPreviewAlias(cfg, resp.GetPreviewWildcard(), resp.GetHostnameRequired()) {
+		return facts, nil
+	}
+	ensured, err := ensurePreviewAlias(ctx, process, resolved, env, token, policy.DryRun)
+	if err != nil {
+		return preflightFacts{}, err
+	}
+	facts.urls = appurl.FormatPreviewURLs(ensured.GetHostnames())
+	facts.builtAlias = ensured.GetToken()
 	if !policy.DryRun {
 		facts.mintedAlias = token
 	}
 	return facts, nil
+}
+
+func assignsPreviewAlias(cfg *project.Project, wildcard *contractv1.PreviewWildcard, hostnameRequired bool) bool {
+	return hostnameRequired || cfg.Domains.Preview != "" || wildcard.GetBaseDomain() != ""
 }
 
 func ensurePreviewAlias(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, token string, dry bool) (ensured *contractv1.EnsurePreviewAliasResponse, err error) {

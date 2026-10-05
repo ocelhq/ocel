@@ -253,8 +253,11 @@ func (b bootstrap) featuresFree(ctx context.Context, tier environment.Tier, feat
 	return b.frontsFree(ctx, tier, features)
 }
 
-func apisFor(features []string) []string {
+func apisFor(tier environment.Tier, features []string) []string {
 	apis := slices.Clone(BootstrapAPIs)
+	if tier == environment.TierPreview {
+		apis = appendMissing(apis, PreviewAPIs)
+	}
 	switch {
 	case slices.Contains(features, albShieldedFeature):
 		apis = appendMissing(apis, albShieldedAPIs)

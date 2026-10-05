@@ -42,7 +42,7 @@ func servicesEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
-	for _, api := range append(slices.Clone(gcp.BootstrapAPIs), gcp.TasksAPIs...) {
+	for _, api := range slices.Concat(gcp.BootstrapAPIs, gcp.PreviewAPIs, gcp.TasksAPIs) {
 		name := "projects/" + liveProject() + "/services/" + api
 		if _, err := service.Services.Enable(name, &serviceusage.EnableServiceRequest{}).Context(ctx).Do(); err != nil {
 			t.Fatalf("enable %s: %v", api, err)
