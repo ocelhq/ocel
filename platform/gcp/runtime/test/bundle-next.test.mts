@@ -191,3 +191,92 @@ test("the entrypoint serves a Next app on the port Cloud Run names", async () =>
 
   expect(await answer(port)).toBe("rendered");
 });
+
+const handlerPath = (runtimeDir: string) => JSON.stringify(join(runtimeDir, "cache-handler.cjs"));
+
+const partiallyStaticLauncher = (
+  runtimeDir: string,
+  log: string,
+) => `const { appendFileSync } = require("node:fs");
+const Handler = require(${handlerPath(runtimeDir)});
+const page = { kind: "APP_PAGE", html: "<p>old</p>", status: 200, headers: {} };
+module.exports = {
+  async handler(req, res) {
+    if (req.headers["x-ocel-refresh"]) {
+      await new Promise((done) => setTimeout(done, 200));
+      appendFileSync(${JSON.stringify(log)}, "refreshed " + req.url + "\\n");
+      res.end("fresh");
+      return;
+    }
+    if (req.headers["x-seed"]) {
+      await new Handler({}).set("/blog", page, { cacheControl: { revalidate: 1 } });
+      while (!(await new Handler({}).get("/blog", { kind: "APP_PAGE" }))) {
+        await new Promise((done) => setTimeout(done, 10));
+      }
+      res.end("seeded");
+      return;
+    }
+    const entry = await new Handler({ _requestHeaders: req.headers }).get("/blog", {
+      kind: "APP_PAGE",
+    });
+    res.end(entry === null ? "no entry" : "entry");
+  },
+};
+`;
+
+test("a stale RSC navigation to a partially static page is answered without the entry and refreshed once before its response ends", async () => {
+  const projectDir = join(dist, "ppr-project");
+  await writeNextProjectFixture(
+    projectDir,
+    { cacheComponents: true },
+    { routes: { "/blog": { initialRevalidateSeconds: 60, renderingMode: "PARTIALLY_STATIC" } } },
+  );
+  const log = join(projectDir, "refreshes.log");
+  await writeFile(log, "");
+  const launcher = join(projectDir, "__next_launcher.cjs");
+  await writeFile(launcher, partiallyStaticLauncher(dir, log));
+  const manifest = join(projectDir, "routing-manifest.json");
+  await writeFile(
+    manifest,
+    JSON.stringify({
+      entry: "bundle-0",
+      buildId: "b1",
+      basePath: "",
+      pathnames: ["/blog"],
+      routes: {
+        beforeMiddleware: [],
+        beforeFiles: [],
+        afterFiles: [],
+        dynamicRoutes: [],
+        onMatch: [],
+        fallback: [],
+      },
+      dispatch: { "/blog": { kind: "function", id: "bundle-0", entryKey: "/blog" } },
+    }),
+  );
+  const port = await freePort();
+  const child = spawn(process.execPath, [join(dir, "entrypoint.mjs")], {
+    cwd: projectDir,
+    env: {
+      PATH: process.env.PATH,
+      OCEL_HANDLER: launcher,
+      PORT: String(port),
+      OCEL_ORIGIN_DISPATCH: "1",
+      OCEL_ORIGIN_SIGNED: "1",
+      OCEL_ROUTING_MANIFEST: manifest,
+      OCEL_FINISH_BEFORE_RESPONSE_MS: "5000",
+    },
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+  children.push(child);
+  await answer(port);
+  const seeded = await fetch(`http://127.0.0.1:${port}/blog`, { headers: { "x-seed": "1" } });
+  expect(await seeded.text()).toBe("seeded");
+  await new Promise((wait) => setTimeout(wait, 1_100));
+  await writeFile(log, "");
+
+  const res = await fetch(`http://127.0.0.1:${port}/blog`, { headers: { RSC: "1" } });
+
+  expect(await res.text()).toBe("no entry");
+  expect(await readFile(log, "utf8")).toBe("refreshed /blog\n");
+});
