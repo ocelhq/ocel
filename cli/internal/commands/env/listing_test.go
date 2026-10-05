@@ -8,9 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/outputschema"
+	"github.com/ocelhq/ocel/cli/internal/outputschema/outputschematest"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/environment"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
@@ -264,5 +267,27 @@ func TestListingValuesAsJSONNamesTheGroupOfADeclaredValue(t *testing.T) {
 	}
 	if groups["GITHUB_CLIENT_ID"] != "github" || groups["LOG_LEVEL"] != "" {
 		t.Errorf("ls json groups = %v, want github for its member and none for an ungrouped value", groups)
+	}
+}
+
+func TestListingValuesAsJSONValidatesAgainstTheEnvListSchema(t *testing.T) {
+	project := setUpEnvFixture(t)
+	root := project.Root
+	envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+	envSet(t, root, "POSTHOG_ID", "ph_public_id", envOptions{folder: "/web"})
+	seedValue(t, project, environment.TierProduction, clitest.FixtureSlug,
+		variablestore.Coordinate{Cell: variablestore.Cell{Key: "LOG_LEVEL"}, Environment: "staging"}, "trace")
+
+	var stdout, stderr bytes.Buffer
+	if err := runEnvList(context.Background(), newJSONDependencies(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	schema, err := outputschema.Result(new(resultv1.EnvListResult).ProtoReflect().Descriptor().FullName())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := outputschematest.Validate(outputschematest.Compile(t, schema), stdout.Bytes()); err != nil {
+		t.Errorf("the env ls schema rejects what env ls prints: %v\n%s", err, stdout.String())
 	}
 }

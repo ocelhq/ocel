@@ -16,7 +16,7 @@ import (
 )
 
 func NewUnlinkCommand(dependencies Dependencies) *cobra.Command {
-	return commands.DeclareMutating(commands.ReserveStdout(&cobra.Command{
+	return commands.DeclareResult(commands.DeclareMutating(commands.ReserveStdout(&cobra.Command{
 		Use:     "unlink",
 		Short:   "Unlink this directory from its console project",
 		Example: "  $ ocel unlink",
@@ -32,7 +32,7 @@ func NewUnlinkCommand(dependencies Dependencies) *cobra.Command {
 			}
 			return runUnlink(dependencies, dir, cmd.OutOrStdout())
 		},
-	}))
+	})), &resultv1.UnlinkResult{})
 }
 
 func projectDir(ctx context.Context, dependencies Dependencies, cwd string) (string, error) {

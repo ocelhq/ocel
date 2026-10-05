@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 )
 
 type Dependencies struct {
@@ -62,5 +63,5 @@ func newScanCommand(dependencies Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&opts.Env, "env", envProduction, "Environment to price: production or preview")
 	cmd.Flags().StringVar(&opts.Profile, "profile", profileName(defaultProfile), "Usage assumptions for the usage-based rows: "+strings.Join(profileNames(), ", "))
 	cmd.Flags().StringVar(&opts.Usage, "usage", "", "YAML or JSON `file` of monthly quantities keyed by resource id, overriding the profile")
-	return commands.DeclareReadOnly(cmd)
+	return commands.DeclareResult(commands.DeclareReadOnly(cmd), &resultv1.CostScanResult{})
 }

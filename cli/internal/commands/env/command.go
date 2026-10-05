@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
@@ -62,7 +63,7 @@ func newListCommand(dependencies Dependencies) *cobra.Command {
 		})
 	}
 	previewFlag(cmd, &opts)
-	return commands.DeclareReadOnly(cmd)
+	return commands.DeclareResult(commands.DeclareReadOnly(cmd), &resultv1.EnvListResult{})
 }
 
 func newSetCommand(dependencies Dependencies) *cobra.Command {
@@ -124,7 +125,7 @@ func newGetCommand(dependencies Dependencies) *cobra.Command {
 	environmentFlag(cmd, &opts)
 	cmd.Flags().BoolVar(&opts.reveal, "reveal", false, "Print the value")
 	commands.AddYesFlag(cmd, &opts.yes)
-	return commands.DeclareReadOnly(cmd)
+	return commands.DeclareResult(commands.DeclareReadOnly(cmd), &resultv1.EnvGetResult{})
 }
 
 func newRemoveCommand(dependencies Dependencies) *cobra.Command {
@@ -182,7 +183,7 @@ func newRefsCommand(dependencies Dependencies) *cobra.Command {
 		})
 	}
 	valueFlags(cmd, &opts)
-	return commands.DeclareReadOnly(cmd)
+	return commands.DeclareResult(commands.DeclareReadOnly(cmd), &resultv1.EnvRefsResult{})
 }
 
 func newHistoryCommand(dependencies Dependencies) *cobra.Command {
@@ -200,7 +201,7 @@ func newHistoryCommand(dependencies Dependencies) *cobra.Command {
 	}
 	valueFlags(cmd, &opts)
 	environmentFlag(cmd, &opts)
-	return commands.DeclareReadOnly(cmd)
+	return commands.DeclareResult(commands.DeclareReadOnly(cmd), &resultv1.EnvHistoryResult{})
 }
 
 func previewFlag(cmd *cobra.Command, opts *envOptions) {

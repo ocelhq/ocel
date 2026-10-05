@@ -83,7 +83,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	cmd.Flags().BoolVar(&flags.ts, "ts", false, "Write ocel.config.ts instead of ocel.json — it compiles to the same document and needs node")
 	cmd.Flags().BoolVar(&flags.yaml, "yaml", false, "Write ocel.yaml instead of ocel.json — the same document, written as YAML")
 	cmd.MarkFlagsMutuallyExclusive("ts", "yaml")
-	return commands.DeclareMutating(commands.ReserveStdout(cmd))
+	return commands.DeclareResult(commands.DeclareMutating(commands.ReserveStdout(cmd)), &resultv1.InitResult{})
 }
 
 func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions, stdout io.Writer) error {

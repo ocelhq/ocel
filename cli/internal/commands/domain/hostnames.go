@@ -222,7 +222,7 @@ func newListCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&opts.preview, "preview", false, "List the global preview domain and the projects served on it instead of this project's own hostnames")
-	return commands.DeclareReadOnly(cmd)
+	return commands.DeclareResult(commands.DeclareReadOnly(cmd), &resultv1.DomainListResult{}, &resultv1.PreviewDomainResult{})
 }
 
 func newAddCommand(invocation commands.Invocation) *cobra.Command {

@@ -32,7 +32,7 @@ func NewDeploymentsCommand(invocation commands.Invocation) *cobra.Command {
 }
 
 func newListCommand(invocation commands.Invocation) *cobra.Command {
-	return commands.DeclareReadOnly(&cobra.Command{
+	return commands.DeclareResult(commands.DeclareReadOnly(&cobra.Command{
 		Use:   "ls",
 		Short: "List production promotions",
 		Args:  cobra.NoArgs,
@@ -43,7 +43,7 @@ func newListCommand(invocation commands.Invocation) *cobra.Command {
 			}
 			return runPromotionsList(cmd.Context(), invocation, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
-	})
+	}), &resultv1.DeploymentListResult{})
 }
 
 const defaultPruneKeepN = 10

@@ -17,7 +17,7 @@ import (
 )
 
 func NewLogoutCommand(dependencies Dependencies) *cobra.Command {
-	return commands.DeclareMutating(commands.ReserveStdout(&cobra.Command{
+	return commands.DeclareResult(commands.DeclareMutating(commands.ReserveStdout(&cobra.Command{
 		Use:     "logout",
 		Short:   "Log out of the Ocel console",
 		Example: "  $ ocel logout",
@@ -25,7 +25,7 @@ func NewLogoutCommand(dependencies Dependencies) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runLogout(cmd.Context(), dependencies, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
-	}))
+	})), &resultv1.LogoutResult{})
 }
 
 func runLogout(ctx context.Context, dependencies Dependencies, stdout, stderr io.Writer) error {

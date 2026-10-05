@@ -94,7 +94,7 @@ func newSetCommand(invocation commands.Invocation) *cobra.Command {
 	}
 	addCoordinateFlags(cmd, &opts)
 	cmd.Flags().StringVar(&opts.owner, "owner", defaultBindingOwner, "Publish under this publisher's name")
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareResult(commands.DeclareMutating(cmd), &resultv1.BindingSetResult{})
 }
 
 func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
@@ -110,7 +110,7 @@ func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	addCoordinateFlags(cmd, &opts)
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareResult(commands.DeclareMutating(cmd), &resultv1.BindingRemoveResult{})
 }
 
 func newListCommand(invocation commands.Invocation) *cobra.Command {
@@ -126,7 +126,7 @@ func newListCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	addCoordinateFlags(cmd, &opts)
-	return commands.DeclareReadOnly(cmd)
+	return commands.DeclareResult(commands.DeclareReadOnly(cmd), &resultv1.BindingListResult{})
 }
 
 func newGenerateCommand(invocation commands.Invocation) *cobra.Command {
@@ -149,7 +149,7 @@ func newGenerateCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	addCoordinateFlags(cmd, &opts)
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareResult(commands.DeclareMutating(cmd), &resultv1.BindingGenerateResult{})
 }
 
 func withBindingCommand(cmd *cobra.Command, run func(context.Context, string) error) error {
