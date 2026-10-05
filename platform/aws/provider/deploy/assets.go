@@ -14,11 +14,10 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
-
-const staticAssetsDir = "static"
 
 const (
 	immutableCacheControl  = "public, max-age=31536000, immutable"
@@ -125,7 +124,7 @@ func staticAssetSet(cfg Config, app, framework string, coord naming.Coordinate) 
 	var uploads []assetUpload
 	manifest := newSetManifest()
 	root := appArtifactRoot(cfg.ArtifactRoot, app)
-	dir := filepath.Join(root, staticAssetsDir)
+	dir := filepath.Join(root, edge.StaticAssetDir)
 	files, err := collectFiles(dir)
 	if err != nil {
 		return nil, err
