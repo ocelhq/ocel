@@ -180,23 +180,16 @@ func writeDomainStatusJSON(out io.Writer, resp *contractv1.GetHostnameStatusResp
 			CertificateId:     cert.GetCertificateId(),
 			CertificateStatus: cert.GetCertificateStatus(),
 			RenewalStatus:     host.GetRenewalStatus(),
-			ExpiresAt:         epochRFC3339(host.GetExpiresAt()),
+			ExpiresAt:         terminal.EpochRFC3339(host.GetExpiresAt()),
 			ExpiringSoon:      host.GetExpiringSoon(),
 			RecordsWritten:    cert.GetRecordsWritten(),
 			ManualRecords:     cert.GetManualRecords(),
-			LastProbeAt:       epochRFC3339(cert.GetLastProbeAt()),
+			LastProbeAt:       terminal.EpochRFC3339(cert.GetLastProbeAt()),
 			LastProbeOk:       cert.GetLastProbeOk(),
 			ServingPointer:    host.GetServingPointer(),
 		})
 	}
 	return terminal.WriteResultJSON(out, result)
-}
-
-func epochRFC3339(unix int64) string {
-	if unix == 0 {
-		return ""
-	}
-	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 }
 
 func newStatusCommand(invocation commands.Invocation) *cobra.Command {

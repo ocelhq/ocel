@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 )
 
 func TestTheRootFlagsFeedTheOneResolver(t *testing.T) {
@@ -415,8 +416,10 @@ func TestACommandWhoseStdoutIsItsDataDrawsItsRunOnStderr(t *testing.T) {
 
 	stdout, stderr := executeRoot(t, "--json", "deployments", "ls")
 
-	if !strings.Contains(stdout, "promo-2") || strings.Contains(stdout, "{") {
-		t.Errorf("stdout = %q, want the promotions table alone", stdout)
+	var listed resultv1.DeploymentListResult
+	clitest.DecodeResultInto(t, stdout, &listed)
+	if len(listed.GetDeployments()) == 0 || listed.GetDeployments()[0].GetPromotionId() != "promo-2" {
+		t.Errorf("stdout = %q, want the promotions as one envelope", stdout)
 	}
 	if evs := clitest.RunEvents(t, stderr); len(evs) == 0 || !evs[len(evs)-1].GetSummary().GetSuccess() {
 		t.Errorf("stderr = %q, want the run's events ending in its summary", stderr)

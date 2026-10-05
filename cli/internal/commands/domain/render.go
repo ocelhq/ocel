@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -73,7 +74,7 @@ func lastProbe(cert *contractv1.CertificateState, never string) string {
 	if cert.GetLastProbeAt() == 0 {
 		return never
 	}
-	at := epochRFC3339(cert.GetLastProbeAt())
+	at := terminal.EpochRFC3339(cert.GetLastProbeAt())
 	if !cert.GetLastProbeOk() {
 		return at + "  FAILED — nothing answered for this project"
 	}
@@ -149,7 +150,7 @@ func domainRenewal(host *contractv1.ProductionHostname) string {
 func renewalLine(status string, expiresAt int64, soon bool) string {
 	expiry := "no expiry reported"
 	if expiresAt != 0 {
-		expiry = "expires " + epochRFC3339(expiresAt)
+		expiry = "expires " + terminal.EpochRFC3339(expiresAt)
 	}
 	if status == "" {
 		status = "not reported"
