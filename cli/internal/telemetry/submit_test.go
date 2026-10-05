@@ -22,6 +22,7 @@ func TestSubmitSpoolsTheEventInTheUserCacheOnlyWhenEnabledOutsideDebugMode(t *te
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			confighome.Isolate(t)
+			telemetry.PrintBannerOnce(io.Discard, telemetry.Resolution{Enabled: true})
 
 			telemetry.Submit(io.Discard, tc.resolution, aCompletedEvent(t, "deploy"))
 
@@ -39,5 +40,19 @@ func TestSubmitSpoolsTheEventInTheUserCacheOnlyWhenEnabledOutsideDebugMode(t *te
 				}
 			}
 		})
+	}
+}
+
+func TestSubmitSpoolsNothingBeforeTheFirstRunBannerIsShown(t *testing.T) {
+	confighome.Isolate(t)
+
+	telemetry.Submit(io.Discard, telemetry.Resolution{Enabled: true}, aCompletedEvent(t, "deploy"))
+
+	spool, err := telemetry.OpenSpool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spool.HasEvents() {
+		t.Error("the spool holds an event recorded before the banner told the user about telemetry")
 	}
 }

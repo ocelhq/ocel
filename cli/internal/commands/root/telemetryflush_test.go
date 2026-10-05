@@ -85,13 +85,29 @@ func aSpooledEvent(t *testing.T, command string) {
 	}
 }
 
+func withBannerShown(t *testing.T) {
+	t.Helper()
+	telemetry.PrintBannerOnce(io.Discard, telemetry.Resolve(telemetry.WriteKey, telemetry.Endpoint))
+}
+
 func TestAnInvocationSpoolsItsCommandCompletedEventOutsideDebugMode(t *testing.T) {
 	withTelemetryBuild(t)
+	withBannerShown(t)
 
 	executeAndReportRoot(t, "--help")
 
 	if got := spooledCommands(t); len(got) != 1 || got[0] != "help" {
 		t.Errorf("spooled commands = %v, want one event for help", got)
+	}
+}
+
+func TestAnInvocationThatNeverShowsTheBannerSpoolsNothing(t *testing.T) {
+	withTelemetryBuild(t)
+
+	executeAndReportRoot(t, "--help")
+
+	if got := spooledCommands(t); len(got) != 0 {
+		t.Errorf("spooled commands = %v, want nothing recorded before the first-run banner is shown", got)
 	}
 }
 
