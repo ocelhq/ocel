@@ -84,6 +84,8 @@ func (i ecrImages) GoString() string { return i.String() }
 
 func (i ecrImages) Destination() string { return i.target.Server }
 
+func (ecrImages) CheckPush(context.Context, string) error { return nil }
+
 func (i ecrImages) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
 	return i.pushed.Has(ctx, push)
 }

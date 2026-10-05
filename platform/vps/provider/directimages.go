@@ -31,6 +31,8 @@ func (l loaded) GoString() string { return l.String() }
 
 func (l loaded) Destination() string { return l.at }
 
+func (loaded) CheckPush(context.Context, string) error { return nil }
+
 func (l loaded) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
 	return l.host.HasImage(ctx, push.ImageRef)
 }

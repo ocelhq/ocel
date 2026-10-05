@@ -34,12 +34,13 @@ type preflightFacts struct {
 
 func previewOpenOptions(policy consent.Policy, cfg *project.Project) commands.OpenOptions {
 	return commands.OpenOptions{
-		Pinning:       executables.ChoosePinning(policy.DryRun),
-		Tier:          environmentv1.Tier_TIER_PREVIEW,
-		Require:       readiness.Features,
-		Slug:          cfg.Slug,
-		ClaimsDomains: true,
-		Policy:        policy,
+		Pinning:         executables.ChoosePinning(policy.DryRun),
+		Tier:            environmentv1.Tier_TIER_PREVIEW,
+		Require:         readiness.Features,
+		Slug:            cfg.Slug,
+		ClaimsDomains:   true,
+		ProjectRegistry: true,
+		Policy:          policy,
 	}
 }
 
@@ -119,6 +120,7 @@ func productionOpenOptions(policy consent.Policy, cfg *project.Project) commands
 		Slug:            cfg.Slug,
 		ClaimsDomains:   true,
 		RequireHostname: true,
+		ProjectRegistry: true,
 		Policy:          policy,
 	}
 }
@@ -150,9 +152,6 @@ func preflightDeploy(ctx context.Context, dependencies Dependencies, policy cons
 
 func resolveContainers(ctx context.Context, dependencies Dependencies, check *run.Span, read readiness.Preflight, prebuilt bool) (*project.Project, map[string]string, error) {
 	resolved, archs := read.Project, read.Response.GetContainerArchs()
-	if err := requireProjectRegistryPassword(resolved); err != nil {
-		return nil, nil, err
-	}
 	if prebuilt {
 		return resolved, archs, nil
 	}

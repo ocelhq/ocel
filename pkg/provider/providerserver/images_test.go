@@ -305,6 +305,8 @@ type refusingStore struct{ where string }
 
 func (s refusingStore) Destination() string { return s.where }
 
+func (s refusingStore) CheckPush(context.Context, string) error { return nil }
+
 func (s refusingStore) Has(context.Context, provider.ImagePush) (bool, error) {
 	return false, nil
 }
@@ -924,6 +926,8 @@ func (s *stubStore) Has(context.Context, provider.ImagePush) (bool, error) {
 }
 
 func (s *stubStore) Destination() string { return "the stub registry" }
+
+func (s *stubStore) CheckPush(context.Context, string) error { return nil }
 
 func (s *stubStore) Push(_ context.Context, push provider.ImagePush, _ progress.Log) error {
 	s.pushed = append(s.pushed, push)

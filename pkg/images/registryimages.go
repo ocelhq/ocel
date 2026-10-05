@@ -39,6 +39,10 @@ func (r registryStore) GoString() string { return r.String() }
 
 func (r registryStore) Destination() string { return r.target.Server }
 
+func (r registryStore) CheckPush(ctx context.Context, repository string) error {
+	return CheckPushAccess(ctx, r.target, repository)
+}
+
 var manifestTypes = []string{
 	"application/vnd.oci.image.index.v1+json",
 	"application/vnd.oci.image.manifest.v1+json",
@@ -84,7 +88,7 @@ func (r registryStore) manifestExists(ctx context.Context, client *http.Client, 
 		return false, resolvable(err), 0, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		authorization, err := r.authorize(ctx, client, resp, server, repository)
+		authorization, err := r.authorize(ctx, client, resp, server, repository, "pull")
 		resp.Body.Close()
 		if err != nil {
 			return false, false, 0, err
@@ -165,15 +169,15 @@ func (r registryStore) head(ctx context.Context, client *http.Client, endpoint, 
 	return resp, nil
 }
 
-func (r registryStore) authorize(ctx context.Context, client *http.Client, refused *http.Response, server, repository string) (string, error) {
+func (r registryStore) authorize(ctx context.Context, client *http.Client, refused *http.Response, server, repository, actions string) (string, error) {
 	scheme, params := challenge(refused.Header.Get("WWW-Authenticate"))
 	switch strings.ToLower(scheme) {
 	case "basic":
 		return r.basic(), nil
 	case "bearer":
-		return r.bearer(ctx, client, params, server, repository)
+		return r.bearer(ctx, client, params, server, repository, actions)
 	default:
-		return "", fmt.Errorf("the registry refused an unauthenticated read and asked for %q, which ocel does not speak", refused.Header.Get("WWW-Authenticate"))
+		return "", fmt.Errorf("the registry refused an unauthenticated request and asked for %q, which ocel does not speak", refused.Header.Get("WWW-Authenticate"))
 	}
 }
 
@@ -181,7 +185,7 @@ func (r registryStore) basic() string {
 	return "Basic " + base64.StdEncoding.EncodeToString([]byte(r.target.Username+":"+r.target.Password))
 }
 
-func (r registryStore) bearer(ctx context.Context, client *http.Client, params map[string]string, server, repository string) (string, error) {
+func (r registryStore) bearer(ctx context.Context, client *http.Client, params map[string]string, server, repository, actions string) (string, error) {
 	realm := params["realm"]
 	if realm == "" {
 		return "", fmt.Errorf("the registry asked for a bearer token and named no realm to fetch it from")
@@ -195,7 +199,7 @@ func (r registryStore) bearer(ctx context.Context, client *http.Client, params m
 	}
 	scope := params["scope"]
 	if scope == "" {
-		scope = "repository:" + repository + ":pull"
+		scope = "repository:" + repository + ":" + actions
 	}
 	query.Set("scope", scope)
 

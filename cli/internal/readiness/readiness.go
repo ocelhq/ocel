@@ -33,6 +33,7 @@ type Request struct {
 	HostCheckDomains []string
 	RequireHostname  bool
 	Feature          string
+	Registry         *contractv1.ImageRegistry
 }
 
 func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {

@@ -604,6 +604,8 @@ message PreflightRequest {
   repeated string host_check_domains = 8;
 
   repeated ContainerApp containers = 9;
+
+  ImageRegistry project_registry = 10;
 }
 
 message ContainerApp {

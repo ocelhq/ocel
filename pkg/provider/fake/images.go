@@ -14,7 +14,9 @@ type Images struct {
 	asked  []provider.ImagePush
 	pushed []provider.ImagePush
 	failed error
+	denied error
 	opened []provider.RegistryTarget
+	probed []string
 }
 
 func NewImages() *Images { return &Images{stored: map[string]bool{}} }
@@ -29,6 +31,18 @@ func (i *Images) FailPushes(err error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.failed = err
+}
+
+func (i *Images) DenyPushes(err error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.denied = err
+}
+
+func (i *Images) Probed() []string {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return append([]string(nil), i.probed...)
 }
 
 func (i *Images) Asked() []provider.ImagePush {
@@ -50,6 +64,13 @@ func (i *Images) Opened() []provider.RegistryTarget {
 }
 
 func (i *Images) Destination() string { return RegistryServer }
+
+func (i *Images) CheckPush(_ context.Context, repository string) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.probed = append(i.probed, repository)
+	return i.denied
+}
 
 func (i *Images) Has(_ context.Context, push provider.ImagePush) (bool, error) {
 	i.mu.Lock()
