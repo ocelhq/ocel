@@ -61,6 +61,7 @@ func loadOptions(ctx context.Context, dependencies Dependencies, cwd string, com
 		Project:         cfg,
 		Command:         command,
 		OpenDocker:      dependencies.OpenDocker,
+		RecordSession:   dependencies.RecordDevSession,
 		Stdin:           stdin,
 		Stdout:          stdout,
 		Stderr:          stderr,

@@ -18,7 +18,7 @@ var (
 	startWatching = watchAndResolve
 )
 
-func watchAndResolve(ctx context.Context, server *devserver.Server, cfg *project.Project, invoked invocation, session *run.Span, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
+func watchAndResolve(ctx context.Context, server *devserver.Server, cfg *project.Project, invoked invocation, session *run.Span, onResolved func(map[string]string), onFailed func(error)) (*filewatch.Watcher, error) {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolve watch directories: %w", err)
@@ -40,6 +40,7 @@ func watchAndResolve(ctx context.Context, server *devserver.Server, cfg *project
 		resolved, err := resolveOnce(ctx, server, cfg, invoked, change)
 		change.End(err)
 		if err != nil {
+			onFailed(err)
 			return
 		}
 		server.PushEnv(resolved)

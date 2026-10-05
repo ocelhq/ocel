@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/localrpc"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 type SyncResult struct {
@@ -107,6 +108,17 @@ func (s *Server) ScopedFolders() map[string][]string {
 		slices.Sort(scoped[key])
 	}
 	return scoped
+}
+
+func (s *Server) ResourceKinds() []string {
+	kinds := []string{}
+	for _, resource := range s.declarations.Resources() {
+		if kind := naming.ResourceTypeName(resource.Type); !slices.Contains(kinds, kind) {
+			kinds = append(kinds, kind)
+		}
+	}
+	slices.Sort(kinds)
+	return kinds
 }
 
 func (s *Server) ResetDeclarations() {

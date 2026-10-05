@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -33,6 +34,7 @@ type Options struct {
 	Stderr          io.Writer
 	StdinIsTerminal bool
 	Run             *run.Run
+	RecordSession   func(telemetry.DevSession)
 }
 
 func (o Options) session() *run.Span {
@@ -78,6 +80,12 @@ func RunOnce(ctx context.Context, opts Options, cwd string) error {
 
 func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	cfg := opts.Project
+	tally := newSession(opts.RecordSession)
+	defer func() {
+		if !errors.Is(err, leader.ErrAlreadyRunning) {
+			tally.end(err)
+		}
+	}()
 	startup := opts.session().Child("", environmentTitle)
 	defer func() { startup.End(err) }()
 	source, err := readValueSource(ctx, cfg)
@@ -122,14 +130,16 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	if err != nil {
 		return err
 	}
+	tally.noteKinds(server.ResourceKinds())
 	updates := make(chan map[string]string, 1)
 	watching, err := startWatching(background, server, cfg, invoked, opts.session(), func(env map[string]string) {
+		tally.noteKinds(server.ResourceKinds())
 		select {
 		case <-updates:
 		default:
 		}
 		updates <- env
-	})
+	}, tally.noteError)
 	if err != nil {
 		return fmt.Errorf("watch discovery paths: %w", err)
 	}
@@ -157,6 +167,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 				continue
 			}
 			resolved = env
+			tally.noteReload()
 			child.Stop()
 			child, err = startChild(ctx, opts, resolved)
 			if err != nil {
@@ -166,7 +177,9 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	}
 }
 
-func follow(ctx context.Context, opts Options, running leader.Leader) error {
+func follow(ctx context.Context, opts Options, running leader.Leader) (err error) {
+	tally := newSession(opts.RecordSession)
+	defer func() { tally.end(err) }()
 	stream, first, err := subscribe(ctx, opts, running)
 	if err != nil {
 		return err
@@ -200,6 +213,7 @@ func follow(ctx context.Context, opts Options, running leader.Leader) error {
 		case err := <-child.Exited():
 			return exitError(ctx, err)
 		case env := <-updates:
+			tally.noteReload()
 			child.Stop()
 			child, err = startChild(ctx, opts, env)
 			if err != nil {

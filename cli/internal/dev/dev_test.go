@@ -28,6 +28,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/filewatch"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -471,9 +472,9 @@ export default { slug: "test-app" };
 		}
 
 		stalled := startWatching
-		startWatching = func(ctx context.Context, server *devserver.Server, cfg *project.Project, invoked invocation, session *run.Span, onResolved func(map[string]string)) (*filewatch.Watcher, error) {
+		startWatching = func(ctx context.Context, server *devserver.Server, cfg *project.Project, invoked invocation, session *run.Span, onResolved func(map[string]string), onFailed func(error)) (*filewatch.Watcher, error) {
 			time.Sleep(300 * time.Millisecond)
-			return stalled(ctx, server, cfg, invoked, session, onResolved)
+			return stalled(ctx, server, cfg, invoked, session, onResolved, onFailed)
 		}
 		t.Cleanup(func() { startWatching = stalled })
 
@@ -851,8 +852,9 @@ func toMap(env []string) map[string]string {
 }
 
 type testDeps struct {
-	OpenDocker docker.OpenFunc
-	Format     terminal.Format
+	OpenDocker    docker.OpenFunc
+	Format        terminal.Format
+	RecordSession func(telemetry.DevSession)
 }
 
 func devDeps() testDeps {
@@ -864,7 +866,7 @@ func options(ctx context.Context, deps testDeps, cwd string, command []string, s
 	if err != nil {
 		return Options{}, err
 	}
-	return Options{Project: cfg, Command: command, OpenDocker: deps.OpenDocker, Stdin: stdin, Stdout: stdout, Stderr: stderr}, nil
+	return Options{Project: cfg, Command: command, OpenDocker: deps.OpenDocker, RecordSession: deps.RecordSession, Stdin: stdin, Stdout: stdout, Stderr: stderr}, nil
 }
 
 func runDev(ctx context.Context, deps testDeps, reset bool, cwd string, command []string, stdout, stderr io.Writer, stdin io.Reader) error {
