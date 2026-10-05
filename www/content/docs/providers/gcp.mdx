@@ -426,15 +426,12 @@ NUMBER=$(gcloud projects describe my-project --format='value(projectNumber)')
 gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=roles/secretmanager.editor \
-  --condition="title=ocel realtime secrets,expression=(resource.type != 'secretmanager.googleapis.com/Secret' && resource.type != 'secretmanager.googleapis.com/SecretVersion') || resource.name.startsWith('projects/$NUMBER/secrets/ocel_realtime-')"
+  --condition="title=ocel realtime secrets,expression=resource.name.startsWith('projects/$NUMBER/secrets/ocel_realtime-')"
 gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=roles/iap.admin \
   --condition="title=ocel previews,expression=resource.type == 'iap.googleapis.com/WebService' && resource.name.startsWith('projects/$NUMBER/iap_web/cloud_run-europe-west1/services/ocel-')"
 ```
-
-Secret Manager checks creating a secret against the project, so the condition cannot narrow
-what a deploy may create; it narrows every read, write and deletion of a secret that exists.
 
 A prune or a destroy untags the images no Cloud Run revision runs any more, and the
 repository deletes an untagged image a week later. A deploy that finds its image already
@@ -475,14 +472,15 @@ gcloud projects add-iam-policy-binding my-project \
   --condition="title=ocel databases,expression=resource.name.startsWith('projects/my-project/instances/ocel--')"
 ```
 
-Cloud Storage and Cloud SQL check creating a bucket or an instance, listing instances and
-reading Cloud SQL's operations against the project, where no name condition admits them, so a
-deploy also needs a custom role holding those permissions alone. It reads the settings of
-every instance in the project, and changes none of them:
+Cloud Storage, Cloud SQL and Secret Manager check creating a bucket, an instance or a secret,
+listing instances and reading Cloud SQL's operations against the project, where no name
+condition admits them, so a deploy also needs a custom role holding those permissions alone.
+It may create a secret under any name, and writes and deletes only its own; it reads
+the settings of every instance in the project, and changes none of them:
 
 ```bash
 gcloud iam roles create ocelDeployCreates --project my-project \
-  --permissions=storage.buckets.create,cloudsql.instances.create,cloudsql.instances.list,cloudsql.instances.get
+  --permissions=storage.buckets.create,cloudsql.instances.create,cloudsql.instances.list,cloudsql.instances.get,secretmanager.secrets.create
 gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=projects/my-project/roles/ocelDeployCreates --condition=None
