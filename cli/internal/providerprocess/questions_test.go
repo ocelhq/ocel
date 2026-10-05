@@ -177,6 +177,27 @@ func TestAQuestionNobodyCanAnswerReportsInputRequired(t *testing.T) {
 	}
 }
 
+func TestAQuestionAPersonDeclinesReportsConfirmationRequiredWithTheProvidersRemedy(t *testing.T) {
+	t.Parallel()
+
+	fake := newQuestionFake(t, "unknown-host-key")
+
+	err := fake.call(t, answering(&scriptedPrompt{attended: true, answer: false}, io.Discard))
+	if err == nil {
+		t.Fatal("call error = nil, want the declined refusal")
+	}
+	got := clierror.NewRunError(err)
+	if got.GetCode() != clierror.CodeConfirmationRequired || got.Hint != nil {
+		t.Errorf("run error = %v, want confirmation_required with no hint, since --yes never answers a provider question", got)
+	}
+	if !strings.Contains(got.GetMessage(), "ssh-keyscan") {
+		t.Errorf("message = %q, want the provider's remedy kept", got.GetMessage())
+	}
+	if recorded := fake.recorded(t); recorded != "" {
+		t.Errorf("known_hosts = %q, want nothing recorded once declined", recorded)
+	}
+}
+
 func TestAQuestionUnderJSONIsNeverAskedOnATerminal(t *testing.T) {
 	t.Parallel()
 
