@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -21,10 +22,13 @@ type Prompt interface {
 type Questions struct {
 	Prompt Prompt
 	Out    io.Writer
+	JSON   func() bool
 	run    *run.Run
 }
 
-func (q Questions) attended() bool { return q.Prompt != nil && q.Out != nil && q.Prompt.Attended() }
+func (q Questions) attended() bool {
+	return q.Prompt != nil && q.Out != nil && q.Prompt.Attended() && (q.JSON == nil || !q.JSON())
+}
 
 func (q Questions) holding(ask func() error) error {
 	if q.run == nil {
@@ -35,8 +39,11 @@ func (q Questions) holding(ask func() error) error {
 
 func (q Questions) answer(ctx context.Context, process *Process, err error) (bool, error) {
 	question, asked := questionIn(err)
-	if !asked || !q.attended() {
+	if !asked {
 		return false, err
+	}
+	if !q.attended() {
+		return false, clierror.NewInputRequired(err, "")
 	}
 	confirmed, askErr := q.ask(ctx, question)
 	if askErr != nil {
