@@ -157,6 +157,17 @@ func proxyViewersGrant(names Names, region string) string {
 		proxyAdminRole, proxiedService, fmt.Sprintf(proxiedServices, projectNumberHole, region, names.Namespace()))
 }
 
+const untaggingRole = "roles/artifactregistry.repoAdmin"
+
+func untaggingGrants(names Names, region string) []string {
+	var grants []string
+	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
+		grants = append(grants, fmt.Sprintf("%s, on the repository projects/%s/locations/%s/repositories/%s",
+			untaggingRole, names.Project(), region, names.Repository(tier)))
+	}
+	return grants
+}
+
 func rolesFor(purpose edge.CredentialPurpose) []string {
 	if purpose != edge.PurposeBootstrap {
 		return deployRoles

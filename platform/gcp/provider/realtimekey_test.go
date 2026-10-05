@@ -30,13 +30,13 @@ func TestAnotherRealtimeIsTrustedThroughANewKeysVersionWithoutANewRevision(t *te
 
 	h := newRealtimeHarness(t)
 	app := h.provision(t, "app")
-	revisions := h.run.standing()
+	revisions := h.run.remaining()
 	chat := h.provision(t, "chat")
 
 	if got := h.keys(t); got["app"] != app.Properties[provider.PropertyVerifyKey] || got["chat"] != chat.Properties[provider.PropertyVerifyKey] || len(got) != 2 {
 		t.Errorf("the keys are %v, want app's and chat's alone", got)
 	}
-	if got := h.run.standing(); !slices.Equal(got, revisions) {
+	if got := h.run.remaining(); !slices.Equal(got, revisions) {
 		t.Errorf("revisions went from %v to %v, and a new revision leaves the old one's sockets on an instance publishes no longer reach", revisions, got)
 	}
 	if app.Properties[provider.PropertyHost] != chat.Properties[provider.PropertyHost] {

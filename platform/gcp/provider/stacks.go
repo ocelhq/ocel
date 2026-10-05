@@ -397,24 +397,33 @@ type serviceRevision struct {
 }
 
 func (p *Provider) tearDownAll(ctx context.Context, going []serviceRevision, progress progress.Log) error {
+	var ran []string
+	defer func() { p.untagUnusedImages(ctx, ran, progress) }()
 	for _, each := range going {
 		if each.service == "" {
 			continue
 		}
-		if err := p.tearDown(ctx, each.service, progress); err != nil {
+		images, err := p.deleteService(ctx, each.service, progress)
+		if err != nil {
 			return err
 		}
+		ran = append(ran, images...)
 	}
 	return nil
 }
 
 func (p *Provider) removeRevisions(ctx context.Context, going []serviceRevision, progress progress.Log) ([]int, error) {
-	var kept []int
+	var (
+		kept []int
+		ran  []string
+	)
+	defer func() { p.untagUnusedImages(ctx, ran, progress) }()
 	for at, each := range going {
-		stays, err := p.removeRevision(ctx, each.service, each.revision, progress)
+		stays, images, err := p.removeRevision(ctx, each.service, each.revision, progress)
 		if err != nil {
 			return nil, err
 		}
+		ran = append(ran, images...)
 		if stays {
 			kept = append(kept, at)
 		}
