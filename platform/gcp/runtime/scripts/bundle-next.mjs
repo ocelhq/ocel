@@ -5,7 +5,7 @@ import { stageSharp } from "@framework/next-image-optimizer/stage-sharp";
 
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = process.argv[2] ? join(process.cwd(), process.argv[2]) : join(pkgDir, "dist");
-const folder = join(dist, "next");
+const directory = join(dist, "next");
 
 const handlers = {
   "cache-handler": Bun.resolveSync("@framework/next-runtime/cache-handler", pkgDir),
@@ -40,7 +40,7 @@ await rm(dist, { recursive: true, force: true });
 
 await Promise.all(
   Object.entries(handlers).map(([name, entry]) =>
-    bundle(entry, join(folder, `${name}.cjs`), {
+    bundle(entry, join(directory, `${name}.cjs`), {
       format: "cjs",
       minify: true,
       footer: "module.exports = module.exports.default;",
@@ -48,7 +48,7 @@ await Promise.all(
   ),
 );
 
-await bundle(join(pkgDir, "src/next/entrypoint.mts"), join(folder, "entrypoint.mjs"), {
+await bundle(join(pkgDir, "src/next/entrypoint.mts"), join(directory, "entrypoint.mjs"), {
   format: "esm",
   minify: true,
   external: ["sharp"],
@@ -56,6 +56,6 @@ await bundle(join(pkgDir, "src/next/entrypoint.mts"), join(folder, "entrypoint.m
   define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
 });
 
-stageSharp(folder, "x64");
+stageSharp(directory, "x64");
 
-process.stdout.write(`${folder}\n`);
+process.stdout.write(`${directory}\n`);

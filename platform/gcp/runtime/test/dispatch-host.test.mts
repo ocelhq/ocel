@@ -70,7 +70,7 @@ test("every function a route names is rendered by the instance that routed it", 
   expect(served.sort()).toEqual(["/home", "/other"]);
 });
 
-test("a static asset is served from the folder the service's image holds it in", async () => {
+test("a static asset is served from the directory the service's image holds it in", async () => {
   const host = readGcpDispatchHost(
     {
       OCEL_ROUTING_MANIFEST: join(dir, "routing.json"),

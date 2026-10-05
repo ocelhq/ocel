@@ -31,7 +31,7 @@ async function read(key: string): Promise<string | null> {
   return object?.body ? new Response(object.body).text() : null;
 }
 
-test("an asset is read from the folder the image holds the app's assets in", async () => {
+test("an asset is read from the directory the image holds the app's assets in", async () => {
   expect(await read(`${assetPrefix}/_next/static/app.js`)).toBe("chunk");
   expect(await read(`${assetPrefix}/404.html`)).toBe("<p>missing</p>");
 });

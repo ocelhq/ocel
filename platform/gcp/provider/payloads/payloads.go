@@ -23,11 +23,11 @@ var (
 func NodeRuntime() []byte { return nodeRuntime }
 
 func NextRuntime() fs.FS {
-	folder, err := fs.Sub(embedded, "dist/next")
+	directory, err := fs.Sub(embedded, "dist/next")
 	if err != nil {
 		panic(fmt.Sprintf("payloads: %v", err))
 	}
-	return folder
+	return directory
 }
 
 func ContainerRuntime(arch string) ([]byte, error) {
