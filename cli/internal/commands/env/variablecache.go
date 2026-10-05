@@ -11,6 +11,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/ocelhq/ocel/cli/internal/userconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -25,11 +26,11 @@ type variableCacheEntry struct {
 }
 
 func openVariableCache() (*variableCache, error) {
-	base, err := os.UserConfigDir()
+	dir, err := userconfig.Dir()
 	if err != nil {
-		return nil, fmt.Errorf("resolve user config directory: %w", err)
+		return nil, err
 	}
-	return openVariableCacheAt(filepath.Join(base, "ocel", "variable-cache"))
+	return openVariableCacheAt(filepath.Join(dir, "variable-cache"))
 }
 
 func openVariableCacheAt(dir string) (*variableCache, error) {

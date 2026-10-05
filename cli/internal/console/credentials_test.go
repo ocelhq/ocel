@@ -3,6 +3,9 @@ package console
 import (
 	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -11,6 +14,22 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
+
+func TestCredentialsFileLivesInTheUserConfigDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+
+	path, err := ensureCredentialsFilePath()
+	if err != nil {
+		t.Fatalf("ensureCredentialsFilePath err = %v", err)
+	}
+	if want := filepath.Join(home, "ocel", "credentials.json"); path != want {
+		t.Errorf("path = %q, want %q", path, want)
+	}
+	if info, err := os.Stat(filepath.Dir(path)); err != nil || runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
+		t.Errorf("config directory stat = %v, %v, want a 0700 directory", info, err)
+	}
+}
 
 func TestRequireLoginWithoutSavedCredentialsReportsConsoleNotLoggedInHintingOcelLogin(t *testing.T) {
 	var stderr bytes.Buffer
