@@ -262,6 +262,9 @@ func TestABootstrapWhoseServingPortsAreClosedFromOutsideAsksWhetherTheyHaveBeenO
 	if !strings.Contains(err.Error(), "ocel bootstrap production") {
 		t.Errorf("refusal = %q, want the command to run again where nobody can answer", err)
 	}
+	if want := "ocel bootstrap production"; question.Remedy != want {
+		t.Errorf("remedy = %q, want %q: under --json the user is told what to type once the ports are open", question.Remedy, want)
+	}
 }
 
 func TestConfirmingPortsStillClosedFromOutsideAsksAgain(t *testing.T) {
