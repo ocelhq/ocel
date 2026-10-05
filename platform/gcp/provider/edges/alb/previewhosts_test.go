@@ -368,3 +368,105 @@ func TestARouterThatServesEachPreviewDeploymentOnItsOwnHostnameSaysSo(t *testing
 		t.Error("Facts() says the alb router serves no preview deployment on its own hostname, so a deploy would never announce one")
 	}
 }
+
+const siblingAlias = "shop-dddddddddddddddd.preview.example.com"
+
+func rotatedMove(promotionID string, record router.DeploymentRecord, superseded ...string) router.PointerMove {
+	move := aliasMove(promotionID, rotatedAlias, record)
+	for _, hostname := range superseded {
+		move.Superseded = append(move.Superseded, edge.PreviewHost{Hostname: hostname, App: "web"})
+	}
+	return move
+}
+
+func wantAliasRouted(t *testing.T, w *world, hostname string) {
+	t.Helper()
+	if got, want := w.hosts(tierRoutes)[hostname], backendName("shop", environment.TierPreview, hostname); got != want {
+		t.Errorf("the tier url map routes %s to %q, want %q: the move failed, so it keeps serving", hostname, got, want)
+	}
+}
+
+func TestAnAliasWhoseReplacementFailsToRaiseIsRoutedAgain(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	if err := stack.MovePointer(ctx, aliasMove("p1", aliasHost, previewRecord("b1")), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p1) = %v", err)
+	}
+	w.breakUp(BindingStack("shop", environment.TierPreview), errors.New("the binding stack would not rise"))
+	err := stack.MovePointer(ctx, rotatedMove("p2", previewRecord("b2"), aliasHost), progress.Discard())
+
+	var unserved router.Unserved
+	if !errors.As(err, &unserved) {
+		t.Fatalf("MovePointer(p2) = %v, want it unserved", err)
+	}
+	wantAliasRouted(t, w, aliasHost)
+	if got, routed := w.hosts(tierRoutes)[rotatedAlias]; routed {
+		t.Errorf("%s is routed to %q, want nothing", rotatedAlias, got)
+	}
+}
+
+func TestAnAliasWhoseReplacementFailsToRouteIsRoutedAgain(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	if err := stack.MovePointer(ctx, aliasMove("p1", aliasHost, previewRecord("b1")), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p1) = %v", err)
+	}
+	w.refuseRoute(rotatedAlias, errors.New("compute refused the host rule"))
+	err := stack.MovePointer(ctx, rotatedMove("p2", previewRecord("b2"), aliasHost), progress.Discard())
+
+	var unserved router.Unserved
+	if !errors.As(err, &unserved) {
+		t.Fatalf("MovePointer(p2) = %v, want it unserved", err)
+	}
+	wantAliasRouted(t, w, aliasHost)
+	if got, routed := w.hosts(tierRoutes)[rotatedAlias]; routed {
+		t.Errorf("%s is routed to %q, want nothing", rotatedAlias, got)
+	}
+}
+
+func TestAnAliasRotatedOntoAFullUrlMapThatFailsToRouteGetsItsHostRuleBack(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	if err := stack.MovePointer(ctx, aliasMove("p1", aliasHost, previewRecord("b1")), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p1) = %v", err)
+	}
+	w.fillHostRules(tierRoutes, maxHostRules)
+	w.refuseRoute(rotatedAlias, errors.New("compute refused the host rule"))
+	err := stack.MovePointer(ctx, rotatedMove("p2", previewRecord("b2"), aliasHost), progress.Discard())
+
+	var unserved router.Unserved
+	if !errors.As(err, &unserved) {
+		t.Fatalf("MovePointer(p2) = %v, want it unserved", err)
+	}
+	wantAliasRouted(t, w, aliasHost)
+	if got := len(w.hosts(tierRoutes)); got != maxHostRules {
+		t.Errorf("the tier url map holds %d host rules, want %d", got, maxHostRules)
+	}
+}
+
+func TestASupersededAliasThatFailsToUnrouteLeavesTheAliasesBeforeItRouted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	first := aliasMove("p1", aliasHost, previewRecord("b1"))
+	first.Hosts = append(first.Hosts, edge.PreviewHost{Hostname: siblingAlias, App: "web"})
+	if err := stack.MovePointer(ctx, first, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(p1) = %v", err)
+	}
+	w.refuseUnroute(siblingAlias, errors.New("compute refused to drop the host rule"))
+	err := stack.MovePointer(ctx, rotatedMove("p2", previewRecord("b2"), aliasHost, siblingAlias), progress.Discard())
+
+	var unserved router.Unserved
+	if !errors.As(err, &unserved) {
+		t.Fatalf("MovePointer(p2) = %v, want it unserved", err)
+	}
+	wantAliasRouted(t, w, aliasHost)
+	wantAliasRouted(t, w, siblingAlias)
+}
