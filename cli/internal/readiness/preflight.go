@@ -2,14 +2,11 @@ package readiness
 
 import (
 	"context"
-	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-
-	"google.golang.org/protobuf/proto"
 )
 
 type Preflight struct {
@@ -18,35 +15,19 @@ type Preflight struct {
 }
 
 func Read(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {
-	sent := newPreflightRequest(cfg, req)
-	resp, err := preflight(ctx, provider, sent)
+	resolved, err := ResolveComputes(provider, cfg)
 	if err != nil {
 		return Preflight{}, err
 	}
-	if len(resp.GetCredentialProblems()) > 0 {
-		return Preflight{Response: resp}, nil
-	}
-	resolved, err := cfg.ResolveComputes(resp.GetComputes(), provider.Name())
-	if err != nil {
-		return Preflight{}, err
-	}
-	resent := newPreflightRequest(resolved, req)
-	if isAskingTheSame(sent, resent) {
-		return Preflight{Project: resolved, Response: resp}, nil
-	}
-	resp, err = preflight(ctx, provider, resent)
+	resp, err := preflight(ctx, provider, newPreflightRequest(resolved, req))
 	if err != nil {
 		return Preflight{}, err
 	}
 	return Preflight{Project: resolved, Response: resp}, nil
 }
 
-func ResolveComputes(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (*project.Project, error) {
-	resp, err := preflight(ctx, provider, &contractv1.PreflightRequest{Edge: cfg.EdgeSelection()})
-	if err != nil {
-		return nil, err
-	}
-	return cfg.ResolveComputes(resp.GetComputes(), provider.Name())
+func ResolveComputes(provider *providerprocess.Provider, cfg *project.Project) (*project.Project, error) {
+	return cfg.ResolveComputes(provider.Facts().GetComputes(), provider.Name())
 }
 
 func preflight(ctx context.Context, provider *providerprocess.Provider, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
@@ -56,11 +37,4 @@ func preflight(ctx context.Context, provider *providerprocess.Provider, req *con
 		return err
 	})
 	return resp, err
-}
-
-func isAskingTheSame(sent, resent *contractv1.PreflightRequest) bool {
-	return slices.Equal(sent.GetFrameworks(), resent.GetFrameworks()) &&
-		slices.EqualFunc(sent.GetContainers(), resent.GetContainers(), func(a, b *contractv1.ContainerApp) bool {
-			return proto.Equal(a, b)
-		})
 }

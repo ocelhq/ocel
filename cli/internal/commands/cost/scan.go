@@ -109,7 +109,7 @@ func price(ctx context.Context, dependencies Dependencies, provider *providerpro
 	if !provider.Facts().GetPricesDeploys() {
 		return nil, nil, nil, fmt.Errorf("%s does not price a deploy, so there is nothing to scan", provider.Name())
 	}
-	resolved, err := readiness.ResolveComputes(ctx, provider, cfg)
+	resolved, err := readiness.ResolveComputes(provider, cfg)
 	if err != nil {
 		return nil, nil, nil, err
 	}

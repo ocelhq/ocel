@@ -25,5 +25,9 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 }
 
 func factsProto(p provider.Provider) *contractv1.ProviderFacts {
-	return &contractv1.ProviderFacts{PricesDeploys: p.Hooks().Cost != nil}
+	return &contractv1.ProviderFacts{
+		PricesDeploys:  p.Hooks().Cost != nil,
+		Computes:       provider.ComputeNames(p.Facts().Computes),
+		WorkerCeilings: provider.WorkerCeilingMessages(p.Facts().WorkerCeilings),
+	}
 }
