@@ -37,7 +37,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 		Yes:          opts.Yes,
 		DryRun:       opts.Dry,
 		GrantsDryRun: true,
-		TTY:          invocation.CanAsk(stdin),
+		Interactive:  invocation.CanAsk(stdin),
 	}.Granted()
 	if err != nil {
 		return err

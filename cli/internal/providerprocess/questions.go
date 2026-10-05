@@ -22,12 +22,12 @@ type Prompt interface {
 type Questions struct {
 	Prompt Prompt
 	Out    io.Writer
-	JSON   func() bool
+	IsJSON func() bool
 	run    *run.Run
 }
 
 func (q Questions) attended() bool {
-	return q.Prompt != nil && q.Out != nil && q.Prompt.Attended() && (q.JSON == nil || !q.JSON())
+	return q.Prompt != nil && q.Out != nil && q.Prompt.Attended() && (q.IsJSON == nil || !q.IsJSON())
 }
 
 func (q Questions) holding(ask func() error) error {

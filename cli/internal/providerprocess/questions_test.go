@@ -155,7 +155,7 @@ func TestAQuestionNobodyCanAnswerReportsInputRequired(t *testing.T) {
 
 	for name, questions := range map[string]Questions{
 		"no terminal":      answering(&scriptedPrompt{attended: false, answer: true}, io.Discard),
-		"under --json":     {Prompt: &scriptedPrompt{attended: true, answer: true}, Out: io.Discard, JSON: func() bool { return true }},
+		"under --json":     {Prompt: &scriptedPrompt{attended: true, answer: true}, Out: io.Discard, IsJSON: func() bool { return true }},
 		"no prompt at all": {},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -184,7 +184,7 @@ func TestAQuestionUnderJSONIsNeverAskedOnATerminal(t *testing.T) {
 	asker := &scriptedPrompt{attended: true, answer: true}
 	var out bytes.Buffer
 
-	err := fake.call(t, Questions{Prompt: asker, Out: &out, JSON: func() bool { return true }})
+	err := fake.call(t, Questions{Prompt: asker, Out: &out, IsJSON: func() bool { return true }})
 	if err == nil {
 		t.Fatal("call error = nil, want a refusal")
 	}

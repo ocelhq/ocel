@@ -104,13 +104,13 @@ func runDestroyProduction(ctx context.Context, invocation commands.Invocation, c
 	}
 
 	bypass, notice, err := consent.Bypass{
-		Noun:    "project",
-		Subject: cfg.Slug,
-		Action:  "destroying production",
-		Verb:    "destroyed",
-		Yes:     yes,
-		DryRun:  dry,
-		TTY:     invocation.CanAsk(stdin),
+		Noun:        "project",
+		Subject:     cfg.Slug,
+		Action:      "destroying production",
+		Verb:        "destroyed",
+		Yes:         yes,
+		DryRun:      dry,
+		Interactive: invocation.CanAsk(stdin),
 	}.Granted()
 	if err != nil {
 		return err

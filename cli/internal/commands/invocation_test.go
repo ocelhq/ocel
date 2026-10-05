@@ -82,7 +82,7 @@ func TestAnInvocationAsksOnlyOnATerminalAndNeverUnderJSON(t *testing.T) {
 		{"no terminal under JSON", false, func() bool { return true }, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			invocation := commands.Invocation{StdinIsTerminal: func(io.Reader) bool { return tc.terminal }, JSON: tc.json}
+			invocation := commands.Invocation{StdinIsTerminal: func(io.Reader) bool { return tc.terminal }, IsJSON: tc.json}
 
 			if got := invocation.CanAsk(strings.NewReader("")); got != tc.want {
 				t.Errorf("CanAsk() = %t, want %t", got, tc.want)

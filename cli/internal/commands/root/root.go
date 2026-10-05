@@ -213,12 +213,13 @@ func newCommand() *command {
 }
 
 func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
+	isJSON := func() bool { return set.json }
 	return commands.Invocation{
 		Events:          bus,
 		Presentation:    set.presentation,
 		StdinIsTerminal: func(in io.Reader) bool { return terminal.IsTerminal(in) },
-		JSON:            func() bool { return set.json },
-		Questions:       providerprocess.Questions{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr, JSON: func() bool { return set.json }},
+		IsJSON:          isJSON,
+		Questions:       providerprocess.Questions{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr, IsJSON: isJSON},
 		ConfigPath:      set.explicitConfigPath,
 	}
 }
