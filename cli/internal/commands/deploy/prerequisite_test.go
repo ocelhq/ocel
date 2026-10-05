@@ -199,13 +199,14 @@ func TestADeployUnderJSONOnATerminalOffersNoSetupAndFailsWithTheMissingPrerequis
 		name    string
 		prepare func(t *testing.T, fixture clitest.FakeProject)
 		code    string
+		hint    string
 	}{
 		{"no infrastructure", func(t *testing.T, fixture clitest.FakeProject) {
 			removeBootstrap(t, fixture, environment.TierProduction)
-		}, "bootstrap.missing"},
+		}, "bootstrap.missing", "ocel bootstrap production --features cache,images"},
 		{"no production hostname", func(t *testing.T, fixture clitest.FakeProject) {
 			clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), "export default {\n  slug: \""+clitest.FixtureSlug+"\",\n  provider: { fake: {} },\n};\n")
-		}, "prerequisite.missing"},
+		}, "prerequisite.missing", "domains.production"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fixture := setUpDeployProject(t)
@@ -228,8 +229,8 @@ func TestADeployUnderJSONOnATerminalOffersNoSetupAndFailsWithTheMissingPrerequis
 				t.Errorf("terminal = %q, want nothing asked under --json", asked)
 			}
 			evs := clitest.RunEvents(t, stdout.String())
-			if got := evs[len(evs)-1].GetSummary().GetError(); got.GetCode() != tc.code {
-				t.Errorf("summary error = %v, want %s", got, tc.code)
+			if got := evs[len(evs)-1].GetSummary().GetError(); got.GetCode() != tc.code || got.GetHint() != tc.hint {
+				t.Errorf("summary error = %v, want %s hinting %s", got, tc.code, tc.hint)
 			}
 			if bootstraps := clitest.RequestsTo[*contractv1.BootstrapRequest](t, fixture.Requests, contractv1connect.ProviderServiceBootstrapProcedure); len(bootstraps) != 0 {
 				t.Errorf("the provider was sent %d bootstraps under --json, want none", len(bootstraps))

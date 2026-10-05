@@ -198,8 +198,11 @@ func TestAProjectWithNoHostnameWhereTheRouterNeedsOneIsADomainToSetUp(t *testing
 	if missing.Missing() != prerequisite.Domain {
 		t.Errorf("missing = %v, want the domain", missing.Missing())
 	}
-	if want := "add a production hostname under \"domains\" in ocel.json, then run `ocel deploy`"; missing.Hint() != want {
-		t.Errorf("hint = %q, want %q", missing.Hint(), want)
+	if want := "add a production hostname under \"domains\" in ocel.json, then run `ocel deploy`"; missing.Remedy() != want {
+		t.Errorf("remedy = %q, want %q", missing.Remedy(), want)
+	}
+	if missing.Hint() != "domains.production" {
+		t.Errorf("hint = %q, want the config field a user sets, domains.production", missing.Hint())
 	}
 	for _, want := range []string{"shop", "ocel.json", "domains"} {
 		if !strings.Contains(missing.Error(), want) {
