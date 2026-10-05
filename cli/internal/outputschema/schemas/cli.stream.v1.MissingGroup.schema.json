@@ -1,0 +1,25 @@
+{
+  "$defs": {
+    "cli.stream.v1.MissingGroup.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "default": "",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "minLength": 1,
+          "pattern": "^[^#\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        }
+      },
+      "title": "Missing Group",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.stream.v1.MissingGroup.schema.json",
+  "$ref": "#/$defs/cli.stream.v1.MissingGroup.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

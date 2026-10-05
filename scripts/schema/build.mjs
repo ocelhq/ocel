@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,6 +12,11 @@ const SCHEMA_OUT = join(root, "www", "public", "schema", VERSION, "ocel.schema.j
 const TYPES_OUT = join(root, "packages", "ocel", "src", "generated", "config.ts");
 
 const read = (path) => JSON.parse(readFileSync(path, "utf8"));
+
+const MESSAGE_SCHEMAS_OUT = join(root, "www", "public", "schema", VERSION, "cli");
+const EMBEDDED_SCHEMAS_OUT = join(root, "cli", "internal", "outputschema", "schemas");
+const MESSAGE_SCHEMA_ORIGIN = `https://ocel.dev/schema/${VERSION}/cli`;
+const BUNDLE_SUFFIX = ".jsonschema.bundle.json";
 
 const SCHEMA_URL = `https://ocel.dev/schema/${VERSION}/ocel.schema.json`;
 
@@ -321,13 +327,84 @@ function types(merged) {
   return `${header}\n${emitter.render()}`;
 }
 
+function messageSchemas() {
+  const scratch = mkdtempSync(join(tmpdir(), "ocel-message-schemas-"));
+  try {
+    execFileSync(
+      "pnpm",
+      ["exec", "buf", "generate", "--template", "proto/buf.gen.schema.yaml", "--output", scratch],
+      { cwd: root, stdio: "inherit" },
+    );
+    return readdirSync(scratch)
+      .filter((file) => file.endsWith(BUNDLE_SUFFIX))
+      .sort()
+      .map((file) => {
+        const name = file.slice(0, -BUNDLE_SUFFIX.length);
+        const bundle = read(join(scratch, file));
+        refuseNonECMAScriptPatterns(name, bundle);
+        return {
+          file: `${name}.schema.json`,
+          schema: { ...bundle, $id: `${MESSAGE_SCHEMA_ORIGIN}/${name}.schema.json` },
+        };
+      });
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+function refuseNonECMAScriptPatterns(name, node) {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const item of node) refuseNonECMAScriptPatterns(name, item);
+    return;
+  }
+  if (typeof node.pattern === "string") {
+    try {
+      new RegExp(node.pattern, "u");
+    } catch (error) {
+      throw new Error(
+        `${name} has a pattern that is not ECMA-262: ${node.pattern} (${error.message})`,
+      );
+    }
+  }
+  for (const value of Object.values(node)) refuseNonECMAScriptPatterns(name, value);
+}
+
+function writeMessageSchemas() {
+  const outputs = [MESSAGE_SCHEMAS_OUT, EMBEDDED_SCHEMAS_OUT];
+  for (const out of outputs) {
+    rmSync(out, { recursive: true, force: true });
+    mkdirSync(out, { recursive: true });
+  }
+  const written = [];
+  for (const { file, schema: document } of messageSchemas()) {
+    for (const out of outputs) {
+      const path = join(out, file);
+      writeFileSync(path, `${JSON.stringify(document, null, 2)}\n`);
+      written.push(path);
+    }
+  }
+  return written;
+}
+
 const merged = schema();
 mkdirSync(dirname(SCHEMA_OUT), { recursive: true });
 writeFileSync(SCHEMA_OUT, `${JSON.stringify(merged, null, 2)}\n`);
 mkdirSync(dirname(TYPES_OUT), { recursive: true });
 writeFileSync(TYPES_OUT, types(merged));
 writeFileSync(SELECTORS_OUT, `${JSON.stringify(selectors(merged), null, 2)}\n`);
-execFileSync("pnpm", ["exec", "biome", "format", "--write", SCHEMA_OUT, TYPES_OUT, SELECTORS_OUT], {
-  cwd: root,
-  stdio: "inherit",
-});
+const messageSchemaFiles = writeMessageSchemas();
+execFileSync(
+  "pnpm",
+  [
+    "exec",
+    "biome",
+    "format",
+    "--write",
+    SCHEMA_OUT,
+    TYPES_OUT,
+    SELECTORS_OUT,
+    ...messageSchemaFiles,
+  ],
+  { cwd: root, stdio: "inherit" },
+);

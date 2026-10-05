@@ -1,0 +1,37 @@
+{
+  "$defs": {
+    "cli.stream.v1.MissingVariable.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "default": "",
+          "type": "string"
+        },
+        "folder": {
+          "default": "",
+          "pattern": "^(/[^/#\\x00-\\x1f\\x7f]+)*$",
+          "type": "string"
+        },
+        "group": {
+          "default": "",
+          "pattern": "^[^#\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Missing Variable",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.stream.v1.MissingVariable.schema.json",
+  "$ref": "#/$defs/cli.stream.v1.MissingVariable.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

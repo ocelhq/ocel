@@ -1,0 +1,132 @@
+{
+  "$defs": {
+    "cli.result.v1.Certificate.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(expires_at)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(expiring_soon)$": {
+          "default": false,
+          "type": "boolean"
+        },
+        "^(last_probe_at)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(last_probe_ok)$": {
+          "default": false,
+          "type": "boolean"
+        },
+        "^(manual_records)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "^(records_written)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "^(renewal_status)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "expiresAt": {
+          "default": "",
+          "type": "string"
+        },
+        "expiringSoon": {
+          "default": false,
+          "type": "boolean"
+        },
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "lastProbeAt": {
+          "default": "",
+          "type": "string"
+        },
+        "lastProbeOk": {
+          "default": false,
+          "type": "boolean"
+        },
+        "manualRecords": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "recordsWritten": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "renewalStatus": {
+          "default": "",
+          "type": "string"
+        },
+        "status": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Certificate",
+      "type": "object"
+    },
+    "cli.result.v1.PreviewDomainResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(base_domain)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(edge_scope)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(route_installed)$": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "properties": {
+        "baseDomain": {
+          "default": "",
+          "type": "string"
+        },
+        "certificate": {
+          "$ref": "#/$defs/cli.result.v1.Certificate.jsonschema.json"
+        },
+        "edgeScope": {
+          "default": "",
+          "type": "string"
+        },
+        "projects": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "routeInstalled": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "Preview Domain Result",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.PreviewDomainResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.PreviewDomainResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

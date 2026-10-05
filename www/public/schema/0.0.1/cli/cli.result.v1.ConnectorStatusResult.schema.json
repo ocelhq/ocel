@@ -1,0 +1,126 @@
+{
+  "$defs": {
+    "cli.result.v1.ConnectorDenial.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "default": "",
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "type": "string"
+        },
+        "verb": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Connector Denial",
+      "type": "object"
+    },
+    "cli.result.v1.ConnectorStatus.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(connected_at)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(last_denied)$": {
+          "$ref": "#/$defs/cli.result.v1.ConnectorDenial.jsonschema.json"
+        },
+        "^(last_seen_at)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "compute": {
+          "default": "",
+          "type": "string"
+        },
+        "connectedAt": {
+          "default": "",
+          "type": "string"
+        },
+        "lastDenied": {
+          "$ref": "#/$defs/cli.result.v1.ConnectorDenial.jsonschema.json"
+        },
+        "lastSeenAt": {
+          "default": "",
+          "type": "string"
+        },
+        "liveness": {
+          "anyOf": [
+            {
+              "pattern": "^CONNECTOR_LIVENESS_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "CONNECTOR_LIVENESS_ONLINE",
+                "CONNECTOR_LIVENESS_OFFLINE",
+                "CONNECTOR_LIVENESS_NEVER_CONNECTED"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Connector Liveness"
+        },
+        "reach": {
+          "default": "",
+          "type": "string"
+        },
+        "target": {
+          "default": "",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "type": "string"
+        },
+        "vendor": {
+          "default": "",
+          "type": "string"
+        },
+        "version": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Connector Status",
+      "type": "object"
+    },
+    "cli.result.v1.ConnectorStatusResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "connectors": {
+          "items": {
+            "$ref": "#/$defs/cli.result.v1.ConnectorStatus.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Connector Status Result",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.ConnectorStatusResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.ConnectorStatusResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

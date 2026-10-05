@@ -1,0 +1,62 @@
+{
+  "$defs": {
+    "cli.result.v1.InitResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(config_path)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(sdk_package)$": {
+          "type": "string"
+        }
+      },
+      "properties": {
+        "configPath": {
+          "default": "",
+          "type": "string"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "pattern": "^CONFIG_FORMAT_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": ["CONFIG_FORMAT_JSON", "CONFIG_FORMAT_YAML", "CONFIG_FORMAT_TYPESCRIPT"],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Config Format"
+        },
+        "language": {
+          "default": "",
+          "type": "string"
+        },
+        "provider": {
+          "default": "",
+          "type": "string"
+        },
+        "sdkPackage": {
+          "type": "string"
+        },
+        "slug": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Init Result",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.InitResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.InitResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

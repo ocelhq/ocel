@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "cli.result.v1.ConsoleOrganization.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "type": "string"
+        },
+        "slug": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Console Organization",
+      "type": "object"
+    },
+    "cli.result.v1.ConsoleProject.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "type": "string"
+        },
+        "slug": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Console Project",
+      "type": "object"
+    },
+    "cli.result.v1.LinkResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "organization": {
+          "$ref": "#/$defs/cli.result.v1.ConsoleOrganization.jsonschema.json"
+        },
+        "project": {
+          "$ref": "#/$defs/cli.result.v1.ConsoleProject.jsonschema.json"
+        }
+      },
+      "title": "Link Result",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.LinkResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.LinkResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

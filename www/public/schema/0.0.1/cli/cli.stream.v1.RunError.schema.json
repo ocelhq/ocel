@@ -1,0 +1,39 @@
+{
+  "$defs": {
+    "cli.stream.v1.RunError.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(docs_url)$": {
+          "type": "string"
+        }
+      },
+      "properties": {
+        "code": {
+          "default": "",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+          "type": "string"
+        },
+        "docsUrl": {
+          "type": "string"
+        },
+        "hint": {
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "type": "string"
+        },
+        "retryable": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "Run Error",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.stream.v1.RunError.schema.json",
+  "$ref": "#/$defs/cli.stream.v1.RunError.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

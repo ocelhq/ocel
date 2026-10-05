@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "cli.result.v1.PreviewListResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "previews": {
+          "items": {
+            "$ref": "#/$defs/cli.result.v1.PreviewSummary.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Preview List Result",
+      "type": "object"
+    },
+    "cli.result.v1.PreviewSummary.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(alias_urls)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "^(created_at)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "aliasUrls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "createdAt": {
+          "default": "",
+          "type": "string"
+        },
+        "identity": {
+          "default": "",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "type": "string"
+        },
+        "lifecycle": {
+          "anyOf": [
+            {
+              "pattern": "^LIFECYCLE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "LIFECYCLE_EPHEMERAL",
+                "LIFECYCLE_PERSISTENT"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Lifecycle"
+        }
+      },
+      "title": "Preview Summary",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.PreviewListResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.PreviewListResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

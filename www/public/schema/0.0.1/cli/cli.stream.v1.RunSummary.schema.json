@@ -1,0 +1,376 @@
+{
+  "$defs": {
+    "cli.stream.v1.Assumption.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "warning": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Assumption",
+      "type": "object"
+    },
+    "cli.stream.v1.MissingGroup.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "default": "",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "minLength": 1,
+          "pattern": "^[^#\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        }
+      },
+      "title": "Missing Group",
+      "type": "object"
+    },
+    "cli.stream.v1.MissingVariable.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "default": "",
+          "type": "string"
+        },
+        "folder": {
+          "default": "",
+          "pattern": "^(/[^/#\\x00-\\x1f\\x7f]+)*$",
+          "type": "string"
+        },
+        "group": {
+          "default": "",
+          "pattern": "^[^#\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Missing Variable",
+      "type": "object"
+    },
+    "cli.stream.v1.MissingVariables.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "cells": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.MissingVariable.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.MissingGroup.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "remedy": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Missing Variables",
+      "type": "object"
+    },
+    "cli.stream.v1.Party.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "account": {
+          "default": "",
+          "type": "string"
+        },
+        "location": {
+          "default": "",
+          "type": "string"
+        },
+        "principal": {
+          "default": "",
+          "type": "string"
+        },
+        "vendor": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Party",
+      "type": "object"
+    },
+    "cli.stream.v1.RunError.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(docs_url)$": {
+          "type": "string"
+        }
+      },
+      "properties": {
+        "code": {
+          "default": "",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+          "type": "string"
+        },
+        "docsUrl": {
+          "type": "string"
+        },
+        "hint": {
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "type": "string"
+        },
+        "retryable": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "Run Error",
+      "type": "object"
+    },
+    "cli.stream.v1.RunSummary.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(change_started)$": {
+          "default": false,
+          "type": "boolean"
+        },
+        "^(duration_ms)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        },
+        "^(log_path)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(promotion_id)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(url_notes)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "properties": {
+        "apps": {
+          "items": {
+            "$ref": "#/$defs/common.progress.v1.AppResult.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "assumed": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.Assumption.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "changeStarted": {
+          "default": false,
+          "type": "boolean"
+        },
+        "detail": {
+          "default": "",
+          "type": "string"
+        },
+        "durationMs": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        },
+        "error": {
+          "$ref": "#/$defs/cli.stream.v1.RunError.jsonschema.json"
+        },
+        "headline": {
+          "default": "",
+          "type": "string"
+        },
+        "interrupted": {
+          "default": false,
+          "type": "boolean"
+        },
+        "logPath": {
+          "default": "",
+          "type": "string"
+        },
+        "missing": {
+          "$ref": "#/$defs/cli.stream.v1.MissingVariables.jsonschema.json"
+        },
+        "origin": {
+          "$ref": "#/$defs/cli.stream.v1.Party.jsonschema.json"
+        },
+        "promotionId": {
+          "default": "",
+          "type": "string"
+        },
+        "propagation": {
+          "$ref": "#/$defs/common.progress.v1.Propagation.jsonschema.json"
+        },
+        "success": {
+          "default": false,
+          "type": "boolean"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "pattern": "^TIER_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "TIER_PREVIEW",
+                "TIER_PRODUCTION"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Tier"
+        },
+        "urlNotes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Run Summary",
+      "type": "object"
+    },
+    "common.progress.v1.AppResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(deployment_url)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "app": {
+          "default": "",
+          "type": "string"
+        },
+        "deploymentUrl": {
+          "default": "",
+          "type": "string"
+        },
+        "error": {
+          "default": "",
+          "type": "string"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "pattern": "^APP_OUTCOME_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "APP_OUTCOME_SUCCEEDED",
+                "APP_OUTCOME_FAILED",
+                "APP_OUTCOME_NOT_RUN"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "App Outcome"
+        },
+        "urls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "App Result",
+      "type": "object"
+    },
+    "common.progress.v1.Propagation.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(typical_ms)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        }
+      },
+      "properties": {
+        "published": {
+          "default": false,
+          "type": "boolean"
+        },
+        "typicalMs": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        }
+      },
+      "title": "Propagation",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.stream.v1.RunSummary.schema.json",
+  "$ref": "#/$defs/cli.stream.v1.RunSummary.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,53 @@
+{
+  "$defs": {
+    "cli.result.v1.DoctorCheck.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "fix": {
+          "default": "",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "type": "string"
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "pattern": "^DOCTOR_VERDICT_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "DOCTOR_VERDICT_PASS",
+                "DOCTOR_VERDICT_WARN",
+                "DOCTOR_VERDICT_FAIL",
+                "DOCTOR_VERDICT_NEUTRAL"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Doctor Verdict"
+        }
+      },
+      "title": "Doctor Check",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.DoctorCheck.schema.json",
+  "$ref": "#/$defs/cli.result.v1.DoctorCheck.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
