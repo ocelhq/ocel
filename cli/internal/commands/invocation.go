@@ -27,6 +27,7 @@ type Invocation struct {
 	Events          *run.Bus
 	Presentation    func(w io.Writer) terminal.Presentation
 	StdinIsTerminal func(r io.Reader) bool
+	JSON            func() bool
 	Questions       providerprocess.Questions
 	ConfigPath      func() string
 	Setups          prerequisite.Setups
@@ -51,6 +52,10 @@ func (i Invocation) EnsureProject(ctx context.Context, cwd string, policy consen
 
 func (i Invocation) LoadOptionalProject(ctx context.Context, cwd string) (*project.Project, error) {
 	return project.LoadOptional(ctx, cwd, i.ConfigPath())
+}
+
+func (i Invocation) CanAsk(stdin io.Reader) bool {
+	return i.StdinIsTerminal(stdin) && (i.JSON == nil || !i.JSON())
 }
 
 func (i Invocation) IsBrowserReachable(stdin io.Reader) bool {

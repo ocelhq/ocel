@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/creack/pty"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
@@ -277,6 +278,53 @@ func TestLinkSelectsOrCreatesAConsoleProjectForThisDirectory(t *testing.T) {
 			dependencies.Events.Attach(terminal.NewJSONLines(&stream))
 
 			_ = runLink(context.Background(), dependencies, t.TempDir(), "", options{apiURL: srv.URL}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+
+			evs := clitest.RunEvents(t, stream.String())
+			failure := evs[len(evs)-1].GetSummary().GetError()
+			if failure.GetCode() != clierror.CodeInputRequired || failure.GetHint() != tc.hint {
+				t.Errorf("summary error = %v, want input_required with the hint %s", failure, tc.hint)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name     string
+		orgs     int
+		projects []map[string]string
+		opts     options
+		hint     string
+	}{
+		{"several organizations", 2, nil, options{create: true}, "--org <slug>"},
+		{"an organization with projects", 1, []map[string]string{projectRow("p1", "My App", "my-app")}, options{}, "ocel link <project>"},
+		{"an organization with no projects", 1, nil, options{}, "--create"},
+	} {
+		t.Run("under --json a terminal is not asked about "+tc.name+" and input_required names "+tc.hint, func(t *testing.T) {
+			t.Parallel()
+
+			ptmx, tty, err := pty.Open()
+			if err != nil {
+				t.Skipf("no pty available: %v", err)
+			}
+			t.Cleanup(func() {
+				ptmx.Close()
+				tty.Close()
+			})
+			var asked bytes.Buffer
+			go func() { _, _ = io.Copy(&asked, ptmx) }()
+			dependencies := newTestDependencies()
+			dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+			dependencies.StdinIsTerminal = func(r io.Reader) bool { return terminal.IsTerminal(r) }
+			dependencies.JSON = func() bool { return true }
+			srv := newCloudServer(t, tc.projects...)
+			if tc.orgs > 1 {
+				srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
+			}
+			var stream bytes.Buffer
+			dependencies.Events.Attach(terminal.NewJSONLines(&stream))
+			opts := tc.opts
+			opts.apiURL = srv.URL
+
+			_ = runLink(context.Background(), dependencies, t.TempDir(), "", opts, &stream, &bytes.Buffer{}, tty)
 
 			evs := clitest.RunEvents(t, stream.String())
 			failure := evs[len(evs)-1].GetSummary().GetError()

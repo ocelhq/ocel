@@ -67,3 +67,26 @@ func TestTheBrowserIsReachableOnlyFromAnInteractiveTerminalThatHasNotOptedOut(t 
 		})
 	}
 }
+
+func TestAnInvocationAsksOnlyOnATerminalAndNeverUnderJSON(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		terminal bool
+		json     func() bool
+		want     bool
+	}{
+		{"a terminal", true, nil, true},
+		{"a terminal with JSON off", true, func() bool { return false }, true},
+		{"a terminal under JSON", true, func() bool { return true }, false},
+		{"no terminal", false, nil, false},
+		{"no terminal under JSON", false, func() bool { return true }, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			invocation := commands.Invocation{StdinIsTerminal: func(io.Reader) bool { return tc.terminal }, JSON: tc.json}
+
+			if got := invocation.CanAsk(strings.NewReader("")); got != tc.want {
+				t.Errorf("CanAsk() = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}

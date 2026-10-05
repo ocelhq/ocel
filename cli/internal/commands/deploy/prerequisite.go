@@ -10,7 +10,7 @@ import (
 )
 
 func ensureProject(ctx context.Context, dependencies Dependencies, command, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) (consent.Policy, *project.Project, error) {
-	policy := consent.NewPolicy(command, yes, dependencies.StdinIsTerminal(stdin), stdout, stdin)
+	policy := consent.NewPolicy(command, yes, dependencies.CanAsk(stdin), stdout, stdin)
 	policy.DryRun = dry
 	if err := policy.Refuse(); err != nil {
 		return policy, nil, err

@@ -47,7 +47,7 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 	open := commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure}
 	if keyOffer != nil {
 		open.Feature = providercontract.FeatureVariablesKey
-		open.Policy = consent.NewPolicy(command, false, dependencies.StdinIsTerminal(keyOffer.stdin), stderr, keyOffer.stdin)
+		open.Policy = consent.NewPolicy(command, false, dependencies.CanAsk(keyOffer.stdin), stderr, keyOffer.stdin)
 	}
 	return dependencies.WithProvider(ctx, cfg, command, open, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider, status := p.Run, p.Check, p.Provider, p.Preflight

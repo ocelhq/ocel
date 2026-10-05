@@ -154,7 +154,7 @@ func runDomainRemove(ctx context.Context, invocation commands.Invocation, cwd, h
 		headline = fmt.Sprintf("Removed %s", host)
 		plan = fmt.Sprintf("This will unbind %s from production of project %q, and remove the certificate and DNS records ocel created for it", host, cfg.Slug)
 	}
-	policy := consent.NewPlanPolicy("ocel domain rm", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
+	policy := consent.NewPlanPolicy("ocel domain rm", opts.yes, invocation.CanAsk(stdin), stdout, stdin)
 	return changeHostnames(ctx, invocation, cfg, hostnameChange{
 		command:  "ocel domain rm",
 		rpc:      "RemoveHostname",

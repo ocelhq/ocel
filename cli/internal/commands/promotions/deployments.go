@@ -106,7 +106,7 @@ func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd
 		return err
 	}
 
-	policy := consent.NewPlanPolicy("ocel deployments prune", opts.yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
+	policy := consent.NewPlanPolicy("ocel deployments prune", opts.yes, invocation.CanAsk(stdin), stdout, stdin)
 	if err := policy.Refuse(); err != nil {
 		return err
 	}

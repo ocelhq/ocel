@@ -159,7 +159,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	}
 
 	command := readiness.BootstrapCommand(tier)
-	policy := consent.NewPlanPolicy(command, opts.Yes, invocation.StdinIsTerminal(stdin), stdout, stdin)
+	policy := consent.NewPlanPolicy(command, opts.Yes, invocation.CanAsk(stdin), stdout, stdin)
 	policy.DryRun = opts.Dry
 	if err := policy.Refuse(); err != nil {
 		return err
