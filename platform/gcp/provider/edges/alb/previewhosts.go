@@ -64,22 +64,22 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 	if err := s.refuseExhaustedLimits(ctx, took, withdrawn); err != nil {
 		return router.Unserved{Err: err}
 	}
-	for _, hostname := range withdrawn {
+	for i, hostname := range withdrawn {
 		if err := s.e.deps.Routes.Unroute(ctx, s.recorded.LoadBalancer.URLMap, hostname); err != nil {
-			return router.Unserved{Err: err}
+			return router.Unserved{Err: errors.Join(err, s.restoreRecordedRoutes(ctx, nil, withdrawn[:i]))}
 		}
 		delete(hosts, hostname)
 		delete(tags, hostname)
 	}
 	if err := s.raise(ctx, hosts); err != nil {
-		return router.Unserved{Err: err}
+		return router.Unserved{Err: errors.Join(err, s.restoreRecordedRoutes(ctx, nil, withdrawn))}
 	}
 	for _, hostname := range took {
 		if progress != nil {
 			progress.Say("Routing " + hostname + " to " + describeHost(hosts[hostname]))
 		}
 		if err := s.reach(ctx, hosts[hostname], hostname); err != nil {
-			return router.Unserved{Err: errors.Join(err, s.unrouteUnrecorded(ctx, took), s.raise(ctx, s.recorded.Hosts))}
+			return router.Unserved{Err: errors.Join(err, s.restoreRecordedRoutes(ctx, took, withdrawn))}
 		}
 	}
 	s.recordPreviewHosts(hosts, tags)
@@ -137,6 +137,24 @@ func recordOf(records map[string]router.DeploymentRecord, app string) (router.De
 		}
 	}
 	return router.DeploymentRecord{}, false
+}
+
+func (s *stack) restoreRecordedRoutes(ctx context.Context, took, withdrawn []string) error {
+	return errors.Join(
+		s.unrouteUnrecorded(ctx, took),
+		s.raise(ctx, s.recorded.Hosts),
+		s.routeRecorded(ctx, slices.Concat(took, withdrawn)),
+	)
+}
+
+func (s *stack) routeRecorded(ctx context.Context, hostnames []string) error {
+	var errs []error
+	for _, hostname := range hostnames {
+		if host, recorded := s.recorded.Hosts[hostname]; recorded {
+			errs = append(errs, s.reach(ctx, host, hostname))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (s *stack) unrouteUnrecorded(ctx context.Context, hostnames []string) error {

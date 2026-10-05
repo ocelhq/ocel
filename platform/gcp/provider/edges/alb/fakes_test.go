@@ -37,6 +37,9 @@ type world struct {
 	breaks   map[string]error
 	pinning  error
 
+	routeFails   map[string]error
+	unrouteFails map[string]error
+
 	invalidatedTags  [][]string
 	invalidatedHosts []string
 	invalidating     error
@@ -71,11 +74,13 @@ func newWorld() *world {
 			LoadBalancerStack(environment.TierProduction): balancer(),
 			LoadBalancerStack(environment.TierPreview):    balancer(),
 		},
-		routed:   map[string]map[string]string{},
-		backends: map[string]map[string]bool{"": {notFoundBackend: true}},
-		entries:  map[string]map[string]bool{},
-		declared: map[string]map[string]declaration{},
-		breaks:   map[string]error{},
+		routed:       map[string]map[string]string{},
+		backends:     map[string]map[string]bool{"": {notFoundBackend: true}},
+		entries:      map[string]map[string]bool{},
+		declared:     map[string]map[string]declaration{},
+		breaks:       map[string]error{},
+		routeFails:   map[string]error{},
+		unrouteFails: map[string]error{},
 	}
 }
 
@@ -164,10 +169,16 @@ func (w *world) Route(_ context.Context, urlMap, hostname, backend string) error
 		return fmt.Errorf("route %s onto the backend service %q, which no stack declared: Compute rejects a url map naming a backend that is not there",
 			hostname, backend)
 	}
+	if err := w.routeFails[hostname]; err != nil {
+		return err
+	}
 	hosts := w.routed[urlMap]
 	if hosts == nil {
 		hosts = map[string]string{}
 		w.routed[urlMap] = hosts
+	}
+	if _, routed := hosts[hostname]; !routed && len(hosts) >= maxHostRules {
+		return fmt.Errorf("route %s onto a url map already holding %d host rules, the most Compute allows", hostname, len(hosts))
 	}
 	hosts[hostname] = backend
 	return nil
@@ -222,6 +233,9 @@ func (w *world) fillHostRules(urlMap string, count int) {
 func (w *world) Unroute(_ context.Context, urlMap, hostname string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if err := w.unrouteFails[hostname]; err != nil {
+		return err
+	}
 	delete(w.routed[urlMap], hostname)
 	return nil
 }
@@ -448,4 +462,16 @@ func (m mocks) NewResource(args pulumi.MockResourceArgs) (string, resource.Prope
 
 func (mocks) Call(args pulumi.MockCallArgs) (resource.PropertyMap, error) {
 	return args.Args, nil
+}
+
+func (w *world) refuseRoute(hostname string, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.routeFails[hostname] = err
+}
+
+func (w *world) refuseUnroute(hostname string, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.unrouteFails[hostname] = err
 }
