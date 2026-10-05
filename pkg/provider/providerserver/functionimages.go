@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"strings"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
@@ -47,7 +46,7 @@ func (r *deployRun) imageFunctions(
 		if err != nil {
 			return nil, err
 		}
-		r.recordFunctionImage(fn.GetLogicalName(), push.Source)
+		r.recordFunctionImage(fn.GetLogicalName(), push.ImageRef)
 		pushes = append(pushes, push)
 	}
 	return pushes, nil
@@ -96,7 +95,6 @@ func (r *deployRun) imageFunction(
 	target := images.Ref(repository, naming.DigestTag(digest.String()), r.registry)
 	return provider.ImagePush{
 		App:      name,
-		Source:   pinnedImageRef(target, digest.String()),
 		ImageRef: target,
 		Digest:   digest.String(),
 		Function: true,
@@ -162,9 +160,4 @@ func functionRepository(app, function string) string {
 		return app
 	}
 	return app + "-" + images.FunctionRoute(app, function)
-}
-
-func pinnedImageRef(target, digest string) string {
-	repository := target[:strings.LastIndex(target, ":")]
-	return repository + "@" + digest
 }

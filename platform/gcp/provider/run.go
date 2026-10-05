@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"google.golang.org/api/googleapi"
@@ -18,7 +17,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -234,14 +232,6 @@ func trafficTo(revision string, current []*run.GoogleCloudRunV2TrafficTarget) []
 	return traffic
 }
 
-func (p *Provider) storedAs(image string) string {
-	repository, digest, pinned := strings.Cut(image, "@")
-	if !pinned || !p.emulated() {
-		return image
-	}
-	return repository + ":" + naming.DigestTag(digest)
-}
-
 type release struct {
 	url      string
 	revision string
@@ -262,7 +252,6 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress progre
 		return release{}, err
 	}
 	path := clients.servicePath(s.service)
-	s.image = p.storedAs(s.image)
 	desired, err := serviceOf(s)
 	if err != nil {
 		return release{}, err

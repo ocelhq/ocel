@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -128,8 +129,9 @@ func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.
 	if spec.Image == "" {
 		t.Fatal("the function spec names no image, so the provider has nothing to run it from")
 	}
-	if !strings.Contains(spec.Image, "@sha256:") {
-		t.Errorf("the function spec runs %q, want a digest-pinned ref: a tag can move under a revision that is meant to be fixed", spec.Image)
+	if spec.Image != pushed[0].ImageRef || !strings.Contains(spec.Image, ":sha256-") {
+		t.Errorf("the function spec runs %q, want the %q it was pushed under: the tag is the image's digest, so it never moves, "+
+			"and a docker daemon an emulator runs out of resolves a tag where it resolves no digest", spec.Image, pushed[0].ImageRef)
 	}
 	if spec.Artifact.Key != "" {
 		t.Errorf("the function spec names artifact %q as well as an image, want the image alone", spec.Artifact.Key)
@@ -154,8 +156,8 @@ func TestAFunctionsImageIsNeverMistakenForTheAppsOwn(t *testing.T) {
 		t.Errorf("the app spec runs the image %q, want none: the app is serverless and only its functions travel as images", app.App.Image)
 	}
 	spec := app.App.Functions[0]
-	if !strings.Contains(spec.Image, "@sha256:") {
-		t.Errorf("the function spec runs %q, want a digest-pinned ref of its own", spec.Image)
+	if !strings.Contains(spec.Image, ":sha256-") {
+		t.Errorf("the function spec runs %q, want the digest tag of its own image", spec.Image)
 	}
 }
 
@@ -430,8 +432,8 @@ func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderShipsOne(t *testing.
 		t.Fatal(err)
 	}
 	specs := vendor.FakeStacks().Provisioned()
-	if spec := specs[len(specs)-1].App.Functions[0]; !strings.HasSuffix(spec.Image, "@"+digest.String()) {
-		t.Errorf("the function spec runs %q, want it pinned to the wrapped image's digest %s", spec.Image, digest)
+	if spec := specs[len(specs)-1].App.Functions[0]; !strings.HasSuffix(spec.Image, ":"+naming.DigestTag(digest.String())) {
+		t.Errorf("the function spec runs %q, want it tagged with the wrapped image's digest %s", spec.Image, digest)
 	}
 }
 
