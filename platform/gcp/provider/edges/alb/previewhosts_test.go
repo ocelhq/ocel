@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -539,8 +540,12 @@ func TestATagWhoseUntagFailedIsTakenOffByTheNextMove(t *testing.T) {
 
 	ctx := context.Background()
 	w, stack, record, _, tag := owingATag(t)
-	if err := stack.MovePointer(ctx, aliasMove("p2", deploymentHost, record), progress.Discard()); !errors.Is(err, errUntagRefused) {
-		t.Fatalf("MovePointer(alias) = %v, want the untag error", err)
+	log := &warnings{Log: progress.Discard()}
+	if err := stack.MovePointer(ctx, aliasMove("p2", deploymentHost, record), log); err != nil {
+		t.Fatalf("MovePointer(alias) = %v, want nil: traffic moved, so the deploy did not fail", err)
+	}
+	if len(log.said) != 1 || !strings.Contains(log.said[0], tag) {
+		t.Errorf("the move warned %v, want one warning naming the tag %s it could not remove", log.said, tag)
 	}
 	if got, want := w.pins(), []string{previewService + "@" + record.Revisions[previewService]}; !slices.Equal(got, want) {
 		t.Errorf("the alias move pinned %v, want %v: a failed untag must not stop traffic moving", got, want)
@@ -589,8 +594,8 @@ func TestATagStillOwedRemovalThatAHostnameHoldsAgainStaysOnItsRevision(t *testin
 	const second = "shop-eeeeeeeeeeeeeeee.preview.example.com"
 	ctx := context.Background()
 	w, stack, record, _, tag := owingATag(t)
-	if err := stack.MovePointer(ctx, aliasMove("p2", deploymentHost, record), progress.Discard()); !errors.Is(err, errUntagRefused) {
-		t.Fatalf("MovePointer(alias) = %v, want the untag error", err)
+	if err := stack.MovePointer(ctx, aliasMove("p2", deploymentHost, record), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(alias) = %v, want nil", err)
 	}
 
 	w.refuseUntags(nil)

@@ -3,6 +3,7 @@ package alb
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -351,7 +352,7 @@ func (s *stack) removeUnheldTags(ctx context.Context) error {
 		}
 		if err := s.e.deps.Pins.Untag(ctx, owed.Service, owed.Tag); err != nil {
 			kept = append(kept, owed)
-			errs = append(errs, err)
+			errs = append(errs, fmt.Errorf("remove revision tag %s of %s: %w", owed.Tag, owed.Service, err))
 		}
 	}
 	if len(s.recorded.TagsToRemove) == 0 {
