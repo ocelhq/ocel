@@ -83,6 +83,12 @@ func UnsetColorEnv() {
 	}
 }
 
+func UnsetGitEnv() {
+	for _, name := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"} {
+		os.Unsetenv(name)
+	}
+}
+
 func writeProject(t *testing.T) string {
 	t.Helper()
 
