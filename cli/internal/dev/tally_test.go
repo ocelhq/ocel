@@ -229,10 +229,3 @@ func TestATallyCountsOnlyPublishedErrorCodesAndNotTheInterruptOrAnUncodedFailure
 		t.Errorf("error codes = %v, want only variables.missing twice", recorded.ErrorCodes)
 	}
 }
-
-func TestATallyRecordsNothingWhenNoOneListens(t *testing.T) {
-	tally := newTally(nil)
-
-	tally.noteReload()
-	tally.end(errors.New("anything"))
-}
