@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/executables"
@@ -47,7 +48,7 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 			"  $ ocel bootstrap preview --features all",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = cmd.Help()
-			return &exitcode.ExitError{Code: 1}
+			return &clierror.Error{Code: clierror.CodeUsage, Cause: &exitcode.ExitError{Code: 1}}
 		},
 	}
 

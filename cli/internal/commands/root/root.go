@@ -109,7 +109,7 @@ func (c *command) execute() error {
 	invoked, err := c.root.ExecuteC()
 	c.invoked = invoked
 	if err != nil && !c.preRunReached {
-		err = &clierror.Error{Code: usageCode, Hint: invoked.UseLine(), Cause: err}
+		err = &clierror.Error{Code: clierror.CodeUsage, Hint: invoked.UseLine(), Cause: err}
 	}
 	c.stopInterruptHandler()
 	return errors.Join(err, c.bus.Close())
