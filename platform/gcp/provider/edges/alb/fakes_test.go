@@ -285,7 +285,12 @@ func (w *world) ReadRollback(context.Context, string, string) (pin.Rollback, boo
 
 func (w *world) RecordRollback(context.Context, string, string, pin.Rollback) error { return nil }
 
-func (w *world) Close(_ context.Context, service string) error {
+func (w *world) Close(ctx context.Context, service string, stillActive router.StillActive) error {
+	if stillActive != nil {
+		if err := stillActive(ctx); err != nil {
+			return err
+		}
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.closed == nil {

@@ -95,7 +95,12 @@ func (p *pinRecorder) ReadRollback(context.Context, string, string) (pin.Rollbac
 
 func (p *pinRecorder) RecordRollback(context.Context, string, string, pin.Rollback) error { return nil }
 
-func (p *pinRecorder) Close(_ context.Context, service string) error {
+func (p *pinRecorder) Close(ctx context.Context, service string, stillActive router.StillActive) error {
+	if stillActive != nil {
+		if err := stillActive(ctx); err != nil {
+			return err
+		}
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed == nil {
