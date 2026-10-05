@@ -288,11 +288,15 @@ func TestADeployMayKeepTheRealtimeSecretsOfItsNamespaceAndAdministersNoOtherSecr
 	if strings.Contains(document.Document, "roles/secretmanager.admin") {
 		t.Errorf("Permissions(deploy) names roles/secretmanager.admin, which reads, rewrites and deletes every secret in the project and changes who may read each:\n%s", document.Document)
 	}
-	const realtime = `roles/secretmanager.editor, on the condition ` +
-		`(resource.type != "secretmanager.googleapis.com/Secret" && resource.type != "secretmanager.googleapis.com/SecretVersion") || ` +
-		`resource.name.startsWith("projects/PROJECT_NUMBER/secrets/ocel_realtime-")`
-	if !strings.Contains(document.Document, realtime) {
-		t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a deploy creates, writes and deletes the realtime secrets of its namespace and no others", document.Document, realtime)
+	const realtime = `roles/secretmanager.editor, on the condition resource.name.startsWith("projects/PROJECT_NUMBER/secrets/ocel_realtime-")`
+	if !slices.Contains(strings.Split(document.Document, "\n"), realtime) {
+		t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a deploy writes and deletes the realtime secrets of its namespace and no others", document.Document, realtime)
+	}
+	if strings.Contains(document.Document, "resource.type !=") {
+		t.Errorf("Permissions(deploy) =\n%s\nadmits a resource by what it is not, which hands roles/secretmanager.editor on the project itself and on every resource that is not a secret", document.Document)
+	}
+	if !strings.Contains(document.Document, "secretmanager.secrets.create") {
+		t.Errorf("Permissions(deploy) =\n%s\nwant secretmanager.secrets.create in the custom role: Secret Manager checks creating a secret against the project, where no secret name condition admits it", document.Document)
 	}
 	if !strings.Contains(document.Document, "roles/secretmanager.secretAccessor") {
 		t.Errorf("Permissions(deploy) does not name roles/secretmanager.secretAccessor, and a deploy reads the passphrase its edge's state is sealed with")

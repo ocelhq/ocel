@@ -110,14 +110,12 @@ var deployRoles = []string{
 
 const (
 	realtimeSecretsRole = "roles/secretmanager.editor"
-	secretType          = "secretmanager.googleapis.com/Secret"
 	projectNumberHole   = "PROJECT_NUMBER"
 )
 
 func realtimeSecretsGrant(names Names) string {
-	return fmt.Sprintf("%s, on the condition (resource.type != %q && resource.type != %q) || resource.name.startsWith(%q)",
-		realtimeSecretsRole, secretType, secretVersionType,
-		"projects/"+projectNumberHole+"/secrets/"+names.RealtimeSecretPrefix())
+	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q)",
+		realtimeSecretsRole, "projects/"+projectNumberHole+"/secrets/"+names.RealtimeSecretPrefix())
 }
 
 const (
@@ -178,6 +176,7 @@ var projectPermissions = []string{
 	"cloudsql.instances.create",
 	"cloudsql.instances.list",
 	"cloudsql.instances.get",
+	"secretmanager.secrets.create",
 }
 
 func appBucketsGrant(names Names) string {
@@ -192,7 +191,7 @@ func databasesGrant(names Names) string {
 
 func projectPermissionsGrant() string {
 	return "a custom role holding " + strings.Join(projectPermissions, ", ") +
-		", unconditioned: Google checks creating a bucket or an instance, listing instances and reading Cloud SQL operations against the project, " +
+		", unconditioned: Google checks creating a bucket, an instance or a secret, listing instances and reading Cloud SQL operations against the project, " +
 		"where no name condition admits them"
 }
 
