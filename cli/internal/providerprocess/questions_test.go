@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -66,9 +67,14 @@ func (f questionFake) call(t *testing.T, questions Questions) error {
 
 func callRefusing(t *testing.T, questions Questions, call func() error) error {
 	t.Helper()
+	return callRefusingIn(t, "success", questions, call)
+}
+
+func callRefusingIn(t *testing.T, mode string, questions Questions, call func() error) error {
+	t.Helper()
 
 	ctx, span, _ := deploySpan(t)
-	p := startFake(t, ctx, "success", span, questions)
+	p := startFake(t, ctx, mode, span, questions)
 	return p.callAnswering(ctx, func(*Process) error { return call() })
 }
 
@@ -373,6 +379,59 @@ func TestARetriedCallThatAsksAgainIsNeverAskedTwice(t *testing.T) {
 	}
 	if len(asker.asked) != 1 {
 		t.Errorf("asked %d times, want exactly one prompt", len(asker.asked))
+	}
+}
+
+type answersInTurn struct {
+	answers []bool
+	asked   []string
+}
+
+func (a *answersInTurn) Attended() bool { return true }
+
+func (a *answersInTurn) Confirm(_ context.Context, question string) (bool, error) {
+	a.asked = append(a.asked, question)
+	answer := a.answers[0]
+	a.answers = a.answers[1:]
+	return answer, nil
+}
+
+func TestAConfirmThatAsksAgainIsAskedBeforeTheCallIsRetried(t *testing.T) {
+	t.Parallel()
+
+	asker := &scriptedPrompt{attended: true, answer: true}
+
+	calls := 0
+	err := callRefusingIn(t, "asks-again-on-confirm", answering(asker, io.Discard), func() error {
+		calls++
+		if calls == 1 {
+			return asking(fakeQuestionID)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("call error = %v, want the call retried once the follow-up is confirmed", err)
+	}
+	if want := []string{"Trust it?", "Have you opened port 443?"}; !slices.Equal(asker.asked, want) {
+		t.Errorf("asked %q, want %q", asker.asked, want)
+	}
+	if calls != 2 {
+		t.Errorf("called %d times, want one retry after the last answer", calls)
+	}
+}
+
+func TestDecliningTheQuestionAConfirmAsksAgainRetriesNothing(t *testing.T) {
+	t.Parallel()
+
+	asker := &answersInTurn{answers: []bool{true, false}}
+
+	calls := 0
+	err := callRefusingIn(t, "asks-again-on-confirm", answering(asker, io.Discard), func() error { calls++; return asking(fakeQuestionID) })
+	if got := clierror.NewRunError(err).GetCode(); got != clierror.CodeConfirmationRequired {
+		t.Fatalf("call error = %v (code %q), want %q", err, got, clierror.CodeConfirmationRequired)
+	}
+	if calls != 1 {
+		t.Errorf("called %d times, want no retry once the follow-up is declined", calls)
 	}
 }
 
