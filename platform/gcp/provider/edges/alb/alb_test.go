@@ -30,6 +30,7 @@ func balancing(t *testing.T) (*Edge, *world) {
 		Routes:    w,
 		Entries:   w,
 		Pins:      w,
+		Warm:      w.warmThrough,
 		Project:   "acme-prod",
 		Region:    "europe-west1",
 	}), w
@@ -762,4 +763,60 @@ func TestAHostnameBoundBeforeItsAppReleasedIsRoutedToTheLoadBalancersNotFoundBac
 func openRouter(shared edge.EdgeStack) fake.PromotingStack {
 	s := shared.(*stack)
 	return fake.PromotingStack{Stack: routerStack{s: s}, Ledger: s.openLedger()}
+}
+
+func promotedWithHealthPath(t *testing.T, stack edge.EdgeStack) {
+	t.Helper()
+	ctx := context.Background()
+	if err := openRouter(stack).Ledger.PutStaged(ctx, router.DeploymentRecord{
+		App: "web", Build: "b1", Physical: "ocel-shop-prod-web", HealthPath: "/healthz",
+		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
+	}); err != nil {
+		t.Fatalf("PutStaged = %v", err)
+	}
+	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.Discard()); err != nil {
+		t.Fatalf("Promote = %v", err)
+	}
+}
+
+func TestAPromotionWarmsItsRevisionThroughTheLoadBalancerOnAHostnameRoutedToIt(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
+		t.Fatalf("BindDomain = %v", err)
+	}
+	promotedWithHealthPath(t, stack)
+
+	want := []string{"https://shop.example.com/healthz via " + loadBalancerAddress}
+	if got := w.warmedThrough(); !slices.Equal(got, want) {
+		t.Errorf("the promotion warmed %v, want %v: the service's ingress admits the load balancer alone, so its run.app url turns the warm away", got, want)
+	}
+}
+
+func TestAPromotionBehindAShieldedLoadBalancerWarmsThroughTheEdgeInFront(t *testing.T) {
+	t.Parallel()
+
+	_, w, bound := reconciled(t)
+	if err := bound.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
+		t.Fatalf("BindDomain = %v", err)
+	}
+	bound.(*stack).recorded.LoadBalancer.Shielded = true
+	promotedWithHealthPath(t, bound)
+
+	want := []string{"https://shop.example.com/healthz via the hostname's own address"}
+	if got := w.warmedThrough(); !slices.Equal(got, want) {
+		t.Errorf("the promotion warmed %v, want %v: a shielded load balancer admits the edge's client certificate alone, so the warm goes where the hostname resolves", got, want)
+	}
+}
+
+func TestAPromotionNoHostnameReachesWarmsNothing(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	promotedWithHealthPath(t, stack)
+
+	if got := w.warmedThrough(); len(got) != 0 {
+		t.Errorf("the promotion warmed %v, and no hostname routes to the service, so nothing could admit the request", got)
+	}
 }

@@ -46,7 +46,7 @@ func (p *Provider) exposeService(ctx context.Context, c *clients, spec provider.
 		warnPreviewOpen(spec, service, progress)
 		return nil
 	}
-	return p.grantViewers(ctx, c, service, progress)
+	return p.grantViewers(ctx, c, service, c.AppAccountEmail(spec.Ref.Tier, spec.Ref.Project, spec.App.App), progress)
 }
 
 func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSpec, progress progress.Log) ([]provider.Function, error) {
@@ -78,6 +78,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	}
 	if err := grantCache(ctx, c, spec, account); err != nil {
 		return nil, err
+	}
+	if gated {
+		allowWarming(ctx, c, spec.App.App, account, progress)
 	}
 	if err := grantCDNPurge(ctx, c, spec, account); err != nil {
 		return nil, err
@@ -279,6 +282,9 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	if err := grantCache(ctx, c, spec, account); err != nil {
 		return nil, err
+	}
+	if gated {
+		allowWarming(ctx, c, spec.App.App, account, progress)
 	}
 	own, err := p.runtimeEnv(names, spec, tasks)
 	if err != nil {

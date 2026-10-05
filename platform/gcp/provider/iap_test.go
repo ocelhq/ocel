@@ -327,3 +327,12 @@ func TestRemovingAPreviewTierWhoseStampRecordsTheProxyAgentKeepsTheAgent(t *test
 	}
 	t.Error("a preview removal says nothing of the proxy's service agent, and the plan should say it is kept and why")
 }
+
+func TestTheProxyAdmitsTheAccountThePreviewRunsAsBesideTheViewersSoAPromotionCanWarmThePreview(t *testing.T) {
+	admitted := admittedMembers("ocel-1a2b3c4d5e@acme-prod.iam.gserviceaccount.com", []string{"user:ana@example.com"})
+
+	want := []string{"serviceAccount:ocel-1a2b3c4d5e@acme-prod.iam.gserviceaccount.com", "user:ana@example.com"}
+	if !slices.Equal(slices.Sorted(slices.Values(admitted)), want) {
+		t.Errorf("the proxy admits %v, want %v: a promotion warms a preview with a token signed as that account", admitted, want)
+	}
+}

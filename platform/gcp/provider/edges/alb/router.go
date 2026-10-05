@@ -114,6 +114,7 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 		return err
 	}
 	r.s.purgeReplaced(ctx, move, progress)
+	pin.WarmRevisions(ctx, r.s.warmThroughLoadBalancer, move.Records, progress)
 	return nil
 }
 

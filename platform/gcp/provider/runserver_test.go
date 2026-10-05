@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 
+	"google.golang.org/api/iamcredentials/v1"
 	runv1 "google.golang.org/api/run/v1"
 	run "google.golang.org/api/run/v2"
 )
@@ -52,6 +53,34 @@ type runServer struct {
 
 	untagAtRelease    string
 	untagEveryRelease bool
+
+	signed []signedJWT
+}
+
+type signedJWT struct {
+	account string
+	claims  map[string]any
+}
+
+func (s *runServer) signJWT(w http.ResponseWriter, r *http.Request) {
+	var asked iamcredentials.SignJwtRequest
+	if err := json.NewDecoder(r.Body).Decode(&asked); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	var claims map[string]any
+	if err := json.Unmarshal([]byte(asked.Payload), &claims); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	s.signed = append(s.signed, signedJWT{account: strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/"), ":signJwt"), claims: claims})
+	writeBody(w, &iamcredentials.SignJwtResponse{KeyId: "k1", SignedJwt: "signed-by-iam"})
+}
+
+func (s *runServer) signedJWTs() []signedJWT {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.signed)
 }
 
 type upload struct {
@@ -84,6 +113,8 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 			s.iam = grantedIAM()
 		}
 		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(path, ":signJwt"):
+			s.signJWT(w, r)
 		case strings.HasPrefix(path, "/v1/") && !strings.Contains(path, "/packages/"):
 			s.iam.rest(t)(w, r)
 		case r.Method == http.MethodPost && strings.HasPrefix(path, "/upload/storage/v1/b/"):

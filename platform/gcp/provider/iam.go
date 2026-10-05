@@ -277,6 +277,46 @@ func (c *clients) bindAccountRole(ctx context.Context, account, role, member str
 	return nil
 }
 
+func (c *clients) unbindAccountRole(ctx context.Context, account, role string) ([]string, error) {
+	service, err := c.Accounts()
+	if err != nil {
+		return nil, err
+	}
+	var refused error
+	for attempt := range bindAttempts {
+		if attempt > 0 && !waited(ctx, attempt) {
+			return nil, ctx.Err()
+		}
+		policy, err := attempted(ctx, service.Projects.ServiceAccounts.GetIamPolicy(accountPath(c, account)).Context(ctx).Do)
+		if absent(err) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read who may act as the %s service account: %w", account, err)
+		}
+		var removed []string
+		policy.Bindings = slices.DeleteFunc(policy.Bindings, func(binding *iam.Binding) bool {
+			if binding.Role != role || binding.Condition != nil {
+				return false
+			}
+			removed = append(removed, binding.Members...)
+			return true
+		})
+		if len(removed) == 0 {
+			return nil, nil
+		}
+		_, refused = attempted(ctx, service.Projects.ServiceAccounts.SetIamPolicy(accountPath(c, account),
+			&iam.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
+		if refused == nil {
+			return removed, nil
+		}
+		if !stale(refused) {
+			break
+		}
+	}
+	return nil, fmt.Errorf("remove the %s binding from the %s service account: %w", role, account, refused)
+}
+
 func boundAccountMember(bindings []*iam.Binding, role, member string, granting bool) ([]*iam.Binding, bool) {
 	for i, binding := range bindings {
 		if binding.Role != role || binding.Condition != nil {

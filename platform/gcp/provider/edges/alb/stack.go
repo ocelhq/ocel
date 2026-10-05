@@ -310,3 +310,28 @@ func negName(slug string, tier environment.Tier, hostname string) string {
 }
 
 func isWildcard(hostname string) bool { return strings.HasPrefix(hostname, "*.") }
+
+func (s *stack) warmThroughLoadBalancer(ctx context.Context, service, _, path string) error {
+	if s.e.deps.Warm == nil {
+		return nil
+	}
+	hostname := s.findHostnameServing(service)
+	if hostname == "" {
+		return nil
+	}
+	address := s.recorded.LoadBalancer.Address
+	if s.recorded.LoadBalancer.Shielded {
+		address = ""
+	}
+	return s.e.deps.Warm(ctx, "https://"+hostname+path, address)
+}
+
+func (s *stack) findHostnameServing(service string) string {
+	for _, hostname := range slices.Sorted(maps.Keys(s.recorded.Hosts)) {
+		host := s.recorded.Hosts[hostname]
+		if host.Service == service && host.Tag == "" && !isWildcard(hostname) {
+			return hostname
+		}
+	}
+	return ""
+}

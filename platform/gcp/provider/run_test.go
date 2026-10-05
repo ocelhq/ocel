@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -701,6 +702,33 @@ func TestWarmingAPromotedRevisionAsksItsOwnUrlOnTheAppsHealthPath(t *testing.T) 
 	}
 }
 
+func TestAWarmTheServiceTurnsAwayOrFailsToServeIsReportedAndAnAnswerFromTheAppIsNot(t *testing.T) {
+	for name, tc := range map[string]struct {
+		status  int
+		wantErr bool
+	}{
+		"the proxy refusing the token":           {http.StatusForbidden, true},
+		"the proxy finding no token":             {http.StatusUnauthorized, true},
+		"an app failing to start":                {http.StatusServiceUnavailable, true},
+		"an app with nothing at its health path": {http.StatusNotFound, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(tc.status) }))
+			t.Cleanup(app.Close)
+			server := &runServer{}
+			open := serves("ocel-shop-prod-app")
+			_, one := released(t, server, open)
+			server.service.TrafficStatuses = []*run.GoogleCloudRunV2TrafficTargetStatus{{Type: trafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
+
+			err := server.open(t).Warm(context.Background(), open.service, one, "/healthz")
+
+			if (err != nil) != tc.wantErr {
+				t.Errorf("Warm() = %v against a %d answer, want an error: %v", err, tc.status, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestARevisionOnlyTheLoadBalancerReachesIsNotAskedToWarm(t *testing.T) {
 	asked := make(chan string, 4)
 	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -718,5 +746,69 @@ func TestARevisionOnlyTheLoadBalancerReachesIsNotAskedToWarm(t *testing.T) {
 	}
 	if len(asked) != 0 {
 		t.Error("warming asked a revision whose ingress admits the load balancer alone, and the request could only be turned away")
+	}
+}
+
+func TestWarmingARevisionBehindIdentityAwareProxySendsATokenSignedAsTheAccountTheServiceRunsAs(t *testing.T) {
+	asked := make(chan string, 4)
+	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked <- r.Method + " " + r.URL.Path + " " + r.Header.Get("Authorization")
+	}))
+	t.Cleanup(app.Close)
+	server := &runServer{}
+	preview := serves("ocel-shop-pr-7-web")
+	preview.public = false
+	preview.iap = true
+	_, one := released(t, server, preview)
+	server.service.TrafficStatuses = []*run.GoogleCloudRunV2TrafficTargetStatus{{Type: trafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
+
+	if err := server.open(t).Warm(context.Background(), preview.service, one, "/healthz"); err != nil {
+		t.Fatalf("Warm() = %v", err)
+	}
+
+	select {
+	case got := <-asked:
+		if got != "HEAD /healthz Bearer signed-by-iam" {
+			t.Errorf("warming asked %q, want HEAD /healthz carrying the token IAM signed: the proxy turns away a request that carries none", got)
+		}
+	default:
+		t.Fatal("warming asked a revision behind Identity-Aware Proxy nothing, and the first viewer after the promotion pays its cold start")
+	}
+	account := preview.account
+	signed := server.signedJWTs()
+	if len(signed) != 1 || signed[0].account != "projects/-/serviceAccounts/"+account {
+		t.Fatalf("IAM was asked to sign %+v, want one token signed as %s", signed, account)
+	}
+	claims := signed[0].claims
+	if claims["iss"] != account || claims["sub"] != account || claims["aud"] != app.URL+"/*" {
+		t.Errorf("the token claims %v, want iss and sub %s and aud %s/*: the proxy admits a service account's JWT only for the url it names", claims, account, app.URL)
+	}
+	if issued, expires := claims["iat"].(float64), claims["exp"].(float64); expires <= issued || expires-issued > 3600 {
+		t.Errorf("the token is issued at %v and expires at %v, and the proxy takes one that lives for at most an hour", issued, expires)
+	}
+}
+
+func TestWarmingThroughALoadBalancerDialsItsAddressAndAsksForTheHostname(t *testing.T) {
+	asked := make(chan string, 4)
+	balancer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked <- r.Method + " " + r.Host + r.URL.Path
+	}))
+	t.Cleanup(balancer.Close)
+	roots := x509.NewCertPool()
+	roots.AddCert(balancer.Certificate())
+	warmRoots = roots
+	t.Cleanup(func() { warmRoots = nil })
+
+	if err := warmThrough(context.Background(), "https://example.com/healthz", balancer.Listener.Addr().String()); err != nil {
+		t.Fatalf("warmThrough() = %v", err)
+	}
+
+	select {
+	case got := <-asked:
+		if got != "HEAD example.com/healthz" {
+			t.Errorf("the load balancer was asked %q, want HEAD example.com/healthz: its url map routes by hostname", got)
+		}
+	default:
+		t.Error("warming asked the load balancer nothing")
 	}
 }

@@ -63,7 +63,11 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 	pointers, err := pin.MovePointer(ctx, r.s.e.pins, r.s.recorded.Pointers, move, progress)
 	r.s.recorded.Pointers = pointers
 	r.s.keep()
-	return err
+	if err != nil {
+		return err
+	}
+	pin.WarmRevisions(ctx, r.s.e.pins.Warm, move.Records, progress)
+	return nil
 }
 
 func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRemoval, _ progress.Log) error {

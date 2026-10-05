@@ -137,11 +137,12 @@ func pinRecords(ctx context.Context, pins Pins, move router.PointerMove, progres
 			}
 		}
 	}
-	warm(ctx, pins, pinning, progress)
 	return nil
 }
 
-func warm(ctx context.Context, pins Pins, records []router.DeploymentRecord, progress progress.Log) {
+type Warm func(ctx context.Context, service, revision, path string) error
+
+func WarmRevisions(ctx context.Context, warm Warm, records map[string]router.DeploymentRecord, progress progress.Log) {
 	var (
 		waiting sync.WaitGroup
 		mu      sync.Mutex
@@ -154,7 +155,7 @@ func warm(ctx context.Context, pins Pins, records []router.DeploymentRecord, pro
 				path = record.HealthPath
 			}
 			waiting.Go(func() {
-				if err := pins.Warm(ctx, service, revision, path); err != nil {
+				if err := warm(ctx, service, revision, path); err != nil {
 					mu.Lock()
 					failed = append(failed, err.Error())
 					mu.Unlock()

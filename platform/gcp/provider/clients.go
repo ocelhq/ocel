@@ -19,6 +19,7 @@ import (
 	"google.golang.org/api/compute/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/api/iam/v1"
+	"google.golang.org/api/iamcredentials/v1"
 	iap "google.golang.org/api/iap/v1"
 	loggingrest "google.golang.org/api/logging/v2"
 	"google.golang.org/api/networkconnectivity/v1"
@@ -64,6 +65,7 @@ type clients struct {
 	certs         memo[*certmanager.Service]
 	connectivity  memo[*networkconnectivity.Service]
 	proxies       memo[*iap.Service]
+	signing       memo[*iamcredentials.Service]
 	identities    memo[*serviceidentities.APIService]
 	principal     memo[string]
 	projects      memo[*cloudresourcemanager.Service]
@@ -178,6 +180,12 @@ func (c *clients) ServiceIdentities() (*serviceidentities.APIService, error) {
 func (c *clients) IAP() (*iap.Service, error) {
 	return opened(c, &c.proxies, "Identity-Aware Proxy", func() (*iap.Service, error) {
 		return iap.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) IAMCredentials() (*iamcredentials.Service, error) {
+	return opened(c, &c.signing, "IAM Service Account Credentials", func() (*iamcredentials.Service, error) {
+		return iamcredentials.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 
