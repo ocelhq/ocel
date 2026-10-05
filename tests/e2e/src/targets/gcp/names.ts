@@ -10,6 +10,19 @@ export const NAMESPACE_LABEL = "ocel-namespace";
 
 export const PROJECT_LABEL = "ocel-project";
 
+const LONGEST_LABEL = 63;
+const LABEL_MARKER_CHARS = 8;
+
+export function labelValue(value: string): string {
+  const sanitized = sanitize(value);
+  if (sanitized.length <= LONGEST_LABEL) {
+    return sanitized;
+  }
+  const digest = createHash("sha256").update(sanitized).digest("hex").slice(0, LABEL_MARKER_CHARS);
+  const head = sanitized.slice(0, LONGEST_LABEL - LABEL_MARKER_CHARS - 2).replace(/-+$/, "");
+  return `${head}-x${digest}`;
+}
+
 const LONGEST_SERVICE = 49;
 const DIGEST_CHARS = 6;
 const PRODUCTION = "prod";

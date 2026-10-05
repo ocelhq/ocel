@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { repoRoot } from "../../paths";
-import { NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
+import { labelValue, NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
 import {
   BOOTSTRAP_APIS,
   exposedServices,
@@ -114,7 +114,7 @@ describe("servedBy", () => {
   });
 });
 
-describe("servicesOf", () => {
+describe("the services the sweep finds of a project", () => {
   const services = servicesIn({
     services: [
       { name: "a/worker-1", labels: labelled("j-1-deploy-node") },
@@ -134,6 +134,14 @@ describe("servicesOf", () => {
 
   it("matches the project and namespace as the provider sanitizes them into a label", () => {
     expect(servicesOf(services, "Ocel Nightly", "J-1/Deploy Node")).toHaveLength(2);
+  });
+
+  it("matches a project whose slug is longer than a label holds by the label the provider fitted it to", () => {
+    const slug = "ocel-e2e-j-1-deploy-node-with-a-project-slug-long-enough-to-pass-the-label-limit";
+    const fitted = "ocel-e2e-j-1-deploy-node-with-a-project-slug-long-eno-x75c4919d";
+    expect(labelValue(slug)).toBe(fitted);
+    const long = servicesIn({ services: [{ name: "a/long-1", labels: labelled(fitted) }] });
+    expect(servicesOf(long, "ocel-nightly", slug).map((s) => s.name)).toEqual(["long-1"]);
   });
 
   it("is nothing once the project has no service left", () => {
