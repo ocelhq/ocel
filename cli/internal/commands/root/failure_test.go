@@ -114,7 +114,7 @@ func TestAnUnknownCommandUnderJSONPrintsAUsageDocument(t *testing.T) {
 	}
 }
 
-func TestACommandThatNeverStartsARunPrintsItsFailureAsOneInternalDocument(t *testing.T) {
+func TestACommandThatNeverStartsARunPrintsItsFailureAsOneCodedDocument(t *testing.T) {
 	for _, command := range []string{"lock", "generate"} {
 		t.Run(command, func(t *testing.T) {
 			t.Chdir(t.TempDir())
@@ -122,8 +122,8 @@ func TestACommandThatNeverStartsARunPrintsItsFailureAsOneInternalDocument(t *tes
 			code, stdout, stderr := executeAndReportRoot(t, "--json", command)
 
 			failure := requireOneFailureDocument(t, stdout)
-			if failure["code"] != "internal" {
-				t.Errorf("error code = %v, want internal", failure["code"])
+			if failure["code"] != "project.no_config" || failure["hint"] != "ocel init" {
+				t.Errorf("error code = %v, hint = %v, want project.no_config and ocel init", failure["code"], failure["hint"])
 			}
 			if code != 1 {
 				t.Errorf("exit code = %d, want 1", code)
