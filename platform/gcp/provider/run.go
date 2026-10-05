@@ -27,6 +27,7 @@ import (
 
 const (
 	trafficByRevision = "TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"
+	trafficByLatest   = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
 	trafficField      = "traffic"
 )
 
@@ -56,6 +57,7 @@ type serving struct {
 	ingress     string
 	mounts      []secretMount
 	egress      *privateEgress
+	tag         string
 }
 
 type privateEgress struct {
@@ -268,7 +270,82 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress progre
 	if err != nil {
 		return release{}, err
 	}
+	if s.tag != "" {
+		if err := p.tagRevision(ctx, services, path, s.service, revision, s.tag); err != nil {
+			return release{}, err
+		}
+	}
 	return release{url: deployed.Uri, revision: revision}, nil
+}
+
+func (p *Provider) tagRevision(ctx context.Context, services *run.Service, path, service, revision, tag string) error {
+	return p.rewriteTraffic(ctx, services, path, service, "tag revision "+revision+" of "+service+" as "+tag,
+		func(traffic []*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudRunV2TrafficTarget {
+			return withTag(traffic, revision, tag)
+		})
+}
+
+func (p *Provider) untagRevision(ctx context.Context, services *run.Service, path, service, revision string) error {
+	return p.rewriteTraffic(ctx, services, path, service, "take every tag off revision "+revision+" of "+service,
+		func(traffic []*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudRunV2TrafficTarget {
+			return slices.DeleteFunc(traffic, func(target *run.GoogleCloudRunV2TrafficTarget) bool {
+				return target.Percent == 0 && target.Tag != "" && revisionName(target.Revision) == revision
+			})
+		})
+}
+
+func (p *Provider) rewriteTraffic(
+	ctx context.Context,
+	services *run.Service,
+	path, service, doing string,
+	change func([]*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudRunV2TrafficTarget,
+) error {
+	return p.retryWrite(ctx, doing, func() error {
+		current, err := p.read(ctx, services, path, service)
+		if err != nil {
+			return err
+		}
+		traffic := change(slices.Clone(allocatedTraffic(current)))
+		if sameTraffic(traffic, allocatedTraffic(current)) {
+			return nil
+		}
+		rewritten := &run.GoogleCloudRunV2Service{Etag: current.Etag, Traffic: traffic}
+		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+			return services.Projects.Locations.Services.Patch(path, rewritten).UpdateMask(trafficField).Context(ctx).Do(call...)
+		})
+	})
+}
+
+func allocatedTraffic(current *run.GoogleCloudRunV2Service) []*run.GoogleCloudRunV2TrafficTarget {
+	if len(current.Traffic) > 0 {
+		return current.Traffic
+	}
+	return []*run.GoogleCloudRunV2TrafficTarget{{Type: trafficByLatest, Percent: 100}}
+}
+
+func withTag(traffic []*run.GoogleCloudRunV2TrafficTarget, revision, tag string) []*run.GoogleCloudRunV2TrafficTarget {
+	tagged := make([]*run.GoogleCloudRunV2TrafficTarget, 0, len(traffic)+1)
+	for _, target := range traffic {
+		if target.Tag != tag {
+			tagged = append(tagged, target)
+			continue
+		}
+		if target.Type == trafficByRevision && revisionName(target.Revision) == revision {
+			return traffic
+		}
+		if target.Percent > 0 {
+			untagged := *target
+			untagged.Tag = ""
+			tagged = append(tagged, &untagged)
+		}
+	}
+	return append(tagged, &run.GoogleCloudRunV2TrafficTarget{Type: trafficByRevision, Revision: revision, Tag: tag})
+}
+
+func sameTraffic(a, b []*run.GoogleCloudRunV2TrafficTarget) bool {
+	return slices.EqualFunc(a, b, func(x, y *run.GoogleCloudRunV2TrafficTarget) bool {
+		return x.Type == y.Type && revisionName(x.Revision) == revisionName(y.Revision) && x.Percent == y.Percent && x.Tag == y.Tag
+	})
 }
 
 func heldTraffic(current *run.GoogleCloudRunV2Service) []*run.GoogleCloudRunV2TrafficTarget {
@@ -464,6 +541,9 @@ func (p *Provider) removeRevision(ctx context.Context, service, revision string,
 	if isLatestOrRouted(current, revision) {
 		return true, nil
 	}
+	if err := p.untagRevision(ctx, services, path, service, revision); err != nil {
+		return false, err
+	}
 	ensureProgress(progress).Say("Deleting revision " + revision + " of Cloud Run service " + service + " in " + clients.region)
 	err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 		return services.Projects.Locations.Services.Revisions.Delete(path + "/revisions/" + revision).Context(ctx).Do(call...)
@@ -479,6 +559,6 @@ func isLatestOrRouted(service *run.GoogleCloudRunV2Service, revision string) boo
 		return true
 	}
 	return slices.ContainsFunc(service.Traffic, func(target *run.GoogleCloudRunV2TrafficTarget) bool {
-		return revisionName(target.Revision) == revision
+		return target.Percent > 0 && revisionName(target.Revision) == revision
 	})
 }

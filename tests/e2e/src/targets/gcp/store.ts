@@ -4,8 +4,6 @@ export type Service = { name: string; uri: string };
 
 type Listing = { services?: Array<{ name?: string; uri?: string }> };
 
-const HASHED = /^-[0-9a-f]{6}$/;
-
 export function servicesIn(body: unknown): Service[] {
   return ((body as Listing).services ?? []).map((service) => ({
     name: (service.name ?? "").split("/").pop() ?? "",
@@ -13,17 +11,13 @@ export function servicesIn(body: unknown): Service[] {
   }));
 }
 
-export function under(services: Service[], lead: string): Service[] {
-  return services.filter((service) => service.name.startsWith(`${lead}-`));
-}
-
-export function servedBy(services: Service[], lead: string): string {
-  const named = under(services, lead);
-  const own = named.filter((service) => HASHED.test(service.name.slice(lead.length)));
-  const [serving] = own.length > 0 ? own : named;
+export function servedBy(services: Service[], names: string[]): string {
+  const serving = names
+    .map((name) => services.find((service) => service.name === name))
+    .find((service) => service !== undefined);
   if (!serving) {
     throw new Error(
-      `no Cloud Run service is named ${lead}-*, so nothing says where the app is served ` +
+      `no Cloud Run service is named ${names.join(" or ")}, so nothing says where the app is served ` +
         `(${services.map((service) => service.name).join(", ") || "the project has none"})`,
     );
   }
@@ -33,26 +27,21 @@ export function servedBy(services: Service[], lead: string): string {
   return serving.uri;
 }
 
-export function exposedServices(body: unknown, leads: string[]): string {
+export function exposedServices(body: unknown, names: string[]): string {
   const raw = (body as { services?: Array<{ name?: string }> }).services ?? [];
-  const named = raw.filter((service) => {
-    const name = (service.name ?? "").split("/").pop() ?? "";
-    return leads.some((lead) => name.startsWith(`${lead}-`));
-  });
+  const named = raw.filter((service) =>
+    names.includes((service.name ?? "").split("/").pop() ?? ""),
+  );
   return JSON.stringify(named);
 }
 
-export function hasServicesUnder(services: Service[], leads: string[]): boolean {
-  return leads.some((lead) => under(services, lead).length > 0);
+export function hasAnyService(services: Service[], names: string[]): boolean {
+  return services.some((service) => names.includes(service.name));
 }
 
 export function strayServices(names: string[], namespace: string, mine: string[]): string[] {
   const harness = `${namespace}-${HARNESS_PREFIX}`;
-  return names.filter(
-    (name) =>
-      name.startsWith(harness) &&
-      !mine.some((lead) => name === lead || name.startsWith(`${lead}-`)),
-  );
+  return names.filter((name) => name.startsWith(harness) && !mine.includes(name));
 }
 
 export function reachable(uri: string, endpoint: string | undefined): string {
