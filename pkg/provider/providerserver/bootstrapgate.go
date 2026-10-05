@@ -349,12 +349,22 @@ func (g Gate) EnsureReady(ctx context.Context, tier environment.Tier, required [
 			return BootstrapStatus{}, err
 		}
 	}
-	if stale := status.Stale(required); len(stale) > 0 {
-		warn(progress, fmt.Sprintf(
-			"This account's Ocel bootstrap is the shape this build needs but its content is behind: %s. Re-run `%s` to refresh it",
-			strings.Join(stale, ", "), command))
+	return status, status.refuseStale(required, g.WrittenBy, command)
+}
+
+func (s BootstrapStatus) refuseStale(required []string, writing provider.WrittenBy, command string) error {
+	stale := s.Stale(required)
+	if len(stale) == 0 {
+		return nil
 	}
-	return status, nil
+	if s.Downgrade(writing) {
+		return refusal.Refuse(refusal.CodeNotReady,
+			"this account's Ocel bootstrap was written by ocel %s, newer than this one (%s), and this build does not match it: %s.\nUpgrade ocel, then try again",
+			s.WrittenBy, writing, strings.Join(stale, ", "))
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"this account's Ocel bootstrap is behind what this build needs: %s.\nRun `%s`, then try again",
+		strings.Join(stale, ", "), command)
 }
 
 func (s BootstrapStatus) lacking(required []string, command string) error {
@@ -368,7 +378,7 @@ func (s BootstrapStatus) lacking(required []string, command string) error {
 }
 
 func (g Gate) repair(ctx context.Context, status BootstrapStatus, required []string, progress progress.Log) bool {
-	if !status.RepairOnDeploy || len(status.repairable(required)) == 0 {
+	if !status.RepairOnDeploy || len(status.repairable(required)) == 0 || status.Downgrade(g.WrittenBy) {
 		return false
 	}
 	if !g.WrittenBy.Release() {
@@ -394,7 +404,7 @@ func (g Gate) repair(ctx context.Context, status BootstrapStatus, required []str
 		return false
 	}
 	if err != nil {
-		warn(progress, fmt.Sprintf("Could not refresh the %s bootstrap, so this run continues against the one in place: %s", status.Tier, err))
+		warn(progress, fmt.Sprintf("Could not refresh the %s bootstrap: %s", status.Tier, err))
 		return false
 	}
 	return true
