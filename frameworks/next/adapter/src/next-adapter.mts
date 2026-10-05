@@ -409,7 +409,7 @@ const adapter = {
     const prerenderDispatch = outputs.prerenders.map((p) => {
       const routeKey = p.pathname;
       const allowQuery = p.config?.allowQuery;
-      const tags = cacheTags(p);
+      const tags = cacheTags(p, programmableEdge);
       const entryKey = entryKeyByRouteId.get(p.parentOutputId);
       const edgeEntryKey = edgeEntryByOutputId.get(p.parentOutputId);
       if (entryKey === undefined && edgeEntryKey === undefined) {
@@ -961,15 +961,16 @@ async function emitEdgeBundle(
   );
 }
 
-function cacheTags(prerender: AdapterOutput["PRERENDER"]): string[] {
+function cacheTags(prerender: AdapterOutput["PRERENDER"], programmableEdge: boolean): string[] {
   const header = prerender.fallback?.initialHeaders?.["x-next-cache-tags"];
   const raw = Array.isArray(header) ? header.join(",") : header;
   if (!raw) return [];
+  if (!programmableEdge) return [...new Set(raw.split(",").filter(Boolean))];
 
   const { tags, dropped } = boundCacheTags(raw.split(","));
   if (dropped > 0) {
     console.warn(
-      `ocel: dropped ${dropped} cache tag(s) over Cloudflare's limits for "${prerender.pathname}" — purges naming them will not hit this route`,
+      `ocel: dropped ${dropped} cache tag(s) over the edge's cache tag limits for "${prerender.pathname}" — purges naming them will not hit this route`,
     );
   }
   return tags;

@@ -1,14 +1,9 @@
 import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import {
-  type CacheEntryFile,
-  entryObjectKey,
-  isGuardRejection,
-  type TagRecord,
-  tagRecordUpdate,
-} from "@framework/next-cache";
+import { type CacheEntryFile, entryObjectKey, type TagRecord } from "@framework/next-cache";
 import { type EntryStore, isrEntryStore } from "./isr-writer.mjs";
 import { entriesAdopted, type ObjectStore, providerObjectStore } from "./object-store.mjs";
+import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
 
 export type { CacheEntryFile, TagRecord } from "@framework/next-cache";
 

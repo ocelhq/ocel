@@ -1516,6 +1516,37 @@ test("leaves an API route that parents no prerender out of the pages dispatch", 
   expect(manifest.dispatch["/api/hello"]).not.toHaveProperty("page");
 });
 
+const overCloudflareTagLimit = "t".repeat(1025);
+
+async function prerenderTagsBuiltFor(edgeKind: string): Promise<unknown> {
+  const { projectDir, args } = await synthPrerenderProject();
+  args.outputs.prerenders[0].fallback.initialHeaders = {
+    "x-next-cache-tags": `posts,${overCloudflareTagLimit},two words`,
+  };
+  vi.stubEnv("OCEL_EDGE_KIND", edgeKind);
+  const adapter = await loadAdapterIn(projectDir);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    await adapter.onBuildComplete(args as never);
+  } finally {
+    warn.mockRestore();
+  }
+  const manifest = await readManifest(projectDir);
+  return manifest.dispatch[args.outputs.prerenders[0].pathname].tags;
+}
+
+test("bounds a prerender's cache tags to Cloudflare's limits when Cloudflare is the edge", async () => {
+  expect(await prerenderTagsBuiltFor("cloudflare")).toEqual(["posts", "two%20words"]);
+});
+
+test("keeps a prerender's cache tags whole on an edge other than Cloudflare", async () => {
+  expect(await prerenderTagsBuiltFor("cloudfront")).toEqual([
+    "posts",
+    overCloudflareTagLimit,
+    "two words",
+  ]);
+});
+
 test("copies the html variant's headers and status onto an APP_PAGE entry", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   args.outputs.prerenders[0].fallback.initialHeaders = {

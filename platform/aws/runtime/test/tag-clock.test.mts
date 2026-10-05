@@ -1,6 +1,6 @@
-import type { TagRecordUpdate } from "@framework/next-cache";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { CacheEntryFile, CacheStore } from "../src/next/cache-store.mjs";
+import type { TagRecordUpdate } from "../src/next/tag-index.mjs";
 import type { TagSnapshotRead, UseCacheStore } from "../src/next/use-cache-store.mjs";
 import { publishedRecords, type TagRow } from "./tag-rows.mjs";
 
