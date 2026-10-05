@@ -139,6 +139,20 @@ func gitRepository(t *testing.T) string {
 	return dir
 }
 
+func TestTheDevValueReportTestsLeaveAnInheritedGitDirUntouched(t *testing.T) {
+	t.Parallel()
+
+	inherited := filepath.Join(t.TempDir(), "inherited.git")
+	child := exec.Command(os.Args[0], "-test.run", "^TestTheDevValueReport(NamesWhereEachKeyCameFromAndNeverAValue|AsksGitWhetherItIgnoresEachFile)$")
+	child.Env = append(os.Environ(), "GIT_DIR="+inherited)
+	if out, err := child.CombinedOutput(); err != nil {
+		t.Errorf("the report tests under GIT_DIR=%s failed: %v\n%s", inherited, err, out)
+	}
+	if _, err := os.Stat(inherited); !os.IsNotExist(err) {
+		t.Errorf("the report tests wrote to the inherited GIT_DIR %s (stat: %v), want it untouched", inherited, err)
+	}
+}
+
 func TestTheDevValueReportAsksGitWhetherItIgnoresEachFile(t *testing.T) {
 	t.Parallel()
 

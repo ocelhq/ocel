@@ -37,6 +37,7 @@ func TestMain(m *testing.M) {
 	}
 	clitest.UnsetColorEnv()
 	os.Unsetenv("REGISTRY_TOKEN")
+	clitest.UnsetGitEnv()
 	done := clitest.IsolateConfigHome()
 	code := m.Run()
 	done()

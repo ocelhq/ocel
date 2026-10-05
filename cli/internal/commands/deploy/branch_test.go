@@ -1,7 +1,6 @@
 package deploy
 
 import (
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -19,14 +18,6 @@ func createDetachedCheckout(t *testing.T) string {
 func createAttachedCheckout(t *testing.T, branch string) string {
 	t.Helper()
 	dir := t.TempDir()
-	for _, name := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"} {
-		if value, set := os.LookupEnv(name); set {
-			t.Setenv(name, value)
-			if err := os.Unsetenv(name); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
 	for _, args := range [][]string{
 		{"init", "--quiet", "--initial-branch", branch},
 		{"-c", "user.name=ocel", "-c", "user.email=ocel@example.com", "commit", "--quiet", "--allow-empty", "--message", "root"},
