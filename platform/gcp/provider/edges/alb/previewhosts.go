@@ -84,7 +84,7 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 		}
 	}
 	for _, hostname := range slices.Sorted(maps.Keys(replaced)) {
-		s.owe(replaced[hostname])
+		s.recordTagsToRemove(replaced[hostname])
 	}
 	s.recordPreviewHosts(hosts, tags)
 	return nil
@@ -284,7 +284,7 @@ func (s *stack) withdrawPointer(ctx context.Context, removal router.PointerRemov
 		delete(kept, hostname)
 	}
 	for _, hostname := range going {
-		s.owe(tagsOf(withdrawn[hostname], recorded[hostname]))
+		s.recordTagsToRemove(tagsOf(withdrawn[hostname], recorded[hostname]))
 	}
 	s.recordPreviewHosts(hosts, kept)
 	return nil
@@ -334,11 +334,11 @@ func tagsOf(gone Host, recorded pin.Tags) pin.Tags {
 	return pin.Tags{gone.Service: gone.Tag}
 }
 
-func (s *stack) owe(gone pin.Tags) {
+func (s *stack) recordTagsToRemove(gone pin.Tags) {
 	for _, service := range slices.Sorted(maps.Keys(gone)) {
-		owed := RevisionTag{Service: service, Tag: gone[service]}
-		if !slices.Contains(s.recorded.TagsToRemove, owed) {
-			s.recorded.TagsToRemove = append(s.recorded.TagsToRemove, owed)
+		removal := RevisionTag{Service: service, Tag: gone[service]}
+		if !slices.Contains(s.recorded.TagsToRemove, removal) {
+			s.recorded.TagsToRemove = append(s.recorded.TagsToRemove, removal)
 		}
 	}
 }
@@ -346,13 +346,13 @@ func (s *stack) owe(gone pin.Tags) {
 func (s *stack) removeUnheldTags(ctx context.Context) error {
 	var kept []RevisionTag
 	var errs []error
-	for _, owed := range s.recorded.TagsToRemove {
-		if isTagHeld(s.recorded.Hosts, s.recorded.DeploymentTags, owed.Service, owed.Tag) {
+	for _, removal := range s.recorded.TagsToRemove {
+		if isTagHeld(s.recorded.Hosts, s.recorded.DeploymentTags, removal.Service, removal.Tag) {
 			continue
 		}
-		if err := s.e.deps.Pins.Untag(ctx, owed.Service, owed.Tag); err != nil {
-			kept = append(kept, owed)
-			errs = append(errs, fmt.Errorf("remove revision tag %s of %s: %w", owed.Tag, owed.Service, err))
+		if err := s.e.deps.Pins.Untag(ctx, removal.Service, removal.Tag); err != nil {
+			kept = append(kept, removal)
+			errs = append(errs, fmt.Errorf("remove revision tag %s of %s: %w", removal.Tag, removal.Service, err))
 		}
 	}
 	if len(s.recorded.TagsToRemove) == 0 {

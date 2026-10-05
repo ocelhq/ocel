@@ -320,7 +320,7 @@ func (w *world) Close(ctx context.Context, service string, stillActive router.St
 
 func (w *world) Warm(context.Context, string, string, string) error { return nil }
 
-func (w *world) refuseUntags(err error) {
+func (w *world) failUntags(err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.untagFails = err
@@ -476,19 +476,19 @@ func (mocks) Call(args pulumi.MockCallArgs) (resource.PropertyMap, error) {
 	return args.Args, nil
 }
 
-func (w *world) refuseRoute(hostname string, err error) {
+func (w *world) failRoute(hostname string, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.routeFails[hostname] = err
 }
 
-func (w *world) refuseUnroute(hostname string, err error) {
+func (w *world) failUnroute(hostname string, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.unrouteFails[hostname] = err
 }
 
-func (w *world) refuseUnrouteAfterApplying(hostname string, err error) {
+func (w *world) failUnrouteAfterApplying(hostname string, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.unrouteAppliedFails[hostname] = err
