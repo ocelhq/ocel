@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -687,5 +688,50 @@ func TestPinningAServiceNoPromotionOpensLeavesItsInvokerCheckOn(t *testing.T) {
 
 	if server.serving().InvokerIamDisabled {
 		t.Error("pinning a service that only its invokers may reach opened it to anyone")
+	}
+}
+
+func TestWarmingAPromotedRevisionAsksItsOwnUrlOnTheAppsHealthPath(t *testing.T) {
+	asked := make(chan string, 4)
+	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked <- r.Method + " " + r.URL.Path
+	}))
+	t.Cleanup(app.Close)
+	server := &runServer{}
+	open := serves("ocel-shop-prod-app")
+	_, one := released(t, server, open)
+	server.service.TrafficStatuses = []*run.GoogleCloudRunV2TrafficTargetStatus{{Type: trafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
+
+	if err := server.open(t).Warm(context.Background(), open.service, one, "/healthz"); err != nil {
+		t.Fatalf("Warm() = %v", err)
+	}
+
+	select {
+	case got := <-asked:
+		if got != "HEAD /healthz" {
+			t.Errorf("warming asked %q, want HEAD /healthz", got)
+		}
+	default:
+		t.Error("warming asked the revision nothing, and the first visitor after the promotion pays its cold start")
+	}
+}
+
+func TestARevisionOnlyTheLoadBalancerReachesIsNotAskedToWarm(t *testing.T) {
+	asked := make(chan string, 4)
+	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked <- r.Method + " " + r.URL.Path
+	}))
+	t.Cleanup(app.Close)
+	server := &runServer{}
+	behind := serves("ocel-shop-prod-app")
+	behind.ingress = ingressLoadBalancer
+	_, one := released(t, server, behind)
+	server.service.TrafficStatuses = []*run.GoogleCloudRunV2TrafficTargetStatus{{Type: trafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
+
+	if err := server.open(t).Warm(context.Background(), behind.service, one, "/"); err != nil {
+		t.Fatalf("Warm() = %v", err)
+	}
+	if len(asked) != 0 {
+		t.Error("warming asked a revision whose ingress admits the load balancer alone, and the request could only be turned away")
 	}
 }

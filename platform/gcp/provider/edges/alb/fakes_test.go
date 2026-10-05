@@ -254,6 +254,8 @@ func (w *world) Close(_ context.Context, service string) error {
 	return nil
 }
 
+func (w *world) Warm(context.Context, string, string, string) error { return nil }
+
 func (w *world) Untag(_ context.Context, service, tag string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
