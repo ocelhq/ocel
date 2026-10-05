@@ -347,7 +347,7 @@ func runBindingsList(ctx context.Context, invocation commands.Invocation, cwd st
 			return "", err
 		}
 		if invocation.Presentation(stdout).Format == terminal.FormatJSON {
-			return "", terminal.WriteResultJSON(stdout, &resultv1.BindingListResult{Bindings: bindingEntries(resp.GetBindings())})
+			return "", terminal.WriteResultJSON(stdout, &resultv1.BindingListResult{Bindings: bindingSummaries(resp.GetBindings())})
 		}
 		renderBindings(stdout, resp.GetBindings())
 		return "", nil
@@ -379,7 +379,7 @@ func runBindingsGenerate(ctx context.Context, invocation commands.Invocation, cw
 			headline = fmt.Sprintf("Nothing is published to %s; wrote %s, which names no record and so leaves no binding name open", describeBindingCoordinate(opts), path)
 		}
 		if invocation.Presentation(stdout).Format == terminal.FormatJSON {
-			return headline, terminal.WriteResultJSON(stdout, &resultv1.BindingGenerateResult{Path: path, Bindings: bindingEntries(resp.GetBindings())})
+			return headline, terminal.WriteResultJSON(stdout, &resultv1.BindingGenerateResult{Path: path, Bindings: bindingSummaries(resp.GetBindings())})
 		}
 		return headline, nil
 	})
@@ -395,15 +395,15 @@ func describeBindingCoordinate(opts bindingsOptions) string {
 	return "the preview environment " + opts.environment
 }
 
-func bindingEntries(bindings []*variablestorev1.BindingSummary) []*resultv1.BindingEntry {
-	out := make([]*resultv1.BindingEntry, 0, len(bindings))
-	for _, l := range bindings {
-		out = append(out, &resultv1.BindingEntry{
-			Name:    l.GetName(),
-			Type:    bindingTypeName(l.GetType()),
-			Source:  l.GetSource(),
-			Owner:   l.GetOwner(),
-			Version: l.GetVersion(),
+func bindingSummaries(bindings []*variablestorev1.BindingSummary) []*resultv1.BindingSummary {
+	out := make([]*resultv1.BindingSummary, 0, len(bindings))
+	for _, binding := range bindings {
+		out = append(out, &resultv1.BindingSummary{
+			Name:    binding.GetName(),
+			Type:    bindingTypeName(binding.GetType()),
+			Source:  binding.GetSource(),
+			Owner:   binding.GetOwner(),
+			Version: binding.GetVersion(),
 		})
 	}
 	return out
@@ -416,9 +416,9 @@ func renderBindings(stdout io.Writer, bindings []*variablestorev1.BindingSummary
 	}
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tTYPE\tSOURCE\tOWNER\tVERSION")
-	for _, l := range bindings {
+	for _, binding := range bindings {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\n",
-			l.GetName(), bindingTypeName(l.GetType()), sourceOrDash(l.GetSource()), l.GetOwner(), l.GetVersion())
+			binding.GetName(), bindingTypeName(binding.GetType()), sourceOrDash(binding.GetSource()), binding.GetOwner(), binding.GetVersion())
 	}
 	_ = tw.Flush()
 }
