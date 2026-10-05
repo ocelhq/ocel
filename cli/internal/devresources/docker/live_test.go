@@ -12,7 +12,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/pkg/provider/enginetest"
 )
+
+func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }
 
 const liveEnv = "OCEL_LIVE_DOCKER"
 
@@ -31,10 +34,18 @@ func requireDocker(t *testing.T) docker.Engine {
 	return engine
 }
 
+func labelledForThisRun(t *testing.T, labels map[string]string) map[string]string {
+	t.Helper()
+	args := enginetest.RunLabelArgs(t)
+	key, value, _ := strings.Cut(args[len(args)-1], "=")
+	labels[key] = value
+	return labels
+}
+
 func TestDockerWaitingOnAContainerThatExitedStopsAtOnceWithItsExitCodeAndLastLines(t *testing.T) {
 	engine := requireDocker(t)
 	ctx := context.Background()
-	labels := map[string]string{"dev.ocel.project": "docker-live-exit-test", "dev.ocel.backend": "postgres"}
+	labels := labelledForThisRun(t, map[string]string{"dev.ocel.project": "docker-live-exit-test", "dev.ocel.backend": "postgres"})
 	t.Cleanup(func() { _ = engine.Wipe(ctx, labels) })
 
 	running, err := engine.Run(ctx, docker.Spec{
@@ -66,7 +77,7 @@ func TestDockerWaitingOnAContainerThatExitedStopsAtOnceWithItsExitCodeAndLastLin
 func TestDockerAContainerRunsOnALoopbackPortAndItsVolumeOutlivesIt(t *testing.T) {
 	engine := requireDocker(t)
 	ctx := context.Background()
-	labels := map[string]string{"dev.ocel.project": "docker-live-test", "dev.ocel.backend": "postgres"}
+	labels := labelledForThisRun(t, map[string]string{"dev.ocel.project": "docker-live-test", "dev.ocel.backend": "postgres"})
 	spec := docker.Spec{
 		Name:       "ocel-dev-docker-live-test",
 		Image:      liveImage,
