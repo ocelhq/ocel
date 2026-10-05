@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 
@@ -49,6 +50,9 @@ func (q *questions) pose(err error) error {
 	var rpcErr *connect.Error
 	if !asked || !errors.As(err, &rpcErr) {
 		return err
+	}
+	if question.Remedy == "" {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("provider: the question %q carries no remedy for a user nobody can ask: %w", question.Prompt, err))
 	}
 	id, idErr := newQuestionID()
 	if idErr != nil {

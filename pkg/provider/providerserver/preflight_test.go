@@ -170,6 +170,7 @@ func askingCredentials(vendor *fake.Provider, confirmed *int) {
 	creds.Ask("the host key is in no known_hosts file; record it and try again", provider.Question{
 		Finding: "the host key for 203.0.113.7 is in none of ~/.ssh/known_hosts",
 		Prompt:  "Trust that key?",
+		Remedy:  "ssh-keyscan -t ssh-ed25519 -p 22 203.0.113.7 >> ~/.ssh/known_hosts",
 		Confirm: func(context.Context) error {
 			*confirmed++
 			creds.Admit()
