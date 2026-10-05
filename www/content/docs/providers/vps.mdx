@@ -44,8 +44,8 @@ ocel deploy
 ```
 
 Bootstrap creates the `ocel-deploy` login every later deploy acts as. Point `ssh.user` at it
-and deploys need no sudo; deploy as the login you bootstrapped with and Ocel uses its sudo
-to act as `ocel-deploy`, never as root.
+and deploys need no sudo. Deploy as the login you bootstrapped with and Ocel uses its sudo
+to run everything under `/var/lib/ocel` as `ocel-deploy`, not as root.
 
 ## Bootstrap
 
