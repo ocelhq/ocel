@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -62,4 +62,18 @@ test("an asset's etag names its content", async () => {
   expect(chunk?.httpEtag).toMatch(/^".+"$/);
   expect(again?.httpEtag).toBe(chunk?.httpEtag);
   expect(page?.httpEtag).not.toBe(chunk?.httpEtag);
+});
+
+test("a disk asset whose read fails once is read again on the next request", async () => {
+  const file = join(dir, "assets", "flaky.js");
+  await writeFile(file, "flaky");
+  await chmod(file, 0o000);
+  const bucket = newDiskAssetBucket(dir, assetPrefix);
+
+  await expect(bucket.get(`${assetPrefix}/flaky.js`)).rejects.toThrow();
+
+  await chmod(file, 0o644);
+  const object = await bucket.get(`${assetPrefix}/flaky.js`);
+  expect(object?.httpEtag).toMatch(/^".+"$/);
+  expect(await new Response(object?.body).text()).toBe("flaky");
 });

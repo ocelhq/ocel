@@ -8,7 +8,7 @@ import type { AssetBucket, AssetObject } from "@framework/next-router/assets";
 
 const assetsSegment = "assets";
 
-function trimAssetsSegment(assetPrefix: string): string {
+function trimToReleaseRoot(assetPrefix: string): string {
   return assetPrefix.endsWith(assetsSegment)
     ? assetPrefix.slice(0, -assetsSegment.length)
     : `${assetPrefix}/`;
@@ -18,7 +18,7 @@ function newDiskFileLookup(
   dir: string,
   assetPrefix: string,
 ): (key: string) => Promise<string | null> {
-  const root = trimAssetsSegment(assetPrefix);
+  const root = trimToReleaseRoot(assetPrefix);
   const within = dir.endsWith(sep) ? dir : dir + sep;
   return async (key) => {
     if (!key.startsWith(root) || key.includes("\0")) return null;
@@ -42,6 +42,7 @@ export function newDiskAssetBucket(dir: string, assetPrefix: string): AssetBucke
         (body) => `"${createHash("sha256").update(body).digest("base64url")}"`,
       );
       etags.set(file, etag);
+      etag.catch(() => etags.delete(file));
     }
     return etag;
   };
@@ -49,10 +50,8 @@ export function newDiskAssetBucket(dir: string, assetPrefix: string): AssetBucke
     async get(key): Promise<AssetObject | null> {
       const file = await fileOf(key);
       if (!file) return null;
-      return {
-        body: Readable.toWeb(createReadStream(file)) as ReadableStream,
-        httpEtag: await etagOf(file),
-      };
+      const httpEtag = await etagOf(file);
+      return { body: Readable.toWeb(createReadStream(file)) as ReadableStream, httpEtag };
     },
   };
 }
