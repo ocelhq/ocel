@@ -7,11 +7,17 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/telemetry"
 )
 
-const rootArgsEnvVar = "OCEL_TEST_ROOT_ARGS"
+const (
+	rootArgsEnvVar          = "OCEL_TEST_ROOT_ARGS"
+	telemetryKeyEnvVar      = "OCEL_TEST_TELEMETRY_KEY"
+	telemetryEndpointEnvVar = "OCEL_TEST_TELEMETRY_ENDPOINT"
+)
 
 func runRootSubprocess(args []string) int {
+	telemetry.WriteKey, telemetry.Endpoint = os.Getenv(telemetryKeyEnvVar), os.Getenv(telemetryEndpointEnvVar)
 	return newCommand().executeAndReport(args)
 }
 
