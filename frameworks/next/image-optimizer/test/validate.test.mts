@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { validate } from "../src/validate.mjs";
-import { imageConfig, payload } from "./fixtures.mjs";
+import { imageConfig, payload } from "../test-support/fixtures.mjs";
 
 function check(overrides: Parameters<typeof payload>[1], config = imageConfig()) {
   return validate(payload(config, overrides), config);

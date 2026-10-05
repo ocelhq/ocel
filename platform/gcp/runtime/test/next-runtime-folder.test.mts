@@ -73,13 +73,23 @@ test("the runtime folder holds the entrypoint and every cache handler a Next bui
   );
 });
 
-test("the entrypoint imports nothing but Node's own modules", async () => {
+test("the entrypoint imports nothing but Node's own modules and the sharp the folder ships", async () => {
   await init;
   const [imports] = parse(await readFile(join(folder, "entrypoint.mjs"), "utf8"));
   const bare = imports
     .flatMap((found) => (found.n === undefined ? [] : [found.n]))
     .filter((specifier) => !isBuiltin(specifier));
-  expect(bare).toEqual([]);
+  expect([...new Set(bare)]).toEqual(["sharp"]);
+});
+
+test("the runtime folder ships sharp built for the Linux x64 Cloud Run runs", async () => {
+  expect(await shippedFiles()).toEqual(
+    expect.arrayContaining([
+      "node_modules/sharp/package.json",
+      expect.stringMatching(/^node_modules\/@img\/sharp-linux-x64\/lib\/sharp-linux-x64.*\.node$/),
+      expect.stringMatching(/^node_modules\/@img\/sharp-libvips-linux-x64\/lib\/libvips-cpp\.so/),
+    ]),
+  );
 });
 
 test("no file in the runtime folder contains a path of the checkout it was built in", async () => {

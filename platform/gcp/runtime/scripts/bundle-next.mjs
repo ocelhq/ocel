@@ -1,6 +1,7 @@
 import { rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stageSharp } from "@framework/next-image-optimizer/stage-sharp";
 
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = process.argv[2] ? join(process.cwd(), process.argv[2]) : join(pkgDir, "dist");
@@ -50,8 +51,11 @@ await Promise.all(
 await bundle(join(pkgDir, "src/next/entrypoint.mts"), join(folder, "entrypoint.mjs"), {
   format: "esm",
   minify: true,
+  external: ["sharp"],
   banner: cjsInterop,
   define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
 });
+
+stageSharp(folder, "x64");
 
 process.stdout.write(`${folder}\n`);

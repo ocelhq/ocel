@@ -9,7 +9,7 @@ import {
   imageConfig,
   serialize,
   storeWithConfig,
-} from "./fixtures.mjs";
+} from "../test-support/fixtures.mjs";
 
 const KEY = CONFIG_KEY;
 

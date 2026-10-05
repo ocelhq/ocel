@@ -1,34 +1,16 @@
-const TARGET = { os: ["linux"], cpu: ["arm64"], libc: ["glibc"] };
-
 import { execFileSync } from "node:child_process";
-import {
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { stageSharp } from "@framework/next-image-optimizer/stage-sharp";
 
 import { bunArgs } from "./bundle.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const sharpDir = realpathSync(join(root, "node_modules", "sharp"));
-const manifestOf = (dir) => JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-const sharpManifest = manifestOf(sharpDir);
-const sharp = sharpManifest.version;
-const locked = Object.keys(sharpManifest.dependencies).map(
-  (name) => `  "${name}": ${manifestOf(join(sharpDir, "..", name)).version}`,
-);
 const out = join(root, "dist", "zip");
-const stage = join(root, "dist", "stage");
 
 rmSync(out, { recursive: true, force: true });
-rmSync(stage, { recursive: true, force: true });
-mkdirSync(stage, { recursive: true });
 mkdirSync(out, { recursive: true });
 
 execFileSync("bun", ["build", ...bunArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))], {
@@ -36,61 +18,7 @@ execFileSync("bun", ["build", ...bunArgs(join(root, "src", "index.mts"), join(ou
   stdio: "inherit",
 });
 
-writeFileSync(
-  join(stage, "package.json"),
-  `${JSON.stringify(
-    {
-      name: "ocel-image-optimizer-runtime",
-      private: true,
-      dependencies: { sharp },
-    },
-    null,
-    2,
-  )}\n`,
-);
-
-writeFileSync(
-  join(stage, "pnpm-workspace.yaml"),
-  [
-    "packages: []",
-    "supportedArchitectures:",
-    `  os: [${TARGET.os.join(", ")}]`,
-    `  cpu: [${TARGET.cpu.join(", ")}]`,
-    `  libc: [${TARGET.libc.join(", ")}]`,
-    "overrides:",
-    ...locked,
-    "",
-  ].join("\n"),
-);
-
-execFileSync("pnpm", ["install", "--node-linker=hoisted", "--prod", "--no-frozen-lockfile"], {
-  cwd: stage,
-  stdio: "inherit",
-});
-
-execFileSync("cp", ["-R", join(stage, "node_modules"), join(out, "node_modules")], {
-  stdio: "inherit",
-});
-
-if (!statSync(join(out, "node_modules", "@img", "sharp-linux-arm64"), { throwIfNoEntry: false })) {
-  throw new Error("cross-install produced no @img/sharp-linux-arm64");
-}
-if (
-  !statSync(join(out, "node_modules", "@img", "sharp-libvips-linux-arm64"), {
-    throwIfNoEntry: false,
-  })
-) {
-  throw new Error("cross-install produced no @img/sharp-libvips-linux-arm64");
-}
-
-for (const file of [
-  ".modules.yaml",
-  ".package-map.json",
-  ".pnpm-workspace-state-v1.json",
-  ".pnpm",
-]) {
-  rmSync(join(out, "node_modules", file), { recursive: true, force: true });
-}
+stageSharp(out, "arm64");
 
 execFileSync("chmod", ["-R", "u=rwX,go=rX", out], { stdio: "inherit" });
 execFileSync("find", [out, "-exec", "touch", "-t", "198001010000", "{}", "+"], {

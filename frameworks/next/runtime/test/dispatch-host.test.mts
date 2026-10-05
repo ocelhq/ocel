@@ -137,6 +137,56 @@ test("a dispatch host serves assets from the bucket its host handed it", async (
   expect(built.originFetch).toBe(originFetch);
 });
 
+test("an image request is answered by the image origin its host handed the dispatcher", async () => {
+  const { writeFile, mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "ocel-dispatch-image-"));
+  const path = join(dir, "routing-manifest.json");
+  await writeFile(
+    path,
+    JSON.stringify({
+      ...manifest,
+      images: {
+        path: "/_next/image",
+        deviceSizes: [64],
+        imageSizes: [],
+        formats: ["image/webp"],
+        domains: [],
+        remotePatterns: [],
+        minimumCacheTTL: 60,
+        maximumRedirects: 3,
+        maximumResponseBody: 1024,
+        dangerouslyAllowSVG: false,
+        dangerouslyAllowLocalIP: false,
+        contentSecurityPolicy: "",
+        contentDispositionType: "inline",
+        configHash: "c".repeat(64),
+      },
+    }),
+  );
+  const asked: { url: string; w: number }[] = [];
+  const built = readDispatchHost({ OCEL_ROUTING_MANIFEST: path }, localOrigin, {
+    originFetch: fetch,
+    imageOrigin: async (payload) => {
+      asked.push({ url: payload.url, w: payload.w });
+      return new Response("resized", { headers: { "content-type": "image/webp" } });
+    },
+  });
+
+  const response = await dispatchRequest(
+    new Request("https://app.example/_next/image?url=%2Flogo.png&w=64&q=75", {
+      headers: { accept: "image/webp" },
+    }),
+    built,
+    () => {},
+  );
+
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe("resized");
+  expect(asked).toEqual([{ url: "/logo.png", w: 64 }]);
+});
+
 test("the control headers a client forges never reach the local origin", async () => {
   await serving("/local", forged);
 

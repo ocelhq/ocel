@@ -1,15 +1,6 @@
 import { GetObjectCommand, type S3Client } from "@aws-sdk/client-s3";
-import { readCapped } from "./stream.mjs";
-
-export interface ObjectStore {
-  get(key: string, limit: number): Promise<StoredObject | undefined>;
-}
-
-export interface StoredObject {
-  bytes: Uint8Array;
-  cacheControl: string | null;
-  etag: string | null;
-}
+import type { ObjectStore } from "@framework/next-image-optimizer/store";
+import { readCapped } from "@framework/next-image-optimizer/stream";
 
 export function s3Store(client: S3Client, bucket: string): ObjectStore {
   return {

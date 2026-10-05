@@ -1,7 +1,7 @@
 import { S3Client } from "@aws-sdk/client-s3";
-import type { ImageOriginRequest, OriginResponse } from "./contract.mjs";
-import { BOOTSTRAP_MESSAGE } from "./errors.mjs";
-import { type OptimizeDeps, optimize } from "./optimize.mjs";
+import type { ImageOriginRequest, OriginResponse } from "@framework/next-image-optimizer/contract";
+import { BOOTSTRAP_MESSAGE } from "@framework/next-image-optimizer/errors";
+import { type OptimizeDeps, optimize } from "@framework/next-image-optimizer/optimize";
 import { s3Store } from "./store.mjs";
 
 interface FunctionUrlEvent {

@@ -15,7 +15,7 @@ import {
   TIFF,
   WEBP,
 } from "../src/sniff.mjs";
-import { animatedGif, ico, solid, stillGif, svg } from "./images.mjs";
+import { animatedGif, ico, solid, stillGif, svg } from "../test-support/images.mjs";
 
 describe("magic bytes", () => {
   test("recognises the formats a browser will be sent", async () => {

@@ -11,12 +11,11 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",
-    "ipaddr.js": "^2.4.0",
-    "sharp": "^0.35.3",
-    "undici": "^8.9.0"
+    "@framework/next-image-optimizer": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24",
+    "sharp": "^0.35.3",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   }

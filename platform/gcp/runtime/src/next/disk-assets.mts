@@ -3,6 +3,7 @@ import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { join, normalize, sep } from "node:path";
 import { Readable } from "node:stream";
+import type { ObjectStore } from "@framework/next-image-optimizer/store";
 import type { AssetBucket, AssetObject } from "@framework/next-router/assets";
 
 const assetsSegment = "assets";
@@ -13,14 +14,23 @@ function releaseRoot(assetPrefix: string): string {
     : `${assetPrefix}/`;
 }
 
-function pathWithin(dir: string, rel: string): string | null {
-  if (rel.includes("\0")) return null;
-  const full = normalize(join(dir, rel));
-  return full.startsWith(dir.endsWith(sep) ? dir : dir + sep) ? full : null;
+function diskFiles(dir: string, assetPrefix: string): (key: string) => Promise<string | null> {
+  const root = releaseRoot(assetPrefix);
+  const within = dir.endsWith(sep) ? dir : dir + sep;
+  return async (key) => {
+    if (!key.startsWith(root) || key.includes("\0")) return null;
+    const file = normalize(join(dir, key.slice(root.length)));
+    if (!file.startsWith(within)) return null;
+    try {
+      return (await stat(file)).isFile() ? file : null;
+    } catch {
+      return null;
+    }
+  };
 }
 
 export function diskAssetBucket(dir: string, assetPrefix: string): AssetBucket {
-  const root = releaseRoot(assetPrefix);
+  const fileOf = diskFiles(dir, assetPrefix);
   const etags = new Map<string, Promise<string>>();
   const etagOf = (file: string): Promise<string> => {
     let etag = etags.get(file);
@@ -34,18 +44,25 @@ export function diskAssetBucket(dir: string, assetPrefix: string): AssetBucket {
   };
   return {
     async get(key): Promise<AssetObject | null> {
-      if (!key.startsWith(root)) return null;
-      const file = pathWithin(dir, key.slice(root.length));
+      const file = await fileOf(key);
       if (!file) return null;
-      try {
-        if (!(await stat(file)).isFile()) return null;
-        return {
-          body: Readable.toWeb(createReadStream(file)) as ReadableStream,
-          httpEtag: await etagOf(file),
-        };
-      } catch {
-        return null;
-      }
+      return {
+        body: Readable.toWeb(createReadStream(file)) as ReadableStream,
+        httpEtag: await etagOf(file),
+      };
+    },
+  };
+}
+
+export function diskObjectStore(dir: string, assetPrefix: string): ObjectStore {
+  const fileOf = diskFiles(dir, assetPrefix);
+  return {
+    async get(key, limit) {
+      const file = await fileOf(key);
+      if (!file) return undefined;
+      const { size } = await stat(file);
+      if (size > limit) throw new Error(`object ${key} holds ${size} bytes`);
+      return { bytes: new Uint8Array(await readFile(file)), cacheControl: null, etag: null };
     },
   };
 }

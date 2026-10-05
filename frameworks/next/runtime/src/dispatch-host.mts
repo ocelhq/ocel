@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
 import { CONTROL_HEADERS, type RouteDeps, serve } from "@framework/next-router";
 import type { AssetBucket } from "@framework/next-router/assets";
-import { functionUrlImageOrigin } from "@framework/next-router/image";
+import { functionUrlImageOrigin, type ImageOrigin } from "@framework/next-router/image";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import { type Invoke, invalidatesByCacheTag } from "@framework/node-runtime/host";
 import { withRouterHeader } from "@framework/node-runtime/router-header";
@@ -33,6 +33,7 @@ export interface DispatchHost {
   assetPrefix: string;
   assetBucket?: AssetBucket;
   imageOptimizerUrl?: string;
+  imageOrigin?: ImageOrigin;
   originFetch: typeof fetch;
 }
 
@@ -51,7 +52,8 @@ function newRouteDeps(
     deploymentId: host.deploymentId,
     originFetch: host.originFetch,
     keepCacheTags: host.keepCacheTags,
-    imageOrigin: functionUrlImageOrigin(host.imageOptimizerUrl, host.originFetch),
+    imageOrigin:
+      host.imageOrigin ?? functionUrlImageOrigin(host.imageOptimizerUrl, host.originFetch),
     assetStore: {
       store: host.assetBucket,
       assetPrefix: host.assetPrefix,
@@ -80,6 +82,7 @@ export function newDispatchInvoke(host: DispatchHost): Invoke {
 
 export interface DispatchAccess {
   assetBucket?: AssetBucket;
+  imageOrigin?: ImageOrigin;
   originFetch: typeof fetch;
 }
 
@@ -126,6 +129,7 @@ export function readDispatchHost(
     assetPrefix: env.OCEL_ASSET_PREFIX ?? "",
     ...(access.assetBucket ? { assetBucket: access.assetBucket } : {}),
     ...(env.OCEL_IMAGE_OPTIMIZER_URL ? { imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL } : {}),
+    ...(access.imageOrigin ? { imageOrigin: access.imageOrigin } : {}),
     originFetch: access.originFetch,
   };
 }
