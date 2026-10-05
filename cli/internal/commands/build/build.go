@@ -32,7 +32,7 @@ import (
 
 type Dependencies struct {
 	commands.Invocation
-	BuildApps           func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, log build.Log) (build.Output, error)
+	BuildApps           func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error)
 	CollectDeclarations func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
 }
 
@@ -65,8 +65,12 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 		return err
 	}
 	if declared.Provider == nil {
-		if _, err := declared.ResolveDeclaredComputes(); err != nil {
+		resolved, err := declared.ResolveDeclaredComputes()
+		if err != nil {
 			return fmt.Errorf("%w: give each a `compute` under `apps`, or name the provider in %s", err, filepath.Base(declared.Path))
+		}
+		if err := build.RefuseNextFunctionsWithoutRuntimeDir(resolved, build.Host{}); err != nil {
+			return err
 		}
 	}
 
@@ -81,7 +85,7 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 		return err
 	}
 	defer building.End(&err)
-	cfg, err := resolveBuiltComputes(ctx, dependencies, building, declared)
+	cfg, host, err := resolveBuild(ctx, dependencies, building, declared)
 	if err != nil {
 		return err
 	}
@@ -92,7 +96,7 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 		return err
 	}
 	clients := builtInClients(cfg, appurl.FormatProductionURLs(cfg))
-	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.Env(clients), declaredArchs(cfg), workers, appBuildLog(phase))
+	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.Env(clients), declaredArchs(cfg), workers, host, appBuildLog(phase))
 	if err != nil {
 		return err
 	}
@@ -129,18 +133,28 @@ func (noValues) Reveal(context.Context, []variables.Coordinate) (map[variables.C
 	return nil, nil
 }
 
-func resolveBuiltComputes(ctx context.Context, dependencies Dependencies, building *run.Run, declared *project.Project) (resolved *project.Project, err error) {
-	if len(declared.UnresolvedApps()) == 0 {
-		return declared.ResolveDeclaredComputes()
+func resolveBuild(ctx context.Context, dependencies Dependencies, building *run.Run, declared *project.Project) (resolved *project.Project, host build.Host, err error) {
+	unresolved := len(declared.UnresolvedApps()) > 0
+	if !unresolved {
+		resolved, err = declared.ResolveDeclaredComputes()
+		if err != nil || len(build.FindNextFunctionApps(resolved.Apps)) == 0 {
+			return resolved, build.Host{}, err
+		}
 	}
 	check := building.Phase(progressv1.Phase_PHASE_CHECK)
 	defer func() { check.End(err) }()
 	provider, _, err := dependencies.OpenProvider(ctx, check, declared, commands.OpenOptions{})
 	if err != nil {
-		return nil, err
+		return nil, build.Host{}, err
 	}
 	defer provider.Close()
-	return readiness.ResolveComputes(provider, declared)
+	if unresolved {
+		resolved, err = readiness.ResolveComputes(provider, declared)
+		if err != nil {
+			return nil, build.Host{}, err
+		}
+	}
+	return resolved, build.ReadHost(provider.Facts()), nil
 }
 
 func appBuildLog(phase *run.Span) build.Log {

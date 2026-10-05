@@ -38,7 +38,7 @@ type deployOptions struct {
 
 type Dependencies struct {
 	commands.Invocation
-	BuildApps               func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, log build.Log) (build.Output, error)
+	BuildApps               func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error)
 	RefuseUnbuildableImages func(ctx context.Context, span *run.Span, cfg *project.Project, archs map[string]string) error
 	ReadPrebuilt            func(ctx context.Context, cfg *project.Project, archs map[string]string) (build.Output, error)
 	DeploymentID            func(projectDir, app string) (string, error)
@@ -132,6 +132,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			command:        "ocel deploy",
 			containerArchs: facts.containerArchs,
 			workerCeilings: facts.workerCeilings,
+			host:           build.ReadHost(provider.Facts()),
 			urls:           facts.urls,
 			dry:            opts.dry,
 			enabled:        !opts.dry && browser,

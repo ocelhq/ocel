@@ -60,19 +60,19 @@ type tools struct {
 
 var installed = tools{node: runNode, image: image.Build, architecture: images.BuiltArchitecture, addFiles: image.AddFiles}
 
-func Apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers HostedWorkers, log Log) (Output, error) {
-	return installed.apps(ctx, cfg, env, archs, workers, log)
+func Apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers HostedWorkers, host Host, log Log) (Output, error) {
+	return installed.apps(ctx, cfg, env, archs, workers, host, log)
 }
 
 func ReadPrebuilt(ctx context.Context, cfg *project.Project, archs map[string]string) (Output, error) {
 	return installed.readPrebuilt(ctx, cfg, archs)
 }
 
-func (t tools) apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers HostedWorkers, log Log) (Output, error) {
+func (t tools) apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers HostedWorkers, host Host, log Log) (Output, error) {
 	if unresolved := cfg.UnresolvedApps(); len(unresolved) > 0 {
 		return Output{}, fmt.Errorf("the build reached %s with no compute resolved, and an app is built for the compute it runs on", english.And(english.Quoted(unresolved)))
 	}
-	if err := t.functions(ctx, cfg, env, log); err != nil {
+	if err := t.functions(ctx, cfg, env, host, log); err != nil {
 		return Output{}, err
 	}
 	images, err := t.images(ctx, cfg, archs, workers, log)
@@ -86,11 +86,14 @@ func (t tools) apps(ctx context.Context, cfg *project.Project, env map[string]ma
 	return Output{Functions: functions, Images: images}, nil
 }
 
-func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map[string]map[string]string, log Log) error {
+func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map[string]map[string]string, host Host, log Log) error {
 	for _, env := range envByApp {
 		if err := checkVariableNames(env); err != nil {
 			return err
 		}
+	}
+	if err := RefuseNextFunctionsWithoutRuntimeDir(cfg, host); err != nil {
+		return err
 	}
 
 	outputDir, err := buildoutput.Root(cfg.Dir)
@@ -132,6 +135,8 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 				Env:           envByApp[a.Name],
 				EdgeKind:      string(cfg.EdgeKind()),
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
+
+				NextRuntimeDir: host.NextRuntimeDir,
 			})
 		case name == buildoutput.FrameworkNode:
 			target, err := nodeTarget(cfg, a, outputDir)

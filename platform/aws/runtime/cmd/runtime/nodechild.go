@@ -9,11 +9,13 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
 
@@ -436,7 +438,7 @@ func nodeChildEnv(sockPath string, extraEnv []string) []string {
 
 func entrypointPath(a buildoutput.FunctionDescriptor) string {
 	if a.Framework.Name == "next" {
-		return "/opt/ocel/next/entrypoint.mjs"
+		return path.Join(awsports.NextRuntimeDir, "entrypoint.mjs")
 	}
 	return "/opt/ocel/node/entrypoint.mjs"
 }

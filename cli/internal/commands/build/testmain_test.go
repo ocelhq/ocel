@@ -34,7 +34,7 @@ func declaringNothing(context.Context, *project.Project, *variables.Declarations
 }
 
 func stubBuild(dependencies *Dependencies, functions []build.Function) {
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 		return build.Output{Functions: functions}, nil
 	}
 }

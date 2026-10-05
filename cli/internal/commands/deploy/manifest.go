@@ -38,6 +38,7 @@ type assembly struct {
 	span           *run.Span
 	containerArchs map[string]string
 	workerCeilings []provider.WorkerCeiling
+	host           build.Host
 	urls           map[string]string
 }
 
@@ -121,7 +122,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	span.End(nil)
 	var built build.Output
 	err := steps.run(cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
-		built, err = dependencies.BuildApps(ctx, cfg, build.Env(clients), a.containerArchs, workers, steps.log())
+		built, err = dependencies.BuildApps(ctx, cfg, build.Env(clients), a.containerArchs, workers, a.host, steps.log())
 		if err != nil {
 			return err
 		}

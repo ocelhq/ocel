@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
@@ -42,7 +43,7 @@ export default {
 		return []declaration.Resource{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_TASK, Name: "greet", Task: &resourcesv1.TaskConfig{}, Source: source}}, nil
 	}
 	var handed build.HostedWorkers
-	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, workers build.HostedWorkers, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, workers build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 		handed = workers
 		return build.Output{Functions: []build.Function{{Route: "index", App: "api"}}}, nil
 	}
@@ -72,7 +73,7 @@ export default {
 
 		var built *project.Project
 		dependencies := newTestDependencies()
-		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
+		dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 			built = cfg
 			return build.Output{Functions: []build.Function{{Route: "index", App: "api"}}}, nil
 		}
@@ -118,7 +119,7 @@ export default {
 
 		var archs map[string]string
 		dependencies := newTestDependencies()
-		dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, asked map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
+		dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, asked map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 			archs = asked
 			return build.Output{
 				Functions: []build.Function{{Route: "index", App: "api"}},
@@ -143,33 +144,6 @@ export default {
 		}
 	})
 
-	t.Run("bakes each app's plaintext client values, as a deploy does", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default {
-  slug: "test-app",
-  apps: [{ name: "web", path: ".", framework: "next", compute: "serverless", domains: { production: ["shop.acme.com"] } }],
-};
-`)
-
-		var env map[string]map[string]string
-		dependencies := newTestDependencies()
-		dependencies.BuildApps = func(_ context.Context, _ *project.Project, handed map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
-			env = handed
-			return build.Output{}, nil
-		}
-
-		dependencies.Events = run.NewBus(time.Now)
-		if err := runBuild(context.Background(), dependencies, root); err != nil {
-			t.Fatalf("runBuild: %v", err)
-		}
-		if got, want := env["web"][processenv.ClientURLEnvVar], "https://shop.acme.com"; got != want {
-			t.Errorf("web was built with %s = %q, want %q", processenv.ClientURLEnvVar, got, want)
-		}
-	})
-
 	t.Run("surfaces a build failure", func(t *testing.T) {
 		t.Parallel()
 
@@ -179,7 +153,7 @@ export default { slug: "test-app" };
 `)
 
 		dependencies := newTestDependencies()
-		dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Log) (build.Output, error) {
+		dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 			return build.Output{}, errors.New("boom: app build failed")
 		}
 
@@ -236,7 +210,7 @@ func TestBuildAsksTheProviderWhichComputeAnAppNamingNoneRunsOn(t *testing.T) {
 
 	dependencies := newTestDependencies()
 	var built *project.Project
-	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 		built = cfg
 		return build.Output{}, nil
 	}
@@ -246,6 +220,108 @@ func TestBuildAsksTheProviderWhichComputeAnAppNamingNoneRunsOn(t *testing.T) {
 	}
 	if built == nil || !built.Apps[0].RunsOn(provider.ComputeContainer) {
 		t.Fatalf("built = %+v, want web built for the container compute its provider runs, as a deploy would", built)
+	}
+}
+
+func TestBuildBakesEachAppsPlaintextClientValuesAsADeployDoes(t *testing.T) {
+	root := clitest.SetUpProject(t).Root
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "`+clitest.FixtureSlug+`",
+  provider: { fake: {} },
+  apps: [{ name: "web", path: ".", framework: "next", compute: "serverless", domains: { production: ["shop.acme.com"] } }],
+};
+`)
+
+	var env map[string]map[string]string
+	dependencies := newTestDependencies()
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, handed map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		env = handed
+		return build.Output{}, nil
+	}
+
+	if err := runBuild(context.Background(), dependencies, root); err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+	if got, want := env["web"][processenv.ClientURLEnvVar], "https://shop.acme.com"; got != want {
+		t.Errorf("web was built with %s = %q, want %q", processenv.ClientURLEnvVar, got, want)
+	}
+}
+
+func TestBuildPointsANextAppAtTheCacheHandlerDirectoryItsProviderDeclares(t *testing.T) {
+	fixture := clitest.SetUpProject(t)
+	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.NextRuntimeDir = "/var/host/next" })
+	root := fixture.Root
+	writeBuildConfig(t, root, `[{ name: "web", path: "web", framework: "next", compute: "serverless" }]`)
+	clitest.WriteFile(t, filepath.Join(root, "web", "package.json"), "{}\n")
+
+	dependencies := newTestDependencies()
+	var host build.Host
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, handed build.Host, _ build.Log) (build.Output, error) {
+		host = handed
+		return build.Output{}, nil
+	}
+
+	if err := runBuild(context.Background(), dependencies, root); err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+	if host.NextRuntimeDir != "/var/host/next" {
+		t.Errorf("web was built against the Next runtime directory %q, want the one its provider declares", host.NextRuntimeDir)
+	}
+}
+
+func TestBuildOfANextAppWithDeclaredComputesSucceedsWithoutCredentials(t *testing.T) {
+	fixture := clitest.SetUpProject(t)
+	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.NextRuntimeDir = "/var/host/next" })
+	fixture.Provider.Credentials().(*fake.Credentials).Ask("sign in to fake", provider.Question{Finding: "no session", Prompt: "Sign in?"})
+	root := fixture.Root
+	writeBuildConfig(t, root, `[{ name: "web", path: "web", framework: "next", compute: "serverless" }]`)
+	clitest.WriteFile(t, filepath.Join(root, "web", "package.json"), "{}\n")
+
+	dependencies := newTestDependencies()
+	var host build.Host
+	dependencies.BuildApps = func(_ context.Context, _ *project.Project, _ map[string]map[string]string, _ map[string]string, _ build.HostedWorkers, handed build.Host, _ build.Log) (build.Output, error) {
+		host = handed
+		return build.Output{}, nil
+	}
+
+	if err := runBuild(context.Background(), dependencies, root); err != nil {
+		t.Fatalf("runBuild: %v, want the build to read the provider's facts without asking who is signed in", err)
+	}
+	if host.NextRuntimeDir != "/var/host/next" {
+		t.Errorf("web was built against the Next runtime directory %q, want the one its provider declares", host.NextRuntimeDir)
+	}
+}
+
+func TestBuildRefusesANextAppWhenNoProviderNamesItsNextRuntimeDirectory(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  apps: [{ name: "web", path: ".", framework: "next", compute: "serverless" }],
+};
+`)
+
+	dependencies := newTestDependencies()
+	built := false
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+		built = true
+		return build.Output{}, nil
+	}
+
+	err := runBuild(context.Background(), dependencies, root)
+	if err == nil {
+		t.Fatal("runBuild = nil error, want web refused: only the provider it deploys through says where its functions load Next's runtime files from")
+	}
+	for _, want := range []string{`"web"`, "provider"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, missing %q", err, want)
+		}
+	}
+	if built {
+		t.Error("the build ran before the refusal")
 	}
 }
 
@@ -262,7 +338,7 @@ export default {
 
 	dependencies := newTestDependencies()
 	built := false
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]map[string]string, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 		built = true
 		return build.Output{}, nil
 	}

@@ -22,8 +22,11 @@ import { defaultImages } from "./fixtures.mts";
 
 let originalCwd: string;
 
+const nextRuntimeDir = "/var/host/next";
+
 beforeEach(() => {
   originalCwd = process.cwd();
+  vi.stubEnv("OCEL_NEXT_RUNTIME_DIR", nextRuntimeDir);
 });
 
 afterEach(() => {
@@ -1317,7 +1320,7 @@ test("leaves a non-build phase untouched and writes nothing", async () => {
   await expect(readFile(join(projectDir, ".ocel/cache-handler.cjs"), "utf8")).rejects.toThrow();
 });
 
-test("names the layer's cache handler by absolute path in required-server-files", async () => {
+test("names the cache handler in the directory the host declares, by absolute path, in required-server-files", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1326,12 +1329,12 @@ test("names the layer's cache handler by absolute path in required-server-files"
   const manifest = JSON.parse(
     await readFile(join(projectDir, ".next/required-server-files.json"), "utf8"),
   );
-  expect(manifest.config.cacheHandler).toBe("/opt/ocel/next/cache-handler.cjs");
+  expect(manifest.config.cacheHandler).toBe("/var/host/next/cache-handler.cjs");
   expect(manifest.config.cacheMaxMemorySize).toBe(0);
   expect(manifest.version).toBe(1);
 });
 
-test("registers the 'use cache' handlers by absolute path alongside the ISR one", async () => {
+test("registers the 'use cache' handlers from the host's directory alongside the ISR one", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1341,10 +1344,18 @@ test("registers the 'use cache' handlers by absolute path alongside the ISR one"
     await readFile(join(projectDir, ".next/required-server-files.json"), "utf8"),
   );
   expect(manifest.config.cacheHandlers).toEqual({
-    default: "/opt/ocel/next/use-cache-default.cjs",
-    remote: "/opt/ocel/next/use-cache-remote.cjs",
+    default: "/var/host/next/use-cache-default.cjs",
+    remote: "/var/host/next/use-cache-remote.cjs",
   });
-  expect(manifest.config.cacheHandler).toBe("/opt/ocel/next/cache-handler.cjs");
+  expect(manifest.config.cacheHandler).toBe("/var/host/next/cache-handler.cjs");
+});
+
+test("refuses a build whose host names no Next runtime directory", async () => {
+  vi.stubEnv("OCEL_NEXT_RUNTIME_DIR", "");
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(/OCEL_NEXT_RUNTIME_DIR/);
 });
 
 test("regroups a route's prerender outputs into one cache entry", async () => {

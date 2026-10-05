@@ -79,6 +79,8 @@ func (p *Provider) Facts() provider.Facts {
 		RendersTransforms: true,
 		StoresArtifacts:   true,
 		WorkerCeilings:    deploy.WorkerCeilings,
+
+		NextRuntimeDir: awsports.NextRuntimeDir,
 	}
 }
 

@@ -107,7 +107,7 @@ func TestBuild(t *testing.T) {
 
 		var gotScript string
 		var got nodeBuildRequest
-		builder := nodeOnly{node: func(_ context.Context, script string, request []byte, _ Log) error {
+		builder := nodeOnly{host: servingNext, node: func(_ context.Context, script string, request []byte, _ Log) error {
 			gotScript = script
 			if err := json.Unmarshal(request, &got); err != nil {
 				return err
@@ -163,13 +163,55 @@ func TestBuild(t *testing.T) {
 		})
 	})
 
+	t.Run("hands each next app the directory its host loads Next's runtime files from", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
+
+		var got nodeBuildRequest
+		builder := nodeOnly{node: requestOf(&got), host: Host{NextRuntimeDir: "/var/host/next"}}
+		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+
+		if len(got.Apps) != 1 || got.Apps[0].NextRuntimeDir != "/var/host/next" {
+			t.Errorf("request apps = %+v, want web built against the directory its host loads Next's runtime files from", got.Apps)
+		}
+	})
+
+	t.Run("refuses a next app its host names no Next runtime directory for", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
+
+		ran := false
+		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+			ran = true
+			return nil
+		}}
+		err := builder.Build(context.Background(), cfg, nil, Log{})
+		if err == nil {
+			t.Fatal("Build = nil error, want web refused: no directory on its host holds Next's runtime files, so its build output could not be served")
+		}
+		if !strings.Contains(err.Error(), `"web"`) {
+			t.Errorf("error = %q, want it to name the app", err)
+		}
+		if ran {
+			t.Error("the node build script ran before the refusal")
+		}
+	})
+
 	t.Run("names the missing build script when none was materialized", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
 		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 
-		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, nil, Log{})
+		err := nodeOnly{host: servingNext, node: runNode}.Build(context.Background(), cfg, nil, Log{})
 		if err == nil {
 			t.Fatal("Build succeeded with no materialized build script, want error")
 		}
@@ -186,7 +228,7 @@ func TestBuild(t *testing.T) {
 			buildoutput.FunctionDescriptor{Framework: buildoutput.Framework{Name: "node"}, EntryFile: "h", App: "stale"})
 
 		ran := false
-		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+		builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
 			ran = true
 			return nil
 		}}
@@ -209,7 +251,7 @@ func TestBuild(t *testing.T) {
 		writeBuildScript(t, root)
 		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 
-		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+		builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
 			return errors.New("node build failed: web has no build script")
 		}}
 
@@ -229,7 +271,7 @@ func TestBuild(t *testing.T) {
 				root := t.TempDir()
 				writeBuildScript(t, root)
 				ran := false
-				builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+				builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
 					ran = true
 					return nil
 				}}
@@ -253,7 +295,7 @@ func TestBuild(t *testing.T) {
 		writeFile(t, filepath.Join(root, "apps", "api", "src", "server.js"), "export default { fetch: () => new Response('hi') };\n")
 
 		ran := false
-		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+		builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
 			ran = true
 			return nil
 		}}
@@ -282,7 +324,7 @@ func TestBuild(t *testing.T) {
 
 		root := t.TempDir()
 		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}}}}
-		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, nil, Log{})
+		err := nodeOnly{host: servingNext, node: runNode}.Build(context.Background(), cfg, nil, Log{})
 		if err == nil || !strings.Contains(err.Error(), "src/server.ts") || !strings.Contains(err.Error(), `"api"`) {
 			t.Errorf("Build err = %v, want the app and the entrypoints tried named", err)
 		}
@@ -293,7 +335,7 @@ func TestBuild(t *testing.T) {
 
 		root := t.TempDir()
 		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless}}}
-		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, nil, Log{})
+		err := nodeOnly{host: servingNext, node: runNode}.Build(context.Background(), cfg, nil, Log{})
 		if err == nil || !strings.Contains(err.Error(), `"framework"`) {
 			t.Errorf("Build err = %v, want the app told to state its framework", err)
 		}
@@ -308,7 +350,7 @@ func TestBuild(t *testing.T) {
 		cfg := &project.Project{Dir: fixtureRoot, Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}}}}
 
 		var stderr bytes.Buffer
-		if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, Log{Shared: &stderr}); err != nil {
+		if err := (nodeOnly{host: servingNext, node: runNode}).Build(context.Background(), cfg, nil, Log{Shared: &stderr}); err != nil {
 			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 		}
 
@@ -333,7 +375,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		writeFile(t, filepath.Join(source, "src", "server.ts"), "export default {};\n")
 
 		var got nodeBuildRequest
-		builder := nodeOnly{node: func(_ context.Context, _ string, request []byte, _ Log) error {
+		builder := nodeOnly{host: servingNext, node: func(_ context.Context, _ string, request []byte, _ Log) error {
 			if err := json.Unmarshal(request, &got); err != nil {
 				return err
 			}
@@ -376,7 +418,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		writeFile(t, filepath.Join(root, "shared", "server.js"), "export default {};\n")
 
 		ran := false
-		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+		builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
 			ran = true
 			return nil
 		}}
@@ -399,7 +441,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		cfg := &project.Project{Dir: fixtureRoot, Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}}}}
 
 		var stderr bytes.Buffer
-		if err := (nodeOnly{node: runNode}).Build(context.Background(), cfg, nil, Log{Shared: &stderr}); err != nil {
+		if err := (nodeOnly{host: servingNext, node: runNode}).Build(context.Background(), cfg, nil, Log{Shared: &stderr}); err != nil {
 			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 		}
 
@@ -474,7 +516,7 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 			writeBuildScript(t, root)
 
 			var got nodeBuildRequest
-			if err := (nodeOnly{node: requestOf(&got)}).Build(context.Background(), tc.cfg(root), nil, Log{}); err != nil {
+			if err := (nodeOnly{host: servingNext, node: requestOf(&got)}).Build(context.Background(), tc.cfg(root), nil, Log{}); err != nil {
 				t.Fatalf("Build: %v", err)
 			}
 
@@ -491,12 +533,15 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 	}
 }
 
+var servingNext = Host{NextRuntimeDir: "/var/host/next"}
+
 type nodeOnly struct {
 	node nodeRun
+	host Host
 }
 
 func (n nodeOnly) Build(ctx context.Context, cfg *project.Project, env map[string]map[string]string, log Log) error {
-	return tools{node: n.node}.functions(ctx, cfg, env, log)
+	return tools{node: n.node}.functions(ctx, cfg, env, n.host, log)
 }
 
 func outputRoot(t *testing.T, projectDir string) string {

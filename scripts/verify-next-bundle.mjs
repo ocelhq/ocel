@@ -45,6 +45,7 @@ function buildApp() {
     NEXT_ADAPTER_PATH: adapter,
     OCEL_APP_NAME: appName,
     OCEL_OUTPUT_DIR: appOut,
+    OCEL_NEXT_RUNTIME_DIR: "/opt/ocel/next",
   });
 }
 

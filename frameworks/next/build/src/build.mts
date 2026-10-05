@@ -12,6 +12,7 @@ export interface NextBuild {
   env?: Record<string, string>;
   edgeKind?: string;
   allowDegraded?: string[];
+  nextRuntimeDir?: string;
 }
 
 const ADAPTER_PATH_ENV = "NEXT_ADAPTER_PATH";
@@ -45,6 +46,7 @@ export async function buildNext(app: NextBuild, adapterPath: string): Promise<vo
     OCEL_APP_FOLDER: app.folder ?? "",
     OCEL_EDGE_KIND: app.edgeKind ?? "",
     OCEL_ALLOW_DEGRADED: (app.allowDegraded ?? []).join(","),
+    OCEL_NEXT_RUNTIME_DIR: app.nextRuntimeDir ?? "",
     [ADAPTER_PATH_ENV]: adapterPath,
     [DEPLOYMENT_ID_ENV]: app.deploymentId,
   });
