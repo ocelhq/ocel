@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/valuestore"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -197,7 +198,8 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		}
 	}
 
-	return dependencies.WithProvider(ctx, cfg, "ocel preview up", previewOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) (err error) {
+	deployTelemetry := watchDeploy(dependencies.Events, cfg, telemetry.DeployTargetPreview, opts.dry)
+	err = dependencies.WithProvider(ctx, cfg, "ocel preview up", previewOpenOptions(policy, cfg), func(ctx context.Context, p commands.ProviderRun) (err error) {
 		run, check, provider, read := p.Run, p.Check, p.Provider, p.Preflight
 		cfg := p.Project
 		facts, err := preflightPreviewUp(ctx, dependencies, policy, check, provider, cfg, read, opts.prebuilt, env)
@@ -247,6 +249,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		if err != nil {
 			return err
 		}
+		deployTelemetry.noteManifest(manifest)
 		if manifest == nil {
 			run.Succeed(nothingToDeploy(cfg))
 			return nil
@@ -277,6 +280,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			return err
 		}
 		deployed = true
+		deployTelemetry.noteDeployed()
 
 		record, err := deployrecord.New(cfg, manifest, env, "", out.promotionID, out.apps)
 		if err != nil {
@@ -288,6 +292,8 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 		run.Succeed(fmt.Sprintf("Deployed %s to preview %s", cfg.Slug, env.GetIdentity()))
 		return nil
 	})
+	deployTelemetry.record(dependencies.RecordEvent, err)
+	return err
 }
 
 func refuseMissingPreviewDomain(cfg *project.Project, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, check *run.Span) error {
