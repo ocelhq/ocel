@@ -5,6 +5,7 @@ import {
   readDispatchHost,
 } from "@framework/next-runtime/dispatch-host";
 import type { Invoke } from "@framework/node-runtime/host";
+import { diskAssetBucket } from "./disk-assets.mjs";
 
 function functionIds(manifest: RoutingManifest): string[] {
   const ids = new Set<string>([manifest.entry]);
@@ -17,8 +18,14 @@ function functionIds(manifest: RoutingManifest): string[] {
   return [...ids];
 }
 
+const staticDirVar = "OCEL_STATIC_DIR";
+
 export function readGcpDispatchHost(env: NodeJS.ProcessEnv, localOrigin: string): DispatchHost {
-  const host = readDispatchHost(env, localOrigin, { originFetch: fetch });
+  const staticDir = env[staticDirVar];
+  const host = readDispatchHost(env, localOrigin, {
+    originFetch: fetch,
+    ...(staticDir && { assetBucket: diskAssetBucket(staticDir, env.OCEL_ASSET_PREFIX ?? "") }),
+  });
   return {
     ...host,
     functionUrls: Object.fromEntries(functionIds(host.manifest).map((id) => [id, localOrigin])),

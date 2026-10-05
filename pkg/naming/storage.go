@@ -14,8 +14,10 @@ func (c Coordinate) AssetKey(assetPath string) string {
 	return c.StoragePrefix() + path("assets", strings.TrimPrefix(assetPath, PathSeparator))
 }
 
+const ImageConfigFile = "image-config.json"
+
 func (c Coordinate) ImageConfigKey() string {
-	return c.StoragePrefix() + "image-config.json"
+	return c.StoragePrefix() + ImageConfigFile
 }
 
 func (c Coordinate) ISRPrefix() string {

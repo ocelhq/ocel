@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +11,7 @@ const manifest: RoutingManifest = {
   entry: "bundle-0",
   buildId: "b1",
   basePath: "",
-  pathnames: ["/home", "/other"],
+  pathnames: ["/home", "/other", "/logo.svg"],
   routes: {
     beforeMiddleware: [],
     beforeFiles: [],
@@ -23,6 +23,7 @@ const manifest: RoutingManifest = {
   dispatch: {
     "/home": { kind: "function", id: "bundle-0", entryKey: "/home" },
     "/other": { kind: "function", id: "bundle-1", entryKey: "/other" },
+    "/logo.svg": { kind: "static" },
   },
 };
 
@@ -34,6 +35,8 @@ const served: string[] = [];
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "ocel-gcp-dispatch-"));
   await writeFile(join(dir, "routing.json"), JSON.stringify(manifest));
+  await mkdir(join(dir, "static", "assets"), { recursive: true });
+  await writeFile(join(dir, "static", "assets", "logo.svg"), "<svg/>");
   local = http.createServer((req, res) => {
     served.push(String(req.headers["x-ocel-entry"]));
     res.end("rendered here");
@@ -65,4 +68,25 @@ test("every function a route names is rendered by the instance that routed it", 
     "rendered here",
   ]);
   expect(served.sort()).toEqual(["/home", "/other"]);
+});
+
+test("a static asset is served from the folder the service's image holds it in", async () => {
+  const host = readGcpDispatchHost(
+    {
+      OCEL_ROUTING_MANIFEST: join(dir, "routing.json"),
+      OCEL_STATIC_DIR: join(dir, "static"),
+      OCEL_ASSET_PREFIX: "prod/shop/web/r1/assets",
+    },
+    localOrigin,
+  );
+
+  const response = await dispatchRequest(
+    new Request("https://shop.example/logo.svg"),
+    host,
+    () => {},
+  );
+
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toBe("image/svg+xml");
+  expect(await response.text()).toBe("<svg/>");
 });

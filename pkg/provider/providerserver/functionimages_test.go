@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -271,6 +272,54 @@ func TestANextFunctionsImageBootsTheNextRuntimeInTheDirectoryTheProviderNames(t 
 		if slices.Contains(tarNames(t, layer), strings.TrimPrefix(images.NodeRuntimePath, "/")) {
 			t.Errorf("the image includes the node runtime at %s, which a Next function never boots", images.NodeRuntimePath)
 		}
+	}
+}
+
+func TestTheEntryFunctionsImageCarriesTheAppsStaticAssetsAndNoOtherFunctionsDoes(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", BuildID: "b1"}, []byte(`{"entry":"index"}`))
+	app := filepath.Join(workingOutputRoot(t), "apps", "web")
+	for rel, body := range map[string]string{
+		"static/_next/static/app.js": "chunk",
+		"image-config.json":          "{}",
+	} {
+		full := filepath.Join(app, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	served, vendor := imagingServed(t)
+	req := imagingDeployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+	web := webFunctions(req)
+	web.Functions[0].RouteId = "index"
+	web.Functions = append(web.Functions, &contractv1.ManifestFunction{
+		LogicalName:  "feed",
+		RouteId:      "feed",
+		Framework:    &contractv1.Framework{Name: "node", Arch: "x86_64"},
+		EntryFile:    "index.handler",
+		ArtifactPath: adminArtifactPath,
+	})
+
+	result, _ := deploy(t, served, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	asset := strings.TrimPrefix(images.StaticRoot, "/") + "/assets/_next/static/app.js"
+	config := strings.TrimPrefix(images.StaticRoot, "/") + "/image-config.json"
+	pushed := map[string][]string{}
+	for _, push := range vendor.ImageStore().Pushed() {
+		pushed[push.App] = regularFiles(t, push.Built)
+	}
+	if !slices.Contains(pushed["server"], asset) || !slices.Contains(pushed["server"], config) {
+		t.Errorf("the entry function's image holds %v, want %s and %s: a function run from an image has no asset store to read them from", pushed["server"], asset, config)
+	}
+	if slices.Contains(pushed["feed"], asset) {
+		t.Errorf("a function that routes nothing holds the app's static assets at %s", asset)
 	}
 }
 
