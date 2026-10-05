@@ -100,7 +100,7 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "Remove a feature other projects still use")
 	cmd.Flags().BoolVar(&opts.Repair, "repair", false, "Let later deploys refresh stale features on their own; --repair=false turns it off")
 
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
 func newDestroyCommand(invocation commands.Invocation) *cobra.Command {
@@ -135,7 +135,7 @@ func newDestroyCommand(invocation commands.Invocation) *cobra.Command {
 	commands.AddYesFlag(cmd, &opts.Yes)
 	commands.AddDryFlag(cmd, &opts.Dry, "Print what would be removed and stop, removing nothing")
 
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
 func environmentArg(args []string) (environmentv1.Tier, error) {

@@ -158,8 +158,13 @@ func NewPreviewCommand(dependencies Dependencies) *cobra.Command {
 	prune.Flags().IntVar(&pruneOpts.keep, "keep", defaultPreviewPruneKeepN, "How many recent deployments to keep (the live one always stays)")
 	commands.AddYesFlag(prune, &pruneOpts.yes)
 
-	cmd.AddCommand(commands.DeclareMutating(up), commands.DeclareMutating(rm), commands.DeclareResult(commands.DeclareReadOnly(commands.ReserveStdout(ls)), &resultv1.PreviewListResult{}), commands.DeclareMutating(prune))
-	return commands.DeclareMutating(cmd)
+	cmd.AddCommand(
+		commands.DeclareRunEvents(commands.DeclareMutating(up)),
+		commands.DeclareRunEvents(commands.DeclareMutating(rm)),
+		commands.DeclareResult(commands.DeclareReadOnly(commands.ReserveStdout(ls)), &resultv1.PreviewListResult{}),
+		commands.DeclareRunEvents(commands.DeclareMutating(prune)),
+	)
+	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
 func previewUpFlags(cmd *cobra.Command, opts *previewUpOptions) {

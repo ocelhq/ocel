@@ -226,7 +226,7 @@ func newListCommand(invocation commands.Invocation) *cobra.Command {
 }
 
 func newAddCommand(invocation commands.Invocation) *cobra.Command {
-	return commands.DeclareMutating(&cobra.Command{
+	return commands.DeclareRunEvents(commands.DeclareMutating(&cobra.Command{
 		Use:   "add [host]",
 		Short: "Provision the certificate, the edge surface and the DNS for this project's production hostnames",
 		Args:  cobra.MaximumNArgs(1),
@@ -237,7 +237,7 @@ func newAddCommand(invocation commands.Invocation) *cobra.Command {
 			}
 			return runDomainAdd(cmd.Context(), invocation, cwd, firstArg(args), cmd.OutOrStdout())
 		},
-	})
+	}))
 }
 
 func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
@@ -255,5 +255,5 @@ func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	commands.AddYesFlag(cmd, &opts.yes)
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }

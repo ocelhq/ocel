@@ -69,7 +69,7 @@ func newPruneCommand(invocation commands.Invocation) *cobra.Command {
 	}
 	cmd.Flags().IntVar(&opts.keep, "keep", defaultPruneKeepN, "Number of most recent promotions to keep, always additionally pinning the active one")
 	commands.AddYesFlag(cmd, &opts.yes)
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
 func runPromotionsList(ctx context.Context, invocation commands.Invocation, cwd string, stdout, stderr io.Writer) error {

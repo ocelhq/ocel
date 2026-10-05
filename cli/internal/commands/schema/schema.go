@@ -34,13 +34,11 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 	})), &resultv1.SchemaListResult{})
 }
 
-func outputOf(cmd *cobra.Command) resultv1.CommandOutput {
+func findOutput(cmd *cobra.Command) resultv1.CommandOutput {
 	switch {
-	case cmd.HasSubCommands():
-		return resultv1.CommandOutput_COMMAND_OUTPUT_UNSPECIFIED
 	case hasResults(cmd):
 		return resultv1.CommandOutput_COMMAND_OUTPUT_RESULT
-	case commands.DrawsRunOnStdout(cmd):
+	case commands.PrintsRunEvents(cmd):
 		return resultv1.CommandOutput_COMMAND_OUTPUT_RUN_EVENTS
 	default:
 		return resultv1.CommandOutput_COMMAND_OUTPUT_UNSPECIFIED
@@ -52,7 +50,16 @@ func hasResults(cmd *cobra.Command) bool {
 	return declared
 }
 
-func commandPath(cmd *cobra.Command) string {
+func isHidden(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Hidden {
+			return true
+		}
+	}
+	return false
+}
+
+func formatPath(cmd *cobra.Command) string {
 	return strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" ")
 }
 
@@ -64,8 +71,8 @@ func listSchemas(invocation commands.Invocation, cmd *cobra.Command) error {
 			if sub.Hidden {
 				continue
 			}
-			if output := outputOf(sub); output != resultv1.CommandOutput_COMMAND_OUTPUT_UNSPECIFIED {
-				list.Commands = append(list.Commands, &resultv1.CommandSchema{Path: commandPath(sub), Output: output})
+			if output := findOutput(sub); output != resultv1.CommandOutput_COMMAND_OUTPUT_UNSPECIFIED {
+				list.Commands = append(list.Commands, &resultv1.CommandSchema{Path: formatPath(sub), Output: output})
 			}
 			walk(sub)
 		}
@@ -99,19 +106,20 @@ func describeOutput(output resultv1.CommandOutput) string {
 }
 
 func printSchema(cmd *cobra.Command, args []string) error {
+	path := strings.Join(args, " ")
 	target, rest, err := cmd.Root().Find(args)
-	if err != nil || len(rest) > 0 || target.Hidden || target == cmd.Root() {
-		return refuse(cmd, fmt.Errorf("no command %q: `ocel schema` lists the commands that have a schema", strings.Join(args, " ")))
+	if err != nil || len(rest) > 0 || isHidden(target) || target == cmd.Root() {
+		return refuseUsage(cmd, fmt.Errorf("no command %q: `ocel schema` lists the commands that have a schema%s", path, suggestCommands(target, rest)))
 	}
 	var schema []byte
-	switch outputOf(target) {
+	switch findOutput(target) {
 	case resultv1.CommandOutput_COMMAND_OUTPUT_RESULT:
 		results, _ := commands.FindResults(target)
 		schema, err = outputschema.Result(results...)
 	case resultv1.CommandOutput_COMMAND_OUTPUT_RUN_EVENTS:
 		schema, err = outputschema.RunEvent()
 	default:
-		return refuse(cmd, fmt.Errorf("`ocel %s` has no schema: `ocel schema` lists the commands that do", commandPath(target)))
+		return refuseUsage(cmd, fmt.Errorf("`ocel %s` has no schema: `ocel schema` lists the commands that do", formatPath(target)))
 	}
 	if err != nil {
 		return err
@@ -120,6 +128,17 @@ func printSchema(cmd *cobra.Command, args []string) error {
 	return err
 }
 
-func refuse(cmd *cobra.Command, cause error) error {
+func suggestCommands(found *cobra.Command, rest []string) string {
+	if len(rest) == 0 {
+		return ""
+	}
+	suggestions := found.SuggestionsFor(rest[0])
+	if len(suggestions) == 0 {
+		return ""
+	}
+	return "\n\nDid you mean this?\n\t" + strings.Join(suggestions, "\n\t")
+}
+
+func refuseUsage(cmd *cobra.Command, cause error) error {
 	return &clierror.Error{Code: clierror.CodeUsage, Hint: cmd.UseLine(), Cause: cause}
 }

@@ -60,5 +60,5 @@ func newUseCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&opts.preview, "preview", false, "Act on the preview tier (required)")
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }

@@ -92,5 +92,5 @@ func newReleaseCommand(invocation commands.Invocation) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&opts.preview, "preview", false, "Act on the preview tier (required)")
 	commands.AddYesFlag(cmd, &opts.yes)
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
