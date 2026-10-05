@@ -32,7 +32,7 @@ func (e *UnprovisionedError) Error() string {
 // never delivered to the process. Match it with errors.As to tell a resource
 // this deploy does not include from one that is misconfigured.
 type MissingBindingError struct {
-	// Key is the environment variable the binding arrives in.
+	// Key is the name the binding is delivered under, as a file in OCEL_LIVE_DIR or a live value.
 	Key string
 }
 
