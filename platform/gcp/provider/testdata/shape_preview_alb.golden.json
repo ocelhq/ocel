@@ -267,30 +267,6 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_compute_region_network_endpoint_group:ocel-alb-preview-preview-neg",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_compute_region_network_endpoint_group",
-      "name": "ocel-alb-preview-preview-neg",
-      "region": "europe-west1",
-      "properties": {
-        "network_endpoint_type": "SERVERLESS"
-      }
-    },
-    {
-      "id": "project:shop/shared:preview/google_compute_backend_service:ocel-alb-preview-preview",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_compute_backend_service",
-      "name": "ocel-alb-preview-preview",
-      "region": "europe-west1",
-      "properties": {
-        "enable_cdn": true,
-        "load_balancing_scheme": "EXTERNAL_MANAGED",
-        "protocol": "HTTPS"
-      }
-    },
-    {
       "id": "project:shop/environment:pr-42/app:web/google_cloud_run_v2_service:ocel-shop-pr-42-web-entry-461bda",
       "scope": "project:shop/environment:pr-42/app:web",
       "vendor": "gcp",

@@ -79,12 +79,8 @@ func (p *Provider) declaredTopics(ctx context.Context, ref provider.StackRef) (m
 	return declared, nil
 }
 
-func runsTopics(app *provider.AppSpec) bool {
-	return app.PreviewLabel == ""
-}
-
 func reachesTopics(app *provider.AppSpec) bool {
-	return hostsWorkers(app) || runsTopics(app) && slices.ContainsFunc(app.Values.Bindings, func(binding provider.Binding) bool {
+	return hostsWorkers(app) || slices.ContainsFunc(app.Values.Bindings, func(binding provider.Binding) bool {
 		return binding.Type == provider.BindingTopic || binding.Type == provider.BindingTask
 	})
 }
@@ -108,7 +104,7 @@ type deployedWorker struct {
 }
 
 func hostsWorkers(app *provider.AppSpec) bool {
-	return len(app.Workers) > 0 && runsTopics(app)
+	return len(app.Workers) > 0
 }
 
 func nameWorkers(names Names, spec provider.StackSpec) []deployedWorker {

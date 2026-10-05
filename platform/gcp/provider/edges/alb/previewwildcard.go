@@ -58,7 +58,7 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 	wildcard := edge.PreviewWildcard(spec.BaseDomain)
 	if wildcard == "" {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge answers every preview from one wildcard host rule, and this reconcile names no base domain", Kind)
+			"the %q edge answers previews under one wildcard certificate, and this reconcile names no base domain", Kind)
 	}
 	if spec.Certificate == "" {
 		return "", refusal.Refuse(refusal.CodeInvalid,
@@ -68,9 +68,6 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 	entry := previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate, Shielded: e.deps.Shielded}
 	balancer, err := e.raiseServing(ctx, environment.TierPreview, entry, progress.Discard())
 	if err != nil {
-		return "", err
-	}
-	if err := e.deps.Routes.Route(ctx, balancer.URLMap, wildcard, previewBackendName(spec.BaseDomain)); err != nil {
 		return "", err
 	}
 	if err := e.rememberPreview(ctx, entry); err != nil {
@@ -90,21 +87,15 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 	}
 	if len(served) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"%s still serves the previews of %s on the %s load balancer of tier %s, and releasing the host rule would leave every one of them "+
-				"answering a 404 from the load balancer: take those previews down with `ocel destroy preview` in each project first",
+			"%s still serves the previews of %s on the %s load balancer of tier %s, and releasing its certificate would leave every one of them "+
+				"refusing TLS: take those previews down with `ocel destroy preview` in each project first",
 			wildcard, strings.Join(served, ", "), Kind, environment.TierPreview)
 	}
 	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(environment.TierPreview))
 	if err != nil {
 		return err
 	}
-	balancer := loadBalancerOf(outputs)
-	if balancer.URLMap != "" {
-		if err := e.deps.Routes.Unroute(ctx, balancer.URLMap, wildcard); err != nil {
-			return err
-		}
-	}
-	if balancer.provisioned() {
+	if loadBalancerOf(outputs).provisioned() {
 		if _, err := e.raiseServing(ctx, environment.TierPreview, previewEntry{}, progress.Discard()); err != nil {
 			return err
 		}
@@ -128,8 +119,4 @@ func previewResourceName(baseDomain string, role ...string) string {
 	return naming.Fit(maxResourceName, naming.WordSeparator, segments...)
 }
 
-func previewBackendName(baseDomain string) string { return previewResourceName(baseDomain) }
-
 func previewEntryName(baseDomain string) string { return previewResourceName(baseDomain, "cert") }
-
-func previewNEGName(baseDomain string) string { return previewResourceName(baseDomain, "neg") }

@@ -321,8 +321,8 @@ func TestTheShieldedLoadBalancerLeavesThePreviewWildcardToTheLoadBalancerItWasBo
 	if _, err := balancer.Shielded().Bootstrap(context.Background(), environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewNEGName("preview.example.com")]; declared {
-		t.Error("the shielded balancer declares the preview wildcard's network endpoint group, which the balancer it was bound on already owns under that name")
+	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewEntryName("preview.example.com")]; declared {
+		t.Error("the shielded balancer declares the preview wildcard's certificate map entry, which the balancer it was bound on already owns under that name")
 	}
 }
 
@@ -387,24 +387,21 @@ func TestThePreviewEntryAnEdgeForwardsIsServedByTheShieldedLoadBalancerAlone(t *
 	if origin != (edge.Origin{Address: shieldedAddress, Certified: true}) {
 		t.Errorf("ClaimPreviewEntry named origin %+v, want the shielded preview balancer at %s", origin, shieldedAddress)
 	}
-	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewNEGName("preview.example.com")]; !declared {
-		t.Error("the shielded preview balancer declares no network endpoint group for the wildcard, so no preview is answered through the edge")
-	}
-	if _, routed := w.hosts("ocel-alb-shielded-preview-routes")["*.preview.example.com"]; !routed {
-		t.Errorf("the shielded balancer routes %v, want *.preview.example.com", w.hosts("ocel-alb-shielded-preview-routes"))
+	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewEntryName("preview.example.com")]; !declared {
+		t.Error("the shielded preview balancer enters no certificate for the wildcard, so no preview is answered through the edge")
 	}
 	if _, err := balancer.Bootstrap(ctx, environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap of the balancer browsers reach: %v", err)
 	}
-	if _, declared := w.declarations(LoadBalancerStack(environment.TierPreview))[previewNEGName("preview.example.com")]; declared {
+	if _, declared := w.declarations(LoadBalancerStack(environment.TierPreview))[previewEntryName("preview.example.com")]; declared {
 		t.Error("the balancer browsers reach declares the wildcard too, so a preview that skips the edge is answered")
 	}
 
 	if err := NewRouter(balancer).Hooks().Origin.DisclaimPreviewEntry(ctx, "preview.example.com"); err != nil {
 		t.Fatalf("DisclaimPreviewEntry: %v", err)
 	}
-	if _, routed := w.hosts("ocel-alb-shielded-preview-routes")["*.preview.example.com"]; routed {
-		t.Error("the shielded balancer still routes *.preview.example.com once the entry was given back")
+	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewEntryName("preview.example.com")]; declared {
+		t.Error("the shielded balancer still enters *.preview.example.com once the entry was given back")
 	}
 }
 

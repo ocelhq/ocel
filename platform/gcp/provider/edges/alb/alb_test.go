@@ -268,7 +268,7 @@ func previewWildcard() edge.PreviewWildcardSpec {
 	return edge.PreviewWildcardSpec{BaseDomain: previewBase, Certificate: previewCertificate}
 }
 
-func TestOneHostRuleAndOneMaskedNegAnswerEveryPreviewHostname(t *testing.T) {
+func TestThePreviewWildcardEntersItsCertificateAndRoutesNoHostnameOfItsOwn(t *testing.T) {
 	t.Parallel()
 
 	balancer, w := balancing(t)
@@ -280,28 +280,15 @@ func TestOneHostRuleAndOneMaskedNegAnswerEveryPreviewHostname(t *testing.T) {
 		t.Errorf("ReconcilePreviewWildcard published %q, want the tier balancer's address %q for DNS to point the wildcard at", published, loadBalancerAddress)
 	}
 
-	routed := w.hosts("ocel-alb-production-routes")
-	backend := routed[edge.PreviewWildcard(previewBase)]
-	if backend == "" {
-		t.Fatalf("the tier url map routes %v, want one host rule for %s: every preview resolves through it and none writes its own",
-			routed, edge.PreviewWildcard(previewBase))
+	if routed := w.hosts(tierRoutes); len(routed) != 0 {
+		t.Errorf("the tier url map routes %v, want nothing: a preview is answered by the exact host rule its promotion writes, "+
+			"and a wildcard rule would reach whatever Cloud Run service a hostname's label names", routed)
 	}
 	resources := w.declarations(LoadBalancerStack(environment.TierPreview))
-	neg, declared := resources[previewNEGName(previewBase)]
-	if !declared {
-		t.Fatalf("the preview balancer declares %v, want a serverless network endpoint group the host rule's backend reaches Cloud Run through", keys(resources))
-	}
-	if mask := cloudRunMask(neg); mask != "<service>."+previewBase {
-		t.Errorf("the neg has the url mask %q, want %q: the mask is what turns a hostname's label into the Cloud Run service that answers it",
-			mask, "<service>."+previewBase)
-	}
-	if _, present := resources[backend]; !present {
-		t.Errorf("the host rule points at the backend %q, and the balancer declares only %v", backend, keys(resources))
-	}
-	if !cachesByHost(resources[backend]) {
-		t.Errorf("the preview backend declares the cache key policy %v, want the host in it: one backend answers every preview "+
-			"hostname on the wildcard, so a key that leaves the host out serves one preview's bytes to another",
-			cacheKeyPolicy(resources[backend]))
+	for name, declared := range resources {
+		if cloudRunMask(declared) != "" {
+			t.Errorf("the preview balancer declares %s with the url mask %q, want none: a mask reaches every service in the project by name", name, cloudRunMask(declared))
+		}
 	}
 	if _, entered := resources[previewEntryName(previewBase)]; !entered {
 		t.Errorf("the preview balancer declares %v, want a certificate map entry: nothing terminates TLS for %s without one",
@@ -342,7 +329,7 @@ func TestAPreviewWildcardWithNoCertificateIsRefusedRatherThanServedOnPlainHttp(t
 	}
 }
 
-func TestRaisingTheTierLoadBalancerAgainLeavesTheWildcardRouting(t *testing.T) {
+func TestRaisingTheTierLoadBalancerAgainKeepsTheWildcardCertificateEntered(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -355,13 +342,13 @@ func TestRaisingTheTierLoadBalancerAgainLeavesTheWildcardRouting(t *testing.T) {
 	}
 
 	resources := w.declarations(LoadBalancerStack(environment.TierPreview))
-	if _, declared := resources[previewNEGName(previewBase)]; !declared {
-		t.Errorf("the balancer raised again declares %v, and the wildcard's neg is gone from it: a bootstrap that reruns would "+
+	if _, declared := resources[previewEntryName(previewBase)]; !declared {
+		t.Errorf("the balancer raised again declares %v, and the wildcard's certificate is gone from it: a bootstrap that reruns would "+
 			"take every preview in the tier down", keys(resources))
 	}
 }
 
-func TestDestroyingThePreviewWildcardTakesItsRouteAndLeavesTheLoadBalancerInPlace(t *testing.T) {
+func TestDestroyingThePreviewWildcardTakesItsCertificateAndLeavesTheLoadBalancerInPlace(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -373,11 +360,8 @@ func TestDestroyingThePreviewWildcardTakesItsRouteAndLeavesTheLoadBalancerInPlac
 		t.Fatalf("DestroyPreviewWildcard = %v", err)
 	}
 
-	if routed := w.hosts("ocel-alb-production-routes"); routed[edge.PreviewWildcard(previewBase)] != "" {
-		t.Errorf("the tier url map still routes %v after the wildcard was released", routed)
-	}
 	resources := w.declarations(LoadBalancerStack(environment.TierPreview))
-	if _, declared := resources[previewNEGName(previewBase)]; declared {
+	if _, declared := resources[previewEntryName(previewBase)]; declared {
 		t.Errorf("the balancer still declares %v after the wildcard was released: bytes a release leaves behind must be zero", keys(resources))
 	}
 	if slices.Contains(w.torn(), LoadBalancerStack(environment.TierPreview)) {
@@ -426,7 +410,7 @@ func TestAWildcardWhoseTeardownFailsIsStillOwnedSoTheRetryStillTearsItDown(t *te
 
 	owner, err := balancer.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
 	if err != nil || owner != edge.PreviewEntryOwner {
-		t.Errorf("DomainOwner(%s) = %q, %v, want %q: the neg and the certificate map entry are still provisioned, "+
+		t.Errorf("DomainOwner(%s) = %q, %v, want %q: the certificate map entry is still provisioned, "+
 			"and a retry that read the wildcard as gone would leave them there forever",
 			edge.PreviewWildcard(previewBase), owner, err, edge.PreviewEntryOwner)
 	}
@@ -452,7 +436,7 @@ func TestThePreviewWildcardIsKeptWhileAProjectIsStillServedOnIt(t *testing.T) {
 	}
 }
 
-func TestAPromotionOfAPreviewOnTheGlobalWildcardWritesNoHostRule(t *testing.T) {
+func TestAPreviewAliasIsAnsweredOnAnExactHostRuleOntoItsAppsService(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -460,30 +444,31 @@ func TestAPromotionOfAPreviewOnTheGlobalWildcardWritesNoHostRule(t *testing.T) {
 	if _, err := balancer.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
-	stack, err := balancer.Reconcile(ctx,
+	shared, err := balancer.Reconcile(ctx,
 		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PruneOnly: true},
 		edge.StackState{GlobalPreview: previewBase})
 	if err != nil {
 		t.Fatalf("Reconcile = %v", err)
 	}
-	if !stack.State().ServedOnGlobalPreview(previewBase) {
-		t.Fatalf("state = %+v, want the stack to record the wildcard it is served on", stack.State())
-	}
-	before := w.hosts("ocel-alb-production-routes")
+	stack := routerStack{s: shared.(*stack)}
+	record := previewRecord("b1")
 
-	if err := openRouter(stack).Ledger.PutStaged(ctx, router.DeploymentRecord{
-		App: "web", Build: "b1", Physical: "shop--pr-7",
-		Revisions: map[string]string{"shop--pr-7": "shop--pr-7-00001"},
-	}); err != nil {
-		t.Fatalf("PutStaged = %v", err)
-	}
-	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: "pr-7", Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.Discard()); err != nil {
-		t.Fatalf("Promote = %v", err)
+	move := aliasMove("p1", aliasHost, record)
+	if err := stack.MovePointer(ctx, move, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(pr-7) = %v", err)
 	}
 
-	if after := w.hosts("ocel-alb-production-routes"); !maps.Equal(after, before) {
-		t.Errorf("the promotion left the tier url map routing %v, want the %v it found: a preview on the shared wildcard "+
-			"resolves through the one host rule, and a write per preview is what this design exists to avoid", after, before)
+	backend := backendName("shop", environment.TierPreview, aliasHost)
+	if got := w.hosts(tierRoutes)[aliasHost]; got != backend {
+		t.Errorf("%s is routed to %q, want its own backend %q", aliasHost, got, backend)
+	}
+	neg := w.declarations(BindingStack("shop", environment.TierPreview))[negName("shop", environment.TierPreview, aliasHost)]
+	run, _ := neg.Args["cloudRun"].(map[string]any)
+	if run["service"] != previewService || run["tag"] != nil {
+		t.Errorf("the alias's neg points at %v, want service %s and no tag: the alias follows the service's traffic, which the promotion pins", run, previewService)
+	}
+	if got := w.pinnedRevision(previewService); got != record.Revisions[previewService] {
+		t.Errorf("the promotion pinned %q, want %s", got, record.Revisions[previewService])
 	}
 }
 
@@ -513,9 +498,6 @@ func TestTheWildcardRemovalPlanNamesWhatComesDownAndWhatStays(t *testing.T) {
 		named[change.Kind] = true
 	}
 	for _, kind := range []string{
-		"compute.URLMap host rule",
-		"compute.BackendService",
-		"compute.RegionNetworkEndpointGroup",
 		"certificatemanager.CertificateMapEntry",
 	} {
 		if !named[kind] {
@@ -538,20 +520,6 @@ func cloudRunMask(neg declaration) string {
 	}
 	mask, _ := run["urlMask"].(string)
 	return mask
-}
-
-func cacheKeyPolicy(backend declaration) map[string]any {
-	policy, ok := backend.Args["cdnPolicy"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	key, _ := policy["cacheKeyPolicy"].(map[string]any)
-	return key
-}
-
-func cachesByHost(backend declaration) bool {
-	host, _ := cacheKeyPolicy(backend)["includeHost"].(bool)
-	return host
 }
 
 func reconciledPreview(t *testing.T) (*Edge, *world, edge.EdgeStack) {

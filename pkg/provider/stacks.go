@@ -95,8 +95,6 @@ type AppSpec struct {
 
 	AssetPrefix string
 
-	PreviewLabel string
-
 	VendorState any
 
 	Proxied bool

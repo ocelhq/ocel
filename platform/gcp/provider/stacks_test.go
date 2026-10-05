@@ -10,7 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -24,9 +23,7 @@ import (
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
-var sharedPreviewLabel = edge.PreviewKey("0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0").Sign("shop", "abcdefghijklmnop")
-
-func previewSpec(label string) provider.StackSpec {
+func previewSpec() provider.StackSpec {
 	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
@@ -39,7 +36,6 @@ func previewSpec(label string) provider.StackSpec {
 			Compute:         provider.ComputeContainer,
 			Image:           "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
 			HealthCheckPath: "/",
-			PreviewLabel:    label,
 			Functions: []provider.FunctionSpec{{
 				Name:      "fn--web--checkout",
 				Image:     "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:abc",
@@ -49,47 +45,12 @@ func previewSpec(label string) provider.StackSpec {
 	}
 }
 
-func TestAPreviewOnTheSharedWildcardDeploysTheServiceItsHostnameNames(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
-	label := sharedPreviewLabel
-
-	containers, err := p.ProvisionContainers(context.Background(), previewSpec(label), nil)
-	if err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
-	}
-	if len(containers) != 1 || containers[0].Physical != label {
-		t.Fatalf("ProvisionContainers() deployed %+v, want the service named %q: the load balancer resolves the hostname's label "+
-			"to a Cloud Run service of that name and nothing routes it anywhere else", containers, label)
-	}
-}
-
-func TestAPreviewFunctionIsNamedApartFromThePreviewItShipsIn(t *testing.T) {
-	server := &runServer{}
-	p := server.open(t)
-	label := sharedPreviewLabel
-
-	functions, err := p.ProvisionFunctions(context.Background(), previewSpec(label), nil)
-	if err != nil {
-		t.Fatalf("ProvisionFunctions() = %v", err)
-	}
-	if len(functions) != 1 {
-		t.Fatalf("ProvisionFunctions() = %+v, want the one function the spec names", functions)
-	}
-	if functions[0].Physical == label {
-		t.Errorf("the function is served by %q, which is the service the preview's own hostname resolves to", label)
-	}
-	if !strings.HasPrefix(functions[0].Physical, label) {
-		t.Errorf("the function is served by %q, want it under the preview's label %q so removing the preview names it", functions[0].Physical, label)
-	}
-}
-
 func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
 	progress := &fake.Log{}
 
-	if _, err := p.ProvisionContainers(context.Background(), previewSpec(""), progress); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), previewSpec(), progress); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	if !slices.ContainsFunc(progress.Lines(), func(said string) bool {
@@ -99,7 +60,7 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	}
 
 	production := &fake.Log{}
-	spec := previewSpec("")
+	spec := previewSpec()
 	spec.Ref.Tier = environment.TierProduction
 	spec.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
 	if _, err := p.ProvisionContainers(context.Background(), spec, production); err != nil {
@@ -114,7 +75,7 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec = previewSpec(sharedPreviewLabel)
+	spec = previewSpec()
 	spec.Edge = front
 	if _, err := p.ProvisionContainers(context.Background(), spec, shielded); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
@@ -124,10 +85,10 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	}
 }
 
-func TestAProductionReleaseIsNamedNoDifferentlyForHavingNoPreviewLabel(t *testing.T) {
+func TestAProductionReleaseIsNamedForItsNamespaceProjectEnvironmentAndApp(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	spec := previewSpec("")
+	spec := previewSpec()
 	spec.Ref.Tier = environment.TierProduction
 	spec.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
 
@@ -290,7 +251,7 @@ func TestDestroyingEveryReleaseOfAFunctionDeletesItsServiceWhicheverGoesFirst(t 
 func TestAContainerThatNamesNoHealthPathIsProbedAtTheRoot(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	spec := previewSpec(sharedPreviewLabel)
+	spec := previewSpec()
 	spec.App.HealthCheckPath = ""
 
 	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
@@ -328,10 +289,10 @@ func TestAnAppBoundToAStoreReachesPrivateRangesOverTheTiersSubnetwork(t *testing
 	server := &runServer{}
 	p := server.open(t)
 
-	if _, err := p.ProvisionContainers(context.Background(), boundToAStore(previewSpec(sharedPreviewLabel)), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), boundToAStore(previewSpec()), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if _, err := p.ProvisionFunctions(context.Background(), boundToAStore(previewSpec(sharedPreviewLabel)), nil); err != nil {
+	if _, err := p.ProvisionFunctions(context.Background(), boundToAStore(previewSpec()), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 	released := slices.Concat(server.created, server.patched)
@@ -349,7 +310,7 @@ func TestAnAppBoundToNoStoreHasNoNetworkInterface(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
 
-	if _, err := p.ProvisionContainers(context.Background(), previewSpec(sharedPreviewLabel), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), previewSpec(), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	if got := egressOf(server.created[0]); got != "" {
@@ -360,7 +321,7 @@ func TestAnAppBoundToNoStoreHasNoNetworkInterface(t *testing.T) {
 func TestAnAppBoundToARealtimeIsToldWhereItsGatewayTakesPublishes(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	spec := previewSpec(sharedPreviewLabel)
+	spec := previewSpec()
 	spec.App.Values.Bindings = []provider.Binding{{
 		Type: provider.BindingRealtime, Name: "realtime--app", Resource: "app",
 		Properties: map[string]string{provider.PropertyHost: "ocel-shop-pr-7-realtime-abc123-ew.a.run.app"},
@@ -382,7 +343,7 @@ func TestAnAppBoundToNoRealtimeIsToldOfNoGateway(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
 
-	if _, err := p.ProvisionContainers(context.Background(), boundToAStore(previewSpec(sharedPreviewLabel)), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), boundToAStore(previewSpec()), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	manifest, err := variables.Parse([]byte(envOf(server.created[0].Template.Containers[0])[variables.EnvVar]))

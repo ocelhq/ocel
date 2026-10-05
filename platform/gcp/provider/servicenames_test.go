@@ -5,10 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
@@ -153,106 +150,6 @@ func TestAFunctionOfOneAppAndAnAppNamedForItAreTwoServices(t *testing.T) {
 	}
 	if part == whole {
 		t.Errorf("both are served by %q, and one app's function would release over another app entirely", part)
-	}
-}
-
-const previewKey edge.PreviewKey = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
-
-func signSharedPreviewLabel(slug, app string) string {
-	return edge.NewSharedPreviewSite(slug, "preview.acme.com", previewKey).ListHosts("pr-7", "abcdefghijklmnop", []string{app})[0].ReadLabel()
-}
-
-func TestAPreviewServedOnTheSharedWildcardIsNamedTheLabelInItsHostname(t *testing.T) {
-	names := serviceNames(t)
-	label := signSharedPreviewLabel("shop", "web")
-
-	service, err := names.PreviewService(label, "web", "web")
-	if err != nil {
-		t.Fatalf("PreviewService() = %v", err)
-	}
-	if service != label {
-		t.Errorf("PreviewService() = %q, want exactly %q: the url mask hands the whole label to Cloud Run as the service name, "+
-			"so anything else answers nothing", service, label)
-	}
-	if !cloudRunName.MatchString(service) {
-		t.Errorf("PreviewService() = %q, which Cloud Run will not take as a service name", service)
-	}
-}
-
-func TestAPreviewFunctionThatIsNotTheAppIsNamedApartFromThePreviewHostname(t *testing.T) {
-	names := serviceNames(t)
-	label := signSharedPreviewLabel("shop", "web")
-
-	part, err := names.PreviewService(label, "web", "fn--web--checkout")
-	if err != nil {
-		t.Fatalf("PreviewService() = %v", err)
-	}
-	if !cloudRunName.MatchString(part) {
-		t.Errorf("PreviewService() = %q, which Cloud Run will not take as a service name", part)
-	}
-	if !strings.Contains(part, "checkout") {
-		t.Errorf("PreviewService() = %q, want the route the function serves named in it", part)
-	}
-	if part == label {
-		t.Errorf("PreviewService() = %q, which is the label the preview answers on: a hostname would reach a function nothing routes to it", part)
-	}
-}
-
-func TestAPreviewServiceLongerThanCloudRunTakesIsRefusedNamingTheSlugToShorten(t *testing.T) {
-	names := serviceNames(t)
-	slug := "the-longest-shop-anyone-named"
-
-	_, err := names.PreviewService(signSharedPreviewLabel(slug, "web"), "web", "web")
-	if err == nil {
-		t.Fatal("PreviewService() named a service longer than the 49 characters Cloud Run takes")
-	}
-	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
-		t.Errorf("PreviewService() code = %v, want %v", code, refusal.CodeInvalid)
-	}
-	for _, part := range []string{slug, "29", "25-character token", "49"} {
-		if !strings.Contains(err.Error(), part) {
-			t.Errorf("PreviewService() = %v, want %q named in it: the slug and its length are what a user can shorten", err, part)
-		}
-	}
-}
-
-func TestAPreviewFunctionServiceLongerThanCloudRunTakesIsRefusedNamingTheRoute(t *testing.T) {
-	names := serviceNames(t)
-
-	_, err := names.PreviewService(signSharedPreviewLabel("shop", "web"), "web", "fn--web--checkout-and-pay-now")
-	if err == nil {
-		t.Fatal("PreviewService() named a service longer than the 49 characters Cloud Run takes")
-	}
-	if !strings.Contains(err.Error(), "checkout-and-pay-now") {
-		t.Errorf("PreviewService() = %v, want the function's route named in it: it is part of the service's name", err)
-	}
-}
-
-func TestAPreviewOfAProjectWhoseSlugStartsWithADigitIsRefusedBeforeCloudRunIsAsked(t *testing.T) {
-	names := serviceNames(t)
-
-	_, err := names.PreviewService(signSharedPreviewLabel("7shop", "web"), "web", "web")
-	if err == nil {
-		t.Fatal("PreviewService() named a service starting with a digit, which Cloud Run will not take")
-	}
-	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
-		t.Errorf("PreviewService() code = %v, want %v", code, refusal.CodeInvalid)
-	}
-	for _, part := range []string{"7shop", "letter"} {
-		if !strings.Contains(err.Error(), part) {
-			t.Errorf("PreviewService() = %v, want %q named in it: the slug is what the user can rename", err, part)
-		}
-	}
-}
-
-func TestAPreviewLabelNothingNamedIsRefusedRatherThanDeployingSomethingUnreachable(t *testing.T) {
-	names := serviceNames(t)
-
-	if _, err := names.PreviewService("", "web", "web"); err == nil {
-		t.Fatal("PreviewService() named a service from an empty label")
-	}
-	if _, err := names.PreviewService("Shop-PR_7", "web", "web"); err == nil {
-		t.Fatal("PreviewService() named a service from a label Cloud Run will not take")
 	}
 }
 

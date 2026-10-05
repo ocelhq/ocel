@@ -147,7 +147,6 @@ type edgeAccount struct {
 	serving         map[string]string
 	serves          *[]edge.Need
 	forwards        map[string]edge.Origin
-	byLabel         bool
 	addressesItself bool
 
 	routerServes *[]edge.Need
@@ -549,12 +548,6 @@ func (e *Edge) Facts() edge.Facts {
 		}
 	}
 	return facts
-}
-
-func (e *Edge) RoutesPreviewsByLabel(routes bool) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.byLabel = routes
 }
 
 func (e *Edge) AddressesItself(addresses bool) {

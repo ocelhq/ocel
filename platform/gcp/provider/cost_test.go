@@ -154,7 +154,7 @@ func TestShapeBehindTheLoadBalancerFrontsEveryHostname(t *testing.T) {
 	}
 }
 
-func TestShapeOfAPreviewBehindTheLoadBalancerIncludesTheWildcard(t *testing.T) {
+func TestShapeOfAPreviewBehindTheLoadBalancerIncludesTheWildcardCertificate(t *testing.T) {
 	client, _ := costServed(t)
 
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
@@ -168,8 +168,8 @@ func TestShapeOfAPreviewBehindTheLoadBalancerIncludesTheWildcard(t *testing.T) {
 	golden(t, "shape_preview_alb", set)
 
 	counts := typeCounts(set)
-	if counts["google_compute_region_network_endpoint_group"] != 2 {
-		t.Errorf("counts = %v, want the preview wildcard's endpoint group beside the hostname's", counts)
+	if counts["google_certificate_manager_certificate_map_entry"] != 2 || counts["google_compute_region_network_endpoint_group"] != 1 {
+		t.Errorf("counts = %v, want the preview wildcard's certificate beside the hostname's, and the hostname's endpoint group alone", counts)
 	}
 }
 
