@@ -452,6 +452,7 @@ func (p *Provider) route(
 ) (bool, error) {
 	var opened bool
 	err := p.retryWrite(ctx, doing, func() error {
+		opened = false
 		current, err := p.read(ctx, services, path, service)
 		if err != nil {
 			return err
@@ -464,7 +465,6 @@ func (p *Provider) route(
 		if !open || isOpen(current) {
 			routed, opening = nil, ""
 		}
-		opened = opening != ""
 		var annotations map[string]string
 		cleared := false
 		if open {
@@ -489,9 +489,14 @@ func (p *Provider) route(
 			routed.ForceSendFields = append(routed.ForceSendFields, "Annotations")
 			mask += "," + annotationsField
 		}
-		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+		opened = opening != ""
+		err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Services.Patch(path, routed).UpdateMask(mask).Context(ctx).Do(call...)
 		})
+		if stale(err) {
+			opened = false
+		}
+		return err
 	})
 	return opened, err
 }

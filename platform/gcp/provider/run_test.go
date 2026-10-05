@@ -780,6 +780,47 @@ func TestAPinThatFindsTheServiceOpenedOnItsRetryDoesNotClaimToHaveOpenedIt(t *te
 	}
 }
 
+func TestAPinWhoseRetryFailsBeforeItsPatchLandsDoesNotClaimToHaveOpenedTheService(t *testing.T) {
+	server := &runServer{}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+	server.patchConflicts = 1
+	displaced := errors.New("another promotion displaced this one")
+	checks := 0
+	stillActive := func(context.Context) error {
+		checks++
+		if checks > 1 {
+			return displaced
+		}
+		return nil
+	}
+
+	opened, err := server.open(t).Pin(context.Background(), app.service, one, stillActive)
+
+	if !errors.Is(err, displaced) {
+		t.Fatalf("Pin(%s) = %v, want the displacement its retry found", one, err)
+	}
+	if opened {
+		t.Error("Pin says it opened the service although the patch that opens it conflicted and never landed, and a failed promotion would close what it never opened")
+	}
+}
+
+func TestAPinThatKeepsConflictingUntilItGivesUpDoesNotClaimToHaveOpenedTheService(t *testing.T) {
+	server := &runServer{}
+	app := promotable("ocel-shop-prod-app")
+	_, one := released(t, server, app)
+	server.patchConflicts = releaseAttempts + 1
+
+	opened, err := server.open(t).Pin(context.Background(), app.service, one, nil)
+
+	if err == nil {
+		t.Fatal("Pin = nil, want it to give up on the conflicts")
+	}
+	if opened {
+		t.Error("Pin says it opened a service whose every patch conflicted, and a failed promotion would close it")
+	}
+}
+
 func TestPinningAServiceNoPromotionOpensLeavesItsInvokerCheckOn(t *testing.T) {
 	server := &runServer{}
 	worker := serving{service: "ocel-shop-prod-worker", image: "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one", compute: provider.ComputeServerless}
