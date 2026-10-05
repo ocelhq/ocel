@@ -6,7 +6,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const stdoutAnnotation = "ocel.stdout"
+const (
+	stdoutAnnotation    = "ocel.stdout"
+	runEventsAnnotation = "ocel.run-events"
+)
 
 func ReserveStdout(cmd *cobra.Command) *cobra.Command {
 	if cmd.Annotations == nil {
@@ -27,8 +30,16 @@ func PrintsData(cmd *cobra.Command) bool {
 	return isStdoutReserved(cmd) && !isTerminalSharedWithChild(cmd)
 }
 
-func DrawsRunOnStdout(cmd *cobra.Command) bool {
-	return !isStdoutReserved(cmd)
+func DeclareRunEvents(cmd *cobra.Command) *cobra.Command {
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[runEventsAnnotation] = "true"
+	return cmd
+}
+
+func PrintsRunEvents(cmd *cobra.Command) bool {
+	return cmd.Annotations[runEventsAnnotation] != ""
 }
 
 func isStdoutReserved(cmd *cobra.Command) bool {

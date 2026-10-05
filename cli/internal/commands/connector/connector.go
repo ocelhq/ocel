@@ -82,7 +82,7 @@ func newAddCommand(dependencies Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&opts.compute, "compute", "", "What the connector runs on: `serverless` or container, and the provider's own default when this names neither")
 	cmd.Flags().BoolVar(&opts.reveal, "allow-reveal", false, "Let the console read secret values back in the clear")
 	cmd.Flags().BoolVar(&opts.write, "allow-write", true, "Let the console write values")
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
 func newRemoveCommand(dependencies Dependencies) *cobra.Command {
@@ -99,7 +99,7 @@ func newRemoveCommand(dependencies Dependencies) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&opts.target, "target", "", "The `fingerprint` ocel connector status prints, to forget a connector whose target will not answer")
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
 func newStatusCommand(dependencies Dependencies) *cobra.Command {

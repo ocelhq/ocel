@@ -70,7 +70,7 @@ func newProductionCommand(invocation commands.Invocation) *cobra.Command {
 	}
 	commands.AddYesFlag(cmd, &yes)
 	commands.AddDryFlag(cmd, &dry, "Print what would be destroyed and stop, destroying nothing")
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
 func newPreviewCommand(invocation commands.Invocation) *cobra.Command {
@@ -94,7 +94,7 @@ func newPreviewCommand(invocation commands.Invocation) *cobra.Command {
 	}
 	commands.AddYesFlag(cmd, &yes)
 	commands.AddDryFlag(cmd, &dry, "Print what would be destroyed and stop, destroying nothing")
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
 func runDestroyProduction(ctx context.Context, invocation commands.Invocation, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {

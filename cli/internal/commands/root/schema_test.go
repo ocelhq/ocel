@@ -20,7 +20,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
-func printedResult(t *testing.T, result proto.Message) []byte {
+func printResultDocument(t *testing.T, result proto.Message) []byte {
 	t.Helper()
 	var out bytes.Buffer
 	if err := terminal.WriteResultJSON(&out, result); err != nil {
@@ -36,7 +36,7 @@ func TestTheSchemaPrintedForEnvLsValidatesWhatEnvLsPrintsUnderJSON(t *testing.T)
 	}
 	schema := outputschematest.Compile(t, []byte(stdout))
 
-	listed := printedResult(t, &resultv1.EnvListResult{
+	listed := printResultDocument(t, &resultv1.EnvListResult{
 		Tier: environmentv1.Tier_TIER_PREVIEW,
 		Values: []*resultv1.EnvValueSummary{
 			{
@@ -97,7 +97,7 @@ func TestTheSchemaPrintedForACommandWithTwoResultsAcceptsBoth(t *testing.T) {
 	schema := outputschematest.Compile(t, []byte(stdout))
 
 	for _, result := range []proto.Message{&resultv1.DomainListResult{}, &resultv1.PreviewDomainResult{BaseDomain: "preview.example.com"}} {
-		if err := outputschematest.Validate(schema, printedResult(t, result)); err != nil {
+		if err := outputschematest.Validate(schema, printResultDocument(t, result)); err != nil {
 			t.Errorf("the schema printed for domain ls rejects %s: %v", result.ProtoReflect().Descriptor().Name(), err)
 		}
 	}
@@ -122,6 +122,7 @@ func TestSchemaWithoutACommandListsEveryCommandThatHasOneWithWhatItPrints(t *tes
 		"env ls":     "result",
 		"doctor":     "result",
 		"deploy":     "run-events",
+		"preview":    "run-events",
 		"preview up": "run-events",
 	} {
 		if outputs[path] != want {
@@ -165,13 +166,13 @@ func TestSchemaWithoutACommandUnderJSONListsThemAsOneResult(t *testing.T) {
 		}
 	}
 
-	listing := outputschematest.Compile(t, schemaOf(t, "schema"))
+	listing := outputschematest.Compile(t, printSchemaOf(t, "schema"))
 	if err := outputschematest.Validate(listing, []byte(stdout)); err != nil {
 		t.Errorf("the schema printed for schema rejects what schema prints: %v", err)
 	}
 }
 
-func schemaOf(t *testing.T, path ...string) []byte {
+func printSchemaOf(t *testing.T, path ...string) []byte {
 	t.Helper()
 	stdout, _ := executeRoot(t, append([]string{"schema"}, path...)...)
 	return []byte(stdout)
@@ -209,6 +210,32 @@ func TestSchemaOfACommandWithoutOneFailsWithUsageNamingTheListing(t *testing.T) 
 	}
 }
 
+func TestSchemaOfAHiddenCommandOrOneUnderItFailsWithUsage(t *testing.T) {
+	for _, path := range [][]string{{"completion", "bash"}, {"completion"}, {"telemetry", "flush"}, {"help"}} {
+		code, stdout, _ := executeAndReportRoot(t, append([]string{"--json", "schema"}, path...)...)
+
+		failure := requireOneFailureDocument(t, stdout)
+		if failure["code"] != "usage" || code != 1 {
+			t.Errorf("ocel schema %s: error code = %v, exit code = %d, want usage and 1", strings.Join(path, " "), failure["code"], code)
+		}
+	}
+}
+
+func TestEveryCommandWhoseRunIsDrawnOnStdoutDeclaresRunEventsAndNoOtherDoes(t *testing.T) {
+	ocel := newCommand()
+	ocel.root.SetOut(&bytes.Buffer{})
+	ocel.root.SetErr(&bytes.Buffer{})
+	for _, cmd := range listLeafCommands(ocel.root) {
+		drawsRunOnStdout := commands.ChooseRunOutput(cmd) == cmd.OutOrStdout()
+		switch declared := commands.PrintsRunEvents(cmd); {
+		case drawsRunOnStdout && !declared:
+			t.Errorf("ocel %s draws its run on stdout and declares no run events, want commands.DeclareRunEvents or commands.ReserveStdout", commandPath(cmd))
+		case !drawsRunOnStdout && declared:
+			t.Errorf("ocel %s declares run events and its stdout is reserved, so the run is drawn on stderr", commandPath(cmd))
+		}
+	}
+}
+
 func TestSchemaOfAnUnknownCommandUnderHumanOutputPrintsOneFailureOnStderr(t *testing.T) {
 	code, stdout, stderr := executeAndReportRoot(t, "schema", "no-such-command")
 
@@ -219,12 +246,12 @@ func TestSchemaOfAnUnknownCommandUnderHumanOutputPrintsOneFailureOnStderr(t *tes
 
 var printsNoResultYet = []string{"env set", "env rm", "env ref", "env sync", "env ui", "logs"}
 
-func leafCommands(root *cobra.Command) []*cobra.Command {
+func listLeafCommands(root *cobra.Command) []*cobra.Command {
 	return slices.DeleteFunc(visibleCommands(root), func(cmd *cobra.Command) bool { return cmd.HasSubCommands() })
 }
 
 func TestEveryCommandWhoseStdoutIsItsDataDeclaresItsResultsUnlessItPrintsNone(t *testing.T) {
-	for _, cmd := range leafCommands(newCommand().root) {
+	for _, cmd := range listLeafCommands(newCommand().root) {
 		path := commandPath(cmd)
 		_, declared := commands.FindResults(cmd)
 		switch {
@@ -238,7 +265,7 @@ func TestEveryCommandWhoseStdoutIsItsDataDeclaresItsResultsUnlessItPrintsNone(t 
 }
 
 func TestEveryDeclaredResultHasAPublishedSchema(t *testing.T) {
-	for _, cmd := range leafCommands(newCommand().root) {
+	for _, cmd := range listLeafCommands(newCommand().root) {
 		results, declared := commands.FindResults(cmd)
 		if !declared {
 			continue
