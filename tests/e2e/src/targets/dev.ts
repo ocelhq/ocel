@@ -25,7 +25,9 @@ import type { CellUnderTest } from "../run/cellRun";
 import { appCommand, appHomes, migrateCommand, stateComplaint } from "../workspace";
 import type { Deployment, Exposure, Restart, Sweeper, Target } from "./types";
 
-const HEALTH_TIMEOUT_MS = 120_000;
+export const RESOLVE_TIMEOUT_MS = 240_000;
+
+export const HEALTH_TIMEOUT_MS = 120_000;
 
 const STACK_STOPS_WITHIN_MS = 45_000;
 
@@ -59,9 +61,26 @@ async function freePort(): Promise<number> {
   });
 }
 
+export function resolvedEnvironment(said: string): boolean {
+  return /✓ (Resolved the app's environment|Connected to the running `ocel dev`)/.test(said);
+}
+
+export function healthDeadline(started: number, resolvedAt: number | undefined): number {
+  return resolvedAt === undefined
+    ? started + RESOLVE_TIMEOUT_MS + HEALTH_TIMEOUT_MS
+    : resolvedAt + HEALTH_TIMEOUT_MS;
+}
+
 async function waitForHealth(url: string, served: ServedApp): Promise<void> {
-  const deadline = Date.now() + HEALTH_TIMEOUT_MS;
-  while (Date.now() < deadline) {
+  const started = Date.now();
+  let resolvedAt: number | undefined;
+  while (Date.now() < healthDeadline(started, resolvedAt)) {
+    if (resolvedAt === undefined && resolvedEnvironment(served.output())) {
+      resolvedAt = Date.now();
+    }
+    if (resolvedAt === undefined && Date.now() >= started + RESOLVE_TIMEOUT_MS) {
+      break;
+    }
     if (exited(served.child)) {
       throw new Error(`ocel dev exited before ${url} answered:\n${redact(served.output())}`);
     }
@@ -72,6 +91,11 @@ async function waitForHealth(url: string, served: ServedApp): Promise<void> {
       }
     } catch {}
     await delay(500);
+  }
+  if (resolvedAt === undefined) {
+    throw new Error(
+      `ocel dev did not resolve the app's environment within ${RESOLVE_TIMEOUT_MS / 1000}s:\n${redact(served.output())}`,
+    );
   }
   throw new Error(`${url} never became healthy:\n${redact(served.output())}`);
 }
@@ -213,7 +237,7 @@ export class DevTarget implements Target, Restart, Exposure {
   readonly name = "dev";
   readonly workers = 4;
   readonly maxRequestBodyBytes = UNCAPPED_BODY_BYTES;
-  readonly stepTimeoutMs = 180_000;
+  readonly stepTimeoutMs = 420_000;
 
   private readonly served = new Map<string, ServedApps>();
 

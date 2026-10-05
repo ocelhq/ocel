@@ -1,5 +1,14 @@
 import { describe, expect, it } from "bun:test";
-import { devProject, findKeptRunning, startedResources, volumesIn } from "./dev";
+import {
+  devProject,
+  findKeptRunning,
+  HEALTH_TIMEOUT_MS,
+  healthDeadline,
+  RESOLVE_TIMEOUT_MS,
+  resolvedEnvironment,
+  startedResources,
+  volumesIn,
+} from "./dev";
 
 describe("the containers a restart kept running", () => {
   it("names each container whose start time did not move", () => {
@@ -67,5 +76,39 @@ describe("the volumes docker inspect names", () => {
 
   it("names none for containers that mount no volume", () => {
     expect(volumesIn("\n\n")).toEqual([]);
+  });
+});
+
+describe("whether ocel dev is past resolving the app's environment", () => {
+  const building =
+    "INFO  Still running: Resolving the app's environment — 0/1 done, 1m32s elapsed\n";
+
+  it("is false while it still builds and resolves", () => {
+    expect(resolvedEnvironment(building)).toBe(false);
+  });
+
+  it("is true once it resolved the app's environment", () => {
+    expect(
+      resolvedEnvironment(`${building}INFO  ✓ Resolved the app's environment in 2m05s\n`),
+    ).toBe(true);
+  });
+
+  it("is true once a second ocel dev connected to the running one", () => {
+    expect(resolvedEnvironment("INFO  ✓ Connected to the running `ocel dev` in 0s\n")).toBe(true);
+  });
+});
+
+describe("the deadline an app served by ocel dev answers /health by", () => {
+  const started = 1_000_000;
+
+  it("runs from the moment ocel dev resolved the app's environment, so a cold build before it spends none of it", () => {
+    const resolvedAt = started + 125_000;
+    expect(healthDeadline(started, resolvedAt)).toBe(resolvedAt + HEALTH_TIMEOUT_MS);
+  });
+
+  it("bounds the build itself while ocel dev is still resolving", () => {
+    expect(healthDeadline(started, undefined)).toBe(
+      started + RESOLVE_TIMEOUT_MS + HEALTH_TIMEOUT_MS,
+    );
   });
 });
