@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -98,5 +99,79 @@ func TestACacheAppPrefixOfAKeyNamingNoAppIsRefused(t *testing.T) {
 	_, err := cacheAppPrefix("prod/shop")
 	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("cacheAppPrefix(prod/shop) = %v, want an invalid-input refusal", err)
+	}
+}
+
+func TestPruningAReleasesISRPrefixPlansItsCacheEntriesUseCacheEntriesAndTagSnapshotOnly(t *testing.T) {
+	list, keeps, err := cacheSweep("prod/shop/web/r1a2b3c4d/isr/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "cache/shop/web/prod/r1a2b3c4d/isr/"; list != want {
+		t.Fatalf("pruning the ISR prefix lists %q, want %q", list, want)
+	}
+	for _, name := range []string{
+		"cache/shop/web/prod/r1a2b3c4d/isr/cache/index.cache.json",
+		"cache/shop/web/prod/r1a2b3c4d/isr/fetch-cache/h.cache.json",
+		"cache/shop/web/prod/r1a2b3c4d/isr/use-cache/abc.json",
+		"cache/shop/web/prod/r1a2b3c4d/isr/tag-clock.json",
+	} {
+		if !keeps(name) {
+			t.Errorf("pruning the ISR prefix leaves %q, want it deleted", name)
+		}
+	}
+	if list2 := "cache/shop/web/prod/r9z8y7x6w/isr/tag-clock.json"; strings.HasPrefix(list2, list) {
+		t.Errorf("the listing %q reaches another release's tag snapshot %q", list, list2)
+	}
+}
+
+func TestDestroyingAReleasePlansEveryCacheObjectOfThatReleaseAndNoOther(t *testing.T) {
+	list, keeps, err := cacheSweep("prod/shop/web/r1a2b3c4d/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "cache/shop/web/prod/r1a2b3c4d/"; list != want {
+		t.Fatalf("destroying a release lists %q, want %q", list, want)
+	}
+	for _, other := range []string{
+		"cache/shop/web/prod/r9z8y7x6w/isr/tag-clock.json",
+		"cache/shop/web/prod/r1a2b3c4de/isr/tag-clock.json",
+	} {
+		if strings.HasPrefix(other, list) {
+			t.Errorf("the listing %q reaches %q, another release", list, other)
+		}
+	}
+	if !keeps("cache/shop/web/prod/r1a2b3c4d/isr/tag-clock.json") {
+		t.Error("destroying a release leaves its tag snapshot, want it deleted")
+	}
+}
+
+func TestRemovingAPreviewEnvironmentPlansOnlyThatEnvironmentsCacheObjects(t *testing.T) {
+	_, keeps, err := cacheSweep("pr-7/shop/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]bool{
+		"cache/shop/web/pr-7/r1/isr/tag-clock.json":  true,
+		"cache/shop/api/pr-7/r2/isr/x":               true,
+		"cache/shop/web/prod/r1/isr/tag-clock.json":  false,
+		"cache/shop/web/pr-70/r1/isr/tag-clock.json": false,
+	} {
+		if got := keeps(name); got != want {
+			t.Errorf("removing pr-7/shop/ deletes %q = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestRemovingAProjectsEnvironmentListsNoOtherProjectsCache(t *testing.T) {
+	list, _, err := cacheSweep("pr-7/shop/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list != "cache/shop/" {
+		t.Errorf("removing pr-7/shop/ lists %q, want exactly cache/shop/", list)
+	}
+	if neighbour := "cache/shopping/web/pr-7/r1/isr/x"; strings.HasPrefix(neighbour, list) {
+		t.Errorf("the listing %q reaches %q, another project", list, neighbour)
 	}
 }
