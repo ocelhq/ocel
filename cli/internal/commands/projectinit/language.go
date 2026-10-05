@@ -9,16 +9,17 @@ import (
 )
 
 type sdkLanguage struct {
-	name     string
-	language language.Language
-	add      []string
+	name       string
+	language   language.Language
+	addCommand []string
+	sdk        string
 }
 
 var sdkLanguages = []sdkLanguage{
-	{name: "go", language: language.Go, add: []string{"go", "get", goSDKModule}},
-	{name: "rust", language: language.Rust, add: []string{"cargo", "add", rustSDKCrate}},
-	{name: "python", language: language.Python, add: []string{"uv", "add", sdkPackage}},
-	{name: "node", language: language.JS},
+	{name: "go", language: language.Go, addCommand: []string{"go", "get"}, sdk: goSDKModule},
+	{name: "rust", language: language.Rust, addCommand: []string{"cargo", "add"}, sdk: rustSDKCrate},
+	{name: "python", language: language.Python, addCommand: []string{"uv", "add"}, sdk: sdkPackage},
+	{name: "node", language: language.JS, sdk: sdkPackage},
 }
 
 func languageNames() []string {

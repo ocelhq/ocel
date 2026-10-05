@@ -81,14 +81,14 @@ func GenerateKeys(projectDir string, app App, keys []Key) error {
 
 func MapEnvImports(projectDir string, apps []App) error {
 	for _, app := range apps {
-		if err := MapAppEnvImport(projectDir, app); err != nil {
+		if _, err := MapAppEnvImport(projectDir, app); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func MapAppEnvImport(projectDir string, app App) error {
+func MapAppEnvImport(projectDir string, app App) (written string, err error) {
 	return mapSpecifier(app.Dir, accessorPath(projectDir, app.Name, app.Dir))
 }
 
@@ -152,7 +152,7 @@ func specifierFor(from, source string) string {
 	return rel
 }
 
-func mapSpecifier(dir, accessor string) error {
+func mapSpecifier(dir, accessor string) (written string, err error) {
 	for _, name := range configFiles {
 		path := filepath.Join(dir, name)
 		source, err := os.ReadFile(path)
@@ -160,22 +160,22 @@ func mapSpecifier(dir, accessor string) error {
 			continue
 		}
 		if err != nil {
-			return err
+			return "", err
 		}
 
 		updated, err := withMapping(path, string(source), accessor)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if updated == string(source) {
-			return nil
+			return "", nil
 		}
 		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", name, err)
+			return "", fmt.Errorf("write %s: %w", name, err)
 		}
-		return nil
+		return path, nil
 	}
-	return nil
+	return "", nil
 }
 
 type buildRecord struct {

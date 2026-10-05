@@ -34,7 +34,8 @@ func NewSetup(dependencies Dependencies) prerequisite.Setup {
 			if !answered {
 				return prerequisite.SetupDeclinedError{Missing: missing}
 			}
-			return runInit(ctx, dependencies, absent.StartDir, "", opts)
+			_, err = runInit(ctx, dependencies, absent.StartDir, "", opts)
+			return err
 		},
 	}
 }

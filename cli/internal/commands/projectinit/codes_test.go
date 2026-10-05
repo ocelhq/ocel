@@ -15,7 +15,7 @@ func runFailingInit(t *testing.T, dir string, opts initOptions) (code, hint stri
 	t.Helper()
 	dependencies := newTestDependencies()
 	stubPackageManager(&dependencies, nil)
-	err := runInit(context.Background(), dependencies, dir, "acme", opts)
+	_, err := runInit(context.Background(), dependencies, dir, "acme", opts)
 	if err == nil {
 		t.Fatal("init succeeded, want a failure")
 	}

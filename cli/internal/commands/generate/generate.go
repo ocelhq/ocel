@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -13,9 +14,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/realtimetypes"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/cli/node"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 )
 
 type Dependencies struct {
@@ -24,7 +27,7 @@ type Dependencies struct {
 }
 
 func NewCommand(dependencies Dependencies) *cobra.Command {
-	return commands.DeclareMutating(&cobra.Command{
+	return commands.DeclareMutating(commands.ReserveStdout(&cobra.Command{
 		Use:   "generate",
 		Short: "Generate the app-side files ocel derives from your declarations",
 		Long: "Generate the app-side files ocel derives from your declarations.\n\n" +
@@ -43,7 +46,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 
 			return runGenerate(cmd.Context(), dependencies, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
-	})
+	}))
 }
 
 func runGenerate(ctx context.Context, dependencies Dependencies, cwd string, stdout, stderr io.Writer) error {
@@ -66,20 +69,29 @@ func runGenerate(ctx context.Context, dependencies Dependencies, cwd string, std
 	if err != nil {
 		return err
 	}
-	named, err := clientenv.GenerateProjectAccessors(cfg, keys)
+	named, files, err := clientenv.GenerateProjectAccessors(cfg, keys)
 	if err != nil {
 		return err
 	}
 
-	noun := "variables"
-	if named == 1 {
-		noun = "variable"
+	asJSON := dependencies.Presentation(stdout).Format == terminal.FormatJSON
+	if !asJSON {
+		noun := "variables"
+		if named == 1 {
+			noun = "variable"
+		}
+		fmt.Fprintf(stdout, "Generated the client accessor for %d client-accessible %s\n", named, noun)
 	}
-	fmt.Fprintf(stdout, "Generated the client accessor for %d client-accessible %s\n", named, noun)
 
 	wroteRealtime, err := realtimetypes.Generate(cfg.Dir, resources)
 	if err != nil {
 		return err
+	}
+	if asJSON {
+		if wroteRealtime {
+			files = append(files, filepath.Join(cfg.Dir, realtimetypes.FileName))
+		}
+		return terminal.WriteResultJSON(stdout, &resultv1.GenerateResult{Files: files, ClientVariableCount: int32(named)})
 	}
 	if wroteRealtime {
 		fmt.Fprintf(stdout, "Generated the realtime channel types in %s\n", realtimetypes.FileName)

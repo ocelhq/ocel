@@ -21,9 +21,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/progress"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -73,7 +75,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 			opts := flags
 			opts.configPath = dependencies.ConfigPath()
 
-			return runInit(cmd.Context(), dependencies, cwd, slug, opts)
+			return runInitCommand(cmd.Context(), dependencies, cwd, slug, opts, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().StringVar(&flags.provider, "provider", "", "Provider this project deploys through")
@@ -81,77 +83,111 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	cmd.Flags().BoolVar(&flags.ts, "ts", false, "Write ocel.config.ts instead of ocel.json — it compiles to the same document and needs node")
 	cmd.Flags().BoolVar(&flags.yaml, "yaml", false, "Write ocel.yaml instead of ocel.json — the same document, written as YAML")
 	cmd.MarkFlagsMutuallyExclusive("ts", "yaml")
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareMutating(commands.ReserveStdout(cmd))
 }
 
-func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions) error {
-	configPath, err := initConfigPath(cwd, opts)
+func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions, stdout io.Writer) error {
+	result, err := runInit(ctx, dependencies, cwd, slug, opts)
 	if err != nil {
 		return err
+	}
+	if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+		return terminal.WriteResultJSON(stdout, result)
+	}
+	return nil
+}
+
+func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, opts initOptions) (*resultv1.InitResult, error) {
+	configPath, err := initConfigPath(cwd, opts)
+	if err != nil {
+		return nil, err
 	}
 	projectDir := filepath.Dir(configPath)
 	name := filepath.Base(configPath)
 
 	slug, err = resolveSlug(projectDir, slug)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	provider := strings.TrimSpace(opts.provider)
 	shipped := configdoc.ProviderIDs()
 	if provider == "" {
-		return clierror.NewInputRequired(
+		return nil, clierror.NewInputRequired(
 			fmt.Errorf("name the provider this project deploys through, e.g. `ocel init --provider <id>` — ocel ships %s", strings.Join(shipped, ", ")),
 			"--provider <id>",
 		)
 	}
 	if !slices.Contains(shipped, provider) {
-		return fmt.Errorf("--provider names %q, and ocel ships no such provider — name one of %s", provider, strings.Join(shipped, ", "))
+		return nil, fmt.Errorf("--provider names %q, and ocel ships no such provider — name one of %s", provider, strings.Join(shipped, ", "))
 	}
 
 	lang, detected, err := languageOfProject(projectDir, opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if _, err := os.Stat(configPath); err == nil {
-		return &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already exists", name)}
+		return nil, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already exists", name)}
 	} else if !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("check for existing %s: %w", name, err)
+		return nil, fmt.Errorf("check for existing %s: %w", name, err)
 	}
 	if others := project.OtherConfigFiles(configPath); len(others) > 0 {
-		return &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)}
+		return nil, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)}
 	}
 
 	ctx, initializing, err := dependencies.Events.Begin(ctx, "ocel init", "")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = writeProject(ctx, dependencies, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, opts.settings, lang, detected)
+	added, err := writeProject(ctx, dependencies, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, opts.settings, lang, detected)
 	if err == nil {
 		initializing.Succeed("Initialized project " + slug)
 	}
 	initializing.End(&err)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	result := &resultv1.InitResult{
+		ConfigPath: configPath,
+		Format:     configFormat(name),
+		Slug:       slug,
+		Provider:   provider,
+		Language:   lang.name,
+	}
+	if added != "" {
+		result.SdkPackage = &added
+	}
+	return result, nil
 }
 
-func writeProject(ctx context.Context, dependencies Dependencies, build *run.Span, configPath, slug, provider string, settings []providerSetting, lang sdkLanguage, detected bool) error {
+func configFormat(name string) resultv1.ConfigFormat {
+	switch {
+	case project.IsTypeScript(name):
+		return resultv1.ConfigFormat_CONFIG_FORMAT_TYPESCRIPT
+	case project.IsYAML(name):
+		return resultv1.ConfigFormat_CONFIG_FORMAT_YAML
+	}
+	return resultv1.ConfigFormat_CONFIG_FORMAT_JSON
+}
+
+func writeProject(ctx context.Context, dependencies Dependencies, build *run.Span, configPath, slug, provider string, settings []providerSetting, lang sdkLanguage, detected bool) (added string, err error) {
 	projectDir, name := filepath.Dir(configPath), filepath.Base(configPath)
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
-		return fmt.Errorf("create directory for %s: %w", name, err)
+		return "", fmt.Errorf("create directory for %s: %w", name, err)
 	}
 	if err := os.WriteFile(configPath, []byte(configTemplate(name, slug, provider, settings)), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", name, err)
+		return "", fmt.Errorf("write %s: %w", name, err)
 	}
 	build.Say(fmt.Sprintf("Wrote %s for project %s", name, slug))
 
 	if detected {
-		addSDK(ctx, dependencies, build, projectDir, lang)
+		added = addSDK(ctx, dependencies, build, projectDir, lang)
 	} else {
 		build.Warn(fmt.Sprintf("No %s here — add the ocel SDK once this directory contains one.", strings.Join(language.ManifestNames(), ", ")))
 	}
 	build.Say("Run `ocel deploy` to deploy to your own infrastructure, or `ocel dev` to develop against the Ocel console.")
-	return nil
+	return added, nil
 }
 
 func initConfigPath(cwd string, opts initOptions) (string, error) {
@@ -303,16 +339,16 @@ func detectPackageManager(dir string) packageManager {
 	return npmPackageManager
 }
 
-func addCommand(dir string, lang sdkLanguage) []string {
-	if len(lang.add) > 0 {
-		return slices.Clone(lang.add)
+func addCommand(dir string, lang sdkLanguage) (argv []string, pkg string) {
+	if len(lang.addCommand) > 0 {
+		return append(slices.Clone(lang.addCommand), lang.sdk), lang.sdk
 	}
 	pm := detectPackageManager(dir)
-	return []string{pm.name, pm.addCommand, sdkPackage}
+	return []string{pm.name, pm.addCommand, sdkPackage}, sdkPackage
 }
 
-func addSDK(ctx context.Context, dependencies Dependencies, build *run.Span, dir string, lang sdkLanguage) {
-	argv := addCommand(dir, lang)
+func addSDK(ctx context.Context, dependencies Dependencies, build *run.Span, dir string, lang sdkLanguage) string {
+	argv, pkg := addCommand(dir, lang)
 	command := strings.Join(argv, " ")
 
 	span := build.Child(sdkPackage, progress.Adding.Title(fmt.Sprintf("the SDK to this project with `%s`", command)))
@@ -321,6 +357,10 @@ func addSDK(ctx context.Context, dependencies Dependencies, build *run.Span, dir
 		span.Warn(fmt.Sprintf("Could not add %s — run `%s` yourself.", sdkPackage, command))
 	}
 	span.End(err)
+	if err != nil {
+		return ""
+	}
+	return pkg
 }
 
 func RunPackageManager(ctx context.Context, dir string, argv []string, output io.Writer) error {

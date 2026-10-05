@@ -62,7 +62,7 @@ func discoverAndSync(ctx context.Context, server *devserver.Server, cfg *project
 	if err != nil {
 		return nil, err
 	}
-	if _, err := clientenv.GenerateProjectAccessors(cfg, clientKeys); err != nil {
+	if _, _, err := clientenv.GenerateProjectAccessors(cfg, clientKeys); err != nil {
 		return nil, err
 	}
 

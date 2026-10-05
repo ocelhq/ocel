@@ -38,6 +38,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -169,7 +170,7 @@ func newCommand() *command {
 	rootCmd.AddCommand(projectinit.NewCommand(initDependencies))
 	rootCmd.AddCommand(generate.NewCommand(generate.Dependencies{Invocation: invocation, CollectDeclarations: declaration.Collect}))
 	rootCmd.AddCommand(buildcommand.NewCommand(buildcommand.Dependencies{Invocation: invocation, BuildApps: build.Apps, CollectDeclarations: declaration.Collect}))
-	rootCmd.AddCommand(lock.NewCommand(invocation))
+	rootCmd.AddCommand(lock.NewCommand(lock.Dependencies{Invocation: invocation, Pin: executables.Pin}))
 	deployDependencies := deploy.Dependencies{
 		Invocation:              invocation,
 		BuildApps:               build.Apps,

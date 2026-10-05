@@ -19,7 +19,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -65,7 +67,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&opts.org, "org", "", "Organization `slug`, instead of picking one")
 	cmd.Flags().BoolVar(&opts.create, "create", false, "Create the project, named [project] or after this directory")
-	return commands.DeclareMutating(cmd)
+	return commands.DeclareMutating(commands.ReserveStdout(cmd))
 }
 
 func runLink(ctx context.Context, dependencies Dependencies, projectDir, projectRef string, opts options, stdout, stderr io.Writer, stdin io.Reader) (err error) {
@@ -91,7 +93,7 @@ func runLink(ctx context.Context, dependencies Dependencies, projectDir, project
 	}
 
 	client := console.New(apiURL)
-	lr := linkRun{run: linking, stdout: stdout, stdin: stdin, scanner: scanner, canAsk: dependencies.CanAsk(stdin)}
+	lr := linkRun{run: linking, stderr: stderr, stdin: stdin, scanner: scanner, canAsk: dependencies.CanAsk(stdin)}
 
 	org, err := pickOrganization(ctx, lr, client, creds.AccessToken, apiURL, opts)
 	if err != nil {
@@ -126,12 +128,18 @@ func runLink(ctx context.Context, dependencies Dependencies, projectDir, project
 	}
 
 	linking.Succeed(fmt.Sprintf("Linked this directory to %s (%s)", selected.Slug, org.Name))
+	if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+		return terminal.WriteResultJSON(stdout, &resultv1.LinkResult{
+			Organization: &resultv1.ConsoleOrganization{Id: org.ID, Name: org.Name, Slug: org.Slug},
+			Project:      &resultv1.ConsoleProject{Id: selected.ID, Name: selected.Name, Slug: selected.Slug},
+		})
+	}
 	return nil
 }
 
 type linkRun struct {
 	run     *run.Run
-	stdout  io.Writer
+	stderr  io.Writer
 	stdin   io.Reader
 	scanner *bufio.Scanner
 	canAsk  bool
@@ -146,10 +154,10 @@ func (c linkRun) wait(phase progressv1.Phase, subject string, title progress.Tit
 	return err
 }
 
-func (c linkRun) ask(ctx context.Context, question func(stdout io.Writer)) (string, error) {
+func (c linkRun) ask(ctx context.Context, question func(w io.Writer)) (string, error) {
 	var answer string
 	err := c.run.Ask(func() error {
-		question(c.stdout)
+		question(c.stderr)
 		answered := make(chan string, 1)
 		go func() {
 			line := ""
@@ -222,13 +230,13 @@ func selectOrCreateProject(
 		return create(name)
 	}
 
-	selection, err := lr.ask(ctx, func(stdout io.Writer) {
-		fmt.Fprintf(stdout, "Projects in %s:\n", org.Name)
+	selection, err := lr.ask(ctx, func(w io.Writer) {
+		fmt.Fprintf(w, "Projects in %s:\n", org.Name)
 		for i, p := range projects {
-			fmt.Fprintf(stdout, "  %d) %s (%s)\n", i+1, p.Name, p.Slug)
+			fmt.Fprintf(w, "  %d) %s (%s)\n", i+1, p.Name, p.Slug)
 		}
-		fmt.Fprintln(stdout, "  n) Create a new project")
-		fmt.Fprint(stdout, "Select a project (number, slug, or n): ")
+		fmt.Fprintln(w, "  n) Create a new project")
+		fmt.Fprint(w, "Select a project (number, slug, or n): ")
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to read input: %w", err)
@@ -292,9 +300,9 @@ func defaultProjectName(projectDir, name string) string {
 
 func promptProjectName(ctx context.Context, lr linkRun, projectDir, lead string) (string, error) {
 	fallback := filepath.Base(projectDir)
-	name, err := lr.ask(ctx, func(stdout io.Writer) {
-		fmt.Fprint(stdout, lead)
-		fmt.Fprintf(stdout, "Project name (%s): ", fallback)
+	name, err := lr.ask(ctx, func(w io.Writer) {
+		fmt.Fprint(w, lead)
+		fmt.Fprintf(w, "Project name (%s): ", fallback)
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to read input: %w", err)
@@ -340,12 +348,12 @@ func pickOrganization(ctx context.Context, lr linkRun, client *console.Client, a
 		)
 	}
 
-	selection, err := lr.ask(ctx, func(stdout io.Writer) {
-		fmt.Fprintln(stdout, "Organizations:")
+	selection, err := lr.ask(ctx, func(w io.Writer) {
+		fmt.Fprintln(w, "Organizations:")
 		for i, org := range orgs {
-			fmt.Fprintf(stdout, "  %d) %s (%s)\n", i+1, org.Name, org.Slug)
+			fmt.Fprintf(w, "  %d) %s (%s)\n", i+1, org.Name, org.Slug)
 		}
-		fmt.Fprint(stdout, "Select an organization (number or slug): ")
+		fmt.Fprint(w, "Select an organization (number or slug): ")
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to read input: %w", err)
