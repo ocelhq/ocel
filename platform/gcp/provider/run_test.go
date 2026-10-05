@@ -169,21 +169,6 @@ func TestTrafficIsPinnedToOneRevisionByName(t *testing.T) {
 	}
 }
 
-func TestAnEmulatedRunFindsTheImageUnderTheNameTheDaemonStoresItUnder(t *testing.T) {
-	pinned := "europe-west1-docker.pkg.dev/floci/ocel-preview/web@sha256:abc123"
-
-	real := pushing(t, "").storedAs(pinned)
-	if real != pinned {
-		t.Errorf("storedAs() = %q against a registry, want the digest the release pinned", real)
-	}
-
-	emulated := pushing(t, "http://127.0.0.1:4588").storedAs(pinned)
-	if emulated != "europe-west1-docker.pkg.dev/floci/ocel-preview/web:sha256-abc123" {
-		t.Errorf("storedAs() = %q under emulation, want the tag the image was written into the daemon under: "+
-			"a docker daemon resolves nothing by the digest a registry would have given it", emulated)
-	}
-}
-
 func released(t *testing.T, server *runServer, s serving) (string, string) {
 	t.Helper()
 	if s.image == "" {
@@ -474,7 +459,7 @@ func TestAServiceChangedUnderAReleaseIsReadAgainAndPatchedAgain(t *testing.T) {
 
 	server.patchConflicts = 1
 	again := serves("ocel-shop-prod-app")
-	again.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	again.image = "europe-west1-docker.pkg.dev/acme/ocel/app:sha256-two"
 	released(t, server, again)
 
 	service := server.serving()

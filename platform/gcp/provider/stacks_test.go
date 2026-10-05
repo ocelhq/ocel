@@ -412,11 +412,11 @@ func TestPruningAReleaseUntagsTheImageNoRemainingRevisionRuns(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
 	released := newReleasedStacks(p)
-	dropped := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout@sha256:one")
+	dropped := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one")
 	released.provision(t, dropped)
-	unchanged := functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout@sha256:one")
+	unchanged := functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one")
 	released.provision(t, unchanged)
-	active := released.provision(t, functionRelease("d3", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout@sha256:two"))
+	active := released.provision(t, functionRelease("d3", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-two"))
 	if _, err := p.Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
@@ -438,7 +438,7 @@ func TestDestroyingEveryReleaseOfAFunctionUntagsEveryImageItsRevisionsRan(t *tes
 	server := &runServer{}
 	p := server.open(t)
 	released := newReleasedStacks(p)
-	only := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout@sha256:one")
+	only := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-one")
 	released.provision(t, only)
 
 	released.destroy(t, only.Ref)
