@@ -111,7 +111,11 @@ func (c *command) execute() error {
 	invoked, err := c.root.ExecuteC()
 	c.invoked = invoked
 	if err != nil && !c.preRunReached {
-		err = &clierror.Error{Code: clierror.CodeUsage, Hint: invoked.UseLine(), Cause: err}
+		usage := invoked
+		if usage.Hidden {
+			usage = c.root
+		}
+		err = &clierror.Error{Code: clierror.CodeUsage, Hint: usage.UseLine(), Cause: err}
 	}
 	c.stopInterruptHandler()
 	return errors.Join(err, c.bus.Close())
