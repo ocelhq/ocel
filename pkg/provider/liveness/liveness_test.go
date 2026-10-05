@@ -423,3 +423,20 @@ func TestALoopbackNameIsProbedFromWhereItResolves(t *testing.T) {
 		t.Errorf("a public name went to the loopback probe: %v", asked)
 	}
 }
+
+func TestTheLivenessLooksUpRecordsThroughTheSystemResolverItProbesWith(t *testing.T) {
+	t.Parallel()
+
+	probe := &Net{System: &dnsBook{
+		hosts:   map[string][]string{"shop.example.com": {"203.0.113.4"}},
+		aliases: map[string]string{"www.example.com": "front.example.net"},
+	}}
+	addresses, err := probe.Host(context.Background(), "shop.example.com")
+	if err != nil || !slices.Equal(addresses, []string{"203.0.113.4"}) {
+		t.Errorf("Host() = %v, %v, want the system resolver's answer", addresses, err)
+	}
+	target, err := probe.CNAME(context.Background(), "www.example.com")
+	if err != nil || target != "front.example.net." {
+		t.Errorf("CNAME() = %q, %v, want the system resolver's answer", target, err)
+	}
+}

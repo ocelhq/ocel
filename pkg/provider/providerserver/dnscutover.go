@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"time"
@@ -34,6 +35,12 @@ type dnsCutover struct {
 	sleep    func(context.Context, time.Duration) error
 	now      func() time.Time
 	manual   manualRecordPolicy
+	lookup   recordLookup
+}
+
+type recordLookup interface {
+	Host(ctx context.Context, host string) ([]string, error)
+	CNAME(ctx context.Context, host string) (string, error)
 }
 
 type manualRecordPolicy struct {
@@ -59,7 +66,9 @@ func failOnManualRecords(sender *eventStream, root Span) manualRecordPolicy {
 }
 
 func newDNSCutover(front edge.Edge, dns edge.DNSRecords, zone string, liveness provider.Liveness) dnsCutover {
+	lookup, _ := liveness.(recordLookup)
 	return dnsCutover{
+		lookup:   lookup,
 		kind:     front.Kind(),
 		facts:    front.Facts(),
 		dns:      dns,
@@ -117,7 +126,11 @@ func (s dnsCutover) write(ctx context.Context, records []edge.Record, headline s
 		notes = append([]string{s.facts.ProxiedRecordNote}, notes...)
 	}
 	if s.dns == nil {
-		result.Manual = records
+		result.Manual = s.listUnresolved(ctx, records)
+		if len(result.Manual) == 0 {
+			return result, nil
+		}
+		records = result.Manual
 		if s.manual.report != nil {
 			s.manual.report(headline, records, append(slices.Clone(notes), instructionsOnly)...)
 		}
@@ -128,6 +141,9 @@ func (s dnsCutover) write(ctx context.Context, records []edge.Record, headline s
 	}
 	written, err := s.dns.Ensure(ctx, records, say)
 	result.Written, result.Manual = written, edge.Unwritten(records, written)
+	if err == nil {
+		result.Manual = s.listUnresolved(ctx, result.Manual)
+	}
 	if err != nil || len(result.Manual) == 0 {
 		return result, err
 	}
@@ -135,6 +151,35 @@ func (s dnsCutover) write(ctx context.Context, records []edge.Record, headline s
 		s.manual.report(headline, result.Manual, notes...)
 	}
 	return result, s.waiting(headline, result.Manual)
+}
+
+func (s dnsCutover) listUnresolved(ctx context.Context, records []edge.Record) []edge.Record {
+	if s.lookup == nil {
+		return records
+	}
+	return slices.DeleteFunc(slices.Clone(records), func(rec edge.Record) bool { return s.resolves(ctx, rec) })
+}
+
+func (s dnsCutover) resolves(ctx context.Context, rec edge.Record) bool {
+	switch {
+	case rec.Proxied:
+		return false
+	case rec.Type == edge.RecordTypeCNAME:
+		target, err := s.lookup.CNAME(ctx, rec.Name)
+		return err == nil && strings.EqualFold(strings.TrimSuffix(target, "."), strings.TrimSuffix(rec.Value, "."))
+	}
+	want, err := netip.ParseAddr(rec.Value)
+	if err != nil {
+		return false
+	}
+	addresses, err := s.lookup.Host(ctx, rec.Name)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(addresses, func(address string) bool {
+		got, err := netip.ParseAddr(address)
+		return err == nil && got.Unmap() == want.Unmap()
+	})
 }
 
 type manualRecordsPending struct {
