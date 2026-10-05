@@ -8,7 +8,7 @@ import {
   variantHeadersFile,
 } from "@framework/next-cache";
 import { runWithWaitUntil } from "@framework/node-runtime/background";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import OcelCacheHandler from "../src/cache-handler.mjs";
 import type { CacheStore } from "../src/cache-store.mjs";
 import { installNextHost } from "../src/host.mjs";
@@ -80,6 +80,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   OcelCacheHandler.store = undefined;
   OcelCacheHandler.variantHeaders = undefined;
   installNextHost({});
@@ -786,4 +787,82 @@ test("holds the request's last byte for the tag write a revalidation makes", asy
 
   expect(held).toHaveLength(1);
   expect(store.tags.get("products")?.expired).toBeGreaterThan(0);
+});
+
+function seedFetch(store: ReturnType<typeof fakeStore>, ageMs: number, tags: string[] = []) {
+  store.fetches.set("abc", {
+    lastModified: Date.now() - ageMs,
+    value: { kind: "FETCH", data: { body: "cached" }, revalidate: 60, tags },
+  });
+}
+
+test("a stale fetch entry is a miss where CPU stops at the response's end", async () => {
+  vi.stubEnv("OCEL_FINISH_BEFORE_RESPONSE_MS", "5000");
+  const store = fakeStore();
+  seedFetch(store, 120_000);
+
+  const entry = await new OcelCacheHandler().get("abc", {
+    kind: "FETCH",
+    tags: [],
+    revalidate: 60,
+  });
+
+  expect(entry).toBeNull();
+});
+
+test("a stale fetch entry is served where CPU runs past the response's end", async () => {
+  const store = fakeStore();
+  seedFetch(store, 120_000);
+
+  const entry = await new OcelCacheHandler().get("abc", {
+    kind: "FETCH",
+    tags: [],
+    revalidate: 60,
+  });
+
+  expect(entry?.value.data.body).toBe("cached");
+});
+
+test("a fetch entry within its window is served where CPU stops at the response's end", async () => {
+  vi.stubEnv("OCEL_FINISH_BEFORE_RESPONSE_MS", "5000");
+  const store = fakeStore();
+  seedFetch(store, 10_000);
+
+  const entry = await new OcelCacheHandler().get("abc", {
+    kind: "FETCH",
+    tags: [],
+    revalidate: 60,
+  });
+
+  expect(entry?.value.data.body).toBe("cached");
+});
+
+test("a fetch entry that never goes stale by time is served where CPU stops at the response's end", async () => {
+  vi.stubEnv("OCEL_FINISH_BEFORE_RESPONSE_MS", "5000");
+  const store = fakeStore();
+  seedFetch(store, 120_000);
+  delete store.fetches.get("abc")!.value.revalidate;
+
+  const entry = await new OcelCacheHandler().get("abc", {
+    kind: "FETCH",
+    tags: [],
+    revalidate: false,
+  });
+
+  expect(entry?.value.data.body).toBe("cached");
+});
+
+test("a fetch entry stale by tag is a miss where CPU stops at the response's end", async () => {
+  vi.stubEnv("OCEL_FINISH_BEFORE_RESPONSE_MS", "5000");
+  const store = fakeStore();
+  fakeSnapshot({ api: { stale: Date.now() } });
+  seedFetch(store, 10_000, ["api"]);
+
+  const entry = await new OcelCacheHandler().get("abc", {
+    kind: "FETCH",
+    tags: ["api"],
+    revalidate: 60,
+  });
+
+  expect(entry).toBeNull();
 });

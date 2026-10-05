@@ -10,6 +10,7 @@ import {
   variantHeadersFile,
 } from "@framework/next-cache";
 import { background, holdEnd } from "@framework/node-runtime/background";
+import { finishBeforeResponseMs } from "@framework/node-runtime/host";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
@@ -17,7 +18,7 @@ import { noteServedEntry } from "./refresh.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 import { noteRevalidation } from "./revalidation-signal.mjs";
 import { isRscRequest } from "./rsc-request.mjs";
-import { recordTags, tagsExpireEntry } from "./tag-clock.mjs";
+import { recordTags, tagClock, tagsExpireEntry } from "./tag-clock.mjs";
 
 function unchunk(html: any): string {
   if (typeof html === "string") return html;
@@ -158,6 +159,14 @@ export default class OcelCacheHandler {
       const tags = tagsOf(entry.value, ctx);
       if (tags.length > 0 && (await tagsExpireEntry(tags, entry.lastModified))) {
         return null;
+      }
+      if (ctx?.kind === "FETCH" && finishBeforeResponseMs(process.env) > 0) {
+        const window = ctx.revalidate || entry.value.revalidate;
+        const timeStale =
+          typeof window === "number" &&
+          window > 0 &&
+          Date.now() - entry.lastModified > window * 1000;
+        if (timeStale || tagClock.areTagsStale(tags, entry.lastModified)) return null;
       }
       if (ctx?.kind !== "FETCH") {
         this.noteOriginTags(tags);
