@@ -49,6 +49,26 @@ func scan(t *testing.T, dependencies Dependencies, root string, opts Options) st
 	return stdout.String()
 }
 
+type scanEnvelope struct {
+	OK   bool     `json:"ok"`
+	Data scanJSON `json:"data"`
+}
+
+func decodeScan(t *testing.T, out string) scanJSON {
+	t.Helper()
+	if strings.Count(strings.TrimSuffix(out, "\n"), "\n") != 0 || !strings.HasSuffix(out, "\n") {
+		t.Fatalf("stdout = %q, want exactly one newline-terminated line", out)
+	}
+	var envelope scanEnvelope
+	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+		t.Fatalf("stdout is not one JSON envelope: %v\n%s", err, out)
+	}
+	if !envelope.OK {
+		t.Fatalf("stdout = %q, want ok true", out)
+	}
+	return envelope.Data
+}
+
 type scanJSON struct {
 	Resources   json.RawMessage `json:"resources"`
 	Estimate    json.RawMessage `json:"estimate"`
@@ -128,10 +148,7 @@ func TestCostScanPricesEveryResourceUnderTheProfileAskedFor(t *testing.T) {
 			return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
 		}
 
-		var built scanJSON
-		if err := json.Unmarshal([]byte(scan(t, dependencies, root, Options{})), &built); err != nil {
-			t.Fatal(err)
-		}
+		built := decodeScan(t, scan(t, dependencies, root, Options{}))
 		if len(built.Assumptions) != 0 {
 			t.Errorf("assumptions with a build = %v, want none", built.Assumptions)
 		}
@@ -139,10 +156,7 @@ func TestCostScanPricesEveryResourceUnderTheProfileAskedFor(t *testing.T) {
 		dependencies.ReadFunctions = func(string) ([]build.Function, error) {
 			return nil, build.ErrNoBuildOutput
 		}
-		var unbuilt scanJSON
-		if err := json.Unmarshal([]byte(scan(t, dependencies, root, Options{})), &unbuilt); err != nil {
-			t.Fatal(err)
-		}
+		unbuilt := decodeScan(t, scan(t, dependencies, root, Options{}))
 		if len(unbuilt.Assumptions) != 1 || !strings.Contains(unbuilt.Assumptions[0], "one function") {
 			t.Errorf("assumptions without a build = %v, want the one-function-per-app assumption", unbuilt.Assumptions)
 		}
@@ -200,10 +214,7 @@ export default {
 
 		out := scan(t, dependencies, root, Options{})
 
-		var got scanJSON
-		if err := json.Unmarshal([]byte(out), &got); err != nil {
-			t.Fatalf("stdout is not one JSON object: %v\n%s", err, out)
-		}
+		got := decodeScan(t, out)
 		var set costv1.ResourceSet
 		if err := protojson.Unmarshal(got.Resources, &set); err != nil {
 			t.Fatalf("resources is not a ResourceSet: %v", err)
@@ -283,8 +294,5 @@ func TestAScanStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsItsEstimateAloneO
 	if !result.GetSuccess() {
 		t.Errorf("result = %v, want the scan's run to succeed", result)
 	}
-	var scanned scanJSON
-	if err := json.Unmarshal(stdout.Bytes(), &scanned); err != nil {
-		t.Errorf("stdout = %q, want the estimate as one JSON document: %v", stdout.String(), err)
-	}
+	decodeScan(t, stdout.String())
 }

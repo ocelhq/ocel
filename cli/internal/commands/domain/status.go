@@ -2,7 +2,6 @@ package domain
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand/v2"
@@ -20,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -163,59 +163,33 @@ func outstandingHosts(resp *contractv1.GetHostnameStatusResponse) string {
 	return strings.Join(pending, "; ")
 }
 
-type domainStatusReport struct {
-	Ready          bool               `json:"ready"`
-	RecordsWritten []string           `json:"recordsWritten,omitempty"`
-	ManualRecords  []string           `json:"manualRecords,omitempty"`
-	Hosts          []domainHostReport `json:"hosts"`
-}
-
-type domainHostReport struct {
-	Hostname       string   `json:"hostname"`
-	Declared       bool     `json:"declared"`
-	Ready          bool     `json:"ready"`
-	Pending        string   `json:"pending,omitempty"`
-	Certificate    string   `json:"certificate,omitempty"`
-	CertStatus     string   `json:"certificateStatus,omitempty"`
-	Renewal        string   `json:"renewal,omitempty"`
-	ExpiresAt      string   `json:"expiresAt,omitempty"`
-	ExpiringSoon   bool     `json:"expiringSoon,omitempty"`
-	RecordsWritten []string `json:"recordsWritten,omitempty"`
-	ManualRecords  []string `json:"manualRecords,omitempty"`
-	LastProbeAt    string   `json:"lastProbeAt,omitempty"`
-	LastProbeOk    bool     `json:"lastProbeOk"`
-	ServingPointer string   `json:"servingPointer,omitempty"`
-}
-
 func writeDomainStatusJSON(out io.Writer, resp *contractv1.GetHostnameStatusResponse) error {
-	report := domainStatusReport{
+	result := &resultv1.DomainStatusResult{
 		Ready:          resp.GetReady(),
 		RecordsWritten: resp.GetRecordsWritten(),
 		ManualRecords:  resp.GetManualRecords(),
-		Hosts:          make([]domainHostReport, 0, len(resp.GetHostnames())),
+		Hosts:          make([]*resultv1.DomainHostStatus, 0, len(resp.GetHostnames())),
 	}
 	for _, host := range resp.GetHostnames() {
 		cert := host.GetCertificate()
-		report.Hosts = append(report.Hosts, domainHostReport{
-			Hostname:       host.GetHostname(),
-			Declared:       host.GetDeclared(),
-			Ready:          host.GetReady(),
-			Pending:        host.GetPending(),
-			Certificate:    cert.GetCertificateId(),
-			CertStatus:     cert.GetCertificateStatus(),
-			Renewal:        host.GetRenewalStatus(),
-			ExpiresAt:      epochRFC3339(host.GetExpiresAt()),
-			ExpiringSoon:   host.GetExpiringSoon(),
-			RecordsWritten: cert.GetRecordsWritten(),
-			ManualRecords:  cert.GetManualRecords(),
-			LastProbeAt:    epochRFC3339(cert.GetLastProbeAt()),
-			LastProbeOk:    cert.GetLastProbeOk(),
-			ServingPointer: host.GetServingPointer(),
+		result.Hosts = append(result.Hosts, &resultv1.DomainHostStatus{
+			Hostname:          host.GetHostname(),
+			Declared:          host.GetDeclared(),
+			Ready:             host.GetReady(),
+			Pending:           host.GetPending(),
+			Certificate:       cert.GetCertificateId(),
+			CertificateStatus: cert.GetCertificateStatus(),
+			Renewal:           host.GetRenewalStatus(),
+			ExpiresAt:         epochRFC3339(host.GetExpiresAt()),
+			ExpiringSoon:      host.GetExpiringSoon(),
+			RecordsWritten:    cert.GetRecordsWritten(),
+			ManualRecords:     cert.GetManualRecords(),
+			LastProbeAt:       epochRFC3339(cert.GetLastProbeAt()),
+			LastProbeOk:       cert.GetLastProbeOk(),
+			ServingPointer:    host.GetServingPointer(),
 		})
 	}
-	enc := json.NewEncoder(out)
-	enc.SetIndent("", "  ")
-	return enc.Encode(report)
+	return terminal.WriteResultJSON(out, result)
 }
 
 func epochRFC3339(unix int64) string {
