@@ -22,3 +22,10 @@ func EpochRFC3339(sec int64) string {
 	}
 	return time.Unix(sec, 0).UTC().Format(time.RFC3339)
 }
+
+func FormatRFC3339(at *time.Time) string {
+	if at == nil {
+		return ""
+	}
+	return at.UTC().Format(time.RFC3339)
+}
