@@ -141,7 +141,7 @@ func withOptions(cmd *cobra.Command, dependencies Dependencies, opts *options,
 	}
 	if link == nil {
 		fmt.Fprintln(cmd.ErrOrStderr(), "This directory isn't linked to a console project. Run `ocel link` first.")
-		return &clierror.Error{Code: "console.not_linked", Hint: "ocel link", Cause: &exitcode.ExitError{Code: 1, Err: console.ErrNotLinked}}
+		return &clierror.Error{Code: clierror.CodeConsoleNotLinked, Hint: "ocel link", Cause: &exitcode.ExitError{Code: 1, Err: console.ErrNotLinked}}
 	}
 	return run(ctx, cfg, link)
 }

@@ -115,12 +115,12 @@ func runInit(ctx context.Context, dependencies Dependencies, cwd, slug string, o
 	}
 
 	if _, err := os.Stat(configPath); err == nil {
-		return &clierror.Error{Code: codeConfigExists, Cause: fmt.Errorf("%s already exists", name)}
+		return &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already exists", name)}
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("check for existing %s: %w", name, err)
 	}
 	if others := project.OtherConfigFiles(configPath); len(others) > 0 {
-		return &clierror.Error{Code: codeConfigExists, Cause: fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)}
+		return &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)}
 	}
 
 	ctx, initializing, err := dependencies.Events.Begin(ctx, "ocel init", "")

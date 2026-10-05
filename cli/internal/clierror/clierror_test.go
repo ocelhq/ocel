@@ -65,12 +65,12 @@ func TestACodedErrorWithoutACauseReadsAsItsCode(t *testing.T) {
 	}
 }
 
-func TestACodeOutsideTheDottedLowercaseShapeOrNamedInternalBecomesInternalWithNoDocsPageKeepingItsHintAndRetry(t *testing.T) {
+func TestACodeOutsideTheRegistryBecomesInternalWithNoDocsPageKeepingItsHintAndRetry(t *testing.T) {
 	validator, err := protovalidate.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, code := range []string{"", "internal", "Project.NoConfig", "project..no_config", "project.no-config", ".project", "1project", "project.", "project no_config"} {
+	for _, code := range []string{"", "internal", "project.unregistered", "Project.NoConfig", "project..no_config", "project.no-config", ".project", "1project", "project.", "project no_config"} {
 		got := clierror.NewRunError(&clierror.Error{Code: code, Hint: "try again", Retryable: true, Cause: errors.New("boom")})
 
 		want := &streamv1.RunError{Code: "internal", Message: "boom", Hint: proto.String("try again"), Retryable: true}

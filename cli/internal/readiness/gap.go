@@ -109,7 +109,7 @@ func (e MissingFeaturesError) Remedy() string { return "`" + e.Hint() + "`" }
 func (e MissingFeaturesError) Hint() string { return e.Gap.RepairCommand(e.Tier) }
 
 func (e MissingFeaturesError) refuse() error {
-	return &clierror.Error{Code: "bootstrap.features_missing", Hint: e.Hint(), Cause: e}
+	return &clierror.Error{Code: clierror.CodeBootstrapFeaturesMissing, Hint: e.Hint(), Cause: e}
 }
 
 func (e MissingFeaturesError) BootstrapRequest() *contractv1.BootstrapRequest {

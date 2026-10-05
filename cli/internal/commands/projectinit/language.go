@@ -60,7 +60,7 @@ func detectLanguage(dir string) (sdkLanguage, bool, error) {
 			names = append(names, sdkLanguageOf(l).name)
 		}
 		return sdkLanguage{}, false, &clierror.Error{
-			Code: codeAmbiguousLanguage,
+			Code: clierror.CodeInitAmbiguousLanguage,
 			Hint: "--lang",
 			Cause: fmt.Errorf(
 				"this directory contains the manifests of %s at once, so it could be a %s project: name the one this is with `--lang %s`",
