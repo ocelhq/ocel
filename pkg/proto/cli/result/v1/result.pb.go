@@ -3054,7 +3054,7 @@ func (x *InitResult) GetSdkPackage() string {
 
 type SchemaListResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Commands      []*CommandSchema       `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
+	Commands      []*ListedCommand       `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3089,14 +3089,14 @@ func (*SchemaListResult) Descriptor() ([]byte, []int) {
 	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{42}
 }
 
-func (x *SchemaListResult) GetCommands() []*CommandSchema {
+func (x *SchemaListResult) GetCommands() []*ListedCommand {
 	if x != nil {
 		return x.Commands
 	}
 	return nil
 }
 
-type CommandSchema struct {
+type ListedCommand struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
 	Output        CommandOutput          `protobuf:"varint,2,opt,name=output,proto3,enum=cli.result.v1.CommandOutput" json:"output,omitempty"`
@@ -3104,20 +3104,20 @@ type CommandSchema struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CommandSchema) Reset() {
-	*x = CommandSchema{}
+func (x *ListedCommand) Reset() {
+	*x = ListedCommand{}
 	mi := &file_cli_result_v1_result_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CommandSchema) String() string {
+func (x *ListedCommand) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CommandSchema) ProtoMessage() {}
+func (*ListedCommand) ProtoMessage() {}
 
-func (x *CommandSchema) ProtoReflect() protoreflect.Message {
+func (x *ListedCommand) ProtoReflect() protoreflect.Message {
 	mi := &file_cli_result_v1_result_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3129,19 +3129,19 @@ func (x *CommandSchema) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CommandSchema.ProtoReflect.Descriptor instead.
-func (*CommandSchema) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListedCommand.ProtoReflect.Descriptor instead.
+func (*ListedCommand) Descriptor() ([]byte, []int) {
 	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{43}
 }
 
-func (x *CommandSchema) GetPath() string {
+func (x *ListedCommand) GetPath() string {
 	if x != nil {
 		return x.Path
 	}
 	return ""
 }
 
-func (x *CommandSchema) GetOutput() CommandOutput {
+func (x *ListedCommand) GetOutput() CommandOutput {
 	if x != nil {
 		return x.Output
 	}
@@ -3405,8 +3405,8 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"sdkPackage\x88\x01\x01B\x0e\n" +
 	"\f_sdk_package\"L\n" +
 	"\x10SchemaListResult\x128\n" +
-	"\bcommands\x18\x01 \x03(\v2\x1c.cli.result.v1.CommandSchemaR\bcommands\"Y\n" +
-	"\rCommandSchema\x12\x12\n" +
+	"\bcommands\x18\x01 \x03(\v2\x1c.cli.result.v1.ListedCommandR\bcommands\"Y\n" +
+	"\rListedCommand\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x124\n" +
 	"\x06output\x18\x02 \x01(\x0e2\x1c.cli.result.v1.CommandOutputR\x06output*\x92\x01\n" +
 	"\x0fDeploymentState\x12 \n" +
@@ -3498,7 +3498,7 @@ var file_cli_result_v1_result_proto_goTypes = []any{
 	(*GenerateResult)(nil),        // 45: cli.result.v1.GenerateResult
 	(*InitResult)(nil),            // 46: cli.result.v1.InitResult
 	(*SchemaListResult)(nil),      // 47: cli.result.v1.SchemaListResult
-	(*CommandSchema)(nil),         // 48: cli.result.v1.CommandSchema
+	(*ListedCommand)(nil),         // 48: cli.result.v1.ListedCommand
 	nil,                           // 49: cli.result.v1.DeploymentSummary.BuildsEntry
 	nil,                           // 50: cli.result.v1.PinnedExecutable.DigestsEntry
 	(*v1.ResourceSet)(nil),        // 51: provider.cost.v1.ResourceSet
@@ -3551,8 +3551,8 @@ var file_cli_result_v1_result_proto_depIdxs = []int32{
 	44, // 40: cli.result.v1.LockResult.connectors:type_name -> cli.result.v1.PinnedExecutable
 	50, // 41: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
 	3,  // 42: cli.result.v1.InitResult.format:type_name -> cli.result.v1.ConfigFormat
-	48, // 43: cli.result.v1.SchemaListResult.commands:type_name -> cli.result.v1.CommandSchema
-	4,  // 44: cli.result.v1.CommandSchema.output:type_name -> cli.result.v1.CommandOutput
+	48, // 43: cli.result.v1.SchemaListResult.commands:type_name -> cli.result.v1.ListedCommand
+	4,  // 44: cli.result.v1.ListedCommand.output:type_name -> cli.result.v1.CommandOutput
 	45, // [45:45] is the sub-list for method output_type
 	45, // [45:45] is the sub-list for method input_type
 	45, // [45:45] is the sub-list for extension type_name
