@@ -92,28 +92,20 @@ func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRe
 func (r routerStack) Destroy(context.Context) error { return nil }
 
 func (r routerStack) serveDeployment(ctx context.Context, move router.PointerMove) error {
-	tags := map[string]string{}
+	tags := pin.Tags{}
 	for _, app := range slices.Sorted(maps.Keys(move.Records)) {
-		record := move.Records[app]
-		revision := record.Revisions[record.Physical]
-		if revision == "" {
-			return router.Unserved{Err: refusal.Refuse(refusal.CodeInvalid,
-				"build %s of %s recorded no revision of the service it answers on, and a preview deployment is answered on the tag of the revision its deploy created: "+
-					"re-deploy %s so its release records one",
-				record.Build, app, app)}
-		}
-		tag, err := r.s.e.pins.ReadTag(ctx, record.Physical, revision)
+		read, err := pin.ReadTags(ctx, r.s.e.pins, move.Records[app])
 		if err != nil {
 			return router.Unserved{Err: err}
 		}
-		tags[record.Physical] = tag
+		maps.Copy(tags, read)
 	}
 	if err := move.RefuseInactive(ctx); err != nil {
 		return err
 	}
 	deployments := maps.Clone(r.s.recorded.Deployments)
 	if deployments == nil {
-		deployments = map[string]map[string]string{}
+		deployments = map[string]pin.Tags{}
 	}
 	deployments[move.Pointer] = tags
 	r.s.recorded.Deployments = deployments
@@ -144,7 +136,7 @@ func (r routerStack) removeDeployment(ctx context.Context, pointer string) error
 	return nil
 }
 
-func isTagServed(deployments map[string]map[string]string, service, tag string) bool {
+func isTagServed(deployments map[string]pin.Tags, service, tag string) bool {
 	for _, tags := range deployments {
 		if tags[service] == tag {
 			return true

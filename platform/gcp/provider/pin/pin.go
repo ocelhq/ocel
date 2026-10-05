@@ -39,6 +39,26 @@ type Rollback struct {
 	Opened   bool   `json:"opened,omitempty"`
 }
 
+type Tags map[string]string
+
+func ReadTags(ctx context.Context, pins Pins, record router.DeploymentRecord) (Tags, error) {
+	if record.Revisions[record.Physical] == "" {
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"build %s of %s recorded no revision of the service it answers on, and a deployment is answered on the tags of the revisions its deploy created: "+
+				"re-deploy %s so its release records one",
+			record.Build, record.App, record.App)
+	}
+	tags := Tags{}
+	for _, service := range slices.Sorted(maps.Keys(record.Revisions)) {
+		tag, err := pins.ReadTag(ctx, service, record.Revisions[service])
+		if err != nil {
+			return nil, err
+		}
+		tags[service] = tag
+	}
+	return tags, nil
+}
+
 type Pointers map[string][]string
 
 func ReplacePointer(ctx context.Context, pins Pins, pointers Pointers, move router.PointerMove) (Pointers, error) {

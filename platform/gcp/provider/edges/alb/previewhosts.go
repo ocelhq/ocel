@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
 func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, progress progress.Log) error {
@@ -20,9 +21,13 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 	if hosts == nil {
 		hosts = map[string]Host{}
 	}
+	tags := maps.Clone(s.recorded.DeploymentTags)
+	if tags == nil {
+		tags = map[string]pin.Tags{}
+	}
 	var took []string
 	for _, host := range move.Hosts {
-		served, err := s.previewHost(ctx, move, host, deployment)
+		served, read, err := s.previewHost(ctx, move, host, deployment)
 		if err != nil {
 			return router.Unserved{Err: err}
 		}
@@ -30,6 +35,9 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 			continue
 		}
 		hosts[host.Hostname] = served
+		if read != nil {
+			tags[host.Hostname] = read
+		}
 		took = append(took, host.Hostname)
 	}
 	withdrawn := s.listRecordedPreviewHosts(edge.ListPreviewHostnames(move.ListHostsToWithdraw()))
@@ -55,6 +63,7 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 			return router.Unserved{Err: err}
 		}
 		delete(hosts, hostname)
+		delete(tags, hostname)
 	}
 	if err := s.raise(ctx, hosts); err != nil {
 		return router.Unserved{Err: err}
@@ -67,7 +76,7 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 			return router.Unserved{Err: errors.Join(err, s.unrouteUnrecorded(ctx, took), s.raise(ctx, s.recorded.Hosts))}
 		}
 	}
-	s.recordPreviewHosts(hosts)
+	s.recordPreviewHosts(hosts, tags)
 	return nil
 }
 
@@ -78,14 +87,14 @@ func describeHost(host Host) string {
 	return "revision tag " + host.Tag + " of Cloud Run service " + host.Service
 }
 
-func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host edge.PreviewHost, deployment bool) (Host, error) {
+func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host edge.PreviewHost, deployment bool) (Host, pin.Tags, error) {
 	record, found := recordOf(move.Records, host.App)
 	if !found {
-		return Host{}, refusal.Refuse(refusal.CodeInvalid,
+		return Host{}, nil, refusal.Refuse(refusal.CodeInvalid,
 			"preview hostname %s names app %q, and promotion %s records no release of it", host.Hostname, host.App, move.Promotion.PromotionID)
 	}
 	if record.Physical == "" {
-		return Host{}, refusal.Refuse(refusal.CodeInvalid,
+		return Host{}, nil, refusal.Refuse(refusal.CodeInvalid,
 			"build %s of %s recorded no Cloud Run service it answers on, so %s has nothing to route to: re-deploy %s so its release records one",
 			record.Build, record.App, host.Hostname, record.App)
 	}
@@ -96,21 +105,14 @@ func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host e
 		Pointer: move.Pointer,
 	}
 	if !deployment {
-		return served, nil
+		return served, nil, nil
 	}
-	revision := record.Revisions[record.Physical]
-	if revision == "" {
-		return Host{}, refusal.Refuse(refusal.CodeInvalid,
-			"build %s of %s recorded no revision of the service it answers on, and a deployment hostname reaches the revision its deploy created: "+
-				"re-deploy %s so its release records one",
-			record.Build, record.App, record.App)
-	}
-	tag, err := s.e.deps.Pins.ReadTag(ctx, record.Physical, revision)
+	tags, err := pin.ReadTags(ctx, s.e.deps.Pins, record)
 	if err != nil {
-		return Host{}, err
+		return Host{}, nil, err
 	}
-	served.Tag = tag
-	return served, nil
+	served.Tag = tags[record.Physical]
+	return served, tags, nil
 }
 
 func recordOf(records map[string]router.DeploymentRecord, app string) (router.DeploymentRecord, bool) {
@@ -223,19 +225,28 @@ func (s *stack) withdrawPointer(ctx context.Context, removal router.PointerRemov
 		return err
 	}
 	withdrawn := s.recorded.Hosts
-	s.recordPreviewHosts(hosts)
+	owed := s.recorded.DeploymentTags
+	kept := maps.Clone(owed)
+	for _, hostname := range going {
+		delete(kept, hostname)
+	}
+	s.recordPreviewHosts(hosts, kept)
 	var errs []error
 	for _, hostname := range going {
-		errs = append(errs, s.untagUnroutedRevision(ctx, withdrawn[hostname], hosts))
+		errs = append(errs, s.untagUnroutedRevisions(ctx, tagsOf(withdrawn[hostname], owed[hostname]), hosts, kept))
 	}
 	return errors.Join(errs...)
 }
 
-func (s *stack) recordPreviewHosts(hosts map[string]Host) {
+func (s *stack) recordPreviewHosts(hosts map[string]Host, tags map[string]pin.Tags) {
 	if len(hosts) == 0 {
 		hosts = nil
 	}
+	if len(tags) == 0 {
+		tags = nil
+	}
 	s.recorded.Hosts = hosts
+	s.recorded.DeploymentTags = tags
 	s.keep()
 }
 
@@ -261,14 +272,37 @@ func (s *stack) listRecordedPreviewHosts(hostnames []string) []string {
 	return recorded
 }
 
-func (s *stack) untagUnroutedRevision(ctx context.Context, gone Host, kept map[string]Host) error {
+func tagsOf(gone Host, recorded pin.Tags) pin.Tags {
+	if len(recorded) > 0 {
+		return recorded
+	}
 	if gone.Tag == "" {
 		return nil
 	}
-	for _, host := range kept {
-		if host.Service == gone.Service && host.Tag == gone.Tag {
-			return nil
+	return pin.Tags{gone.Service: gone.Tag}
+}
+
+func (s *stack) untagUnroutedRevisions(ctx context.Context, gone pin.Tags, hosts map[string]Host, tags map[string]pin.Tags) error {
+	var errs []error
+	for _, service := range slices.Sorted(maps.Keys(gone)) {
+		if isTagHeld(hosts, tags, service, gone[service]) {
+			continue
+		}
+		errs = append(errs, s.e.deps.Pins.Untag(ctx, service, gone[service]))
+	}
+	return errors.Join(errs...)
+}
+
+func isTagHeld(hosts map[string]Host, tags map[string]pin.Tags, service, tag string) bool {
+	for _, host := range hosts {
+		if host.Service == service && host.Tag == tag {
+			return true
 		}
 	}
-	return s.e.deps.Pins.Untag(ctx, gone.Service, gone.Tag)
+	for _, held := range tags {
+		if held[service] == tag {
+			return true
+		}
+	}
+	return false
 }

@@ -252,11 +252,15 @@ func previewStack(t *testing.T, pins *pinRecorder) router.Stack {
 }
 
 func deploymentMove(pointer, promotionID, revision string) router.PointerMove {
+	return deploymentMoveOf(pointer, promotionID, revision, map[string]string{webService: revision})
+}
+
+func deploymentMoveOf(pointer, promotionID, revision string, revisions map[string]string) router.PointerMove {
 	return router.PointerMove{
 		Pointer:   router.FormatDeploymentPointer(pointer, promotionID),
 		Promotion: router.Promotion{PromotionID: promotionID, Builds: map[string]string{"web": "b-" + revision}},
 		Records: map[string]router.DeploymentRecord{"web": {
-			App: "web", Build: "b-" + revision, Physical: webService, Revisions: map[string]string{webService: revision},
+			App: "web", Build: "b-" + revision, Physical: webService, Revisions: revisions,
 		}},
 	}
 }
@@ -301,6 +305,27 @@ func TestRemovingAPreviewDeploymentUntagsItsRevisionUnlessAnotherDeploymentStill
 	}
 	if pins.isClosed(webService) {
 		t.Error("removing a deployment closed the service, and the preview's own url stops answering")
+	}
+}
+
+func TestRemovingAPreviewDeploymentUntagsEveryServiceItsDeployTagged(t *testing.T) {
+	t.Parallel()
+
+	const fnService = "ocel-shop-prod-fn--web--api"
+	ctx := context.Background()
+	pins := &pinRecorder{}
+	stack := previewStack(t, pins)
+	move := deploymentMoveOf("pr-7", "p1", "web-00001-abc", map[string]string{webService: "web-00001-abc", fnService: "fn-00001-abc"})
+	if err := stack.MovePointer(ctx, move, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(deployment) = %v", err)
+	}
+	if err := stack.RemovePointer(ctx, router.PointerRemoval{Pointer: move.Pointer}, progress.Discard()); err != nil {
+		t.Fatalf("RemovePointer(deployment) = %v", err)
+	}
+	for service, tag := range map[string]string{webService: "tag-web-00001-abc", fnService: "tag-fn-00001-abc"} {
+		if !pins.isUntagged(service, tag) {
+			t.Errorf("removing the deployment left %s tagged %s, and the revision prune keeps what it tagged", service, tag)
+		}
 	}
 }
 
