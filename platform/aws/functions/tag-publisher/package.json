@@ -12,7 +12,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",
     "@aws-sdk/client-ssm": "^3.1083.0",
-    "@framework/next-cache": "workspace:*"
+    "@framework/next-cache": "workspace:*",
+    "@platform/aws-runtime": "workspace:*"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.160",

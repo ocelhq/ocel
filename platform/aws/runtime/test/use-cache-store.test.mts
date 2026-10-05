@@ -1,4 +1,7 @@
+import type { PublishTag } from "@framework/next-cache";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
+const publishNothing: PublishTag = async () => {};
 
 beforeEach(() => {
   process.env.OCEL_STATE_TABLE = "state";
@@ -15,7 +18,7 @@ afterEach(() => {
   }
 });
 
-async function storeWithResponses(responses: any[]) {
+async function storeWithResponses(responses: any[], publish: PublishTag = publishNothing) {
   const sends: any[] = [];
   vi.doMock("@aws-sdk/client-dynamodb", async (orig) => {
     const actual = await orig<any>();
@@ -32,8 +35,8 @@ async function storeWithResponses(responses: any[]) {
       },
     };
   });
-  const { awsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
-  return { store: awsUseCacheStore(), sends };
+  const { newAwsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
+  return { store: newAwsUseCacheStore(publish), sends };
 }
 
 test("stays on the provider's bucket when a cache store is adopted", async () => {
@@ -57,9 +60,9 @@ test("stays on the provider's bucket when a cache store is adopted", async () =>
       },
     };
   });
-  const { awsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
+  const { newAwsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
 
-  await awsUseCacheStore().writeEntry("k", {
+  await newAwsUseCacheStore(publishNothing).writeEntry("k", {
     tags: [],
     stale: 0,
     timestamp: 0,
@@ -123,6 +126,17 @@ test("rounds a fractional write time into the fixed-width sort key", async () =>
   });
 });
 
+test("publishes a revalidated tag's record to the instance's tag snapshot without its write time", async () => {
+  const published: Array<[string, unknown]> = [];
+  const { store } = await storeWithResponses([{}], async (tag, record) => {
+    published.push([tag, record]);
+  });
+
+  await store.writeTag("cart", { stale: 4_000, writtenAt: 4_000 });
+
+  expect(published).toEqual([["cart", { stale: 4_000 }]]);
+});
+
 test("reports a rejected conditional write rather than throwing", async () => {
   const rejected = Object.assign(new Error("guard"), {
     name: "ConditionalCheckFailedException",
@@ -155,8 +169,8 @@ async function storeWithObjects(responses: any[]) {
       },
     };
   });
-  const { awsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
-  return { store: awsUseCacheStore(), sends };
+  const { newAwsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
+  return { store: newAwsUseCacheStore(publishNothing), sends };
 }
 
 const envelope = {

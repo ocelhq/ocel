@@ -4,6 +4,9 @@
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./tag-snapshot-store": "./src/next/tag-snapshot-store.mts"
+  },
   "scripts": {
     "build": "bun scripts/bundle-modules.mjs",
     "typecheck": "tsc --noEmit",

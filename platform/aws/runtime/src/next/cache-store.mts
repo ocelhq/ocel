@@ -1,6 +1,6 @@
 import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { type CacheEntryFile, entryObjectKey } from "@framework/next-cache";
+import { type CacheEntryFile, entryObjectKey, type PublishTag } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
 import { type EntryStore, isrEntryStore } from "./isr-writer.mjs";
 import {
@@ -13,7 +13,7 @@ import {
 } from "./object-store.mjs";
 import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
 
-export function awsCacheStore(): CacheStore {
+export function newAwsCacheStore(publish: PublishTag): CacheStore {
   const prefix = requireEnv("OCEL_ISR_PREFIX");
   const table = requireEnv("OCEL_STATE_TABLE");
   const tagNamespace = requireEnv("OCEL_ISR_TAG_NAMESPACE");
@@ -71,19 +71,19 @@ export function awsCacheStore(): CacheStore {
       if (record.stale === undefined && record.expired === undefined) return;
       const writtenAt = Date.now();
 
-      await Promise.all(
-        tags.map(async (tag) => {
-          try {
-            await ddb.send(
-              new UpdateItemCommand(
-                tagRecordUpdate(table, tagNamespace, tag, { ...record, writtenAt }),
-              ),
-            );
-          } catch (err) {
-            if (!isGuardRejection(err)) throw err;
-          }
-        }),
-      );
+      const indexed = async (tag: string) => {
+        try {
+          await ddb.send(
+            new UpdateItemCommand(
+              tagRecordUpdate(table, tagNamespace, tag, { ...record, writtenAt }),
+            ),
+          );
+        } catch (err) {
+          if (!isGuardRejection(err)) throw err;
+        }
+      };
+
+      await Promise.all(tags.flatMap((tag) => [indexed(tag), publish(tag, record)]));
     },
   };
 }
