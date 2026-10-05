@@ -72,7 +72,7 @@ func listSchemas(invocation commands.Invocation, cmd *cobra.Command) error {
 				continue
 			}
 			if output := findOutput(sub); output != resultv1.CommandOutput_COMMAND_OUTPUT_UNSPECIFIED {
-				list.Commands = append(list.Commands, &resultv1.CommandSchema{Path: formatPath(sub), Output: output})
+				list.Commands = append(list.Commands, &resultv1.ListedCommand{Path: formatPath(sub), Output: output})
 			}
 			walk(sub)
 		}

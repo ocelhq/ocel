@@ -1,6 +1,6 @@
 {
   "$defs": {
-    "cli.result.v1.CommandSchema.jsonschema.json": {
+    "cli.result.v1.ListedCommand.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
@@ -31,7 +31,7 @@
           "type": "string"
         }
       },
-      "title": "Command Schema",
+      "title": "Listed Command",
       "type": "object"
     },
     "cli.result.v1.SchemaListResult.jsonschema.json": {
@@ -40,7 +40,7 @@
       "properties": {
         "commands": {
           "items": {
-            "$ref": "#/$defs/cli.result.v1.CommandSchema.jsonschema.json"
+            "$ref": "#/$defs/cli.result.v1.ListedCommand.jsonschema.json"
           },
           "type": "array"
         }

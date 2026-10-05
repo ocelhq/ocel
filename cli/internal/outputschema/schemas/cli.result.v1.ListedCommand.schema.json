@@ -1,6 +1,6 @@
 {
   "$defs": {
-    "cli.result.v1.CommandSchema.jsonschema.json": {
+    "cli.result.v1.ListedCommand.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
@@ -31,11 +31,11 @@
           "type": "string"
         }
       },
-      "title": "Command Schema",
+      "title": "Listed Command",
       "type": "object"
     }
   },
-  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.CommandSchema.schema.json",
-  "$ref": "#/$defs/cli.result.v1.CommandSchema.jsonschema.json",
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.ListedCommand.schema.json",
+  "$ref": "#/$defs/cli.result.v1.ListedCommand.jsonschema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema"
 }

@@ -439,10 +439,10 @@ message InitResult {
 }
 
 message SchemaListResult {
-  repeated CommandSchema commands = 1;
+  repeated ListedCommand commands = 1;
 }
 
-message CommandSchema {
+message ListedCommand {
   string path = 1;
 
   CommandOutput output = 2;
