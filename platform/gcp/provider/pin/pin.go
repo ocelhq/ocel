@@ -225,19 +225,27 @@ func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error 
 			continue
 		}
 		if serving, err := pins.ReadServing(ctx, each.service); err == nil && serving != each.revision {
-			if recorded := recordRollback(ctx, pins, each, rollback, &left); recorded {
+			err := pins.RecordRollback(ctx, each.service, each.revision, rollback)
+			if err == nil {
+				continue
+			}
+			if !errors.Is(err, ErrRevisionServed) {
+				left = append(left, each.service+" is put back on "+each.revision+" if the promotion that pinned it since fails")
 				continue
 			}
 		}
 		if rollback.Opened {
-			err := pins.Close(ctx, each.service, stillPinned(pins, each))
-			if errors.Is(err, errRepinned) {
-				if recorded := recordRollback(ctx, pins, each, rollback, &left); recorded {
-					continue
-				}
-				err = pins.Close(ctx, each.service, stillPinned(pins, each))
+			recorded, err := untilRecorded(ctx, pins, each, rollback, func() error {
+				return pins.Close(ctx, each.service, stillPinned(pins, each))
+			})
+			if errors.Is(err, errNotRecorded) {
+				left = append(left, each.service+" is put back on "+each.revision+" if the promotion that pinned it since fails")
+				continue
 			}
-			if err != nil && !errors.Is(err, errRepinned) {
+			if recorded {
+				continue
+			}
+			if err != nil {
 				left = append(left, each.service+" answers everyone on "+each.revision)
 				continue
 			}
@@ -249,8 +257,12 @@ func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error 
 				left = append(left, each.service+" serves "+each.revision)
 			}
 		default:
-			err := pins.Restore(ctx, each.service, rollback.Previous, stillPinned(pins, each))
-			if err != nil && !errors.Is(err, errRepinned) {
+			_, err := untilRecorded(ctx, pins, each, rollback, func() error {
+				return pins.Restore(ctx, each.service, rollback.Previous, stillPinned(pins, each))
+			})
+			if errors.Is(err, errNotRecorded) {
+				left = append(left, each.service+" is put back on "+each.revision+" if the promotion that pinned it since fails")
+			} else if err != nil {
 				left = append(left, each.service+" serves "+each.revision)
 			}
 		}
@@ -262,15 +274,25 @@ func restore(ctx context.Context, pins Pins, moved []pinned, cause error) error 
 		cause, strings.Join(left, ", "))
 }
 
-func recordRollback(ctx context.Context, pins Pins, each pinned, rollback Rollback, left *[]string) bool {
-	err := pins.RecordRollback(ctx, each.service, each.revision, rollback)
-	if errors.Is(err, ErrRevisionServed) {
-		return false
+const repinAttempts = 3
+
+var errNotRecorded = errors.New("the rollback this promotion owes could not be recorded")
+
+func untilRecorded(ctx context.Context, pins Pins, each pinned, rollback Rollback, put func() error) (recorded bool, err error) {
+	for range repinAttempts {
+		err = put()
+		if !errors.Is(err, errRepinned) {
+			return false, err
+		}
+		err = pins.RecordRollback(ctx, each.service, each.revision, rollback)
+		if err == nil {
+			return true, nil
+		}
+		if !errors.Is(err, ErrRevisionServed) {
+			return false, fmt.Errorf("%w: %w", errNotRecorded, err)
+		}
 	}
-	if err != nil {
-		*left = append(*left, each.service+" is put back on "+each.revision+" if the promotion that pinned it since fails")
-	}
-	return true
+	return false, errNotRecorded
 }
 
 func readRollback(ctx context.Context, pins Pins, each pinned) (Rollback, error) {
