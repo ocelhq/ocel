@@ -72,7 +72,7 @@ function cacheControlOf(ctx: any): CacheEntryFile["cacheControl"] | undefined {
 }
 
 function loadVariantHeaders(): Record<string, Record<string, unknown>> {
-  const root = process.env.LAMBDA_TASK_ROOT ?? process.cwd();
+  const root = getNextHost().functionDir ?? process.cwd();
   try {
     const parsed = JSON.parse(readFileSync(join(root, variantHeadersFile), "utf8"));
     return isProjection(parsed) ? parsed : {};

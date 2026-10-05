@@ -1,17 +1,16 @@
 import { afterEach, expect, test, vi } from "vitest";
+import type { NextHost } from "../src/host.mjs";
+import { newInstanceCache } from "../src/instance-cache.mjs";
 
-async function loadHandler(env: Record<string, string> = {}) {
+async function loadHandler(env: Record<string, string> = {}, host: NextHost = {}) {
   vi.resetModules();
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
+  (await import("../src/host.mjs")).installNextHost(host);
   (await import("../src/tag-clock.mjs")).setTagClockStore(null);
   return (await import("../src/use-cache-default.mjs")).default;
 }
 
-const budgetVariables = [
-  "OCEL_USE_CACHE_MAX_BYTES",
-  "OCEL_USE_CACHE_MAX_ENTRY",
-  "AWS_LAMBDA_FUNCTION_MEMORY_SIZE",
-];
+const budgetVariables = ["OCEL_USE_CACHE_MAX_ENTRY"];
 
 afterEach(() => {
   for (const v of budgetVariables) delete process.env[v];
@@ -91,7 +90,7 @@ test("a read arriving during an in-flight set waits for it and hits", async () =
 });
 
 test("evicts least-recently-used entries once the byte budget is exceeded", async () => {
-  const handler = await loadHandler({ OCEL_USE_CACHE_MAX_BYTES: "300" });
+  const handler = await loadHandler({}, { instanceCache: newInstanceCache(300) });
   const body = "x".repeat(100);
 
   await handler.set("a", Promise.resolve(entry(body)));
@@ -109,10 +108,10 @@ test("evicts least-recently-used entries once the byte budget is exceeded", asyn
 });
 
 test("refuses an entry above the per-entry cap without evicting anything", async () => {
-  const handler = await loadHandler({
-    OCEL_USE_CACHE_MAX_BYTES: "10000",
-    OCEL_USE_CACHE_MAX_ENTRY: "50",
-  });
+  const handler = await loadHandler(
+    { OCEL_USE_CACHE_MAX_ENTRY: "50" },
+    { instanceCache: newInstanceCache(10000) },
+  );
 
   await handler.set("small", Promise.resolve(entry("tiny")));
   await handler.set("huge", Promise.resolve(entry("x".repeat(500))));
@@ -121,15 +120,32 @@ test("refuses an entry above the per-entry cap without evicting anything", async
   expect(await handler.get("small", [])).toBeDefined();
 });
 
-test("derives the byte budget from the function's configured memory", async () => {
-  const handler = await loadHandler({ AWS_LAMBDA_FUNCTION_MEMORY_SIZE: "1" });
-  const body = "x".repeat(60 * 1024);
+test("stores entries in the instance cache its host declares", async () => {
+  const cache = newInstanceCache(1000);
+  const handler = await loadHandler({}, { instanceCache: cache });
 
-  await handler.set("a", Promise.resolve(entry(body)));
-  await handler.set("b", Promise.resolve(entry(body)));
+  await handler.set("k", Promise.resolve(entry("payload")));
+
+  expect(cache.read("use-cache-default:k")).toBeDefined();
+});
+
+test("shares the host's instance cache with whatever else the host stores in it", async () => {
+  const cache = newInstanceCache(150);
+  const handler = await loadHandler({}, { instanceCache: cache });
+
+  await handler.set("a", Promise.resolve(entry("x".repeat(100))));
+  cache.write("other", "O", 100);
 
   expect(await handler.get("a", [])).toBeUndefined();
-  expect(await handler.get("b", [])).toBeDefined();
+  expect(cache.read("other")).toBe("O");
+});
+
+test("falls back to its own cache when its host declares none", async () => {
+  const handler = await loadHandler();
+
+  await handler.set("k", Promise.resolve(entry("payload")));
+
+  expect(await handler.get("k", [])).toBeDefined();
 });
 
 test("leaves no entry behind when the value stream errors part-way", async () => {

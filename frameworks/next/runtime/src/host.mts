@@ -1,5 +1,6 @@
 import { dispatchesAtOrigin, type Invoke } from "@framework/node-runtime/host";
 import type { CacheStore } from "./cache-store.mjs";
+import type { InstanceCache } from "./instance-cache.mjs";
 import type { UseCacheStore } from "./use-cache-store.mjs";
 
 export interface NextHost {
@@ -7,6 +8,8 @@ export interface NextHost {
   newUseCacheStore?: () => Promise<UseCacheStore>;
   newDispatchInvoke?: (localOrigin: string) => Promise<Invoke>;
   cacheTagsPerObject?: number;
+  functionDir?: string;
+  instanceCache?: InstanceCache;
 }
 
 const hostKey = Symbol.for("ocel.next.host.v1");
