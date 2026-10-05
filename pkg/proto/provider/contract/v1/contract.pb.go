@@ -5033,6 +5033,7 @@ type Question struct {
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Finding       string                 `protobuf:"bytes,2,opt,name=finding,proto3" json:"finding,omitempty"`
 	Prompt        string                 `protobuf:"bytes,3,opt,name=prompt,proto3" json:"prompt,omitempty"`
+	Remedy        string                 `protobuf:"bytes,4,opt,name=remedy,proto3" json:"remedy,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5084,6 +5085,13 @@ func (x *Question) GetFinding() string {
 func (x *Question) GetPrompt() string {
 	if x != nil {
 		return x.Prompt
+	}
+	return ""
+}
+
+func (x *Question) GetRemedy() string {
+	if x != nil {
+		return x.Remedy
 	}
 	return ""
 }
@@ -6298,11 +6306,12 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x1e\n" +
 	"\x06keep_n\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x05keepN\x12D\n" +
 	"\venvironment\x18\x03 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x127\n" +
-	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"L\n" +
+	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"d\n" +
 	"\bQuestion\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\afinding\x18\x02 \x01(\tR\afinding\x12\x16\n" +
-	"\x06prompt\x18\x03 \x01(\tR\x06prompt\":\n" +
+	"\x06prompt\x18\x03 \x01(\tR\x06prompt\x12\x16\n" +
+	"\x06remedy\x18\x04 \x01(\tR\x06remedy\":\n" +
 	"\x0eConfirmRequest\x12(\n" +
 	"\vquestion_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"questionId\"\x11\n" +
