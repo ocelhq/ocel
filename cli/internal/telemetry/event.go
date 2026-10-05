@@ -8,6 +8,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/ocelhq/ocel/cli/internal/invocation"
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
@@ -27,6 +29,7 @@ func NewIdentity(installID string) Identity {
 }
 
 type Event struct {
+	UUID       string         `json:"uuid"`
 	Name       string         `json:"event"`
 	DistinctID string         `json:"distinct_id"`
 	Timestamp  string         `json:"timestamp"`
@@ -54,7 +57,12 @@ func newEvent(name string, identity Identity, at time.Time, properties map[strin
 			return Event{}, fmt.Errorf("telemetry property %q is not on the allowlist", property)
 		}
 	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return Event{}, fmt.Errorf("generate telemetry event id: %w", err)
+	}
 	return Event{
+		UUID:       id.String(),
 		Name:       name,
 		DistinctID: identity.InstallID,
 		Timestamp:  at.UTC().Format(time.RFC3339Nano),

@@ -3,12 +3,15 @@ package telemetry
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
@@ -89,6 +92,10 @@ func TestACommandCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testi
 	if err := json.Unmarshal(marshal(t, event), &got); err != nil {
 		t.Fatal(err)
 	}
+	if id, err := uuid.Parse(fmt.Sprint(got["uuid"])); err != nil || id.Version() != 7 {
+		t.Errorf("uuid = %v, want a version 7 UUID: %v", got["uuid"], err)
+	}
+	delete(got, "uuid")
 	want := map[string]any{
 		"event":       "command_completed",
 		"distinct_id": anIdentity.InstallID,
@@ -111,6 +118,21 @@ func TestACommandCompletedEventCarriesTheCompletionAndTheBaseProperties(t *testi
 	}
 	if !bytes.Equal(marshal(t, got), marshal(t, want)) {
 		t.Errorf("event = %v, want %v", got, want)
+	}
+}
+
+func TestTwoEventsOfTheSameCompletionCarryDifferentUUIDs(t *testing.T) {
+	first, err := NewCommandCompleted(anIdentity, aTime, CommandCompletion{Command: "help"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := NewCommandCompleted(anIdentity, aTime, CommandCompletion{Command: "help"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if first.UUID == "" || first.UUID == second.UUID {
+		t.Errorf("uuids = %q and %q, want two distinct ids so the server can deduplicate a resend", first.UUID, second.UUID)
 	}
 }
 

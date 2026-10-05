@@ -98,7 +98,7 @@ func (s Spool) remove(sent []json.RawMessage) error {
 	defer unlock()
 	gone := make(map[string]bool, len(sent))
 	for _, event := range sent {
-		gone[string(event)] = true
+		gone[readEventUUID(event)] = true
 	}
 	lines, err := s.readLines()
 	if err != nil {
@@ -106,7 +106,7 @@ func (s Spool) remove(sent []json.RawMessage) error {
 	}
 	var kept [][]byte
 	for _, line := range lines {
-		if !gone[string(line)] {
+		if !gone[readEventUUID(line)] {
 			kept = append(kept, line)
 		}
 	}
@@ -199,4 +199,12 @@ func (s Spool) replaceLines(lines [][]byte) error {
 		return fmt.Errorf("replace telemetry spool: %w", err)
 	}
 	return nil
+}
+
+func readEventUUID(line []byte) string {
+	var event struct {
+		UUID string `json:"uuid"`
+	}
+	_ = json.Unmarshal(line, &event)
+	return event.UUID
 }
