@@ -416,7 +416,7 @@ func TestAnAliasWhoseReplacementFailsToRouteIsRoutedAgain(t *testing.T) {
 	if err := stack.MovePointer(ctx, aliasMove("p1", aliasHost, previewRecord("b1")), progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(p1) = %v", err)
 	}
-	w.refuseRoute(rotatedAlias, errors.New("compute refused the host rule"))
+	w.failRoute(rotatedAlias, errors.New("compute refused the host rule"))
 	err := stack.MovePointer(ctx, rotatedMove("p2", previewRecord("b2"), aliasHost), progress.Discard())
 
 	var unserved router.Unserved
@@ -438,7 +438,7 @@ func TestAnAliasRotatedOntoAFullUrlMapThatFailsToRouteGetsItsHostRuleBack(t *tes
 		t.Fatalf("MovePointer(p1) = %v", err)
 	}
 	w.fillHostRules(tierRoutes, maxHostRules)
-	w.refuseRoute(rotatedAlias, errors.New("compute refused the host rule"))
+	w.failRoute(rotatedAlias, errors.New("compute refused the host rule"))
 	err := stack.MovePointer(ctx, rotatedMove("p2", previewRecord("b2"), aliasHost), progress.Discard())
 
 	var unserved router.Unserved
@@ -461,7 +461,7 @@ func TestASupersededAliasThatFailsToUnrouteLeavesTheAliasesBeforeItRouted(t *tes
 	if err := stack.MovePointer(ctx, first, progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(p1) = %v", err)
 	}
-	w.refuseUnroute(siblingAlias, errors.New("compute refused to drop the host rule"))
+	w.failUnroute(siblingAlias, errors.New("compute refused to drop the host rule"))
 	err := stack.MovePointer(ctx, rotatedMove("p2", previewRecord("b2"), aliasHost, siblingAlias), progress.Discard())
 
 	var unserved router.Unserved
@@ -509,7 +509,7 @@ func TestASupersededAliasWhoseUnrouteAppliedBeforeItFailedIsRoutedAgain(t *testi
 	if err := stack.MovePointer(ctx, first, progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(p1) = %v", err)
 	}
-	w.refuseUnrouteAfterApplying(siblingAlias, errors.New("compute dropped the host rule and then lost the reply"))
+	w.failUnrouteAfterApplying(siblingAlias, errors.New("compute dropped the host rule and then lost the reply"))
 	err := stack.MovePointer(ctx, rotatedMove("p2", previewRecord("b2"), aliasHost, siblingAlias), progress.Discard())
 
 	var unserved router.Unserved
@@ -522,7 +522,7 @@ func TestASupersededAliasWhoseUnrouteAppliedBeforeItFailedIsRoutedAgain(t *testi
 
 var errUntagRefused = errors.New("cloud run refused to remove the tag")
 
-func owingATag(t *testing.T) (*world, routerStack, router.DeploymentRecord, router.PointerMove, string) {
+func failingAnUntag(t *testing.T) (*world, routerStack, router.DeploymentRecord, router.PointerMove, string) {
 	t.Helper()
 	ctx := context.Background()
 	w, stack := previewRouter(t)
@@ -531,7 +531,7 @@ func owingATag(t *testing.T) (*world, routerStack, router.DeploymentRecord, rout
 	if err := stack.MovePointer(ctx, move, progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(deployment) = %v", err)
 	}
-	w.refuseUntags(errUntagRefused)
+	w.failUntags(errUntagRefused)
 	return w, stack, record, move, w.tagOf(previewService, record.Revisions[previewService])
 }
 
@@ -539,7 +539,7 @@ func TestATagWhoseUntagFailedIsTakenOffByTheNextMove(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	w, stack, record, _, tag := owingATag(t)
+	w, stack, record, _, tag := failingAnUntag(t)
 	log := &warnings{Log: progress.Discard()}
 	if err := stack.MovePointer(ctx, aliasMove("p2", deploymentHost, record), log); err != nil {
 		t.Fatalf("MovePointer(alias) = %v, want nil: traffic moved, so the deploy did not fail", err)
@@ -551,10 +551,10 @@ func TestATagWhoseUntagFailedIsTakenOffByTheNextMove(t *testing.T) {
 		t.Errorf("the alias move pinned %v, want %v: a failed untag must not stop traffic moving", got, want)
 	}
 	if got, want := stack.s.recorded.TagsToRemove, []RevisionTag{{Service: previewService, Tag: tag}}; !slices.Equal(got, want) {
-		t.Errorf("the router records %v owed removal, want %v", got, want)
+		t.Errorf("the router records %v to remove, want %v", got, want)
 	}
 
-	w.refuseUntags(nil)
+	w.failUntags(nil)
 	if err := stack.MovePointer(ctx, aliasMove("p2", deploymentHost, record), progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(alias) again = %v", err)
 	}
@@ -562,7 +562,7 @@ func TestATagWhoseUntagFailedIsTakenOffByTheNextMove(t *testing.T) {
 		t.Errorf("the retry untagged %v, want %v exactly once", got, want)
 	}
 	if got := stack.s.recorded.TagsToRemove; got != nil {
-		t.Errorf("the router still records %v owed removal", got)
+		t.Errorf("the router still records %v to remove", got)
 	}
 }
 
@@ -570,13 +570,13 @@ func TestATagWhoseUntagFailedIsTakenOffWhenItsDeploymentIsRemovedAgain(t *testin
 	t.Parallel()
 
 	ctx := context.Background()
-	w, stack, _, move, tag := owingATag(t)
+	w, stack, _, move, tag := failingAnUntag(t)
 	removal := router.PointerRemoval{Pointer: move.Pointer, Hosts: move.Hosts}
 	if err := stack.RemovePointer(ctx, removal, progress.Discard()); !errors.Is(err, errUntagRefused) {
 		t.Fatalf("RemovePointer(deployment) = %v, want the untag error", err)
 	}
 
-	w.refuseUntags(nil)
+	w.failUntags(nil)
 	if err := stack.RemovePointer(ctx, removal, progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer(deployment) again = %v", err)
 	}
@@ -584,21 +584,21 @@ func TestATagWhoseUntagFailedIsTakenOffWhenItsDeploymentIsRemovedAgain(t *testin
 		t.Errorf("the removals untagged %v, want %v once", got, want)
 	}
 	if got := stack.s.recorded.TagsToRemove; len(got) != 0 {
-		t.Errorf("the router still records %v owed removal", got)
+		t.Errorf("the router still records %v to remove", got)
 	}
 }
 
-func TestATagStillOwedRemovalThatAHostnameHoldsAgainStaysOnItsRevision(t *testing.T) {
+func TestATagToRemoveThatAHostnameHoldsAgainStaysOnItsRevision(t *testing.T) {
 	t.Parallel()
 
 	const second = "shop-eeeeeeeeeeeeeeee.preview.example.com"
 	ctx := context.Background()
-	w, stack, record, _, tag := owingATag(t)
+	w, stack, record, _, tag := failingAnUntag(t)
 	if err := stack.MovePointer(ctx, aliasMove("p2", deploymentHost, record), progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(alias) = %v, want nil", err)
 	}
 
-	w.refuseUntags(nil)
+	w.failUntags(nil)
 	if err := stack.MovePointer(ctx, deploymentMove(deploymentFirst, second, record), progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(second host) = %v", err)
 	}
@@ -606,6 +606,6 @@ func TestATagStillOwedRemovalThatAHostnameHoldsAgainStaysOnItsRevision(t *testin
 		t.Errorf("the router untagged %s#%s while %s holds it", previewService, tag, second)
 	}
 	if got := stack.s.recorded.TagsToRemove; len(got) != 0 {
-		t.Errorf("the router still records %v owed removal", got)
+		t.Errorf("the router still records %v to remove", got)
 	}
 }
