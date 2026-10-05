@@ -2,7 +2,6 @@ package vps_test
 
 import (
 	"context"
-	"errors"
 	"net"
 	"os"
 	"slices"
@@ -96,10 +95,16 @@ func TestADeployOntoABoxWhosePortsAreFilteredFromOutsideGoesAheadAndNamesTheClou
 	if len(warnings) != 1 {
 		t.Fatalf("PreflightDeploy() warned %q, want one warning that the box's hostnames cannot be reached from outside", warnings)
 	}
-	for _, wanted := range []string{"box.invalid", "ports 80 and 443", "timed out", "listens", "firewall", "GCP", "security group"} {
+	for _, wanted := range []string{"box.invalid", "ports 80 and 443", "(timed out)", "firewall", "GCP", "security group"} {
 		if !strings.Contains(warnings[0], wanted) {
 			t.Errorf("warning = %q, want %q in it", warnings[0], wanted)
 		}
+	}
+	if lines := strings.Count(warnings[0], "\n") + 1; lines > 2 {
+		t.Errorf("warning = %q, want what is closed and how to open it in two lines, not %d", warnings[0], lines)
+	}
+	if strings.Contains(warnings[0], "box's own firewall") {
+		t.Errorf("warning = %q, want only the cloud firewall named: a silent drop happens on the way, not on the box", warnings[0])
 	}
 }
 
@@ -116,19 +121,11 @@ func TestAPortRefusedFromOutsideIsToldApartFromAPortThatTimesOut(t *testing.T) {
 	if len(warnings) != 1 {
 		t.Fatalf("PreflightDeploy() warned %q, want one warning", warnings)
 	}
-	lines := strings.Split(warnings[0], "\n")
-	about := func(port string) string {
-		at := slices.IndexFunc(lines, func(line string) bool { return strings.Contains(line, "port "+port+":") })
-		if at < 0 {
-			t.Fatalf("warning = %q, want a line about port %s", warnings[0], port)
-		}
-		return lines[at]
+	if !strings.Contains(warnings[0], "(80 refused, 443 timed out)") {
+		t.Errorf("warning = %q, want port 80 told refused and 443 timed out: a refusal is an active reject, a timeout a silent drop", warnings[0])
 	}
-	if line := about("80"); !strings.Contains(line, "refused") || strings.Contains(line, "timed out") {
-		t.Errorf("port 80's line = %q, want it refused and not timed out: a refusal is an active reject, a timeout a silent drop", line)
-	}
-	if line := about("443"); !strings.Contains(line, "timed out") || strings.Contains(line, "refused") {
-		t.Errorf("port 443's line = %q, want it timed out and not refused", line)
+	if !strings.Contains(warnings[0], "box's own firewall") {
+		t.Errorf("warning = %q, want the box's own firewall named: something on the box may be what rejects 80", warnings[0])
 	}
 }
 
@@ -143,7 +140,7 @@ func TestAPortWindowsRefusesIsToldAsRefusedRatherThanByItsRawError(t *testing.T)
 	if err != nil {
 		t.Fatalf("PreflightDeploy() = %v, want the deploy let through with a warning", err)
 	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "port 80: refused") {
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "port 80 on box.invalid is unreachable from this machine (refused)") {
 		t.Fatalf("PreflightDeploy() warned %q, want port 80 told as refused", warnings)
 	}
 }
@@ -238,7 +235,7 @@ func TestBothPortsAreProbedAtOnceUnderAShortDeadline(t *testing.T) {
 	}
 }
 
-func TestABootstrapWhoseServingPortsAreClosedFromOutsideFails(t *testing.T) {
+func TestABootstrapWhoseServingPortsAreClosedFromOutsideAsksWhetherTheyHaveBeenOpened(t *testing.T) {
 	t.Parallel()
 
 	machine := boxSaying(nil)
@@ -250,14 +247,60 @@ func TestABootstrapWhoseServingPortsAreClosedFromOutsideFails(t *testing.T) {
 	p.Reaching(reachingWith(map[string]error{"box.invalid:80": filtered, "box.invalid:443": filtered}, &dialed))
 
 	err := p.RefuseServingPortsClosedFromOutside(context.Background(), environment.TierProduction)
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("RefuseServingPortsClosedFromOutside() = %v, want a not-ready refusal", err)
+	question, asked := provider.QuestionOf(err)
+	if !asked {
+		t.Fatalf("RefuseServingPortsClosedFromOutside() = %v, want a question: opening a cloud firewall is a step only the user can take, and the bootstrap waits on it", err)
 	}
-	for _, wanted := range []string{"ports 80 and 443", "timed out", "security group", "ocel bootstrap production"} {
-		if !strings.Contains(err.Error(), wanted) {
-			t.Errorf("refusal = %q, want %q in it", err, wanted)
+	if want := "Have you opened ports 80 and 443?"; question.Prompt != want {
+		t.Errorf("prompt = %q, want %q", question.Prompt, want)
+	}
+	for _, wanted := range []string{"ports 80 and 443", "security group"} {
+		if !strings.Contains(question.Finding, wanted) {
+			t.Errorf("finding = %q, want %q in it", question.Finding, wanted)
 		}
+	}
+	if !strings.Contains(err.Error(), "ocel bootstrap production") {
+		t.Errorf("refusal = %q, want the command to run again where nobody can answer", err)
+	}
+}
+
+func TestConfirmingPortsStillClosedFromOutsideAsksAgain(t *testing.T) {
+	t.Parallel()
+
+	machine := boxSaying(nil)
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	var dialed []string
+	p.Reaching(reachingWith(map[string]error{"box.invalid:443": filtered}, &dialed))
+
+	question, _ := provider.QuestionOf(p.RefuseServingPortsClosedFromOutside(context.Background(), environment.TierProduction))
+	again, asked := provider.QuestionOf(question.Confirm(context.Background()))
+	if !asked {
+		t.Fatal("Confirm() asked nothing, want the question asked again while 443 is still closed")
+	}
+	if want := "Have you opened port 443?"; again.Prompt != want {
+		t.Errorf("prompt = %q, want %q", again.Prompt, want)
+	}
+}
+
+func TestConfirmingPortsNowOpenFromOutsideLetsTheBootstrapGoAhead(t *testing.T) {
+	t.Parallel()
+
+	machine := boxSaying(nil)
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	causes := map[string]error{"box.invalid:80": filtered, "box.invalid:443": filtered}
+	var dialed []string
+	p.Reaching(reachingWith(causes, &dialed))
+
+	question, _ := provider.QuestionOf(p.RefuseServingPortsClosedFromOutside(context.Background(), environment.TierProduction))
+	clear(causes)
+	if err := question.Confirm(context.Background()); err != nil {
+		t.Errorf("Confirm() = %v, want nil once both ports answer", err)
 	}
 }
 

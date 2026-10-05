@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
 
@@ -32,13 +32,26 @@ func (p *Provider) refuseServingPortsClosedFromOutside(ctx context.Context, tier
 	if err := p.host.ProxyOwnsServingPorts(ctx); err != nil {
 		return err
 	}
-	said, err := p.readServingPortsClosedFromOutside(ctx)
-	if err != nil || said == "" {
+	return p.askServingPortsOpened(ctx, tier)
+}
+
+func (p *Provider) askServingPortsOpened(ctx context.Context, tier environment.Tier) error {
+	address, err := p.host.Address(ctx)
+	if err != nil {
 		return err
 	}
-	return refusal.Refuse(refusal.CodeNotReady,
-		"%s\nEverything else the bootstrap installs is in place: run `%s` again once the ports are open.",
-		said, provider.BootstrapCommand(tier))
+	closed := findClosedPorts(ctx, p.reach(), address)
+	if len(closed) == 0 {
+		return nil
+	}
+	said := describeClosedPorts(address, closed)
+	return provider.Ask(
+		fmt.Sprintf("%s\nRun `%s` again once you have opened %s.", said, provider.BootstrapCommand(tier), namePorts(closed)),
+		provider.Question{
+			Finding: said,
+			Prompt:  fmt.Sprintf("Have you opened %s?", namePorts(closed)),
+			Confirm: func(ctx context.Context) error { return p.askServingPortsOpened(ctx, tier) },
+		})
 }
 
 func (p *Provider) readServingPortsClosedFromOutside(ctx context.Context) (string, error) {
@@ -74,30 +87,54 @@ func findClosedPorts(ctx context.Context, reach Reach, address string) []closedP
 }
 
 func describeClosedPorts(address string, closed []closedPort) string {
-	ports := make([]string, 0, len(closed))
-	lines := make([]string, 0, len(closed))
+	numbers := make([]string, 0, len(closed))
+	reasons := make([]string, 0, len(closed))
+	refused := false
 	for _, one := range closed {
-		ports = append(ports, one.port)
-		lines = append(lines, fmt.Sprintf("  port %s: %s", one.port, explainClosed(one.cause)))
+		numbers = append(numbers, one.port)
+		reasons = append(reasons, one.port+" "+explainClosed(one.cause))
+		refused = refused || isRefused(one.cause)
 	}
-	named, verb, them := "port "+ports[0], "accepts", "it"
-	if len(ports) > 1 {
-		named, verb, them = "ports "+strings.Join(ports, " and "), "accept", "them"
+	why := strings.Join(reasons, ", ")
+	if same := explainClosed(closed[0].cause); !slices.ContainsFunc(closed, func(one closedPort) bool { return explainClosed(one.cause) != same }) {
+		why = same
 	}
-	return fmt.Sprintf("%s on %s %s no connection from this machine, though the proxy on the box listens on %s:\n%s\n"+
-		"A cloud firewall in front of the box most likely blocks %s: allow inbound TCP %s from anywhere in the GCP VPC firewall rules, the AWS security group, or your provider's equivalent. "+
-		"Until then nothing outside reaches the hostnames this box serves, and its proxy cannot obtain certificates for them.",
-		named, address, verb, them, strings.Join(lines, "\n"), them, strings.Join(ports, " and "))
+	verb := "is"
+	if len(closed) > 1 {
+		verb = "are"
+	}
+	where := "your cloud firewall (GCP VPC firewall rules, AWS security group, or equivalent)"
+	if refused {
+		where += " or the box's own firewall"
+	}
+	return fmt.Sprintf("%s on %s %s unreachable from this machine (%s).\nAllow inbound TCP %s in %s.",
+		namePorts(closed), address, verb, why,
+		strings.Join(numbers, " and "), where)
+}
+
+func namePorts(closed []closedPort) string {
+	numbers := make([]string, 0, len(closed))
+	for _, one := range closed {
+		numbers = append(numbers, one.port)
+	}
+	if len(numbers) == 1 {
+		return "port " + numbers[0]
+	}
+	return "ports " + strings.Join(numbers, " and ")
+}
+
+func isRefused(cause error) bool {
+	return errors.Is(cause, syscall.ECONNREFUSED) || errors.Is(cause, wsaConnectionRefused)
 }
 
 func explainClosed(cause error) string {
 	var timing interface{ Timeout() bool }
 	switch {
-	case errors.Is(cause, syscall.ECONNREFUSED), errors.Is(cause, wsaConnectionRefused):
-		return "refused, so a firewall on the way or on the box rejects it before the proxy sees it"
+	case isRefused(cause):
+		return "refused"
 	case errors.Is(cause, os.ErrDeadlineExceeded), errors.Is(cause, context.DeadlineExceeded),
 		errors.Is(cause, syscall.ETIMEDOUT), errors.As(cause, &timing) && timing.Timeout():
-		return fmt.Sprintf("timed out after %s, so something between this machine and the box drops it", servingPortTimeout)
+		return "timed out"
 	default:
 		return cause.Error()
 	}
