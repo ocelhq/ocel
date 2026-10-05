@@ -287,14 +287,24 @@ func (s *fakeProviderServer) ReadLogs(ctx context.Context, _ *contractv1.ReadLog
 	return stream.Send(&contractv1.ReadLogsResponse{Body: &contractv1.ReadLogsResponse_Notice{Notice: &contractv1.LogNotice{Kind: contractv1.LogNotice_KIND_CAUGHT_UP}}})
 }
 
-func (s *fakeProviderServer) Preflight(context.Context, *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
+func (s *fakeProviderServer) Preflight(_ context.Context, _ *contractv1.PreflightRequest, stream *connect.ServerStream[contractv1.PreflightEvent]) error {
+	if err := recordDrive(); err != nil {
+		return err
+	}
+	if err := refusalFor(s.mode); err != nil {
+		return askedOver(err)
+	}
+	return stream.Send(&contractv1.PreflightEvent{Body: &contractv1.PreflightEvent_Response{Response: &contractv1.PreflightResponse{}}})
+}
+
+func (s *fakeProviderServer) DescribeBootstrap(context.Context, *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
 	if err := recordDrive(); err != nil {
 		return nil, err
 	}
 	if err := refusalFor(s.mode); err != nil {
 		return nil, askedOver(err)
 	}
-	return &contractv1.PreflightResponse{}, nil
+	return &contractv1.DescribeBootstrapResponse{}, nil
 }
 
 func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {

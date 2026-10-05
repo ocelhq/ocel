@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -37,7 +36,6 @@ type Request struct {
 }
 
 func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {
-	child := span.Child(provider.Name(), CheckingTitle(req.Tier, cfg.Slug))
 	read, err := Read(ctx, provider, cfg, req)
 	if err == nil {
 		span.Identity(identityEvent(cfg, req.Tier, read.Response.GetIdentity()))
@@ -46,7 +44,6 @@ func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provid
 	if err == nil && req.Feature != "" {
 		err = refuseMissingOfferedFeature(ctx, provider, cfg, read.Response.GetBootstrap(), req)
 	}
-	child.End(err)
 	if err != nil {
 		return Preflight{}, err
 	}
@@ -122,17 +119,6 @@ func TierName(tier environmentv1.Tier) string {
 
 func BootstrapCommand(tier environmentv1.Tier) string {
 	return "ocel bootstrap " + TierName(tier)
-}
-
-func CheckingTitle(tier environmentv1.Tier, slug string) progress.Title {
-	if tier == environmentv1.Tier_TIER_UNSPECIFIED {
-		return progress.Checking.Title("your credentials")
-	}
-	object := "your credentials and the " + TierName(tier) + " bootstrap"
-	if slug != "" {
-		object += " for " + slug
-	}
-	return progress.Checking.Title(object)
 }
 
 func infraLabel(tier environmentv1.Tier) string {

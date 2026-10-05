@@ -6,10 +6,16 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
+
+	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/progress"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -17,84 +23,153 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
+func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightRequest, stream *connect.ServerStream[contractv1.PreflightEvent]) (err error) {
 	tier, err := decodeTier(req.GetRequiredTier())
 	if err != nil {
-		return nil, err
+		return err
 	}
 	p, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
-		return nil, err
+		return err
 	}
+	sender := newEventStream(ctx, func(ev *progressv1.OperationEvent) error {
+		return stream.Send(&contractv1.PreflightEvent{Body: &contractv1.PreflightEvent_Progress{Progress: ev}})
+	})
+	resp, err := h.preflight(ctx, preflightSteps{spans: newSpanEvents(sender)}, p, gate, tier, req)
+	err = errors.Join(err, sender.close())
+	if err != nil {
+		return err
+	}
+	return stream.Send(&contractv1.PreflightEvent{Body: &contractv1.PreflightEvent_Response{Response: resp}})
+}
 
+func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provider.Provider, gate Gate, tier environment.Tier, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
 	resp := &contractv1.PreflightResponse{Identity: &contractv1.Identity{}}
+	vendor := p.Facts().Vendor
 
-	principal, err := p.Credentials().Whoami(ctx)
+	var principal provider.Principal
+	err := steps.credentials(string(vendor), func() (err error) {
+		principal, err = p.Credentials().Whoami(ctx)
+		return err
+	})
 	if _, asked := provider.QuestionOf(err); asked {
 		return nil, provider.RefusalError(err)
 	}
 	if err != nil {
-		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(p.Facts().Vendor, err))
+		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(vendor, err))
 		return resp, nil
 	}
-	resp.Identity = PrincipalProto(p.Facts().Vendor, principal)
-	resp.ContainerArchs, err = containerArchs(ctx, p.Runtime(), req.GetContainers())
-	if err != nil {
-		return nil, provider.RefusalError(err)
-	}
-	edgeCredentialsChecked, err := h.verifyEdgeCredentials(ctx, p, gate.Edge, req.GetEdge(), resp)
+	resp.Identity = PrincipalProto(vendor, principal)
+
+	edgeCredentialsChecked, err := h.verifyEdgeCredentials(ctx, steps, p, gate.Edge, req.GetEdge(), resp)
 	if err != nil {
 		return nil, err
 	}
-	if err := verifyDNSCredentials(ctx, p, gate.Edge, edgeCredentialsChecked, req.GetEdge().GetDns(), resp); err != nil {
+	if err := verifyDNSCredentials(ctx, steps, p, gate.Edge, edgeCredentialsChecked, req.GetEdge().GetDns(), resp); err != nil {
 		return nil, err
+	}
+	if len(resp.GetCredentialProblems()) > 0 {
+		return resp, nil
+	}
+
+	if len(req.GetContainers()) > 0 {
+		err = steps.run(string(vendor), progress.Reading.Title("the architecture your containers run on"), func() (err error) {
+			resp.ContainerArchs, err = containerArchs(ctx, p.Runtime(), req.GetContainers())
+			return err
+		})
+		if err != nil {
+			return nil, provider.RefusalError(err)
+		}
 	}
 	resp.HostnameRequired, err = h.hostnameRequired(p, req.GetEdge())
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-
 	required, err := bootstrapplan.RequiredFeatures(gate.Bootstrap.Catalogue(), req.GetFrameworks(), gate.Edge)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 
-	status, err := gate.Status(ctx, tier)
+	var status bootstrapStatus
+	err = steps.run(string(vendor), progress.Reading.Title(bootstrapName(req.GetRequiredTier())), func() (err error) {
+		status, err = readBootstrap(ctx, p, gate, tier, req)
+		return err
+	})
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	resp.Bootstrap = BootstrapStatusProto(status, h.session.writer, req.GetRequiredTier(), required)
-
-	if status.Present {
-		resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier), true
-		resp.KnownSlugs, err = listOtherSlugsIfUnrecorded(ctx, gate, tier, req.GetSlug())
-		if err != nil {
-			return nil, provider.RefusalError(err)
-		}
-		resp.DomainClaims, err = h.domainClaims(ctx, p, tier, req)
-		if err != nil {
-			return nil, provider.RefusalError(err)
-		}
-		if req.GetCheckHosts() {
-			resp.HostChecks = h.hostChecks(ctx, p, provider.HostCheckRequest{Tier: tier, Edge: gate.Edge, Hostnames: req.GetHostCheckDomains()})
-		}
-		if tier == environment.TierPreview {
-			resp.PreviewWildcard, err = recordedPreviewWildcard(ctx, p)
-			if err != nil {
-				return nil, provider.RefusalError(err)
-			}
+	resp.Bootstrap = BootstrapStatusProto(status.own, h.session.writer, req.GetRequiredTier(), required)
+	if !status.own.Present {
+		if status.siblingPresent {
+			resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier.Sibling()), true
 		}
 		return resp, nil
 	}
+	resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier), true
+	resp.KnownSlugs, resp.PreviewWildcard = status.knownSlugs, status.previewWildcard
 
-	sibling, err := gate.Status(ctx, tier.Sibling())
-	if err != nil {
-		return nil, provider.RefusalError(err)
+	if len(req.GetDomains()) > 0 {
+		err = steps.run(string(gate.Edge), progress.Checking.Title("who serves "+strings.Join(req.GetDomains(), ", ")), func() (err error) {
+			resp.DomainClaims, err = h.domainClaims(ctx, p, tier, req)
+			return err
+		})
+		if err != nil {
+			return nil, provider.RefusalError(err)
+		}
 	}
-	if sibling.Present {
-		resp.InfraTier, resp.InfrastructurePresent = encodeTier(sibling.Tier), true
+	if req.GetCheckHosts() {
+		_ = steps.run(string(vendor), progress.Checking.Title("the hosts"), func() error {
+			resp.HostChecks = h.hostChecks(ctx, p, provider.HostCheckRequest{Tier: tier, Edge: gate.Edge, Hostnames: req.GetHostCheckDomains()})
+			return nil
+		})
 	}
 	return resp, nil
+}
+
+type preflightSteps struct {
+	spans *spanEvents
+}
+
+func (s preflightSteps) run(subject string, title progress.Title, do func() error) error {
+	span := Span{ID: newSpanID(), Title: sanitizeTitle(title), Phase: progressv1.Phase_PHASE_CHECK, Subject: subject}
+	return s.spans.run(span, func(*spanRun) error { return do() })
+}
+
+func (s preflightSteps) credentials(subject string, verify func() error) error {
+	return s.run(subject, progress.Checking.Title("your credentials"), verify)
+}
+
+func bootstrapName(tier environmentv1.Tier) string {
+	if tier == environmentv1.Tier_TIER_UNSPECIFIED {
+		return "the Ocel bootstrap"
+	}
+	name, _ := decodeTier(tier)
+	return "the " + string(name) + " bootstrap"
+}
+
+type bootstrapStatus struct {
+	own             BootstrapStatus
+	siblingPresent  bool
+	knownSlugs      []string
+	previewWildcard *contractv1.PreviewWildcard
+}
+
+func readBootstrap(ctx context.Context, p provider.Provider, gate Gate, tier environment.Tier, req *contractv1.PreflightRequest) (status bootstrapStatus, err error) {
+	if status.own, err = gate.Status(ctx, tier); err != nil {
+		return status, err
+	}
+	if !status.own.Present {
+		sibling, err := gate.Status(ctx, tier.Sibling())
+		status.siblingPresent = sibling.Present
+		return status, err
+	}
+	if status.knownSlugs, err = listOtherSlugsIfUnrecorded(ctx, gate, tier, req.GetSlug()); err != nil {
+		return status, err
+	}
+	if tier == environment.TierPreview {
+		status.previewWildcard, err = recordedPreviewWildcard(ctx, p)
+	}
+	return status, err
 }
 
 func containerArchs(ctx context.Context, runtime provider.Runtime, containers []*contractv1.ContainerApp) (map[string]string, error) {
@@ -114,6 +189,7 @@ func containerArchs(ctx context.Context, runtime provider.Runtime, containers []
 
 func (h *handlers) verifyEdgeCredentials(
 	ctx context.Context,
+	steps preflightSteps,
 	p provider.Provider,
 	kind edge.Kind,
 	sel *contractv1.EdgeSelection,
@@ -130,7 +206,14 @@ func (h *handlers) verifyEdgeCredentials(
 	if verify == nil {
 		return false, nil
 	}
-	scope, err := verify(ctx)
+	var scope edge.CredentialIdentity
+	err = steps.credentials(string(kind), func() (err error) {
+		scope, err = verify(ctx)
+		return err
+	})
+	if _, asked := provider.QuestionOf(err); asked {
+		return false, provider.RefusalError(err)
+	}
 	if err != nil {
 		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(provider.Vendor(kind), err))
 		return true, nil
@@ -141,6 +224,7 @@ func (h *handlers) verifyEdgeCredentials(
 
 func verifyDNSCredentials(
 	ctx context.Context,
+	steps preflightSteps,
 	p provider.Provider,
 	front edge.Kind,
 	edgeCredentialsChecked bool,
@@ -159,7 +243,11 @@ func verifyDNSCredentials(
 	if edgeCredentialsChecked && vendor == provider.Vendor(front) {
 		return nil
 	}
-	if err := writer.VerifyCredentials(ctx); err != nil {
+	err = steps.credentials(string(vendor), func() error { return writer.VerifyCredentials(ctx) })
+	if _, asked := provider.QuestionOf(err); asked {
+		return provider.RefusalError(err)
+	}
+	if err != nil {
 		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(vendor, err))
 	}
 	return nil

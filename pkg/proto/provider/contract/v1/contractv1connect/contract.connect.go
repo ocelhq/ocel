@@ -144,7 +144,7 @@ type ProviderServiceClient interface {
 	GetEnvironment(context.Context, *v1.GetEnvironmentRequest) (*v1.GetEnvironmentResponse, error)
 	EnsurePreviewAlias(context.Context, *v1.EnsurePreviewAliasRequest) (*v1.EnsurePreviewAliasResponse, error)
 	ForgetPreviewAlias(context.Context, *v1.ForgetPreviewAliasRequest) (*v1.ForgetPreviewAliasResponse, error)
-	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
+	Preflight(context.Context, *v1.PreflightRequest) (*connect.ServerStreamForClient[v1.PreflightEvent], error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
 	RemoveStalePromotions(context.Context, *v1.RemoveStalePromotionsRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
@@ -258,7 +258,7 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("ForgetPreviewAlias")),
 			connect.WithClientOptions(opts...),
 		),
-		preflight: connect.NewClient[v1.PreflightRequest, v1.PreflightResponse](
+		preflight: connect.NewClient[v1.PreflightRequest, v1.PreflightEvent](
 			httpClient,
 			baseURL+ProviderServicePreflightProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("Preflight")),
@@ -379,7 +379,7 @@ type providerServiceClient struct {
 	getEnvironment            *connect.Client[v1.GetEnvironmentRequest, v1.GetEnvironmentResponse]
 	ensurePreviewAlias        *connect.Client[v1.EnsurePreviewAliasRequest, v1.EnsurePreviewAliasResponse]
 	forgetPreviewAlias        *connect.Client[v1.ForgetPreviewAliasRequest, v1.ForgetPreviewAliasResponse]
-	preflight                 *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
+	preflight                 *connect.Client[v1.PreflightRequest, v1.PreflightEvent]
 	listPromotions            *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
 	rollback                  *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
 	removeStalePromotions     *connect.Client[v1.RemoveStalePromotionsRequest, v11.OperationEvent]
@@ -505,12 +505,8 @@ func (c *providerServiceClient) ForgetPreviewAlias(ctx context.Context, req *v1.
 }
 
 // Preflight calls provider.contract.v1.ProviderService.Preflight.
-func (c *providerServiceClient) Preflight(ctx context.Context, req *v1.PreflightRequest) (*v1.PreflightResponse, error) {
-	response, err := c.preflight.CallUnary(ctx, connect.NewRequest(req))
-	if response != nil {
-		return response.Msg, err
-	}
-	return nil, err
+func (c *providerServiceClient) Preflight(ctx context.Context, req *v1.PreflightRequest) (*connect.ServerStreamForClient[v1.PreflightEvent], error) {
+	return c.preflight.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // ListPromotions calls provider.contract.v1.ProviderService.ListPromotions.
@@ -641,7 +637,7 @@ type ProviderServiceHandler interface {
 	GetEnvironment(context.Context, *v1.GetEnvironmentRequest) (*v1.GetEnvironmentResponse, error)
 	EnsurePreviewAlias(context.Context, *v1.EnsurePreviewAliasRequest) (*v1.EnsurePreviewAliasResponse, error)
 	ForgetPreviewAlias(context.Context, *v1.ForgetPreviewAliasRequest) (*v1.ForgetPreviewAliasResponse, error)
-	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
+	Preflight(context.Context, *v1.PreflightRequest, *connect.ServerStream[v1.PreflightEvent]) error
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
 	RemoveStalePromotions(context.Context, *v1.RemoveStalePromotionsRequest, *connect.ServerStream[v11.OperationEvent]) error
@@ -751,7 +747,7 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("ForgetPreviewAlias")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServicePreflightHandler := connect.NewUnaryHandlerSimple(
+	providerServicePreflightHandler := connect.NewServerStreamHandlerSimple(
 		ProviderServicePreflightProcedure,
 		svc.Preflight,
 		connect.WithSchema(providerServiceMethods.ByName("Preflight")),
@@ -982,8 +978,8 @@ func (UnimplementedProviderServiceHandler) ForgetPreviewAlias(context.Context, *
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ForgetPreviewAlias is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Preflight is not implemented"))
+func (UnimplementedProviderServiceHandler) Preflight(context.Context, *v1.PreflightRequest, *connect.ServerStream[v1.PreflightEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Preflight is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error) {

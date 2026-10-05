@@ -231,7 +231,7 @@ func TestAQuestionOnAUnaryCallIsAskedOnceConfirmedAndThatCallRetried(t *testing.
 	p := startFake(t, ctx, "unknown-host-key", span, answering(asker, io.Discard), fake.env()...)
 
 	err := p.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
-		_, err := client.Preflight(ctx, &contractv1.PreflightRequest{})
+		_, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{})
 		return err
 	})
 	if err != nil {
@@ -245,6 +245,25 @@ func TestAQuestionOnAUnaryCallIsAskedOnceConfirmedAndThatCallRetried(t *testing.
 	}
 	if got := fake.recorded(t); got != fakeHostLine() {
 		t.Errorf("known_hosts = %q, want %q", got, fakeHostLine())
+	}
+}
+
+func TestAQuestionOnPreflightIsAskedOnceConfirmedAndThePreflightRetried(t *testing.T) {
+	t.Parallel()
+
+	ctx, span, _ := deploySpan(t)
+	fake := newQuestionFake(t, "unknown-host-key")
+	asker := &scriptedPrompt{attended: true, answer: true}
+	p := startFake(t, ctx, "unknown-host-key", span, answering(asker, io.Discard), fake.env()...)
+
+	if _, err := Preflight(ctx, p, &contractv1.PreflightRequest{}); err != nil {
+		t.Fatalf("Preflight() error = %v, want the retried preflight to answer", err)
+	}
+	if len(asker.asked) != 1 {
+		t.Errorf("asked %d times (%v), want exactly one prompt", len(asker.asked), asker.asked)
+	}
+	if got := fake.drivenTimes(t); got != 2 {
+		t.Errorf("the preflight ran %d times, want 2", got)
 	}
 }
 

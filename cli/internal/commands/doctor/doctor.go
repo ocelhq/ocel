@@ -164,7 +164,7 @@ func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) r
 		return found
 	}
 
-	answers := gather(ctx, invocation, cfg, descriptor.ID)
+	answers := gather(ctx, invocation, cfg)
 	found.add(credentialSections(cfg, answers)...)
 	for _, tier := range checkedTiers() {
 		found.add(tierSection(tier, hosts[tier], answers))
@@ -326,15 +326,15 @@ func hostCheckDomains(asking bool, cfg *project.Project) []string {
 	return named
 }
 
-func gather(ctx context.Context, invocation commands.Invocation, cfg *project.Project, providerID string) *answers {
+func gather(ctx context.Context, invocation commands.Invocation, cfg *project.Project) *answers {
 	got := &answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
-	if err := checkSetup(ctx, invocation, cfg, providerID, got); err != nil && got.problem == "" {
+	if err := checkSetup(ctx, invocation, cfg, got); err != nil && got.problem == "" {
 		got.problem = strings.TrimSpace(err.Error())
 	}
 	return got
 }
 
-func checkSetup(ctx context.Context, invocation commands.Invocation, cfg *project.Project, providerID string, got *answers) error {
+func checkSetup(ctx context.Context, invocation commands.Invocation, cfg *project.Project, got *answers) error {
 	ctx, run, err := invocation.Events.Begin(ctx, "ocel doctor", cfg.Dir)
 	if err != nil {
 		return err
@@ -346,10 +346,7 @@ func checkSetup(ctx context.Context, invocation commands.Invocation, cfg *projec
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
 	var provider *providerprocess.Provider
-	err = runStep(check, providerID, progress.Loading.Title("the provider"), func() (err error) {
-		provider, _, err = invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
-		return err
-	})
+	provider, _, err = invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{})
 	if err != nil {
 		return err
 	}
@@ -374,16 +371,12 @@ func runStep(check *run.Span, subject string, title progress.Title, work func() 
 func askAboutTier(ctx context.Context, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier, got *answers) error {
 	name := readiness.TierName(tier)
 	checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
-	var read readiness.Preflight
-	err := runStep(check, provider.Name(), readiness.CheckingTitle(tier, cfg.Slug), func() (err error) {
-		read, err = readiness.Read(ctx, provider, cfg, readiness.Request{
-			Tier:             tier,
-			Slug:             cfg.Slug,
-			Domains:          cfg.HostnameNames(tier),
-			CheckHosts:       checkHosts,
-			HostCheckDomains: hostCheckDomains(checkHosts, cfg),
-		})
-		return err
+	read, err := readiness.Read(ctx, provider, cfg, readiness.Request{
+		Tier:             tier,
+		Slug:             cfg.Slug,
+		Domains:          cfg.HostnameNames(tier),
+		CheckHosts:       checkHosts,
+		HostCheckDomains: hostCheckDomains(checkHosts, cfg),
 	})
 	if err != nil {
 		return err

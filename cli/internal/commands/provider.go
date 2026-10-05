@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -35,7 +36,9 @@ func (i Invocation) OpenProvider(ctx context.Context, check *run.Span, cfg *proj
 }
 
 func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, readiness.Preflight, error) {
+	loading := check.Child(providerID(cfg), progress.Loading.Title("the provider"))
 	provider, err := providerprocess.Start(ctx, cfg, check, i.Questions, opts.Pinning)
+	loading.End(err)
 	if err != nil {
 		return nil, readiness.Preflight{}, err
 	}
@@ -106,4 +109,11 @@ func (i Invocation) WithProvider(ctx context.Context, cfg *project.Project, comm
 	err = work(ctx, ProviderRun{Run: running, Check: check, Provider: provider, Preflight: preflight, Project: loaded})
 	check.End(err)
 	return err
+}
+
+func providerID(cfg *project.Project) string {
+	if cfg.Provider == nil {
+		return ""
+	}
+	return cfg.Provider.ID
 }

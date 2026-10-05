@@ -210,7 +210,7 @@ func TestARunNamingNoEdgeStillNeedsTheDefaultEdgesFeature(t *testing.T) {
 	client, _ := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
-	resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
+	resp, err := preflight(ctx, client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
 	})

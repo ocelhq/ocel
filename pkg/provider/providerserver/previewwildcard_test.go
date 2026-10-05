@@ -334,7 +334,7 @@ func TestThePreviewWildcardNamesWhoRenewsItAndWhenItExpires(t *testing.T) {
 	}
 	assertWildcardRenewal(t, "GetPreviewWildcard()", got.GetWildcard(), expiry)
 
-	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	resp, err := preflight(context.Background(), client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PREVIEW,
 		Slug:         "shop",
 	})

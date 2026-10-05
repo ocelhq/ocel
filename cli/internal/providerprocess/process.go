@@ -433,6 +433,33 @@ func (r *Process) streamError(rpc string, err error, refused bool) error {
 	return r.withExitStderr(fmt.Errorf("provider: provider connection lost: %w", err))
 }
 
+func (r *Process) preflight(ctx context.Context, req *contractv1.PreflightRequest, onProgress func(*progressv1.OperationEvent)) (*contractv1.PreflightResponse, error) {
+	client, err := r.Client()
+	if err != nil {
+		return nil, err
+	}
+	stream, err := client.Preflight(ctx, req)
+	if err != nil {
+		return nil, r.callError("Preflight", err)
+	}
+	defer stream.Close()
+
+	for stream.Receive() {
+		event := stream.Msg()
+		if response := event.GetResponse(); response != nil {
+			return response, nil
+		}
+		onProgress(event.GetProgress())
+	}
+	if err := stream.Err(); err != nil {
+		if connect.IsWireError(err) {
+			return nil, err
+		}
+		return nil, r.streamError("Preflight", err, false)
+	}
+	return nil, r.withExitStderr(errors.New("provider: provider closed the Preflight stream without a response"))
+}
+
 func (r *Process) readLogs(ctx context.Context, req *contractv1.ReadLogsRequest, onResponse func(*contractv1.ReadLogsResponse) error) error {
 	client, err := r.Client()
 	if err != nil {

@@ -474,7 +474,7 @@ func TestRunDeployRefusesAComputeTheProviderDoesNotRun(t *testing.T) {
 	}
 }
 
-func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckSpanNamedForItsProviderThenSaysWhoItActsAs(t *testing.T) {
+func TestDeployChecksCredentialsThenTheProjectsBootstrapAsCheckStepsNamedForItsProviderThenSaysWhoItActsAs(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
 	useJSONFormat(t, &dependencies)
@@ -483,32 +483,41 @@ func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckSpanNamedForItsPr
 	out := deployOutput(t, fixture, dependencies, deployOptions{yes: true}, "")
 
 	evs := envelopes(t, out)
-	started := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return ev.GetOperation().GetStarted() != nil && ev.GetOperation().GetMessage() == "Checking your credentials and the production bootstrap for "+clitest.FixtureSlug
-	})
-	if started < 0 {
-		t.Fatalf("no span started for the credential check: %s", out)
+	step := func(message string) (int, int) {
+		t.Helper()
+		started := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
+			return ev.GetOperation().GetStarted() != nil && ev.GetOperation().GetMessage() == message
+		})
+		if started < 0 {
+			t.Fatalf("no step %q started: %s", message, out)
+		}
+		span := evs[started]
+		if span.GetOperation().GetPhase() != progressv1.Phase_PHASE_CHECK || span.GetOperation().GetSubject() != "fake" {
+			t.Errorf("%q started in %s naming %q, want the check phase naming the provider %q", message, span.GetOperation().GetPhase(), span.GetOperation().GetSubject(), "fake")
+		}
+		ended := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
+			return ev.GetOperation().GetEnded() != nil && bytes.Equal(ev.GetOperation().GetSpanId(), span.GetOperation().GetSpanId())
+		})
+		if ended < 0 || evs[ended].GetOperation().GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
+			t.Fatalf("%q never ended OK: %s", message, out)
+		}
+		return started, ended
 	}
-	span := evs[started]
-	if span.GetOperation().GetPhase() != progressv1.Phase_PHASE_CHECK || span.GetOperation().GetSubject() != "fake" {
-		t.Errorf("credential check started in %s naming %q, want the check phase naming the provider %q", span.GetOperation().GetPhase(), span.GetOperation().GetSubject(), "fake")
-	}
-	ended := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return ev.GetOperation().GetEnded() != nil && bytes.Equal(ev.GetOperation().GetSpanId(), span.GetOperation().GetSpanId())
-	})
-	if ended < 0 || evs[ended].GetOperation().GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
-		t.Fatalf("the credential check never ended OK: %s", out)
+	_, credentialsEnded := step("Checking your credentials")
+	bootstrapStarted, bootstrapEnded := step("Reading the production bootstrap")
+	if bootstrapStarted < credentialsEnded {
+		t.Errorf("the bootstrap read began at event %d, before the credential check ended at %d: want one step at a time", bootstrapStarted, credentialsEnded)
 	}
 	identity := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetIdentity() != nil })
-	if identity < started || identity > ended {
-		t.Errorf("identity at event %d, credential check from %d to %d: want who the deploy acts as named while the check is still open", identity, started, ended)
+	if identity < bootstrapEnded {
+		t.Errorf("identity at event %d, before the checks ended at %d", identity, bootstrapEnded)
 	}
 	if evs[identity].GetOperation().GetPhase() != progressv1.Phase_PHASE_CHECK {
 		t.Errorf("identity in %s, want the check phase", evs[identity].GetOperation().GetPhase())
 	}
 }
 
-func TestAnUnbootstrappedProductionFailsTheCheckSpanWithTheCommandThatBootstrapsIt(t *testing.T) {
+func TestAnUnbootstrappedProductionFailsTheCheckPhaseWithTheCommandThatBootstrapsIt(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
 	useJSONFormat(t, &dependencies)
@@ -522,17 +531,15 @@ func TestAnUnbootstrappedProductionFailsTheCheckSpanWithTheCommandThatBootstraps
 	}
 
 	evs := envelopes(t, stdout.String())
-	check := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return ev.GetOperation().GetStarted() != nil && strings.HasPrefix(ev.GetOperation().GetMessage(), "Checking your credentials")
+	failed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
+		op := ev.GetOperation()
+		return op.GetPhase() == progressv1.Phase_PHASE_CHECK && op.GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
 	})
-	if check < 0 {
-		t.Fatalf("no credential check started: %s", stdout.String())
+	if failed < 0 || !strings.Contains(evs[failed].GetOperation().GetMessage(), "ocel bootstrap production") {
+		t.Fatalf("the check phase did not fail naming `ocel bootstrap production`: %s", stdout.String())
 	}
-	ended := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return ev.GetOperation().GetEnded() != nil && bytes.Equal(ev.GetOperation().GetSpanId(), evs[check].GetOperation().GetSpanId())
-	})
-	if ended < 0 || evs[ended].GetOperation().GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR || !strings.Contains(evs[ended].GetOperation().GetMessage(), "ocel bootstrap production") {
-		t.Fatalf("the credential check did not fail naming `ocel bootstrap production`: %s", stdout.String())
+	if slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetOperation().GetPhase() == progressv1.Phase_PHASE_BUILD }) {
+		t.Errorf("the deploy began building against no bootstrap: %s", stdout.String())
 	}
 }
 

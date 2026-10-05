@@ -45,7 +45,7 @@ service ProviderService {
 
     rpc ForgetPreviewAlias(ForgetPreviewAliasRequest) returns (ForgetPreviewAliasResponse);
 
-    rpc Preflight(PreflightRequest) returns (PreflightResponse);
+    rpc Preflight(PreflightRequest) returns (stream PreflightEvent);
 
     rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
 
@@ -610,6 +610,15 @@ message ContainerApp {
   string app = 1 [(buf.validate.field).string.min_len = 1];
 
   string arch = 2 [(buf.validate.field).string = {in: ["x86_64", "arm64"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+}
+
+message PreflightEvent {
+  oneof body {
+    option (buf.validate.oneof).required = true;
+
+    common.progress.v1.OperationEvent progress = 1;
+    PreflightResponse response = 2;
+  }
 }
 
 message PreflightResponse {
