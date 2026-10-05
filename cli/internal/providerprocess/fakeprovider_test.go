@@ -363,9 +363,13 @@ func refusalFor(mode string) error {
 	}
 	finding := fmt.Sprintf("the host key for %s (%s) port %d is in none of %s\n  %s %s", fakeHostName, fakeHostAddress, fakeHostPort, store, fakeHostKeyType, fakeHostFingerprint)
 	return provider.RefusalError(provider.Ask(
-		fmt.Sprintf("%s\nCheck that fingerprint against the machine itself, then record it:\n  ssh-keyscan -t %s -p %d %s >> %s", finding, fakeHostKeyType, fakeHostPort, fakeHostAddress, store),
-		provider.Question{Finding: finding, Prompt: fmt.Sprintf("Trust that key and record %s in %s?", fakeHostEntry(), store)},
+		fmt.Sprintf("%s\nCheck that fingerprint against the machine itself, then record it:\n  %s", finding, fakeKeyscan(store)),
+		provider.Question{Finding: finding, Prompt: fmt.Sprintf("Trust that key and record %s in %s?", fakeHostEntry(), store), Remedy: fakeKeyscan(store)},
 	))
+}
+
+func fakeKeyscan(store string) string {
+	return fmt.Sprintf("ssh-keyscan -t %s -p %d %s >> %s", fakeHostKeyType, fakeHostPort, fakeHostAddress, store)
 }
 
 func askedOver(err error) error {
@@ -374,7 +378,7 @@ func askedOver(err error) error {
 	if !asked || !errors.As(err, &wire) {
 		return err
 	}
-	detail, detailErr := connect.NewErrorDetail(&contractv1.Question{Id: fakeQuestionID, Finding: question.Finding, Prompt: question.Prompt})
+	detail, detailErr := connect.NewErrorDetail(&contractv1.Question{Id: fakeQuestionID, Finding: question.Finding, Prompt: question.Prompt, Remedy: question.Remedy})
 	if detailErr != nil {
 		return errors.Join(err, detailErr)
 	}

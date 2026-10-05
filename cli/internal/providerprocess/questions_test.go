@@ -179,7 +179,28 @@ func TestAQuestionNobodyCanAnswerReportsInputRequired(t *testing.T) {
 			if !strings.Contains(err.Error(), "ssh-keyscan") {
 				t.Errorf("err = %v, want the provider's remedy kept", err)
 			}
+			hint := clierror.NewRunError(err).GetHint()
+			if want := fakeKeyscan(fake.knownHosts); hint != want {
+				t.Errorf("hint = %q, want the line a user types, %q", hint, want)
+			}
 		})
+	}
+}
+
+func TestAQuestionNobodyCanAnswerHintsTheRemedyWithoutTerminalControls(t *testing.T) {
+	t.Parallel()
+
+	wire := connect.NewError(connect.CodePermissionDenied, errors.New("the host key is unknown"))
+	detail, err := connect.NewErrorDetail(&contractv1.Question{Id: "q", Remedy: "ssh-keyscan \x1b[2J203.0.113.10 >> known_hosts"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wire.AddDetail(detail)
+
+	_, err = Questions{}.answer(context.Background(), nil, wire)
+
+	if got, want := clierror.NewRunError(err).GetHint(), "ssh-keyscan [2J203.0.113.10 >> known_hosts"; got != want {
+		t.Errorf("hint = %q, want %q", got, want)
 	}
 }
 
