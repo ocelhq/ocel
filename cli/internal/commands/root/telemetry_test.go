@@ -11,9 +11,9 @@ import (
 func withTelemetryKey(t *testing.T) {
 	t.Helper()
 	confighome.Isolate(t)
-	previous := telemetry.Key
-	telemetry.Key = "a-key"
-	t.Cleanup(func() { telemetry.Key = previous })
+	previous := telemetry.WriteKey
+	telemetry.WriteKey = "a-key"
+	t.Cleanup(func() { telemetry.WriteKey = previous })
 }
 
 func TestTheTelemetryBannerPrintsOnStderrOnceAcrossInvocations(t *testing.T) {

@@ -11,8 +11,8 @@ import (
 
 const bannerShownKey = "telemetry_banner_shown"
 
-func AnnounceOnce(w io.Writer, res Resolution) {
-	if !res.Enabled || res.Debug || bannerShown(userconfig.Read()) {
+func PrintBannerOnce(w io.Writer, resolution Resolution) {
+	if !resolution.Enabled || resolution.Debug || bannerShown(userconfig.Read()) {
 		return
 	}
 	fmt.Fprintf(w, "Ocel collects anonymous usage data: which commands run, and whether they succeed. Never your code, paths or names.\nLearn more: %s\nTurn it off: %s=0\n\n", docsurl.FormatTelemetryPage(), EnvVar)

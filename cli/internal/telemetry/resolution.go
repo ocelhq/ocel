@@ -11,7 +11,7 @@ const (
 	debugValue    = "debug"
 )
 
-var Key = ""
+var WriteKey = ""
 
 type Rule string
 

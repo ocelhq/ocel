@@ -147,7 +147,7 @@ func newCommand() *command {
 		if err := set.readFromFlagsOrEnv(cmd); err != nil {
 			return err
 		}
-		telemetry.AnnounceOnce(cmd.ErrOrStderr(), telemetry.Resolve(telemetry.Key))
+		telemetry.PrintBannerOnce(cmd.ErrOrStderr(), telemetry.Resolve(telemetry.WriteKey))
 		invocation.AttachCommandSink(cmd)
 		install := installInterruptHandler
 		if cmd == devCmd || cmd == runCmd {
