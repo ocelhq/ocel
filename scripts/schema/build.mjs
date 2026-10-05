@@ -327,7 +327,7 @@ function types(merged) {
   return `${header}\n${emitter.render()}`;
 }
 
-function messageSchemas() {
+function generateMessageSchemas() {
   const scratch = mkdtempSync(join(tmpdir(), "ocel-message-schemas-"));
   try {
     execFileSync(
@@ -376,15 +376,10 @@ function writeMessageSchemas() {
     rmSync(out, { recursive: true, force: true });
     mkdirSync(out, { recursive: true });
   }
-  const written = [];
-  for (const { file, schema: document } of messageSchemas()) {
-    for (const out of outputs) {
-      const path = join(out, file);
-      writeFileSync(path, `${JSON.stringify(document, null, 2)}\n`);
-      written.push(path);
-    }
+  for (const { file, schema: document } of generateMessageSchemas()) {
+    const text = `${JSON.stringify(document, null, 2)}\n`;
+    for (const out of outputs) writeFileSync(join(out, file), text);
   }
-  return written;
 }
 
 const merged = schema();
@@ -393,18 +388,8 @@ writeFileSync(SCHEMA_OUT, `${JSON.stringify(merged, null, 2)}\n`);
 mkdirSync(dirname(TYPES_OUT), { recursive: true });
 writeFileSync(TYPES_OUT, types(merged));
 writeFileSync(SELECTORS_OUT, `${JSON.stringify(selectors(merged), null, 2)}\n`);
-const messageSchemaFiles = writeMessageSchemas();
-execFileSync(
-  "pnpm",
-  [
-    "exec",
-    "biome",
-    "format",
-    "--write",
-    SCHEMA_OUT,
-    TYPES_OUT,
-    SELECTORS_OUT,
-    ...messageSchemaFiles,
-  ],
-  { cwd: root, stdio: "inherit" },
-);
+writeMessageSchemas();
+execFileSync("pnpm", ["exec", "biome", "format", "--write", SCHEMA_OUT, TYPES_OUT, SELECTORS_OUT], {
+  cwd: root,
+  stdio: "inherit",
+});

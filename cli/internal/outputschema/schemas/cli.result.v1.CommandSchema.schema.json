@@ -11,7 +11,10 @@
               "type": "string"
             },
             {
-              "enum": ["COMMAND_OUTPUT_RESULT", "COMMAND_OUTPUT_RUN_EVENTS"],
+              "enum": [
+                "COMMAND_OUTPUT_RESULT",
+                "COMMAND_OUTPUT_RUN_EVENTS"
+              ],
               "type": "string"
             },
             {

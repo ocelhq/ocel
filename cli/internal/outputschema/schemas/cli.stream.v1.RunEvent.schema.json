@@ -37,7 +37,10 @@
               "type": "string"
             },
             {
-              "enum": ["TIER_PREVIEW", "TIER_PRODUCTION"],
+              "enum": [
+                "TIER_PREVIEW",
+                "TIER_PRODUCTION"
+              ],
               "type": "string"
             },
             {
@@ -323,7 +326,10 @@
               "type": "string"
             },
             {
-              "enum": ["TIER_PREVIEW", "TIER_PRODUCTION"],
+              "enum": [
+                "TIER_PREVIEW",
+                "TIER_PRODUCTION"
+              ],
               "type": "string"
             },
             {
@@ -578,7 +584,11 @@
               "type": "string"
             },
             {
-              "enum": ["APP_OUTCOME_SUCCEEDED", "APP_OUTCOME_FAILED", "APP_OUTCOME_NOT_RUN"],
+              "enum": [
+                "APP_OUTCOME_SUCCEEDED",
+                "APP_OUTCOME_FAILED",
+                "APP_OUTCOME_NOT_RUN"
+              ],
               "type": "string"
             },
             {
@@ -717,7 +727,10 @@
               "type": "string"
             },
             {
-              "enum": ["SPAN_STATUS_OK", "SPAN_STATUS_ERROR"],
+              "enum": [
+                "SPAN_STATUS_OK",
+                "SPAN_STATUS_ERROR"
+              ],
               "type": "string"
             },
             {
@@ -766,7 +779,12 @@
               "type": "string"
             },
             {
-              "enum": ["LEVEL_DEBUG", "LEVEL_INFO", "LEVEL_WARN", "LEVEL_ERROR"],
+              "enum": [
+                "LEVEL_DEBUG",
+                "LEVEL_INFO",
+                "LEVEL_WARN",
+                "LEVEL_ERROR"
+              ],
               "type": "string"
             },
             {
@@ -904,7 +922,10 @@
               "type": "string"
             },
             {
-              "enum": ["STREAM_STDOUT", "STREAM_STDERR"],
+              "enum": [
+                "STREAM_STDOUT",
+                "STREAM_STDERR"
+              ],
               "type": "string"
             },
             {

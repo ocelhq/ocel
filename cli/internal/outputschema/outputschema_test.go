@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -165,6 +167,40 @@ func TestTheRunEventSchemaAcceptsEveryLineTheNDJSONStreamPrints(t *testing.T) {
 	for _, line := range lines {
 		if err := outputschematest.Validate(compiled, []byte(line)); err != nil {
 			t.Errorf("the schema rejects %s: %v", line, err)
+		}
+	}
+}
+
+func TestTheEmbeddedSchemasAreByteForByteThePublishedOnes(t *testing.T) {
+	root := filepath.Join("..", "..", "..")
+	version, err := os.ReadFile(filepath.Join(root, "VERSION"))
+	if err != nil {
+		t.Fatalf("read the release version: %v", err)
+	}
+	published := filepath.Join(root, "www", "public", "schema", strings.TrimSpace(string(version)), "cli")
+	embedded, err := os.ReadDir("schemas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	publishedFiles, err := os.ReadDir(published)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(embedded) != len(publishedFiles) {
+		t.Errorf("%d schemas are embedded and %d published, want the same set", len(embedded), len(publishedFiles))
+	}
+	for _, entry := range embedded {
+		want, err := os.ReadFile(filepath.Join("schemas", entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(filepath.Join(published, entry.Name()))
+		if err != nil {
+			t.Errorf("%s is embedded and not published: %v", entry.Name(), err)
+			continue
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("the published %s differs from the embedded one", entry.Name())
 		}
 	}
 }

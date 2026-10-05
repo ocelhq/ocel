@@ -251,7 +251,10 @@
               "type": "string"
             },
             {
-              "enum": ["TIER_PREVIEW", "TIER_PRODUCTION"],
+              "enum": [
+                "TIER_PREVIEW",
+                "TIER_PRODUCTION"
+              ],
               "type": "string"
             },
             {
@@ -302,7 +305,11 @@
               "type": "string"
             },
             {
-              "enum": ["APP_OUTCOME_SUCCEEDED", "APP_OUTCOME_FAILED", "APP_OUTCOME_NOT_RUN"],
+              "enum": [
+                "APP_OUTCOME_SUCCEEDED",
+                "APP_OUTCOME_FAILED",
+                "APP_OUTCOME_NOT_RUN"
+              ],
               "type": "string"
             },
             {
