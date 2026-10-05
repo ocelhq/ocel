@@ -1,6 +1,7 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { Client } from "@connectrpc/connect";
-import { decodeJson } from "../delivery/payload.js";
+import { JsonText } from "../delivery/json-text.js";
+import { decodeJson, decodeJsonText } from "../delivery/payload.js";
 import type {
   DeadLetter as ProtoDeadLetter,
   TopicService,
@@ -16,6 +17,8 @@ export interface DeadLetter {
   publishedAt: Date | undefined;
   /** The message's payload. */
   payload: unknown;
+  /** The JSON text the message's payload was sent as, byte for byte. */
+  payloadJson: JsonText;
   /** How many attempts were made. */
   attempts: number;
   /** The last attempt's error. */
@@ -53,6 +56,7 @@ function decodeDeadLetter(letter: ProtoDeadLetter): DeadLetter {
       ? timestampDate(letter.message.publishedAt)
       : undefined,
     payload: decodeJson(letter.payload),
+    payloadJson: decodeJsonText(letter.payload) ?? new JsonText("null"),
     attempts: letter.attempts,
     error: letter.error,
     failedAt: letter.failedAt ? timestampDate(letter.failedAt) : undefined,

@@ -1,5 +1,6 @@
 import { describe, expectTypeOf, it } from "vitest";
 import { z } from "zod";
+import type { JsonText } from "../delivery/json-text.js";
 import type { RunContext } from "../worker/context.js";
 import { type Task, task } from "./task.js";
 
@@ -8,10 +9,11 @@ const image = z.object({ url: z.string(), width: z.string().transform(Number) })
 describe("a task's payload typed from its schema", () => {
   const resize = task("resize", {
     schema: image,
-    run: async (payload, { ctx, signal }) => {
+    run: async (payload, { ctx, signal, payloadJson }) => {
       expectTypeOf(payload).toEqualTypeOf<{ url: string; width: number }>();
       expectTypeOf(ctx).toEqualTypeOf<RunContext>();
       expectTypeOf(signal).toEqualTypeOf<AbortSignal>();
+      expectTypeOf(payloadJson).toEqualTypeOf<JsonText>();
       return { bytes: payload.width * 2 };
     },
     onSuccess: ({ payload, output }) => {
@@ -20,8 +22,10 @@ describe("a task's payload typed from its schema", () => {
     },
   });
 
-  it("triggers with the schema's input", () => {
-    expectTypeOf(resize.trigger).parameter(0).toEqualTypeOf<{ url: string; width: string }>();
+  it("triggers with the schema's input, or JSON text", () => {
+    expectTypeOf(resize.trigger)
+      .parameter(0)
+      .toEqualTypeOf<{ url: string; width: string } | JsonText>();
     expectTypeOf(resize).toEqualTypeOf<Task<{ url: string; width: string }, { bytes: number }>>();
   });
 
@@ -45,13 +49,13 @@ describe("a task's payload typed from its run", () => {
     expectTypeOf(send).toEqualTypeOf<Task<{ to: string }, number>>();
   });
 
-  it("triggers a batch task with one item of the list its run takes", () => {
+  it("triggers a batch task with one item of the list its run takes, or JSON text", () => {
     const rollup = task("rollup", {
       batch: { size: 100 },
       run: async (events: { kind: string }[]) => events.length,
     });
 
-    expectTypeOf(rollup.trigger).parameter(0).toEqualTypeOf<{ kind: string }>();
+    expectTypeOf(rollup.trigger).parameter(0).toEqualTypeOf<{ kind: string } | JsonText>();
   });
 
   it("takes any payload when run declares none", () => {

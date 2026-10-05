@@ -6,6 +6,7 @@ import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
 import { declarationSite } from "../declaration/callsite.js";
 import { defer } from "../declaration/defer.js";
 import { type Duration, encodeDueAt, encodeDuration } from "../delivery/duration.js";
+import type { JsonText } from "../delivery/json-text.js";
 import { encodeLane, type Lane } from "../delivery/lane.js";
 import { encodePayload } from "../delivery/payload.js";
 import { encodeRetryPolicy, type RetryOptions } from "../delivery/retry.js";
@@ -83,8 +84,8 @@ export interface TriggerOptions {
 
 /** One item of a `batchTrigger`. */
 export interface BatchTriggerItem<TInput> {
-  /** The run's payload. */
-  payload: TInput;
+  /** The run's payload, or the JSON text to send as it byte for byte. */
+  payload: TInput | JsonText;
   /** How the run is triggered. */
   options?: TriggerOptions;
 }
@@ -171,8 +172,8 @@ export class Task<TInput = unknown, TOutput = unknown> {
     return (this.client ??= createClient(TaskService, createRuntimeTransport()));
   }
 
-  /** Starts a run of this task with `payload`. */
-  async trigger(payload: TInput, options?: TriggerOptions): Promise<RunHandle> {
+  /** Starts a run of this task with `payload`, or with a {@link JsonText} sent byte for byte. */
+  async trigger(payload: TInput | JsonText, options?: TriggerOptions): Promise<RunHandle> {
     const client = this.ensureClient("trigger");
     const { id } = await client.trigger({
       task: this.name,

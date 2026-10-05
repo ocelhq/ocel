@@ -6,8 +6,6 @@ import {
   corsCheck,
   emptyBodyCheck,
   encodedSlashCheck,
-  exactTaskPayloadCheck,
-  exactTopicPayloadCheck,
   hyphenatedTaskCheck,
   kvPasswordOutOfEnvironmentCheck,
   lanesCheck,
@@ -442,19 +440,6 @@ export const gaps: Gap[] = [
       "a binding's env key holds the declared name, hyphen and all, and the sh that runs the app's dev script drops a variable whose name holds a hyphen",
     issue: 1526,
     where: [{ on: ["dev"], fixtures: [tasks.node], fails: [check(hyphenatedTaskCheck)] }],
-  },
-  {
-    id: "typescript-sdk-parses-payloads",
-    reason:
-      "the TypeScript SDK parses an envelope and a run record with JSON.parse, so a handler and runs.retrieve get 2.0 as 2 and an integer past 2^53 rounded, though the request it sent and the envelope it was delivered carry the exact text",
-    issue: 1528,
-    where: [
-      {
-        on: ["dev", "vps", "vps.incus", "aws", "aws.floci", "gcp", "gcp.floci"],
-        fixtures: [tasks.node],
-        fails: [check(exactTaskPayloadCheck), check(exactTopicPayloadCheck)],
-      },
-    ],
   },
   {
     id: "go-image-built-from-the-app-path-alone",

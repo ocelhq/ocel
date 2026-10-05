@@ -1,10 +1,11 @@
-import { fromJson, type JsonValue } from "@bufbuild/protobuf";
 import { type Timestamp, timestampDate } from "@bufbuild/protobuf/wkt";
+import { isJsonText, JsonText } from "../delivery/json-text.js";
 import { validatePayload } from "../delivery/schema.js";
-import { type Envelope, EnvelopeSchema } from "../gen/proto/app/topic/v1/topic_pb.js";
+import type { Envelope } from "../gen/proto/app/topic/v1/topic_pb.js";
 import { AbortTaskRunError } from "../task/errors.js";
 import type { CatchErrorResult, TaskResult } from "../task/hooks.js";
 import type { RunContext } from "./context.js";
+import { type ParsedEnvelope, parseEnvelope } from "./envelope.js";
 import { findRegistration, findWorker, type Registration } from "./registry.js";
 import { Semaphore } from "./semaphore.js";
 
@@ -25,33 +26,6 @@ const createAbortAnswer = (reason: string): DeliveryAnswer => ({
 
 const decodeTimestamp = (timestamp: Timestamp | undefined) =>
   timestamp ? timestampDate(timestamp) : undefined;
-
-interface ParsedEnvelope {
-  envelope: Envelope;
-  payloads: unknown[];
-}
-
-function parseEnvelope(body: string): ParsedEnvelope {
-  const parsed: unknown = JSON.parse(body);
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("the envelope is not a JSON object");
-  }
-  const { payload, messages, ...fields } = parsed as Record<string, unknown>;
-  const deliveries = Array.isArray(messages) ? (messages as Record<string, unknown>[]) : [];
-  const bare = Array.isArray(messages)
-    ? deliveries.map(({ payload: _payload, ...delivery }) => delivery)
-    : messages;
-  const envelope = fromJson(
-    EnvelopeSchema,
-    (bare === undefined ? fields : { ...fields, messages: bare }) as JsonValue,
-    { ignoreUnknownFields: true },
-  );
-  const payloads =
-    deliveries.length > 0
-      ? deliveries.map((delivery) => delivery.payload ?? null)
-      : [payload ?? null];
-  return { envelope, payloads };
-}
 
 const starts = new Map<string, Promise<unknown>>();
 const semaphores = new Map<string, Semaphore>();
@@ -124,8 +98,10 @@ function createRunContext(
 
 async function decodePayload(
   registration: Registration,
-  { envelope, payloads: values }: ParsedEnvelope,
-): Promise<{ ok: true; payload: unknown } | { ok: false; answer: DeliveryAnswer }> {
+  { envelope, payloads }: ParsedEnvelope,
+): Promise<
+  { ok: true; payload: unknown; payloadJson: JsonText } | { ok: false; answer: DeliveryAnswer }
+> {
   const isBatchEnvelope = envelope.messages.length > 0;
   if (!registration.batch && isBatchEnvelope) {
     return {
@@ -136,8 +112,12 @@ async function decodePayload(
       },
     };
   }
+  const values = payloads.map((payload) => payload.value);
+  const payloadJson = registration.batch
+    ? new JsonText(`[${payloads.map((payload) => payload.json.text).join(",")}]`)
+    : (payloads[0]?.json ?? new JsonText("null"));
   const { schema } = registration;
-  if (!schema) return { ok: true, payload: registration.batch ? values : values[0] };
+  if (!schema) return { ok: true, payload: registration.batch ? values : values[0], payloadJson };
   const validated: unknown[] = [];
   for (const value of values) {
     const result = await validatePayload(schema, value);
@@ -149,7 +129,7 @@ async function decodePayload(
     }
     validated.push(result.value);
   }
-  return { ok: true, payload: registration.batch ? validated : validated[0] };
+  return { ok: true, payload: registration.batch ? validated : validated[0], payloadJson };
 }
 
 async function serveAttempt(
@@ -160,7 +140,7 @@ async function serveAttempt(
 ): Promise<DeliveryAnswer> {
   const parsed = await decodePayload(registration, delivered);
   if (!parsed.ok) return parsed.answer;
-  const { payload } = parsed;
+  const { payload, payloadJson } = parsed;
   const ctx = createRunContext(registration, delivered.envelope, signal);
   const { hooks } = registration;
   const workerMiddleware = findWorker(workerName)?.middleware;
@@ -179,7 +159,7 @@ async function serveAttempt(
   const runAttempt = async () => {
     await hooks.onStartAttempt?.({ payload, ctx });
     const run = async () => {
-      output = await registration.run(payload, { ctx, signal });
+      output = await registration.run(payload, { ctx, signal, payloadJson });
     };
     if (hooks.middleware) await hooks.middleware({ payload, ctx, next: run });
     else await run();
@@ -198,7 +178,7 @@ async function serveAttempt(
   let body = "null";
   if (!failure) {
     try {
-      body = JSON.stringify(output ?? null) ?? "null";
+      body = isJsonText(output) ? output.text : (JSON.stringify(output ?? null) ?? "null");
     } catch (error) {
       failure = {
         error: new AbortTaskRunError(`the output does not encode as JSON: ${describeError(error)}`),

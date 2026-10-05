@@ -1,17 +1,7 @@
 import express, { Router } from "express";
-import { runs } from "ocel/task";
+import { JsonText, runs } from "ocel/task";
 import { notices, type Sighting, sighting, verbatim } from "../infra/wire";
 import { serveJSON } from "./serve";
-
-type RawJSON = { rawJSON(text: string): unknown };
-
-type SourceReviver = (key: string, value: unknown, context: { source: string }) => unknown;
-
-function parseKeepingNumberText(text: string): unknown {
-  const keepSource: SourceReviver = (_key, value, { source }) =>
-    typeof value === "number" ? (JSON as unknown as RawJSON).rawJSON(source) : value;
-  return JSON.parse(text, keepSource as Parameters<typeof JSON.parse>[1]);
-}
 
 export const wire = Router();
 
@@ -20,7 +10,7 @@ wire.use(express.text({ type: () => true }));
 wire.post(
   "/trigger",
   serveJSON(async (req) => {
-    const { id } = await verbatim.trigger(parseKeepingNumberText(String(req.body)));
+    const { id } = await verbatim.trigger(new JsonText(String(req.body)));
     return { id };
   }),
 );
@@ -28,7 +18,7 @@ wire.post(
 wire.post(
   "/send",
   serveJSON(async (req) => {
-    const messageId = await notices.send(parseKeepingNumberText(String(req.body)));
+    const messageId = await notices.send(new JsonText(String(req.body)));
     return { messageId };
   }),
 );
@@ -41,8 +31,8 @@ wire.get(
       id: run.id,
       task: run.task,
       status: run.status,
-      payload: JSON.stringify(run.payload),
-      output: JSON.stringify(run.output),
+      payload: run.payloadJson.text,
+      output: run.outputJson?.text ?? "",
       error: run.error ?? "",
     };
   }),

@@ -7,7 +7,7 @@ vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 
-const { topic } = await import("./index.js");
+const { JsonText, topic } = await import("./index.js");
 
 describe("a consumer's dead letters", () => {
   let proxy: RuntimeProxy;
@@ -69,6 +69,7 @@ describe("a consumer's dead letters", () => {
           messageId: "01J00000000000000000000000",
           publishedAt: new Date("2026-01-01T00:00:00Z"),
           payload: 7,
+          payloadJson: new JsonText("7"),
           attempts: 3,
           error: "card declined",
           failedAt: new Date("2026-01-01T00:05:00Z"),

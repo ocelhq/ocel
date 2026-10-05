@@ -4,8 +4,6 @@ import path from "node:path";
 import stripJsonComments from "strip-json-comments";
 import {
   batchCheck,
-  exactTaskPayloadCheck,
-  exactTopicPayloadCheck,
   hyphenatedTaskCheck,
   lanesCheck,
   nextCacheChecks,
@@ -277,7 +275,7 @@ describe("the tasks concern", () => {
     expect(planned).toContain("tasks/go");
   });
 
-  it("expects only the payload checks red on tasks/node on dev, under the TypeScript SDK's ticket, and nothing red on tasks/go", () => {
+  it("expects only the hyphenated task red on tasks/node on dev, and nothing red on tasks/go", () => {
     const { expectedFailures } = planOn("dev");
     const issuesOf = (cell: string) =>
       Object.fromEntries(
@@ -288,13 +286,11 @@ describe("the tasks concern", () => {
       );
     expect(issuesOf("tasks/node/web")).toEqual({
       [hyphenatedTaskCheck.title]: [1526],
-      [exactTaskPayloadCheck.title]: [1528],
-      [exactTopicPayloadCheck.title]: [1528],
     });
     expect(issuesOf("tasks/go/web")).toEqual({});
   });
 
-  it("runs the behavioural suite on a box, with the TypeScript SDK's payload checks red on tasks/node and tasks/go's image red under its own ticket", () => {
+  it("runs the behavioural suite on a box, with nothing red on tasks/node and tasks/go's image red under its own ticket", () => {
     for (const lane of ["vps", "vps.incus"] as const) {
       const planned = planOn(lane, {}, EVERY_CELL);
       const names = planned.cells.map((cell) => cell.name);
@@ -308,15 +304,12 @@ describe("the tasks concern", () => {
             listed.map((gap) => gap.issue),
           ]),
         );
-      expect(issuesOf("tasks/node/web")).toEqual({
-        [exactTaskPayloadCheck.title]: [1528],
-        [exactTopicPayloadCheck.title]: [1528],
-      });
+      expect(issuesOf("tasks/node/web")).toEqual({});
       expect(issuesOf("tasks/go/web")).toEqual({ deploy: [1550] });
     }
   });
 
-  it("runs the behavioural suite on gcp, with lanes, batches, task concurrency and the TypeScript SDK's payload checks red on tasks/node", () => {
+  it("runs the behavioural suite on gcp, with lanes, batches and task concurrency red on tasks/node", () => {
     for (const lane of ["gcp", "gcp.floci"] as const) {
       const planned = planOn(lane);
       expect(Object.keys(planned.skipped).filter((cell) => cell.startsWith("tasks/"))).toEqual([]);
@@ -334,8 +327,6 @@ describe("the tasks concern", () => {
         [lanesCheck.title]: [1562],
         [batchCheck.title]: [1563],
         [taskConcurrencyCheck.title]: [1564],
-        [exactTaskPayloadCheck.title]: [1528],
-        [exactTopicPayloadCheck.title]: [1528],
       });
       expect(issuesOf("tasks/go/web")).toEqual({});
     }
@@ -346,15 +337,9 @@ describe("the tasks concern", () => {
       Object.keys(
         planOn(lane, {}, EVERY_CELL).expectedFailures["tasks/node-api-gateway/web"] ?? {},
       ).sort();
-    const payloads = [exactTaskPayloadCheck.title, exactTopicPayloadCheck.title];
-    expect(red("aws")).toEqual([lanesCheck.title, ...payloads].sort());
+    expect(red("aws")).toEqual([lanesCheck.title]);
     expect(red("aws.floci")).toEqual(
-      [
-        lanesCheck.title,
-        orderedKeysInParallelCheck.title,
-        taskConcurrencyCheck.title,
-        ...payloads,
-      ].sort(),
+      [lanesCheck.title, orderedKeysInParallelCheck.title, taskConcurrencyCheck.title].sort(),
     );
     for (const lane of ["aws", "aws.floci"] as const) {
       expect(Object.keys(planOn(lane).skipped).filter((cell) => cell.startsWith("tasks/"))).toEqual(
