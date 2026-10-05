@@ -47,7 +47,7 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 		s.recorded.LoadBalancer = balancer
 		s.keep()
 	}
-	if err := s.refuseFullURLMap(ctx, took); err != nil {
+	if err := s.refuseExhaustedLimits(ctx, took); err != nil {
 		return router.Unserved{Err: err}
 	}
 	for _, hostname := range withdrawn {
@@ -157,7 +157,7 @@ func (s *stack) readLoadBalancer(ctx context.Context) (LoadBalancer, error) {
 
 const maxHostRules = 1000
 
-func (s *stack) refuseFullURLMap(ctx context.Context, hostnames []string) error {
+func (s *stack) refuseExhaustedLimits(ctx context.Context, hostnames []string) error {
 	var adding []string
 	for _, hostname := range hostnames {
 		if _, routed := s.recorded.Hosts[hostname]; !routed {
@@ -167,6 +167,27 @@ func (s *stack) refuseFullURLMap(ctx context.Context, hostnames []string) error 
 	if len(adding) == 0 {
 		return nil
 	}
+	if err := s.refuseFullURLMap(ctx, adding); err != nil {
+		return err
+	}
+	return s.refuseExhaustedBackendServiceQuota(ctx, adding)
+}
+
+func (s *stack) refuseExhaustedBackendServiceQuota(ctx context.Context, adding []string) error {
+	quota, found, err := s.e.deps.Routes.ReadBackendServiceQuota(ctx)
+	if err != nil || !found {
+		return err
+	}
+	if quota.Usage+float64(len(adding)) <= quota.Limit {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"%s would each take a backend service, and project %s has %.0f of the %.0f its GLOBAL_EXTERNAL_MANAGED_BACKEND_SERVICES quota allows: "+
+			"remove previews this tier no longer needs with `ocel destroy preview`, or ask Google Cloud to raise the quota, then promote again",
+		strings.Join(adding, ", "), s.e.deps.Project, quota.Usage, quota.Limit)
+}
+
+func (s *stack) refuseFullURLMap(ctx context.Context, adding []string) error {
 	ruled, err := s.e.deps.Routes.CountHostRules(ctx, s.recorded.LoadBalancer.URLMap)
 	if err != nil {
 		return err

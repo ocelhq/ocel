@@ -43,6 +43,8 @@ type world struct {
 	closed           map[string]bool
 	onUp             func()
 	through          []string
+
+	backendServiceQuota *BackendServiceQuota
 }
 
 func (w *world) warmThrough(_ context.Context, url, address string) error {
@@ -185,6 +187,21 @@ func (w *world) CountHostRules(_ context.Context, urlMap string) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return len(w.routed[urlMap]), nil
+}
+
+func (w *world) ReadBackendServiceQuota(context.Context) (BackendServiceQuota, bool, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.backendServiceQuota == nil {
+		return BackendServiceQuota{}, false, nil
+	}
+	return *w.backendServiceQuota, true, nil
+}
+
+func (w *world) setBackendServiceQuota(quota BackendServiceQuota) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.backendServiceQuota = &quota
 }
 
 func (w *world) fillHostRules(urlMap string, count int) {

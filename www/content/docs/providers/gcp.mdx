@@ -136,7 +136,8 @@ exact host rule for its hostname onto a serverless network endpoint group that n
 preview's own Cloud Run service, so a hostname reaches the one service it was routed to and
 nothing else, and a hostname no preview serves is answered 404 by the load balancer. The
 rule comes down with the preview. Each preview hostname is a backend service of its own, so
-the project's backend service quota bounds how many previews a tier answers at once. Each
+the project's backend service quota bounds how many previews a tier answers at once, and a
+promotion that would pass it is refused before anything is provisioned. Each
 deployment of a preview is also answered on a hostname of its own, routed to the Cloud Run
 revision tag that deploy created, so an older deployment keeps serving what it shipped after
 the alias moves on, until `ocel preview prune` or `ocel preview rm` drops it. A project that
