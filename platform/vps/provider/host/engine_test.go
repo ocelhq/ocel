@@ -88,12 +88,6 @@ func aLiveProxy(t *testing.T) liveProxy {
 		}
 	}
 	runnable(t, proxy.binary, switchboardBinary(arch), 0o755)
-	unprivileged := quoted("--security-opt") + " " + quoted(noNewPrivileges) + " "
-	if pinnable() {
-		unprivileged = ""
-	} else {
-		t.Log("this engine refuses to exec anything under no-new-privileges, so the switchboard runs here without it")
-	}
 	proxy.here = strings.NewReplacer(
 		switchboard.FrontDir, filepath.Join(dir, "front"),
 		switchboard.ControlDir, filepath.Join(dir, "control"),
@@ -110,7 +104,7 @@ func aLiveProxy(t *testing.T) liveProxy {
 		`"`+TunnelNetwork+`"`, `"`+tunneling+`"`,
 		quoted(ProxyNetwork), quoted(network),
 		`"`+ProxyNetwork+`"`, `"`+network+`"`,
-		unprivileged, "",
+		unprivilegedHere(t), "",
 	).Replace
 
 	taken(t, board)
@@ -134,6 +128,15 @@ func aTunnelNetwork(t *testing.T) string {
 	}
 	t.Cleanup(func() { _ = exec.Command(dockerEngine, "network", "rm", name).Run() })
 	return name
+}
+
+func unprivilegedHere(t *testing.T) string {
+	t.Helper()
+	if pinnable() {
+		return ""
+	}
+	t.Log("this engine refuses to exec anything under no-new-privileges, so the switchboard runs here without it")
+	return quoted("--security-opt") + " " + quoted(noNewPrivileges) + " "
 }
 
 var pinnable = sync.OnceValue(func() bool {
