@@ -20,13 +20,12 @@ const memoryVar = "OCEL_FUNCTION_MEMORY_MB";
 
 export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
   const memoryMb = Number(env[memoryVar]);
-  const memoryBytes = memoryMb > 0 ? memoryMb * MB : undefined;
-  const storeBytes = instanceCacheBytes(memoryBytes);
+  const cache = newInstanceCache(instanceCacheBytes(memoryMb > 0 ? memoryMb * MB : undefined));
   return {
     bind: readPortBind(env),
-    instanceCache: newInstanceCache(storeBytes),
-    newCacheStore: async () => newInstanceCacheStore(storeBytes),
-    newUseCacheStore: async () => newInstanceUseCacheStore(storeBytes),
+    instanceCache: cache,
+    newCacheStore: async () => newInstanceCacheStore(cache),
+    newUseCacheStore: async () => newInstanceUseCacheStore(cache),
     newDispatchInvoke: async (localOrigin) => newGcpDispatchInvoke(localOrigin),
     scheduleRefresh: newInstanceRefresh(() => instanceOrigin(env)),
   };

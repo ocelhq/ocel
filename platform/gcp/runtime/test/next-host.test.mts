@@ -1,5 +1,5 @@
-import { refuseIncompleteHost } from "@framework/next-runtime/host";
-import { expect, test } from "vitest";
+import { installNextHost, refuseIncompleteHost } from "@framework/next-runtime/host";
+import { expect, test, vi } from "vitest";
 import { newGcpNextHost } from "../src/next/next-host.mjs";
 
 test("the GCP host binds every network on the port Cloud Run names", () => {
@@ -52,4 +52,60 @@ test("the GCP host's cache store keeps an entry for the next request the instanc
   await store.writeFetch("hash", entry);
 
   expect(await store.readFetch("hash")).toEqual(entry);
+});
+
+test("the GCP host's cache store and use-cache store share one tenth of the service's memory", async () => {
+  const host = newGcpNextHost({ PORT: "8080", OCEL_FUNCTION_MEMORY_MB: "1" });
+  const pages = await host.newCacheStore!();
+  const useCache = await host.newUseCacheStore!();
+  const html = "x".repeat(30_000);
+
+  await pages.writeEntry("/a", {
+    lastModified: 1,
+    value: { kind: "PAGES", html, pageData: {}, status: 200, headers: {} },
+  });
+  await useCache.writeEntry("key", {
+    tags: [],
+    stale: 1,
+    timestamp: 2,
+    expire: 3,
+    revalidate: 4,
+    body: html,
+  });
+
+  expect(await pages.readEntry("/a")).toBeNull();
+});
+
+test("the GCP host's cache store and the cache the default use-cache handler fills share one tenth of the service's memory", async () => {
+  vi.resetModules();
+  const host = newGcpNextHost({ PORT: "8080", OCEL_FUNCTION_MEMORY_MB: "1" });
+  installNextHost(host);
+  const handler = (await import("@framework/next-runtime/use-cache-default")).default;
+  const pages = await host.newCacheStore!();
+  const html = "x".repeat(30_000);
+  const bytes = new TextEncoder().encode("y".repeat(60_000));
+
+  await pages.writeEntry("/a", {
+    lastModified: 1,
+    value: { kind: "PAGES", html, pageData: {}, status: 200, headers: {} },
+  });
+  await handler.set(
+    "key",
+    Promise.resolve({
+      value: new ReadableStream({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      }),
+      tags: [],
+      stale: 1,
+      timestamp: performance.timeOrigin + performance.now(),
+      expire: 3600,
+      revalidate: 3600,
+    }),
+  );
+
+  expect(await handler.get("key", [])).toBeDefined();
+  expect(await pages.readEntry("/a")).toBeNull();
 });
