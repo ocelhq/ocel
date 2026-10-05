@@ -76,6 +76,12 @@ describe("selectGoModules", () => {
     );
   });
 
+  it("selects the module whose tests read a file that sits outside every module", () => {
+    assert.deepEqual(selectGoModules(["www/content/docs/telemetry.mdx"], modules), [
+      { dir: "cli", reason: "changed www/content/docs/telemetry.mdx" },
+    ]);
+  });
+
   it("selects every module when the workspace or the lint config changes", () => {
     for (const file of ["go.work", "go.work.sum", ".golangci.yml"]) {
       const selected = selectGoModules([file], modules);
