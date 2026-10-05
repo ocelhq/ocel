@@ -1,6 +1,7 @@
 import type { NextHost } from "@framework/next-runtime/host";
 import { instanceCacheBytes, newInstanceCache } from "@framework/next-runtime/instance-cache";
 import { readPortBind } from "@framework/node-runtime/host";
+import { newInstanceCacheStore, newInstanceUseCacheStore } from "./instance-stores.mjs";
 
 const MB = 1024 * 1024;
 
@@ -8,8 +9,12 @@ const memoryVar = "OCEL_FUNCTION_MEMORY_MB";
 
 export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
   const memoryMb = Number(env[memoryVar]);
+  const memoryBytes = memoryMb > 0 ? memoryMb * MB : undefined;
+  const storeBytes = instanceCacheBytes(memoryBytes);
   return {
     bind: readPortBind(env),
-    instanceCache: newInstanceCache(instanceCacheBytes(memoryMb > 0 ? memoryMb * MB : undefined)),
+    instanceCache: newInstanceCache(storeBytes),
+    newCacheStore: async () => newInstanceCacheStore(storeBytes),
+    newUseCacheStore: async () => newInstanceUseCacheStore(storeBytes),
   };
 }

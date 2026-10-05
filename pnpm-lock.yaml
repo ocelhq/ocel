@@ -986,6 +986,9 @@ importers:
 
   platform/gcp/runtime:
     dependencies:
+      '@framework/next-cache':
+        specifier: workspace:*
+        version: link:../../../frameworks/next/cache
       '@framework/next-runtime':
         specifier: workspace:*
         version: link:../../../frameworks/next/runtime
