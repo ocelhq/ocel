@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 
@@ -70,14 +69,14 @@ func connectorStatusResult(registered []console.Connector) *resultv1.ConnectorSt
 		result.Connectors = append(result.Connectors, &resultv1.ConnectorStatus{
 			Target:       row.Target,
 			Vendor:       row.Vendor,
-			Compute:      deref(row.Compute),
+			Compute:      stringOrEmpty(row.Compute),
 			Reach:        row.Reach,
-			Url:          deref(row.URL),
-			Version:      deref(row.Version),
+			Url:          stringOrEmpty(row.URL),
+			Version:      stringOrEmpty(row.Version),
 			Capabilities: sortedCapabilities(row.Capabilities),
 			Liveness:     connectorLiveness(row.Liveness()),
-			ConnectedAt:  formatTime(row.ConnectedAt),
-			LastSeenAt:   formatTime(row.LastSeenAt),
+			ConnectedAt:  terminal.FormatRFC3339(row.ConnectedAt),
+			LastSeenAt:   terminal.FormatRFC3339(row.LastSeenAt),
 			LastDenied:   connectorDenial(row.LastDenied),
 		})
 	}
@@ -110,18 +109,11 @@ func sortedCapabilities(values []string) []string {
 	return sorted
 }
 
-func deref(value *string) string {
+func stringOrEmpty(value *string) string {
 	if value == nil {
 		return ""
 	}
 	return *value
-}
-
-func formatTime(at *time.Time) string {
-	if at == nil {
-		return ""
-	}
-	return at.UTC().Format(time.RFC3339)
 }
 
 func readFingerprint(ctx context.Context, dependencies Dependencies, cfg *project.Project) (fingerprint string, err error) {
