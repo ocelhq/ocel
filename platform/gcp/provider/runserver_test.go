@@ -6,7 +6,6 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"net/http/httptest"
 	"slices"
 	"strconv"
 	"strings"
@@ -37,6 +36,8 @@ type runServer struct {
 	uploads []upload
 	present map[string]bool
 	events  []string
+
+	iam *iamServer
 }
 
 type upload struct {
@@ -46,9 +47,16 @@ type upload struct {
 
 func (s *runServer) open(t *testing.T) *Provider {
 	t.Helper()
-	server := httptest.NewServer(s.serve(t))
-	t.Cleanup(server.Close)
-	return pushing(t, server.URL)
+	return pushing(t, s.identities().serve(t, s.serve(t)).endpoint)
+}
+
+func (s *runServer) identities() *iamServer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.iam == nil {
+		s.iam = grantedIAM()
+	}
+	return s.iam
 }
 
 func (s *runServer) serve(t *testing.T) http.HandlerFunc {
@@ -58,7 +66,12 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 		defer s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		path := r.URL.Path
+		if s.iam == nil {
+			s.iam = grantedIAM()
+		}
 		switch {
+		case strings.HasPrefix(path, "/v1/"):
+			s.iam.rest(t)(w, r)
 		case r.Method == http.MethodPost && strings.HasPrefix(path, "/upload/storage/v1/b/"):
 			s.store(t, w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(path, ":setIamPolicy"):

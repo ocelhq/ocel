@@ -251,3 +251,29 @@ func TestEachTierRunsItsGatewaysAsAnAccountOfItsOwn(t *testing.T) {
 		t.Errorf("the production gateway runs as %q, which is not an account of its own", production)
 	}
 }
+
+func TestAnAppsAccountIsNamedForItsNamespaceAndAHashOfItsTierProjectAndApp(t *testing.T) {
+	t.Setenv(provider.NamespaceEnvVar, strings.Repeat("a", 19))
+	names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+
+	account := names.AppAccount(environment.TierProduction, "shop", "web")
+	if !regexp.MustCompile(`^a{19}-[0-9a-f]{10}$`).MatchString(account) || !accountID.MatchString(account) {
+		t.Errorf("AppAccount() = %q, want the namespace and ten hex characters in the 30 IAM takes", account)
+	}
+	if email := names.AppAccountEmail(environment.TierProduction, "shop", "web"); email != account+"@acme-prod.iam.gserviceaccount.com" {
+		t.Errorf("AppAccountEmail() = %q, want the account in the project's own domain", email)
+	}
+	others := map[string]string{
+		"another tier":        names.AppAccount(environment.TierPreview, "shop", "web"),
+		"another project":     names.AppAccount(environment.TierProduction, "blog", "web"),
+		"another app":         names.AppAccount(environment.TierProduction, "shop", "api"),
+		"the realtime":        names.RealtimeAccount(environment.TierProduction),
+		"the push":            names.PushAccount(environment.TierProduction),
+		"the env source sync": names.EnvSourceSyncAccount(environment.TierProduction),
+	}
+	for what, other := range others {
+		if other == account {
+			t.Errorf("an app's account is %q, the same as %s", account, what)
+		}
+	}
+}

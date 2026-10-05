@@ -10,6 +10,7 @@ import (
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -88,6 +89,7 @@ var deployRoles = []string{
 	"roles/secretmanager.secretAccessor",
 	"roles/artifactregistry.writer",
 	"roles/iam.serviceAccountUser",
+	"roles/iam.serviceAccountCreator",
 	"roles/run.admin",
 	"roles/memorystore.admin",
 	"roles/pubsub.admin",
@@ -105,6 +107,35 @@ func realtimeSecretsGrant(names Names) string {
 	return fmt.Sprintf("%s, on the condition (resource.type != %q && resource.type != %q) || resource.name.startsWith(%q)",
 		realtimeSecretsRole, secretType, secretVersionType,
 		"projects/"+projectNumberHole+"/secrets/"+names.RealtimeSecretPrefix())
+}
+
+const (
+	appGrantsRole       = "roles/resourcemanager.projectIamAdmin"
+	modifiedGrantsLimit = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', [])"
+)
+
+func appGrantsGrant() string {
+	quoted := make([]string, len(appGrantedRoles))
+	for i, role := range appGrantedRoles {
+		quoted[i] = "'" + role + "'"
+	}
+	return fmt.Sprintf("%s, on the condition %s.hasOnly([%s])", appGrantsRole, modifiedGrantsLimit, strings.Join(quoted, ", "))
+}
+
+func queueAdminGrant(queue string) string {
+	return "roles/cloudtasks.queueAdmin on the queue " + queue
+}
+
+func accountAdminGrant(email string) string {
+	return "roles/iam.serviceAccountAdmin on the service account " + email
+}
+
+func delayGrants(names Names, region string) []string {
+	var grants []string
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		grants = append(grants, accountAdminGrant(names.WorkloadAccountEmail(tier)), queueAdminGrant(names.DelayQueuePath(region, tier)))
+	}
+	return grants
 }
 
 func rolesFor(purpose edge.CredentialPurpose) []string {

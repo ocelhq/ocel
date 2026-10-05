@@ -88,6 +88,19 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 	return nil
 }
 
+func (t Topology) GrantPublisher(ctx context.Context, clients *ports.Clients) error {
+	service, err := clients.PubSub()
+	if err != nil {
+		return err
+	}
+	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
+		if err := grantOnTopic(ctx, service, TopicPath(clients.Project, t.Names.Topic(name)), publisherRole, t.Publisher); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error {
 	service, err := clients.PubSub()
 	if err != nil {

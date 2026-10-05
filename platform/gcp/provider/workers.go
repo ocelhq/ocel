@@ -122,7 +122,7 @@ func nameWorkers(names Names, spec provider.StackSpec) []deployedWorker {
 	return named
 }
 
-func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provider.StackSpec, image string, env map[string]string,
+func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provider.StackSpec, image, account string, env map[string]string,
 	declared map[string]*provider.TopicSpec, progress progress.Log,
 ) ([]deployedWorker, error) {
 	named := nameWorkers(c.Names, spec)
@@ -137,7 +137,7 @@ func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provid
 			service: worker.service,
 			image:   image,
 			env:     env,
-			account: c.WorkloadAccountEmail(spec.Ref.Tier),
+			account: account,
 			egress:  p.egressFor(c.Names, spec),
 		}), progress)
 		if err != nil {
