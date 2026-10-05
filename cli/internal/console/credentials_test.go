@@ -12,18 +12,18 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/clitest/confighome"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
 func TestCredentialsFileLivesInTheUserConfigDirectory(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", home)
+	configDir := confighome.Isolate(t)
 
 	path, err := ensureCredentialsFilePath()
 	if err != nil {
 		t.Fatalf("ensureCredentialsFilePath err = %v", err)
 	}
-	if want := filepath.Join(home, "ocel", "credentials.json"); path != want {
+	if want := filepath.Join(configDir, "credentials.json"); path != want {
 		t.Errorf("path = %q, want %q", path, want)
 	}
 	if info, err := os.Stat(filepath.Dir(path)); err != nil || runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
@@ -104,8 +104,7 @@ func TestLoadCredentials(t *testing.T) {
 
 	t.Run("an empty env token falls through", func(t *testing.T) {
 		t.Setenv(accessTokenEnvVar, "")
-		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-		t.Setenv("HOME", t.TempDir())
+		confighome.Isolate(t)
 
 		_, err := LoadCredentials()
 		if err == nil {

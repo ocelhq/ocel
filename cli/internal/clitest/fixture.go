@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/clitest/confighome"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -67,7 +68,7 @@ func IsolateConfigHome() func() {
 	if err != nil {
 		panic(err)
 	}
-	os.Setenv("XDG_CONFIG_HOME", dir)
+	confighome.Set(dir, func(name, value string) { os.Setenv(name, value) })
 	os.Unsetenv(commands.ConfigEnvVar)
 	return func() { os.RemoveAll(dir) }
 }
