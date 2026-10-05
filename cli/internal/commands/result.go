@@ -10,10 +10,10 @@ import (
 
 const resultsAnnotation = "ocel.results"
 
-func DeclareResult(cmd *cobra.Command, results ...proto.Message) *cobra.Command {
-	names := make([]string, len(results))
-	for i, result := range results {
-		names[i] = string(result.ProtoReflect().Descriptor().FullName())
+func DeclareResult(cmd *cobra.Command, result proto.Message, more ...proto.Message) *cobra.Command {
+	names := make([]string, 0, 1+len(more))
+	for _, each := range append([]proto.Message{result}, more...) {
+		names = append(names, string(each.ProtoReflect().Descriptor().FullName()))
 	}
 	if cmd.Annotations == nil {
 		cmd.Annotations = map[string]string{}

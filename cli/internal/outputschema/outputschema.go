@@ -3,6 +3,7 @@ package outputschema
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -18,10 +19,13 @@ const (
 )
 
 func RunEvent() ([]byte, error) {
-	return read(runEventMessage)
+	return readSchema(runEventMessage)
 }
 
 func Result(messages ...protoreflect.FullName) ([]byte, error) {
+	if len(messages) == 0 {
+		return nil, errors.New("a result schema needs at least one result message")
+	}
 	definitions := map[string]any{}
 	success := make([]any, 0, len(messages))
 	for _, message := range messages {
@@ -43,14 +47,14 @@ func Result(messages ...protoreflect.FullName) ([]byte, error) {
 		"$schema": draft2020,
 		"title":   "Result envelope",
 		"oneOf": []any{
-			envelope(true, "data", data),
-			envelope(false, "error", map[string]any{"$ref": failure}),
+			newEnvelope(true, "data", data),
+			newEnvelope(false, "error", map[string]any{"$ref": failure}),
 		},
 		"$defs": definitions,
 	}, "", "  ")
 }
 
-func envelope(ok bool, key string, payload any) map[string]any {
+func newEnvelope(ok bool, key string, payload any) map[string]any {
 	return map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
@@ -63,7 +67,7 @@ func envelope(ok bool, key string, payload any) map[string]any {
 }
 
 func mergeDefinitions(into map[string]any, message protoreflect.FullName) (string, error) {
-	raw, err := read(message)
+	raw, err := readSchema(message)
 	if err != nil {
 		return "", err
 	}
@@ -80,7 +84,7 @@ func mergeDefinitions(into map[string]any, message protoreflect.FullName) (strin
 	return bundle.Ref, nil
 }
 
-func read(message protoreflect.FullName) ([]byte, error) {
+func readSchema(message protoreflect.FullName) ([]byte, error) {
 	raw, err := schemas.ReadFile("schemas/" + string(message) + ".schema.json")
 	if err != nil {
 		return nil, fmt.Errorf("no schema for %s: %w", message, err)

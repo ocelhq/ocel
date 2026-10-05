@@ -22,7 +22,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
-func resultDocument(t *testing.T, result proto.Message) []byte {
+func printResultDocument(t *testing.T, result proto.Message) []byte {
 	t.Helper()
 	var out bytes.Buffer
 	if err := terminal.WriteResultJSON(&out, result); err != nil {
@@ -31,7 +31,7 @@ func resultDocument(t *testing.T, result proto.Message) []byte {
 	return out.Bytes()
 }
 
-func envListSchema(t *testing.T) []byte {
+func buildEnvListSchema(t *testing.T) []byte {
 	t.Helper()
 	schema, err := outputschema.Result(new(resultv1.EnvListResult).ProtoReflect().Descriptor().FullName())
 	if err != nil {
@@ -41,9 +41,9 @@ func envListSchema(t *testing.T) []byte {
 }
 
 func TestTheResultSchemaAcceptsTheResultEnvelopeAProgramPrints(t *testing.T) {
-	compiled := outputschematest.Compile(t, envListSchema(t))
+	compiled := outputschematest.Compile(t, buildEnvListSchema(t))
 
-	document := resultDocument(t, &resultv1.EnvListResult{
+	document := printResultDocument(t, &resultv1.EnvListResult{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Values: []*resultv1.EnvValueSummary{{
 			Coordinate: &resultv1.EnvCoordinate{Project: "shop", Folder: "/web", Key: "LOG_LEVEL"},
@@ -58,7 +58,7 @@ func TestTheResultSchemaAcceptsTheResultEnvelopeAProgramPrints(t *testing.T) {
 }
 
 func TestTheResultSchemaAcceptsTheFailureEnvelope(t *testing.T) {
-	compiled := outputschematest.Compile(t, envListSchema(t))
+	compiled := outputschematest.Compile(t, buildEnvListSchema(t))
 
 	var out bytes.Buffer
 	terminal.PrintFailureJSON(&out, &streamv1.RunError{Code: "project.no_config", Message: "no ocel.json", Hint: proto.String("run `ocel init`")})
@@ -68,11 +68,11 @@ func TestTheResultSchemaAcceptsTheFailureEnvelope(t *testing.T) {
 }
 
 func TestTheResultSchemaRejectsAMisspelledFieldAndAMalformedEnvelope(t *testing.T) {
-	compiled := outputschematest.Compile(t, envListSchema(t))
+	compiled := outputschematest.Compile(t, buildEnvListSchema(t))
 
 	for name, document := range map[string]string{
 		"a misspelled field":      `{"ok":true,"data":{"tier":"TIER_PRODUCTION","valuez":[]}}`,
-		"another result":          string(resultDocument(t, &resultv1.LogoutResult{LoggedOut: true})),
+		"another result":          string(printResultDocument(t, &resultv1.LogoutResult{LoggedOut: true})),
 		"no ok flag":              `{"data":{"values":[]}}`,
 		"success carrying error":  `{"ok":true,"error":{"code":"internal","message":"x","retryable":false}}`,
 		"a failure carrying data": `{"ok":false,"data":{"values":[]}}`,
@@ -94,12 +94,12 @@ func TestTheResultSchemaOfSeveralResultsAcceptsAnyOfThemAndNothingElse(t *testin
 	compiled := outputschematest.Compile(t, schema)
 
 	for _, result := range []proto.Message{&resultv1.DomainListResult{}, &resultv1.PreviewDomainResult{BaseDomain: "preview.example.com"}} {
-		document := resultDocument(t, result)
+		document := printResultDocument(t, result)
 		if err := outputschematest.Validate(compiled, document); err != nil {
 			t.Errorf("the schema rejects %s: %v", document, err)
 		}
 	}
-	if err := outputschematest.Validate(compiled, resultDocument(t, &resultv1.LogoutResult{})); err == nil {
+	if err := outputschematest.Validate(compiled, printResultDocument(t, &resultv1.LogoutResult{})); err == nil {
 		t.Error("the schema accepts the result of a command it was not built for")
 	}
 }
@@ -107,6 +107,12 @@ func TestTheResultSchemaOfSeveralResultsAcceptsAnyOfThemAndNothingElse(t *testin
 func TestTheResultSchemaOfAnUnknownMessageIsRefused(t *testing.T) {
 	if _, err := outputschema.Result("cli.result.v1.NoSuchResult"); err == nil || !strings.Contains(err.Error(), "cli.result.v1.NoSuchResult") {
 		t.Fatalf("err = %v, want one naming the message", err)
+	}
+}
+
+func TestTheResultSchemaOfNoMessageIsRefused(t *testing.T) {
+	if _, err := outputschema.Result(); err == nil {
+		t.Fatal("err = nil, want the empty list of results refused")
 	}
 }
 
