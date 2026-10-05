@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -76,4 +76,35 @@ test("a disk asset whose read fails once is read again on the next request", asy
   const object = await bucket.get(`${assetPrefix}/flaky.js`);
   expect(object?.httpEtag).toMatch(/^".+"$/);
   expect(await new Response(object?.body).text()).toBe("flaky");
+});
+
+test("an asset that links to a file outside the directory is missing", async () => {
+  await symlink(join(tmpdir(), "ocel-outside.txt"), join(dir, "assets", "escape.txt"));
+
+  expect(await read(`${assetPrefix}/escape.txt`)).toBeNull();
+});
+
+test("an asset under a directory that links outside the directory is missing", async () => {
+  await symlink(tmpdir(), join(dir, "assets", "escape-dir"));
+
+  expect(await read(`${assetPrefix}/escape-dir/ocel-outside.txt`)).toBeNull();
+});
+
+test("an asset that links to a file inside the directory is read", async () => {
+  await symlink(join(dir, "assets", "404.html"), join(dir, "assets", "alias.html"));
+
+  expect(await read(`${assetPrefix}/alias.html`)).toBe("<p>missing</p>");
+});
+
+test("an asset is read where the directory itself is reached through a link", async () => {
+  const alias = `${dir}-alias`;
+  await symlink(dir, alias);
+  try {
+    const object = await newDiskAssetBucket(alias, assetPrefix).get(
+      `${assetPrefix}/_next/static/app.js`,
+    );
+    expect(await new Response(object?.body).text()).toBe("chunk");
+  } finally {
+    await rm(alias, { force: true });
+  }
 });

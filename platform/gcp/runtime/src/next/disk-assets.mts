@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { join, normalize, sep } from "node:path";
 import { Readable } from "node:stream";
 import type { ObjectStore } from "@framework/next-image-optimizer/store";
@@ -19,13 +19,23 @@ function newDiskFileLookup(
   assetPrefix: string,
 ): (key: string) => Promise<string | null> {
   const root = trimToReleaseRoot(assetPrefix);
-  const within = dir.endsWith(sep) ? dir : dir + sep;
+  const lexicalDir = dir.endsWith(sep) ? dir : dir + sep;
+  let realDir: Promise<string> | undefined;
+  const realDirOnce = (): Promise<string> => {
+    realDir ??= realpath(dir).then((real) => (real.endsWith(sep) ? real : real + sep));
+    realDir.catch(() => {
+      realDir = undefined;
+    });
+    return realDir;
+  };
   return async (key) => {
     if (!key.startsWith(root) || key.includes("\0")) return null;
     const file = normalize(join(dir, key.slice(root.length)));
-    if (!file.startsWith(within)) return null;
+    if (!file.startsWith(lexicalDir)) return null;
     try {
-      return (await stat(file)).isFile() ? file : null;
+      const real = await realpath(file);
+      if (!real.startsWith(await realDirOnce())) return null;
+      return (await stat(real)).isFile() ? real : null;
     } catch {
       return null;
     }
