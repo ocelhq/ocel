@@ -83,3 +83,20 @@ func TestACachePrefixNamingNoWholeProjectAndEnvironmentIsRefused(t *testing.T) {
 		}
 	}
 }
+
+func TestACacheAppPrefixIsTheProjectThenTheAppOfTheKey(t *testing.T) {
+	got, err := cacheAppPrefix("prod/shop/web/r1/isr")
+	if err != nil {
+		t.Fatalf("cacheAppPrefix() = %v", err)
+	}
+	if want := "cache/shop/web/"; got != want {
+		t.Errorf("cacheAppPrefix(prod/shop/web/r1/isr) = %q, want %q", got, want)
+	}
+}
+
+func TestACacheAppPrefixOfAKeyNamingNoAppIsRefused(t *testing.T) {
+	_, err := cacheAppPrefix("prod/shop")
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+		t.Errorf("cacheAppPrefix(prod/shop) = %v, want an invalid-input refusal", err)
+	}
+}
