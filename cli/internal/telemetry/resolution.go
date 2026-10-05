@@ -32,14 +32,14 @@ type Resolution struct {
 func Resolve(key string) Resolution {
 	setting := strings.ToLower(os.Getenv(EnvVar))
 	switch {
-	case key == "":
-		return Resolution{Rule: RuleNoKey}
 	case setting == "0" || setting == "false":
 		return Resolution{Rule: RuleOptedOut}
 	case isTruthy(os.Getenv(doNotTrackVar)):
 		return Resolution{Rule: RuleDoNotTrack}
 	case setting == debugValue:
 		return Resolution{Enabled: true, Debug: true, Rule: RuleDebug}
+	case key == "":
+		return Resolution{Rule: RuleNoKey}
 	}
 	return Resolution{Enabled: true, Rule: RuleDefault}
 }

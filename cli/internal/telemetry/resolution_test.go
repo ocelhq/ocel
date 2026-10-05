@@ -88,10 +88,26 @@ func TestDoNotTrackBeatsDebugMode(t *testing.T) {
 	}
 }
 
-func TestAMissingKeyBeatsDebugMode(t *testing.T) {
+func TestOptingOutDecidesEvenWithoutAKey(t *testing.T) {
+	got := resolveWith(t, "", map[string]string{"OCEL_TELEMETRY": "0"})
+
+	if got.Enabled || got.Debug || got.Rule != telemetry.RuleOptedOut {
+		t.Errorf("Resolve = %+v, want OCEL_TELEMETRY=0 to decide before the missing key", got)
+	}
+}
+
+func TestDebugModeWorksWithoutAKey(t *testing.T) {
 	got := resolveWith(t, "", map[string]string{"OCEL_TELEMETRY": "debug"})
 
-	if got.Enabled || got.Debug || got.Rule != telemetry.RuleNoKey {
-		t.Errorf("Resolve = %+v, want a keyless build to stay disabled", got)
+	if !got.Enabled || !got.Debug || got.Rule != telemetry.RuleDebug {
+		t.Errorf("Resolve = %+v, want debug mode in a keyless build, since debug prints instead of sending", got)
+	}
+}
+
+func TestOptOutsBeatDebugModeWithoutAKey(t *testing.T) {
+	got := resolveWith(t, "", map[string]string{"OCEL_TELEMETRY": "debug", "DO_NOT_TRACK": "1"})
+
+	if got.Enabled || got.Debug || got.Rule != telemetry.RuleDoNotTrack {
+		t.Errorf("Resolve = %+v, want DO_NOT_TRACK to win over debug mode in a keyless build", got)
 	}
 }
