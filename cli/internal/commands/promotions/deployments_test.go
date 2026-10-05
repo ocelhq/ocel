@@ -4,14 +4,17 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/environment"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -149,6 +152,78 @@ func TestDeploymentsListRendersPromotionsNewestFirstWithTheActiveOne(t *testing.
 			t.Errorf("stdout = %q, want the concrete tier-mismatch message", out)
 		}
 	})
+}
+
+func newJSONInvocation() commands.Invocation {
+	invocation := clitest.NewInvocation()
+	invocation.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
+	}
+	return invocation
+}
+
+func TestDeploymentsListAsJSONPrintsOneEnvelopeOfPromotionsNewestFirst(t *testing.T) {
+	project := promotedTwice(t)
+	invocation := newJSONInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := runPromotionsList(context.Background(), invocation, project.Root, &stdout, &stderr); err != nil {
+		t.Fatalf("runPromotionsList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var listed resultv1.DeploymentListResult
+	clitest.DecodeResultInto(t, stdout.String(), &listed)
+	if len(listed.GetDeployments()) != 2 {
+		t.Fatalf("deployments = %v, want two promotions", listed.GetDeployments())
+	}
+	newest, oldest := listed.GetDeployments()[0], listed.GetDeployments()[1]
+	if newest.GetPromotionId() != "promo-2" || newest.GetState() != resultv1.DeploymentState_DEPLOYMENT_STATE_ACTIVE {
+		t.Errorf("newest = %v, want promo-2 active", newest)
+	}
+	if got := newest.GetBuilds(); got["web"] != "build-2~fp2" || got["admin"] != "build-2~fp3" {
+		t.Errorf("newest builds = %v, want each app's shipped identity", got)
+	}
+	if newest.GetCreatedAt() != "1970-01-01T00:00:02Z" {
+		t.Errorf("newest createdAt = %q, want an RFC 3339 timestamp", newest.GetCreatedAt())
+	}
+	if oldest.GetPromotionId() != "promo-1" || oldest.GetTag() != "v1.0.0" || oldest.GetState() != resultv1.DeploymentState_DEPLOYMENT_STATE_SUPERSEDED {
+		t.Errorf("oldest = %v, want promo-1 tagged v1.0.0 and superseded", oldest)
+	}
+	if evs := clitest.RunEvents(t, stderr.String()); len(evs) == 0 || !evs[len(evs)-1].GetSummary().GetSuccess() {
+		t.Errorf("stderr = %q, want the run's events ending in a successful summary", stderr.String())
+	}
+}
+
+func TestDeploymentsListAsJSONPrintsAnEmptyListWhenNothingWasPromoted(t *testing.T) {
+	project := clitest.SetUpProject(t)
+	clitest.RecordEdgeStack(t, project, environment.TierProduction, fake.KindRelay)
+	invocation := newJSONInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := runPromotionsList(context.Background(), invocation, project.Root, &stdout, &stderr); err != nil {
+		t.Fatalf("runPromotionsList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	if data := clitest.DecodeResult(t, stdout.String()); !reflect.DeepEqual(data["deployments"], []any{}) {
+		t.Errorf("data = %v, want an empty deployments list", data)
+	}
+}
+
+func TestDeploymentsListAsJSONKeepsATierMismatchOffStdout(t *testing.T) {
+	project := promotedTwice(t)
+	bootstrappedOnlyForPreview(t, project)
+	invocation := newJSONInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := runPromotionsList(context.Background(), invocation, project.Root, &stdout, &stderr); err == nil {
+		t.Fatal("runPromotionsList err = nil, want a tier-mismatch error")
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing: the failure is reported by the caller", stdout.String())
+	}
 }
 
 func runeIndex(line, substr string) int {

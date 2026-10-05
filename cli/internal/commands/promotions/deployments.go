@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -81,8 +82,37 @@ func runPromotionsList(ctx context.Context, invocation commands.Invocation, cwd 
 	if err != nil {
 		return err
 	}
+	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
+		return terminal.WriteResultJSON(stdout, deploymentListResult(promotions))
+	}
 	renderPromotions(stdout, promotions)
 	return nil
+}
+
+func deploymentListResult(promotions []*contractv1.PromotionHistoryEntry) *resultv1.DeploymentListResult {
+	result := &resultv1.DeploymentListResult{Deployments: make([]*resultv1.DeploymentSummary, 0, len(promotions))}
+	for _, entry := range promotions {
+		p := entry.GetPromotion()
+		result.Deployments = append(result.Deployments, &resultv1.DeploymentSummary{
+			PromotionId: p.GetPromotionId(),
+			Tag:         p.GetTag(),
+			CreatedAt:   terminal.EpochRFC3339(p.GetTs()),
+			Builds:      p.GetBuilds(),
+			State:       deploymentState(entry),
+		})
+	}
+	return result
+}
+
+func deploymentState(entry *contractv1.PromotionHistoryEntry) resultv1.DeploymentState {
+	switch {
+	case entry.GetActive():
+		return resultv1.DeploymentState_DEPLOYMENT_STATE_ACTIVE
+	case entry.GetUnpromoted():
+		return resultv1.DeploymentState_DEPLOYMENT_STATE_UNPROMOTED
+	default:
+		return resultv1.DeploymentState_DEPLOYMENT_STATE_SUPERSEDED
+	}
 }
 
 func listPromotions(ctx context.Context, invocation commands.Invocation, cfg *project.Project) (promotions []*contractv1.PromotionHistoryEntry, err error) {
