@@ -152,6 +152,57 @@ func TestFunctionImageBootsANextFunctionThroughTheNextRuntimeEntrypoint(t *testi
 	}
 }
 
+func TestFunctionImageServesTheAppsStaticAssetsAndImageConfigFromTheStaticRoot(t *testing.T) {
+	dir := stagedFunc(t, map[string]string{
+		"index.mjs":   "module.exports = {}",
+		"config.json": frameworkConfig(t, buildoutput.FrameworkNext, nil),
+	})
+	app := t.TempDir()
+	for rel, body := range map[string]string{
+		"static/_next/static/chunks/app.js": "chunk",
+		"static/favicon.ico":                "icon",
+		"image-config.json":                 `{"path":"/_next/image"}`,
+		"routing-manifest.json":             "{}",
+	} {
+		full := filepath.Join(app, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	image, err := images.FunctionImage(empty.Image, nextRuntime, dir, images.FunctionImageOptions{NextRuntimeDir: "/ocel/next", AppDir: app})
+	if err != nil {
+		t.Fatalf("FunctionImage() error = %v", err)
+	}
+
+	layers, err := image.Layers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, layer := range layers {
+		names = append(names, tarNames(t, layer)...)
+	}
+	root := strings.TrimPrefix(images.StaticRoot, "/")
+	for _, want := range []string{
+		root + "/assets/_next/static/chunks/app.js",
+		root + "/assets/favicon.ico",
+		root + "/image-config.json",
+	} {
+		if !slices.Contains(names, want) {
+			t.Errorf("the image holds %v, want %s: a function that serves its app's assets reads them from its own image", names, want)
+		}
+	}
+	if slices.ContainsFunc(names, func(name string) bool {
+		return strings.HasSuffix(name, "routing-manifest.json") && strings.HasPrefix(name, root)
+	}) {
+		t.Errorf("the image holds %v, want nothing from the app's build directory but its static assets and image config", names)
+	}
+}
+
 func TestFunctionImageRefusesANextFunctionWhereTheProviderNamesNoNextRuntimeDirectory(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"index.mjs":   "module.exports = {}",

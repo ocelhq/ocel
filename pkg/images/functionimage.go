@@ -4,7 +4,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,15 +17,21 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const FunctionImageRoot = "/ocel/app"
 
+const StaticRoot = "/ocel/static"
+
+const staticAssetsDir = "assets"
+
 type FunctionImageOptions struct {
 	Overlay        map[string][]byte
 	NextRuntimeDir string
+	AppDir         string
 }
 
 func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, opts FunctionImageOptions) (v1.Image, error) {
@@ -31,7 +39,7 @@ func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, o
 	if err != nil {
 		return nil, err
 	}
-	packed, err := functionLayer(dir, rels, opts.Overlay)
+	packed, err := functionLayer(dir, rels, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +148,8 @@ func functionCommand(framework buildoutput.Framework, staged buildoutput.Functio
 	}
 }
 
-func functionLayer(dir string, rels []string, overlay map[string][]byte) ([]byte, error) {
+func functionLayer(dir string, rels []string, opts FunctionImageOptions) ([]byte, error) {
+	overlay := opts.Overlay
 	var packed bytes.Buffer
 	archive := tar.NewWriter(&packed)
 	for _, rel := range rels {
@@ -156,10 +165,33 @@ func functionLayer(dir string, rels []string, overlay map[string][]byte) ([]byte
 			return nil, err
 		}
 	}
+	if opts.AppDir != "" {
+		if err := tarStatic(archive, opts.AppDir); err != nil {
+			return nil, err
+		}
+	}
 	if err := archive.Close(); err != nil {
 		return nil, err
 	}
 	return packed.Bytes(), nil
+}
+
+func tarStatic(archive *tar.Writer, appDir string) error {
+	assets := filepath.Join(appDir, edge.StaticAssetDir)
+	rels, err := ArtifactFiles(assets)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	for _, rel := range rels {
+		if err := tarFile(archive, filepath.Join(assets, filepath.FromSlash(rel)), path.Join(StaticRoot, staticAssetsDir, rel)); err != nil {
+			return err
+		}
+	}
+	err = tarFile(archive, filepath.Join(appDir, naming.ImageConfigFile), path.Join(StaticRoot, naming.ImageConfigFile))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 func tarFile(archive *tar.Writer, full, rel string) error {

@@ -27,6 +27,7 @@ const (
 	deploymentIDEnvVar    = "OCEL_DEPLOYMENT_ID"
 	isrPrefixEnvVar       = "OCEL_ISR_PREFIX"
 	isrTagNamespaceEnvVar = "OCEL_ISR_TAG_NAMESPACE"
+	staticDirEnvVar       = "OCEL_STATIC_DIR"
 
 	finishBeforeResponseEnvVar = "OCEL_FINISH_BEFORE_RESPONSE_MS"
 )
@@ -75,6 +76,7 @@ func nextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving) map[s
 			env[edge.OriginSignedVar] = "1"
 		}
 		env[routingManifestEnvVar] = routingManifestInImage
+		env[staticDirEnvVar] = images.StaticRoot
 		env[assetPrefixEnvVar] = app.AssetPrefix
 		env[slugEnvVar] = spec.Ref.Project
 		env[appNameEnvVar] = app.App
