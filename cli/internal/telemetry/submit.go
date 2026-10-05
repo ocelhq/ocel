@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/ocelhq/ocel/cli/internal/userconfig"
 )
 
 const DebugPrefix = "[telemetry] "
@@ -13,6 +15,9 @@ func Submit(w io.Writer, resolution Resolution, event Event) {
 		return
 	}
 	if !resolution.Debug {
+		if !isBannerShown(userconfig.Read()) {
+			return
+		}
 		if spool, err := OpenSpool(); err == nil {
 			_ = spool.Append(event)
 		}
