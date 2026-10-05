@@ -154,7 +154,7 @@ func TestATimeoutLongerThanARequestMayRunIsRefused(t *testing.T) {
 }
 
 func TestTrafficIsPinnedToOneRevisionByName(t *testing.T) {
-	pinned := trafficTo("ocel-shop-prod-web-00007-abc")
+	pinned := trafficTo("ocel-shop-prod-web-00007-abc", nil)
 
 	if len(pinned) != 1 {
 		t.Fatalf("traffic is split %d ways, want all of it on the revision this release created", len(pinned))
@@ -261,6 +261,37 @@ func TestAPinWhosePromotionWasDisplacedWhileTheServiceMovedPinsNothing(t *testin
 	}
 	if service := server.serving(); !servedBy(service.Traffic, three) {
 		t.Errorf("the service serves %+v, want all of it on %s, the pin that raced it: a pin writes on the etag it read, so a pin that landed after that read makes it read again and ask again whether its promotion is still active", service.Traffic, three)
+	}
+}
+
+func TestPinningTrafficKeepsEveryTagTheServiceCarries(t *testing.T) {
+	server := &runServer{}
+	first := serves("ocel-shop-prod-app")
+	_, one := released(t, server, first)
+	second := first
+	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	_, two := released(t, server, second)
+	server.service.Traffic = []*run.GoogleCloudRunV2TrafficTarget{
+		{Type: trafficByRevision, Revision: one, Percent: 100},
+		{Type: trafficByRevision, Revision: one, Tag: "r00000001"},
+		{Type: trafficByRevision, Revision: two, Tag: "r00000002"},
+	}
+
+	if err := server.open(t).Pin(context.Background(), first.service, two, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", two, err)
+	}
+
+	traffic := server.serving().Traffic
+	if !servedBy(traffic, two) {
+		t.Errorf("the service serves %+v, want all of it on %s", traffic, two)
+	}
+	for tag, revision := range map[string]string{"r00000001": one, "r00000002": two} {
+		if !slices.ContainsFunc(traffic, func(target *run.GoogleCloudRunV2TrafficTarget) bool {
+			return target.Tag == tag && revisionName(target.Revision) == revision
+		}) {
+			t.Errorf("the service carries %+v after the pin, want tag %s still on %s: a tag is how a deployment reaches its own revision, and a promotion must not take it away",
+				traffic, tag, revision)
+		}
 	}
 }
 
