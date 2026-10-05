@@ -88,6 +88,18 @@ test("an instance store charges an entry two bytes a character, the most V8 spen
   expect(await short.readEntry("/wide")).toBeNull();
 });
 
+test("an instance store hands back a copy, so mutating a read or written value leaves the cached entry as written", async () => {
+  const store = newInstanceCacheStore(newInstanceCache(1024 * 1024));
+  const written = page("<p>blog</p>");
+
+  await store.writeEntry("/blog", written);
+  (written.value as { html: string }).html = "<p>mutated after write</p>";
+  const first = await store.readEntry("/blog");
+  (first?.value as { html: string }).html = "<p>mutated after read</p>";
+
+  expect(await store.readEntry("/blog")).toEqual(page("<p>blog</p>"));
+});
+
 test("an instance cache store and use-cache store handed one instance cache evict each other's entries once the cache outgrows its budget", async () => {
   const one = page("x".repeat(400));
   const useCacheEntry = {
