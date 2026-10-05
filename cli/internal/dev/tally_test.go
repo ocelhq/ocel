@@ -209,9 +209,9 @@ func TestADevSessionFollowingALeaderCountsItsRestartsAndKnowsNoKinds(t *testing.
 	}
 }
 
-func TestASessionCountsOnlyPublishedErrorCodesAndNotTheInterruptOrAnUncodedFailure(t *testing.T) {
+func TestATallyCountsOnlyPublishedErrorCodesAndNotTheInterruptOrAnUncodedFailure(t *testing.T) {
 	var recorded telemetry.DevSession
-	tally := newSession(func(session telemetry.DevSession) { recorded = session })
+	tally := newTally(func(session telemetry.DevSession) { recorded = session })
 
 	tally.noteError(&clierror.Error{Code: "variables.missing", Cause: errors.New("a secret detail")})
 	tally.noteError(&clierror.Error{Code: "variables.missing", Cause: errors.New("another")})
@@ -226,8 +226,8 @@ func TestASessionCountsOnlyPublishedErrorCodesAndNotTheInterruptOrAnUncodedFailu
 	}
 }
 
-func TestASessionRecordsNothingWhenNoOneListens(t *testing.T) {
-	tally := newSession(nil)
+func TestATallyRecordsNothingWhenNoOneListens(t *testing.T) {
+	tally := newTally(nil)
 
 	tally.noteReload()
 	tally.end(errors.New("anything"))
