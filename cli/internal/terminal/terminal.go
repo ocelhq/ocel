@@ -12,8 +12,13 @@ import (
 
 const defaultColumns = 80
 
+type File interface {
+	io.Writer
+	Fd() uintptr
+}
+
 func IsTerminal(v any) bool {
-	f, ok := v.(*os.File)
+	f, ok := v.(File)
 	if !ok {
 		return false
 	}
@@ -31,7 +36,7 @@ func termWidth(w io.Writer) int {
 }
 
 func liveWidth(w io.Writer) (int, bool) {
-	f, ok := w.(*os.File)
+	f, ok := w.(File)
 	if !ok {
 		return 0, false
 	}

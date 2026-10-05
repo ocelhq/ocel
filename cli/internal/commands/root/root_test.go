@@ -466,18 +466,21 @@ func TestEveryCommandThatReportsThroughItsRunIsMarkedToDrawItOnStdout(t *testing
 	}
 }
 
-func TestACommandWhoseDataAndRunShareOneTerminalDrawsTheGroupedViewSoNoLineOfDataLandsOnTheLiveRow(t *testing.T) {
+func TestACommandWhoseDataAndRunShareOneTerminalDrawsItsRunLiveAndItsDataOnRowsOfTheirOwn(t *testing.T) {
 	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 
 	executeRootOn(t, tty, tty, "deployments", "ls")
 
 	got := screen()
-	if strings.Contains(got, liveFrame) {
-		t.Errorf("the terminal shows %q, want no live line while the command's data shares its terminal", got)
+	if !strings.Contains(got, liveFrame) {
+		t.Errorf("the terminal shows %q, want the run drawn in live-line frames while its check runs", got)
 	}
-	if !strings.Contains(ansi.Strip(got), "\nID  ") {
-		t.Errorf("the terminal shows %q, want the promotions table header on a row of its own", got)
+	plain := ansi.Strip(got)
+	for _, row := range []string{"\nID  ", "\npromo-2  ", "\npromo-1  "} {
+		if !strings.Contains(plain, row) {
+			t.Errorf("the terminal shows %q, want %q on a row of its own", plain, strings.TrimSpace(row))
+		}
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"strconv"
@@ -372,6 +373,49 @@ func TestTheRunsResultErasesTheLiveLineAndNoTickDrawsItAgain(t *testing.T) {
 	}
 	if got := rig.closed(t); got != ended {
 		t.Fatalf("after the result the sink wrote %q, want nothing more", strings.TrimPrefix(got, ended))
+	}
+}
+
+type sharedScreen struct{ *bytes.Buffer }
+
+func (sharedScreen) Fd() uintptr { return 0 }
+
+func TestDataWrittenAboveTheLiveLineErasesItFirstAndRedrawsItBelowTheData(t *testing.T) {
+	t.Parallel()
+
+	rig := newLineRig(t, Presentation{Width: 32})
+	rig.run.Phase(progressv1.Phase_PHASE_CHECK).Child("vps", progress.Checking.Title("the box"))
+	stdout := rig.sink.Above(sharedScreen{rig.out})
+	if _, err := fmt.Fprintln(stdout, "11:13:03 node/http listening"); err != nil {
+		t.Fatalf("Fprintln() = %v", err)
+	}
+
+	screen := screenOf(t, rig.out.String())
+	if want := "11:13:03 node/http listening\n      [check] ⠋ vps:   0/1 · 0s"; screen != want {
+		t.Fatalf("screen\n%q\nwant the data above the live line\n%q", screen, want)
+	}
+}
+
+func TestTheLiveLineStaysOffTheScreenWhileTheDataEndsMidLine(t *testing.T) {
+	t.Parallel()
+
+	rig := newLineRig(t, Presentation{Width: 32})
+	rig.run.Phase(progressv1.Phase_PHASE_CHECK).Child("vps", progress.Checking.Title("the box"))
+	stdout := rig.sink.Above(sharedScreen{rig.out})
+	if _, err := io.WriteString(stdout, "partial"); err != nil {
+		t.Fatalf("WriteString() = %v", err)
+	}
+	rig.clock.pass(100 * time.Millisecond)
+	rig.tick()
+
+	if screen := screenOf(t, rig.out.String()); screen != "partial" {
+		t.Fatalf("screen %q, want the unfinished data line left alone", screen)
+	}
+	if _, err := io.WriteString(stdout, " row\n"); err != nil {
+		t.Fatalf("WriteString() = %v", err)
+	}
+	if screen, want := screenOf(t, rig.out.String()), "partial row\n      [check] ⠙ vps:  0/1 · <1s"; screen != want {
+		t.Fatalf("screen\n%q\nwant the live line back once the row ends\n%q", screen, want)
 	}
 }
 
