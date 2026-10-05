@@ -690,9 +690,7 @@ func TestListingPreviewsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheList
 	previewUp(t, fixture, previewAppDependencies("feature/login", ""), previewUpOptions{})
 	identity := previewKey(t, "feature/login")
 	dependencies := newTestDependencies()
-	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
-	}
+	dependencies.Presentation = clitest.ResolveJSONPresentation
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
@@ -721,9 +719,7 @@ func TestPreviewListAsJSONCarriesEachPreviewsLifecycleLabelAndAliases(t *testing
 	previewUp(t, fixture, previewAppDependencies("feature/login", ""), previewUpOptions{})
 	previewUp(t, fixture, previewAppDependencies("feature/login", ""), previewUpOptions{name: "staging", persistent: true})
 	dependencies := newTestDependencies()
-	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
-	}
+	dependencies.Presentation = clitest.ResolveJSONPresentation
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
@@ -755,9 +751,7 @@ func TestPreviewListAsJSONCarriesEachPreviewsLifecycleLabelAndAliases(t *testing
 func TestPreviewListAsJSONPrintsAnEmptyListWhenThereAreNoPreviews(t *testing.T) {
 	fixture := setUpPreviewProject(t)
 	dependencies := newTestDependencies()
-	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
-	}
+	dependencies.Presentation = clitest.ResolveJSONPresentation
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)

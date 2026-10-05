@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -26,7 +25,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
-	"github.com/ocelhq/ocel/cli/internal/terminal"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -735,9 +733,7 @@ func chdir(t *testing.T, dir string, run func() error) error {
 func newJSONDependencies() Dependencies {
 	dependencies := newTestDependencies()
 	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
-	dependencies.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
-	}
+	dependencies.Presentation = clitest.ResolveJSONPresentation
 	return dependencies
 }
 

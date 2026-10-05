@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/environment"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -154,17 +152,10 @@ func TestDeploymentsListRendersPromotionsNewestFirstWithTheActiveOne(t *testing.
 	})
 }
 
-func newJSONInvocation() commands.Invocation {
-	invocation := clitest.NewInvocation()
-	invocation.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
-	}
-	return invocation
-}
-
 func TestDeploymentsListAsJSONPrintsOneEnvelopeOfPromotionsNewestFirst(t *testing.T) {
 	project := promotedTwice(t)
-	invocation := newJSONInvocation()
+	invocation := clitest.NewInvocation()
+	invocation.Presentation = clitest.ResolveJSONPresentation
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stderr)
@@ -198,7 +189,8 @@ func TestDeploymentsListAsJSONPrintsOneEnvelopeOfPromotionsNewestFirst(t *testin
 func TestDeploymentsListAsJSONPrintsAnEmptyListWhenNothingWasPromoted(t *testing.T) {
 	project := clitest.SetUpProject(t)
 	clitest.RecordEdgeStack(t, project, environment.TierProduction, fake.KindRelay)
-	invocation := newJSONInvocation()
+	invocation := clitest.NewInvocation()
+	invocation.Presentation = clitest.ResolveJSONPresentation
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stderr)
@@ -214,7 +206,8 @@ func TestDeploymentsListAsJSONPrintsAnEmptyListWhenNothingWasPromoted(t *testing
 func TestDeploymentsListAsJSONKeepsATierMismatchOffStdout(t *testing.T) {
 	project := promotedTwice(t)
 	bootstrappedOnlyForPreview(t, project)
-	invocation := newJSONInvocation()
+	invocation := clitest.NewInvocation()
+	invocation.Presentation = clitest.ResolveJSONPresentation
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stderr)
@@ -323,9 +316,7 @@ func assertKeptEveryPromotion(t *testing.T, project clitest.FakeProject) {
 func TestListingDeploymentsSaysWhoItActsAsInTheCheckPhaseAndPrintsItsTableBesideTheStream(t *testing.T) {
 	project := promotedTwice(t)
 	invocation := clitest.NewInvocation()
-	invocation.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
-	}
+	invocation.Presentation = clitest.ResolveJSONPresentation
 
 	var stream, stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stream)
@@ -352,9 +343,7 @@ func TestListingDeploymentsSaysWhoItActsAsInTheCheckPhaseAndPrintsItsTableBeside
 func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 	project := promotedThrice(t)
 	invocation := clitest.NewInvocation()
-	invocation.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
-	}
+	invocation.Presentation = clitest.ResolveJSONPresentation
 
 	var stream bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stream)
