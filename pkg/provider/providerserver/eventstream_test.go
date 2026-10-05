@@ -507,6 +507,23 @@ func TestSpanProgressStripsControlCharacters(t *testing.T) {
 	}
 }
 
+func TestSpanProgressKeepsTheLinesOfAMultiLineError(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	progress := newSpanLog(sender, testSpan)
+
+	progress.Error("never answered /up\nstate: Status=restarting\nlogs: boom")
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	if got := stream.recorded()[0].GetMessage(); got != "never answered /up\nstate: Status=restarting\nlogs: boom" {
+		t.Errorf("Error() message = %q, want its lines kept apart rather than run together", got)
+	}
+}
+
 func TestEventConstructors(t *testing.T) {
 	t.Parallel()
 

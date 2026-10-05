@@ -27,3 +27,19 @@ func TestAMessageLosesItsControlCharactersButNotItsLength(t *testing.T) {
 		t.Errorf("SanitizeMessage() is %d long, want the %d characters that were not control characters", len(got), len(long))
 	}
 }
+
+func TestAMessageKeepsItsLinesAndLosesTheCarriageReturnsBetweenThem(t *testing.T) {
+	t.Parallel()
+
+	if got := SanitizeMessage("never answered /up\r\nstate: Status=restarting\nlogs:\x1b[2J boom\n"); got != "never answered /up\nstate: Status=restarting\nlogs:[2J boom" {
+		t.Errorf("SanitizeMessage() = %q, want each line kept apart and every other control character gone", got)
+	}
+}
+
+func TestALineLosesEveryControlCharacterItsNewlinesAmongThem(t *testing.T) {
+	t.Parallel()
+
+	if got := SanitizeLine("the plan\r\nis \x1b[2Junknown\n"); got != "the planis [2Junknown" {
+		t.Errorf("SanitizeLine() = %q, want one line with no control characters", got)
+	}
+}
