@@ -82,12 +82,11 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 			return router.Unserved{Err: errors.Join(err, s.restoreRecordedRoutes(ctx, took, withdrawn))}
 		}
 	}
-	s.recordPreviewHosts(hosts, tags)
-	var errs []error
 	for _, hostname := range slices.Sorted(maps.Keys(replaced)) {
-		errs = append(errs, s.untagUnroutedRevisions(ctx, replaced[hostname], hosts, tags))
+		s.owe(replaced[hostname])
 	}
-	return errors.Join(errs...)
+	s.recordPreviewHosts(hosts, tags)
+	return nil
 }
 
 func describeHost(host Host) string {
@@ -258,12 +257,11 @@ func (s *stack) withdrawPointer(ctx context.Context, removal router.PointerRemov
 	for _, hostname := range going {
 		delete(kept, hostname)
 	}
-	s.recordPreviewHosts(hosts, kept)
-	var errs []error
 	for _, hostname := range going {
-		errs = append(errs, s.untagUnroutedRevisions(ctx, tagsOf(withdrawn[hostname], recorded[hostname]), hosts, kept))
+		s.owe(tagsOf(withdrawn[hostname], recorded[hostname]))
 	}
-	return errors.Join(errs...)
+	s.recordPreviewHosts(hosts, kept)
+	return nil
 }
 
 func (s *stack) recordPreviewHosts(hosts map[string]Host, tags map[string]pin.Tags) {
@@ -310,14 +308,32 @@ func tagsOf(gone Host, recorded pin.Tags) pin.Tags {
 	return pin.Tags{gone.Service: gone.Tag}
 }
 
-func (s *stack) untagUnroutedRevisions(ctx context.Context, gone pin.Tags, hosts map[string]Host, tags map[string]pin.Tags) error {
-	var errs []error
+func (s *stack) owe(gone pin.Tags) {
 	for _, service := range slices.Sorted(maps.Keys(gone)) {
-		if isTagHeld(hosts, tags, service, gone[service]) {
+		owed := RevisionTag{Service: service, Tag: gone[service]}
+		if !slices.Contains(s.recorded.TagsToRemove, owed) {
+			s.recorded.TagsToRemove = append(s.recorded.TagsToRemove, owed)
+		}
+	}
+}
+
+func (s *stack) removeUnheldTags(ctx context.Context) error {
+	var kept []RevisionTag
+	var errs []error
+	for _, owed := range s.recorded.TagsToRemove {
+		if isTagHeld(s.recorded.Hosts, s.recorded.DeploymentTags, owed.Service, owed.Tag) {
 			continue
 		}
-		errs = append(errs, s.e.deps.Pins.Untag(ctx, service, gone[service]))
+		if err := s.e.deps.Pins.Untag(ctx, owed.Service, owed.Tag); err != nil {
+			kept = append(kept, owed)
+			errs = append(errs, err)
+		}
 	}
+	if len(s.recorded.TagsToRemove) == 0 {
+		return nil
+	}
+	s.recorded.TagsToRemove = kept
+	s.keep()
 	return errors.Join(errs...)
 }
 

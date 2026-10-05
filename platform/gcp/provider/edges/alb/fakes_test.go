@@ -48,6 +48,7 @@ type world struct {
 	onUp             func()
 	through          []string
 	warmFails        error
+	untagFails       error
 
 	backendServiceQuota *BackendServiceQuota
 }
@@ -317,9 +318,18 @@ func (w *world) Close(ctx context.Context, service string, stillActive router.St
 
 func (w *world) Warm(context.Context, string, string, string) error { return nil }
 
+func (w *world) refuseUntags(err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.untagFails = err
+}
+
 func (w *world) Untag(_ context.Context, service, tag string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.untagFails != nil {
+		return w.untagFails
+	}
 	w.untags = append(w.untags, service+"#"+tag)
 	return nil
 }

@@ -470,3 +470,89 @@ func TestASupersededAliasThatFailsToUnrouteLeavesTheAliasesBeforeItRouted(t *tes
 	wantAliasRouted(t, w, aliasHost)
 	wantAliasRouted(t, w, siblingAlias)
 }
+
+var errUntagRefused = errors.New("cloud run refused to remove the tag")
+
+func owingATag(t *testing.T) (*world, routerStack, router.DeploymentRecord, router.PointerMove, string) {
+	t.Helper()
+	ctx := context.Background()
+	w, stack := previewRouter(t)
+	record := previewRecord("b1")
+	move := deploymentMove(deploymentFirst, deploymentHost, record)
+	if err := stack.MovePointer(ctx, move, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(deployment) = %v", err)
+	}
+	w.refuseUntags(errUntagRefused)
+	return w, stack, record, move, w.tagOf(previewService, record.Revisions[previewService])
+}
+
+func TestATagWhoseUntagFailedIsTakenOffByTheNextMove(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack, record, _, tag := owingATag(t)
+	if err := stack.MovePointer(ctx, aliasMove("p2", deploymentHost, record), progress.Discard()); !errors.Is(err, errUntagRefused) {
+		t.Fatalf("MovePointer(alias) = %v, want the untag error", err)
+	}
+	if got, want := w.pins(), []string{previewService + "@" + record.Revisions[previewService]}; !slices.Equal(got, want) {
+		t.Errorf("the alias move pinned %v, want %v: a failed untag must not stop traffic moving", got, want)
+	}
+	if got, want := stack.s.recorded.TagsToRemove, []RevisionTag{{Service: previewService, Tag: tag}}; !slices.Equal(got, want) {
+		t.Errorf("the router records %v owed removal, want %v", got, want)
+	}
+
+	w.refuseUntags(nil)
+	if err := stack.MovePointer(ctx, aliasMove("p2", deploymentHost, record), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(alias) again = %v", err)
+	}
+	if got, want := w.untagged(), []string{previewService + "#" + tag}; !slices.Equal(got, want) {
+		t.Errorf("the retry untagged %v, want %v exactly once", got, want)
+	}
+	if got := stack.s.recorded.TagsToRemove; got != nil {
+		t.Errorf("the router still records %v owed removal", got)
+	}
+}
+
+func TestATagWhoseUntagFailedIsTakenOffWhenItsDeploymentIsRemovedAgain(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w, stack, _, move, tag := owingATag(t)
+	removal := router.PointerRemoval{Pointer: move.Pointer, Hosts: move.Hosts}
+	if err := stack.RemovePointer(ctx, removal, progress.Discard()); !errors.Is(err, errUntagRefused) {
+		t.Fatalf("RemovePointer(deployment) = %v, want the untag error", err)
+	}
+
+	w.refuseUntags(nil)
+	if err := stack.RemovePointer(ctx, removal, progress.Discard()); err != nil {
+		t.Fatalf("RemovePointer(deployment) again = %v", err)
+	}
+	if got, want := w.untagged(), []string{previewService + "#" + tag}; !slices.Equal(got, want) {
+		t.Errorf("the removals untagged %v, want %v once", got, want)
+	}
+	if got := stack.s.recorded.TagsToRemove; len(got) != 0 {
+		t.Errorf("the router still records %v owed removal", got)
+	}
+}
+
+func TestATagStillOwedRemovalThatAHostnameHoldsAgainStaysOnItsRevision(t *testing.T) {
+	t.Parallel()
+
+	const second = "shop-eeeeeeeeeeeeeeee.preview.example.com"
+	ctx := context.Background()
+	w, stack, record, _, tag := owingATag(t)
+	if err := stack.MovePointer(ctx, aliasMove("p2", deploymentHost, record), progress.Discard()); !errors.Is(err, errUntagRefused) {
+		t.Fatalf("MovePointer(alias) = %v, want the untag error", err)
+	}
+
+	w.refuseUntags(nil)
+	if err := stack.MovePointer(ctx, deploymentMove(deploymentFirst, second, record), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(second host) = %v", err)
+	}
+	if slices.Contains(w.untagged(), previewService+"#"+tag) {
+		t.Errorf("the router untagged %s#%s while %s holds it", previewService, tag, second)
+	}
+	if got := stack.s.recorded.TagsToRemove; len(got) != 0 {
+		t.Errorf("the router still records %v owed removal", got)
+	}
+}
