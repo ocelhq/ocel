@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/kvstore"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -135,13 +134,9 @@ func (s kvStore) changes(current *memorystoreInstance) []string {
 }
 
 func labelsFor(names Names, ref provider.StackRef, store string) map[string]string {
-	return map[string]string{
-		"ocel-namespace":   naming.Sanitize(string(names.namespace)),
-		"ocel-tier":        string(ref.Tier),
-		"ocel-project":     naming.Sanitize(ref.Project),
-		"ocel-environment": naming.Sanitize(ref.Name.Env),
-		"ocel-kv":          naming.Sanitize(store),
-	}
+	labels := stackLabels(names, ref)
+	labels[kvLabel] = labelValue(store)
+	return labels
 }
 
 type kvInstance struct {

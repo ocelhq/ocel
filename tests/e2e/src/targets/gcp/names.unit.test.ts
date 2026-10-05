@@ -1,5 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import { fittedSlug, namespaceOf, roomForSlug, serviceNames } from "./names";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { repoRoot } from "../../paths";
+import {
+  fittedSlug,
+  NAMESPACE_LABEL,
+  namespaceOf,
+  PROJECT_LABEL,
+  roomForSlug,
+  serviceNames,
+} from "./names";
 
 describe("roomForSlug", () => {
   it("leaves the slug what a Cloud Run service name has left over", () => {
@@ -53,6 +63,13 @@ describe("serviceNames", () => {
     ]);
   });
 
+  it("sanitize the app as the provider does, so an app whose name is not a slug still finds its services", () => {
+    expect(serviceNames("ocel", "j-1-deploy-node", "My App")).toEqual([
+      "ocel-j-1-deploy-no-prod-my-app-a3d786",
+      "ocel-j-1-dep-prod-my-app-index-99f89b",
+    ]);
+  });
+
   it("fit the 37 characters a service a release tags keeps, cutting the project before the app", () => {
     for (const name of serviceNames(
       "ocel-nightly",
@@ -62,5 +79,16 @@ describe("serviceNames", () => {
       expect(name.length).toBeLessThanOrEqual(37);
       expect(name).toContain("-express-");
     }
+  });
+});
+
+describe("the labels a service is found by", () => {
+  it("are the keys the provider labels every service of a project with", async () => {
+    const go = await readFile(
+      path.join(repoRoot, "platform", "gcp", "provider", "labels.go"),
+      "utf8",
+    );
+    expect(go).toMatch(new RegExp(`namespaceLabel\\s*=\\s*"${NAMESPACE_LABEL}"`));
+    expect(go).toMatch(new RegExp(`projectLabel\\s*=\\s*"${PROJECT_LABEL}"`));
   });
 });

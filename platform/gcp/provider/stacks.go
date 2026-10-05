@@ -140,6 +140,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			memory:           fn.Memory,
 			egress:           p.egressFor(names, spec),
 			tag:              p.revisionTag(spec),
+			labels:           stackLabels(names, spec.Ref),
 			opensOnPromotion: true,
 		}
 		if servesNext(app) {
@@ -307,6 +308,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		ingress:   ingressFor(factsOf(spec.Edge)),
 		egress:    p.egressFor(names, spec),
 		tag:       p.revisionTag(spec),
+		labels:    stackLabels(names, spec.Ref),
 
 		opensOnPromotion: true,
 	}, progress)

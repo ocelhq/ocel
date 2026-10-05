@@ -38,11 +38,12 @@ import { fittedSlug, gcpSlug, namespaceOf, roomForSlug, serviceNames } from "./n
 import {
   deleteService,
   exposedServices,
-  hasAnyService,
   listServices,
   reachable,
   readServices,
+  type Service,
   servedBy,
+  servicesOf,
   strayServices,
   switchOn,
   TASKS_FEATURE,
@@ -147,7 +148,10 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     list: () => this.deployedSlugs(),
     exists: async (slug) => {
       const cell = cellOfSlug(gcpCells(), slug);
-      return hasAnyService(await this.services(), namesFor(slug, cell.fixture.apps).flat());
+      return this.deploys(
+        await this.services(),
+        gcpSlug({ slug, fixture: cell.fixture }, process.env),
+      );
     },
     sweepStale: (runId) => this.sweepStale(runId),
     sweepRun: (runId) => this.sweepRun(runId),
@@ -407,12 +411,18 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     };
   }
 
+  private deploys(services: Service[], project: string): boolean {
+    return servicesOf(services, namespaceOf(process.env), project).length > 0;
+  }
+
   private async deployedSlugs(): Promise<string[]> {
     const runId = currentRunIdentity();
     const found = await this.services();
     return gcpCells()
       .map((cell) => ({ cell, slug: projectSlug(cell.name, runId) }))
-      .filter(({ cell, slug }) => hasAnyService(found, namesFor(slug, cell.fixture.apps).flat()))
+      .filter(({ cell, slug }) =>
+        this.deploys(found, gcpSlug({ slug, fixture: cell.fixture }, process.env)),
+      )
       .map(({ slug }) => slug);
   }
 
@@ -446,19 +456,15 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     } catch (error) {
       complaints.push(error instanceof Error ? error.message : String(error));
     }
-    const mine = gcpCells().flatMap((cell) =>
-      namesFor(projectSlug(cell.name, runId), cell.fixture.apps).flat(),
+    const mine = gcpCells().map((cell) =>
+      gcpSlug({ slug: projectSlug(cell.name, runId), fixture: cell.fixture }, process.env),
     );
     const found = await this.services();
     const at = await this.where();
     if (!endpoint()) {
       complaints.push(...(await this.sweepStores(at, runId)));
     }
-    for (const name of strayServices(
-      found.map((service) => service.name),
-      namespaceOf(process.env),
-      mine,
-    )) {
+    for (const name of strayServices(found, namespaceOf(process.env), mine)) {
       try {
         await deleteService(at, name);
         process.stdout.write(`swept ${name}\n`);

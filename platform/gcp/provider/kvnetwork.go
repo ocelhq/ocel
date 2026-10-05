@@ -205,7 +205,7 @@ func (b bootstrap) networkFree(ctx context.Context, tier environment.Tier, featu
 	named := make([]string, 0, len(held))
 	for _, instance := range held {
 		named = append(named, fmt.Sprintf("kv %s of project %s environment %s (Memorystore instance %s)",
-			instance.Labels["ocel-kv"], instance.Labels["ocel-project"], instance.Labels["ocel-environment"], path.Base(instance.Name)))
+			instance.Labels[kvLabel], instance.Labels[projectLabel], instance.Labels[environmentLabel], path.Base(instance.Name)))
 	}
 	if next != "" {
 		named = append(named, "and more")
