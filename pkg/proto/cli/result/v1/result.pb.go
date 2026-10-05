@@ -1570,6 +1570,714 @@ func (x *DoctorCheck) GetFix() string {
 	return ""
 }
 
+type EnvCoordinate struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Project       string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	Folder        string                 `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
+	Key           string                 `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	Environment   string                 `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvCoordinate) Reset() {
+	*x = EnvCoordinate{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvCoordinate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvCoordinate) ProtoMessage() {}
+
+func (x *EnvCoordinate) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvCoordinate.ProtoReflect.Descriptor instead.
+func (*EnvCoordinate) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *EnvCoordinate) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *EnvCoordinate) GetFolder() string {
+	if x != nil {
+		return x.Folder
+	}
+	return ""
+}
+
+func (x *EnvCoordinate) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *EnvCoordinate) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+type EnvListResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v11.Tier               `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Values        []*EnvValueSummary     `protobuf:"bytes,2,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvListResult) Reset() {
+	*x = EnvListResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvListResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvListResult) ProtoMessage() {}
+
+func (x *EnvListResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvListResult.ProtoReflect.Descriptor instead.
+func (*EnvListResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *EnvListResult) GetTier() v11.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v11.Tier(0)
+}
+
+func (x *EnvListResult) GetValues() []*EnvValueSummary {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+type EnvValueSummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Coordinate    *EnvCoordinate         `protobuf:"bytes,1,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Group         string                 `protobuf:"bytes,3,opt,name=group,proto3" json:"group,omitempty"`
+	Orphaned      bool                   `protobuf:"varint,4,opt,name=orphaned,proto3" json:"orphaned,omitempty"`
+	Version       int64                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
+	Size          int64                  `protobuf:"varint,6,opt,name=size,proto3" json:"size,omitempty"`
+	UpdatedAt     string                 `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	EnvSource     string                 `protobuf:"bytes,8,opt,name=env_source,json=envSource,proto3" json:"env_source,omitempty"`
+	Target        *EnvCoordinate         `protobuf:"bytes,9,opt,name=target,proto3,oneof" json:"target,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvValueSummary) Reset() {
+	*x = EnvValueSummary{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvValueSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvValueSummary) ProtoMessage() {}
+
+func (x *EnvValueSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvValueSummary.ProtoReflect.Descriptor instead.
+func (*EnvValueSummary) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *EnvValueSummary) GetCoordinate() *EnvCoordinate {
+	if x != nil {
+		return x.Coordinate
+	}
+	return nil
+}
+
+func (x *EnvValueSummary) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *EnvValueSummary) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *EnvValueSummary) GetOrphaned() bool {
+	if x != nil {
+		return x.Orphaned
+	}
+	return false
+}
+
+func (x *EnvValueSummary) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *EnvValueSummary) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *EnvValueSummary) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+func (x *EnvValueSummary) GetEnvSource() string {
+	if x != nil {
+		return x.EnvSource
+	}
+	return ""
+}
+
+func (x *EnvValueSummary) GetTarget() *EnvCoordinate {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+type EnvGetResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v11.Tier               `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Coordinate    *EnvCoordinate         `protobuf:"bytes,2,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	Size          int64                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	UpdatedAt     string                 `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Target        *EnvCoordinate         `protobuf:"bytes,6,opt,name=target,proto3,oneof" json:"target,omitempty"`
+	Revealed      bool                   `protobuf:"varint,7,opt,name=revealed,proto3" json:"revealed,omitempty"`
+	Value         *string                `protobuf:"bytes,8,opt,name=value,proto3,oneof" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvGetResult) Reset() {
+	*x = EnvGetResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvGetResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvGetResult) ProtoMessage() {}
+
+func (x *EnvGetResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvGetResult.ProtoReflect.Descriptor instead.
+func (*EnvGetResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *EnvGetResult) GetTier() v11.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v11.Tier(0)
+}
+
+func (x *EnvGetResult) GetCoordinate() *EnvCoordinate {
+	if x != nil {
+		return x.Coordinate
+	}
+	return nil
+}
+
+func (x *EnvGetResult) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *EnvGetResult) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *EnvGetResult) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+func (x *EnvGetResult) GetTarget() *EnvCoordinate {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *EnvGetResult) GetRevealed() bool {
+	if x != nil {
+		return x.Revealed
+	}
+	return false
+}
+
+func (x *EnvGetResult) GetValue() string {
+	if x != nil && x.Value != nil {
+		return *x.Value
+	}
+	return ""
+}
+
+type EnvRefsResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v11.Tier               `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Coordinate    *EnvCoordinate         `protobuf:"bytes,2,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	References    []*EnvCoordinate       `protobuf:"bytes,3,rep,name=references,proto3" json:"references,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvRefsResult) Reset() {
+	*x = EnvRefsResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvRefsResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvRefsResult) ProtoMessage() {}
+
+func (x *EnvRefsResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvRefsResult.ProtoReflect.Descriptor instead.
+func (*EnvRefsResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *EnvRefsResult) GetTier() v11.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v11.Tier(0)
+}
+
+func (x *EnvRefsResult) GetCoordinate() *EnvCoordinate {
+	if x != nil {
+		return x.Coordinate
+	}
+	return nil
+}
+
+func (x *EnvRefsResult) GetReferences() []*EnvCoordinate {
+	if x != nil {
+		return x.References
+	}
+	return nil
+}
+
+type EnvHistoryResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v11.Tier               `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Coordinate    *EnvCoordinate         `protobuf:"bytes,2,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	Versions      []*EnvVersion          `protobuf:"bytes,3,rep,name=versions,proto3" json:"versions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvHistoryResult) Reset() {
+	*x = EnvHistoryResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvHistoryResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvHistoryResult) ProtoMessage() {}
+
+func (x *EnvHistoryResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvHistoryResult.ProtoReflect.Descriptor instead.
+func (*EnvHistoryResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *EnvHistoryResult) GetTier() v11.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v11.Tier(0)
+}
+
+func (x *EnvHistoryResult) GetCoordinate() *EnvCoordinate {
+	if x != nil {
+		return x.Coordinate
+	}
+	return nil
+}
+
+func (x *EnvHistoryResult) GetVersions() []*EnvVersion {
+	if x != nil {
+		return x.Versions
+	}
+	return nil
+}
+
+type EnvVersion struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	CreatedAt     string                 `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Size          int64                  `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvVersion) Reset() {
+	*x = EnvVersion{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvVersion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvVersion) ProtoMessage() {}
+
+func (x *EnvVersion) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvVersion.ProtoReflect.Descriptor instead.
+func (*EnvVersion) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *EnvVersion) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *EnvVersion) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *EnvVersion) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+type EnvSourceResult struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Tier                v11.Tier               `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	EnvSource           string                 `protobuf:"bytes,2,opt,name=env_source,json=envSource,proto3" json:"env_source,omitempty"`
+	OwnsValues          bool                   `protobuf:"varint,3,opt,name=owns_values,json=ownsValues,proto3" json:"owns_values,omitempty"`
+	Scheduled           bool                   `protobuf:"varint,4,opt,name=scheduled,proto3" json:"scheduled,omitempty"`
+	CanCreate           bool                   `protobuf:"varint,5,opt,name=can_create,json=canCreate,proto3" json:"can_create,omitempty"`
+	CanUpdate           bool                   `protobuf:"varint,6,opt,name=can_update,json=canUpdate,proto3" json:"can_update,omitempty"`
+	LastAttemptAt       string                 `protobuf:"bytes,7,opt,name=last_attempt_at,json=lastAttemptAt,proto3" json:"last_attempt_at,omitempty"`
+	LastSuccessAt       string                 `protobuf:"bytes,8,opt,name=last_success_at,json=lastSuccessAt,proto3" json:"last_success_at,omitempty"`
+	LastError           string                 `protobuf:"bytes,9,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	Links               []*EnvSourceLink       `protobuf:"bytes,10,rep,name=links,proto3" json:"links,omitempty"`
+	Credentials         []string               `protobuf:"bytes,11,rep,name=credentials,proto3" json:"credentials,omitempty"`
+	ConfiguredEnvSource string                 `protobuf:"bytes,12,opt,name=configured_env_source,json=configuredEnvSource,proto3" json:"configured_env_source,omitempty"`
+	DevEnvSource        string                 `protobuf:"bytes,13,opt,name=dev_env_source,json=devEnvSource,proto3" json:"dev_env_source,omitempty"`
+	DevLocalFile        string                 `protobuf:"bytes,14,opt,name=dev_local_file,json=devLocalFile,proto3" json:"dev_local_file,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *EnvSourceResult) Reset() {
+	*x = EnvSourceResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvSourceResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvSourceResult) ProtoMessage() {}
+
+func (x *EnvSourceResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvSourceResult.ProtoReflect.Descriptor instead.
+func (*EnvSourceResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *EnvSourceResult) GetTier() v11.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v11.Tier(0)
+}
+
+func (x *EnvSourceResult) GetEnvSource() string {
+	if x != nil {
+		return x.EnvSource
+	}
+	return ""
+}
+
+func (x *EnvSourceResult) GetOwnsValues() bool {
+	if x != nil {
+		return x.OwnsValues
+	}
+	return false
+}
+
+func (x *EnvSourceResult) GetScheduled() bool {
+	if x != nil {
+		return x.Scheduled
+	}
+	return false
+}
+
+func (x *EnvSourceResult) GetCanCreate() bool {
+	if x != nil {
+		return x.CanCreate
+	}
+	return false
+}
+
+func (x *EnvSourceResult) GetCanUpdate() bool {
+	if x != nil {
+		return x.CanUpdate
+	}
+	return false
+}
+
+func (x *EnvSourceResult) GetLastAttemptAt() string {
+	if x != nil {
+		return x.LastAttemptAt
+	}
+	return ""
+}
+
+func (x *EnvSourceResult) GetLastSuccessAt() string {
+	if x != nil {
+		return x.LastSuccessAt
+	}
+	return ""
+}
+
+func (x *EnvSourceResult) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *EnvSourceResult) GetLinks() []*EnvSourceLink {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+func (x *EnvSourceResult) GetCredentials() []string {
+	if x != nil {
+		return x.Credentials
+	}
+	return nil
+}
+
+func (x *EnvSourceResult) GetConfiguredEnvSource() string {
+	if x != nil {
+		return x.ConfiguredEnvSource
+	}
+	return ""
+}
+
+func (x *EnvSourceResult) GetDevEnvSource() string {
+	if x != nil {
+		return x.DevEnvSource
+	}
+	return ""
+}
+
+func (x *EnvSourceResult) GetDevLocalFile() string {
+	if x != nil {
+		return x.DevLocalFile
+	}
+	return ""
+}
+
+type EnvSourceLink struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Folder        string                 `protobuf:"bytes,1,opt,name=folder,proto3" json:"folder,omitempty"`
+	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvSourceLink) Reset() {
+	*x = EnvSourceLink{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvSourceLink) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvSourceLink) ProtoMessage() {}
+
+func (x *EnvSourceLink) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvSourceLink.ProtoReflect.Descriptor instead.
+func (*EnvSourceLink) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *EnvSourceLink) GetFolder() string {
+	if x != nil {
+		return x.Folder
+	}
+	return ""
+}
+
+func (x *EnvSourceLink) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
 var File_cli_result_v1_result_proto protoreflect.FileDescriptor
 
 const file_cli_result_v1_result_proto_rawDesc = "" +
@@ -1688,7 +2396,88 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\averdict\x18\x01 \x01(\x0e2\x1c.cli.result.v1.DoctorVerdictR\averdict\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x16\n" +
 	"\x06detail\x18\x03 \x03(\tR\x06detail\x12\x10\n" +
-	"\x03fix\x18\x04 \x01(\tR\x03fix*\x92\x01\n" +
+	"\x03fix\x18\x04 \x01(\tR\x03fix\"u\n" +
+	"\rEnvCoordinate\x12\x18\n" +
+	"\aproject\x18\x01 \x01(\tR\aproject\x12\x16\n" +
+	"\x06folder\x18\x02 \x01(\tR\x06folder\x12\x10\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12 \n" +
+	"\venvironment\x18\x04 \x01(\tR\venvironment\"x\n" +
+	"\rEnvListResult\x12/\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x126\n" +
+	"\x06values\x18\x02 \x03(\v2\x1e.cli.result.v1.EnvValueSummaryR\x06values\"\xd5\x02\n" +
+	"\x0fEnvValueSummary\x12<\n" +
+	"\n" +
+	"coordinate\x18\x01 \x01(\v2\x1c.cli.result.v1.EnvCoordinateR\n" +
+	"coordinate\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x14\n" +
+	"\x05group\x18\x03 \x01(\tR\x05group\x12\x1a\n" +
+	"\borphaned\x18\x04 \x01(\bR\borphaned\x12\x18\n" +
+	"\aversion\x18\x05 \x01(\x03R\aversion\x12\x12\n" +
+	"\x04size\x18\x06 \x01(\x03R\x04size\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\a \x01(\tR\tupdatedAt\x12\x1d\n" +
+	"\n" +
+	"env_source\x18\b \x01(\tR\tenvSource\x129\n" +
+	"\x06target\x18\t \x01(\v2\x1c.cli.result.v1.EnvCoordinateH\x00R\x06target\x88\x01\x01B\t\n" +
+	"\a_target\"\xd1\x02\n" +
+	"\fEnvGetResult\x12/\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12<\n" +
+	"\n" +
+	"coordinate\x18\x02 \x01(\v2\x1c.cli.result.v1.EnvCoordinateR\n" +
+	"coordinate\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x12\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x05 \x01(\tR\tupdatedAt\x129\n" +
+	"\x06target\x18\x06 \x01(\v2\x1c.cli.result.v1.EnvCoordinateH\x00R\x06target\x88\x01\x01\x12\x1a\n" +
+	"\brevealed\x18\a \x01(\bR\brevealed\x12\x19\n" +
+	"\x05value\x18\b \x01(\tH\x01R\x05value\x88\x01\x01B\t\n" +
+	"\a_targetB\b\n" +
+	"\x06_value\"\xbc\x01\n" +
+	"\rEnvRefsResult\x12/\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12<\n" +
+	"\n" +
+	"coordinate\x18\x02 \x01(\v2\x1c.cli.result.v1.EnvCoordinateR\n" +
+	"coordinate\x12<\n" +
+	"\n" +
+	"references\x18\x03 \x03(\v2\x1c.cli.result.v1.EnvCoordinateR\n" +
+	"references\"\xb8\x01\n" +
+	"\x10EnvHistoryResult\x12/\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12<\n" +
+	"\n" +
+	"coordinate\x18\x02 \x01(\v2\x1c.cli.result.v1.EnvCoordinateR\n" +
+	"coordinate\x125\n" +
+	"\bversions\x18\x03 \x03(\v2\x19.cli.result.v1.EnvVersionR\bversions\"Y\n" +
+	"\n" +
+	"EnvVersion\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\x03R\aversion\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x02 \x01(\tR\tcreatedAt\x12\x12\n" +
+	"\x04size\x18\x03 \x01(\x03R\x04size\"\xa3\x04\n" +
+	"\x0fEnvSourceResult\x12/\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x1d\n" +
+	"\n" +
+	"env_source\x18\x02 \x01(\tR\tenvSource\x12\x1f\n" +
+	"\vowns_values\x18\x03 \x01(\bR\n" +
+	"ownsValues\x12\x1c\n" +
+	"\tscheduled\x18\x04 \x01(\bR\tscheduled\x12\x1d\n" +
+	"\n" +
+	"can_create\x18\x05 \x01(\bR\tcanCreate\x12\x1d\n" +
+	"\n" +
+	"can_update\x18\x06 \x01(\bR\tcanUpdate\x12&\n" +
+	"\x0flast_attempt_at\x18\a \x01(\tR\rlastAttemptAt\x12&\n" +
+	"\x0flast_success_at\x18\b \x01(\tR\rlastSuccessAt\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\t \x01(\tR\tlastError\x122\n" +
+	"\x05links\x18\n" +
+	" \x03(\v2\x1c.cli.result.v1.EnvSourceLinkR\x05links\x12 \n" +
+	"\vcredentials\x18\v \x03(\tR\vcredentials\x122\n" +
+	"\x15configured_env_source\x18\f \x01(\tR\x13configuredEnvSource\x12$\n" +
+	"\x0edev_env_source\x18\r \x01(\tR\fdevEnvSource\x12$\n" +
+	"\x0edev_local_file\x18\x0e \x01(\tR\fdevLocalFile\"9\n" +
+	"\rEnvSourceLink\x12\x16\n" +
+	"\x06folder\x18\x01 \x01(\tR\x06folder\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url*\x92\x01\n" +
 	"\x0fDeploymentState\x12 \n" +
 	"\x1cDEPLOYMENT_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOYMENT_STATE_ACTIVE\x10\x01\x12\x1f\n" +
@@ -1719,7 +2508,7 @@ func file_cli_result_v1_result_proto_rawDescGZIP() []byte {
 }
 
 var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_cli_result_v1_result_proto_goTypes = []any{
 	(DeploymentState)(0),          // 0: cli.result.v1.DeploymentState
 	(ConnectorLiveness)(0),        // 1: cli.result.v1.ConnectorLiveness
@@ -1745,23 +2534,33 @@ var file_cli_result_v1_result_proto_goTypes = []any{
 	(*DoctorResult)(nil),          // 21: cli.result.v1.DoctorResult
 	(*DoctorSection)(nil),         // 22: cli.result.v1.DoctorSection
 	(*DoctorCheck)(nil),           // 23: cli.result.v1.DoctorCheck
-	nil,                           // 24: cli.result.v1.DeploymentSummary.BuildsEntry
-	(*v1.ResourceSet)(nil),        // 25: provider.cost.v1.ResourceSet
-	(*v1.Estimate)(nil),           // 26: provider.cost.v1.Estimate
-	(v11.Lifecycle)(0),            // 27: common.environment.v1.Lifecycle
+	(*EnvCoordinate)(nil),         // 24: cli.result.v1.EnvCoordinate
+	(*EnvListResult)(nil),         // 25: cli.result.v1.EnvListResult
+	(*EnvValueSummary)(nil),       // 26: cli.result.v1.EnvValueSummary
+	(*EnvGetResult)(nil),          // 27: cli.result.v1.EnvGetResult
+	(*EnvRefsResult)(nil),         // 28: cli.result.v1.EnvRefsResult
+	(*EnvHistoryResult)(nil),      // 29: cli.result.v1.EnvHistoryResult
+	(*EnvVersion)(nil),            // 30: cli.result.v1.EnvVersion
+	(*EnvSourceResult)(nil),       // 31: cli.result.v1.EnvSourceResult
+	(*EnvSourceLink)(nil),         // 32: cli.result.v1.EnvSourceLink
+	nil,                           // 33: cli.result.v1.DeploymentSummary.BuildsEntry
+	(*v1.ResourceSet)(nil),        // 34: provider.cost.v1.ResourceSet
+	(*v1.Estimate)(nil),           // 35: provider.cost.v1.Estimate
+	(v11.Lifecycle)(0),            // 36: common.environment.v1.Lifecycle
+	(v11.Tier)(0),                 // 37: common.environment.v1.Tier
 }
 var file_cli_result_v1_result_proto_depIdxs = []int32{
 	7,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
 	7,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
 	9,  // 2: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
 	10, // 3: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
-	25, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
-	26, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
+	34, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
+	35, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
 	13, // 6: cli.result.v1.DeploymentListResult.deployments:type_name -> cli.result.v1.DeploymentSummary
-	24, // 7: cli.result.v1.DeploymentSummary.builds:type_name -> cli.result.v1.DeploymentSummary.BuildsEntry
+	33, // 7: cli.result.v1.DeploymentSummary.builds:type_name -> cli.result.v1.DeploymentSummary.BuildsEntry
 	0,  // 8: cli.result.v1.DeploymentSummary.state:type_name -> cli.result.v1.DeploymentState
 	15, // 9: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
-	27, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
+	36, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
 	9,  // 11: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
 	10, // 12: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
 	19, // 13: cli.result.v1.ConnectorStatusResult.connectors:type_name -> cli.result.v1.ConnectorStatus
@@ -1771,11 +2570,26 @@ var file_cli_result_v1_result_proto_depIdxs = []int32{
 	22, // 17: cli.result.v1.DoctorResult.sections:type_name -> cli.result.v1.DoctorSection
 	23, // 18: cli.result.v1.DoctorSection.checks:type_name -> cli.result.v1.DoctorCheck
 	2,  // 19: cli.result.v1.DoctorCheck.verdict:type_name -> cli.result.v1.DoctorVerdict
-	20, // [20:20] is the sub-list for method output_type
-	20, // [20:20] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	37, // 20: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
+	26, // 21: cli.result.v1.EnvListResult.values:type_name -> cli.result.v1.EnvValueSummary
+	24, // 22: cli.result.v1.EnvValueSummary.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	24, // 23: cli.result.v1.EnvValueSummary.target:type_name -> cli.result.v1.EnvCoordinate
+	37, // 24: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
+	24, // 25: cli.result.v1.EnvGetResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	24, // 26: cli.result.v1.EnvGetResult.target:type_name -> cli.result.v1.EnvCoordinate
+	37, // 27: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
+	24, // 28: cli.result.v1.EnvRefsResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	24, // 29: cli.result.v1.EnvRefsResult.references:type_name -> cli.result.v1.EnvCoordinate
+	37, // 30: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
+	24, // 31: cli.result.v1.EnvHistoryResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	30, // 32: cli.result.v1.EnvHistoryResult.versions:type_name -> cli.result.v1.EnvVersion
+	37, // 33: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
+	32, // 34: cli.result.v1.EnvSourceResult.links:type_name -> cli.result.v1.EnvSourceLink
+	35, // [35:35] is the sub-list for method output_type
+	35, // [35:35] is the sub-list for method input_type
+	35, // [35:35] is the sub-list for extension type_name
+	35, // [35:35] is the sub-list for extension extendee
+	0,  // [0:35] is the sub-list for field type_name
 }
 
 func init() { file_cli_result_v1_result_proto_init() }
@@ -1783,13 +2597,15 @@ func file_cli_result_v1_result_proto_init() {
 	if File_cli_result_v1_result_proto != nil {
 		return
 	}
+	file_cli_result_v1_result_proto_msgTypes[23].OneofWrappers = []any{}
+	file_cli_result_v1_result_proto_msgTypes[24].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_result_v1_result_proto_rawDesc), len(file_cli_result_v1_result_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   22,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
