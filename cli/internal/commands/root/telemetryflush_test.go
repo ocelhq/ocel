@@ -250,3 +250,17 @@ func TestTheFlushCommandIsHiddenFromHelpAndTheCommandCatalog(t *testing.T) {
 		t.Errorf("help = %q, catalog = %q, want the hidden flush command named nowhere", stdout, catalog)
 	}
 }
+
+func TestABareTelemetryCommandFailsAsAnUnknownCommandDoes(t *testing.T) {
+	for _, prefix := range [][]string{nil, {"--json"}} {
+		unknownCode, unknownOut, unknownErr := executeAndReportRoot(t, append(prefix, "no-such-command")...)
+
+		code, stdout, stderr := executeAndReportRoot(t, append(prefix, "telemetry")...)
+
+		wantOut := strings.ReplaceAll(unknownOut, "no-such-command", "telemetry")
+		wantErr := strings.ReplaceAll(unknownErr, "no-such-command", "telemetry")
+		if code != unknownCode || stdout != wantOut || stderr != wantErr {
+			t.Errorf("ocel %v telemetry = %d, stdout %q, stderr %q, want %d, stdout %q, stderr %q", prefix, code, stdout, stderr, unknownCode, wantOut, wantErr)
+		}
+	}
+}
