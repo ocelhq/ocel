@@ -5,17 +5,21 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const LocalNamespace = "ocel"
+const localNamespace = "ocel"
 
 const projectSeparator = "."
+
+func LocalRepository(project, name string) string {
+	return localNamespace + naming.PathSeparator + naming.Sanitize(project) + naming.PathSeparator + name
+}
 
 func RegistryRepository(project, repository string) string {
 	return naming.Sanitize(project) + projectSeparator + naming.RepositorySegment(repository)
 }
 
-func Ref(project, repository, tag string, target provider.RegistryTarget) string {
+func FormatRef(project, repository, tag string, target provider.RegistryTarget) string {
 	if !target.Named() {
-		return LocalNamespace + naming.PathSeparator + naming.Sanitize(project) + naming.PathSeparator + naming.RepositorySegment(repository) + ":" + tag
+		return LocalRepository(project, naming.RepositorySegment(repository)) + ":" + tag
 	}
 	return target.ImageRef(RegistryRepository(project, repository), tag)
 }

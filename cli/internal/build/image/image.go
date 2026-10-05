@@ -23,7 +23,7 @@ type Image struct {
 func Repository(slug, app string) (string, error) {
 	project := naming.Sanitize(slug)
 	name := naming.Sanitize(app)
-	repository := images.LocalNamespace + "/" + project + "/" + name
+	repository := images.LocalRepository(slug, name)
 	if !naming.IsRepositorySegment(project) || !naming.IsRepositorySegment(name) || len(repository) > maxRepository {
 		return "", fmt.Errorf("project %q and app %q name an image repository of %q, which docker rejects as a repository name: name them something a repository can be derived from", slug, app, repository)
 	}
