@@ -115,6 +115,10 @@ func (r report) failures() int {
 	return r.count(verdictFail)
 }
 
+func (r report) warnings() int {
+	return r.count(verdictWarn)
+}
+
 func (r report) count(want verdict) int {
 	n := 0
 	for _, s := range r.sections {
@@ -723,7 +727,7 @@ func (s section) render(out io.Writer, p terminal.Palette) {
 }
 
 func (r report) result() *resultv1.DoctorResult {
-	failures, warnings := r.count(verdictFail), r.count(verdictWarn)
+	failures, warnings := r.failures(), r.warnings()
 	overall := resultv1.DoctorVerdict_DOCTOR_VERDICT_PASS
 	switch {
 	case failures > 0:
@@ -760,13 +764,15 @@ func (v verdict) result() resultv1.DoctorVerdict {
 		return resultv1.DoctorVerdict_DOCTOR_VERDICT_WARN
 	case verdictFail:
 		return resultv1.DoctorVerdict_DOCTOR_VERDICT_FAIL
-	default:
+	case verdictNeutral:
 		return resultv1.DoctorVerdict_DOCTOR_VERDICT_NEUTRAL
+	default:
+		return resultv1.DoctorVerdict_DOCTOR_VERDICT_UNSPECIFIED
 	}
 }
 
 func (r report) summary(p terminal.Palette) string {
-	failures, warnings := r.count(verdictFail), r.count(verdictWarn)
+	failures, warnings := r.failures(), r.warnings()
 	if failures == 0 && warnings == 0 {
 		return p.SuccessBold("Good to go.")
 	}

@@ -232,6 +232,28 @@ func TestADataCommandThatAlreadyReportedItsFailureKeepsItsExitCodeAndPrintsNoDoc
 	}
 }
 
+func TestDoctorWithAFailingCheckUnderJSONPrintsOnlyItsOkEnvelopeAndExitsOne(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	code, stdout, _ := executeAndReportRoot(t, "--json", "doctor")
+
+	decoder := json.NewDecoder(strings.NewReader(stdout))
+	var doc map[string]any
+	if err := decoder.Decode(&doc); err != nil {
+		t.Fatalf("stdout = %q, want one JSON document: %v", stdout, err)
+	}
+	if decoder.More() {
+		t.Fatalf("stdout = %q, want exactly one JSON document", stdout)
+	}
+	data, _ := doc["data"].(map[string]any)
+	if doc["ok"] != true || data["verdict"] != "DOCTOR_VERDICT_FAIL" {
+		t.Errorf("document = %v, want ok:true carrying the failing verdict", doc)
+	}
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+}
+
 func TestAProjectThatFailsToLoadBeforeARunStartsPrintsOneErrorDocument(t *testing.T) {
 	t.Chdir(t.TempDir())
 
