@@ -3,6 +3,7 @@ package cli.result.v1;
 
 option go_package = "github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1";
 
+import "common/environment/v1/environment.proto";
 import "provider/cost/v1/cost.proto";
 
 message BindingSetResult {
@@ -87,4 +88,118 @@ message CostScanResult {
   provider.cost.v1.Estimate estimate = 2;
 
   repeated string assumptions = 3;
+}
+
+message DeploymentListResult {
+  repeated DeploymentSummary deployments = 1;
+}
+
+message DeploymentSummary {
+  string promotion_id = 1;
+
+  string tag = 2;
+
+  string created_at = 3;
+
+  map<string, string> builds = 4;
+
+  DeploymentState state = 5;
+}
+
+enum DeploymentState {
+  DEPLOYMENT_STATE_UNSPECIFIED = 0;
+  DEPLOYMENT_STATE_ACTIVE = 1;
+  DEPLOYMENT_STATE_UNPROMOTED = 2;
+  DEPLOYMENT_STATE_SUPERSEDED = 3;
+}
+
+message PreviewListResult {
+  repeated PreviewSummary previews = 1;
+}
+
+message PreviewSummary {
+  string identity = 1;
+
+  common.environment.v1.Lifecycle lifecycle = 2;
+
+  string label = 3;
+
+  string created_at = 4;
+
+  repeated string alias_urls = 5;
+}
+
+message DomainListResult {
+  repeated DomainHostStatus hosts = 1;
+}
+
+message PreviewDomainResult {
+  string base_domain = 1;
+
+  string edge_scope = 2;
+
+  bool route_installed = 3;
+
+  string certificate_id = 4;
+
+  string certificate_status = 5;
+
+  string renewal_status = 6;
+
+  string expires_at = 7;
+
+  bool expiring_soon = 8;
+
+  repeated string records_written = 9;
+
+  repeated string manual_records = 10;
+
+  string last_probe_at = 11;
+
+  bool last_probe_ok = 12;
+
+  repeated string projects = 13;
+}
+
+message ConnectorStatusResult {
+  repeated ConnectorStatus connectors = 1;
+}
+
+message ConnectorStatus {
+  string target = 1;
+
+  string vendor = 2;
+
+  string compute = 3;
+
+  string reach = 4;
+
+  string url = 5;
+
+  string version = 6;
+
+  repeated string capabilities = 7;
+
+  ConnectorLiveness liveness = 8;
+
+  string connected_at = 9;
+
+  string last_seen_at = 10;
+
+  ConnectorDenial last_denied = 11;
+}
+
+enum ConnectorLiveness {
+  CONNECTOR_LIVENESS_UNSPECIFIED = 0;
+  CONNECTOR_LIVENESS_ONLINE = 1;
+  CONNECTOR_LIVENESS_OFFLINE = 2;
+  CONNECTOR_LIVENESS_NEVER_CONNECTED = 3;
+}
+
+message ConnectorDenial {
+  string verb = 1;
+
+  string at = 2;
+
+  string message = 3;
 }
