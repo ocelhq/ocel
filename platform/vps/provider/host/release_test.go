@@ -650,7 +650,7 @@ func TestTheCutoverConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUps
 		quoted(SwitchboardMounted),
 		quoted(SwitchboardContainer),
 	} {
-		if !strings.Contains(gated, wanted) {
+		if !strings.Contains(gated, insideWatch(wanted)) {
 			t.Errorf("the gate is made as %q, which includes no %s", gated, wanted)
 		}
 	}
@@ -1037,7 +1037,7 @@ func diagnosed(t *testing.T, gate session.Result, state, logs string) string {
 	proxied := box.answer
 	box.answer = func(command string) (session.Result, bool) {
 		switch {
-		case strings.Contains(command, "docker inspect") && strings.Contains(command, ".State."):
+		case strings.HasPrefix(command, "docker inspect") && strings.Contains(command, ".State."):
 			return session.Result{Stdout: state}, true
 		case strings.Contains(command, "docker logs"):
 			return session.Result{Stdout: logs}, true
