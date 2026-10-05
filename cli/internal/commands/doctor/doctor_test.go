@@ -625,10 +625,7 @@ func TestRunDoctorWarnsThatNothingRenewsAPinnedWildcardAboutToExpire(t *testing.
 func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStdout(t *testing.T) {
 	project := healthyProject(t)
 
-	invocation := clitest.NewInvocation()
-	invocation.Presentation = func(io.Writer) terminal.Presentation {
-		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
-	}
+	invocation := jsonInvocation()
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stderr)
@@ -853,31 +850,40 @@ func TestDoctorAsJSONWithoutAConfigReportsTheFailureAsData(t *testing.T) {
 }
 
 func TestDoctorAsJSONCountsWarningsWithoutFailing(t *testing.T) {
-	var found report
-	s := section{name: "Preview"}
-	s.warn("no preview domain", "run `ocel domain use`")
-	s.neutral("skipped")
-	found.add(s)
-
-	result := found.result()
-	if result.GetVerdict() != resultv1.DoctorVerdict_DOCTOR_VERDICT_WARN || result.GetWarnings() != 1 || result.GetProblems() != 0 {
-		t.Errorf("result = %v, want a warn verdict with one warning", result)
-	}
-	if got := result.GetSections()[0].GetChecks()[1].GetVerdict(); got != resultv1.DoctorVerdict_DOCTOR_VERDICT_NEUTRAL {
-		t.Errorf("neutral check verdict = %v, want neutral", got)
-	}
-}
-
-func TestDoctorHumanOutputIsUnchangedByTheJSONResult(t *testing.T) {
-	project := healthyProject(t)
-	invocation := clitest.NewInvocation()
+	project := clitest.SetUpProject(t)
+	clitest.WriteFile(t, filepath.Join(project.Root, "ocel.config.ts"), `
+export default {
+  slug: "my-shop",
+  provider: { fake: {} },
+  domains: { production: "shop.example.com" },
+};
+`)
+	invocation := jsonInvocation()
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stderr)
-	if err := Run(context.Background(), invocation, project.Root, &stdout); err != nil {
-		t.Fatal(err)
+	err := Run(context.Background(), invocation, project.Root, &stdout)
+	if code := exitCode(t, err); code != 0 {
+		t.Fatalf("exit code = %d, want warnings alone to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	if out := stdout.String(); strings.HasPrefix(out, "{") || !strings.Contains(out, "Good to go.") {
-		t.Errorf("stdout = %q, want the human report", out)
+
+	var report resultv1.DoctorResult
+	clitest.DecodeResultInto(t, stdout.String(), &report)
+	if report.GetVerdict() != resultv1.DoctorVerdict_DOCTOR_VERDICT_WARN || report.GetWarnings() != 1 || report.GetProblems() != 0 {
+		t.Errorf("report = %v, want a warn verdict with one warning", &report)
+	}
+	preview := report.GetSections()[len(report.GetSections())-1]
+	var verdicts []resultv1.DoctorVerdict
+	for _, check := range preview.GetChecks() {
+		verdicts = append(verdicts, check.GetVerdict())
+	}
+	if want := []resultv1.DoctorVerdict{resultv1.DoctorVerdict_DOCTOR_VERDICT_WARN, resultv1.DoctorVerdict_DOCTOR_VERDICT_NEUTRAL}; preview.GetName() != "Preview" || !slices.Equal(verdicts, want) {
+		t.Errorf("section %q verdicts = %v, want %v", preview.GetName(), verdicts, want)
+	}
+}
+
+func TestAVerdictDoctorDoesNotKnowIsUnspecifiedInTheResult(t *testing.T) {
+	if got := verdict(-1).result(); got != resultv1.DoctorVerdict_DOCTOR_VERDICT_UNSPECIFIED {
+		t.Errorf("result = %v, want unspecified", got)
 	}
 }
