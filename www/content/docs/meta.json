@@ -23,6 +23,8 @@
     "---Under the hood---",
     "how-a-deploy-works",
     "cli",
-    "sdk"
+    "sdk",
+    "---Reference---",
+    "errors"
   ]
 }

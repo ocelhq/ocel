@@ -1,0 +1,12 @@
+---
+title: confirmation_required
+description: A command needs a confirmation it cannot ask for.
+---
+
+A command that changes your account asks you to confirm before it does. This run has no terminal to ask on, or it is writing `--json`, so there is nobody to answer. The command stops and changes nothing.
+
+## Fix
+
+Pass `--yes` to confirm in advance, or run the command in a terminal and answer the prompt. The error's `hint` names the flag.
+
+On a command that confirms a plan, such as `ocel deploy`, `--dry` prints the plan without asking and changes nothing.

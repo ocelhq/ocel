@@ -1,0 +1,31 @@
+{
+  "title": "Errors",
+  "pages": [
+    "index",
+    "---Confirmation and input---",
+    "confirmation_required",
+    "confirmation_bypass_mismatch",
+    "input_required",
+    "usage",
+    "---Project---",
+    "project.no_config",
+    "project.invalid_config",
+    "init.config_exists",
+    "init.ambiguous_language",
+    "sdk.version_mismatch",
+    "variables.missing",
+    "---Provider and account---",
+    "provider.unavailable",
+    "provider.version_mismatch",
+    "prerequisite.missing",
+    "bootstrap.missing",
+    "bootstrap.features_missing",
+    "---Console---",
+    "console.not_logged_in",
+    "console.not_linked",
+    "---Runs---",
+    "interrupted",
+    "dev.command_failed",
+    "doctor.checks_failed"
+  ]
+}

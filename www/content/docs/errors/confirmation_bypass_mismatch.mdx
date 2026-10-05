@@ -1,0 +1,10 @@
+---
+title: confirmation_bypass_mismatch
+description: The destroy bypass variable is set, but not to the thing being destroyed.
+---
+
+`OCEL_DESTROY_BYPASS_CONFIRMATION` skips the confirmation of a destructive command, but only when its value is the name of the thing the command is about to destroy. Here it is set to something else, and the run has no terminal to fall back to asking on, so the command stops.
+
+## Fix
+
+Set the variable to the exact name the message gives, pass `--yes` to confirm whatever the variable says, or run the command in a terminal and confirm there. In a terminal, a mismatched value falls back to the interactive prompt instead of failing.

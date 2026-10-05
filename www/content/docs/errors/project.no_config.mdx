@@ -1,0 +1,10 @@
+---
+title: project.no_config
+description: Ocel found no config file to read.
+---
+
+A command that reads the project could not find its config, or was pointed at a path that is not one. The message names which: no config in the directory, a `--config` or `OCEL_CONFIG` path that is missing or is a directory, or a file whose name is not a config name.
+
+## Fix
+
+Run the command from the project directory, or pass `--config` with the path. To create a config, run `ocel init --provider <id>`. See [configuration](/docs/configuration).

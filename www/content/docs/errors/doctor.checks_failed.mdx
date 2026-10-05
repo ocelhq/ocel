@@ -1,0 +1,10 @@
+---
+title: doctor.checks_failed
+description: ocel doctor found a problem.
+---
+
+`ocel doctor` ran its checks and at least one of them failed. It has already listed each check with its verdict, and the fix for anything in the way. Warnings alone do not raise this code. The CLI exits with code 1.
+
+## Fix
+
+Apply the fix doctor names next to each failed check, then run `ocel doctor` again.

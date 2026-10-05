@@ -1,0 +1,10 @@
+---
+title: interrupted
+description: The run was stopped before it finished.
+---
+
+You pressed Ctrl+C, or something else cancelled the run, and the command stopped before it finished. The CLI exits with code 130. This code replaces whatever error the cancelled work returned, and the error carries no `docs_url` or `hint`.
+
+## Fix
+
+Nothing failed on its own. Run the command again when you want it to finish.

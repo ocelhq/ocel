@@ -1,0 +1,10 @@
+---
+title: project.invalid_config
+description: The project's config is not valid.
+---
+
+Ocel read the config and refused it. The message says why, and the error's `hint` names the field when one is at fault: a missing or malformed `slug`, an app name that is not a DNS label, two config files in one directory, a file that is not valid JSON, or a `provider`, `domains`, `bindings` or `registry` entry that does not fit.
+
+## Fix
+
+Correct the field the message names and run the command again. The `$schema` line at the top of `ocel.json` makes an editor flag these before a run. See [configuration](/docs/configuration).

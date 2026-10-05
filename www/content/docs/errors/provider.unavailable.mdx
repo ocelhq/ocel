@@ -1,0 +1,10 @@
+---
+title: provider.unavailable
+description: The provider process did not start.
+---
+
+Ocel runs each cloud provider as a separate process that ships with the CLI. This one could not be started, exited before it was ready, did not become ready in time, or failed while it was starting. The message carries the cause, and the provider's own stderr when it printed any.
+
+## Fix
+
+Run the command again. If it keeps failing, reinstall the CLI so the provider binary is whole, and run `ocel doctor` to see what is wrong on this machine.
