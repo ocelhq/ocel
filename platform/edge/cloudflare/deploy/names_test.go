@@ -97,7 +97,7 @@ func TestAccountNames(t *testing.T) {
 			t.Run("a name longer than Cloudflare allows is refused", func(t *testing.T) {
 				t.Parallel()
 
-				long := strings.Repeat("a", longestAccountName)
+				long := strings.Repeat("a", maxWorkerNameLength)
 				if _, err := tc.nameFor(long, environment.TierPreview); err == nil || !strings.Contains(err.Error(), long) {
 					t.Errorf("nameFor(%d-character namespace) err = %v, want one naming it", len(long), err)
 				}
