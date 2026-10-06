@@ -63,13 +63,21 @@ func readClientCAs(zoneName string, held []zoneClientCertificate) ([]string, err
 }
 
 func readClientCA(zoneName string, held zoneClientCertificate) (string, error) {
-	block, _ := pem.Decode([]byte(held.Certificate))
-	if block == nil || block.Type != "CERTIFICATE" {
+	authority, ok := readEmbeddedCA(held.Certificate)
+	if !ok {
 		return "", refuseUnreadableCA(zoneName, held.ID)
+	}
+	return authority, nil
+}
+
+func readEmbeddedCA(certificatePEM string) (string, bool) {
+	block, _ := pem.Decode([]byte(certificatePEM))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return "", false
 	}
 	presented, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return "", refuseUnreadableCA(zoneName, held.ID)
+		return "", false
 	}
 	for _, issuer := range presented.IssuingCertificateURL {
 		encoded, embedded := strings.CutPrefix(issuer, embeddedIssuerPrefix)
@@ -84,12 +92,12 @@ func readClientCA(zoneName string, held zoneClientCertificate) (string, error) {
 		if err != nil || !authority.IsCA || presented.CheckSignatureFrom(authority) != nil {
 			continue
 		}
-		return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), nil
+		return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), true
 	}
 	if bytes.Equal(presented.RawIssuer, presented.RawSubject) && presented.CheckSignature(presented.SignatureAlgorithm, presented.RawTBSCertificate, presented.Signature) == nil {
-		return string(pem.EncodeToMemory(block)), nil
+		return string(pem.EncodeToMemory(block)), true
 	}
-	return "", refuseUnreadableCA(zoneName, held.ID)
+	return "", false
 }
 
 func refuseUnreadableCA(zoneName, id string) error {
@@ -239,8 +247,8 @@ func (p *cloudflare) listClientCertificates(ctx context.Context, zoneID string) 
 	return held, nil
 }
 
-func mintClientCertificate(zoneName string, now time.Time) (certificate, key string, err error) {
-	authorityKey, authority, err := mintClientCA(zoneName, now)
+func mintClientCertificate(subject string, now time.Time) (certificate, key string, err error) {
+	authorityKey, authority, err := mintClientCA(subject, now)
 	if err != nil {
 		return "", "", err
 	}
@@ -254,8 +262,8 @@ func mintClientCertificate(zoneName string, now time.Time) (certificate, key str
 	}
 	template := &x509.Certificate{
 		SerialNumber:          serial,
-		Subject:               pkix.Name{CommonName: clientCertificateName + " " + zoneName},
-		DNSNames:              []string{zoneName},
+		Subject:               pkix.Name{CommonName: clientCertificateName + " " + subject},
+		DNSNames:              []string{subject},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(clientCertificateLifetime),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
@@ -276,7 +284,7 @@ func mintClientCertificate(zoneName string, now time.Time) (certificate, key str
 	return certificate, key, nil
 }
 
-func mintClientCA(zoneName string, now time.Time) (*rsa.PrivateKey, *x509.Certificate, error) {
+func mintClientCA(subject string, now time.Time) (*rsa.PrivateKey, *x509.Certificate, error) {
 	private, err := rsa.GenerateKey(rand.Reader, clientCertificateBits)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate the client certificate CA's key: %w", err)
@@ -287,7 +295,7 @@ func mintClientCA(zoneName string, now time.Time) (*rsa.PrivateKey, *x509.Certif
 	}
 	template := &x509.Certificate{
 		SerialNumber:          serial,
-		Subject:               pkix.Name{CommonName: clientCAName + " " + zoneName},
+		Subject:               pkix.Name{CommonName: clientCAName + " " + subject},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(clientCertificateLifetime),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,

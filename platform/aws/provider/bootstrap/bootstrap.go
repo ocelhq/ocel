@@ -587,6 +587,7 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 			if _, err := ensureISRWriterSeed(ctx, d.ssm, d.ns, d.tier, front.Kind()); err != nil {
 				return err
 			}
+		case edge.OfferWorkerClientCertificate:
 		default:
 			d.progress.Warn(fmt.Sprintf("Ignoring the %s edge's %q offer: nothing in this bootstrap adopts it", front.Kind(), offer.Kind))
 		}

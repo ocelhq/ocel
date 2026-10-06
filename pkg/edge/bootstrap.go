@@ -93,6 +93,13 @@ const OfferDeploymentsStore OfferKind = "deployments-store"
 
 const OfferISRWriter OfferKind = "isr-writer"
 
+const OfferWorkerClientCertificate OfferKind = "worker-client-certificate"
+
+const (
+	OfferKeyClientCertificateID          = "certificateId"
+	OfferKeyClientCertificateAuthorities = "certificateAuthorities"
+)
+
 const (
 	OfferKeyISRWriterEndpoint            = "endpoint"
 	OfferKeyISRWriterScriptName          = "scriptName"

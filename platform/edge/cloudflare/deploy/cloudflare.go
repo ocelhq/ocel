@@ -63,6 +63,8 @@ type cloudflare struct {
 	options   Options
 	objects   func(endpoint string, creds r2.TemporaryCredentialNewResponse) objectAPI
 
+	workerClientCertificate bool
+
 	zoneMu    sync.Mutex
 	zonesSeen map[string][]zoneRef
 
@@ -71,6 +73,12 @@ type cloudflare struct {
 }
 
 func New(namespace string, options Options) edge.Edge { return newCloudflare(namespace, options) }
+
+func NewWithWorkerClientCertificate(namespace string, options Options) edge.Edge {
+	front := newCloudflare(namespace, options)
+	front.workerClientCertificate = true
+	return front
+}
 
 func newCloudflare(namespace string, options Options) *cloudflare {
 	return &cloudflare{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries)), namespace: namespace, options: options}
@@ -125,7 +133,7 @@ func (p *cloudflare) Hooks() edge.Hooks {
 		DescribeBootstrap:             p.describeBootstrap,
 		VerifyCredentials:             p.verifyCredentials,
 		CheckCodeEntitlement:          p.codeEntitlement,
-		DescribeCredentialPermissions: credentialPermissions,
+		DescribeCredentialPermissions: p.describeCredentialPermissions,
 		ClientCertificates: &edge.ClientCertificateHooks{
 			Ensure:  p.ensureClientCertificates,
 			Present: p.presentClientCertificates,
@@ -212,6 +220,13 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 		}
 		out.Offers = append(out.Offers, offer)
 	}
+	if p.workerClientCertificate {
+		offer, err := p.workerClientCertificates().ensure(ctx, accountID, state.certificates)
+		if err != nil {
+			return out, fmt.Errorf("bootstrap the worker client certificate: %w", err)
+		}
+		out.Offers = append(out.Offers, offer)
+	}
 	return out, nil
 }
 
@@ -236,6 +251,11 @@ func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error 
 	}
 	if err := p.cacheStore().teardown(ctx, accountID, tier); err != nil {
 		errs = append(errs, err)
+	}
+	if p.workerClientCertificate {
+		if err := p.workerClientCertificates().teardown(ctx, accountID, tier); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	return errors.Join(errs...)
 }

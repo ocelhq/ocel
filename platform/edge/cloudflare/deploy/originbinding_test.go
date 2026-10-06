@@ -232,9 +232,9 @@ func TestTheRouteThatRunsNoWorkerNamesNoOwnerInPlaceOfTheRecordThatForwardsTheHo
 
 func TestTheWorkerEdgesTokenMayEditTheZonesClientCertificatesAndReadItsSSLMode(t *testing.T) {
 	for _, purpose := range []edge.CredentialPurpose{edge.PurposeBootstrap, edge.PurposeDeploy} {
-		document, err := credentialPermissions(purpose)
+		document, err := New(defaultNamespace, Options{}).Hooks().DescribeCredentialPermissions(purpose)
 		if err != nil {
-			t.Fatalf("credentialPermissions(%s): %v", purpose, err)
+			t.Fatalf("DescribeCredentialPermissions(%s): %v", purpose, err)
 		}
 		for _, needed := range []string{"Zone · SSL and Certificates · Edit", "Zone · Zone Settings · Read"} {
 			if !strings.Contains(document.Document, needed) {

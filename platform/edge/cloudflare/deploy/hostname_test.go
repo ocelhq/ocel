@@ -70,6 +70,11 @@ type cfMock struct {
 
 	deletedClientCertificates []string
 
+	mtlsCertificates         []map[string]any
+	uploadedMTLSCertificates []map[string]any
+	deletedMTLSCertificates  []string
+	refuseMTLSDelete         bool
+
 	originRequests   [][]string
 	originCSRs       []string
 	revokedOrigin    []string
@@ -394,6 +399,41 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		}
 		m.clientCertificates = append(m.clientCertificates, uploaded)
 		writeResult(w, uploaded)
+	})
+
+	mux.HandleFunc("GET /accounts/acct/mtls_certificates", func(w http.ResponseWriter, _ *http.Request) {
+		writeResult(w, append([]map[string]any{}, m.mtlsCertificates...))
+	})
+
+	mux.HandleFunc("POST /accounts/acct/mtls_certificates", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		m.uploadedMTLSCertificates = append(m.uploadedMTLSCertificates, body)
+		uploaded := map[string]any{
+			"id":           fmt.Sprintf("mtls-%d", len(m.uploadedMTLSCertificates)),
+			"ca":           body["ca"],
+			"certificates": body["certificates"],
+			"name":         body["name"],
+			"expires_on":   certificateNotAfter(fmt.Sprint(body["certificates"])).Format(time.RFC3339),
+		}
+		m.mtlsCertificates = append(m.mtlsCertificates, uploaded)
+		writeResult(w, uploaded)
+	})
+
+	mux.HandleFunc("DELETE /accounts/acct/mtls_certificates/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if m.refuseMTLSDelete {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": false, "messages": []any{}, "result": nil,
+				"errors": []any{map[string]any{"code": 1000, "message": "the certificate is in use"}},
+			})
+			return
+		}
+		m.deletedMTLSCertificates = append(m.deletedMTLSCertificates, id)
+		m.mtlsCertificates = slices.DeleteFunc(m.mtlsCertificates, func(listed map[string]any) bool { return listed["id"] == id })
+		writeResult(w, map[string]any{"id": id})
 	})
 
 	mux.HandleFunc("POST /certificates", func(w http.ResponseWriter, r *http.Request) {
