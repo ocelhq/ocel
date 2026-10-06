@@ -124,7 +124,7 @@ func (r *deployRun) wrapFunction(ctx context.Context, name string, framework bui
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"this provider ships no container runtime built for %s, and %s is built for it", goarch, name)
 	}
-	wrapped, err := images.WrapContainer(image, body)
+	wrapped, err := images.WrapContainer(image, body, nil)
 	if err != nil {
 		return nil, fmt.Errorf("wrap %s's image in the runtime: %w", name, err)
 	}

@@ -47,7 +47,7 @@ func transferRuntime(t *testing.T, daemon images.DockerHost, client *http.Client
 }
 
 func transferCoordinate(runtime []byte) string {
-	return transferRepository + ":" + images.RuntimeTag(transferDigest, runtime)
+	return transferRepository + ":" + images.RuntimeTag(transferDigest, runtime, nil)
 }
 
 func rootfs(t *testing.T) []byte {
@@ -185,7 +185,7 @@ func wrappedAsADeployDoes(ctx context.Context, daemon images.DockerHost, client 
 		discard()
 		return nil, nil, err
 	}
-	wrapped, err := images.WrapContainer(base, runtime)
+	wrapped, err := images.WrapContainer(base, runtime, nil)
 	if err != nil {
 		discard()
 		return nil, nil, err

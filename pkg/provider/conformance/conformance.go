@@ -2,8 +2,10 @@ package conformance
 
 import (
 	"context"
+	"path"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
@@ -52,6 +54,22 @@ func runHooks(t *testing.T, suite Suite) {
 			t.Skip("this provider sets no Cost hooks, so no deploy of it is priced")
 		}
 		runCost(t, suite)
+	})
+	t.Run("NextServerRuntime", func(t *testing.T) {
+		if hooks.ReadNextServerRuntime == nil {
+			t.Skip("this provider ships no Next server runtime, so its Next containers run Next with Next's defaults")
+		}
+		dir := p.Facts().NextRuntimeDir
+		if dir == "" || !path.IsAbs(dir) {
+			t.Fatalf("Facts().NextRuntimeDir = %q, want the absolute directory the Next server runtime is shipped to", dir)
+		}
+		files, err := hooks.ReadNextServerRuntime(context.Background())
+		if err != nil {
+			t.Fatalf("ReadNextServerRuntime() error = %v", err)
+		}
+		if _, ok := files[images.NextServerAdapterFile]; !ok {
+			t.Errorf("ReadNextServerRuntime() has no %s, which next start loads as its adapter", images.NextServerAdapterFile)
+		}
 	})
 }
 

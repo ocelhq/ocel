@@ -212,7 +212,7 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, framework b
 	if err != nil {
 		t.Fatal(err)
 	}
-	wrapped, err := images.WrapContainer(image, binary)
+	wrapped, err := images.WrapContainer(image, binary, nil)
 	if err != nil {
 		t.Fatalf("wrap the %s function's image in the runtime, as a deploy does: %v", framework.Name, err)
 	}

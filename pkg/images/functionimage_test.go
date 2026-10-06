@@ -477,7 +477,7 @@ func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageContains(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	wrapped, err := images.WrapContainer(image, []byte("a runtime binary"))
+	wrapped, err := images.WrapContainer(image, []byte("a runtime binary"), nil)
 	if err != nil {
 		t.Fatalf("WrapContainer() = %v, want a node function's image wrapped like any container", err)
 	}
