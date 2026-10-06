@@ -102,21 +102,22 @@ func (w ISRWriter) PutEntry(ctx context.Context, isrPrefix, key string, body []b
 	url := w.Endpoint + "/" + isrPrefix + "/entry?key=" + neturl.QueryEscape(key)
 	for attempt := 0; ; attempt++ {
 		status, err := w.putEntryOnce(ctx, url, isrPrefix, body)
-		if err != nil {
-			return fmt.Errorf("put entry %s of %s into the isr-writer: %w", key, isrPrefix, err)
-		}
 		switch {
-		case status >= 200 && status < 300:
+		case err == nil && status >= 200 && status < 300:
 			return nil
-		case status == http.StatusTooManyRequests && attempt < len(isrWriterBackoff):
-			backoff := isrWriterBackoff[attempt]
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(backoff/2 + rand.N(backoff/2+1)):
+		case ctx.Err() != nil:
+			return ctx.Err()
+		case attempt >= len(isrWriterBackoff) || (err == nil && status != http.StatusTooManyRequests && status < http.StatusInternalServerError):
+			if err != nil {
+				return fmt.Errorf("put entry %s of %s into the isr-writer: %w", key, isrPrefix, err)
 			}
-		default:
 			return fmt.Errorf("isr writer put of entry %s of %s: status %d", key, isrPrefix, status)
+		}
+		backoff := isrWriterBackoff[attempt]
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff/2 + rand.N(backoff/2+1)):
 		}
 	}
 }

@@ -270,6 +270,51 @@ func TestPuttingAnEntryRetriesAThrottledWrite(t *testing.T) {
 	}
 }
 
+func TestPuttingAnEntryRetriesAServerErrorAndATransportFailure(t *testing.T) {
+	previous := isrWriterBackoff
+	isrWriterBackoff = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}
+	t.Cleanup(func() { isrWriterBackoff = previous })
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch attempts.Add(1) {
+		case 1:
+			w.WriteHeader(http.StatusServiceUnavailable)
+		case 2:
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			_ = conn.Close()
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	if err := writerAccess(srv.URL).PutEntry(context.Background(), testPrefix, "blog", []byte(`{}`)); err != nil {
+		t.Fatalf("PutEntry = %v, want the third attempt to land after a 503 and a dropped connection", err)
+	}
+	if got := attempts.Load(); got != 3 {
+		t.Errorf("%d attempts, want 3", got)
+	}
+}
+
+func TestPuttingAnEntryDoesNotRetryAClientError(t *testing.T) {
+	previous := isrWriterBackoff
+	isrWriterBackoff = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}
+	t.Cleanup(func() { isrWriterBackoff = previous })
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(srv.Close)
+
+	if err := writerAccess(srv.URL).PutEntry(context.Background(), testPrefix, "blog", []byte(`{}`)); err == nil {
+		t.Error("PutEntry = nil though the writer answered 403")
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Errorf("%d attempts, want 1: a 403 never succeeds on retry", got)
+	}
+}
+
 func TestPuttingAnEntryWithoutAnAdoptedWriterIsRefused(t *testing.T) {
 	for name, writer := range map[string]ISRWriter{
 		"no endpoint": {BootstrapCredential: "c", Seed: "s"},
