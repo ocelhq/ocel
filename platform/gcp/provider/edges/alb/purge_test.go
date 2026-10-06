@@ -69,6 +69,18 @@ func stagedRelease(t *testing.T, stack edge.EdgeStack, app, build string, releas
 	}
 }
 
+func stagedFunctionRelease(t *testing.T, stack edge.EdgeStack, app, build string, release int, framework string) {
+	t.Helper()
+	entry := "ocel-shop-prod-" + app
+	if err := openRouter(stack).Ledger.PutStaged(context.Background(), router.DeploymentRecord{
+		App: app, Build: build, EntryFunction: entry, Framework: framework,
+		IsrPrefix: strings.Replace(releasePrefix(release), "/web/", "/"+app+"/", 1),
+		Revisions: map[string]string{entry: entry + "-" + build},
+	}); err != nil {
+		t.Fatalf("PutStaged(%s/%s) = %v", app, build, err)
+	}
+}
+
 func promoted(t *testing.T, stack edge.EdgeStack, log progress.Log, id, pointer string, builds map[string]string) {
 	t.Helper()
 	err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{
@@ -451,5 +463,54 @@ func TestAHostnamePurgeThatFailsWarnsWithTheCommandToClearItAndLeavesThePromotio
 	}
 	if got := w.pins(); !slices.Contains(got, "ocel-shop-prod-web@ocel-shop-prod-web-b1") {
 		t.Errorf("the pins are %v, want the release pinned despite the failed purge", got)
+	}
+}
+
+func TestAPromotionOfAFunctionAppClearsEveryHostnameItServesFromCloudCDN(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	bound(t, stack, "shop.example.com", "web")
+	stagedFunctionRelease(t, stack, "web", "b1", 1, "")
+	stagedFunctionRelease(t, stack, "web", "b2", 2, "")
+	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
+	promoted(t, stack, progress.Discard(), "p2", "", map[string]string{"web": "b2"})
+
+	if got, want := w.invalidatedHostnames(), []string{"shop.example.com", "shop.example.com"}; !slices.Equal(got, want) {
+		t.Errorf("the promotions cleared hostnames %v, want %v", got, want)
+	}
+	if got := w.invalidations(); len(got) != 0 {
+		t.Errorf("the promotions cleared tags %v, want none", got)
+	}
+}
+
+func TestTheFirstPromotionOfANextFunctionAppClearsItsHostnames(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	bound(t, stack, "shop.example.com", "web")
+	stagedFunctionRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
+
+	if got, want := w.invalidatedHostnames(), []string{"shop.example.com"}; !slices.Equal(got, want) {
+		t.Errorf("the first promotion cleared hostnames %v, want %v", got, want)
+	}
+}
+
+func TestALaterPromotionOfANextFunctionAppClearsItsReleaseTagAndNoHostname(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	bound(t, stack, "shop.example.com", "web")
+	stagedFunctionRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
+	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
+	promoted(t, stack, progress.Discard(), "p2", "", map[string]string{"web": "b2"})
+
+	if got, want := w.invalidatedHostnames(), []string{"shop.example.com"}; !slices.Equal(got, want) {
+		t.Errorf("the promotions cleared hostnames %v, want only the first's %v", got, want)
+	}
+	if got, want := w.invalidations(), [][]string{{"ocel-alb-production-routes", "r00000001"}}; !slices.EqualFunc(got, want, slices.Equal) {
+		t.Errorf("the promotions cleared tags %v, want %v", got, want)
 	}
 }

@@ -803,6 +803,35 @@ func TestAHostnameBoundBeforeItsAppReleasedIsRoutedToTheLoadBalancersNotFoundBac
 	}
 }
 
+func TestAHostnameBoundToAPromotedFunctionAppIsRoutedToItsEntryFunctionsService(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	stagedFunctionRelease(t, stack, "web", "b1", 1, "")
+	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
+	bound(t, stack, "shop.example.com", "web")
+
+	if got, want := w.hosts("ocel-alb-production-routes")["shop.example.com"], backendName("shop", environment.TierProduction, "shop.example.com"); got != want {
+		t.Errorf("shop.example.com is routed to %q, want %q", got, want)
+	}
+	if got := hostOf(stack, "shop.example.com").Service; got != "ocel-shop-prod-web" {
+		t.Errorf("the bind recorded service %q, want the entry function's ocel-shop-prod-web", got)
+	}
+}
+
+func TestTheFirstReleaseOfAFunctionAppAfterABindTakesTheHostnameLive(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	bound(t, stack, "shop.example.com", "web")
+	stagedFunctionRelease(t, stack, "web", "b1", 1, "")
+	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
+
+	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got == notFoundBackend {
+		t.Errorf("shop.example.com is still routed to the 404 backend after its function app released")
+	}
+}
+
 func openRouter(shared edge.EdgeStack) fake.PromotingStack {
 	s := shared.(*stack)
 	return fake.PromotingStack{Stack: routerStack{s: s}, Ledger: s.openLedger()}
@@ -901,4 +930,8 @@ func TestAWarmThatFailsThroughTheLoadBalancerNamesTheRevisionItWarmed(t *testing
 	if len(log.said) != 1 || !strings.Contains(log.said[0], "revision ocel-shop-prod-web-00001 of ocel-shop-prod-web") {
 		t.Errorf("the promotion warned %v, want one warning naming the revision it could not warm", log.said)
 	}
+}
+
+func hostOf(shared edge.EdgeStack, hostname string) Host {
+	return shared.(*stack).recorded.Hosts[hostname]
 }

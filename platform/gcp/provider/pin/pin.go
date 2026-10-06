@@ -42,7 +42,7 @@ type Rollback struct {
 type Tags map[string]string
 
 func ReadTags(ctx context.Context, pins Pins, record router.DeploymentRecord) (Tags, error) {
-	if record.Revisions[record.Physical] == "" {
+	if record.Revisions[ResolveService(record)] == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"build %s of %s recorded no revision of the service it answers on, and a deployment is answered on the tags of the revisions its deploy created: "+
 				"re-deploy %s so its release records one",
@@ -178,7 +178,7 @@ func WarmRevisions(ctx context.Context, warm func(ctx context.Context, service, 
 	for _, record := range records {
 		for service, revision := range record.Revisions {
 			path := "/"
-			if service == record.Physical && record.HealthPath != "" {
+			if service == ResolveService(record) && record.HealthPath != "" {
 				path = record.HealthPath
 			}
 			waiting.Go(func() {
@@ -315,4 +315,11 @@ func readRollback(ctx context.Context, pins Pins, each pinned) (Rollback, error)
 		return rollback, err
 	}
 	return Rollback{Previous: earlier.Previous, Opened: rollback.Opened || earlier.Opened}, nil
+}
+
+func ResolveService(record router.DeploymentRecord) string {
+	if record.Physical != "" {
+		return record.Physical
+	}
+	return record.EntryFunction
 }
