@@ -145,6 +145,16 @@ func TestAContainerAppIsForwardedToAndNeverDispatchedByEitherSide(t *testing.T) 
 	}
 }
 
+func TestAContainerAppIsNotRefusedForARoutingManifestItNeverUses(t *testing.T) {
+	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, nil)
+	query := servingQuery(root, "web", buildoutput.FrameworkNext)
+	query.Compute = provider.ComputeContainer
+
+	if _, err := providerserver.AppServingFor(query); err != nil {
+		t.Fatalf("AppServingFor() = %v, want a container served without a routing manifest", err)
+	}
+}
+
 func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToDispatchBy(t *testing.T) {
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, []byte(`{}`))
 
