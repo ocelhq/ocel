@@ -287,7 +287,7 @@ func (b bootstrap) letSyncCall(ctx context.Context, tier environment.Tier, name 
 		if refused == nil {
 			return nil
 		}
-		if !taken(refused) {
+		if !stale(refused) {
 			break
 		}
 	}

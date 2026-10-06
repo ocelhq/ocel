@@ -384,6 +384,24 @@ func TestASyncServiceAnyoneButTheSyncAccountMayCallIsMended(t *testing.T) {
 	}
 }
 
+func TestLettingTheSyncAccountCallTheServiceRetriesWhenGoogleAnswers412(t *testing.T) {
+	t.Parallel()
+	server := newSyncServer()
+	server.policyChanges = 1
+	b := server.open(t)
+	tier := environment.TierProduction
+	name := b.clients.EnvSourceSync(tier)
+
+	if err := b.letSyncCall(context.Background(), tier, name); err != nil {
+		t.Fatalf("letSyncCall() after one 412 = %v, want the write retried", err)
+	}
+	member := "serviceAccount:" + b.clients.EnvSourceSyncAccountEmail(tier)
+	policy := server.policy(b.clients.servicePath(name))
+	if policy == nil || len(policy.Bindings) != 1 || !slices.Equal(policy.Bindings[0].Members, []string{member}) {
+		t.Errorf("the policy is %s, want %s alone", encoded(t, policy), member)
+	}
+}
+
 func TestTakingTheSyncServiceTwiceIsNothingToDo(t *testing.T) {
 	t.Parallel()
 	server := newSyncServer()

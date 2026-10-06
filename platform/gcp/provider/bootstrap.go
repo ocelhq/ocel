@@ -637,7 +637,7 @@ func (b bootstrap) grantRunAs(ctx context.Context, name string) error {
 		if refused == nil {
 			return nil
 		}
-		if !taken(refused) {
+		if !stale(refused) {
 			break
 		}
 	}
