@@ -161,7 +161,7 @@ func (c *clients) bindKeyRoles(ctx context.Context, tier environment.Tier, membe
 		if refused == nil {
 			return true, nil
 		}
-		if !isRaced(refused) {
+		if !stale(refused) {
 			break
 		}
 	}

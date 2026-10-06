@@ -13,6 +13,8 @@ import (
 
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -369,7 +371,7 @@ func stale(err error) bool {
 	case http.StatusConflict, http.StatusPreconditionFailed:
 		return true
 	}
-	return false
+	return status.Code(err) == codes.Aborted || status.Code(err) == codes.FailedPrecondition
 }
 
 func servedBy(traffic []*run.GoogleCloudRunV2TrafficTarget, revision string) bool {

@@ -269,7 +269,7 @@ func grantPubSubRole(ctx context.Context, path, role, member string, calls iamPo
 		}
 		policy.Bindings = withMember(policy.Bindings, role, member)
 		refused = retried(ctx, func() error { return calls.write(policy) })
-		if refused == nil || !changedUnder(refused) {
+		if refused == nil || !stale(refused) {
 			break
 		}
 	}
@@ -304,7 +304,7 @@ func revokePubSubRole(ctx context.Context, path, role, member string, calls iamP
 		if isAnswered(refused, http.StatusNotFound) {
 			return false, nil
 		}
-		if !changedUnder(refused) {
+		if !stale(refused) {
 			break
 		}
 	}
@@ -439,6 +439,6 @@ func deleteIgnoringMissing(ctx context.Context, what string, call func() error) 
 	return nil
 }
 
-func changedUnder(err error) bool {
+func stale(err error) bool {
 	return isAnswered(err, http.StatusConflict) || isAnswered(err, http.StatusPreconditionFailed)
 }

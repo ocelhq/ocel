@@ -251,15 +251,11 @@ func (c *clients) bindQueueRoles(ctx context.Context, tier environment.Tier, mem
 		if refused == nil {
 			return nil
 		}
-		if !isRaced(refused) {
+		if !stale(refused) {
 			break
 		}
 	}
 	return fmt.Errorf("let %s delay messages on %s: %w", member, c.DelayQueue(tier), refused)
-}
-
-func isRaced(err error) bool {
-	return stale(err) || status.Code(err) == codes.Aborted || status.Code(err) == codes.FailedPrecondition
 }
 
 func (b bootstrap) purgeDelayQueue(ctx context.Context, tier environment.Tier) error {
