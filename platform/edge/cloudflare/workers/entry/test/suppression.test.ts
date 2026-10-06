@@ -302,3 +302,42 @@ describe("self-revalidation suppression", () => {
     expect(origin.purposes()).toEqual([null]);
   });
 });
+
+describe("control headers a client sends", () => {
+  const controlHeaders = { "x-ocel-refresh": "1", "x-ocel-entry": "evil", "next-resume": "1" };
+
+  function expectNoControlHeaders(requests: Request[]) {
+    expect(requests.length).toBeGreaterThan(0);
+    for (const request of requests) {
+      for (const name of Object.keys(controlHeaders)) {
+        expect(request.headers.has(name), name).toBe(false);
+      }
+    }
+  }
+
+  it("forwards no client-sent refresh, entry or resume header on the cacheable path", async () => {
+    const origin = recorder();
+
+    await dispatchBlog(
+      blogDeps(origin),
+      new Request("https://app.example/blog", { headers: controlHeaders }),
+    );
+
+    expectNoControlHeaders(origin.requests);
+  });
+
+  it("forwards no client-sent refresh, entry or resume header on the bypass path", async () => {
+    const origin = recorder();
+
+    await dispatchBlog(
+      blogDeps(origin),
+      new Request("https://app.example/blog", {
+        method: "POST",
+        headers: { ...controlHeaders, "next-action": "abc" },
+        body: "x",
+      }),
+    );
+
+    expectNoControlHeaders(origin.requests);
+  });
+});
