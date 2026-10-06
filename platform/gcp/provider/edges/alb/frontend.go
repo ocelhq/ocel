@@ -135,7 +135,7 @@ func previewWildcardResources(ctx *pulumi.Context, spec loadBalancerSpec, projec
 		Protocol:            pulumi.String("HTTPS"),
 		LoadBalancingScheme: pulumi.String(externalManaged),
 		EnableCdn:           pulumi.Bool(true),
-		CdnPolicy:           newCDNPolicy(),
+		CdnPolicy:           newCDNPolicy(spec.Preview.Shielded),
 		Backends: compute.BackendServiceBackendArray{
 			&compute.BackendServiceBackendArgs{Group: group.SelfLink},
 		},

@@ -17,6 +17,7 @@ type bindingSpec struct {
 	Tier           environment.Tier
 	CertificateMap string
 	Hosts          map[string]Host
+	Shielded       bool
 }
 
 func bindingProgram(spec bindingSpec) Program {
@@ -59,7 +60,7 @@ func bindingProgram(spec bindingSpec) Program {
 				Protocol:            pulumi.String("HTTPS"),
 				LoadBalancingScheme: pulumi.String(externalManaged),
 				EnableCdn:           pulumi.Bool(true),
-				CdnPolicy:           newCDNPolicy(),
+				CdnPolicy:           newCDNPolicy(spec.Shielded),
 				Backends: compute.BackendServiceBackendArray{
 					&compute.BackendServiceBackendArgs{Group: group.SelfLink},
 				},

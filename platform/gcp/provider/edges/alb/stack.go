@@ -179,6 +179,7 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 		Tier:           s.state.Tier,
 		CertificateMap: s.recorded.LoadBalancer.CertificateMap,
 		Hosts:          hosts,
+		Shielded:       s.recorded.LoadBalancer.Shielded,
 	}), progress.Discard())
 	return err
 }

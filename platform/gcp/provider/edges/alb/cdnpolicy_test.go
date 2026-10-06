@@ -137,3 +137,43 @@ func TestNoKeyedHeaderIsOneCloudCDNRefusesToKey(t *testing.T) {
 		}
 	}
 }
+
+func TestAShieldedBindingsBackendKeysNoHeaderOrCookieSoNextPagesStayUncachedThere(t *testing.T) {
+	t.Parallel()
+
+	seen, err := declared(shieldedBinding(map[string]Host{"shop.example.com": {
+		App: "web", Certificate: cdnCertificate, Service: "ocel-shop-prod-web", Backend: cdnBackend,
+	}}, true))
+	if err != nil {
+		t.Fatalf("the binding program = %v", err)
+	}
+
+	key := cacheKeyPolicy(seen[cdnBackend])
+	for _, field := range []string{"includeHttpHeaders", "includeNamedCookies"} {
+		if named, _ := key[field].([]any); len(named) > 0 {
+			t.Errorf("cacheKeyPolicy.%s = %v, want none: nothing purges a shielded load balancer's Cloud CDN, so a cacheable Next page would outlive revalidateTag", field, named)
+		}
+	}
+}
+
+func TestAShieldedPreviewWildcardBackendKeysNoHeaderOrCookie(t *testing.T) {
+	t.Parallel()
+
+	seen, err := declared(func(ctx *pulumi.Context, project string) error {
+		return previewWildcardResources(ctx, loadBalancerSpec{
+			Region:  "europe-west1",
+			Names:   loadBalancerNames(environment.TierPreview, true),
+			Preview: previewEntry{BaseDomain: previewBase, Certificate: previewCertificate, Shielded: true},
+		}, project)
+	})
+	if err != nil {
+		t.Fatalf("previewWildcardResources = %v", err)
+	}
+
+	key := cacheKeyPolicy(seen[previewBackendName(previewBase)])
+	for _, field := range []string{"includeHttpHeaders", "includeNamedCookies"} {
+		if named, _ := key[field].([]any); len(named) > 0 {
+			t.Errorf("cacheKeyPolicy.%s = %v, want none", field, named)
+		}
+	}
+}
