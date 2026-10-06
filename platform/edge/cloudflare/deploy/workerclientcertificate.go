@@ -136,6 +136,24 @@ func (c workerClientCertificates) read(ctx context.Context, accountID string, ti
 	return state, nil
 }
 
+func (c workerClientCertificates) readOne(ctx context.Context, accountID, id string, now time.Time) (workerClientCertificateState, error) {
+	state := workerClientCertificateState{enabled: true, now: now}
+	if id == "" {
+		return state, nil
+	}
+	certificate, err := c.client.MTLSCertificates.Get(ctx, id, mtls_certificates.MTLSCertificateGetParams{AccountID: cf.F(accountID)})
+	if hasStatus(err, http.StatusNotFound) {
+		return state, nil
+	}
+	if err != nil {
+		return workerClientCertificateState{}, fmt.Errorf("read the mTLS certificate %s: %w", id, err)
+	}
+	state.held = []heldWorkerClientCertificate{{
+		id: certificate.ID, name: certificate.Name, certificates: certificate.Certificates, expiresOn: certificate.ExpiresOn,
+	}}
+	return state, nil
+}
+
 func namesWorkerClientCertificate(name, base string) bool {
 	date, named := strings.CutPrefix(name, base+"-")
 	if !named || len(date) != len(workerClientCertificateDate) {

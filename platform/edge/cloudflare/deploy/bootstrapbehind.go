@@ -15,6 +15,8 @@ type bootstrapCaller struct {
 	worker    string
 	retry     string
 	refreshes bool
+
+	certificateID string
 }
 
 func (p *cloudflare) refuseBootstrapBehind(ctx context.Context, accountID string, tier environment.Tier, caller bootstrapCaller) error {
@@ -36,7 +38,7 @@ func (p *cloudflare) refuseBootstrapBehind(ctx context.Context, accountID string
 		}
 	}
 	if caller.refreshes {
-		refreshPhrases, err := p.refreshQueueBehind(ctx, accountID, tier)
+		refreshPhrases, err := p.refreshQueueBehind(ctx, accountID, tier, caller.certificateID)
 		if err != nil {
 			return err
 		}
@@ -55,8 +57,8 @@ func (p *cloudflare) refuseBootstrapBehind(ctx context.Context, accountID string
 		strings.ToUpper(joined[:1]), joined[1:], caller.worker, calls, provider.BootstrapCommand(tier), caller.retry)
 }
 
-func (p *cloudflare) refreshQueueBehind(ctx context.Context, accountID string, tier environment.Tier) ([]string, error) {
-	certificates, err := p.workerClientCertificates().read(ctx, accountID, tier, time.Now())
+func (p *cloudflare) refreshQueueBehind(ctx context.Context, accountID string, tier environment.Tier, certificateID string) ([]string, error) {
+	certificates, err := p.workerClientCertificates().readOne(ctx, accountID, certificateID, time.Now())
 	if err != nil {
 		return nil, err
 	}
