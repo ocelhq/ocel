@@ -27,6 +27,8 @@ type syncServer struct {
 	patched   []string
 	deleted   []string
 	pushed    []string
+
+	policyChanges int
 }
 
 func newSyncServer() *syncServer {
@@ -93,6 +95,12 @@ func (s *syncServer) serveRun(w http.ResponseWriter, r *http.Request, path strin
 	case verb == "setIamPolicy":
 		asked := readBody[run.GoogleIamV1SetIamPolicyRequest](w, r)
 		if asked == nil {
+			return
+		}
+		if s.policyChanges > 0 {
+			s.policyChanges--
+			w.WriteHeader(http.StatusPreconditionFailed)
+			w.Write([]byte(`{"error":{"code":412,"message":"conditionNotMet"}}`))
 			return
 		}
 		s.policies[name] = asked.Policy
