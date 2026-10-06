@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -37,9 +36,9 @@ func (e Exit) Error() string {
 }
 
 type Process struct {
-	pid    int
-	what   string
-	exited chan Exit
+	pid     int
+	program string
+	exited  chan Exit
 }
 
 func Start(opts Options) (*Process, error) {
@@ -52,16 +51,16 @@ func Start(opts Options) (*Process, error) {
 	cmd.Stdout = opts.Stdout
 	cmd.Stderr = opts.Stderr
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("start %s: %w", strings.Join(opts.Command, " "), err)
+		return nil, fmt.Errorf("start %s: %w", opts.Command[0], err)
 	}
-	p := &Process{pid: cmd.Process.Pid, what: strings.Join(opts.Command, " "), exited: make(chan Exit, 1)}
+	p := &Process{pid: cmd.Process.Pid, program: opts.Command[0], exited: make(chan Exit, 1)}
 	go p.reap()
 	return p, nil
 }
 
 func (p *Process) PID() int { return p.pid }
 
-func (p *Process) Command() string { return p.what }
+func (p *Process) Program() string { return p.program }
 
 func (p *Process) Exited() <-chan Exit { return p.exited }
 
@@ -98,7 +97,7 @@ func (p *Process) reap() {
 			continue
 		}
 		if err != nil {
-			p.exited <- Exit{Code: 1, Err: fmt.Errorf("wait for %s: %w", p.what, err)}
+			p.exited <- Exit{Code: 1, Err: fmt.Errorf("wait for %s: %w", p.program, err)}
 			return
 		}
 		if pid != p.pid {

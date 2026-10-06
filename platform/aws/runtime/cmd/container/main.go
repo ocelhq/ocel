@@ -130,7 +130,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 			return exitCode(exit)
 		case exit := <-proc.Exited():
 			if exit.Err != nil {
-				fmt.Fprintf(os.Stderr, "ocel: the app (%s) exited: %v\n", proc.Command(), exit.Err)
+				fmt.Fprintf(os.Stderr, "ocel: the app (%s) exited: %v\n", proc.Program(), exit.Err)
 			}
 			drain, cancel := context.WithTimeout(context.Background(), drainGrace)
 			_ = server.Shutdown(drain)
