@@ -443,3 +443,53 @@ func TestShapeOfANextPreviewBehindIdentityAwareProxyListsNoRefreshQueueAndKeepsI
 		}
 	}
 }
+
+func TestANextAppIsPricedAtTheMemoryItsServicesRunWith(t *testing.T) {
+	client, _ := costServed(t)
+	image := "europe-west1-docker.pkg.dev/acme-prod/ocel/web@sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	serverless := func(name, framework string) *contractv1.ManifestApp {
+		return &contractv1.ManifestApp{Name: name, Framework: &contractv1.Framework{Name: framework},
+			Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{Functions: []*contractv1.ManifestFunction{
+				{LogicalName: "fn--" + name + "--entry", Framework: &contractv1.Framework{Name: framework}},
+			}}}}
+	}
+	manifest := &contractv1.Manifest{
+		Slug: "shop",
+		Apps: []*contractv1.ManifestApp{
+			serverless("site", "next"),
+			serverless("api", "node"),
+			{Name: "docs", Framework: &contractv1.Framework{Name: "next"},
+				Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{Image: image, HealthCheckPath: "/", MinInstances: 1, MaxInstances: 1}}},
+		},
+	}
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    manifest,
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+
+	want := map[string]string{
+		"project:shop/environment:prod/app:site": "2048Mi",
+		"project:shop/environment:prod/app:docs": "2048Mi",
+		"project:shop/environment:prod/app:api":  "512Mi",
+	}
+	seen := map[string]bool{}
+	for _, r := range set.GetResources() {
+		memory, priced := want[r.GetScope()]
+		if r.GetType() != "google_cloud_run_v2_service" || !priced {
+			continue
+		}
+		seen[r.GetScope()] = true
+		template := r.GetProperties().AsMap()["template"].(map[string]any)
+		limits := template["containers"].([]any)[0].(map[string]any)["resources"].(map[string]any)["limits"].(map[string]any)
+		if limits["memory"] != memory {
+			t.Errorf("%s is priced at %v of memory, want the %s its services run with", r.GetScope(), limits["memory"], memory)
+		}
+	}
+	if len(seen) != len(want) {
+		t.Errorf("shaped the services of %v, want one for each of %v", seen, want)
+	}
+}
