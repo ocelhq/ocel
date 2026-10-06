@@ -7,11 +7,17 @@ import {
   type CacheTarget,
   refreshBackoffSeconds,
   refreshSentinelTtlSeconds,
+  refreshThroughQueue,
   sentinelUrl,
   serveCached,
 } from "../src/cache";
 import { dispatchResult, type RouteDeps } from "../src/index";
-import type { RevalidationMessage, RevalidationRoute } from "../src/revalidation";
+import {
+  queuedRefreshDeadlineMs,
+  type RevalidationMessage,
+  type RevalidationRoute,
+  revalidationRetryWindowMs,
+} from "../src/revalidation";
 import { coloDeps } from "./cache-deps";
 
 const isrPrefix = "prod/p/app/build";
@@ -132,14 +138,36 @@ describe("the colo tier's admitted refresh", () => {
     expect(sender.sent).toHaveLength(1);
   });
 
-  it("re-arms the colo's claim on an accepted enqueue rather than releasing it", async () => {
+  it("holds the colo's claim for the retry window on an accepted enqueue", async () => {
     const sender = queue(true);
     const { cache } = await serveStale("re-armed", {
       deps: { enqueueRevalidation: sender.enqueueRevalidation },
     });
 
-    expect(cache.ttls).toEqual([refreshSentinelTtlSeconds, refreshSentinelTtlSeconds]);
+    expect(cache.ttls).toEqual([refreshSentinelTtlSeconds, revalidationRetryWindowMs / 1000]);
     expect(cache.deletes).toBe(0);
+  });
+
+  it("never counts a queued refresh as landed", async () => {
+    const sender = queue(true);
+    const deps = testDeps({ ms: 0 }, caches.default, {
+      enqueueRevalidation: sender.enqueueRevalidation,
+    });
+    let direct = 0;
+
+    const outcome = await refreshThroughQueue(
+      deps,
+      "build:/never-landed",
+      revalidation,
+      0,
+      async () => {
+        direct++;
+        return "landed";
+      },
+    );
+
+    expect(outcome).toBe("queued");
+    expect(direct).toBe(0);
   });
 
   it("renders when the queue refuses the message", async () => {
@@ -213,6 +241,101 @@ describe("the colo tier's admitted refresh", () => {
   });
 });
 
+async function staleAt(name: string, enqueueRevalidation: CacheDeps["enqueueRevalidation"]) {
+  const key = `build:/${name}`;
+  const clock = { ms: 0 };
+  const deps = testDeps(clock, caches.default, { enqueueRevalidation });
+  const target: CacheTarget = {
+    key: `https://cache.ocel/enqueue/${name}`,
+    refreshKey: key,
+    revalidate: 1,
+    expiration: 100_000,
+    revalidation,
+  };
+  const request = new Request(`https://app.example/${name}`);
+  const blocking = countingOrigin();
+  await serveCached(request, target, deps, countingOrigin(), blocking);
+  await deps.flush();
+  clock.ms = 5_000;
+  return {
+    clock,
+    blocking,
+    expireSentinel: () => caches.default.delete(new Request(sentinelUrl(key))),
+    hit: async () => {
+      const response = await serveCached(request, target, deps, countingOrigin(), blocking);
+      await deps.flush();
+      return response;
+    },
+  };
+}
+
+describe("a queued refresh that stays stale", () => {
+  it("enqueues a stale entry's refresh at most once per retry window", async () => {
+    const sender = queue(true);
+    const run = await staleAt("once-per-window", sender.enqueueRevalidation);
+
+    await run.hit();
+    await run.hit();
+    expect(sender.sent).toHaveLength(1);
+
+    await run.expireSentinel();
+    await run.hit();
+    expect(sender.sent).toHaveLength(2);
+    expect(run.blocking.calls).toBe(0);
+  });
+
+  it("renders a queued refresh itself once the queue has not landed it within five minutes", async () => {
+    const sender = queue(true);
+    const run = await staleAt("deadline", sender.enqueueRevalidation);
+
+    await run.hit();
+    run.clock.ms += queuedRefreshDeadlineMs;
+    await run.expireSentinel();
+    await run.hit();
+
+    expect(run.blocking.calls).toBe(1);
+    expect(sender.sent).toHaveLength(1);
+  });
+
+  it("keeps waiting on the queue until the five minutes pass", async () => {
+    const sender = queue(true);
+    const run = await staleAt("before-deadline", sender.enqueueRevalidation);
+
+    await run.hit();
+    run.clock.ms += queuedRefreshDeadlineMs - 1_000;
+    await run.expireSentinel();
+    await run.hit();
+
+    expect(run.blocking.calls).toBe(0);
+    expect(sender.sent).toHaveLength(2);
+  });
+
+  it("starts the five minutes again for a newer entry", async () => {
+    const sender = queue(true);
+    const deps = testDeps({ ms: 0 }, caches.default, {
+      enqueueRevalidation: sender.enqueueRevalidation,
+    });
+    const clock = { ms: 0 };
+    const withClock = { ...deps, now: () => clock.ms };
+    let direct = 0;
+    const render = async () => {
+      direct++;
+      return "landed" as const;
+    };
+    const key = "build:/newer-entry";
+
+    await refreshThroughQueue(withClock, key, revalidation, 0, render);
+    clock.ms = queuedRefreshDeadlineMs - 1;
+    await refreshThroughQueue(withClock, key, revalidation, 400_000, render);
+    clock.ms = queuedRefreshDeadlineMs + 1_000;
+    const outcome = await refreshThroughQueue(withClock, key, revalidation, 400_000, render);
+
+    expect(outcome).toBe("queued");
+    expect(direct).toBe(0);
+    expect(sender.sent).toHaveLength(3);
+  });
+});
+
 function noAssets(): RouteDeps["assetStore"] {
   return {
     assetPrefix: "",
@@ -265,6 +388,8 @@ function blogDeps(
   over: {
     entry?: unknown;
     now?: number;
+    cache?: Cache;
+    cacheNow?: () => number;
     enqueueRevalidation?: CacheDeps["enqueueRevalidation"];
     waitUntil?: (p: Promise<unknown>) => void;
     interception?: RouteDeps["interception"];
@@ -293,10 +418,13 @@ function blogDeps(
     assetStore: noAssets(),
     fetch: origin.fetch,
     cache: coloDeps({
-      cache: {
-        match: async () => undefined,
-        put: async () => {},
-      } as unknown as Cache,
+      cache:
+        over.cache ??
+        ({
+          match: async () => undefined,
+          put: async () => {},
+        } as unknown as Cache),
+      now: over.cacheNow,
       waitUntil: over.waitUntil ?? (() => {}),
       enqueueRevalidation: over.enqueueRevalidation,
     }),
@@ -321,6 +449,8 @@ const dispatchBlog = (deps: RouteDeps, request?: Request) =>
 async function dispatchStale(
   over: {
     entry?: unknown;
+    cache?: Cache;
+    cacheNow?: () => number;
     enqueueRevalidation?: CacheDeps["enqueueRevalidation"];
     interception?: RouteDeps["interception"];
   } = {},
@@ -332,12 +462,41 @@ async function dispatchStale(
       entry: over.entry ?? storedEntry(1_000),
       now: 1_000 + 61_000,
       waitUntil: (p) => pending.push(p),
+      cache: over.cache,
+      cacheNow: over.cacheNow,
       enqueueRevalidation: over.enqueueRevalidation,
       ...("interception" in over ? { interception: over.interception } : {}),
     }),
   );
   await Promise.all(pending);
   return { response, origin };
+}
+
+async function queuedThenOverdue(name: string, entry?: unknown) {
+  const sender = queue(true);
+  const clock = { ms: 0 };
+  const real = await caches.open(`queued-${name}`);
+  const sentinels = new Set<string>();
+  const cache = {
+    match: (request: Request) => real.match(request),
+    delete: (request: Request) => real.delete(request),
+    put: (request: Request, response: Response) => {
+      if (new URL(request.url).host === "refresh.ocel") sentinels.add(request.url);
+      return real.put(request, response);
+    },
+  } as unknown as Cache;
+  const run = () =>
+    dispatchStale({
+      entry,
+      cache,
+      cacheNow: () => clock.ms,
+      enqueueRevalidation: sender.enqueueRevalidation,
+    });
+  await run();
+  clock.ms += queuedRefreshDeadlineMs;
+  for (const url of sentinels) await real.delete(new Request(url));
+  const second = await run();
+  return { sender, second };
 }
 
 describe("the R2 tier's admitted refresh", () => {
@@ -349,6 +508,13 @@ describe("the R2 tier's admitted refresh", () => {
 
     expect(response.headers.get("x-nextjs-cache")).toBe("STALE");
     expect(origin.revalidating()).toEqual([]);
+    expect(sender.sent).toHaveLength(1);
+  });
+
+  it("renders a queued refresh itself once the queue has not landed it within five minutes", async () => {
+    const { sender, second } = await queuedThenOverdue("r2");
+
+    expect(second.origin.revalidating()).toHaveLength(1);
     expect(sender.sent).toHaveLength(1);
   });
 
@@ -426,6 +592,13 @@ describe("a PPR route's admitted refresh", () => {
 
     expect(origin.revalidating()).toEqual([]);
     expect(origin.requests).toHaveLength(1);
+    expect(sender.sent).toHaveLength(1);
+  });
+
+  it("renders a queued refresh itself once the queue has not landed it within five minutes", async () => {
+    const { sender, second } = await queuedThenOverdue("ppr", pprEntry);
+
+    expect(second.origin.revalidating()).toHaveLength(1);
     expect(sender.sent).toHaveLength(1);
   });
 

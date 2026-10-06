@@ -10,7 +10,13 @@ import {
 } from "@framework/next-router/http-cache";
 import { isSegmentPayload } from "@framework/next-router/segment";
 
-import { enqueued, type RevalidationRoute, type RevalidationSender } from "./revalidation";
+import {
+  enqueued,
+  queuedRefreshDeadlineMs,
+  type RevalidationRoute,
+  type RevalidationSender,
+  revalidationRetryWindowMs,
+} from "./revalidation";
 import type { TagClock, TagVerdict } from "./tag-clock";
 
 const ENTRY_MODIFIED = "x-ocel-entry-modified";
@@ -332,7 +338,7 @@ async function claimSentinel(cache: Cache, sentinel: Request): Promise<boolean> 
   return true;
 }
 
-export type RefreshOutcome = "landed" | "failed" | "refused";
+export type RefreshOutcome = "landed" | "queued" | "failed" | "refused";
 
 export function refreshOutcome(response: Response): RefreshOutcome {
   return response.ok && response.status !== 204 ? "landed" : "refused";
@@ -350,10 +356,75 @@ async function recordRefreshOutcome(
     else {
       await cache.put(
         sentinel,
-        sentinelRecord(outcome === "refused" ? refreshBackoffSeconds : refreshSentinelTtlSeconds),
+        sentinelRecord(
+          outcome === "refused"
+            ? refreshBackoffSeconds
+            : outcome === "queued"
+              ? revalidationRetryWindowMs / 1000
+              : refreshSentinelTtlSeconds,
+        ),
       );
     }
   } catch {}
+}
+
+const QUEUED_MODIFIED = "x-ocel-queued-modified";
+const QUEUED_AT = "x-ocel-queued-at";
+
+function queuedMarkerUrl(key: string): string {
+  return `https://queued.refresh.ocel/${key.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+async function readQueuedMarker(
+  cache: Cache,
+  marker: Request,
+): Promise<{ modified: number; at: number } | undefined> {
+  try {
+    const stored = await cache.match(marker);
+    if (!stored) return undefined;
+    const modified = Number(stored.headers.get(QUEUED_MODIFIED));
+    const at = Number(stored.headers.get(QUEUED_AT));
+    if (!Number.isFinite(modified) || !Number.isFinite(at)) return undefined;
+    return { modified, at };
+  } catch {
+    return undefined;
+  }
+}
+
+export async function refreshThroughQueue(
+  deps: CacheDeps,
+  key: string,
+  route: RevalidationRoute | undefined,
+  modified: number,
+  direct: () => Promise<RefreshOutcome>,
+): Promise<RefreshOutcome> {
+  if (!deps.enqueueRevalidation || !route) return direct();
+  const now = deps.now ?? Date.now;
+  const marker = new Request(queuedMarkerUrl(key));
+  const queued = await readQueuedMarker(deps.cache, marker);
+  const standing = queued?.modified === modified ? queued : undefined;
+  if (standing && now() - standing.at >= queuedRefreshDeadlineMs) {
+    try {
+      await deps.cache.delete(marker);
+    } catch {}
+    return direct();
+  }
+  if (!(await enqueued(deps.enqueueRevalidation, route, modified))) return direct();
+  if (!standing) {
+    try {
+      await deps.cache.put(
+        marker,
+        new Response(null, {
+          headers: {
+            "cache-control": `max-age=${(queuedRefreshDeadlineMs + revalidationRetryWindowMs) / 1000}`,
+            [QUEUED_MODIFIED]: String(modified),
+            [QUEUED_AT]: String(now()),
+          },
+        }),
+      );
+    } catch {}
+  }
+  return "queued";
 }
 
 async function askBelow(deps: CacheDeps, refreshing: number): Promise<boolean> {
@@ -422,15 +493,19 @@ async function serveOrAdmitRefresh(
     return policy.forServe(fromStorage(cached, false), "HIT");
   }
   if (state === "stale") {
-    const refresh = async () => {
-      if (await enqueued(deps.enqueueRevalidation, target.revalidation, modified)) {
-        return "landed";
-      }
-      const response = await originBlocking(modified);
-      const outcome = refreshOutcome(response);
-      await store(keyRequest, target, deps, policy, response);
-      return outcome;
-    };
+    const refresh = () =>
+      refreshThroughQueue(
+        deps,
+        target.refreshKey ?? target.key,
+        target.revalidation,
+        modified,
+        async () => {
+          const response = await originBlocking(modified);
+          const outcome = refreshOutcome(response);
+          await store(keyRequest, target, deps, policy, response);
+          return outcome;
+        },
+      );
     if (target.refreshKey) {
       admitRefresh(deps, target.refreshKey, modified, refresh, staleWindowMs(meta, now()));
     } else refreshOnce(deps, target.key, refresh);

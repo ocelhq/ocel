@@ -38,6 +38,8 @@ const maxIdLength = 128;
 
 export const revalidationRetryWindowMs = 30_000;
 
+export const queuedRefreshDeadlineMs = 300_000;
+
 function retryWindow(enqueuedAt: number): number {
   return Math.floor(enqueuedAt / revalidationRetryWindowMs);
 }
