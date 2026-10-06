@@ -1,5 +1,6 @@
 import { refreshHeader } from "@framework/next-cache";
 
+import type { Env } from "./env";
 import { sqsFetch, sqsRegion } from "./signing";
 
 export interface RevalidationMessage {
@@ -13,10 +14,12 @@ export interface RevalidationMessage {
   enqueuedAt: number;
 }
 
-export type RevalidationRoute = Omit<RevalidationMessage, "v" | "lastModified" | "enqueuedAt">;
+export type RevalidationRoute = Omit<RevalidationMessage, "v" | "lastModified" | "enqueuedAt"> & {
+  origin: string;
+};
 
 export function revalidationMessage(
-  route: RevalidationRoute,
+  { origin: _origin, ...route }: RevalidationRoute,
   lastModified: number,
   enqueuedAt: number = Date.now(),
 ): RevalidationMessage {
@@ -63,7 +66,7 @@ export async function revalidationIds(message: RevalidationMessage): Promise<Rev
   };
 }
 
-export type RevalidationSender = (message: RevalidationMessage) => Promise<boolean>;
+export type RevalidationSender = (message: RevalidationMessage, origin: string) => Promise<boolean>;
 
 export const enqueueTimeoutMs = 1_000;
 
@@ -100,14 +103,43 @@ export function queueSender(
   };
 }
 
+export function cloudflareQueueSender(
+  queue: Queue,
+  timeoutMs: number = enqueueTimeoutMs,
+): RevalidationSender {
+  return async (message, origin) => {
+    let budget: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        queue.send(JSON.stringify({ ...message, origin }), { contentType: "text" }),
+        new Promise<never>((_, reject) => {
+          budget = setTimeout(() => reject(new Error("over its budget")), timeoutMs);
+        }),
+      ]);
+      return true;
+    } catch (error) {
+      console.warn("ocel: could not send to the refresh queue", error);
+      return false;
+    } finally {
+      clearTimeout(budget);
+    }
+  };
+}
+
 export function revalidationSender(
-  queueUrl: string | undefined,
-  accessKeyId: string | undefined,
-  secretAccessKey: string | undefined,
+  env: Pick<
+    Env,
+    | "OCEL_REFRESH_QUEUE"
+    | "OCEL_REVALIDATE_QUEUE_URL"
+    | "OCEL_EDGE_ACCESS_KEY_ID"
+    | "OCEL_EDGE_SECRET_KEY"
+  >,
   timeoutMs?: number,
 ): RevalidationSender | undefined {
+  if (env.OCEL_REFRESH_QUEUE) return cloudflareQueueSender(env.OCEL_REFRESH_QUEUE, timeoutMs);
+  const queueUrl = env.OCEL_REVALIDATE_QUEUE_URL;
   if (!queueUrl) return undefined;
-  const send = sqsFetch(accessKeyId, secretAccessKey, sqsRegion(queueUrl));
+  const send = sqsFetch(env.OCEL_EDGE_ACCESS_KEY_ID, env.OCEL_EDGE_SECRET_KEY, sqsRegion(queueUrl));
   return send && queueSender(queueUrl, send, timeoutMs);
 }
 
@@ -118,7 +150,7 @@ export async function enqueued(
 ): Promise<boolean> {
   if (!send || !route) return false;
   try {
-    return await send(revalidationMessage(route, lastModified));
+    return await send(revalidationMessage(route, lastModified), route.origin);
   } catch {
     return false;
   }

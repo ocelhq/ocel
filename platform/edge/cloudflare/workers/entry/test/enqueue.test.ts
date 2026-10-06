@@ -31,16 +31,19 @@ const revalidation: RevalidationRoute = {
   isrPrefix,
   routeId: "/blog",
   routePath: "/blog",
+  origin: "https://r1-abc.o.example.com",
 };
 
 function queue(accept: boolean | "throws" = true) {
   const sent: RevalidationMessage[] = [];
-  const enqueueRevalidation = async (message: RevalidationMessage) => {
+  const origins: string[] = [];
+  const enqueueRevalidation = async (message: RevalidationMessage, origin: string) => {
     sent.push(message);
+    origins.push(origin);
     if (accept === "throws") throw new Error("queue unreachable");
     return accept;
   };
-  return { sent, enqueueRevalidation };
+  return { sent, origins, enqueueRevalidation };
 }
 
 function sentinelWatch(key: string) {
@@ -136,6 +139,16 @@ describe("the colo tier's admitted refresh", () => {
     expect(stale.headers.get("x-ocel-cache")).toBe("STALE");
     expect(blocking.calls).toBe(0);
     expect(sender.sent).toHaveLength(1);
+  });
+
+  it("queues a stale entry's refresh with the origin its route renders at", async () => {
+    const sender = queue(true);
+    await serveStale("origin-carried", {
+      deps: { enqueueRevalidation: sender.enqueueRevalidation },
+    });
+
+    expect(sender.origins).toEqual(["https://r1-abc.o.example.com"]);
+    expect(JSON.stringify(sender.sent[0])).not.toContain("o.example.com");
   });
 
   it("holds the colo's claim for the retry window on an accepted enqueue", async () => {

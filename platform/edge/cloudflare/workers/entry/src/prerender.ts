@@ -139,6 +139,7 @@ async function prerender(ctx: PrerenderContext, deps: PrerenderTierDeps): Promis
           isrPrefix: admissionTier.config.isrPrefix,
           routeId: target.id,
           routePath,
+          origin: forwardUrl.origin,
         }
       : undefined;
 
