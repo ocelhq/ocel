@@ -26,6 +26,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/option"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type cfMock struct {
@@ -81,6 +82,8 @@ type cfMock struct {
 	sslMode          string
 
 	tunnels tunnelMock
+
+	bootstrapInstalled bool
 }
 
 type putSecret struct {
@@ -101,6 +104,10 @@ type putBody struct {
 
 func (m *cfMock) server(t *testing.T) *httptest.Server {
 	t.Helper()
+	if m.bootstrapInstalled {
+		installBootstrap(t, m, environment.TierProduction)
+		installBootstrap(t, m, environment.TierPreview)
+	}
 	mux := http.NewServeMux()
 
 	firstPage := func(r *http.Request) bool {

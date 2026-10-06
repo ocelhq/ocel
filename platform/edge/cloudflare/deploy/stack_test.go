@@ -272,8 +272,9 @@ func readStampSet(t *testing.T, p *cloudflare, endpoint, secret string) stampSet
 
 func previewZoneMock() *cfMock {
 	return &cfMock{
-		zoneID:   "zone1",
-		zoneName: "app.com",
+		bootstrapInstalled: true,
+		zoneID:             "zone1",
+		zoneName:           "app.com",
 		existingRecords: []map[string]any{
 			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
 		},
@@ -366,7 +367,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("an opted-in second reconcile of the same spec touches Cloudflare not at all", func(t *testing.T) {
+	t.Run("an opted-in second reconcile of the same spec only reads the bootstrap workers", func(t *testing.T) {
 		t.Setenv(envSkipEdgeReconcile, "1")
 
 		store := fakeStoreServer(t, "s3cr3t")
@@ -383,8 +384,9 @@ func TestReconcile(t *testing.T) {
 		if _, err := reconcileState(t, p, spec, state); err != nil {
 			t.Fatalf("second Reconcile: %v", err)
 		}
-		if m.requests != spent {
-			t.Errorf("Cloudflare requests = %d, want the %d the first reconcile already spent", m.requests, spent)
+		const bootstrapReads = 8
+		if m.requests != spent+bootstrapReads {
+			t.Errorf("Cloudflare requests = %d, want the %d the first reconcile spent plus the %d reads of the two bootstrap workers", m.requests, spent, bootstrapReads)
 		}
 	})
 

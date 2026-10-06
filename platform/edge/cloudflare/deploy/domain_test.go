@@ -21,7 +21,7 @@ func domainStack(t *testing.T, m *cfMock) *stack {
 }
 
 func zoneMock() *cfMock {
-	return &cfMock{zoneID: "zone1", zoneName: "app.com"}
+	return &cfMock{zoneID: "zone1", zoneName: "app.com", bootstrapInstalled: true}
 }
 
 func TestBindDomain(t *testing.T) {

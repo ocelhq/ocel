@@ -57,8 +57,9 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 
 	t.Run("the shared worker claims the bootstrap wildcard and plants nothing", func(t *testing.T) {
 		m := &cfMock{
-			zoneID:   "zone1",
-			zoneName: "app.com",
+			bootstrapInstalled: true,
+			zoneID:             "zone1",
+			zoneName:           "app.com",
 			existingRoutes: []map[string]any{
 				{"id": "project", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-shop-preview"},
 			},
@@ -92,7 +93,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 	})
 
 	t.Run("nothing is minted for a project", func(t *testing.T) {
-		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
+		m := &cfMock{zoneID: "zone1", zoneName: "app.com", bootstrapInstalled: true}
 		store := fakeStoreServer(t, "s3cr3t")
 
 		if _, err := m.provider(t).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err != nil {
@@ -112,7 +113,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 	})
 
 	t.Run("the cache bucket and the isr writer are bound", func(t *testing.T) {
-		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
+		m := &cfMock{zoneID: "zone1", zoneName: "app.com", bootstrapInstalled: true}
 		spec := previewWildcardSpec()
 		spec.Values = map[string]string{valueKeyCacheBucket: "ocel-edge-cache-preview"}
 		spec.Program.ISRWriterScriptName = "ocel-isr-writer-preview"
@@ -136,7 +137,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 	})
 
 	t.Run("a spec without a base domain is an error", func(t *testing.T) {
-		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
+		m := &cfMock{zoneID: "zone1", zoneName: "app.com", bootstrapInstalled: true}
 		spec := previewWildcardSpec()
 		spec.BaseDomain = ""
 
@@ -159,8 +160,9 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 
 	t.Run("the wildcard route and the script go, the record stays", func(t *testing.T) {
 		m := &cfMock{
-			zoneID:   "zone1",
-			zoneName: "app.com",
+			bootstrapInstalled: true,
+			zoneID:             "zone1",
+			zoneName:           "app.com",
 			existingRoutes: []map[string]any{
 				{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
 				{"id": "project", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-shop-preview"},
@@ -184,8 +186,9 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 
 	t.Run("the script stays while another wildcard still routes to it", func(t *testing.T) {
 		m := &cfMock{
-			zoneID:   "zone1",
-			zoneName: "app.com",
+			bootstrapInstalled: true,
+			zoneID:             "zone1",
+			zoneName:           "app.com",
 			existingRoutes: []map[string]any{
 				{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
 				{"id": "sibling", "pattern": "*.staging.app.com/*", "script": previewEntryScript},
@@ -203,8 +206,9 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 
 	t.Run("a wildcard another script owns is left in place", func(t *testing.T) {
 		m := &cfMock{
-			zoneID:   "zone1",
-			zoneName: "app.com",
+			bootstrapInstalled: true,
+			zoneID:             "zone1",
+			zoneName:           "app.com",
 			existingRoutes: []map[string]any{
 				{"id": "someone-elses", "pattern": "*.preview.app.com/*", "script": "ocel-shop-preview"},
 			},
@@ -254,8 +258,9 @@ func TestPruneStaleRoutesSparesThePreviewEntry(t *testing.T) {
 			t.Parallel()
 
 			m := &cfMock{
-				zoneID:   "zone1",
-				zoneName: "app.com",
+				bootstrapInstalled: true,
+				zoneID:             "zone1",
+				zoneName:           "app.com",
 				existingRoutes: []map[string]any{
 					{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
 				},
