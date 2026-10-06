@@ -189,6 +189,29 @@ jobs:
       - name: ruff format
         run: uv run ruff format --check .
 
+  proto:
+    name: Proto
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+
+      - uses: ./.github/actions/buf
+
+      - name: buf lint
+        run: buf lint proto --error-format github-actions
+
+      - name: The module builds as buf push sends it
+        run: buf build proto --error-format github-actions -o /dev/null
+
+      - name: No wire change the BSR module's consumers would break on
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: buf breaking proto --error-format github-actions --against ".git#ref=$BASE,subdir=proto"
+
   workflows:
     name: Workflows
     runs-on: ubuntu-latest

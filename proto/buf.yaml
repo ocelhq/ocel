@@ -1,6 +1,7 @@
 version: v2
 modules:
   - path: .
+    name: buf.build/ocelhq/ocel
 deps:
   - buf.build/bufbuild/protovalidate
 lint:
@@ -16,6 +17,6 @@ breaking:
   use:
     - FILE
   ignore:
-    - common/environment
     - common/progress
-    - provider
+    - provider/contract
+    - provider/cost
