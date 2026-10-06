@@ -377,3 +377,183 @@ func TestRevokingAnAppsTopicGrantsSkipsATopicThatIsGone(t *testing.T) {
 		t.Errorf("the project still binds %q, want the member gone from it", got)
 	}
 }
+
+type racingStacks struct {
+	keyvalue.Store
+	between func()
+	lists   *int
+}
+
+func (r racingStacks) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	entries, err := r.Store.List(ctx, in, under...)
+	*r.lists++
+	if *r.lists == 1 && r.between != nil {
+		r.between()
+	}
+	return entries, err
+}
+
+func topicHeld(server *iamServer, c *clients, ref provider.StackRef, member string) bool {
+	return slices.Contains(publishersOf(server, "/v1/projects/acme-prod/topics/"+taskNames(c.Names, ref).Topic("resize")), member)
+}
+
+func racingRecords(t *testing.T, spec provider.StackSpec, between func(), lists *int) (keyvalue.Store, keyvalue.Store) {
+	t.Helper()
+	store := fake.NewKeyValues()
+	ctx := context.Background()
+	if err := stackrecords.Write(ctx, store, spec.Ref.Tier, spec.Ref.Project, spec.Ref.Name, stackrecords.Stack{Kind: provider.StackApp, App: "web"}); err != nil {
+		t.Fatal(err)
+	}
+	infra := naming.InfraStack(stackrecords.ProductionEnv)
+	if err := stackrecords.Write(ctx, store, spec.Ref.Tier, spec.Ref.Project, infra,
+		stackrecords.Stack{Kind: provider.StackInfra, Bindings: []provider.Binding{topicBinding("resize")}}); err != nil {
+		t.Fatal(err)
+	}
+	return racingStacks{Store: store, between: between, lists: lists}, store
+}
+
+func recordApp(t *testing.T, store keyvalue.Store, spec provider.StackSpec, name naming.StackName) {
+	t.Helper()
+	if err := stackrecords.Write(context.Background(), store, spec.Ref.Tier, spec.Ref.Project, name, stackrecords.Stack{Kind: provider.StackApp, App: "web"}); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestAnEnvironmentRecordedWhileAnAppsGrantsAreRevokedKeepsThem(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c, spec, member := grantedAppAccount(t, server)
+	before := holdings(server, c, member)
+	if !topicHeld(server, c, spec.Ref, member) {
+		t.Fatal("the account holds no topic publisher before removal")
+	}
+	writes, lists := server.projectWrites, 0
+	var backing keyvalue.Store
+	records, backing := racingRecords(t, spec, func() {
+		recordApp(t, backing, spec, stackOf("pr-8", "web", "r2"))
+	}, &lists)
+
+	if err := forgetUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	}
+
+	if got := holdings(server, c, member); !slices.Equal(got, before) {
+		t.Errorf("the account holds %q, want the %q it held before pr-8 started running the app", got, before)
+	}
+	if !topicHeld(server, c, spec.Ref, member) {
+		t.Error("the account lost its topic publisher grant")
+	}
+	if lists != 2 {
+		t.Errorf("the records were listed %d times, want 2", lists)
+	}
+	if server.projectWrites-writes < 2 {
+		t.Errorf("the project policy was written %d times, want a revoke and a restore", server.projectWrites-writes)
+	}
+}
+
+func TestGrantsADeployMadeBeforeTheRevocationLandedAreRestored(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	server.accountPolicies = map[string]*iam.Policy{}
+	p, c := ensuringAccounts(t, server)
+	spec := reachingTopics(routedNextSpec())
+	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
+	member := "serviceAccount:" + c.AppAccountEmail(spec.Ref.Tier, spec.Ref.Project, "web")
+	lists := 0
+	var backing keyvalue.Store
+	records, backing := racingRecords(t, spec, func() {
+		recordApp(t, backing, spec, stackOf("pr-8", "web", "r2"))
+		email, err := p.ensureAppAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if err := grantCache(context.Background(), c, spec, email); err != nil {
+			t.Error(err)
+		}
+	}, &lists)
+
+	if err := forgetUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	}
+
+	if got := holdings(server, c, member); len(got) != 8 {
+		t.Errorf("the account holds %q, want the 8 grants the deploy made while the revoke ran", got)
+	}
+	if !topicHeld(server, c, spec.Ref, member) {
+		t.Error("the account lost its topic publisher grant")
+	}
+}
+
+func TestGrantsStayRevokedWhenNoEnvironmentStartedRunningTheAppMeanwhile(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c, spec, member := grantedAppAccount(t, server)
+	lists := 0
+	records, _ := racingRecords(t, spec, nil, &lists)
+
+	if err := forgetUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	}
+
+	if got := holdings(server, c, member); len(got) != 0 {
+		t.Errorf("the account still holds %q, want nothing", got)
+	}
+	if topicHeld(server, c, spec.Ref, member) {
+		t.Error("the account still publishes to the topic")
+	}
+	if lists != 2 {
+		t.Errorf("the records were listed %d times, want 2", lists)
+	}
+}
+
+func TestRevokingWhileAnotherEnvironmentIsRecordedReadsTheRecordsOnce(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c, spec, member := grantedAppAccount(t, server)
+	before := holdings(server, c, member)
+	lists := 0
+	records, backing := racingRecords(t, spec, nil, &lists)
+	recordApp(t, backing, spec, stackOf("pr-8", "web", "r2"))
+
+	if err := forgetUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	}
+
+	if lists != 1 {
+		t.Errorf("the records were listed %d times, want once", lists)
+	}
+	if got := holdings(server, c, member); !slices.Equal(got, before) {
+		t.Errorf("the account holds %q, want %q unchanged", got, before)
+	}
+}
+
+func TestTakingAMemberOffTheProjectReportsEveryBindingItHeld(t *testing.T) {
+	t.Parallel()
+	member, other := "serviceAccount:app@x.iam.gserviceaccount.com", "serviceAccount:other@x.iam.gserviceaccount.com"
+	first := &cloudresourcemanager.Expr{Expression: "a"}
+	second := &cloudresourcemanager.Expr{Expression: "b"}
+	bindings := []*cloudresourcemanager.Binding{
+		{Role: "roles/one", Condition: first, Members: []string{member}},
+		{Role: "roles/two", Condition: second, Members: []string{member, other}},
+		{Role: "roles/three", Members: []string{member}},
+		{Role: "roles/four", Members: []string{other}},
+	}
+
+	kept, removed := boundWithout(bindings, member)
+
+	if len(removed) != 3 {
+		t.Fatalf("boundWithout() removed %+v, want three bindings", removed)
+	}
+	for i, want := range []struct {
+		role string
+		cond *cloudresourcemanager.Expr
+	}{{"roles/one", first}, {"roles/two", second}, {"roles/three", nil}} {
+		if removed[i].Role != want.role || removed[i].Condition != want.cond || !slices.Equal(removed[i].Members, []string{member}) {
+			t.Errorf("removed[%d] = %+v, want %s with its condition and exactly the member", i, removed[i], want.role)
+		}
+	}
+	if len(kept) != 2 || !slices.Equal(kept[0].Members, []string{other}) || kept[0].Role != "roles/two" {
+		t.Errorf("boundWithout() kept %+v, want roles/two held by the other member and roles/four", kept)
+	}
+}

@@ -269,50 +269,49 @@ func boundAccountMember(bindings []*iam.Binding, role, member string, granting b
 	return append(bindings, &iam.Binding{Role: role, Members: []string{member}}), true
 }
 
-func boundWithout(bindings []*cloudresourcemanager.Binding, member string) ([]*cloudresourcemanager.Binding, bool) {
-	changed := false
-	kept := make([]*cloudresourcemanager.Binding, 0, len(bindings))
+func boundWithout(bindings []*cloudresourcemanager.Binding, member string) (kept, removed []*cloudresourcemanager.Binding) {
+	kept = make([]*cloudresourcemanager.Binding, 0, len(bindings))
 	for _, binding := range bindings {
 		if slices.Contains(binding.Members, member) {
+			removed = append(removed, &cloudresourcemanager.Binding{Role: binding.Role, Condition: binding.Condition, Members: []string{member}})
 			binding.Members = slices.DeleteFunc(slices.Clone(binding.Members), func(held string) bool { return held == member })
-			changed = true
 			if len(binding.Members) == 0 {
 				continue
 			}
 		}
 		kept = append(kept, binding)
 	}
-	return kept, changed
+	return kept, removed
 }
 
-func (c *clients) unbindProjectMember(ctx context.Context, member string) error {
+func (c *clients) unbindProjectMember(ctx context.Context, member string) ([]*cloudresourcemanager.Binding, error) {
 	service, err := c.Projects()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var refused error
 	for attempt := range bindAttempts {
 		if attempt > 0 && !waited(ctx, attempt) {
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
 		policy, err := c.projectPolicy(ctx)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		bindings, changed := boundWithout(policy.Bindings, member)
-		if !changed {
-			return nil
+		bindings, removed := boundWithout(policy.Bindings, member)
+		if len(removed) == 0 {
+			return nil, nil
 		}
 		policy.Bindings = bindings
 		policy.Version = conditionalPolicyVersion
 		_, refused = attempted(ctx, service.Projects.SetIamPolicy(c.project,
 			&cloudresourcemanager.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
 		if refused == nil {
-			return nil
+			return removed, nil
 		}
 		if !taken(refused) {
 			break
 		}
 	}
-	return fmt.Errorf("revoke every project binding of %s on project %s: %w", member, c.project, refused)
+	return nil, fmt.Errorf("revoke every project binding of %s on project %s: %w", member, c.project, refused)
 }
