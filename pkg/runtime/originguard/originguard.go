@@ -93,6 +93,11 @@ func Handler(opts Options) http.Handler {
 			r.Out.URL.RawQuery = r.In.URL.RawQuery
 			r.Out.Host = r.In.Host
 			r.Out.Header.Del(OriginSecretHeader)
+			if strings.EqualFold(strings.TrimSpace(r.In.Header.Get("Upgrade")), "h2c") {
+				r.Out.Header.Del("Upgrade")
+				r.Out.Header.Del("Connection")
+				r.Out.Header.Del("HTTP2-Settings")
+			}
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 			w.Header().Set(AppUnansweredHeader, "true")
