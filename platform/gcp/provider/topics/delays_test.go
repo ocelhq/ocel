@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -155,8 +156,8 @@ func TestLiveRescheduleMovesADelayedRunsTaskAndRefusesARunNoLongerDelayed(t *tes
 		t.Errorf("the rescheduled run is %s due %v, want delayed until %v", run.GetStatus(), run.GetDueAt().AsTime(), later)
 	}
 	tasks := p.delayTasks()
-	if len(tasks) != 1 || !tasks[0].GetScheduleTime().AsTime().Equal(later) {
-		t.Errorf("the delay queue holds %d tasks, want only one, scheduled for %v", len(tasks), later)
+	if len(tasks) != 2 || !slices.ContainsFunc(tasks, func(task *cloudtaskspb.Task) bool { return task.GetScheduleTime().AsTime().Equal(later) }) {
+		t.Errorf("the delay queue holds %d tasks, want the superseded one and the one scheduled for %v", len(tasks), later)
 	}
 
 	queued := p.trigger("resize", `{}`, nil)
@@ -214,11 +215,13 @@ func TestLiveACanceledRunIsNeverAttempted(t *testing.T) {
 			t.Errorf("the canceled run is %s, want canceled with a finish time", run.GetStatus())
 		}
 	}
-	if tasks := p.delayTasks(); len(tasks) != 0 {
-		t.Errorf("the delay queue still holds %d tasks, want the canceled run's deleted", len(tasks))
+	tasks := p.delayTasks()
+	if len(tasks) != 1 {
+		t.Fatalf("the delay queue holds %d tasks, want the canceled delayed run's left in place", len(tasks))
 	}
-	if codes := p.deliverPulled(worker, "resize", "resize"); len(codes) != 1 || !acked(codes[0]) {
-		t.Errorf("the queued run's message delivered %v, want one acked push", codes)
+	p.dispatch(tasks[0])
+	if codes := p.deliverPulled(worker, "resize", "resize"); len(codes) != 2 || !acked(codes[0]) || !acked(codes[1]) {
+		t.Errorf("the canceled runs' messages delivered %v, want two acked pushes", codes)
 	}
 	if len(worker.received()) != 0 {
 		t.Error("a canceled run reached the worker")

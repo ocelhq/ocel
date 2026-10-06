@@ -79,8 +79,8 @@ func TestRemovingTheLastEnvironmentRunningAnAppRevokesEveryGrantItsAccountHeld(t
 	t.Parallel()
 	server := appAccountsOnly()
 	c, spec, member := grantedAppAccount(t, server)
-	if got := holdings(server, c, member); len(got) != 8 {
-		t.Fatalf("the account holds %q before removal, want the records, key, task database, tag database, cache, queue (2) and own account grants", got)
+	if got := holdings(server, c, member); len(got) != 7 {
+		t.Fatalf("the account holds %q before removal, want the records, key, task database, tag database, cache, queue and own account grants", got)
 	}
 	records := recordedStacks{names: []naming.StackName{spec.Ref.Name, naming.InfraStack("production"), stackOf("production", "api", "r1")}}
 
@@ -477,7 +477,7 @@ func TestGrantsADeployMadeBeforeTheRevocationLandedAreRestored(t *testing.T) {
 		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
-	if got := holdings(server, c, member); len(got) != 8 {
+	if got := holdings(server, c, member); len(got) != 7 {
 		t.Errorf("the account holds %q, want the 8 grants the deploy made while the revoke ran", got)
 	}
 	if !topicHeld(server, c, spec.Ref, member) {

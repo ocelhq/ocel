@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -37,8 +38,10 @@ func TestLiveDebouncedTriggersFoldIntoOnePendingRunThatRunsTheFirstPayload(t *te
 	if string(run.GetPayload()) != `{"n":1}` {
 		t.Errorf("the pending run holds %s, want the first trigger's payload", run.GetPayload())
 	}
-	if tasks := p.delayTasks(); len(tasks) != 1 || !tasks[0].GetScheduleTime().AsTime().Equal(run.GetDueAt().AsTime()) {
-		t.Errorf("the delay queue holds %d tasks, want one scheduled for the pending run's due time", len(tasks))
+	if tasks := p.delayTasks(); len(tasks) != 2 || !slices.ContainsFunc(tasks, func(task *cloudtaskspb.Task) bool {
+		return task.GetScheduleTime().AsTime().Equal(run.GetDueAt().AsTime())
+	}) {
+		t.Errorf("the delay queue holds %d tasks, want the superseded one and one scheduled for the pending run's due time", len(tasks))
 	}
 
 	if _, err := p.deployment.Tasks().CancelRun(context.Background(), &taskv1.CancelRunRequest{Id: first}); err != nil {
@@ -73,8 +76,9 @@ func TestLiveConcurrentDebouncedTriggersAllAnswerTheOnePendingRun(t *testing.T) 
 	if distinct := slices.Compact(slices.Sorted(slices.Values(ids))); len(distinct) != 1 {
 		t.Errorf("%d concurrent debounced triggers answered runs %v, want one pending run", triggers, distinct)
 	}
-	if tasks := p.delayTasks(); len(tasks) != 1 {
-		t.Errorf("the delay queue holds %d tasks, want only the pending run's", len(tasks))
+	due := p.retrieve(ids[0]).GetDueAt().AsTime()
+	if tasks := p.delayTasks(); !slices.ContainsFunc(tasks, func(task *cloudtaskspb.Task) bool { return task.GetScheduleTime().AsTime().Equal(due) }) {
+		t.Errorf("the delay queue holds %d tasks, want one scheduled for the pending run's due time", len(tasks))
 	}
 }
 

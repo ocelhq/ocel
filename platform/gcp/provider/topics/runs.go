@@ -40,7 +40,6 @@ func (s Store) readStoredRun(ctx context.Context, execution string) (storedRun, 
 }
 
 func (t Tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*taskv1.CancelRunResponse, error) {
-	var delayTask string
 	_, err := t.deployment.Store().changeRun(ctx, req.GetId(), func(run *storedRun, found bool) error {
 		if !found {
 			return refuseMissingRun(req.GetId())
@@ -48,14 +47,10 @@ func (t Tasks) CancelRun(ctx context.Context, req *taskv1.CancelRunRequest) (*ta
 		if !runs.IsUnfinished(run.Status) {
 			return errRunUnchanged
 		}
-		delayTask = run.delivery.DelayTask
 		run.Status, run.FinishedAt, run.delivery.DelayTask = provider.RunCanceled, time.Now(), ""
 		return nil
 	})
 	if err != nil && !errors.Is(err, errRunUnchanged) {
-		return nil, err
-	}
-	if err := t.deployment.unschedule(ctx, delayTask); err != nil {
 		return nil, err
 	}
 	resp, err := t.RetrieveRun(ctx, &taskv1.RetrieveRunRequest{Id: req.GetId()})
@@ -126,10 +121,7 @@ func (t Tasks) moveOnce(ctx context.Context, id string, due time.Time, keepTTL b
 		}
 		return nil
 	})
-	if err != nil {
-		return errors.Join(err, t.deployment.unschedule(ctx, delayTask))
-	}
-	return t.deployment.unschedule(ctx, current.delivery.DelayTask)
+	return err
 }
 
 func (t Tasks) ReplayRun(ctx context.Context, req *taskv1.ReplayRunRequest) (*taskv1.ReplayRunResponse, error) {

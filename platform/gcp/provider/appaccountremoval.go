@@ -52,7 +52,7 @@ func revokeUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 	revoked.tasks = slices.ContainsFunc(revoked.project, func(b *cloudresourcemanager.Binding) bool {
 		return b.Role == taskRecordsRole && b.Condition != nil && b.Condition.Expression == taskCondition
 	})
-	if err := ignoreAbsent(c.bindQueueRoles(ctx, ref.Tier, member, nil)); err != nil {
+	if err := ignoreAbsent(c.bindQueueRoles(ctx, ref.Tier, member, queueRoles, nil)); err != nil {
 		return err
 	}
 	if err := ignoreAbsent(c.bindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), runAsRole, member, false)); err != nil {
@@ -87,7 +87,7 @@ func (c *clients) restoreGrants(ctx context.Context, ref provider.StackRef, memb
 		}
 	}
 	if revoked.tasks {
-		if err := ignoreAbsent(c.bindQueueRoles(ctx, ref.Tier, member, queueRoles)); err != nil {
+		if err := ignoreAbsent(c.bindQueueRoles(ctx, ref.Tier, member, queueRoles, queueRoles)); err != nil {
 			return err
 		}
 		if err := ignoreAbsent(c.bindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), runAsRole, member, true)); err != nil {

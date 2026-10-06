@@ -73,7 +73,7 @@ func (c *clients) taskGrants(ctx context.Context, spec provider.StackSpec, membe
 			return c.bindProjectRole(ctx, member, taskRecordsRole, taskDatabaseCondition(c, tier), true)
 		},
 		func() error {
-			return explainMissingGrant(c.bindQueueRoles(ctx, tier, member, queueRoles), queueAdminGrant(c.DelayQueuePath(c.region, tier)))
+			return explainMissingGrant(c.bindQueueRoles(ctx, tier, member, queueRoles, queueRoles), queueAdminGrant(c.DelayQueuePath(c.region, tier)))
 		},
 		func() error {
 			own := c.AppAccount(tier, spec.Ref.Project, spec.App.App)

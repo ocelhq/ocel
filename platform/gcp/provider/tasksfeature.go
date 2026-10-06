@@ -57,7 +57,9 @@ var tasksPermissions = []string{
 
 var tasksRoles = []string{"roles/cloudtasks.admin"}
 
-var queueRoles = []string{queueEnqueuerRole, queueDeleterRole}
+var queueRoles = []string{queueEnqueuerRole}
+
+var retiredTierQueueRoles = []string{queueEnqueuerRole, queueDeleterRole}
 
 func tasksSummary() string {
 	return "a Firestore database of the tier's own that its runs are kept in, a Cloud Tasks queue a delayed message waits in, " +
@@ -221,7 +223,7 @@ func (b bootstrap) ensureDelayQueue(ctx context.Context, tier environment.Tier) 
 	return nil
 }
 
-func (c *clients) bindQueueRoles(ctx context.Context, tier environment.Tier, member string, wanted []string) error {
+func (c *clients) bindQueueRoles(ctx context.Context, tier environment.Tier, member string, roles, wanted []string) error {
 	client, err := c.Workload().CloudTasks()
 	if err != nil {
 		return err
@@ -238,7 +240,7 @@ func (c *clients) bindQueueRoles(ctx context.Context, tier environment.Tier, mem
 		if err != nil {
 			return fmt.Errorf("read who may delay messages on %s: %w", c.DelayQueue(tier), err)
 		}
-		bindings, changed := boundKeyRoles(policy.GetBindings(), member, queueRoles, wanted)
+		bindings, changed := boundKeyRoles(policy.GetBindings(), member, roles, wanted)
 		if !changed {
 			return nil
 		}
