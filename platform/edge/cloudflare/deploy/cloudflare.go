@@ -402,50 +402,6 @@ func workerModule(content []byte) edge.WorkerModule {
 	}
 }
 
-func (p *cloudflare) findApp(ctx context.Context, name string) (bool, error) {
-	accountID, err := requireAccountID("query the Cloudflare edge")
-	if err != nil {
-		return false, err
-	}
-	_, err = p.client.Workers.Scripts.Settings.Get(ctx, name, workers.ScriptSettingGetParams{
-		AccountID: cf.F(accountID),
-	})
-	var apiErr *cf.Error
-	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-		return false, nil
-	}
-	return err == nil, err
-}
-
-func (p *cloudflare) deployApp(ctx context.Context, app edge.AppDeployment) (edge.AppResult, error) {
-	accountID, err := requireAccountID("deploy to the Cloudflare edge")
-	if err != nil {
-		return edge.AppResult{}, err
-	}
-	up := upload{accountID: accountID, scriptName: app.Name, worker: bindCodeLoader(bindObjectStore(app.Worker, app.Values))}
-
-	assetsJWT, err := p.uploadAssets(ctx, up)
-	if err != nil {
-		return edge.AppResult{}, fmt.Errorf("upload assets: %w", err)
-	}
-
-	if err := p.putScript(ctx, up, assetsJWT); err != nil {
-		return edge.AppResult{}, fmt.Errorf("put worker script: %w", err)
-	}
-
-	if err := p.reconcileWorkerRoutes(ctx, up, routeSpec{desired: app.Domains, prune: true}, app.Warn); err != nil {
-		return edge.AppResult{}, err
-	}
-	url, err := p.setSubdomain(ctx, up, len(app.Domains) == 0)
-	if err != nil {
-		return edge.AppResult{}, fmt.Errorf("set workers.dev subdomain: %w", err)
-	}
-	if len(app.Domains) > 0 {
-		url = canonicalDomainURL(app.Domains)
-	}
-	return edge.AppResult{URL: url}, nil
-}
-
 type upload struct {
 	accountID  string
 	scriptName string
