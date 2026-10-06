@@ -45,18 +45,15 @@ export function newCloudStorage(options: CloudStorageOptions): CloudStorage {
     now: options.now,
   });
 
-  async function send(url: string, init: RequestInit): Promise<Response> {
+  async function send(url: string, init: RequestInit, signal: AbortSignal): Promise<Response> {
     const headers = new Headers(init.headers);
     if (options.endpoint === undefined)
       headers.set("Authorization", `Bearer ${await metadataToken.token()}`);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
-    try {
-      return await doFetch(url, { ...init, headers, signal: controller.signal });
-    } finally {
-      clearTimeout(timer);
-    }
+    return doFetch(url, { ...init, headers, signal });
   }
+
+  const isTransportError = (error: unknown) =>
+    error instanceof Error && (error.name === "TypeError" || error.name === "AbortError");
 
   async function request(
     verb: "read" | "write",
@@ -64,56 +61,76 @@ export function newCloudStorage(options: CloudStorageOptions): CloudStorage {
     url: string,
     init: RequestInit,
     accept: (res: Response) => Promise<unknown> | undefined,
-  ): Promise<unknown> {
+  ): Promise<{ value: unknown; ambiguous: boolean }> {
     const fail = (cause: string) =>
       new Error(`ocel: Cloud Storage ${verb} of ${bucket}/${name} failed: ${cause}`);
     let refreshed = false;
+    let ambiguous = false;
     let lastCause = "";
     for (let attempt = 1; attempt <= attempts; attempt++) {
       if (attempt > 1) {
         await sleep(random() * Math.min(2000, 100 * 2 ** (attempt - 2)));
       }
-      let res: Response;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
       try {
-        res = await send(url, init);
-        if (res.status === 401 && !refreshed && options.endpoint === undefined) {
-          refreshed = true;
-          metadataToken.forget();
-          res = await send(url, init);
+        let res: Response;
+        try {
+          res = await send(url, init, controller.signal);
+          if (res.status === 401 && !refreshed && options.endpoint === undefined) {
+            refreshed = true;
+            metadataToken.forget();
+            res = await send(url, init, controller.signal);
+          }
+        } catch (error) {
+          lastCause = error instanceof Error ? error.message : String(error);
+          ambiguous = true;
+          continue;
         }
-      } catch (error) {
-        lastCause = error instanceof Error ? error.message : String(error);
-        continue;
+        let accepted: unknown;
+        try {
+          accepted = await accept(res);
+        } catch (error) {
+          if (!isTransportError(error)) throw error;
+          lastCause = (error as Error).message;
+          ambiguous = true;
+          continue;
+        }
+        if (accepted) return { value: accepted, ambiguous };
+        lastCause = String(res.status);
+        const retryable = res.status === 408 || res.status === 429 || res.status >= 500;
+        if (!retryable) throw fail(lastCause);
+        ambiguous ||= res.status !== 429;
+      } finally {
+        clearTimeout(timer);
       }
-      const accepted = accept(res);
-      if (accepted) return accepted;
-      lastCause = String(res.status);
-      const retryable = res.status === 408 || res.status === 429 || res.status >= 500;
-      if (!retryable) throw fail(lastCause);
     }
     throw fail(lastCause);
   }
 
+  async function read(name: string, conditions?: { ifGenerationNotMatch?: string }) {
+    const query = new URLSearchParams({ alt: "media" });
+    if (conditions?.ifGenerationNotMatch !== undefined) {
+      query.set("ifGenerationNotMatch", conditions.ifGenerationNotMatch);
+    }
+    const url = `${origin}/storage/v1/b/${bucket}/o/${encodeURIComponent(name)}?${query}`;
+    const { value } = await request("read", name, url, { method: "GET" }, (res) => {
+      if (res.status === 404) return Promise.resolve<ObjectRead>({ status: "absent" });
+      if (res.status === 304) return Promise.resolve<ObjectRead>({ status: "unchanged" });
+      if (res.status !== 200) return undefined;
+      return (async (): Promise<ObjectRead> => {
+        const generation = res.headers.get("x-goog-generation");
+        if (generation === null) {
+          throw new Error(`ocel: Cloud Storage answered ${name} with no generation`);
+        }
+        return { status: "found", body: await res.text(), generation };
+      })();
+    });
+    return value as ObjectRead;
+  }
+
   return {
-    async read(name, conditions) {
-      const query = new URLSearchParams({ alt: "media" });
-      if (conditions?.ifGenerationNotMatch !== undefined) {
-        query.set("ifGenerationNotMatch", conditions.ifGenerationNotMatch);
-      }
-      const url = `${origin}/storage/v1/b/${bucket}/o/${encodeURIComponent(name)}?${query}`;
-      return (await request("read", name, url, { method: "GET" }, (res) => {
-        if (res.status === 404) return Promise.resolve<ObjectRead>({ status: "absent" });
-        if (res.status === 304) return Promise.resolve<ObjectRead>({ status: "unchanged" });
-        if (res.status !== 200) return undefined;
-        return (async (): Promise<ObjectRead> => {
-          const generation = res.headers.get("x-goog-generation");
-          if (generation === null) {
-            throw new Error(`ocel: Cloud Storage answered ${name} with no generation`);
-          }
-          return { status: "found", body: await res.text(), generation };
-        })();
-      })) as ObjectRead;
-    },
+    read,
 
     async write(name, body, conditions) {
       const query = new URLSearchParams({ uploadType: "media", name });
@@ -121,7 +138,7 @@ export function newCloudStorage(options: CloudStorageOptions): CloudStorage {
         query.set("ifGenerationMatch", conditions.ifGenerationMatch);
       }
       const url = `${origin}/upload/storage/v1/b/${bucket}/o?${query}`;
-      return (await request(
+      const { value, ambiguous } = await request(
         "write",
         name,
         url,
@@ -136,7 +153,15 @@ export function newCloudStorage(options: CloudStorageOptions): CloudStorage {
             }),
           );
         },
-      )) as ObjectWrite;
+      );
+      const written = value as ObjectWrite;
+      if (written.status === "lost" && ambiguous) {
+        const current = await read(name);
+        if (current.status === "found" && current.body === body) {
+          return { status: "written", generation: current.generation };
+        }
+      }
+      return written;
     },
   };
 }
