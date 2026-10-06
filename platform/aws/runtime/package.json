@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./tag-index": "./src/next/tag-index.mts",
     "./tag-snapshot-store": "./src/next/tag-snapshot-store.mts"
   },
   "scripts": {

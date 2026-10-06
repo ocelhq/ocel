@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { tagNamespace } from "@framework/next-cache";
+import { tagNamespace } from "@platform/aws-runtime/tag-index";
 import { afterAll, expect, it } from "vitest";
 
 import { bunArgs } from "../scripts/bundle.mjs";

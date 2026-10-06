@@ -1,7 +1,8 @@
-import { isrPrefixOf, tagNamespace, tagSnapshotKey } from "@framework/next-cache";
+import { tagSnapshotKey } from "@framework/next-cache";
 import contract from "@framework/next-cache/fixtures/edge-contract.json" with { type: "json" };
 import { revalidatedHeader } from "@framework/next-runtime/revalidation-signal";
 import { afterEach, expect, test } from "vitest";
+import { isrPrefixOf, tagNamespace } from "../src/next/tag-index.mjs";
 
 afterEach(() => {
   for (const name of Object.values(contract.cacheStoreEnv)) delete process.env[name];
