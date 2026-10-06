@@ -8,6 +8,7 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/images"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -57,14 +58,35 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (p
 		return provider.ImagePush{}, refusal.Refuse(refusal.CodeNotReady,
 			"this provider ships no container runtime built for %s, and %s's image is built for it", arch, app)
 	}
+	next, err := r.nextServerRuntime(ctx, entry)
+	if err != nil {
+		return provider.ImagePush{}, err
+	}
 	return provider.ImagePush{
 		App:      app,
 		Source:   ref,
-		ImageRef: images.FormatRef(r.spec.Slug, repository, images.RuntimeTag(digest, runtime), r.registry),
+		ImageRef: images.FormatRef(r.spec.Slug, repository, images.RuntimeTag(digest, runtime, next), r.registry),
 		Wrap: func(ctx context.Context) (v1.Image, func(), error) {
-			return images.WrapFromDaemon(ctx, repository, digest, runtime)
+			return images.WrapFromDaemon(ctx, repository, digest, runtime, next)
 		},
 	}, nil
+}
+
+func (r *deployRun) nextServerRuntime(ctx context.Context, entry provider.AppEntry) (*images.NextServerRuntime, error) {
+	read := r.provider.Hooks().ReadNextServerRuntime
+	if read == nil || entry.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext {
+		return nil, nil
+	}
+	dir := r.provider.Facts().NextRuntimeDir
+	if dir == "" {
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"this provider ships a Next server runtime and names no directory for it, so %s's image has nowhere to hold it", entry.App)
+	}
+	files, err := read(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read the Next server runtime %s's container loads: %w", entry.App, err)
+	}
+	return &images.NextServerRuntime{Dir: dir, Files: files}, nil
 }
 
 func (r *deployRun) openImages(ctx context.Context, project *contractv1.ImageRegistry) error {
