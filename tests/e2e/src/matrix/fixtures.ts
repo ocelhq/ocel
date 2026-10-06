@@ -159,6 +159,7 @@ export const sdk = {
       dev: [defaults],
       aws: [container, apiGateway],
       vps: [defaults],
+      gcp: [defaults],
     },
     sample: { group: "node-http" },
   }),

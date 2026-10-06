@@ -215,6 +215,12 @@ export const gaps: Gap[] = [
     ],
   },
   {
+    id: "gcp-postgres-is-private-to-the-runner",
+    reason:
+      "a gcp postgres is a Cloud SQL instance with no public address, reached over the tier's private network alone, so the journey cannot migrate it from the runner and the tables the todo and document checks write are never created",
+    where: [{ on: ["gcp"], fixtures: [sdk.node], fails: [check(todoAndDocumentChecks)] }],
+  },
+  {
     id: "build-needs-postgres",
     reason: "ocel build fails collecting page data for /api/todos without a resolved postgres",
     issue: 849,
@@ -463,7 +469,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["gcp.floci"],
-        fixtures: [lifecycle.next, ...SDK_NEXT_BEARING],
+        fixtures: [lifecycle.next, ...SDK_NEXT_BEARING, sdk.node],
         fails: [step.deploy],
         skipsCell: true,
       },

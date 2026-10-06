@@ -14,6 +14,7 @@ import {
   realtimeOperationLimitCheck,
   realtimeRuleDeniesCheck,
   taskConcurrencyCheck,
+  todoAndDocumentChecks,
 } from "../checks";
 import { DEFAULT_BASE, GCP_BASE, VPS_BASE } from "../config";
 import { fixtureDir } from "../paths";
@@ -194,6 +195,26 @@ describe("the needs a Google Cloud origin does not serve", () => {
         );
       }
     }
+  });
+});
+
+describe("sdk/node on gcp", () => {
+  it("runs sdk/node on gcp, its database checks red because the runner cannot reach a private Cloud SQL instance", () => {
+    const planned = planOn("gcp");
+    const titles = todoAndDocumentChecks.map((one) => one.title);
+
+    expect(planned.cells.map((cell) => cell.name)).toContain("sdk/node");
+    const listed = planned.expectedFailures["sdk/node/web"] ?? {};
+    expect(Object.keys(listed).sort()).toEqual([...titles].sort());
+    for (const gapsListed of Object.values(listed)) {
+      expect(gapsListed.map((gap) => gap.id)).toEqual(["gcp-postgres-is-private-to-the-runner"]);
+    }
+  });
+
+  it("skips sdk/node on floci-gcp, which serves no Cloud SQL", () => {
+    expect((planOn("gcp.floci").skipped["sdk/node"] ?? []).map((gap) => gap.id)).toEqual([
+      "floci-serves-no-cloud-sql",
+    ]);
   });
 });
 

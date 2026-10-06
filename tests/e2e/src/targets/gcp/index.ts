@@ -2,7 +2,7 @@ import { type ChildProcess, execFile } from "node:child_process";
 import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { migrates, setsEnv, setsSecret } from "../../checks";
+import { setsEnv, setsSecret } from "../../checks";
 import {
   INITIAL_GREETING,
   JOURNEY_NONCE_ENV,
@@ -27,7 +27,6 @@ import { cellsOn, fixturesOn } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
 import type { CellUnderTest } from "../../run/cellRun";
 import { copyTree } from "../../tree";
-import { migrateCommand } from "../../workspace";
 import { hostnameUrls } from "../hostnames";
 import type { Deployment, Exposure, ReleaseCycle, Restart, Sweeper, Target } from "../types";
 import { appBucketPrefix, deleteAppBucket, listAppBuckets, strayBuckets } from "./buckets";
@@ -290,9 +289,6 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
         "kv-create.json",
         `${JSON.stringify(created, null, 2)}\n`,
       );
-    }
-    if (migrates(cell.fixture.checks)) {
-      await this.run(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
     }
     return this.deployment(cell, "deploy");
   }
