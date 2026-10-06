@@ -51,7 +51,7 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
         : newInstanceCacheStore(cache),
     newUseCacheStore: async () =>
       shared
-        ? newGcpUseCacheStore(newInstanceUseCacheStore(cache), shared.tags)
+        ? newGcpUseCacheStore(shared.storage, shared.objectPrefix, shared.tags)
         : newInstanceUseCacheStore(cache),
     newDispatchInvoke: async (localOrigin) => newGcpDispatchInvoke(localOrigin),
     scheduleRefresh: newInstanceRefresh(
