@@ -1,13 +1,13 @@
 import { createHmac } from "node:crypto";
 import type { Refresh } from "@framework/next-runtime/refresh";
 import { expect, test, vi } from "vitest";
+import { newRefreshQueue, type RefreshQueueOptions } from "../src/next/refresh-queue.mjs";
 import {
   isRefreshTaskSignedBy,
   refreshSignatureHeader,
   signRefreshTask,
 } from "../src/next/refresh-signature.mjs";
 import { readRefreshTask } from "../src/next/refresh-task.mjs";
-import { newTaskRefresh, type TaskRefreshOptions } from "../src/next/task-refresh.mjs";
 
 const queue = "projects/p/locations/r/queues/q";
 const account = "ocel-production-refresh@p.iam.gserviceaccount.com";
@@ -44,8 +44,8 @@ function rig(answers: (call: Call, n: number) => Response | Error) {
   return { fetch: fetchStub, tasks, metadata };
 }
 
-function schedule(r: ReturnType<typeof rig>, extra: Partial<TaskRefreshOptions> = {}) {
-  return newTaskRefresh({
+function schedule(r: ReturnType<typeof rig>, extra: Partial<RefreshQueueOptions> = {}) {
+  return newRefreshQueue({
     queue,
     account,
     url,

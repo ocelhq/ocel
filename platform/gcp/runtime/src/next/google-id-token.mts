@@ -18,7 +18,7 @@ const unknownKeyRefetchIntervalMs = 60_000;
 const issuedAtSkewMs = 60_000;
 const attempts = 3;
 const attemptTimeoutMs = 2_500;
-const failureMemoryMs = 10_000;
+const failureTtlMs = 10_000;
 const issuers = new Set(["https://accounts.google.com", "accounts.google.com"]);
 
 interface KeySet {
@@ -78,7 +78,7 @@ function readKeys(jwks: unknown): Map<string, KeyObject> | undefined {
   return keys;
 }
 
-function claimsAccepted(claims: Record<string, unknown>, options: IdTokenOptions, now: number) {
+function areClaimsAccepted(claims: Record<string, unknown>, options: IdTokenOptions, now: number) {
   const { iss, aud, exp, iat, email, email_verified: verified } = claims;
   return (
     typeof iss === "string" &&
@@ -140,7 +140,7 @@ export function newGoogleIdTokenCheck(options: IdTokenOptions): IdTokenCheck {
       await sleep(random() * Math.min(1_000, 100 * 2 ** (n - 1)));
     }
     const error = new Error(`ocel: could not read Google's token signing keys: ${failure}`);
-    lastFailure = { error, until: now() + failureMemoryMs };
+    lastFailure = { error, until: now() + failureTtlMs };
     throw error;
   }
 
@@ -179,6 +179,6 @@ export function newGoogleIdTokenCheck(options: IdTokenOptions): IdTokenCheck {
     } catch {
       return false;
     }
-    return claimsAccepted(token.claims, options, now());
+    return areClaimsAccepted(token.claims, options, now());
   };
 }

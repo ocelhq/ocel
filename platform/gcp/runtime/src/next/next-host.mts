@@ -12,8 +12,8 @@ import { newGcpDispatchInvoke } from "./dispatch-host.mjs";
 import { newFirestore } from "./firestore.mjs";
 import { newInstanceCacheStore, newInstanceUseCacheStore } from "./instance-stores.mjs";
 import { readRefreshEndpoint } from "./refresh-endpoint.mjs";
+import { newRefreshQueue } from "./refresh-queue.mjs";
 import { newFirestoreTagRecords } from "./tag-records.mjs";
-import { newTaskRefresh } from "./task-refresh.mjs";
 import { newGcpUseCacheStore } from "./use-cache-store.mjs";
 
 const MB = 1024 * 1024;
@@ -81,7 +81,7 @@ function readTaskRefresh(
     if (!env[name]) throw new Error(`ocel: OCEL_REFRESH_URL is set but ${name} is not`);
   }
   if (!secret) throw new Error("ocel: OCEL_REFRESH_URL is set but OCEL_REFRESH_SECRET is not");
-  return newTaskRefresh({
+  return newRefreshQueue({
     queue: env.OCEL_REFRESH_QUEUE!,
     account: env.OCEL_REFRESH_ACCOUNT!,
     url,
