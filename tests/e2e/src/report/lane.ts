@@ -3,7 +3,7 @@ import { gaps } from "../matrix/gaps";
 import { laneNamed, targetOfLane } from "../matrix/types";
 import { cellApp, type GapRef, type Plan, plan, type RunFilter } from "../plan";
 import { filterFrom } from "../run/filter";
-import { hasReleaseCycle, targetNamed } from "../targets";
+import { hasReleaseCycle, previewsOn, targetNamed } from "../targets";
 
 const USAGE = "pnpm --filter @ocel-tests/e2e plan --lane <lane>";
 
@@ -42,9 +42,14 @@ function main(argv: string[]) {
   }
   const lane = laneNamed(named);
   const filter = filterFrom(process.env);
-  const releaseCycle = hasReleaseCycle(targetNamed(targetOfLane(lane)));
+  const target = targetNamed(targetOfLane(lane));
+  const releaseCycle = hasReleaseCycle(target);
+  const previews = previewsOn(target, lane);
   process.stdout.write(
-    laneTable(plan({ fixtures, gaps, lane, releaseCycle, filter, env: process.env }), filter),
+    laneTable(
+      plan({ fixtures, gaps, lane, releaseCycle, previews, filter, env: process.env }),
+      filter,
+    ),
   );
 }
 

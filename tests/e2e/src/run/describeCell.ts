@@ -9,6 +9,7 @@ import { readPrepareFailure } from "../prepare";
 import { progress } from "../progress";
 import { phasesDriven, stepsPlanned } from "../steps";
 import { targetNamed } from "../targets";
+import { hasPreviews } from "../targets/types";
 import { CellRun, messageOf } from "./cellRun";
 import { resultWriter } from "./results";
 
@@ -36,6 +37,8 @@ export function describeCell(planFile: string, name: string) {
   const write = resultWriter(runId, target.name, name);
   const log = progress(name);
   const timeout = target.stepTimeoutMs;
+  const timeoutOf = (phase: string | undefined) =>
+    phase === "preview" && hasPreviews(target) ? target.previewStepTimeoutMs : timeout;
 
   describe(name, () => {
     beforeAll(() => run.prepareProcess(), { timeout });
@@ -73,7 +76,7 @@ export function describeCell(planFile: string, name: string) {
               throw error;
             }
           },
-          timeout,
+          timeoutOf(step.phase),
         );
       });
     }

@@ -1,8 +1,15 @@
 import type { Check } from "./checks/context";
+import { PREVIEW_TITLES, type PreviewCheck, previewChecksFor } from "./checks/previews";
 import type { Cell, Fixture, Phase } from "./matrix/types";
 import type { CellRun } from "./run/cellRun";
 import type { StackPoint } from "./stacks";
-import { hasReleaseCycle, type ReleaseCycle, type Target } from "./targets/types";
+import {
+  hasPreviews,
+  hasReleaseCycle,
+  type Previews,
+  type ReleaseCycle,
+  type Target,
+} from "./targets/types";
 
 export type Step = {
   app: string;
@@ -51,7 +58,12 @@ export const step = {
   rollback: selector([ROLLBACK]),
   destroy: selector([DESTROY]),
   refuse: selector([REFUSE]),
+  preview: selector(Object.values(PREVIEW_TITLES)),
 };
+
+export function previewStep(check: PreviewCheck): TestSelector {
+  return selector([PREVIEW_TITLES[check]]);
+}
 
 export function check(
   checks: Check | Check[],
@@ -61,7 +73,22 @@ export function check(
   return selector(listed.flatMap((one) => phases.map((phase) => checkTitle(phase, one.title))));
 }
 
-export function phasesOf(fixture: Fixture, keep: boolean, releaseCycle = true): Phase[] {
+export function walksPreviews(
+  cell: Pick<Cell, "fixture" | "variant" | "target">,
+  previewsOnLane: boolean,
+): boolean {
+  return (
+    previewsOnLane &&
+    (cell.fixture.previews?.[cell.target] ?? []).some((one) => one.name === cell.variant.name)
+  );
+}
+
+export function phasesOf(
+  fixture: Fixture,
+  keep: boolean,
+  releaseCycle = true,
+  previews = false,
+): Phase[] {
   if (fixture.refusal) {
     return ["deploy", ...(keep ? [] : (["destroy"] as const))];
   }
@@ -71,6 +98,7 @@ export function phasesOf(fixture: Fixture, keep: boolean, releaseCycle = true): 
     "verify",
     ...(fixture.restarts ? (["restart"] as const) : []),
     ...(redeploys ? (["redeploy", "rollback"] as const) : []),
+    ...(previews && !keep ? (["preview"] as const) : []),
     ...(keep ? [] : (["destroy"] as const)),
   ];
 }
@@ -163,6 +191,16 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
     ...replaced("restart", RESTART),
     ...replaced("redeploy", REDEPLOY),
     ...replaced("rollback", ROLLBACK),
+    ...(has("preview")
+      ? perApp((app) =>
+          previewChecksFor(cell).map((check) => ({
+            app,
+            title: PREVIEW_TITLES[check],
+            phase: "preview" as const,
+            run: (run: CellRun) => run.preview(app, check),
+          })),
+        )
+      : []),
     ...(has("destroy") ? perApp((app) => [newDestroyStep(app)]) : []),
     ...perApp((app) => [
       ...at("afterOcelDestroy").map((one) => ({
@@ -207,9 +245,12 @@ export function stepsPlanned(cell: Cell, planned: PlannedSteps): Step[] {
 }
 
 export function phasesDriven(
-  target: Pick<Target, "name"> & Partial<ReleaseCycle>,
+  target: Pick<Target, "name"> & Partial<ReleaseCycle> & Partial<Previews>,
   phases: Phase[],
 ): Phase[] {
+  if (phases.includes("preview") && !hasPreviews(target)) {
+    throw new Error(`${target.name} walks preview with no previews to drive it`);
+  }
   const cycled = phases.filter((phase) => phase === "redeploy" || phase === "rollback");
   if (cycled.length > 0 && !hasReleaseCycle(target)) {
     throw new Error(

@@ -15,7 +15,7 @@ import {
   UNNAMED_CONCERNS,
 } from "./matrix/types";
 import { type Coverage, type Draw, sample } from "./sample";
-import { phasesOf, stepsOf } from "./steps";
+import { phasesOf, stepsOf, walksPreviews } from "./steps";
 
 export type RunFilter = {
   concerns: Concern[];
@@ -100,8 +100,9 @@ export function cellNamed(fixtures: Fixture[], target: TargetName, name: string)
   return found;
 }
 
-function longestFirst(cells: Cell[], releaseCycle: boolean): Cell[] {
-  const length = (cell: Cell) => phasesOf(cell.fixture, false, releaseCycle).length;
+function longestFirst(cells: Cell[], releaseCycle: boolean, previews: boolean): Cell[] {
+  const length = (cell: Cell) =>
+    phasesOf(cell.fixture, false, releaseCycle, walksPreviews(cell, previews)).length;
   return [...cells].sort((a, b) => length(b) - length(a));
 }
 
@@ -213,6 +214,15 @@ function checkMatrix(fixtures: Fixture[]) {
     if (placements.length === 0) {
       throw new Error(`${one.name} runs on no target`);
     }
+    for (const [target, previewed = []] of Object.entries(one.previews ?? {})) {
+      const placed = (one.on[target as TargetName] ?? []).map((variant) => variant.name);
+      const stray = previewed.find((variant) => !placed.includes(variant.name));
+      if (stray) {
+        throw new Error(
+          `${one.name} previews the ${stray.name} variant on ${target}, which it does not run there`,
+        );
+      }
+    }
     for (const [target, variants = []] of placements) {
       if (variants.length === 0) {
         throw new Error(`${one.name} runs nothing on ${target}`);
@@ -292,10 +302,11 @@ export function plan(input: {
   gaps: Gap[];
   lane: Lane;
   releaseCycle: boolean;
+  previews: boolean;
   filter: RunFilter;
   env: NodeJS.ProcessEnv;
 }): Plan {
-  const { fixtures, gaps, lane, releaseCycle, filter, env } = input;
+  const { fixtures, gaps, lane, releaseCycle, previews, filter, env } = input;
   checkMatrix(fixtures);
   checkGaps(gaps);
   checkVariantsAsked(fixtures, filter.variants);
@@ -305,13 +316,15 @@ export function plan(input: {
 
   const laneTests: LaneTest[] = offered.flatMap((one) =>
     cellsOn(one, target).flatMap((cell) =>
-      stepsOf(cell, phasesOf(one, false, releaseCycle)).map((step) => ({
-        cell: cell.name,
-        app: step.app,
-        fixture: one.name,
-        variant: cell.variant.name,
-        title: step.title,
-      })),
+      stepsOf(cell, phasesOf(one, false, releaseCycle, walksPreviews(cell, previews))).map(
+        (step) => ({
+          cell: cell.name,
+          app: step.app,
+          fixture: one.name,
+          variant: cell.variant.name,
+          title: step.title,
+        }),
+      ),
     ),
   );
   const resolved = resolveGaps(gaps, lane, env, laneTests);
@@ -339,8 +352,9 @@ export function plan(input: {
   const cells = longestFirst(
     chosen.flatMap((one) => covered.get(one.name) ?? []),
     releaseCycle,
+    previews,
   ).map((cell): PlannedCell => {
-    const phases = phasesOf(cell.fixture, filter.keep, releaseCycle);
+    const phases = phasesOf(cell.fixture, filter.keep, releaseCycle, walksPreviews(cell, previews));
     return {
       name: cell.name,
       fixture: cell.fixture.name,
