@@ -200,6 +200,7 @@ func serve(store s3store.Store, buckets map[string][]string) *s3store.Service {
 		External:     func(context.Context) (s3store.PresignAPI, string) { return presigner, store.Endpoint },
 		Callbacks:    callbacks{allowed: allowed},
 		SweepUploads: true,
+		PostPolicies: true,
 		Sessions:     s3store.SessionsBucket(),
 		Granted:      slices.Sorted(maps.Keys(buckets)),
 	})
