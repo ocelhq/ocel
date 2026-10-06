@@ -8,6 +8,7 @@ import (
 
 	"cloud.google.com/go/storage"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -73,7 +74,7 @@ func (c *clients) bindBucketRole(ctx context.Context, bucket, member string, gra
 	return false, fmt.Errorf("let %s use the objects of the Cloud Storage bucket %s: %w", member, bucket, refused)
 }
 
-func (c *clients) revokeBucketAccess(ctx context.Context, recorded []stackrecords.NamedStack, member string) ([]string, error) {
+func (c *clients) revokeBucketAccess(ctx context.Context, recorded []stackrecords.NamedStack, member string, keeping []string) ([]string, error) {
 	var revoked []string
 	for _, stack := range recorded {
 		if !stack.Name.IsInfra() {
@@ -81,7 +82,7 @@ func (c *clients) revokeBucketAccess(ctx context.Context, recorded []stackrecord
 		}
 		for _, binding := range stack.Bindings {
 			bucket := binding.Properties[provider.PropertyBucket]
-			if binding.Type != provider.BindingBucket || bucket == "" || slices.Contains(revoked, bucket) {
+			if binding.Type != provider.BindingBucket || bucket == "" || slices.Contains(revoked, bucket) || slices.Contains(keeping, bucket) {
 				continue
 			}
 			changed, err := c.bindBucketRole(ctx, bucket, member, false)
@@ -97,4 +98,14 @@ func (c *clients) revokeBucketAccess(ctx context.Context, recorded []stackrecord
 		}
 	}
 	return revoked, nil
+}
+
+func (p *Provider) revokeDroppedBuckets(ctx context.Context, c *clients, spec provider.StackSpec, member string) error {
+	infra := naming.InfraStack(spec.Ref.Name.Env)
+	recorded, found, err := stackrecords.Read(ctx, p.KeyValues(), spec.Ref.Tier, spec.Ref.Project, infra)
+	if err != nil || !found {
+		return err
+	}
+	_, err = c.revokeBucketAccess(ctx, []stackrecords.NamedStack{{Name: infra, Stack: recorded}}, member, grantedBuckets(spec.App))
+	return err
 }

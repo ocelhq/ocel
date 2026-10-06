@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 type handedToken string
@@ -23,6 +24,7 @@ func pushing(t *testing.T, endpoint string) *Provider {
 		projectDir: t.TempDir(),
 		namespace:  names.namespace,
 		resolved:   &clients{Names: names, region: "europe-west1", endpoint: endpoint},
+		records:    fake.NewKeyValues(),
 	}
 }
 
