@@ -56,6 +56,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		return nil, provider.RefusalError(err)
 	}
 
+	warnings := &warningLog{Log: progress.Discard()}
 	propagation, err := session.readSlowestPropagation(slices.Collect(maps.Values(session.state.Apps)))
 	if err != nil {
 		return nil, provider.RefusalError(err)
@@ -66,19 +67,28 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Builds:      target.Builds,
 		Propagation: &propagation,
 	}
-	dropped, err := session.promoteApps(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, session.readAppRouter, progress.Discard())
+	dropped, err := session.promoteApps(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, session.readAppRouter, warnings)
 	if err != nil {
-		return nil, provider.RefusalError(errors.Join(err, session.reclaimDropped(ctx, "", dropped, progress.Discard())))
+		return nil, provider.RefusalError(errors.Join(err, session.reclaimDropped(ctx, "", dropped, warnings)))
 	}
 	if err := session.checkpoint(ctx); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	rolled := &contractv1.RollbackResponse{Promoted: promotionProto(promoted)}
-	if err := session.reclaimDropped(ctx, "", dropped, progress.Discard()); err != nil {
+	err = session.reclaimDropped(ctx, "", dropped, warnings)
+	rolled.Warnings = warnings.warned
+	if err != nil {
 		rolled.Warnings = append(rolled.Warnings, unreclaimedWarning(promoted.PromotionID, err))
 	}
 	return rolled, nil
 }
+
+type warningLog struct {
+	progress.Log
+	warned []string
+}
+
+func (w *warningLog) Warn(message string) { w.warned = append(w.warned, message) }
 
 func rollbackTarget(history []router.HistoryEntry, to, tag string) (router.Promotion, error) {
 	if tag != "" {

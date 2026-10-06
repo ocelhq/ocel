@@ -442,23 +442,20 @@ func TestADeployWhoseCallerHungUpStillReclaimsWhatItProvisioned(t *testing.T) {
 	}
 }
 
-func TestTheRollbackPointerMoveIsHandedProgressThatDiscards(t *testing.T) {
+func TestRollbackReturnsTheWarningsThePointerMoveRaised(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	edgeProvisioned(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
-	plane := relayPlane(provider)
-	plane.SayOnPointerMove("the pointer move said this into a rollback that streams nothing")
+	const warned = "the CDN purge failed during the pointer move"
+	relayPlane(provider).WarnOnPointerMove(warned)
 
-	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); err != nil {
+	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"})
+	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
-	moved := plane.PointerMoveProgress()
-	if moved == nil {
-		t.Fatal("the rollback never reached the router's pointer move")
-	}
-	if moved != progress.Discard() {
-		t.Errorf("the rollback handed the pointer move %#v, want the discarding reporter: Rollback is a unary RPC that streams nothing", moved)
+	if !slices.Contains(rolled.GetWarnings(), warned) {
+		t.Errorf("Rollback() warnings = %q, want them to carry %q", rolled.GetWarnings(), warned)
 	}
 }
 

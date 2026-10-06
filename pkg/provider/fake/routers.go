@@ -62,6 +62,7 @@ type DataPlane struct {
 	unremoved  error
 	before     func()
 	says       string
+	warns      string
 	progress   progress.Log
 	propagates *router.Propagation
 	served     map[projectPointer]map[string]string
@@ -125,6 +126,12 @@ func (d *DataPlane) SayOnPointerMove(said string) {
 	d.says = said
 }
 
+func (d *DataPlane) WarnOnPointerMove(warned string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.warns = warned
+}
+
 func (d *DataPlane) PointerMoveProgress() progress.Log {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -133,11 +140,14 @@ func (d *DataPlane) PointerMoveProgress() progress.Log {
 
 func (d *DataPlane) beginPointerMove(progress progress.Log) {
 	d.mu.Lock()
-	before, said := d.before, d.says
+	before, said, warned := d.before, d.says, d.warns
 	d.before, d.progress = nil, progress
 	d.mu.Unlock()
 	if said != "" {
 		progress.Say(said)
+	}
+	if warned != "" {
+		progress.Warn(warned)
 	}
 	if before != nil {
 		before()
