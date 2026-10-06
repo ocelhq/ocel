@@ -194,8 +194,8 @@ func testSpec(endpoint, version string) edge.StackSpec {
 		Tier:    environment.TierProduction,
 		Version: version,
 		Program: &edge.ProgramSpec{
-			StoreEndpoint: endpoint,
-			BootstrapCred: storeBootstrapCred,
+			StoreEndpoint:       endpoint,
+			BootstrapCredential: storeBootstrapCred,
 		},
 	}
 }

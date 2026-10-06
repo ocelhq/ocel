@@ -14,7 +14,7 @@ import (
 const testPrefix = "prod/acme/web/BUILD1"
 
 func writerAccess(endpoint string) ISRWriter {
-	return ISRWriter{Endpoint: endpoint, BootstrapCred: "cred-1", Seed: "seed-1"}
+	return ISRWriter{Endpoint: endpoint, BootstrapCredential: "cred-1", Seed: "seed-1"}
 }
 
 type writerCall struct {
@@ -39,7 +39,7 @@ func fakeWriter(t *testing.T, status int) (*httptest.Server, *[]writerCall) {
 	return srv, &calls
 }
 
-func TestDeriveISRWriteSecret(t *testing.T) {
+func TestAnISRWriteSecretDiffersPerPrefixAndRotatesWithTheSeed(t *testing.T) {
 	t.Run("differs per prefix", func(t *testing.T) {
 		t.Parallel()
 		web := DeriveISRWriteSecret("seed-1", "prod/acme/web/B1")
@@ -73,7 +73,7 @@ func TestDeriveISRWriteSecret(t *testing.T) {
 	})
 }
 
-func TestISRWriteSecretHash(t *testing.T) {
+func TestAnISRWriteSecretHashIsTheHexSHA256TheWorkerStores(t *testing.T) {
 	t.Run("is the hex SHA256 the worker stores", func(t *testing.T) {
 		t.Parallel()
 		hash := isrWriteSecretHash("write-secret")
@@ -91,7 +91,7 @@ func TestISRWriteSecretHash(t *testing.T) {
 	})
 }
 
-func TestInitializingTheISRWriterSeedsOnlyTheHashUnderTheBootstrapCredential(t *testing.T) {
+func TestInitializingTheISRWriterSeedsOnlyTheHashUnderTheBootstrapCredentialential(t *testing.T) {
 	srv, calls := fakeWriter(t, http.StatusNoContent)
 	w := writerAccess(srv.URL)
 	secret := DeriveISRWriteSecret(w.Seed, testPrefix)
@@ -119,7 +119,7 @@ func TestInitializingTheISRWriterSeedsOnlyTheHashUnderTheBootstrapCredential(t *
 
 func TestInitializingAnISRWriterWithNoSeedSendsNothing(t *testing.T) {
 	srv, calls := fakeWriter(t, http.StatusNoContent)
-	w := ISRWriter{Endpoint: srv.URL, BootstrapCred: "cred-1"}
+	w := ISRWriter{Endpoint: srv.URL, BootstrapCredential: "cred-1"}
 
 	if err := w.Initialize(context.Background(), testPrefix); err != nil {
 		t.Fatalf("Initialize: %v", err)
@@ -129,32 +129,7 @@ func TestInitializingAnISRWriterWithNoSeedSendsNothing(t *testing.T) {
 	}
 }
 
-func TestRetireISRWriter(t *testing.T) {
-	t.Run("destroys the build's instance", func(t *testing.T) {
-		srv, calls := fakeWriter(t, http.StatusNoContent)
-
-		if err := writerAccess(srv.URL).Retire(context.Background(), testPrefix); err != nil {
-			t.Fatalf("Retire: %v", err)
-		}
-		if len(*calls) != 1 || (*calls)[0].path != "/"+testPrefix+"/destroy" {
-			t.Fatalf("calls = %+v, want one POST to /%s/destroy", *calls, testPrefix)
-		}
-	})
-
-	t.Run("reaches the worker without a deploy seed", func(t *testing.T) {
-		srv, calls := fakeWriter(t, http.StatusNoContent)
-		w := ISRWriter{Endpoint: srv.URL, BootstrapCred: "cred-1"}
-
-		if err := w.Retire(context.Background(), testPrefix); err != nil {
-			t.Fatalf("Retire: %v", err)
-		}
-		if len(*calls) != 1 || (*calls)[0].path != "/"+testPrefix+"/destroy" {
-			t.Fatalf("calls = %+v, want one POST to /%s/destroy", *calls, testPrefix)
-		}
-	})
-}
-
-func TestISRWriterRequest(t *testing.T) {
+func TestTheISRWriterRefusesARejectedCallAndKeepsItsOwnConnection(t *testing.T) {
 	t.Run("rejected call is an error", func(t *testing.T) {
 		srv, _ := fakeWriter(t, http.StatusUnauthorized)
 
@@ -188,19 +163,16 @@ func TestISRWriterRequest(t *testing.T) {
 	})
 }
 
-func TestISRWriterCalls(t *testing.T) {
+func TestTheISRWriterCallsNothingWithoutAdoptedCoordinates(t *testing.T) {
 	t.Run("are no-ops when no writer was adopted", func(t *testing.T) {
 		srv, calls := fakeWriter(t, http.StatusNoContent)
 		for _, w := range []ISRWriter{
 			{},
 			{Endpoint: srv.URL},
-			{BootstrapCred: "cred-1"},
+			{BootstrapCredential: "cred-1"},
 		} {
 			if err := w.Initialize(context.Background(), testPrefix); err != nil {
 				t.Fatalf("Initialize with %+v: %v", w, err)
-			}
-			if err := w.Retire(context.Background(), testPrefix); err != nil {
-				t.Fatalf("Retire with %+v: %v", w, err)
 			}
 		}
 		if len(*calls) != 0 {

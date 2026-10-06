@@ -21,17 +21,17 @@ func programmed(slug string, tier environment.Tier) EntryProgram {
 			Variables: map[string]string{"OCEL_ORIGIN_ONLY": "v"},
 			Secrets:   map[string]string{"OCEL_ORIGIN_KEY": "s"},
 		},
-		Values:              map[string]string{"cacheBucket": "ocel-edge-cache-preview"},
-		StoreScriptName:     "ocel-deployments-store-preview",
-		StoreEndpoint:       "https://store.example",
-		StoreBootstrapCred:  "store-cred",
-		ISRWriterScriptName: "ocel-isr-writer-preview",
+		Values:                   map[string]string{"cacheBucket": "ocel-edge-cache-preview"},
+		StoreScriptName:          "ocel-deployments-store-preview",
+		StoreEndpoint:            "https://store.example",
+		StoreBootstrapCredential: "store-cred",
+		ISRWriterScriptName:      "ocel-isr-writer-preview",
 	}
 }
 
 const previewKey edge.PreviewKey = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
 
-func TestEntryProgramForTheSharedPreviewEntry(t *testing.T) {
+func TestTheSharedPreviewEntryProgramBindsTheStoreWorkerAndTheBaseDomain(t *testing.T) {
 	entry := programmed("", environment.TierPreview)
 	entry.PreviewBaseDomain = "preview.acme.com"
 	entry.PreviewKey = previewKey
@@ -103,7 +103,7 @@ func TestEntryProgramRefusesAWorkerThatVerifiesPreviewLabelsWithNoKey(t *testing
 	}
 }
 
-func TestEntryProgramForAPreviewProject(t *testing.T) {
+func TestAPreviewProjectEntryProgramNamesItsWorkerAndReadsTheStoreOverItsEndpoint(t *testing.T) {
 	project := programmed("proj", environment.TierPreview)
 	project.PreviewBaseDomain = "preview.acme.com"
 	project.PreviewKey = previewKey
@@ -140,9 +140,9 @@ func TestEntryProgramForAPreviewProject(t *testing.T) {
 	if _, bound := built.Spec.Worker.Services[genericStoreBinding]; bound {
 		t.Errorf("Services = %v, want no store binding: a project worker reads the store over its endpoint", built.Spec.Worker.Services)
 	}
-	if built.Spec.StoreEndpoint != project.StoreEndpoint || built.Spec.BootstrapCred != project.StoreBootstrapCred {
+	if built.Spec.StoreEndpoint != project.StoreEndpoint || built.Spec.BootstrapCredential != project.StoreBootstrapCredential {
 		t.Errorf("store = %q/%q, want %q/%q",
-			built.Spec.StoreEndpoint, built.Spec.BootstrapCred, project.StoreEndpoint, project.StoreBootstrapCred)
+			built.Spec.StoreEndpoint, built.Spec.BootstrapCredential, project.StoreEndpoint, project.StoreBootstrapCredential)
 	}
 }
 
@@ -166,7 +166,7 @@ func TestEntryProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
 	}
 }
 
-func TestEntryProgramForAProductionProject(t *testing.T) {
+func TestAProductionProjectEntryProgramSweepsItsOwnScriptAndCarriesNoPreviewConfig(t *testing.T) {
 	built, err := programmed("proj", environment.TierProduction).Build()
 	if err != nil {
 		t.Fatalf("Build: %v", err)
