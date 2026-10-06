@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	pubsub "google.golang.org/api/pubsub/v1"
+
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
@@ -141,5 +143,156 @@ func TestGrantingAPublisherTouchesOnlyTheTopicsNotTheirDeadLetters(t *testing.T)
 		if strings.HasPrefix(call, "PUT ") || strings.Contains(call, "/subscriptions/") || strings.Contains(call, "dead") {
 			t.Errorf("GrantPublisher() called %q, and granting a publisher creates and reads nothing else", call)
 		}
+	}
+}
+
+const revoked = "serviceAccount:app@acme-prod.iam.gserviceaccount.com"
+const bystander = "serviceAccount:other@acme-prod.iam.gserviceaccount.com"
+
+type policyServer struct {
+	mu       sync.Mutex
+	policies map[string]*pubsub.Policy
+	gone     map[string]bool
+	conflict int
+	writes   map[string]int
+}
+
+func (p *policyServer) serve(w http.ResponseWriter, r *http.Request) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	path := r.URL.Path
+	topic := strings.TrimSuffix(strings.TrimSuffix(path, ":getIamPolicy"), ":setIamPolicy")
+	if p.gone[topic] {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND"}}`))
+		return
+	}
+	if strings.HasSuffix(path, ":getIamPolicy") {
+		policy := p.policies[topic]
+		if policy == nil {
+			policy = &pubsub.Policy{Etag: "BwXhoLA="}
+		}
+		_ = json.NewEncoder(w).Encode(policy)
+		return
+	}
+	if p.conflict > 0 {
+		p.conflict--
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error":{"code":409,"status":"ABORTED"}}`))
+		return
+	}
+	var asked pubsub.SetIamPolicyRequest
+	if err := json.NewDecoder(r.Body).Decode(&asked); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	p.policies[topic] = asked.Policy
+	p.writes[topic]++
+	_ = json.NewEncoder(w).Encode(asked.Policy)
+}
+
+func revoking(t *testing.T, policies map[string]*pubsub.Policy) (*policyServer, topics.Names, *ports.Clients) {
+	t.Helper()
+	state := &policyServer{policies: map[string]*pubsub.Policy{}, gone: map[string]bool{}, writes: map[string]int{}}
+	server := httptest.NewServer(http.HandlerFunc(state.serve))
+	t.Cleanup(server.Close)
+	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
+	for name, policy := range policies {
+		state.policies["/v1/"+topics.TopicPath("acme-prod", names.Topic(name))] = policy
+	}
+	return state, names, &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: server.URL}
+}
+
+func (p *policyServer) path(names topics.Names, topic string) string {
+	return "/v1/" + topics.TopicPath("acme-prod", names.Topic(topic))
+}
+
+func membersOf(policy *pubsub.Policy, role string) []string {
+	for _, binding := range policy.Bindings {
+		if binding.Role == role {
+			return binding.Members
+		}
+	}
+	return nil
+}
+
+func TestRevokingAPublisherTakesOnlyThatMemberOffEachTopic(t *testing.T) {
+	state, names, clients := revoking(t, map[string]*pubsub.Policy{
+		"orders": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{
+			{Role: "roles/pubsub.publisher", Members: []string{revoked, bystander}},
+			{Role: "roles/pubsub.viewer", Members: []string{revoked}},
+		}},
+		"resize": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{bystander}}}},
+	})
+
+	taken, err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: revoked}).RevokePublisher(context.Background(), clients)
+	if err != nil {
+		t.Fatalf("RevokePublisher() = %v", err)
+	}
+
+	orders := state.policies[state.path(names, "orders")]
+	if got := membersOf(orders, "roles/pubsub.publisher"); !slices.Equal(got, []string{bystander}) {
+		t.Errorf("orders publishers = %q, want only the other member", got)
+	}
+	if got := membersOf(orders, "roles/pubsub.viewer"); !slices.Equal(got, []string{revoked}) {
+		t.Errorf("orders viewers = %q, want the viewer role untouched", got)
+	}
+	if n := state.writes[state.path(names, "resize")]; n != 0 {
+		t.Errorf("resize was written %d times, want none: the member did not hold it", n)
+	}
+	keys := make([]string, 0, len(taken.Topics))
+	for name := range taken.Topics {
+		keys = append(keys, name)
+	}
+	if !slices.Equal(keys, []string{"orders"}) {
+		t.Errorf("RevokePublisher() returned topics %q, want only the one the member was taken off", keys)
+	}
+	if taken.Publisher != revoked || taken.Names != names {
+		t.Errorf("RevokePublisher() returned %+v, want the same names and publisher", taken)
+	}
+}
+
+func TestRevokingTheLastPublisherOfATopicDropsItsBinding(t *testing.T) {
+	state, names, clients := revoking(t, map[string]*pubsub.Policy{
+		"orders": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{revoked}}}},
+	})
+
+	if _, err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: revoked}).RevokePublisher(context.Background(), clients); err != nil {
+		t.Fatalf("RevokePublisher() = %v", err)
+	}
+
+	if bindings := state.policies[state.path(names, "orders")].Bindings; len(bindings) != 0 {
+		t.Errorf("orders binds %+v, want no binding left with no members", bindings)
+	}
+}
+
+func TestRevokingAPublisherFromATopicThatIsGoneSucceeds(t *testing.T) {
+	state, names, clients := revoking(t, map[string]*pubsub.Policy{
+		"orders": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{revoked}}}},
+	})
+	state.gone[state.path(names, "resize")] = true
+
+	taken, err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: revoked}).RevokePublisher(context.Background(), clients)
+	if err != nil {
+		t.Fatalf("RevokePublisher() = %v, want a deleted topic to have nothing to revoke", err)
+	}
+	if _, listed := taken.Topics["resize"]; listed {
+		t.Errorf("RevokePublisher() returned the deleted topic resize in %v", taken.Topics)
+	}
+}
+
+func TestRevokingAPublisherRetriesAPolicyChangedUnderIt(t *testing.T) {
+	state, names, clients := revoking(t, map[string]*pubsub.Policy{
+		"orders": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{revoked, bystander}}}},
+	})
+	state.conflict = 1
+
+	if _, err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: revoked}).RevokePublisher(context.Background(), clients); err != nil {
+		t.Fatalf("RevokePublisher() = %v", err)
+	}
+
+	if got := membersOf(state.policies[state.path(names, "orders")], "roles/pubsub.publisher"); !slices.Equal(got, []string{bystander}) {
+		t.Errorf("orders publishers = %q after a conflict, want only the other member", got)
 	}
 }

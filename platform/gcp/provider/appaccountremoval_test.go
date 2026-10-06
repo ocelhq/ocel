@@ -8,11 +8,13 @@ import (
 
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iam/v1"
+	pubsub "google.golang.org/api/pubsub/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -275,5 +277,103 @@ func TestDestroyingTheContainerAppOfTheLastEnvironmentRunningItRevokesItsAccount
 	released.destroy(t, second.Ref)
 	if holding() {
 		t.Errorf("the project still binds %q after the last environment running the container app was destroyed", projectBindingsOf(server.identities()))
+	}
+}
+
+func topicBinding(declared string) provider.Binding {
+	return provider.Binding{
+		Type: provider.BindingTopic, Name: "topic--" + declared, Resource: declared,
+		Properties: map[string]string{topicPathProperty: declared, topicDeclaredProperty: declared, topicSpecProperty: "{}"},
+	}
+}
+
+func recordedTierTopics(t *testing.T, spec provider.StackSpec, other ...naming.StackName) keyvalue.Store {
+	t.Helper()
+	store := fake.NewKeyValues()
+	write := func(name naming.StackName, recorded stackrecords.Stack) {
+		if err := stackrecords.Write(context.Background(), store, spec.Ref.Tier, spec.Ref.Project, name, recorded); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(spec.Ref.Name, stackrecords.Stack{Kind: provider.StackApp, App: "web"})
+	for _, env := range []string{stackrecords.ProductionEnv, "pr-6"} {
+		write(naming.InfraStack(env), stackrecords.Stack{Kind: provider.StackInfra, Bindings: []provider.Binding{topicBinding("resize")}})
+	}
+	for _, name := range other {
+		write(name, stackrecords.Stack{Kind: provider.StackApp, App: name.App})
+	}
+	return store
+}
+
+func resizePath(c *clients, spec provider.StackSpec, env string) string {
+	ref := spec.Ref
+	ref.Name = naming.InfraStack(env)
+	return "/v1/projects/acme-prod/topics/" + taskNames(c.Names, ref).Topic("resize")
+}
+
+func publishersOf(server *iamServer, path string) []string {
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	for _, binding := range topicBindingsOf(server.topicPolicies[path]) {
+		if binding.Role == "roles/pubsub.publisher" {
+			return binding.Members
+		}
+	}
+	return nil
+}
+
+func TestRemovingTheLastEnvironmentRunningAnAppTakesItsAccountOffEveryTopicOfTheTier(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c, spec, member := grantedAppAccount(t, server)
+	other := "serviceAccount:other@acme-prod.iam.gserviceaccount.com"
+	prod, preview := resizePath(c, spec, stackrecords.ProductionEnv), resizePath(c, spec, "pr-6")
+	if !slices.Contains(publishersOf(server, prod), member) {
+		t.Fatalf("prod's resize has publishers %q before removal, want the account in them", publishersOf(server, prod))
+	}
+	server.topicPolicies[preview] = &pubsub.Policy{Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{member, other}}}}
+
+	if err := forgetUnusedAppAccount(context.Background(), c, recordedTierTopics(t, spec), spec.Ref, nil); err != nil {
+		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	}
+
+	if got := publishersOf(server, prod); slices.Contains(got, member) {
+		t.Errorf("prod's resize still has publishers %q, want the account gone", got)
+	}
+	if got := publishersOf(server, preview); !slices.Equal(got, []string{other}) {
+		t.Errorf("pr-6's resize has publishers %q, want only the other member", got)
+	}
+}
+
+func TestRemovingOneEnvironmentLeavesTheAppsTopicGrants(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c, spec, member := grantedAppAccount(t, server)
+	writes := server.topicWrites
+
+	if err := forgetUnusedAppAccount(context.Background(), c, recordedTierTopics(t, spec, stackOf("pr-8", "web", "r2")), spec.Ref, nil); err != nil {
+		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	}
+
+	if server.topicWrites != writes {
+		t.Errorf("topic policies were written %d times, want none while pr-8 runs the app", server.topicWrites-writes)
+	}
+	if got := publishersOf(server, resizePath(c, spec, stackrecords.ProductionEnv)); !slices.Contains(got, member) {
+		t.Errorf("prod's resize has publishers %q, want the account kept", got)
+	}
+}
+
+func TestRevokingAnAppsTopicGrantsSkipsATopicThatIsGone(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c, spec, member := grantedAppAccount(t, server)
+	server.deletedTopics = map[string]bool{resizePath(c, spec, stackrecords.ProductionEnv): true}
+
+	if err := forgetUnusedAppAccount(context.Background(), c, recordedTierTopics(t, spec), spec.Ref, nil); err != nil {
+		t.Fatalf("forgetUnusedAppAccount() = %v, want a deleted topic to have nothing to revoke", err)
+	}
+
+	if got := projectBindingsOf(server); slices.ContainsFunc(got, func(bound string) bool { return strings.Contains(bound, member) }) {
+		t.Errorf("the project still binds %q, want the member gone from it", got)
 	}
 }

@@ -101,6 +101,37 @@ func (t Topology) GrantPublisher(ctx context.Context, clients *ports.Clients) er
 	return nil
 }
 
+func (t Topology) RevokePublisher(ctx context.Context, clients *ports.Clients) (Topology, error) {
+	taken := Topology{Names: t.Names, Publisher: t.Publisher, Agent: t.Agent}
+	if t.Publisher == "" {
+		return taken, nil
+	}
+	service, err := clients.PubSub()
+	if err != nil {
+		return taken, err
+	}
+	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
+		path := TopicPath(clients.Project, t.Names.Topic(name))
+		removed, err := revokePubSubRole(ctx, path, publisherRole, t.Publisher, iamPolicyCalls{
+			read: func() (*pubsub.Policy, error) { return service.Projects.Topics.GetIamPolicy(path).Context(ctx).Do() },
+			write: func(policy *pubsub.Policy) error {
+				_, err := service.Projects.Topics.SetIamPolicy(path, &pubsub.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do()
+				return err
+			},
+		})
+		if err != nil {
+			return taken, err
+		}
+		if removed {
+			if taken.Topics == nil {
+				taken.Topics = map[string]*provider.TopicSpec{}
+			}
+			taken.Topics[name] = t.Topics[name]
+		}
+	}
+	return taken, nil
+}
+
 func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error {
 	service, err := clients.PubSub()
 	if err != nil {
@@ -252,6 +283,42 @@ func grantPubSubRole(ctx context.Context, path, role, member string, calls iamPo
 	return nil
 }
 
+func revokePubSubRole(ctx context.Context, path, role, member string, calls iamPolicyCalls) (bool, error) {
+	var refused error
+	for attempt := range grantAttempts {
+		if attempt > 0 && !waited(ctx, attempt) {
+			return false, ctx.Err()
+		}
+		var policy *pubsub.Policy
+		if err := retried(ctx, func() error {
+			var readErr error
+			policy, readErr = calls.read()
+			return readErr
+		}); err != nil {
+			if isAnswered(err, http.StatusNotFound) {
+				return false, nil
+			}
+			return false, fmt.Errorf("read who may reach %s: %w", path, err)
+		}
+		bindings, removed := withoutMember(policy.Bindings, role, member)
+		if !removed {
+			return false, nil
+		}
+		policy.Bindings = bindings
+		refused = retried(ctx, func() error { return calls.write(policy) })
+		if refused == nil {
+			return true, nil
+		}
+		if isAnswered(refused, http.StatusNotFound) {
+			return false, nil
+		}
+		if !isAnswered(refused, http.StatusConflict) {
+			break
+		}
+	}
+	return false, fmt.Errorf("revoke %s %s on %s: %w", member, role, path, refused)
+}
+
 func holdsRole(policy *pubsub.Policy, role, member string) bool {
 	return slices.ContainsFunc(policy.Bindings, func(binding *pubsub.Binding) bool {
 		return binding.Role == role && binding.Condition == nil && slices.Contains(binding.Members, member)
@@ -266,6 +333,20 @@ func withMember(bindings []*pubsub.Binding, role, member string) []*pubsub.Bindi
 		}
 	}
 	return append(bindings, &pubsub.Binding{Role: role, Members: []string{member}})
+}
+
+func withoutMember(bindings []*pubsub.Binding, role, member string) ([]*pubsub.Binding, bool) {
+	for i, binding := range bindings {
+		if binding.Role != role || binding.Condition != nil || !slices.Contains(binding.Members, member) {
+			continue
+		}
+		binding.Members = slices.DeleteFunc(binding.Members, func(held string) bool { return held == member })
+		if len(binding.Members) == 0 {
+			bindings = slices.Delete(bindings, i, i+1)
+		}
+		return bindings, true
+	}
+	return bindings, false
 }
 
 func (t Topology) removeConsumers(ctx context.Context, clients *ports.Clients, topic string, consumers []string) error {
