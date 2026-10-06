@@ -23,8 +23,8 @@ type appAccount struct {
 	app     string
 }
 
-func retiredDelayDescription(tier environment.Tier) string {
-	return "the identity a delayed message of the " + string(tier) + " tier is published to its topic as"
+func retiredWorkloadDescription(tier environment.Tier) string {
+	return "the identity every app ocel deploys in the " + string(tier) + " tier runs as"
 }
 
 func (n Names) accountID(account *iam.ServiceAccount) (string, bool) {
@@ -63,9 +63,9 @@ func (n Names) readAppAccount(account *iam.ServiceAccount) (appAccount, bool) {
 	return appAccount{id: id, tier: tier, project: project, app: app}, true
 }
 
-func (n Names) isRetiredDelayAccount(account *iam.ServiceAccount, tier environment.Tier) bool {
+func (n Names) isRetiredWorkloadAccount(account *iam.ServiceAccount, tier environment.Tier) bool {
 	id, here := n.accountID(account)
-	return here && id == string(n.namespace)+"-"+string(tier) && account.Description == retiredDelayDescription(tier)
+	return here && id == string(n.namespace)+"-"+string(tier) && account.Description == retiredWorkloadDescription(tier)
 }
 
 func isAppRecorded(stacks []stackrecords.NamedStack, app string) bool {
@@ -95,7 +95,7 @@ func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.Bootst
 			return fmt.Errorf("list the service accounts of project %s: %w", b.clients.project, err)
 		}
 		for _, account := range page.Accounts {
-			if b.clients.isRetiredDelayAccount(account, req.Tier) {
+			if b.clients.isRetiredWorkloadAccount(account, req.Tier) {
 				id, _ := b.clients.accountID(account)
 				retired = append(retired, id)
 			} else if found, ok := b.clients.readAppAccount(account); ok && found.tier == req.Tier {
@@ -109,11 +109,11 @@ func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.Bootst
 
 	var failures []error
 	for _, id := range retired {
-		deleted, err := b.deleteAccount(ctx, id)
+		deleted, err := b.retireWorkloadAccount(ctx, id)
 		if err != nil {
 			failures = append(failures, err)
 		} else if deleted {
-			progress.Say(retiredDelayDeleted(id, req.Tier))
+			progress.Say(retiredWorkloadDeleted(id, req.Tier))
 		}
 	}
 	deleted := 0
@@ -144,8 +144,15 @@ func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.Bootst
 	return errors.Join(failures...)
 }
 
-func retiredDelayDeleted(id string, tier environment.Tier) string {
-	return "Deleted the " + id + " service account: a delayed message of the " + string(tier) + " tier is now published as the app that sent it"
+func retiredWorkloadDeleted(id string, tier environment.Tier) string {
+	return "Deleted the " + id + " service account: every app of the " + string(tier) + " tier runs as an account of its own"
+}
+
+func (b bootstrap) retireWorkloadAccount(ctx context.Context, id string) (bool, error) {
+	if _, err := b.clients.unbindProjectMember(ctx, "serviceAccount:"+id+"@"+b.clients.project+accountDomain); err != nil {
+		return false, err
+	}
+	return b.deleteAccount(ctx, id)
 }
 
 func (b bootstrap) deleteAccount(ctx context.Context, id string) (bool, error) {
@@ -162,7 +169,7 @@ func (b bootstrap) deleteAccount(ctx context.Context, id string) (bool, error) {
 	return true, nil
 }
 
-func (b bootstrap) deleteRetiredDelayAccount(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+func (b bootstrap) deleteRetiredWorkloadAccount(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return err
@@ -175,12 +182,12 @@ func (b bootstrap) deleteRetiredDelayAccount(ctx context.Context, tier environme
 	if err != nil {
 		return fmt.Errorf("read the %s service account: %w", id, err)
 	}
-	if !b.clients.isRetiredDelayAccount(account, tier) {
+	if !b.clients.isRetiredWorkloadAccount(account, tier) {
 		return nil
 	}
-	deleted, err := b.deleteAccount(ctx, id)
+	deleted, err := b.retireWorkloadAccount(ctx, id)
 	if deleted {
-		ensureProgress(progress).Say(retiredDelayDeleted(id, tier))
+		ensureProgress(progress).Say(retiredWorkloadDeleted(id, tier))
 	}
 	return err
 }
