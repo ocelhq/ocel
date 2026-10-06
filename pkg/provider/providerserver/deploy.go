@@ -1163,6 +1163,7 @@ func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
 		Project:           naming.Sanitize(r.spec.Slug),
 		App:               entry.App,
 		Framework:         entry.Manifest.GetFramework().GetName(),
+		Compute:           entry.Compute(),
 		Stack:             entry.Stack,
 		Coordinate:        appCoordinate(r.spec, entry.App, entry.Build.Release()),
 		EdgeRunsCode:      r.front.Facts().RunsCode,
