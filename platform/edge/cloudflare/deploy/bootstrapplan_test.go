@@ -2,6 +2,7 @@ package cloudflare
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/option"
+	"github.com/cloudflare/cloudflare-go/v4/workers"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -404,4 +406,30 @@ func TestDeployedScriptWithoutTheModuleItExpected(t *testing.T) {
 			t.Errorf("error %v does not name %q", err, want)
 		}
 	}
+}
+
+func TestAWorkerBoundToAnotherQueueReadsAsDrifted(t *testing.T) {
+	bound := bootstrapWorker{worker: edge.Worker{Queues: map[string]string{refreshQueueBinding: "ocel-refresh"}}}
+	var current, other workers.ScriptScriptAndVersionSettingGetResponse
+	for settings, queue := range map[*workers.ScriptScriptAndVersionSettingGetResponse]string{&current: "ocel-refresh", &other: "another-queue"} {
+		raw := `{"compatibility_date":"` + compatDate + `","compatibility_flags":` + flagsJSON(t) + `,"bindings":[{"type":"queue","name":"` + refreshQueueBinding + `","queue_name":"` + queue + `"}]}`
+		if err := json.Unmarshal([]byte(raw), settings); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !settingsCurrent(&current, bound) {
+		t.Error("a worker bound to the queue this build names reads as drifted")
+	}
+	if settingsCurrent(&other, bound) {
+		t.Error("a worker bound to another queue reads as current")
+	}
+}
+
+func flagsJSON(t *testing.T) string {
+	t.Helper()
+	raw, err := json.Marshal(compatFlags)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
 }

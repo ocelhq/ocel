@@ -250,19 +250,70 @@ func TestTheBootstrapRefusalNamesTheCallerAndWhatToRerun(t *testing.T) {
 	}
 }
 
-func TestADeployIsNotRefusedForAMissingRefresher(t *testing.T) {
+func refreshingCaller() bootstrapCaller {
+	return bootstrapCaller{worker: "the entry worker this deploy uploads", retry: "deploy again", refreshes: true}
+}
+
+func TestADeployThatRefreshesThroughTheQueueIsRefusedUntilTheQueueIsBootstrapped(t *testing.T) {
 	m := bootstrapMock(t, false)
 	p := mutualTLSEdge(t, m)
 	installBootstrap(t, m, environment.TierProduction)
-	for _, script := range []string{refresherScript} {
-		if _, present := m.putBodies[script]; present {
-			t.Fatalf("%s is installed before the test starts", script)
+
+	err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller())
+
+	refused := refusedNotReady(t, err)
+	for _, want := range []string{`refresh queue "ocel-refresh" is missing`, `refresher worker "ocel-refresher" is missing`, "ocel bootstrap production"} {
+		if !strings.Contains(refused.Message, want) {
+			t.Errorf("refusal %q does not say %q", refused.Message, want)
 		}
 	}
+}
 
-	err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, bootstrapCaller{worker: "the entry worker", retry: "deploy again"})
+func TestADeployThatRefreshesThroughTheQueueIsRefusedWhileItsRefresherIsBehind(t *testing.T) {
+	m := bootstrapMock(t, false)
+	p := mutualTLSEdge(t, m)
+	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller()); err != nil {
+		t.Fatalf("refuseBootstrapBehind after a bootstrap = %v, want none", err)
+	}
+	prior := refresherBundle
+	refresherBundle = []byte("export default {rebuilt:1}")
+	t.Cleanup(func() { refresherBundle = prior })
+
+	err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller())
+
+	refused := refusedNotReady(t, err)
+	if !strings.Contains(refused.Message, `refresher worker "ocel-refresher" is behind this build`) {
+		t.Errorf("refusal %q does not name the refresher as behind", refused.Message)
+	}
+}
+
+func TestADeployThatRefreshesThroughTheQueueIsRefusedWithoutAConsumer(t *testing.T) {
+	m := bootstrapMock(t, false)
+	p := mutualTLSEdge(t, m)
+	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
+		t.Fatal(err)
+	}
+	m.queues[0]["consumers"] = []any{}
+
+	err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller())
+
+	refused := refusedNotReady(t, err)
+	if !strings.Contains(refused.Message, `has no consumer that drains it into "ocel-refresher"`) {
+		t.Errorf("refusal %q does not name the missing consumer", refused.Message)
+	}
+}
+
+func TestADeployThatRefreshesElsewhereIsNotRefusedForTheRefreshQueue(t *testing.T) {
+	m := bootstrapMock(t, false)
+	p := mutualTLSEdge(t, m)
+	installBootstrap(t, m, environment.TierProduction)
+
+	err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, bootstrapCaller{worker: "the entry worker this deploy uploads", retry: "deploy again"})
 
 	if err != nil {
-		t.Errorf("refuseBootstrapBehind = %v, want a deploy kept going while the refresher is missing: the gate for it is not part of this bootstrap", err)
+		t.Errorf("refuseBootstrapBehind = %v, want a deploy that binds no refresh queue left alone", err)
 	}
 }

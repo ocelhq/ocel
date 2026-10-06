@@ -168,6 +168,12 @@ func TestScriptBindings(t *testing.T) {
 			want:   []map[string]string{{"name": "OCEL_ORIGIN_CLIENT_CERTIFICATE", "certificate_id": "c1"}},
 		},
 		{
+			name:   "a queue becomes a queue producer binding naming its queue",
+			worker: edge.Worker{Main: mainModule(), Queues: map[string]string{"OCEL_REFRESH_QUEUE": "ocel-refresh"}},
+			typ:    "queue",
+			want:   []map[string]string{{"name": "OCEL_REFRESH_QUEUE", "queue_name": "ocel-refresh"}},
+		},
+		{
 			name:   "a loader binding maps to a worker_loader binding",
 			worker: edge.Worker{Main: mainModule(), LoaderBinding: "LOADER"},
 			typ:    "worker_loader",

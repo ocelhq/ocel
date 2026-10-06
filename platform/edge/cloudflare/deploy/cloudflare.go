@@ -652,6 +652,13 @@ func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 			"certificate_id": worker.ClientCertificates[name],
 		})
 	}
+	for _, name := range slices.Sorted(maps.Keys(worker.Queues)) {
+		bindings = append(bindings, map[string]any{
+			"type":       "queue",
+			"name":       name,
+			"queue_name": worker.Queues[name],
+		})
+	}
 	return bindings
 }
 

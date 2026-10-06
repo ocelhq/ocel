@@ -194,6 +194,8 @@ type Worker struct {
 	Services      map[string]string
 
 	ClientCertificates map[string]string
+
+	Queues map[string]string
 }
 
 type ObjectStore struct {
