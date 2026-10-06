@@ -33,6 +33,7 @@ type originHostRecord struct {
 	Service string `json:"service"`
 	Tag     string `json:"tag"`
 	Backend string `json:"backend"`
+	Routed  bool   `json:"routed"`
 }
 
 func (e *Edge) originHostKey(tier environment.Tier, hostname string) keyvalue.Key {
@@ -64,12 +65,18 @@ func (e *Edge) RouteOriginHost(ctx context.Context, host OriginHost) error {
 		if err := json.Unmarshal(entry.Value, &held); err != nil {
 			return fmt.Errorf("decode what %s is routed to on the %s edge: %w", host.Hostname, Kind, err)
 		}
-		if held == record {
-			return e.deps.Routes.Route(ctx, balancer.URLMap, host.Hostname, record.Backend)
+		if routed := held; routed.Routed {
+			routed.Routed = false
+			if routed == record {
+				return e.deps.Routes.Route(ctx, balancer.URLMap, host.Hostname, record.Backend)
+			}
 		}
 	} else if err := e.refuseFullURLMap(ctx, balancer.URLMap, []string{host.Hostname}, 0, originLimitAdvice); err != nil {
 		return err
 	} else if err := e.refuseExhaustedBackendServiceQuota(ctx, []string{host.Hostname}, originLimitAdvice); err != nil {
+		return err
+	}
+	if entry, err = e.writeOriginHostRecord(ctx, entry, record); err != nil {
 		return err
 	}
 	target := Target{Tier: host.Tier, Slug: host.Slug, Origin: host.Hostname}
@@ -79,13 +86,22 @@ func (e *Edge) RouteOriginHost(ctx context.Context, host OriginHost) error {
 	if err := e.deps.Routes.Route(ctx, balancer.URLMap, host.Hostname, record.Backend); err != nil {
 		return err
 	}
+	record.Routed = true
+	_, err = e.writeOriginHostRecord(ctx, entry, record)
+	return err
+}
+
+func (e *Edge) writeOriginHostRecord(ctx context.Context, entry keyvalue.Entry, record originHostRecord) (keyvalue.Entry, error) {
+	var err error
 	if entry.Value, err = json.Marshal(record); err != nil {
-		return err
+		return entry, err
 	}
-	if _, err := e.deps.KeyValues.Write(ctx, entry); err != nil {
-		return fmt.Errorf("record that %s is routed on the %s edge: %w", host.Hostname, Kind, err)
+	revision, err := e.deps.KeyValues.Write(ctx, entry)
+	if err != nil {
+		return entry, fmt.Errorf("record %s as routed on the %s edge: %w", record.Backend, Kind, err)
 	}
-	return nil
+	entry.Revision = revision
+	return entry, nil
 }
 
 func (e *Edge) UnrouteOriginHost(ctx context.Context, tier environment.Tier, hostname string) error {
