@@ -1,3 +1,4 @@
+import type http from "node:http";
 import { releaseOf } from "@framework/next-runtime/cache-shaping";
 import { type DispatchHost, dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
@@ -32,6 +33,26 @@ function isImmutable(cacheControl: string | null): boolean {
   return (cacheControl ?? "")
     .split(",")
     .some((directive) => directive.trim().toLowerCase() === "immutable");
+}
+
+export function withholdFromCloudCdn(cacheControl: string | null): string | null {
+  if (cacheControl === null || isImmutable(cacheControl)) return cacheControl;
+  const storable = cacheControl
+    .split(",")
+    .some((directive) => directive.trim().toLowerCase().startsWith("s-maxage"));
+  return storable ? uncacheable : cacheControl;
+}
+
+export function withholdResponsesFromCloudCdn(prototype: http.ServerResponse): void {
+  const writeHead = prototype.writeHead;
+  prototype.writeHead = function (this: http.ServerResponse, ...args: any[]) {
+    if (!this.headersSent) {
+      const current = this.getHeader("cache-control");
+      const withheld = withholdFromCloudCdn(current === undefined ? null : String(current));
+      if (withheld !== null && withheld !== current) this.setHeader("cache-control", withheld);
+    }
+    return (writeHead as any).apply(this, args);
+  } as typeof prototype.writeHead;
 }
 
 export function cacheTagsForCloudCdn(
