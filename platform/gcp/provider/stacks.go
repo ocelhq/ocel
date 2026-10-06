@@ -163,12 +163,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			if refresh != nil {
 				addressed = refresh.addressedTo(service, served.tag)
 			}
-			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, nextCache{
-				bucket:      names.Bucket(spec.Ref.Tier),
-				tagDatabase: "projects/" + names.project + "/databases/" + names.TagDatabase(spec.Ref.Tier),
-				endpoint:    p.containerEndpoint(),
-				edgeStore:   edgeStore,
-			}, addressed)); err != nil {
+			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, nextCacheOf(names, spec.Ref.Tier, p.containerEndpoint(), edgeStore), addressed)); err != nil {
 				return nil, err
 			}
 			if values, err = mergedValues(fn.Name, values, newCDNPurgeEnv(names, spec)); err != nil {
@@ -329,7 +324,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
-	ran, err := p.deployService(ctx, serving{
+	served := serving{
 		service:   service,
 		image:     app.Image,
 		env:       values,
@@ -345,7 +340,18 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		labels:    stackLabels(names, spec.Ref),
 
 		opensOnPromotion: true,
-	}, progress)
+	}
+	if servesNext(app) {
+		edgeStore, err := p.readEdgeISRStore(ctx, spec)
+		if err != nil {
+			return nil, err
+		}
+		served = fillNextContainerDefaults(served)
+		if served.env, err = mergedValues(app.App, values, newNextContainerEnv(spec, served, nextCacheOf(names, spec.Ref.Tier, p.containerEndpoint(), edgeStore))); err != nil {
+			return nil, err
+		}
+	}
+	ran, err := p.deployService(ctx, served, progress)
 	if err != nil {
 		return nil, err
 	}
