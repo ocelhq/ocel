@@ -1,4 +1,4 @@
-import { withCacheHandlers } from "@framework/next-cache/naming";
+import { addCacheHandlers } from "@framework/next-cache/naming";
 
 const productionServerPhase = "phase-production-server";
 
@@ -20,7 +20,7 @@ export function newServerAdapter(runtimeDir: string, installHost: () => void): N
       return {
         ...config,
         cacheMaxMemorySize: 0,
-        ...withCacheHandlers(config, runtimeDir),
+        ...addCacheHandlers(config, runtimeDir),
       };
     },
   };

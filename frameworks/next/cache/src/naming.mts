@@ -10,7 +10,7 @@ export const cacheHandlerFile = "cache-handler.cjs";
 export const useCacheDefaultFile = "use-cache-default.cjs";
 export const useCacheRemoteFile = "use-cache-remote.cjs";
 
-export function withCacheHandlers(
+export function addCacheHandlers(
   config: { cacheHandlers?: Record<string, string> },
   runtimeDir: string,
 ): { cacheHandler: string; cacheHandlers: Record<string, string> } {

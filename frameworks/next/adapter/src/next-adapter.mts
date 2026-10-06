@@ -16,7 +16,7 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { boundCacheTags } from "@framework/next-cache/cache-tags";
-import { cacheKey, variantHeadersFile, withCacheHandlers } from "@framework/next-cache/naming";
+import { addCacheHandlers, cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
 import type { ServeDescriptor } from "@platform/edge-contract/serve";
 import type { AdapterOutput, NextAdapter } from "next";
@@ -1003,7 +1003,7 @@ async function patchCacheHandlers(distDir: string): Promise<void> {
     return;
   }
   if (!manifest.config) return;
-  Object.assign(manifest.config, withCacheHandlers(manifest.config, readNextRuntimeDir()));
+  Object.assign(manifest.config, addCacheHandlers(manifest.config, readNextRuntimeDir()));
   await writeFile(manifestPath, JSON.stringify(manifest));
 }
 
