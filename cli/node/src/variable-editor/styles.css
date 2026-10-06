@@ -1,10 +1,10 @@
 @import "tailwindcss" source(none);
 @import "shadcn/tailwind.css";
-@import "@ui/theme/tokens.css";
-@import "@ui/theme/base.css";
+@import "@ocelhq/theme/tokens.css";
+@import "@ocelhq/theme/base.css";
 
 @source "./";
-@source "../../../../ui/variables/src";
+@source "../../node_modules/@ocelhq/variables-ui/dist";
 
 @custom-variant dark (&:is(.dark *));
 

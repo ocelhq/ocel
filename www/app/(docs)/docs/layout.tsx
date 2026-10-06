@@ -8,30 +8,30 @@ import { layoutTree, tabColors } from "@/lib/source";
 import "./globals.css";
 
 const grotesk = localFont({
-  src: "../../../../ui/theme/fonts/space-grotesk/space-grotesk-latin-300-700.woff2",
+  src: "../../../node_modules/@ocelhq/theme/fonts/space-grotesk/space-grotesk-latin-300-700.woff2",
   weight: "400 600",
   variable: "--font-grotesk",
 });
 const plexSans = localFont({
-  src: "../../../../ui/theme/fonts/ibm-plex-sans/ibm-plex-sans-latin-100-700.woff2",
+  src: "../../../node_modules/@ocelhq/theme/fonts/ibm-plex-sans/ibm-plex-sans-latin-100-700.woff2",
   weight: "400 600",
   variable: "--font-plex-sans",
 });
 const plexMono = localFont({
   src: [
     {
-      path: "../../../../ui/theme/fonts/ibm-plex-mono/ibm-plex-mono-latin-400.woff2",
+      path: "../../../node_modules/@ocelhq/theme/fonts/ibm-plex-mono/ibm-plex-mono-latin-400.woff2",
       weight: "400",
     },
     {
-      path: "../../../../ui/theme/fonts/ibm-plex-mono/ibm-plex-mono-latin-500.woff2",
+      path: "../../../node_modules/@ocelhq/theme/fonts/ibm-plex-mono/ibm-plex-mono-latin-500.woff2",
       weight: "500",
     },
   ],
   variable: "--font-plex-mono",
 });
 const archivo = localFont({
-  src: "../../../../ui/theme/fonts/archivo/archivo-latin-800.woff2",
+  src: "../../../node_modules/@ocelhq/theme/fonts/archivo/archivo-latin-800.woff2",
   weight: "800",
   variable: "--font-archivo",
 });

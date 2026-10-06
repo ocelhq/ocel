@@ -6,8 +6,8 @@ import type {
   State,
   VariablesPort,
   Version,
-} from "@ui/variables";
-import { VariablesError } from "@ui/variables";
+} from "@ocelhq/variables-ui";
+import { VariablesError } from "@ocelhq/variables-ui";
 
 const token = new URLSearchParams(location.hash.slice(1)).get("t") ?? "";
 history.replaceState(null, "", location.pathname);

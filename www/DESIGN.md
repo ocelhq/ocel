@@ -160,7 +160,8 @@ components:
 
 # Design System: Ocel
 
-Invariants, tokens, register dials and named exceptions live in `ui/theme/DESIGN.md`.
+Invariants, tokens, register dials and named exceptions live in `@ocelhq/theme`'s
+[`DESIGN.md`](https://github.com/ocelhq/console/blob/main/packages/theme/DESIGN.md).
 This file covers the landing and read registers' components, and defers to that file
 wherever the two disagree.
 
@@ -216,7 +217,7 @@ A monochrome drawing with one saturated line and one confirmation green.
 
 **The Dark Screen Rule.** Terminal and code panes keep their dark palette in light mode. They are screens set into the drawing, not part of the paper.
 
-**The Same Ink Rule.** Landing, docs, and dashboard draw from `ui/theme/src/tokens.css`. A new color on one surface is a new color on all of them, so it earns a place there first.
+**The Same Ink Rule.** Landing, docs, and dashboard draw from `@ocelhq/theme/tokens.css`. A new color on one surface is a new color on all of them, so it earns a place there first.
 
 ## Typography
 

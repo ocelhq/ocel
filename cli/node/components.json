@@ -14,7 +14,7 @@
   "rtl": false,
   "aliases": {
     "components": "@/components",
-    "utils": "@ui/variables",
+    "utils": "@ocelhq/variables-ui",
     "ui": "@/components/ui",
     "lib": "@/lib",
     "hooks": "@/hooks"
