@@ -33,6 +33,18 @@ func TestTheNextRuntimeShipsItsEntrypointAndEveryCacheHandler(t *testing.T) {
 	}
 }
 
+func TestTheNextServerRuntimeHoldsTheAdapterAndEveryCacheHandlerItNames(t *testing.T) {
+	files := NextServerRuntime()
+	for _, name := range []string{"server-adapter.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"} {
+		if len(files[name]) == 0 {
+			t.Errorf("NextServerRuntime() holds no bytes for %s, and next start loads it from the image", name)
+		}
+	}
+	if len(files) != 4 {
+		t.Errorf("NextServerRuntime() holds %d files, want the adapter and the three cache handlers", len(files))
+	}
+}
+
 func TestTheContainerRuntimeIsAStaticLinuxBinaryForTheOneArchitectureCloudRunRuns(t *testing.T) {
 	body, err := ContainerRuntime(ContainerArch)
 	if err != nil {
