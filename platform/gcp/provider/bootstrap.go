@@ -946,7 +946,7 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 		}
 		taking.report(progress)
 	}
-	return b.deleteRetiredDelayAccount(ctx, tier, progress)
+	return b.deleteRetiredWorkloadAccount(ctx, tier, progress)
 }
 
 func (r removal) report(progress progress.Log) {

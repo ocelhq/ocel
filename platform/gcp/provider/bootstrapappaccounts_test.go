@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iam/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -40,6 +41,8 @@ type serviceAccountListing struct {
 	tokens   []string
 	deleted  []string
 	listed   int
+	policy   *cloudresourcemanager.Policy
+	events   []string
 }
 
 func listing(accounts ...listedAccount) *serviceAccountListing {
@@ -52,6 +55,20 @@ func (s *serviceAccountListing) handler(t *testing.T) http.HandlerFunc {
 		defer s.mu.Unlock()
 		const collection = "/v1/projects/acme-prod/serviceAccounts"
 		switch {
+		case r.URL.Path == "/v1/projects/acme-prod:getIamPolicy":
+			if s.policy == nil {
+				s.policy = &cloudresourcemanager.Policy{Etag: "BwXhoLA="}
+			}
+			json.NewEncoder(w).Encode(s.policy)
+		case r.URL.Path == "/v1/projects/acme-prod:setIamPolicy":
+			var asked cloudresourcemanager.SetIamPolicyRequest
+			if err := json.NewDecoder(r.Body).Decode(&asked); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			s.policy = asked.Policy
+			s.events = append(s.events, "revoke")
+			json.NewEncoder(w).Encode(s.policy)
 		case r.Method == http.MethodGet && r.URL.Path == collection:
 			s.listed++
 			token := r.URL.Query().Get("pageToken")
@@ -85,6 +102,7 @@ func (s *serviceAccountListing) handler(t *testing.T) http.HandlerFunc {
 				return
 			}
 			s.deleted = append(s.deleted, id)
+			s.events = append(s.events, "delete "+id)
 			w.Write([]byte(`{}`))
 		default:
 			t.Errorf("the sweep called %s %s, which nothing here serves", r.Method, r.URL.Path)
@@ -304,59 +322,101 @@ func TestAnAppAccountIsReadBackFromTheDescriptionItWasCreatedWith(t *testing.T) 
 	}
 }
 
-func TestABootstrapDeletesItsTiersRetiredDelayAccount(t *testing.T) {
+const (
+	workloadDescriptionOnMain = "the identity every app ocel deploys in the preview tier runs as"
+	delayDescriptionOnBranch  = "the identity a delayed message of the preview tier is published to its topic as"
+)
+
+func workloadPolicy() *cloudresourcemanager.Policy {
+	const member = "serviceAccount:ocel-preview@acme-prod.iam.gserviceaccount.com"
+	return &cloudresourcemanager.Policy{Etag: "BwXhoLA=", Bindings: []*cloudresourcemanager.Binding{
+		{Role: "roles/datastore.viewer", Members: []string{member, "serviceAccount:other@acme-prod.iam.gserviceaccount.com"}},
+		{Role: "roles/datastore.user", Members: []string{member}},
+		{Role: "roles/cloudkms.cryptoKeyDecrypter", Members: []string{member}},
+		{Role: "roles/viewer", Members: []string{member}},
+	}}
+}
+
+func TestABootstrapRevokesThenDeletesItsTiersRetiredWorkloadAccount(t *testing.T) {
 	t.Parallel()
 	names := sweepNamed()
-	retired := listedAccount{id: "ocel-preview", description: retiredDelayDescription(environment.TierPreview)}
-	otherTier := listedAccount{id: "ocel-production", description: retiredDelayDescription(environment.TierProduction)}
-	userMade := listedAccount{id: "ocel-preview", description: "made by hand"}
+	retired := listedAccount{id: "ocel-preview", description: workloadDescriptionOnMain}
+	otherTier := listedAccount{id: "ocel-production", description: "the identity every app ocel deploys in the production tier runs as"}
 	running := recordedApp{environment.TierPreview, "shop", stackOf("pr-8", "web", "r1")}
 
-	kept := listing(userMade, otherTier)
-	b, log := sweepingFor(t, kept, running)
-	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log); err != nil {
-		t.Fatalf("deleteUnusedAccounts() = %v", err)
-	}
-	if got := kept.deletes(); len(got) != 0 {
-		t.Errorf("deleted %v, want nothing: one has another description and one belongs to the production tier", got)
+	for name, description := range map[string]string{
+		"made by hand":                         "made by hand",
+		"described as an unreleased build did": delayDescriptionOnBranch,
+	} {
+		kept := listing(listedAccount{id: "ocel-preview", description: description}, otherTier)
+		kept.policy = workloadPolicy()
+		b, log := sweepingFor(t, kept, running)
+		if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log); err != nil {
+			t.Fatalf("%s: deleteUnusedAccounts() = %v", name, err)
+		}
+		if got := kept.deletes(); len(got) != 0 || len(kept.events) != 0 {
+			t.Errorf("%s: deleted %v and wrote %v, want nothing", name, got, kept.events)
+		}
 	}
 
 	retiring := listing(retired, otherTier, appAccountOf(names, environment.TierPreview, "shop", "web"))
-	b, log = sweepingFor(t, retiring, running)
+	retiring.policy = workloadPolicy()
+	b, log := sweepingFor(t, retiring, running)
 	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
-	if got := retiring.deletes(); !slices.Equal(got, []string{"ocel-preview"}) {
-		t.Errorf("deleted %v, want only ocel-preview whatever the records hold", got)
+	if want := []string{"revoke", "delete ocel-preview"}; !slices.Equal(retiring.events, want) {
+		t.Errorf("events = %v, want %v whatever the records hold", retiring.events, want)
 	}
-	if !slices.Contains(log.Lines(), "INFO Deleted the ocel-preview service account: a delayed message of the preview tier is now published as the app that sent it") {
+	assertWorkloadRevoked(t, retiring.policy)
+	if !slices.Contains(log.Lines(), "INFO Deleted the ocel-preview service account: every app of the preview tier runs as an account of its own") {
 		t.Errorf("progress = %q, want the retired account said", log.Lines())
 	}
 }
 
-func TestRemovingATierDeletesItsRetiredDelayAccount(t *testing.T) {
+func assertWorkloadRevoked(t *testing.T, policy *cloudresourcemanager.Policy) {
+	t.Helper()
+	var held []string
+	for _, binding := range policy.Bindings {
+		if slices.Contains(binding.Members, "serviceAccount:ocel-preview@acme-prod.iam.gserviceaccount.com") {
+			held = append(held, binding.Role)
+		}
+	}
+	if want := []string{"roles/viewer"}; !slices.Equal(held, want) {
+		t.Errorf("the retired account still holds %v, want only %v: ocel never granted that one", held, want)
+	}
+	for _, binding := range policy.Bindings {
+		if binding.Role == "roles/datastore.viewer" && !slices.Equal(binding.Members, []string{"serviceAccount:other@acme-prod.iam.gserviceaccount.com"}) {
+			t.Errorf("datastore.viewer members = %v, want the other account kept", binding.Members)
+		}
+	}
+}
+
+func TestRemovingATierRevokesThenDeletesItsRetiredWorkloadAccount(t *testing.T) {
 	t.Parallel()
-	retired := listedAccount{id: "ocel-preview", description: retiredDelayDescription(environment.TierPreview)}
-	server := &serviceAccountListing{byID: map[string]listedAccount{"ocel-preview": retired}}
+	retired := listedAccount{id: "ocel-preview", description: workloadDescriptionOnMain}
+	server := &serviceAccountListing{byID: map[string]listedAccount{"ocel-preview": retired}, policy: workloadPolicy()}
 	b, log := sweepingFor(t, server)
-	if err := b.deleteRetiredDelayAccount(context.Background(), environment.TierPreview, log); err != nil {
-		t.Fatalf("deleteRetiredDelayAccount() = %v", err)
+	if err := b.deleteRetiredWorkloadAccount(context.Background(), environment.TierPreview, log); err != nil {
+		t.Fatalf("deleteRetiredWorkloadAccount() = %v", err)
 	}
-	if got := server.deletes(); !slices.Equal(got, []string{"ocel-preview"}) {
-		t.Errorf("deleted %v, want ocel-preview", got)
+	if want := []string{"revoke", "delete ocel-preview"}; !slices.Equal(server.events, want) {
+		t.Errorf("events = %v, want %v", server.events, want)
 	}
+	assertWorkloadRevoked(t, server.policy)
 
 	for name, byID := range map[string]map[string]listedAccount{
-		"one made by hand": {"ocel-preview": {id: "ocel-preview", description: "made by hand"}},
-		"none":             {},
+		"one made by hand":             {"ocel-preview": {id: "ocel-preview", description: "made by hand"}},
+		"one an unreleased build made": {"ocel-preview": {id: "ocel-preview", description: delayDescriptionOnBranch}},
+		"none":                         {},
 	} {
-		server := &serviceAccountListing{byID: byID}
+		server := &serviceAccountListing{byID: byID, policy: workloadPolicy()}
 		b, log := sweepingFor(t, server)
-		if err := b.deleteRetiredDelayAccount(context.Background(), environment.TierPreview, log); err != nil {
-			t.Fatalf("%s: deleteRetiredDelayAccount() = %v", name, err)
+		if err := b.deleteRetiredWorkloadAccount(context.Background(), environment.TierPreview, log); err != nil {
+			t.Fatalf("%s: deleteRetiredWorkloadAccount() = %v", name, err)
 		}
-		if got := server.deletes(); len(got) != 0 {
-			t.Errorf("%s: deleted %v, want nothing", name, got)
+		if got := server.deletes(); len(got) != 0 || len(server.events) != 0 {
+			t.Errorf("%s: deleted %v and wrote %v, want nothing", name, got, server.events)
 		}
 	}
 }
