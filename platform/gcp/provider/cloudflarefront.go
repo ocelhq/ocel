@@ -10,7 +10,18 @@ import (
 
 type cloudflareFront struct {
 	*cloudflare.Proxy
-	origin edge.Edge
+	origin    edge.Edge
+	options   cloudflare.Options
+	wildcards originWildcards
+}
+
+func (f cloudflareFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+	if base := f.options.OriginBase(spec.Tier); f.Facts().RunsCode && !spec.PruneOnly && base != "" {
+		if err := f.wildcards.ensure(ctx, spec.Tier, base, spec.Warn); err != nil {
+			return nil, err
+		}
+	}
+	return f.Proxy.Reconcile(ctx, spec, prior)
 }
 
 func (f cloudflareFront) Hooks() edge.Hooks {
@@ -29,5 +40,8 @@ func (f cloudflareFront) Bootstrap(ctx context.Context, tier environment.Tier) (
 }
 
 func (f cloudflareFront) Teardown(ctx context.Context, tier environment.Tier) error {
+	if err := f.wildcards.destroy(ctx, tier); err != nil {
+		return err
+	}
 	return f.origin.Teardown(ctx, tier)
 }
