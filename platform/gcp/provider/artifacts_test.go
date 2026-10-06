@@ -66,10 +66,10 @@ func TestRemovingAProjectsEnvironmentFromTheCacheListsOnlyThatProject(t *testing
 	if list != "cache/shop/" {
 		t.Errorf("removing pr-7/shop/ lists %q, want cache/shop/", list)
 	}
-	if !keeps("cache/shop/web/pr-7/r1/isr/tag-clock.json") {
+	if !keeps("cache/shop/web/pr-7/r1/isr/cache/index.cache.json") {
 		t.Error("removing pr-7/shop/ leaves pr-7's own object, want it deleted")
 	}
-	for _, name := range []string{"cache/shop/web/prod/r1/isr/tag-clock.json", "cache/shop/web"} {
+	for _, name := range []string{"cache/shop/web/prod/r1/isr/cache/index.cache.json", "cache/shop/web"} {
 		if keeps(name) {
 			t.Errorf("removing pr-7/shop/ deletes %q, want it left", name)
 		}
@@ -102,7 +102,7 @@ func TestACacheAppPrefixOfAKeyNamingNoAppIsRefused(t *testing.T) {
 	}
 }
 
-func TestPruningAReleasesISRPrefixPlansItsCacheEntriesUseCacheEntriesAndTagSnapshotOnly(t *testing.T) {
+func TestPruningAReleasesISRPrefixPlansItsCacheAndUseCacheEntriesOnly(t *testing.T) {
 	list, keeps, err := cacheSweep("prod/shop/web/r1a2b3c4d/isr/")
 	if err != nil {
 		t.Fatal(err)
@@ -114,14 +114,13 @@ func TestPruningAReleasesISRPrefixPlansItsCacheEntriesUseCacheEntriesAndTagSnaps
 		"cache/shop/web/prod/r1a2b3c4d/isr/cache/index.cache.json",
 		"cache/shop/web/prod/r1a2b3c4d/isr/fetch-cache/h.cache.json",
 		"cache/shop/web/prod/r1a2b3c4d/isr/use-cache/abc.json",
-		"cache/shop/web/prod/r1a2b3c4d/isr/tag-clock.json",
 	} {
 		if !keeps(name) {
 			t.Errorf("pruning the ISR prefix leaves %q, want it deleted", name)
 		}
 	}
-	if list2 := "cache/shop/web/prod/r9z8y7x6w/isr/tag-clock.json"; strings.HasPrefix(list2, list) {
-		t.Errorf("the listing %q reaches another release's tag snapshot %q", list, list2)
+	if list2 := "cache/shop/web/prod/r9z8y7x6w/isr/cache/index.cache.json"; strings.HasPrefix(list2, list) {
+		t.Errorf("the listing %q reaches another release's cache entry %q", list, list2)
 	}
 }
 
@@ -134,15 +133,15 @@ func TestDestroyingAReleasePlansEveryCacheObjectOfThatReleaseAndNoOther(t *testi
 		t.Fatalf("destroying a release lists %q, want %q", list, want)
 	}
 	for _, other := range []string{
-		"cache/shop/web/prod/r9z8y7x6w/isr/tag-clock.json",
-		"cache/shop/web/prod/r1a2b3c4de/isr/tag-clock.json",
+		"cache/shop/web/prod/r9z8y7x6w/isr/cache/index.cache.json",
+		"cache/shop/web/prod/r1a2b3c4de/isr/cache/index.cache.json",
 	} {
 		if strings.HasPrefix(other, list) {
 			t.Errorf("the listing %q reaches %q, another release", list, other)
 		}
 	}
-	if !keeps("cache/shop/web/prod/r1a2b3c4d/isr/tag-clock.json") {
-		t.Error("destroying a release leaves its tag snapshot, want it deleted")
+	if !keeps("cache/shop/web/prod/r1a2b3c4d/isr/cache/index.cache.json") {
+		t.Error("destroying a release leaves its cache entry, want it deleted")
 	}
 }
 
@@ -152,10 +151,10 @@ func TestRemovingAPreviewEnvironmentPlansOnlyThatEnvironmentsCacheObjects(t *tes
 		t.Fatal(err)
 	}
 	for name, want := range map[string]bool{
-		"cache/shop/web/pr-7/r1/isr/tag-clock.json":  true,
-		"cache/shop/api/pr-7/r2/isr/x":               true,
-		"cache/shop/web/prod/r1/isr/tag-clock.json":  false,
-		"cache/shop/web/pr-70/r1/isr/tag-clock.json": false,
+		"cache/shop/web/pr-7/r1/isr/cache/index.cache.json":  true,
+		"cache/shop/api/pr-7/r2/isr/x":                       true,
+		"cache/shop/web/prod/r1/isr/cache/index.cache.json":  false,
+		"cache/shop/web/pr-70/r1/isr/cache/index.cache.json": false,
 	} {
 		if got := keeps(name); got != want {
 			t.Errorf("removing pr-7/shop/ deletes %q = %v, want %v", name, got, want)
