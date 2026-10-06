@@ -81,6 +81,39 @@ describe("originFetchFor", () => {
     expect([...new Uint8Array(await sent[0].arrayBuffer())]).toEqual([1, 2, 3, 0, 255]);
   });
 
+  it("forwards a request body to the client certificate binding before the body has ended", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c;
+        c.enqueue(new Uint8Array([7]));
+      },
+    });
+    let firstChunk: number | undefined;
+    const binding = {
+      fetch: async (request: Request) => {
+        const reader = request.body!.getReader();
+        firstChunk = (await reader.read()).value?.[0];
+        return new Response("ok");
+      },
+    } as unknown as Fetcher;
+    const originFetch = originFetchFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding })!;
+    const sending = originFetch(
+      new Request("https://d-abc.origin.example.com/x", {
+        method: "POST",
+        body,
+        duplex: "half",
+      } as RequestInit),
+    );
+    const outcome = await Promise.race([
+      sending.then(() => "forwarded"),
+      new Promise((resolve) => setTimeout(() => resolve("buffering"), 200)),
+    ]);
+    controller.close();
+    expect(outcome).toBe("forwarded");
+    expect(firstChunk).toBe(7);
+  });
+
   it("drops the empty-body sentinel on the client certificate path", async () => {
     const { binding } = fakeBinding(
       () => new Response("x", { headers: { "x-ocel-empty-body": "1" } }),

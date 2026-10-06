@@ -17,17 +17,8 @@ export function clientCertificateOriginFetch(binding: Fetcher): typeof fetch {
     }
     const headers = new Headers(request.headers);
     headers.delete(CLIENT_AUTHORIZATION_HEADER);
-    const hasBody = request.method !== "GET" && request.method !== "HEAD";
-    const body = hasBody ? await request.arrayBuffer() : undefined;
     return dropEmptyBodySentinel(
-      await binding.fetch(
-        new Request(request.url, {
-          method: request.method,
-          headers,
-          body,
-          redirect: "manual",
-        }),
-      ),
+      await binding.fetch(new Request(request, { headers, redirect: "manual" })),
     );
   }) as typeof fetch;
 }
