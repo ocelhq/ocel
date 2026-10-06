@@ -19,6 +19,8 @@ const (
 type OriginBindings struct {
 	Variables map[string]string
 	Secrets   map[string]string
+
+	ClientCertificate string
 }
 
 type EntryProgram struct {
@@ -89,6 +91,12 @@ func newEntryWorker(entry edge.WorkerModule, origin OriginBindings) (edge.Worker
 	worker := edge.Worker{Main: entry, Variables: variables}
 	if len(origin.Secrets) > 0 {
 		worker.Secrets = maps.Clone(origin.Secrets)
+	}
+	if origin.ClientCertificate != "" {
+		if origin.Variables[edge.EdgeAccessKeyIDVar] != "" || origin.Secrets[edge.EdgeSecretKeyVar] != "" {
+			return edge.Worker{}, fmt.Errorf("the origin hands the %s edge both AWS signing keys and a client certificate; an origin is reached one way, so hand it one", Kind)
+		}
+		worker.ClientCertificates = map[string]string{edge.OriginClientCertificateBinding: origin.ClientCertificate}
 	}
 	return worker, nil
 }

@@ -260,3 +260,43 @@ func TestEntryProgramWithNoOriginSecretsCarriesNoSecrets(t *testing.T) {
 		t.Errorf("Variables = %#v, want non-nil and empty", built.Spec.Worker.Variables)
 	}
 }
+
+func TestAnEntryWorkerGivenAnOriginClientCertificateBindsItForMutualTLS(t *testing.T) {
+	program := programmed("shop", environment.TierProduction)
+	program.Origin = OriginBindings{ClientCertificate: "c1"}
+
+	built, err := program.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	want := map[string]string{edge.OriginClientCertificateBinding: "c1"}
+	if !maps.Equal(built.Spec.Worker.ClientCertificates, want) {
+		t.Errorf("ClientCertificates = %v, want %v", built.Spec.Worker.ClientCertificates, want)
+	}
+}
+
+func TestAnEntryWorkerRefusesAnOriginThatHandsBothAWSKeysAndAClientCertificate(t *testing.T) {
+	program := programmed("shop", environment.TierProduction)
+	program.Origin = OriginBindings{
+		ClientCertificate: "c1",
+		Variables:         map[string]string{edge.EdgeAccessKeyIDVar: "AKIA"},
+		Secrets:           map[string]string{edge.EdgeSecretKeyVar: "s"},
+	}
+
+	if _, err := program.Build(); err == nil || !strings.Contains(err.Error(), "client certificate") {
+		t.Fatalf("Build() = %v, want a refusal naming the client certificate", err)
+	}
+}
+
+func TestAnEntryWorkerWithNoOriginClientCertificateCarriesNone(t *testing.T) {
+	program := programmed("shop", environment.TierProduction)
+	program.Origin = OriginBindings{}
+
+	built, err := program.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if built.Spec.Worker.ClientCertificates != nil {
+		t.Errorf("ClientCertificates = %v, want nil", built.Spec.Worker.ClientCertificates)
+	}
+}
