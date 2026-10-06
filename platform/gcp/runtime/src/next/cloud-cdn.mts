@@ -43,6 +43,38 @@ export function withholdFromCloudCdn(cacheControl: string | null): string | null
   return storable ? uncacheable : cacheControl;
 }
 
+function withholdValue(value: unknown): string | undefined {
+  const current = Array.isArray(value) ? value.join(", ") : String(value);
+  const withheld = withholdFromCloudCdn(current);
+  return withheld !== current ? (withheld ?? undefined) : undefined;
+}
+
+function withholdWriteHeadHeaders(headers: unknown): unknown {
+  if (Array.isArray(headers)) {
+    let copy: unknown[] | undefined;
+    for (let i = 0; i + 1 < headers.length; i += 2) {
+      if (String(headers[i]).toLowerCase() !== "cache-control") continue;
+      const withheld = withholdValue(headers[i + 1]);
+      if (withheld === undefined) continue;
+      copy ??= [...headers];
+      copy[i + 1] = withheld;
+    }
+    return copy ?? headers;
+  }
+  if (headers !== null && typeof headers === "object") {
+    let copy: Record<string, unknown> | undefined;
+    for (const [key, value] of Object.entries(headers)) {
+      if (key.toLowerCase() !== "cache-control") continue;
+      const withheld = withholdValue(value);
+      if (withheld === undefined) continue;
+      copy ??= { ...headers };
+      copy[key] = withheld;
+    }
+    return copy ?? headers;
+  }
+  return headers;
+}
+
 export function withholdResponsesFromCloudCdn(prototype: http.ServerResponse): void {
   const writeHead = prototype.writeHead;
   prototype.writeHead = function (this: http.ServerResponse, ...args: any[]) {
@@ -50,6 +82,8 @@ export function withholdResponsesFromCloudCdn(prototype: http.ServerResponse): v
       const current = this.getHeader("cache-control");
       const withheld = withholdFromCloudCdn(current === undefined ? null : String(current));
       if (withheld !== null && withheld !== current) this.setHeader("cache-control", withheld);
+      const headersAt = typeof args[1] === "string" ? 2 : 1;
+      if (args.length > headersAt) args[headersAt] = withholdWriteHeadHeaders(args[headersAt]);
     }
     return (writeHead as any).apply(this, args);
   } as typeof prototype.writeHead;
