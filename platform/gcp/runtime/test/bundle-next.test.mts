@@ -69,6 +69,7 @@ test("the runtime directory holds the entrypoint and every cache handler a Next 
     expect.arrayContaining([
       "cache-handler.cjs",
       "entrypoint.mjs",
+      "server-adapter.mjs",
       "use-cache-default.cjs",
       "use-cache-remote.cjs",
     ]),
@@ -82,6 +83,47 @@ test("the entrypoint imports nothing but Node's own modules and the sharp the di
     .flatMap((found) => (found.n === undefined ? [] : [found.n]))
     .filter((specifier) => !isBuiltin(specifier));
   expect([...new Set(bare)]).toEqual(["sharp"]);
+});
+
+test("the server adapter imports nothing but Node's own modules", async () => {
+  await init;
+  const [imports] = parse(await readFile(join(dir, "server-adapter.mjs"), "utf8"));
+  const bare = imports
+    .flatMap((found) => (found.n === undefined ? [] : [found.n]))
+    .filter((specifier) => !isBuiltin(specifier));
+  expect(bare).toEqual([]);
+});
+
+test("the server adapter installs the Cloud Run host and points Next's production server at the handlers beside it", async () => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `const { default: adapter } = await import(${JSON.stringify(join(dir, "server-adapter.mjs"))});
+const config = adapter.modifyConfig({}, { phase: "phase-production-server" });
+const host = globalThis[Symbol.for("ocel.next.host.v1")];
+process.stdout.write(JSON.stringify({ config, store: typeof host?.newCacheStore }));`,
+    ],
+    {
+      env: {
+        PATH: process.env.PATH,
+        PORT: "8080",
+        OCEL_ISR_BUCKET: "bucket",
+        OCEL_ISR_OBJECT_PREFIX: "cache/app",
+        OCEL_ISR_PREFIX: "app",
+        OCEL_TAG_DATABASE: "database",
+      },
+    },
+  );
+
+  const { config, store } = JSON.parse(stdout);
+  expect(config.cacheHandler).toBe(join(dir, "cache-handler.cjs"));
+  expect(config.cacheHandlers).toEqual({
+    default: join(dir, "use-cache-default.cjs"),
+    remote: join(dir, "use-cache-remote.cjs"),
+  });
+  expect(store).toBe("function");
 });
 
 test("the runtime directory ships sharp built for the Linux x64 Cloud Run runs", async () => {

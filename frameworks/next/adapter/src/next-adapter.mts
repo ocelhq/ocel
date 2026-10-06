@@ -16,7 +16,13 @@ import {
 import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { boundCacheTags } from "@framework/next-cache/cache-tags";
-import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
+import {
+  cacheHandlerFile,
+  cacheKey,
+  useCacheDefaultFile,
+  useCacheRemoteFile,
+  variantHeadersFile,
+} from "@framework/next-cache/naming";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
 import type { ServeDescriptor } from "@platform/edge-contract/serve";
 import type { AdapterOutput, NextAdapter } from "next";
@@ -1004,11 +1010,11 @@ async function patchCacheHandlers(distDir: string): Promise<void> {
   }
   if (!manifest.config) return;
   const dir = readNextRuntimeDir();
-  manifest.config.cacheHandler = posix.join(dir, "cache-handler.cjs");
+  manifest.config.cacheHandler = posix.join(dir, cacheHandlerFile);
   manifest.config.cacheHandlers = {
     ...(manifest.config.cacheHandlers as Record<string, string> | undefined),
-    default: posix.join(dir, "use-cache-default.cjs"),
-    remote: posix.join(dir, "use-cache-remote.cjs"),
+    default: posix.join(dir, useCacheDefaultFile),
+    remote: posix.join(dir, useCacheRemoteFile),
   };
   await writeFile(manifestPath, JSON.stringify(manifest));
 }
