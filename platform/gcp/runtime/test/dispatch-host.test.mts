@@ -115,6 +115,7 @@ test("a refresh task reaches the endpoint before the router strips its control h
     isrPrefix: "prod/shop/web/r1/isr",
     localOrigin,
     check: async () => true,
+    readEntry: async () => ({ lastModified: 10, value: {} }),
   });
   const server = await serveInvoke(
     newGcpDispatchInvoke(
