@@ -488,3 +488,31 @@ func TestARevisionTagTooLongForTheRunAppLabelGivesNoRefreshTagURL(t *testing.T) 
 		t.Errorf("refreshTagURLOf() of a 64-character label = %q, want none", got)
 	}
 }
+
+func TestANextPreviewBehindIdentityAwareProxyRefreshesOnItsOwnRatherThanByTask(t *testing.T) {
+	if refreshesByTask(buildoutput.FrameworkNext, provider.ComputeServerless, edge.Facts{}, true) {
+		t.Error("a Next preview behind Identity-Aware Proxy refreshes by task, but Cloud Tasks' token cannot pass the proxy")
+	}
+	if !refreshesByTask(buildoutput.FrameworkNext, provider.ComputeServerless, edge.Facts{}, false) {
+		t.Error("a Next app billed per request that is not gated refreshes on its own, want the tier's queue")
+	}
+}
+
+func TestANextServiceBilledPerInstanceIsToldNoResponseEndHoldAndNoRefreshQueue(t *testing.T) {
+	spec := routedNextSpec()
+
+	env := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeServerless, instanceBilled: true}, nextCache{}, nil)
+	if got, told := env[finishBeforeResponseEnvVar]; told {
+		t.Errorf("a Next service billed per instance reads %s=%q, want no hold: its cpu outlives the response", finishBeforeResponseEnvVar, got)
+	}
+	for _, name := range refreshEnvVars {
+		if got, told := env[name]; told {
+			t.Errorf("a Next service billed per instance reads %s=%q, want no refresh queue", name, got)
+		}
+	}
+
+	billedPerRequest := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeServerless, instanceBilled: false}, nextCache{}, nil)
+	if _, told := billedPerRequest[finishBeforeResponseEnvVar]; !told {
+		t.Errorf("a Next service billed per request reads no %s, so billing is not what decides it", finishBeforeResponseEnvVar)
+	}
+}

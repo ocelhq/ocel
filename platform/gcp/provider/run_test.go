@@ -1004,3 +1004,23 @@ func TestAReleaseRetriedAfterAConflictKeepsOnlyTheRollbacksTheServiceRecordsOnTh
 		t.Errorf("the service records rollbacks %q after the retried release, want none: the retry read a service that recorded none", got)
 	}
 }
+
+func TestAServerlessServiceBilledPerInstanceKeepsItsCPUBetweenRequests(t *testing.T) {
+	idles := func(instanceBilled bool) bool {
+		desired := desiredOf(t, serving{
+			service:        "ocel-shop-pr-7-web",
+			image:          "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
+			account:        "ocel-1a2b3c4d5e@acme.iam.gserviceaccount.com",
+			compute:        provider.ComputeServerless,
+			instanceBilled: instanceBilled,
+		})
+		return desired.Template.Containers[0].Resources.CpuIdle
+	}
+
+	if idles(true) {
+		t.Error("a serverless service billed per instance idles its cpu between requests, want it kept")
+	}
+	if !idles(false) {
+		t.Error("a serverless service billed per request keeps its cpu between requests, want it idle")
+	}
+}

@@ -47,25 +47,26 @@ const releaseAttempts = 4
 const maxRequestTimeout = 3600 * time.Second
 
 type serving struct {
-	service     string
-	image       string
-	env         map[string]string
-	account     string
-	compute     provider.Compute
-	health      string
-	public      bool
-	cpu         string
-	memory      int
-	concurrency int
-	generation  string
-	instances   provider.Instances
-	timeout     time.Duration
-	ingress     string
-	mounts      []secretMount
-	egress      *privateEgress
-	tag         string
-	iap         bool
-	labels      map[string]string
+	service        string
+	image          string
+	env            map[string]string
+	account        string
+	compute        provider.Compute
+	health         string
+	public         bool
+	cpu            string
+	memory         int
+	concurrency    int
+	generation     string
+	instances      provider.Instances
+	timeout        time.Duration
+	ingress        string
+	mounts         []secretMount
+	egress         *privateEgress
+	tag            string
+	iap            bool
+	instanceBilled bool
+	labels         map[string]string
 
 	opensOnPromotion bool
 }
@@ -134,7 +135,7 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 		Ports: []*run.GoogleCloudRunV2ContainerPort{{ContainerPort: containerimage.Port}},
 		Env:   environmentOf(s.env),
 		Resources: &run.GoogleCloudRunV2ResourceRequirements{
-			CpuIdle:         s.compute == provider.ComputeServerless,
+			CpuIdle:         s.billsPerRequest(),
 			Limits:          map[string]string{"cpu": cpu, "memory": memory},
 			ForceSendFields: []string{"CpuIdle"},
 		},
@@ -659,4 +660,8 @@ func isLatestOrRouted(service *run.GoogleCloudRunV2Service, revision string) boo
 	return slices.ContainsFunc(service.Traffic, func(target *run.GoogleCloudRunV2TrafficTarget) bool {
 		return target.Percent > 0 && revisionName(target.Revision) == revision
 	})
+}
+
+func (s serving) billsPerRequest() bool {
+	return s.compute == provider.ComputeServerless && !s.instanceBilled
 }

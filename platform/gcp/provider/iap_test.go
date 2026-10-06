@@ -13,6 +13,7 @@ import (
 	"google.golang.org/api/googleapi"
 	iap "google.golang.org/api/iap/v1"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -350,5 +351,22 @@ func TestAPreviewBehindIdentityAwareProxyTagsTheRevisionItsReleaseCreated(t *tes
 	production.Ref.Tier = environment.TierProduction
 	if got := p.revisionTag(production); got != "" {
 		t.Errorf("revisionTag() of a production release with no edge in front = %q, want none: the service answers anyone, so a tag would publish every unpromoted revision", got)
+	}
+}
+
+func TestATierAndEdgeAreGatedBehindIdentityAwareProxyExactlyWhenTheirStackIs(t *testing.T) {
+	p := pushing(t, "")
+
+	if !p.gatesBehindIAP(environment.TierPreview, edge.Facts{}) {
+		t.Error("a preview with no edge in front is not gated, want it behind Identity-Aware Proxy")
+	}
+	if p.gatesBehindIAP(environment.TierProduction, edge.Facts{}) {
+		t.Error("production is gated behind Identity-Aware Proxy, and production answers anyone")
+	}
+	if p.gatesBehindIAP(environment.TierPreview, edge.Facts{ShieldsOrigin: true}) {
+		t.Error("a preview behind a shielding edge is gated, and Cloud Run refuses IAP on both")
+	}
+	if pushing(t, "http://127.0.0.1:4588").gatesBehindIAP(environment.TierPreview, edge.Facts{}) {
+		t.Error("a preview against the emulator is gated, which the emulator does not serve")
 	}
 }
