@@ -63,6 +63,20 @@ func withOriginBase(t *testing.T, p *Provider) *routedHosts {
 	return routing
 }
 
+func adoptBehindTheWorker(t *testing.T, p *Provider, writerURL string, kinds ...edge.Kind) {
+	t.Helper()
+	withOriginBase(t, p)
+	writer := writerOffer("c2")
+	writer.Values[edge.OfferKeyISRWriterEndpoint] = writerURL
+	for _, kind := range append([]edge.Kind{cloudflareKind}, kinds...) {
+		err := adoptEdgeOffers(context.Background(), p.resolved, p.records, environment.TierProduction, kind,
+			edge.BootstrapOutput{Offers: []edge.Offer{storeOffer("c1"), writer, certificateOffer()}}, &fake.Log{})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func behindTheWorker(spec provider.StackSpec) provider.StackSpec {
 	spec.Edge = codeRunningFront{kind: cloudflareKind, runsCode: true, shields: true}
 	return spec

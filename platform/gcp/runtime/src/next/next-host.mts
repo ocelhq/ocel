@@ -6,6 +6,7 @@ import {
   finishBeforeResponseMs,
   readPortBind,
 } from "@framework/node-runtime/host";
+import { type IsrWriterClient, newIsrWriterClient } from "@platform/edge-contract/isr-writer";
 import { newGcpCacheStore } from "./cache-store.mjs";
 import { newCdnPurge, withCdnPurge } from "./cdn-purge.mjs";
 import { cloudCdnRelease, cloudCdnShapedTagsPerObject } from "./cloud-cdn.mjs";
@@ -13,6 +14,7 @@ import { newCloudStorage } from "./cloud-storage.mjs";
 import { newGcpDispatchInvoke } from "./dispatch-host.mjs";
 import { newFirestore } from "./firestore.mjs";
 import { newInstanceCacheStore, newInstanceUseCacheStore } from "./instance-stores.mjs";
+import { newIsrWriterTagRecords } from "./isr-writer-tags.mjs";
 import { readRefreshEndpoint } from "./refresh-endpoint.mjs";
 import { type RefreshEnv, readRefreshEnv } from "./refresh-env.mjs";
 import { newRefreshQueue } from "./refresh-queue.mjs";
@@ -40,8 +42,10 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
       "ocel: OCEL_CDN_URL_MAP names a url map to purge, and this service is told no release its responses are tagged with",
     );
   }
-  const records =
-    bucket && objectPrefix && isrPrefix && tagDatabase
+  const writer = openIsrWriter(env, isrPrefix, tagDatabase);
+  const records = writer
+    ? newIsrWriterTagRecords(writer)
+    : bucket && objectPrefix && isrPrefix && tagDatabase
       ? newFirestoreTagRecords(
           newFirestore({ database: tagDatabase, endpoint: env.OCEL_FIRESTORE_ENDPOINT }),
           isrPrefix,
@@ -63,7 +67,7 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
       : undefined;
   const newCacheStore = async () =>
     shared
-      ? newGcpCacheStore(shared.storage, shared.objectPrefix, shared.tags.publish)
+      ? newGcpCacheStore(shared.storage, shared.objectPrefix, shared.tags.publish, writer)
       : newInstanceCacheStore(cache);
   return {
     bind: readPortBind(env),
@@ -84,6 +88,33 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
       ),
     scheduleRefresh: readRefreshQueue(env, refresh),
   };
+}
+
+function openIsrWriter(
+  env: NodeJS.ProcessEnv,
+  isrPrefix: string | undefined,
+  tagDatabase: string | undefined,
+): IsrWriterClient | undefined {
+  const endpoint = env.OCEL_ISR_WRITER_URL;
+  const secret = env.OCEL_ISR_WRITER_SECRET;
+  if (!endpoint && !secret) return undefined;
+  if (!endpoint || !secret) {
+    throw new Error(
+      "ocel: OCEL_ISR_WRITER_URL and OCEL_ISR_WRITER_SECRET must both be set when this service keeps its pages and tags in the edge's store; " +
+        "re-run `ocel bootstrap production` and redeploy",
+    );
+  }
+  if (tagDatabase) {
+    throw new Error(
+      "ocel: this service is told both an isr-writer and OCEL_TAG_DATABASE, and two places would claim to hold its tags",
+    );
+  }
+  if (!isrPrefix) {
+    throw new Error(
+      "ocel: this service is told an isr-writer and no OCEL_ISR_PREFIX to write under",
+    );
+  }
+  return newIsrWriterClient({ endpoint, isrPrefix, secret });
 }
 
 function readRefreshQueue(

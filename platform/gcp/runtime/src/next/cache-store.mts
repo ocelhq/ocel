@@ -1,11 +1,13 @@
 import { type CacheEntryFile, entryObjectKey, type PublishTag } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
+import type { IsrWriterClient } from "@platform/edge-contract/isr-writer";
 import type { CloudStorage } from "./cloud-storage.mjs";
 
 export function newGcpCacheStore(
   storage: CloudStorage,
   objectPrefix: string,
   publish: PublishTag,
+  pages?: Pick<IsrWriterClient, "readEntry" | "writeEntry">,
 ): CacheStore {
   const entryName = (key: string) => {
     const name = entryObjectKey(objectPrefix, key);
@@ -28,8 +30,9 @@ export function newGcpCacheStore(
   }
 
   return {
-    readEntry: async (key) => read(entryName(key)),
-    writeEntry: async (key, entry) => write(entryName(key), entry),
+    readEntry: async (key) => (pages ? pages.readEntry(key) : read(entryName(key))),
+    writeEntry: async (key, entry) =>
+      pages ? pages.writeEntry(key, entry) : write(entryName(key), entry),
     readFetch: (hash) => read(fetchName(hash)),
     writeFetch: (hash, entry) => write(fetchName(hash), entry),
 

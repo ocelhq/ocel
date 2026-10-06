@@ -15,7 +15,8 @@
     "@framework/next-protocol": "workspace:*",
     "@framework/next-router": "workspace:*",
     "@framework/next-runtime": "workspace:*",
-    "@framework/node-runtime": "workspace:*"
+    "@framework/node-runtime": "workspace:*",
+    "@platform/edge-contract": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24",

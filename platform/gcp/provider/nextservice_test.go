@@ -246,7 +246,7 @@ func TestANextServiceBehindAnEdgeThatRunsNoCodeRoutesItsOwnRequests(t *testing.T
 func TestANextServiceBehindAnEdgeThatRunsCodeLeavesRoutingToIt(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	withOriginBase(t, p)
+	adoptBehindTheWorker(t, p, "https://writer.example.test", fake.KindRelay)
 	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -371,7 +371,7 @@ func TestANextServiceIsToldToReceiveRefreshesAtItsRunAppAddress(t *testing.T) {
 func TestANextServiceBehindAnEdgeThatRunsCodeIsToldNoRefreshQueue(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	withOriginBase(t, p)
+	adoptBehindTheWorker(t, p, "https://writer.example.test", fake.KindRelay)
 	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)

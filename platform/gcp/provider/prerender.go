@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/sync/errgroup"
@@ -16,9 +17,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/prerender"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-func (p *Provider) seedPrerenders(ctx context.Context, spec provider.StackSpec, runProgress progress.Log) error {
+func (p *Provider) seedPrerenders(ctx context.Context, spec provider.StackSpec, edgeStore *cloudflare.ISRWriter, runProgress progress.Log) error {
 	root, err := buildoutput.Root(p.projectDir)
 	if err != nil {
 		return err
@@ -43,10 +45,29 @@ func (p *Provider) seedPrerenders(ctx context.Context, spec provider.StackSpec, 
 			if err != nil {
 				return fmt.Errorf("seed %s: %w", seed.Key, err)
 			}
+			if edgeStore != nil {
+				if key, isPage, err := pageSeedKey(isr.Prefix, seed.Key); err != nil {
+					return err
+				} else if isPage {
+					return edgeStore.PutEntry(ctx, isr.Prefix, key, body)
+				}
+			}
 			return p.createSeed(ctx, spec, seed.Key, body)
 		})
 	}
 	return group.Wait()
+}
+
+func pageSeedKey(isrPrefix, seedKey string) (string, bool, error) {
+	relative, isPage := strings.CutPrefix(seedKey, isrPrefix+"/cache/")
+	if !isPage {
+		return "", false, nil
+	}
+	key, found := strings.CutSuffix(relative, ".cache.json")
+	if !found || key == "" {
+		return "", false, fmt.Errorf("seed %s is not a cache entry the isr-writer can address", seedKey)
+	}
+	return key, true, nil
 }
 
 func prerenderCount(n int) string {

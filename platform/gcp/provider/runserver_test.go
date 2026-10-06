@@ -41,7 +41,8 @@ type runServer struct {
 	present map[string]bool
 	events  []string
 
-	iam *iamServer
+	iam     *iamServer
+	secrets *secretServer
 
 	images    map[string]string
 	labels    map[string]map[string]string
@@ -114,6 +115,11 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 			s.iam = grantedIAM()
 		}
 		switch {
+		case strings.HasPrefix(path, "/v1/projects/") && strings.Contains(path, "/secrets"):
+			if s.secrets == nil {
+				s.secrets = newSecretServer()
+			}
+			s.secrets.serve(t, w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(path, ":signJwt"):
 			s.signJWT(w, r)
 		case strings.HasPrefix(path, "/v1/") && !strings.Contains(path, "/packages/"):

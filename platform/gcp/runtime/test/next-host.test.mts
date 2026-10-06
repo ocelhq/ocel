@@ -390,3 +390,80 @@ test("a GCP host told a url map but no release refuses to start", () => {
     }),
   ).toThrow(/OCEL_CDN_URL_MAP/);
 });
+
+const writerEnv = {
+  PORT: "8080",
+  OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
+  OCEL_ISR_BUCKET: "b",
+  OCEL_ISR_OBJECT_PREFIX: "cache/shop/web/prod/r1/isr",
+  OCEL_STORAGE_ENDPOINT: "http://storage.test",
+  OCEL_ISR_WRITER_URL: "https://writer.example",
+  OCEL_ISR_WRITER_SECRET: "s",
+};
+
+function stubFetch(answer: (url: URL, init: RequestInit | undefined) => Response) {
+  const calls: { url: URL; init: RequestInit | undefined }[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+      calls.push({ url, init });
+      return answer(url, init);
+    }),
+  );
+  return calls;
+}
+
+test("the GCP host keeps pages and tags in the edge's store when its service is told an isr-writer", async () => {
+  const calls = stubFetch((url) =>
+    url.hostname === "writer.example" && url.pathname.endsWith("/tags")
+      ? new Response(null, { status: 204 })
+      : url.hostname === "writer.example"
+        ? new Response(null, { status: 204 })
+        : new Response(JSON.stringify({ generation: "1" }), {
+            headers: { "content-type": "application/json" },
+          }),
+  );
+  try {
+    const host = newGcpNextHost(writerEnv);
+    const store = await host.newCacheStore!();
+    const entry = { lastModified: 1, value: { kind: "FETCH", data: {} } };
+
+    await store.writeEntry("blog", entry);
+    await store.writeFetch("abc", entry);
+    await store.writeTags(["a", "b"], { stale: 5 });
+
+    const writer = calls.filter((call) => call.url.hostname === "writer.example");
+    const page = writer.find((call) => call.url.pathname.endsWith("/entry"))!;
+    expect(page.init?.method).toBe("PUT");
+    expect(page.url.href).toBe("https://writer.example/prod/shop/web/r1/isr/entry?key=blog");
+    expect(new Headers(page.init?.headers).get("authorization")).toBe("Bearer s");
+    const tags = writer.filter((call) => call.url.pathname.endsWith("/tags"));
+    expect(tags).toHaveLength(1);
+    expect(JSON.parse(String(tags[0]!.init?.body))).toEqual({
+      records: { a: { stale: 5 }, b: { stale: 5 } },
+    });
+    const storage = calls.filter((call) => call.url.hostname === "storage.test");
+    expect(storage).toHaveLength(1);
+    expect(storage[0]!.url.searchParams.get("name")).toBe(
+      "cache/shop/web/prod/r1/isr/fetch-cache/abc.cache.json",
+    );
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("the GCP host refuses an isr-writer url without its secret", () => {
+  const { OCEL_ISR_WRITER_SECRET: _, ...env } = writerEnv;
+
+  expect(() => newGcpNextHost(env)).toThrow(/OCEL_ISR_WRITER_URL and OCEL_ISR_WRITER_SECRET/);
+  expect(() =>
+    newGcpNextHost({ ...env, OCEL_ISR_WRITER_SECRET: "s", OCEL_ISR_WRITER_URL: "" }),
+  ).toThrow(/OCEL_ISR_WRITER_URL and OCEL_ISR_WRITER_SECRET/);
+});
+
+test("the GCP host refuses an isr-writer beside a tags database", () => {
+  expect(() =>
+    newGcpNextHost({ ...writerEnv, OCEL_TAG_DATABASE: "projects/p/databases/d" }),
+  ).toThrow(/OCEL_TAG_DATABASE/);
+});

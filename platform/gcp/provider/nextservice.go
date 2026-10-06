@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 const (
@@ -33,6 +34,8 @@ const (
 	isrObjectPrefixEnvVar   = "OCEL_ISR_OBJECT_PREFIX"
 	storageEndpointEnvVar   = "OCEL_STORAGE_ENDPOINT"
 	tagDatabaseEnvVar       = "OCEL_TAG_DATABASE"
+	isrWriterURLEnvVar      = "OCEL_ISR_WRITER_URL"
+	isrWriterSecretEnvVar   = "OCEL_ISR_WRITER_SECRET"
 	firestoreEndpointEnvVar = "OCEL_FIRESTORE_ENDPOINT"
 	staticDirEnvVar         = "OCEL_STATIC_DIR"
 	refreshURLEnvVar        = "OCEL_REFRESH_URL"
@@ -84,6 +87,17 @@ type nextCache struct {
 	bucket      string
 	tagDatabase string
 	endpoint    string
+	edgeStore   *edgeISRStore
+}
+
+type edgeISRStore struct {
+	writer cloudflare.ISRWriter
+	secret string
+}
+
+func keepsISRInEdgeStore(spec provider.StackSpec) bool {
+	return spec.App != nil && servesNext(spec.App) && spec.App.ISR != nil &&
+		spec.App.Compute == provider.ComputeServerless && factsOf(spec.Edge).RunsCode
 }
 
 type nextRefresh struct {
@@ -157,11 +171,18 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 		env[isrPrefixEnvVar] = isr.Prefix
 		env[isrTagNamespaceEnvVar] = isr.TagNamespace
 		env[isrBucketEnvVar] = cache.bucket
-		env[tagDatabaseEnvVar] = cache.tagDatabase
 		env[isrObjectPrefixEnvVar] = strings.TrimSuffix(cacheObjectName(isr.Prefix+"/"), "/")
+		if store := cache.edgeStore; store != nil {
+			env[isrWriterURLEnvVar] = store.writer.Endpoint
+			env[isrWriterSecretEnvVar] = store.secret
+		} else {
+			env[tagDatabaseEnvVar] = cache.tagDatabase
+		}
 		if cache.endpoint != "" {
 			env[storageEndpointEnvVar] = cache.endpoint
-			env[firestoreEndpointEnvVar] = cache.endpoint
+			if cache.edgeStore == nil {
+				env[firestoreEndpointEnvVar] = cache.endpoint
+			}
 		}
 	}
 	return env
