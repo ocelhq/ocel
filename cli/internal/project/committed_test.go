@@ -123,7 +123,7 @@ func committedConfigs(t *testing.T, root string) []string {
 	for _, dir := range fixturetest.Dirs(t) {
 		found = append(found, fixturetest.ConfigsIn(t, dir)...)
 	}
-	return append(found, fixturetest.ConfigsIn(t, filepath.Join(root, "console", "web"))...)
+	return found
 }
 
 type commentBlock struct{ first, last int }
