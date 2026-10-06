@@ -317,3 +317,76 @@ test("the GCP host's cache store and the cache the default use-cache handler fil
   expect(await handler.get("key", [])).toBeDefined();
   expect(await pages.readEntry("/a")).toBeNull();
 });
+
+const purgeEnv = {
+  ...tagEnv,
+  OCEL_ISR_PREFIX: "prod/shop/web/r1a2b3c4d/isr",
+  OCEL_CACHE_TAG_PURGE: "1",
+};
+
+async function withCloudCdnStub(
+  run: (seen: { kind: "commit" | "purge"; body: string }[], origin: string) => Promise<void>,
+): Promise<void> {
+  const seen: { kind: "commit" | "purge"; body: string }[] = [];
+  const { server, origin } = await listen((req, body) => {
+    if (req.url?.endsWith(":commit")) seen.push({ kind: "commit", body });
+  });
+  const realFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("metadata.google.internal")) {
+      return Response.json({ access_token: "t", expires_in: 3600 });
+    }
+    if (url.startsWith("https://compute.googleapis.com/")) {
+      seen.push({ kind: "purge", body: String(init?.body) });
+      return Response.json({});
+    }
+    return realFetch(input, init);
+  });
+  try {
+    await run(seen, origin);
+  } finally {
+    vi.unstubAllGlobals();
+    server.close();
+  }
+}
+
+test("a GCP host told a url map clears each tag it records, after the record lands", async () => {
+  await withCloudCdnStub(async (seen, origin) => {
+    const host = newGcpNextHost({
+      ...purgeEnv,
+      OCEL_CDN_URL_MAP: "projects/p/global/urlMaps/m",
+      OCEL_FIRESTORE_ENDPOINT: origin,
+    });
+    const pages = await host.newCacheStore!();
+    const useCache = await host.newUseCacheStore!();
+
+    await pages.writeTags(["cart"], { expired: 5 });
+    await useCache.writeTag("shelf", { expired: 6, writtenAt: 1 });
+
+    expect(seen.map((s) => s.kind)).toEqual(["commit", "purge", "commit", "purge"]);
+    expect(JSON.parse(seen[1]!.body)).toEqual({ cacheTags: ["r1a2b3c4d|cart"] });
+    expect(JSON.parse(seen[3]!.body)).toEqual({ cacheTags: ["r1a2b3c4d|shelf"] });
+  });
+});
+
+test("a GCP host told no url map clears nothing", async () => {
+  await withCloudCdnStub(async (seen, origin) => {
+    const host = newGcpNextHost({ ...purgeEnv, OCEL_FIRESTORE_ENDPOINT: origin });
+    const pages = await host.newCacheStore!();
+
+    await pages.writeTags(["cart"], { expired: 5 });
+
+    expect(seen.map((s) => s.kind)).toEqual(["commit"]);
+  });
+});
+
+test("a GCP host told a url map but no release refuses to start", () => {
+  expect(() =>
+    newGcpNextHost({
+      ...tagEnv,
+      OCEL_ISR_PREFIX: "prod/shop/web/r1a2b3c4d/isr",
+      OCEL_CDN_URL_MAP: "projects/p/global/urlMaps/m",
+    }),
+  ).toThrow(/OCEL_CDN_URL_MAP/);
+});
