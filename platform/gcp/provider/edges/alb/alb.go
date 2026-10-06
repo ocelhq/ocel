@@ -95,9 +95,15 @@ func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview 
 	spec := loadBalancerSpec{
 		Region:  e.deps.Region,
 		Names:   loadBalancerNames(tier, e.deps.Shielded),
+		Tier:    tier,
 		Preview: preview,
 	}
 	if e.deps.Shielded {
+		origin, err := e.recordedOriginWildcard(ctx, tier)
+		if err != nil {
+			return LoadBalancer{}, err
+		}
+		spec.Origin = origin
 		trusted, err := e.ensureTrusted(ctx, tier)
 		if err != nil {
 			return LoadBalancer{}, err
