@@ -7,7 +7,8 @@
   "scripts": {
     "build": "bun scripts/bundle-next.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "live": "vitest run --config vitest.live.config.mts"
   },
   "dependencies": {
     "@framework/next-cache": "workspace:*",
