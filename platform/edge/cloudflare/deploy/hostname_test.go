@@ -72,6 +72,7 @@ type cfMock struct {
 
 	mtlsCertificates         []map[string]any
 	listedMTLSCertificates   int
+	ignoresQueueNameFilter   bool
 	gotMTLSCertificates      []string
 	uploadedMTLSCertificates []map[string]any
 	deletedMTLSCertificates  []string
@@ -413,7 +414,7 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	mux.HandleFunc("GET /accounts/acct/queues", func(w http.ResponseWriter, r *http.Request) {
 		listed := []map[string]any{}
 		for _, queue := range m.queues {
-			if name := r.URL.Query().Get("name"); name != "" && queue["queue_name"] != name {
+			if name := r.URL.Query().Get("name"); name != "" && !m.ignoresQueueNameFilter && queue["queue_name"] != name {
 				continue
 			}
 			listed = append(listed, queue)
