@@ -14,6 +14,7 @@ type Host struct {
 	NextRuntimeDir         string
 	MaxFunctionBytes       int64
 	NextRefreshesByRequest bool
+	ShipsNextServerRuntime bool
 }
 
 func ReadHost(facts *contractv1.ProviderFacts) Host {
@@ -21,6 +22,7 @@ func ReadHost(facts *contractv1.ProviderFacts) Host {
 		NextRuntimeDir:         facts.GetNextRuntimeDir(),
 		MaxFunctionBytes:       facts.GetMaxFunctionBytes(),
 		NextRefreshesByRequest: facts.GetNextRefreshesByRequest(),
+		ShipsNextServerRuntime: facts.GetShipsNextServerRuntime(),
 	}
 }
 

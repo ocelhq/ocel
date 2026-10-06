@@ -33,5 +33,6 @@ func factsProto(p provider.Provider) *contractv1.ProviderFacts {
 		NextRuntimeDir:         facts.NextRuntimeDir,
 		MaxFunctionBytes:       facts.MaxFunctionBytes,
 		NextRefreshesByRequest: facts.NextRefreshesByRequest,
+		ShipsNextServerRuntime: p.Hooks().ReadNextServerRuntime != nil,
 	}
 }
