@@ -29,6 +29,8 @@ export const RESOLVE_TIMEOUT_MS = 240_000;
 
 export const HEALTH_TIMEOUT_MS = 120_000;
 
+const HEALTH_PROBE_TIMEOUT_MS = 5_000;
+
 const STACK_STOPS_WITHIN_MS = 45_000;
 
 const DOTFILE = ".env";
@@ -84,12 +86,9 @@ async function waitForHealth(url: string, served: ServedApp): Promise<void> {
     if (exited(served.child)) {
       throw new Error(`ocel dev exited before ${url} answered:\n${redact(served.output())}`);
     }
-    try {
-      const res = await fetch(url);
-      if (res.ok) {
-        return;
-      }
-    } catch {}
+    if (await answersHealth(url)) {
+      return;
+    }
     await delay(500);
   }
   if (resolvedAt === undefined) {
@@ -121,9 +120,12 @@ async function stop(served: ServedApp): Promise<void> {
   } catch {}
 }
 
-async function answering(port: number): Promise<boolean> {
+export async function answersHealth(
+  url: string,
+  within = HEALTH_PROBE_TIMEOUT_MS,
+): Promise<boolean> {
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/health`);
+    const res = await fetch(url, { signal: AbortSignal.timeout(within) });
     return res.ok;
   } catch {
     return false;
@@ -387,7 +389,7 @@ export class DevTarget implements Target, Restart, Exposure {
     const alive: string[] = [];
     for (const [slug, served] of this.served) {
       for (const one of served.apps) {
-        if (await answering(one.port)) {
+        if (await answersHealth(`http://127.0.0.1:${one.port}/health`)) {
           alive.push(slug);
           break;
         }

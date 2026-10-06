@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import {
+  answersHealth,
   devProject,
   findKeptRunning,
   HEALTH_TIMEOUT_MS,
@@ -110,5 +113,21 @@ describe("the deadline an app served by ocel dev answers /health by", () => {
     expect(healthDeadline(started, undefined)).toBe(
       started + RESOLVE_TIMEOUT_MS + HEALTH_TIMEOUT_MS,
     );
+  });
+});
+
+describe("whether an app answers /health", () => {
+  it("is false, and returns, when the app accepts the request and never answers it", async () => {
+    const server = createServer(() => undefined);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const started = Date.now();
+      expect(await answersHealth(`http://127.0.0.1:${port}/health`, 200)).toBe(false);
+      expect(Date.now() - started).toBeLessThan(5_000);
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
   });
 });
