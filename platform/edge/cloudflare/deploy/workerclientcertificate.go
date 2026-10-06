@@ -58,6 +58,13 @@ func (s workerClientCertificateState) current() (heldWorkerClientCertificate, bo
 	return s.held[0], true
 }
 
+func (s workerClientCertificateState) keptID() string {
+	if current, held := s.current(); held && current.expiresOn.After(s.now) && !s.due(current) {
+		return current.id
+	}
+	return ""
+}
+
 func (s workerClientCertificateState) live() []heldWorkerClientCertificate {
 	return slices.DeleteFunc(slices.Clone(s.held), func(c heldWorkerClientCertificate) bool { return !c.expiresOn.After(s.now) })
 }

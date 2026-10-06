@@ -2,6 +2,7 @@ package cloudflare
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -85,5 +86,34 @@ func TestDescribingACloudflareBootstrapWithoutCredentialsIsAnError(t *testing.T)
 	_, err := m.provider(t).Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
 	if err == nil || !strings.Contains(err.Error(), envAPIToken) {
 		t.Fatalf("DescribeBootstrap error = %v, want one naming %s", err, envAPIToken)
+	}
+}
+
+func TestTheBootstrapStatusListsTheRefreshQueueAndItsRefresher(t *testing.T) {
+	m := bootstrapMock(t, false)
+	p := mutualTLSEdge(t, m)
+
+	parts, err := p.Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
+	if err != nil {
+		t.Fatalf("DescribeBootstrap: %v", err)
+	}
+	names := []string{refreshQueueName, refresherScript, refreshQueueName + "/" + refresherScript}
+	for _, name := range names {
+		if !slices.ContainsFunc(parts, func(part edge.BootstrapPart) bool { return part.Name == name && !part.Current }) {
+			t.Errorf("parts = %+v, want %q listed and not current on a fresh account", parts, name)
+		}
+	}
+
+	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
+		t.Fatal(err)
+	}
+	parts, err = p.Hooks().DescribeBootstrap(t.Context(), environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		if !slices.ContainsFunc(parts, func(part edge.BootstrapPart) bool { return part.Name == name && part.Current }) {
+			t.Errorf("parts = %+v, want %q current once bootstrapped", parts, name)
+		}
 	}
 }
