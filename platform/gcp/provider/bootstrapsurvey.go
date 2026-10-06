@@ -186,7 +186,11 @@ func (b bootstrap) presenceOf(ctx context.Context, tier environment.Tier, target
 	case KindRepository:
 		return b.repositoryPresence(ctx, target.Name)
 	case KindRole:
-		return b.rolePresence(ctx, target.Name)
+		role, ok := findCustomRole(b.clients.Names, target.Name)
+		if !ok {
+			return presence{}, fmt.Errorf("no custom role is named %s", target.Name)
+		}
+		return b.rolePresence(ctx, role)
 	case KindServiceAccount:
 		return b.accountPresence(ctx, tier, target.Name)
 	case KindService:

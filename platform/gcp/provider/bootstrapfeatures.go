@@ -29,7 +29,8 @@ func (bootstrap) Catalogue() []provider.Feature {
 	return []provider.Feature{{
 		Name: albFeature,
 		Summary: "a global external Application Load Balancer as the front: one address, one certificate map, one URL map — " +
-			"the one bootstrap item with a recurring cost, about $18 a month plus egress",
+			"the one bootstrap item with a recurring cost, about $18 a month plus egress, " +
+			"and a custom role that may only clear Cloud CDN, which Next apps behind it are granted",
 		Edges: []edge.Kind{alb.Kind},
 	}, {
 		Name: albShieldedFeature,
@@ -92,6 +93,9 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 
 func (b bootstrap) raiseFeatures(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	if err := b.raiseFronts(ctx, req, progress); err != nil {
+		return err
+	}
+	if err := b.raiseCDNPurgeRole(ctx, req, progress); err != nil {
 		return err
 	}
 	if slices.Contains(req.Features, tasksFeature) {
@@ -160,6 +164,9 @@ func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.B
 	}
 	if err := b.dropFronts(ctx, read, req, progress); err != nil {
 		return err
+	}
+	if slices.Contains(droppedFeatures(read.Stamp.Features, req), albFeature) {
+		ensureProgress(progress).Say("Kept custom role " + read.Names.CDNPurgeRolePath() + ": " + reasonRoleKept)
 	}
 	if slices.Contains(droppedFeatures(read.Stamp.Features, req), tasksFeature) {
 		ensureProgress(progress).Say("Taking down the " + string(req.Tier) + " task database, push and refresh accounts and their grants, and purging its delay queue: this bootstrap no longer requests feature " + tasksFeature)

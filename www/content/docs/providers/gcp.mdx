@@ -63,6 +63,13 @@ is answered by it. It is the only thing ocel provisions on Google Cloud that bil
 it serves no traffic: about $18 a month per tier for the forwarding rule, plus
 Premium-tier egress. The bootstrap plan says so before it provisions anything.
 
+The bootstrap also keeps one custom role,
+`projects/<project>/roles/<namespace with _ for ->_cdn_purge`, holding only
+`compute.urlMaps.invalidateCache`: the Next apps behind the load balancer are granted it to clear
+revalidated pages from Cloud CDN, and nothing else. It costs nothing, and a bootstrap never
+deletes it, because Google holds a deleted custom role's id for up to 44 days. A role deleted by
+hand is undeleted within Google's first 7 days, and one whose permissions drifted is put back.
+
 ```json title="ocel.json"
 {
   "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
