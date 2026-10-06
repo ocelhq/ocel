@@ -1,4 +1,5 @@
 import http from "node:http";
+import net from "node:net";
 import type { CacheEntryFile } from "@framework/next-cache";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import {
@@ -172,6 +173,26 @@ test("a refresh task this runtime cannot read is dropped, never retried", async 
   expect(response.status).toBe(204);
   expect(rendered).toEqual([]);
   expect(warn).toHaveBeenCalled();
+});
+
+test("a refresh whose connection closes before its body is complete is answered as a bad request", async () => {
+  const endpoint = endpointFor();
+  const answered = new Promise<number>((resolve) => {
+    front = http.createServer((req, res) => {
+      endpoint(req, res).then(() => resolve(res.statusCode));
+    });
+  });
+  await new Promise<void>((resolve) => front!.listen({ host: "127.0.0.1", port: 0 }, resolve));
+  const port = (front!.address() as { port: number }).port;
+
+  const socket = net.connect(port, "127.0.0.1");
+  socket.write(
+    "POST /_ocel/refresh HTTP/1.1\r\nhost: x\r\nauthorization: Bearer good\r\ncontent-length: 500\r\n\r\n{",
+  );
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  socket.destroy();
+
+  expect(await answered).toBe(400);
 });
 
 test("a refresh body larger than a task can be is refused unread", async () => {
