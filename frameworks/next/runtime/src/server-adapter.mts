@@ -1,9 +1,4 @@
-import { join } from "node:path";
-import {
-  cacheHandlerFile,
-  useCacheDefaultFile,
-  useCacheRemoteFile,
-} from "@framework/next-cache/naming";
+import { withCacheHandlers } from "@framework/next-cache/naming";
 
 const productionServerPhase = "phase-production-server";
 
@@ -25,12 +20,7 @@ export function newServerAdapter(runtimeDir: string, installHost: () => void): N
       return {
         ...config,
         cacheMaxMemorySize: 0,
-        cacheHandler: join(runtimeDir, cacheHandlerFile),
-        cacheHandlers: {
-          ...config.cacheHandlers,
-          default: join(runtimeDir, useCacheDefaultFile),
-          remote: join(runtimeDir, useCacheRemoteFile),
-        },
+        ...withCacheHandlers(config, runtimeDir),
       };
     },
   };

@@ -31,8 +31,9 @@ func findFunctionBuildFaults(facts provider.Facts) []string {
 func answersTheFunctionBuildFacts(t *testing.T, suite Suite, configured *contractv1.ProviderFacts) {
 	t.Helper()
 
-	declared := readDeclaredFacts(t, suite)
-	if got, want := configured.GetShipsNextServerRuntime(), readDeclaredProvider(t, suite).Hooks().ReadNextServerRuntime != nil; got != want {
+	p := readDeclaredProvider(t, suite)
+	declared := p.Facts()
+	if got, want := configured.GetShipsNextServerRuntime(), p.Hooks().ReadNextServerRuntime != nil; got != want {
 		t.Errorf("ConfigureResponse.facts.ships_next_server_runtime = %v, want %v — the RPC answers whether Hooks().ReadNextServerRuntime is set", got, want)
 	}
 	if got, want := configured.GetNextRuntimeDir(), declared.NextRuntimeDir; got != want {
