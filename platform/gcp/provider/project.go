@@ -103,7 +103,7 @@ func (p *Provider) openClients(ctx context.Context) (*clients, error) {
 	if err := names.fit(); err != nil {
 		return nil, err
 	}
-	p.resolved = &clients{Names: names, region: p.options.Region, endpoint: p.endpoint}
+	p.resolved = &clients{Names: names, region: p.options.Region, endpoint: p.endpoint, tagEndpoint: p.tagEndpoint}
 	return p.resolved, nil
 }
 

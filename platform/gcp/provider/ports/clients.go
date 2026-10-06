@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 
@@ -59,10 +60,11 @@ func (m *memo[T]) get(open func() (T, error)) (T, error) {
 }
 
 type Clients struct {
-	Namespace provider.Namespace
-	Project   string
-	Region    string
-	Endpoint  string
+	Namespace   provider.Namespace
+	Project     string
+	Region      string
+	Endpoint    string
+	TagEndpoint string
 
 	firestore  memo[*firestore.Client]
 	taskStores sync.Map
@@ -131,8 +133,15 @@ func (c *Clients) TagFirestore(tier environment.Tier) (*firestore.Client, error)
 	held, _ := c.tagStores.LoadOrStore(tier, &memo[*firestore.Client]{})
 	return Opened(c, held.(*memo[*firestore.Client]), "Firestore", func() (*firestore.Client, error) {
 		return firestore.NewClientWithDatabase(
-			context.Background(), c.Project, TagDatabase(c.Namespace, tier), EmulatorGRPC(c.Endpoint)...)
+			context.Background(), c.Project, TagDatabase(c.Namespace, tier), append(EmulatorGRPC(c.tagEndpoint()), EmulatorAdmin(c.TagEndpoint)...)...)
 	})
+}
+
+func (c *Clients) tagEndpoint() string {
+	if c.TagEndpoint != "" {
+		return c.TagEndpoint
+	}
+	return c.Endpoint
 }
 
 func (c *Clients) KMS() (*kms.KeyManagementClient, error) {
@@ -175,6 +184,34 @@ func EmulatorGRPC(endpoint string) []option.ClientOption {
 		option.WithoutAuthentication(),
 		option.WithGRPCDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
 	}
+}
+
+type emulatorOwner struct{}
+
+func (emulatorOwner) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+	return map[string]string{"authorization": "Bearer owner"}, nil
+}
+
+func (emulatorOwner) RequireTransportSecurity() bool { return false }
+
+func EmulatorAdmin(endpoint string) []option.ClientOption {
+	if endpoint == "" || !IsLoopback(endpoint) {
+		return nil
+	}
+	return []option.ClientOption{option.WithGRPCDialOption(grpc.WithPerRPCCredentials(emulatorOwner{}))}
+}
+
+func IsLoopback(endpoint string) bool {
+	host := HostPort(endpoint)
+	if named, _, err := net.SplitHostPort(host); err == nil {
+		host = named
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	address := net.ParseIP(host)
+	return address != nil && address.IsLoopback()
 }
 
 func EmulatorStorage(endpoint string) []option.ClientOption {
