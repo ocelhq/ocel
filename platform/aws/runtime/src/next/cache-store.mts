@@ -2,11 +2,11 @@ import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { type CacheEntryFile, entryObjectKey, type PublishTag } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
-import { newIsrWriterClient } from "@platform/edge-contract/isr-writer";
 import {
   entriesAdopted,
   isNotFound,
   type ObjectStore,
+  openAdoptedIsrWriter,
   providerObjectStore,
   readBodyText,
   requireEnv,
@@ -19,16 +19,7 @@ interface EntryStore {
 }
 
 function openAdoptedEntryStore(isrPrefix: string): EntryStore {
-  const endpoint = process.env.OCEL_ISR_WRITER_URL;
-  const secret = process.env.OCEL_ISR_WRITER_SECRET;
-  if (!endpoint || !secret) {
-    throw new Error(
-      "ocel cache handler: OCEL_ISR_WRITER_URL and OCEL_ISR_WRITER_SECRET must both be set " +
-        "when this deploy reads its ISR entries from an adopted cache store; " +
-        "re-run `ocel bootstrap production` and redeploy",
-    );
-  }
-  const client = newIsrWriterClient({ endpoint, isrPrefix, secret });
+  const client = openAdoptedIsrWriter(isrPrefix);
   return {
     read: (key) => client.readEntry(key),
     write: (key, entry) => client.writeEntry(key, entry),

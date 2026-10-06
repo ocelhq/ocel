@@ -1,4 +1,4 @@
-import type { PublishTag } from "@framework/next-cache";
+import { entryMissHeader, type PublishTag } from "@framework/next-cache";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 const publishNothing: PublishTag = async () => {};
@@ -14,8 +14,9 @@ afterEach(() => {
   vi.resetModules();
   vi.restoreAllMocks();
   for (const v of Object.keys(process.env)) {
-    if (v.startsWith("OCEL_ISR_STORE_")) delete process.env[v];
+    if (v.startsWith("OCEL_ISR_STORE_") || v.startsWith("OCEL_ISR_WRITER_")) delete process.env[v];
   }
+  vi.unstubAllGlobals();
 });
 
 async function storeWithResponses(responses: any[], publish: PublishTag = publishNothing) {
@@ -42,6 +43,8 @@ async function storeWithResponses(responses: any[], publish: PublishTag = publis
 test("stays on the provider's bucket when a cache store is adopted", async () => {
   Object.assign(process.env, {
     OCEL_ISR_STORE_BUCKET: "isr",
+    OCEL_ISR_WRITER_URL: "https://writer.example",
+    OCEL_ISR_WRITER_SECRET: "write-secret",
   });
   const built: any[] = [];
   const sent: any[] = [];
@@ -336,4 +339,136 @@ test("surfaces a snapshot read failure that is neither a 404 nor a 304", async (
   const { store } = await storeWithObjects([new Error("s3 is down")]);
 
   await expect(store.readTagSnapshot(null)).rejects.toThrow(/down/);
+});
+
+function adoptWithWriter() {
+  Object.assign(process.env, {
+    OCEL_ISR_STORE_BUCKET: "isr",
+    OCEL_ISR_WRITER_URL: "https://writer.example",
+    OCEL_ISR_WRITER_SECRET: "write-secret",
+  });
+}
+
+function writerAnswering(...responses: Array<Response | Error>) {
+  const calls: Array<[string, any]> = [];
+  vi.stubGlobal("fetch", async (url: any, init: any) => {
+    calls.push([String(url), init ?? {}]);
+    const next = responses.shift();
+    if (next === undefined) throw new Error("unexpected extra fetch()");
+    if (next instanceof Error) throw next;
+    return next;
+  });
+  return calls;
+}
+
+const edgeSnapshot = (records: Record<string, unknown>, etag: string) =>
+  new Response(JSON.stringify({ version: 1, deployedAt: 1_000, generatedAt: 2_000, records }), {
+    status: 200,
+    headers: { etag },
+  });
+
+const cursorOf = (own: string | null, edge: string | null) => JSON.stringify([own, edge]);
+
+test("honours a tag the edge raised that never reached the origin's own snapshot", async () => {
+  adoptWithWriter();
+  const calls = writerAnswering(edgeSnapshot({ posts: { expired: 2_000 } }, '"w1"'));
+  const { store } = await storeWithObjects([
+    storedSnapshot({ ...snapshot, records: { products: { expired: 1_800 } } }, '"s1"'),
+  ]);
+
+  const read = await store.readTagSnapshot(null);
+
+  expect(calls).toHaveLength(1);
+  expect(calls[0][0]).toBe("https://writer.example/prod/proj/app/BID/tags");
+  expect(calls[0][1].headers.authorization).toBe("Bearer write-secret");
+  expect(calls[0][1].headers["if-none-match"]).toBeUndefined();
+  expect(read).toEqual({
+    status: "fresh",
+    records: { products: { expired: 1_800 }, posts: { expired: 2_000 } },
+    cursor: cursorOf('"s1"', '"w1"'),
+  });
+});
+
+test("takes the later invalidation of a tag recorded in both snapshots", async () => {
+  adoptWithWriter();
+  writerAnswering(edgeSnapshot({ posts: { expired: 200, stale: 50 } }, '"w1"'));
+  const { store } = await storeWithObjects([
+    storedSnapshot({ ...snapshot, records: { posts: { expired: 100, stale: 10 } } }, '"s1"'),
+  ]);
+
+  const read = await store.readTagSnapshot(null);
+
+  expect(read).toMatchObject({
+    status: "fresh",
+    records: { posts: { expired: 200, stale: 50 } },
+  });
+});
+
+test("conditions each snapshot read on the version it last read", async () => {
+  adoptWithWriter();
+  const calls = writerAnswering(new Response(null, { status: 304 }));
+  const { store, sends } = await storeWithObjects([notModified()]);
+
+  const read = await store.readTagSnapshot(cursorOf('"s1"', '"w1"'));
+
+  expect(sends[0].IfNoneMatch).toBe('"s1"');
+  expect(calls[0][1].headers["if-none-match"]).toBe('"w1"');
+  expect(read).toEqual({ status: "unchanged" });
+});
+
+test("reads the edge's newer snapshot while its own is unchanged", async () => {
+  adoptWithWriter();
+  writerAnswering(edgeSnapshot({ posts: { expired: 2_000 } }, '"w2"'));
+  const { store } = await storeWithObjects([notModified()]);
+
+  const read = await store.readTagSnapshot(cursorOf('"s1"', '"w1"'));
+
+  expect(read).toEqual({
+    status: "fresh",
+    records: { posts: { expired: 2_000 } },
+    cursor: cursorOf('"s1"', '"w2"'),
+  });
+});
+
+test("cannot trust its tags when the edge holds no snapshot", async () => {
+  adoptWithWriter();
+  writerAnswering(new Response(null, { status: 404, headers: { [entryMissHeader]: "1" } }));
+  const { store } = await storeWithObjects([storedSnapshot(snapshot, '"s1"')]);
+
+  expect(await store.readTagSnapshot(null)).toEqual({ status: "unusable" });
+});
+
+test("cannot trust its tags when its own snapshot is unusable, whatever the edge holds", async () => {
+  adoptWithWriter();
+  writerAnswering(edgeSnapshot({ posts: { expired: 2_000 } }, '"w1"'));
+  const missing = Object.assign(new Error("nope"), { name: "NoSuchKey" });
+  const { store } = await storeWithObjects([missing]);
+
+  expect(await store.readTagSnapshot(null)).toEqual({ status: "unusable" });
+});
+
+test("surfaces an edge snapshot read that failed", async () => {
+  adoptWithWriter();
+  writerAnswering(new Response(null, { status: 500 }));
+  const { store } = await storeWithObjects([storedSnapshot(snapshot, '"s1"')]);
+
+  await expect(store.readTagSnapshot(null)).rejects.toThrow(/status 500/);
+});
+
+test("reads only its own snapshot when no isr-writer is bound", async () => {
+  const calls = writerAnswering();
+  const { store } = await storeWithObjects([storedSnapshot(snapshot, '"v1"')]);
+
+  const read = await store.readTagSnapshot(null);
+
+  expect(calls).toHaveLength(0);
+  expect(read).toEqual({ status: "fresh", records: snapshot.records, cursor: '"v1"' });
+});
+
+test("refuses an adopted store whose isr-writer is not fully configured", async () => {
+  process.env.OCEL_ISR_STORE_BUCKET = "isr";
+  await expect(storeWithObjects([])).rejects.toThrow("OCEL_ISR_WRITER_URL");
+
+  process.env.OCEL_ISR_WRITER_URL = "https://writer.example";
+  await expect(storeWithObjects([])).rejects.toThrow("OCEL_ISR_WRITER_SECRET");
 });
