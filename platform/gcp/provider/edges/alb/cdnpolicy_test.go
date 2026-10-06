@@ -77,6 +77,38 @@ func TestThePreviewWildcardBackendKeysWhatABindingsBackendKeys(t *testing.T) {
 	}
 }
 
+func TestADraftModeRequestIsCachedApartFromThePublishedPage(t *testing.T) {
+	t.Parallel()
+
+	seen, err := declared(cdnBinding())
+	if err != nil {
+		t.Fatalf("the binding program = %v", err)
+	}
+
+	got := cacheKeyPolicy(seen[cdnBackend])["includeNamedCookies"]
+	want := []any{"__prerender_bypass"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("includeNamedCookies = %v, want %v; without it Cloud CDN answers a draft-mode request with the cached published page", got, want)
+	}
+}
+
+func TestTheCacheKeyNamesNoMoreCookiesThanCloudCDNAllows(t *testing.T) {
+	t.Parallel()
+
+	seen, err := declared(cdnBinding())
+	if err != nil {
+		t.Fatalf("the binding program = %v", err)
+	}
+
+	cookies, ok := cacheKeyPolicy(seen[cdnBackend])["includeNamedCookies"].([]any)
+	if !ok {
+		t.Fatalf("includeNamedCookies is not a list")
+	}
+	if len(cookies) > 5 {
+		t.Errorf("includeNamedCookies names %d cookies, Cloud CDN allows 5 (https://docs.cloud.google.com/cdn/docs/caching)", len(cookies))
+	}
+}
+
 func TestNoKeyedHeaderIsOneCloudCDNRefusesToKey(t *testing.T) {
 	t.Parallel()
 
