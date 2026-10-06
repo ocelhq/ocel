@@ -8,7 +8,7 @@ export function isrWriteSecret(seed: string, isrPrefix: string): string {
 }
 
 export async function raise(
-  fetchImpl: typeof fetch,
+  send: typeof fetch,
   endpoint: string,
   seed: string,
   isrPrefix: string,
@@ -18,6 +18,6 @@ export async function raise(
     endpoint,
     isrPrefix,
     secret: isrWriteSecret(seed, isrPrefix),
-    fetch: fetchImpl,
+    fetch: send,
   }).raiseTags(Object.fromEntries(records));
 }

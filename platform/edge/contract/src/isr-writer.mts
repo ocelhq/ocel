@@ -42,7 +42,7 @@ export function newIsrWriterClient(opts: {
   fetch?: typeof fetch;
 }): IsrWriterClient {
   const { endpoint, isrPrefix, secret } = opts;
-  const fetchImpl = opts.fetch ?? fetch;
+  const send = opts.fetch ?? fetch;
   if (!endpoint.startsWith("https://")) {
     throw new Error(
       `isr writer ${isrPrefix}: the endpoint ${endpoint} is not https, and the write secret travels in the clear over anything else`,
@@ -55,7 +55,7 @@ export function newIsrWriterClient(opts: {
   return {
     async readEntry(key) {
       try {
-        const res = await fetchImpl(entryAt(key), {
+        const res = await send(entryAt(key), {
           headers: { authorization: bearer },
           signal: AbortSignal.timeout(readTimeoutMs),
         });
@@ -76,7 +76,7 @@ export function newIsrWriterClient(opts: {
     },
 
     async writeEntry(key, entry) {
-      const res = await fetchImpl(entryAt(key), {
+      const res = await send(entryAt(key), {
         method: "PUT",
         headers: { authorization: bearer, "content-type": "application/json" },
         body: JSON.stringify(entry),
@@ -93,7 +93,7 @@ export function newIsrWriterClient(opts: {
     },
 
     async raiseTags(records) {
-      const res = await fetchImpl(`${base}/tags`, {
+      const res = await send(`${base}/tags`, {
         method: "POST",
         headers: { authorization: bearer, "content-type": "application/json" },
         body: JSON.stringify({ records }),
@@ -107,7 +107,7 @@ export function newIsrWriterClient(opts: {
     async readTagSnapshot(etag) {
       const headers: Record<string, string> = { authorization: bearer };
       if (etag !== null) headers["if-none-match"] = etag;
-      const res = await fetchImpl(`${base}/tags`, {
+      const res = await send(`${base}/tags`, {
         headers,
         signal: AbortSignal.timeout(readTimeoutMs),
       });
