@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -23,9 +24,15 @@ func (f cloudflareFront) Facts() edge.Facts {
 }
 
 func (f cloudflareFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
-	if base := f.options.OriginBase(spec.Tier); f.Facts().RunsCode && !spec.PruneOnly && base != "" {
+	base := f.options.OriginBase(spec.Tier)
+	if f.Facts().RunsCode && base != "" && (!spec.PruneOnly || spec.Tier == environment.TierPreview) {
 		if err := f.wildcards.ensure(ctx, spec.Tier, base, spec.Warn); err != nil {
-			return nil, err
+			if !spec.PruneOnly {
+				return nil, err
+			}
+			if spec.Warn != nil {
+				spec.Warn(fmt.Sprintf("the preview origin wildcard *.%s is not ready, and serverless apps behind the worker are refused until it is: %v", base, err))
+			}
 		}
 	}
 	return f.Edge.Reconcile(ctx, spec, prior)
