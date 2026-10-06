@@ -162,7 +162,7 @@ func TestPromotingTheReleaseAlreadyServedClearsNothing(t *testing.T) {
 	}
 }
 
-func TestOnePromotionOfTwoNextAppsClearsBothReplacedReleasesInOneRequest(t *testing.T) {
+func TestOnePromotionOfTwoNextAppsOnOneReleaseClearsItOnce(t *testing.T) {
 	t.Parallel()
 
 	_, w, stack := reconciled(t)
@@ -173,9 +173,9 @@ func TestOnePromotionOfTwoNextAppsClearsBothReplacedReleasesInOneRequest(t *test
 	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1", "admin": "b1"})
 	promoted(t, stack, progress.Discard(), "p2", "", map[string]string{"web": "b2", "admin": "b2"})
 
-	want := [][]string{{"ocel-alb-production-routes", "r00000001", "r00000001"}}
+	want := [][]string{{"ocel-alb-production-routes", "r00000001"}}
 	if got := w.invalidations(); !slices.EqualFunc(got, want, slices.Equal) {
-		t.Errorf("the promotion invalidated %v, want one request carrying both replaced releases %v", got, want)
+		t.Errorf("the promotion invalidated %v, want one request carrying the replaced release once %v", got, want)
 	}
 }
 
