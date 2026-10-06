@@ -82,23 +82,6 @@ func (d Deployment) schedule(ctx context.Context, p publication, name string) er
 	return nil
 }
 
-func (d Deployment) unschedule(ctx context.Context, name string) error {
-	if name == "" {
-		return nil
-	}
-	client, err := d.Clients.CloudTasks()
-	if err != nil {
-		return err
-	}
-	err = retried(ctx, func() error {
-		return client.DeleteTask(ctx, &cloudtaskspb.DeleteTaskRequest{Name: name})
-	})
-	if err != nil && status.Code(err) != codes.NotFound {
-		return fmt.Errorf("delete delay task %s: %w", name, err)
-	}
-	return nil
-}
-
 func (d Deployment) publish(ctx context.Context, p publication, delayTask string) error {
 	if delayTask != "" {
 		return d.schedule(ctx, p, delayTask)

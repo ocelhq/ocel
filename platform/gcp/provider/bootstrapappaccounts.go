@@ -167,7 +167,7 @@ func (b bootstrap) retireWorkloadAccount(ctx context.Context, tier environment.T
 	if _, err := b.clients.bindKeyRoles(ctx, tier, member, []string{appOpeningRole}, nil); err != nil {
 		return false, fmt.Errorf("take back what the %s service account may do with the %s key: %w", id, tier, err)
 	}
-	if err := ignoreAbsent(b.clients.bindQueueRoles(ctx, tier, member, nil)); err != nil {
+	if err := ignoreAbsent(b.clients.bindQueueRoles(ctx, tier, member, retiredTierQueueRoles, nil)); err != nil {
 		return false, fmt.Errorf("take back what the %s service account may do on the %s delay queue: %w", id, tier, err)
 	}
 	return b.deleteAccount(ctx, id)

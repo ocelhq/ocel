@@ -247,8 +247,8 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsItselfAndPublishToItsTop
 		}
 	}
 	slices.Sort(queueRoles)
-	if !slices.Equal(queueRoles, []string{"roles/cloudtasks.enqueuer", "roles/cloudtasks.taskDeleter"}) {
-		t.Errorf("the app holds %v on the delay queue, want enqueuer and taskDeleter", queueRoles)
+	if !slices.Equal(queueRoles, []string{"roles/cloudtasks.enqueuer"}) {
+		t.Errorf("the app holds %v on the delay queue, want the enqueuer alone", queueRoles)
 	}
 	own := "/v1/projects/acme-prod/serviceAccounts/" + email
 	var actingAs []string
@@ -277,6 +277,26 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsItselfAndPublishToItsTop
 	}
 }
 
+func TestAnAppReachingTopicsMayNotDeleteTasksOnTheTiersDelayQueue(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	server.accountPolicies = map[string]*iam.Policy{}
+	p, c := ensuringAccounts(t, server)
+	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
+
+	email, err := p.ensureAppAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
+	if err != nil {
+		t.Fatalf("ensureAppAccount() = %v", err)
+	}
+
+	member := "serviceAccount:" + email
+	for _, binding := range server.queuePolicies[c.DelayQueuePath("europe-west1", environment.TierProduction)].GetBindings() {
+		if binding.GetRole() == "roles/cloudtasks.taskDeleter" && slices.Contains(binding.GetMembers(), member) {
+			t.Errorf("the app holds %s on the delay queue, and a delay queue is shared by every app of the tier", binding.GetRole())
+		}
+	}
+}
+
 func TestAnAppReachingNoTopicsIsGrantedNothingOnTheQueueOrItsOwnAccount(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
@@ -301,7 +321,7 @@ func TestAQueueGrantRacedByAnotherDeployIsReadAgainAndWritten(t *testing.T) {
 	server.queueAborts = 2
 	c := server.open(t)
 
-	if err := c.bindQueueRoles(context.Background(), environment.TierProduction, "serviceAccount:app@acme-prod.iam.gserviceaccount.com", queueRoles); err != nil {
+	if err := c.bindQueueRoles(context.Background(), environment.TierProduction, "serviceAccount:app@acme-prod.iam.gserviceaccount.com", queueRoles, queueRoles); err != nil {
 		t.Fatalf("bindQueueRoles() = %v", err)
 	}
 
