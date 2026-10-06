@@ -300,11 +300,7 @@ export default {
       cache: {
         cache: caches.default,
         waitUntil: (promise) => ctx.waitUntil(promise),
-        enqueueRevalidation: revalidationSender(
-          env.OCEL_REVALIDATE_QUEUE_URL,
-          env.OCEL_EDGE_ACCESS_KEY_ID,
-          env.OCEL_EDGE_SECRET_KEY,
-        ),
+        enqueueRevalidation: revalidationSender(env),
       },
       interception: store
         ? {
