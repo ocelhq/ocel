@@ -33,6 +33,7 @@ beforeEach(() => {
 
 const blog = {
   url: "/blog?page=2",
+  key: "blog",
   lastModified: 1_000,
   headers: { host: "shop.example", "x-ocel-refresh": "1000" },
 };

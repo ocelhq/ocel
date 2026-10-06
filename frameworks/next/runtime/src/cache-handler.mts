@@ -182,7 +182,10 @@ export default class OcelCacheHandler {
             entry.cacheControl?.revalidate ?? served.revalidate,
           )
         ) {
-          noteStaleEntry(this.requestHeaders, entry.lastModified);
+          noteStaleEntry(this.requestHeaders, {
+            key: cacheKey(key),
+            lastModified: entry.lastModified,
+          });
         }
         if (served.readsNoEntry) return null;
       }

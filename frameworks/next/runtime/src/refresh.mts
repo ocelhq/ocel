@@ -7,8 +7,14 @@ import {
 } from "./prerendered-routes.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 
+export interface StaleEntry {
+  key: string;
+  lastModified: number;
+}
+
 export interface Refresh {
   url: string;
+  key: string;
   lastModified: number;
   headers: Record<string, string>;
 }
@@ -20,7 +26,7 @@ export interface ServedRoute {
   readsNoEntry: boolean;
 }
 
-const staleEntryKey = Symbol.for("ocel.next.stale-entry.v1");
+const staleEntryKey = Symbol.for("ocel.next.stale-entry.v2");
 
 const servedRouteKey = Symbol.for("ocel.next.served-route.v1");
 
@@ -28,14 +34,20 @@ const prefetchPurpose = "prefetch";
 
 const rscQuery = "_rsc";
 
-export function noteStaleEntry(headers: RequestHeaders, lastModified: number): void {
-  const noted = headers[staleEntryKey];
-  headers[staleEntryKey] = typeof noted === "number" ? Math.max(noted, lastModified) : lastModified;
+export function noteStaleEntry(headers: RequestHeaders, entry: StaleEntry): void {
+  const noted = readStaleEntry(headers);
+  if (noted === undefined || entry.lastModified > noted.lastModified)
+    headers[staleEntryKey] = entry;
 }
 
-export function readStaleEntry(headers: RequestHeaders): number | undefined {
+export function readStaleEntry(headers: RequestHeaders): StaleEntry | undefined {
   const noted = headers[staleEntryKey];
-  return typeof noted === "number" ? noted : undefined;
+  return typeof noted === "object" &&
+    noted !== null &&
+    typeof noted.key === "string" &&
+    Number.isFinite(noted.lastModified)
+    ? noted
+    : undefined;
 }
 
 export function noteServedRoute(headers: RequestHeaders, route: ServedRoute): void {
@@ -90,14 +102,15 @@ export function routeStaleHitsToRefresh(
 
   const writeHead = res.writeHead;
   res.writeHead = function (this: http.ServerResponse, ...args: any[]) {
-    const lastModified = readStaleEntry(req.headers as RequestHeaders);
-    if (!this.headersSent && lastModified !== undefined) {
+    const stale = readStaleEntry(req.headers as RequestHeaders);
+    if (!this.headersSent && stale !== undefined) {
       const refresh: Refresh = {
         url: pageUrl(req.url),
-        lastModified,
+        key: stale.key,
+        lastModified: stale.lastModified,
         headers: {
           ...(req.headers.host ? { host: req.headers.host } : {}),
-          [refreshHeader]: String(lastModified),
+          [refreshHeader]: String(stale.lastModified),
         },
       };
       holdEnd(

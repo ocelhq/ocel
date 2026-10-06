@@ -334,7 +334,7 @@ function servedBy(route: { revalidate: number | false; readsNoEntry?: boolean })
   return { requestHeaders, handler: new OcelCacheHandler({ _requestHeaders: requestHeaders }) };
 }
 
-test("notes a stale page entry it serves so the host can refresh it", async () => {
+test("notes the entry and generation of a stale page it serves, so the host can refresh it", async () => {
   const store = fakeStore();
   seedPage(store, "index", { lastModified: 1_000 });
   const { requestHeaders, handler } = servedBy({ revalidate: 60 });
@@ -342,7 +342,17 @@ test("notes a stale page entry it serves so the host can refresh it", async () =
   const entry = await handler.get("/", { kind: "APP_PAGE" });
 
   expect(entry?.lastModified).toBe(1_000);
-  expect(readStaleEntry(requestHeaders)).toBe(1_000);
+  expect(readStaleEntry(requestHeaders)).toEqual({ key: "index", lastModified: 1_000 });
+});
+
+test("notes the entry a stale page was read from under its store key", async () => {
+  const store = fakeStore();
+  seedPage(store, "blog/post", { lastModified: 1_000 });
+  const { requestHeaders, handler } = servedBy({ revalidate: 60 });
+
+  await handler.get("/blog/post", { kind: "APP_PAGE" });
+
+  expect(readStaleEntry(requestHeaders)).toEqual({ key: "blog/post", lastModified: 1_000 });
 });
 
 test("notes a page entry that outlived the window its own render recorded", async () => {
@@ -353,7 +363,7 @@ test("notes a page entry that outlived the window its own render recorded", asyn
 
   await handler.get("/", { kind: "APP_PAGE" });
 
-  expect(readStaleEntry(requestHeaders)).toBe(writtenAt);
+  expect(readStaleEntry(requestHeaders)).toEqual({ key: "index", lastModified: writtenAt });
 });
 
 test("notes nothing for a page entry within the window its own render recorded", async () => {
@@ -389,7 +399,7 @@ test("notes a page entry whose tag went stale after it was written", async () =>
   const entry = await handler.get("/", { kind: "APP_PAGE" });
 
   expect(entry).not.toBeNull();
-  expect(readStaleEntry(requestHeaders)).toBe(writtenAt);
+  expect(readStaleEntry(requestHeaders)).toEqual({ key: "index", lastModified: writtenAt });
 });
 
 test("reads no page entry for a request that resumes from it, and notes the stale one", async () => {
@@ -398,7 +408,7 @@ test("reads no page entry for a request that resumes from it, and notes the stal
   const { requestHeaders, handler } = servedBy({ revalidate: 60, readsNoEntry: true });
 
   expect(await handler.get("/", { kind: "APP_PAGE" })).toBeNull();
-  expect(readStaleEntry(requestHeaders)).toBe(1_000);
+  expect(readStaleEntry(requestHeaders)).toEqual({ key: "index", lastModified: 1_000 });
 });
 
 test("reads no page entry for a request that resumes from it, even a fresh one", async () => {
