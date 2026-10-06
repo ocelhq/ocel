@@ -28,6 +28,7 @@ type iamServer struct {
 	mu        sync.Mutex
 	keys      map[string]bool
 	keyPolicy map[string]*iampb.Policy
+	keyRaces  int
 	project   *cloudresourcemanager.Policy
 	writes    int
 	created   []*iam.CreateServiceAccountRequest
@@ -113,6 +114,11 @@ func (s *iamServer) GetIamPolicy(_ context.Context, req *iampb.GetIamPolicyReque
 func (s *iamServer) SetIamPolicy(_ context.Context, req *iampb.SetIamPolicyRequest) (*iampb.Policy, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.keyRaces > 0 {
+		s.keyRaces--
+		s.keyPolicy[req.GetResource()] = &iampb.Policy{Etag: []byte("BwXhoLB="), Bindings: []*iampb.Binding{{Role: "roles/cloudkms.viewer", Members: []string{"user:concurrent"}}}}
+		return nil, status.Error(codes.FailedPrecondition, "the key's policy changed under this write")
+	}
 	s.keyPolicy[req.GetResource()] = req.GetPolicy()
 	s.writes++
 	return req.GetPolicy(), nil
