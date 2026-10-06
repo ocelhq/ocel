@@ -52,7 +52,8 @@ A serverless Next app runs as Cloud Run services billed per request, each with 2
 A Next app deployed as functions (serverless compute, billed per request) cannot turn on
 `experimental.partialFallbacks` (`partialPrefetching` from Next 16.3). Next renders those shells after
 the response ends, and Cloud Run stops the work then, so the build refuses it and names the setting.
-Next apps on container compute are not affected.
+Turn the setting off, or set `"compute": "container"` on the app in `ocel.json`: a Next app on
+container compute is not affected.
 
 A Next app on `compute: "container"` runs `next start` in its image with 2 GiB of memory and its
 CPU always allocated, so it is billed per instance, and it keeps at least one instance running
