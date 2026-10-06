@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,9 +23,29 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/provider/enginetest"
 )
 
+func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }
+
 const liveEnv = "OCEL_LIVE_DOCKER"
+
+type labelledEngine struct {
+	docker.Engine
+	t *testing.T
+}
+
+func (e labelledEngine) Run(ctx context.Context, spec docker.Spec) (docker.Container, error) {
+	args := enginetest.RunLabelArgs(e.t)
+	key, value, _ := strings.Cut(args[len(args)-1], "=")
+	labels := maps.Clone(spec.Labels)
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	labels[key] = value
+	spec.Labels = labels
+	return e.Engine.Run(ctx, spec)
+}
 
 type liveBucket struct {
 	backend   *bucket.Backend
@@ -52,7 +74,14 @@ func startLive(t *testing.T, project string) liveBucket {
 	t.Cleanup(app.Close)
 
 	origins := []string{app.URL}
-	backend := bucket.New(docker.Open, t.TempDir(), func() []string { return origins })
+	open := func(ctx context.Context) (docker.Engine, error) {
+		engine, err := docker.Open(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return labelledEngine{Engine: engine, t: t}, nil
+	}
+	backend := bucket.New(open, t.TempDir(), func() []string { return origins })
 	t.Cleanup(func() {
 		_ = backend.Close(ctx, true)
 		engine, err := docker.Open(ctx)
@@ -102,6 +131,40 @@ func put(t *testing.T, target *bucketv1.PresignedTarget, contentType, body strin
 	return send(t, http.MethodPut, target.GetUrl(), headers, body)
 }
 
+func postForm(t *testing.T, target *bucketv1.PresignedTarget, overrides map[string]string, body string) *http.Response {
+	t.Helper()
+	var form bytes.Buffer
+	writer := multipart.NewWriter(&form)
+	for name, value := range target.GetFields() {
+		if override, ok := overrides[name]; ok {
+			value = override
+		}
+		if err := writer.WriteField(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	file, err := writer.CreateFormFile("file", "upload")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write([]byte(body)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return send(t, http.MethodPost, target.GetUrl(), map[string]string{"Content-Type": writer.FormDataContentType()}, form.String())
+}
+
+func (l liveBucket) head(t *testing.T, key string) *bucketv1.ObjectInfo {
+	t.Helper()
+	head, err := l.backend.Head(context.Background(), &bucketv1.HeadRequest{Bucket: l.name, Key: key})
+	if err != nil {
+		t.Fatalf("Head = %v", err)
+	}
+	return head.GetObject()
+}
+
 func (l liveBucket) presign(t *testing.T, callbackBase string, files ...*bucketv1.PresignFile) *bucketv1.PresignUploadResponse {
 	t.Helper()
 	presigned, err := l.backend.PresignUpload(context.Background(), &bucketv1.PresignUploadRequest{
@@ -121,11 +184,51 @@ func TestDockerAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
 		&bucketv1.PresignFile{Key: "type.txt", Name: "type.txt", Size: 5, MimeType: "text/plain"},
 		&bucketv1.PresignFile{Key: "size.txt", Name: "size.txt", Size: 5, MimeType: "text/plain"},
 	)
-	if resp := put(t, presigned.GetFiles()[0], "image/png", "hello"); resp.StatusCode != http.StatusForbidden {
-		t.Errorf("a PUT under another content type answered %s, want 403", resp.Status)
+	for _, file := range presigned.GetFiles() {
+		if file.GetMethod() != http.MethodPost {
+			t.Fatalf("an uploader target is a %s, want a POST form", file.GetMethod())
+		}
 	}
-	if resp := put(t, presigned.GetFiles()[1], "text/plain", "hello, this is far more than five bytes"); resp.StatusCode != http.StatusForbidden {
-		t.Errorf("a PUT of another length answered %s, want 403", resp.Status)
+	if resp := postForm(t, presigned.GetFiles()[0], map[string]string{"Content-Type": "image/png"}, "hello"); resp.StatusCode < 400 || resp.StatusCode >= 500 {
+		t.Errorf("a form under another content type answered %s, want a 4xx", resp.Status)
+	}
+	if resp := postForm(t, presigned.GetFiles()[1], nil, "hello, this is far more than five bytes"); resp.StatusCode < 400 || resp.StatusCode >= 500 {
+		t.Errorf("a form of another length answered %s, want a 4xx", resp.Status)
+	}
+	for _, key := range []string{"type.txt", "size.txt"} {
+		if live.head(t, key) != nil {
+			t.Errorf("%s landed although its upload broke the signed conditions", key)
+		}
+	}
+}
+
+func TestDockerASignedUploadIsHeldToItsMaxSizeOnTheDevStore(t *testing.T) {
+	live := startLive(t, "bucket-live-maxsize-test")
+	sign := func() *bucketv1.PresignedTarget {
+		signed, err := live.backend.Sign(context.Background(), &bucketv1.SignRequest{
+			Bucket:      live.name,
+			Key:         "bounded.txt",
+			Operation:   bucketv1.SignedOperation_SIGNED_OPERATION_POST_UPLOAD,
+			Audience:    bucketv1.SignedAudience_SIGNED_AUDIENCE_EXTERNAL,
+			Constraints: &bucketv1.SignConstraints{MaxSize: 5, ContentType: "text/plain"},
+		})
+		if err != nil {
+			t.Fatalf("Sign = %v", err)
+		}
+		return signed.GetTarget()
+	}
+
+	if resp := postForm(t, sign(), nil, "hello!"); resp.StatusCode < 400 || resp.StatusCode >= 500 {
+		t.Errorf("a form over the signed maximum answered %s, want a 4xx", resp.Status)
+	}
+	if live.head(t, "bounded.txt") != nil {
+		t.Fatal("an object over the signed maximum landed")
+	}
+	if resp := postForm(t, sign(), nil, "hello"); resp.StatusCode/100 != 2 {
+		t.Fatalf("a form within the signed maximum answered %s", resp.Status)
+	}
+	if object := live.head(t, "bounded.txt"); object == nil || object.GetSize() != 5 {
+		t.Errorf("Head = %v, want the 5-byte object", object)
 	}
 }
 
@@ -133,8 +236,8 @@ func TestDockerACompletedUploadCallsTheAppBackWithTheSignedFile(t *testing.T) {
 	live := startLive(t, "bucket-live-complete-test")
 	presigned := live.presign(t, live.app.URL+"/api/upload",
 		&bucketv1.PresignFile{Key: "a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"})
-	if resp := put(t, presigned.GetFiles()[0], "text/plain", "hello"); resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT to the presigned url answered %s", resp.Status)
+	if resp := postForm(t, presigned.GetFiles()[0], nil, "hello"); resp.StatusCode/100 != 2 {
+		t.Fatalf("the form POST to the presigned url answered %s", resp.Status)
 	}
 
 	completed, err := live.backend.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: presigned.GetSessionId()})
@@ -170,8 +273,8 @@ func TestDockerAnUploadWhoseCallbackGoesToAnOriginNoBucketAllowsCompletesWithout
 	live := startLive(t, "bucket-live-foreign-callback-test")
 	presigned := live.presign(t, foreign.URL+"/api/upload",
 		&bucketv1.PresignFile{Key: "a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"})
-	if resp := put(t, presigned.GetFiles()[0], "text/plain", "hello"); resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT to the presigned url answered %s", resp.Status)
+	if resp := postForm(t, presigned.GetFiles()[0], nil, "hello"); resp.StatusCode/100 != 2 {
+		t.Fatalf("the form POST to the presigned url answered %s", resp.Status)
 	}
 
 	if _, err := live.backend.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: presigned.GetSessionId()}); err != nil {
@@ -231,7 +334,7 @@ func TestDockerTheAppsOriginIsReadAgainOnEverySync(t *testing.T) {
 	allowed := func(origin string) string {
 		resp := send(t, http.MethodOptions, live.endpoint+"/"+live.name+"/a.txt", map[string]string{
 			"Origin":                        origin,
-			"Access-Control-Request-Method": http.MethodPut,
+			"Access-Control-Request-Method": http.MethodPost,
 		}, "")
 		return resp.Header.Get("Access-Control-Allow-Origin")
 	}
