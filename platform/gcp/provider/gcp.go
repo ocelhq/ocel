@@ -113,14 +113,15 @@ func (p *Provider) Facts() provider.Facts {
 
 func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
-		PreflightDeploy:     p.PreflightDeploy,
-		ProgramEdge:         p.ProgramEdge,
-		EnsureImageRegistry: p.EnsureImageRegistry,
-		OpenDirectImages:    p.OpenDirectImages,
-		CheckBucket:         s3store.Check,
-		ProveIdentity:       ports.ProveIdentity,
-		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
-		FunctionImages:      &provider.FunctionImageHooks{ResolveBase: p.ResolveFunctionBase, ReadRuntime: p.ReadFunctionRuntime},
+		PreflightDeploy:       p.PreflightDeploy,
+		ProgramEdge:           p.ProgramEdge,
+		EnsureImageRegistry:   p.EnsureImageRegistry,
+		OpenDirectImages:      p.OpenDirectImages,
+		CheckBucket:           s3store.Check,
+		ProveIdentity:         ports.ProveIdentity,
+		Cost:                  &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
+		FunctionImages:        &provider.FunctionImageHooks{ResolveBase: p.ResolveFunctionBase, ReadRuntime: p.ReadFunctionRuntime},
+		ReadNextServerRuntime: p.ReadNextServerRuntime,
 	}
 }
 

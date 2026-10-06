@@ -14,11 +14,14 @@ var embedded embed.FS
 const ContainerArch = "amd64"
 
 var (
-	nodeRuntime      = load("dist/serve.mjs")
-	containerRuntime = load("dist/container-runtime-" + ContainerArch)
-	envSourceSync    = load("dist/envsourcesync-" + ContainerArch)
-	realtimeGateway  = load("dist/realtime-gateway-" + ContainerArch)
+	nodeRuntime       = load("dist/serve.mjs")
+	containerRuntime  = load("dist/container-runtime-" + ContainerArch)
+	envSourceSync     = load("dist/envsourcesync-" + ContainerArch)
+	realtimeGateway   = load("dist/realtime-gateway-" + ContainerArch)
+	nextServerRuntime = loadNextServerRuntime()
 )
+
+var nextServerRuntimeFiles = []string{"server-adapter.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"}
 
 func NodeRuntime() []byte { return nodeRuntime }
 
@@ -29,6 +32,8 @@ func NextRuntime() fs.FS {
 	}
 	return directory
 }
+
+func NextServerRuntime() map[string][]byte { return nextServerRuntime }
 
 func ContainerRuntime(arch string) ([]byte, error) {
 	if arch != ContainerArch {
@@ -47,4 +52,12 @@ func load(name string) []byte {
 		panic(fmt.Sprintf("payloads: %v", err))
 	}
 	return body
+}
+
+func loadNextServerRuntime() map[string][]byte {
+	files := make(map[string][]byte, len(nextServerRuntimeFiles))
+	for _, name := range nextServerRuntimeFiles {
+		files[name] = load("dist/next/" + name)
+	}
+	return files
 }
