@@ -13,6 +13,7 @@ import (
 	"github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -43,8 +44,13 @@ type Buckets struct {
 }
 
 type CacheBucket struct {
-	Name string
-	S3   S3API
+	Name   string
+	S3     S3API
+	Writer ISRWriter
+}
+
+type ISRWriter interface {
+	Destroy(ctx context.Context, isrPrefix string) error
 }
 
 func (b Buckets) Buckets(context.Context, environment.Tier) (Buckets, error) { return b, nil }
@@ -184,6 +190,16 @@ func (a Artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, pref
 		sweeps = append(sweeps, CacheBucket{Name: cache.Name, S3: a.reach(cache)})
 	}
 	var errs []error
+	if isrPrefix, covers := naming.ISRPrefixUnder(prefix); covers {
+		for _, cache := range buckets.Caches {
+			if cache.Writer == nil {
+				continue
+			}
+			if err := cache.Writer.Destroy(ctx, isrPrefix); err != nil {
+				errs = append(errs, fmt.Errorf("retire the isr writer's record of %s: %w", isrPrefix, err))
+			}
+		}
+	}
 	swept := 0
 	for _, sweeping := range sweeps {
 		if sweeping.Name == "" {

@@ -324,6 +324,40 @@ func TestBucketsSweepTheCacheStoreOfEveryInstalledEdge(t *testing.T) {
 	}
 }
 
+func TestTheEdgeCacheStoreCarriesTheISRWriterAdoptedWithIt(t *testing.T) {
+	for _, writer := range []bootstrap.ISRWriter{
+		{Endpoint: "https://writer.example", BootstrapCredential: "cred"},
+		{Endpoint: "https://writer.example"},
+	} {
+		p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
+		if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Deployed, error) {
+			return bootstrap.Deployed{
+				ArtifactBucket: "functions",
+				AssetBucket:    "assets",
+				Features:       bootstrap.FeatureSet{bootstrap.FeatureCloudflareEdge: true},
+			}, nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: cloudflare.Kind}, func() (bootstrap.TierParams, error) {
+			return bootstrap.TierParams{CacheStore: bootstrap.CacheStore{Bucket: "cache-cloudflare"}, ISRWriter: writer}, nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		buckets, err := p.Buckets(context.Background(), environment.TierProduction)
+		if err != nil {
+			t.Fatalf("Buckets error = %v", err)
+		}
+		if len(buckets.Caches) != 1 {
+			t.Fatalf("Buckets() returns caches %v, want the one the edge keeps", buckets.Caches)
+		}
+		if has := buckets.Caches[0].Writer != nil; has != (writer.BootstrapCredential != "") {
+			t.Errorf("the cache store holds a writer = %v for %+v, want one only where the credential to retire a record with was adopted", has, writer)
+		}
+	}
+}
+
 func TestBootstrapReadyWithoutAVariablesKey(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	deployed := bootstrap.Deployed{
