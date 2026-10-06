@@ -3,6 +3,7 @@ import { type DispatchHost, dispatchRequest } from "@framework/next-runtime/disp
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import { type Invoke, invalidatesByCacheTag } from "@framework/node-runtime/host";
 
+const uncacheable = "private, no-cache, no-store, max-age=0, must-revalidate";
 const routerStateTree = "next-router-state-tree";
 
 export function trimVaryForCloudCdn(vary: string | null): string | null {
@@ -75,14 +76,17 @@ export function forCloudCdn(response: Response, release: string | null, url: str
   );
   if (dropped.length > 0) {
     console.warn(
-      `ocel: ${url} carries ${dropped.length} cache tags past Cloud CDN's limits, so revalidating ${dropped.join(", ")} will not reach it`,
+      `ocel: ${url} carries ${dropped.length} cache tags past Cloud CDN's limits, so Cloud CDN does not store it and revalidating ${dropped.join(", ")} cannot miss it`,
     );
   }
-  if (trimmedVary === vary && value === tags) return response;
+  if (trimmedVary === vary && value === tags && dropped.length === 0) return response;
   const rewritten = new Response(response.body, response);
   if (trimmedVary === null) rewritten.headers.delete("vary");
   else rewritten.headers.set("vary", trimmedVary);
-  if (value === null) rewritten.headers.delete("cache-tag");
+  if (dropped.length > 0) {
+    rewritten.headers.set("cache-control", uncacheable);
+    rewritten.headers.delete("cache-tag");
+  } else if (value === null) rewritten.headers.delete("cache-tag");
   else rewritten.headers.set("cache-tag", value);
   return rewritten;
 }

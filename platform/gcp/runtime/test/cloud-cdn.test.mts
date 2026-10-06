@@ -158,14 +158,39 @@ test("a service whose edge purges nothing by tag is told no release", () => {
 test("tags dropped past Cloud CDN's limits are named in one warning", () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
+  forCloudCdn(new Response("x", { headers: { "cache-tag": shapedTags(60) } }), release, url);
+
+  expect(warn).toHaveBeenCalledTimes(1);
+  expect(warn.mock.calls[0]![0]).toContain(url);
+  expect(warn.mock.calls[0]![0]).toContain(`${release}|tag49`);
+});
+
+test("a page whose tags exceed Cloud CDN's limits is stored nowhere, so revalidating a dropped tag cannot miss it", () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+
   const response = forCloudCdn(
-    new Response("x", { headers: { "cache-tag": shapedTags(60) } }),
+    new Response("x", {
+      headers: { "cache-tag": shapedTags(60), "cache-control": "s-maxage=31536000" },
+    }),
     release,
     url,
   );
 
-  expect(tagsOf(response)?.split(",")).toHaveLength(50);
-  expect(warn).toHaveBeenCalledTimes(1);
-  expect(warn.mock.calls[0]![0]).toContain(url);
-  expect(warn.mock.calls[0]![0]).toContain(`${release}|tag49`);
+  expect(response.headers.get("cache-control")).toBe(
+    "private, no-cache, no-store, max-age=0, must-revalidate",
+  );
+  expect(response.headers.has("cache-tag")).toBe(false);
+});
+
+test("a page whose tags all fit keeps its cache control", () => {
+  const response = forCloudCdn(
+    new Response("x", {
+      headers: { "cache-tag": shapedTags(3), "cache-control": "s-maxage=60" },
+    }),
+    release,
+    url,
+  );
+
+  expect(response.headers.get("cache-control")).toBe("s-maxage=60");
+  expect(tagsOf(response)).toBe(`${release},${shapedTags(3)}`);
 });
