@@ -145,15 +145,15 @@ func TestTakingAMemberOffRolesLeavesThePolicyItWasGivenUnchanged(t *testing.T) {
 func TestGrantingAMemberAKeyRoleLeavesTheBindingsItWasGivenUnchanged(t *testing.T) {
 	t.Parallel()
 	bindings := []*iampb.Binding{{Role: "roles/cloudkms.viewer", Members: []string{"user:kept@acme.example"}}}
-	before := proto.Clone(bindings[0])
+	before := proto.Clone(bindings[0]).(*iampb.Binding)
 
 	got, changed := boundKeyMember(bindings, "roles/cloudkms.viewer", "user:new@acme.example", true)
 
 	if !changed || !slices.Contains(got[0].GetMembers(), "user:new@acme.example") {
-		t.Fatalf("boundKeyMember() = %v, %v, want the member granted", got, changed)
+		t.Fatalf("boundKeyMember() changed %v, want the member granted", changed)
 	}
 	if !proto.Equal(bindings[0], before) {
-		t.Errorf("the binding it was given is now %v, want %v", bindings[0], before)
+		t.Errorf("the binding it was given is now %s %v, want %s %v", bindings[0].GetRole(), bindings[0].GetMembers(), before.GetRole(), before.GetMembers())
 	}
 }
 
