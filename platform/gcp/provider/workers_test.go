@@ -19,7 +19,7 @@ func TestAWorkerIsAServiceOnlyPubSubReachesThatScalesToNothing(t *testing.T) {
 		service: "ocel-shop-prod-web-w-media-a1b2c3",
 		image:   "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
 		env:     map[string]string{"REGION": "eu"},
-		account: "ocel-production@acme-prod.iam.gserviceaccount.com",
+		account: "ocel-1a2b3c4d5e@acme-prod.iam.gserviceaccount.com",
 	})
 	desired := desiredOf(t, worker)
 
@@ -39,8 +39,8 @@ func TestAWorkerIsAServiceOnlyPubSubReachesThatScalesToNothing(t *testing.T) {
 	if template.MaxInstanceRequestConcurrency != 4 {
 		t.Errorf("a worker instance takes %d pushes at once, want the 4 the worker declares", template.MaxInstanceRequestConcurrency)
 	}
-	if template.ServiceAccount != "ocel-production@acme-prod.iam.gserviceaccount.com" {
-		t.Errorf("a worker runs as %s, want the tier's workload account it sends and records runs as", template.ServiceAccount)
+	if template.ServiceAccount != "ocel-1a2b3c4d5e@acme-prod.iam.gserviceaccount.com" {
+		t.Errorf("a worker runs as %s, want the app's own account it was handed", template.ServiceAccount)
 	}
 	env := map[string]string{}
 	for _, entry := range template.Containers[0].Env {
