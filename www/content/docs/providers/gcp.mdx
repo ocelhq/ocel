@@ -122,7 +122,7 @@ Premium-tier egress. The bootstrap plan says so before it provisions anything.
 
 The bootstrap also keeps one custom role,
 `projects/<project>/roles/<namespace with _ for ->_cdn_purge`, holding only
-`compute.urlMaps.invalidateCache`: the Next apps behind the load balancer are granted it to clear
+`compute.urlMaps.invalidateCache`: the serverless Next apps behind the load balancer are granted it to clear
 revalidated pages from Cloud CDN, and nothing else. It costs nothing, and a bootstrap never
 deletes it, because Google holds a deleted custom role's id for up to 44 days. A role deleted by
 hand is undeleted within Google's first 7 days, and one whose permissions drifted is put back.
@@ -367,7 +367,7 @@ gcloud projects add-iam-policy-binding my-project \
   --condition="title=ocel app grants,expression=api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser', 'projects/my-project/roles/ocel_cdn_purge'])"
 ```
 
-A Next app behind the load balancer is also granted that role, which holds `compute.urlMaps.invalidateCache` and nothing else, so `revalidateTag` clears the tag from Cloud CDN. Google cannot scope the permission to one URL map, so the grant covers every URL map of the project.
+A serverless Next app behind the load balancer is also granted that role, which holds `compute.urlMaps.invalidateCache` and nothing else, so `revalidateTag` clears the tag from Cloud CDN. Google cannot scope the permission to one URL map, so the grant covers every URL map of the project.
 
 Google limits how many service accounts a project may hold, and every app takes one per tier:
 a deploy that reaches the limit is refused, naming the quota. A deploy never deletes an account:
