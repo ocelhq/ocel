@@ -370,25 +370,26 @@ function refuseNonECMAScriptPatterns(name, node) {
   for (const value of Object.values(node)) refuseNonECMAScriptPatterns(name, value);
 }
 
-function writeMessageSchemas() {
+function writeMessageSchemas(generated) {
   const outputs = [MESSAGE_SCHEMAS_OUT, EMBEDDED_SCHEMAS_OUT];
   for (const out of outputs) {
     rmSync(out, { recursive: true, force: true });
     mkdirSync(out, { recursive: true });
   }
-  for (const { file, schema: document } of generateMessageSchemas()) {
+  for (const { file, schema: document } of generated) {
     const text = `${JSON.stringify(document, null, 2)}\n`;
     for (const out of outputs) writeFileSync(join(out, file), text);
   }
 }
 
 const merged = schema();
+const messageSchemas = generateMessageSchemas();
 mkdirSync(dirname(SCHEMA_OUT), { recursive: true });
 writeFileSync(SCHEMA_OUT, `${JSON.stringify(merged, null, 2)}\n`);
 mkdirSync(dirname(TYPES_OUT), { recursive: true });
 writeFileSync(TYPES_OUT, types(merged));
 writeFileSync(SELECTORS_OUT, `${JSON.stringify(selectors(merged), null, 2)}\n`);
-writeMessageSchemas();
+writeMessageSchemas(messageSchemas);
 execFileSync("pnpm", ["exec", "biome", "format", "--write", SCHEMA_OUT, TYPES_OUT, SELECTORS_OUT], {
   cwd: root,
   stdio: "inherit",
