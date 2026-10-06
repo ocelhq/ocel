@@ -388,7 +388,10 @@ func (b bootstrap) accountPresence(ctx context.Context, tier environment.Tier, n
 	if !granted(policy, memberOf(member)) {
 		return presence{present: true, mends: reasonUngranted}, nil
 	}
-	purpose := b.purposeOf(tier, name)
+	purpose, err := b.purposeOf(tier, name)
+	if err != nil {
+		return presence{}, err
+	}
 	grants, err := purpose.granted(ctx, tier)
 	if err != nil {
 		return presence{}, err

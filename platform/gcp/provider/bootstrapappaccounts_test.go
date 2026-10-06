@@ -206,8 +206,12 @@ func TestABootstrapKeepsEveryTierAccountWhateverItsDescriptionSays(t *testing.T)
 	var accounts []listedAccount
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
 		for _, id := range []string{names.PushAccount(tier), names.RealtimeAccount(tier), names.EnvSourceSyncAccount(tier)} {
+			purpose, err := held.purposeOf(tier, id)
+			if err != nil {
+				t.Fatalf("purposeOf(%s, %s) = %v", tier, id, err)
+			}
 			accounts = append(accounts,
-				listedAccount{id: id, description: held.purposeOf(tier, id).description},
+				listedAccount{id: id, description: purpose.description},
 				listedAccount{id: id, description: forged})
 		}
 	}

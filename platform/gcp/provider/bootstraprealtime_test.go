@@ -48,7 +48,11 @@ func TestARealtimeAccountThatMayNotReadItsKeysIsSurveyedAsMendable(t *testing.T)
 	if err != nil {
 		t.Fatalf("accountPresence() = %v", err)
 	}
-	if !found.present || found.mends != b.purposeOf(tier, b.clients.RealtimeAccount(tier)).ungranted {
+	purpose, err := b.purposeOf(tier, b.clients.RealtimeAccount(tier))
+	if err != nil {
+		t.Fatalf("purposeOf() = %v", err)
+	}
+	if !found.present || found.mends != purpose.ungranted {
 		t.Errorf("accountPresence() = %+v, want it present and mended for the read it lacks: a gateway mounting keys it may not read never starts", found)
 	}
 }
@@ -69,5 +73,23 @@ func TestRemovingTheRealtimeAccountTakesItsReadOffTheProject(t *testing.T) {
 	}
 	if members, _ := server.projectMembers(realtimeKeysReaderRole); len(members) > 0 {
 		t.Errorf("the project still binds %v to %s once the account is gone", members, realtimeKeysReaderRole)
+	}
+}
+
+func TestAnAccountNoPurposeNamesIsRefusedRatherThanTreatedAsTheRealtimeAccount(t *testing.T) {
+	t.Parallel()
+	server := grantedIAM()
+	b := bootstrap{clients: server.open(t)}
+	tier := environment.TierProduction
+	ctx := context.Background()
+
+	if err := b.makeAccount(ctx, survey{Tier: tier, Names: b.clients.Names}, "ocel-unheard-of"); err == nil {
+		t.Error("makeAccount() = nil, want a refusal: no purpose names that account")
+	}
+	if err := b.takeAccount(ctx, tier, "ocel-unheard-of"); err == nil {
+		t.Error("takeAccount() = nil, want a refusal: realtime's forget must not run for it")
+	}
+	if len(server.created) != 0 {
+		t.Errorf("created %d accounts, want none", len(server.created))
 	}
 }

@@ -573,14 +573,16 @@ type accountPurpose struct {
 	granted     func(ctx context.Context, tier environment.Tier) (bool, error)
 }
 
-func (b bootstrap) purposeOf(tier environment.Tier, name string) accountPurpose {
+func (b bootstrap) purposeOf(tier environment.Tier, name string) (accountPurpose, error) {
 	switch name {
 	case b.clients.EnvSourceSyncAccount(tier):
-		return b.syncPurpose(tier)
+		return b.syncPurpose(tier), nil
 	case b.clients.PushAccount(tier):
-		return b.pushPurpose(tier)
+		return b.pushPurpose(tier), nil
+	case b.clients.RealtimeAccount(tier):
+		return b.realtimePurpose(tier), nil
 	}
-	return b.realtimePurpose(tier)
+	return accountPurpose{}, fmt.Errorf("no purpose is known for the %s service account in the %s tier", name, tier)
 }
 
 func (b bootstrap) makeAccount(ctx context.Context, read survey, name string) error {
@@ -588,7 +590,10 @@ func (b bootstrap) makeAccount(ctx context.Context, read survey, name string) er
 	if err != nil {
 		return err
 	}
-	purpose := b.purposeOf(read.Tier, name)
+	purpose, err := b.purposeOf(read.Tier, name)
+	if err != nil {
+		return err
+	}
 	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+b.clients.project, &iam.CreateServiceAccountRequest{
 		AccountId: name,
 		ServiceAccount: &iam.ServiceAccount{
@@ -640,7 +645,11 @@ func (b bootstrap) grantRunAs(ctx context.Context, name string) error {
 }
 
 func (b bootstrap) takeAccount(ctx context.Context, tier environment.Tier, name string) error {
-	if err := b.purposeOf(tier, name).forget(ctx, tier); err != nil {
+	purpose, err := b.purposeOf(tier, name)
+	if err != nil {
+		return err
+	}
+	if err := purpose.forget(ctx, tier); err != nil {
 		return err
 	}
 	service, err := b.clients.Accounts()
