@@ -2,9 +2,12 @@ package deploy
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,6 +17,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	smithy "github.com/aws/smithy-go"
+
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func writeTree(t *testing.T, files map[string]string) string {
@@ -183,4 +189,49 @@ func TestUploadArtifact(t *testing.T) {
 			}
 		}
 	})
+}
+
+func serveDescriptor(t *testing.T, runtime, buildID string) string {
+	t.Helper()
+	raw, err := json.Marshal(edge.ServeDescriptor{Framework: runtime, BuildID: buildID, Entry: "/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+func buildIDOf(t *testing.T, routingManifest string) string {
+	t.Helper()
+	var routing struct {
+		BuildID string `json:"buildId"`
+	}
+	if err := json.Unmarshal([]byte(routingManifest), &routing); err != nil {
+		t.Fatalf("parse routing manifest %s: %v", routingManifest, err)
+	}
+	return routing.BuildID
+}
+
+func withServeDescriptors(t *testing.T, files map[string]string) map[string]string {
+	t.Helper()
+	out := maps.Clone(files)
+	for rel, contents := range files {
+		app, ok := appOfRoutingManifest(rel)
+		if !ok {
+			continue
+		}
+		descriptor := path.Join(appsDirName, app, edge.ServeDescriptorFile)
+		if _, written := out[descriptor]; written {
+			continue
+		}
+		out[descriptor] = serveDescriptor(t, buildoutput.FrameworkNext, buildIDOf(t, contents))
+	}
+	return out
+}
+
+func appOfRoutingManifest(rel string) (string, bool) {
+	parts := strings.Split(rel, "/")
+	if len(parts) != 3 || parts[0] != appsDirName || parts[2] != edge.RoutingManifestFile {
+		return "", false
+	}
+	return parts[1], true
 }

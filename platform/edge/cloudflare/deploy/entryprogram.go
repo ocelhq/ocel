@@ -1,7 +1,8 @@
-package deploy
+package cloudflare
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -9,18 +10,27 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-type EdgeProgram struct {
+const (
+	envPreview           = "OCEL_PREVIEW"
+	envPreviewGlobal     = "OCEL_PREVIEW_GLOBAL"
+	envPreviewBaseDomain = "OCEL_PREVIEW_BASE_DOMAIN"
+)
+
+type OriginBindings struct {
+	Variables map[string]string
+	Secrets   map[string]string
+}
+
+type EntryProgram struct {
 	Tier              environment.Tier
-	Kind              edge.Kind
 	Entry             edge.WorkerModule
 	Namespace         string
 	Slug              string
 	Env               string
 	PreviewBaseDomain string
 	PreviewKey        edge.PreviewKey
-
-	Worker WorkerFacts
-	Values map[string]string
+	Origin            OriginBindings
+	Values            map[string]string
 
 	StoreScriptName     string
 	StoreEndpoint       string
@@ -28,11 +38,11 @@ type EdgeProgram struct {
 	ISRWriterScriptName string
 }
 
-func (p EdgeProgram) Build() (provider.EdgeProgram, error) {
+func (p EntryProgram) Build() (provider.EdgeProgram, error) {
 	if p.Slug != "" && p.Namespace == "" {
 		return provider.EdgeProgram{}, fmt.Errorf("an edge worker is named for the namespace that installed its bootstrap, and this program names none; a name without it reaches whatever another namespace deployed for %s", p.Slug)
 	}
-	generic, err := sharedWorker(p.Kind, p.Entry, p.Worker)
+	generic, err := newEntryWorker(p.Entry, p.Origin)
 	if err != nil {
 		return provider.EdgeProgram{}, err
 	}
@@ -48,7 +58,7 @@ func (p EdgeProgram) Build() (provider.EdgeProgram, error) {
 				"no deployments-store worker found for the preview bootstrap, and the shared preview entry reads every deployment through it; re-run `%s` to provision it",
 				provider.BootstrapCommand(environment.TierPreview))
 		}
-		generic = withService(generic, storeServiceBinding, p.StoreScriptName)
+		generic = withService(generic, genericStoreBinding, p.StoreScriptName)
 		generic = withVar(generic, envPreview, "1")
 		generic = withVar(generic, envPreviewGlobal, "1")
 		generic = withVar(generic, envPreviewBaseDomain, p.PreviewBaseDomain)
@@ -70,9 +80,30 @@ func (p EdgeProgram) Build() (provider.EdgeProgram, error) {
 	return provider.EdgeProgram{Spec: spec, Values: p.Values}, nil
 }
 
-func (p EdgeProgram) addPreviewKey(worker edge.Worker) (edge.Worker, error) {
+func newEntryWorker(entry edge.WorkerModule, origin OriginBindings) (edge.Worker, error) {
+	if len(entry.Content) == 0 {
+		return edge.Worker{}, fmt.Errorf("the %s edge names no entry module for its worker to run", Kind)
+	}
+	variables := map[string]string{}
+	maps.Copy(variables, origin.Variables)
+	worker := edge.Worker{Main: entry, Variables: variables}
+	if len(origin.Secrets) > 0 {
+		worker.Secrets = maps.Clone(origin.Secrets)
+	}
+	return worker, nil
+}
+
+func addPreviewVariables(worker edge.Worker, baseDomain string) edge.Worker {
+	worker = withVar(worker, envPreview, "1")
+	if baseDomain != "" {
+		worker = withVar(worker, envPreviewBaseDomain, baseDomain)
+	}
+	return worker
+}
+
+func (p EntryProgram) addPreviewKey(worker edge.Worker) (edge.Worker, error) {
 	if p.PreviewKey != "" {
-		return addSecret(worker, edge.PreviewKeyVar, string(p.PreviewKey)), nil
+		return withSecret(worker, edge.PreviewKeyVar, string(p.PreviewKey)), nil
 	}
 	if worker.Variables[envPreviewBaseDomain] != "" {
 		return edge.Worker{}, fmt.Errorf("the preview worker for %s serves hostnames under %s but was given no key to verify them with, so it would answer none; deploy again so ocel hands it the preview key", p.describePreviewScope(), p.PreviewBaseDomain)
@@ -80,7 +111,7 @@ func (p EdgeProgram) addPreviewKey(worker edge.Worker) (edge.Worker, error) {
 	return worker, nil
 }
 
-func (p EdgeProgram) describePreviewScope() string {
+func (p EntryProgram) describePreviewScope() string {
 	if p.Slug == "" {
 		return "every project"
 	}
