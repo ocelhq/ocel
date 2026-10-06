@@ -143,3 +143,56 @@ func TestRemovingTheLiveDirLeavesNoBindingOnDisk(t *testing.T) {
 		t.Errorf("the live dir survives its removal: %v", err)
 	}
 }
+
+func TestAReprojectionLeavesTheBindingsAnEarlierProjectionHandedOutWholeUntilTheyAreRetired(t *testing.T) {
+	live := newTestLiveDir(t)
+	earlier, err := live.project(map[string]string{"OCEL_RESOURCE_KV_cache": kvBinding})
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	rotated := `{"name":"cache","kv":{"password":"rotated"}}`
+	later, err := live.project(map[string]string{
+		"OCEL_RESOURCE_KV_cache":      rotated,
+		"OCEL_RESOURCE_POSTGRES_main": `{"name":"main"}`,
+	})
+	if err != nil {
+		t.Fatalf("project again: %v", err)
+	}
+
+	if earlier[processenv.LiveDirEnvVar] == later[processenv.LiveDirEnvVar] {
+		t.Fatalf("both projections name %s, so a reader of the earlier one sees the later one's files", earlier[processenv.LiveDirEnvVar])
+	}
+	if got := readLiveFile(t, earlier, "OCEL_RESOURCE_KV_cache"); got != kvBinding {
+		t.Errorf("the earlier projection's OCEL_RESOURCE_KV_cache = %q while it is still read, want %q", got, kvBinding)
+	}
+	if _, err := os.Stat(filepath.Join(earlier[processenv.LiveDirEnvVar], "OCEL_RESOURCE_POSTGRES_main")); !os.IsNotExist(err) {
+		t.Errorf("the earlier projection gained a binding the later one added: %v", err)
+	}
+	if got := readLiveFile(t, later, "OCEL_RESOURCE_KV_cache"); got != rotated {
+		t.Errorf("the later projection's OCEL_RESOURCE_KV_cache = %q, want %q", got, rotated)
+	}
+
+	live.retire()
+	if _, err := os.Stat(earlier[processenv.LiveDirEnvVar]); !os.IsNotExist(err) {
+		t.Errorf("the earlier projection survives once its readers are retired: %v", err)
+	}
+	if got := readLiveFile(t, later, "OCEL_RESOURCE_KV_cache"); got != rotated {
+		t.Errorf("retiring removed the projection still in use: OCEL_RESOURCE_KV_cache = %q", got)
+	}
+}
+
+func TestAnUnchangedReprojectionHandsOutTheSameDirectory(t *testing.T) {
+	live := newTestLiveDir(t)
+	bindings := map[string]string{"OCEL_RESOURCE_KV_cache": kvBinding}
+	first, err := live.project(bindings)
+	if err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	again, err := live.project(bindings)
+	if err != nil {
+		t.Fatalf("project again: %v", err)
+	}
+	if first[processenv.LiveDirEnvVar] != again[processenv.LiveDirEnvVar] {
+		t.Errorf("an unchanged set of bindings moved from %s to %s", first[processenv.LiveDirEnvVar], again[processenv.LiveDirEnvVar])
+	}
+}
