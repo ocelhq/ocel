@@ -135,6 +135,9 @@ a `package.json` on its own is node, a `go.mod` is go, a `pyproject.toml` or
 `package.json`, `pyproject.toml` or `requirements.txt` builds that app's native extension,
 so the app is node, next or python.
 
+On container compute only `next` may be named, or is read off the directory; the other
+frameworks are serverless-only, and a container app declaring one is refused.
+
 A rust app's crate builds one binary. ocel compiles it with `cargo` for the app's `arch`
 as a static musl binary, so the matching target must be installed:
 `rustup target add x86_64-unknown-linux-musl` or `aarch64-unknown-linux-musl`.

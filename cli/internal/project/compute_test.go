@@ -256,3 +256,45 @@ func TestAnAppNamingNoComputeCannotBeResolvedWithoutAProvider(t *testing.T) {
 		t.Fatalf("ResolveDeclaredComputes() error = %v, want the app named and the provider it needs", err)
 	}
 }
+
+func TestANextAppResolvedOntoContainerComputeKeepsItsFramework(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Project{Apps: []App{{Name: "web", Serverless: &Serverless{Framework: "next", Detected: true}, Container: &Container{}}}}
+
+	resolved, err := cfg.ResolveComputes([]string{"container"}, "fake")
+	if err != nil {
+		t.Fatalf("ResolveComputes() error = %v", err)
+	}
+	got := resolved.Apps[0]
+	if got.Compute != provider.ComputeContainer || got.Serverless != nil || got.Framework() != "next" || got.Container == nil || got.Container.Framework != "next" {
+		t.Errorf("the resolved app = %+v, want a container that keeps next", got)
+	}
+}
+
+func TestANextAppDeclaredOnAContainerOnlyProviderIsAdmitted(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Project{Apps: []App{{Name: "web", Serverless: &Serverless{Framework: "next"}, Container: &Container{}}}}
+
+	resolved, err := cfg.ResolveComputes([]string{"container"}, "fake")
+	if err != nil {
+		t.Fatalf("ResolveComputes() error = %v, want a declared next admitted on container compute", err)
+	}
+	if got := resolved.Apps[0].Framework(); got != "next" {
+		t.Errorf("framework = %q, want next", got)
+	}
+}
+
+func TestResolvingANextAppOntoContainerLeavesTheLoadedContainerAsDeclared(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Project{Apps: []App{{Name: "web", Serverless: &Serverless{Framework: "next", Detected: true}, Container: &Container{}}}}
+
+	if _, err := cfg.ResolveComputes([]string{"container"}, "fake"); err != nil {
+		t.Fatalf("ResolveComputes() error = %v", err)
+	}
+	if got := cfg.Apps[0]; got.Serverless == nil || got.Container.Framework != "" {
+		t.Errorf("the loaded app became %+v, want it left as the config declared it", got)
+	}
+}

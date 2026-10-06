@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/english"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -81,13 +82,19 @@ func (p *Project) UnresolvedApps() []string {
 func (a App) runningOn(compute provider.Compute) (App, error) {
 	a.Compute = compute
 	if compute == provider.ComputeContainer {
-		if a.Serverless != nil && !a.Serverless.Detected {
+		keepsNext := a.Serverless != nil && a.Serverless.Framework == buildoutput.FrameworkNext
+		if a.Serverless != nil && !a.Serverless.Detected && !keepsNext {
 			return App{}, frameworkOnContainer(a.Name, a.Serverless.Framework, compute)
 		}
 		a.Serverless = nil
-		if a.Container == nil {
-			a.Container = &Container{}
+		container := Container{}
+		if a.Container != nil {
+			container = *a.Container
 		}
+		if keepsNext {
+			container.Framework = buildoutput.FrameworkNext
+		}
+		a.Container = &container
 		return a, nil
 	}
 	if a.Serverless == nil {

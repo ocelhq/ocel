@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -41,6 +42,7 @@ type Container struct {
 	Health       *Health
 	MinInstances *int
 	MaxInstances *int
+	Framework    string
 }
 
 func (c *Container) Instances() provider.Instances {
@@ -72,10 +74,13 @@ type Health struct {
 func (a App) RunsOn(compute provider.Compute) bool { return a.Compute == compute }
 
 func (a App) Framework() string {
-	if a.Serverless == nil {
-		return ""
+	if a.Serverless != nil {
+		return a.Serverless.Framework
 	}
-	return a.Serverless.Framework
+	if a.Container != nil {
+		return a.Container.Framework
+	}
+	return ""
 }
 
 func (a App) Architecture() string { return arch.Architecture(a.Arch) }
@@ -196,8 +201,11 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 
 	named := strings.TrimSpace(a.Framework)
 	if compute == provider.ComputeContainer {
-		if named != "" {
+		if named != "" && named != buildoutput.FrameworkNext {
 			return newInvalidConfigError(frameworkOnContainer(a.Name, named, compute), "")
+		}
+		if framework, _ := frameworkOf(a.Name, dir, named); framework == buildoutput.FrameworkNext {
+			container.Framework = framework
 		}
 		return nil
 	}
@@ -267,7 +275,7 @@ func normalizeHealth(a configdoc.AppConfig) (*Health, error) {
 
 func frameworkOnContainer(app, framework string, compute provider.Compute) error {
 	return fmt.Errorf(
-		"app %q declares framework %q, and it runs on %q compute, which runs the image it is given: a framework names what a serverless app's functions are built with and nothing else — give %q `compute: \"serverless\"`, or remove its `framework`",
+		"app %q declares framework %q, and it runs on %q compute, which runs the image it is given: on container compute only \"next\" changes how the image serves, so no other framework may be named there — give %q `compute: \"serverless\"`, or remove its `framework`",
 		app, framework, compute, app,
 	)
 }
