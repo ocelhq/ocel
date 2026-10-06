@@ -166,6 +166,11 @@ func (s *edgeSession) releasePointerHostnames(ctx context.Context, pointer strin
 		if err := progress.ReportWarning(runProgress, s.edgeStack().UnbindDomain(ctx, hostname)); err != nil {
 			return err
 		}
+		if kind := s.state.Host(hostname).Router; kind != "" {
+			if err := (&hostnames{edgeSession: s}).disclaim(ctx, hostname, kind); err != nil {
+				return err
+			}
+		}
 		s.state.Forget(hostname)
 	}
 	return nil
@@ -221,4 +226,23 @@ func errNoDeploy(tier environment.Tier) error {
 	}
 	return noDeploy{refusal.Refusal{Code: refusal.CodeNotReady,
 		Message: "this project has no production deploys yet; run `ocel deploy` first"}}
+}
+
+func (s *edgeSession) removeDeployments(ctx context.Context, deployments []router.PointerRemoval, runProgress progress.Log) error {
+	released := false
+	for _, deployment := range deployments {
+		if len(s.state.PointerHostnames(deployment.Pointer)) == 0 {
+			continue
+		}
+		if err := s.releasePointerHostnames(ctx, deployment.Pointer, runProgress); err != nil {
+			return err
+		}
+		released = true
+	}
+	if released {
+		if err := s.checkpoint(ctx); err != nil {
+			return err
+		}
+	}
+	return s.sharedStack.removeDeployments(ctx, deployments, runProgress)
 }

@@ -1639,9 +1639,6 @@ func (r *deployRun) listDeploymentHosts() []edge.PreviewHost {
 		if !paired.Facts().ServesPreviewDeployments {
 			continue
 		}
-		if r.appRouters[entry.App] != r.edgeKind && routerOriginBehind(r.front, paired) != nil {
-			continue
-		}
 		if host := findAppHost(r.deployment, entry.App); host.Hostname != "" {
 			hosts = append(hosts, host)
 		}

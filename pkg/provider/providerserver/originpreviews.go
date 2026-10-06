@@ -33,8 +33,30 @@ func (r *deployRun) listOriginPreviews() ([]ConfiguredHost, error) {
 		if host := findAppHost(r.aliases, entry.App); host.Hostname != "" {
 			hosts = append(hosts, ConfiguredHost{Hostname: host.Hostname, App: entry.App, Pointer: router.ResolvePointer(r.spec.Pointer)})
 		}
+		if host := findAppHost(r.deployment, entry.App); host.Hostname != "" {
+			hosts = append(hosts, ConfiguredHost{Hostname: host.Hostname, App: entry.App, Pointer: router.FormatDeploymentPointer(r.spec.Pointer, r.spec.PromotionID)})
+		}
 	}
-	return hosts, nil
+	return append(hosts, r.listKeptDeploymentHosts(hosts)...), nil
+}
+
+func (r *deployRun) listKeptDeploymentHosts(listed []ConfiguredHost) []ConfiguredHost {
+	var kept []ConfiguredHost
+	for _, hostname := range r.state.Hostnames() {
+		held := r.state.Host(hostname)
+		preview, _, deployment := router.ParseDeploymentPointer(held.Pointer)
+		if !deployment || preview != router.ResolvePointer(r.spec.Pointer) || held.Edge != r.front.Kind() {
+			continue
+		}
+		if slices.ContainsFunc(listed, func(host ConfiguredHost) bool { return host.Hostname == hostname }) {
+			continue
+		}
+		if kind := r.appRouters[held.App]; kind == "" || kind == r.edgeKind {
+			continue
+		}
+		kept = append(kept, ConfiguredHost{Hostname: hostname, App: held.App, Pointer: held.Pointer})
+	}
+	return kept
 }
 
 func (r *deployRun) forwardAppPreviews(ctx context.Context, progress progress.Log) error {

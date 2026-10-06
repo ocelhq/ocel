@@ -120,8 +120,13 @@ func (s EdgeState) Hostnames() []string { return slices.Sorted(maps.Keys(s.Hosts
 
 func (s EdgeState) PointerHostnames(pointer string) []string {
 	var hosts []string
+	resolved := router.ResolvePointer(pointer)
 	for _, hostname := range s.Hostnames() {
-		if held := s.Hosts[hostname].Pointer; held != "" && held == router.ResolvePointer(pointer) {
+		held := s.Hosts[hostname].Pointer
+		if held == "" {
+			continue
+		}
+		if preview, _, deployment := router.ParseDeploymentPointer(held); held == resolved || (deployment && preview == resolved) {
 			hosts = append(hosts, hostname)
 		}
 	}
