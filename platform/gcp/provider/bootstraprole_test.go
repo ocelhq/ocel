@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 const appAccountsRoleEndpoint = "/v1/projects/acme-prod/roles/ocel_app_accounts"
 
 type roleServer struct {
+	endpoint     string
 	mu           sync.Mutex
 	role         *iam.Role
 	createAnswer int
@@ -32,12 +34,13 @@ type roleServer struct {
 }
 
 func (s *roleServer) handler(t *testing.T) http.HandlerFunc {
+	endpoint := cmp.Or(s.endpoint, appAccountsRoleEndpoint)
 	return func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == appAccountsRoleEndpoint:
+		case r.Method == http.MethodGet && r.URL.Path == endpoint:
 			if s.role == nil {
 				w.WriteHeader(http.StatusNotFound)
 				w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"role not found"}}`))
@@ -61,7 +64,7 @@ func (s *roleServer) handler(t *testing.T) http.HandlerFunc {
 			s.role.Name = "projects/acme-prod/roles/" + asked.RoleId
 			s.role.Etag = "BwXhoLA="
 			_ = json.NewEncoder(w).Encode(s.role)
-		case r.Method == http.MethodPost && r.URL.Path == appAccountsRoleEndpoint+":undelete":
+		case r.Method == http.MethodPost && r.URL.Path == endpoint+":undelete":
 			s.writes = append(s.writes, "undelete")
 			if s.undeleteCode != 0 {
 				w.WriteHeader(s.undeleteCode)
@@ -70,7 +73,7 @@ func (s *roleServer) handler(t *testing.T) http.HandlerFunc {
 			}
 			s.role.Deleted = false
 			_ = json.NewEncoder(w).Encode(s.role)
-		case r.Method == http.MethodPatch && r.URL.Path == appAccountsRoleEndpoint:
+		case r.Method == http.MethodPatch && r.URL.Path == endpoint:
 			s.writes = append(s.writes, "patch")
 			var asked iam.Role
 			if err := json.NewDecoder(r.Body).Decode(&asked); err != nil {
@@ -126,7 +129,7 @@ func TestABootstrapCreatesTheAppAccountsRoleOnceAndReusesIt(t *testing.T) {
 	if err != nil || found.present {
 		t.Fatalf("presenceOf() = %+v, %v, want an absent role", found, err)
 	}
-	if err := b.makeRole(ctx, target.Name); err != nil {
+	if err := b.makeRole(ctx, appAccountsRole(b.clients.Names)); err != nil {
 		t.Fatalf("makeRole() = %v", err)
 	}
 	if !slices.Equal(server.writes, []string{"create"}) {
@@ -144,7 +147,7 @@ func TestABootstrapCreatesTheAppAccountsRoleOnceAndReusesIt(t *testing.T) {
 	if err != nil || !found.present || found.mends != "" {
 		t.Fatalf("presenceOf() = %+v, %v, want a present role with nothing to mend", found, err)
 	}
-	if err := b.makeRole(ctx, target.Name); err != nil {
+	if err := b.makeRole(ctx, appAccountsRole(b.clients.Names)); err != nil {
 		t.Fatalf("makeRole() again = %v", err)
 	}
 	if !slices.Equal(server.writes, []string{"create"}) {
@@ -164,7 +167,7 @@ func TestADeletedAppAccountsRoleIsUndeleted(t *testing.T) {
 	if err != nil || !found.present || found.mends != reasonRoleDeleted {
 		t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, reasonRoleDeleted)
 	}
-	if err := b.makeRole(ctx, target.Name); err != nil {
+	if err := b.makeRole(ctx, appAccountsRole(b.clients.Names)); err != nil {
 		t.Fatalf("makeRole() = %v", err)
 	}
 	if !slices.Equal(server.writes, []string{"undelete"}) {
@@ -192,7 +195,7 @@ func TestAnAppAccountsRoleWithOtherPermissionsIsPutBack(t *testing.T) {
 			if err != nil || !found.present || found.mends != reasonRoleDrifted {
 				t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, reasonRoleDrifted)
 			}
-			if err := b.makeRole(t.Context(), target.Name); err != nil {
+			if err := b.makeRole(t.Context(), appAccountsRole(b.clients.Names)); err != nil {
 				t.Fatalf("makeRole() = %v", err)
 			}
 			if !slices.Equal(server.writes, []string{"patch"}) {
@@ -220,7 +223,7 @@ func TestAnAppAccountsRoleDeletedTooLongAgoIsRefusedNamingTheWait(t *testing.T) 
 			t.Parallel()
 			b := server.bootstrap(t)
 
-			err := b.makeRole(t.Context(), "ocel_app_accounts")
+			err := b.makeRole(t.Context(), appAccountsRole(b.clients.Names))
 
 			var refused refusal.Refusal
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {

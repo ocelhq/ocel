@@ -357,7 +357,11 @@ func (b bootstrap) make(ctx context.Context, read survey, target item) error {
 	case KindRepository:
 		return b.makeRepository(ctx, target.Name)
 	case KindRole:
-		return b.makeRole(ctx, target.Name)
+		role, ok := findCustomRole(read.Names, target.Name)
+		if !ok {
+			return fmt.Errorf("no custom role is named %s", target.Name)
+		}
+		return b.makeRole(ctx, role)
 	case KindServiceAccount:
 		return b.makeAccount(ctx, read, target.Name)
 	case KindService:

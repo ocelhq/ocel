@@ -63,6 +63,7 @@ func (n Names) RepositoryPath(region string, tier environment.Tier) string {
 const (
 	appAccountInfix   = "app"
 	appAccountsSuffix = "app_accounts"
+	cdnPurgeSuffix    = "cdn_purge"
 )
 
 func customRoleID(ns provider.Namespace, suffix string) string {
@@ -73,6 +74,12 @@ func (n Names) AppAccountsRole() string { return customRoleID(n.namespace, appAc
 
 func (n Names) AppAccountsRolePath() string {
 	return "projects/" + n.project + "/roles/" + n.AppAccountsRole()
+}
+
+func (n Names) CDNPurgeRole() string { return customRoleID(n.namespace, cdnPurgeSuffix) }
+
+func (n Names) CDNPurgeRolePath() string {
+	return "projects/" + n.project + "/roles/" + n.CDNPurgeRole()
 }
 
 func (n Names) AppAccount(tier environment.Tier, project, app string) string {

@@ -28,7 +28,35 @@ var appAccountsPermissions = []string{
 	"iam.serviceAccounts.setIamPolicy",
 }
 
-func (b bootstrap) rolePresence(ctx context.Context, id string) (presence, error) {
+type customRole struct {
+	id          string
+	title       string
+	description string
+	permissions []string
+	drifted     string
+}
+
+func appAccountsRole(names Names) customRole {
+	return customRole{
+		id:          names.AppAccountsRole(),
+		title:       "ocel app accounts (" + string(names.namespace) + ")",
+		description: "lets a deploy create the service accounts its apps run as and set who may act as them, and nothing else",
+		permissions: appAccountsPermissions,
+		drifted:     reasonRoleDrifted,
+	}
+}
+
+func findCustomRole(names Names, id string) (customRole, bool) {
+	for _, role := range []customRole{appAccountsRole(names), cdnPurgeRole(names)} {
+		if role.id == id {
+			return role, true
+		}
+	}
+	return customRole{}, false
+}
+
+func (b bootstrap) rolePresence(ctx context.Context, want customRole) (presence, error) {
+	id := want.id
 	role, err := b.readRole(ctx, id)
 	if absent(err) {
 		return presence{}, nil
@@ -39,8 +67,8 @@ func (b bootstrap) rolePresence(ctx context.Context, id string) (presence, error
 	switch {
 	case role.Deleted:
 		return presence{present: true, mends: reasonRoleDeleted}, nil
-	case roleDrifted(role):
-		return presence{present: true, mends: reasonRoleDrifted}, nil
+	case roleDrifted(role, want):
+		return presence{present: true, mends: want.drifted}, nil
 	}
 	return presence{present: true}, nil
 }
@@ -55,19 +83,20 @@ func (b bootstrap) readRole(ctx context.Context, id string) (*iam.Role, error) {
 
 func (c *clients) roleName(id string) string { return "projects/" + c.project + "/roles/" + id }
 
-func roleDrifted(role *iam.Role) bool {
+func roleDrifted(role *iam.Role, want customRole) bool {
 	return role.Stage == roleStageDisabled ||
-		!slices.Equal(slices.Sorted(slices.Values(role.IncludedPermissions)), slices.Sorted(slices.Values(appAccountsPermissions)))
+		!slices.Equal(slices.Sorted(slices.Values(role.IncludedPermissions)), slices.Sorted(slices.Values(want.permissions)))
 }
 
-func (b bootstrap) makeRole(ctx context.Context, id string) error {
+func (b bootstrap) makeRole(ctx context.Context, want customRole) error {
+	id := want.id
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return err
 	}
 	role, err := b.readRole(ctx, id)
 	if absent(err) {
-		role, err = b.createRole(ctx, id)
+		role, err = b.createRole(ctx, want)
 	}
 	if err != nil {
 		return err
@@ -81,31 +110,31 @@ func (b bootstrap) makeRole(ctx context.Context, id string) error {
 			return fmt.Errorf("undelete the %s custom role: %w", id, err)
 		}
 	}
-	if !roleDrifted(role) {
+	if !roleDrifted(role, want) {
 		return nil
 	}
 	if _, err := attempted(ctx, service.Projects.Roles.Patch(name, &iam.Role{
-		IncludedPermissions: appAccountsPermissions,
+		IncludedPermissions: want.permissions,
 		Stage:               roleStageGA,
 		Etag:                role.Etag,
 	}).UpdateMask("includedPermissions,stage").Context(ctx).Do); err != nil {
-		return fmt.Errorf("put the %s custom role back to the permissions a deploy needs: %w", id, err)
+		return fmt.Errorf("put the %s custom role back to its permissions: %w", id, err)
 	}
 	return nil
 }
 
-func (b bootstrap) createRole(ctx context.Context, id string) (*iam.Role, error) {
+func (b bootstrap) createRole(ctx context.Context, want customRole) (*iam.Role, error) {
+	id := want.id
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return nil, err
 	}
-	namespace := b.clients.Namespace()
 	created, err := attempted(ctx, service.Projects.Roles.Create("projects/"+b.clients.project, &iam.CreateRoleRequest{
 		RoleId: id,
 		Role: &iam.Role{
-			Title:               "ocel app accounts (" + string(namespace) + ")",
-			Description:         "lets a deploy create the service accounts its apps run as and set who may act as them, and nothing else",
-			IncludedPermissions: appAccountsPermissions,
+			Title:               want.title,
+			Description:         want.description,
+			IncludedPermissions: want.permissions,
 			Stage:               roleStageGA,
 		},
 	}).Context(ctx).Do)
