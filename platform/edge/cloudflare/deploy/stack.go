@@ -140,7 +140,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, fmt.Errorf("the Cloudflare edge runs the entry worker; stack %q has no program", spec.Slug)
 	}
 	if !spec.PruneOnly {
-		if err := p.refuseBootstrapBehind(ctx, accountID, spec.Tier); err != nil {
+		if err := p.refuseBootstrapBehind(ctx, accountID, spec.Tier, bootstrapCaller{worker: "the entry worker this deploy uploads", retry: "deploy again"}); err != nil {
 			return nil, err
 		}
 	}

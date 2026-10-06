@@ -183,3 +183,69 @@ func TestAPruneOnlyReconcileIsNotGatedOnTheBootstrap(t *testing.T) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 }
+
+func TestTheBootstrapRefusalNamesTheCallerAndWhatToRerun(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	seedBootstrapBundles(t, "store-v1", "writer-v1")
+
+	cases := []struct {
+		name    string
+		tier    environment.Tier
+		trigger func(t *testing.T, m *cfMock) error
+		want    string
+	}{
+		{
+			name: "a deploy with one worker behind",
+			tier: environment.TierProduction,
+			trigger: func(t *testing.T, m *cfMock) error {
+				_, writer := bootstrapScriptNames(t, environment.TierProduction)
+				delete(m.putBodies, writer)
+				delete(m.scriptSettings, writer)
+				store := fakeStoreServer(t, "")
+				_, err := m.provider(t).Reconcile(t.Context(), productionEntrySpec(store.URL), edge.StackState{})
+				return err
+			},
+			want: "and the entry worker this deploy uploads calls it, so serving it would fail every request it routes.\nRe-run `" +
+				provider.BootstrapCommand(environment.TierProduction) + "` to install this build's, then deploy again",
+		},
+		{
+			name: "a deploy with both workers missing",
+			tier: environment.TierProduction,
+			trigger: func(t *testing.T, m *cfMock) error {
+				store, writer := bootstrapScriptNames(t, environment.TierProduction)
+				for _, name := range []string{store, writer} {
+					delete(m.putBodies, name)
+					delete(m.scriptSettings, name)
+				}
+				srv := fakeStoreServer(t, "")
+				_, err := m.provider(t).Reconcile(t.Context(), productionEntrySpec(srv.URL), edge.StackState{})
+				return err
+			},
+			want: "and the entry worker this deploy uploads calls them, so",
+		},
+		{
+			name: "the preview wildcard with one worker behind",
+			tier: environment.TierPreview,
+			trigger: func(t *testing.T, m *cfMock) error {
+				seedBootstrapBundles(t, "store-v1", "writer-v2")
+				_, err := m.provider(t).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec())
+				return err
+			},
+			want: "and the shared preview entry worker calls it, so serving it would fail every request it routes.\nRe-run `" +
+				provider.BootstrapCommand(environment.TierPreview) + "` to install this build's, then run this again",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			seedBootstrapBundles(t, "store-v1", "writer-v1")
+			m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
+			installBootstrap(t, m, tc.tier)
+
+			refused := refusedNotReady(t, tc.trigger(t, m))
+
+			if !strings.Contains(refused.Error(), tc.want) {
+				t.Errorf("refusal %q does not contain %q", refused.Error(), tc.want)
+			}
+		})
+	}
+}
