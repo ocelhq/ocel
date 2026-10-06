@@ -1,5 +1,6 @@
 import type { Fetch } from "../checks/context";
 import type { Lane, TargetName } from "../matrix/types";
+import type { Plan } from "../plan";
 import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
 
@@ -23,7 +24,7 @@ export interface Target {
   readonly stepTimeoutMs: number;
   readonly sweeper: Sweeper;
   detectLane(): Promise<Lane>;
-  prepareLane(): Promise<PrepareFailures>;
+  prepareLane(planned: Pick<Plan, "cells">): Promise<PrepareFailures>;
   prepareProcess(): Promise<void>;
   finishLane?(): Promise<void>;
   deploy(cell: CellUnderTest): Promise<Deployment>;

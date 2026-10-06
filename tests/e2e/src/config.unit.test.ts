@@ -239,6 +239,26 @@ describe("overlayFor", () => {
     ).toMatchObject({ edge: "cloudflare", dns: "cloudflare" });
   });
 
+  it("declares a preview wildcard under the zone for an alb cell that previews", () => {
+    const overlay = overlayFor(cell(deploy.next, alb), "gcp", { OCEL_E2E_ZONE: "j.example" });
+
+    expect(overlay.previewDomain).toBe("*.pv-j-1-deploy-next.j.example");
+    expect(renderConfig(overlay)).toContain(
+      '  domains: { ...base.domains, preview: "*.pv-j-1-deploy-next.j.example" },',
+    );
+    expect(JSON.parse(renderJsonConfig("{}", overlay)).domains).toEqual({
+      preview: "*.pv-j-1-deploy-next.j.example",
+    });
+  });
+
+  it("declares no preview domain for a cell that does not preview", () => {
+    const zoned = { OCEL_E2E_ZONE: "j.example" };
+
+    expect(overlayFor(cell(deploy.node, alb), "gcp", zoned).previewDomain).toBeUndefined();
+    expect(overlayFor(cell(deploy.next, defaults), "gcp", zoned).previewDomain).toBeUndefined();
+    expect(overlayFor(cell(deploy.next, alb), "gcp", {}).previewDomain).toBeUndefined();
+  });
+
   it("renders the alb edge from the gcp edge module", () => {
     const rendered = renderConfig(
       overlayFor(cell(deploy.node, alb), "gcp", { OCEL_E2E_ZONE: "j.example" }),

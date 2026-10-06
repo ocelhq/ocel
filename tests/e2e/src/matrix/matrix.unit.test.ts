@@ -16,6 +16,7 @@ import {
   taskConcurrencyCheck,
   todoAndDocumentChecks,
 } from "../checks";
+import { PREVIEW_TITLES } from "../checks/previews";
 import { DEFAULT_BASE, GCP_BASE, VPS_BASE } from "../config";
 import { fixtureDir } from "../paths";
 import { NO_FILTER, plan, type RunFilter } from "../plan";
@@ -224,6 +225,43 @@ describe("sdk/node on gcp", () => {
     expect((planOn("gcp.floci").skipped["sdk/node"] ?? []).map((gap) => gap.id)).toEqual([
       "floci-serves-no-cloud-sql",
     ]);
+  });
+});
+
+describe("previews on gcp", () => {
+  const zoned = {
+    OCEL_E2E_ZONE: "journeys.example.com",
+    CLOUDFLARE_API_TOKEN: "token",
+    CLOUDFLARE_ACCOUNT_ID: "account",
+  };
+  const previewTitlesOf = (planned: ReturnType<typeof planOn>, cell: string) =>
+    (planned.cells.find((one) => one.name === cell)?.steps ?? [])
+      .filter((one) => one.phase === "preview")
+      .map((one) => one.title);
+
+  it("previews deploy/next on gcp through Identity-Aware Proxy and behind the load balancer when the run names a zone", () => {
+    const planned = planOn("gcp", zoned);
+
+    expect(previewTitlesOf(planned, "deploy/next")).toEqual([PREVIEW_TITLES.refused]);
+    expect(previewTitlesOf(planned, "deploy/next-alb")).toEqual([
+      PREVIEW_TITLES["own-release"],
+      PREVIEW_TITLES.pruned,
+    ]);
+  });
+
+  it("previews deploy/next through Identity-Aware Proxy alone when the run names no zone", () => {
+    const planned = planOn("gcp");
+
+    expect(previewTitlesOf(planned, "deploy/next")).toEqual([PREVIEW_TITLES.refused]);
+    expect(planned.cells.map((cell) => cell.name)).not.toContain("deploy/next-alb");
+  });
+
+  it("plans no preview phase on floci-gcp", () => {
+    const planned = planOn("gcp.floci", zoned, { ...NO_FILTER, runSkipped: true });
+
+    for (const cell of planned.cells) {
+      expect(cell.phases).not.toContain("preview");
+    }
   });
 });
 

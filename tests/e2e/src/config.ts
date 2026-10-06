@@ -38,6 +38,7 @@ export type Overlay = {
   tunnel?: boolean;
   dns?: "cloudflare";
   hostnames?: Record<string, string>;
+  previewDomain?: string;
   variablesKey?: string;
   registry?: RegistryConfig;
   proxy?: unknown;
@@ -111,11 +112,16 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
     case "gcp": {
       const { edge } = cell.variant.config;
       const hostnamed = edge !== undefined && HOSTNAME_EDGES.includes(edge) && zone;
+      const previewing =
+        edge === "alb" &&
+        zone &&
+        (cell.fixture.previews?.gcp ?? []).some((one) => one.name === cell.variant.name);
       return {
         base: GCP_BASE,
         slug: gcpSlug(cell, env),
         ...cell.variant.config,
         ...(hostnamed ? { dns: "cloudflare" as const, hostnames: hostnamesOf(cell, zone) } : {}),
+        ...(previewing ? { previewDomain: `*.${appHostname("pv", cell.slug, zone)}` } : {}),
       };
     }
     case "vps": {
@@ -189,6 +195,11 @@ export function renderConfig(overlay: Overlay): string {
   if (overlay.dns) {
     fields.push(`  dns: cloudflareDns(),`);
   }
+  if (overlay.previewDomain) {
+    fields.push(
+      `  domains: { ...base.domains, preview: ${JSON.stringify(overlay.previewDomain)} },`,
+    );
+  }
   if (overlay.registry) {
     fields.push(`  registry: ${JSON.stringify(overlay.registry)},`);
   }
@@ -247,6 +258,9 @@ export function renderJsonConfig(base: string, overlay: Overlay): string {
   }
   if (overlay.dns) {
     written.dns = overlay.dns;
+  }
+  if (overlay.previewDomain) {
+    written.domains = { ...(read.domains as object | undefined), preview: overlay.previewDomain };
   }
   if (overlay.registry) {
     written.registry = overlay.registry;

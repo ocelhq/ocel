@@ -1,5 +1,5 @@
 import { type ChildProcess, execFile } from "node:child_process";
-import { access, rm } from "node:fs/promises";
+import { access, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { setsEnv, setsSecret } from "../../checks";
@@ -23,12 +23,22 @@ import type { Cell, Lane, Phase } from "../../matrix/types";
 import { sanitize } from "../../naming";
 import { configTree, ocel, type Ran, recordOutput, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, laneDir, treeDir } from "../../paths";
-import { cellsOn, fixturesOn } from "../../plan";
+import { cellsOn, fixturesOn, type Plan } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
 import type { CellUnderTest } from "../../run/cellRun";
 import { copyTree } from "../../tree";
 import { hostnameUrls } from "../hostnames";
-import type { Deployment, Exposure, ReleaseCycle, Restart, Sweeper, Target } from "../types";
+import { previewReleasesIn } from "../previewResult";
+import type {
+  Deployment,
+  Exposure,
+  PreviewRelease,
+  Previews,
+  ReleaseCycle,
+  Restart,
+  Sweeper,
+  Target,
+} from "../types";
 import { appBucketPrefix, deleteAppBucket, listAppBuckets, strayBuckets } from "./buckets";
 import { databaseFilter, deleteDatabase, listDatabases, strayDatabases } from "./cloudsql";
 import { startDispatch, stopDispatch } from "./dispatch";
@@ -151,23 +161,42 @@ export function gcpSweepOverlay(cell: Cell, slug: string, env: NodeJS.ProcessEnv
   );
 }
 
+function hasCloudflareZone(env: NodeJS.ProcessEnv): boolean {
+  return ["OCEL_E2E_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"].every((name) =>
+    env[name]?.trim(),
+  );
+}
+
 export function laneFeatures(env: NodeJS.ProcessEnv, emulated: boolean): string[] {
   if (emulated) {
     return [TASKS_FEATURE];
   }
-  const zoned = ["OCEL_E2E_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"].every((name) =>
-    env[name]?.trim(),
-  );
-  return [NETWORK_FEATURE, TASKS_FEATURE, ...(zoned ? [ALB_FEATURE] : [])];
+  return [NETWORK_FEATURE, TASKS_FEATURE, ...(hasCloudflareZone(env) ? [ALB_FEATURE] : [])];
 }
 
-export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
+export function previewBootstrapArgs(
+  env: NodeJS.ProcessEnv,
+  emulated: boolean,
+  planned: { cells: { phases: string[] }[] },
+): string[] | undefined {
+  if (emulated || !planned.cells.some((cell) => cell.phases.includes("preview"))) {
+    return undefined;
+  }
+  const features = [TASKS_FEATURE, ...(hasCloudflareZone(env) ? [ALB_FEATURE] : [])];
+  return ["bootstrap", "preview", "--yes", "--features", features.join(",")];
+}
+
+export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previews {
   readonly name = "gcp";
   readonly workers = 2;
   readonly maxRequestBodyBytes = UNCAPPED_BODY_BYTES;
   readonly stepTimeoutMs = 900_000;
+  readonly previewLanes: Lane[] = ["gcp"];
+  readonly previewStepTimeoutMs = 2_700_000;
 
   private dispatching: ChildProcess | undefined;
+
+  private readonly previewsUp = new Map<string, number>();
 
   private readonly output = new Map<string, string[]>();
 
@@ -197,7 +226,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     );
   }
 
-  async prepareLane(): Promise<PrepareFailures> {
+  async prepareLane(planned: Pick<Plan, "cells">): Promise<PrepareFailures> {
     const refused = refuseFlociWithoutFirestore(process.env);
     if (refused) {
       return { lane: refused.message };
@@ -223,6 +252,10 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
         ["bootstrap", "production", "--yes", "--features", features.join(",")],
         childEnv(dir),
       );
+      const preview = previewBootstrapArgs(process.env, emulator !== undefined, planned);
+      if (preview) {
+        await ocel(dir, preview, childEnv(dir));
+      }
       if (emulator) {
         const { child, tasksEndpoint } = await startDispatch(
           emulator,
@@ -371,6 +404,69 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     return output;
   }
 
+  async previewUp(cell: CellUnderTest, name: string): Promise<PreviewRelease[]> {
+    const dir = await cellTree(cell);
+    const attempt = (this.previewsUp.get(cell.slug) ?? 0) + 1;
+    this.previewsUp.set(cell.slug, attempt);
+    const ran = await this.run(
+      cell,
+      dir,
+      "preview",
+      `preview-up-${attempt}`,
+      ["preview", "up", name, "--yes", "--json"],
+      childEnv(dir),
+    );
+    const record = await readFile(path.join(dir, ".ocel", "deploy-result.json"), "utf8");
+    return previewReleasesIn(ran.stdout, record, `ocel preview up ${name}`);
+  }
+
+  async previewPrune(cell: CellUnderTest, name: string, keep: number): Promise<void> {
+    const dir = await cellTree(cell);
+    await this.run(
+      cell,
+      dir,
+      "preview",
+      "preview-prune",
+      ["preview", "prune", name, "--keep", String(keep), "--yes"],
+      childEnv(dir),
+    );
+  }
+
+  async previewRemove(cell: CellUnderTest, name: string): Promise<void> {
+    const dir = await cellTree(cell);
+    const env = childEnv(dir);
+    const removed = await this.run(
+      cell,
+      dir,
+      "preview",
+      "preview-rm",
+      ["preview", "rm", name, "--yes"],
+      env,
+    ).then(
+      () => undefined,
+      (error: unknown) => ({ error }),
+    );
+    const destroyed = await this.run(
+      cell,
+      dir,
+      "preview",
+      "preview-destroy",
+      ["destroy", "preview", "--yes"],
+      env,
+    ).then(
+      () => undefined,
+      (error: unknown) => ({ error }),
+    );
+    if (removed || destroyed) {
+      throw new Error(
+        [
+          ...(removed ? [`ocel preview rm ${name}: ${String(removed.error)}`] : []),
+          ...(destroyed ? [`ocel destroy preview: ${String(destroyed.error)}`] : []),
+        ].join("; "),
+      );
+    }
+  }
+
   private run(
     cell: CellUnderTest,
     dir: string,
@@ -460,6 +556,9 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
       );
       try {
         await writeJourneyConfig(dir, gcpSweepOverlay(cell, slug, process.env));
+        if (!endpoint() && (cell.fixture.previews?.gcp ?? []).length > 0) {
+          await ocel(dir, ["destroy", "preview", "--yes"], childEnv(dir));
+        }
         await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir));
         process.stdout.write(`swept ${slug}\n`);
       } catch (error) {

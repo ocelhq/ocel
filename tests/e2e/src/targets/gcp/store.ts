@@ -5,7 +5,9 @@ import {
   labelValue,
   NAMESPACE_LABEL,
   PRODUCTION_ENVIRONMENT,
+  PRODUCTION_TIER,
   PROJECT_LABEL,
+  TIER_LABEL,
 } from "./names";
 
 export type Service = { name: string; uri: string; labels: Record<string, string> };
@@ -30,6 +32,7 @@ export function findAppService(
 ): Service {
   const serving = servicesOf(services, namespace, project).filter(
     (service) =>
+      service.labels[TIER_LABEL] === labelValue(PRODUCTION_TIER) &&
       service.labels[ENVIRONMENT_LABEL] === labelValue(PRODUCTION_ENVIRONMENT) &&
       service.labels[APP_LABEL] === labelValue(app),
   );
