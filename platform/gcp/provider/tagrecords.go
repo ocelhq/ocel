@@ -28,8 +28,7 @@ const (
 
 	tagRecordsRole = "roles/datastore.user"
 
-	reasonTagsUnprotected = "it exists with delete protection off, and one call would take every tag record this tier's Next apps read with it"
-	reasonTagsUnindexed   = "it has no index the tag records of an app are read through"
+	reasonTagsUnindexed = "it has no index the tag records of an app are read through"
 )
 
 func tagIndexes() []*firestoreadmin.GoogleFirestoreAdminV1Index {
@@ -95,7 +94,6 @@ func (b bootstrap) tagDatabasePresence(ctx context.Context, id string) (presence
 		return found, err
 	}
 	if found.mends != "" {
-		found.mends = reasonTagsUnprotected
 		return found, nil
 	}
 	service, err := b.clients.Databases()
