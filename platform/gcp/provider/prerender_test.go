@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,10 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/prerender"
 )
-
-const seededSnapshot = "cache/shop/web/prod/r1/isr/tag-clock.json"
 
 func plantPrerenders(t *testing.T, p *Provider, files map[string]string) {
 	t.Helper()
@@ -50,24 +46,11 @@ func TestANextDeploySeedsUnderTheCacheStoreProjectFirst(t *testing.T) {
 	}
 
 	uploads := server.stored()
-	if len(uploads) != 3 {
-		t.Fatalf("the deploy uploaded %v, want the tag snapshot and two entries", uploadNames(uploads))
-	}
-	if uploads[0].name != seededSnapshot {
-		t.Errorf("the first upload is %q, want the genesis tag snapshot %q", uploads[0].name, seededSnapshot)
-	}
-	var snapshot prerender.TagSnapshot
-	if err := json.Unmarshal(uploads[0].body, &snapshot); err != nil {
-		t.Fatalf("the tag snapshot is not JSON: %v", err)
-	}
-	if snapshot.Version != prerender.TagSnapshotVersion || len(snapshot.Records) != 0 || snapshot.DeployedAt != snapshot.GeneratedAt {
-		t.Errorf("the tag snapshot = %+v, want the genesis one", snapshot)
-	}
-	rest := uploadNames(uploads[1:])
-	slices.Sort(rest)
+	names := uploadNames(uploads)
+	slices.Sort(names)
 	want := []string{"cache/shop/web/prod/r1/isr/cache/index.cache.json", "cache/shop/web/prod/r1/isr/fetch-cache/abc"}
-	if !slices.Equal(rest, want) {
-		t.Errorf("the entries landed at %v, want %v", rest, want)
+	if !slices.Equal(names, want) {
+		t.Errorf("the deploy uploaded %v, want the two entries and no tag file", names)
 	}
 	for _, u := range uploads {
 		if u.ifGenerationMatch != "0" {
@@ -80,9 +63,8 @@ func TestANextDeploySeedsUnderTheCacheStoreProjectFirst(t *testing.T) {
 	}
 }
 
-func TestARedeployOfTheSameReleaseKeepsTheTagSnapshotAndEntriesItHas(t *testing.T) {
+func TestARedeployOfTheSameReleaseKeepsTheEntriesItHas(t *testing.T) {
 	server := &runServer{present: map[string]bool{
-		seededSnapshot: true,
 		"cache/shop/web/prod/r1/isr/cache/index.cache.json": true,
 		"cache/shop/web/prod/r1/isr/fetch-cache/abc":        true,
 	}}
@@ -95,8 +77,8 @@ func TestARedeployOfTheSameReleaseKeepsTheTagSnapshotAndEntriesItHas(t *testing.
 
 	names := uploadNames(server.stored())
 	slices.Sort(names)
-	if len(names) != 3 || len(slices.Compact(slices.Clone(names))) != 3 {
-		t.Errorf("the redeploy attempted %v, want one attempt for each of the three objects", names)
+	if len(names) != 2 || len(slices.Compact(slices.Clone(names))) != 2 {
+		t.Errorf("the redeploy attempted %v, want one attempt for each of the two objects", names)
 	}
 }
 

@@ -174,6 +174,9 @@ func (a artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, pref
 			errs = append(errs, err)
 		}
 	}
+	if err := a.removeTagRecords(ctx, tier, prefix, progress); err != nil {
+		errs = append(errs, err)
+	}
 	if err := errors.Join(errs...); err != nil {
 		return err
 	}

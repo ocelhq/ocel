@@ -2,12 +2,10 @@ package gcp
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
-	"time"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/sync/errgroup"
@@ -31,12 +29,8 @@ func (p *Provider) seedPrerenders(ctx context.Context, spec provider.StackSpec, 
 		return err
 	}
 
-	genesis, err := json.Marshal(prerender.GenesisTagSnapshot(time.Now()))
-	if err != nil {
-		return fmt.Errorf("encode tag snapshot: %w", err)
-	}
-	if err := p.createSeed(ctx, spec, prerender.TagSnapshotKey(isr.Prefix), "application/json", genesis); err != nil || len(seeds) == 0 {
-		return err
+	if len(seeds) == 0 {
+		return nil
 	}
 
 	ensureProgress(runProgress).Say("Uploading " + spec.App.App + "'s " + prerenderCount(len(seeds)))
@@ -49,7 +43,7 @@ func (p *Provider) seedPrerenders(ctx context.Context, spec provider.StackSpec, 
 			if err != nil {
 				return fmt.Errorf("seed %s: %w", seed.Key, err)
 			}
-			return p.createSeed(ctx, spec, seed.Key, "", body)
+			return p.createSeed(ctx, spec, seed.Key, body)
 		})
 	}
 	return group.Wait()
@@ -62,14 +56,13 @@ func prerenderCount(n int) string {
 	return fmt.Sprintf("%d prerender cache entries", n)
 }
 
-func (p *Provider) createSeed(ctx context.Context, spec provider.StackSpec, key, contentType string, body []byte) error {
+func (p *Provider) createSeed(ctx context.Context, spec provider.StackSpec, key string, body []byte) error {
 	store := artifacts{p}
 	object, err := store.object(ctx, provider.ArtifactRef{Tier: spec.Ref.Tier, Bucket: provider.StoreCache, Key: key})
 	if err != nil {
 		return err
 	}
 	writer := object.If(storage.Conditions{DoesNotExist: true}).NewWriter(ctx)
-	writer.ContentType = contentType
 	writer.ChunkSize = len(body) + 1
 	_, err = writer.Write(body)
 	if closed := writer.Close(); err == nil {

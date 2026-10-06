@@ -2,12 +2,20 @@ package gcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
+	"cloud.google.com/go/firestore"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
+	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const (
@@ -119,4 +127,62 @@ func readsTagsByPrefix(index *firestoreadmin.GoogleFirestoreAdminV1Index) bool {
 		}
 	}
 	return true
+}
+
+func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, prefix string, log progress.Log) error {
+	resolved, err := a.p.openClients(ctx)
+	if err != nil {
+		return err
+	}
+	store, err := resolved.Workload().TagFirestore(tier)
+	if err != nil {
+		return err
+	}
+	start := strings.TrimSuffix(prefix, "/") + "/"
+	records := store.Collection(tagCollection).
+		Where(tagPrefixField, ">=", start).
+		Where(tagPrefixField, "<", start+"\uf8ff").
+		Select().Documents(ctx)
+	defer records.Stop()
+
+	writer := store.BulkWriter(ctx)
+	var jobs []*firestore.BulkWriterJob
+	var errs []error
+	for {
+		record, err := records.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			if status.Code(err) == codes.NotFound && len(jobs) == 0 {
+				writer.End()
+				return nil
+			}
+			errs = append(errs, fmt.Errorf("list the tag records under %s: %w", prefix, err))
+			break
+		}
+		job, err := writer.Delete(record.Ref)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("delete %s: %w", record.Ref.Path, err))
+			break
+		}
+		jobs = append(jobs, job)
+	}
+	writer.End()
+	removed := 0
+	for _, job := range jobs {
+		if _, err := job.Results(); err != nil {
+			errs = append(errs, fmt.Errorf("delete a tag record under %s: %w", prefix, err))
+			continue
+		}
+		removed++
+	}
+	if err := errors.Join(errs...); err != nil {
+		return err
+	}
+	if removed > 0 {
+		ensureProgress(log).Say(fmt.Sprintf("Removed %d tag records under %s from Firestore database %s",
+			removed, prefix, ports.TagDatabase(resolved.Namespace(), tier)))
+	}
+	return nil
 }
