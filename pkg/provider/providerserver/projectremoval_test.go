@@ -172,6 +172,31 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 	}
 }
 
+func TestRemoveProjectRetiresTheISRPrefixOfEveryReleaseBeforeSweepingTheProject(t *testing.T) {
+	client, vendor := deployedProject(t)
+
+	stream, err := client.RemoveProject(context.Background(), projectRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
+	}
+
+	var want []string
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.App == nil {
+			continue
+		}
+		coordinate := naming.Coordinate{Project: "shop", Env: spec.Ref.Name.Env, App: spec.Ref.Name.App, Release: spec.Ref.Name.Release}
+		want = append(want, "remove-prefix "+coordinate.ISRPrefix())
+	}
+	if len(want) == 0 {
+		t.Fatal("the deploy provisioned no app stack to remove")
+	}
+	inOrder(t, vendor.Journal(), append(want, "remove-prefix "+naming.Coordinate{Project: "shop", Env: stackrecords.ProductionEnv}.StoragePrefix())...)
+}
+
 func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {
 	client, vendor := deployedProject(t)
 	ctx := context.Background()

@@ -420,6 +420,11 @@ func (r *projectRemoval) purgeValues(ctx context.Context, progress progress.Log)
 
 func (r *projectRemoval) purgeObjects(ctx context.Context, progress progress.Log) error {
 	var errs []error
+	for _, isrPrefix := range r.listISRPrefixes() {
+		if err := r.provider.Artifacts().RemovePrefix(ctx, r.tier, isrPrefix, progress); err != nil {
+			errs = append(errs, fmt.Errorf("remove %s: %w", isrPrefix, err))
+		}
+	}
 	for _, env := range r.environments() {
 		prefix := naming.Coordinate{Project: naming.Sanitize(r.slug), Env: env}.StoragePrefix()
 		if err := r.provider.Artifacts().RemovePrefix(ctx, r.tier, prefix, progress); err != nil {
@@ -427,6 +432,16 @@ func (r *projectRemoval) purgeObjects(ctx context.Context, progress progress.Log
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (r *projectRemoval) listISRPrefixes() []string {
+	prefixes := make([]string, 0, len(r.apps))
+	for _, stack := range r.apps {
+		coordinate := naming.Coordinate{Project: naming.Sanitize(r.slug), Env: stack.Env, App: stack.App, Release: stack.Release}
+		prefixes = append(prefixes, coordinate.ISRPrefix())
+	}
+	slices.Sort(prefixes)
+	return slices.Compact(prefixes)
 }
 
 func (r *projectRemoval) environments() []string {

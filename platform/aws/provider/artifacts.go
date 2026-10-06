@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func (p *Provider) Buckets(ctx context.Context, tier environment.Tier) (awsports.Buckets, error) {
@@ -24,10 +25,14 @@ func (p *Provider) Buckets(ctx context.Context, tier environment.Tier) (awsports
 			return buckets, err
 		}
 		if params.CacheStore.Bucket != "" {
-			buckets.Caches = append(buckets.Caches, awsports.CacheBucket{
+			cache := awsports.CacheBucket{
 				Name: params.CacheStore.Bucket,
 				S3:   cacheStoreClient(params.CacheStore),
-			})
+			}
+			if writer := params.ISRWriter; writer.Endpoint != "" && writer.BootstrapCredential != "" {
+				cache.Writer = cloudflare.ISRWriter{Endpoint: writer.Endpoint, BootstrapCredential: writer.BootstrapCredential}
+			}
+			buckets.Caches = append(buckets.Caches, cache)
 		}
 	}
 	return buckets, nil
