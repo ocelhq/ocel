@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
 type stack struct {
@@ -39,7 +40,7 @@ func (s *stack) released(ctx context.Context, records map[string]router.Deployme
 		if host.Service != "" || isWildcard(hostname) {
 			continue
 		}
-		service := records[host.App].Physical
+		service := pin.ResolveService(records[host.App])
 		if service == "" {
 			continue
 		}
@@ -201,7 +202,7 @@ func (s *stack) serving(ctx context.Context, app string) (string, error) {
 	if err != nil || !staged {
 		return "", err
 	}
-	return record.Physical, nil
+	return pin.ResolveService(record), nil
 }
 
 func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {

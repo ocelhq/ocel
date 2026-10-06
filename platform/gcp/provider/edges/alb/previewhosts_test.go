@@ -75,6 +75,27 @@ func TestADeploymentHostnameIsRoutedToTheRevisionItsDeployTagged(t *testing.T) {
 	}
 }
 
+func TestADeploymentHostnameOfAFunctionAppIsRoutedToItsEntryFunctionsTaggedRevision(t *testing.T) {
+	t.Parallel()
+
+	w, stack := previewRouter(t)
+	record := previewRecord("b1")
+	record.Physical = ""
+	record.EntryFunction = previewService
+	if err := stack.MovePointer(context.Background(), deploymentMove(deploymentFirst, deploymentHost, record), progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(deployment) = %v", err)
+	}
+
+	backend := backendName("shop", environment.TierPreview, deploymentHost)
+	if got := w.hosts(tierRoutes)[deploymentHost]; got != backend {
+		t.Errorf("%s is routed to %q, want %q", deploymentHost, got, backend)
+	}
+	host := stack.s.recorded.Hosts[deploymentHost]
+	if want := w.tagOf(previewService, record.Revisions[previewService]); host.Service != previewService || host.Tag != want {
+		t.Errorf("the recorded host is %+v, want service %s and tag %q", host, previewService, want)
+	}
+}
+
 func TestADeploymentWhosePromotionWasDroppedRoutesNothing(t *testing.T) {
 	t.Parallel()
 

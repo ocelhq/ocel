@@ -103,14 +103,15 @@ func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host e
 		return Host{}, nil, refusal.Refuse(refusal.CodeInvalid,
 			"preview hostname %s names app %q, and promotion %s records no release of it", host.Hostname, host.App, move.Promotion.PromotionID)
 	}
-	if record.Physical == "" {
+	service := pin.ResolveService(record)
+	if service == "" {
 		return Host{}, nil, refusal.Refuse(refusal.CodeInvalid,
 			"build %s of %s recorded no Cloud Run service it answers on, so %s has nothing to route to: re-deploy %s so its release records one",
 			record.Build, record.App, host.Hostname, record.App)
 	}
 	served := Host{
 		App:     record.App,
-		Service: record.Physical,
+		Service: service,
 		Backend: backendName(s.state.Slug, s.state.Tier, host.Hostname),
 		Pointer: move.Pointer,
 	}
@@ -121,7 +122,7 @@ func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host e
 	if err != nil {
 		return Host{}, nil, err
 	}
-	served.Tag = tags[record.Physical]
+	served.Tag = tags[service]
 	return served, tags, nil
 }
 

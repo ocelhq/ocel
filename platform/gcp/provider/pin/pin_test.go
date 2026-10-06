@@ -639,3 +639,33 @@ func TestAPromotionThatClosedAServiceAndIsRepinnedWhilePuttingItBackRecordsARoll
 		t.Errorf("api rollbacks = %+v, want api-2 recorded as put back on api-1 without Opened: this promotion already closed the service", cloudRun.rollbacks[api])
 	}
 }
+
+func TestAFunctionAppAnswersOnItsEntryFunctionsService(t *testing.T) {
+	t.Parallel()
+
+	if got := pin.ResolveService(router.DeploymentRecord{EntryFunction: "fn-svc"}); got != "fn-svc" {
+		t.Errorf("ResolveService = %q, want fn-svc", got)
+	}
+}
+
+func TestAContainerAppAnswersOnItsContainersService(t *testing.T) {
+	t.Parallel()
+
+	if got := pin.ResolveService(router.DeploymentRecord{Physical: "ctr", EntryFunction: "fn"}); got != "ctr" {
+		t.Errorf("ResolveService = %q, want ctr", got)
+	}
+}
+
+func TestTheTagsOfAFunctionAppsDeploymentAreReadWithoutRefusal(t *testing.T) {
+	t.Parallel()
+
+	tags, err := pin.ReadTags(context.Background(), &services{}, router.DeploymentRecord{
+		App: "web", Build: "b1", EntryFunction: "fn-svc", Revisions: map[string]string{"fn-svc": "fn-svc-b1"},
+	})
+	if err != nil {
+		t.Fatalf("ReadTags = %v", err)
+	}
+	if _, found := tags["fn-svc"]; !found {
+		t.Errorf("ReadTags = %v, want a key for fn-svc", tags)
+	}
+}
