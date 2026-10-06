@@ -1,14 +1,18 @@
 import type { Env } from "./env";
-import { type Outcome, parseRefresh, trigger } from "./refresh";
+import { parseRefresh, type RefreshOutcome, trigger } from "./refresh";
 
 const baseDelaySeconds = 15;
 const maxDelaySeconds = 300;
 
-function backoff(attempts: number): number {
+function computeRetryDelay(attempts: number): number {
   return Math.min(maxDelaySeconds, baseDelaySeconds * 2 ** (attempts - 1));
 }
 
-function log(outcome: Outcome, item: Message<unknown>, fields: Record<string, unknown>): void {
+function log(
+  outcome: RefreshOutcome,
+  item: Message<unknown>,
+  fields: Record<string, unknown>,
+): void {
   const { settle: _settle, ...rest } = outcome;
   console.log(JSON.stringify({ ...rest, messageId: item.id, attempts: item.attempts, ...fields }));
 }
@@ -23,7 +27,7 @@ async function settle(item: Message<unknown>, env: Env): Promise<void> {
     : {};
   log(outcome, item, { isrPrefix, routePath, lastModified, enqueuedAt });
   if (outcome.settle === "ack") item.ack();
-  else item.retry({ delaySeconds: backoff(item.attempts) });
+  else item.retry({ delaySeconds: computeRetryDelay(item.attempts) });
 }
 
 async function queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
@@ -39,7 +43,7 @@ async function queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
           attempts: item.attempts,
         }),
       );
-      item.retry({ delaySeconds: backoff(item.attempts) });
+      item.retry({ delaySeconds: computeRetryDelay(item.attempts) });
     }
   }
 }
