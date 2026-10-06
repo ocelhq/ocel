@@ -10,6 +10,7 @@ const (
 	tierLabel        = "ocel-tier"
 	projectLabel     = "ocel-project"
 	environmentLabel = "ocel-environment"
+	appLabel         = "ocel-app"
 	kvLabel          = "ocel-kv"
 	bucketLabel      = "ocel-bucket"
 	postgresLabel    = "ocel-postgres"
