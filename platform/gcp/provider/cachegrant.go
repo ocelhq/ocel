@@ -21,6 +21,9 @@ func grantCache(ctx context.Context, c *clients, spec provider.StackSpec, accoun
 	}); err != nil {
 		return err
 	}
+	if keepsISRInEdgeStore(spec) {
+		return nil
+	}
 	return untilVisible(ctx, func() error {
 		return c.bindProjectRole(ctx, member, tagRecordsRole, tagDatabaseCondition(c, spec.Ref.Tier), true)
 	})

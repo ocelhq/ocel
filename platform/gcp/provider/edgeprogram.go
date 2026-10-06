@@ -85,3 +85,19 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 	}
 	return result, nil
 }
+
+func (p *Provider) edgeISRStoreFor(ctx context.Context, spec provider.StackSpec) (*edgeISRStore, error) {
+	if !keepsISRInEdgeStore(spec) {
+		return nil, nil
+	}
+	writer, err := p.readEdgeISRWriter(ctx, spec)
+	if err != nil {
+		return nil, err
+	}
+	if !writer.IsConfigured() {
+		return nil, refusal.Refuse(refusal.CodeNotReady,
+			"the %s edge's ISR writer is not adopted, and %s keeps its pages and tags in it: run `%s` again",
+			spec.Edge.Kind(), spec.App.App, provider.BootstrapCommand(spec.Ref.Tier))
+	}
+	return &edgeISRStore{writer: writer, secret: cloudflare.DeriveISRWriteSecret(writer.Seed, spec.App.ISR.Prefix)}, nil
+}

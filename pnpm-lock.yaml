@@ -1052,6 +1052,9 @@ importers:
       '@framework/node-runtime':
         specifier: workspace:*
         version: link:../../../frameworks/node/runtime
+      '@platform/edge-contract':
+        specifier: workspace:*
+        version: link:../../edge/contract
     devDependencies:
       '@types/node':
         specifier: ^24

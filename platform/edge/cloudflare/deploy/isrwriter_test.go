@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -205,4 +206,98 @@ func TestTheISRWriterCallsNothingWithoutAdoptedCoordinates(t *testing.T) {
 			t.Errorf("calls = %+v, want none without adopted writer coordinates", *calls)
 		}
 	})
+}
+
+func TestPuttingAnEntrySendsItUnderTheDeploymentsWriteSecret(t *testing.T) {
+	var got struct {
+		method, path, key, auth, contentType, body string
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		got.method, got.path, got.key = r.Method, r.URL.Path, r.URL.Query().Get("key")
+		got.auth, got.contentType, got.body = r.Header.Get("Authorization"), r.Header.Get("Content-Type"), string(raw)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(srv.Close)
+
+	if err := writerAccess(srv.URL).PutEntry(context.Background(), testPrefix, "blog/a b", []byte(`{"lastModified":1}`)); err != nil {
+		t.Fatalf("PutEntry = %v", err)
+	}
+
+	if got.method != http.MethodPut || got.path != "/"+testPrefix+"/entry" || got.key != "blog/a b" {
+		t.Errorf("request = %s %s?key=%s, want PUT /%s/entry?key=blog/a b", got.method, got.path, got.key, testPrefix)
+	}
+	if want := "Bearer " + DeriveISRWriteSecret("seed-1", testPrefix); got.auth != want {
+		t.Errorf("Authorization = %q, want the deployment's write secret, never the bootstrap credential", got.auth)
+	}
+	if got.contentType != "application/json" || got.body != `{"lastModified":1}` {
+		t.Errorf("content type %q and body %q, want the entry as JSON", got.contentType, got.body)
+	}
+}
+
+func TestPuttingAnEntryRetriesAThrottledWrite(t *testing.T) {
+	previous := isrWriterBackoff
+	isrWriterBackoff = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}
+	t.Cleanup(func() { isrWriterBackoff = previous })
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if attempts.Add(1) < 3 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(srv.Close)
+
+	if err := writerAccess(srv.URL).PutEntry(context.Background(), testPrefix, "blog", []byte(`{}`)); err != nil {
+		t.Fatalf("PutEntry = %v, want the third attempt to land", err)
+	}
+	if got := attempts.Load(); got != 3 {
+		t.Errorf("%d attempts, want 3", got)
+	}
+
+	always := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	t.Cleanup(always.Close)
+	attempts.Store(0)
+	if err := writerAccess(always.URL).PutEntry(context.Background(), testPrefix, "blog", []byte(`{}`)); err == nil {
+		t.Error("PutEntry = nil though the writer throttled every attempt")
+	}
+	if got := attempts.Load(); got != 4 {
+		t.Errorf("%d attempts, want the first and three retries", got)
+	}
+}
+
+func TestPuttingAnEntryWithoutAnAdoptedWriterIsRefused(t *testing.T) {
+	for name, writer := range map[string]ISRWriter{
+		"no endpoint": {BootstrapCredential: "c", Seed: "s"},
+		"no seed":     {Endpoint: "https://w.example", BootstrapCredential: "c"},
+	} {
+		err := writer.PutEntry(context.Background(), testPrefix, "blog", []byte(`{}`))
+		if err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
+			t.Errorf("%s: PutEntry = %v, want a refusal that says to re-run bootstrap", name, err)
+		}
+	}
+}
+
+func TestPuttingAnEntryTheWriterRejectedNamesTheKeyAndNotTheSecret(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(srv.Close)
+
+	err := writerAccess(srv.URL).PutEntry(context.Background(), testPrefix, "blog", []byte(`{}`))
+	if err == nil {
+		t.Fatal("PutEntry = nil though the writer answered 403")
+	}
+	for _, want := range []string{testPrefix, "blog", "403"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not name %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), DeriveISRWriteSecret("seed-1", testPrefix)) || strings.Contains(err.Error(), "seed-1") {
+		t.Errorf("error %q holds the write secret", err)
+	}
 }

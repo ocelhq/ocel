@@ -66,7 +66,7 @@ func TestANextAppWithoutTheALBIsToldNoURLMap(t *testing.T) {
 			spec.Edge = front
 		},
 		"an edge that runs code": func(t *testing.T, p *Provider, spec *provider.StackSpec) {
-			withOriginBase(t, p)
+			adoptBehindTheWorker(t, p, "https://writer.example.test", fake.KindRelay)
 			front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 			if err != nil {
 				t.Fatal(err)

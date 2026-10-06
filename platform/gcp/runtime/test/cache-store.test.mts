@@ -80,3 +80,31 @@ test("a published tag is handed to the tag records", async () => {
 
   expect(publish).toHaveBeenCalledWith("cart", { expired: 5 });
 });
+
+test("page entries are kept in the edge's store when an isr-writer is bound", async () => {
+  const { bucket, storage } = open();
+  const pages = {
+    readEntry: vi.fn(async () => entry),
+    writeEntry: vi.fn(async () => {}),
+  };
+  const store = newGcpCacheStore(storage, prefix, vi.fn(), pages);
+
+  await store.writeEntry("blog", entry);
+  expect(await store.readEntry("blog")).toEqual(entry);
+
+  expect(pages.writeEntry).toHaveBeenCalledWith("blog", entry);
+  expect(pages.readEntry).toHaveBeenCalledWith("blog");
+  expect([...bucket.objects.keys()]).toEqual([]);
+});
+
+test("fetch entries are kept in Cloud Storage when an isr-writer is bound", async () => {
+  const { bucket, storage } = open();
+  const pages = { readEntry: vi.fn(), writeEntry: vi.fn() };
+  const store = newGcpCacheStore(storage, prefix, vi.fn(), pages);
+
+  await store.writeFetch("abc", entry);
+
+  expect(await store.readFetch("abc")).toEqual(entry);
+  expect([...bucket.objects.keys()]).toEqual([`${prefix}/fetch-cache/abc.cache.json`]);
+  expect(pages.writeEntry).not.toHaveBeenCalled();
+});

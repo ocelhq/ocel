@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
@@ -89,8 +90,16 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err != nil {
 		return nil, err
 	}
+	edgeStore, err := p.edgeISRStoreFor(ctx, spec)
+	if err != nil {
+		return nil, err
+	}
 	if servesNext(app) && app.ISR != nil {
-		if err := p.seedPrerenders(ctx, spec, progress); err != nil {
+		var writer *cloudflare.ISRWriter
+		if edgeStore != nil {
+			writer = &edgeStore.writer
+		}
+		if err := p.seedPrerenders(ctx, spec, writer, progress); err != nil {
 			return nil, err
 		}
 	}
@@ -158,6 +167,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 				bucket:      names.Bucket(spec.Ref.Tier),
 				tagDatabase: "projects/" + names.project + "/databases/" + names.TagDatabase(spec.Ref.Tier),
 				endpoint:    p.containerEndpoint(),
+				edgeStore:   edgeStore,
 			}, addressed)); err != nil {
 				return nil, err
 			}
