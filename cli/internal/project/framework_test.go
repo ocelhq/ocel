@@ -331,6 +331,24 @@ export default {
 		}
 	})
 
+	t.Run("a container app whose package.json cannot be read is refused rather than read as no framework", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  apps: [{ name: "web", path: "services/web", compute: "container" }],
+};
+`)
+		writeFile(t, filepath.Join(root, "services", "web", "package.json"), `{not json`)
+
+		_, err := Load(context.Background(), root, "")
+		if err == nil || !strings.Contains(err.Error(), "package.json") {
+			t.Fatalf("Load = %v, want the unreadable package.json refused: a Next app would otherwise deploy without its adapter", err)
+		}
+	})
+
 	t.Run("a container app declaring next is read as next", func(t *testing.T) {
 		t.Parallel()
 

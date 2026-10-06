@@ -204,7 +204,15 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 		if named != "" && named != buildoutput.FrameworkNext {
 			return newInvalidConfigError(frameworkOnContainer(a.Name, named, compute), "")
 		}
-		if framework, _ := frameworkOf(a.Name, dir, named); framework == buildoutput.FrameworkNext {
+		framework := named
+		if framework == "" && isDir(dir) {
+			detected, _, err := language.DetectFramework(dir)
+			if err != nil {
+				return fmt.Errorf("app %q: %w", a.Name, err)
+			}
+			framework = detected
+		}
+		if framework == buildoutput.FrameworkNext {
 			container.Framework = framework
 		}
 		return nil

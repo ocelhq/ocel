@@ -108,7 +108,8 @@ func (c NextConfigConflict) Warning() string {
 	switch c.Setting {
 	case OwnAdapter:
 		return fmt.Sprintf(`app %q sets adapterPath in %[2]s, and next start loads that adapter in place of the one ocel adds to its image, so it never loads the cache handlers ocel ships and each instance caches on its own: delete adapterPath from %[2]s`, c.App, c.ConfigFile)
-	default:
+	case StandaloneOutput:
 		return fmt.Sprintf(`app %q sets output: "standalone" in %[2]s, and a standalone server.js runs on the config its build baked in, so it never loads the cache handlers ocel adds to its image and each instance caches on its own: delete output: "standalone" from %[2]s and start the image with next start`, c.App, c.ConfigFile)
 	}
+	panic(fmt.Sprintf("NextConfigConflict.Setting = %d, which names no setting", c.Setting))
 }
