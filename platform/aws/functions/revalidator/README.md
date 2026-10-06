@@ -33,16 +33,16 @@ It does not remove the *key*: `isrPrefix` chooses which record is read, and a
 lie there is the whole of what a compromised edge key can still steer. So the
 real boundary is this, and it is two things, not one:
 
-- **`isrPrefix` is validated as a key prefix** (`src/message.mts`), to the same
+- **`isrPrefix` is validated as a key prefix**
+  (`platform/edge/contract/src/revalidation.mts`), to the same
   standard `routePath` is: dot-free segments of the characters
   `platform/aws/provider/deploy` composes it from, no separator, no traversal, no absolute
   key, nothing empty, and no `fetch-cache` segment. Without that check a `#` or
   a `?` truncates the `/origin.json` the consumer appends, and the message names
-  an arbitrary object — including one under the fetch-cache segment the edge
-  is granted `s3:PutObject` on and writes fully-controlled JSON bodies to. And a
-  prefix ending `.../fetch-cache` needs no truncation at all: the appended
-  `/origin.json` lands it in that same region, which is why the segment is
-  rejected outright rather than merely well-formed. A fragment
+  an arbitrary object. The `fetch-cache` segment holds cache entries, which are
+  render output and not records a deploy wrote, so a prefix ending
+  `.../fetch-cache` is rejected outright: the appended `/origin.json` would
+  land in that region with no truncation needed. A fragment
   never reaches the wire and `aws4fetch` signs `url.pathname`, so the signature
   would have matched the planted document exactly, and the origin comparison
   below would have agreed with the planted origin. It also stops
@@ -110,24 +110,12 @@ moves.
 
   Read-only, and no `s3:PutObject` — the consumer never writes to the store.
 
-  The `/origin.json` suffix is load-bearing and must not be relaxed to `/*` —
-  and it is only half of the mechanism. IAM's `*` spans `/`, so this pattern
-  alone admits `<prefix>/fetch-cache/origin.json`, which an edge write grant of
-  `*/fetch-cache/*` also admits. The disjointness holds because **both** grants
-  are anchored on a trailing literal and the two literals cannot coexist in one
-  key: this one admits only keys ending `/origin.json`, and the edge's write
-  grant is written `!Sub '${AssetBucket.Arn}/*/fetch-cache/*.cache.json'`, which
-  admits only keys ending `.cache.json`. Relaxing *either* suffix re-opens the
-  vector.
+  The edge key holds no S3 grant at all (`platform/aws/provider/bootstrap`
+  asserts it), so a stolen edge credential cannot write `origin.json` or any
+  other object here. That is what keeps the `/origin.json` suffix safe to keep
+  narrow: the consumer's read grant is the only S3 grant in the account that
+  names these records, and it must not be relaxed to `/*`.
 
-  That the edge worker only ever writes `.cache.json` keys is true
-  (`platform/edge/cloudflare/workers/entry/src/cache-entrypoint.ts`, `fetchObjectKey`) but is **not**
-  what makes this safe: the threat modelled here is a stolen edge *credential*,
-  which the worker's code does not constrain. Only the grant does.
-
-  Because the separation is by suffix, `origin.json` does **not** need to move
-  to a prefix of its own; moving it would not help, since `*/fetch-cache/*`
-  matches under any leading prefix.
 - **Env**, `OCEL_ASSET_BUCKET: !Ref AssetBucket`, exactly as `publisher.go`
   renders it for the tag publisher.
 - **A deploy-side write** (`platform/aws/provider/deploy`), which does not exist yet: after
