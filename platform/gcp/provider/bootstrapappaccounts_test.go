@@ -14,6 +14,7 @@ import (
 	"google.golang.org/api/iam/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -432,5 +433,73 @@ func TestABootstrapChecksItMayListServiceAccounts(t *testing.T) {
 		if !slices.Contains(permissions, want) {
 			t.Errorf("permissionsFor(nil) lacks %s", want)
 		}
+	}
+}
+
+type countingRecords struct {
+	keyvalue.Store
+	mu    sync.Mutex
+	lists int
+	after func(listed int)
+}
+
+func (c *countingRecords) List(ctx context.Context, in keyvalue.Partition, extra ...string) ([]keyvalue.Entry, error) {
+	entries, err := c.Store.List(ctx, in, extra...)
+	c.mu.Lock()
+	c.lists++
+	listed := c.lists
+	c.mu.Unlock()
+	if c.after != nil {
+		c.after(listed)
+	}
+	return entries, err
+}
+
+func TestABootstrapReadsAProjectsRecordsOnceToChooseAndOnceMoreBeforeEachDelete(t *testing.T) {
+	t.Parallel()
+	names := sweepNamed()
+	tier := environment.TierPreview
+	server := listing(
+		appAccountOf(names, tier, "shop", "web"),
+		appAccountOf(names, tier, "shop", "api"),
+		appAccountOf(names, tier, "shop", "worker"),
+		appAccountOf(names, tier, "shop", "cron"),
+	)
+	b, log := sweepingFor(t, server, recordedApp{tier, "shop", stackOf("pr-8", "web", "r1")}, recordedApp{tier, "shop", stackOf("pr-8", "api", "r1")})
+	records := &countingRecords{Store: b.records}
+	b.records = records
+
+	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(tier), log); err != nil {
+		t.Fatalf("deleteUnusedAccounts() = %v", err)
+	}
+	if got, want := server.deletes(), []string{names.AppAccount(tier, "shop", "worker"), names.AppAccount(tier, "shop", "cron")}; !slices.Equal(got, want) {
+		t.Errorf("deleted %v, want %v", got, want)
+	}
+	if records.lists != 3 {
+		t.Errorf("read the records %d times, want 3: once for the project and once before each of the two deletes", records.lists)
+	}
+}
+
+func TestABootstrapKeepsTheAccountOfAnAppDeployedWhileItSweeps(t *testing.T) {
+	t.Parallel()
+	names := sweepNamed()
+	tier := environment.TierPreview
+	server := listing(appAccountOf(names, tier, "shop", "web"))
+	b, log := sweepingFor(t, server)
+	records := &countingRecords{Store: b.records}
+	records.after = func(listed int) {
+		if listed == 1 {
+			if err := stackrecords.Write(context.Background(), b.records, tier, "shop", stackOf("pr-9", "web", "r1"), stackrecords.Stack{}); err != nil {
+				t.Errorf("record the concurrent deploy: %v", err)
+			}
+		}
+	}
+	b.records = records
+
+	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(tier), log); err != nil {
+		t.Fatalf("deleteUnusedAccounts() = %v", err)
+	}
+	if got := server.deletes(); len(got) != 0 {
+		t.Errorf("deleted %v, want nothing: a deploy recorded the app after the sweep first read the records", got)
 	}
 }
