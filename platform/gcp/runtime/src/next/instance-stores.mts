@@ -42,7 +42,7 @@ export function newInstanceUseCacheStore(cache: InstanceCache): UseCacheStore {
       writeEntry(cache, `use-cache:${key}`, entry);
     },
     async readTagSnapshot() {
-      return { status: "fresh", records: {}, etag: null };
+      return { status: "fresh", records: {}, cursor: null };
     },
     async writeTag() {
       return true;

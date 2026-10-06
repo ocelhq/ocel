@@ -14,13 +14,13 @@ export interface TagRecordUpdate extends TagRecord {
 }
 
 export type TagSnapshotRead =
-  | { status: "fresh"; records: Record<string, TagRecord>; etag: string | null }
+  | { status: "fresh"; records: Record<string, TagRecord>; cursor: string | null }
   | { status: "unchanged" }
   | { status: "unusable" };
 
 export interface UseCacheStore {
   readEntry(key: string): Promise<UseCacheEntry | null>;
   writeEntry(key: string, entry: UseCacheEntry): Promise<void>;
-  readTagSnapshot(etag: string | null): Promise<TagSnapshotRead>;
+  readTagSnapshot(cursor: string | null): Promise<TagSnapshotRead>;
   writeTag(tag: string, record: TagRecordUpdate): Promise<boolean>;
 }

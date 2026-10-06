@@ -72,7 +72,7 @@ test("an instance use-cache store reads back the entry it was handed", async () 
 test("an instance use-cache store has a tag snapshot with no tags another instance wrote", async () => {
   const store = newInstanceUseCacheStore(newInstanceCache(1024));
 
-  expect(await store.readTagSnapshot(null)).toEqual({ status: "fresh", records: {}, etag: null });
+  expect(await store.readTagSnapshot(null)).toEqual({ status: "fresh", records: {}, cursor: null });
   expect(await store.writeTag("cart", { expired: 1, writtenAt: 1 })).toBe(true);
 });
 

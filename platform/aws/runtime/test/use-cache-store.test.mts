@@ -273,7 +273,7 @@ test("reads the whole tag clock from one object under the build's prefix", async
   expect(read).toEqual({
     status: "fresh",
     records: snapshot.records,
-    etag: '"v1"',
+    cursor: '"v1"',
   });
 });
 
@@ -291,7 +291,7 @@ test("reads an object the store named no version for", async () => {
 
   expect(await store.readTagSnapshot(null)).toMatchObject({
     status: "fresh",
-    etag: null,
+    cursor: null,
   });
 });
 
@@ -320,7 +320,7 @@ test("reads a snapshot with no records as a fresh, empty clock", async () => {
   expect(await store.readTagSnapshot(null)).toEqual({
     status: "fresh",
     records: {},
-    etag: '"v1"',
+    cursor: '"v1"',
   });
 });
 
