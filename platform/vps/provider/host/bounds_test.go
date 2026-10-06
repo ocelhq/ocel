@@ -15,7 +15,12 @@ import (
 
 const stalledDocker = `#!/bin/sh
 case "$1 $2" in
-"image inspect") exit 1 ;;
+"image inspect")
+	if [ -n "${STALLED_INSPECT:-}" ]; then exec sleep 600; fi
+	exit 1
+	;;
+"inspect --type") exec sleep 600 ;;
+"logs --tail") exec sleep 600 ;;
 esac
 case "$1" in
 pull)
@@ -53,7 +58,7 @@ func runAgainstStalledDocker(t *testing.T, script string, env ...string) scriptR
 func TestAPullThatStallsIsCutOffAndTriedAgainRatherThanWaitedOnForever(t *testing.T) {
 	t.Parallel()
 
-	ran := runAgainstStalledDocker(t, imagePulled("rustfs/rustfs:1.0.0", 3, 1), "STALLED_PULLS=1")
+	ran := runAgainstStalledDocker(t, imagePulled("rustfs/rustfs:1.0.0", 3, 1, 60), "STALLED_PULLS=1")
 	if ran.failed != nil {
 		t.Fatalf("a pull that stalled once and then answered failed the step: %v\n%s", ran.failed, ran.said)
 	}
@@ -68,7 +73,7 @@ func TestAPullThatStallsIsCutOffAndTriedAgainRatherThanWaitedOnForever(t *testin
 func TestAPullThatStallsOnEveryAttemptFailsNamingTheImageAndTheBound(t *testing.T) {
 	t.Parallel()
 
-	ran := runAgainstStalledDocker(t, imagePulled("rustfs/rustfs:1.0.0", 2, 1))
+	ran := runAgainstStalledDocker(t, imagePulled("rustfs/rustfs:1.0.0", 2, 1, 60))
 	if ran.failed == nil {
 		t.Fatalf("a pull that never finished passed:\n%s", ran.said)
 	}
@@ -76,6 +81,48 @@ func TestAPullThatStallsOnEveryAttemptFailsNamingTheImageAndTheBound(t *testing.
 		if !strings.Contains(ran.said, want) {
 			t.Errorf("the stalled pull said %q, want it to name %q", strings.TrimSpace(ran.said), want)
 		}
+	}
+}
+
+func TestEveryPullAttemptTogetherStaysWithinThePullBudgetAndTheFailureNamesIt(t *testing.T) {
+	t.Parallel()
+
+	ran := runAgainstStalledDocker(t, imagePulled("rustfs/rustfs:1.0.0", 50, 2, 3))
+	if ran.failed == nil {
+		t.Fatalf("a pull that never finished passed:\n%s", ran.said)
+	}
+	if want := "rustfs/rustfs:1.0.0 was not pulled within 3s"; !strings.Contains(ran.said, want) {
+		t.Errorf("the stalled pull said %q, want %q", strings.TrimSpace(ran.said), want)
+	}
+	if ran.elapsed > 25*time.Second {
+		t.Errorf("pulls with a 3s budget took %s: the attempts and their backoff outlived it", ran.elapsed)
+	}
+}
+
+func TestAnImageInspectThatStallsIsCutOffAndThePullStillRuns(t *testing.T) {
+	t.Parallel()
+
+	ran := runAgainstStalledDocker(t, imagePulled("rustfs/rustfs:1.0.0", 3, 5, 60), "STALLED_INSPECT=1", "STALLED_PULLS=0")
+	if ran.failed != nil {
+		t.Fatalf("a stalled image inspect failed the pull it guards: %v\n%s", ran.failed, ran.said)
+	}
+	if ran.pulls != "1" {
+		t.Errorf("the image was pulled %s times after a stalled inspect, want once", ran.pulls)
+	}
+	if ran.elapsed > 40*time.Second {
+		t.Errorf("a stalled image inspect held the step for %s", ran.elapsed)
+	}
+}
+
+func TestAContainerWhoseInspectStallsIsReportedNotRisenWithinItsAttempts(t *testing.T) {
+	t.Parallel()
+
+	ran := runAgainstStalledDocker(t, switchboardBox(nil, Front{}).rising(2))
+	if ran.failed == nil {
+		t.Fatalf("a container docker never described rose:\n%s", ran.said)
+	}
+	if ran.elapsed > 90*time.Second {
+		t.Errorf("a stalled docker inspect held the readiness wait for %s", ran.elapsed)
 	}
 }
 

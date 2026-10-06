@@ -429,7 +429,7 @@ func (s boxContainer) prepared() string {
 	return "set -e\n" +
 		s.networksPresent() +
 		bindsPresent(s.files) +
-		imagePulled(s.image, containerPulls, pullAttemptSeconds)
+		imagePulled(s.image, containerPulls, pullAttemptSeconds, pullBudgetSeconds)
 }
 
 func (s boxContainer) replaced() string {
@@ -476,16 +476,21 @@ func rejoining(name string) string {
 		"done\n"
 }
 
-func imagePulled(imageRef string, attempts, attemptSeconds int) string {
+func imagePulled(imageRef string, attempts, attemptSeconds, budgetSeconds int) string {
 	image := quoted(imageRef)
+	spent := "{ printf '%s\\n' " + quoted(fmt.Sprintf("%s was not pulled within %s", imageRef, spelledSeconds(budgetSeconds))) + " >&2; exit 1; }"
 	return "at=0\n" + scriptPullBackoff.start() +
-		"until docker image inspect " + image + " >/dev/null 2>&1 || " + within(attemptSeconds, "docker pull "+image) + " >/dev/null; do\n" +
+		"pull_deadline=$(($(date +%s) + " + fmt.Sprint(budgetSeconds) + "))\n" +
+		"pull_left() { left=$((pull_deadline - $(date +%s))); [ \"$left\" -gt " + fmt.Sprint(attemptSeconds) + " ] && left=" + fmt.Sprint(attemptSeconds) + "; [ \"$left\" -gt 0 ]; }\n" +
+		"until " + within(probeSeconds, "docker image inspect "+image) + " >/dev/null 2>&1 || " +
+		"{ pull_left || " + spent + "; timeout -k " + fmt.Sprint(killGraceSeconds) + " \"$left\" docker pull " + image + " >/dev/null; }; do\n" +
 		"at=$((at + 1))\n" +
 		"if [ \"$at\" -ge " + fmt.Sprint(attempts) + " ]; then\n" +
 		"printf '%s\\n' " + quoted(fmt.Sprintf("%s was not pulled in %d attempts of at most %s each", imageRef, attempts, spelledSeconds(attemptSeconds))) + " >&2\n" +
 		"exit 1\n" +
 		"fi\n" +
 		scriptPullBackoff.again() +
+		"pull_left || " + spent + "\n" +
 		"done\n"
 }
 
@@ -495,7 +500,7 @@ func (s boxContainer) readiness() []string {
 
 func (s boxContainer) rising(attempts int) string {
 	name := quoted(s.name)
-	inspect := "docker inspect --type container --format "
+	inspect := within(probeSeconds, "docker inspect --type container --format ")
 	answering := within(probeSeconds, words(s.readiness())) + " >/dev/null 2>&1"
 	return "at=0\n" +
 		"while :; do\n" +
@@ -507,7 +512,7 @@ func (s boxContainer) rising(attempts int) string {
 		"printf '%s\\n' " + quoted(fmt.Sprintf("%s was created and %s within %ds", s.name, s.unready, attempts)) + " >&2\n" +
 		inspect + quoted("status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}") +
 		" " + name + " >&2 2>&1 || true\n" +
-		"docker logs --tail 2 " + name + " >&2 2>&1 || true\n" +
+		within(probeSeconds, "docker logs --tail 2 "+name) + " >&2 2>&1 || true\n" +
 		"exit 1"
 }
 

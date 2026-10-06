@@ -226,7 +226,7 @@ func volumeCreating(spec ResourceContainer) string {
 }
 
 func runResourceScript(spec ResourceContainer, digest, envFile string) string {
-	return imagePulled(spec.Image, appPulls, pullAttemptSeconds) +
+	return imagePulled(spec.Image, appPulls, pullAttemptSeconds, pullBudgetSeconds) +
 		boundedStep(dockerStepSeconds, "docker run of "+spec.Name, words(resourceRun(spec, digest, envFile))+" >/dev/null")
 }
 

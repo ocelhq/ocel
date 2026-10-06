@@ -181,7 +181,7 @@ func ContainerName(stack, app, deployment, image string) string {
 const appPulls = 5
 
 func runContainerScript(spec Container, env handoff) string {
-	return imagePulled(spec.Image, appPulls, pullAttemptSeconds) +
+	return imagePulled(spec.Image, appPulls, pullAttemptSeconds, pullBudgetSeconds) +
 		boundedStep(dockerStepSeconds, "docker run of "+spec.Name, words(containerRun(spec, env))+" >/dev/null")
 }
 
