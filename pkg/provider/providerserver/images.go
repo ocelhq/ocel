@@ -58,7 +58,7 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (p
 		return provider.ImagePush{}, refusal.Refuse(refusal.CodeNotReady,
 			"this provider ships no container runtime built for %s, and %s's image is built for it", arch, app)
 	}
-	next, err := r.nextServerRuntime(ctx, entry)
+	next, err := r.readNextServerRuntime(ctx, entry)
 	if err != nil {
 		return provider.ImagePush{}, err
 	}
@@ -72,7 +72,7 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (p
 	}, nil
 }
 
-func (r *deployRun) nextServerRuntime(ctx context.Context, entry provider.AppEntry) (*images.NextServerRuntime, error) {
+func (r *deployRun) readNextServerRuntime(ctx context.Context, entry provider.AppEntry) (*images.NextServerRuntime, error) {
 	read := r.provider.Hooks().ReadNextServerRuntime
 	if read == nil || entry.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext {
 		return nil, nil
