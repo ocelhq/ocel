@@ -269,10 +269,10 @@ func boundAccountMember(bindings []*iam.Binding, role, member string, granting b
 	return append(bindings, &iam.Binding{Role: role, Members: []string{member}}), true
 }
 
-func boundWithout(bindings []*cloudresourcemanager.Binding, member string) (kept, removed []*cloudresourcemanager.Binding) {
+func boundWithout(bindings []*cloudresourcemanager.Binding, member string, roles []string) (kept, removed []*cloudresourcemanager.Binding) {
 	kept = make([]*cloudresourcemanager.Binding, 0, len(bindings))
 	for _, binding := range bindings {
-		if slices.Contains(binding.Members, member) {
+		if slices.Contains(roles, binding.Role) && slices.Contains(binding.Members, member) {
 			removed = append(removed, &cloudresourcemanager.Binding{Role: binding.Role, Condition: binding.Condition, Members: []string{member}})
 			binding.Members = slices.DeleteFunc(slices.Clone(binding.Members), func(held string) bool { return held == member })
 			if len(binding.Members) == 0 {
@@ -298,7 +298,7 @@ func (c *clients) unbindProjectMember(ctx context.Context, member string) ([]*cl
 		if err != nil {
 			return nil, err
 		}
-		bindings, removed := boundWithout(policy.Bindings, member)
+		bindings, removed := boundWithout(policy.Bindings, member, appGrantedRoles)
 		if len(removed) == 0 {
 			return nil, nil
 		}
@@ -313,5 +313,5 @@ func (c *clients) unbindProjectMember(ctx context.Context, member string) ([]*cl
 			break
 		}
 	}
-	return nil, fmt.Errorf("revoke every project binding of %s on project %s: %w", member, c.project, refused)
+	return nil, fmt.Errorf("revoke the roles ocel granted %s on project %s: %w", member, c.project, refused)
 }
