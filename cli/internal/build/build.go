@@ -96,6 +96,9 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 	if err := RefuseNextFunctionsWithoutRuntimeDir(cfg, host); err != nil {
 		return err
 	}
+	if err := RefuseNextFunctionsWithOwnAdapter(cfg); err != nil {
+		return err
+	}
 
 	outputDir, err := buildoutput.Root(cfg.Dir)
 	if err != nil {
