@@ -941,6 +941,35 @@ func TestRun(t *testing.T) {
 		}
 	})
 
+	t.Run("adopts nothing from the worker client certificate offer and warns nothing", func(t *testing.T) {
+		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
+			Offers: []edge.Offer{
+				{Kind: edge.OfferWorkerClientCertificate, Values: map[string]string{
+					edge.OfferKeyClientCertificateID:          "certificate-1",
+					edge.OfferKeyClientCertificateAuthorities: "-----BEGIN CERTIFICATE-----",
+				}},
+				{Kind: edge.OfferCacheStore, Values: offeredStore()},
+			},
+		}})
+		log := &warningLog{Log: progress.Discard()}
+
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, everything(), log); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if len(log.warnings) != 0 {
+			t.Errorf("warnings = %v, want none for an offer this bootstrap deliberately adopts nothing from", log.warnings)
+		}
+		for name, value := range ssmc.params {
+			if strings.Contains(fmt.Sprint(value), "certificate-1") {
+				t.Errorf("stored the worker client certificate offer in %s", name)
+			}
+		}
+		if _, ok := ssmc.params[cloudflareNames(environment.TierProduction).cacheStoreParam]; !ok {
+			t.Errorf("the cache store offer alongside it was not adopted")
+		}
+	})
+
 	t.Run("no offers stores no cache store", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
@@ -1430,3 +1459,10 @@ func recordWaits(t *testing.T) *[]time.Duration {
 	t.Cleanup(func() { cfn.WaitBefore = previous })
 	return &waits
 }
+
+type warningLog struct {
+	progress.Log
+	warnings []string
+}
+
+func (l *warningLog) Warn(message string) { l.warnings = append(l.warnings, message) }

@@ -11,6 +11,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
@@ -27,6 +28,7 @@ const (
 	kindWorkerSubdomain = "Cloudflare::WorkerSubdomain"
 	kindWorkerRoute     = "Cloudflare::WorkerRoute"
 	kindDurableObject   = "Cloudflare::DurableObject"
+	kindMTLSCertificate = "Cloudflare::MTLSCertificate"
 )
 
 const (
@@ -76,6 +78,9 @@ func (p *cloudflare) adoption(_ context.Context, tier environment.Tier) (edge.Ad
 	for _, worker := range workers {
 		adoption.Offers = append(adoption.Offers, worker.offer)
 	}
+	if p.workerClientCertificate {
+		adoption.Offers = append(adoption.Offers, edge.OfferWorkerClientCertificate)
+	}
 	return adoption, nil
 }
 
@@ -84,6 +89,7 @@ func (s bootstrapState) removals() []edge.PlanChange {
 	for _, worker := range s.workers {
 		changes = append(changes, worker.removals()...)
 	}
+	changes = append(changes, s.certificates.removals()...)
 	if s.store.bucketPresent {
 		changes = append(changes, edge.PlanChange{
 			Kind:   kindR2Bucket,
@@ -130,8 +136,9 @@ func bootstrapCredentials() (string, error) {
 }
 
 type bootstrapState struct {
-	store   cacheStoreState
-	workers []workerState
+	store        cacheStoreState
+	workers      []workerState
+	certificates workerClientCertificateState
 }
 
 func (p *cloudflare) readState(ctx context.Context, accountID string, tier environment.Tier) (bootstrapState, error) {
@@ -151,6 +158,12 @@ func (p *cloudflare) readState(ctx context.Context, accountID string, tier envir
 		}
 		state.workers = append(state.workers, read)
 	}
+	if p.workerClientCertificate {
+		state.certificates, err = p.workerClientCertificates().read(ctx, accountID, tier, time.Now())
+		if err != nil {
+			return bootstrapState{}, err
+		}
+	}
 	return state, nil
 }
 
@@ -162,7 +175,7 @@ func (s bootstrapState) changes() []edge.PlanChange {
 	for _, worker := range s.workers {
 		changes = append(changes, worker.changes()...)
 	}
-	return changes
+	return append(changes, s.certificates.changes()...)
 }
 
 func presence(present bool) edge.PlanAction {

@@ -60,11 +60,14 @@ func proxyCredentialPermissions(purpose edge.CredentialPurpose) (edge.Credential
 		"cloudflare: the token permissions are listed for bootstrap or deploy credentials, not %q", string(purpose))
 }
 
-func credentialPermissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
+func (p *cloudflare) describeCredentialPermissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
 	var permissions []string
 	switch purpose {
 	case edge.PurposeBootstrap:
 		permissions = bootstrapPermissions()
+		if p.workerClientCertificate {
+			permissions = slices.Concat(permissions, workerClientCertificatePermissions)
+		}
 	case edge.PurposeDeploy:
 		permissions = deployPermissions()
 	default:
