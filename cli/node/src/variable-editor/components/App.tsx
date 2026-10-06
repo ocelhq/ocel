@@ -1,4 +1,3 @@
-import { ArrowUUpLeftIcon } from "@phosphor-icons/react";
 import {
   BulkBar,
   Button,
@@ -14,7 +13,8 @@ import {
   store,
   Table,
   useValue,
-} from "@ui/variables";
+} from "@ocelhq/variables-ui";
+import { ArrowUUpLeftIcon } from "@phosphor-icons/react";
 
 import { Masthead } from "./Masthead";
 

@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
-@import "@ui/theme/tokens.css";
+@import "@ocelhq/theme/tokens.css";
 
 @theme inline {
   --font-sans: var(--font-plex-sans), system-ui, sans-serif;

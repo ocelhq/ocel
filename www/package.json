@@ -12,6 +12,7 @@
   "dependencies": {
     "@base-ui/react": "^1.6.0",
     "@heroicons/react": "^2.2.0",
+    "@ocelhq/theme": "0.1.0",
     "@opentelemetry/api-logs": "^0.222.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.222.0",
     "@opentelemetry/resources": "^2.11.0",
@@ -19,7 +20,6 @@
     "@phosphor-icons/react": "^2.1.10",
     "@pierre/diffs": "^1.4.1",
     "@types/mdx": "^2.0.14",
-    "@ui/theme": "workspace:^",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.6",
     "fumadocs-core": "^16.15.7",

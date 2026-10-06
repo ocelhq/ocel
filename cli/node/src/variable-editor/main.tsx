@@ -1,4 +1,4 @@
-import { install, store } from "@ui/variables";
+import { install, store } from "@ocelhq/variables-ui";
 import { createRoot } from "react-dom/client";
 
 import { loopback, session } from "./api";
