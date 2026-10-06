@@ -558,6 +558,43 @@ func TestAStoreWithNoRoomSignsNoWrite(t *testing.T) {
 	}
 }
 
+func TestASignedUploadWithAMaxSizeOnAStoreThatSignsNoPolicyIsRefused(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, func(cfg *Config) { cfg.PostPolicies = false })
+
+	_, err := h.svc.Sign(context.Background(), &bucketv1.SignRequest{
+		Bucket: "store", Key: "a.png",
+		Operation:   bucketv1.SignedOperation_SIGNED_OPERATION_POST_UPLOAD,
+		Audience:    bucketv1.SignedAudience_SIGNED_AUDIENCE_EXTERNAL,
+		Constraints: &bucketv1.SignConstraints{MaxSize: 1024},
+	})
+
+	var connectErr *connect.Error
+	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeFailedPrecondition {
+		t.Fatalf("Sign = %v, want it refused rather than signed as a PUT with no size bound", err)
+	}
+	if !strings.Contains(err.Error(), `"store"`) {
+		t.Fatalf("Sign = %v, want the refusal to name the bucket", err)
+	}
+}
+
+func TestASignedUploadWithoutAMaxSizeOnAStoreThatSignsNoPolicyIsSignedAsAPut(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, func(cfg *Config) { cfg.PostPolicies = false })
+
+	signed, err := h.svc.Sign(context.Background(), &bucketv1.SignRequest{
+		Bucket: "store", Key: "a.png",
+		Operation: bucketv1.SignedOperation_SIGNED_OPERATION_POST_UPLOAD,
+		Audience:  bucketv1.SignedAudience_SIGNED_AUDIENCE_EXTERNAL,
+	})
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	if signed.GetTarget().GetMethod() != "PUT" {
+		t.Fatalf("method = %q, want a PUT where the store signs no POST policy", signed.GetTarget().GetMethod())
+	}
+}
+
 func TestAStoreThatSignsNoPolicyStillBoundsAnUploadByHead(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, func(cfg *Config) { cfg.PostPolicies = false })
