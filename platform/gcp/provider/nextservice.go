@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
@@ -171,11 +172,11 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 		env[appNameEnvVar] = app.App
 		env[deploymentIDEnvVar] = app.Deployment
 	}
-	maps.Copy(env, nextCacheEnv(app.ISR, cache))
+	maps.Copy(env, newNextCacheEnv(app.ISR, cache))
 	return env
 }
 
-func nextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
+func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 	env := map[string]string{}
 	if isr == nil {
 		return env
@@ -199,9 +200,10 @@ func nextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 	return env
 }
 
-func newNextContainerEnv(spec provider.StackSpec, s serving, cache nextCache) map[string]string {
-	env := nextCacheEnv(spec.App.ISR, cache)
-	env[memoryEnvVar] = strconv.Itoa(s.memory)
+func newNextContainerEnv(spec provider.StackSpec, memory int, cache nextCache) map[string]string {
+	env := newNextCacheEnv(spec.App.ISR, cache)
+	env[memoryEnvVar] = strconv.Itoa(memory)
+	env[containerimage.NextAdapterPathVar] = path.Join(nextRuntimeDir, containerimage.NextServerAdapterFile)
 	return env
 }
 
@@ -212,7 +214,7 @@ func fillNextContainerDefaults(s serving) serving {
 	return s
 }
 
-func nextCacheOf(names Names, tier environment.Tier, endpoint string, edgeStore *edgeISRStore) nextCache {
+func newNextCache(names Names, tier environment.Tier, endpoint string, edgeStore *edgeISRStore) nextCache {
 	return nextCache{
 		edgeStore:   edgeStore,
 		bucket:      names.Bucket(tier),
