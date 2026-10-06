@@ -1,9 +1,14 @@
 package gcp
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -172,5 +177,77 @@ func TestRemovingAProjectsEnvironmentListsNoOtherProjectsCache(t *testing.T) {
 	}
 	if neighbour := "cache/shopping/web/pr-7/r1/isr/x"; strings.HasPrefix(neighbour, list) {
 		t.Errorf("the listing %q reaches %q, another project", list, neighbour)
+	}
+}
+
+type destroyedPrefixes struct {
+	mu    sync.Mutex
+	paths []string
+	auths []string
+}
+
+func servingDestroys(t *testing.T) (*destroyedPrefixes, string) {
+	t.Helper()
+	seen := &destroyedPrefixes{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen.mu.Lock()
+		defer seen.mu.Unlock()
+		seen.paths = append(seen.paths, r.Method+" "+r.URL.Path)
+		seen.auths = append(seen.auths, r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+	return seen, server.URL
+}
+
+func adoptingTheWriter(t *testing.T, writerURL string) artifacts {
+	t.Helper()
+	p := (&runServer{}).open(t)
+	adoptBehindTheWorker(t, p, writerURL)
+	return artifacts{p}
+}
+
+func TestPruningAReleaseBehindCloudflareDestroysItsISRWriterRecord(t *testing.T) {
+	t.Parallel()
+	seen, url := servingDestroys(t)
+	store := adoptingTheWriter(t, url)
+
+	for _, prefix := range []string{"prod/shop/web/r1a2b3c4d/", "prod/shop/web/r1a2b3c4d/isr/"} {
+		seen.paths, seen.auths = nil, nil
+		if err := store.retireISRWriter(context.Background(), environment.TierProduction, prefix); err != nil {
+			t.Fatalf("retireISRWriter(%s) = %v", prefix, err)
+		}
+		if len(seen.paths) != 1 || seen.paths[0] != "POST /prod/shop/web/r1a2b3c4d/isr/destroy" || seen.auths[0] != "Bearer c2" {
+			t.Errorf("retireISRWriter(%s) called %v with %v, want one destroy of the release's isr prefix under the writer's bootstrap credential", prefix, seen.paths, seen.auths)
+		}
+	}
+}
+
+func TestPruningAReleaseWithNoAdoptedISRWriterCallsNoWriter(t *testing.T) {
+	t.Parallel()
+	seen, _ := servingDestroys(t)
+	p := (&runServer{}).open(t)
+	p.records = newOffersHarness(t).records
+
+	if err := (artifacts{p}).retireISRWriter(context.Background(), environment.TierProduction, "prod/shop/web/r1a2b3c4d/"); err != nil {
+		t.Fatalf("retireISRWriter() = %v, want nothing to do where no edge adopted a writer", err)
+	}
+	if len(seen.paths) != 0 {
+		t.Errorf("called %v, want no call", seen.paths)
+	}
+}
+
+func TestRemovingAProjectPrefixOnGCPDestroysNoISRWriterRecord(t *testing.T) {
+	t.Parallel()
+	seen, url := servingDestroys(t)
+	store := adoptingTheWriter(t, url)
+
+	for _, prefix := range []string{"prod/shop/", "prod/", "prod/shop/web/"} {
+		if err := store.retireISRWriter(context.Background(), environment.TierProduction, prefix); err != nil {
+			t.Fatalf("retireISRWriter(%s) = %v", prefix, err)
+		}
+	}
+	if len(seen.paths) != 0 {
+		t.Errorf("called %v for prefixes that name no release", seen.paths)
 	}
 }
