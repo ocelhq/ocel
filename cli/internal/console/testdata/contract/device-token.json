@@ -1,0 +1,28 @@
+{
+  "name": "device-token",
+  "request": {
+    "method": "POST",
+    "path": "/api/auth/device/token",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+      "device_code": "{{device.code}}",
+      "client_id": "ocel-cli"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "access_token": "q8Lm2Vb7Xc4Nz1Kw9Rt6Yp3Hs5Jd0Fg",
+      "token_type": "Bearer",
+      "expires_in": 2592000,
+      "scope": ""
+    }
+  },
+  "dynamic": [
+    "$.access_token",
+    "$.expires_in"
+  ]
+}

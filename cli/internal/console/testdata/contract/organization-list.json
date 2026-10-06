@@ -1,0 +1,21 @@
+{
+  "name": "organization-list",
+  "request": {
+    "method": "GET",
+    "path": "/api/auth/organization/list",
+    "headers": {
+      "Authorization": "Bearer {{session.token}}"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": [
+      {
+        "id": "{{organization.id}}",
+        "name": "Test Org",
+        "slug": "{{organization.slug}}"
+      }
+    ]
+  }
+}

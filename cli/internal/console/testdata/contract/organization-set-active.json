@@ -1,0 +1,18 @@
+{
+  "name": "organization-set-active",
+  "request": {
+    "method": "POST",
+    "path": "/api/auth/organization/set-active",
+    "headers": {
+      "Authorization": "Bearer {{session.token}}",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "organizationId": "{{organization.id}}"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": null
+  }
+}

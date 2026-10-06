@@ -1,0 +1,16 @@
+{
+  "name": "sign-out",
+  "request": {
+    "method": "POST",
+    "path": "/api/auth/sign-out",
+    "headers": {
+      "Authorization": "Bearer {{session.token}}",
+      "Content-Type": "application/json"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 200,
+    "body": null
+  }
+}
