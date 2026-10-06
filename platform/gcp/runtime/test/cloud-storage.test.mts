@@ -172,6 +172,58 @@ test("a request that hangs is abandoned after its timeout and tried again", asyn
   expect(s.storageCalls).toHaveLength(2);
 });
 
+test("a body that stalls after the headers arrived is abandoned after the timeout and tried again", async () => {
+  const stalled: Script = ({ init }) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          init.signal?.addEventListener("abort", () =>
+            controller.error(new DOMException("aborted", "AbortError")),
+          );
+        },
+      }),
+      { status: 200, headers: { "x-goog-generation": "1" } },
+    );
+  const s = stub([stalled, reply(200, "ok", { "x-goog-generation": "2" })]);
+  const storage = newCloudStorage({
+    bucket: "bkt",
+    fetch: s.fetch,
+    requestTimeoutMs: 50,
+    sleep: async () => {},
+  });
+
+  const result = await storage.read("a.json");
+
+  expect(result).toEqual({ status: "found", body: "ok", generation: "2" });
+  expect(s.storageCalls).toHaveLength(2);
+});
+
+test("a write response that is not json fails at once instead of being retried", async () => {
+  const s = stub([reply(200, "<html>")]);
+  const storage = newCloudStorage({ bucket: "bkt", fetch: s.fetch, sleep: async () => {} });
+
+  await expect(storage.write("a.json", "{}")).rejects.toThrow(SyntaxError);
+  expect(s.storageCalls).toHaveLength(1);
+});
+
+test("a conditional write whose first attempt landed unseen is written when its retry meets 412 and the object holds its body", async () => {
+  const s = stub([reply(503), reply(412), reply(200, '{"x":1}', { "x-goog-generation": "7" })]);
+  const storage = newCloudStorage({ bucket: "bkt", fetch: s.fetch, sleep: async () => {} });
+
+  const result = await storage.write("a.json", '{"x":1}', { ifGenerationMatch: "0" });
+
+  expect(result).toEqual({ status: "written", generation: "7" });
+});
+
+test("a conditional write whose retry meets 412 and finds another body is lost", async () => {
+  const s = stub([reply(503), reply(412), reply(200, '{"x":2}', { "x-goog-generation": "7" })]);
+  const storage = newCloudStorage({ bucket: "bkt", fetch: s.fetch, sleep: async () => {} });
+
+  const result = await storage.write("a.json", '{"x":1}', { ifGenerationMatch: "0" });
+
+  expect(result).toEqual({ status: "lost" });
+});
+
 test("the token is fetched once and reused until a minute before it expires", async () => {
   const found = () => reply(200, "x", { "x-goog-generation": "1" })({} as Call);
   const s = stub([found, found, found]);
