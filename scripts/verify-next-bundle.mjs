@@ -7,7 +7,18 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
+const providerBuilds = {
+  aws: {
+    OCEL_NEXT_RUNTIME_DIR: "/opt/ocel/next",
+    OCEL_MAX_FUNCTION_BYTES: String(200 * 1024 * 1024),
+  },
+  gcp: { OCEL_NEXT_RUNTIME_DIR: "/ocel/next", OCEL_MAX_FUNCTION_BYTES: "" },
+};
+
 const opts = parseArgs(process.argv.slice(2));
+const provider = opts.provider ?? "aws";
+if (!Object.hasOwn(providerBuilds, provider)) fatal("--provider is aws or gcp");
+const providerBuild = providerBuilds[provider];
 const appDir = resolve(repoRoot, opts.app ?? "tests/fixtures/sdk/next");
 const appName = opts["app-name"] ?? basename(appDir);
 const outRoot = resolve(repoRoot, opts.out ?? join(appDir, ".ocel/verify-output"));
@@ -45,8 +56,7 @@ function buildApp() {
     NEXT_ADAPTER_PATH: adapter,
     OCEL_APP_NAME: appName,
     OCEL_OUTPUT_DIR: appOut,
-    OCEL_NEXT_RUNTIME_DIR: "/opt/ocel/next",
-    OCEL_MAX_FUNCTION_BYTES: String(200 * 1024 * 1024),
+    ...providerBuild,
   });
 }
 
