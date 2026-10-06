@@ -11,12 +11,17 @@ import (
 )
 
 type Host struct {
-	NextRuntimeDir   string
-	MaxFunctionBytes int64
+	NextRuntimeDir         string
+	MaxFunctionBytes       int64
+	NextRefreshesByRequest bool
 }
 
 func ReadHost(facts *contractv1.ProviderFacts) Host {
-	return Host{NextRuntimeDir: facts.GetNextRuntimeDir(), MaxFunctionBytes: facts.GetMaxFunctionBytes()}
+	return Host{
+		NextRuntimeDir:         facts.GetNextRuntimeDir(),
+		MaxFunctionBytes:       facts.GetMaxFunctionBytes(),
+		NextRefreshesByRequest: facts.GetNextRefreshesByRequest(),
+	}
 }
 
 func FindNextFunctionApps(apps []project.App) []string {

@@ -133,6 +133,15 @@ describe("buildNext", () => {
     expect((await envOf(app())).OCEL_MAX_FUNCTION_BYTES).toBe("");
   });
 
+  it("tells the build when its host refreshes by request", async () => {
+    const env = await envOf(app({ nextRefreshesByRequest: true }));
+    expect(env.OCEL_NEXT_REFRESHES_BY_REQUEST).toBe("1");
+  });
+
+  it("tells the build nothing when its host refreshes in the background", async () => {
+    expect((await envOf(app())).OCEL_NEXT_REFRESHES_BY_REQUEST).toBe("");
+  });
+
   it("builds for production whatever NODE_ENV the shell sets", async () => {
     expect((await envOf(app({ env: { NODE_ENV: "development" } }))).NODE_ENV).toBe("production");
   });

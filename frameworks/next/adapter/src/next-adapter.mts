@@ -76,6 +76,23 @@ function readNextRuntimeDir(): string {
   return dir;
 }
 
+function refusePartialFallbacks(
+  config: Parameters<NonNullable<NextAdapter["modifyConfig"]>>[0],
+): void {
+  if (process.env.OCEL_NEXT_REFRESHES_BY_REQUEST !== "1") return;
+  let setting: string;
+  if (config.experimental?.partialFallbacks === true) {
+    setting = "experimental.partialFallbacks";
+  } else if ((config as { partialPrefetching?: unknown }).partialPrefetching) {
+    setting = "partialPrefetching";
+  } else {
+    return;
+  }
+  throw new Error(
+    `ocel: ${setting} has Next render a more specific fallback shell after the response ends, and this host stops a function's work when its response ends, so the shell would be lost and its page refreshed again and again. Turn ${setting} off in next.config to deploy here`,
+  );
+}
+
 async function installCacheHandler(): Promise<string> {
   const dest = join(process.cwd(), ".ocel", "cache-handler.cjs");
   await mkdir(dirname(dest), { recursive: true });
@@ -88,6 +105,7 @@ const adapter = {
 
   async modifyConfig(config, { phase }) {
     if (phase === PHASE_PRODUCTION_BUILD) {
+      refusePartialFallbacks(config);
       return {
         ...config,
         cacheMaxMemorySize: 0,

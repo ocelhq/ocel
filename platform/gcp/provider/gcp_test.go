@@ -7,3 +7,9 @@ func TestCloudRunDeclaresNoFunctionSizeBudget(t *testing.T) {
 		t.Errorf("Facts().MaxFunctionBytes = %d, want none: a Cloud Run function is a container image, which no unzipped-code limit splits", got)
 	}
 }
+
+func TestCloudRunDeclaresItsNextFunctionsRefreshByRequest(t *testing.T) {
+	if !pushing(t, "").Facts().NextRefreshesByRequest {
+		t.Error("Facts().NextRefreshesByRequest = false, want true: a Cloud Run function billed per request stops its work when the response ends")
+	}
+}

@@ -98,10 +98,11 @@ func (p *Provider) Facts() provider.Facts {
 			{Edge: alb.Kind, Router: router.Kind(alb.Kind), Computes: provider.Computes()},
 			{Edge: cloudflare.Kind, Router: router.Kind(alb.Kind), Computes: provider.Computes()},
 		},
-		DNSKinds:        []provider.DNSKind{dnsCloudflare},
-		StoresArtifacts: true,
-		WorkerCeilings:  slices.Clone(workerCeilings),
-		NextRuntimeDir:  nextRuntimeDir,
+		DNSKinds:               []provider.DNSKind{dnsCloudflare},
+		StoresArtifacts:        true,
+		WorkerCeilings:         slices.Clone(workerCeilings),
+		NextRefreshesByRequest: true,
+		NextRuntimeDir:         nextRuntimeDir,
 	}
 }
 
