@@ -13,5 +13,6 @@
     "noEmit": true,
     "paths": { "@/*": ["./src/variable-editor/*"] }
   },
-  "include": ["src/variable-editor/**/*"]
+  "include": ["src/variable-editor/**/*"],
+  "exclude": ["src/**/*.test.ts"]
 }
