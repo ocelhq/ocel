@@ -41,3 +41,7 @@ allowBuilds:
 linkWorkspacePackages: true
 
 autoInstallPeers: false
+
+minimumReleaseAgeExclude:
+  - '@ocelhq/theme@0.1.0'
+  - '@ocelhq/variables-ui@0.1.0'
