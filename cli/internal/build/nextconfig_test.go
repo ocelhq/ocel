@@ -108,6 +108,9 @@ func TestANextContainerThatNamesItsOwnAdapterIsNamedWithTheConfigFileThatSaysSo(
 	tests := []struct{ name, file, body string }{
 		{"top level", "next.config.mjs", "export default {\n  adapterPath: require.resolve(\"./my-adapter.js\"),\n}\n"},
 		{"experimental", "next.config.ts", `export default { experimental: { adapterPath: "./a.js" } }`},
+		{"shorthand alone", "next.config.mjs", "const adapterPath = \"./a.js\"\nexport default { adapterPath }\n"},
+		{"shorthand among others", "next.config.mjs", "export default { foo, adapterPath, bar }"},
+		{"shorthand last", "next.config.mjs", "export default { foo,\n  adapterPath\n}"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -311,5 +314,27 @@ func TestANextConfigSettingBesideAStringHoldingCommentMarkersIsStillNamed(t *tes
 	}
 	if !reflect.DeepEqual(found, want) {
 		t.Errorf("FindNextConfigConflicts() = %+v, want %+v", found, want)
+	}
+}
+
+func TestANextContainerWhoseConfigOnlyNamesALookalikeOfAdapterPathIsNotNamed(t *testing.T) {
+	t.Parallel()
+
+	for _, body := range []string{
+		`export default { adapterPathX: "./a.js" }`,
+		`export default { adapterPathX }`,
+		`export default { myadapterPath, other }`,
+	} {
+		root := t.TempDir()
+		writeNextConfig(t, root, "web", "next.config.mjs", body)
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextContainerApp("web", "web")}}
+
+		found, err := FindNextConfigConflicts(cfg, Host{ShipsNextServerRuntime: true})
+		if err != nil {
+			t.Fatalf("FindNextConfigConflicts() error = %v", err)
+		}
+		if found != nil {
+			t.Errorf("FindNextConfigConflicts(%q) = %+v, want none", body, found)
+		}
 	}
 }
