@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -26,6 +27,19 @@ func TestTheFilterForDatabasesOnANetworkMatchesTheNamespaceLabelAStackWrites(t *
 
 	if want := "settings.userLabels.ocel-namespace:" + written + " "; !strings.Contains(got, want) {
 		t.Errorf("databasesFilter() = %q, want it to hold %q: the filter reads the label stackLabels writes", got, want)
+	}
+}
+
+func TestTheFilterForStoresOnANetworkMatchesTheLabelsAStackWrites(t *testing.T) {
+	t.Parallel()
+	namespace := provider.Namespace(strings.Repeat("ocel-", 20) + "end")
+	written := stackLabels(Names{namespace: namespace}, provider.StackRef{Tier: environment.TierProduction})
+
+	got := storesFilter(namespace, environment.TierProduction)
+
+	want := "labels.ocel-namespace=" + strconv.Quote(written[namespaceLabel]) + " AND labels.ocel-tier=" + strconv.Quote(written[tierLabel])
+	if got != want {
+		t.Errorf("storesFilter() = %q, want %q: the filter reads the labels stackLabels writes", got, want)
 	}
 }
 
