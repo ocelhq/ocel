@@ -376,6 +376,31 @@ func TestALaterPromotionOfANextAppClearsItsReleaseTagAndNoHostname(t *testing.T)
 	}
 }
 
+func TestPromotingAPreviewAliasClearsOnlyTheHostnamesItMovesNeverTheDeploymentHostnames(t *testing.T) {
+	t.Parallel()
+
+	w, stack := previewRouter(t)
+	for _, build := range []string{"b1", "b2"} {
+		move := deploymentMove("d-"+build, "shop-"+build+".preview.example.com", previewRecord(build))
+		if err := stack.MovePointer(context.Background(), move, progress.Discard()); err != nil {
+			t.Fatalf("MovePointer(deployment %s) = %v", build, err)
+		}
+	}
+	alias := router.PointerMove{
+		Pointer:   "pr-7",
+		Hosts:     []edge.PreviewHost{{Hostname: "shop-pr-7.preview.example.com", App: "web"}},
+		Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b2"}},
+		Records:   map[string]router.DeploymentRecord{"web": previewRecord("b2")},
+	}
+	if err := stack.MovePointer(context.Background(), alias, progress.Discard()); err != nil {
+		t.Fatalf("MovePointer(alias) = %v", err)
+	}
+
+	if got, want := w.invalidatedHostnames(), []string{"shop-pr-7.preview.example.com"}; !slices.Equal(got, want) {
+		t.Errorf("the alias promotion cleared hostnames %v, want only %v: a deployment hostname is immutable and never needs clearing", got, want)
+	}
+}
+
 func TestAnAppThatBecomesNextIsClearedByHostname(t *testing.T) {
 	t.Parallel()
 
