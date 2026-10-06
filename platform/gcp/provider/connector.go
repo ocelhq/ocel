@@ -325,11 +325,11 @@ func boundMembers(members []string, member string, granting bool) ([]string, boo
 	case granting && at >= 0:
 		return members, false
 	case granting:
-		return append(members, member), true
+		return append(slices.Clone(members), member), true
 	case at < 0:
 		return members, false
 	default:
-		return slices.Delete(members, at, at+1), true
+		return slices.Delete(slices.Clone(members), at, at+1), true
 	}
 }
 

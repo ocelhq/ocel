@@ -328,10 +328,13 @@ func holdsRole(policy *pubsub.Policy, role, member string) bool {
 }
 
 func withMember(bindings []*pubsub.Binding, role, member string) []*pubsub.Binding {
-	for _, binding := range bindings {
+	for i, binding := range bindings {
 		if binding.Role == role && binding.Condition == nil {
-			binding.Members = append(binding.Members, member)
-			return bindings
+			bound := slices.Clone(bindings)
+			widened := *binding
+			widened.Members = append(slices.Clone(binding.Members), member)
+			bound[i] = &widened
+			return bound
 		}
 	}
 	return append(bindings, &pubsub.Binding{Role: role, Members: []string{member}})

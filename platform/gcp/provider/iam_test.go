@@ -2,10 +2,14 @@ package gcp
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"testing"
 
+	"cloud.google.com/go/iam/apiv1/iampb"
 	"google.golang.org/api/cloudresourcemanager/v1"
+	iam "google.golang.org/api/iam/v1"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 )
@@ -57,5 +61,113 @@ func TestWritingTheProjectPolicyReadsItAgainWhenAnEtagMismatchRefusesTheWrite(t 
 	}
 	if got, _ := revoking.projectMembers(appRecordsRole); slices.Contains(got, member) {
 		t.Errorf("%s still has members %q, want %s revoked", appRecordsRole, got, member)
+	}
+}
+
+func policyBindings(members ...string) []*cloudresourcemanager.Binding {
+	return []*cloudresourcemanager.Binding{
+		{Role: "roles/viewer", Members: slices.Clone(members)},
+		{Role: "roles/editor", Members: []string{"user:kept@acme.example", "user:other@acme.example"}},
+	}
+}
+
+func snapshotOf(t *testing.T, bindings any) string {
+	t.Helper()
+	encoded, err := json.Marshal(bindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(encoded)
+}
+
+func TestGrantingAMemberARoleLeavesTheBindingsItWasGivenUnchanged(t *testing.T) {
+	t.Parallel()
+	bindings := policyBindings("user:kept@acme.example")
+	before := snapshotOf(t, bindings)
+
+	got, changed := boundMember(bindings, "roles/viewer", "user:new@acme.example", nil, true)
+
+	if !changed || !slices.Contains(got[0].Members, "user:new@acme.example") {
+		t.Fatalf("boundMember() = %s, %v, want the member granted", snapshotOf(t, got), changed)
+	}
+	if after := snapshotOf(t, bindings); after != before {
+		t.Errorf("the bindings it was given are now %s, want %s", after, before)
+	}
+}
+
+func TestTakingAMemberOffARoleLeavesTheBindingsItWasGivenUnchanged(t *testing.T) {
+	t.Parallel()
+	bindings := policyBindings("user:kept@acme.example", "user:gone@acme.example")
+	before := snapshotOf(t, bindings)
+
+	got, changed := boundMember(bindings, "roles/viewer", "user:gone@acme.example", nil, false)
+
+	if !changed || slices.Contains(got[0].Members, "user:gone@acme.example") {
+		t.Fatalf("boundMember() = %s, %v, want the member taken off", snapshotOf(t, got), changed)
+	}
+	if after := snapshotOf(t, bindings); after != before {
+		t.Errorf("the bindings it was given are now %s, want %s", after, before)
+	}
+}
+
+func TestBoundMembersLeavesTheMembersItWasGivenUnchanged(t *testing.T) {
+	t.Parallel()
+	members := make([]string, 0, 8)
+	members = append(members, "user:a@acme.example", "user:b@acme.example", "user:c@acme.example")
+	before := slices.Clone(members)
+
+	granted, _ := boundMembers(members, "user:d@acme.example", true)
+	revoked, _ := boundMembers(members, "user:a@acme.example", false)
+
+	if !slices.Equal(members, before) || !slices.Equal(members[:cap(members)][:3], before) {
+		t.Errorf("the members it was given are now %v, want %v", members, before)
+	}
+	if !slices.Equal(granted, append(slices.Clone(before), "user:d@acme.example")) || !slices.Equal(revoked, before[1:]) {
+		t.Errorf("boundMembers() granted %v and revoked %v", granted, revoked)
+	}
+}
+
+func TestTakingAMemberOffRolesLeavesThePolicyItWasGivenUnchanged(t *testing.T) {
+	t.Parallel()
+	bindings := policyBindings("user:kept@acme.example", "user:gone@acme.example")
+	before := snapshotOf(t, bindings)
+
+	kept, removed := removeMemberFromRoles(bindings, "user:gone@acme.example", []string{"roles/viewer"})
+
+	if len(removed) != 1 || slices.Contains(kept[0].Members, "user:gone@acme.example") {
+		t.Fatalf("removeMemberFromRoles() = %s, %s, want the member off roles/viewer", snapshotOf(t, kept), snapshotOf(t, removed))
+	}
+	if after := snapshotOf(t, bindings); after != before {
+		t.Errorf("the policy it was given is now %s, want %s", after, before)
+	}
+}
+
+func TestGrantingAMemberAKeyRoleLeavesTheBindingsItWasGivenUnchanged(t *testing.T) {
+	t.Parallel()
+	bindings := []*iampb.Binding{{Role: "roles/cloudkms.viewer", Members: []string{"user:kept@acme.example"}}}
+	before := proto.Clone(bindings[0])
+
+	got, changed := boundKeyMember(bindings, "roles/cloudkms.viewer", "user:new@acme.example", true)
+
+	if !changed || !slices.Contains(got[0].GetMembers(), "user:new@acme.example") {
+		t.Fatalf("boundKeyMember() = %v, %v, want the member granted", got, changed)
+	}
+	if !proto.Equal(bindings[0], before) {
+		t.Errorf("the binding it was given is now %v, want %v", bindings[0], before)
+	}
+}
+
+func TestGrantingAMemberAnAccountRoleLeavesTheBindingsItWasGivenUnchanged(t *testing.T) {
+	t.Parallel()
+	bindings := []*iam.Binding{{Role: "roles/iam.serviceAccountUser", Members: []string{"user:kept@acme.example"}}}
+	before := snapshotOf(t, bindings)
+
+	got, changed := boundAccountMember(bindings, "roles/iam.serviceAccountUser", "user:new@acme.example", true)
+
+	if !changed || !slices.Contains(got[0].Members, "user:new@acme.example") {
+		t.Fatalf("boundAccountMember() = %v, %v, want the member granted", got, changed)
+	}
+	if after := snapshotOf(t, bindings); after != before {
+		t.Errorf("the bindings it was given are now %s, want %s", after, before)
 	}
 }
