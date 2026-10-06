@@ -96,7 +96,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	}
 	deployed := make([]provider.Function, 0, len(app.Functions)+len(app.Workers))
 	var refresh *nextRefresh
-	if refreshesByTask(app.Framework, app.Compute, factsOf(spec.Edge)) {
+	if refreshesByTask(app.Framework, app.Compute, factsOf(spec.Edge), gated) {
 		projectNumber, err := c.ReadProjectNumber(ctx)
 		if err != nil {
 			return nil, err
@@ -136,6 +136,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			compute:          provider.ComputeServerless,
 			public:           !gated,
 			iap:              gated,
+			instanceBilled:   gated && servesNext(app),
 			ingress:          ingressFor(factsOf(spec.Edge)),
 			memory:           fn.Memory,
 			egress:           p.egressFor(names, spec),

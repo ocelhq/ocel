@@ -15,7 +15,7 @@ func TestTheServiceShapeMatchesWhatServiceOfSends(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		properties := serviceProperties(compute, instances.Min, ingressLoadBalancer)
+		properties := serviceProperties(compute == provider.ComputeServerless, instances.Min, ingressLoadBalancer)
 		if properties["ingress"] != sent.Ingress {
 			t.Errorf("%s: shaped ingress %v, serviceOf sends %v", compute, properties["ingress"], sent.Ingress)
 		}

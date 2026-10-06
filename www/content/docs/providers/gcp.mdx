@@ -232,6 +232,9 @@ waits in the tier's Cloud Tasks queue until it is due.
 A Next app billed per request refreshes a stale page through the same queue: it queues the
 refresh, and Cloud Tasks calls the app's Cloud Run url with a token signed as the tier's refresh
 account. A Next app on container compute, or behind an edge that runs code, refreshes on its own.
+A Next app in a preview served behind Identity-Aware Proxy is billed for its instance's whole life
+instead, and refreshes on its own too: the proxy lets in only the people `previewViewers` names, so
+Cloud Tasks could not reach it.
 
 Each worker runs as a second Cloud Run service from its app's image, scaled from zero, reached
 by Pub/Sub alone: its ingress is internal, and only the tier's push account may invoke it. A run

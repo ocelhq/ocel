@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
@@ -75,6 +76,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		return nil, err
 	}
 	ingress := ingressFor(factsOf(front))
+	gated := p.gatesBehindIAP(req.Deploy.Tier, factsOf(front))
 	site := pricing.EdgeSite{Slug: req.Deploy.Slug, Tier: req.Deploy.Tier, Region: region}
 	for _, app := range req.Deploy.Apps {
 		site.Apps = append(site.Apps, pricing.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
@@ -93,7 +95,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 			if err != nil {
 				return nil, err
 			}
-			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(provider.ComputeContainer, app.Instances.Min, ingress))
+			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(false, app.Instances.Min, ingress))
 		} else {
 			specs := req.Functions[app.App]
 			if len(specs) == 0 {
@@ -104,19 +106,19 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 				if err != nil {
 					return nil, err
 				}
-				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(provider.ComputeServerless, 0, ingress))
+				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(!gated || app.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext, 0, ingress))
 			}
 		}
 		tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
 		for _, worker := range app.Workers {
 			service := names.WorkerService(req.Deploy.Slug, req.Deploy.Env, app.App, worker.Name)
-			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(provider.ComputeServerless, 0, ingressInternal))
+			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(true, 0, ingressInternal))
 		}
 	}
 	if err := shapeStores(tree, names, req, region, shared, environment); err != nil {
 		return nil, err
 	}
-	shapeTopicsAndRefreshes(tree, names, req, factsOf(front), region, shared, environment)
+	shapeTopicsAndRefreshes(tree, names, req, factsOf(front), gated, region, shared, environment)
 	shapeRealtime(tree, names, req, region, environment)
 	return tree.Set(provider.CostSource)
 }
@@ -148,7 +150,7 @@ func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 	return nil
 }
 
-func shapeTopicsAndRefreshes(tree *pricing.Tree, names Names, req provider.ShapeRequest, front edge.Facts, region, shared, environment string) {
+func shapeTopicsAndRefreshes(tree *pricing.Tree, names Names, req provider.ShapeRequest, front edge.Facts, gated bool, region, shared, environment string) {
 	scope := taskNames(names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
 	declared := false
 	for _, resource := range req.Resources {
@@ -168,7 +170,7 @@ func shapeTopicsAndRefreshes(tree *pricing.Tree, names Names, req provider.Shape
 		}
 	}
 	refreshes := slices.ContainsFunc(req.Deploy.Apps, func(entry provider.AppEntry) bool {
-		return refreshesByTask(entry.Manifest.GetFramework().GetName(), entry.Compute(), front)
+		return refreshesByTask(entry.Manifest.GetFramework().GetName(), entry.Compute(), front, gated)
 	})
 	if !declared && !refreshes {
 		return
@@ -246,14 +248,14 @@ func itemProperties(item item, region string) map[string]any {
 	return map[string]any{}
 }
 
-func serviceProperties(compute provider.Compute, minInstances int, ingress string) map[string]any {
+func serviceProperties(billsPerRequest bool, minInstances int, ingress string) map[string]any {
 	return map[string]any{
 		"ingress": ingress,
 		"template": map[string]any{
 			"scaling": map[string]any{"min_instance_count": minInstances},
 			"containers": []any{map[string]any{
 				"resources": map[string]any{
-					"cpu_idle": compute == provider.ComputeServerless,
+					"cpu_idle": billsPerRequest,
 					"limits":   map[string]any{"cpu": revisionCPU, "memory": revisionMemory},
 				},
 			}},

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -406,5 +407,39 @@ func TestShapeOfANextAppOnContainerComputeListsNoTaskQueue(t *testing.T) {
 
 	if counts := typeCounts(set); counts["google_cloud_tasks_queue"] != 0 {
 		t.Errorf("counts = %v, want no queue for an app that refreshes on its own", counts)
+	}
+}
+
+func TestShapeOfANextPreviewBehindIdentityAwareProxyListsNoRefreshQueueAndKeepsItsCPU(t *testing.T) {
+	client, _ := costServed(t)
+	shaped := func(container bool) *costv1.ResourceSet {
+		set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+			Manifest:    nextManifest(container),
+			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"},
+		})
+		if err != nil {
+			t.Fatalf("Shape() = %v", err)
+		}
+		return set
+	}
+
+	set, container := shaped(false), shaped(true)
+
+	counts, without := typeCounts(set), typeCounts(container)
+	if counts["google_cloud_tasks_queue"] != 0 {
+		t.Errorf("counts = %v, want no delay queue: a gated preview refreshes on its own", counts)
+	}
+	if counts["google_service_account"] != without["google_service_account"] {
+		t.Errorf("counts = %v, want no refresh account beside the %d accounts of an app that refreshes on its own", counts, without["google_service_account"])
+	}
+	for _, r := range set.GetResources() {
+		if r.GetType() != "google_cloud_run_v2_service" || !strings.HasSuffix(r.GetScope(), "/app:web") {
+			continue
+		}
+		template := r.GetProperties().AsMap()["template"].(map[string]any)
+		resources := template["containers"].([]any)[0].(map[string]any)["resources"].(map[string]any)
+		if resources["cpu_idle"] != false {
+			t.Errorf("%s has cpu_idle = %v, want false: a gated Next preview is billed per instance", r.GetName(), resources["cpu_idle"])
+		}
 	}
 }

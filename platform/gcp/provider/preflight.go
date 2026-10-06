@@ -56,7 +56,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 			}
 			facts, opened = front.Facts(), true
 		}
-		if refreshesByTask(framework, compute, facts) {
+		if refreshesByTask(framework, compute, facts, proxied) {
 			needs = append(needs, featureNeed{feature: tasksFeature, declares: "Next app " + entry.App,
 				reason: "a Next app billed per request on Cloud Run refreshes a stale page through the tier's Cloud Tasks queue, which its bootstrap has not installed"})
 		}
@@ -101,7 +101,7 @@ func (p *Provider) proxiesPreviews(pre provider.DeployPreflight) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return p.servesBehindIAP(provider.StackSpec{Ref: provider.StackRef{Tier: pre.Deploy.Tier}, Edge: front}), nil
+	return p.gatesBehindIAP(pre.Deploy.Tier, factsOf(front)), nil
 }
 
 func refuseMissingProxyAgent(tier environment.Tier, written stamp) error {

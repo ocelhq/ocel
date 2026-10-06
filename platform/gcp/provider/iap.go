@@ -11,6 +11,7 @@ import (
 	iap "google.golang.org/api/iap/v1"
 	serviceidentities "google.golang.org/api/serviceusage/v1beta1"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -27,7 +28,11 @@ const (
 var memberKinds = []string{"user:", "group:", "domain:", "serviceAccount:", "principal:", "principalSet:"}
 
 func (p *Provider) servesBehindIAP(spec provider.StackSpec) bool {
-	return spec.Ref.Tier == environment.TierPreview && !factsOf(spec.Edge).ShieldsOrigin && !p.emulated()
+	return p.gatesBehindIAP(spec.Ref.Tier, factsOf(spec.Edge))
+}
+
+func (p *Provider) gatesBehindIAP(tier environment.Tier, front edge.Facts) bool {
+	return tier == environment.TierPreview && !front.ShieldsOrigin && !p.emulated()
 }
 
 func refuseViewersWithoutKind(viewers []string) error {

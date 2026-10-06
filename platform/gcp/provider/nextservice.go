@@ -55,8 +55,8 @@ func servesNext(app *provider.AppSpec) bool {
 	return app.Framework == buildoutput.FrameworkNext
 }
 
-func refreshesByTask(framework string, compute provider.Compute, front edge.Facts) bool {
-	return framework == buildoutput.FrameworkNext && compute == provider.ComputeServerless && !front.RunsCode
+func refreshesByTask(framework string, compute provider.Compute, front edge.Facts, gated bool) bool {
+	return framework == buildoutput.FrameworkNext && compute == provider.ComputeServerless && !front.RunsCode && !gated
 }
 
 func fillNextServingDefaults(s serving) serving {
@@ -126,7 +126,7 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 	if app.Router != "" {
 		env[routerKindEnvVar] = string(app.Router)
 	}
-	if s.compute == provider.ComputeServerless {
+	if s.billsPerRequest() {
 		env[finishBeforeResponseEnvVar] = strconv.FormatInt(finishBeforeResponseCap.Milliseconds(), 10)
 	}
 	if routing := app.Routing; routing != nil && resolveRouteID(fn) == routing.Entry {
