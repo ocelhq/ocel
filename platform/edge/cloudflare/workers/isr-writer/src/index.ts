@@ -9,6 +9,7 @@ import { IsrSnapshot } from "./isr-snapshot";
 import type { Memo } from "./memo";
 import { forget, memoize, memoized } from "./memo";
 import { isSecretHash } from "./registry";
+import { readTagSnapshot } from "./tag-snapshot";
 
 export { IsrDeploy, IsrSnapshot };
 
@@ -157,6 +158,14 @@ export default class extends WorkerEntrypoint<Env> {
         return new Response("Too Many Requests", { status: 429 });
       }
       return new Response(null, { status: 204 });
+    }
+
+    if (request.method === "GET" && op === "tags") {
+      const token = bearer(request);
+      if (token === null || !(await authorized(this.env, isrPrefix, token))) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      return readTagSnapshot(this.env.OCEL_CACHE_STORE, isrPrefix, request.headers);
     }
 
     if (request.method === "POST" && op === "tags") {

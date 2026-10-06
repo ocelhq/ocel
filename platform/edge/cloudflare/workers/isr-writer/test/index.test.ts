@@ -426,18 +426,18 @@ describe("secret rotation", () => {
   });
 });
 
+function raiseReq(prefix: string, secret: string, body: unknown) {
+  return SELF.fetch(
+    bearerReq(`/${prefix}/tags`, secret, { method: "POST", body: JSON.stringify(body) }),
+  );
+}
+
+async function seedGenesis(prefix: string, deployedAt: number) {
+  const genesis: TagSnapshot = { version: 1, deployedAt, generatedAt: deployedAt, records: {} };
+  await env.OCEL_CACHE_STORE.put(tagSnapshotKey(prefix), JSON.stringify(genesis));
+}
+
 describe("tag raises", () => {
-  function raiseReq(prefix: string, secret: string, body: unknown) {
-    return SELF.fetch(
-      bearerReq(`/${prefix}/tags`, secret, { method: "POST", body: JSON.stringify(body) }),
-    );
-  }
-
-  async function seedGenesis(prefix: string, deployedAt: number) {
-    const genesis: TagSnapshot = { version: 1, deployedAt, generatedAt: deployedAt, records: {} };
-    await env.OCEL_CACHE_STORE.put(tagSnapshotKey(prefix), JSON.stringify(genesis));
-  }
-
   async function snapshotOf(prefix: string): Promise<TagSnapshot | null> {
     const object = await env.OCEL_CACHE_STORE.get(tagSnapshotKey(prefix));
     return object === null ? null : ((await object.json()) as TagSnapshot);
@@ -588,5 +588,76 @@ describe("tag raises", () => {
     const res = await SELF.fetch(bearerReq(`/${prefix}/destroy`, BOOTSTRAP, { method: "POST" }));
     expect(res.status).toBe(204);
     expect(await runDurableObjectAlarm(snapshotStub(prefix))).toBe(false);
+  });
+});
+
+describe("tag reads", () => {
+  function readReq(prefix: string, secret?: string, headers: Record<string, string> = {}) {
+    const path = `/${prefix}/tags`;
+    return SELF.fetch(
+      secret === undefined ? req(path, { headers }) : bearerReq(path, secret, { headers }),
+    );
+  }
+
+  it("answers a deployment's tag snapshot to its own write secret", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    await seedGenesis(prefix, 10);
+    await raiseReq(prefix, "write-secret", { records: { posts: { expired: 123 } } });
+
+    const res = await readReq(prefix, "write-secret");
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/json");
+    expect(res.headers.get("etag")).toBeTruthy();
+    const snapshot = (await res.json()) as TagSnapshot;
+    expect(snapshot.version).toBe(1);
+    expect(snapshot.records.posts?.expired).toBe(123);
+  });
+
+  it("refuses a tag read without the deployment's write secret", async () => {
+    const theirs = freshPrefix();
+    await initialize(theirs, "their-secret");
+    await seedGenesis(theirs, 1_000);
+    const mine = freshPrefix();
+    await initialize(mine, "my-secret");
+
+    expect((await readReq(theirs)).status).toBe(401);
+    expect((await readReq(theirs, "my-secret")).status).toBe(401);
+    expect((await readReq(theirs, BOOTSTRAP)).status).toBe(401);
+    expect((await readReq(freshPrefix(), "write-secret")).status).toBe(401);
+  });
+
+  it("answers not modified when the snapshot has not changed since the etag the reader holds", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    await seedGenesis(prefix, 10);
+    await raiseReq(prefix, "write-secret", { records: { posts: { expired: 123 } } });
+    const first = await readReq(prefix, "write-secret");
+    const etag = first.headers.get("etag") as string;
+    await first.arrayBuffer();
+
+    const unchanged = await readReq(prefix, "write-secret", { "if-none-match": etag });
+    expect(unchanged.status).toBe(304);
+    expect(await unchanged.text()).toBe("");
+
+    await raiseReq(prefix, "write-secret", { records: { users: { stale: 50 } } });
+    const changed = await readReq(prefix, "write-secret", { "if-none-match": etag });
+    expect(changed.status).toBe(200);
+    expect(changed.headers.get("etag")).not.toBe(etag);
+    expect(((await changed.json()) as TagSnapshot).records).toEqual({
+      posts: { expired: 123 },
+      users: { stale: 50 },
+    });
+  });
+
+  it("answers a miss before any tag was raised", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+
+    const res = await readReq(prefix, "write-secret");
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get(entryMissHeader)).toBe("1");
   });
 });
