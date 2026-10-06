@@ -5,9 +5,11 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  isProductionTarget,
   ocelBinary,
   previewNameForApp,
-  projectSlugForRun,
+  projectSlugForApp,
+  readCompatTarget,
   renderOcelConfig,
   requireNamespace,
   SKIP_DRIFT_CHECK_ENV,
@@ -25,11 +27,18 @@ if (!adapterDir) {
   process.exit(1);
 }
 
+const target = readCompatTarget();
+const production = isProductionTarget(target);
 const { slug, name } = resolveIdentity();
 ensureConfig(slug);
-console.error(`[ocel-e2e] removing preview ${name} from project ${slug}`);
+const command = production ? ["destroy", "production", "--yes"] : ["preview", "rm", name, "--yes"];
+console.error(
+  production
+    ? `[ocel-e2e] destroying production of project ${slug}`
+    : `[ocel-e2e] removing preview ${name} from project ${slug}`,
+);
 
-const res = spawnSync(process.execPath, [ocelBinary(adapterDir), "preview", "rm", name, "--yes"], {
+const res = spawnSync(process.execPath, [ocelBinary(adapterDir), ...command], {
   cwd: appDir,
   stdio: ["ignore", "inherit", "inherit"],
   timeout: TEARDOWN_TIMEOUT_MS,
@@ -40,16 +49,18 @@ if (res.error || res.signal || res.status !== 0) {
   const why =
     res.error?.message ?? (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`);
   console.error(
-    `[ocel-e2e] TEARDOWN FAILED for preview ${name} of project ${slug}: ${why}\n` +
-      `[ocel-e2e] its Lambdas and stacks are still live; remove them by running ` +
-      `\`ocel preview rm ${name} --yes\` from a directory whose ocel.config.ts ` +
+    `[ocel-e2e] TEARDOWN FAILED for ${production ? "production" : `preview ${name}`} of project ${slug}: ${why}\n` +
+      `[ocel-e2e] its services and stacks are still live; remove them by running ` +
+      `\`ocel ${command.join(" ")}\` from a directory whose ocel.config.ts ` +
       `declares slug: "${slug}", or take the whole project with ` +
       `\`node tests/next-compat/project-teardown.mjs ${slug}\``,
   );
   process.exit(1);
 }
 
-console.error(`[ocel-e2e] preview ${name} removed`);
+console.error(
+  production ? `[ocel-e2e] production of ${slug} destroyed` : `[ocel-e2e] preview ${name} removed`,
+);
 
 function resolveIdentity() {
   let state = {};
@@ -61,7 +72,7 @@ function resolveIdentity() {
     );
   }
   return {
-    slug: state.slug || projectSlugForRun(),
+    slug: state.slug || projectSlugForApp(appDir, target),
     name: state.name || previewNameForApp(appDir),
   };
 }
@@ -72,5 +83,5 @@ function ensureConfig(slug) {
     return;
   }
   console.error(`[ocel-e2e] no ocel.config.ts; re-rendering it for project ${slug}`);
-  writeFileSync(path, renderOcelConfig({ slug }));
+  writeFileSync(path, renderOcelConfig({ slug, target }));
 }

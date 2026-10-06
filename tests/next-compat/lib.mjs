@@ -76,7 +76,7 @@ export const NAME_HINT_LEN = 12;
 
 export const NAME_HASH_LEN = 8;
 
-export function previewName({ dir }) {
+function normalizeAppDir(dir) {
   const normalized = String(dir ?? "")
     .trim()
     .replace(/\/+$/, "");
@@ -85,8 +85,17 @@ export function previewName({ dir }) {
       "previewName needs a directory: neither NEXT_TEST_DIR nor a working directory was set",
     );
   }
+  return normalized;
+}
+
+function hashAppDir(normalized) {
+  return createHash("sha256").update(normalized).digest("hex").slice(0, NAME_HASH_LEN);
+}
+
+export function previewName({ dir }) {
+  const normalized = normalizeAppDir(dir);
   const hint = sanitizeToken(basename(normalized)).slice(0, NAME_HINT_LEN).replace(/-+$/, "");
-  const hash = createHash("sha256").update(normalized).digest("hex").slice(0, NAME_HASH_LEN);
+  const hash = hashAppDir(normalized);
   const name = hint ? `${hint}-${hash}` : hash;
   return /^[a-z]/.test(name) ? name : `e2e-${name}`;
 }
@@ -103,13 +112,52 @@ export function previewNameForApp(appDir) {
   return previewName({ dir: process.env.NEXT_TEST_DIR || appDir });
 }
 
+export function selectStrandedSlugs(slugs, keepSlug) {
+  const stranded = (slugs ?? []).filter(
+    (slug) => slug.startsWith(SLUG_PREFIX) && slug !== keepSlug,
+  );
+  return [...new Set(stranded)].sort();
+}
+
 export function strandedProjectSlugs(parameterNames, keepSlug) {
   const slugs = (parameterNames ?? [])
     .map((name) => String(name ?? ""))
     .filter((name) => name.startsWith(PREVIEW_ROOT_STACK_PARAM_PREFIX))
-    .map((name) => name.slice(PREVIEW_ROOT_STACK_PARAM_PREFIX.length))
-    .filter((slug) => slug.startsWith(SLUG_PREFIX) && slug !== keepSlug);
-  return [...new Set(slugs)].sort();
+    .map((name) => name.slice(PREVIEW_ROOT_STACK_PARAM_PREFIX.length));
+  return selectStrandedSlugs(slugs, keepSlug);
+}
+
+function cutRunSlug(runSlug) {
+  return runSlug.slice(0, MAX_SLUG_LEN - 1 - NAME_HASH_LEN).replace(/-+$/, "");
+}
+
+export function selectStrandedAppSlugs(slugs, runSlug) {
+  const own = new Set(selectRunSlugs(slugs, runSlug));
+  return selectStrandedSlugs(slugs, runSlug).filter((slug) => !own.has(slug));
+}
+
+const RETRY_BASE_MS = 1_000;
+
+const RETRY_CEILING_MS = 30_000;
+
+export function retryDelayMs(attempt, random = Math.random) {
+  const doubled = Math.min(RETRY_CEILING_MS, RETRY_BASE_MS * 2 ** attempt);
+  return Math.round(doubled / 2 + (doubled / 2) * random());
+}
+
+export function projectSlugForApp(appDir, target) {
+  const run = projectSlugForRun();
+  if (!isProductionTarget(target)) {
+    return run;
+  }
+  const hash = hashAppDir(normalizeAppDir(process.env.NEXT_TEST_DIR || appDir));
+  return `${cutRunSlug(run)}-${hash}`;
+}
+
+export function selectRunSlugs(slugs, runSlug) {
+  const perApp = new RegExp(`^${cutRunSlug(runSlug)}-[0-9a-f]{${NAME_HASH_LEN}}$`);
+  const mine = (slugs ?? []).filter((slug) => slug === runSlug || perApp.test(slug));
+  return [...new Set(mine)].sort();
 }
 
 function sanitizeToken(value) {
@@ -119,18 +167,107 @@ function sanitizeToken(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-export function renderOcelConfig({ slug }) {
+export const COMPAT_TARGET_ENV = "OCEL_COMPAT_TARGET";
+
+export const COMPAT_TARGETS = ["aws-cloudflare", "gcp-direct", "gcp-alb", "gcp-cloudflare"];
+
+export const DEFAULT_COMPAT_TARGET = "aws-cloudflare";
+
+export const GCP_PROJECT_ENV = "OCEL_GCP_PROJECT";
+
+export const GCP_REGION_ENV = "OCEL_GCP_REGION";
+
+export const UNRUNNABLE_TARGETS = Object.freeze({
+  // TODO: drop this entry once a cloudflare edge runs code in front of a gcp origin; renderOcelConfig then passes it the origin domain it needs and reconcile-entry reconciles its entry
+  "gcp-cloudflare":
+    "gcp-cloudflare is not runnable yet: ocel fronts a gcp origin with Cloudflare only as a forwarding proxy that runs no Worker, so a run would measure the load balancer behind Cloudflare's proxy rather than the code-running edge aws-cloudflare measures. Dispatch gcp-direct or gcp-alb",
+});
+
+export function readCompatTarget(env = process.env) {
+  const named = env[COMPAT_TARGET_ENV]?.trim() || DEFAULT_COMPAT_TARGET;
+  if (!COMPAT_TARGETS.includes(named)) {
+    throw new Error(
+      `${COMPAT_TARGET_ENV} names ${named}, and the harness deploys to one of ${COMPAT_TARGETS.join(", ")}`,
+    );
+  }
+  if (UNRUNNABLE_TARGETS[named]) {
+    throw new Error(UNRUNNABLE_TARGETS[named]);
+  }
+  if (named === DEFAULT_COMPAT_TARGET) {
+    return { name: named };
+  }
+  const project = env[GCP_PROJECT_ENV]?.trim();
+  if (!project) {
+    throw new Error(
+      `${GCP_PROJECT_ENV} is not set, and ${named} deploys into the project it names`,
+    );
+  }
+  const region = env[GCP_REGION_ENV]?.trim();
+  if (!region) {
+    throw new Error(`${GCP_REGION_ENV} is not set, and ${named} deploys into the region it names`);
+  }
+  return { name: named, gcp: { project, region } };
+}
+
+export function isProductionTarget(target) {
+  return target?.name === "gcp-direct";
+}
+
+const GCP_TARGET_EDGES = Object.freeze({
+  "gcp-direct": { imports: [], fields: [] },
+  "gcp-alb": {
+    imports: [
+      ["ocel/dns", "cloudflareDns"],
+      ["ocel/providers/gcp/edge", "alb"],
+    ],
+    fields: [`  edge: alb(),`, `  dns: cloudflareDns(),`],
+  },
+  "gcp-cloudflare": {
+    imports: [
+      ["ocel/dns", "cloudflareDns"],
+      ["ocel/edge", "cloudflare"],
+    ],
+    fields: [`  edge: cloudflare(),`, `  dns: cloudflareDns(),`],
+  },
+});
+
+export function renderOcelConfig({ slug, target = { name: DEFAULT_COMPAT_TARGET } }) {
+  const app = `  apps: [{ name: ${JSON.stringify(APP_NAME)}, path: ".", framework: "next" }],`;
+  if (target.name === DEFAULT_COMPAT_TARGET) {
+    return [
+      `import { defineConfig } from "ocel/config";`,
+      `import { cloudflare } from "ocel/edge";`,
+      `import awsProvider from "ocel/providers/aws";`,
+      ``,
+      `// Generated by tests/next-compat/deploy.mjs. Do not edit.`,
+      `export default defineConfig({`,
+      `  slug: ${JSON.stringify(slug)},`,
+      `  provider: awsProvider(),`,
+      `  edge: cloudflare(),`,
+      app,
+      `});`,
+      ``,
+    ].join("\n");
+  }
+  if (!target.gcp) {
+    throw new Error(`renderOcelConfig needs the gcp project and region of ${target.name}`);
+  }
+  const { imports, fields } = GCP_TARGET_EDGES[target.name];
+  const provider = `gcpProvider({ project: ${JSON.stringify(target.gcp.project)}, region: ${JSON.stringify(target.gcp.region)} })`;
+  const modules = [
+    ["ocel/config", "{ defineConfig }"],
+    ["ocel/providers/gcp", "gcpProvider"],
+    ...imports.map(([module, name]) => [module, `{ ${name} }`]),
+  ].sort(([first], [second]) => first.localeCompare(second));
   return [
-    `import { defineConfig } from "ocel/config";`,
-    `import { cloudflare } from "ocel/edge";`,
-    `import awsProvider from "ocel/providers/aws";`,
+    ...modules.map(([module, name]) => `import ${name} from "${module}";`),
     ``,
     `// Generated by tests/next-compat/deploy.mjs. Do not edit.`,
     `export default defineConfig({`,
     `  slug: ${JSON.stringify(slug)},`,
-    `  provider: awsProvider(),`,
-    `  edge: cloudflare(),`,
-    `  apps: [{ name: ${JSON.stringify(APP_NAME)}, path: ".", framework: "next" }],`,
+    `  provider: ${provider},`,
+    ...fields,
+    app,
     `});`,
     ``,
   ].join("\n");
@@ -636,7 +773,7 @@ export function tail(text, maxLines) {
 
 export const PLAN_APPLY_HINT = "Run without --dry to apply.";
 
-export function planProblems(output, { resultWritten, listed, name }) {
+export function deployPlanProblems(output, { resultWritten }) {
   const problems = [];
   if (!String(output ?? "").includes(PLAN_APPLY_HINT)) {
     problems.push(`the plan never said how to apply it: no "${PLAN_APPLY_HINT}" in the output`);
@@ -644,6 +781,11 @@ export function planProblems(output, { resultWritten, listed, name }) {
   if (resultWritten) {
     problems.push(`${DEPLOY_RESULT_FILE} was written by a run that was only ever supposed to plan`);
   }
+  return problems;
+}
+
+export function planProblems(output, { resultWritten, listed, name }) {
+  const problems = deployPlanProblems(output, { resultWritten });
   const readBack = String(listed ?? "").trim();
   if (!readBack) {
     problems.push(

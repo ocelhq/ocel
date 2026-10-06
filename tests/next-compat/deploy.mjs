@@ -16,11 +16,14 @@ import {
   APP_NAME,
   BUILD_LOG_FILE,
   DEPLOY_RESULT_FILE,
+  deployPlanProblems,
   deployURL,
+  isProductionTarget,
   ocelBinary,
   planProblems,
   previewNameForApp,
-  projectSlugForRun,
+  projectSlugForApp,
+  readCompatTarget,
   renderOcelConfig,
   requireNamespace,
   SKIP_DRIFT_CHECK_ENV,
@@ -70,23 +73,33 @@ function deploy() {
   const adapterDir = required("ADAPTER_DIR");
   const sidecarDir = required("OCEL_E2E_SIDECAR_DIR");
 
-  const slug = projectSlugForRun();
+  const target = readCompatTarget();
+  const slug = projectSlugForApp(appDir, target);
   const name = previewNameForApp(appDir);
   writeFileSync(
     join(appDir, STATE_FILE),
-    `${JSON.stringify({ slug, name, appName: APP_NAME, startedAt: Date.now() }, null, 2)}\n`,
+    `${JSON.stringify({ slug, name, target: target.name, appName: APP_NAME, startedAt: Date.now() }, null, 2)}\n`,
   );
-  console.error(`[ocel-e2e] preview ${name} of project ${slug} in ${appDir}`);
+  if (isProductionTarget(target)) {
+    console.error(`[ocel-e2e] production of project ${slug} in ${appDir}`);
+  } else {
+    console.error(`[ocel-e2e] preview ${name} of project ${slug} in ${appDir}`);
+  }
 
-  writeFileSync(join(appDir, "ocel.config.ts"), renderOcelConfig({ slug }));
+  writeFileSync(join(appDir, "ocel.config.ts"), renderOcelConfig({ slug, target }));
   dropHarnessTests();
   patchPackageJson();
   ensureDeps();
   linkSidecar(appDir, sidecarDir);
 
   runOcel(adapterDir, ["build"]);
-  planFirst(adapterDir, name);
-  runOcel(adapterDir, ["preview", "up", name, "--prebuilt"]);
+  if (isProductionTarget(target)) {
+    planProduction(adapterDir);
+    runOcel(adapterDir, ["deploy", "--prebuilt", "--yes"]);
+  } else {
+    planFirst(adapterDir, name);
+    runOcel(adapterDir, ["preview", "up", name, "--prebuilt"]);
+  }
 
   const resultPath = join(appDir, DEPLOY_RESULT_FILE);
   if (!existsSync(resultPath)) {
@@ -129,6 +142,20 @@ function patchPackageJson() {
     writeFileSync(path, `${JSON.stringify(patched, null, 2)}\n`);
     console.error("[ocel-e2e] patched package.json (build script, typescript pin)");
   }
+}
+
+function planProduction(adapterDir) {
+  const logPath = join(appDir, BUILD_LOG_FILE);
+  const before = existsSync(logPath) ? readFileSync(logPath, "utf8").length : 0;
+  runOcel(adapterDir, ["deploy", "--prebuilt", "--dry"]);
+  const planned = readFileSync(logPath, "utf8").slice(before);
+  const problems = deployPlanProblems(planned, {
+    resultWritten: existsSync(join(appDir, DEPLOY_RESULT_FILE)),
+  });
+  if (problems.length > 0) {
+    throw new Error(`--dry did not stay a plan:\n  ${problems.join("\n  ")}`);
+  }
+  console.error("[ocel-e2e] --dry planned this production deploy and changed nothing");
 }
 
 function planFirst(adapterDir, name) {

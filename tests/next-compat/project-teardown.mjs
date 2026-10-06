@@ -6,11 +6,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { listProjectSlugs, readAccessToken } from "./gcp.mjs";
 import {
+  isProductionTarget,
   ocelBinary,
   projectSlugForRun,
+  readCompatTarget,
   renderOcelConfig,
   requireNamespace,
+  selectRunSlugs,
   withoutSkipDriftChecks,
 } from "./lib.mjs";
 import { linkSidecar } from "./sidecar.mjs";
@@ -18,11 +22,36 @@ import { linkSidecar } from "./sidecar.mjs";
 const TEARDOWN_TIMEOUT_MS = 30 * 60 * 1000;
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const slug = process.argv[2] || projectSlugForRun();
-  process.exit(destroyProject(slug) ? 0 : 1);
+  process.exit(await main(process.argv[2]));
 }
 
-export function destroyProject(slug) {
+async function main(named) {
+  requireNamespace();
+  const target = readCompatTarget();
+  if (named) {
+    return destroyProject(named, target) ? 0 : 1;
+  }
+  if (!isProductionTarget(target)) {
+    return destroyProject(projectSlugForRun(), target) ? 0 : 1;
+  }
+  const run = projectSlugForRun();
+  const slugs = selectRunSlugs(
+    await listProjectSlugs({
+      ...target.gcp,
+      namespace: process.env.OCEL_NAMESPACE,
+      token: readAccessToken(),
+    }),
+    run,
+  );
+  if (slugs.length === 0) {
+    console.error(`[ocel-e2e] nothing of ${run} is left`);
+    return 0;
+  }
+  const failed = slugs.filter((slug) => !destroyProject(slug, target));
+  return failed.length === 0 ? 0 : 1;
+}
+
+export function destroyProject(slug, target = readCompatTarget()) {
   requireNamespace();
   const adapterDir = process.env.ADAPTER_DIR;
   const sidecarDir = process.env.OCEL_E2E_SIDECAR_DIR;
@@ -31,11 +60,12 @@ export function destroyProject(slug) {
   }
 
   const dir = mkdtempSync(join(tmpdir(), `ocel-e2e-teardown-${slug}-`));
-  writeFileSync(join(dir, "ocel.config.ts"), renderOcelConfig({ slug }));
+  writeFileSync(join(dir, "ocel.config.ts"), renderOcelConfig({ slug, target }));
   linkSidecar(dir, sidecarDir);
 
-  console.error(`[ocel-e2e] destroying the preview footprint of project ${slug} (from ${dir})`);
-  const res = spawnSync(process.execPath, [ocelBinary(adapterDir), "destroy", "preview", "--yes"], {
+  const tier = isProductionTarget(target) ? "production" : "preview";
+  console.error(`[ocel-e2e] destroying the ${tier} footprint of project ${slug} (from ${dir})`);
+  const res = spawnSync(process.execPath, [ocelBinary(adapterDir), "destroy", tier, "--yes"], {
     cwd: dir,
     stdio: ["ignore", "inherit", "inherit"],
     timeout: TEARDOWN_TIMEOUT_MS,
