@@ -23,8 +23,9 @@ const (
 )
 
 const (
-	RouterRelay  router.Kind = "relay-router"
-	RouterDirect router.Kind = "direct-router"
+	RouterRelay      router.Kind = "relay-router"
+	RouterDirect     router.Kind = "direct-router"
+	RouterRelayStore router.Kind = "relay-store"
 )
 
 type Edges struct {
@@ -97,7 +98,7 @@ func (e *Edges) answering(hostname string) router.Kind {
 		}
 		forwarded, found := front.forwardedTo(hostname)
 		if !found {
-			return front.routedBy
+			return front.servingRouter()
 		}
 		for _, origin := range fronts {
 			if Origin(origin.routedBy).Address == forwarded.Address {
@@ -107,6 +108,32 @@ func (e *Edges) answering(hostname string) router.Kind {
 		return front.routedBy
 	}
 	return ""
+}
+
+func (e *Edge) storeRouter() router.Kind {
+	return router.Kind(strings.TrimSuffix(string(e.routedBy), "-router") + "-store")
+}
+
+func (e *Edge) pairsStoreRouter() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.storePaired
+}
+
+func (e *Edge) servingRouter() router.Kind {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.storePaired {
+		return e.storeRouter()
+	}
+	return e.routedBy
+}
+
+func (e *Edges) PairAppsWithStoreRouter(kind edge.Kind) {
+	front := e.Edge(kind)
+	front.mu.Lock()
+	defer front.mu.Unlock()
+	front.storePaired = true
 }
 
 func (e *Edge) forwardedTo(hostname string) (edge.Origin, bool) {
@@ -196,6 +223,8 @@ type edgeAccount struct {
 
 	refusesCertified error
 	refusesBinds     error
+	refusesDisclaims error
+	storePaired      bool
 	onIssued         func()
 	onEntryClaimed   func()
 	permissions      *edge.CredentialDocument
@@ -211,6 +240,12 @@ func (e *Edge) RefusesBinds(err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.refusesBinds = err
+}
+
+func (e *Edge) RefusesDisclaims(err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.refusesDisclaims = err
 }
 
 func (e *Edge) OnOriginCertificateIssued(fn func()) {
@@ -406,12 +441,16 @@ func (e *Edge) holdOriginCertificate(claim router.Claim) edge.Origin {
 	return origin
 }
 
-func (e *Edge) recordDisclaim(hostname string) {
+func (e *Edge) recordDisclaim(hostname string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.refusesDisclaims != nil {
+		return e.refusesDisclaims
+	}
 	e.disclaimed = append(e.disclaimed, hostname)
 	e.holding = slices.DeleteFunc(e.holding, func(held string) bool { return held == hostname })
 	delete(e.held, hostname)
+	return nil
 }
 
 func (e *Edge) listHeldClaims() []string {

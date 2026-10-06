@@ -119,6 +119,7 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 	if err != nil {
 		return false, err
 	}
+	d.notePreviousRouter(host, &hostState, answering, progress)
 	hostState.Router = answering
 	priorCertID := hostState.Certificate.ID
 	certifying := d.hostCertificates(host, &hostState, answering)
@@ -127,6 +128,9 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 		return false, err
 	}
 	if d.state.Ready(host, d.front.Kind(), answering) && hostState.Certificate.ID == priorCertID {
+		if err := d.releasePreviousRouter(ctx, host, &hostState, answering, progress); err != nil {
+			return false, err
+		}
 		reclaimed, err := d.refreshOriginClaim(ctx, target, &hostState, progress)
 		if err != nil {
 			return reclaimed, err
@@ -166,10 +170,53 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 		return true, err
 	}
 	progress.Say(fmt.Sprintf("%s is served through %s", host, describeFront(d.front.Kind())))
+	if err := d.releasePreviousRouter(ctx, host, &hostState, answering, progress); err != nil {
+		return true, err
+	}
 	if !served || previous == d.front.Kind() {
 		return true, nil
 	}
 	return true, d.unbindPreviousEdge(ctx, host, previous, progress)
+}
+
+func (d *hostnames) notePreviousRouter(host string, hostState *stackrecords.HostnameState, answering router.Kind, progress progress.Log) {
+	bound, served := hostState.ServedEdge()
+	movesFront := served && bound != d.front.Kind()
+	if hostState.Router != "" && hostState.Router != answering {
+		origin, err := d.findRouterOrigin(hostState.Router)
+		switch {
+		case err != nil && movesFront:
+		case err != nil:
+			progress.Warn(fmt.Sprintf("%s was claimed on %s, which no longer pairs with %s, so that claim stays until the router's stack is removed",
+				host, hostState.Router, describeFront(d.front.Kind())))
+		case origin != nil:
+			hostState.PreviousRouter = hostState.Router
+		}
+	}
+	if hostState.PreviousRouter == answering {
+		hostState.PreviousRouter = ""
+	}
+}
+
+func (d *hostnames) releasePreviousRouter(ctx context.Context, host string, hostState *stackrecords.HostnameState, answering router.Kind, progress progress.Log) error {
+	if hostState.PreviousRouter == "" {
+		return nil
+	}
+	if hostState.PreviousRouter != answering {
+		if err := d.disclaim(ctx, host, hostState.PreviousRouter); err != nil {
+			progress.Warn(fmt.Sprintf("%s answers through %s, but giving its claim back to %s failed, so the next deploy or `ocel domain add` tries again: %v",
+				host, answering, hostState.PreviousRouter, err))
+			d.state.SetHost(host, *hostState)
+			return d.checkpoint(ctx)
+		}
+		if origin, _ := d.findRouterOrigin(answering); origin == nil && hostState.OriginCertificateID != "" {
+			revokeOriginCertificate(ctx, d.front, hostState.OriginCertificateID, progress)
+			hostState.OriginCertificateID, hostState.OriginCertificateExpiresAt, hostState.ClientCADigests = "", time.Time{}, nil
+		}
+	}
+	hostState.PreviousRouter = ""
+	d.state.SetHost(host, *hostState)
+	return d.checkpoint(ctx)
 }
 
 func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostState *stackrecords.HostnameState, progress progress.Log) error {
@@ -369,10 +416,15 @@ func (d *hostnames) remove(ctx context.Context, runProgress progress.Log) error 
 		if err != nil {
 			return err
 		}
+		hostState := d.state.Host(host)
 		if err := d.disclaim(ctx, host, kind); err != nil {
 			return err
 		}
-		hostState := d.state.Host(host)
+		if hostState.PreviousRouter != "" {
+			if err := d.disclaim(ctx, host, hostState.PreviousRouter); err != nil {
+				return err
+			}
+		}
 		revokeOriginCertificate(ctx, d.front, hostState.OriginCertificateID, runProgress)
 		if err := d.cutover.release(ctx, hostState.Written, runProgress.Say); err != nil {
 			return err
