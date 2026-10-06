@@ -36,6 +36,9 @@ func costServed(t *testing.T) (contractv1connect.ProviderServiceClient, costv1co
 
 func costServedIn(t *testing.T, region string) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
+	for _, variable := range []string{"OCEL_FLOCI_GCP_ENDPOINT", "OCEL_FLOCI_FIRESTORE_ENDPOINT", "OCEL_FLOCI_TASKS_ENDPOINT"} {
+		t.Setenv(variable, "")
+	}
 	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: region})
 	config := providerserver.Config{
 		Version: "test",
