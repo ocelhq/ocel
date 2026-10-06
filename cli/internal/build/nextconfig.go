@@ -30,9 +30,18 @@ type NextConfigConflict struct {
 var nextConfigSettings = []struct {
 	setting NextConfigSetting
 	pattern *regexp.Regexp
+	warning string
 }{
-	{StandaloneOutput, regexp.MustCompile("output\\s*:\\s*[\"'`]standalone[\"'`]")},
-	{OwnAdapter, regexp.MustCompile(`\badapterPath\s*:`)},
+	{
+		StandaloneOutput,
+		regexp.MustCompile("output\\s*:\\s*[\"'`]standalone[\"'`]"),
+		`app %q sets output: "standalone" in %[2]s, and a standalone server.js runs on the config its build baked in, so it never loads the cache handlers ocel adds to its image and each instance caches on its own: delete output: "standalone" from %[2]s and start the image with next start`,
+	},
+	{
+		OwnAdapter,
+		regexp.MustCompile(`\badapterPath\s*:`),
+		`app %q sets adapterPath in %[2]s, and next start loads that adapter in place of the one ocel adds to its image, so it never loads the cache handlers ocel ships and each instance caches on its own: delete adapterPath from %[2]s`,
+	},
 }
 
 func FindNextConfigConflicts(cfg *project.Project, host Host) ([]NextConfigConflict, error) {
@@ -105,11 +114,10 @@ func readNextConfig(dir string) (file, text string, err error) {
 }
 
 func (c NextConfigConflict) Warning() string {
-	switch c.Setting {
-	case OwnAdapter:
-		return fmt.Sprintf(`app %q sets adapterPath in %[2]s, and next start loads that adapter in place of the one ocel adds to its image, so it never loads the cache handlers ocel ships and each instance caches on its own: delete adapterPath from %[2]s`, c.App, c.ConfigFile)
-	case StandaloneOutput:
-		return fmt.Sprintf(`app %q sets output: "standalone" in %[2]s, and a standalone server.js runs on the config its build baked in, so it never loads the cache handlers ocel adds to its image and each instance caches on its own: delete output: "standalone" from %[2]s and start the image with next start`, c.App, c.ConfigFile)
+	for _, s := range nextConfigSettings {
+		if s.setting == c.Setting {
+			return fmt.Sprintf(s.warning, c.App, c.ConfigFile)
+		}
 	}
-	panic(fmt.Sprintf("NextConfigConflict.Setting = %d, which names no setting", c.Setting))
+	return ""
 }
