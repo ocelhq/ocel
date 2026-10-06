@@ -62,10 +62,10 @@ const specs = [
     "description": "Ocel blob HTTP route factories for the core, Next.js, Hono, and Express adapters.",
     "noiseTier": "precise",
     "filePatterns": [
-      "packages/ocel/src/blob/route.ts",
-      "packages/ocel/src/blob/next.ts",
-      "packages/ocel/src/blob/hono.ts",
-      "packages/ocel/src/blob/express.ts"
+      "packages/ocel/src/bucket/route.ts",
+      "packages/ocel/src/bucket/next.ts",
+      "packages/ocel/src/bucket/hono.ts",
+      "packages/ocel/src/bucket/express.ts"
     ],
     "patterns": [
       {
@@ -93,9 +93,8 @@ const specs = [
     "description": "Signed upload-completion callback routing and delivery primitives.",
     "noiseTier": "precise",
     "filePatterns": [
-      "packages/ocel/src/blob/route.ts",
-      "cli/internal/devserver/detector.go",
-      "platform/aws/runtime/bucket/listener.go"
+      "packages/ocel/src/bucket/route.ts",
+      "platform/aws/runtime/bucket/uploadcompleter.go"
     ],
     "patterns": [
       {
@@ -124,12 +123,9 @@ const specs = [
     "description": "Session-authenticated Connect RPC service registrations and generated handler implementations.",
     "noiseTier": "precise",
     "filePatterns": [
-      "platform/aws/provider/server/*.go",
-      "platform/aws/runtime/proxy/mux.go",
       "platform/aws/runtime/bucket/service.go",
       "platform/aws/provider/cmd/deploy/main.go",
       "platform/aws/runtime/cmd/runtime/proxyserver.go",
-      "platform/aws/provider/channelauth/interceptor.go",
       "pkg/localrpc/localrpc.go"
     ],
     "patterns": [
@@ -149,7 +145,7 @@ const specs = [
         "label": "Authenticated RPC server"
       },
       {
-        "source": "^\\s*func\\s+\\(s\\s+\\*(?:Server|VarsServer|Service)\\)\\s+\\w+\\s*\\([^\\n]*\\breq\\s+\\*(?:deploymentsv1|envv1|bucketsv1)\\.\\w+Request\\b",
+        "source": "^\\s*func\\s+\\(s\\s+\\*(?:Server|VarsServer|Service)\\)\\s+\\w+\\s*\\([^\\n]*\\breq\\s+\\*(?:deploymentsv1|envv1|bucketv1)\\.\\w+Request\\b",
         "flags": "m",
         "label": "Generated Connect handler implementation"
       }
@@ -173,7 +169,7 @@ const specs = [
     "description": "Loopback development Connect services, sync handler, and server binding.",
     "noiseTier": "precise",
     "filePatterns": [
-      "cli/internal/cmd/devserver/main.go",
+      "cli/internal/declaration/collect.go",
       "cli/internal/devserver/*.go",
       "packages/ocel/src/runtime/rpc.ts"
     ],
@@ -194,7 +190,7 @@ const specs = [
         "label": "Loopback development server"
       },
       {
-        "source": "^\\s*func\\s+\\(s\\s+\\*(?:Server|runtimeShim)\\)\\s+\\w+\\s*\\([^\\n]*(?:req|_)\\s+\\*(?:resourcesv1|devv1|bucketsv1)\\.\\w+Request\\b",
+        "source": "^\\s*func\\s+\\(s\\s+\\*(?:Server|runtimeShim)\\)\\s+\\w+\\s*\\([^\\n]*(?:req|_)\\s+\\*(?:resourcesv1|devv1|bucketv1)\\.\\w+Request\\b",
         "flags": "m",
         "label": "Development RPC handler implementation"
       }
@@ -206,7 +202,7 @@ const specs = [
       "resourcePath, resourceHandler := resourcesv1connect.NewResourceServiceHandler(s)",
       "mux.HandleFunc(\"/sync\", s.handleSync)",
       "httpSrv := &http.Server{Handler: srv.Mux()}",
-      "func (s *runtimeShim) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploadRequest) (*bucketsv1.PresignUploadResponse, error) {"
+      "func (s *runtimeShim) PresignUpload(ctx context.Context, req *bucketv1.PresignUploadRequest) (*bucketv1.PresignUploadResponse, error) {"
     ],
     "closesSurfaceIds": [
       "local-development-rpc"
@@ -219,9 +215,7 @@ const specs = [
     "noiseTier": "precise",
     "filePatterns": [
       "cli/ocel/main.go",
-      "cli/internal/commands/**/*.go",
-      "cli/internal/authclient/*.go",
-      "cli/internal/credentials/credentials.go"
+      "cli/internal/commands/**/*.go"
     ],
     "patterns": [
       {
@@ -403,13 +397,14 @@ const specs = [
     "description": "Loopback Connect RPC registration, clients, and development bucket-service dispatch.",
     "noiseTier": "precise",
     "filePatterns": [
-      "cli/internal/cmd/devserver/main.go",
+      "cli/internal/declaration/collect.go",
+      "cli/internal/declaration/service.go",
       "cli/internal/devserver/*.go",
       "packages/ocel/src/runtime/rpc.ts"
     ],
     "patterns": [
       {
-        "source": "(?:resourcesv1connect|devv1connect|bucketsv1connect)\\.New(?:Resource|Dev|Bucket)ServiceHandler\\(",
+        "source": "(?:resourcesv1connect|devv1connect|bucketv1connect)\\.New(?:Resource|Dev|Bucket)ServiceHandler\\(",
         "label": "Development Connect service registration"
       },
       {
@@ -421,7 +416,7 @@ const specs = [
         "label": "Development Connect client transport"
       },
       {
-        "source": "(?:resourcesv1connect|devv1connect|bucketsv1connect)\\.New(?:Resource|Dev|Bucket)ServiceClient\\(",
+        "source": "(?:resourcesv1connect|devv1connect|bucketv1connect)\\.New(?:Resource|Dev|Bucket)ServiceClient\\(",
         "label": "Development Connect service client"
       },
       {
@@ -434,7 +429,7 @@ const specs = [
       "mux.HandleFunc(\"/sync\", s.handleSync)",
       "const transport = createConnectTransport({",
       "client := resourcesv1connect.NewResourceServiceClient(http.DefaultClient, url)",
-      "func (s *runtimeShim) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploadRequest) (*bucketsv1.PresignUploadResponse, error) {"
+      "func (s *runtimeShim) PresignUpload(ctx context.Context, req *bucketv1.PresignUploadRequest) (*bucketv1.PresignUploadResponse, error) {"
     ],
     "closesSurfaceIds": [
       "local-development-rpc"
@@ -547,79 +542,6 @@ const specs = [
   },
   {
     "version": 1,
-    "slug": "aws-connect-deploy-handler",
-    "description": "AWS provider ConnectRPC handler method implementations (DeploymentService/EnvVarsService) plus the channel bearer-auth and traceparent interceptors that guard them.",
-    "noiseTier": "normal",
-    "filePatterns": [
-      "platform/aws/provider/server/*.go",
-      "platform/aws/provider/channelauth/*.go",
-      "platform/aws/provider/tracecontext/*.go"
-    ],
-    "patterns": [
-      {
-        "source": "func \\(\\w+ \\*(Server|VarsServer)\\) [A-Z]\\w+\\(ctx context\\.Context, req \\*\\w+v1\\.",
-        "label": "connectrpc-handler-method"
-      },
-      {
-        "source": "func \\(\\w+ \\*interceptor\\) check\\(header http\\.Header\\) error",
-        "label": "channel-bearer-check"
-      },
-      {
-        "source": "channel\\.WithTraceParent\\(ctx,",
-        "label": "traceparent-extract"
-      }
-    ],
-    "excludeFilePatterns": [
-      "**/*_test.go"
-    ],
-    "examples": [
-      "func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) (err error) {",
-      "func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {",
-      "func (a *interceptor) check(header http.Header) error {",
-      "return channel.WithTraceParent(ctx, header.Get(channel.TraceParentHeader))"
-    ],
-    "closesSurfaceIds": [
-      "aws-provider-rpc"
-    ]
-  },
-  {
-    "version": 1,
-    "slug": "aws-deploy-event-stream",
-    "description": "The DeployEvent serialization path of the AWS provider streaming RPCs: the buffered event sender and tracer that relay provider logs, errors, and spans back to the CLI over the ConnectRPC stream.",
-    "noiseTier": "normal",
-    "filePatterns": [
-      "platform/aws/provider/server/*.go"
-    ],
-    "patterns": [
-      {
-        "source": "newEventSender\\(",
-        "label": "event-sender"
-      },
-      {
-        "source": "DeployEvent_(Log|Result|Progress|Span|StagePlan)\\{",
-        "label": "deploy-event-variant"
-      },
-      {
-        "source": "func \\(t \\*eventTracer\\)",
-        "label": "event-tracer-method"
-      },
-      {
-        "source": "\\.Get(StagePlan|Span)\\(\\)",
-        "label": "deploy-event-accessor"
-      }
-    ],
-    "examples": [
-      "sender := newEventSender(context.Background(), stream.send)",
-      "Event: &deploymentsv1.DeployEvent_Log{Log: &deploymentsv1.LogEvent{Message: message}},",
-      "func (t *eventTracer) Span(id, parentID deploy.StageID, name string, start, end time.Time, err error, attrs ...deploy.Attr) {",
-      "first := stream.events[0].GetStagePlan()"
-    ],
-    "closesSurfaceIds": [
-      "aws-provider-rpc"
-    ]
-  },
-  {
-    "version": 1,
     "slug": "membrane-bucket-service-handler",
     "description": "Go runtime BucketService ConnectRPC handler implementations: presigned S3 PUT issuance, upload-signature verification, and upload-status reporting.",
     "noiseTier": "precise",
@@ -628,18 +550,18 @@ const specs = [
     ],
     "patterns": [
       {
-        "source": "func \\(s \\*Service\\) (PresignUpload|VerifyUploadSignature|GetUploadStatus)\\(ctx context\\.Context, req \\*bucketsv1\\.",
+        "source": "func \\(s \\*Service\\) (PresignUpload|VerifyUploadSignature|GetUploadStatus)\\(ctx context\\.Context, req \\*bucketv1\\.",
         "label": "bucket-service-handler-method"
       },
       {
-        "source": "bucketsv1connect\\.BucketServiceHandler",
+        "source": "bucketv1connect\\.BucketServiceHandler",
         "label": "bucket-service-handler-binding"
       }
     ],
     "examples": [
-      "func (s *Service) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploadRequest) (*bucketsv1.PresignUploadResponse, error) {",
-      "func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketsv1.VerifyUploadSignatureRequest) (*bucketsv1.VerifyUploadSignatureResponse, error) {",
-      "var _ bucketsv1connect.BucketServiceHandler = (*Service)(nil)"
+      "func (s *Service) PresignUpload(ctx context.Context, req *bucketv1.PresignUploadRequest) (*bucketv1.PresignUploadResponse, error) {",
+      "func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketv1.VerifyUploadSignatureRequest) (*bucketv1.VerifyUploadSignatureResponse, error) {",
+      "var _ bucketv1connect.BucketServiceHandler = (*Service)(nil)"
     ],
     "closesSurfaceIds": [
       "membrane-bucket-rpc"
@@ -740,7 +662,8 @@ const specs = [
     "description": "The ocel CLI's console auth HTTP client: OAuth 2.0 device-authorization grant polling and bearer-token attachment against the console /api/auth endpoints.",
     "noiseTier": "precise",
     "filePatterns": [
-      "cli/internal/authclient/*.go"
+      "cli/internal/console/client.go",
+      "cli/internal/console/device.go"
     ],
     "patterns": [
       {
@@ -771,7 +694,7 @@ const specs = [
     "description": "The ocel CLI credential store: OS keyring with a 0600 file fallback and an OCEL_ACCESS_TOKEN environment override for the console access token.",
     "noiseTier": "precise",
     "filePatterns": [
-      "cli/internal/credentials/*.go"
+      "cli/internal/console/credentials.go"
     ],
     "patterns": [
       {
