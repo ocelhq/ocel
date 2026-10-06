@@ -54,7 +54,7 @@ func localURL(port string) string {
 func applyEnv(base []string, overrides map[string]string) []string {
 	merged := make(map[string]string, len(base)+len(overrides))
 	for _, kv := range base {
-		if i := strings.IndexByte(kv, '='); i >= 0 {
+		if i := strings.IndexByte(kv, '='); i >= 0 && !strings.HasPrefix(kv, processenv.ResourceEnvVarPrefix) {
 			merged[kv[:i]] = kv[i+1:]
 		}
 	}

@@ -879,3 +879,17 @@ func TestTheChildEnvironment(t *testing.T) {
 		}
 	})
 }
+
+func TestABindingTheShellAlreadyHeldNeverReachesTheChildsEnvironment(t *testing.T) {
+	inherited := []string{
+		"PATH=/usr/bin",
+		processenv.ResourceEnvVarPrefix + `KV_cache={"kv":{"password":"from-the-shell"}}`,
+	}
+	merged := toMap(applyEnv(inherited, map[string]string{processenv.LiveDirEnvVar: "/tmp/ocel-dev-live-1/bindings-1"}))
+	if _, held := merged[processenv.ResourceEnvVarPrefix+"KV_cache"]; held {
+		t.Errorf("the child's environment holds the shell's %sKV_cache; a binding reaches a dev process only through %s", processenv.ResourceEnvVarPrefix, processenv.LiveDirEnvVar)
+	}
+	if merged["PATH"] != "/usr/bin" || merged[processenv.LiveDirEnvVar] != "/tmp/ocel-dev-live-1/bindings-1" {
+		t.Errorf("merged = %v, want the shell's other values and the live dir kept", merged)
+	}
+}
