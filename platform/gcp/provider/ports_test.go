@@ -121,6 +121,18 @@ func TestTheCloudflareFrontOnGCPRunsCodeAndShieldsItsOrigin(t *testing.T) {
 	}
 }
 
+func TestTheCloudflareFrontOnGCPDescribesTheEdgesBootstrap(t *testing.T) {
+	t.Parallel()
+
+	front, err := testProvider(t).Edges().Open(cloudflare.Kind, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if front.Hooks().DescribeBootstrap == nil {
+		t.Error("the cloudflare front describes no bootstrap, so its workers, certificate and queue never show in the status or get repaired on deploy")
+	}
+}
+
 func TestGCPPairsServerlessAppsWithTheCloudflareRouterAndForwardsContainersThroughTheShieldedLoadBalancer(t *testing.T) {
 	t.Parallel()
 

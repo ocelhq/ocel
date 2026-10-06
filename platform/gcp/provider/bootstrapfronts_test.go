@@ -381,3 +381,18 @@ func TestABootstrapPlanNamesWhatTheEdgesFrontInstallsAndWhatRemovingItTakes(t *t
 		t.Errorf("the removal group's action = %q, want delete", removes[0].Action)
 	}
 }
+
+func TestARepairOnDeployRunsTheEdgesOwnBootstrapOnGCP(t *testing.T) {
+	t.Parallel()
+
+	b, registry := fronting(t)
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albShieldedFeature}, Repair: true}
+
+	if err := b.raiseFronts(context.Background(), req, nil); err != nil {
+		t.Fatalf("raiseFronts = %v", err)
+	}
+
+	if !slices.Equal(registry.front.raised, []environment.Tier{environment.TierProduction}) {
+		t.Errorf("the edge's bootstrap ran for %v, want once for the production tier: a stale edge part is repaired by the edge's own bootstrap", registry.front.raised)
+	}
+}

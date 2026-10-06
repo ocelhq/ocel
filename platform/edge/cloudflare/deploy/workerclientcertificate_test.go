@@ -241,7 +241,7 @@ func TestABootstrapThatCannotDeleteAnExpiredClientCertificateStillSucceeds(t *te
 	if err != nil {
 		t.Fatalf("planBootstrap: %v", err)
 	}
-	want := edge.PlanChange{Kind: kindMTLSCertificate, Name: certificateName(expired), Action: edge.PlanDelete, Reason: "expired"}
+	want := edge.PlanChange{Kind: kindMTLSCertificate, Name: productionCertificateBase, Action: edge.PlanDelete, Reason: certificateName(expired) + " expired"}
 	if !slices.Contains(changes, want) {
 		t.Errorf("plan = %+v, want it to still list %+v", changes, want)
 	}
@@ -340,7 +340,7 @@ func TestPlanningABootstrapNamesTheWorkerClientCertificate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("planBootstrap: %v", err)
 		}
-		want := edge.PlanChange{Kind: kindMTLSCertificate, Name: certificateName(expires), Action: edge.PlanKeep, Reason: reasonCurrent}
+		want := edge.PlanChange{Kind: kindMTLSCertificate, Name: productionCertificateBase, Action: edge.PlanKeep, Reason: certificateName(expires) + " " + reasonCurrent}
 		if !slices.Contains(changes, want) {
 			t.Errorf("plan = %+v, want %+v", changes, want)
 		}
@@ -356,8 +356,8 @@ func TestPlanningABootstrapNamesTheWorkerClientCertificate(t *testing.T) {
 			t.Fatalf("planBootstrap: %v", err)
 		}
 		want := edge.PlanChange{
-			Kind: kindMTLSCertificate, Name: certificateName(expires), Action: edge.PlanUpdate,
-			Reason: "expires " + expires.UTC().Format("2006-01-02") + "; a new one is uploaded beside it",
+			Kind: kindMTLSCertificate, Name: productionCertificateBase, Action: edge.PlanUpdate,
+			Reason: certificateName(expires) + " expires " + expires.UTC().Format("2006-01-02") + "; a new one is uploaded beside it",
 		}
 		if !slices.Contains(changes, want) {
 			t.Errorf("plan = %+v, want %+v", changes, want)
@@ -367,7 +367,7 @@ func TestPlanningABootstrapNamesTheWorkerClientCertificate(t *testing.T) {
 			t.Fatalf("describeBootstrap: %v", err)
 		}
 		for _, part := range parts {
-			if part.Name == certificateName(expires) && part.Current {
+			if part.Name == productionCertificateBase && part.Current {
 				t.Errorf("a due certificate shows as current: %+v", part)
 			}
 		}
@@ -383,7 +383,7 @@ func TestPlanningABootstrapNamesTheWorkerClientCertificate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("planBootstrap: %v", err)
 		}
-		want := edge.PlanChange{Kind: kindMTLSCertificate, Name: certificateName(expired), Action: edge.PlanDelete, Reason: "expired"}
+		want := edge.PlanChange{Kind: kindMTLSCertificate, Name: productionCertificateBase, Action: edge.PlanDelete, Reason: certificateName(expired) + " expired"}
 		if !slices.Contains(changes, want) {
 			t.Errorf("plan = %+v, want %+v", changes, want)
 		}
