@@ -1,25 +1,20 @@
 import type { NextHost } from "@framework/next-runtime/host";
 import { instanceCacheBytes, newInstanceCache } from "@framework/next-runtime/instance-cache";
-import { finishBeforeResponseMs, readPortBind } from "@framework/node-runtime/host";
+import type { ScheduleRefresh } from "@framework/next-runtime/refresh";
+import {
+  dispatchesAtOrigin,
+  finishBeforeResponseMs,
+  readPortBind,
+} from "@framework/node-runtime/host";
 import { newGcpCacheStore } from "./cache-store.mjs";
 import { newCloudStorage } from "./cloud-storage.mjs";
 import { newGcpDispatchInvoke } from "./dispatch-host.mjs";
 import { newFirestore } from "./firestore.mjs";
-import { newInstanceRefresh } from "./instance-refresh.mjs";
 import { newInstanceCacheStore, newInstanceUseCacheStore } from "./instance-stores.mjs";
 import { readRefreshEndpoint } from "./refresh-endpoint.mjs";
 import { newFirestoreTagRecords } from "./tag-records.mjs";
+import { newTaskRefresh } from "./task-refresh.mjs";
 import { newGcpUseCacheStore } from "./use-cache-store.mjs";
-
-const renderOriginVar = "__NEXT_PRIVATE_ORIGIN";
-const defaultRefreshTimeoutMs = 10_000;
-
-function readInstanceOrigin(env: NodeJS.ProcessEnv): string {
-  const origin = env[renderOriginVar];
-  if (!origin)
-    throw new Error("ocel: the Next runtime has not started the server a refresh renders on");
-  return origin;
-}
 
 const MB = 1024 * 1024;
 
@@ -56,9 +51,28 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
         : newInstanceUseCacheStore(cache),
     newDispatchInvoke: async (localOrigin) =>
       newGcpDispatchInvoke(localOrigin, env, readRefreshEndpoint(env, localOrigin)),
-    scheduleRefresh: newInstanceRefresh(
-      () => readInstanceOrigin(env),
-      finishBeforeResponseMs(env) || defaultRefreshTimeoutMs,
-    ),
+    scheduleRefresh: readTaskRefresh(env),
   };
+}
+
+function readTaskRefresh(env: NodeJS.ProcessEnv): ScheduleRefresh | undefined {
+  const url = env.OCEL_REFRESH_URL;
+  if (!url) {
+    if (dispatchesAtOrigin(env) && finishBeforeResponseMs(env) > 0 && env.OCEL_ISR_PREFIX) {
+      throw new Error(
+        "ocel: a Next service billed per request refreshes stale pages through a Cloud Tasks queue, and its deploy named none",
+      );
+    }
+    return undefined;
+  }
+  for (const name of ["OCEL_REFRESH_QUEUE", "OCEL_REFRESH_ACCOUNT", "OCEL_ISR_PREFIX"]) {
+    if (!env[name]) throw new Error(`ocel: OCEL_REFRESH_URL is set but ${name} is not`);
+  }
+  return newTaskRefresh({
+    queue: env.OCEL_REFRESH_QUEUE!,
+    account: env.OCEL_REFRESH_ACCOUNT!,
+    url,
+    isrPrefix: env.OCEL_ISR_PREFIX!,
+    endpoint: env.OCEL_TASKS_ENDPOINT,
+  });
 }
