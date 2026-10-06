@@ -45,9 +45,10 @@ Each tier's bootstrap also creates a Firestore database of its own, `<namespace>
 that holds the revalidated tags of the tier's Next apps. It has no standing charge, only the
 reads, writes and storage its records use.
 
-A Next app on Cloud Run cannot turn on `experimental.partialFallbacks` (`partialPrefetching` from
-Next 16.3). Next renders those shells after the response ends, and Cloud Run stops the work then, so
-the deploy is refused and names the setting.
+A Next app deployed as functions (serverless compute, billed per request) cannot turn on
+`experimental.partialFallbacks` (`partialPrefetching` from Next 16.3). Next renders those shells after
+the response ends, and Cloud Run stops the work then, so the build refuses it and names the setting.
+Next apps on container compute are not affected.
 
 ## Edge
 
@@ -189,10 +190,13 @@ ocel bootstrap production --features tasks
 ```
 
 That is the tier's task database, its delay queue, its push account, and the account Cloud Tasks
-signs a Next app's page refreshes as. None of it bills while idle. The bootstrap credential also needs `roles/cloudtasks.admin`. A deploy declaring a topic or
-task, or shipping a Next app billed per request, on a tier without it is refused, naming that command, and an ephemeral preview declaring one
-is refused. Dropping `tasks` from a bootstrap is refused while any project on the tier still
-declares a topic or task, or runs a Next app that refreshes its pages through it.
+signs a Next app's page refreshes as. None of it bills while idle. The bootstrap credential also
+needs `roles/cloudtasks.admin`. A deploy declaring a topic or task, or shipping a Next app billed
+per request behind an edge that runs no code, on a tier without it is refused, naming that
+command, and an ephemeral preview declaring one is refused. A Next app on container compute, or
+behind an edge that runs code, needs no queue. Dropping `tasks` from a bootstrap is refused while
+any project on the tier still declares a topic or task, or still holds the refresh grant of a Next
+app; that grant is released when the app's last environment is destroyed.
 
 What differs from `ocel dev`: lanes are recorded but not weighted, a batch consumer receives
 batches of one, a task's own `concurrency` is not enforced (its worker's is), and a batch trigger
