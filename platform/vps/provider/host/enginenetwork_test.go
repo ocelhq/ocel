@@ -46,7 +46,7 @@ func onYourNetwork(t *testing.T) yourNetwork {
 	if err != nil {
 		t.Skipf("no switchboard is built for a machine reporting %q", runtime.GOARCH)
 	}
-	boxNetwork := enginetest.Network(t, "box")
+	boxNetwork := enginetest.InternalNetwork(t, "box")
 	yours, board := enginetest.Network(t, "yours"), probeName(t)+"-board"
 	tunneling := enginetest.Network(t, "tunnel")
 	t.Cleanup(func() { taken(t, board) })
@@ -64,6 +64,7 @@ func onYourNetwork(t *testing.T) yourNetwork {
 	binary := switchboardBinary(arch)
 	runnable(t, filepath.Join(switching, switchboard.Name), binary, 0o755)
 	here := strings.NewReplacer(
+		"docker network create "+quoted(ProxyNetwork), "docker network create --opt "+enginetest.InternalBridge+" "+quoted(boxNetwork),
 		unprivilegedHere(t), "",
 		switchboard.FrontDir, filepath.Join(dir, "front"),
 		switchboard.ControlDir, filepath.Join(dir, "control"),
