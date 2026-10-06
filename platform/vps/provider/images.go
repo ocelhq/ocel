@@ -36,8 +36,8 @@ func (p pulled) GoString() string { return p.String() }
 
 func (p pulled) Destination() string { return p.at }
 
-func (p pulled) CheckPush(ctx context.Context, repository string) error {
-	return p.from.CheckPush(ctx, repository)
+func (p pulled) ProbePush(ctx context.Context, repository string) error {
+	return p.from.ProbePush(ctx, repository)
 }
 
 func (p pulled) Has(ctx context.Context, push provider.ImagePush) (bool, error) {

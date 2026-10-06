@@ -1089,7 +1089,7 @@ func (r refusingImages) Has(context.Context, provider.ImagePush) (bool, error) {
 
 func (refusingImages) Destination() string { return "the refusing registry" }
 
-func (refusingImages) CheckPush(context.Context, string) error { return nil }
+func (refusingImages) ProbePush(context.Context, string) error { return nil }
 
 func (r refusingImages) Push(context.Context, provider.ImagePush, progress.Log) error {
 	return r.err

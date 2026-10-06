@@ -65,7 +65,7 @@ func (i *Images) Opened() []provider.RegistryTarget {
 
 func (i *Images) Destination() string { return RegistryServer }
 
-func (i *Images) CheckPush(_ context.Context, repository string) error {
+func (i *Images) ProbePush(_ context.Context, repository string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.probed = append(i.probed, repository)

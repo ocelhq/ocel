@@ -68,7 +68,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	if err := verifyDNSCredentials(ctx, steps, p, gate.Edge, edgeCredentialsChecked, req.GetEdge().GetDns(), resp); err != nil {
 		return nil, err
 	}
-	if err := verifyPushAccess(ctx, steps, p, req, resp); err != nil {
+	if err := verifyProjectPushAccess(ctx, steps, p, req, resp); err != nil {
 		return nil, err
 	}
 	if len(resp.GetCredentialProblems()) > 0 {
@@ -110,6 +110,12 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	}
 	resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier), true
 	resp.KnownSlugs, resp.PreviewWildcard = status.knownSlugs, status.previewWildcard
+	if err := verifyOwnPushAccess(ctx, steps, p, tier, req, resp); err != nil {
+		return nil, err
+	}
+	if len(resp.GetCredentialProblems()) > 0 {
+		return resp, nil
+	}
 
 	if len(req.GetDomains()) > 0 {
 		err = steps.run(string(gate.Edge), progress.Checking.Title("who serves "+strings.Join(req.GetDomains(), ", ")), func() (err error) {
@@ -256,25 +262,47 @@ func verifyDNSCredentials(
 	return nil
 }
 
-func verifyPushAccess(ctx context.Context, steps preflightSteps, p provider.Provider, req *contractv1.PreflightRequest, resp *contractv1.PreflightResponse) error {
+func verifyProjectPushAccess(ctx context.Context, steps preflightSteps, p provider.Provider, req *contractv1.PreflightRequest, resp *contractv1.PreflightResponse) error {
 	project := req.GetProjectRegistry()
 	if project.GetServer() == "" || len(req.GetContainers()) == 0 {
 		return nil
 	}
-	target := provider.RegistryTarget{
+	return verifyPushAccess(ctx, steps, p, provider.RegistryTarget{
 		Server:    project.GetServer(),
 		Namespace: project.GetNamespace(),
 		Username:  project.GetUsername(),
 		Password:  project.GetPassword(),
+	}, req.GetContainers(), resp)
+}
+
+func verifyOwnPushAccess(ctx context.Context, steps preflightSteps, p provider.Provider, tier environment.Tier, req *contractv1.PreflightRequest, resp *contractv1.PreflightResponse) error {
+	ensure := p.Hooks().EnsureImageRegistry
+	if ensure == nil || req.GetProjectRegistry().GetServer() != "" || len(req.GetContainers()) == 0 {
+		return nil
 	}
+	own, err := ensure(ctx, tier)
+	if _, asked := provider.QuestionOf(err); asked {
+		return provider.RefusalError(err)
+	}
+	if err != nil {
+		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(p.Facts().Vendor, fmt.Errorf("resolve the registry this provider hosts: %w", err)))
+		return nil
+	}
+	if !own.Named() {
+		return nil
+	}
+	return verifyPushAccess(ctx, steps, p, own, req.GetContainers(), resp)
+}
+
+func verifyPushAccess(ctx context.Context, steps preflightSteps, p provider.Provider, target provider.RegistryTarget, containers []*contractv1.ContainerApp, resp *contractv1.PreflightResponse) error {
 	named := strings.TrimSuffix(target.Server+"/"+strings.Trim(target.Namespace, "/"), "/")
 	err := steps.run(target.Server, progress.Checking.Title("push access to "+named), func() error {
 		store, err := imageStoreFor(ctx, p, target)
 		if err != nil || store == nil {
 			return err
 		}
-		for _, container := range req.GetContainers() {
-			if err := store.CheckPush(ctx, container.GetApp()); err != nil {
+		for _, container := range containers {
+			if err := store.ProbePush(ctx, container.GetApp()); err != nil {
 				return err
 			}
 		}
