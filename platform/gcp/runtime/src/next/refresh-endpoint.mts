@@ -2,6 +2,7 @@ import type http from "node:http";
 import type { CacheEntryFile } from "@framework/next-cache";
 import { type IdTokenCheck, newGoogleIdTokenCheck } from "./google-id-token.mjs";
 import { renderAtOrigin } from "./loopback-render.mjs";
+import type { RefreshEnv } from "./refresh-env.mjs";
 import { isRefreshTaskSignedBy, refreshSignatureHeader } from "./refresh-signature.mjs";
 import { readRefreshTask } from "./refresh-task.mjs";
 
@@ -153,24 +154,17 @@ export function newRefreshEndpoint(options: RefreshEndpointOptions): RefreshEndp
 }
 
 export function readRefreshEndpoint(
-  env: NodeJS.ProcessEnv,
-  secret: string | undefined,
+  refresh: RefreshEnv | undefined,
   localOrigin: string,
   readEntry: RefreshEndpointOptions["readEntry"],
 ): RefreshEndpoint | undefined {
-  const url = env.OCEL_REFRESH_URL;
-  if (!url) return undefined;
-  const account = env.OCEL_REFRESH_ACCOUNT;
-  if (!account) throw new Error("ocel: OCEL_REFRESH_URL is set but OCEL_REFRESH_ACCOUNT is not");
-  const isrPrefix = env.OCEL_ISR_PREFIX;
-  if (!isrPrefix) throw new Error("ocel: OCEL_REFRESH_URL is set but OCEL_ISR_PREFIX is not");
-  if (!secret) throw new Error("ocel: OCEL_REFRESH_URL is set but OCEL_REFRESH_SECRET is not");
+  if (!refresh) return undefined;
   return newRefreshEndpoint({
-    path: new URL(url).pathname,
-    isrPrefix,
-    secret,
+    path: new URL(refresh.url).pathname,
+    isrPrefix: refresh.isrPrefix,
+    secret: refresh.secret,
     localOrigin,
     readEntry,
-    check: newGoogleIdTokenCheck({ audience: url, email: account }),
+    check: newGoogleIdTokenCheck({ audience: refresh.url, email: refresh.account }),
   });
 }

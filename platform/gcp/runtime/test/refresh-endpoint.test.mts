@@ -325,28 +325,18 @@ test("a request to any other path is left to the app", async () => {
 });
 
 test("a service told no refresh url has no refresh endpoint", () => {
-  expect(readRefreshEndpoint({}, undefined, originUrl, async () => null)).toBeUndefined();
-});
-
-test("a service told a refresh url but no account refuses to start", () => {
-  expect(() =>
-    readRefreshEndpoint(
-      { OCEL_REFRESH_URL: "https://web.run.app/_ocel/refresh", OCEL_ISR_PREFIX: isrPrefix },
-      secret,
-      originUrl,
-      async () => null,
-    ),
-  ).toThrow(/OCEL_REFRESH_ACCOUNT/);
+  expect(readRefreshEndpoint(undefined, originUrl, async () => null)).toBeUndefined();
 });
 
 test("the refresh endpoint answers at the path of the url the service is told", async () => {
   const endpoint = readRefreshEndpoint(
     {
-      OCEL_REFRESH_URL: "https://web.run.app/_ocel/refresh",
-      OCEL_REFRESH_ACCOUNT: "refresh@p.iam.gserviceaccount.com",
-      OCEL_ISR_PREFIX: isrPrefix,
+      url: "https://web.run.app/_ocel/refresh",
+      queue: "projects/p/locations/r/queues/q",
+      account: "refresh@p.iam.gserviceaccount.com",
+      isrPrefix,
+      secret,
     },
-    secret,
     originUrl,
     async () => null,
   )!;
@@ -354,21 +344,6 @@ test("the refresh endpoint answers at the path of the url the service is told", 
 
   expect((await fetch(`${base}/_ocel/refresh`)).status).toBe(405);
   expect((await fetch(`${base}/`)).status).toBe(418);
-});
-
-test("a service told a refresh url but no refresh secret refuses to start", () => {
-  expect(() =>
-    readRefreshEndpoint(
-      {
-        OCEL_REFRESH_URL: "https://web.run.app/_ocel/refresh",
-        OCEL_REFRESH_ACCOUNT: "refresh@p.iam.gserviceaccount.com",
-        OCEL_ISR_PREFIX: isrPrefix,
-      },
-      undefined,
-      originUrl,
-      async () => null,
-    ),
-  ).toThrow(/OCEL_REFRESH_SECRET/);
 });
 
 test("a refresh task carrying another app's signature is refused", async () => {

@@ -12,6 +12,7 @@ import { newGcpDispatchInvoke } from "./dispatch-host.mjs";
 import { newFirestore } from "./firestore.mjs";
 import { newInstanceCacheStore, newInstanceUseCacheStore } from "./instance-stores.mjs";
 import { readRefreshEndpoint } from "./refresh-endpoint.mjs";
+import { type RefreshEnv, readRefreshEnv } from "./refresh-env.mjs";
 import { newRefreshQueue } from "./refresh-queue.mjs";
 import { newFirestoreTagRecords } from "./tag-records.mjs";
 import { newGcpUseCacheStore } from "./use-cache-store.mjs";
@@ -23,6 +24,7 @@ const memoryVar = "OCEL_FUNCTION_MEMORY_MB";
 export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
   const refreshSecret = env.OCEL_REFRESH_SECRET;
   delete env.OCEL_REFRESH_SECRET;
+  const refresh = readRefreshEnv(env, refreshSecret);
   const memoryMb = Number(env[memoryVar]);
   const cache = newInstanceCache(instanceCacheBytes(memoryMb > 0 ? memoryMb * MB : undefined));
   const bucket = env.OCEL_ISR_BUCKET;
@@ -56,20 +58,19 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
       newGcpDispatchInvoke(
         localOrigin,
         env,
-        readRefreshEndpoint(env, refreshSecret, localOrigin, async (key) =>
+        readRefreshEndpoint(refresh, localOrigin, async (key) =>
           (await newCacheStore()).readEntry(key),
         ),
       ),
-    scheduleRefresh: readTaskRefresh(env, refreshSecret),
+    scheduleRefresh: readRefreshQueue(env, refresh),
   };
 }
 
-function readTaskRefresh(
+function readRefreshQueue(
   env: NodeJS.ProcessEnv,
-  secret: string | undefined,
+  refresh: RefreshEnv | undefined,
 ): ScheduleRefresh | undefined {
-  const url = env.OCEL_REFRESH_URL;
-  if (!url) {
+  if (!refresh) {
     if (dispatchesAtOrigin(env) && finishBeforeResponseMs(env) > 0 && env.OCEL_ISR_PREFIX) {
       throw new Error(
         "ocel: a Next service billed per request refreshes stale pages through a Cloud Tasks queue, and its deploy named none",
@@ -77,16 +78,5 @@ function readTaskRefresh(
     }
     return undefined;
   }
-  for (const name of ["OCEL_REFRESH_QUEUE", "OCEL_REFRESH_ACCOUNT", "OCEL_ISR_PREFIX"]) {
-    if (!env[name]) throw new Error(`ocel: OCEL_REFRESH_URL is set but ${name} is not`);
-  }
-  if (!secret) throw new Error("ocel: OCEL_REFRESH_URL is set but OCEL_REFRESH_SECRET is not");
-  return newRefreshQueue({
-    queue: env.OCEL_REFRESH_QUEUE!,
-    account: env.OCEL_REFRESH_ACCOUNT!,
-    url,
-    isrPrefix: env.OCEL_ISR_PREFIX!,
-    secret,
-    endpoint: env.OCEL_TASKS_ENDPOINT,
-  });
+  return newRefreshQueue({ ...refresh, endpoint: env.OCEL_TASKS_ENDPOINT });
 }
