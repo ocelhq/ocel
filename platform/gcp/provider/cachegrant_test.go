@@ -177,3 +177,35 @@ func TestARedeployOfANextAppWritesNoTagRecordsPolicy(t *testing.T) {
 		t.Errorf("a redeploy wrote the project policy %d times, want 0", got)
 	}
 }
+
+func TestANextContainersAccountMayUseItsOwnCachePrefixAndTagRecords(t *testing.T) {
+	t.Parallel()
+	server := &runServer{}
+	p := server.open(t)
+	if _, err := p.ProvisionContainers(context.Background(), nextContainerSpec(), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	env := envOf(server.created[0].Template.Containers[0])
+	account := "serviceAccount:" + server.created[0].Template.ServiceAccount
+
+	var expressions []string
+	for _, binding := range server.identities().project.Bindings {
+		if binding.Role == appObjectsRole && slices.Contains(binding.Members, account) {
+			expressions = append(expressions, binding.Condition.Expression)
+		}
+	}
+	if len(expressions) != 1 {
+		t.Fatalf("the container's account holds the storage bindings %q, want exactly one", expressions)
+	}
+	opening := `resource.name.startsWith("projects/_/buckets/` + env["OCEL_ISR_BUCKET"] + `/objects/`
+	if !strings.HasPrefix(expressions[0], opening) || !strings.HasSuffix(expressions[0], `")`) {
+		t.Fatalf("the grant %q is not a startsWith over an object of bucket %q", expressions[0], env["OCEL_ISR_BUCKET"])
+	}
+	granted := strings.TrimSuffix(strings.TrimPrefix(expressions[0], opening), `")`)
+	if !strings.HasPrefix(env["OCEL_ISR_OBJECT_PREFIX"]+"/", granted) {
+		t.Errorf("the grant over %q is not a prefix of OCEL_ISR_OBJECT_PREFIX %q", granted, env["OCEL_ISR_OBJECT_PREFIX"])
+	}
+	if got := tagRecordBindingsOf(server.identities()); len(got) != 1 || !strings.Contains(got[0], account) {
+		t.Errorf("the project's tag record bindings = %q, want the one of %s", got, account)
+	}
+}

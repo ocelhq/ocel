@@ -45,10 +45,25 @@ Each tier's bootstrap also creates a Firestore database of its own, `<namespace>
 that holds the revalidated tags of the tier's Next apps. It has no standing charge, only the
 reads, writes and storage its records use.
 
+## Next.js
+
+A serverless Next app runs as Cloud Run services billed per request, each with 2 GiB of memory.
+
 A Next app deployed as functions (serverless compute, billed per request) cannot turn on
 `experimental.partialFallbacks` (`partialPrefetching` from Next 16.3). Next renders those shells after
 the response ends, and Cloud Run stops the work then, so the build refuses it and names the setting.
 Next apps on container compute are not affected.
+
+A Next app on `compute: "container"` runs `next start` in its image with 2 GiB of memory and its
+CPU always allocated, so it is billed per instance, and it keeps at least one instance running
+unless `minInstances` is 0. It shares the tier's Cloud Storage cache and Firestore tag records
+with a serverless Next app, so a revalidated tag reaches every instance, and it refreshes stale
+pages in the background. Do not build it with `output: "standalone"` and do not set
+`adapterPath` in `next.config`: the deploy warns about both.
+
+Each prerendered page renders on its first request after a deploy and is then served from the
+cache. With `minInstances: 0`, Cloud Run stops an idle instance after at most 15 minutes, so the
+next request starts cold. See [Cloud Run billing settings](https://cloud.google.com/run/docs/configuring/billing-settings).
 
 ## Edge
 
