@@ -21,7 +21,7 @@ export interface RefreshEndpointOptions {
   readBackTimeoutMs?: number;
 }
 
-const defaultRenderTimeoutMs = 40_000;
+const defaultRenderTimeoutMs = 30_000;
 const defaultReadBackTimeoutMs = 10_000;
 const maxBodyBytes = 65_536;
 

@@ -15,6 +15,7 @@ let origin: http.Server;
 let originUrl: string;
 let rendered: { url: string; headers: http.IncomingHttpHeaders }[];
 let originStatus: number;
+let originHangs: boolean;
 let front: http.Server | undefined;
 let warn: ReturnType<typeof vi.spyOn>;
 let entries: Map<string, CacheEntryFile>;
@@ -25,6 +26,7 @@ let readEntry: (key: string) => Promise<CacheEntryFile | null>;
 beforeAll(async () => {
   origin = http.createServer((req, res) => {
     rendered.push({ url: String(req.url), headers: req.headers });
+    if (originHangs) return;
     if (storesOnRender) entries.set("blog", { lastModified: Date.now(), value: {} });
     res.writeHead(originStatus);
     res.end("rendered");
@@ -38,6 +40,7 @@ afterAll(() => new Promise<void>((resolve) => origin.close(() => resolve())));
 beforeEach(() => {
   rendered = [];
   originStatus = 200;
+  originHangs = false;
   entries = new Map();
   storesOnRender = true;
   readKeys = [];
@@ -188,6 +191,26 @@ test("a refresh whose re-render fails answers so Cloud Tasks retries it", async 
 
   expect(response.status).toBe(502);
   expect(await response.text()).not.toContain("good");
+});
+
+test("a re-render that never answers fails after thirty seconds, so Cloud Tasks retries it", async () => {
+  originHangs = true;
+  const base = await serve(endpointFor());
+  vi.useFakeTimers({ toFake: ["setTimeout"] });
+  try {
+    const pending = post(base, task());
+    await vi.waitFor(() => expect(rendered).toHaveLength(1));
+
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(await Promise.race([pending, Promise.resolve("waiting")])).toBe("waiting");
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    const response = await pending;
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain("did not answer within 30000ms");
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("a refresh whose re-render stored a newer entry is done", async () => {
