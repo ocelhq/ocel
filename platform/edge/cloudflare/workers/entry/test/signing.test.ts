@@ -202,15 +202,6 @@ describe("awsServiceFetch", () => {
     expect(awsServiceFetch("k", "s", "")).toBeUndefined();
   });
 
-  it("signs an S3 read against the bound region and the s3 service", async () => {
-    const sent = await capture((send) =>
-      send!("s3", "https://bucket.s3.eu-west-2.amazonaws.com/prod/p/a/b/x.json"),
-    );
-    const auth = sent.headers.get("authorization") ?? "";
-    expect(auth).toContain("/eu-west-2/s3/aws4_request");
-    expect(sent.headers.get("x-amz-content-sha256")).toBeTruthy();
-  });
-
   it("signs a DynamoDB call's x-amz-target, which the API requires", async () => {
     const body = JSON.stringify({ TableName: "state" });
     const sent = await capture((send) =>

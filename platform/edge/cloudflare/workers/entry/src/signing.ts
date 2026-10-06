@@ -115,7 +115,7 @@ export function sqsFetch(
   return ((input, init) => client.fetch(input as RequestInfo, init)) as typeof fetch;
 }
 
-export type AwsService = "s3" | "dynamodb";
+export type AwsService = "dynamodb";
 
 export type AwsServiceFetch = (
   service: AwsService,
@@ -133,7 +133,6 @@ export function awsServiceFetch(
   if (!accessKeyId || !secretAccessKey || !region) return undefined;
   const options = { accessKeyId, secretAccessKey, region, retries: serviceRetries };
   const clients: Record<AwsService, AwsClient> = {
-    s3: new AwsClient({ ...options, service: "s3" }),
     dynamodb: new AwsClient({ ...options, service: "dynamodb" }),
   };
   return (service, url, init) => clients[service].fetch(url, init);

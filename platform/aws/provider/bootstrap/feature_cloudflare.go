@@ -40,8 +40,8 @@ func cloudflareEdgePlacements(bucket string) stackPayloads {
 
 func cloudflareEdgeTemplate(in featureInputs) featureStack {
 	specs := []crossStackParam{
-		{paramAssetBucketName, "The core bootstrap's asset bucket, which the edge reads static assets from and writes its fetch cache back into.", in.refs.assetBucket},
-		{paramAssetBucketARN, "ARN of that bucket, so the edge reader is granted the asset and fetch-cache prefixes and nothing else.", in.refs.assetBucketARN},
+		{paramAssetBucketName, "The core bootstrap's asset bucket, where the tag publisher seeds each build's tag snapshot.", in.refs.assetBucket},
+		{paramAssetBucketARN, "ARN of that bucket, so the tag publisher's role is scoped to it.", in.refs.assetBucketARN},
 		{paramStateTableARN, "ARN of the core bootstrap's state table, so the edge reader reaches tag items alone.", in.refs.stateTableARN},
 		{paramStateTableStreamARN, "ARN of that table's stream, the only trigger the tag publisher has.", in.refs.stateTableStreamARN},
 		{paramRevalidateQueueARN, "ARN of the revalidation queue the ISR feature provisioned, the one queue the edge reader may enqueue a refresh on.", in.refs.revalidateQueueARN},
@@ -73,7 +73,7 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
 	return fmt.Sprintf(`  EdgeUser:
     Type: AWS::IAM::User
     Metadata:
-      Description: "The identity the %s edge signs its calls into this account with: it reads the asset bucket, writes the fetch cache back, reads and updates tag items, invokes app functions and enqueues ISR revalidations."
+      Description: "The identity the %s edge signs its calls into this account with: it reads and updates tag items, invokes app functions and enqueues ISR revalidations."
     Properties:
       UserName: %s
       Policies:
@@ -81,12 +81,6 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              - Effect: Allow
-                Action: s3:GetObject
-                Resource: !Sub '${%s}/*'
-              - Effect: Allow
-                Action: s3:PutObject
-                Resource: !Sub '${%s}/*/fetch-cache/*.cache.json'
               - Effect: Allow
                 Action:
                   - dynamodb:BatchGetItem
@@ -124,7 +118,6 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
                   StringEquals:
                     kms:ViaService: !Sub 'sqs.${AWS::Region}.amazonaws.com'
 %s`, tier, userName, ns.PolicyName("edge-cache"),
-		paramAssetBucketARN, paramAssetBucketARN,
 		paramStateTableARN, paramStateTableARN, StateTableIndexName, naming.EnvTierTagKey, tier,
 		paramRevalidateQueueARN, invoke)
 }

@@ -26,7 +26,6 @@ export interface Env {
   OCEL_AWS_REGION?: string;
   OCEL_REVALIDATE_QUEUE_URL?: string;
   OCEL_STATE_TABLE?: string;
-  OCEL_ISR_BUCKET?: string;
   OCEL_IMAGE_OPTIMIZER_URL?: string;
   LOADER?: WorkerLoader;
 }

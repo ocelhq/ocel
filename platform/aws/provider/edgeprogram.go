@@ -20,7 +20,6 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 	facts := deploy.WorkerFacts{
 		Region:             p.aws.Region,
 		StateTable:         deployed.StateTable,
-		AssetBucket:        deployed.AssetBucket,
 		ImageOptimizerURL:  deployed.ImageOptimizerURL,
 		RevalidateQueueURL: deployed.RevalidateQueueURL,
 	}

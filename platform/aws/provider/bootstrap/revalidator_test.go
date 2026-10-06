@@ -390,61 +390,23 @@ func iamResourceMatches(pattern, arn string) bool {
 }
 
 func TestAssetBucketRevalidator(t *testing.T) {
-	t.Run("no key satisfies both the edge write and the origin read", func(t *testing.T) {
+	t.Run("the edge key holds no S3 grant, so it cannot plant an origin record", func(t *testing.T) {
 		for _, tc := range revalidatorTemplates() {
 			t.Run(tc.name, func(t *testing.T) {
-				write := edgeGrant(t, tc.edgeTemplate, "s3:PutObject")
-				read := revalidatorGrant(t, tc.template, "s3:GetObject")
-
-				for _, key := range []string{
-					"${AssetBucketArn}/prod/proj/web/B1/fetch-cache/origin.json",
-					"${AssetBucketArn}/prod/proj/web/B1/origin.json",
-					"${AssetBucketArn}/prod/proj/web/B1/fetch-cache/a/origin.json",
-				} {
-					if iamResourceMatches(write, key) && iamResourceMatches(read, key) {
-						t.Errorf("%s is both edge-writable under %q and consumer-readable under %q: a stolen edge key plants an origin record and the consumer delivers the app's bypass token to it", key, write, read)
+				user, ok := parseRevalidatorTemplate(t, tc.edgeTemplate).Resources["EdgeUser"]
+				if !ok {
+					t.Fatal("template is missing the EdgeUser")
+				}
+				for _, st := range user.Properties.Policies[0].PolicyDocument.Statement {
+					for _, action := range st.actions() {
+						if strings.HasPrefix(action, "s3:") {
+							t.Errorf("the edge user is granted %s on %v: a stolen edge key plants an origin record and the consumer delivers the app's bypass token to it", action, st.resources())
+						}
 					}
-				}
-
-				writeTail := write[strings.LastIndex(write, "*")+1:]
-				readTail := read[strings.LastIndex(read, "*")+1:]
-				if writeTail == "" || readTail == "" {
-					t.Fatalf("one grant ends in an unanchored wildcard (write %q, read %q); nothing bounds what a key can end in, so the two grants cannot be disjoint", write, read)
-				}
-				if strings.HasSuffix(writeTail, readTail) || strings.HasSuffix(readTail, writeTail) {
-					t.Errorf("write grant ends %q and read grant ends %q; one is a suffix of the other, so a single key satisfies both", writeTail, readTail)
 				}
 			})
 		}
 	})
-}
-
-func edgeGrant(t *testing.T, template, action string) string {
-	t.Helper()
-	user, ok := parseRevalidatorTemplate(t, template).Resources["EdgeUser"]
-	if !ok {
-		t.Fatal("template is missing the EdgeUser")
-	}
-	return soleResource(t, user.Properties.Policies[0].PolicyDocument.Statement, action)
-}
-
-func revalidatorGrant(t *testing.T, template, action string) string {
-	t.Helper()
-	return soleResource(t, revalidatorPolicy(t, template), action)
-}
-
-func soleResource(t *testing.T, statements []policyStatement, action string) string {
-	t.Helper()
-	var found []string
-	for _, st := range statements {
-		if slices.Contains(st.actions(), action) {
-			found = append(found, st.resources()...)
-		}
-	}
-	if len(found) != 1 {
-		t.Fatalf("%s is granted on %v, want exactly one resource", action, found)
-	}
-	return found[0]
 }
 
 func TestRunRevalidator(t *testing.T) {
