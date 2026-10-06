@@ -72,3 +72,52 @@ func TestATagInvalidationTheAPIRefusesNamesTheTagsAndTheURLMap(t *testing.T) {
 		}
 	}
 }
+
+func TestInvalidatingHostnamesSendsOneRequestPerHostForEveryPath(t *testing.T) {
+	t.Parallel()
+
+	p, server := invalidating(t, 0)
+	if err := p.InvalidateHostnames(context.Background(), invalidatedURLMap, []string{"a.example.com", "b.example.com"}); err != nil {
+		t.Fatalf("InvalidateHostnames = %v", err)
+	}
+
+	wantPath := "/projects/acme-prod/global/urlMaps/" + invalidatedURLMap + "/invalidateCache"
+	if len(server.rules) != 2 || server.paths[0] != wantPath {
+		t.Fatalf("the invalidation sent %v to %v, want one POST per host to %s", server.rules, server.paths, wantPath)
+	}
+	for i, host := range []string{"a.example.com", "b.example.com"} {
+		if rule := server.rules[i]; rule.Host != host || rule.Path != "/*" || len(rule.CacheTags) != 0 {
+			t.Errorf("rule %d is %+v, want host %s with path /* and no tags: leaving the host out would clear the tier's whole shared url map", i, rule, host)
+		}
+	}
+}
+
+func TestNoHostnamesSendsNothing(t *testing.T) {
+	t.Parallel()
+
+	p, server := invalidating(t, 0)
+	if err := p.InvalidateHostnames(context.Background(), invalidatedURLMap, nil); err != nil {
+		t.Fatalf("InvalidateHostnames = %v", err)
+	}
+	if len(server.paths) != 0 {
+		t.Errorf("no hostnames sent %v, want no request", server.paths)
+	}
+}
+
+func TestAHostnameInvalidationTheAPIRefusesNamesTheHostAndTheURLMapAndStopsNoOtherHost(t *testing.T) {
+	t.Parallel()
+
+	p, server := invalidating(t, http.StatusForbidden)
+	err := p.InvalidateHostnames(context.Background(), invalidatedURLMap, []string{"a.example.com", "b.example.com"})
+	if err == nil {
+		t.Fatal("InvalidateHostnames = nil, want the refusal")
+	}
+	for _, want := range []string{"a.example.com", "b.example.com", invalidatedURLMap} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error reads %q, want it to name %q", err, want)
+		}
+	}
+	if len(server.rules) != 2 {
+		t.Errorf("the API saw %d requests, want both hosts tried", len(server.rules))
+	}
+}
