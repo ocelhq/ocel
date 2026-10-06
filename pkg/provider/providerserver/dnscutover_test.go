@@ -461,6 +461,8 @@ func TestRecordsTheHostnameAlreadyResolvesToAreNeitherReportedNorAwaited(t *test
 		{"an A record", edge.Record{Name: "shop.app.com", Type: edge.RecordTypeA, Value: "203.0.113.7"}, resolving{"shop.app.com": {"203.0.113.7"}}},
 		{"an AAAA record", edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: "2001:db8::7"}, resolving{"shop.app.com": {"2001:db8:0::7"}}},
 		{"a CNAME", edge.Record{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "front.example.net"}, resolving{"shop.app.com": {"Front.example.net."}}},
+		{"a CNAME to a name that is itself an alias", edge.Record{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "front.example.net"},
+			resolving{"shop.app.com": {"edge.example.net."}, "front.example.net": {"edge.example.net."}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
