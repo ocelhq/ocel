@@ -5,7 +5,9 @@ export async function readTagSnapshot(
   isrPrefix: string,
   conditions: Headers,
 ): Promise<Response> {
-  const object = await bucket.get(tagSnapshotKey(isrPrefix), { onlyIf: conditions });
+  const etag = /^(?:W\/)?"([^",]*)"$/.exec(conditions.get("if-none-match")?.trim() ?? "")?.[1];
+  const onlyIf: R2Conditional = etag === undefined ? {} : { etagDoesNotMatch: etag };
+  const object = await bucket.get(tagSnapshotKey(isrPrefix), { onlyIf });
   if (object === null) {
     return new Response("Not Found", { status: 404, headers: { [entryMissHeader]: "1" } });
   }
