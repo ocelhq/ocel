@@ -92,12 +92,12 @@ var formulas = pricing.Table{
 	"google_cloud_tasks_queue":                              tasksQueue,
 }
 
-func Price(req *costv1.PriceRequest) (*costv1.Estimate, error) {
+func Price(req *costv1.PriceRequest, edges ...pricing.EdgeRates) (*costv1.Estimate, error) {
 	rateCard, err := card()
 	if err != nil {
 		return nil, err
 	}
-	merged, table, err := pricing.Priced(rateCard, formulas)
+	merged, table, err := pricing.Priced(rateCard, formulas, edges...)
 	if err != nil {
 		return nil, err
 	}

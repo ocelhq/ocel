@@ -221,7 +221,11 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 		Changes: planned(read, parameterItems(read.Names, read.Tier)),
 	}
 	params.Action, params.Reason = provider.RollUp(params.Changes)
-	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(Vendor, append(groups, params))}, nil
+	fronts, err := b.plannedFronts(ctx, req.Tier, req.Features)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(Vendor, append(append(groups, fronts...), params))}, nil
 }
 
 func planned(read survey, items []item) []provider.Change {
@@ -871,7 +875,11 @@ func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 		stack.Changes = append(stack.Changes, change)
 	}
 	params.Action, params.Reason = provider.RollUp(params.Changes)
-	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(Vendor, []provider.ChangeGroup{stack, params})}, nil
+	fronts, err := b.removedFronts(ctx, tier, read.Stamp.Features)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(Vendor, append([]provider.ChangeGroup{stack, params}, fronts...))}, nil
 }
 
 var removalOrder = []Kind{

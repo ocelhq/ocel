@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	cloudflarecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -81,12 +82,14 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	for _, app := range req.Deploy.Apps {
 		site.Apps = append(site.Apps, pricing.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
 	}
-	shape, err := edgeShape(front.Kind(), site)
+	shapes, err := edgeShapes(front.Kind(), string(p.namespace), site)
 	if err != nil {
 		return nil, err
 	}
-	tree.AddShaped(shared, shape.Vendor, shape.Region, shape.Shared)
-	tree.AddShaped(environment, shape.Vendor, shape.Region, shape.Environment)
+	for _, shape := range shapes {
+		tree.AddShaped(shared, shape.Vendor, shape.Region, shape.Shared)
+		tree.AddShaped(environment, shape.Vendor, shape.Region, shape.Environment)
+	}
 
 	for _, app := range req.Deploy.Apps {
 		scope := tree.Scope(environment, pricing.ScopeApp, app.App)
@@ -109,7 +112,9 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(!gated || app.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext, 0, ingress))
 			}
 		}
-		tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
+		for _, shape := range shapes {
+			tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
+		}
 		for _, worker := range app.Workers {
 			service := names.WorkerService(req.Deploy.Slug, req.Deploy.Env, app.App, worker.Name)
 			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(true, 0, ingressInternal))
@@ -264,12 +269,20 @@ func serviceProperties(billsPerRequest bool, minInstances int, ingress string) m
 }
 
 func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	return cost.Price(req)
+	return cost.Price(req, cloudflarecost.Rates)
 }
 
-func edgeShape(kind edge.Kind, site pricing.EdgeSite) (pricing.EdgeShape, error) {
+func edgeShapes(kind edge.Kind, namespace string, site pricing.EdgeSite) ([]pricing.EdgeShape, error) {
 	if kind != alb.Kind && kind != cloudflare.Kind {
-		return pricing.EdgeShape{}, nil
+		return nil, nil
 	}
-	return alb.Shape(site)
+	balancer, err := alb.Shape(site)
+	if err != nil || kind == alb.Kind {
+		return []pricing.EdgeShape{balancer}, err
+	}
+	worker, err := cloudflare.Shape(namespace, site)
+	if err != nil {
+		return nil, err
+	}
+	return []pricing.EdgeShape{balancer, worker}, nil
 }

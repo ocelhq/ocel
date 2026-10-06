@@ -311,7 +311,7 @@ func TestTheCloudflareFrontThatRunsNoCodeKeepsNoOriginWildcard(t *testing.T) {
 	t.Parallel()
 	h := newWildcardHarness()
 	front := cloudflareFront{
-		Proxy:     cloudflare.NewProxy("ocel", cloudflare.Options{OriginDomain: wildcardBase}),
+		Edge:      cloudflare.NewProxy("ocel", cloudflare.Options{OriginDomain: wildcardBase}),
 		options:   cloudflare.Options{OriginDomain: wildcardBase},
 		wildcards: h.wildcards,
 	}
@@ -320,5 +320,45 @@ func TestTheCloudflareFrontThatRunsNoCodeKeepsNoOriginWildcard(t *testing.T) {
 
 	if h.certificates.issued != 0 || len(h.dns.written) != 0 {
 		t.Errorf("issued %d certificates and wrote %v for a front that runs no code", h.certificates.issued, h.dns.written)
+	}
+}
+
+type workerReconcile struct {
+	edge.Edge
+	certified func() int
+	seen      *int
+}
+
+func (w workerReconcile) Reconcile(context.Context, edge.StackSpec, edge.StackState) (edge.EdgeStack, error) {
+	*w.seen = w.certified()
+	return nil, nil
+}
+
+func TestTheCloudflareFrontReconcilesTheOriginWildcardBeforeTheWorker(t *testing.T) {
+	t.Parallel()
+	h := newWildcardHarness()
+	relay, err := fake.NewEdges().Open(fake.KindRelay, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certified := -1
+	front := cloudflareFront{
+		Edge:      workerReconcile{Edge: relay, certified: func() int { return h.certificates.issued }, seen: &certified},
+		options:   cloudflare.Options{OriginDomain: wildcardBase},
+		wildcards: h.wildcards,
+	}
+
+	if _, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{}); err != nil {
+		t.Fatalf("Reconcile = %v", err)
+	}
+
+	if certified != 1 {
+		t.Errorf("the worker was reconciled after %d certificates were issued, want the origin wildcard certified first: its deployments are not reachable before it", certified)
+	}
+	pruning := edge.StackSpec{Slug: "shop", Tier: environment.TierProduction, PruneOnly: true}
+	h2 := newWildcardHarness()
+	front.wildcards = h2.wildcards
+	if _, err := front.Reconcile(context.Background(), pruning, edge.StackState{}); err != nil || h2.certificates.issued != 0 {
+		t.Errorf("a prune reconcile issued %d certificates (err %v), want none", h2.certificates.issued, err)
 	}
 }

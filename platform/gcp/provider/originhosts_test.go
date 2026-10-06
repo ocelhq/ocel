@@ -234,3 +234,29 @@ func TestRemovingAFunctionUnroutesItsOriginHostnameFirst(t *testing.T) {
 		t.Errorf("unrouted %v, want only the origin host: a run.app URL and an empty one name no origin host", routing.unrouted)
 	}
 }
+
+func TestAFunctionBehindTheWorkerOpensAtCreation(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	withOriginBase(t, p)
+	image := "europe-west1-docker.pkg.dev/acme/ocel/web-checkout:sha256-one"
+
+	if _, err := p.ProvisionFunctions(context.Background(), behindTheWorker(functionRelease("d1", image)), nil); err != nil {
+		t.Fatal(err)
+	}
+	service := server.created[0]
+	if !service.InvokerIamDisabled || service.Labels[opensOnPromotionLabel] != "" {
+		t.Errorf("service opens %v with label %q, want open at creation: the worker reaches it on its origin host before any promotion, and ingress with mTLS keeps clients out",
+			service.InvokerIamDisabled, service.Labels[opensOnPromotionLabel])
+	}
+
+	plain := &runServer{}
+	spec := functionRelease("d2", image)
+	spec.Edge = codeRunningFront{kind: "alb", shields: true}
+	if _, err := plain.open(t).ProvisionFunctions(context.Background(), spec, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := plain.created[0]; got.InvokerIamDisabled || got.Labels[opensOnPromotionLabel] == "" {
+		t.Errorf("a service behind the load balancer opens %v with label %q, want it shut until its promotion", got.InvokerIamDisabled, got.Labels[opensOnPromotionLabel])
+	}
+}

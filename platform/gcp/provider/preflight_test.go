@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 func withStamp(t *testing.T, written stamp) *Provider {
@@ -183,11 +184,20 @@ func TestANextAppOnContainerComputeIsAdmittedWithoutATaskQueue(t *testing.T) {
 
 func TestANextAppBehindAnEdgeThatRunsNoCodeIsRefusedUntilTheTierHasItsTaskQueue(t *testing.T) {
 	pre := shippingNext(false)
-	pre.Edge = cloudflare.Kind
+	pre.Edge = alb.Kind
 	err := withStamp(t, stamp{State: stateComplete}).PreflightDeploy(context.Background(), pre)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Errorf("PreflightDeploy() = %v, want a Next app that routes its own requests behind the Cloudflare proxy refused until the queue is installed", err)
+		t.Errorf("PreflightDeploy() = %v, want a Next app that routes its own requests behind the load balancer refused until the queue is installed", err)
+	}
+}
+
+func TestANextAppBehindTheCodeRunningEdgeNeedsNoTasksFeature(t *testing.T) {
+	pre := shippingNext(false)
+	pre.Edge = cloudflare.Kind
+
+	if err := withStamp(t, stamp{State: stateComplete}).PreflightDeploy(context.Background(), pre); err != nil {
+		t.Errorf("PreflightDeploy() = %v, want a Next app admitted without the tasks feature: the worker refreshes it through its own queue", err)
 	}
 }
 

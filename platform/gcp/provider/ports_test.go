@@ -93,7 +93,7 @@ func TestAnEdgeThisProviderCannotFrontWithIsRefusedWithThePriceOfTheOneThatCan(t
 	}
 }
 
-func TestCloudflareFrontsTheLoadBalancerAsAProxyThatRunsNoCode(t *testing.T) {
+func TestTheCloudflareFrontOnGCPRunsCodeAndShieldsItsOrigin(t *testing.T) {
 	t.Parallel()
 
 	p := testProvider(t)
@@ -101,25 +101,69 @@ func TestCloudflareFrontsTheLoadBalancerAsAProxyThatRunsNoCode(t *testing.T) {
 		t.Errorf("Facts().Edges = %v, want cloudflare among them", p.Facts().Edges)
 	}
 	if _, err := p.Bootstrap(cloudflare.Kind); err != nil {
-		t.Fatalf("Bootstrap(%q) = %v, want the bootstrap that raises the load balancer it forwards to", cloudflare.Kind, err)
+		t.Fatalf("Bootstrap(%q) = %v, want the bootstrap that raises the load balancer it reaches", cloudflare.Kind, err)
 	}
 	front, err := p.Edges().Open(cloudflare.Kind, nil)
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", cloudflare.Kind, err)
 	}
 	facts := front.Facts()
-	if facts.RunsCode || !facts.ProxiesRecords || facts.ServesUnbound {
-		t.Errorf("the cloudflare edge's facts = %+v, want a proxy that forwards records to an origin and runs no worker", facts)
+	if !facts.RunsCode || !facts.ProxiesRecords || len(facts.Entry.Content) == 0 {
+		t.Errorf("the cloudflare edge's facts = %+v, want a worker that runs code and proxies the records of forwarded containers", facts)
 	}
 	if !facts.ShieldsOrigin {
 		t.Errorf("the cloudflare edge's facts = %+v, want the origin shielded, so a Cloud Run service answers only its load balancer", facts)
 	}
 	hooks := front.Hooks()
-	if hooks.ClientCertificates == nil || hooks.CheckBootstrapInstalled == nil || hooks.ListBoundHostnames == nil {
-		t.Error("the cloudflare edge presents no client certificate, or says nothing of the load balancer its bootstrap raises")
+	if hooks.ClientCertificates == nil || hooks.CheckBootstrapInstalled == nil || hooks.ListBoundHostnames == nil ||
+		hooks.OriginCertificates == nil || hooks.PurgeHostnames == nil || hooks.PlanBootstrap == nil {
+		t.Error("the cloudflare edge lacks a hook the worker or the forwarded containers it fronts depend on")
 	}
-	if got := p.Facts().ListPairedRouters(cloudflare.Kind); !slices.Equal(got, []router.Kind{router.Kind(alb.Kind)}) {
-		t.Errorf("ListPairedRouters(cloudflare) = %v, want the load balancer alone", got)
+}
+
+func TestGCPPairsServerlessAppsWithTheCloudflareRouterAndForwardsContainersThroughTheShieldedLoadBalancer(t *testing.T) {
+	t.Parallel()
+
+	facts := testProvider(t).Facts()
+
+	if got, found := facts.PairedRouter(cloudflare.Kind, provider.ComputeServerless); !found || got != router.Kind(cloudflare.Kind) {
+		t.Errorf("PairedRouter(cloudflare, serverless) = %q, %v, want the cloudflare router", got, found)
+	}
+	if got, found := facts.PairedRouter(cloudflare.Kind, provider.ComputeContainer); !found || got != router.Kind(alb.Kind) {
+		t.Errorf("PairedRouter(cloudflare, container) = %q, %v, want the load balancer", got, found)
+	}
+	for _, pairing := range facts.Pairings {
+		if pairing.Edge == cloudflare.Kind && pairing.Forwarded != (pairing.Router == router.Kind(alb.Kind)) {
+			t.Errorf("pairing %+v: only containers behind the load balancer are forwarded", pairing)
+		}
+	}
+}
+
+func TestTheCloudflareRouterOnGCPSignsAndDispatchesAndHasNoOriginHooks(t *testing.T) {
+	t.Parallel()
+
+	opened, err := testProvider(t).Routers().Open(router.Kind(cloudflare.Kind))
+	if err != nil {
+		t.Fatalf("Open(cloudflare router) = %v", err)
+	}
+	facts := opened.Facts()
+	if !facts.SignsOriginForwards || !facts.Dispatches || !facts.ReachesFunctions || facts.ReachesContainers {
+		t.Errorf("facts = %+v, want a router that signs and dispatches to functions but reaches no container", facts)
+	}
+	if hooks := opened.Hooks(); hooks.Origin != nil {
+		t.Error("the cloudflare router has origin hooks, and the deploy would treat it as one that forwards to an origin")
+	}
+}
+
+func TestTheALBRoutersFactsAreUnchangedByTheCloudflareEdge(t *testing.T) {
+	t.Parallel()
+
+	opened, err := testProvider(t).Routers().Open(router.Kind(alb.Kind))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if facts := opened.Facts(); facts.SignsOriginForwards || facts.Dispatches {
+		t.Errorf("alb router facts = %+v, want neither: the origin guard behind the plain load balancer depends on it", facts)
 	}
 }
 

@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -289,4 +291,52 @@ func appendMissing(listed, more []string) []string {
 		}
 	}
 	return listed
+}
+
+func (b bootstrap) plannedFronts(ctx context.Context, tier environment.Tier, features []string) ([]provider.ChangeGroup, error) {
+	var groups []provider.ChangeGroup
+	err := b.eachFront(features, func(feature provider.Feature, front edge.Edge) error {
+		plan := front.Hooks().PlanBootstrap
+		if plan == nil {
+			return nil
+		}
+		planned, err := plan(ctx, tier)
+		if err != nil {
+			return fmt.Errorf("plan the %s edge bootstrap: %w", front.Kind(), err)
+		}
+		if len(planned) == 0 {
+			return nil
+		}
+		group, err := bootstrapplan.EdgeGroup(front.Kind(), feature.Name, planned)
+		groups = append(groups, group)
+		return err
+	})
+	return groups, err
+}
+
+func (b bootstrap) removedFronts(ctx context.Context, tier environment.Tier, features []string) ([]provider.ChangeGroup, error) {
+	var groups []provider.ChangeGroup
+	err := b.eachFront(features, func(feature provider.Feature, front edge.Edge) error {
+		plan := front.Hooks().PlanRemoveBootstrap
+		if plan == nil {
+			return nil
+		}
+		planned, err := plan(ctx, tier)
+		if err != nil {
+			return fmt.Errorf("plan what removing the %s edge bootstrap takes: %w", front.Kind(), err)
+		}
+		if len(planned) == 0 {
+			return nil
+		}
+		changes, err := bootstrapplan.EdgeChanges(front.Kind(), planned)
+		groups = append(groups, provider.ChangeGroup{
+			Kind:    edge.EdgeGroupKind,
+			Name:    edge.EdgeGroupName(front.Kind()),
+			Feature: feature.Name,
+			Action:  provider.ActionDelete,
+			Changes: changes,
+		})
+		return err
+	})
+	return groups, err
 }

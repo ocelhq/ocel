@@ -9,10 +9,17 @@ import (
 )
 
 type cloudflareFront struct {
-	*cloudflare.Proxy
+	edge.Edge
+	proxy     *cloudflare.Proxy
 	origin    edge.Edge
 	options   cloudflare.Options
 	wildcards originWildcards
+}
+
+func (f cloudflareFront) Facts() edge.Facts {
+	facts := f.Edge.Facts()
+	facts.ShieldsOrigin = true
+	return facts
 }
 
 func (f cloudflareFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
@@ -21,11 +28,14 @@ func (f cloudflareFront) Reconcile(ctx context.Context, spec edge.StackSpec, pri
 			return nil, err
 		}
 	}
-	return f.Proxy.Reconcile(ctx, spec, prior)
+	return f.Edge.Reconcile(ctx, spec, prior)
 }
 
 func (f cloudflareFront) Hooks() edge.Hooks {
-	hooks := f.Proxy.Hooks()
+	hooks := f.Edge.Hooks()
+	proxied := f.proxy.Hooks()
+	hooks.OriginCertificates = proxied.OriginCertificates
+	hooks.PurgeHostnames = proxied.PurgeHostnames
 	origin := f.origin.Hooks()
 	hooks.CheckBootstrapInstalled = origin.CheckBootstrapInstalled
 	hooks.ListBoundHostnames = origin.ListBoundHostnames
@@ -36,11 +46,14 @@ func (f cloudflareFront) Bootstrap(ctx context.Context, tier environment.Tier) (
 	if _, err := f.origin.Bootstrap(ctx, tier); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	return f.Proxy.Bootstrap(ctx, tier)
+	return f.Edge.Bootstrap(ctx, tier)
 }
 
 func (f cloudflareFront) Teardown(ctx context.Context, tier environment.Tier) error {
 	if err := f.wildcards.destroy(ctx, tier); err != nil {
+		return err
+	}
+	if err := f.Edge.Teardown(ctx, tier); err != nil {
 		return err
 	}
 	return f.origin.Teardown(ctx, tier)

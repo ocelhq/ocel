@@ -100,7 +100,8 @@ func (p *Provider) Facts() provider.Facts {
 		Pairings: []provider.Pairing{
 			{Edge: edge.None, Router: cloudrun.RouterKind, Computes: provider.Computes()},
 			{Edge: alb.Kind, Router: router.Kind(alb.Kind), Computes: provider.Computes()},
-			{Edge: cloudflare.Kind, Router: router.Kind(alb.Kind), Computes: provider.Computes()},
+			{Edge: cloudflare.Kind, Router: router.Kind(cloudflare.Kind), Computes: []provider.Compute{provider.ComputeServerless}},
+			{Edge: cloudflare.Kind, Router: router.Kind(alb.Kind), Computes: []provider.Compute{provider.ComputeContainer}, Forwarded: true},
 		},
 		DNSKinds:               []provider.DNSKind{dnsCloudflare},
 		StoresArtifacts:        true,

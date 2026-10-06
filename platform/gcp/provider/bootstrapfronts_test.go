@@ -36,6 +36,7 @@ type countingFront struct {
 	refusal   error
 	silent    bool
 	parts     []edge.BootstrapPart
+	plan      []edge.PlanChange
 	out       edge.BootstrapOutput
 	describe  error
 }
@@ -49,6 +50,12 @@ func (f *countingFront) Hooks() edge.Hooks {
 		ListBoundHostnames:      func(context.Context, environment.Tier) ([]string, error) { return f.bound, nil },
 		DescribeBootstrap: func(context.Context, environment.Tier) ([]edge.BootstrapPart, error) {
 			return f.parts, f.describe
+		},
+		PlanBootstrap: func(context.Context, environment.Tier) ([]edge.PlanChange, error) {
+			return f.plan, nil
+		},
+		PlanRemoveBootstrap: func(context.Context, environment.Tier) ([]edge.PlanChange, error) {
+			return f.plan, nil
 		},
 	}
 }
@@ -348,4 +355,29 @@ func adoptedAs(t *testing.T, h *offersHarness, kind edge.Kind) (adoptedEdge, boo
 		t.Fatal(err)
 	}
 	return adopted, true
+}
+
+func TestABootstrapPlanNamesWhatTheEdgesFrontInstallsAndWhatRemovingItTakes(t *testing.T) {
+	t.Parallel()
+
+	b, registry := fronting(t)
+	registry.front.plan = []edge.PlanChange{{Kind: "Cloudflare::Worker", Name: "ocel-deployments-store", Action: edge.PlanCreate}}
+
+	installs, err := b.plannedFronts(context.Background(), environment.TierProduction, []string{albFeature})
+	if err != nil {
+		t.Fatal(err)
+	}
+	removes, err := b.removedFronts(context.Background(), environment.TierProduction, []string{albFeature})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for what, groups := range map[string][]provider.ChangeGroup{"installs": installs, "removes": removes} {
+		if len(groups) != 1 || groups[0].Name != edge.EdgeGroupName(alb.Kind) || len(groups[0].Changes) != 1 || groups[0].Changes[0].Name != "ocel-deployments-store" {
+			t.Errorf("%s = %+v, want one edge group carrying the front's planned worker", what, groups)
+		}
+	}
+	if removes[0].Action != provider.ActionDelete {
+		t.Errorf("the removal group's action = %q, want delete", removes[0].Action)
+	}
 }
