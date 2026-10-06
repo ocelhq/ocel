@@ -97,8 +97,8 @@ func TestAPromotionClearsTheReleaseItReplacedFromCloudCDN(t *testing.T) {
 	t.Parallel()
 
 	_, w, stack := reconciled(t)
-	stagedRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
-	stagedRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
 	log := &fake.Log{}
 	promoted(t, stack, log, "p1", "", map[string]string{"web": "b1"})
 	promoted(t, stack, log, "p2", "", map[string]string{"web": "b2"})
@@ -119,8 +119,8 @@ func TestAPromotionWithoutALogStillClearsTheReleaseItReplaced(t *testing.T) {
 	t.Parallel()
 
 	_, w, stack := reconciled(t)
-	stagedRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
-	stagedRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
 	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
 	promoted(t, stack, nil, "p2", "", map[string]string{"web": "b2"})
 
@@ -134,8 +134,8 @@ func TestARollbackClearsTheReleaseItRolledBackFrom(t *testing.T) {
 	t.Parallel()
 
 	_, w, stack := reconciled(t)
-	stagedRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
-	stagedRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
 	for _, step := range []struct{ id, build string }{{"p1", "b1"}, {"p2", "b2"}, {"p3", "b1"}} {
 		promoted(t, stack, progress.Discard(), step.id, "", map[string]string{"web": step.build})
 	}
@@ -150,7 +150,7 @@ func TestTheFirstPromotionOfAnAppClearsNoReleaseTag(t *testing.T) {
 	t.Parallel()
 
 	_, w, stack := reconciled(t)
-	stagedRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
 	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
 
 	if got := w.invalidations(); len(got) != 0 {
@@ -165,7 +165,7 @@ func TestPromotingTheReleaseAlreadyServedClearsNothing(t *testing.T) {
 	t.Parallel()
 
 	_, w, stack := reconciled(t)
-	stagedRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
 	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
 	promoted(t, stack, progress.Discard(), "p2", "", map[string]string{"web": "b1"})
 
@@ -179,8 +179,8 @@ func TestOnePromotionOfTwoNextAppsOnOneReleaseClearsItOnce(t *testing.T) {
 
 	_, w, stack := reconciled(t)
 	for _, app := range []string{"web", "admin"} {
-		stagedRelease(t, stack, app, "b1", 1, buildoutput.FrameworkNext)
-		stagedRelease(t, stack, app, "b2", 2, buildoutput.FrameworkNext)
+		stagedFunctionRelease(t, stack, app, "b1", 1, buildoutput.FrameworkNext)
+		stagedFunctionRelease(t, stack, app, "b2", 2, buildoutput.FrameworkNext)
 	}
 	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1", "admin": "b1"})
 	promoted(t, stack, progress.Discard(), "p2", "", map[string]string{"web": "b2", "admin": "b2"})
@@ -195,8 +195,8 @@ func TestTwoPreviewPointersOfOneAppNeverClearEachOthersRelease(t *testing.T) {
 	t.Parallel()
 
 	_, w, stack := reconciled(t)
-	stagedRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
-	stagedRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
 	promoted(t, stack, progress.Discard(), "p1", "pr-7", map[string]string{"web": "b1"})
 	promoted(t, stack, progress.Discard(), "p2", "pr-8", map[string]string{"web": "b2"})
 
@@ -226,8 +226,8 @@ func TestARemovedPointerForgetsTheReleaseItServed(t *testing.T) {
 	t.Parallel()
 
 	_, w, stack := reconciled(t)
-	stagedRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
-	stagedRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
 	promoted(t, stack, progress.Discard(), "p1", "pr-7", map[string]string{"web": "b1"})
 	if err := openRouter(stack).RemovePointer(context.Background(), router.PointerRemoval{Pointer: "pr-7"}, progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer = %v", err)
@@ -264,8 +264,8 @@ func TestAPurgeThatFailsWarnsWithTheCommandToClearItAndLeavesThePromotionServed(
 	t.Parallel()
 
 	_, w, stack := reconciled(t)
-	stagedRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
-	stagedRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
 	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
 	w.invalidating = fmt.Errorf("permission denied")
 	log := &fake.Log{}
@@ -347,7 +347,7 @@ func TestTheFirstPromotionOfANextAppClearsItsHostnamesBecauseNoReleaseTagIsKnown
 
 	_, w, stack := reconciled(t)
 	bound(t, stack, "shop.example.com", "web")
-	stagedRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
 	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
 
 	if got, want := w.invalidatedHostnames(), []string{"shop.example.com"}; !slices.Equal(got, want) {
@@ -363,8 +363,8 @@ func TestALaterPromotionOfANextAppClearsItsReleaseTagAndNoHostname(t *testing.T)
 
 	_, w, stack := reconciled(t)
 	bound(t, stack, "shop.example.com", "web")
-	stagedRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
-	stagedRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
 	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
 	promoted(t, stack, progress.Discard(), "p2", "", map[string]string{"web": "b2"})
 
@@ -407,7 +407,7 @@ func TestAnAppThatBecomesNextIsClearedByHostname(t *testing.T) {
 	_, w, stack := reconciled(t)
 	bound(t, stack, "shop.example.com", "web")
 	stagedRelease(t, stack, "web", "b1", 1, "")
-	stagedRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
+	stagedFunctionRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
 	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
 	promoted(t, stack, progress.Discard(), "p2", "", map[string]string{"web": "b2"})
 
@@ -498,6 +498,24 @@ func TestAPromotionOfAFunctionAppClearsEveryHostnameItServesFromCloudCDN(t *test
 	bound(t, stack, "shop.example.com", "web")
 	stagedFunctionRelease(t, stack, "web", "b1", 1, "")
 	stagedFunctionRelease(t, stack, "web", "b2", 2, "")
+	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
+	promoted(t, stack, progress.Discard(), "p2", "", map[string]string{"web": "b2"})
+
+	if got, want := w.invalidatedHostnames(), []string{"shop.example.com", "shop.example.com"}; !slices.Equal(got, want) {
+		t.Errorf("the promotions cleared hostnames %v, want %v", got, want)
+	}
+	if got := w.invalidations(); len(got) != 0 {
+		t.Errorf("the promotions cleared tags %v, want none", got)
+	}
+}
+
+func TestAPromotionOfANextContainerClearsItsHostnamesBecauseItsResponsesCarryNoReleaseTag(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	bound(t, stack, "shop.example.com", "web")
+	stagedRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
 	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
 	promoted(t, stack, progress.Discard(), "p2", "", map[string]string{"web": "b2"})
 
