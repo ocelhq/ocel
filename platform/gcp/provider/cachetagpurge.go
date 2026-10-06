@@ -2,7 +2,7 @@ package gcp
 
 import "github.com/ocelhq/ocel/pkg/edge"
 
-func cacheTagPurgeEnv(front edge.Edge) map[string]string {
+func newCacheTagPurgeEnv(front edge.Edge) map[string]string {
 	if !factsOf(front).InvalidatesByCacheTag {
 		return nil
 	}

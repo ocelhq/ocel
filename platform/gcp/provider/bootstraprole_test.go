@@ -129,7 +129,7 @@ func TestABootstrapCreatesTheAppAccountsRoleOnceAndReusesIt(t *testing.T) {
 	if err != nil || found.present {
 		t.Fatalf("presenceOf() = %+v, %v, want an absent role", found, err)
 	}
-	if err := b.makeRole(ctx, appAccountsRole(b.clients.Names)); err != nil {
+	if err := b.makeRole(ctx, newAppAccountsRole(b.clients.Names)); err != nil {
 		t.Fatalf("makeRole() = %v", err)
 	}
 	if !slices.Equal(server.writes, []string{"create"}) {
@@ -147,7 +147,7 @@ func TestABootstrapCreatesTheAppAccountsRoleOnceAndReusesIt(t *testing.T) {
 	if err != nil || !found.present || found.mends != "" {
 		t.Fatalf("presenceOf() = %+v, %v, want a present role with nothing to mend", found, err)
 	}
-	if err := b.makeRole(ctx, appAccountsRole(b.clients.Names)); err != nil {
+	if err := b.makeRole(ctx, newAppAccountsRole(b.clients.Names)); err != nil {
 		t.Fatalf("makeRole() again = %v", err)
 	}
 	if !slices.Equal(server.writes, []string{"create"}) {
@@ -167,7 +167,7 @@ func TestADeletedAppAccountsRoleIsUndeleted(t *testing.T) {
 	if err != nil || !found.present || found.mends != reasonRoleDeleted {
 		t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, reasonRoleDeleted)
 	}
-	if err := b.makeRole(ctx, appAccountsRole(b.clients.Names)); err != nil {
+	if err := b.makeRole(ctx, newAppAccountsRole(b.clients.Names)); err != nil {
 		t.Fatalf("makeRole() = %v", err)
 	}
 	if !slices.Equal(server.writes, []string{"undelete"}) {
@@ -195,7 +195,7 @@ func TestAnAppAccountsRoleWithOtherPermissionsIsPutBack(t *testing.T) {
 			if err != nil || !found.present || found.mends != reasonRoleDrifted {
 				t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, reasonRoleDrifted)
 			}
-			if err := b.makeRole(t.Context(), appAccountsRole(b.clients.Names)); err != nil {
+			if err := b.makeRole(t.Context(), newAppAccountsRole(b.clients.Names)); err != nil {
 				t.Fatalf("makeRole() = %v", err)
 			}
 			if !slices.Equal(server.writes, []string{"patch"}) {
@@ -223,7 +223,7 @@ func TestAnAppAccountsRoleDeletedTooLongAgoIsRefusedNamingTheWait(t *testing.T) 
 			t.Parallel()
 			b := server.bootstrap(t)
 
-			err := b.makeRole(t.Context(), appAccountsRole(b.clients.Names))
+			err := b.makeRole(t.Context(), newAppAccountsRole(b.clients.Names))
 
 			var refused refusal.Refusal
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {

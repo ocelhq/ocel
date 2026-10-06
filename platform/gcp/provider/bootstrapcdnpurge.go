@@ -8,13 +8,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func cdnPurgeRole(names Names) customRole {
+func newCDNPurgeRole(names Names) customRole {
 	return customRole{
 		id:          names.CDNPurgeRole(),
 		title:       "ocel cache purge (" + string(names.namespace) + ")",
 		description: "lets a Next app behind the alb clear its revalidated pages from Cloud CDN, and nothing else",
 		permissions: []string{"compute.urlMaps.invalidateCache"},
-		drifted:     "it holds other permissions than clearing Cloud CDN, which is all a Next app behind the alb is granted it for",
+		driftReason: "it holds other permissions than clearing Cloud CDN, which is all a Next app behind the alb is granted it for",
 	}
 }
 
@@ -29,5 +29,5 @@ func (b bootstrap) raiseCDNPurgeRole(ctx context.Context, req provider.Bootstrap
 	names := b.clients.Names
 	ensureProgress(progress).Say("Keeping custom role " + names.CDNPurgeRolePath() + " for " + string(req.Tier) +
 		": Next apps behind the alb are granted it to clear Cloud CDN, and nothing else")
-	return b.makeRole(ctx, cdnPurgeRole(names))
+	return b.makeRole(ctx, newCDNPurgeRole(names))
 }

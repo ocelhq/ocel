@@ -133,7 +133,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			}, addressed)); err != nil {
 				return nil, err
 			}
-			if values, err = mergedValues(fn.Name, values, cdnPurgeEnv(names, spec)); err != nil {
+			if values, err = mergedValues(fn.Name, values, newCDNPurgeEnv(names, spec)); err != nil {
 				return nil, err
 			}
 		}

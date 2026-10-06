@@ -33,21 +33,21 @@ type customRole struct {
 	title       string
 	description string
 	permissions []string
-	drifted     string
+	driftReason string
 }
 
-func appAccountsRole(names Names) customRole {
+func newAppAccountsRole(names Names) customRole {
 	return customRole{
 		id:          names.AppAccountsRole(),
 		title:       "ocel app accounts (" + string(names.namespace) + ")",
 		description: "lets a deploy create the service accounts its apps run as and set who may act as them, and nothing else",
 		permissions: appAccountsPermissions,
-		drifted:     reasonRoleDrifted,
+		driftReason: reasonRoleDrifted,
 	}
 }
 
 func findCustomRole(names Names, id string) (customRole, bool) {
-	for _, role := range []customRole{appAccountsRole(names), cdnPurgeRole(names)} {
+	for _, role := range []customRole{newAppAccountsRole(names), newCDNPurgeRole(names)} {
 		if role.id == id {
 			return role, true
 		}
@@ -68,7 +68,7 @@ func (b bootstrap) rolePresence(ctx context.Context, want customRole) (presence,
 	case role.Deleted:
 		return presence{present: true, mends: reasonRoleDeleted}, nil
 	case roleDrifted(role, want):
-		return presence{present: true, mends: want.drifted}, nil
+		return presence{present: true, mends: want.driftReason}, nil
 	}
 	return presence{present: true}, nil
 }
