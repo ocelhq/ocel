@@ -1,6 +1,6 @@
 name: versions
 description: >-
-  The node, bun, pnpm, golangci-lint and actionlint versions the repository pins, read from
+  The node, bun, pnpm, golangci-lint, actionlint and buf versions the repository pins, read from
   mise.toml and package.json so no workflow carries a version of its own.
 
 inputs:
@@ -22,6 +22,9 @@ outputs:
   actionlint:
     description: actionlint version mise.toml pins, without a leading v.
     value: ${{ steps.read.outputs.actionlint }}
+  buf:
+    description: buf version mise.toml pins.
+    value: ${{ steps.read.outputs.buf }}
   pnpm:
     description: pnpm version package.json pins in devEngines.packageManager.
     value: ${{ steps.read.outputs.pnpm }}
@@ -42,8 +45,9 @@ runs:
         bun=$(tool bun)
         golangci_lint=$(tool golangci-lint)
         actionlint=$(tool actionlint)
+        buf=$(tool buf)
         pnpm=$(jq -er '.devEngines.packageManager.version' package.json)
-        for pair in node=$node bun=$bun golangci-lint=$golangci_lint actionlint=$actionlint pnpm=$pnpm; do
+        for pair in node=$node bun=$bun golangci-lint=$golangci_lint actionlint=$actionlint buf=$buf pnpm=$pnpm; do
           [ -n "${pair#*=}" ] || { echo "::error::no ${pair%%=*} version pinned"; exit 1; }
         done
         {
@@ -51,5 +55,6 @@ runs:
           echo "bun=$bun"
           echo "golangci-lint=$golangci_lint"
           echo "actionlint=$actionlint"
+          echo "buf=$buf"
           echo "pnpm=$pnpm"
         } >> "$GITHUB_OUTPUT"

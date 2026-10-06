@@ -90,3 +90,29 @@ jobs:
             refs+=("refs/tags/$tag")
           done
           git push --atomic origin "${refs[@]}"
+
+  bsr:
+    name: bsr
+    needs: [plan, tag]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/buf
+
+      - name: Push the proto module to buf.build/ocelhq/ocel, labelled with this release
+        env:
+          BUF_TOKEN: ${{ secrets.BUF_TOKEN }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          REPO: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          buf push proto \
+            --label "v$VERSION" \
+            --source-control-url "$REPO/commit/$GITHUB_SHA" \
+            --create --create-visibility public

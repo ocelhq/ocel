@@ -1,0 +1,23 @@
+name: buf
+description: The buf version mise.toml pins, checksummed and on PATH.
+
+runs:
+  using: composite
+  steps:
+    - name: Take the versions the repository pins
+      id: versions
+      uses: ./.github/actions/versions
+
+    - name: Install buf
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ steps.versions.outputs.buf }}
+      run: |
+        set -euo pipefail
+        cd "$RUNNER_TEMP"
+        gh release download "v$VERSION" --repo bufbuild/buf --pattern buf-Linux-x86_64 --pattern sha256.txt
+        grep -E "  buf-Linux-x86_64$" sha256.txt | sha256sum --check --strict
+        mkdir -p buf-bin
+        install -m 0755 buf-Linux-x86_64 buf-bin/buf
+        echo "$RUNNER_TEMP/buf-bin" >> "$GITHUB_PATH"
