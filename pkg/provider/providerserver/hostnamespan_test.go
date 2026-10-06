@@ -71,6 +71,62 @@ func TestAHostnameAnotherEdgeServesLeavesTheAttachingSpanAtAWarningNamingOnlyThe
 	}
 }
 
+func TestAHostnameAWorkerRouteAlreadySendsToTheEdgeIsAttachedThroughItRatherThanReportedAsServedElsewhere(t *testing.T) {
+	builtProject(t)
+	client, p := deployServed(t)
+
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	req.Edge.Kind = string(fake.KindDirect)
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() on the %s edge = %q", fake.KindDirect, result.GetError())
+	}
+
+	p.Edges().(*fake.Edges).RouteOnlyThrough(fake.KindRelay, "shop.example")
+	req.Edge.Kind = string(fake.KindRelay)
+	result, events := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() on the %s edge = %q", fake.KindRelay, result.GetError())
+	}
+
+	root := hostnameSpanOf(t, events)
+	if len(root.warnings) != 0 {
+		t.Errorf("the span warned %q, want no warning: the edge already answers shop.example", root.warnings)
+	}
+	if want := "Attached production hostname shop.example"; root.ended.GetEnded().GetTitle() != want {
+		t.Errorf("the span ended titled %q, want %q", root.ended.GetEnded().GetTitle(), want)
+	}
+	if !slices.ContainsFunc(p.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings(), func(b edge.DomainBinding) bool { return b.Hostname == "shop.example" }) {
+		t.Errorf("the %s edge bound %v, want shop.example among them", fake.KindRelay, p.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings())
+	}
+}
+
+func TestAHostnameStillAnsweredThroughAnotherFrontKeepsTheNoteThatDomainAddMovesIt(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	req.Edge.Kind = string(fake.KindDirect)
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() on the %s edge = %q", fake.KindDirect, result.GetError())
+	}
+
+	req.Edge.Kind = string(fake.KindRelay)
+	result, events := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() on the %s edge = %q", fake.KindRelay, result.GetError())
+	}
+
+	root := hostnameSpanOf(t, events)
+	if want := "Did not attach production hostname shop.example"; root.ended.GetEnded().GetTitle() != want {
+		t.Errorf("the span ended titled %q, want %q", root.ended.GetEnded().GetTitle(), want)
+	}
+	if len(root.warnings) != 1 || !strings.HasPrefix(root.warnings[0], "shop.example is still served through the direct edge") {
+		t.Errorf("the span warned %q, want one warning naming shop.example and the direct edge", root.warnings)
+	}
+}
+
 func TestAHostnameWhoseCertificateIsStillIssuingLeavesTheAttachingSpanAtAWarning(t *testing.T) {
 	builtProject(t)
 	client, p := deployServed(t)
