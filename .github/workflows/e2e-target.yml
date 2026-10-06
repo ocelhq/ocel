@@ -50,6 +50,7 @@ permissions:
 env:
   OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.1.0-ocel.1
   OCEL_FLOCI_GCP_IMAGE: floci/floci-gcp:0.8.0
+  OCEL_FLOCI_FIRESTORE_IMAGE: gcr.io/google.com/cloudsdktool/google-cloud-cli:587.0.0-emulators
   FORCE_COLOR: "1"
 
 jobs:
@@ -138,7 +139,7 @@ jobs:
       - name: Pull the emulator the cells deploy into
         if: steps.due.outputs.run == 'true' && !inputs.cloud && (inputs.target == 'aws' || inputs.target == 'gcp')
         run: |
-          if [ "$TARGET" = gcp ]; then docker pull "$OCEL_FLOCI_GCP_IMAGE"; else docker pull "$OCEL_FLOCI_IMAGE"; fi
+          if [ "$TARGET" = gcp ]; then docker pull "$OCEL_FLOCI_GCP_IMAGE" && docker pull "$OCEL_FLOCI_FIRESTORE_IMAGE"; else docker pull "$OCEL_FLOCI_IMAGE"; fi
 
       - name: Take the versions the repository pins
         if: steps.due.outputs.run == 'true' && inputs.cloud && inputs.target != 'vps'

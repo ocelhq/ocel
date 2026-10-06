@@ -5,7 +5,7 @@ import { projectSlug } from "../../identity";
 import { fixtures } from "../../matrix/fixtures";
 import { cellsOn, fixturesOn } from "../../plan";
 import type { CellUnderTest } from "../../run/cellRun";
-import { cellOfSlug, gcpSweepOverlay } from "./index";
+import { cellOfSlug, gcpSweepOverlay, refuseFlociWithoutFirestore } from "./index";
 
 const cells = fixturesOn(fixtures, "gcp").flatMap((one) => cellsOn(one, "gcp"));
 
@@ -44,5 +44,30 @@ describe("gcpSweepOverlay", () => {
       expect(overlay).toEqual(overlayFor(deployed, "gcp", env));
       expect(overlay.slug).not.toBe(slug);
     }
+  });
+});
+
+describe("refuseFlociWithoutFirestore", () => {
+  it("refuses the floci lane when floci runs without the Firestore emulator beside it", () => {
+    const refused = refuseFlociWithoutFirestore({
+      OCEL_FLOCI_GCP_ENDPOINT: "http://127.0.0.1:4588",
+    });
+
+    expect(refused).toBeInstanceOf(Error);
+    expect(refused?.message).toContain("OCEL_FLOCI_FIRESTORE_ENDPOINT");
+    expect(refused?.message).toContain("scripts/floci.sh --cloud gcp");
+  });
+
+  it("accepts the floci lane with the Firestore emulator beside it", () => {
+    expect(
+      refuseFlociWithoutFirestore({
+        OCEL_FLOCI_GCP_ENDPOINT: "http://127.0.0.1:4588",
+        OCEL_FLOCI_FIRESTORE_ENDPOINT: "http://127.0.0.1:8085",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("leaves a lane on a real project alone", () => {
+    expect(refuseFlociWithoutFirestore({ OCEL_GCP_PROJECT: "acme" })).toBeUndefined();
   });
 });

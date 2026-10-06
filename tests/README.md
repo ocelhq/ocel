@@ -70,7 +70,7 @@ addresses its endpoint as `<account>.<host>`, and `<account>.127.0.0.1` resolves
 so a bootstrap against the printed form fails where the named form works (#888). A
 bootstrap cannot be updated on floci (#853), so a second run wants a fresh emulator.
 
-For `gcp` that is a floci-gcp emulator, which runs one real container per Cloud Run
+For `gcp` that is a floci-gcp emulator, with Google's Firestore emulator beside it, which the Next cells keep tag records in. floci-gcp runs one real container per Cloud Run
 revision out of the docker daemon the script mounts into it, so the daemon that builds the
 images is the daemon that runs them:
 
@@ -78,6 +78,7 @@ images is the daemon that runs them:
 node scripts/snapshot.mjs
 scripts/floci.sh --cloud gcp create ocel-e2e
 export OCEL_FLOCI_GCP_ENDPOINT=http://127.0.0.1:<the port it printed>
+export OCEL_FLOCI_FIRESTORE_ENDPOINT=http://127.0.0.1:<the Firestore port it printed>
 pnpm --filter @ocel-tests/e2e cell --concern deploy --fixture node --target gcp
 scripts/floci.sh --cloud gcp destroy ocel-e2e
 ```

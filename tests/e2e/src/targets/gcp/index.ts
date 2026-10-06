@@ -53,6 +53,7 @@ import {
 } from "./store";
 
 const ENDPOINT_ENV = "OCEL_FLOCI_GCP_ENDPOINT";
+const FIRESTORE_ENDPOINT_ENV = "OCEL_FLOCI_FIRESTORE_ENDPOINT";
 const PROJECT_ENV = "OCEL_GCP_PROJECT";
 const REGION_ENV = "OCEL_GCP_REGION";
 
@@ -61,8 +62,17 @@ const DEFAULT_REGION = "europe-west1";
 
 const BRING_AN_EMULATOR_UP = [
   "scripts/floci.sh --cloud gcp create <name>",
-  'eval "$(scripts/floci.sh --cloud gcp status <name>)"',
+  "export $(scripts/floci.sh --cloud gcp status <name>)",
 ].join("\n  ");
+
+export function refuseFlociWithoutFirestore(env: NodeJS.ProcessEnv): Error | undefined {
+  if (!env[ENDPOINT_ENV]?.trim() || env[FIRESTORE_ENDPOINT_ENV]?.trim()) {
+    return undefined;
+  }
+  return new Error(
+    `the floci lane serves tag records from Google's Firestore emulator, which scripts/floci.sh --cloud gcp starts beside floci, and ${FIRESTORE_ENDPOINT_ENV} names none. Run:\n  ${BRING_AN_EMULATOR_UP}`,
+  );
+}
 
 const ran = promisify(execFile);
 
@@ -173,6 +183,10 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
   }
 
   async prepareLane(): Promise<PrepareFailures> {
+    const refused = refuseFlociWithoutFirestore(process.env);
+    if (refused) {
+      return { lane: refused.message };
+    }
     const [first] = fixturesOn(matrix, "gcp");
     if (!first) {
       throw new Error("no fixture in the matrix runs on gcp, so there is nothing to bootstrap");

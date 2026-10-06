@@ -33,6 +33,7 @@ permissions:
 env:
   OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.1.0-ocel.1
   OCEL_FLOCI_GCP_IMAGE: floci/floci-gcp:0.8.0
+  OCEL_FLOCI_FIRESTORE_IMAGE: gcr.io/google.com/cloudsdktool/google-cloud-cli:587.0.0-emulators
   FORCE_COLOR: "1"
 
 jobs:
@@ -131,9 +132,9 @@ jobs:
         if: steps.gate.outputs.green != 'true'
         uses: ./.github/actions/containerd-docker
 
-      - name: Pull the emulator the smoke deploys into
+      - name: Pull the emulators the smoke deploys into
         if: steps.gate.outputs.green != 'true'
-        run: docker pull "$OCEL_FLOCI_GCP_IMAGE"
+        run: docker pull "$OCEL_FLOCI_GCP_IMAGE" && docker pull "$OCEL_FLOCI_FIRESTORE_IMAGE"
 
       - name: Take the binaries this run built
         if: steps.gate.outputs.green != 'true'
