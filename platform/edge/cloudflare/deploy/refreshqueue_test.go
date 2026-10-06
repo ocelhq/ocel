@@ -1,6 +1,8 @@
 package cloudflare
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"slices"
 	"testing"
@@ -109,6 +111,52 @@ func TestARenewedWorkerClientCertificateRedeploysTheRefresher(t *testing.T) {
 	bindings := bindingsByType(uploadedMetadata(t, m, refresherScript), "mtls_certificate")
 	if len(bindings) != 1 || bindings[0]["certificate_id"] != renewed {
 		t.Errorf("bindings = %v, want the renewed certificate %q", bindings, renewed)
+	}
+}
+
+func TestARenewedWorkerClientCertificateIsTrustedByTheOriginBeforeTheRefresherPresentsIt(t *testing.T) {
+	p, m, first := bootstrappedWithRefresher(t)
+	m.mtlsCertificates[0]["expires_on"] = time.Now().Add(30 * 24 * time.Hour).Format(time.RFC3339)
+	puts := countPuts(m, refresherScript)
+	var trusted []edge.Offer
+	var refresherPutsAtTrust []int
+	p.trustClientCertificate = func(_ context.Context, tier environment.Tier, offer edge.Offer) error {
+		if tier != environment.TierProduction {
+			t.Errorf("trust asked for tier %s, want production", tier)
+		}
+		trusted = append(trusted, offer)
+		refresherPutsAtTrust = append(refresherPutsAtTrust, countPuts(m, refresherScript))
+		return nil
+	}
+
+	second, err := p.Bootstrap(t.Context(), environment.TierProduction)
+	if err != nil {
+		t.Fatalf("renewing Bootstrap: %v", err)
+	}
+
+	renewed := workerCertificateOffer(t, second)
+	if renewed.Values[edge.OfferKeyClientCertificateID] == workerCertificateOffer(t, first).Values[edge.OfferKeyClientCertificateID] {
+		t.Fatal("the certificate was not renewed")
+	}
+	if len(trusted) != 1 || !reflect.DeepEqual(trusted[0], renewed) {
+		t.Fatalf("trust was asked for %+v, want the renewed certificate's offer once", trusted)
+	}
+	if !slices.Equal(refresherPutsAtTrust, []int{puts}) {
+		t.Errorf("the refresher had been uploaded %v times when trust was asked, want %d: the origin must trust the new CA before the refresher presents the new certificate", refresherPutsAtTrust, puts)
+	}
+}
+
+func TestABootstrapWhoseOriginCannotTrustTheRenewedCertificateLeavesTheRefresherOnTheOldOne(t *testing.T) {
+	p, m, _ := bootstrappedWithRefresher(t)
+	m.mtlsCertificates[0]["expires_on"] = time.Now().Add(30 * 24 * time.Hour).Format(time.RFC3339)
+	puts := countPuts(m, refresherScript)
+	p.trustClientCertificate = func(context.Context, environment.Tier, edge.Offer) error { return errors.New("load balancer busy") }
+
+	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err == nil {
+		t.Fatal("Bootstrap succeeded, want the failure to trust the renewed certificate")
+	}
+	if got := countPuts(m, refresherScript); got != puts {
+		t.Errorf("the refresher was uploaded %d times despite the failure, want it left on the old certificate", got-puts)
 	}
 }
 

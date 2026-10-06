@@ -80,18 +80,19 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 			return nil, err
 		}
 		shielded := e.openALB().Shielded()
+		wildcards := originWildcards{
+			keyValues:     e.keyValues,
+			certificates:  e.certificates,
+			openDNS:       func() edge.DNSRecords { return cloudflare.NewDNS("") },
+			balancer:      shielded,
+			readWorkerCAs: e.readWorkerCAs,
+		}
 		return cloudflareFront{
-			Edge:    cloudflare.NewWithWorkerClientCertificate(string(e.namespace), decoded),
-			proxy:   cloudflare.NewProxy(string(e.namespace), decoded),
-			origin:  shielded,
-			options: decoded,
-			wildcards: originWildcards{
-				keyValues:     e.keyValues,
-				certificates:  e.certificates,
-				openDNS:       func() edge.DNSRecords { return cloudflare.NewDNS("") },
-				balancer:      shielded,
-				readWorkerCAs: e.readWorkerCAs,
-			},
+			Edge:      cloudflare.NewWithWorkerClientCertificate(string(e.namespace), decoded, wildcards.trustWorkerClientCertificate),
+			proxy:     cloudflare.NewProxy(string(e.namespace), decoded),
+			origin:    shielded,
+			options:   decoded,
+			wildcards: wildcards,
 		}, nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,

@@ -64,6 +64,7 @@ type cloudflare struct {
 	objects   func(endpoint string, creds r2.TemporaryCredentialNewResponse) objectAPI
 
 	workerClientCertificate bool
+	trustClientCertificate  ClientCertificateTrust
 
 	zoneMu    sync.Mutex
 	zonesSeen map[string][]zoneRef
@@ -74,9 +75,12 @@ type cloudflare struct {
 
 func New(namespace string, options Options) edge.Edge { return newCloudflare(namespace, options) }
 
-func NewWithWorkerClientCertificate(namespace string, options Options) edge.Edge {
+type ClientCertificateTrust func(ctx context.Context, tier environment.Tier, offer edge.Offer) error
+
+func NewWithWorkerClientCertificate(namespace string, options Options, trust ClientCertificateTrust) edge.Edge {
 	front := newCloudflare(namespace, options)
 	front.workerClientCertificate = true
+	front.trustClientCertificate = trust
 	return front
 }
 
@@ -226,6 +230,11 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 			return out, fmt.Errorf("bootstrap the worker client certificate: %w", err)
 		}
 		out.Offers = append(out.Offers, offer)
+		if p.trustClientCertificate != nil {
+			if err := p.trustClientCertificate(ctx, tier, offer); err != nil {
+				return out, fmt.Errorf("make the origin trust the worker client certificate's CA before the refresher presents it: %w", err)
+			}
+		}
 		if err := p.ensureRefreshQueue(ctx, accountID, state.refresh, offer.Values[edge.OfferKeyClientCertificateID]); err != nil {
 			return out, fmt.Errorf("bootstrap the refresh queue: %w", err)
 		}

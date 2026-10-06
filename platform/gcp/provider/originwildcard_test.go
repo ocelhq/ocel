@@ -385,3 +385,37 @@ func TestAPreviewDeployThatOnlyPrunesStillSetsUpThePreviewOriginWildcard(t *test
 		t.Errorf("a preview deploy that hosts on the global preview wildcard issued %d origin certificates, want the preview origin wildcard set up: its serverless apps are refused without it", h.certificates.issued)
 	}
 }
+
+func TestARenewedWorkerClientCertificateIsTrustedByTheRecordedOriginWildcard(t *testing.T) {
+	t.Parallel()
+	h := newWildcardHarness()
+	if err := h.wildcards.ensure(context.Background(), environment.TierProduction, wildcardBase, nil); err != nil {
+		t.Fatal(err)
+	}
+	renewed := "-----BEGIN CERTIFICATE-----\nBBBB\n-----END CERTIFICATE-----\n"
+	offer := edge.Offer{Kind: edge.OfferWorkerClientCertificate, Values: map[string]string{
+		edge.OfferKeyClientCertificateAuthorities: renewed + workerAuthority,
+	}}
+
+	if err := h.wildcards.trustWorkerClientCertificate(context.Background(), environment.TierProduction, offer); err != nil {
+		t.Fatalf("trustWorkerClientCertificate = %v", err)
+	}
+
+	last := h.balancer.reconciled[len(h.balancer.reconciled)-1]
+	if last.Tier != environment.TierProduction || last.BaseDomain != wildcardBase || last.Certificate != wildcardCert ||
+		!slices.Equal(last.ClientCAs, []string{renewed, workerAuthority}) {
+		t.Errorf("reconciled %+v, want the recorded wildcard trusting the renewed and the held CA", last)
+	}
+}
+
+func TestARenewedWorkerClientCertificateOnATierWithNoOriginWildcardTrustsNothing(t *testing.T) {
+	t.Parallel()
+	h := newWildcardHarness()
+
+	if err := h.wildcards.trustWorkerClientCertificate(context.Background(), environment.TierProduction, edge.Offer{}); err != nil {
+		t.Fatalf("trustWorkerClientCertificate = %v", err)
+	}
+	if len(h.balancer.reconciled) != 0 {
+		t.Errorf("reconciled %+v, want nothing: the first deploy that sets the wildcard up reads the adopted CAs", h.balancer.reconciled)
+	}
+}

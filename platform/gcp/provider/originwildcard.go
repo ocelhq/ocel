@@ -154,6 +154,18 @@ func (w originWildcards) ensure(ctx context.Context, tier environment.Tier, base
 	return err
 }
 
+func (w originWildcards) trustWorkerClientCertificate(ctx context.Context, tier environment.Tier, offer edge.Offer) error {
+	_, recorded, err := w.read(ctx, tier)
+	if err != nil || recorded.BaseDomain == "" || !recorded.Certified {
+		return err
+	}
+	_, err = w.balancer.ReconcileOriginWildcard(ctx, alb.OriginWildcardSpec{
+		Tier: tier, BaseDomain: recorded.BaseDomain, Certificate: recorded.Certificate.ID,
+		ClientCAs: splitAuthorities(offer.Values[edge.OfferKeyClientCertificateAuthorities]),
+	})
+	return err
+}
+
 func (w originWildcards) certify(
 	ctx context.Context,
 	tier environment.Tier,
