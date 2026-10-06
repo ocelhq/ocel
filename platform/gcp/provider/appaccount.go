@@ -73,7 +73,7 @@ func (c *clients) taskGrants(ctx context.Context, spec provider.StackSpec, membe
 			return c.bindProjectRole(ctx, member, taskRecordsRole, taskDatabaseCondition(c, tier), true)
 		},
 		func() error {
-			return lacking(c.bindQueueRoles(ctx, tier, member, queueRoles), queueAdminGrant(c.DelayQueuePath(c.region, tier)))
+			return explainMissingGrant(c.bindQueueRoles(ctx, tier, member, queueRoles), queueAdminGrant(c.DelayQueuePath(c.region, tier)))
 		},
 		func() error {
 			own := c.AppAccount(tier, spec.Ref.Project, spec.App.App)
@@ -103,7 +103,7 @@ func (c *clients) createAppAccount(ctx context.Context, tier environment.Tier, p
 		return nil
 	}
 	if !absent(err) {
-		return lacking(fmt.Errorf("read the %s service account: %w", account, err), c.AppAccountsRolePath())
+		return explainMissingGrant(fmt.Errorf("read the %s service account: %w", account, err), c.AppAccountsRolePath())
 	}
 	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+c.project, &iam.CreateServiceAccountRequest{
 		AccountId: account,
@@ -120,7 +120,7 @@ func (c *clients) createAppAccount(ctx context.Context, tier environment.Tier, p
 			"project %s has as many service accounts as its Service Account Count quota allows, and every app ocel deploys runs as one of its own.\n"+
 				"Delete accounts nothing uses or raise the quota in the console, then deploy again", c.project)
 	}
-	return lacking(fmt.Errorf("create the %s service account: %w", account, err), c.AppAccountsRolePath())
+	return explainMissingGrant(fmt.Errorf("create the %s service account: %w", account, err), c.AppAccountsRolePath())
 }
 
 func appAccountDescription(tier environment.Tier, project, app string) string {
@@ -154,7 +154,7 @@ func wrapAccountGrantError(err error, grant string) error {
 	if absent(err) {
 		return fmt.Errorf("%w: %w", errUnseenAccount, err)
 	}
-	return lacking(err, grant)
+	return explainMissingGrant(err, grant)
 }
 
 func isUnseenAccount(err error) bool {
@@ -167,7 +167,7 @@ func isUnseenAccount(err error) bool {
 	return answeredCode(err) == http.StatusBadRequest || status.Code(err) == codes.InvalidArgument
 }
 
-func lacking(err error, grant string) error {
+func explainMissingGrant(err error, grant string) error {
 	if err == nil {
 		return nil
 	}

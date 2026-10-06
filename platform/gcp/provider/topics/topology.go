@@ -260,12 +260,8 @@ func grantPubSubRole(ctx context.Context, path, role, member string, calls iamPo
 		if attempt > 0 && !waited(ctx, attempt) {
 			return ctx.Err()
 		}
-		var policy *pubsub.Policy
-		if err := retried(ctx, func() error {
-			var readErr error
-			policy, readErr = calls.read()
-			return readErr
-		}); err != nil {
+		policy, err := readPolicy(ctx, calls)
+		if err != nil {
 			return fmt.Errorf("read who may reach %s: %w", path, err)
 		}
 		if holdsRole(policy, role, member) {
@@ -289,12 +285,8 @@ func revokePubSubRole(ctx context.Context, path, role, member string, calls iamP
 		if attempt > 0 && !waited(ctx, attempt) {
 			return false, ctx.Err()
 		}
-		var policy *pubsub.Policy
-		if err := retried(ctx, func() error {
-			var readErr error
-			policy, readErr = calls.read()
-			return readErr
-		}); err != nil {
+		policy, err := readPolicy(ctx, calls)
+		if err != nil {
 			if isAnswered(err, http.StatusNotFound) {
 				return false, nil
 			}
@@ -319,6 +311,16 @@ func revokePubSubRole(ctx context.Context, path, role, member string, calls iamP
 	return false, fmt.Errorf("revoke %s %s on %s: %w", member, role, path, refused)
 }
 
+func readPolicy(ctx context.Context, calls iamPolicyCalls) (*pubsub.Policy, error) {
+	var policy *pubsub.Policy
+	err := retried(ctx, func() error {
+		var readErr error
+		policy, readErr = calls.read()
+		return readErr
+	})
+	return policy, err
+}
+
 func holdsRole(policy *pubsub.Policy, role, member string) bool {
 	return slices.ContainsFunc(policy.Bindings, func(binding *pubsub.Binding) bool {
 		return binding.Role == role && binding.Condition == nil && slices.Contains(binding.Members, member)
@@ -340,11 +342,15 @@ func withoutMember(bindings []*pubsub.Binding, role, member string) ([]*pubsub.B
 		if binding.Role != role || binding.Condition != nil || !slices.Contains(binding.Members, member) {
 			continue
 		}
-		binding.Members = slices.DeleteFunc(binding.Members, func(held string) bool { return held == member })
-		if len(binding.Members) == 0 {
-			bindings = slices.Delete(bindings, i, i+1)
+		kept := slices.Clone(bindings)
+		members := slices.DeleteFunc(slices.Clone(binding.Members), func(held string) bool { return held == member })
+		if len(members) == 0 {
+			return slices.Delete(kept, i, i+1), true
 		}
-		return bindings, true
+		narrowed := *binding
+		narrowed.Members = members
+		kept[i] = &narrowed
+		return kept, true
 	}
 	return bindings, false
 }
