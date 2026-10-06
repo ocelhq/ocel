@@ -6,7 +6,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { ocelBinary, renderOcelConfig, requireNamespace, withoutSkipDriftChecks } from "./lib.mjs";
+import {
+  DEFAULT_COMPAT_TARGET,
+  ocelBinary,
+  readCompatTarget,
+  renderOcelConfig,
+  requireNamespace,
+  withoutSkipDriftChecks,
+} from "./lib.mjs";
 import { linkSidecar } from "./sidecar.mjs";
 
 const RECONCILE_TIMEOUT_MS = 10 * 60 * 1000;
@@ -19,6 +26,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
 export function reconcileEntry(wildcard) {
   requireNamespace();
+  const target = readCompatTarget();
+  if (target.name !== DEFAULT_COMPAT_TARGET) {
+    console.error(`[ocel-e2e] ${target.name} has no shared preview entry worker to reconcile`);
+    return true;
+  }
   const adapterDir = process.env.ADAPTER_DIR;
   const sidecarDir = process.env.OCEL_E2E_SIDECAR_DIR;
   if (!adapterDir || !sidecarDir) {
