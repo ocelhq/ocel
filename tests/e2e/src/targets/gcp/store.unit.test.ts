@@ -2,14 +2,14 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { repoRoot } from "../../paths";
-import { labelValue, NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
+import { APP_LABEL, ENVIRONMENT_LABEL, labelValue, NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
 import {
   BOOTSTRAP_APIS,
   exposedServices,
+  findAppService,
   PREVIEW_APIS,
   reachable,
   readServices,
-  servedBy,
   servicesIn,
   servicesOf,
   strayServices,
@@ -93,24 +93,80 @@ describe("servicesIn", () => {
   });
 });
 
-describe("servedBy", () => {
-  it("is the url of the first of the app's names that is deployed", () => {
-    const names = [
-      "ocel-j-1-deploy-node-prod-web-a1b2c3",
-      "ocel-j-1-deploy-node-prod-web-api-d4e5f6",
-    ];
-    expect(servedBy(servicesIn({ services: [api, web] }), names)).toBe(web.uri);
-    expect(servedBy(servicesIn({ services: [api] }), names)).toBe(api.uri);
+describe("findAppService", () => {
+  const l = (project: string, app?: string, environment = "prod") => ({
+    [NAMESPACE_LABEL]: "ocel-nightly",
+    [PROJECT_LABEL]: project,
+    [ENVIRONMENT_LABEL]: environment,
+    ...(app ? { [APP_LABEL]: app } : {}),
+  });
+  const service = (name: string, labels: Record<string, string>, uri = `https://${name}`) => ({
+    name: `projects/p/locations/l/services/${name}`,
+    uri,
+    labels,
+  });
+  const find = (services: unknown[], project = "j-1-deploy-node", app = "web") =>
+    findAppService(servicesIn({ services }), "ocel-nightly", project, app);
+
+  it("finds the one service labelled with the app in the project", () => {
+    const found = find([
+      service("a", l("j-1-deploy-node", "web")),
+      service("w", l("j-1-deploy-node")),
+    ]);
+
+    expect(found.name).toBe("a");
+    expect(found.uri).toBe("https://a");
   });
 
-  it("tells an app apart from another cell's whose name is cut to the same lead", () => {
-    const other = {
-      name: "projects/p/locations/l/services/ocel-j-1-deploy-node-prod-web-ffffff",
-      uri: "http://other",
-    };
+  it("refuses to pick when two services carry the same app label", () => {
     expect(() =>
-      servedBy(servicesIn({ services: [other] }), ["ocel-j-1-deploy-node-prod-web-a1b2c3"]),
-    ).toThrow(/no Cloud Run service/);
+      find([service("a", l("j-1-deploy-node", "web")), service("b", l("j-1-deploy-node", "web"))]),
+    ).toThrow(/a and b are all labelled ocel-app=web/);
+  });
+
+  it("says which services the project has when none carries the app label", () => {
+    expect(() =>
+      find([service("w", l("j-1-deploy-node")), service("x", l("j-2-deploy-node", "web"))]),
+    ).toThrow(/no Cloud Run service is labelled ocel-app=web in project j-1-deploy-node.*\(w\)/);
+  });
+
+  it("never answers another project's service of the same app", () => {
+    let thrown: unknown;
+    try {
+      find([service("x", l("j-2-deploy-node", "web"))]);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(String(thrown)).toMatch(/no Cloud Run service is labelled ocel-app=web/);
+    expect(String(thrown)).not.toContain("(x)");
+  });
+
+  it("never answers a preview's service for the production deploy", () => {
+    expect(() => find([service("p", l("j-1-deploy-node", "web", "pr-3"))])).toThrow(
+      /no Cloud Run service is labelled ocel-app=web/,
+    );
+  });
+
+  it("does not let a preview's service of the same app make the production lookup ambiguous", () => {
+    const found = find([
+      service("a", l("j-1-deploy-node", "web")),
+      service("p", l("j-1-deploy-node", "web", "pr-3")),
+    ]);
+
+    expect(found.name).toBe("a");
+  });
+
+  it("refuses a service that answers on no url of its own", () => {
+    expect(() => find([service("a", l("j-1-deploy-node", "web"), "")])).toThrow(
+      /answers on no url of its own/,
+    );
+  });
+
+  it("matches an app as the provider sanitizes it into a label", () => {
+    const found = find([service("a", l("j-1-deploy-node", "my-app"))], "j-1-deploy-node", "My App");
+
+    expect(found.name).toBe("a");
   });
 });
 
@@ -188,21 +244,22 @@ describe("reachable", () => {
 });
 
 describe("exposedServices", () => {
-  it("is every field Cloud Run holds of the services a cell deployed, and none of another's", () => {
+  it("is every field Cloud Run holds of every service the cell's project labels, and none of another's", () => {
     const held = {
       ...web,
+      labels: labelled("j-1-deploy-node"),
       template: { containers: [{ env: [{ name: "OCEL_LIVE", value: "manifest" }] }] },
     };
-    const other = {
-      ...web,
-      name: "projects/floci-local/locations/europe-west1/services/ocel-j-2-deploy-node-prod-web-a1b2c3",
-    };
-    const exposed = exposedServices({ services: [held, api, other] }, [
-      "ocel-j-1-deploy-node-prod-web-a1b2c3",
-      "ocel-j-1-deploy-node-prod-web-api-d4e5f6",
-    ]);
+    const worker = { ...api, labels: labelled("j-1-deploy-node") };
+    const other = { ...web, labels: labelled("j-2-deploy-node") };
 
-    expect(JSON.parse(exposed)).toEqual([held, api]);
+    const exposed = exposedServices(
+      { services: [held, worker, other] },
+      "ocel-nightly",
+      "j-1-deploy-node",
+    );
+
+    expect(JSON.parse(exposed)).toEqual([held, worker]);
   });
 });
 

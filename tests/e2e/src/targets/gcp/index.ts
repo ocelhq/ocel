@@ -36,15 +36,15 @@ import {
   storeFilter,
   strayStores,
 } from "./memorystore";
-import { fittedSlug, gcpSlug, namespaceOf, roomForSlug, serviceNames } from "./names";
+import { gcpSlug, namespaceOf } from "./names";
 import {
   deleteService,
   exposedServices,
+  findAppService,
   listServices,
   reachable,
   readServices,
   type Service,
-  servedBy,
   servicesOf,
   strayServices,
   switchOn,
@@ -103,12 +103,6 @@ function childEnv(dir: string): NodeJS.ProcessEnv {
     [PROJECT_ENV]: project(),
     [REGION_ENV]: region(),
   };
-}
-
-function namesFor(slug: string, apps: string[]): string[][] {
-  const namespace = namespaceOf(process.env);
-  const fitted = fittedSlug(slug, roomForSlug(namespace, apps));
-  return apps.map((app) => serviceNames(namespace, fitted, app));
 }
 
 function gcpCells(): Cell[] {
@@ -328,7 +322,8 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
   async readExposed(cell: CellUnderTest): Promise<string> {
     const services = exposedServices(
       await readServices(await this.where()),
-      namesFor(cell.slug, cell.fixture.apps).flat(),
+      namespaceOf(process.env),
+      gcpSlug(cell, process.env),
     );
     return [...this.outputFor(cell), services].join("\n");
   }
@@ -396,13 +391,16 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
 
   private async deployment(cell: CellUnderTest, phase: Phase): Promise<Deployment> {
     const found = await this.services();
-    const named = namesFor(cell.slug, cell.fixture.apps);
     const urls =
       cloudflareUrls(cell, process.env.OCEL_E2E_ZONE?.trim() || undefined) ??
       new Map(
-        cell.fixture.apps.map((app, at) => {
-          return [app, reachable(servedBy(found, named[at] ?? []), endpoint())];
-        }),
+        cell.fixture.apps.map((app) => [
+          app,
+          reachable(
+            findAppService(found, namespaceOf(process.env), gcpSlug(cell, process.env), app).uri,
+            endpoint(),
+          ),
+        ]),
       );
     await cell.evidence.write(
       phase,

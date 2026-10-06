@@ -10,6 +10,12 @@ export const NAMESPACE_LABEL = "ocel-namespace";
 
 export const PROJECT_LABEL = "ocel-project";
 
+export const APP_LABEL = "ocel-app";
+
+export const ENVIRONMENT_LABEL = "ocel-environment";
+
+export const PRODUCTION_ENVIRONMENT = "prod";
+
 const LONGEST_LABEL = 63;
 const LABEL_DIGEST_CHARS = 8;
 const TRUNCATION_MARKER = "-x";
@@ -28,7 +34,6 @@ export function labelValue(value: string): string {
 
 const LONGEST_SERVICE = 49;
 const DIGEST_CHARS = 6;
-const PRODUCTION = "prod";
 const ONLY_ROUTE = "index";
 const SEPARATORS = 5;
 
@@ -41,7 +46,7 @@ export function roomForSlug(namespace: string, apps: string[]): number {
   return (
     LONGEST_SERVICE -
     namespace.length -
-    PRODUCTION.length -
+    PRODUCTION_ENVIRONMENT.length -
     longest -
     ONLY_ROUTE.length -
     DIGEST_CHARS -
@@ -69,41 +74,4 @@ export function gcpSlug(
   env: NodeJS.ProcessEnv,
 ): string {
   return fittedSlug(cell.slug, roomForSlug(namespaceOf(env), cell.fixture.apps));
-}
-
-const LONGEST_APP_SERVICE = 37;
-const FUNCTION_KIND = "fn";
-const FIELD_SEPARATOR = "--";
-
-export function serviceNames(namespace: string, slug: string, app: string): string[] {
-  const routed = [FUNCTION_KIND, sanitize(app), ONLY_ROUTE].join(FIELD_SEPARATOR);
-  return [serviceName(namespace, slug, app, app), serviceName(namespace, slug, app, routed)];
-}
-
-function serviceName(namespace: string, slug: string, app: string, fn: string): string {
-  const parts = [namespace, sanitize(slug), PRODUCTION, sanitize(app)];
-  if (fn !== app) {
-    parts.push(
-      sanitize(
-        fn.slice(`${FUNCTION_KIND}${FIELD_SEPARATOR}${sanitize(app)}${FIELD_SEPARATOR}`.length),
-      ),
-    );
-  }
-  const hash = createHash("sha256")
-    .update([namespace, slug, PRODUCTION, app, fn].join("\0"))
-    .digest("hex")
-    .slice(0, DIGEST_CHARS);
-  return `${fitReadable(parts, LONGEST_APP_SERVICE - DIGEST_CHARS - 1)}-${hash}`;
-}
-
-function fitReadable(parts: string[], room: number): string {
-  for (const cut of [1, 2]) {
-    const over = parts.join("-").length - room;
-    if (over <= 0) {
-      break;
-    }
-    const part = parts[cut] ?? "";
-    parts[cut] = part.slice(0, Math.max(part.length - over, 1)).replace(/^-+|-+$/g, "");
-  }
-  return parts.join("-").slice(0, room).replace(/-+$/, "");
 }
