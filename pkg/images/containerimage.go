@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
+	"slices"
 	"strings"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -21,11 +23,20 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-const runtimeTagHexLen = 12
+const (
+	runtimeTagHexLen      = 12
+	NextServerAdapterFile = "server-adapter.mjs"
+	NextAdapterPathVar    = "NEXT_ADAPTER_PATH"
+)
+
+type NextServerRuntime struct {
+	Dir   string
+	Files map[string][]byte
+}
 
 func ContainerPlatform(arch string) string { return "linux/" + arch }
 
-func WrapContainer(base v1.Image, runtime []byte) (v1.Image, error) {
+func WrapContainer(base v1.Image, runtime []byte, next *NextServerRuntime) (v1.Image, error) {
 	file, err := base.ConfigFile()
 	if err != nil {
 		return nil, err
@@ -38,24 +49,92 @@ func WrapContainer(base v1.Image, runtime []byte) (v1.Image, error) {
 	if len(runtime) == 0 {
 		return nil, refusal.Refuse(refusal.CodeNotReady, "this provider ships no runtime built for %s", file.Architecture)
 	}
+	config := file.Config
+	if next != nil {
+		if err := checkNextServerRuntime(next, config.Env); err != nil {
+			return nil, err
+		}
+	}
 	packed, err := runtimeLayer(runtime)
 	if err != nil {
 		return nil, err
 	}
-	layer, err := tarball.LayerFromOpener(func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(packed)), nil
-	})
+	addenda := []mutate.Addendum{}
+	layer, err := bytesLayer(packed)
 	if err != nil {
 		return nil, err
 	}
-	appended, err := mutate.Append(base, mutate.Addendum{Layer: layer})
+	addenda = append(addenda, mutate.Addendum{Layer: layer})
+	if next != nil {
+		nextPacked, err := nextServerLayer(next)
+		if err != nil {
+			return nil, err
+		}
+		nextLayer, err := bytesLayer(nextPacked)
+		if err != nil {
+			return nil, err
+		}
+		addenda = append(addenda, mutate.Addendum{Layer: nextLayer})
+		config.Env = append(append([]string{}, config.Env...), NextAdapterPathVar+"="+path.Join(next.Dir, NextServerAdapterFile))
+	}
+	appended, err := mutate.Append(base, addenda...)
 	if err != nil {
 		return nil, err
 	}
-	config := file.Config
 	config.Entrypoint = []string{containerimage.RuntimePath}
 	config.Cmd = command
 	return mutate.Config(appended, config)
+}
+
+func bytesLayer(packed []byte) (v1.Layer, error) {
+	return tarball.LayerFromOpener(func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(packed)), nil
+	})
+}
+
+func checkNextServerRuntime(next *NextServerRuntime, env []string) error {
+	if _, ok := next.Files[NextServerAdapterFile]; !ok {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"the provider's Next server runtime holds no %s, so next start has no adapter to load", NextServerAdapterFile)
+	}
+	for _, entry := range env {
+		if name, value, _ := strings.Cut(entry, "="); name == NextAdapterPathVar {
+			return refusal.Refuse(refusal.CodeInvalid,
+				"the image sets %s=%s and ocel sets it to load the cache handlers its provider ships: remove it from the image",
+				NextAdapterPathVar, value)
+		}
+	}
+	return nil
+}
+
+func sortedNames(files map[string][]byte) []string {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
+}
+
+func nextServerLayer(next *NextServerRuntime) ([]byte, error) {
+	var packed bytes.Buffer
+	archive := tar.NewWriter(&packed)
+	if err := archive.WriteHeader(&tar.Header{
+		Typeflag: tar.TypeDir,
+		Name:     strings.TrimPrefix(next.Dir, "/") + "/",
+		Mode:     0o755,
+	}); err != nil {
+		return nil, err
+	}
+	for _, name := range sortedNames(next.Files) {
+		if err := tarBody(archive, path.Join(next.Dir, name), next.Files[name], 0o644); err != nil {
+			return nil, err
+		}
+	}
+	if err := archive.Close(); err != nil {
+		return nil, err
+	}
+	return packed.Bytes(), nil
 }
 
 func runtimeLayer(runtime []byte) ([]byte, error) {
@@ -84,9 +163,19 @@ func runtimeLayer(runtime []byte) ([]byte, error) {
 	return packed.Bytes(), nil
 }
 
-func RuntimeTag(digest string, runtime []byte) string {
-	sum := sha256.Sum256(runtime)
-	return naming.DigestTag(digest) + naming.WordSeparator + "ocel" + naming.WordSeparator + hex.EncodeToString(sum[:])[:runtimeTagHexLen]
+func RuntimeTag(digest string, runtime []byte, next *NextServerRuntime) string {
+	hash := sha256.New()
+	hash.Write(runtime)
+	if next != nil {
+		hash.Write([]byte{0})
+		hash.Write([]byte(next.Dir))
+		for _, name := range sortedNames(next.Files) {
+			body := next.Files[name]
+			fmt.Fprintf(hash, "\x00%d:%s\x00%d:", len(name), name, len(body))
+			hash.Write(body)
+		}
+	}
+	return naming.DigestTag(digest) + naming.WordSeparator + "ocel" + naming.WordSeparator + hex.EncodeToString(hash.Sum(nil))[:runtimeTagHexLen]
 }
 
 func BuiltArchitecture(ctx context.Context, repository, digest string) (string, error) {
@@ -99,7 +188,7 @@ func BuiltArchitecture(ctx context.Context, repository, digest string) (string, 
 	return host.Architecture(ctx, &http.Client{Transport: transport}, repository+":"+naming.DigestTag(digest))
 }
 
-func WrapFromDaemon(ctx context.Context, repository, digest string, runtime []byte) (v1.Image, func(), error) {
+func WrapFromDaemon(ctx context.Context, repository, digest string, runtime []byte, next *NextServerRuntime) (v1.Image, func(), error) {
 	host, err := DockerHostFromEnv()
 	if err != nil {
 		return nil, nil, err
@@ -136,7 +225,7 @@ func WrapFromDaemon(ctx context.Context, repository, digest string, runtime []by
 		discard()
 		return nil, nil, fmt.Errorf("read %s as the daemon at %s exported it: %w", ref, host.Address, err)
 	}
-	wrapped, err := WrapContainer(base, runtime)
+	wrapped, err := WrapContainer(base, runtime, next)
 	if err != nil {
 		discard()
 		return nil, nil, err

@@ -388,7 +388,7 @@ func wrapped(t *testing.T) v1.Image {
 	if err != nil {
 		t.Fatal(err)
 	}
-	built, err := images.WrapContainer(base, []byte("#!/bin/sh\nexec \"$@\"\n"))
+	built, err := images.WrapContainer(base, []byte("#!/bin/sh\nexec \"$@\"\n"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

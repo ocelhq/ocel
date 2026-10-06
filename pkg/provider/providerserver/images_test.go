@@ -36,7 +36,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-var pushedCoordinate = "ghcr.io/acme/shop.web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary))
+var pushedCoordinate = "ghcr.io/acme/shop.web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary), nil)
 
 func registryDeployRequest() *contractv1.DeployRequest {
 	return namingARegistry(containerDeployRequest("/"))
@@ -357,7 +357,7 @@ func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *test
 	}
 }
 
-var loadedCoordinate = "ocel/shop/web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary))
+var loadedCoordinate = "ocel/shop/web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary), nil)
 
 type loadingProvider struct {
 	*fake.Provider
@@ -806,7 +806,7 @@ func wrappingServedOn(t *testing.T, architecture string) (contractv1connect.Prov
 
 func wrappedCoordinate() string {
 	_, digest, _ := strings.Cut(containerTestImage, "@")
-	return "ghcr.io/acme/shop.web:" + images.RuntimeTag(digest, containerRuntimeBytes)
+	return "ghcr.io/acme/shop.web:" + images.RuntimeTag(digest, containerRuntimeBytes, nil)
 }
 
 func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItShipsNames(t *testing.T) {
@@ -1019,4 +1019,64 @@ func daemonServing(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Setenv(images.DockerCertPathEnv, "")
 	t.Setenv(images.DockerHostEnv, "tcp://"+strings.TrimPrefix(daemon.URL, "http://"))
 	return daemon
+}
+
+func nextContainerRequest() *contractv1.DeployRequest {
+	req := registryDeployRequest()
+	req.Manifest.Apps[0].Framework = &contractv1.Framework{Name: "next"}
+	return req
+}
+
+func TestANextContainerIsWrappedInItsProvidersNextServerRuntime(t *testing.T) {
+	builtProject(t)
+	daemonWithTheBuiltImage(t, "amd64")
+	client, vendor := wrappingServed(t)
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ReadNextServerRuntime = func(context.Context) (map[string][]byte, error) {
+			return map[string][]byte{images.NextServerAdapterFile: []byte("an adapter")}, nil
+		}
+	})
+
+	result, _ := deploy(t, client, nextContainerRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	pushed := vendor.ImageStore().Pushed()
+	if len(pushed) != 1 || pushed[0].Built == nil {
+		t.Fatalf("the store was handed %v, want the wrapped image", pushed)
+	}
+	want := images.NextAdapterPathVar + "=/opt/fake/next/" + images.NextServerAdapterFile
+	if env := configOf(t, pushed[0].Built).Env; !slices.Contains(env, want) {
+		t.Errorf("the pushed image has env %v, want it to hold %s", env, want)
+	}
+	_, digest, _ := strings.Cut(containerTestImage, "@")
+	next := &images.NextServerRuntime{Dir: "/opt/fake/next", Files: map[string][]byte{images.NextServerAdapterFile: []byte("an adapter")}}
+	if tag := "ghcr.io/acme/shop.web:" + images.RuntimeTag(digest, containerRuntimeBytes, next); pushed[0].ImageRef != tag {
+		t.Errorf("the image is pushed as %q, want %q: the tag names the Next runtime it carries", pushed[0].ImageRef, tag)
+	}
+}
+
+func TestANextContainerOnAProviderWithoutANextServerRuntimeIsWrappedAsBefore(t *testing.T) {
+	builtProject(t)
+	daemonWithTheBuiltImage(t, "amd64")
+	client, vendor := wrappingServed(t)
+
+	result, _ := deploy(t, client, nextContainerRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	pushed := vendor.ImageStore().Pushed()
+	if len(pushed) != 1 || pushed[0].Built == nil {
+		t.Fatalf("the store was handed %v, want the wrapped image", pushed)
+	}
+	if pushed[0].ImageRef != wrappedCoordinate() {
+		t.Errorf("the image is pushed as %q, want today's %q", pushed[0].ImageRef, wrappedCoordinate())
+	}
+	for _, entry := range configOf(t, pushed[0].Built).Env {
+		if strings.HasPrefix(entry, images.NextAdapterPathVar+"=") {
+			t.Errorf("the pushed image sets %s though its provider ships no Next server runtime", entry)
+		}
+	}
 }
