@@ -94,7 +94,7 @@ type nextRefresh struct {
 	region        string
 }
 
-func (r nextRefresh) forService(service string) *nextRefresh {
+func (r nextRefresh) addressedTo(service string) *nextRefresh {
 	r.url = refreshURLOf(service, r.projectNumber, r.region)
 	return &r
 }

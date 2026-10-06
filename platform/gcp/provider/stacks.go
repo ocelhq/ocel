@@ -119,15 +119,15 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		}
 		if servesNext(app) {
 			served = fillNextServingDefaults(served)
-			var forService *nextRefresh
+			var addressed *nextRefresh
 			if refresh != nil {
-				forService = refresh.forService(service)
+				addressed = refresh.addressedTo(service)
 			}
 			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, nextCache{
 				bucket:      names.Bucket(spec.Ref.Tier),
 				tagDatabase: "projects/" + names.project + "/databases/" + names.TagDatabase(spec.Ref.Tier),
 				endpoint:    p.containerEndpoint(),
-			}, forService)); err != nil {
+			}, addressed)); err != nil {
 				return nil, err
 			}
 		}
