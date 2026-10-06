@@ -144,50 +144,6 @@ func ReadTierParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier env
 	return p, nil
 }
 
-type TeardownParams struct {
-	Passphrase    string
-	PassphraseErr error
-
-	CacheStore CacheStore
-	ISRWriter  ISRWriter
-}
-
-func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (TeardownParams, error) {
-	names, err := edgeNamesFor(ns, tier, kind)
-	if err != nil {
-		return TeardownParams{}, err
-	}
-	passphraseParam := ns.PassphraseParamName()
-	found, err := getParameters(ctx, api, []string{
-		passphraseParam,
-		names.cacheStoreParam,
-		names.isrWriterParam,
-	})
-	if err != nil {
-		return TeardownParams{}, err
-	}
-
-	var p TeardownParams
-
-	passphrase, ok := found[passphraseParam]
-	if !ok {
-		p.PassphraseErr = fmt.Errorf("read passphrase parameter: %s not found", passphraseParam)
-	}
-	p.Passphrase = passphrase
-
-	if raw, ok := found[names.cacheStoreParam]; ok {
-		if err := json.Unmarshal([]byte(raw), &p.CacheStore); err != nil {
-			p.CacheStore = CacheStore{}
-		}
-	}
-	if raw, ok := found[names.isrWriterParam]; ok {
-		if err := json.Unmarshal([]byte(raw), &p.ISRWriter); err != nil {
-			p.ISRWriter = ISRWriter{}
-		}
-	}
-	return p, nil
-}
-
 func getParameters(ctx context.Context, api SSMBatchAPI, names []string) (map[string]string, error) {
 	found := make(map[string]string, len(names))
 	for start := 0; start < len(names); start += getParametersLimit {
