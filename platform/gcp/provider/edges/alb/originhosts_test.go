@@ -16,8 +16,16 @@ const originHostname = "r0001abcd-ocel-shop-prod-web.o.example.com"
 func originHost() OriginHost {
 	return OriginHost{
 		Tier: environment.TierProduction, Slug: "shop", Hostname: originHostname,
-		Service: "ocel-shop-prod-web", Tag: "r0001abcd",
+		Service: "ocel-shop-prod-web", Tag: "r0001abcd", Revision: "ocel-shop-prod-web-00001-abc",
 	}
+}
+
+func secondOriginHost() OriginHost {
+	host := originHost()
+	host.Hostname = "r0002abcd-ocel-shop-prod-web.o.example.com"
+	host.Tag = "r0002abcd"
+	host.Revision = "ocel-shop-prod-web-00002-def"
+	return host
 }
 
 func originStack() string {
@@ -139,6 +147,78 @@ func TestAnOriginHostnameWhoseRouteFailedIsStillUnroutedAfterwards(t *testing.T)
 	}
 }
 
+func TestUnroutingARevisionsOriginHostnamesTakesAwayOnlyThatRevisions(t *testing.T) {
+	t.Parallel()
+	balancer, w := shielding(t)
+	shielded := balancer.Shielded()
+	ctx := context.Background()
+	first, second := originHost(), secondOriginHost()
+	for _, host := range []OriginHost{first, second} {
+		if err := shielded.RouteOriginHost(ctx, host); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := shielded.UnrouteOriginHosts(ctx, environment.TierProduction, first.Service, first.Revision); err != nil {
+		t.Fatalf("UnrouteOriginHosts = %v", err)
+	}
+
+	if routedTo(w, "ocel-alb-shielded-production-routes", first.Hostname) != "" {
+		t.Errorf("the url map still routes %s", first.Hostname)
+	}
+	if routedTo(w, "ocel-alb-shielded-production-routes", second.Hostname) == "" {
+		t.Errorf("the url map lost the rule of %s, which another revision of the service still answers on", second.Hostname)
+	}
+	if err := shielded.RouteOriginHost(ctx, first); err != nil || len(w.raised()) != 3 {
+		t.Errorf("routing the first host again = %v after %d stacks raised, want its record forgotten so it raises afresh", err, len(w.raised()))
+	}
+}
+
+func TestUnroutingARevisionLeavesAHostnameThatALaterRevisionOfTheSameReleaseNowAnswers(t *testing.T) {
+	t.Parallel()
+	balancer, w := shielding(t)
+	shielded := balancer.Shielded()
+	ctx := context.Background()
+	older, newer := originHost(), originHost()
+	newer.Revision = "ocel-shop-prod-web-00003-ghi"
+	for _, host := range []OriginHost{older, newer} {
+		if err := shielded.RouteOriginHost(ctx, host); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := shielded.UnrouteOriginHosts(ctx, environment.TierProduction, older.Service, older.Revision); err != nil {
+		t.Fatalf("UnrouteOriginHosts = %v", err)
+	}
+
+	if routedTo(w, "ocel-alb-shielded-production-routes", older.Hostname) == "" {
+		t.Errorf("the url map lost %s, which the newer revision of the same release answers on", older.Hostname)
+	}
+}
+
+func TestUnroutingAServicesOriginHostnamesWithNoRevisionTakesAwayEveryOne(t *testing.T) {
+	t.Parallel()
+	balancer, w := shielding(t)
+	shielded := balancer.Shielded()
+	ctx := context.Background()
+	first, second := originHost(), secondOriginHost()
+	for _, host := range []OriginHost{first, second} {
+		if err := shielded.RouteOriginHost(ctx, host); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := shielded.UnrouteOriginHosts(ctx, environment.TierProduction, first.Service, ""); err != nil {
+		t.Fatalf("UnrouteOriginHosts = %v", err)
+	}
+
+	for _, host := range []OriginHost{first, second} {
+		if routedTo(w, "ocel-alb-shielded-production-routes", host.Hostname) != "" {
+			t.Errorf("the url map still routes %s", host.Hostname)
+		}
+	}
+}
+
 func TestUnroutingAnOriginHostnameNothingRoutedSucceeds(t *testing.T) {
 	t.Parallel()
 	balancer, w := shielding(t)
@@ -176,6 +256,11 @@ func TestOnlyTheShieldedLoadBalancerRoutesOriginHostnames(t *testing.T) {
 
 	if err := balancer.RouteOriginHost(context.Background(), originHost()); refusalCodeOf(err) != refusal.CodeInvalid {
 		t.Errorf("RouteOriginHost on the unshielded edge = %v, want an invalid refusal", err)
+	}
+	revisionless := originHost()
+	revisionless.Revision = ""
+	if err := balancer.Shielded().RouteOriginHost(context.Background(), revisionless); refusalCodeOf(err) != refusal.CodeInvalid {
+		t.Errorf("RouteOriginHost with no revision = %v, want an invalid refusal: nothing could find the host again to unroute it", err)
 	}
 	tagless := originHost()
 	tagless.Tag = ""

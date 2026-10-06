@@ -27,9 +27,17 @@ func (r *routedHosts) RouteOriginHost(_ context.Context, host alb.OriginHost) er
 	return r.err
 }
 
-func (r *routedHosts) UnrouteOriginHost(_ context.Context, _ environment.Tier, hostname string) error {
-	r.unrouted = append(r.unrouted, hostname)
+func (r *routedHosts) UnrouteOriginHosts(_ context.Context, _ environment.Tier, service, revision string) error {
+	r.unrouted = append(r.unrouted, service+"/"+revision)
 	return nil
+}
+
+func withoutURLs(functions []provider.Function) []provider.Function {
+	bare := make([]provider.Function, 0, len(functions))
+	for _, function := range functions {
+		bare = append(bare, provider.Function{Name: function.Name, Physical: function.Physical, Revision: function.Revision})
+	}
+	return bare
 }
 
 func recordOriginWildcard(t *testing.T, store keyvalue.Store, recorded originWildcard) {
@@ -115,7 +123,7 @@ func TestAFunctionBehindTheWorkerAnswersOnItsReleasesOriginHostname(t *testing.T
 	}
 
 	release := spec.Ref.Name.Release.String()
-	if len(routing.routed) != 1 || routing.routed[0].Tag != release || routing.routed[0].Slug != "shop" ||
+	if len(routing.routed) != 1 || routing.routed[0].Tag != release || routing.routed[0].Slug != "shop" || routing.routed[0].Revision != functions[0].Revision || routing.routed[0].Revision == "" ||
 		routing.routed[0].Hostname != originHostname(release, functions[0].Physical, "o.example.com") {
 		t.Fatalf("routed %+v, want the release-tagged revision at the origin hostname", routing.routed)
 	}
@@ -196,20 +204,20 @@ func prunable(t *testing.T) (*Provider, *routedHosts, []provider.Function) {
 func TestPruningARevisionUnroutesItsOriginHostname(t *testing.T) {
 	p, routing, deployed := prunable(t)
 
-	left, err := p.RemoveFunctionRevisions(context.Background(), provider.StackRef{Tier: environment.TierProduction}, deployed[:1], nil)
+	left, err := p.RemoveFunctionRevisions(context.Background(), provider.StackRef{Tier: environment.TierProduction}, withoutURLs(deployed[:1]), nil)
 	if err != nil {
 		t.Fatalf("RemoveFunctionRevisions = %v", err)
 	}
-	host := strings.TrimPrefix(deployed[0].URL, "https://")
-	if len(left) != 0 || !slices.Equal(routing.unrouted, []string{host}) {
-		t.Errorf("kept %v and unrouted %v, want the removed revision's host %s unrouted", left, routing.unrouted, host)
+	want := deployed[0].Physical + "/" + deployed[0].Revision
+	if len(left) != 0 || !slices.Equal(routing.unrouted, []string{want}) {
+		t.Errorf("kept %v and unrouted %v, want only %s unrouted: the resources layer names a revision by service and revision, with no URL", left, routing.unrouted, want)
 	}
 }
 
 func TestARevisionThatStaysKeepsItsOriginHostname(t *testing.T) {
 	p, routing, deployed := prunable(t)
 
-	left, err := p.RemoveFunctionRevisions(context.Background(), provider.StackRef{Tier: environment.TierProduction}, deployed[2:], nil)
+	left, err := p.RemoveFunctionRevisions(context.Background(), provider.StackRef{Tier: environment.TierProduction}, withoutURLs(deployed[2:]), nil)
 	if err != nil {
 		t.Fatalf("RemoveFunctionRevisions = %v", err)
 	}
@@ -218,20 +226,21 @@ func TestARevisionThatStaysKeepsItsOriginHostname(t *testing.T) {
 	}
 }
 
-func TestRemovingAFunctionUnroutesItsOriginHostnameFirst(t *testing.T) {
+func TestRemovingAFunctionUnroutesEveryOriginHostnameOfItsService(t *testing.T) {
 	routing := &routedHosts{}
 	p := &Provider{originRoutes: routing}
 	functions := []provider.Function{
-		{Name: "a", URL: "https://r1-a.o.example.com"},
-		{Name: "b", URL: "https://svc-abc.europe-west1.run.app"},
-		{Name: "c", URL: ""},
+		{Name: "a", Physical: "svc-a", Revision: "svc-a-001"},
+		{Name: "a", Physical: "svc-a", Revision: "svc-a-002"},
+		{Name: "b", Physical: "svc-b"},
+		{Name: "c"},
 	}
 
-	if err := p.unrouteOriginHosts(context.Background(), environment.TierProduction, functions); err != nil {
+	if err := p.unrouteServiceOriginHosts(context.Background(), environment.TierProduction, functions); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(routing.unrouted, []string{"r1-a.o.example.com"}) {
-		t.Errorf("unrouted %v, want only the origin host: a run.app URL and an empty one name no origin host", routing.unrouted)
+	if !slices.Equal(routing.unrouted, []string{"svc-a/", "svc-b/"}) {
+		t.Errorf("unrouted %v, want each named service once with no revision, and nothing for a function with no service", routing.unrouted)
 	}
 }
 

@@ -188,7 +188,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			if served.tag == "" {
 				return nil, fmt.Errorf("function %s is served behind the Cloudflare worker, which reaches the revision this release tags, and this release tagged none", fn.Name)
 			}
-			if address, err = p.routeOriginHost(ctx, spec, originBase, service, served.tag, progress); err != nil {
+			if address, err = p.routeOriginHost(ctx, spec, originBase, service, served.tag, ran.revision, progress); err != nil {
 				return nil, err
 			}
 		}
@@ -221,7 +221,7 @@ func workerImageOf(app *provider.AppSpec) string {
 }
 
 func (p *Provider) RemoveFunctions(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Log) error {
-	if err := p.unrouteOriginHosts(ctx, ref.Tier, functions); err != nil {
+	if err := p.unrouteServiceOriginHosts(ctx, ref.Tier, functions); err != nil {
 		return err
 	}
 	if err := p.tearDownAll(ctx, functionRevisions(functions), progress); err != nil {
@@ -266,7 +266,7 @@ func (p *Provider) RemoveFunctionRevisions(ctx context.Context, ref provider.Sta
 		}
 		removed = append(removed, function)
 	}
-	if err := p.unrouteOriginHosts(ctx, ref.Tier, removed); err != nil {
+	if err := p.unrouteRevisionOriginHosts(ctx, ref.Tier, removed); err != nil {
 		return nil, err
 	}
 	return left, nil
