@@ -5,15 +5,20 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/hmac"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -46,15 +51,17 @@ func uniqueName(t *testing.T) string {
 }
 
 type received struct {
-	lock   sync.Mutex
-	bodies [][]byte
-	answer func(n int) int
+	lock    sync.Mutex
+	bodies  [][]byte
+	headers []http.Header
+	answer  func(n int) int
 }
 
 func (r *received) serve(w http.ResponseWriter, req *http.Request) {
 	body, _ := io.ReadAll(req.Body)
 	r.lock.Lock()
 	r.bodies = append(r.bodies, body)
+	r.headers = append(r.headers, req.Header.Clone())
 	n := len(r.bodies)
 	r.lock.Unlock()
 	w.WriteHeader(r.answer(n))
@@ -64,6 +71,12 @@ func (r *received) all() [][]byte {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	return append([][]byte(nil), r.bodies...)
+}
+
+func (r *received) sent() []http.Header {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	return append([]http.Header(nil), r.headers...)
 }
 
 func newDispatcherFor(t *testing.T, endpoint string) *dispatcher {
@@ -314,5 +327,144 @@ func TestLiveATaskItsTargetRefusedWaitsOutItsQueuesBackoffBeforeItIsSentAgain(t 
 	}
 	if got := len(target.all()); got != 2 {
 		t.Errorf("the target got %d sends, want the refused task sent again once its backoff passed", got)
+	}
+}
+
+func newTasksQueue(t *testing.T, d *dispatcher) string {
+	t.Helper()
+	parent := "projects/" + testProject + "/locations/" + testRegion
+	queue := parent + "/queues/" + uniqueName(t)
+	if _, err := d.tasks.CreateQueue(context.Background(), &cloudtaskspb.CreateQueueRequest{Parent: parent, Queue: &cloudtaskspb.Queue{Name: queue}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.tasks.DeleteQueue(context.Background(), &cloudtaskspb.DeleteQueueRequest{Name: queue}) })
+	return queue
+}
+
+func attachTasksAPI(t *testing.T, d *dispatcher) *httptest.Server {
+	t.Helper()
+	key, err := newSigningKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := newTasksAPI(func(ctx context.Context, request *cloudtaskspb.CreateTaskRequest) (*cloudtaskspb.Task, error) {
+		return d.tasks.CreateTask(ctx, request)
+	}, key)
+	d.api = api
+	server := httptest.NewServer(api)
+	t.Cleanup(server.Close)
+	return server
+}
+
+func postRefresh(t *testing.T, api *httptest.Server, queue, name, target string, body []byte, signature string) *http.Response {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{"task": map[string]any{
+		"name": queue + "/tasks/" + name,
+		"httpRequest": map[string]any{
+			"url":        target,
+			"httpMethod": "POST",
+			"headers":    map[string]string{"Content-Type": "application/json", "x-ocel-refresh-signature": signature},
+			"body":       base64.StdEncoding.EncodeToString(body),
+			"oidcToken": map[string]any{
+				"serviceAccountEmail": "refresh@x.iam.gserviceaccount.com",
+				"audience":            "https://web-1.europe-west1.run.app/_ocel/refresh",
+			},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.Post(api.URL+"/v2/"+queue+"/tasks", "application/json", bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	return resp
+}
+
+func TestLiveATaskPostedThroughTheTasksAPIIsSentWithAnIDTokenForItsAudienceAndItsSignatureIntact(t *testing.T) {
+	endpoint := flociEndpoint(t)
+	target := &received{answer: func(int) int { return http.StatusNoContent }}
+	server := httptest.NewServer(http.HandlerFunc(target.serve))
+	t.Cleanup(server.Close)
+	d := newDispatcherFor(t, endpoint)
+	api := attachTasksAPI(t, d)
+	queue := newTasksQueue(t, d)
+	body := []byte("{\"isrPrefix\":\"p\",\"refresh\":{\"url\":\"/blog\"}}")
+	mac := hmac.New(sha256.New, []byte("s1"))
+	mac.Write(body)
+	signature := hex.EncodeToString(mac.Sum(nil))
+
+	if resp := postRefresh(t, api, queue, "t1", server.URL+"/_ocel/refresh", body, signature); resp.StatusCode != http.StatusOK {
+		said, _ := io.ReadAll(resp.Body)
+		t.Fatalf("the tasks API answered %d %s", resp.StatusCode, said)
+	}
+	stored, err := d.tasks.GetTask(context.Background(), &cloudtaskspb.GetTaskRequest{Name: queue + "/tasks/t1", ResponseView: cloudtaskspb.Task_FULL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("floci kept the task's OidcToken: %v; its headers: %v; its body length: %d",
+		stored.GetHttpRequest().GetOidcToken() != nil, stored.GetHttpRequest().GetHeaders(), len(stored.GetHttpRequest().GetBody()))
+
+	if err := d.dispatchDue(context.Background()); err != nil {
+		t.Fatalf("dispatchDue() = %v", err)
+	}
+
+	bodies, headers := target.all(), target.sent()
+	if len(bodies) != 1 || !bytes.Equal(bodies[0], body) {
+		t.Fatalf("the target got %q, want the task's exact body", bodies)
+	}
+	if got := headers[0].Get("x-ocel-refresh-signature"); got != signature {
+		t.Errorf("the signature header is %q, want %q", got, signature)
+	}
+	check := hmac.New(sha256.New, []byte("s1"))
+	check.Write(bodies[0])
+	if hex.EncodeToString(check.Sum(nil)) != headers[0].Get("x-ocel-refresh-signature") {
+		t.Error("the signature does not verify against the body the target received")
+	}
+	token := strings.TrimPrefix(headers[0].Get("Authorization"), "Bearer ")
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		t.Fatalf("the Authorization header is %q, want a Bearer ID token", headers[0].Get("Authorization"))
+	}
+	var claims struct{ Aud, Email string }
+	decodeSegment(t, parts[1], &claims)
+	if claims.Aud != "https://web-1.europe-west1.run.app/_ocel/refresh" || claims.Email != "refresh@x.iam.gserviceaccount.com" {
+		t.Errorf("the token claims %+v, want the audience and account the task named", claims)
+	}
+	certs, err := http.Get(api.URL + "/oauth2/v3/certs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer certs.Body.Close()
+	var set struct{ Keys []jwk }
+	if err := json.NewDecoder(certs.Body).Decode(&set); err != nil || len(set.Keys) != 1 {
+		t.Fatalf("the certs answer holds %v, %v", set.Keys, err)
+	}
+	n, _ := base64.RawURLEncoding.DecodeString(set.Keys[0].N)
+	e, _ := base64.RawURLEncoding.DecodeString(set.Keys[0].E)
+	public := &rsa.PublicKey{N: new(big.Int).SetBytes(n), E: int(new(big.Int).SetBytes(e).Int64())}
+	signed, _ := base64.RawURLEncoding.DecodeString(parts[2])
+	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
+	if err := rsa.VerifyPKCS1v15(public, crypto.SHA256, digest[:], signed); err != nil {
+		t.Errorf("the published key does not verify the token the target received: %v", err)
+	}
+	if _, err := d.tasks.GetTask(context.Background(), &cloudtaskspb.GetTaskRequest{Name: queue + "/tasks/t1"}); status.Code(err) != codes.NotFound {
+		t.Errorf("GetTask() = %v, want the sent task deleted", err)
+	}
+}
+
+func TestLiveASecondTaskWithTheSameNamePostedThroughTheTasksAPIIsAnsweredAlreadyExists(t *testing.T) {
+	endpoint := flociEndpoint(t)
+	d := newDispatcherFor(t, endpoint)
+	api := attachTasksAPI(t, d)
+	queue := newTasksQueue(t, d)
+	later := "http://127.0.0.1:1/_ocel/refresh"
+
+	first := postRefresh(t, api, queue, "same", later, []byte("{}"), "sig")
+	second := postRefresh(t, api, queue, "same", later, []byte("{}"), "sig")
+
+	if first.StatusCode != http.StatusOK || second.StatusCode != http.StatusConflict {
+		t.Errorf("the creates answered %d then %d, want 200 then 409", first.StatusCode, second.StatusCode)
 	}
 }
