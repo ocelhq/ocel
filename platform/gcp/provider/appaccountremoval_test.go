@@ -578,3 +578,39 @@ func TestAStackThatStillRecordsComputeAfterARemovalKeepsItsAppGrants(t *testing.
 		}
 	}
 }
+
+func TestDestroyingAStackOfSeveralServicesRevokesItsAppsGrants(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	released := newReleasedStacks(p)
+	spec := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one")
+	spec.App.Functions = append(spec.App.Functions, provider.FunctionSpec{
+		Name:      "fn--web--worker",
+		Image:     "europe-west1-docker.pkg.dev/acme/ocel/web-worker@sha256:one",
+		Framework: spec.App.Functions[0].Framework,
+	})
+	result, err := released.stacks.Provision(context.Background(), spec, nil)
+	if err != nil {
+		t.Fatalf("Provision(%s) = %v", spec.Ref.Name, err)
+	}
+	if len(result.Functions) != 2 {
+		t.Fatalf("Provision(%s) deployed %+v, want the two functions its spec names", spec.Ref.Name, result.Functions)
+	}
+	if err := stackrecords.Write(context.Background(), released.store, spec.Ref.Tier, spec.Ref.Project, spec.Ref.Name,
+		stackrecords.Stack{Kind: provider.StackApp, App: "web", Functions: result.Functions}); err != nil {
+		t.Fatal(err)
+	}
+	member := "serviceAccount:" + p.resolved.AppAccountEmail(environment.TierProduction, "shop", "web")
+	holding := func() bool {
+		return slices.ContainsFunc(projectBindingsOf(server.identities()), func(bound string) bool { return strings.Contains(bound, member) })
+	}
+	if !holding() {
+		t.Fatalf("the project binds %q before the destroy, want the app's account in it", projectBindingsOf(server.identities()))
+	}
+
+	released.destroy(t, spec.Ref)
+
+	if holding() {
+		t.Errorf("the project still binds %q after the app's only stack was destroyed", projectBindingsOf(server.identities()))
+	}
+}
