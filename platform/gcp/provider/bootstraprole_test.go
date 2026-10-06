@@ -83,6 +83,9 @@ func (s *roleServer) handler(t *testing.T) http.HandlerFunc {
 			s.patched, s.patchedMask = &asked, r.URL.Query().Get("updateMask")
 			s.role.IncludedPermissions, s.role.Stage = asked.IncludedPermissions, asked.Stage
 			_ = json.NewEncoder(w).Encode(s.role)
+		case r.Method == http.MethodDelete && r.URL.Path == endpoint:
+			s.writes = append(s.writes, "delete")
+			w.WriteHeader(http.StatusNotFound)
 		default:
 			t.Errorf("the bootstrap called %s %s, which nothing here serves", r.Method, r.URL)
 			w.WriteHeader(http.StatusNotFound)
