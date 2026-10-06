@@ -20,7 +20,7 @@ import { DEFAULT_BASE, GCP_BASE, VPS_BASE } from "../config";
 import { fixtureDir } from "../paths";
 import { NO_FILTER, plan, type RunFilter } from "../plan";
 import { filterFrom } from "../run/filter";
-import { hasReleaseCycle, targetNamed } from "../targets";
+import { hasReleaseCycle, previewsOn, targetNamed } from "../targets";
 import { fixtures } from "./fixtures";
 import { gaps } from "./gaps";
 import { type Concern, LANES, type Lane, type TargetName, targetOfLane } from "./types";
@@ -31,8 +31,17 @@ const REGISTRY_CREDENTIALS = {
 };
 
 function planOn(lane: Lane, env: NodeJS.ProcessEnv = {}, filter: RunFilter = NO_FILTER) {
-  const releaseCycle = hasReleaseCycle(targetNamed(targetOfLane(lane)));
-  return plan({ fixtures, gaps, lane, releaseCycle, filter, env });
+  const target = targetNamed(targetOfLane(lane));
+  const releaseCycle = hasReleaseCycle(target);
+  return plan({
+    fixtures,
+    gaps,
+    lane,
+    releaseCycle,
+    previews: previewsOn(target, lane),
+    filter,
+    env,
+  });
 }
 
 function concernIn(concern: Concern, planned: ReturnType<typeof planOn>): string[] {

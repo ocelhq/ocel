@@ -21,6 +21,7 @@ describe("a smoke", () => {
         gaps,
         lane: LANE_IN_CI[name],
         releaseCycle: smoke.target !== "dev",
+        previews: false,
         filter: smokeFilter(smoke),
         env: {},
       });

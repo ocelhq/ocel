@@ -35,6 +35,34 @@ export interface ReleaseCycle {
   rollback(cell: CellUnderTest, greeting: string): Promise<Deployment>;
 }
 
+export type PreviewRelease = {
+  app: string;
+  urls: string[];
+  deploymentUrl: string;
+  deploymentId: string;
+};
+
+export interface Previews {
+  readonly previewLanes: Lane[];
+  readonly previewStepTimeoutMs: number;
+  previewUp(cell: CellUnderTest, name: string): Promise<PreviewRelease[]>;
+  previewPrune(cell: CellUnderTest, name: string, keep: number): Promise<void>;
+  previewRemove(cell: CellUnderTest, name: string): Promise<void>;
+}
+
+export function hasPreviews<T extends object>(target: T): target is T & Previews {
+  const previewing = target as Partial<Previews>;
+  return (
+    typeof previewing.previewUp === "function" &&
+    typeof previewing.previewPrune === "function" &&
+    typeof previewing.previewRemove === "function"
+  );
+}
+
+export function previewsOn(target: object, lane: Lane): boolean {
+  return hasPreviews(target) && target.previewLanes.includes(lane);
+}
+
 export interface Exposure {
   readExposed(cell: CellUnderTest): Promise<string>;
 }

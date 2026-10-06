@@ -1,10 +1,18 @@
 import { describe, expect, it } from "bun:test";
 import type { Check } from "./checks/context";
+import { PREVIEW_TITLES } from "./checks/previews";
 import { type Cell, fixture, variant } from "./matrix/types";
 import { defaults } from "./matrix/variants";
 import { CellRun } from "./run/cellRun";
 import type { ExternalStack } from "./stacks";
-import { phasesDriven, phasesOf, stepsOf, stepsPlanned, type TestSelector } from "./steps";
+import {
+  phasesDriven,
+  phasesOf,
+  stepsOf,
+  stepsPlanned,
+  type TestSelector,
+  walksPreviews,
+} from "./steps";
 import type { Deployment, Target } from "./targets/types";
 
 const ping: Check = { title: "ping", run: async () => undefined };
@@ -50,6 +58,74 @@ describe("the steps a cell process runs", () => {
     };
     expect(() => stepsPlanned(cell, drifted)).toThrow(
       /lifecycle\/next walks web · deploy, web · ping, web · destroy, not the planned web · deploy, web · pong, web · destroy/,
+    );
+  });
+});
+
+describe("the preview phase", () => {
+  const front = variant("front", { offeredOn: ["gcp"], config: { edge: "alb" } });
+  const previewing = fixture("lifecycle/next", {
+    apps: ["web"],
+    redeploys: true,
+    checks: [ping],
+    on: { gcp: [defaults, front] },
+    previews: { gcp: [defaults, front] },
+  });
+  const cellOf = (one: typeof defaults): Cell => ({
+    name: "lifecycle/next",
+    fixture: previewing,
+    variant: one,
+    cacheLayer: "edge",
+    target: "gcp",
+  });
+  const titlesOf = (one: typeof defaults, keep = false) => {
+    const phases = phasesOf(previewing, keep, true, walksPreviews(cellOf(one), true));
+    return stepsOf(cellOf(one), phases).map((step) => step.title);
+  };
+
+  it("walks the preview phase after rollback and before destroy for a variant the fixture previews", () => {
+    expect(phasesOf(previewing, false, true, walksPreviews(cellOf(front), true))).toEqual([
+      "deploy",
+      "verify",
+      "redeploy",
+      "rollback",
+      "preview",
+      "destroy",
+    ]);
+  });
+
+  it("walks no preview phase on a lane whose target offers none", () => {
+    expect(walksPreviews(cellOf(front), false)).toBe(false);
+    expect(phasesOf(previewing, false, true, false)).not.toContain("preview");
+  });
+
+  it("walks no preview phase in a cell kept for inspection", () => {
+    expect(phasesOf(previewing, true, true, true)).not.toContain("preview");
+  });
+
+  it("walks no preview phase in a cell that refuses its build", () => {
+    const refusing = fixture("deploy/refused", {
+      apps: ["web"],
+      checks: [],
+      refusal: { title: "refused", run: async () => undefined },
+      on: { gcp: [defaults] },
+      previews: { gcp: [defaults] },
+    });
+    expect(phasesOf(refusing, false, true, true)).toEqual(["deploy", "destroy"]);
+  });
+
+  it("walks the hostname steps behind an edge and the Identity-Aware Proxy step on gcp with none", () => {
+    expect(titlesOf(front).slice(-3)).toEqual([
+      PREVIEW_TITLES["own-release"],
+      PREVIEW_TITLES.pruned,
+      "destroy",
+    ]);
+    expect(titlesOf(defaults).slice(-2)).toEqual([PREVIEW_TITLES.refused, "destroy"]);
+  });
+
+  it("refuses to drive a preview phase on a target with no previews", () => {
+    expect(() => phasesDriven({ name: "aws" }, ["deploy", "preview", "destroy"])).toThrow(
+      /aws walks preview with no previews to drive it/,
     );
   });
 });

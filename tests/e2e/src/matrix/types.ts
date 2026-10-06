@@ -55,7 +55,14 @@ const COMPUTE_WHEN_NONE_IS_NAMED: Record<TargetName, Compute> = {
   gcp: "serverless",
 };
 
-export type Phase = "deploy" | "verify" | "restart" | "redeploy" | "rollback" | "destroy";
+export type Phase =
+  | "deploy"
+  | "verify"
+  | "restart"
+  | "redeploy"
+  | "rollback"
+  | "preview"
+  | "destroy";
 
 export const DEFAULT_VARIANT = "default";
 
@@ -103,6 +110,7 @@ export type Fixture = {
   refusal?: Refusal;
   stack?: ExternalStack;
   on: Partial<Record<TargetName, Variant[]>>;
+  previews?: Partial<Record<TargetName, Variant[]>>;
   sample?: Sample;
 };
 

@@ -1,4 +1,11 @@
-export const TIMED_PHASES = ["deploy", "verify", "redeploy", "rollback", "destroy"] as const;
+export const TIMED_PHASES = [
+  "deploy",
+  "verify",
+  "redeploy",
+  "rollback",
+  "preview",
+  "destroy",
+] as const;
 
 export const OTHER_PHASE = "other";
 

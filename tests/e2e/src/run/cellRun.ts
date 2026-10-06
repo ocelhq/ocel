@@ -6,6 +6,14 @@ import {
   REDEPLOY_GREETING,
   secretGuarded,
 } from "../checks/context";
+import {
+  type Clock,
+  checkOwnReleases,
+  checkPruned,
+  checkRefusedWithoutIdentity,
+  PREVIEW_NAME,
+  type PreviewCheck,
+} from "../checks/previews";
 import type { Evidence } from "../evidence";
 import { projectSlug } from "../identity";
 import type { Cell, Fixture, Phase, Refusal, Variant } from "../matrix/types";
@@ -15,10 +23,18 @@ import { namespaceOfSlug } from "../targets/aws/namespace";
 import {
   type Deployment,
   hasExposure,
+  hasPreviews,
   hasReleaseCycle,
   hasRestart,
+  type PreviewRelease,
   type Target,
 } from "../targets/types";
+
+const LIVE_CLOCK: Clock = {
+  fetch: globalThis.fetch,
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  now: () => Date.now(),
+};
 
 export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -46,6 +62,8 @@ export class CellRun {
   private unprepared: { error: unknown } | undefined;
   private deployment: Deployment | undefined;
   private greeting = INITIAL_GREETING;
+  private previews: { first: PreviewRelease[]; second: PreviewRelease[] } | undefined;
+  private readonly clock: Clock;
 
   constructor(input: {
     cell: Cell;
@@ -54,6 +72,7 @@ export class CellRun {
     keep: boolean;
     evidence: Evidence;
     prepareFailure?: string;
+    clock?: Clock;
   }) {
     this.name = input.cell.name;
     this.fixture = input.cell.fixture;
@@ -64,6 +83,7 @@ export class CellRun {
     this.evidence = input.evidence;
     this.target = input.target;
     this.keep = input.keep;
+    this.clock = input.clock ?? LIVE_CLOCK;
     if (input.prepareFailure !== undefined) {
       this.unprepared = { error: new Error(input.prepareFailure) };
     }
@@ -134,6 +154,55 @@ export class CellRun {
       this.deployment = await target.rollback(this, INITIAL_GREETING);
       this.greeting = INITIAL_GREETING;
     });
+  }
+
+  previewUp(): Promise<void> {
+    return this.once("previewUp", async () => {
+      this.ready();
+      const target = this.previewing();
+      const first = await target.previewUp(this, PREVIEW_NAME);
+      const second = await target.previewUp(this, PREVIEW_NAME);
+      for (const app of this.fixture.apps) {
+        for (const released of [first, second]) {
+          if (!released.some((each) => each.app === app)) {
+            throw new Error(`the preview of ${this.name} released nothing for ${app}`);
+          }
+        }
+      }
+      this.previews = { first, second };
+      await this.evidence.write(
+        "preview",
+        "releases.json",
+        `${JSON.stringify({ first, second }, null, 2)}\n`,
+      );
+    });
+  }
+
+  async preview(app: string, check: PreviewCheck): Promise<void> {
+    await this.previewUp();
+    const first = this.previewOf(app, "first");
+    const second = this.previewOf(app, "second");
+    switch (check) {
+      case "own-release":
+        await checkOwnReleases(this.clock, app, first, second);
+        return;
+      case "pruned": {
+        const target = this.previewing();
+        await this.once("previewPrune", () => target.previewPrune(this, PREVIEW_NAME, 1));
+        const seen = await checkPruned(this.clock, app, first, second);
+        await this.evidence.write("preview", `pruned-${app}.json`, `${JSON.stringify({ seen })}\n`);
+        return;
+      }
+      case "refused": {
+        const seen = await checkRefusedWithoutIdentity(this.clock, [first, second]);
+        await this.evidence.write(
+          "preview",
+          `refused-${app}.json`,
+          `${JSON.stringify(seen, null, 2)}\n`,
+        );
+        return;
+      }
+    }
   }
 
   async destroy(): Promise<void> {
@@ -216,7 +285,41 @@ export class CellRun {
   }
 
   private tearDown(): Promise<void> {
-    return this.once("tearDown", () => this.target.destroy(this));
+    return this.once("tearDown", async () => {
+      const target = this.target;
+      const removed =
+        this.started.has("previewUp") && hasPreviews(target)
+          ? await target.previewRemove(this, PREVIEW_NAME).then(
+              () => undefined,
+              (error: unknown) => ({ error }),
+            )
+          : undefined;
+      const destroyed = await target.destroy(this).then(
+        () => undefined,
+        (error: unknown) => ({ error }),
+      );
+      if (removed || destroyed) {
+        throw new Error(
+          [
+            ...(removed ? [`removing preview ${PREVIEW_NAME}: ${messageOf(removed.error)}`] : []),
+            ...(destroyed ? [`destroying: ${messageOf(destroyed.error)}`] : []),
+          ].join("; "),
+          { cause: (removed ?? destroyed)?.error },
+        );
+      }
+    });
+  }
+
+  private previewing() {
+    const target = this.target;
+    assert.ok(hasPreviews(target), `${target.name} has no previews to walk`);
+    return target;
+  }
+
+  private previewOf(app: string, which: "first" | "second"): PreviewRelease {
+    const found = this.previews?.[which].find((each) => each.app === app);
+    assert.ok(found, `the preview of ${this.name} released nothing for ${app}`);
+    return found;
   }
 
   private ready(): void {

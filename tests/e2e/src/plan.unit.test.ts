@@ -40,6 +40,7 @@ type Input = {
   filter?: Partial<RunFilter>;
   gaps?: Gap[];
   releaseCycle?: boolean;
+  previews?: boolean;
   env?: NodeJS.ProcessEnv;
 };
 
@@ -49,12 +50,44 @@ function planOf(fixtures: Fixture[], input: Input = {}): Plan {
     gaps: input.gaps ?? [],
     lane: input.lane ?? "aws",
     releaseCycle: input.releaseCycle ?? true,
+    previews: input.previews ?? false,
     filter: { ...NO_FILTER, ...input.filter },
     env: input.env ?? {},
   });
 }
 
 const cellsOf = (planned: Plan) => planned.cells.map((cell) => cell.name);
+
+describe("the preview phase a cell plans", () => {
+  const previewing = (previews: Fixture["previews"]) =>
+    one("deploy/node", { on: { gcp: [defaults, box] }, previews });
+  const phasesIn = (planned: Plan, cell: string) =>
+    planned.cells.find((each) => each.name === cell)?.phases;
+
+  it("plans no preview phase on a lane the target does not preview on", () => {
+    const planned = planOf([previewing({ gcp: [box] })], { lane: "gcp", previews: false });
+
+    for (const cell of planned.cells) {
+      expect(cell.phases).not.toContain("preview");
+    }
+  });
+
+  it("plans the preview phase only for the variants the fixture previews on that target", () => {
+    const planned = planOf([previewing({ gcp: [box] })], { lane: "gcp", previews: true });
+
+    expect(phasesIn(planned, "deploy/node")).not.toContain("preview");
+    expect(phasesIn(planned, "deploy/node-box")).toContain("preview");
+  });
+
+  it("refuses a fixture that previews a variant it does not run on that target", () => {
+    expect(() =>
+      planOf([one("deploy/node", { on: { gcp: [defaults] }, previews: { gcp: [box] } })], {
+        lane: "gcp",
+        previews: true,
+      }),
+    ).toThrow(/deploy\/node previews the box variant on gcp, which it does not run there/);
+  });
+});
 
 describe("the cells a lane runs", () => {
   it("runs each variant the fixture places on the lane's target, the default one unsuffixed", () => {
