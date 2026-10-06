@@ -1,6 +1,8 @@
 package gcp
 
 import (
+	"errors"
+	"net/http"
 	"regexp"
 	"slices"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const cdnPurgeRoleEndpoint = "/v1/projects/acme-prod/roles/ocel_cdn_purge"
@@ -115,6 +118,66 @@ func TestACDNPurgeRoleWithOtherPermissionsIsPutBackToClearingCloudCDN(t *testing
 	}
 }
 
+func TestADeletedCachePurgeRoleIsUndeleted(t *testing.T) {
+	t.Parallel()
+	server := &roleServer{endpoint: cdnPurgeRoleEndpoint, role: currentCDNPurgeRole()}
+	server.role.Deleted = true
+	b := server.bootstrap(t)
+	target := item{Kind: KindRole, Name: "ocel_cdn_purge"}
+
+	found, err := b.presenceOf(t.Context(), environment.TierProduction, target)
+	if err != nil || !found.present || found.mends != reasonRoleDeleted {
+		t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, reasonRoleDeleted)
+	}
+	if err := b.makeRole(t.Context(), newCDNPurgeRole(b.clients.Names)); err != nil {
+		t.Fatalf("makeRole() = %v", err)
+	}
+	if !slices.Equal(server.writes, []string{"undelete"}) {
+		t.Errorf("makeRole() wrote %v, want one undelete", server.writes)
+	}
+}
+
+func TestACachePurgeRoleDeletedTooLongAgoIsRefusedNamingTheWait(t *testing.T) {
+	t.Parallel()
+	deleted := currentCDNPurgeRole()
+	deleted.Deleted = true
+	server := &roleServer{endpoint: cdnPurgeRoleEndpoint, role: deleted, undeleteCode: http.StatusBadRequest}
+	b := server.bootstrap(t)
+
+	err := b.makeRole(t.Context(), newCDNPurgeRole(b.clients.Names))
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("makeRole() = %v, want a %s refusal", err, refusal.CodeNotReady)
+	}
+	for _, want := range []string{"projects/acme-prod/roles/ocel_cdn_purge", "44 days", "OCEL_NAMESPACE"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal %q does not contain %q", err, want)
+		}
+	}
+}
+
+func TestEveryBootstrapItemRoleIsAKnownCustomRole(t *testing.T) {
+	t.Parallel()
+	names := Names{namespace: "ocel", project: "acme-prod"}
+
+	var roles int
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		for _, each := range stackItems(names, tier, false) {
+			if each.Kind != KindRole {
+				continue
+			}
+			roles++
+			if _, known := findCustomRole(names, each.Name); !known {
+				t.Errorf("the %s bootstrap lists custom role %q, which findCustomRole cannot make", tier, each.Name)
+			}
+		}
+	}
+	if roles == 0 {
+		t.Error("no bootstrap item is a custom role, want at least the app accounts role")
+	}
+}
+
 func TestAnUnknownCustomRoleIsRefusedByName(t *testing.T) {
 	t.Parallel()
 	b := (&roleServer{}).bootstrap(t)
@@ -162,7 +225,9 @@ func TestAnEmulatedBootstrapWithTheAlbMakesNoCDNPurgeRole(t *testing.T) {
 
 func TestDroppingTheAlbSaysTheCDNPurgeRoleIsKept(t *testing.T) {
 	t.Parallel()
+	server := &roleServer{endpoint: cdnPurgeRoleEndpoint, role: currentCDNPurgeRole()}
 	b, _ := fronting(t)
+	b.clients = server.bootstrap(t).clients
 	progress := &fake.Log{}
 	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albFeature}}
 
@@ -173,6 +238,9 @@ func TestDroppingTheAlbSaysTheCDNPurgeRoleIsKept(t *testing.T) {
 	want := "INFO Kept custom role projects/acme-prod/roles/ocel_cdn_purge: " + reasonRoleKept
 	if !slices.Contains(progress.Lines(), want) {
 		t.Errorf("the bootstrap said %q, want a line %q", progress.Lines(), want)
+	}
+	if len(server.writes) != 0 {
+		t.Errorf("dropping the alb wrote %v to the role, want nothing: Google holds a deleted role's id for 44 days", server.writes)
 	}
 }
 

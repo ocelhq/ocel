@@ -77,6 +77,16 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 	}
 }
 
+func TestTheCachePurgeRoleIDReplacesEveryDashOfTheNamespaceWithAnUnderscore(t *testing.T) {
+	t.Setenv(provider.NamespaceEnvVar, "ocel-dev")
+
+	names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+
+	if got, want := names.CDNPurgeRole(), "ocel_dev_cdn_purge"; got != want {
+		t.Errorf("CDNPurgeRole() = %q, want %q: a custom role id allows no dash", got, want)
+	}
+}
+
 func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
