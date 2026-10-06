@@ -197,7 +197,7 @@ function routedDeps(
             edgeRuntime.cacheEntrypoint
               ? {
                   rpc: edgeRuntime.cacheEntrypoint({
-                    props: { isrWriteSecret: record.isrWriteSecret },
+                    props: { isrWriteSecret: record.isrWriteSecret, scope: record.isrPrefix },
                   }),
                   scope: record.isrPrefix,
                 }

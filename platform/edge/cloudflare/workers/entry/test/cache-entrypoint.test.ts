@@ -98,6 +98,7 @@ async function seedSnapshot(records: TagSnapshot["records"], deployedAt = 0): Pr
 function cacheWith(
   aws: ReturnType<typeof awsRecorder>,
   over: {
+    scope?: string;
     store?: ObjectStoreReader;
     raise?: (scope: string, records: Record<string, TagRecord>) => Promise<void>;
     waitUntil?: (p: Promise<unknown>) => void;
@@ -105,6 +106,7 @@ function cacheWith(
   } = {},
 ) {
   return createEdgeCache({
+    scope: over.scope ?? scope,
     region,
     fetchBucket: bucket,
     table,
@@ -241,7 +243,8 @@ it("records one tag update per tag, under the prefix's tag namespace", async () 
 
 it("writes no tag item at all for a scope that is not one release's ISR prefix", async () => {
   const aws = awsRecorder(() => new Response("{}"));
-  await expect(cacheWith(aws).revalidateTags("prod/proj/app/r00000000", ["posts"])).rejects.toThrow(
+  const bound = "prod/proj/app/r00000000";
+  await expect(cacheWith(aws, { scope: bound }).revalidateTags(bound, ["posts"])).rejects.toThrow(
     /ISR prefix/,
   );
   expect(aws.calls).toHaveLength(0);
@@ -392,6 +395,51 @@ it("reports a raise it has no writer to make", async () => {
   await expect(
     tagRaiser({ fetch: async () => new Response(null) }, undefined)(scope, {}),
   ).rejects.toThrow(/no isr writer/);
+});
+
+const otherScope = "prod/proj/other/r00000000/isr";
+
+it("answers no entry for a scope other than the one its deployment bound", async () => {
+  const aws = awsRecorder(() => new Response(JSON.stringify(entry())));
+  expect(await cacheWith(aws).fetchGet(otherScope, "abc123", [])).toBeNull();
+  expect(aws.calls).toHaveLength(0);
+});
+
+it("writes nothing for a scope other than the one its deployment bound", async () => {
+  const aws = awsRecorder();
+  const { pending, waitUntil } = waitUntilRecorder();
+
+  await expect(
+    cacheWith(aws, { waitUntil }).fetchSet(otherScope, "abc123", entry(), []),
+  ).resolves.toBeUndefined();
+  expect(aws.calls).toHaveLength(0);
+  expect(pending).toHaveLength(0);
+});
+
+it("refuses to invalidate tags of a scope other than the one its deployment bound", async () => {
+  const writer = raiseRecorder();
+  const aws = awsRecorder(() => new Response("{}"));
+
+  await expect(
+    cacheWith(aws, { raise: writer.raise }).revalidateTags(otherScope, ["posts"]),
+  ).rejects.toThrow(`bound to ${scope}, not ${otherScope}`);
+  expect(aws.calls).toHaveLength(0);
+  expect(writer.raises).toHaveLength(0);
+});
+
+it("answers like an empty cache when its deployment bound no scope", async () => {
+  const entrypoint = new CacheEntrypoint(createExecutionContext(), {
+    OCEL_EDGE_ACCESS_KEY_ID: "id",
+    OCEL_EDGE_SECRET_KEY: "secret",
+    OCEL_AWS_REGION: region,
+    OCEL_ISR_BUCKET: bucket,
+    OCEL_STATE_TABLE: table,
+    OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE,
+  } as Env);
+
+  expect(await entrypoint.fetchGet(scope, "abc123", [])).toBeNull();
+  await entrypoint.fetchSet(scope, "abc123", entry(), []);
+  await entrypoint.revalidateTags(scope, ["posts"]);
 });
 
 it("answers like an empty cache on a bootstrap that binds no coordinates", async () => {

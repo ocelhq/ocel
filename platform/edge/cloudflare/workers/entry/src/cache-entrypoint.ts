@@ -13,6 +13,7 @@ import { isGuardRejection, tagRecordUpdate } from "./tag-index";
 export type SnapshotRaiser = (scope: string, records: Record<string, TagRecord>) => Promise<void>;
 
 export interface EdgeCacheDeps {
+  scope: string;
   region: string;
   fetchBucket: string;
   table: string;
@@ -36,6 +37,7 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
 
   return {
     async fetchGet(scope, key, tags) {
+      if (scope !== deps.scope) return null;
       try {
         const response = await deps.aws("s3", objectUrl(deps, fetchObjectKey(scope, key)));
         if (!response.ok) return null;
@@ -53,6 +55,7 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
     },
 
     async fetchSet(scope, key, entry, tags) {
+      if (scope !== deps.scope) return;
       if (entry.value?.kind !== "FETCH") {
         throw new Error(
           `ocel: the edge cache stores fetch entries only, got kind ${entry.value?.kind}`,
@@ -77,6 +80,9 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
     },
 
     async revalidateTags(scope, tags, durations) {
+      if (scope !== deps.scope) {
+        throw new Error(`ocel: this edge bundle's cache is bound to ${deps.scope}, not ${scope}`);
+      }
       if (tags.length === 0) return;
 
       const at = now();
@@ -166,15 +172,24 @@ export class CacheEntrypoint
 {
   private cache(): EdgeCacheRpc | null {
     const { OCEL_AWS_REGION, OCEL_ISR_BUCKET, OCEL_STATE_TABLE, OCEL_CACHE_STORE } = this.env;
+    const scope = this.ctx.props?.scope;
     const aws = awsServiceFetch(
       this.env.OCEL_EDGE_ACCESS_KEY_ID,
       this.env.OCEL_EDGE_SECRET_KEY,
       OCEL_AWS_REGION,
     );
-    if (!aws || !OCEL_AWS_REGION || !OCEL_ISR_BUCKET || !OCEL_STATE_TABLE || !OCEL_CACHE_STORE) {
+    if (
+      !aws ||
+      !OCEL_AWS_REGION ||
+      !OCEL_ISR_BUCKET ||
+      !OCEL_STATE_TABLE ||
+      !OCEL_CACHE_STORE ||
+      !scope
+    ) {
       return null;
     }
     return createEdgeCache({
+      scope,
       region: OCEL_AWS_REGION,
       fetchBucket: OCEL_ISR_BUCKET,
       table: OCEL_STATE_TABLE,
