@@ -72,6 +72,9 @@ func (p *Provider) ensureAppAccount(ctx context.Context, c *clients, spec provid
 			return "", err
 		}
 	}
+	if err := p.revokeDroppedBuckets(ctx, c, spec, member); err != nil {
+		return "", err
+	}
 	return email, nil
 }
 

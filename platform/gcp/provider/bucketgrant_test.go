@@ -169,6 +169,46 @@ func TestAnAppBindingABucketThatIsGoneIsRefusedNamingTheBucket(t *testing.T) {
 	}
 }
 
+func TestADeployThatStopsBindingABucketTakesTheAppsGrantOnItAway(t *testing.T) {
+	t.Parallel()
+	p, c, _, buckets := servingAccountsAndBuckets(t)
+	uploads, avatars := c.AppBucket("shop", "prod", "uploads"), c.AppBucket("shop", "prod", "avatars")
+	existingBuckets(buckets, uploads, avatars)
+	spec := appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
+	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
+	p.records = recordingBucketStacks(t, spec, bindingBucket(c, "uploads"), bindingBucket(c, "avatars"))
+	spec.App.Values.Bindings = []provider.Binding{bindingBucket(c, "uploads"), bindingBucket(c, "avatars")}
+	account, err := p.ensureAppAccount(context.Background(), c, spec, nil)
+	if err != nil {
+		t.Fatalf("ensureAppAccount() = %v", err)
+	}
+	member := "serviceAccount:" + account
+	spec.App.Values.Bindings = []provider.Binding{bindingBucket(c, "uploads")}
+
+	if _, err := p.ensureAppAccount(context.Background(), c, spec, nil); err != nil {
+		t.Fatalf("ensureAppAccount() without the avatars binding = %v", err)
+	}
+
+	if got := rolesOf(buckets.granted(avatars), member); got != nil {
+		t.Errorf("the account holds %v on %s after a deploy that no longer binds it", got, avatars)
+	}
+	if got := rolesOf(buckets.granted(uploads), member); len(got) != 1 {
+		t.Errorf("the account holds %v on %s, want the grant of the bucket it still binds", got, uploads)
+	}
+}
+
+func TestADeployThatStopsBindingABucketAlreadyDeletedIsNotRefused(t *testing.T) {
+	t.Parallel()
+	p, c, _, _ := servingAccountsAndBuckets(t)
+	spec := appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
+	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
+	p.records = recordingBucketStacks(t, spec, bindingBucket(c, "uploads"))
+
+	if _, err := p.ensureAppAccount(context.Background(), c, spec, nil); err != nil {
+		t.Errorf("ensureAppAccount() with a recorded bucket already deleted = %v, want nothing to revoke", err)
+	}
+}
+
 func TestRemovingTheLastEnvironmentRunningAnAppRevokesItsBucketsAndSigning(t *testing.T) {
 	t.Parallel()
 	p, c, accounts, buckets := servingAccountsAndBuckets(t)
