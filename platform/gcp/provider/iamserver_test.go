@@ -45,6 +45,7 @@ type iamServer struct {
 
 	topicPolicies map[string]*pubsub.Policy
 	topicWrites   int
+	deletedTopics map[string]bool
 
 	queuePolicies map[string]*iampb.Policy
 	queueWrites   int
@@ -143,6 +144,9 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 			s.writes++
 			s.projectWrites++
 			_ = json.NewEncoder(w).Encode(s.project)
+		case strings.Contains(path, "/topics/") && s.deletedTopics[strings.TrimSuffix(strings.TrimSuffix(path, ":getIamPolicy"), ":setIamPolicy")]:
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"topic not found"}}`))
 		case strings.Contains(path, "/topics/") && strings.HasSuffix(path, ":getIamPolicy"):
 			topic := strings.TrimSuffix(path, ":getIamPolicy")
 			policy := s.topicPolicies[topic]

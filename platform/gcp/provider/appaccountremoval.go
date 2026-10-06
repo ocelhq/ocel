@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
 func (p *Provider) forgetAppAccountIfUnused(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
@@ -44,8 +45,41 @@ func forgetUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 	if err := absentIsDone(c.bindAccountRole(ctx, c.DelayAccount(ref.Tier), runAsRole, member, false)); err != nil {
 		return err
 	}
+	if err := c.revokeTopicPublisher(ctx, recorded, ref, member); err != nil {
+		return err
+	}
 	if progress != nil {
 		progress.Say(fmt.Sprintf("Revoked what app %s of %s was granted in the %s tier: no environment runs it", ref.Name.App, ref.Project, ref.Tier))
+	}
+	return nil
+}
+
+func (c *clients) revokeTopicPublisher(ctx context.Context, recorded []stackrecords.NamedStack, ref provider.StackRef, member string) error {
+	for _, stack := range recorded {
+		if !stack.Name.IsInfra() {
+			continue
+		}
+		declared := map[string]*provider.TopicSpec{}
+		for _, binding := range stack.Bindings {
+			topic, isTopic, err := readDeclaredTopic(binding)
+			if err != nil {
+				return err
+			}
+			if isTopic {
+				declared[topic.declared] = topic.spec
+			}
+		}
+		if len(declared) == 0 {
+			continue
+		}
+		topology := topics.Topology{
+			Names:     taskNames(c.Names, provider.StackRef{Project: ref.Project, Tier: ref.Tier, Name: stack.Name}),
+			Topics:    declared,
+			Publisher: member,
+		}
+		if _, err := topology.RevokePublisher(ctx, c.Workload()); err != nil {
+			return err
+		}
 	}
 	return nil
 }
