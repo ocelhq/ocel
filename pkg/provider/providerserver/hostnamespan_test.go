@@ -99,6 +99,9 @@ func TestAHostnameAWorkerRouteAlreadySendsToTheEdgeIsAttachedThroughItRatherThan
 	if !slices.ContainsFunc(p.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings(), func(b edge.DomainBinding) bool { return b.Hostname == "shop.example" }) {
 		t.Errorf("the %s edge bound %v, want shop.example among them", fake.KindRelay, p.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings())
 	}
+	if root.ended.GetLevel() == progressv1.Level_LEVEL_WARN || root.ended.GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
+		t.Errorf("the span ended %s at %s, want OK below WARN: the hostname moved cleanly", root.ended.GetEnded().GetStatus(), root.ended.GetLevel())
+	}
 }
 
 func TestAHostnameStillAnsweredThroughAnotherFrontKeepsTheNoteThatDomainAddMovesIt(t *testing.T) {
