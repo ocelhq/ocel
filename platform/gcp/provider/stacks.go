@@ -94,6 +94,10 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			return nil, err
 		}
 	}
+	originBase, err := p.readOriginBase(ctx, spec)
+	if err != nil {
+		return nil, err
+	}
 	deployed := make([]provider.Function, 0, len(app.Functions)+len(app.Workers))
 	var refresh *nextRefresh
 	if refreshesByTask(app.Framework, app.Compute, factsOf(spec.Edge), gated) {
@@ -169,8 +173,17 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		if err := p.exposeService(ctx, c, spec, service, progress); err != nil {
 			return nil, err
 		}
+		address := ran.url
+		if originBase != "" {
+			if served.tag == "" {
+				return nil, fmt.Errorf("function %s is served behind the Cloudflare worker, which reaches the revision this release tags, and this release tagged none", fn.Name)
+			}
+			if address, err = p.routeOriginHost(ctx, spec, originBase, service, served.tag, progress); err != nil {
+				return nil, err
+			}
+		}
 		deployed = append(deployed, provider.Function{
-			Name: fn.Name, Physical: service, URL: ran.url, DeploymentURL: ran.deploymentURL, Revision: ran.revision,
+			Name: fn.Name, Physical: service, URL: address, DeploymentURL: ran.deploymentURL, Revision: ran.revision,
 		})
 	}
 	if !hostsWorkers(app) {
@@ -198,6 +211,9 @@ func workerImageOf(app *provider.AppSpec) string {
 }
 
 func (p *Provider) RemoveFunctions(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Log) error {
+	if err := p.unrouteOriginHosts(ctx, ref.Tier, functions); err != nil {
+		return err
+	}
 	if err := p.tearDownAll(ctx, functionRevisions(functions), progress); err != nil {
 		return err
 	}
@@ -227,14 +243,21 @@ func (p *Provider) NameFunctions(ctx context.Context, spec provider.StackSpec) (
 	return append(functions, workerFunctions(nameWorkers(names, spec))...), nil
 }
 
-func (p *Provider) RemoveFunctionRevisions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Log) ([]provider.Function, error) {
+func (p *Provider) RemoveFunctionRevisions(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Log) ([]provider.Function, error) {
 	kept, err := p.removeRevisions(ctx, functionRevisions(functions), progress)
 	if err != nil {
 		return nil, err
 	}
-	var left []provider.Function
-	for _, at := range kept {
-		left = append(left, functions[at])
+	var left, removed []provider.Function
+	for at, function := range functions {
+		if slices.Contains(kept, at) {
+			left = append(left, function)
+			continue
+		}
+		removed = append(removed, function)
+	}
+	if err := p.unrouteOriginHosts(ctx, ref.Tier, removed); err != nil {
+		return nil, err
 	}
 	return left, nil
 }

@@ -16,10 +16,22 @@ type Target struct {
 	Tier     environment.Tier
 	Slug     string
 	Shielded bool
+	Origin   string
+}
+
+func OriginHostStack(hostname string, tier environment.Tier) string {
+	return naming.Fit(maxResourceName, naming.WordSeparator,
+		naming.Fixed(string(Kind)),
+		naming.Fixed("origin"),
+		naming.Fixed(string(tier)),
+		naming.Compressible(naming.SanitizeHost(hostname)),
+	)
 }
 
 func (t Target) Name() string {
 	switch {
+	case t.Origin != "":
+		return OriginHostStack(t.Origin, t.Tier)
 	case t.Slug != "":
 		return BindingStack(t.Slug, t.Tier)
 	case t.Shielded:

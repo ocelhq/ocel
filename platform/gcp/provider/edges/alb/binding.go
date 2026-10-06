@@ -42,35 +42,43 @@ func bindingProgram(spec bindingSpec) Program {
 				continue
 			}
 			neg := negName(spec.Slug, spec.Tier, hostname)
-			group, err := compute.NewRegionNetworkEndpointGroup(ctx, neg, &compute.RegionNetworkEndpointGroupArgs{
-				Name:                pulumi.String(neg),
-				Project:             project,
-				Region:              pulumi.String(spec.Region),
-				NetworkEndpointType: pulumi.String(serverlessNEG),
-				CloudRun: &compute.RegionNetworkEndpointGroupCloudRunArgs{
-					Service: pulumi.String(host.Service),
-					Tag:     pulumi.StringPtrFromPtr(omitEmpty(host.Tag)),
-				},
-			})
-			if err != nil {
-				return err
-			}
-			if _, err := compute.NewBackendService(ctx, host.Backend, &compute.BackendServiceArgs{
-				Name:                pulumi.String(host.Backend),
-				Project:             project,
-				Protocol:            pulumi.String("HTTPS"),
-				LoadBalancingScheme: pulumi.String(externalManaged),
-				EnableCdn:           pulumi.Bool(true),
-				CdnPolicy:           newCDNPolicy(spec.Shielded),
-				Backends: compute.BackendServiceBackendArray{
-					&compute.BackendServiceBackendArgs{Group: group.SelfLink},
-				},
-			}); err != nil {
+			if err := servingBackend(ctx, project, spec.Region, neg, host, newCDNPolicy(spec.Shielded)); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
+}
+
+func servingBackend(ctx *pulumi.Context, project pulumi.String, region, neg string, host Host, cdn *compute.BackendServiceCdnPolicyArgs) error {
+	group, err := compute.NewRegionNetworkEndpointGroup(ctx, neg, &compute.RegionNetworkEndpointGroupArgs{
+		Name:                pulumi.String(neg),
+		Project:             project,
+		Region:              pulumi.String(region),
+		NetworkEndpointType: pulumi.String(serverlessNEG),
+		CloudRun: &compute.RegionNetworkEndpointGroupCloudRunArgs{
+			Service: pulumi.String(host.Service),
+			Tag:     pulumi.StringPtrFromPtr(omitEmpty(host.Tag)),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	args := &compute.BackendServiceArgs{
+		Name:                pulumi.String(host.Backend),
+		Project:             project,
+		Protocol:            pulumi.String("HTTPS"),
+		LoadBalancingScheme: pulumi.String(externalManaged),
+		EnableCdn:           pulumi.Bool(cdn != nil),
+		Backends: compute.BackendServiceBackendArray{
+			&compute.BackendServiceBackendArgs{Group: group.SelfLink},
+		},
+	}
+	if cdn != nil {
+		args.CdnPolicy = cdn
+	}
+	_, err = compute.NewBackendService(ctx, host.Backend, args)
+	return err
 }
 
 func omitEmpty(value string) *string {

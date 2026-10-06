@@ -37,6 +37,8 @@ type Provider struct {
 
 	records keyvalue.Store
 
+	originRoutes originRouting
+
 	mu       sync.Mutex
 	resolved *clients
 

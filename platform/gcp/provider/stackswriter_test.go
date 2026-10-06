@@ -21,11 +21,14 @@ import (
 type codeRunningFront struct {
 	edge.Edge
 	runsCode bool
+	shields  bool
 	kind     edge.Kind
 }
 
-func (f codeRunningFront) Kind() edge.Kind   { return f.kind }
-func (f codeRunningFront) Facts() edge.Facts { return edge.Facts{RunsCode: f.runsCode} }
+func (f codeRunningFront) Kind() edge.Kind { return f.kind }
+func (f codeRunningFront) Facts() edge.Facts {
+	return edge.Facts{RunsCode: f.runsCode, ShieldsOrigin: f.shields}
+}
 
 type recordingStacks struct {
 	provider.Stacks
