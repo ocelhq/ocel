@@ -122,6 +122,23 @@ func (e *Edges) Edge(kind edge.Kind) *Edge {
 	return e.edges[kind]
 }
 
+func (e *Edges) RouteOnlyThrough(kind edge.Kind, hostname string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for other, front := range e.edges {
+		front.mu.Lock()
+		if other == kind {
+			if _, bound := front.serving[hostname]; !bound {
+				front.serving[hostname] = ""
+			}
+		} else {
+			delete(front.serving, hostname)
+			delete(front.forwards, hostname)
+		}
+		front.mu.Unlock()
+	}
+}
+
 func kindList(kinds []edge.Kind) string {
 	names := make([]string, 0, len(kinds))
 	for _, kind := range kinds {

@@ -649,7 +649,7 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 					attached = append(attached, host.Hostname)
 					continue
 				}
-				if bound, served := r.state.Host(host.Hostname).ServedEdge(); served && bound != r.front.Kind() {
+				if bound, served := r.state.Host(host.Hostname).ServedEdge(); served && bound != r.front.Kind() && !r.answersThroughFront(ctx, attaching, host) {
 					skip(host.Hostname, fmt.Sprintf(
 						"%s is still served through %s, not through %s this deploy promoted to: `ocel domain add` moves it, in the order that keeps it answering",
 						host.Hostname, describeFront(bound), describeFront(r.front.Kind())))
@@ -672,6 +672,13 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 		}
 		return err
 	})
+}
+
+func (r *deployRun) answersThroughFront(ctx context.Context, attaching *hostnames, host ConfiguredHost) bool {
+	if !r.front.Facts().RunsCode || r.readConfiguredRouter(host.App) != r.edgeKind {
+		return false
+	}
+	return attaching.probe(ctx, host.Hostname, r.edgeKind).OK
 }
 
 func describeAttached(attached, missed []string) string {
