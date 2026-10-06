@@ -137,25 +137,35 @@ func (c *clients) keyRolesGranted(ctx context.Context, tier environment.Tier, me
 }
 
 func (c *clients) bindKeyRoles(ctx context.Context, tier environment.Tier, member string, roles, wanted []string) (bool, error) {
-	policy, err := c.keyPolicy(ctx, tier)
-	if err != nil || policy == nil {
-		return false, err
-	}
-	bindings, changed := boundKeyRoles(policy.GetBindings(), member, roles, wanted)
-	if !changed {
-		return false, nil
-	}
 	client, err := c.KMS()
 	if err != nil {
 		return false, err
 	}
-	policy.Bindings = bindings
-	if _, err := dialled(ctx, func() (*iampb.Policy, error) {
-		return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: keyPath(c, string(tier)), Policy: policy})
-	}); err != nil {
-		return false, fmt.Errorf("set the roles %s has on the %s key to %v: %w", member, tier, wanted, err)
+	var refused error
+	for attempt := range bindAttempts {
+		if attempt > 0 && !waited(ctx, attempt) {
+			return false, ctx.Err()
+		}
+		policy, err := c.keyPolicy(ctx, tier)
+		if err != nil || policy == nil {
+			return false, err
+		}
+		bindings, changed := boundKeyRoles(policy.GetBindings(), member, roles, wanted)
+		if !changed {
+			return false, nil
+		}
+		policy.Bindings = bindings
+		_, refused = dialled(ctx, func() (*iampb.Policy, error) {
+			return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: keyPath(c, string(tier)), Policy: policy})
+		})
+		if refused == nil {
+			return true, nil
+		}
+		if !isRaced(refused) {
+			break
+		}
 	}
-	return true, nil
+	return false, fmt.Errorf("set the roles %s has on the %s key to %v: %w", member, tier, wanted, refused)
 }
 
 func boundMember(bindings []*cloudresourcemanager.Binding, role, member string,
