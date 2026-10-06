@@ -345,3 +345,66 @@ func TestShapeOfTopicsAndTasksIsTheirPubSubTopologyTheTiersQueueAndDatabaseAndEa
 		t.Errorf("the delay queue is priced %s, want priced by its operations", r.GetStatus())
 	}
 }
+
+func nextManifest(container bool) *contractv1.Manifest {
+	app := &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: "next"}}
+	if container {
+		app.Artifact = &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
+			Image: "europe-west1-docker.pkg.dev/acme-prod/ocel/web@sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", HealthCheckPath: "/healthz",
+			MinInstances: 1, MaxInstances: 1,
+		}}
+	} else {
+		app.Artifact = &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{Functions: []*contractv1.ManifestFunction{
+			{LogicalName: "fn--web--entry", Framework: &contractv1.Framework{Name: "next"}},
+		}}}
+	}
+	return &contractv1.Manifest{Slug: "shop", Apps: []*contractv1.ManifestApp{app}}
+}
+
+func TestShapeOfANextAppBilledPerRequestListsTheTiersQueueAndRefreshAccount(t *testing.T) {
+	client, _ := costServed(t)
+	shaped := func(container bool) *costv1.ResourceSet {
+		set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+			Manifest:    nextManifest(container),
+			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+		})
+		if err != nil {
+			t.Fatalf("Shape() = %v", err)
+		}
+		return set
+	}
+
+	perRequest, container := shaped(false), shaped(true)
+
+	counts, without := typeCounts(perRequest), typeCounts(container)
+	if counts["google_cloud_tasks_queue"] != 1 {
+		t.Errorf("counts = %v, want the tier's delay queue", counts)
+	}
+	if counts["google_service_account"] != without["google_service_account"]+1 {
+		t.Errorf("counts = %v, want the refresh account beside the %d accounts of an app that refreshes on its own", counts, without["google_service_account"])
+	}
+	if counts["google_firestore_database"] != without["google_firestore_database"] {
+		t.Errorf("counts = %v, want no task database: a refresh keeps no run records", counts)
+	}
+	for _, r := range perRequest.GetResources() {
+		if r.GetType() == "google_cloud_tasks_queue" && r.GetScope() != "project:shop/shared:production" {
+			t.Errorf("the queue is scoped %q, want the tier it is shared by", r.GetScope())
+		}
+	}
+}
+
+func TestShapeOfANextAppOnContainerComputeListsNoTaskQueue(t *testing.T) {
+	client, _ := costServed(t)
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    nextManifest(true),
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+
+	if counts := typeCounts(set); counts["google_cloud_tasks_queue"] != 0 {
+		t.Errorf("counts = %v, want no queue for an app that refreshes on its own", counts)
+	}
+}

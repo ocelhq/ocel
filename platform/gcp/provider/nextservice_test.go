@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"net/url"
+	"path"
 	"strconv"
 	"testing"
 
@@ -316,5 +317,104 @@ func TestAnAppWithoutISRIsToldNoTagsDatabase(t *testing.T) {
 		if got, told := env[name]; told {
 			t.Errorf("a Next service with no incremental cache reads %s=%q", name, got)
 		}
+	}
+}
+
+var refreshEnvVars = []string{refreshURLEnvVar, refreshQueueEnvVar, refreshAccountEnvVar, tasksEndpointEnvVar}
+
+func TestANextServiceBilledPerRequestIsToldTheQueueItsRefreshesWaitInAndTheAccountTheyAreSignedAs(t *testing.T) {
+	env := envOf(releasedNext(t, routedNextSpec()))
+	derived := Names{namespace: "ocel", project: "acme-prod"}
+
+	if got, want := env["OCEL_REFRESH_QUEUE"], "projects/acme-prod/locations/europe-west1/queues/ocel-production-delays"; got != want {
+		t.Errorf("the Next service reads OCEL_REFRESH_QUEUE=%q, want %q", got, want)
+	}
+	if got, want := env["OCEL_REFRESH_ACCOUNT"], derived.RefreshAccountEmail(environment.TierProduction); got != want {
+		t.Errorf("the Next service reads OCEL_REFRESH_ACCOUNT=%q, want %q", got, want)
+	}
+}
+
+func TestANextServiceIsToldToReceiveRefreshesAtItsRunAppAddress(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+	env := envOf(server.created[0].Template.Containers[0])
+
+	want := "https://" + path.Base(server.service.Name) + "-123456789.europe-west1.run.app/_ocel/refresh"
+	if got := env["OCEL_REFRESH_URL"]; got != want {
+		t.Errorf("the Next service reads OCEL_REFRESH_URL=%q, want %q", got, want)
+	}
+}
+
+func TestANextServiceBehindAnEdgeThatRunsCodeIsToldNoRefreshQueue(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := routedNextSpec()
+	spec.Edge = front
+	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+
+	env := envOf(server.created[0].Template.Containers[0])
+	for _, name := range refreshEnvVars {
+		if got, told := env[name]; told {
+			t.Errorf("a Next service behind an edge that runs code reads %s=%q", name, got)
+		}
+	}
+}
+
+func TestAnEmulatedNextServiceQueuesItsRefreshesThroughTheEmulator(t *testing.T) {
+	env := envOf(releasedNext(t, routedNextSpec()))
+
+	endpoint, err := url.Parse(env["OCEL_TASKS_ENDPOINT"])
+	if err != nil || endpoint.Hostname() != "host.docker.internal" {
+		t.Errorf("the Next service reads OCEL_TASKS_ENDPOINT=%q, want an address on host.docker.internal", env["OCEL_TASKS_ENDPOINT"])
+	}
+}
+
+func TestANextServiceOnGoogleCloudIsToldNoTasksEndpoint(t *testing.T) {
+	env := newNextEnv(routedNextSpec(), routedNextSpec().App.Functions[0], serving{compute: provider.ComputeServerless}, nextCache{},
+		&nextRefresh{url: "u", queue: "q", account: "a"})
+
+	if got, told := env[tasksEndpointEnvVar]; told {
+		t.Errorf("a Next service on Google Cloud reads %s=%q", tasksEndpointEnvVar, got)
+	}
+	if env[refreshQueueEnvVar] != "q" {
+		t.Errorf("the Next service reads %s=%q, want q", refreshQueueEnvVar, env[refreshQueueEnvVar])
+	}
+}
+
+func TestANodeFunctionIsToldNoRefreshQueue(t *testing.T) {
+	spec := nextSpec()
+	spec.App.Framework = buildoutput.FrameworkNode
+	env := envOf(releasedNext(t, spec))
+
+	for _, name := range refreshEnvVars {
+		if got, told := env[name]; told {
+			t.Errorf("a node function reads %s=%q", name, got)
+		}
+	}
+}
+
+func TestANextServiceOnContainerComputeIsToldNoRefreshQueue(t *testing.T) {
+	spec := routedNextSpec()
+	env := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeContainer}, nextCache{}, nil)
+
+	for _, name := range refreshEnvVars {
+		if got, told := env[name]; told {
+			t.Errorf("a Next service on container compute reads %s=%q", name, got)
+		}
+	}
+}
+
+func TestANextServiceBilledPerRequestMakesTheRefreshURLOfItsServiceProjectNumberAndRegion(t *testing.T) {
+	if got, want := refreshURLOf("ocel-shop-prod-web", 123456789, "europe-west1"), "https://ocel-shop-prod-web-123456789.europe-west1.run.app/_ocel/refresh"; got != want {
+		t.Errorf("refreshURLOf() = %q, want %q", got, want)
 	}
 }
