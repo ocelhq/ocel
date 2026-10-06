@@ -190,7 +190,7 @@ export default {
 		t.Fatalf("the CLI sent %d deploys, want 1 once the hostname was saved", len(sent))
 	}
 	if got := sentPreflights(t, fixture); len(got) == 0 || !slices.Contains(got[len(got)-1].GetDomains(), productionDomain) {
-		t.Errorf("the last preflight named %v, want the hostname the reloaded config declares", got)
+		t.Errorf("the last of %d preflights named %v, want the hostname the reloaded config declares", len(got), got[len(got)-1].GetDomains())
 	}
 }
 
