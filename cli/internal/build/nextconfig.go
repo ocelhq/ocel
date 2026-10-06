@@ -40,7 +40,7 @@ var nextConfigSettings = []struct {
 	},
 	{
 		OwnAdapter,
-		regexp.MustCompile(`\badapterPath\s*:`),
+		regexp.MustCompile(`\badapterPath\s*[:,}]`),
 		`app %q sets adapterPath in %[2]s, and next start loads that adapter in place of the one ocel adds to its image, so it never loads the cache handlers ocel ships and each instance caches on its own: delete adapterPath from %[2]s`,
 	},
 }
