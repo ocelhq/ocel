@@ -26,9 +26,9 @@ func TestAManifestPinningTopicsAndTasksRendersEvenWithNoValueLive(t *testing.T) 
 		Topics: map[string]provider.TopicSpec{"resize": {TTL: time.Hour, Consumers: []provider.ConsumerSpec{
 			{Name: "resize", Worker: "media", Exclusive: true, Retry: provider.RetryPolicy{MaxAttempts: 3, MinDelay: time.Second, MaxDelay: time.Minute}},
 		}}},
-		DelayQueue:   "projects/acme-prod/locations/europe-west1/queues/ocel-production-delays",
-		DelayAccount: "ocel-production@acme-prod.iam.gserviceaccount.com",
-		PublishURL:   "https://pubsub.googleapis.com",
+		DelayQueue: "projects/acme-prod/locations/europe-west1/queues/ocel-production-delays",
+		Account:    "ocel-production@acme-prod.iam.gserviceaccount.com",
+		PublishURL: "https://pubsub.googleapis.com",
 	}
 	rendered, err := Render(manifest)
 	if err != nil || rendered == nil {

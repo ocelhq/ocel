@@ -26,11 +26,11 @@ type Manifest struct {
 }
 
 type Tasks struct {
-	Environment  string                        `json:"environment"`
-	Topics       map[string]provider.TopicSpec `json:"topics"`
-	DelayQueue   string                        `json:"delayQueue"`
-	DelayAccount string                        `json:"delayAccount"`
-	PublishURL   string                        `json:"publishUrl"`
+	Environment string                        `json:"environment"`
+	Topics      map[string]provider.TopicSpec `json:"topics"`
+	DelayQueue  string                        `json:"delayQueue"`
+	Account     string                        `json:"account"`
+	PublishURL  string                        `json:"publishUrl"`
 }
 
 func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }

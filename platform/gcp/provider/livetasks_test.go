@@ -95,7 +95,7 @@ func TestLiveTheTasksFeatureGivesTheTierADelayQueueAPushAccountAndTheGrantsTheyN
 		t.Errorf("Describe().Stacks = %+v, want the %s feature installed", described.Stacks, gcp.TasksFeature)
 	}
 
-	delay := "serviceAccount:" + names.DelayAccountEmail(tier)
+	tierAccount := "serviceAccount:ocel-" + string(tier) + "@" + liveProject() + ".iam.gserviceaccount.com"
 	tasksClient, err := workloadClients(t).CloudTasks()
 	if err != nil {
 		t.Fatal(err)
@@ -109,25 +109,14 @@ func TestLiveTheTasksFeatureGivesTheTierADelayQueueAPushAccountAndTheGrantsTheyN
 		t.Fatal(err)
 	}
 	if slices.ContainsFunc(policy.GetBindings(), func(binding *iampb.Binding) bool {
-		return slices.Contains(binding.GetMembers(), delay)
+		return slices.Contains(binding.GetMembers(), tierAccount)
 	}) {
-		t.Errorf("the delay queue grants %v to %s, want none: apps are granted the queue as they deploy", policy.GetBindings(), delay)
+		t.Errorf("the delay queue grants %v to %s, want none: apps are granted the queue as they deploy", policy.GetBindings(), tierAccount)
 	}
 
 	if !accountGrants(t, names.PushAccountEmail(tier), "roles/iam.serviceAccountTokenCreator", agentOf(t, "@gcp-sa-pubsub.iam.gserviceaccount.com")) {
 		t.Error("Pub/Sub may not sign a push as the push account, so no push would reach a worker")
 	}
-	agent := agentOf(t, "@gcp-sa-cloudtasks.iam.gserviceaccount.com")
-	if !accountGrants(t, names.DelayAccountEmail(tier), "roles/iam.serviceAccountUser", agent) {
-		t.Errorf("%s may not act as the delay account, and a delay task publishes as it", agent)
-	}
-	if accountGrants(t, names.DelayAccountEmail(tier), "roles/iam.serviceAccountUser", delay) {
-		t.Errorf("%s may act as itself, and nothing but Cloud Tasks acts as the delay account", delay)
-	}
-	if projectGrants(t, "roles/datastore.user", delay, names.TaskDatabase(tier)) {
-		t.Errorf("%s may write the runs in %s, and a delayed message writes none", delay, names.TaskDatabase(tier))
-	}
-
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, Remove: []string{gcp.TasksFeature}, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() removing %s = %v", gcp.TasksFeature, err)
 	}
@@ -137,9 +126,6 @@ func TestLiveTheTasksFeatureGivesTheTierADelayQueueAPushAccountAndTheGrantsTheyN
 	}
 	if _, err := accounts.Projects.ServiceAccounts.Get("projects/" + liveProject() + "/serviceAccounts/" + names.PushAccountEmail(tier)).Context(ctx).Do(); err == nil {
 		t.Error("the push account outlived the feature that made it")
-	}
-	if accountGrants(t, names.DelayAccountEmail(tier), "roles/iam.serviceAccountUser", agent) {
-		t.Error("Cloud Tasks may still act as the delay account after the feature was removed")
 	}
 	if _, err := tasksClient.GetQueue(ctx, &cloudtaskspb.GetQueueRequest{Name: queue}); status.Code(err) == codes.NotFound {
 		t.Error("the delay queue was deleted, and Cloud Tasks holds a deleted queue's name for 7 days: a feature added again within them could not make it")

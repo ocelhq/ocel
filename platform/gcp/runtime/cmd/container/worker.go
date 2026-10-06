@@ -35,7 +35,7 @@ func deploymentOf(manifest variables.Manifest) topics.Deployment {
 			Scope:     topics.Scope{Slug: manifest.Slug, Tier: environment.Tier(manifest.Tier), Environment: manifest.Tasks.Environment},
 		},
 		Declared: declared,
-		Delays:   topics.Delays{Queue: manifest.Tasks.DelayQueue, Account: manifest.Tasks.DelayAccount, PublishURL: manifest.Tasks.PublishURL},
+		Delays:   topics.Delays{Queue: manifest.Tasks.DelayQueue, Account: manifest.Tasks.Account, PublishURL: manifest.Tasks.PublishURL},
 	}
 }
 

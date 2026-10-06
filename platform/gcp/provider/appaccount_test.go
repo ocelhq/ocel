@@ -132,7 +132,7 @@ func TestAFunctionServiceRunsAsItsAppsOwnAccountNotTheTiers(t *testing.T) {
 			}
 			for _, service := range server.created {
 				if got := service.Template.ServiceAccount; got != want {
-					t.Errorf("%s runs as %q, want its app's own %q and not the tier's %q", service.Name, got, want, p.resolved.DelayAccountEmail(environment.TierProduction))
+					t.Errorf("%s runs as %q, want its app's own %q", service.Name, got, want)
 				}
 			}
 		})
@@ -222,7 +222,7 @@ func TestAProjectWithNoRoomForAnotherAccountIsRefusedNamingTheQuota(t *testing.T
 	}
 }
 
-func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsTheTierAndPublishToItsTopics(t *testing.T) {
+func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsItselfAndPublishToItsTopics(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	server.accountPolicies = map[string]*iam.Policy{}
@@ -250,13 +250,22 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsTheTierAndPublishToItsTo
 	if !slices.Equal(queueRoles, []string{"roles/cloudtasks.enqueuer", "roles/cloudtasks.taskDeleter"}) {
 		t.Errorf("the app holds %v on the delay queue, want enqueuer and taskDeleter", queueRoles)
 	}
-	tier := "/v1/projects/acme-prod/serviceAccounts/" + c.DelayAccountEmail(environment.TierProduction)
-	actAs := false
-	for _, binding := range policyOrEmpty(server.accountPolicies[tier]) {
-		actAs = actAs || binding.Role == runAsRole && slices.Contains(binding.Members, member)
+	own := "/v1/projects/acme-prod/serviceAccounts/" + email
+	var actingAs []string
+	for _, binding := range policyOrEmpty(server.accountPolicies[own]) {
+		if binding.Role == runAsRole {
+			actingAs = append(actingAs, binding.Members...)
+		}
 	}
-	if !actAs {
-		t.Errorf("the tier account's policy is %+v, want the app to act as it: it enqueues tasks signed as the tier", server.accountPolicies[tier])
+	slices.Sort(actingAs)
+	wantActingAs := []string{member, "serviceAccount:service-123456789@gcp-sa-cloudtasks.iam.gserviceaccount.com"}
+	slices.Sort(wantActingAs)
+	if !slices.Equal(actingAs, wantActingAs) {
+		t.Errorf("the app's own account may be acted as by %v, want exactly %v: it enqueues tasks signed as itself, and Cloud Tasks must act as it to sign them", actingAs, wantActingAs)
+	}
+	tierAccount := "/v1/projects/acme-prod/serviceAccounts/ocel-production@acme-prod.iam.gserviceaccount.com"
+	if _, touched := server.accountPolicies[tierAccount]; touched {
+		t.Errorf("the policy of %s was written, and no account but the app's own is acted as", tierAccount)
 	}
 	topic := "/v1/projects/acme-prod/topics/" + taskNames(c.Names, spec.Ref).Topic("resize")
 	published := false
@@ -268,7 +277,7 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsTheTierAndPublishToItsTo
 	}
 }
 
-func TestAnAppReachingNoTopicsIsGrantedNothingOnTheQueueOrTheTierAccount(t *testing.T) {
+func TestAnAppReachingNoTopicsIsGrantedNothingOnTheQueueOrItsOwnAccount(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	server.accountPolicies = map[string]*iam.Policy{}
@@ -325,5 +334,43 @@ func TestADeployCredentialWithoutTheAppAccountsRoleIsToldWhichRoleItLacks(t *tes
 				t.Errorf("createAppAccount() = %v, want an error naming projects/acme-prod/roles/ocel_app_accounts", err)
 			}
 		})
+	}
+}
+
+func TestAnAppsOwnAccountNotYetReadableIsActedAsOnceItIs(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	server.accountPolicies = map[string]*iam.Policy{}
+	server.accountPolicyUnseen = 2
+	p, c := ensuringAccounts(t, server)
+	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
+
+	email, err := p.ensureAppAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
+	if err != nil {
+		t.Fatalf("ensureAppAccount() = %v, want the grant retried until the account is readable", err)
+	}
+
+	member := "serviceAccount:" + email
+	bound := false
+	for _, binding := range policyOrEmpty(server.accountPolicies["/v1/projects/acme-prod/serviceAccounts/"+email]) {
+		bound = bound || binding.Role == runAsRole && slices.Contains(binding.Members, member)
+	}
+	if !bound {
+		t.Errorf("the app's own account is bound to %+v, want the app to act as it", server.accountPolicies)
+	}
+}
+
+func TestAnAppsOwnAccountItMayNotActAsNamesTheCustomRole(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	server.accountPolicies = map[string]*iam.Policy{}
+	server.accountPolicyDenied = true
+	p, c := ensuringAccounts(t, server)
+	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
+
+	_, err := p.ensureAppAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
+
+	if err == nil || !strings.Contains(err.Error(), "projects/acme-prod/roles/ocel_app_accounts") {
+		t.Errorf("ensureAppAccount() = %v, want an error naming projects/acme-prod/roles/ocel_app_accounts", err)
 	}
 }

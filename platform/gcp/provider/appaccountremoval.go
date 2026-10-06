@@ -9,7 +9,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -64,7 +63,7 @@ func forgetUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 	if err := absentIsDone(c.bindQueueRoles(ctx, ref.Tier, member, nil)); err != nil {
 		return err
 	}
-	if err := absentIsDone(c.bindAccountRole(ctx, c.DelayAccount(ref.Tier), runAsRole, member, false)); err != nil {
+	if err := absentIsDone(c.bindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), runAsRole, member, false)); err != nil {
 		return err
 	}
 	if revoked.topics, err = c.revokeTopicPublisher(ctx, recorded, ref, member); err != nil {
@@ -75,7 +74,7 @@ func forgetUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 		return err
 	}
 	if other, running := runsElsewhere(again, ref); running {
-		if err := c.restoreGrants(ctx, ref.Tier, member, revoked); err != nil {
+		if err := c.restoreGrants(ctx, ref, member, revoked); err != nil {
 			return err
 		}
 		if progress != nil {
@@ -89,17 +88,17 @@ func forgetUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 	return nil
 }
 
-func (c *clients) restoreGrants(ctx context.Context, tier environment.Tier, member string, revoked revokedGrants) error {
+func (c *clients) restoreGrants(ctx context.Context, ref provider.StackRef, member string, revoked revokedGrants) error {
 	for _, binding := range revoked.project {
 		if err := c.bindProjectRole(ctx, member, binding.Role, binding.Condition, true); err != nil {
 			return err
 		}
 	}
 	if revoked.tasks {
-		if err := absentIsDone(c.bindQueueRoles(ctx, tier, member, queueRoles)); err != nil {
+		if err := absentIsDone(c.bindQueueRoles(ctx, ref.Tier, member, queueRoles)); err != nil {
 			return err
 		}
-		if err := absentIsDone(c.bindAccountRole(ctx, c.DelayAccount(tier), runAsRole, member, true)); err != nil {
+		if err := absentIsDone(c.bindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), runAsRole, member, true)); err != nil {
 			return err
 		}
 	}

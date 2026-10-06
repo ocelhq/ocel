@@ -66,10 +66,10 @@ func holdings(server *iamServer, c *clients, member string) []string {
 			held = append(held, "queue "+binding.GetRole())
 		}
 	}
-	delay := "/v1/projects/acme-prod/serviceAccounts/" + c.DelayAccountEmail(environment.TierProduction)
-	for _, binding := range policyOrEmpty(server.accountPolicies[delay]) {
+	own := "/v1/projects/acme-prod/serviceAccounts/" + strings.TrimPrefix(member, "serviceAccount:")
+	for _, binding := range policyOrEmpty(server.accountPolicies[own]) {
 		if slices.Contains(binding.Members, member) {
-			held = append(held, "delay account "+binding.Role)
+			held = append(held, "own account "+binding.Role)
 		}
 	}
 	return held
@@ -80,7 +80,7 @@ func TestRemovingTheLastEnvironmentRunningAnAppRevokesEveryGrantItsAccountHeld(t
 	server := appAccountsOnly()
 	c, spec, member := grantedAppAccount(t, server)
 	if got := holdings(server, c, member); len(got) != 8 {
-		t.Fatalf("the account holds %q before removal, want the records, key, task database, tag database, cache, queue (2) and delay account grants", got)
+		t.Fatalf("the account holds %q before removal, want the records, key, task database, tag database, cache, queue (2) and own account grants", got)
 	}
 	records := recordedStacks{names: []naming.StackName{spec.Ref.Name, naming.InfraStack("production"), stackOf("production", "api", "r1")}}
 

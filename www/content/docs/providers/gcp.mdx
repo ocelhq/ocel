@@ -191,24 +191,19 @@ batches of one, a task's own `concurrency` is not enforced (its worker's is), an
 is not atomic. A deploy that changes a topic's `ordered` is refused while any of its consumers is
 kept, since Pub/Sub cannot change a subscription's ordering: rename the consumers to change it.
 
-Once `tasks` is installed, a deploy also keeps the app's access to the tier's delay queue and to
-the tier's service account, and Google cannot narrow either grant by condition, so you give the
-deploy credential those two roles on exactly those resources, once per tier:
+Once `tasks` is installed, a deploy also keeps the app's access to the tier's delay queue, and
+Google cannot narrow that grant by condition, so you give the deploy credential the role on
+exactly that queue, once per tier:
 
 ```bash
-gcloud iam service-accounts add-iam-policy-binding \
-  ocel-production@my-project.iam.gserviceaccount.com \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-  --role=roles/iam.serviceAccountAdmin
 gcloud tasks queues add-iam-policy-binding ocel-production-delays \
   --location=europe-west1 --project=my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=roles/cloudtasks.queueAdmin
 ```
 
-The account is `<namespace>-<tier>` and the queue `<namespace>-<tier>-delays`, so a project
-with a preview tier needs the same two grants for it. A deploy that lacks one is refused,
-naming it.
+The queue is `<namespace>-<tier>-delays`, so a project with a preview tier needs the same grant
+for it. A deploy that lacks it is refused, naming it.
 
 ## Realtime
 
@@ -251,6 +246,10 @@ gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=projects/my-project/roles/ocel_app_accounts
 ```
+
+An app that reaches topics, tasks or workers may act as its own account, and so may Cloud Tasks,
+because a delayed message is published as the app that sent it. A deploy sets that with the custom
+role.
 
 A bootstrap never deletes the role, because Google holds a deleted custom role's id for up to 44
 days and nothing could make it again in that time. A role deleted by hand is undeleted within

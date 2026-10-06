@@ -74,18 +74,18 @@ func TestAWorkerIsNamedApartFromItsAppAndEveryOtherWorker(t *testing.T) {
 	}
 }
 
-func TestAnAppReachingTopicsIsPinnedEveryTopicItsWorkersAndProxyServe(t *testing.T) {
+func TestATasksManifestPinsTheTiersQueueAndPublishesDelaysAsTheAppsOwnAccount(t *testing.T) {
 	t.Parallel()
 
 	c := &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1"}
 	declared := map[string]*provider.TopicSpec{"resize": {TTL: time.Hour}}
-	tasks := tasksManifest(c, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: naming.InfraStack(stackrecords.ProductionEnv)}, declared)
+	tasks := tasksManifest(c, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: naming.InfraStack(stackrecords.ProductionEnv)}, "web", declared)
 
 	if tasks.Environment != stackrecords.ProductionEnv || tasks.Topics["resize"].TTL != time.Hour {
 		t.Errorf("tasksManifest() = %+v, want the environment's own runs and the resize topic as deployed", tasks)
 	}
 	if tasks.DelayQueue != "projects/acme-prod/locations/europe-west1/queues/ocel-production-delays" ||
-		tasks.DelayAccount != "ocel-production@acme-prod.iam.gserviceaccount.com" || tasks.PublishURL != "https://pubsub.googleapis.com" {
-		t.Errorf("tasksManifest() = %+v, want the tier's delay queue, its delay account and Pub/Sub's own url", tasks)
+		tasks.Account != c.AppAccountEmail(environment.TierProduction, "shop", "web") || tasks.PublishURL != "https://pubsub.googleapis.com" {
+		t.Errorf("tasksManifest() = %+v, want the tier's delay queue, the app's own account and Pub/Sub's own url", tasks)
 	}
 }

@@ -40,8 +40,10 @@ type iamServer struct {
 	projectWrites   int
 	projectAttempts int
 
-	accountPolicies map[string]*iam.Policy
-	accountWrites   int
+	accountPolicies     map[string]*iam.Policy
+	accountWrites       int
+	accountPolicyUnseen int
+	accountPolicyDenied bool
 
 	topicPolicies map[string]*pubsub.Policy
 	topicWrites   int
@@ -169,6 +171,13 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 		case s.tasksAbsent && strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":getIamPolicy"):
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"service account not found"}}`))
+		case s.accountPolicyUnseen > 0 && strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":getIamPolicy"):
+			s.accountPolicyUnseen--
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"service account not found"}}`))
+		case s.accountPolicyDenied && strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":setIamPolicy"):
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"denied"}}`))
 		case s.accountPolicies != nil && strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":getIamPolicy"):
 			policy := s.accountPolicies[strings.TrimSuffix(path, ":getIamPolicy")]
 			if policy == nil {

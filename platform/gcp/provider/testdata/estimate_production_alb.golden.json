@@ -190,10 +190,6 @@
       "status": "STATUS_FREE"
     },
     {
-      "resource": "project:shop/shared:production/google_service_account:ocel-production",
-      "status": "STATUS_FREE"
-    },
-    {
       "resource": "project:shop/shared:production/google_service_account:ocel-ce6fea64cc",
       "status": "STATUS_FREE"
     },
@@ -461,7 +457,7 @@
   ],
   "coverage": {
     "supported": 13,
-    "free": 12,
+    "free": 11,
     "supportedTypes": [
       "google_artifact_registry_repository",
       "google_certificate_manager_certificate_map",
