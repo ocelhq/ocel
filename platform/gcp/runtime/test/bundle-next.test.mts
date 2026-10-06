@@ -1,5 +1,6 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import http from "node:http";
 import { isBuiltin } from "node:module";
 import net from "node:net";
 import { tmpdir } from "node:os";
@@ -101,6 +102,42 @@ test("no file in the runtime directory contains a path of the checkout it was bu
   expect(leaking).toEqual([]);
 });
 
+async function fakeCloudTasks(): Promise<{
+  origin: string;
+  bodies: { task: { httpRequest: { body: string } } }[];
+  server: http.Server;
+}> {
+  const bodies: { task: { httpRequest: { body: string } } }[] = [];
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      bodies.push(JSON.parse(body));
+      res.setHeader("Content-Type", "application/json");
+      res.end("{}");
+    });
+  });
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  const { port } = server.address() as net.AddressInfo;
+  return { origin: `http://127.0.0.1:${port}`, bodies, server };
+}
+
+const decodedTask = (task: { task: { httpRequest: { body: string } } }) =>
+  JSON.parse(Buffer.from(task.task.httpRequest.body, "base64").toString()) as {
+    isrPrefix: string;
+    refresh: { url: string; key: string; lastModified: number };
+  };
+
+const refreshEnv = (origin: string) => ({
+  OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
+  OCEL_REFRESH_URL: `${origin}/_ocel/refresh`,
+  OCEL_REFRESH_QUEUE: "projects/p/locations/r/queues/q",
+  OCEL_REFRESH_ACCOUNT: "ocel-production-refresh@p.iam.gserviceaccount.com",
+  OCEL_TASKS_ENDPOINT: origin,
+});
+
 const staleLauncher = (log: string) => `const { appendFileSync } = require("node:fs");
 module.exports = {
   async handler(req, res) {
@@ -117,7 +154,7 @@ module.exports = {
 };
 `;
 
-test("a stale page served by a Next service billed per request is re-rendered before its response ends", async () => {
+test("a stale page served by a Next service billed per request queues a refresh task before its response ends", async () => {
   const projectDir = join(dist, "stale-project");
   await writeNextProjectFixture(
     projectDir,
@@ -147,6 +184,7 @@ test("a stale page served by a Next service billed per request is re-rendered be
       dispatch: { "/blog": { kind: "function", id: "bundle-0", entryKey: "/blog" } },
     }),
   );
+  const tasks = await fakeCloudTasks();
   const port = await freePort();
 
   const child = spawn(process.execPath, [join(dir, "entrypoint.mjs")], {
@@ -155,6 +193,7 @@ test("a stale page served by a Next service billed per request is re-rendered be
       PATH: process.env.PATH,
       OCEL_HANDLER: launcher,
       PORT: String(port),
+      ...refreshEnv(tasks.origin),
       OCEL_ORIGIN_DISPATCH: "1",
       OCEL_ORIGIN_SIGNED: "1",
       OCEL_ROUTING_MANIFEST: manifest,
@@ -169,7 +208,47 @@ test("a stale page served by a Next service billed per request is re-rendered be
   const res = await fetch(`http://127.0.0.1:${port}/blog`);
 
   expect(await res.text()).toBe("stale");
-  expect(await readFile(log, "utf8")).toBe("refreshed /blog\n");
+  tasks.server.close();
+  expect(tasks.bodies).toHaveLength(1);
+  expect(decodedTask(tasks.bodies[0]!)).toMatchObject({
+    isrPrefix: "prod/shop/web/r1/isr",
+    refresh: { url: "/blog", key: "blog", lastModified: 1000 },
+  });
+  expect(await readFile(log, "utf8")).toBe("");
+});
+
+test("a Next service billed per request that names no refresh queue refuses to start", async () => {
+  const projectDir = join(dist, "no-queue-project");
+  await writeNextProjectFixture(projectDir);
+  const launcher = join(projectDir, "__next_launcher.cjs");
+  await writeFile(launcher, `module.exports = { async handler(req, res) { res.end("x"); } };\n`);
+  const manifest = join(projectDir, "routing-manifest.json");
+  await writeFile(manifest, "{}");
+  const port = await freePort();
+
+  const child = spawn(process.execPath, [join(dir, "entrypoint.mjs")], {
+    cwd: projectDir,
+    env: {
+      PATH: process.env.PATH,
+      OCEL_HANDLER: launcher,
+      PORT: String(port),
+      OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
+      OCEL_ORIGIN_DISPATCH: "1",
+      OCEL_ORIGIN_SIGNED: "1",
+      OCEL_ROUTING_MANIFEST: manifest,
+      OCEL_FINISH_BEFORE_RESPONSE_MS: "5000",
+    },
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  children.push(child);
+  let stderr = "";
+  child.stderr!.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const code = await new Promise<number | null>((done) => child.on("exit", done));
+
+  expect(code).not.toBe(0);
+  expect(stderr).toContain("Cloud Tasks queue");
 });
 
 test("the entrypoint serves a Next app on the port Cloud Run names", async () => {
@@ -224,7 +303,7 @@ module.exports = {
 };
 `;
 
-test("a stale RSC navigation to a partially static page is answered without the entry and refreshed once before its response ends", async () => {
+test("a stale RSC navigation to a partially static page is answered without the entry and queues one refresh task before its response ends", async () => {
   const projectDir = join(dist, "ppr-project");
   await writeNextProjectFixture(
     projectDir,
@@ -254,6 +333,7 @@ test("a stale RSC navigation to a partially static page is answered without the 
       dispatch: { "/blog": { kind: "function", id: "bundle-0", entryKey: "/blog" } },
     }),
   );
+  const tasks = await fakeCloudTasks();
   const port = await freePort();
   const child = spawn(process.execPath, [join(dir, "entrypoint.mjs")], {
     cwd: projectDir,
@@ -261,6 +341,7 @@ test("a stale RSC navigation to a partially static page is answered without the 
       PATH: process.env.PATH,
       OCEL_HANDLER: launcher,
       PORT: String(port),
+      ...refreshEnv(tasks.origin),
       OCEL_ORIGIN_DISPATCH: "1",
       OCEL_ORIGIN_SIGNED: "1",
       OCEL_ROUTING_MANIFEST: manifest,
@@ -278,5 +359,11 @@ test("a stale RSC navigation to a partially static page is answered without the 
   const res = await fetch(`http://127.0.0.1:${port}/blog`, { headers: { RSC: "1" } });
 
   expect(await res.text()).toBe("no entry");
-  expect(await readFile(log, "utf8")).toBe("refreshed /blog\n");
+  tasks.server.close();
+  expect(tasks.bodies).toHaveLength(1);
+  const queued = decodedTask(tasks.bodies[0]!);
+  expect(queued.isrPrefix).toBe("prod/shop/web/r1/isr");
+  expect(queued.refresh).toMatchObject({ url: "/blog", key: "blog" });
+  expect(typeof queued.refresh.lastModified).toBe("number");
+  expect(await readFile(log, "utf8")).toBe("");
 });

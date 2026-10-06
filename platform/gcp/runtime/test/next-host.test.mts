@@ -194,28 +194,61 @@ test("the GCP host's cache store and use-cache store share one tenth of the serv
   });
 });
 
-test("the GCP host's refresh gives up on a re-render once the time the service has to answer runs short", async () => {
-  const slow = http.createServer((_req, res) => {
-    setTimeout(() => res.end("rendered"), 300);
+test("the GCP host refreshes a stale page through the queue its deploy named", async () => {
+  const requests: { method?: string; url?: string }[] = [];
+  const { server, origin } = await listen((req) => {
+    requests.push({ method: req.method, url: req.url });
   });
-  await new Promise<void>((resolve) => slow.listen({ host: "127.0.0.1", port: 0 }, resolve));
-  const { port } = slow.address() as { port: number };
+  try {
+    const host = newGcpNextHost({
+      PORT: "8080",
+      OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
+      OCEL_REFRESH_URL: "https://web-abc.a.run.app/_ocel/refresh",
+      OCEL_REFRESH_QUEUE: "projects/p/locations/r/queues/q",
+      OCEL_REFRESH_ACCOUNT: "ocel-production-refresh@p.iam.gserviceaccount.com",
+      OCEL_TASKS_ENDPOINT: origin,
+    });
+
+    await host.scheduleRefresh!({ url: "/blog", key: "blog", lastModified: 1, headers: {} });
+
+    expect(requests).toEqual([
+      { method: "POST", url: "/v2/projects/p/locations/r/queues/q/tasks" },
+    ]);
+  } finally {
+    server.close();
+  }
+});
+
+test("a GCP host billed per request that routes its own requests refuses to start without a refresh queue", () => {
+  expect(() =>
+    newGcpNextHost({
+      PORT: "8080",
+      OCEL_ORIGIN_DISPATCH: "1",
+      OCEL_FINISH_BEFORE_RESPONSE_MS: "10000",
+      OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
+    }),
+  ).toThrow(/Cloud Tasks queue/);
+});
+
+test("a GCP host told a refresh url but no queue refuses to start", () => {
+  expect(() =>
+    newGcpNextHost({
+      PORT: "8080",
+      OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
+      OCEL_REFRESH_URL: "https://web-abc.a.run.app/_ocel/refresh",
+      OCEL_REFRESH_ACCOUNT: "ocel-production-refresh@p.iam.gserviceaccount.com",
+    }),
+  ).toThrow(/OCEL_REFRESH_QUEUE/);
+});
+
+test("a GCP host that does not dispatch at its origin schedules no refresh", () => {
   const host = newGcpNextHost({
     PORT: "8080",
-    OCEL_FINISH_BEFORE_RESPONSE_MS: "50",
-    __NEXT_PRIVATE_ORIGIN: `http://127.0.0.1:${port}`,
+    OCEL_FINISH_BEFORE_RESPONSE_MS: "10000",
+    OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
   });
-  const started = Date.now();
 
-  try {
-    await expect(
-      host.scheduleRefresh!({ url: "/blog", key: "blog", lastModified: 1, headers: {} }),
-    ).rejects.toThrow(/did not answer within 50ms/);
-    expect(Date.now() - started).toBeLessThan(250);
-  } finally {
-    slow.closeAllConnections();
-    await new Promise<void>((resolve) => slow.close(() => resolve()));
-  }
+  expect(host.scheduleRefresh).toBeUndefined();
 });
 
 test("the GCP host's cache store and the cache the default use-cache handler fills share one tenth of the service's memory", async () => {
