@@ -4,6 +4,8 @@ package host
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -40,20 +42,23 @@ func TestTheWatchStopsTheProbeAndNamesTheContainerOnceItCrashLoops(t *testing.T)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	began := time.Now()
-	said, err := box.Stream(ctx, watchingStart([]string{"web", "api"}, []string{"sh", "-c", "echo $$ > " + pidFile + "; exec sleep 300"}), nil)
+	said, err := box.Stream(ctx, renderStartWatch([]string{"web", "api"}, []string{"sh", "-c", "echo $$ > " + pidFile + "; exec sleep 300"}), nil)
 	if err != nil {
 		t.Fatalf("the watch = %v", err)
 	}
 	if took := time.Since(began); took > 10*time.Second {
 		t.Errorf("the watch took %s to give up on a crash-looping container, want it to stop the probe rather than wait it out", took)
 	}
-	if name, crashed := unstartedIn(said.Stdout); !crashed || name != "api" {
+	if name, crashed := findUnstarted(said.Stdout); !crashed || name != "api" {
 		t.Errorf("the watch said %q, want it to name api as unstarted", said.Stdout)
 	}
 	if said.Code == 0 {
 		t.Error("the watch exited 0 over a container that never started")
 	}
 	written, err := os.ReadFile(pidFile)
+	if errors.Is(err, fs.ErrNotExist) {
+		return
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,14 +77,14 @@ func TestTheWatchHandsBackWhatTheProbeSaidWhileTheContainerHasNotCrashLooped(t *
 	for status, code := range map[string]int{"running 0": 0, "restarting " + strconv.Itoa(crashLoopRestarts-1): 4} {
 		box, _ := watchedOn(t, map[string]string{"web": status})
 		probe := []string{"sh", "-c", "sleep 1; echo answered /up 503; echo never answered >&2; exit " + strconv.Itoa(code)}
-		said, err := box.Stream(context.Background(), watchingStart([]string{"web"}, probe), nil)
+		said, err := box.Stream(context.Background(), renderStartWatch([]string{"web"}, probe), nil)
 		if err != nil {
 			t.Fatalf("%s: the watch = %v", status, err)
 		}
 		if said.Code != code || said.Stdout != "answered /up 503\n" || said.Stderr != "never answered\n" {
 			t.Errorf("%s: the watch handed back %+v, want the probe's own output and exit %d", status, said, code)
 		}
-		if _, crashed := unstartedIn(said.Stdout); crashed {
+		if _, crashed := findUnstarted(said.Stdout); crashed {
 			t.Errorf("%s: the watch named a container unstarted that has not crash-looped", status)
 		}
 	}

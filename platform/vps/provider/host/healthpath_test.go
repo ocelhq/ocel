@@ -51,7 +51,7 @@ func TestTheBoxIsAskedForTheHealthPathCandidatesInOrderAtTheAppsTarget(t *testin
 	if asked < 0 {
 		t.Fatalf("the box was never asked to find a health path: %v", box.commands())
 	}
-	want := watchingStart([]string{containerOf(nextTarget)}, switchboardCommand("find-health-path", "--deploy-timeout", "60", nextTarget, "/up", "/health", "/healthz", "/"))
+	want := renderStartWatch([]string{containerOf(nextTarget)}, switchboardCommand("find-health-path", "--deploy-timeout", "60", nextTarget, "/up", "/health", "/healthz", "/"))
 	if command := box.commands()[asked]; !strings.Contains(command, want) {
 		t.Errorf("the box was asked\n%s\nwant it to contain\n%s", command, want)
 	}

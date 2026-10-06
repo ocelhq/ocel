@@ -19,7 +19,7 @@ func searchedOnCrashing(found session.Result, state string) *bench {
 		switch {
 		case command == stateCommand(physical):
 			return session.Result{Stdout: state}, true
-		case command == lastRunLogsCommand(physical):
+		case command == renderLastRunLogs(physical):
 			return session.Result{Stdout: "Error: Cannot find module '/app/index.js'\nocel: the app exited: exit status 1\n"}, true
 		case strings.HasPrefix(command, "docker logs"):
 			return session.Result{Stdout: "2026-01-01T00:00:01Z first run\n2026-01-01T00:00:09Z last run\n"}, true
@@ -48,7 +48,7 @@ func TestAnAppWhoseContainerExitsBeforeItAnswersIsRefusedAsFailingToStartAndNeve
 			t.Fatalf("%s: FindHealthPath() = %v, want a not-ready refusal", what, err)
 		}
 		said := err.Error()
-		for _, want := range []string{"start node on", "failing to start, not failing a health check", "RestartCount=10", "logs (its last run):\nError: Cannot find module '/app/index.js'", physical + " removed"} {
+		for _, want := range []string{"start node on", "failing to start, not failing a health check", "RestartCount=10", "logs (its last run, last " + appLogTail + " lines):\nError: Cannot find module '/app/index.js'", physical + " removed"} {
 			if !strings.Contains(said, want) {
 				t.Errorf("%s: the refusal reads\n%s\nand never says %q", what, said, want)
 			}
@@ -99,6 +99,17 @@ func TestTheGateWatchesEveryContainerItReleases(t *testing.T) {
 	for _, name := range []string{containerOf(nextTarget), containerOf(apiNextTarget)} {
 		if !strings.Contains(gated, insideWatch("crashed "+quoted(name))) {
 			t.Errorf("the gate ran\n%s\nand never watches %s", gated, name)
+		}
+	}
+}
+
+func TestTheLastRunsLogsAreReadFromWhenItStartedAndNoMoreThanTheTail(t *testing.T) {
+	t.Parallel()
+
+	command := renderLastRunLogs(physical)
+	for _, want := range []string{`--since "$started"`, "--tail " + appLogTail} {
+		if !strings.Contains(command, want) {
+			t.Errorf("the last run's logs are read with\n%s\nwhich has no %s: an app that logs fast before it dies would hand back every line it wrote", command, want)
 		}
 	}
 }
