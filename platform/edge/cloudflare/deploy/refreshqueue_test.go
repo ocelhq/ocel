@@ -160,6 +160,18 @@ func TestABootstrapWhoseOriginCannotTrustTheRenewedCertificateLeavesTheRefresher
 	}
 }
 
+func TestTheRefreshQueueIsFoundByItsNameEvenWhenTheListingIgnoresTheNameFilter(t *testing.T) {
+	p, m, _ := bootstrappedWithRefresher(t)
+	m.queues = append([]map[string]any{{"queue_id": "other-1", "queue_name": "someone-elses", "consumers": []any{}}}, m.queues...)
+	m.ignoresQueueNameFilter = true
+
+	queue, found, err := p.findQueue(t.Context(), "acct", refreshQueueName)
+
+	if err != nil || !found || queue.QueueName != refreshQueueName {
+		t.Errorf("findQueue = %+v, %v, %v, want the tier's own queue whatever the server did with the name filter", queue, found, err)
+	}
+}
+
 func countPuts(m *cfMock, script string) int {
 	n := 0
 	for _, put := range m.putScripts {
