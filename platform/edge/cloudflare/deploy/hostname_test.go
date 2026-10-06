@@ -1095,6 +1095,44 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 	}
 }
 
+func TestARouteOfAHostnameServedElsewhereIsNeitherAttachedNorPruned(t *testing.T) {
+	t.Parallel()
+	m := &cfMock{
+		zoneID:   "zone1",
+		zoneName: "example.com",
+		existingRoutes: []map[string]any{
+			{"id": "kept", "pattern": "shop.example.com/*", "script": "ocel-prod"},
+			{"id": "stale", "pattern": "old.example.com/*", "script": "ocel-prod"},
+		},
+	}
+	up := upload{accountID: "acct", scriptName: "ocel-prod"}
+	spec := routeSpec{desired: []string{"www.example.com"}, servedElsewhere: []string{"shop.example.com"}, prune: true}
+
+	if err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, spec, nil); err != nil {
+		t.Fatalf("reconcileWorkerRoutes: %v", err)
+	}
+
+	if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "www.example.com/*" {
+		t.Errorf("created routes = %v, want www.example.com/* alone", m.createdRoutes)
+	}
+	if !slices.Equal(m.deletedRoutes, []string{"stale"}) {
+		t.Errorf("deleted routes = %v, want the stale one alone: a route of a hostname served elsewhere is left as it was found", m.deletedRoutes)
+	}
+}
+
+func TestNoRouteIsCreatedForAHostnameServedElsewhere(t *testing.T) {
+	t.Parallel()
+	m := &cfMock{zoneID: "zone1", zoneName: "example.com"}
+	up := upload{accountID: "acct", scriptName: "ocel-prod"}
+
+	if err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, routeSpec{servedElsewhere: []string{"shop.example.com"}, prune: true}, nil); err != nil {
+		t.Fatalf("reconcileWorkerRoutes: %v", err)
+	}
+	if len(m.createdRoutes) != 0 {
+		t.Errorf("created routes = %v, want none for a hostname another front serves", m.createdRoutes)
+	}
+}
+
 func TestReconcileWorkerRoutesRequestBudget(t *testing.T) {
 	t.Parallel()
 

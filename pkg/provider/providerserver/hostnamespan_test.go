@@ -104,6 +104,57 @@ func TestAHostnameAWorkerRouteAlreadySendsToTheEdgeIsAttachedThroughItRatherThan
 	}
 }
 
+func lastStackOf(t *testing.T, p *fake.Provider, kind edge.Kind) edge.StackSpec {
+	t.Helper()
+	stacks := p.Edges().(*fake.Edges).Edge(kind).Stacks()
+	if len(stacks) == 0 {
+		t.Fatalf("the %s edge reconciled no stack", kind)
+	}
+	return stacks[len(stacks)-1]
+}
+
+func TestADeployRoutesNoHostnameToItsEdgeThatTheStateRecordsOnAnotherFront(t *testing.T) {
+	builtProject(t)
+	client, p := deployServed(t)
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	req.Edge.Kind = string(fake.KindDirect)
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() on the %s edge = %q", fake.KindDirect, result.GetError())
+	}
+
+	req.Edge.Kind = string(fake.KindRelay)
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() on the %s edge = %q", fake.KindRelay, result.GetError())
+	}
+
+	spec := lastStackOf(t, p, fake.KindRelay)
+	if !slices.Equal(spec.ServedElsewhere, []string{"shop.example"}) || slices.Contains(spec.Domains, "shop.example") {
+		t.Errorf("the %s edge was handed Domains %v and ServedElsewhere %v, want shop.example only in the second: another front still serves it", fake.KindRelay, spec.Domains, spec.ServedElsewhere)
+	}
+	if spec.DomainApps["shop.example"] != "web" {
+		t.Errorf("DomainApps = %v, want the owner of shop.example kept so the worker can serve it the moment its route moves", spec.DomainApps)
+	}
+}
+
+func TestAHostnameRecordedOnThisFrontIsRoutedAsBefore(t *testing.T) {
+	builtProject(t)
+	client, p := deployServed(t)
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	req.Edge.Kind = string(fake.KindRelay)
+	for range 2 {
+		if result, _ := deploy(t, client, req); !result.GetSuccess() {
+			t.Fatalf("Deploy() = %q", result.GetError())
+		}
+	}
+
+	spec := lastStackOf(t, p, fake.KindRelay)
+	if !slices.Contains(spec.Domains, "shop.example") || len(spec.ServedElsewhere) != 0 {
+		t.Errorf("Domains %v and ServedElsewhere %v, want the hostname routed as before", spec.Domains, spec.ServedElsewhere)
+	}
+}
+
 func TestAHostnameStillAnsweredThroughAnotherFrontKeepsTheNoteThatDomainAddMovesIt(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)

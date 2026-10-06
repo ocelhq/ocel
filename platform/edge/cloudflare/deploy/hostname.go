@@ -18,12 +18,13 @@ import (
 )
 
 type routeSpec struct {
-	desired        []string
-	bound          []string
-	prune          bool
-	pruneStem      string
-	requiredRecord string
-	owns           func(script string) bool
+	desired         []string
+	bound           []string
+	servedElsewhere []string
+	prune           bool
+	pruneStem       string
+	requiredRecord  string
+	owns            func(script string) bool
 }
 
 func (spec routeSpec) ownsRoute(scriptName, owner string) bool {
@@ -59,6 +60,9 @@ func (p *cloudflare) reconcileWorkerRoutes(ctx context.Context, up upload, spec 
 
 	wanted := make(map[string]bool, len(spec.desired)+len(spec.bound))
 	for _, host := range spec.bound {
+		wanted[host] = true
+	}
+	for _, host := range spec.servedElsewhere {
 		wanted[host] = true
 	}
 	for _, host := range spec.desired {

@@ -197,12 +197,13 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	}
 
 	if err := p.reconcileWorkerRoutes(ctx, genericUp, routeSpec{
-		desired:        spec.Domains,
-		bound:          prior.Bound,
-		prune:          spec.PruneRoutes,
-		pruneStem:      program.PruneWorkerStem,
-		requiredRecord: program.RequiredRecord,
-		owns:           projectOwnsScript(p.namespace, slug),
+		desired:         spec.Domains,
+		bound:           prior.Bound,
+		servedElsewhere: spec.ServedElsewhere,
+		prune:           spec.PruneRoutes,
+		pruneStem:       program.PruneWorkerStem,
+		requiredRecord:  program.RequiredRecord,
+		owns:            projectOwnsScript(p.namespace, slug),
 	}, spec.Warn); err != nil {
 		return nil, err
 	}
@@ -214,7 +215,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		if err := p.deleteScript(ctx, accountID, program.Name); err != nil {
 			return nil, fmt.Errorf("delete retired generic worker %q: %w", program.Name, err)
 		}
-	} else if _, err := p.setSubdomain(ctx, genericUp, len(spec.Domains) == 0); err != nil {
+	} else if _, err := p.setSubdomain(ctx, genericUp, len(spec.Domains)+len(spec.ServedElsewhere) == 0); err != nil {
 		return nil, fmt.Errorf("set generic worker subdomain: %w", err)
 	}
 	stamps[program.Name] = stamp

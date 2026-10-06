@@ -22,16 +22,18 @@ func NameUnderStem(stem, name string) bool {
 var ErrStoreAbsent = errors.New("the deployments store is not provisioned")
 
 type StackSpec struct {
-	Version     string
-	Tier        environment.Tier
-	Slug        string
-	Domains     []string
-	DomainApps  map[string]string
-	Values      map[string]string
-	PruneOnly   bool
-	PruneRoutes bool
-	Warn        func(string)
-	Program     *ProgramSpec
+	Version    string
+	Tier       environment.Tier
+	Slug       string
+	Domains    []string
+	DomainApps map[string]string
+
+	ServedElsewhere []string
+	Values          map[string]string
+	PruneOnly       bool
+	PruneRoutes     bool
+	Warn            func(string)
+	Program         *ProgramSpec
 }
 
 type ProgramSpec struct {
