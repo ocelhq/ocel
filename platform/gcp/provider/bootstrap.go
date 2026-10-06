@@ -53,8 +53,6 @@ const passphraseBytes = 32
 
 const runAsRole = "roles/iam.serviceAccountUser"
 
-const grantAttempts = 4
-
 const (
 	dockerImages     = "DOCKER"
 	standardImages   = "STANDARD_REPOSITORY"
@@ -635,33 +633,10 @@ func (b bootstrap) grantRunAs(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	service, err := b.clients.Accounts()
-	if err != nil {
-		return err
+	if err := b.clients.bindAccountRole(ctx, name, runAsRole, memberOf(member), true); err != nil {
+		return fmt.Errorf("let %s deploy apps that run as the %s service account: %w", member, name, err)
 	}
-	var refused error
-	for attempt := range grantAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
-			return ctx.Err()
-		}
-		policy, err := b.accountPolicy(ctx, name)
-		if err != nil {
-			return err
-		}
-		if granted(policy, memberOf(member)) {
-			return nil
-		}
-		policy.Bindings = append(policy.Bindings, &iam.Binding{Role: runAsRole, Members: []string{memberOf(member)}})
-		_, refused = attempted(ctx, service.Projects.ServiceAccounts.SetIamPolicy(accountPath(b.clients, name),
-			&iam.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
-		if refused == nil {
-			return nil
-		}
-		if !stale(refused) {
-			break
-		}
-	}
-	return fmt.Errorf("let %s deploy apps that run as the %s service account: %w", member, name, refused)
+	return nil
 }
 
 func (b bootstrap) takeAccount(ctx context.Context, tier environment.Tier, name string) error {
