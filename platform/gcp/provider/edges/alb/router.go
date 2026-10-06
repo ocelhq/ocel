@@ -100,10 +100,15 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 	if err := pin.MovePointer(ctx, r.s.e.deps.Pins, move, progress); err != nil {
 		return err
 	}
-	return r.s.released(ctx, move.Records, progress)
+	if err := r.s.released(ctx, move.Records, progress); err != nil {
+		return err
+	}
+	r.s.purgeReplaced(ctx, move, progress)
+	return nil
 }
 
-func (r routerStack) RemovePointer(context.Context, router.PointerRemoval, progress.Log) error {
+func (r routerStack) RemovePointer(_ context.Context, removal router.PointerRemoval, _ progress.Log) error {
+	r.s.forgetPointer(removal.Pointer)
 	return nil
 }
 
