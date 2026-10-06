@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -25,6 +26,9 @@ type edges struct {
 	warmURL   func(ctx context.Context, url, address string) error
 	project   string
 	region    string
+
+	certificates  provider.Certificates
+	readWorkerCAs func(ctx context.Context, tier environment.Tier) ([]string, error)
 }
 
 var supportedEdges = []edge.Kind{alb.Kind, cloudflare.Kind}
@@ -40,6 +44,9 @@ func (p *Provider) edges() edges {
 		warmURL:   p.warmThrough,
 		project:   p.options.Project,
 		region:    p.options.Region,
+
+		certificates:  p.Certificates(),
+		readWorkerCAs: p.readWorkerCAs,
 	}
 }
 
@@ -72,7 +79,19 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 		if err != nil {
 			return nil, err
 		}
-		return cloudflareFront{Proxy: cloudflare.NewProxy(string(e.namespace), decoded), origin: e.openALB().Shielded()}, nil
+		shielded := e.openALB().Shielded()
+		return cloudflareFront{
+			Proxy:   cloudflare.NewProxy(string(e.namespace), decoded),
+			origin:  shielded,
+			options: decoded,
+			wildcards: originWildcards{
+				keyValues:     e.keyValues,
+				certificates:  e.certificates,
+				openDNS:       func() edge.DNSRecords { return cloudflare.NewDNS("") },
+				balancer:      shielded,
+				readWorkerCAs: e.readWorkerCAs,
+			},
+		}, nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"this provider cannot front deployments with the %q edge: leave `edge` out, and each service answers on the url Cloud Run gives it, "+
