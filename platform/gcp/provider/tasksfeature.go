@@ -52,8 +52,6 @@ var tasksPermissions = []string{
 	"cloudtasks.queues.purge",
 	"cloudtasks.queues.getIamPolicy",
 	"cloudtasks.queues.setIamPolicy",
-	"datastore.indexes.create",
-	"datastore.indexes.get",
 	"resourcemanager.projects.get",
 }
 
