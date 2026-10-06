@@ -81,7 +81,7 @@ func cacheSweep(prefix string) (list string, keeps func(name string) bool, err e
 	segments := strings.Split(strings.TrimSuffix(prefix, "/"), "/")
 	closed := strings.HasSuffix(prefix, "/")
 	switch {
-	case len(segments) >= 4, len(segments) == 3 && closed:
+	case len(segments) >= 3 && closed:
 		return cacheObjectName(prefix), keepAll, nil
 	case len(segments) == 2 && closed:
 		env, project := segments[0], segments[1]

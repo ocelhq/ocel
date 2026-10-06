@@ -77,7 +77,7 @@ func TestRemovingAProjectsEnvironmentFromTheCacheListsOnlyThatProject(t *testing
 }
 
 func TestACachePrefixNamingNoWholeProjectAndEnvironmentIsRefused(t *testing.T) {
-	for _, prefix := range []string{"prod/", "prod", "prod/shop"} {
+	for _, prefix := range []string{"prod/", "prod", "prod/shop", "prod/shop/web/r1", "prod/shop/web/r1/isr"} {
 		_, _, err := cacheSweep(prefix)
 		if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 			t.Errorf("cacheSweep(%q) = %v, want an invalid-input refusal", prefix, err)
