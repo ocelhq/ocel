@@ -280,7 +280,7 @@ func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorke
 			keys: offerKeys{
 				endpoint:   edge.OfferKeyStoreEndpoint,
 				scriptName: edge.OfferKeyStoreScriptName,
-				cred:       edge.OfferKeyStoreBootstrapCred,
+				cred:       edge.OfferKeyStoreBootstrapCredential,
 			},
 		},
 		{
@@ -292,7 +292,7 @@ func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorke
 			keys: offerKeys{
 				endpoint:   edge.OfferKeyISRWriterEndpoint,
 				scriptName: edge.OfferKeyISRWriterScriptName,
-				cred:       edge.OfferKeyISRWriterBootstrapCred,
+				cred:       edge.OfferKeyISRWriterBootstrapCredential,
 			},
 		},
 	}, nil

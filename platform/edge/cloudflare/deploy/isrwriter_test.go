@@ -92,7 +92,7 @@ func TestAnISRWriteSecretHashIsTheHexSHA256TheWorkerStores(t *testing.T) {
 	})
 }
 
-func TestInitializingTheISRWriterSeedsOnlyTheHashUnderTheBootstrapCredentialential(t *testing.T) {
+func TestInitializingTheISRWriterSeedsOnlyTheHashUnderTheBootstrapCredential(t *testing.T) {
 	srv, calls := fakeWriter(t, http.StatusNoContent)
 	w := writerAccess(srv.URL)
 	secret := DeriveISRWriteSecret(w.Seed, testPrefix)

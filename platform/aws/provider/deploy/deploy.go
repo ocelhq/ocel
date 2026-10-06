@@ -76,15 +76,15 @@ type Config struct {
 
 	GlobalPreviewDomain string
 
-	Slug               string
-	StoreScriptName    string
-	StoreEndpoint      string
-	StoreBootstrapCred string
+	Slug                     string
+	StoreScriptName          string
+	StoreEndpoint            string
+	StoreBootstrapCredential string
 
-	ISRWriterEndpoint      string
-	ISRWriterBootstrapCred string
-	ISRWriterScriptName    string
-	ISRWriterSeed          string
+	ISRWriterEndpoint            string
+	ISRWriterBootstrapCredential string
+	ISRWriterScriptName          string
+	ISRWriterSeed                string
 
 	OriginSecret         string
 	PreviousOriginSecret string

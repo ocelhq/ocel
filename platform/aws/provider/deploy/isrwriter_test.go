@@ -42,7 +42,7 @@ func adoptISRWriter(t *testing.T, cfg Config) Config {
 	t.Helper()
 	srv, _ := fakeWriter(t, http.StatusNoContent)
 	cfg.ISRWriterEndpoint = srv.URL
-	cfg.ISRWriterBootstrapCred = "cred-1"
+	cfg.ISRWriterBootstrapCredential = "cred-1"
 	cfg.ISRWriterSeed = "seed-1"
 	return cfg
 }
@@ -72,14 +72,14 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 	t.Run("gives each app its own writer coordinates", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{
-			AssetBucket:            "assets",
-			StateTable:             "state",
-			Env:                    "prod",
-			CacheStoreBucket:       "isr",
-			CacheStoreObjects:      &fakeArtifactStore{exists: map[string]bool{}},
-			ISRWriterEndpoint:      "https://writer.example",
-			ISRWriterBootstrapCred: "cred-1",
-			ISRWriterSeed:          "seed-1",
+			AssetBucket:                  "assets",
+			StateTable:                   "state",
+			Env:                          "prod",
+			CacheStoreBucket:             "isr",
+			CacheStoreObjects:            &fakeArtifactStore{exists: map[string]bool{}},
+			ISRWriterEndpoint:            "https://writer.example",
+			ISRWriterBootstrapCredential: "cred-1",
+			ISRWriterSeed:                "seed-1",
 		}
 		release := releasing(t, cfg)
 

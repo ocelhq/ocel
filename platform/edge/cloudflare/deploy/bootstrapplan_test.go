@@ -357,9 +357,9 @@ func credOf(t *testing.T, offer edge.Offer) string {
 	t.Helper()
 	switch offer.Kind {
 	case edge.OfferDeploymentsStore:
-		return offer.Values[edge.OfferKeyStoreBootstrapCred]
+		return offer.Values[edge.OfferKeyStoreBootstrapCredential]
 	case edge.OfferISRWriter:
-		return offer.Values[edge.OfferKeyISRWriterBootstrapCred]
+		return offer.Values[edge.OfferKeyISRWriterBootstrapCredential]
 	default:
 		t.Fatalf("offer %q includes no bootstrap credential", offer.Kind)
 		return ""

@@ -98,14 +98,14 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		Invoker:     lambda.NewFromConfig(p.aws),
 		CodeUpdater: lambda.NewFromConfig(p.aws),
 
-		StoreScriptName:    params.DeploymentsStore.ScriptName,
-		StoreEndpoint:      params.DeploymentsStore.Endpoint,
-		StoreBootstrapCred: params.DeploymentsStore.BootstrapCred,
+		StoreScriptName:          params.DeploymentsStore.ScriptName,
+		StoreEndpoint:            params.DeploymentsStore.Endpoint,
+		StoreBootstrapCredential: params.DeploymentsStore.BootstrapCredential,
 
-		ISRWriterEndpoint:      params.ISRWriter.Endpoint,
-		ISRWriterBootstrapCred: params.ISRWriter.BootstrapCred,
-		ISRWriterScriptName:    params.ISRWriter.ScriptName,
-		ISRWriterSeed:          params.ISRWriterSeed,
+		ISRWriterEndpoint:            params.ISRWriter.Endpoint,
+		ISRWriterBootstrapCredential: params.ISRWriter.BootstrapCredential,
+		ISRWriterScriptName:          params.ISRWriter.ScriptName,
+		ISRWriterSeed:                params.ISRWriterSeed,
 
 		OriginSecret:         params.OriginSecret.Current,
 		PreviousOriginSecret: params.OriginSecret.Previous,
