@@ -145,8 +145,11 @@ func workerImageOf(app *provider.AppSpec) string {
 	return app.Image
 }
 
-func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress progress.Log) error {
-	return p.tearDownAll(ctx, functionRevisions(functions), progress)
+func (p *Provider) RemoveFunctions(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress progress.Log) error {
+	if err := p.tearDownAll(ctx, functionRevisions(functions), progress); err != nil {
+		return err
+	}
+	return p.forgetAppAccountIfUnused(ctx, ref, progress)
 }
 
 func (p *Provider) NameFunctions(ctx context.Context, spec provider.StackSpec) ([]provider.Function, error) {
@@ -256,8 +259,11 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	return append(deployed, workerContainers(workers, app.Image)...), nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress progress.Log) error {
-	return p.tearDownAll(ctx, containerRevisions(containers), progress)
+func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Log) error {
+	if err := p.tearDownAll(ctx, containerRevisions(containers), progress); err != nil {
+		return err
+	}
+	return p.forgetAppAccountIfUnused(ctx, ref, progress)
 }
 
 func (p *Provider) NameContainers(ctx context.Context, spec provider.StackSpec) ([]provider.AppContainer, error) {
