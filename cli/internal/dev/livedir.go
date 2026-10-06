@@ -12,6 +12,8 @@ import (
 
 type liveDir struct {
 	root     string
+	current  string
+	retired  []string
 	bindings map[string]string
 }
 
@@ -33,12 +35,12 @@ func (d *liveDir) project(env map[string]string) (map[string]string, error) {
 			appEnv[key] = value
 		}
 	}
-	if d.bindings == nil || !maps.Equal(bindings, d.bindings) {
+	if d.current == "" || !maps.Equal(bindings, d.bindings) {
 		if err := d.write(bindings); err != nil {
 			return nil, err
 		}
 	}
-	appEnv[processenv.LiveDirEnvVar] = d.root
+	appEnv[processenv.LiveDirEnvVar] = d.current
 	return appEnv, nil
 }
 
@@ -48,41 +50,29 @@ func (d *liveDir) write(bindings map[string]string) error {
 			return fmt.Errorf("binding %q cannot name a file under %s", key, d.root)
 		}
 	}
+	set, err := os.MkdirTemp(d.root, "bindings-")
+	if err != nil {
+		return fmt.Errorf("make a directory for the bindings under %s: %w", d.root, err)
+	}
 	for key, value := range bindings {
-		if err := d.replace(key, value); err != nil {
-			return fmt.Errorf("write binding %s to %s: %w", key, d.root, err)
+		if err := os.WriteFile(filepath.Join(set, key), []byte(value), 0o600); err != nil {
+			_ = os.RemoveAll(set)
+			return fmt.Errorf("write binding %s to %s: %w", key, set, err)
 		}
 	}
-	for key := range d.bindings {
-		if _, kept := bindings[key]; !kept {
-			if err := os.Remove(filepath.Join(d.root, key)); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("remove binding %s from %s: %w", key, d.root, err)
-			}
-		}
+	if d.current != "" {
+		d.retired = append(d.retired, d.current)
 	}
+	d.current = set
 	d.bindings = bindings
 	return nil
 }
 
-func (d *liveDir) replace(key, value string) error {
-	staged, err := os.CreateTemp(d.root, ".staged-")
-	if err != nil {
-		return err
+func (d *liveDir) retire() {
+	for _, set := range d.retired {
+		_ = os.RemoveAll(set)
 	}
-	if _, err := staged.WriteString(value); err != nil {
-		_ = staged.Close()
-		_ = os.Remove(staged.Name())
-		return err
-	}
-	if err := staged.Close(); err != nil {
-		_ = os.Remove(staged.Name())
-		return err
-	}
-	if err := os.Rename(staged.Name(), filepath.Join(d.root, key)); err != nil {
-		_ = os.Remove(staged.Name())
-		return err
-	}
-	return nil
+	d.retired = nil
 }
 
 func (d *liveDir) remove() {

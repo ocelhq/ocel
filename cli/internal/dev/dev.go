@@ -190,6 +190,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 			}
 			workers.restart(ctx, appEnv)
 			if maps.Equal(env, resolved) {
+				live.retire()
 				continue
 			}
 			resolved = env
@@ -199,6 +200,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 			if err != nil {
 				return err
 			}
+			live.retire()
 		}
 	}
 }
@@ -258,6 +260,7 @@ func follow(ctx context.Context, opts Options, running leader.Leader) (err error
 			if err != nil {
 				return err
 			}
+			live.retire()
 		case <-streamDone:
 			child.Stop()
 			if ctx.Err() != nil {
