@@ -219,3 +219,61 @@ func TestDestroyingTheLastReleaseOfAnAppRevokesItsAccountAndAnotherReleaseKeepsI
 		t.Errorf("the project still binds %q after the app's last release was destroyed", projectBindingsOf(server.identities()))
 	}
 }
+
+func containerEnvironment(env string) provider.StackSpec {
+	return provider.StackSpec{
+		Ref: provider.StackRef{
+			Project: "shop",
+			Tier:    environment.TierPreview,
+			Name:    naming.AppStack(env, "web", releaseOf("r1")),
+		},
+		Kind: provider.StackApp,
+		App: &provider.AppSpec{
+			App:             "web",
+			Compute:         provider.ComputeContainer,
+			Image:           "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
+			HealthCheckPath: "/",
+		},
+	}
+}
+
+func (r releasedStacks) provisionContainer(t *testing.T, spec provider.StackSpec) {
+	t.Helper()
+	ctx := context.Background()
+	result, err := r.stacks.Provision(ctx, spec, nil)
+	if err != nil {
+		t.Fatalf("Provision(%s) = %v", spec.Ref.Name, err)
+	}
+	if len(result.Containers) != 1 {
+		t.Fatalf("Provision(%s) deployed %+v, want the one container its spec names", spec.Ref.Name, result.Containers)
+	}
+	if err := stackrecords.Write(ctx, r.store, spec.Ref.Tier, spec.Ref.Project, spec.Ref.Name,
+		stackrecords.Stack{Kind: provider.StackApp, App: spec.App.App, Containers: result.Containers}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDestroyingTheContainerAppOfTheLastEnvironmentRunningItRevokesItsAccountAndAnotherEnvironmentKeepsIt(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	released := newReleasedStacks(p)
+	first, second := containerEnvironment("pr-7"), containerEnvironment("pr-8")
+	released.provisionContainer(t, first)
+	released.provisionContainer(t, second)
+	member := "serviceAccount:" + p.resolved.AppAccountEmail(environment.TierPreview, "shop", "web")
+	holding := func() bool {
+		return slices.ContainsFunc(projectBindingsOf(server.identities()), func(bound string) bool { return strings.Contains(bound, member) })
+	}
+	if !holding() {
+		t.Fatalf("the project binds %q before any destroy, want the app's account in it", projectBindingsOf(server.identities()))
+	}
+
+	released.destroy(t, first.Ref)
+	if !holding() {
+		t.Error("destroying the container app of pr-7 revoked the account while pr-8 still runs the app")
+	}
+	released.destroy(t, second.Ref)
+	if holding() {
+		t.Errorf("the project still binds %q after the last environment running the container app was destroyed", projectBindingsOf(server.identities()))
+	}
+}
