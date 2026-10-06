@@ -4,7 +4,6 @@ import (
 	"context"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -38,14 +37,11 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 		}
 	}
 	for _, entry := range pre.Deploy.Apps {
-		if entry.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext || entry.Compute() != provider.ComputeServerless {
-			continue
-		}
 		front, err := p.Edges().Open(pre.Edge, nil)
 		if err != nil {
 			return err
 		}
-		if refreshesNextByTask(entry, front.Facts()) {
+		if refreshesByTask(entry.Manifest.GetFramework().GetName(), entry.Compute(), front.Facts()) {
 			needs = append(needs, featureNeed{feature: tasksFeature, declares: "Next app " + entry.App,
 				reason: "a Next app billed per request on Cloud Run refreshes a stale page through the tier's Cloud Tasks queue, which its bootstrap has not installed"})
 		}

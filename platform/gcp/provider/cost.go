@@ -165,7 +165,9 @@ func shapeTopics(tree *pricing.Tree, names Names, req provider.ShapeRequest, fro
 			tree.Add(environment, string(Vendor), tfSchedulerJob, scope.ScheduleJob(topic.declared), region, map[string]any{"region": region, "schedule": topic.spec.Cron})
 		}
 	}
-	refreshes := slices.ContainsFunc(req.Deploy.Apps, func(entry provider.AppEntry) bool { return refreshesNextByTask(entry, front) })
+	refreshes := slices.ContainsFunc(req.Deploy.Apps, func(entry provider.AppEntry) bool {
+		return refreshesByTask(entry.Manifest.GetFramework().GetName(), entry.Compute(), front)
+	})
 	if !declared && !refreshes {
 		return
 	}

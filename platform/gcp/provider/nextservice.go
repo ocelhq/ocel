@@ -53,13 +53,8 @@ func servesNext(app *provider.AppSpec) bool {
 	return app.Framework == buildoutput.FrameworkNext
 }
 
-func refreshesByTask(spec provider.StackSpec) bool {
-	app := spec.App
-	return servesNext(app) && app.Compute == provider.ComputeServerless && app.Routing != nil && !factsOf(spec.Edge).RunsCode
-}
-
-func refreshesNextByTask(entry provider.AppEntry, front edge.Facts) bool {
-	return entry.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext && entry.Compute() == provider.ComputeServerless && !front.RunsCode
+func refreshesByTask(framework string, compute provider.Compute, front edge.Facts) bool {
+	return framework == buildoutput.FrameworkNext && compute == provider.ComputeServerless && !front.RunsCode
 }
 
 func fillNextServingDefaults(s serving) serving {
@@ -90,11 +85,18 @@ type nextCache struct {
 }
 
 type nextRefresh struct {
-	url      string
-	queue    string
-	account  string
-	secret   string
-	endpoint string
+	url           string
+	queue         string
+	account       string
+	secret        string
+	endpoint      string
+	projectNumber int64
+	region        string
+}
+
+func (r nextRefresh) forService(service string) *nextRefresh {
+	r.url = refreshURLOf(service, r.projectNumber, r.region)
+	return &r
 }
 
 func refreshURLOf(service string, projectNumber int64, region string) string {

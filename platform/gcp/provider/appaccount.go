@@ -58,7 +58,7 @@ func (p *Provider) ensureAppAccount(ctx context.Context, c *clients, spec provid
 	if reachesTopics(spec.App) {
 		grants = append(grants, c.taskGrants(ctx, spec, member, declared)...)
 	}
-	if refreshesByTask(spec) {
+	if refreshesByTask(spec.App.Framework, spec.App.Compute, factsOf(spec.Edge)) {
 		grants = append(grants, c.refreshGrants(ctx, tier, member)...)
 	}
 	for _, grant := range grants {
