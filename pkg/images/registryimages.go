@@ -39,8 +39,8 @@ func (r registryStore) GoString() string { return r.String() }
 
 func (r registryStore) Destination() string { return r.target.Server }
 
-func (r registryStore) CheckPush(ctx context.Context, repository string) error {
-	return CheckPushAccess(ctx, r.target, repository)
+func (r registryStore) ProbePush(ctx context.Context, repository string) error {
+	return ProbePushAccess(ctx, r.target, repository)
 }
 
 var manifestTypes = []string{

@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func CheckPushAccess(ctx context.Context, target provider.RegistryTarget, repository string) error {
+func ProbePushAccess(ctx context.Context, target provider.RegistryTarget, repository string) error {
 	store := registryStore{target: target}
 	server, repo, _, err := splitImageRef(Ref(repository, "access", target))
 	if err != nil {
@@ -62,7 +62,7 @@ func startUpload(ctx context.Context, client *http.Client, endpoint, authorizati
 
 func cancelUpload(ctx context.Context, client *http.Client, started *http.Response, authorization string) {
 	location, err := started.Location()
-	if err != nil {
+	if err != nil || location.Scheme != started.Request.URL.Scheme || location.Host != started.Request.URL.Host {
 		return
 	}
 	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), http.MethodDelete, location.String(), nil)

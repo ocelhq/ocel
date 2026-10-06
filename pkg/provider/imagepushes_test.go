@@ -16,7 +16,7 @@ type holdingStore struct{ held []string }
 
 func (holdingStore) Destination() string { return "ghcr.io/acme" }
 
-func (holdingStore) CheckPush(context.Context, string) error { return nil }
+func (holdingStore) ProbePush(context.Context, string) error { return nil }
 
 func (s holdingStore) Has(_ context.Context, push provider.ImagePush) (bool, error) {
 	return slices.Contains(s.held, push.App), nil

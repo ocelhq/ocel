@@ -23,7 +23,7 @@ func (d daemonStore) GoString() string { return d.String() }
 
 func (daemonStore) Destination() string { return "the local docker daemon" }
 
-func (daemonStore) CheckPush(context.Context, string) error { return nil }
+func (daemonStore) ProbePush(context.Context, string) error { return nil }
 
 func (daemonStore) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
 	ref, err := name.NewTag(push.ImageRef, name.Insecure)

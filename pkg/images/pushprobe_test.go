@@ -64,8 +64,8 @@ func TestPushAccessStartsAnUploadWithAPushTokenAndCancelsIt(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 	})
 
-	if err := images.CheckPushAccess(context.Background(), target, "web"); err != nil {
-		t.Fatalf("CheckPushAccess() error = %v, want a registry that accepts the upload to grant push", err)
+	if err := images.ProbePushAccess(context.Background(), target, "web"); err != nil {
+		t.Fatalf("ProbePushAccess() error = %v, want a registry that accepts the upload to grant push", err)
 	}
 	if len(u.scopes) != 1 || u.scopes[0] != "repository:acme/web:pull,push" {
 		t.Errorf("token scopes = %q, want one token asked for push on acme/web", u.scopes)
@@ -78,6 +78,35 @@ func TestPushAccessStartsAnUploadWithAPushTokenAndCancelsIt(t *testing.T) {
 	}
 }
 
+func TestPushAccessHandsAnUploadLocationOnAnotherHostNoCredential(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var stolen []string
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		stolen = append(stolen, r.Header.Get("Authorization"))
+		mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(elsewhere.Close)
+	target := pushRegistry(t, &uploads{}, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", elsewhere.URL+"/v2/acme/web/blobs/uploads/session-1")
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	if err := images.ProbePushAccess(context.Background(), target, "web"); err != nil {
+		t.Fatalf("ProbePushAccess() error = %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, authorization := range stolen {
+		if authorization != "" {
+			t.Errorf("the host the upload's Location names was handed %q, want the registry's credential kept on the registry", authorization)
+		}
+	}
+}
+
 func TestPushAccessRefusedByTheRegistryIsADeniedCredentialNamingWhatTheRegistrySaid(t *testing.T) {
 	t.Parallel()
 
@@ -86,10 +115,10 @@ func TestPushAccessRefusedByTheRegistryIsADeniedCredentialNamingWhatTheRegistryS
 		_, _ = w.Write([]byte(`{"errors":[{"code":"DENIED","message":"permission_denied: create_package"}]}`))
 	})
 
-	err := images.CheckPushAccess(context.Background(), target, "web")
+	err := images.ProbePushAccess(context.Background(), target, "web")
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
-		t.Fatalf("CheckPushAccess() error = %v, want a denied refusal", err)
+		t.Fatalf("ProbePushAccess() error = %v, want a denied refusal", err)
 	}
 	for _, want := range []string{"acme-bot", target.Server + "/acme/web", "DENIED: permission_denied: create_package"} {
 		if !strings.Contains(refused.Message, want) {
@@ -106,10 +135,10 @@ func TestPushAccessWithAPasswordTheTokenRealmRejectsIsADeniedCredential(t *testi
 	})
 	target.Password = "wrong"
 
-	err := images.CheckPushAccess(context.Background(), target, "web")
+	err := images.ProbePushAccess(context.Background(), target, "web")
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
-		t.Fatalf("CheckPushAccess() error = %v, want a denied refusal", err)
+		t.Fatalf("ProbePushAccess() error = %v, want a denied refusal", err)
 	}
 }
 
@@ -120,9 +149,9 @@ func TestPushAccessToARegistryThatCannotBeReachedIsNotReady(t *testing.T) {
 	host := strings.TrimPrefix(server.URL, "http://")
 	server.Close()
 
-	err := images.CheckPushAccess(context.Background(), provider.RegistryTarget{Server: host, Namespace: "acme"}, "web")
+	err := images.ProbePushAccess(context.Background(), provider.RegistryTarget{Server: host, Namespace: "acme"}, "web")
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("CheckPushAccess() error = %v, want a not-ready refusal", err)
+		t.Fatalf("ProbePushAccess() error = %v, want a not-ready refusal", err)
 	}
 }
