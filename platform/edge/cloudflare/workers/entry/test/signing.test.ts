@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { awsServiceFetch, edgeOriginFetch, lambdaRegion } from "../src/signing";
+import { dynamoDbFetch, edgeOriginFetch, lambdaRegion } from "../src/signing";
 
 describe("lambdaRegion", () => {
   it("parses the region out of a Function URL host", () => {
@@ -177,9 +177,9 @@ describe("edgeOriginFetch", () => {
   });
 });
 
-describe("awsServiceFetch", () => {
+describe("dynamoDbFetch", () => {
   async function capture(
-    call: (send: ReturnType<typeof awsServiceFetch>) => Promise<unknown>,
+    call: (send: ReturnType<typeof dynamoDbFetch>) => Promise<unknown>,
   ): Promise<Request> {
     let sent: Request | undefined;
     const originalFetch = globalThis.fetch;
@@ -188,7 +188,7 @@ describe("awsServiceFetch", () => {
       return new Response("ok");
     }) as typeof fetch;
     try {
-      await call(awsServiceFetch("AKIAEXAMPLE", "secretkey", "eu-west-2"));
+      await call(dynamoDbFetch("AKIAEXAMPLE", "secretkey", "eu-west-2"));
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -196,16 +196,16 @@ describe("awsServiceFetch", () => {
   }
 
   it("is undefined when a credential or the region is missing", () => {
-    expect(awsServiceFetch(undefined, "s", "eu-west-2")).toBeUndefined();
-    expect(awsServiceFetch("k", undefined, "eu-west-2")).toBeUndefined();
-    expect(awsServiceFetch("k", "s", undefined)).toBeUndefined();
-    expect(awsServiceFetch("k", "s", "")).toBeUndefined();
+    expect(dynamoDbFetch(undefined, "s", "eu-west-2")).toBeUndefined();
+    expect(dynamoDbFetch("k", undefined, "eu-west-2")).toBeUndefined();
+    expect(dynamoDbFetch("k", "s", undefined)).toBeUndefined();
+    expect(dynamoDbFetch("k", "s", "")).toBeUndefined();
   });
 
   it("signs a DynamoDB call's x-amz-target, which the API requires", async () => {
     const body = JSON.stringify({ TableName: "state" });
     const sent = await capture((send) =>
-      send!("dynamodb", "https://dynamodb.eu-west-2.amazonaws.com/", {
+      send!("https://dynamodb.eu-west-2.amazonaws.com/", {
         method: "POST",
         headers: {
           "content-type": "application/x-amz-json-1.0",
