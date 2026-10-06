@@ -16,6 +16,7 @@ export type Outcome =
 export interface Refresh {
   message: RevalidationMessage;
   url: string;
+  headers: Headers;
 }
 
 export type Parsed = { ok: true; refresh: Refresh } | { ok: false; outcome: Outcome };
@@ -53,7 +54,16 @@ export function parseRefresh(body: unknown): Parsed {
       outcome: { settle: "ack", event: "RevalidateFailed", reason: "origin-unusable" },
     };
   }
-  return { ok: true, refresh: { message: parsed.message, url } };
+  let headers: Headers;
+  try {
+    headers = new Headers(parsed.message.headers);
+  } catch {
+    return {
+      ok: false,
+      outcome: { settle: "ack", event: "RevalidateFailed", reason: "malformed" },
+    };
+  }
+  return { ok: true, refresh: { message: parsed.message, url, headers } };
 }
 
 export async function trigger(refresh: Refresh, origin: Fetcher | undefined): Promise<Outcome> {
@@ -69,7 +79,7 @@ export async function trigger(refresh: Refresh, origin: Fetcher | undefined): Pr
   try {
     response = await origin.fetch(refresh.url, {
       method: "HEAD",
-      headers: refresh.message.headers,
+      headers: refresh.headers,
       redirect: "manual",
       signal,
     });

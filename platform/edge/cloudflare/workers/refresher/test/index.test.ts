@@ -136,6 +136,17 @@ describe("refresher", () => {
     expect(item.settled.retries).toEqual([{ delaySeconds: 15 }]);
   });
 
+  it("drops a refresh whose header values cannot be sent instead of retrying it", async () => {
+    const { calls, env } = origin([rendered]);
+    const item = message(body({ headers: { "x-ocel-refresh": "a\r\nb" } }));
+
+    await run(env, item);
+
+    expect(calls).toHaveLength(0);
+    expect(item.settled.acks).toBe(1);
+    expect(item.settled.retries).toEqual([]);
+  });
+
   it("drops a malformed refresh without fetching anything", async () => {
     const { calls, env } = origin([rendered]);
     const items = [
