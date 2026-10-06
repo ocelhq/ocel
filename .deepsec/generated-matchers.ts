@@ -3,85 +3,6 @@ import { compileDeclarativeMatchers, type DeepsecPlugin } from "deepsec/config";
 const specs = [
   {
     "version": 1,
-    "slug": "better-auth-next-registration",
-    "description": "Better Auth initialization, device authorization, and Next.js authentication endpoint bindings.",
-    "noiseTier": "precise",
-    "filePatterns": [
-      "console/auth/src/*.ts",
-      "console/api/src/routes/auth/route.ts",
-      "console/web/app/api/auth/**/route.ts"
-    ],
-    "patterns": [
-      {
-        "source": "^\\s*export\\s+const\\s+auth\\s*=\\s*betterAuth\\s*\\(",
-        "flags": "m",
-        "label": "Better Auth instance"
-      },
-      {
-        "source": "^\\s*deviceAuthorization\\s*\\(\\s*\\{",
-        "flags": "m",
-        "label": "Device authorization plugin"
-      },
-      {
-        "source": "^\\s*return\\s+auth\\.handler\\s*\\(\\s*request\\s*\\)\\s*;?",
-        "flags": "m",
-        "label": "Better Auth request handler"
-      },
-      {
-        "source": "^\\s*export\\s+const\\s*\\{\\s*GET\\s*,\\s*POST\\s*\\}\\s*=\\s*toNextJsHandler\\s*\\(\\s*auth\\s*\\)\\s*;?",
-        "flags": "m",
-        "label": "Next.js authentication route"
-      }
-    ],
-    "examples": [
-      "export const auth = betterAuth(authConfig);",
-      "deviceAuthorization({",
-      "return auth.handler(request);",
-      "export const { GET, POST } = toNextJsHandler(auth);"
-    ],
-    "closesSurfaceIds": [
-      "console-auth-http"
-    ]
-  },
-  {
-    "version": 1,
-    "slug": "next-control-route-binding",
-    "description": "Repository-specific control API handlers and their Next.js method bindings.",
-    "noiseTier": "precise",
-    "filePatterns": [
-      "console/web/app/api/projects/**/route.ts",
-      "console/web/app/api/resources/**/route.ts",
-      "console/web/app/api/blob/**/route.ts",
-      "console/api/src/routes/**/route.ts"
-    ],
-    "patterns": [
-      {
-        "source": "^\\s*export\\s*\\{[^}\\n]+\\bas\\s+(?:GET|POST)\\b[^}\\n]*\\}\\s*from\\s*[\"']@console/api[\"']\\s*;?",
-        "flags": "m",
-        "label": "Next.js control route binding"
-      },
-      {
-        "source": "^\\s*export\\s+async\\s+function\\s+(?:GET|POST)\\s*\\(",
-        "flags": "m",
-        "label": "Next.js control route method"
-      },
-      {
-        "source": "^\\s*export\\s+(?:async\\s+)?function\\s+(?:listProjects|createProject|getProjectById|resolveResources|detectUploads|presignUpload|uploadStatus|verifyUploadSignature)\\s*\\(",
-        "flags": "m",
-        "label": "Control API handler implementation"
-      }
-    ],
-    "examples": [
-      "export { createProject as POST, listProjects as GET } from \"@console/api\";",
-      "export async function GET(",
-      "export async function resolveResources(request: Request): Promise<Response> {"
-    ],
-    "closesSurfaceIds": [
-      "console-control-api"
-    ]
-  },
-  {
-    "version": 1,
     "slug": "aws-iam-function-url-registration",
     "description": "AWS IAM Function URL provisioning and the runtime entrypoints serving its invocations.",
     "noiseTier": "precise",
@@ -174,8 +95,7 @@ const specs = [
     "filePatterns": [
       "packages/ocel/src/blob/route.ts",
       "cli/internal/devserver/detector.go",
-      "platform/aws/runtime/bucket/listener.go",
-      "console/api/src/routes/blob/signing.ts"
+      "platform/aws/runtime/bucket/listener.go"
     ],
     "patterns": [
       {

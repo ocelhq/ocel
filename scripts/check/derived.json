@@ -18,7 +18,6 @@
     "packages/ocel/src/generated",
     "pkg/configdoc/selectors.json",
     "pkg/proto",
-    "console/connectors/src/gen",
     "packages/ocel/src/gen",
     "python/ocel/src/ocel/gen",
     "crates/ocel-sdk/src/proto",

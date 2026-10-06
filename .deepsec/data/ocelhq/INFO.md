@@ -3,10 +3,9 @@
 ## What this codebase does
 
 Ocel builds and deploys applications into a customer's own cloud account.
-The monorepo contains a Go CLI, runtime SDKs, a hosted Next.js console, an AWS provider, and Cloudflare edge workers.
+The monorepo contains a Go CLI, runtime SDKs, an AWS provider, and Cloudflare edge workers; the hosted console lives in github.com/ocelhq/console.
 
 - The `ocel` CLI builds projects, starts provider subprocesses, and invokes authenticated local Connect RPC services.
-- The hosted console exposes Better Auth endpoints plus organization-scoped project, resource, and blob APIs.
 - A public Cloudflare worker routes application traffic to static assets, edge bundles, or IAM-protected AWS Function URLs.
 - Runtime blob handlers expose presign, polling, and signed upload-completion callback operations in customer applications.
 - SQS revalidation, DynamoDB stream publishing, and Durable Object alarms are the asynchronous ingress families present.
@@ -16,8 +15,7 @@ The only webhook-like ingress found is the SDK's signed blob completion callback
 
 ## Auth shape
 
-- Better Auth provides password, GitHub, bearer-token, organization, and OAuth device-authorization flows for the console and CLI.
-- Console authorization uses `auth.api.getSession`, then checks active organization membership or the target project's organization.
+- The CLI signs in to the hosted console with the OAuth device-authorization grant and attaches the bearer access token it receives.
 - CLI credentials prefer the operating-system keyring and fall back to a user-only credentials file; API calls use bearer access tokens.
 - CLI-to-provider and runtime Connect RPC channels use a random per-process bearer token checked with constant-time comparison.
 - Cloudflare control workers use bearer secrets or stored secret hashes; edge-to-Lambda and edge-to-AWS requests use SigV4 credentials.
@@ -28,15 +26,13 @@ Blob completion callbacks are authorized with an HMAC over the session and canon
 
 ## Threat model
 
-- An unauthenticated Internet client can reach console auth, public application routes, edge routing, and application blob endpoints.
-- An authenticated console user may attempt to cross organization, project, resource, or upload-session boundaries.
+- An unauthenticated Internet client can reach public application routes, edge routing, and application blob endpoints.
 - Project configuration, build inputs, framework bundles, and provider packages execute with the deploying user's local or cloud authority.
 - Compromise of provider session tokens, Cloudflare bootstrap secrets, ISR secrets, or edge AWS credentials can affect customer infrastructure.
 - Queue, stream, alarm, cache, and upload events may be duplicated, reordered, replayed, partially processed, or delivered after expiry.
 
-The primary trust transitions are browser-to-console, edge-to-origin, CLI-to-provider subprocess, and cloud-event-to-callback.
+The primary trust transitions are edge-to-origin, CLI-to-provider subprocess, and cloud-event-to-callback.
 Customer cloud credentials and generated resource connection values are high-impact data.
-Organization membership and project ownership are the main hosted control-plane authorization boundaries.
 
 ## Project-specific patterns to flag
 

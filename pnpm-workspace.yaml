@@ -1,10 +1,9 @@
 packages:
   - www
-  - console/*
+  - console/github
   - cli/node
   - packages/*
   - pkg/provider/transform
-  - ui/*
   - frameworks/*/*
   - platform/aws/functions/*
   - platform/aws/runtime

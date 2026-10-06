@@ -166,7 +166,7 @@ jobs:
         uses: ./.github/actions/go
 
       - name: Every workspace package's tests
-        run: pnpm turbo run test --filter='!./console/*' --filter='!./tests/fixtures/**' --filter='!./tests/next-compat'
+        run: pnpm turbo run test --filter='!./tests/fixtures/**' --filter='!./tests/next-compat'
 
   python:
     name: Python
