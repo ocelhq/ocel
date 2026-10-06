@@ -154,6 +154,7 @@ type policyServer struct {
 	policies map[string]*pubsub.Policy
 	gone     map[string]bool
 	conflict int
+	changed  int
 	writes   map[string]int
 }
 
@@ -180,6 +181,12 @@ func (p *policyServer) serve(w http.ResponseWriter, r *http.Request) {
 		p.conflict--
 		w.WriteHeader(http.StatusConflict)
 		_, _ = w.Write([]byte(`{"error":{"code":409,"status":"ABORTED"}}`))
+		return
+	}
+	if p.changed > 0 {
+		p.changed--
+		w.WriteHeader(http.StatusPreconditionFailed)
+		_, _ = w.Write([]byte(`{"error":{"code":412,"status":"FAILED_PRECONDITION"}}`))
 		return
 	}
 	var asked pubsub.SetIamPolicyRequest
@@ -294,5 +301,35 @@ func TestRevokingAPublisherRetriesAPolicyChangedUnderIt(t *testing.T) {
 
 	if got := membersOf(state.policies[state.path(names, "orders")], "roles/pubsub.publisher"); !slices.Equal(got, []string{bystander}) {
 		t.Errorf("orders publishers = %q after a conflict, want only the other member", got)
+	}
+}
+
+func TestRevokingAPublisherRetriesAPolicyAnsweredFailedPrecondition(t *testing.T) {
+	state, names, clients := revoking(t, map[string]*pubsub.Policy{
+		"orders": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{revoked, bystander}}}},
+	})
+	state.changed = 1
+
+	if _, err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: revoked}).RevokePublisher(context.Background(), clients); err != nil {
+		t.Fatalf("RevokePublisher() = %v", err)
+	}
+
+	if got := membersOf(state.policies[state.path(names, "orders")], "roles/pubsub.publisher"); !slices.Equal(got, []string{bystander}) {
+		t.Errorf("orders publishers = %q after a 412, want only the other member", got)
+	}
+}
+
+func TestGrantingAPublisherRetriesAPolicyAnsweredFailedPrecondition(t *testing.T) {
+	state, names, clients := revoking(t, map[string]*pubsub.Policy{
+		"orders": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{bystander}}}},
+	})
+	state.changed = 1
+
+	if err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: revoked}).GrantPublisher(context.Background(), clients); err != nil {
+		t.Fatalf("GrantPublisher() = %v", err)
+	}
+
+	if got := membersOf(state.policies[state.path(names, "orders")], "roles/pubsub.publisher"); !slices.Contains(got, revoked) {
+		t.Errorf("orders publishers = %q after a 412, want the granted member", got)
 	}
 }
