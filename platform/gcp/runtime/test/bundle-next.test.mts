@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { writeNextProjectFixture } from "@framework/next-runtime/test-support/next-project-fixture";
 import { init, parse } from "es-module-lexer";
 import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
+import { isRefreshTaskSignedBy, refreshSignatureHeader } from "../src/next/refresh-signature.mjs";
 
 const execFileAsync = promisify(execFile);
 const pkgDir = resolve(import.meta.dirname, "..");
@@ -102,12 +103,16 @@ test("no file in the runtime directory contains a path of the checkout it was bu
   expect(leaking).toEqual([]);
 });
 
+interface QueuedTask {
+  task: { httpRequest: { body: string; headers: Record<string, string> } };
+}
+
 async function fakeCloudTasks(): Promise<{
   origin: string;
-  bodies: { task: { httpRequest: { body: string } } }[];
+  bodies: QueuedTask[];
   server: http.Server;
 }> {
-  const bodies: { task: { httpRequest: { body: string } } }[] = [];
+  const bodies: QueuedTask[] = [];
   const server = http.createServer((req, res) => {
     let body = "";
     req.on("data", (chunk) => {
@@ -124,7 +129,14 @@ async function fakeCloudTasks(): Promise<{
   return { origin: `http://127.0.0.1:${port}`, bodies, server };
 }
 
-const decodedTask = (task: { task: { httpRequest: { body: string } } }) =>
+const signedBySecret = (task: QueuedTask) =>
+  isRefreshTaskSignedBy(
+    "s1",
+    Buffer.from(task.task.httpRequest.body, "base64"),
+    task.task.httpRequest.headers[refreshSignatureHeader],
+  );
+
+const decodedTask = (task: QueuedTask) =>
   JSON.parse(Buffer.from(task.task.httpRequest.body, "base64").toString()) as {
     isrPrefix: string;
     refresh: { url: string; key: string; lastModified: number };
@@ -135,6 +147,7 @@ const refreshEnv = (origin: string) => ({
   OCEL_REFRESH_URL: `${origin}/_ocel/refresh`,
   OCEL_REFRESH_QUEUE: "projects/p/locations/r/queues/q",
   OCEL_REFRESH_ACCOUNT: "ocel-production-refresh@p.iam.gserviceaccount.com",
+  OCEL_REFRESH_SECRET: "s1",
   OCEL_TASKS_ENDPOINT: origin,
 });
 
@@ -214,6 +227,7 @@ test("a stale page served by a Next service billed per request queues a refresh 
     isrPrefix: "prod/shop/web/r1/isr",
     refresh: { url: "/blog", key: "blog", lastModified: 1000 },
   });
+  expect(signedBySecret(tasks.bodies[0]!)).toBe(true);
   expect(await readFile(log, "utf8")).toBe("");
 });
 
@@ -365,5 +379,6 @@ test("a stale RSC navigation to a partially static page is answered without the 
   expect(queued.isrPrefix).toBe("prod/shop/web/r1/isr");
   expect(queued.refresh).toMatchObject({ url: "/blog", key: "blog" });
   expect(typeof queued.refresh.lastModified).toBe("number");
+  expect(signedBySecret(tasks.bodies[0]!)).toBe(true);
   expect(await readFile(log, "utf8")).toBe("");
 });

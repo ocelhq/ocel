@@ -206,6 +206,7 @@ test("the GCP host refreshes a stale page through the queue its deploy named", a
       OCEL_REFRESH_URL: "https://web-abc.a.run.app/_ocel/refresh",
       OCEL_REFRESH_QUEUE: "projects/p/locations/r/queues/q",
       OCEL_REFRESH_ACCOUNT: "ocel-production-refresh@p.iam.gserviceaccount.com",
+      OCEL_REFRESH_SECRET: "s1",
       OCEL_TASKS_ENDPOINT: origin,
     });
 
@@ -239,6 +240,34 @@ test("a GCP host told a refresh url but no queue refuses to start", () => {
       OCEL_REFRESH_ACCOUNT: "ocel-production-refresh@p.iam.gserviceaccount.com",
     }),
   ).toThrow(/OCEL_REFRESH_QUEUE/);
+});
+
+test("a GCP host told a refresh url but no refresh secret refuses to start", () => {
+  expect(() =>
+    newGcpNextHost({
+      PORT: "8080",
+      OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
+      OCEL_REFRESH_URL: "https://web-abc.a.run.app/_ocel/refresh",
+      OCEL_REFRESH_QUEUE: "projects/p/locations/r/queues/q",
+      OCEL_REFRESH_ACCOUNT: "ocel-production-refresh@p.iam.gserviceaccount.com",
+    }),
+  ).toThrow(/OCEL_REFRESH_SECRET/);
+});
+
+test("the GCP host takes its refresh secret out of the environment the app sees", () => {
+  const env: NodeJS.ProcessEnv = {
+    PORT: "8080",
+    OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
+    OCEL_REFRESH_URL: "https://web-abc.a.run.app/_ocel/refresh",
+    OCEL_REFRESH_QUEUE: "projects/p/locations/r/queues/q",
+    OCEL_REFRESH_ACCOUNT: "ocel-production-refresh@p.iam.gserviceaccount.com",
+    OCEL_REFRESH_SECRET: "s1",
+  };
+
+  const host = newGcpNextHost(env);
+
+  expect(env.OCEL_REFRESH_SECRET).toBeUndefined();
+  expect(host.scheduleRefresh).toBeDefined();
 });
 
 test("a GCP host that does not dispatch at its origin schedules no refresh", () => {

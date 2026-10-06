@@ -1,6 +1,11 @@
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import type { Refresh } from "@framework/next-runtime/refresh";
 import { expect, test } from "vitest";
+import {
+  isRefreshTaskSignedBy,
+  refreshSignatureHeader,
+  signRefreshTask,
+} from "../src/next/refresh-signature.mjs";
 import { readRefreshTask } from "../src/next/refresh-task.mjs";
 import { newTaskRefresh, type TaskRefreshOptions } from "../src/next/task-refresh.mjs";
 
@@ -45,6 +50,7 @@ function schedule(r: ReturnType<typeof rig>, extra: Partial<TaskRefreshOptions> 
     account,
     url,
     isrPrefix,
+    secret: "s1",
     fetch: r.fetch,
     random: () => 0,
     sleep: async () => {},
@@ -53,16 +59,16 @@ function schedule(r: ReturnType<typeof rig>, extra: Partial<TaskRefreshOptions> 
 }
 
 const ok = () => Response.json({});
-const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+const hmac = (text: string) => createHmac("sha256", "s1").update(text).digest("hex");
 const bodyOf = (call: Call) => JSON.parse(String(call.init.body)).task;
 const headersOf = (call: Call) => call.init.headers as Record<string, string>;
 
-test("a stale hit queues a task named for its deployment, entry and generation", async () => {
+test("a stale hit queues a task named for its deployment, entry and generation under its revision's secret", async () => {
   const r = rig(ok);
 
   await schedule(r)(refresh);
 
-  expect(bodyOf(r.tasks[0]!).name).toBe(`${queue}/tasks/${sha(`${isrPrefix}\0blog\x001000`)}`);
+  expect(bodyOf(r.tasks[0]!).name).toBe(`${queue}/tasks/${hmac(`${isrPrefix}\0blog\x001000`)}`);
 });
 
 test("a refresh of another generation or another deployment queues a task of another name", async () => {
@@ -93,9 +99,23 @@ test("the task posts the refresh to the service's refresh url signed as the tier
     headers: { "Content-Type": "application/json" },
     oidcToken: { serviceAccountEmail: account, audience: url },
   });
-  const decoded = Buffer.from(task.httpRequest.body, "base64").toString();
+  const payload = Buffer.from(task.httpRequest.body, "base64");
+  const decoded = payload.toString();
   expect(JSON.parse(decoded)).toEqual({ isrPrefix, refresh });
   expect(readRefreshTask(decoded)).toEqual({ isrPrefix, refresh });
+  const signature = task.httpRequest.headers[refreshSignatureHeader];
+  expect(signature).toBe(signRefreshTask("s1", payload));
+  expect(isRefreshTaskSignedBy("s1", payload, signature)).toBe(true);
+});
+
+test("a revision with another secret names the same refresh differently", async () => {
+  const r = rig(ok);
+
+  await schedule(r)(refresh);
+  await schedule(r, { secret: "s2" })(refresh);
+
+  const [first, second] = r.tasks.map((call) => bodyOf(call).name);
+  expect(second).not.toBe(first);
 });
 
 test("the task is queued as the identity the service runs as", async () => {
@@ -192,4 +212,14 @@ test("an emulated queue is addressed with no token", async () => {
   expect(r.metadata).toHaveLength(0);
   expect(r.tasks[0]!.url).toBe(`http://127.0.0.1:9000/v2/${queue}/tasks`);
   expect(headersOf(r.tasks[0]!).Authorization).toBeUndefined();
+});
+
+test("a refresh that cannot be queued names neither the token nor the secret", async () => {
+  const r = rig(() => new Response("{}", { status: 503 }));
+
+  const error = await schedule(r)(refresh).catch((e: Error) => e);
+
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).not.toContain("t1");
+  expect((error as Error).message).not.toContain("s1");
 });

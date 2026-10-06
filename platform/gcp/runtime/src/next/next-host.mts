@@ -21,6 +21,8 @@ const MB = 1024 * 1024;
 const memoryVar = "OCEL_FUNCTION_MEMORY_MB";
 
 export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
+  const refreshSecret = env.OCEL_REFRESH_SECRET;
+  delete env.OCEL_REFRESH_SECRET;
   const memoryMb = Number(env[memoryVar]);
   const cache = newInstanceCache(instanceCacheBytes(memoryMb > 0 ? memoryMb * MB : undefined));
   const bucket = env.OCEL_ISR_BUCKET;
@@ -54,15 +56,18 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
       newGcpDispatchInvoke(
         localOrigin,
         env,
-        readRefreshEndpoint(env, localOrigin, async (key) =>
+        readRefreshEndpoint(env, refreshSecret, localOrigin, async (key) =>
           (await newCacheStore()).readEntry(key),
         ),
       ),
-    scheduleRefresh: readTaskRefresh(env),
+    scheduleRefresh: readTaskRefresh(env, refreshSecret),
   };
 }
 
-function readTaskRefresh(env: NodeJS.ProcessEnv): ScheduleRefresh | undefined {
+function readTaskRefresh(
+  env: NodeJS.ProcessEnv,
+  secret: string | undefined,
+): ScheduleRefresh | undefined {
   const url = env.OCEL_REFRESH_URL;
   if (!url) {
     if (dispatchesAtOrigin(env) && finishBeforeResponseMs(env) > 0 && env.OCEL_ISR_PREFIX) {
@@ -75,11 +80,13 @@ function readTaskRefresh(env: NodeJS.ProcessEnv): ScheduleRefresh | undefined {
   for (const name of ["OCEL_REFRESH_QUEUE", "OCEL_REFRESH_ACCOUNT", "OCEL_ISR_PREFIX"]) {
     if (!env[name]) throw new Error(`ocel: OCEL_REFRESH_URL is set but ${name} is not`);
   }
+  if (!secret) throw new Error("ocel: OCEL_REFRESH_URL is set but OCEL_REFRESH_SECRET is not");
   return newTaskRefresh({
     queue: env.OCEL_REFRESH_QUEUE!,
     account: env.OCEL_REFRESH_ACCOUNT!,
     url,
     isrPrefix: env.OCEL_ISR_PREFIX!,
+    secret,
     endpoint: env.OCEL_TASKS_ENDPOINT,
   });
 }
