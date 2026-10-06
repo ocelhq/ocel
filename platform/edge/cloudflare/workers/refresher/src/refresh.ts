@@ -2,7 +2,7 @@ import { parseMessage, type RevalidationMessage } from "@platform/edge-contract/
 
 export const triggerTimeoutMs = 10_000;
 
-export type Outcome =
+export type RefreshOutcome =
   | { settle: "ack"; event: "RevalidateOk" | "RevalidateExpectMiss" }
   | { settle: "ack"; event: "RevalidateFailed"; reason: "malformed" | "unsupported-version" }
   | { settle: "ack"; event: "RevalidateFailed"; reason: "origin-unusable" }
@@ -19,9 +19,9 @@ export interface Refresh {
   headers: Headers;
 }
 
-export type Parsed = { ok: true; refresh: Refresh } | { ok: false; outcome: Outcome };
+export type ParsedRefresh = { ok: true; refresh: Refresh } | { ok: false; outcome: RefreshOutcome };
 
-function compose(origin: unknown, routePath: string): string | undefined {
+function composeOriginUrl(origin: unknown, routePath: string): string | undefined {
   if (typeof origin !== "string") return undefined;
   try {
     const base = new URL(origin);
@@ -33,7 +33,7 @@ function compose(origin: unknown, routePath: string): string | undefined {
   }
 }
 
-export function parseRefresh(body: unknown): Parsed {
+export function parseRefresh(body: unknown): ParsedRefresh {
   if (typeof body !== "string") {
     return {
       ok: false,
@@ -47,7 +47,10 @@ export function parseRefresh(body: unknown): Parsed {
       outcome: { settle: "ack", event: "RevalidateFailed", reason: parsed.reason },
     };
   }
-  const url = compose((JSON.parse(body) as { origin?: unknown }).origin, parsed.message.routePath);
+  const url = composeOriginUrl(
+    (JSON.parse(body) as { origin?: unknown }).origin,
+    parsed.message.routePath,
+  );
   if (url === undefined) {
     return {
       ok: false,
@@ -66,7 +69,10 @@ export function parseRefresh(body: unknown): Parsed {
   return { ok: true, refresh: { message: parsed.message, url, headers } };
 }
 
-export async function trigger(refresh: Refresh, origin: Fetcher | undefined): Promise<Outcome> {
+export async function trigger(
+  refresh: Refresh,
+  origin: Fetcher | undefined,
+): Promise<RefreshOutcome> {
   if (origin === undefined) {
     return {
       settle: "retry",
