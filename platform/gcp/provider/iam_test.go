@@ -171,3 +171,34 @@ func TestGrantingAMemberAnAccountRoleLeavesTheBindingsItWasGivenUnchanged(t *tes
 		t.Errorf("the bindings it was given are now %s, want %s", after, before)
 	}
 }
+
+func TestTakingAMemberOffTheProjectReportsEveryBindingItHeld(t *testing.T) {
+	t.Parallel()
+	member, other := "serviceAccount:app@x.iam.gserviceaccount.com", "serviceAccount:other@x.iam.gserviceaccount.com"
+	first := &cloudresourcemanager.Expr{Expression: "a"}
+	second := &cloudresourcemanager.Expr{Expression: "b"}
+	bindings := []*cloudresourcemanager.Binding{
+		{Role: "roles/one", Condition: first, Members: []string{member}},
+		{Role: "roles/two", Condition: second, Members: []string{member, other}},
+		{Role: "roles/three", Members: []string{member}},
+		{Role: "roles/four", Members: []string{other}},
+		{Role: "roles/five", Members: []string{member}},
+	}
+
+	kept, removed := removeMemberFromRoles(bindings, member, []string{"roles/one", "roles/two", "roles/three"})
+
+	if len(removed) != 3 {
+		t.Fatalf("removeMemberFromRoles() removed %+v, want three bindings", removed)
+	}
+	for i, want := range []struct {
+		role string
+		cond *cloudresourcemanager.Expr
+	}{{"roles/one", first}, {"roles/two", second}, {"roles/three", nil}} {
+		if removed[i].Role != want.role || removed[i].Condition != want.cond || !slices.Equal(removed[i].Members, []string{member}) {
+			t.Errorf("removed[%d] = %+v, want %s with its condition and exactly the member", i, removed[i], want.role)
+		}
+	}
+	if len(kept) != 3 || !slices.Equal(kept[0].Members, []string{other}) || kept[0].Role != "roles/two" || kept[2].Role != "roles/five" || !slices.Equal(kept[2].Members, []string{member}) {
+		t.Errorf("removeMemberFromRoles() kept %+v, want roles/two held by the other member, roles/four and roles/five still held by the member", kept)
+	}
+}
