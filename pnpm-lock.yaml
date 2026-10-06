@@ -760,6 +760,9 @@ importers:
       '@framework/next-cache':
         specifier: workspace:*
         version: link:../../../../frameworks/next/cache
+      '@platform/aws-runtime':
+        specifier: workspace:*
+        version: link:../../runtime
     devDependencies:
       '@types/node':
         specifier: ^24

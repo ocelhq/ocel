@@ -12,7 +12,8 @@
   "dependencies": {
     "@aws-sdk/client-cloudfront": "^3.1083.0",
     "@aws-sdk/client-dynamodb": "^3.1083.0",
-    "@framework/next-cache": "workspace:*"
+    "@framework/next-cache": "workspace:*",
+    "@platform/aws-runtime": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24",

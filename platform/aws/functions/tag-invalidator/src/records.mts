@@ -1,4 +1,4 @@
-import { isrPrefixOf } from "@framework/next-cache";
+import { isrPrefixOf } from "@platform/aws-runtime/tag-index";
 
 type Attribute = { S?: string; N?: string };
 
