@@ -150,7 +150,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			if refresh != nil {
 				addressed = refresh.addressedTo(service, served.tag)
 			}
-			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, nextCacheOf(names, spec.Ref.Tier, p.containerEndpoint()), addressed)); err != nil {
+			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, newNextCache(names, spec.Ref.Tier, p.containerEndpoint()), addressed)); err != nil {
 				return nil, err
 			}
 			if values, err = mergedValues(fn.Name, values, newCDNPurgeEnv(names, spec)); err != nil {
@@ -311,7 +311,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	if servesNext(app) {
 		served = fillNextContainerDefaults(served)
-		if served.env, err = mergedValues(app.App, values, newNextContainerEnv(spec, served, nextCacheOf(names, spec.Ref.Tier, p.containerEndpoint()))); err != nil {
+		if served.env, err = mergedValues(app.App, values, newNextContainerEnv(spec, served.memory, newNextCache(names, spec.Ref.Tier, p.containerEndpoint()))); err != nil {
 			return nil, err
 		}
 	}
