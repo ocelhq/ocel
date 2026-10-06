@@ -1,10 +1,7 @@
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
-import {
-  type DispatchHost,
-  newDispatchInvoke,
-  readDispatchHost,
-} from "@framework/next-runtime/dispatch-host";
+import { type DispatchHost, readDispatchHost } from "@framework/next-runtime/dispatch-host";
 import type { Invoke } from "@framework/node-runtime/host";
+import { newCloudCdnDispatchInvoke } from "./cloud-cdn.mjs";
 import { newDiskAssetBucket, newDiskObjectStore } from "./disk-assets.mjs";
 import { newInProcessImageOrigin } from "./image-origin.mjs";
 import type { RefreshEndpoint } from "./refresh-endpoint.mjs";
@@ -43,7 +40,7 @@ export function newGcpDispatchInvoke(
   env: NodeJS.ProcessEnv,
   endpoint: RefreshEndpoint | undefined,
 ): Invoke {
-  const dispatch = newDispatchInvoke(readGcpDispatchHost(env, localOrigin));
+  const dispatch = newCloudCdnDispatchInvoke(readGcpDispatchHost(env, localOrigin));
   return async (req, res, ocel) => {
     if (endpoint && (await endpoint(req, res))) return;
     return dispatch(req, res, ocel);

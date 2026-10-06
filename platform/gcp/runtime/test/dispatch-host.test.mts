@@ -163,3 +163,31 @@ test("a service told no refresh url routes the refresh path like any other", asy
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test("a static flight response reaches Cloud CDN without the router state tree in its Vary", async () => {
+  const invoke = newGcpDispatchInvoke(
+    localOrigin,
+    {
+      OCEL_ROUTING_MANIFEST: join(dir, "routing.json"),
+      OCEL_STATIC_DIR: join(dir, "static"),
+      OCEL_ASSET_PREFIX: "prod/shop/web/r1/assets",
+    },
+    undefined,
+  );
+  const edge = http.createServer((req, res) =>
+    invoke(req, res, { waitUntil: () => {}, holdEnd: () => {} }),
+  );
+  await new Promise<void>((resolve) => edge.listen({ host: "127.0.0.1", port: 0 }, resolve));
+  try {
+    const { port } = edge.address() as { port: number };
+    const response = await fetch(`http://127.0.0.1:${port}/logo.svg`, { headers: { rsc: "1" } });
+    const vary = response.headers.get("vary") ?? "";
+
+    expect(response.status).toBe(200);
+    expect(vary).toContain("rsc");
+    expect(vary).toContain("next-url");
+    expect(vary).not.toContain("next-router-state-tree");
+  } finally {
+    await new Promise<void>((resolve) => edge.close(() => resolve()));
+  }
+});

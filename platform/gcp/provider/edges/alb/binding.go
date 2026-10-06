@@ -59,9 +59,7 @@ func bindingProgram(spec bindingSpec) Program {
 				Protocol:            pulumi.String("HTTPS"),
 				LoadBalancingScheme: pulumi.String(externalManaged),
 				EnableCdn:           pulumi.Bool(true),
-				CdnPolicy: &compute.BackendServiceCdnPolicyArgs{
-					CacheMode: pulumi.String(cacheOnOrigin),
-				},
+				CdnPolicy:           newCDNPolicy(),
 				Backends: compute.BackendServiceBackendArray{
 					&compute.BackendServiceBackendArgs{Group: group.SelfLink},
 				},
