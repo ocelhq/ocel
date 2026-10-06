@@ -8,6 +8,7 @@ import { IsrDeploy } from "./isr-deploy";
 import { IsrSnapshot } from "./isr-snapshot";
 import type { Memo } from "./memo";
 import { forget, memoize, memoized } from "./memo";
+import { emptyPrefix } from "./prefix";
 import { isSecretHash } from "./registry";
 import { readTagSnapshot } from "./tag-snapshot";
 
@@ -129,6 +130,11 @@ export default class extends WorkerEntrypoint<Env> {
       await deployStub(this.env, isrPrefix).destroy();
       await snapshotStub(this.env, isrPrefix).destroy();
       forget(isrPrefix);
+      if ((await emptyPrefix(this.env.OCEL_CACHE_STORE, isrPrefix)) === "more") {
+        return new Response(`objects remain under ${isrPrefix}; call destroy again`, {
+          status: 202,
+        });
+      }
       return new Response(null, { status: 204 });
     }
 
