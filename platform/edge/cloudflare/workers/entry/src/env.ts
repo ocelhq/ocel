@@ -6,6 +6,7 @@ export interface IsrWriterBinding {
 
 export interface CacheEntrypointProps {
   isrWriteSecret?: string;
+  scope?: string;
 }
 
 export interface Env {
