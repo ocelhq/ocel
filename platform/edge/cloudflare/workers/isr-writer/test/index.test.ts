@@ -651,6 +651,18 @@ describe("tag reads", () => {
     });
   });
 
+  it("honours only If-None-Match when reading the snapshot", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    await seedGenesis(prefix, 10);
+    await raiseReq(prefix, "write-secret", { records: { posts: { expired: 123 } } });
+
+    const res = await readReq(prefix, "write-secret", { "if-match": '"not-the-etag"' });
+
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as TagSnapshot).records.posts?.expired).toBe(123);
+  });
+
   it("answers a miss before any tag was raised", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
