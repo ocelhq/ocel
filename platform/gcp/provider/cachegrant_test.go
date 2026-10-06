@@ -114,3 +114,66 @@ func TestAnAppWithoutISRIsGrantedNoCache(t *testing.T) {
 		t.Errorf("an app without ISR holds the storage bindings %q, want none", got)
 	}
 }
+
+func tagRecordBindingsOf(server *iamServer) []string {
+	var bound []string
+	for _, binding := range projectBindingsOf(server) {
+		if strings.HasPrefix(binding, tagRecordsRole+" ") && strings.Contains(binding, "-tags") {
+			bound = append(bound, binding)
+		}
+	}
+	return bound
+}
+
+func TestANextAppsAccountMayUseItsTiersTagRecordsAndNoOtherDatabase(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c := server.open(t)
+	account := c.AppAccountEmail(environment.TierProduction, "shop", "web")
+
+	if err := grantCache(context.Background(), c, routedNextSpec(), account); err != nil {
+		t.Fatalf("grantCache() = %v", err)
+	}
+
+	want := tagRecordsRole + " serviceAccount:" + account + ` resource.name == "projects/acme-prod/databases/ocel-production-tags"`
+	if got := tagRecordBindingsOf(server); !slices.Equal(got, []string{want}) {
+		t.Errorf("the project's tag record bindings = %q, want exactly %q", got, want)
+	}
+	for _, binding := range server.project.Bindings {
+		if binding.Role == tagRecordsRole && strings.Contains(binding.Condition.Expression, "-tags") &&
+			binding.Condition.Title != "ocel ocel production tag records" {
+			t.Errorf("the tag records binding's condition = %+v, want the title %q", binding.Condition, "ocel ocel production tag records")
+		}
+	}
+}
+
+func TestAnAppWithoutAnIncrementalCacheIsGrantedNoTagRecords(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c := server.open(t)
+
+	if err := grantCache(context.Background(), c, nextSpec(), c.AppAccountEmail(environment.TierProduction, "shop", "web")); err != nil {
+		t.Fatalf("grantCache() = %v", err)
+	}
+	if got := tagRecordBindingsOf(server); len(got) != 0 {
+		t.Errorf("an app without ISR holds the tag record bindings %q, want none", got)
+	}
+}
+
+func TestARedeployOfANextAppWritesNoTagRecordsPolicy(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c := server.open(t)
+	account := c.AppAccountEmail(environment.TierProduction, "shop", "web")
+	if err := grantCache(context.Background(), c, routedNextSpec(), account); err != nil {
+		t.Fatal(err)
+	}
+	before := server.projectWrites
+
+	if err := grantCache(context.Background(), c, routedNextSpec(), account); err != nil {
+		t.Fatalf("second grantCache() = %v", err)
+	}
+	if got := server.projectWrites - before; got != 0 {
+		t.Errorf("a redeploy wrote the project policy %d times, want 0", got)
+	}
+}

@@ -68,6 +68,10 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 			Note: "every record this project stores, and both tiers keep theirs in it",
 		},
 		{
+			Kind: KindDatabase, Name: names.TagDatabase(tier), Slow: true,
+			Note: "the tag records of every Next app this tier serves: one document per revalidated tag, read by every instance of the app",
+		},
+		{
 			Kind: KindBucket, Name: names.Bucket(tier),
 			Note: "the artifacts this tier deploys, and the stamp saying what this bootstrap is",
 		},

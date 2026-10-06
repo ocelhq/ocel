@@ -41,6 +41,10 @@ ocel bootstrap production
 ocel deploy
 ```
 
+Each tier's bootstrap also creates a Firestore database of its own, `<namespace>-<tier>-tags`,
+that holds the revalidated tags of the tier's Next apps. It has no standing charge, only the
+reads, writes and storage its records use.
+
 ## Edge
 
 Leave `edge` out and a deployment has no edge in front of it: each service is answered on
@@ -238,8 +242,8 @@ A deploy needs `roles/datastore.user`, `roles/storage.objectAdmin`,
 
 Each app runs as a service account of its own, which a deploy creates the first time the app
 ships to a tier and grants only what the app's runtime reads: the namespace's database, the
-tier's key, and for an app that reaches topics, tasks or workers the tier's task database, the
-delay queue and its topics. Granting those takes `roles/resourcemanager.projectIamAdmin`, and
+tier's key, for a Next app the tier's tags database, and for an app that reaches topics, tasks or
+workers the tier's task database, the delay queue and its topics. Granting those takes `roles/resourcemanager.projectIamAdmin`, and
 a deploy holds it under a condition that lets it grant and revoke the four roles an app needs
 and no others:
 

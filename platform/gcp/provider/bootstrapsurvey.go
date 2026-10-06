@@ -171,7 +171,10 @@ type presence struct {
 func (b bootstrap) presenceOf(ctx context.Context, tier environment.Tier, target item) (presence, error) {
 	switch target.Kind {
 	case KindDatabase:
-		return b.databasePresence(ctx, b.clients.Database())
+		if target.Shared {
+			return b.databasePresence(ctx, target.Name)
+		}
+		return b.tagDatabasePresence(ctx, target.Name)
 	case KindBucket:
 		return b.bucketPresence(ctx, target.Name)
 	case KindKeyRing:

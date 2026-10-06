@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func TestTheItemDigestTellsTwoNamespacesApart(t *testing.T) {
@@ -107,5 +108,51 @@ func TestTheTiersDelayAccountIsGrantedNothingAnAppReads(t *testing.T) {
 	}
 	if !found.present || found.mends != "" {
 		t.Errorf("accountPresence() = %+v, want the delay account present with nothing to mend", found)
+	}
+}
+
+func tagsDatabaseOf(names Names, tier environment.Tier, emulated bool) (item, bool) {
+	for _, each := range stackItems(names, tier, emulated) {
+		if each.Kind == KindDatabase && each.Name == names.TagDatabase(tier) {
+			return each, true
+		}
+	}
+	return item{}, false
+}
+
+func TestEveryTierHasATagsDatabaseOfItsOwn(t *testing.T) {
+	t.Parallel()
+
+	names := Names{namespace: "ocel", project: "acme-prod"}
+	var named []string
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		database, ok := tagsDatabaseOf(names, tier, false)
+		if !ok {
+			t.Fatalf("the %s tier's stack items = %v, want its tags database among them", tier, idsOf(stackItems(names, tier, false)))
+		}
+		if database.Shared || !database.Slow {
+			t.Errorf("the %s tier's tags database = %+v, want it slow to make and not shared with the sibling tier", tier, database)
+		}
+		named = append(named, database.Name)
+	}
+	if named[0] == named[1] {
+		t.Errorf("both tiers name the tags database %q, want one each", named[0])
+	}
+}
+
+func TestTheEmulatorKeepsTheTagsDatabaseItServesImplicitly(t *testing.T) {
+	t.Parallel()
+
+	names := Names{namespace: "ocel", project: "acme-prod"}
+	tier := environment.TierProduction
+	database, ok := tagsDatabaseOf(names, tier, true)
+	if !ok {
+		t.Fatalf("the emulated stack items = %v, want the tags database among them", idsOf(stackItems(names, tier, true)))
+	}
+	read := survey{Tier: tier, Names: names, Emulated: true, present: map[string]bool{database.ID(): true}}
+	for _, change := range planned(read, []item{database}) {
+		if change.Action != provider.ActionKeep || change.Reason != reasonEmulated {
+			t.Errorf("planned() = %s %q, want keep %q", change.Action, change.Reason, reasonEmulated)
+		}
 	}
 }

@@ -1,0 +1,122 @@
+package gcp
+
+import (
+	"context"
+	"fmt"
+
+	"google.golang.org/api/cloudresourcemanager/v1"
+	firestoreadmin "google.golang.org/api/firestore/v1"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+)
+
+const (
+	tagCollection     = "tags"
+	tagPrefixField    = "prefix"
+	tagWrittenAtField = "writtenAt"
+	tagField          = "tag"
+	tagStaleField     = "stale"
+	tagExpiredField   = "expired"
+
+	tagRecordsRole = "roles/datastore.user"
+
+	reasonTagsUnprotected = "it exists with delete protection off, and one call would take every tag record this tier's Next apps read with it"
+	reasonTagsUnindexed   = "it has no index the tag records of an app are read through"
+)
+
+func tagIndexes() []*firestoreadmin.GoogleFirestoreAdminV1Index {
+	return []*firestoreadmin.GoogleFirestoreAdminV1Index{{
+		QueryScope: collectionScoped,
+		Fields: []*firestoreadmin.GoogleFirestoreAdminV1IndexField{
+			{FieldPath: tagPrefixField, Order: ascending},
+			{FieldPath: tagWrittenAtField, Order: ascending},
+		},
+	}}
+}
+
+func unindexedTagFields() []string {
+	return []string{tagWrittenAtField, tagField, tagStaleField, tagExpiredField}
+}
+
+func tagDatabaseCondition(c *clients, tier environment.Tier) *cloudresourcemanager.Expr {
+	return &cloudresourcemanager.Expr{
+		Title:      "ocel " + string(c.Namespace()) + " " + string(tier) + " tag records",
+		Expression: fmt.Sprintf("resource.name == %q", databasePath(c, c.TagDatabase(tier))),
+	}
+}
+
+func (b bootstrap) ensureTagIndexes(ctx context.Context, tier environment.Tier) error {
+	service, err := b.clients.Databases()
+	if err != nil {
+		return err
+	}
+	database := databasePath(b.clients, b.clients.TagDatabase(tier))
+	for _, field := range unindexedTagFields() {
+		name := database + "/collectionGroups/" + tagCollection + "/fields/" + field
+		operation, err := attempted(ctx, service.Projects.Databases.CollectionGroups.Fields.Patch(name,
+			&firestoreadmin.GoogleFirestoreAdminV1Field{IndexConfig: &firestoreadmin.GoogleFirestoreAdminV1IndexConfig{
+				Indexes:         []*firestoreadmin.GoogleFirestoreAdminV1Index{},
+				ForceSendFields: []string{"Indexes"},
+			}}).UpdateMask("indexConfig").Context(ctx).Do)
+		if err != nil {
+			return fmt.Errorf("leave %s of the tag records unindexed: %w", field, err)
+		}
+		if err := b.awaited(ctx, "leaving "+field+" of the tag records unindexed", operation); err != nil {
+			return err
+		}
+	}
+	parent := database + "/collectionGroups/" + tagCollection
+	for _, index := range tagIndexes() {
+		operation, err := attempted(ctx, service.Projects.Databases.CollectionGroups.Indexes.Create(parent, index).Context(ctx).Do)
+		if taken(err) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("index the tag records of %s: %w", b.clients.TagDatabase(tier), err)
+		}
+		if err := b.awaited(ctx, "building the index on the tag records of "+b.clients.TagDatabase(tier), operation); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b bootstrap) tagDatabasePresence(ctx context.Context, id string) (presence, error) {
+	found, err := b.databasePresence(ctx, id)
+	if err != nil || !found.present || b.clients.emulated() {
+		return found, err
+	}
+	if found.mends != "" {
+		found.mends = reasonTagsUnprotected
+		return found, nil
+	}
+	service, err := b.clients.Databases()
+	if err != nil {
+		return presence{}, err
+	}
+	listed, err := attempted(ctx, service.Projects.Databases.CollectionGroups.Indexes.List(
+		databasePath(b.clients, id)+"/collectionGroups/"+tagCollection).Context(ctx).Do)
+	if err != nil {
+		return presence{}, fmt.Errorf("read the indexes of the tag records in %q: %w", id, err)
+	}
+	for _, index := range listed.Indexes {
+		if index.State == "READY" && readsTagsByPrefix(index) {
+			return found, nil
+		}
+	}
+	found.mends = reasonTagsUnindexed
+	return found, nil
+}
+
+func readsTagsByPrefix(index *firestoreadmin.GoogleFirestoreAdminV1Index) bool {
+	want := tagIndexes()[0]
+	if index.QueryScope != want.QueryScope || len(index.Fields) < len(want.Fields) {
+		return false
+	}
+	for i, field := range want.Fields {
+		if index.Fields[i].FieldPath != field.FieldPath || index.Fields[i].Order != field.Order {
+			return false
+		}
+	}
+	return true
+}

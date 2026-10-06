@@ -172,6 +172,7 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 	}
 	rows := map[string]string{
 		"firestore:database/" + liveNames(t).Database():                 provider.StackGroupKind,
+		"firestore:database/" + liveNames(t).TagDatabase(tier):          provider.StackGroupKind,
 		"iam:serviceaccount/" + liveNames(t).DelayAccount(tier):         provider.StackGroupKind,
 		"storage:bucket/" + liveNames(t).Bucket(tier):                   provider.StackGroupKind,
 		"storage:bucket/" + liveNames(t).StateBucket(tier):              provider.StackGroupKind,
@@ -475,6 +476,49 @@ func TestProjectTheDatabaseIsARowOfItsOwnProvisionedUnderDeleteProtection(t *tes
 	}
 	if database.LocationId != liveRegion() {
 		t.Errorf("the database is in %q, want the one region the bootstrap was given, %q", database.LocationId, liveRegion())
+	}
+}
+
+func TestProjectATiersTagsDatabaseIsProtectedIndexedAndGoneOnceTheTierIsRemoved(t *testing.T) {
+	p := live(t)
+	onRealGoogleCloud(t)
+	tier := environment.TierPreview
+	bootstrap := bootstrapped(t, p, tier)
+
+	ctx := context.Background()
+	service, err := firestoreadmin.NewService(ctx)
+	if err != nil {
+		t.Fatalf("reach the Firestore admin API: %v", err)
+	}
+	path := "projects/" + liveProject() + "/databases/" + liveNames(t).TagDatabase(tier)
+	database, err := service.Projects.Databases.Get(path).Context(ctx).Do()
+	if err != nil {
+		t.Fatalf("read the tags database the bootstrap provisioned: %v", err)
+	}
+	if database.DeleteProtectionState != "DELETE_PROTECTION_ENABLED" {
+		t.Errorf("the tags database has delete protection %q, want it on", database.DeleteProtectionState)
+	}
+	listed, err := service.Projects.Databases.CollectionGroups.Indexes.List(path + "/collectionGroups/tags").Context(ctx).Do()
+	if err != nil {
+		t.Fatalf("list the indexes of the tag records: %v", err)
+	}
+	ready := false
+	for _, index := range listed.Indexes {
+		if index.State == "READY" && len(index.Fields) >= 2 &&
+			index.Fields[0].FieldPath == "prefix" && index.Fields[0].Order == "ASCENDING" &&
+			index.Fields[1].FieldPath == "writtenAt" && index.Fields[1].Order == "ASCENDING" {
+			ready = true
+		}
+	}
+	if !ready {
+		t.Errorf("the tag records have the indexes %+v, want a READY one on prefix then writtenAt", listed.Indexes)
+	}
+
+	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+		t.Fatalf("Remove(%s) = %v", tier, err)
+	}
+	if _, err := service.Projects.Databases.Get(path).Context(ctx).Do(); err == nil {
+		t.Errorf("the tags database %s still exists after its tier was removed", path)
 	}
 }
 

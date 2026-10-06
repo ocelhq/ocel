@@ -42,6 +42,15 @@
       "properties": {}
     },
     {
+      "id": "project:shop/shared:preview/google_firestore_database:ocel-preview-tags",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_firestore_database",
+      "name": "ocel-preview-tags",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/shared:preview/google_storage_bucket:ocel-acme-prod-preview",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
