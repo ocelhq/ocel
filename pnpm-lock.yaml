@@ -886,6 +886,9 @@ importers:
       '@platform/cf-isr-writer':
         specifier: workspace:*
         version: link:../../workers/isr-writer
+      '@platform/cf-refresher':
+        specifier: workspace:*
+        version: link:../../workers/refresher
 
   platform/edge/cloudflare/lib/auth:
     devDependencies:

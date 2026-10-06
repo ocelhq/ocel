@@ -14,6 +14,7 @@ var (
 	entry            = load("dist/entry.js")
 	deploymentsStore = load("dist/deployments-store.js")
 	isrWriter        = load("dist/isr-writer.js")
+	refresher        = load("dist/refresher.js")
 )
 
 func Entry() []byte { return entry }
@@ -21,6 +22,8 @@ func Entry() []byte { return entry }
 func DeploymentsStore() []byte { return deploymentsStore }
 
 func ISRWriter() []byte { return isrWriter }
+
+func Refresher() []byte { return refresher }
 
 func load(name string) []byte {
 	body, err := embedded.ReadFile(name)

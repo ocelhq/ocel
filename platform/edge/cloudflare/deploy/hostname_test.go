@@ -75,6 +75,13 @@ type cfMock struct {
 	deletedMTLSCertificates  []string
 	refuseMTLSDelete         bool
 
+	queues           []map[string]any
+	createdQueues    []string
+	deletedQueues    []string
+	createdConsumers []map[string]any
+	updatedConsumers []map[string]any
+	deletedConsumers []string
+
 	originRequests   [][]string
 	originCSRs       []string
 	revokedOrigin    []string
@@ -399,6 +406,78 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		}
 		m.clientCertificates = append(m.clientCertificates, uploaded)
 		writeResult(w, uploaded)
+	})
+
+	mux.HandleFunc("GET /accounts/acct/queues", func(w http.ResponseWriter, r *http.Request) {
+		listed := []map[string]any{}
+		for _, queue := range m.queues {
+			if name := r.URL.Query().Get("name"); name != "" && queue["queue_name"] != name {
+				continue
+			}
+			listed = append(listed, queue)
+		}
+		writeResult(w, listed)
+	})
+
+	mux.HandleFunc("POST /accounts/acct/queues", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		name := fmt.Sprint(body["queue_name"])
+		m.createdQueues = append(m.createdQueues, name)
+		queue := map[string]any{
+			"queue_id": fmt.Sprintf("queue-%d", len(m.createdQueues)), "queue_name": name,
+			"consumers": []any{}, "producers": []any{},
+		}
+		m.queues = append(m.queues, queue)
+		writeResult(w, queue)
+	})
+
+	mux.HandleFunc("DELETE /accounts/acct/queues/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		m.deletedQueues = append(m.deletedQueues, id)
+		m.queues = slices.DeleteFunc(m.queues, func(queue map[string]any) bool { return queue["queue_id"] == id })
+		writeResult(w, map[string]any{})
+	})
+
+	mux.HandleFunc("POST /accounts/acct/queues/{id}/consumers", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		m.createdConsumers = append(m.createdConsumers, body)
+		consumer := map[string]any{
+			"consumer_id": fmt.Sprintf("consumer-%d", len(m.createdConsumers)), "queue_id": r.PathValue("id"),
+			"script": body["script_name"], "type": body["type"], "settings": body["settings"],
+		}
+		for _, queue := range m.queues {
+			if queue["queue_id"] == r.PathValue("id") {
+				queue["consumers"] = append(queue["consumers"].([]any), consumer)
+			}
+		}
+		writeResult(w, consumer)
+	})
+
+	mux.HandleFunc("PUT /accounts/acct/queues/{id}/consumers/{consumer}", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		m.updatedConsumers = append(m.updatedConsumers, body)
+		for _, queue := range m.queues {
+			for _, consumer := range queue["consumers"].([]any) {
+				if consumer.(map[string]any)["consumer_id"] == r.PathValue("consumer") {
+					consumer.(map[string]any)["settings"] = body["settings"]
+				}
+			}
+		}
+		writeResult(w, map[string]any{"consumer_id": r.PathValue("consumer")})
+	})
+
+	mux.HandleFunc("DELETE /accounts/acct/queues/{id}/consumers/{consumer}", func(w http.ResponseWriter, r *http.Request) {
+		gone := r.PathValue("consumer")
+		m.deletedConsumers = append(m.deletedConsumers, gone)
+		for _, queue := range m.queues {
+			queue["consumers"] = slices.DeleteFunc(queue["consumers"].([]any), func(consumer any) bool {
+				return consumer.(map[string]any)["consumer_id"] == gone
+			})
+		}
+		writeResult(w, map[string]any{})
 	})
 
 	mux.HandleFunc("GET /accounts/acct/mtls_certificates", func(w http.ResponseWriter, _ *http.Request) {

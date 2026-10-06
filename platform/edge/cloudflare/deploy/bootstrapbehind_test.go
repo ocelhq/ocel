@@ -249,3 +249,20 @@ func TestTheBootstrapRefusalNamesTheCallerAndWhatToRerun(t *testing.T) {
 		})
 	}
 }
+
+func TestADeployIsNotRefusedForAMissingRefresher(t *testing.T) {
+	m := bootstrapMock(t, false)
+	p := mutualTLSEdge(t, m)
+	installBootstrap(t, m, environment.TierProduction)
+	for _, script := range []string{refresherScript} {
+		if _, present := m.putBodies[script]; present {
+			t.Fatalf("%s is installed before the test starts", script)
+		}
+	}
+
+	err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, bootstrapCaller{worker: "the entry worker", retry: "deploy again"})
+
+	if err != nil {
+		t.Errorf("refuseBootstrapBehind = %v, want a deploy kept going while the refresher is missing: the gate for it is not part of this bootstrap", err)
+	}
+}

@@ -226,6 +226,9 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 			return out, fmt.Errorf("bootstrap the worker client certificate: %w", err)
 		}
 		out.Offers = append(out.Offers, offer)
+		if err := p.ensureRefreshQueue(ctx, accountID, state.refresh, offer.Values[edge.OfferKeyClientCertificateID]); err != nil {
+			return out, fmt.Errorf("bootstrap the refresh queue: %w", err)
+		}
 	}
 	return out, nil
 }
@@ -247,6 +250,11 @@ func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error 
 	for _, name := range []string{storeScript, writerScript} {
 		if err := p.deleteScript(ctx, accountID, name); err != nil {
 			errs = append(errs, fmt.Errorf("delete worker %q: %w", name, err))
+		}
+	}
+	if p.workerClientCertificate {
+		if err := p.tearDownRefreshQueue(ctx, accountID, tier); err != nil {
+			errs = append(errs, err)
 		}
 	}
 	if err := p.cacheStore().teardown(ctx, accountID, tier); err != nil {
@@ -383,6 +391,7 @@ var (
 	entryBundle            = bundles.Entry()
 	deploymentsStoreBundle = bundles.DeploymentsStore()
 	isrWriterBundle        = bundles.ISRWriter()
+	refresherBundle        = bundles.Refresher()
 )
 
 func workerModule(content []byte) edge.WorkerModule {
