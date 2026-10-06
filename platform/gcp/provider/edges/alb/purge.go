@@ -38,6 +38,9 @@ func newServedKey(pointer, app string) string { return pointer + "/" + app }
 func (s *stack) servedHostnames(move router.PointerMove, app string, record router.DeploymentRecord) []string {
 	var hostnames []string
 	for hostname, host := range s.recorded.Hosts {
+		if _, _, deployment := router.ParseDeploymentPointer(host.Pointer); deployment {
+			continue
+		}
 		if _, pinned := record.Revisions[host.Service]; host.App == app && host.Service != "" && pinned {
 			hostnames = append(hostnames, hostname)
 		}
