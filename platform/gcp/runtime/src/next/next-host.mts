@@ -7,6 +7,7 @@ import { newGcpDispatchInvoke } from "./dispatch-host.mjs";
 import { newFirestore } from "./firestore.mjs";
 import { newInstanceRefresh } from "./instance-refresh.mjs";
 import { newInstanceCacheStore, newInstanceUseCacheStore } from "./instance-stores.mjs";
+import { readRefreshEndpoint } from "./refresh-endpoint.mjs";
 import { newFirestoreTagRecords } from "./tag-records.mjs";
 import { newGcpUseCacheStore } from "./use-cache-store.mjs";
 
@@ -53,7 +54,8 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
       shared
         ? newGcpUseCacheStore(shared.storage, shared.objectPrefix, shared.tags)
         : newInstanceUseCacheStore(cache),
-    newDispatchInvoke: async (localOrigin) => newGcpDispatchInvoke(localOrigin),
+    newDispatchInvoke: async (localOrigin) =>
+      newGcpDispatchInvoke(localOrigin, env, readRefreshEndpoint(env, localOrigin)),
     scheduleRefresh: newInstanceRefresh(
       () => readInstanceOrigin(env),
       finishBeforeResponseMs(env) || defaultRefreshTimeoutMs,

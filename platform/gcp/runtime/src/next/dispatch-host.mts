@@ -7,6 +7,7 @@ import {
 import type { Invoke } from "@framework/node-runtime/host";
 import { newDiskAssetBucket, newDiskObjectStore } from "./disk-assets.mjs";
 import { newInProcessImageOrigin } from "./image-origin.mjs";
+import type { RefreshEndpoint } from "./refresh-endpoint.mjs";
 
 function listFunctionIds(manifest: RoutingManifest): string[] {
   const ids = new Set<string>([manifest.entry]);
@@ -37,6 +38,14 @@ export function readGcpDispatchHost(env: NodeJS.ProcessEnv, localOrigin: string)
   };
 }
 
-export function newGcpDispatchInvoke(localOrigin: string): Invoke {
-  return newDispatchInvoke(readGcpDispatchHost(process.env, localOrigin));
+export function newGcpDispatchInvoke(
+  localOrigin: string,
+  env: NodeJS.ProcessEnv,
+  endpoint: RefreshEndpoint | undefined,
+): Invoke {
+  const dispatch = newDispatchInvoke(readGcpDispatchHost(env, localOrigin));
+  return async (req, res, ocel) => {
+    if (endpoint && (await endpoint(req, res))) return;
+    return dispatch(req, res, ocel);
+  };
 }
