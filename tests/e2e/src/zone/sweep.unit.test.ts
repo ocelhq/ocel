@@ -272,6 +272,7 @@ describe("sweepStaleFromZone on gcp", () => {
       .sort();
     expect(listed).toEqual([
       "-deploy-next-alb.j.example false",
+      "-deploy-next-cloudflare.j.example true",
       "-deploy-node-alb.j.example false",
       "-deploy-node-cloudflare.j.example true",
     ]);

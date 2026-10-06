@@ -118,7 +118,7 @@ export const deploy = {
       dev: [defaults],
       aws: [defaults, container, cloudflare],
       vps: [defaults],
-      gcp: [defaults, container, alb],
+      gcp: [defaults, container, alb, cloudflareOnGoogleCloud],
     },
   }),
   workspace: fixture("deploy/workspace", {
@@ -146,6 +146,7 @@ export const lifecycle = {
     on: {
       aws: [defaults, container, cloudflare],
       vps: [defaults, cloudflareOnABox, cloudflareTunnel],
+      gcp: [defaults, container],
     },
   }),
 };
@@ -172,6 +173,7 @@ export const sdk = {
       dev: [defaults],
       aws: [defaults, container, cloudflare],
       vps: [defaults],
+      gcp: [defaults],
     },
   }),
   workspace: fixture("sdk/workspace", {
@@ -181,6 +183,7 @@ export const sdk = {
       dev: [defaults],
       aws: [defaults, container, cloudflare],
       vps: [defaults],
+      gcp: [defaults],
     },
     sample: { group: "node-http", representative: true },
   }),
