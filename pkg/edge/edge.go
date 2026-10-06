@@ -192,6 +192,8 @@ type Worker struct {
 	Assets        []StaticAsset
 	ObjectStore   ObjectStore
 	Services      map[string]string
+
+	ClientCertificates map[string]string
 }
 
 type ObjectStore struct {

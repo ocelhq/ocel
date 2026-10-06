@@ -2,6 +2,10 @@ package edge
 
 const ServeDescriptorFile = "serve.json"
 
+const RoutingManifestFile = "routing-manifest.json"
+
+const StaticAssetDir = "static"
+
 const AppBundleFile = "edge/bundle.json"
 
 type NeedDetail struct {

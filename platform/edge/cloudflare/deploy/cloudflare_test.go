@@ -8,8 +8,6 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
@@ -162,6 +160,12 @@ func TestScriptBindings(t *testing.T) {
 			worker: edge.Worker{Main: mainModule(), Services: map[string]string{"DEPLOYMENTS": "ocel-proj-store"}},
 			typ:    "service",
 			want:   []map[string]string{{"name": "DEPLOYMENTS", "service": "ocel-proj-store"}},
+		},
+		{
+			name:   "a client certificate becomes an mtls_certificate binding naming its certificate id",
+			worker: edge.Worker{Main: mainModule(), ClientCertificates: map[string]string{"OCEL_ORIGIN_CLIENT_CERTIFICATE": "c1"}},
+			typ:    "mtls_certificate",
+			want:   []map[string]string{{"name": "OCEL_ORIGIN_CLIENT_CERTIFICATE", "certificate_id": "c1"}},
 		},
 		{
 			name:   "a loader binding maps to a worker_loader binding",
@@ -569,15 +573,7 @@ func TestAnAppIsFoundOnceDeployedAndNotBefore(t *testing.T) {
 		t.Fatalf("findApp(%q) = true before anything was deployed under it", name)
 	}
 
-	src := writeAppArtifacts(t)
-	src.Routes = []string{"/"}
-	if err := os.RemoveAll(filepath.Join(src.ArtifactRoot, edge.StaticAssetDir)); err != nil {
-		t.Fatal(err)
-	}
-	worker, err := p.assembleApp(src, signing(map[string]string{"/": "https://fn.lambda-url.aws/"}))
-	if err != nil {
-		t.Fatalf("assembleApp: %v", err)
-	}
+	worker := edge.Worker{Main: mainModule()}
 	result, err := p.deployApp(t.Context(), edge.AppDeployment{Name: name, Worker: worker})
 	if err != nil {
 		t.Fatalf("deployApp: %v", err)

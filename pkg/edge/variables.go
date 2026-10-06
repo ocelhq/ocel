@@ -1,14 +1,6 @@
 package edge
 
-type Addresses interface {
-	FunctionURL(routeID string) (string, error)
-	EdgeCredentials() (Credentials, bool)
-}
-
-type Credentials struct {
-	AccessKeyID string
-	SecretKey   string
-}
+const OriginClientCertificateBinding = "OCEL_ORIGIN_CLIENT_CERTIFICATE"
 
 const (
 	EdgeAccessKeyIDVar = "OCEL_EDGE_ACCESS_KEY_ID"
