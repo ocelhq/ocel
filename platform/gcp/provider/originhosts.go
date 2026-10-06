@@ -44,8 +44,9 @@ func (p *Provider) readOriginBase(ctx context.Context, spec provider.StackSpec) 
 	switch {
 	case recorded.BaseDomain == "":
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"app %s runs as serverless functions behind the Cloudflare worker, which reaches each deployment on its own DNS-only hostname under an origin domain, and tier %s has none: "+
-				"add \"edge\": {\"cloudflare\": {\"originDomain\": \"<a domain in your Cloudflare zone>\"}} to your config, then deploy again",
+			"app %s runs as serverless functions behind the Cloudflare worker, which reaches each deployment on its own DNS-only hostname under an origin domain, and tier %s has none set up. "+
+				"If your config names no originDomain, add \"edge\": {\"cloudflare\": {\"originDomain\": \"<a domain in your Cloudflare zone>\"}} to it; "+
+				"if it does, the tier's origin wildcard was not set up by the last deploy that could, so deploy again and read the warnings it prints",
 			spec.App.App, tier)
 	case recorded.Address == "":
 		return "", refusal.Refuse(refusal.CodeNotReady,

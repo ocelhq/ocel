@@ -359,6 +359,29 @@ func TestTheCloudflareFrontReconcilesTheOriginWildcardBeforeTheWorker(t *testing
 	h2 := newWildcardHarness()
 	front.wildcards = h2.wildcards
 	if _, err := front.Reconcile(context.Background(), pruning, edge.StackState{}); err != nil || h2.certificates.issued != 0 {
-		t.Errorf("a prune reconcile issued %d certificates (err %v), want none", h2.certificates.issued, err)
+		t.Errorf("a production prune reconcile issued %d certificates (err %v), want none", h2.certificates.issued, err)
+	}
+}
+
+func TestAPreviewDeployThatOnlyPrunesStillSetsUpThePreviewOriginWildcard(t *testing.T) {
+	t.Parallel()
+	h := newWildcardHarness()
+	relay, err := fake.NewEdges().Open(fake.KindRelay, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	front := cloudflareFront{
+		Edge:      relay,
+		options:   cloudflare.Options{OriginDomain: wildcardBase},
+		wildcards: h.wildcards,
+	}
+	pruning := edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PruneOnly: true}
+
+	if _, err := front.Reconcile(context.Background(), pruning, edge.StackState{}); err != nil {
+		t.Fatalf("Reconcile = %v", err)
+	}
+
+	if h.certificates.issued != 1 {
+		t.Errorf("a preview deploy that hosts on the global preview wildcard issued %d origin certificates, want the preview origin wildcard set up: its serverless apps are refused without it", h.certificates.issued)
 	}
 }
