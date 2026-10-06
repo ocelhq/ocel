@@ -18,8 +18,6 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		return provider.EdgeProgram{}, err
 	}
 	values := deploy.WorkerValues{
-		Region:             p.aws.Region,
-		StateTable:         deployed.StateTable,
 		ImageOptimizerURL:  deployed.ImageOptimizerURL,
 		RevalidateQueueURL: deployed.RevalidateQueueURL,
 	}

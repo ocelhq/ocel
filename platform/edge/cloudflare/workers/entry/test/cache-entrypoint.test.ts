@@ -1,10 +1,5 @@
 import { createExecutionContext, env } from "cloudflare:test";
-import {
-  type TagRecord,
-  type TagSnapshot,
-  tagNamespace,
-  tagSnapshotKey,
-} from "@framework/next-cache";
+import { type TagRecord, type TagSnapshot, tagSnapshotKey } from "@framework/next-cache";
 import { beforeEach, expect, it } from "vitest";
 
 import {
@@ -22,9 +17,6 @@ declare module "cloudflare:test" {
   }
 }
 
-const region = "eu-west-2";
-const table = "ocel-state";
-
 function snapshotBucket(): ObjectStoreReader {
   return { get: (key) => env.TAG_SNAPSHOT_STORE.get(key) };
 }
@@ -38,37 +30,6 @@ function raiseRecorder(
     raise: async (scope: string, records: Record<string, TagRecord>) => {
       raises.push({ scope, records });
       await land(records);
-    },
-  };
-}
-
-interface Call {
-  url: string;
-  method: string;
-  headers: Headers;
-  body: string;
-}
-
-function awsRecorder(
-  reply: (call: Call) => Response | Promise<Response> = () => new Response(null, { status: 404 }),
-) {
-  const calls: Call[] = [];
-  return {
-    calls,
-    send: async (url: string, init?: RequestInit) => {
-      const call: Call = {
-        url,
-        method: init?.method ?? "GET",
-        headers: new Headers(init?.headers),
-        body:
-          typeof init?.body === "string"
-            ? init.body
-            : init?.body
-              ? new TextDecoder().decode(init.body as Uint8Array)
-              : "",
-      };
-      calls.push(call);
-      return reply(call);
     },
   };
 }
@@ -122,7 +83,6 @@ function entryStore(over: Partial<FetchEntryStore> = {}) {
 function cacheWith(
   over: {
     scope?: string;
-    aws?: ReturnType<typeof awsRecorder>;
     entries?: FetchEntryStore;
     store?: ObjectStoreReader;
     raise?: (scope: string, records: Record<string, TagRecord>) => Promise<void>;
@@ -133,7 +93,6 @@ function cacheWith(
   return createEdgeCache({
     scope: over.scope ?? scope,
     entries: over.entries ?? entryStore().store,
-    tagTable: over.aws ? { region, table, dynamo: over.aws.send } : undefined,
     snapshots: over.store ?? snapshotBucket(),
     raise: over.raise ?? raiseRecorder().raise,
     waitUntil: over.waitUntil ?? (() => {}),
@@ -144,10 +103,8 @@ function cacheWith(
 it("reads a fetch entry from the cache store under the deployment's prefix", async () => {
   const stored = entry();
   await seedEntry(stored);
-  const aws = awsRecorder();
 
-  expect(await cacheWith({ aws }).fetchGet(scope, "abc123", [])).toEqual(stored);
-  expect(aws.calls).toHaveLength(0);
+  expect(await cacheWith().fetchGet(scope, "abc123", [])).toEqual(stored);
 });
 
 it("misses on an absent object", async () => {
@@ -252,66 +209,9 @@ it("does not surface a failed write to the caller", async () => {
   await expect(Promise.all(pending)).resolves.toBeDefined();
 });
 
-it("records one tag update per tag, under the prefix's tag namespace", async () => {
-  const aws = awsRecorder(() => new Response("{}"));
-  await cacheWith({ aws }).revalidateTags(scope, ["posts", "authors"]);
-
-  const updates = aws.calls;
-  expect(updates).toHaveLength(2);
-  expect(updates[0].url).toBe(`https://dynamodb.${region}.amazonaws.com/`);
-  expect(updates[0].headers.get("x-amz-target")).toBe("DynamoDB_20120810.UpdateItem");
-  const body = JSON.parse(updates[0].body);
-  expect(body.TableName).toBe(table);
-  expect(body.Key.pk.S).toBe(`${tagNamespace(scope)}posts`);
-  expect(body.ExpressionAttributeValues[":expired"].N).toBe("5000");
-});
-
-it("writes no tag item at all for a scope that is not one release's ISR prefix", async () => {
-  const aws = awsRecorder(() => new Response("{}"));
-  const bound = "prod/proj/app/r00000000";
-  await expect(cacheWith({ aws, scope: bound }).revalidateTags(bound, ["posts"])).rejects.toThrow(
-    /ISR prefix/,
-  );
-  expect(aws.calls).toHaveLength(0);
-});
-
-it("marks tags stale now and dead at the end of an expire window", async () => {
-  const aws = awsRecorder(() => new Response("{}"));
-  await cacheWith({ aws }).revalidateTags(scope, ["posts"], { expire: 60 });
-
-  const values = JSON.parse(aws.calls[0].body).ExpressionAttributeValues;
-  expect(values[":stale"].N).toBe("5000");
-  expect(values[":expired"].N).toBe(String(5_000 + 60_000));
-});
-
-it("treats a rejected guard as the ordinary outcome it is", async () => {
-  const writer = raiseRecorder();
-  const aws = awsRecorder(
-    () =>
-      new Response(
-        JSON.stringify({
-          __type: "com.amazonaws.dynamodb.v20120810#ConditionalCheckFailedException",
-        }),
-        { status: 400 },
-      ),
-  );
-  await expect(
-    cacheWith({ aws, raise: writer.raise }).revalidateTags(scope, ["posts"]),
-  ).resolves.toBeUndefined();
-  expect(writer.raises).toHaveLength(1);
-});
-
-it("surfaces a tag write that failed for any other reason", async () => {
-  const aws = awsRecorder(
-    () => new Response(JSON.stringify({ __type: "x#ThrottlingException" }), { status: 400 }),
-  );
-  await expect(cacheWith({ aws }).revalidateTags(scope, ["posts"])).rejects.toThrow(/dynamodb 400/);
-});
-
 it("raises every invalidated tag through the writer, under this deployment's prefix", async () => {
   const writer = raiseRecorder();
-  const aws = awsRecorder(() => new Response("{}"));
-  await cacheWith({ aws, raise: writer.raise }).revalidateTags(scope, ["posts", "authors"], {
+  await cacheWith({ raise: writer.raise }).revalidateTags(scope, ["posts", "authors"], {
     expire: 60,
   });
 
@@ -326,40 +226,11 @@ it("raises every invalidated tag through the writer, under this deployment's pre
   ]);
 });
 
-it("records the invalidation durably before raising it", async () => {
-  const order: string[] = [];
-  const aws = awsRecorder(() => {
-    order.push("dynamodb");
-    return new Response("{}");
-  });
-  await cacheWith({ aws, raise: async () => void order.push("raise") }).revalidateTags(scope, [
-    "posts",
-  ]);
-
-  expect(order).toEqual(["dynamodb", "raise"]);
-});
-
-it("does not fail the route when the writer refuses the raise", async () => {
-  const aws = awsRecorder(() => new Response("{}"));
-
-  await expect(
-    cacheWith({
-      aws,
-      raise: async () => {
-        throw new Error("429");
-      },
-    }).revalidateTags(scope, ["posts"]),
-  ).resolves.toBeUndefined();
-
-  expect(aws.calls).toHaveLength(1);
-});
-
 it("sees its own invalidation on the very next read", async () => {
   const stored = entry();
   await seedEntry(stored);
-  const aws = awsRecorder(() => new Response("{}"));
   const writer = raiseRecorder((records) => seedSnapshot(records));
-  const cache = cacheWith({ aws, store: snapshotBucket(), raise: writer.raise });
+  const cache = cacheWith({ store: snapshotBucket(), raise: writer.raise });
 
   await seedSnapshot({ posts: { expired: 500 } });
   expect(await cache.fetchGet(scope, "abc123", ["posts"])).toEqual(stored);
@@ -371,9 +242,7 @@ it("sees its own invalidation on the very next read", async () => {
 it("drops its snapshot memo even when the raise failed", async () => {
   const stored = entry();
   await seedEntry(stored);
-  const aws = awsRecorder(() => new Response("{}"));
   const cache = cacheWith({
-    aws,
     store: snapshotBucket(),
     raise: async () => {
       throw new Error("429");
@@ -383,7 +252,7 @@ it("drops its snapshot memo even when the raise failed", async () => {
   await seedSnapshot({ posts: { expired: 500 } });
   expect(await cache.fetchGet(scope, "abc123", ["posts"])).toEqual(stored);
 
-  await cache.revalidateTags(scope, ["posts"]);
+  await expect(cache.revalidateTags(scope, ["posts"])).rejects.toThrow("429");
   await seedSnapshot({ posts: { expired: 5_000 } });
   expect(await cache.fetchGet(scope, "abc123", ["posts"])).toBeNull();
 });
@@ -449,21 +318,15 @@ it("writes nothing for a scope other than the one its deployment bound", async (
 
 it("refuses to invalidate tags of a scope other than the one its deployment bound", async () => {
   const writer = raiseRecorder();
-  const aws = awsRecorder(() => new Response("{}"));
 
   await expect(
-    cacheWith({ aws, raise: writer.raise }).revalidateTags(otherScope, ["posts"]),
+    cacheWith({ raise: writer.raise }).revalidateTags(otherScope, ["posts"]),
   ).rejects.toThrow(`bound to ${scope}, not ${otherScope}`);
-  expect(aws.calls).toHaveLength(0);
   expect(writer.raises).toHaveLength(0);
 });
 
 it("answers like an empty cache when its deployment bound no scope", async () => {
   const entrypoint = new CacheEntrypoint(createExecutionContext(), {
-    OCEL_EDGE_ACCESS_KEY_ID: "id",
-    OCEL_EDGE_SECRET_KEY: "secret",
-    OCEL_AWS_REGION: region,
-    OCEL_STATE_TABLE: table,
     OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE,
   } as Env);
 
@@ -480,14 +343,15 @@ it("answers like an empty cache on a bootstrap that binds no coordinates", async
   await entrypoint.revalidateTags(scope, ["posts"]);
 });
 
-it("raises the invalidation as its only record when no tag table is bound", async () => {
+it("records an invalidation only by raising it to the isr-writer", async () => {
   const writer = raiseRecorder();
   await cacheWith({ raise: writer.raise }).revalidateTags(scope, ["posts"], { expire: 60 });
 
   expect(writer.raises).toEqual([{ scope, records: { posts: { stale: 5_000, expired: 65_000 } } }]);
+  expect(writer.raises).toHaveLength(1);
 });
 
-it("surfaces a refused raise when the raise is the only record", async () => {
+it("surfaces a refused raise", async () => {
   await expect(
     cacheWith({
       raise: async () => {

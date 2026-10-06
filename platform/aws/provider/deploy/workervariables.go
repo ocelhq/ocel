@@ -6,8 +6,6 @@ import (
 )
 
 type WorkerValues struct {
-	Region             string
-	StateTable         string
 	ImageOptimizerURL  string
 	RevalidateQueueURL string
 	EdgeAccessKeyID    string
@@ -17,8 +15,6 @@ type WorkerValues struct {
 func (f WorkerValues) Bindings() cloudflare.OriginBindings {
 	bindings := cloudflare.OriginBindings{Variables: map[string]string{}}
 	for name, value := range map[string]string{
-		edge.AWSRegionVar:          f.Region,
-		edge.StateTableVar:         f.StateTable,
 		edge.ImageOptimizerURLVar:  f.ImageOptimizerURL,
 		edge.RevalidateQueueURLVar: f.RevalidateQueueURL,
 	} {

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -63,13 +64,12 @@ func TestEdgeUser(t *testing.T) {
 			}
 
 			stmts := user.Properties.Policies[0].PolicyDocument.Statement
-			var ddbTable, ddbIndex, sqsSend, invoke, invokeTagged, invokeTiered bool
+			var sqsSend, invoke, invokeTagged, invokeTiered bool
 			for _, st := range stmts {
-				if st.Resource == paramStateTableARN && boundToTagKeys(st.Condition) {
-					ddbTable = hasAction(st.Action, "dynamodb:BatchGetItem") && hasAction(st.Action, "dynamodb:UpdateItem")
-				}
-				if st.Resource == "${"+paramStateTableARN+"}/index/"+StateTableIndexName && boundToTagKeys(st.Condition) {
-					ddbIndex = hasAction(st.Action, "dynamodb:Query")
+				for _, action := range listPolicyActions(st.Action) {
+					if strings.HasPrefix(action, "dynamodb:") {
+						t.Errorf("the edge user is granted %s, but the edge writes no tag item", action)
+					}
 				}
 				if st.Resource == paramRevalidateQueueARN {
 					sqsSend = hasAction(st.Action, "sqs:SendMessage")
@@ -85,12 +85,6 @@ func TestEdgeUser(t *testing.T) {
 						}
 					}
 				}
-			}
-			if !ddbTable {
-				t.Error("missing dynamodb:BatchGetItem + UpdateItem bounded to the TAG# LeadingKeys")
-			}
-			if !ddbIndex {
-				t.Error("missing dynamodb:Query on the table's index bounded to the TAG# LeadingKeys")
 			}
 			if !sqsSend {
 				t.Error("missing sqs:SendMessage on the revalidation queue the isr feature provisioned")

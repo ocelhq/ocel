@@ -1,14 +1,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import {
-  type EdgeCacheRpc,
-  type FetchCacheEntry,
-  type TagRecord,
-  tagNamespace,
-} from "@framework/next-cache";
+import type { EdgeCacheRpc, FetchCacheEntry, TagRecord } from "@framework/next-cache";
 import type { CacheEntrypointProps, Env, IsrWriterBinding } from "./env";
-import { type DynamoDbFetch, dynamoDbFetch } from "./signing";
 import { createTagClock, dropSnapshotMemo, type ObjectStoreReader, parseJson } from "./tag-clock";
-import { isGuardRejection, tagRecordUpdate } from "./tag-index";
 
 export type SnapshotRaiser = (scope: string, records: Record<string, TagRecord>) => Promise<void>;
 
@@ -21,16 +14,9 @@ export interface FetchEntryStore {
   ): Promise<unknown>;
 }
 
-export interface TagTable {
-  region: string;
-  table: string;
-  dynamo: DynamoDbFetch;
-}
-
 export interface EdgeCacheDeps {
   scope: string;
   entries: FetchEntryStore;
-  tagTable?: TagTable;
   snapshots: ObjectStoreReader;
   raise: SnapshotRaiser;
   waitUntil(promise: Promise<unknown>): void;
@@ -100,22 +86,8 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
           }
         : { expired: at };
 
-      const { tagTable } = deps;
-      if (tagTable) {
-        const namespace = tagNamespace(scope);
-        if (namespace === null) {
-          throw new Error(`ocel: ${scope} is not an ISR prefix tag items can be keyed by`);
-        }
-        await Promise.all(
-          tags.map((tag) => writeTagRecord(tagTable, namespace, tag, { ...record, writtenAt: at })),
-        );
-      }
-
       try {
         await deps.raise(scope, Object.fromEntries(tags.map((tag) => [tag, record])));
-      } catch (error) {
-        if (!tagTable) throw error;
-        console.error("ocel: could not raise the tag invalidation with the isr writer", error);
       } finally {
         dropSnapshotMemo({ isrPrefix: scope }, deps.snapshots);
       }
@@ -126,34 +98,6 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
 function entryTags(entry: FetchCacheEntry, tags: string[]): string[] {
   const stored = entry.value?.tags;
   return Array.isArray(stored) ? [...tags, ...(stored as string[])] : tags;
-}
-
-async function writeTagRecord(
-  table: TagTable,
-  namespace: string,
-  tag: string,
-  record: { stale?: number; expired?: number; writtenAt: number },
-): Promise<void> {
-  const response = await table.dynamo(`https://dynamodb.${table.region}.amazonaws.com/`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/x-amz-json-1.0",
-      "x-amz-target": "DynamoDB_20120810.UpdateItem",
-    },
-    body: JSON.stringify(tagRecordUpdate(table.table, namespace, tag, record)),
-  });
-  if (response.ok) return;
-
-  const error = await dynamoError(response);
-  if (!isGuardRejection(error)) throw error;
-}
-
-async function dynamoError(response: Response): Promise<Error> {
-  const body = await response.text();
-  const type = parseJson<{ __type?: string }>(body)?.__type;
-  const error = new Error(`dynamodb ${response.status}: ${body}`);
-  if (type) error.name = type.slice(type.indexOf("#") + 1);
-  return error;
 }
 
 export function tagRaiser(
@@ -182,22 +126,13 @@ export class CacheEntrypoint
   implements EdgeCacheRpc
 {
   private cache(): EdgeCacheRpc | null {
-    const { OCEL_AWS_REGION, OCEL_STATE_TABLE, OCEL_CACHE_STORE } = this.env;
+    const { OCEL_CACHE_STORE } = this.env;
     const scope = this.ctx.props?.scope;
     if (!OCEL_CACHE_STORE || !scope) return null;
 
-    const dynamo = dynamoDbFetch(
-      this.env.OCEL_EDGE_ACCESS_KEY_ID,
-      this.env.OCEL_EDGE_SECRET_KEY,
-      OCEL_AWS_REGION,
-    );
     return createEdgeCache({
       scope,
       entries: OCEL_CACHE_STORE,
-      tagTable:
-        dynamo && OCEL_AWS_REGION && OCEL_STATE_TABLE
-          ? { region: OCEL_AWS_REGION, table: OCEL_STATE_TABLE, dynamo }
-          : undefined,
       snapshots: OCEL_CACHE_STORE,
       raise: tagRaiser(this.env.ISR_WRITER, this.ctx.props?.isrWriteSecret),
       waitUntil: (promise) => this.ctx.waitUntil(promise),

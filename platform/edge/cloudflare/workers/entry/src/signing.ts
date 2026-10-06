@@ -114,23 +114,3 @@ export function sqsFetch(
   });
   return ((input, init) => client.fetch(input as RequestInfo, init)) as typeof fetch;
 }
-
-export type DynamoDbFetch = (url: string, init?: RequestInit) => Promise<Response>;
-
-const dynamoDbRetries = 1;
-
-export function dynamoDbFetch(
-  accessKeyId: string | undefined,
-  secretAccessKey: string | undefined,
-  region: string | undefined,
-): DynamoDbFetch | undefined {
-  if (!accessKeyId || !secretAccessKey || !region) return undefined;
-  const client = new AwsClient({
-    accessKeyId,
-    secretAccessKey,
-    region,
-    service: "dynamodb",
-    retries: dynamoDbRetries,
-  });
-  return (url, init) => client.fetch(url, init);
-}

@@ -498,16 +498,23 @@ func hasAction(action any, want string) bool {
 	return false
 }
 
-const edgeTagKeyPattern = "PROJECT#*#TAG#*"
-
-func boundToTagKeys(condition map[string]any) bool {
-	cond, ok := condition["ForAllValues:StringLike"].(map[string]any)
-	if !ok {
-		return false
+func listPolicyActions(action any) []string {
+	switch a := action.(type) {
+	case string:
+		return []string{a}
+	case []any:
+		var actions []string
+		for _, v := range a {
+			if name, ok := v.(string); ok {
+				actions = append(actions, name)
+			}
+		}
+		return actions
 	}
-	keys, ok := cond["dynamodb:LeadingKeys"].([]any)
-	return ok && len(keys) == 1 && keys[0] == edgeTagKeyPattern
+	return nil
 }
+
+const edgeTagKeyPattern = "PROJECT#*#TAG#*"
 
 func TestEdgeTagKeys(t *testing.T) {
 	release, err := naming.ParseRelease("r3f8a1c9d")
