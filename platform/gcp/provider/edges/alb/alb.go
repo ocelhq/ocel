@@ -99,7 +99,7 @@ func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview 
 		Preview: preview,
 	}
 	if e.deps.Shielded {
-		origin, err := e.recordedOriginWildcard(ctx, tier)
+		origin, err := e.readOriginWildcard(ctx, tier)
 		if err != nil {
 			return LoadBalancer{}, err
 		}

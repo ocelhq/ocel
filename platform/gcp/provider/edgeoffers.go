@@ -63,7 +63,7 @@ func adoptEdgeOffers(
 		return nil
 	}
 	say := ensureProgress(runProgress)
-	stored, storedCredentials, err := loadAdoptedEdge(ctx, c, records, tier, kind)
+	stored, storedCredentials, err := readAdoptedEdge(ctx, c, records, tier, kind)
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func edgeCredentialUnrecorded(c *clients, tier environment.Tier, kind edge.Kind,
 		kind, surface, scriptName, c.EdgeCredentialsSecret(tier, kind), scriptName, kind)
 }
 
-func loadAdoptedEdge(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
+func readAdoptedEdge(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
 	var adopted adoptedEdge
 	entry, err := keyvalue.ReadOrEmpty(ctx, records, adoptedEdgeKey(tier, kind))
 	if err != nil {
@@ -230,8 +230,8 @@ func notBootstrapped(tier environment.Tier, kind edge.Kind, missing string) erro
 		kind, missing, provider.BootstrapCommand(tier))
 }
 
-func readAdoptedEdge(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
-	adopted, credentials, err := loadAdoptedEdge(ctx, c, records, tier, kind)
+func requireAdoptedEdge(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, kind edge.Kind) (adoptedEdge, edgeCredentials, error) {
+	adopted, credentials, err := readAdoptedEdge(ctx, c, records, tier, kind)
 	if err != nil {
 		return adoptedEdge{}, edgeCredentials{}, err
 	}
@@ -285,7 +285,7 @@ func forgetEdgeOffers(ctx context.Context, c *clients, records keyvalue.Store, t
 }
 
 func readAdoptedISRWriter(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, kind edge.Kind) (cloudflare.ISRWriter, bool, error) {
-	adopted, credentials, err := loadAdoptedEdge(ctx, c, records, tier, kind)
+	adopted, credentials, err := readAdoptedEdge(ctx, c, records, tier, kind)
 	if err != nil || adopted.ISRWriter.Endpoint == "" {
 		return cloudflare.ISRWriter{}, false, err
 	}

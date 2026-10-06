@@ -98,7 +98,7 @@ func (e *Edges) answering(hostname string) router.Kind {
 		}
 		forwarded, found := front.forwardedTo(hostname)
 		if !found {
-			return front.servingRouter()
+			return front.readServingRouter()
 		}
 		for _, origin := range fronts {
 			if Origin(origin.routedBy).Address == forwarded.Address {
@@ -110,7 +110,7 @@ func (e *Edges) answering(hostname string) router.Kind {
 	return ""
 }
 
-func (e *Edge) storeRouter() router.Kind {
+func (e *Edge) readStoreRouter() router.Kind {
 	return router.Kind(strings.TrimSuffix(string(e.routedBy), "-router") + "-store")
 }
 
@@ -120,11 +120,11 @@ func (e *Edge) pairsStoreRouter() bool {
 	return e.storePaired
 }
 
-func (e *Edge) servingRouter() router.Kind {
+func (e *Edge) readServingRouter() router.Kind {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.storePaired {
-		return e.storeRouter()
+		return e.readStoreRouter()
 	}
 	return e.routedBy
 }
