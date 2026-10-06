@@ -126,6 +126,25 @@ func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveDispatchedBy(t *tes
 	}
 }
 
+func TestAContainerAppIsForwardedToAndNeverDispatchedByEitherSide(t *testing.T) {
+	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, []byte(`{"routes":[]}`))
+	for name, runsCode := range map[string]bool{"an edge that runs code": true, "an edge that runs none": false} {
+		t.Run(name, func(t *testing.T) {
+			query := servingQuery(root, "web", buildoutput.FrameworkNext)
+			query.Compute = provider.ComputeContainer
+			query.EdgeRunsCode = runsCode
+
+			facts, err := providerserver.AppServingFor(query)
+			if err != nil {
+				t.Fatalf("AppServingFor() = %v", err)
+			}
+			if facts.OriginDispatch != nil || facts.EdgeDispatch != nil {
+				t.Errorf("OriginDispatch = %+v, EdgeDispatch = %+v, want neither: a container is one service with no function to dispatch to", facts.OriginDispatch, facts.EdgeDispatch)
+			}
+		})
+	}
+}
+
 func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToDispatchBy(t *testing.T) {
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, []byte(`{}`))
 

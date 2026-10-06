@@ -21,6 +21,7 @@ type AppServingInput struct {
 	Project           string
 	App               string
 	Framework         string
+	Compute           provider.Compute
 	Stack             naming.StackName
 	Coordinate        naming.Coordinate
 	EdgeRunsCode      bool
@@ -58,6 +59,9 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	routing, err := routingFor(q, desc, present)
 	if err != nil {
 		return AppServing{}, err
+	}
+	if q.Compute == provider.ComputeContainer {
+		routing = nil
 	}
 	if q.EdgeRunsCode {
 		facts.EdgeDispatch = routing
