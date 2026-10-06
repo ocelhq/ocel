@@ -35,17 +35,18 @@ real boundary is this, and it is two things, not one:
 
 - **`isrPrefix` is validated as a key prefix**
   (`platform/edge/contract/src/revalidation.mts`), to the same
-  standard `routePath` is: dot-free segments of the characters
+  standard `routePath` is: segments other than `.` and `..` of the characters
   `platform/aws/provider/deploy` composes it from, no separator, no traversal, no absolute
   key, nothing empty, and no `fetch-cache` segment. Without that check a `#` or
   a `?` truncates the `/origin.json` the consumer appends, and the message names
-  an arbitrary object. The `fetch-cache` segment holds cache entries, which are
-  render output and not records a deploy wrote, so a prefix ending
-  `.../fetch-cache` is rejected outright: the appended `/origin.json` would
-  land in that region with no truncation needed. A fragment
+  an arbitrary object. A fragment
   never reaches the wire and `aws4fetch` signs `url.pathname`, so the signature
   would have matched the planted document exactly, and the origin comparison
-  below would have agreed with the planted origin. It also stops
+  below would have agreed with the planted origin. The `fetch-cache` segment
+  holds the fetch-cache entries the deploy and the origin runtime write, never
+  an origin record, so a prefix ending `.../fetch-cache` is rejected outright:
+  the appended `/origin.json` would land among those entries with no truncation
+  needed. The check also stops
   `../../../other-app/BID2`, which reads a *sibling app's* record and delivers
   app A's headers, and its render, to app B's Function URL — logged, before the
   check, as a success.
