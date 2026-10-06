@@ -44,7 +44,7 @@ export const UNNAMED_CONCERNS: Concern[] = CONCERNS.filter(
   (concern) => !NAMED_ONLY.includes(concern),
 );
 
-export type Edge = "cloudfront" | "api-gateway" | "cloudflare";
+export type Edge = "cloudfront" | "api-gateway" | "cloudflare" | "alb";
 
 export type CacheLayer = "edge" | "origin";
 

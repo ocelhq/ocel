@@ -1,16 +1,18 @@
+import { HOSTNAME_EDGES } from "../config";
 import { appHostname } from "../identity";
 import type { CellUnderTest } from "../run/cellRun";
 
-export function cloudflareUrls(
+export function hostnameUrls(
   cell: CellUnderTest,
   zone: string | undefined,
 ): Map<string, string> | undefined {
-  if (cell.variant.config.edge !== "cloudflare") {
+  const { edge } = cell.variant.config;
+  if (edge === undefined || !HOSTNAME_EDGES.includes(edge)) {
     return undefined;
   }
   if (!zone) {
     throw new Error(
-      `${cell.name} is fronted by Cloudflare, which answers only a hostname in a zone it serves, and OCEL_E2E_ZONE names none`,
+      `${cell.name} is fronted by ${edge}, which answers only a hostname in a zone the run's Cloudflare token writes, and OCEL_E2E_ZONE names none`,
     );
   }
   return new Map(

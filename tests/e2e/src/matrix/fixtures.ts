@@ -25,6 +25,7 @@ import { SstStack } from "../targets/aws/stacks/sst";
 import { awsWorld } from "../targets/aws/world";
 import { type Fixture, fixture } from "./types";
 import {
+  alb,
   apiGateway,
   cloudflare,
   cloudflareInFrontOfContainers,
@@ -79,7 +80,7 @@ export const deploy = {
       dev: [defaults],
       aws: [container, apiGateway, cloudflareInFrontOfContainers],
       vps: [defaults, registry, cloudflareOnABox, cloudflareTunnel],
-      gcp: [defaults, container, cloudflareOnGoogleCloud],
+      gcp: [defaults, container, cloudflareOnGoogleCloud, alb],
     },
     sample: { group: "node-http" },
   }),
@@ -117,7 +118,7 @@ export const deploy = {
       dev: [defaults],
       aws: [defaults, container, cloudflare],
       vps: [defaults],
-      gcp: [defaults, container],
+      gcp: [defaults, container, alb],
     },
   }),
   workspace: fixture("deploy/workspace", {

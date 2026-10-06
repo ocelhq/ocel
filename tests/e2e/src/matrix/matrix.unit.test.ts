@@ -112,6 +112,56 @@ describe("a pull request's run", () => {
   });
 });
 
+const ZONED_RUN = {
+  OCEL_E2E_ZONE: "journeys.example.com",
+  CLOUDFLARE_API_TOKEN: "token",
+  CLOUDFLARE_ACCOUNT_ID: "account",
+};
+
+const skippedBy = (planned: ReturnType<typeof planOn>, cell: string) =>
+  (planned.skipped[cell] ?? []).map((gap) => gap.id).sort();
+
+describe("the alb variant", () => {
+  it("runs deploy/node behind the load balancer on gcp when the run names a zone", () => {
+    const planned = planOn("gcp", ZONED_RUN);
+
+    expect(planned.cells.map((cell) => cell.name)).toContain("deploy/node-alb");
+    expect(skippedBy(planned, "deploy/node-alb")).toEqual([]);
+  });
+
+  it("skips every alb cell on gcp when the run names no zone", () => {
+    const planned = planOn("gcp");
+
+    for (const cell of ["deploy/node-alb", "deploy/next-alb"]) {
+      expect(skippedBy(planned, cell)).toContain("no-cloudflare-zone");
+    }
+  });
+
+  it("skips every alb cell on floci-gcp, where nothing emulates the Cloudflare zone its hostnames live in", () => {
+    const planned = planOn("gcp.floci", ZONED_RUN);
+
+    for (const cell of ["deploy/node-alb", "deploy/next-alb"]) {
+      expect(skippedBy(planned, cell)).toContain("no-cloudflare-api");
+    }
+  });
+
+  it("plans on every lane with a zone named, without a dead gap", () => {
+    for (const lane of LANES) {
+      expect(() => planOn(lane, ZONED_RUN)).not.toThrow();
+    }
+  });
+});
+
+describe("Cloudflare in front of gcp", () => {
+  it("skips every Cloudflare cell on gcp, where Cloudflare is a proxy that runs no worker, whatever zone the run names", () => {
+    for (const env of [{}, ZONED_RUN]) {
+      expect(skippedBy(planOn("gcp", env), "deploy/node-cloudflare")).toContain(
+        "cloudflare-on-gcp-runs-no-worker",
+      );
+    }
+  });
+});
+
 describe("the Next cache a cell is held to", () => {
   const EDGE_TITLES = [...nextCacheChecks, ...nextDataCacheChecks].map((one) => one.title);
   const ORIGIN_TITLES = [...nextOriginCacheChecks, ...nextOriginDataCacheChecks].map(
@@ -181,6 +231,14 @@ describe("the Next cache a cell is held to", () => {
         expect(cacheTitlesIn(titles, ORIGIN_TITLES)).not.toEqual([]);
       }
     }
+  });
+
+  it("holds a Next app behind the load balancer on gcp to the edge's cache", () => {
+    const planned = planOn("gcp", ZONED, EVERY_CELL);
+    const titles = titlesOf(planned, "deploy/next-alb");
+
+    expect(cacheTitlesIn(titles, EDGE_TITLES)).not.toEqual([]);
+    expect(cacheTitlesIn(titles, ORIGIN_TITLES)).toEqual([]);
   });
 
   it("holds a Next app on aws to the edge's cache", () => {

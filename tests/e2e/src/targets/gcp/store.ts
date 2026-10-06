@@ -113,6 +113,8 @@ export const PREVIEW_APIS = ["iap.googleapis.com"];
 
 export const TASKS_FEATURE = "tasks";
 
+export const ALB_FEATURE = "alb-edge";
+
 export const TASKS_APIS = ["pubsub.googleapis.com", "cloudtasks.googleapis.com"];
 
 export async function switchOn(endpoint: string, project: string): Promise<void> {

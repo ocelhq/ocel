@@ -6,6 +6,9 @@ import { appHostname } from "./identity";
 import type { Cell, Compute, Edge, RegistryConfig, TargetName } from "./matrix/types";
 import { REGISTRY_USER_ENV } from "./registry/settings";
 import type { CellUnderTest } from "./run/cellRun";
+
+type PlannedCell = Pick<CellUnderTest, "name" | "slug" | "fixture" | "variant">;
+
 import { frontNamed } from "./targets/front";
 import { gcpSlug } from "./targets/gcp/names";
 
@@ -44,9 +47,12 @@ const EDGE_IMPORTS: Record<Edge, { name: string; from: string }> = {
   cloudfront: { name: "cloudfront", from: "ocel/providers/aws/edge" },
   "api-gateway": { name: "apiGateway", from: "ocel/providers/aws/edge" },
   cloudflare: { name: "cloudflare", from: "ocel/edge" },
+  alb: { name: "alb", from: "ocel/providers/gcp/edge" },
 };
 
-function hostnamesOf(cell: CellUnderTest, zone: string): Record<string, string> {
+export const HOSTNAME_EDGES: Edge[] = ["cloudflare", "alb"];
+
+function hostnamesOf(cell: PlannedCell, zone: string): Record<string, string> {
   const named: Record<string, string> = {};
   for (const app of cell.fixture.apps) {
     const host = appHostname(app, cell.slug, zone);
@@ -57,7 +63,7 @@ function hostnamesOf(cell: CellUnderTest, zone: string): Record<string, string> 
   return named;
 }
 
-function registryOf(cell: CellUnderTest, env: NodeJS.ProcessEnv): { registry?: RegistryConfig } {
+function registryOf(cell: PlannedCell, env: NodeJS.ProcessEnv): { registry?: RegistryConfig } {
   const named = cell.variant.config.registry;
   if (!named) {
     return {};
@@ -83,11 +89,7 @@ export function awsSweepOverlay(
   return { base: DEFAULT_BASE, slug, ...cell?.variant?.config, ...dnsOf(env) };
 }
 
-export function overlayFor(
-  cell: CellUnderTest,
-  target: TargetName,
-  env: NodeJS.ProcessEnv,
-): Overlay {
+export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.ProcessEnv): Overlay {
   const zone = env.OCEL_E2E_ZONE?.trim() || undefined;
   switch (target) {
     case "aws": {
@@ -107,12 +109,13 @@ export function overlayFor(
       };
     }
     case "gcp": {
-      const proxied = cell.variant.config.edge === "cloudflare" && zone;
+      const { edge } = cell.variant.config;
+      const hostnamed = edge !== undefined && HOSTNAME_EDGES.includes(edge) && zone;
       return {
         base: GCP_BASE,
         slug: gcpSlug(cell, env),
         ...cell.variant.config,
-        ...(proxied ? { dns: "cloudflare" as const, hostnames: hostnamesOf(cell, zone) } : {}),
+        ...(hostnamed ? { dns: "cloudflare" as const, hostnames: hostnamesOf(cell, zone) } : {}),
       };
     }
     case "vps": {

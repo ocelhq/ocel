@@ -21,7 +21,6 @@ import { fixtureMember, outputRoot } from "../paths";
 import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
 import { migrateCommand } from "../workspace";
-import { cloudflareUrls } from "./cloudflare";
 import { bootstrappedMissed, unbootstrappedMissed } from "./doctor";
 import { adoptionMissed, engineSeries } from "./engine";
 import {
@@ -35,6 +34,7 @@ import {
   stepCommand,
 } from "./front";
 import { type Gateway, openGateway, type Scheme } from "./gateway";
+import { hostnameUrls } from "./hostnames";
 import { plannedWrites } from "./planStream";
 import type { Deployment, Exposure, ReleaseCycle, Restart, Sweeper, Target } from "./types";
 
@@ -736,7 +736,7 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
   }
 
   private async deployment(cell: CellUnderTest, session: BoxSession): Promise<Deployment> {
-    const proxied = cloudflareUrls(cell, this.zone());
+    const proxied = hostnameUrls(cell, this.zone());
     const urls = proxied ?? new Map<string, string>();
     for (const [app, hostname] of proxied ? [] : this.hostnamesOf(cell)) {
       await session.gateway.serving(hostname);
