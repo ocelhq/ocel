@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func TestADeployRecordsTheRouterEachAppPromotesThrough(t *testing.T) {
@@ -307,5 +308,43 @@ func TestAContainerAppsNeedsAreCheckedAgainstTheRouterItPromotesThrough(t *testi
 	result, _ := deploy(t, client, mixedRequest())
 	if result.GetSuccess() || !strings.Contains(result.GetError(), "app admin needs "+string(edge.NeedEdgeMiddleware)) {
 		t.Fatalf("Deploy() = %q, want admin refused for %s: its router forwards to the container and runs none of the edge's code, while web's router does", result.GetError(), edge.NeedEdgeMiddleware)
+	}
+}
+
+func TestAProjectDeployedThroughARouterItsEdgeNowForwardsToIsRefusedBeforeItTouchesTheOldRouting(t *testing.T) {
+	client, p := mixedServed(t)
+	seedStack(t, p, environment.TierProduction, "shop", stackrecords.EdgeState{
+		Kind: fake.KindRelay,
+		Edge: edge.StackState{Slug: "shop", Tier: environment.TierProduction},
+		Routers: map[router.Kind]router.StackState{
+			fake.RouterDirect: {Slug: "shop", Tier: environment.TierProduction},
+		},
+		Apps: map[string]router.Kind{"admin": fake.RouterDirect},
+	})
+
+	result, _, err := deployStream(t, client, mixedRequest())
+
+	message := result.GetError()
+	if err != nil {
+		message = err.Error()
+	}
+	if result.GetSuccess() || message == "" {
+		t.Fatal("Deploy() succeeded, want it refused: the router held this project's routing inside the edge's own stack, and the edge now forwards to it")
+	}
+	for _, want := range []string{"admin", string(fake.RouterDirect), "ocel destroy"} {
+		if !strings.Contains(message, want) {
+			t.Errorf("the refusal %q does not name %q", message, want)
+		}
+	}
+}
+
+func TestAProjectDeployedThroughAForwardedRouterIsNotRefused(t *testing.T) {
+	client, _ := mixedServed(t)
+
+	first, _ := deploy(t, client, mixedRequest())
+	second, _ := deploy(t, client, withContainerAdmin(deployRequest(), "abcdefabcdefabcdefabcdefabcdefab"))
+
+	if !first.GetSuccess() || !second.GetSuccess() {
+		t.Errorf("deploys = %q then %q, want a project already forwarded left alone", first.GetError(), second.GetError())
 	}
 }

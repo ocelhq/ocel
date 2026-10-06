@@ -81,7 +81,8 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 		}
 		shielded := e.openALB().Shielded()
 		return cloudflareFront{
-			Proxy:   cloudflare.NewProxy(string(e.namespace), decoded),
+			Edge:    cloudflare.NewWithWorkerClientCertificate(string(e.namespace), decoded),
+			proxy:   cloudflare.NewProxy(string(e.namespace), decoded),
 			origin:  shielded,
 			options: decoded,
 			wildcards: originWildcards{

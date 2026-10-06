@@ -286,6 +286,9 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if run.state, err = run.store.read(ctx); err != nil {
 		return nil, err
 	}
+	if err := refuseRoutersRecordedBeforeTheyWereForwarded(p, front.Kind(), run.state); err != nil {
+		return nil, err
+	}
 	shared.restoreRouterStates(run.state)
 	run.spans = run.newSpans()
 	run.outcomes = pendingOutcomes(spec.Apps)

@@ -384,3 +384,19 @@ func (s *sharedStack) destroy(ctx context.Context) error {
 	}
 	return s.ledger.Destroy(ctx)
 }
+
+func refuseRoutersRecordedBeforeTheyWereForwarded(p provider.Provider, front edge.Kind, recorded stackrecords.EdgeState) error {
+	facts := p.Facts()
+	for _, app := range slices.Sorted(maps.Keys(recorded.Apps)) {
+		kind := recorded.Apps[app]
+		state := recorded.Routers[kind]
+		if !facts.IsForwarded(front, kind) || state.Slug == "" || state.Edge.Slug != "" {
+			continue
+		}
+		return refusal.Refuse(refusal.CodeInvalid,
+			"app %s was deployed through the %s router, which kept its routing inside %s's own stack, and %s now forwards to it instead: "+
+				"deploying now would leave that routing behind. Take this project's deployments down with `ocel destroy` using the release that made them, then deploy again",
+			app, kind, describeFront(front), describeFront(front))
+	}
+	return nil
+}

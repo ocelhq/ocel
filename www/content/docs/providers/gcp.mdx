@@ -156,6 +156,11 @@ the visitor did. That port 80 listener is a second forwarding rule, which costs 
 while the project holds five or fewer. The wildcard `ocel domain use
 --preview` names is forwarded the same way, to a host rule on that load balancer; see
 [previews behind Cloudflare](/docs/providers/cloudflare#previews-behind-cloudflare).
+That is how container apps are served. A serverless app is not forwarded: Cloudflare runs a
+worker in front of it and reaches each deployment on a hostname under an `originDomain` you
+name, as
+[serverless apps on Google Cloud](/docs/providers/cloudflare#serverless-apps-on-google-cloud)
+describes.
 
 ```json title="ocel.json"
 {

@@ -155,7 +155,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			egress:           p.egressFor(names, spec),
 			tag:              p.revisionTag(spec),
 			labels:           stackLabels(names, spec.Ref),
-			opensOnPromotion: true,
+			opensOnPromotion: !factsOf(spec.Edge).RunsCode,
 		}
 		if servesNext(app) {
 			served = fillNextServingDefaults(served)

@@ -17,8 +17,10 @@ Cloudflare is an edge, not an origin: it fronts whichever provider runs your app
 
 The token and the account id come from `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment, not from the config.
 
-On a [VPS](/docs/providers/vps) or [Google Cloud](/docs/providers/gcp), Cloudflare runs no
-worker: it forwards each hostname to the origin through a proxied record. The origin answers
+On a [VPS](/docs/providers/vps), Cloudflare runs no worker: it forwards each hostname to the
+origin through a proxied record. On [Google Cloud](/docs/providers/gcp) it runs a worker in
+front of serverless apps and forwards container apps the same way (see
+[Serverless apps on Google Cloud](#serverless-apps-on-google-cloud)). The origin answers
 only what arrives with the certificate your zone presents to origins (zone-level
 authenticated origin pulls, with a certificate of your own rather than Cloudflare's shared
 one). Every origin trusts the CA of every client certificate the zone holds. If the zone
@@ -85,6 +87,49 @@ Read and DNS Edit on the zone. A deploy checks `CLOUDFLARE_ACCOUNT_ID` and
 will not list the account's zones for the token.
 
 Dev mode starts the resources the app declares on your machine, linked or not, and reads its values from `.env`, or from the env source the config names for dev, with `.env.local` on top.
+
+## Serverless apps on Google Cloud
+
+On [Google Cloud](/docs/providers/gcp), Cloudflare runs a worker in front of serverless apps.
+The worker routes each request, serves cached pages from R2, and reaches every deployment
+of an app on its own hostname under an origin domain you name:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "gcp": { "project": "my-project", "region": "europe-west1" }
+  },
+  "edge": { "cloudflare": { "originDomain": "origin.example.com" } },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+`originDomain` is a domain in a Cloudflare zone of your account, and nothing else may use it.
+Production deployments answer at `<release>-<service>.origin.example.com` and previews at
+`<release>-<service>.preview.origin.example.com`. A Workers mutual TLS binding cannot reach a
+proxied hostname, so these records are DNS-only and point at the tier's load balancer, which
+checks the client certificate the worker presents and refuses everything else. Each tier gets
+one wildcard certificate and one wildcard record under the domain, and a tier has one origin
+domain: a deploy that names another is refused. The first deploy of a tier asks you to deploy
+again while Google is still issuing the wildcard certificate. AWS refuses `originDomain`.
+
+Bootstrapping the edge on Google Cloud keeps, per tier, a client certificate for the worker
+(renewed beside the old one, which stays trusted until it expires), the worker that stores
+each deployment's records, the worker that writes pages and tags into R2, a refresh queue and
+the worker that drains it. Pages and tags live in R2 behind the edge: the app's service
+writes them through the edge, and revalidating a tag purges nothing at Google Cloud. A stale
+page is refreshed through the queue, and the worker renders it itself after five minutes if
+the queue has not. Container apps are not served by the worker: they are forwarded through
+the tier's load balancer as a proxied record, as a VPS is.
+
+Besides the permissions above, the token needs Account SSL and Certificates Edit on the
+account (the worker's client certificate) and DNS Edit on the zone that holds `originDomain`.
+The queue needs nothing more than Workers Scripts Edit. A project deployed before this
+existed through the proxy is refused on its next deploy until `ocel destroy` has taken its
+deployments down: its routing sat in the load balancer's own stack, and the edge now forwards
+to that router.
 
 ## Container apps on AWS
 
