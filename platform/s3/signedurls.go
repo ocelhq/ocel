@@ -104,6 +104,9 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		}
 		in := &s3.PutObjectInput{Bucket: aws.String(granted.bucket), Key: aws.String(key), Metadata: c.GetMetadata()}
 		if !s.cfg.PostPolicies {
+			if c.GetMaxSize() > 0 {
+				return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the store behind %q signs no POST policy, so a signed upload cannot bound its size: sign it without maxSize and check the object's size once it lands, or bind a store that accepts POST policies", req.GetBucket()))
+			}
 			return s.Sign(ctx, &bucketv1.SignRequest{
 				Bucket:      req.GetBucket(),
 				Key:         req.GetKey(),

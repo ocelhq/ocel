@@ -215,6 +215,10 @@ const write = await uploads.signedUpload("reports/q4.pdf", {
 breaks the signature. Both are minted against the store's public address, so both need a domain
 bound to the project.
 
+A store that signs no POST policy refuses a `signedUpload` that asks for `maxSize`. That covers an
+S3-compatible store bound with an endpoint, such as R2, and the store `ocel dev` runs. Sign the
+upload without `maxSize` and check the object's size once it lands.
+
 `expiresIn` is clamped to seven days, the longest a sigv4 signature is valid for. Ask for more and
 you get seven days.
 
