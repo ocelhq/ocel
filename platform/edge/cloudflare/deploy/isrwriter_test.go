@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const testPrefix = "prod/acme/web/BUILD1"
@@ -161,6 +162,31 @@ func TestTheISRWriterRefusesARejectedCallAndKeepsItsOwnConnection(t *testing.T) 
 			t.Errorf("writer saw %d connections, want 1: another client closing the default transport's idle connections reached the writer's", got)
 		}
 	})
+}
+
+func TestAnISRWriterThatNeverAnswersFailsInitializeWithinTheTimeout(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) })
+
+	previous := isrWriterTimeout
+	isrWriterTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { isrWriterTimeout = previous })
+
+	done := make(chan error, 1)
+	go func() { done <- writerAccess(srv.URL).Initialize(context.Background(), testPrefix) }()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Error("Initialize returned nil for a writer that never answered")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Initialize blocked past the isr writer timeout")
+	}
 }
 
 func TestTheISRWriterCallsNothingWithoutAdoptedCoordinates(t *testing.T) {
