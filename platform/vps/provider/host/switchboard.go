@@ -125,7 +125,7 @@ func presenceRead(board boxContainer) string {
 
 func (s boxContainer) restoring(attempts int) string {
 	return "set -e\n" +
-		imagePulled(s.image, containerPulls, pullAttemptSeconds) +
+		imagePulled(s.image, containerPulls, pullAttemptSeconds, pullBudgetSeconds) +
 		routingLocked("-x") +
 		"if [ \"$(docker inspect --type container --format " + quoted("{{.State.Running}}") + " " + quoted(s.name) + " 2>/dev/null)\" != true ]; then\n" +
 		"docker rm --force " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +

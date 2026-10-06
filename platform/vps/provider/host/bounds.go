@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	pullAttemptSeconds = 300
+	pullAttemptSeconds = 120
+	pullBudgetSeconds  = 300
 	dockerStepSeconds  = 120
 	readySeconds       = 120
 	probeSeconds       = 10
