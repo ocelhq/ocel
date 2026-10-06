@@ -480,3 +480,19 @@ func TestANextAppOnATierBootstrappedBeforeItsRefreshAccountIsRefusedNamingTheBoo
 		t.Errorf("ensureAppAccount() took %s to refuse, want it to refuse at once rather than wait for an account that will never appear", time.Since(started))
 	}
 }
+
+func TestANextAppThatSuppliesNoRoutingIsGrantedTheRefreshAccountThePreflightAndShapeAskFor(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	server.accountPolicies = map[string]*iam.Policy{}
+	p, c := ensuringAccounts(t, server)
+
+	email, err := p.ensureAppAccount(context.Background(), c, nextSpec(), nil)
+	if err != nil {
+		t.Fatalf("ensureAppAccount() = %v", err)
+	}
+
+	if !actingAsRefreshAccount(server, c, "serviceAccount:"+email) {
+		t.Errorf("the refresh account may be acted as by %+v, want the app among them: preflight refuses and shape prices the same app for it", server.accountPolicies)
+	}
+}

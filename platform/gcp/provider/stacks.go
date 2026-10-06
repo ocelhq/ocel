@@ -73,12 +73,19 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		}
 	}
 	deployed := make([]provider.Function, 0, len(app.Functions)+len(app.Workers))
-	var projectNumber int64
-	var refreshSecret string
-	if refreshesByTask(spec) {
-		refreshSecret = rand.Text()
-		if projectNumber, err = c.ReadProjectNumber(ctx); err != nil {
+	var refresh *nextRefresh
+	if refreshesByTask(app.Framework, app.Compute, factsOf(spec.Edge)) {
+		projectNumber, err := c.ReadProjectNumber(ctx)
+		if err != nil {
 			return nil, err
+		}
+		refresh = &nextRefresh{
+			queue:         names.DelayQueuePath(c.region, spec.Ref.Tier),
+			account:       names.RefreshAccountEmail(spec.Ref.Tier),
+			secret:        rand.Text(),
+			endpoint:      p.containerEndpoint(),
+			projectNumber: projectNumber,
+			region:        c.region,
 		}
 	}
 	for _, fn := range app.Functions {
@@ -112,21 +119,15 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		}
 		if servesNext(app) {
 			served = fillNextServingDefaults(served)
-			var refresh *nextRefresh
-			if refreshesByTask(spec) {
-				refresh = &nextRefresh{
-					url:      refreshURLOf(service, projectNumber, c.region),
-					queue:    names.DelayQueuePath(c.region, spec.Ref.Tier),
-					account:  names.RefreshAccountEmail(spec.Ref.Tier),
-					secret:   refreshSecret,
-					endpoint: p.containerEndpoint(),
-				}
+			var forService *nextRefresh
+			if refresh != nil {
+				forService = refresh.forService(service)
 			}
 			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, nextCache{
 				bucket:      names.Bucket(spec.Ref.Tier),
 				tagDatabase: "projects/" + names.project + "/databases/" + names.TagDatabase(spec.Ref.Tier),
 				endpoint:    p.containerEndpoint(),
-			}, refresh)); err != nil {
+			}, forService)); err != nil {
 				return nil, err
 			}
 		}
