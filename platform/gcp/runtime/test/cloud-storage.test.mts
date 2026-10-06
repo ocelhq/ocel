@@ -271,6 +271,17 @@ test("a failed token fetch names the status and never the token", async () => {
   );
 });
 
+test("a metadata server that cannot be reached is named in a read's failure", async () => {
+  const fetchStub = (async () => {
+    throw new TypeError("fetch failed");
+  }) as typeof fetch;
+  const storage = newCloudStorage({ bucket: "bkt", fetch: fetchStub, sleep: async () => {} });
+
+  await expect(storage.read("a.json")).rejects.toThrow(
+    "ocel: Cloud Storage read of bkt/a.json failed: ocel: the metadata server could not be reached for a Cloud Storage token: fetch failed",
+  );
+});
+
 test("an emulator endpoint is addressed with no token", async () => {
   const s = stub([reply(200, "x", { "x-goog-generation": "1" })]);
   const storage = newCloudStorage({
