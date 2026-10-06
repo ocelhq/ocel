@@ -12,12 +12,25 @@ import { isGuardRejection, tagRecordUpdate } from "./tag-index";
 
 export type SnapshotRaiser = (scope: string, records: Record<string, TagRecord>) => Promise<void>;
 
-export interface EdgeCacheDeps {
-  scope: string;
+export interface FetchEntryStore {
+  get(key: string): Promise<{ text(): Promise<string> } | null>;
+  put(
+    key: string,
+    value: Uint8Array,
+    options?: { httpMetadata?: { contentType?: string } },
+  ): Promise<unknown>;
+}
+
+export interface TagTable {
   region: string;
-  fetchBucket: string;
   table: string;
   aws: AwsServiceFetch;
+}
+
+export interface EdgeCacheDeps {
+  scope: string;
+  entries: FetchEntryStore;
+  tagTable?: TagTable;
   snapshots: ObjectStoreReader;
   raise: SnapshotRaiser;
   waitUntil(promise: Promise<unknown>): void;
@@ -28,10 +41,6 @@ const maxEntryBytes = 2 * 1024 * 1024;
 
 const fetchObjectKey = (scope: string, key: string) => `${scope}/fetch-cache/${key}.cache.json`;
 
-const objectUrl = (deps: EdgeCacheDeps, key: string) =>
-  `https://${deps.fetchBucket}.s3.${deps.region}.amazonaws.com/` +
-  key.split("/").map(encodeURIComponent).join("/");
-
 export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
   const now = deps.now;
 
@@ -39,9 +48,9 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
     async fetchGet(scope, key, tags) {
       if (scope !== deps.scope) return null;
       try {
-        const response = await deps.aws("s3", objectUrl(deps, fetchObjectKey(scope, key)));
-        if (!response.ok) return null;
-        const entry = parseJson<FetchCacheEntry>(await response.text());
+        const object = await deps.entries.get(fetchObjectKey(scope, key));
+        if (!object) return null;
+        const entry = parseJson<FetchCacheEntry>(await object.text());
         if (!entry) return null;
 
         const all = entryTags(entry, tags);
@@ -68,11 +77,9 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
         if (body.byteLength > maxEntryBytes) return;
 
         deps.waitUntil(
-          deps
-            .aws("s3", objectUrl(deps, fetchObjectKey(scope, key)), {
-              method: "PUT",
-              headers: { "content-type": "application/json" },
-              body,
+          deps.entries
+            .put(fetchObjectKey(scope, key), body, {
+              httpMetadata: { contentType: "application/json" },
             })
             .catch(() => undefined),
         );
@@ -93,17 +100,21 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
           }
         : { expired: at };
 
-      const namespace = tagNamespace(scope);
-      if (namespace === null) {
-        throw new Error(`ocel: ${scope} is not an ISR prefix tag items can be keyed by`);
+      const { tagTable } = deps;
+      if (tagTable) {
+        const namespace = tagNamespace(scope);
+        if (namespace === null) {
+          throw new Error(`ocel: ${scope} is not an ISR prefix tag items can be keyed by`);
+        }
+        await Promise.all(
+          tags.map((tag) => writeTagRecord(tagTable, namespace, tag, { ...record, writtenAt: at })),
+        );
       }
-      await Promise.all(
-        tags.map((tag) => writeTagRecord(deps, namespace, tag, { ...record, writtenAt: at })),
-      );
 
       try {
         await deps.raise(scope, Object.fromEntries(tags.map((tag) => [tag, record])));
       } catch (error) {
+        if (!tagTable) throw error;
         console.error("ocel: could not raise the tag invalidation with the isr writer", error);
       } finally {
         dropSnapshotMemo({ isrPrefix: scope }, deps.snapshots);
@@ -118,7 +129,7 @@ function entryTags(entry: FetchCacheEntry, tags: string[]): string[] {
 }
 
 async function writeTagRecord(
-  deps: EdgeCacheDeps,
+  deps: TagTable,
   namespace: string,
   tag: string,
   record: { stale?: number; expired?: number; writtenAt: number },
@@ -171,29 +182,22 @@ export class CacheEntrypoint
   implements EdgeCacheRpc
 {
   private cache(): EdgeCacheRpc | null {
-    const { OCEL_AWS_REGION, OCEL_ISR_BUCKET, OCEL_STATE_TABLE, OCEL_CACHE_STORE } = this.env;
+    const { OCEL_AWS_REGION, OCEL_STATE_TABLE, OCEL_CACHE_STORE } = this.env;
     const scope = this.ctx.props?.scope;
+    if (!OCEL_CACHE_STORE || !scope) return null;
+
     const aws = awsServiceFetch(
       this.env.OCEL_EDGE_ACCESS_KEY_ID,
       this.env.OCEL_EDGE_SECRET_KEY,
       OCEL_AWS_REGION,
     );
-    if (
-      !aws ||
-      !OCEL_AWS_REGION ||
-      !OCEL_ISR_BUCKET ||
-      !OCEL_STATE_TABLE ||
-      !OCEL_CACHE_STORE ||
-      !scope
-    ) {
-      return null;
-    }
     return createEdgeCache({
       scope,
-      region: OCEL_AWS_REGION,
-      fetchBucket: OCEL_ISR_BUCKET,
-      table: OCEL_STATE_TABLE,
-      aws,
+      entries: OCEL_CACHE_STORE,
+      tagTable:
+        aws && OCEL_AWS_REGION && OCEL_STATE_TABLE
+          ? { region: OCEL_AWS_REGION, table: OCEL_STATE_TABLE, aws }
+          : undefined,
       snapshots: OCEL_CACHE_STORE,
       raise: tagRaiser(this.env.ISR_WRITER, this.ctx.props?.isrWriteSecret),
       waitUntil: (promise) => this.ctx.waitUntil(promise),

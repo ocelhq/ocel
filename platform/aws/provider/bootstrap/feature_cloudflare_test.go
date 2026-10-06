@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -63,16 +64,10 @@ func TestEdgeUser(t *testing.T) {
 			}
 
 			stmts := user.Properties.Policies[0].PolicyDocument.Statement
-			var s3Read, s3Write, ddbTable, ddbIndex, sqsSend, invoke, invokeTagged, invokeTiered bool
+			var ddbTable, ddbIndex, sqsSend, invoke, invokeTagged, invokeTiered bool
 			for _, st := range stmts {
-				if st.Resource == "${"+paramAssetBucketARN+"}/*" {
-					s3Read = hasAction(st.Action, "s3:GetObject")
-					if hasAction(st.Action, "s3:PutObject") {
-						t.Error("s3:PutObject must not be granted bucket-wide")
-					}
-				}
-				if st.Resource == "${"+paramAssetBucketARN+"}/*/fetch-cache/*.cache.json" {
-					s3Write = hasAction(st.Action, "s3:PutObject")
+				if hasS3Action(st.Action) {
+					t.Errorf("the edge user is granted an S3 action on %v", st.Resource)
 				}
 				if st.Resource == paramStateTableARN && boundToTagKeys(st.Condition) {
 					ddbTable = hasAction(st.Action, "dynamodb:BatchGetItem") && hasAction(st.Action, "dynamodb:UpdateItem")
@@ -94,12 +89,6 @@ func TestEdgeUser(t *testing.T) {
 						}
 					}
 				}
-			}
-			if !s3Read {
-				t.Error("missing s3:GetObject on the asset bucket")
-			}
-			if !s3Write {
-				t.Error("missing s3:PutObject scoped to a .cache.json object under the fetch-cache prefix")
 			}
 			if !ddbTable {
 				t.Error("missing dynamodb:BatchGetItem + UpdateItem bounded to the TAG# LeadingKeys")
@@ -180,4 +169,20 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, fronted, nil); err != nil {
 		t.Fatalf("a plain bootstrap straight after the drop: %v", err)
 	}
+}
+
+func hasS3Action(action any) bool {
+	var actions []any
+	switch a := action.(type) {
+	case string:
+		actions = []any{a}
+	case []any:
+		actions = a
+	}
+	for _, v := range actions {
+		if name, ok := v.(string); ok && strings.HasPrefix(name, "s3:") {
+			return true
+		}
+	}
+	return false
 }

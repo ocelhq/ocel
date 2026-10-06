@@ -7,7 +7,12 @@ import {
 } from "@framework/next-cache";
 import { beforeEach, expect, it } from "vitest";
 
-import { CacheEntrypoint, createEdgeCache, tagRaiser } from "../src/cache-entrypoint";
+import {
+  CacheEntrypoint,
+  createEdgeCache,
+  type FetchEntryStore,
+  tagRaiser,
+} from "../src/cache-entrypoint";
 import type { Env } from "../src/index";
 import type { AwsService } from "../src/signing";
 import type { ObjectStoreReader } from "../src/tag-clock";
@@ -19,7 +24,6 @@ declare module "cloudflare:test" {
 }
 
 const region = "eu-west-2";
-const bucket = "ocel-assets";
 const table = "ocel-state";
 
 function snapshotBucket(): ObjectStoreReader {
@@ -95,10 +99,34 @@ async function seedSnapshot(records: TagSnapshot["records"], deployedAt = 0): Pr
   );
 }
 
+const entryKey = (key: string, prefix = scope) => `${prefix}/fetch-cache/${key}.cache.json`;
+
+async function seedEntry(value: unknown, key = "abc123"): Promise<void> {
+  await env.TAG_SNAPSHOT_STORE.put(entryKey(key), JSON.stringify(value));
+}
+
+async function storedEntry(key = "abc123"): Promise<unknown> {
+  return (await env.TAG_SNAPSHOT_STORE.get(entryKey(key)))?.json();
+}
+
+function entryStore(over: Partial<FetchEntryStore> = {}) {
+  const puts: { key: string; contentType?: string }[] = [];
+  const store: FetchEntryStore = {
+    get: (key) => env.TAG_SNAPSHOT_STORE.get(key),
+    put: async (key, value, options) => {
+      puts.push({ key, contentType: options?.httpMetadata?.contentType });
+      return env.TAG_SNAPSHOT_STORE.put(key, value, options);
+    },
+    ...over,
+  };
+  return { puts, store };
+}
+
 function cacheWith(
-  aws: ReturnType<typeof awsRecorder>,
   over: {
     scope?: string;
+    aws?: ReturnType<typeof awsRecorder>;
+    entries?: FetchEntryStore;
     store?: ObjectStoreReader;
     raise?: (scope: string, records: Record<string, TagRecord>) => Promise<void>;
     waitUntil?: (p: Promise<unknown>) => void;
@@ -107,10 +135,8 @@ function cacheWith(
 ) {
   return createEdgeCache({
     scope: over.scope ?? scope,
-    region,
-    fetchBucket: bucket,
-    table,
-    aws: aws.send,
+    entries: over.entries ?? entryStore().store,
+    tagTable: over.aws ? { region, table, aws: over.aws.send } : undefined,
     snapshots: over.store ?? snapshotBucket(),
     raise: over.raise ?? raiseRecorder().raise,
     waitUntil: over.waitUntil ?? (() => {}),
@@ -118,118 +144,120 @@ function cacheWith(
   });
 }
 
-it("reads a fetch entry from the bucket under the deployment's prefix", async () => {
+it("reads a fetch entry from the cache store under the deployment's prefix", async () => {
   const stored = entry();
-  const aws = awsRecorder(() => new Response(JSON.stringify(stored)));
-  const cache = cacheWith(aws);
+  await seedEntry(stored);
+  const aws = awsRecorder();
 
-  expect(await cache.fetchGet(scope, "abc123", [])).toEqual(stored);
-  expect(aws.calls[0]).toMatchObject({ service: "s3", method: "GET" });
-  expect(aws.calls[0].url).toBe(
-    `https://${bucket}.s3.${region}.amazonaws.com/${scope}/fetch-cache/abc123.cache.json`,
-  );
+  expect(await cacheWith({ aws }).fetchGet(scope, "abc123", [])).toEqual(stored);
+  expect(aws.calls).toHaveLength(0);
 });
 
 it("misses on an absent object", async () => {
-  const aws = awsRecorder(() => new Response(null, { status: 404 }));
-  expect(await cacheWith(aws).fetchGet(scope, "abc123", [])).toBeNull();
+  expect(await cacheWith().fetchGet(scope, "abc123", [])).toBeNull();
 });
 
 it("misses rather than throwing when the store is unreachable", async () => {
-  const aws = awsRecorder(() => {
-    throw new Error("s3 down");
+  const { store } = entryStore({
+    get: async () => {
+      throw new Error("r2 down");
+    },
   });
-  expect(await cacheWith(aws).fetchGet(scope, "abc123", [])).toBeNull();
+  expect(await cacheWith({ entries: store }).fetchGet(scope, "abc123", [])).toBeNull();
 });
 
 it("misses when a tag was invalidated after the entry was written", async () => {
   await seedSnapshot({ posts: { expired: 2_000 } });
-  const aws = awsRecorder(() => new Response(JSON.stringify(entry())));
-  expect(await cacheWith(aws).fetchGet(scope, "abc123", ["posts"])).toBeNull();
+  await seedEntry(entry());
+  expect(await cacheWith().fetchGet(scope, "abc123", ["posts"])).toBeNull();
 });
 
 it("serves an entry whose tags are clean", async () => {
   await seedSnapshot({ posts: { expired: 500 } });
-  const aws = awsRecorder(() => new Response(JSON.stringify(entry())));
-  expect(await cacheWith(aws).fetchGet(scope, "abc123", ["posts"])).toEqual(entry());
+  await seedEntry(entry());
+  expect(await cacheWith().fetchGet(scope, "abc123", ["posts"])).toEqual(entry());
 });
 
 it("evaluates the tags the entry itself recorded, not only the caller's", async () => {
   await seedSnapshot({ authors: { expired: 2_000 } });
-  const aws = awsRecorder(() => new Response(JSON.stringify(entry({ tags: ["authors"] }))));
-  expect(await cacheWith(aws).fetchGet(scope, "abc123", ["posts"])).toBeNull();
+  await seedEntry(entry({ tags: ["authors"] }));
+  expect(await cacheWith().fetchGet(scope, "abc123", ["posts"])).toBeNull();
 });
 
 it("misses when the tag snapshot cannot be trusted", async () => {
-  const aws = awsRecorder(() => new Response(JSON.stringify(entry())));
-  expect(await cacheWith(aws).fetchGet(scope, "abc123", ["posts"])).toBeNull();
-  expect(await cacheWith(aws).fetchGet(scope, "abc123", [])).toEqual(entry());
+  await seedEntry(entry());
+  expect(await cacheWith().fetchGet(scope, "abc123", ["posts"])).toBeNull();
+  expect(await cacheWith().fetchGet(scope, "abc123", [])).toEqual(entry());
 });
 
 it("returns from a write before the object lands, and writes behind it", async () => {
   let release = () => {};
   const blocked = new Promise<void>((resolve) => (release = resolve));
-  const aws = awsRecorder(async (call) => {
-    if (call.method === "PUT") await blocked;
-    return new Response(null, { status: 200 });
-  });
+  const { puts, store } = entryStore();
+  const entries: FetchEntryStore = {
+    ...store,
+    put: async (key, value, options) => {
+      await blocked;
+      return store.put(key, value, options);
+    },
+  };
   const { pending, waitUntil } = waitUntilRecorder();
 
-  await cacheWith(aws, { waitUntil }).fetchSet(scope, "abc123", entry(), ["posts"]);
+  await cacheWith({ entries, waitUntil }).fetchSet(scope, "abc123", entry(), ["posts"]);
 
-  expect(aws.calls).toHaveLength(1);
   expect(pending).toHaveLength(1);
+  expect(await storedEntry()).toBeUndefined();
+  expect(puts).toHaveLength(0);
   release();
   await Promise.all(pending);
 
-  const put = aws.calls[0];
-  expect(put.url).toBe(
-    `https://${bucket}.s3.${region}.amazonaws.com/${scope}/fetch-cache/abc123.cache.json`,
-  );
-  expect(JSON.parse(put.body)).toEqual({
+  expect(puts).toEqual([{ key: entryKey("abc123"), contentType: "application/json" }]);
+  expect(await storedEntry()).toEqual({
     ...entry(),
     value: { ...entry().value, tags: ["posts"] },
   });
 });
 
 it("skips an oversized entry rather than failing the render", async () => {
-  const aws = awsRecorder();
+  const { puts, store } = entryStore();
   const { pending, waitUntil } = waitUntilRecorder();
   const huge = entry({ data: { body: "x".repeat(3 * 1024 * 1024) } });
 
   await expect(
-    cacheWith(aws, { waitUntil }).fetchSet(scope, "abc123", huge, []),
+    cacheWith({ entries: store, waitUntil }).fetchSet(scope, "abc123", huge, []),
   ).resolves.toBeUndefined();
-  expect(aws.calls).toHaveLength(0);
+  expect(puts).toHaveLength(0);
   expect(pending).toHaveLength(0);
 });
 
 it.each(["APP_PAGE", "APP_ROUTE", "PAGES", undefined])(
   "refuses to store a %s entry rather than corrupting the fetch cache",
   async (kind) => {
-    const aws = awsRecorder();
+    const { puts, store } = entryStore();
     const { pending, waitUntil } = waitUntilRecorder();
 
     await expect(
-      cacheWith(aws, { waitUntil }).fetchSet(scope, "abc123", entry({ kind }), []),
+      cacheWith({ entries: store, waitUntil }).fetchSet(scope, "abc123", entry({ kind }), []),
     ).rejects.toThrow(/fetch entries only/);
-    expect(aws.calls).toHaveLength(0);
+    expect(puts).toHaveLength(0);
     expect(pending).toHaveLength(0);
   },
 );
 
 it("does not surface a failed write to the caller", async () => {
-  const aws = awsRecorder(() => {
-    throw new Error("s3 down");
+  const { store } = entryStore({
+    put: async () => {
+      throw new Error("429 Too Many Requests");
+    },
   });
   const { pending, waitUntil } = waitUntilRecorder();
-  await cacheWith(aws, { waitUntil }).fetchSet(scope, "abc123", entry(), []);
+  await cacheWith({ entries: store, waitUntil }).fetchSet(scope, "abc123", entry(), []);
   await expect(Promise.all(pending)).resolves.toBeDefined();
 });
 
 it("records one tag update per tag, under the prefix's tag namespace", async () => {
   const aws = awsRecorder(() => new Response("{}"));
-  await cacheWith(aws).revalidateTags(scope, ["posts", "authors"]);
+  await cacheWith({ aws }).revalidateTags(scope, ["posts", "authors"]);
 
   const updates = aws.calls.filter((call) => call.service === "dynamodb");
   expect(updates).toHaveLength(2);
@@ -244,7 +272,7 @@ it("records one tag update per tag, under the prefix's tag namespace", async () 
 it("writes no tag item at all for a scope that is not one release's ISR prefix", async () => {
   const aws = awsRecorder(() => new Response("{}"));
   const bound = "prod/proj/app/r00000000";
-  await expect(cacheWith(aws, { scope: bound }).revalidateTags(bound, ["posts"])).rejects.toThrow(
+  await expect(cacheWith({ aws, scope: bound }).revalidateTags(bound, ["posts"])).rejects.toThrow(
     /ISR prefix/,
   );
   expect(aws.calls).toHaveLength(0);
@@ -252,7 +280,7 @@ it("writes no tag item at all for a scope that is not one release's ISR prefix",
 
 it("marks tags stale now and dead at the end of an expire window", async () => {
   const aws = awsRecorder(() => new Response("{}"));
-  await cacheWith(aws).revalidateTags(scope, ["posts"], { expire: 60 });
+  await cacheWith({ aws }).revalidateTags(scope, ["posts"], { expire: 60 });
 
   const values = JSON.parse(aws.calls[0].body).ExpressionAttributeValues;
   expect(values[":stale"].N).toBe("5000");
@@ -272,7 +300,7 @@ it("treats a rejected guard as the ordinary outcome it is", async () => {
       : new Response("{}"),
   );
   await expect(
-    cacheWith(aws, { raise: writer.raise }).revalidateTags(scope, ["posts"]),
+    cacheWith({ aws, raise: writer.raise }).revalidateTags(scope, ["posts"]),
   ).resolves.toBeUndefined();
   expect(writer.raises).toHaveLength(1);
 });
@@ -281,13 +309,13 @@ it("surfaces a tag write that failed for any other reason", async () => {
   const aws = awsRecorder(
     () => new Response(JSON.stringify({ __type: "x#ThrottlingException" }), { status: 400 }),
   );
-  await expect(cacheWith(aws).revalidateTags(scope, ["posts"])).rejects.toThrow(/dynamodb 400/);
+  await expect(cacheWith({ aws }).revalidateTags(scope, ["posts"])).rejects.toThrow(/dynamodb 400/);
 });
 
 it("raises every invalidated tag through the writer, under this deployment's prefix", async () => {
   const writer = raiseRecorder();
   const aws = awsRecorder(() => new Response("{}"));
-  await cacheWith(aws, { raise: writer.raise }).revalidateTags(scope, ["posts", "authors"], {
+  await cacheWith({ aws, raise: writer.raise }).revalidateTags(scope, ["posts", "authors"], {
     expire: 60,
   });
 
@@ -308,9 +336,9 @@ it("records the invalidation durably before raising it", async () => {
     order.push("dynamodb");
     return new Response("{}");
   });
-  await cacheWith(aws, {
-    raise: async () => void order.push("raise"),
-  }).revalidateTags(scope, ["posts"]);
+  await cacheWith({ aws, raise: async () => void order.push("raise") }).revalidateTags(scope, [
+    "posts",
+  ]);
 
   expect(order).toEqual(["dynamodb", "raise"]);
 });
@@ -319,7 +347,8 @@ it("does not fail the route when the writer refuses the raise", async () => {
   const aws = awsRecorder(() => new Response("{}"));
 
   await expect(
-    cacheWith(aws, {
+    cacheWith({
+      aws,
       raise: async () => {
         throw new Error("429");
       },
@@ -331,11 +360,10 @@ it("does not fail the route when the writer refuses the raise", async () => {
 
 it("sees its own invalidation on the very next read", async () => {
   const stored = entry();
-  const aws = awsRecorder((call) =>
-    call.service === "s3" ? new Response(JSON.stringify(stored)) : new Response("{}"),
-  );
+  await seedEntry(stored);
+  const aws = awsRecorder(() => new Response("{}"));
   const writer = raiseRecorder((records) => seedSnapshot(records));
-  const cache = cacheWith(aws, { store: snapshotBucket(), raise: writer.raise });
+  const cache = cacheWith({ aws, store: snapshotBucket(), raise: writer.raise });
 
   await seedSnapshot({ posts: { expired: 500 } });
   expect(await cache.fetchGet(scope, "abc123", ["posts"])).toEqual(stored);
@@ -346,10 +374,10 @@ it("sees its own invalidation on the very next read", async () => {
 
 it("drops its snapshot memo even when the raise failed", async () => {
   const stored = entry();
-  const aws = awsRecorder((call) =>
-    call.service === "s3" ? new Response(JSON.stringify(stored)) : new Response("{}"),
-  );
-  const cache = cacheWith(aws, {
+  await seedEntry(stored);
+  const aws = awsRecorder(() => new Response("{}"));
+  const cache = cacheWith({
+    aws,
     store: snapshotBucket(),
     raise: async () => {
       throw new Error("429");
@@ -400,19 +428,26 @@ it("reports a raise it has no writer to make", async () => {
 const otherScope = "prod/proj/other/r00000000/isr";
 
 it("answers no entry for a scope other than the one its deployment bound", async () => {
-  const aws = awsRecorder(() => new Response(JSON.stringify(entry())));
-  expect(await cacheWith(aws).fetchGet(otherScope, "abc123", [])).toBeNull();
-  expect(aws.calls).toHaveLength(0);
+  await env.TAG_SNAPSHOT_STORE.put(entryKey("abc123", otherScope), JSON.stringify(entry()));
+  const reads: string[] = [];
+  const { store } = entryStore({
+    get: async (key) => {
+      reads.push(key);
+      return env.TAG_SNAPSHOT_STORE.get(key);
+    },
+  });
+  expect(await cacheWith({ entries: store }).fetchGet(otherScope, "abc123", [])).toBeNull();
+  expect(reads).toHaveLength(0);
 });
 
 it("writes nothing for a scope other than the one its deployment bound", async () => {
-  const aws = awsRecorder();
+  const { puts, store } = entryStore();
   const { pending, waitUntil } = waitUntilRecorder();
 
   await expect(
-    cacheWith(aws, { waitUntil }).fetchSet(otherScope, "abc123", entry(), []),
+    cacheWith({ entries: store, waitUntil }).fetchSet(otherScope, "abc123", entry(), []),
   ).resolves.toBeUndefined();
-  expect(aws.calls).toHaveLength(0);
+  expect(puts).toHaveLength(0);
   expect(pending).toHaveLength(0);
 });
 
@@ -421,7 +456,7 @@ it("refuses to invalidate tags of a scope other than the one its deployment boun
   const aws = awsRecorder(() => new Response("{}"));
 
   await expect(
-    cacheWith(aws, { raise: writer.raise }).revalidateTags(otherScope, ["posts"]),
+    cacheWith({ aws, raise: writer.raise }).revalidateTags(otherScope, ["posts"]),
   ).rejects.toThrow(`bound to ${scope}, not ${otherScope}`);
   expect(aws.calls).toHaveLength(0);
   expect(writer.raises).toHaveLength(0);
@@ -432,7 +467,6 @@ it("answers like an empty cache when its deployment bound no scope", async () =>
     OCEL_EDGE_ACCESS_KEY_ID: "id",
     OCEL_EDGE_SECRET_KEY: "secret",
     OCEL_AWS_REGION: region,
-    OCEL_ISR_BUCKET: bucket,
     OCEL_STATE_TABLE: table,
     OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE,
   } as Env);
@@ -448,4 +482,29 @@ it("answers like an empty cache on a bootstrap that binds no coordinates", async
   expect(await entrypoint.fetchGet(scope, "abc123", ["posts"])).toBeNull();
   await entrypoint.fetchSet(scope, "abc123", entry(), ["posts"]);
   await entrypoint.revalidateTags(scope, ["posts"]);
+});
+
+it("raises the invalidation as its only record when no tag table is bound", async () => {
+  const writer = raiseRecorder();
+  await cacheWith({ raise: writer.raise }).revalidateTags(scope, ["posts"], { expire: 60 });
+
+  expect(writer.raises).toEqual([{ scope, records: { posts: { stale: 5_000, expired: 65_000 } } }]);
+});
+
+it("surfaces a refused raise when the raise is the only record", async () => {
+  await expect(
+    cacheWith({
+      raise: async () => {
+        throw new Error("429");
+      },
+    }).revalidateTags(scope, ["posts"]),
+  ).rejects.toThrow("429");
+});
+
+it("serves fetch entries with no AWS bindings at all", async () => {
+  await seedEntry(entry());
+  const ctx = Object.assign(createExecutionContext(), { props: { scope } });
+  const entrypoint = new CacheEntrypoint(ctx, { OCEL_CACHE_STORE: env.TAG_SNAPSHOT_STORE } as Env);
+
+  expect(await entrypoint.fetchGet(scope, "abc123", [])).toEqual(entry());
 });

@@ -17,7 +17,6 @@ func awsWorkerFacts() WorkerFacts {
 	return WorkerFacts{
 		Region:             "eu-west-1",
 		StateTable:         "ocel-state",
-		AssetBucket:        "ocel-assets",
 		ImageOptimizerURL:  "https://optimizer.example",
 		RevalidateQueueURL: "https://queue.example",
 		EdgeAccessKeyID:    "AKIA",
@@ -46,7 +45,6 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 	awsVariables := map[string]string{
 		"OCEL_AWS_REGION":           "eu-west-1",
 		"OCEL_STATE_TABLE":          "ocel-state",
-		"OCEL_ISR_BUCKET":           "ocel-assets",
 		"OCEL_IMAGE_OPTIMIZER_URL":  "https://optimizer.example",
 		"OCEL_REVALIDATE_QUEUE_URL": "https://queue.example",
 		"OCEL_EDGE_ACCESS_KEY_ID":   "AKIA",
@@ -120,7 +118,6 @@ func TestWorkerFactsBindEveryValueTheEntryWorkerReads(t *testing.T) {
 	wantVariables := map[string]string{
 		edge.AWSRegionVar:          "eu-west-1",
 		edge.StateTableVar:         "ocel-state",
-		edge.AssetBucketVar:        "ocel-assets",
 		edge.ImageOptimizerURLVar:  "https://optimizer.example",
 		edge.RevalidateQueueURLVar: "https://queue.example",
 		edge.EdgeAccessKeyIDVar:    "AKIA",

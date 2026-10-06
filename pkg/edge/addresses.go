@@ -16,9 +16,8 @@ const (
 )
 
 const (
-	AWSRegionVar   = "OCEL_AWS_REGION"
-	StateTableVar  = "OCEL_STATE_TABLE"
-	AssetBucketVar = "OCEL_ISR_BUCKET"
+	AWSRegionVar  = "OCEL_AWS_REGION"
+	StateTableVar = "OCEL_STATE_TABLE"
 )
 
 const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
