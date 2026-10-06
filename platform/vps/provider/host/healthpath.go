@@ -41,11 +41,11 @@ func (h *Host) FindHealthPath(ctx context.Context, search HealthPathSearch, prog
 	}
 	say(progress, fmt.Sprintf("Waiting up to %s for %s to answer HTTP, then probing %s in turn: %s sets no %s, so the first that answers anything but 404 or 405 is its health check",
 		search.Window, search.App, inWords(healthPathCandidates), search.App, healthKey))
-	found, err := h.stream(ctx, watchingStart([]string{containerOf(search.Target)}, findHealthPathCommand(search)), nil, elevation)
+	found, err := h.stream(ctx, renderStartWatch([]string{containerOf(search.Target)}, findHealthPathCommand(search)), nil, elevation)
 	if err != nil {
 		return "", h.unfound(ctx, search, err.Error(), false, elevation)
 	}
-	if _, crashed := unstartedIn(found.Stdout); crashed {
+	if _, crashed := findUnstarted(found.Stdout); crashed {
 		return "", h.unfound(ctx, search, "", true, elevation)
 	}
 	answers := readPathAnswers(found.Stdout)
@@ -79,9 +79,9 @@ func (h *Host) unfound(ctx context.Context, search HealthPathSearch, verdict str
 	defer stop()
 	name := containerOf(search.Target)
 	state := h.said(ctx, stateCommand(name), elevation)
-	if crashed || unstartedState(state) {
+	if crashed || isUnstarted(state) {
 		return refusal.Refuse(refusal.CodeNotReady, "start %s on %s: %s%s",
-			search.App, h.named(), h.unstarted(ctx, search.App, name, state, elevation), h.abandon(ctx, search, elevation))
+			search.App, h.named(), h.describeUnstarted(ctx, search.App, name, state, elevation), h.abandon(ctx, search, elevation))
 	}
 	logs := h.said(ctx, logCommand(name), elevation)
 	if logs == "" {

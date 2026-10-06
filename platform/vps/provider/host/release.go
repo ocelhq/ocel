@@ -121,12 +121,12 @@ func (h *Host) Release(ctx context.Context, rel Release, progress progress.Log) 
 		names = append(names, app.name())
 	}
 	say(progress, rel.waiting())
-	gated, err := h.stream(ctx, watchingStart(names, gateCommand(rel.DeployTimeout, gates)), nil, elevation)
+	gated, err := h.stream(ctx, renderStartWatch(names, gateCommand(rel.DeployTimeout, gates)), nil, elevation)
 	if err != nil {
 		return h.ungated(ctx, rel, "never came back with an exit code", err.Error(), "", elevation)
 	}
-	if name, crashed := unstartedIn(gated.Stdout); crashed {
-		return h.unstartedRelease(ctx, rel, name, elevation)
+	if name, crashed := findUnstarted(gated.Stdout); crashed {
+		return h.refuseUnstartedRelease(ctx, rel, name, elevation)
 	}
 	if gated.Code != 0 {
 		return h.ungated(ctx, rel, fmt.Sprintf("exited %d", gated.Code), strings.TrimSpace(gated.Stderr), gated.Stdout, elevation)
@@ -726,8 +726,8 @@ func (h *Host) ungated(ctx context.Context, rel Release, outcome, verdict, said,
 	var evidence strings.Builder
 	for _, app := range failed {
 		state := h.said(ctx, stateCommand(app.name()), elevation)
-		if unstartedState(state) {
-			evidence.WriteString("\n" + h.unstarted(ctx, app.App, app.name(), state, elevation))
+		if isUnstarted(state) {
+			evidence.WriteString("\n" + h.describeUnstarted(ctx, app.App, app.name(), state, elevation))
 			continue
 		}
 		logs := h.said(ctx, logCommand(app.name()), elevation)
@@ -742,7 +742,7 @@ func (h *Host) ungated(ctx context.Context, rel Release, outcome, verdict, said,
 		rel.apps(), h.named(), outcome, verdict, evidence.String(), h.discard(ctx, rel, elevation))}
 }
 
-func (h *Host) unstartedRelease(ctx context.Context, rel Release, name, elevation string) error {
+func (h *Host) refuseUnstartedRelease(ctx context.Context, rel Release, name, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	app := name
@@ -752,7 +752,7 @@ func (h *Host) unstartedRelease(ctx context.Context, rel Release, name, elevatio
 	state := h.said(ctx, stateCommand(name), elevation)
 	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the previous release is still live\n%s%s",
-		rel.apps(), h.named(), h.unstarted(ctx, app, name, state, elevation), h.discard(ctx, rel, elevation))}
+		rel.apps(), h.named(), h.describeUnstarted(ctx, app, name, state, elevation), h.discard(ctx, rel, elevation))}
 }
 
 func (h *Host) overtaken(ctx context.Context, rel Release, why error, elevation string) error {

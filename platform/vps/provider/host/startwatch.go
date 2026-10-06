@@ -15,7 +15,7 @@ const (
 
 var unstartedStatuses = []string{"restarting", "exited", "dead"}
 
-func watchingStart(names []string, probe []string) string {
+func renderStartWatch(names []string, probe []string) string {
 	var checks strings.Builder
 	for _, name := range names {
 		checks.WriteString("\tcrashed " + quoted(name) + "\n")
@@ -40,7 +40,7 @@ func watchingStart(names []string, probe []string) string {
 		"wait \"$probe\"")
 }
 
-func unstartedIn(said string) (string, bool) {
+func findUnstarted(said string) (string, bool) {
 	for line := range strings.Lines(said) {
 		fields := strings.Fields(line)
 		if len(fields) == 2 && fields[0] == unstartedMarker {
@@ -50,7 +50,7 @@ func unstartedIn(said string) (string, bool) {
 	return "", false
 }
 
-func unstartedState(state string) bool {
+func isUnstarted(state string) bool {
 	for _, status := range unstartedStatuses {
 		if strings.HasPrefix(state, "Status="+status+" ") {
 			return true
@@ -59,14 +59,14 @@ func unstartedState(state string) bool {
 	return false
 }
 
-func lastRunLogsCommand(name string) string {
+func renderLastRunLogs(name string) string {
 	return "started=$(docker inspect --type container --format '{{.State.StartedAt}}' " + quoted(name) + ") && " +
-		"docker logs --since \"$started\" " + quoted(name) + " 2>&1 || true"
+		"docker logs --since \"$started\" --tail " + appLogTail + " " + quoted(name) + " 2>&1 || true"
 }
 
-func (h *Host) unstarted(ctx context.Context, app, name, state, elevation string) string {
-	logs := h.said(ctx, lastRunLogsCommand(name), elevation)
-	ran := "its last run"
+func (h *Host) describeUnstarted(ctx context.Context, app, name, state, elevation string) string {
+	logs := h.said(ctx, renderLastRunLogs(name), elevation)
+	ran := "its last run, last " + appLogTail + " lines"
 	if logs == "" {
 		logs = h.said(ctx, logCommand(name), elevation)
 		ran = "the last " + appLogTail + " lines"
