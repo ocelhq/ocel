@@ -78,13 +78,13 @@ func (c *clients) taskGrants(ctx context.Context, spec provider.StackSpec, membe
 		func() error {
 			own := c.AppAccount(tier, spec.Ref.Project, spec.App.App)
 			if err := c.bindAccountRole(ctx, own, runAsRole, member, true); err != nil {
-				return unseenOrLacking(err, c.AppAccountsRolePath())
+				return wrapAccountGrantError(err, c.AppAccountsRolePath())
 			}
 			agent, err := c.ReadServiceAgent(ctx, cloudTasksAgentDomain)
 			if err != nil {
 				return err
 			}
-			return unseenOrLacking(c.bindAccountRole(ctx, own, runAsRole, agent, true), c.AppAccountsRolePath())
+			return wrapAccountGrantError(c.bindAccountRole(ctx, own, runAsRole, agent, true), c.AppAccountsRolePath())
 		},
 		func() error {
 			return topics.Topology{Names: taskNames(c.Names, spec.Ref), Topics: declared, Publisher: member}.GrantPublisher(ctx, c.Workload())
@@ -150,7 +150,7 @@ func untilVisible(ctx context.Context, grant func() error) error {
 
 var errUnseenAccount = errors.New("the service account is not readable yet")
 
-func unseenOrLacking(err error, grant string) error {
+func wrapAccountGrantError(err error, grant string) error {
 	if absent(err) {
 		return fmt.Errorf("%w: %w", errUnseenAccount, err)
 	}

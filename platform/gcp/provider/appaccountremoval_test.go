@@ -84,8 +84,8 @@ func TestRemovingTheLastEnvironmentRunningAnAppRevokesEveryGrantItsAccountHeld(t
 	}
 	records := recordedStacks{names: []naming.StackName{spec.Ref.Name, naming.InfraStack("production"), stackOf("production", "api", "r1")}}
 
-	if err := forgetUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
 	if got := holdings(server, c, member); len(got) != 0 {
@@ -100,8 +100,8 @@ func TestRemovingOneEnvironmentLeavesTheGrantsOfAnAppAnotherEnvironmentRuns(t *t
 	before := holdings(server, c, member)
 	records := recordedStacks{names: []naming.StackName{spec.Ref.Name, stackOf("pr-8", "web", "r2")}}
 
-	if err := forgetUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
 	if got := holdings(server, c, member); !slices.Equal(got, before) {
@@ -119,8 +119,8 @@ func TestDestroyingOneReleaseLeavesTheGrantsOfAnAppWhoseOtherReleaseIsRecorded(t
 	ref := spec.Ref
 	ref.Name = older
 
-	if err := forgetUnusedAppAccount(context.Background(), c, records, ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, records, ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
 	if got := holdings(server, c, member); !slices.Equal(got, before) {
@@ -140,8 +140,8 @@ func TestRevokingAnAppsGrantsTouchesNoOtherMembersBindings(t *testing.T) {
 	}
 	server.project.Bindings = append(server.project.Bindings, &cloudresourcemanager.Binding{Role: "roles/viewer", Members: []string{other}})
 
-	if err := forgetUnusedAppAccount(context.Background(), c, recordedStacks{names: []naming.StackName{spec.Ref.Name}}, spec.Ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, recordedStacks{names: []naming.StackName{spec.Ref.Name}}, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
 	want := []string{
@@ -170,8 +170,8 @@ func TestRevokingAnAppsGrantsOnATierWithoutTasksSucceeds(t *testing.T) {
 	c, spec, member := grantedAppAccount(t, server)
 	server.tasksAbsent = true
 
-	if err := forgetUnusedAppAccount(context.Background(), c, recordedStacks{names: []naming.StackName{spec.Ref.Name}}, spec.Ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v, want a tier with no delay queue or account to have nothing to revoke there", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, recordedStacks{names: []naming.StackName{spec.Ref.Name}}, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v, want a tier with no delay queue or account to have nothing to revoke there", err)
 	}
 
 	if got := projectBindingsOf(server); slices.ContainsFunc(got, func(bound string) bool { return strings.Contains(bound, member) }) {
@@ -185,10 +185,10 @@ func TestRemovingAnInfraStackRevokesNoAppAccount(t *testing.T) {
 	c, _, member := grantedAppAccount(t, server)
 	before := holdings(server, c, member)
 
-	if err := forgetUnusedAppAccount(context.Background(), c, recordedStacks{}, provider.StackRef{
+	if err := revokeUnusedAppAccount(context.Background(), c, recordedStacks{}, provider.StackRef{
 		Project: "shop", Tier: environment.TierProduction, Name: naming.InfraStack(stackrecords.ProductionEnv),
 	}, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
 	if got := holdings(server, c, member); !slices.Equal(got, before) {
@@ -333,8 +333,8 @@ func TestRemovingTheLastEnvironmentRunningAnAppTakesItsAccountOffEveryTopicOfThe
 	}
 	server.topicPolicies[preview] = &pubsub.Policy{Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{member, other}}}}
 
-	if err := forgetUnusedAppAccount(context.Background(), c, recordedTierTopics(t, spec), spec.Ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, recordedTierTopics(t, spec), spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
 	if got := publishersOf(server, prod); slices.Contains(got, member) {
@@ -351,8 +351,8 @@ func TestRemovingOneEnvironmentLeavesTheAppsTopicGrants(t *testing.T) {
 	c, spec, member := grantedAppAccount(t, server)
 	writes := server.topicWrites
 
-	if err := forgetUnusedAppAccount(context.Background(), c, recordedTierTopics(t, spec, stackOf("pr-8", "web", "r2")), spec.Ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, recordedTierTopics(t, spec, stackOf("pr-8", "web", "r2")), spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
 	if server.topicWrites != writes {
@@ -369,8 +369,8 @@ func TestRevokingAnAppsTopicGrantsSkipsATopicThatIsGone(t *testing.T) {
 	c, spec, member := grantedAppAccount(t, server)
 	server.deletedTopics = map[string]bool{resizePath(c, spec, stackrecords.ProductionEnv): true}
 
-	if err := forgetUnusedAppAccount(context.Background(), c, recordedTierTopics(t, spec), spec.Ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v, want a deleted topic to have nothing to revoke", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, recordedTierTopics(t, spec), spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v, want a deleted topic to have nothing to revoke", err)
 	}
 
 	if got := projectBindingsOf(server); slices.ContainsFunc(got, func(bound string) bool { return strings.Contains(bound, member) }) {
@@ -433,8 +433,8 @@ func TestAnEnvironmentRecordedWhileAnAppsGrantsAreRevokedKeepsThem(t *testing.T)
 		recordApp(t, backing, spec, stackOf("pr-8", "web", "r2"))
 	}, &lists)
 
-	if err := forgetUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
 	if got := holdings(server, c, member); !slices.Equal(got, before) {
@@ -473,8 +473,8 @@ func TestGrantsADeployMadeBeforeTheRevocationLandedAreRestored(t *testing.T) {
 		}
 	}, &lists)
 
-	if err := forgetUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
 	if got := holdings(server, c, member); len(got) != 8 {
@@ -492,8 +492,8 @@ func TestGrantsStayRevokedWhenNoEnvironmentStartedRunningTheAppMeanwhile(t *test
 	lists := 0
 	records, _ := racingRecords(t, spec, nil, &lists)
 
-	if err := forgetUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
 	if got := holdings(server, c, member); len(got) != 0 {
@@ -516,8 +516,8 @@ func TestRevokingWhileAnotherEnvironmentIsRecordedReadsTheRecordsOnce(t *testing
 	records, backing := racingRecords(t, spec, nil, &lists)
 	recordApp(t, backing, spec, stackOf("pr-8", "web", "r2"))
 
-	if err := forgetUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
 	if lists != 1 {
@@ -538,8 +538,8 @@ func TestRevokingAnAppsGrantsLeavesARoleAnOperatorAddedToItsAccount(t *testing.T
 		&cloudresourcemanager.Binding{Role: "roles/bigquery.dataEditor", Condition: conditioned, Members: []string{member}},
 	)
 
-	if err := forgetUnusedAppAccount(context.Background(), c, recordedStacks{names: []naming.StackName{spec.Ref.Name}}, spec.Ref, nil); err != nil {
-		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	if err := revokeUnusedAppAccount(context.Background(), c, recordedStacks{names: []naming.StackName{spec.Ref.Name}}, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
 	want := []string{
@@ -564,10 +564,10 @@ func TestTakingAMemberOffTheProjectReportsEveryBindingItHeld(t *testing.T) {
 		{Role: "roles/five", Members: []string{member}},
 	}
 
-	kept, removed := boundWithout(bindings, member, []string{"roles/one", "roles/two", "roles/three"})
+	kept, removed := removeMemberFromRoles(bindings, member, []string{"roles/one", "roles/two", "roles/three"})
 
 	if len(removed) != 3 {
-		t.Fatalf("boundWithout() removed %+v, want three bindings", removed)
+		t.Fatalf("removeMemberFromRoles() removed %+v, want three bindings", removed)
 	}
 	for i, want := range []struct {
 		role string
@@ -578,6 +578,6 @@ func TestTakingAMemberOffTheProjectReportsEveryBindingItHeld(t *testing.T) {
 		}
 	}
 	if len(kept) != 3 || !slices.Equal(kept[0].Members, []string{other}) || kept[0].Role != "roles/two" || kept[2].Role != "roles/five" || !slices.Equal(kept[2].Members, []string{member}) {
-		t.Errorf("boundWithout() kept %+v, want roles/two held by the other member, roles/four and roles/five still held by the member", kept)
+		t.Errorf("removeMemberFromRoles() kept %+v, want roles/two held by the other member, roles/four and roles/five still held by the member", kept)
 	}
 }

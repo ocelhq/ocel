@@ -17,21 +17,13 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
-func (p *Provider) forgetAppAccountIfUnused(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
-	c, err := p.openClients(ctx)
-	if err != nil {
-		return err
-	}
-	return forgetUnusedAppAccount(ctx, c, p.KeyValues(), ref, progress)
-}
-
 type revokedGrants struct {
 	project []*cloudresourcemanager.Binding
 	tasks   bool
 	topics  []topics.Topology
 }
 
-func runsElsewhere(recorded []stackrecords.NamedStack, ref provider.StackRef) (naming.StackName, bool) {
+func findOtherRunningStack(recorded []stackrecords.NamedStack, ref provider.StackRef) (naming.StackName, bool) {
 	for _, stack := range recorded {
 		if stack.Name != ref.Name && !stack.Name.IsInfra() && stack.Name.App == ref.Name.App {
 			return stack.Name, true
@@ -40,7 +32,7 @@ func runsElsewhere(recorded []stackrecords.NamedStack, ref provider.StackRef) (n
 	return naming.StackName{}, false
 }
 
-func forgetUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.Store, ref provider.StackRef, progress progress.Log) error {
+func revokeUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.Store, ref provider.StackRef, progress progress.Log) error {
 	if ref.Name.IsInfra() {
 		return nil
 	}
@@ -48,7 +40,7 @@ func forgetUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 	if err != nil {
 		return err
 	}
-	if _, running := runsElsewhere(recorded, ref); running {
+	if _, running := findOtherRunningStack(recorded, ref); running {
 		return nil
 	}
 	member := "serviceAccount:" + c.AppAccountEmail(ref.Tier, ref.Project, ref.Name.App)
@@ -60,20 +52,20 @@ func forgetUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 	revoked.tasks = slices.ContainsFunc(revoked.project, func(b *cloudresourcemanager.Binding) bool {
 		return b.Role == taskRecordsRole && b.Condition != nil && b.Condition.Expression == taskCondition
 	})
-	if err := absentIsDone(c.bindQueueRoles(ctx, ref.Tier, member, nil)); err != nil {
+	if err := ignoreAbsent(c.bindQueueRoles(ctx, ref.Tier, member, nil)); err != nil {
 		return err
 	}
-	if err := absentIsDone(c.bindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), runAsRole, member, false)); err != nil {
+	if err := ignoreAbsent(c.bindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), runAsRole, member, false)); err != nil {
 		return err
 	}
 	if revoked.topics, err = c.revokeTopicPublisher(ctx, recorded, ref, member); err != nil {
 		return err
 	}
-	again, err := stackrecords.List(ctx, records, ref.Tier, ref.Project)
+	recordedNow, err := stackrecords.List(ctx, records, ref.Tier, ref.Project)
 	if err != nil {
 		return err
 	}
-	if other, running := runsElsewhere(again, ref); running {
+	if other, running := findOtherRunningStack(recordedNow, ref); running {
 		if err := c.restoreGrants(ctx, ref, member, revoked); err != nil {
 			return err
 		}
@@ -95,10 +87,10 @@ func (c *clients) restoreGrants(ctx context.Context, ref provider.StackRef, memb
 		}
 	}
 	if revoked.tasks {
-		if err := absentIsDone(c.bindQueueRoles(ctx, ref.Tier, member, queueRoles)); err != nil {
+		if err := ignoreAbsent(c.bindQueueRoles(ctx, ref.Tier, member, queueRoles)); err != nil {
 			return err
 		}
-		if err := absentIsDone(c.bindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), runAsRole, member, true)); err != nil {
+		if err := ignoreAbsent(c.bindAccountRole(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.App), runAsRole, member, true)); err != nil {
 			return err
 		}
 	}
@@ -111,7 +103,7 @@ func (c *clients) restoreGrants(ctx context.Context, ref provider.StackRef, memb
 }
 
 func (c *clients) revokeTopicPublisher(ctx context.Context, recorded []stackrecords.NamedStack, ref provider.StackRef, member string) ([]topics.Topology, error) {
-	var revoked []topics.Topology
+	var revokedTopologies []topics.Topology
 	for _, stack := range recorded {
 		if !stack.Name.IsInfra() {
 			continue
@@ -134,18 +126,18 @@ func (c *clients) revokeTopicPublisher(ctx context.Context, recorded []stackreco
 			Topics:    declared,
 			Publisher: member,
 		}
-		taken, err := topology.RevokePublisher(ctx, c.Workload())
+		revoked, err := topology.RevokePublisher(ctx, c.Workload())
 		if err != nil {
 			return nil, err
 		}
-		if len(taken.Topics) > 0 {
-			revoked = append(revoked, taken)
+		if len(revoked.Topics) > 0 {
+			revokedTopologies = append(revokedTopologies, revoked)
 		}
 	}
-	return revoked, nil
+	return revokedTopologies, nil
 }
 
-func absentIsDone(err error) error {
+func ignoreAbsent(err error) error {
 	if err != nil && (absent(err) || status.Code(err) == codes.NotFound) {
 		return nil
 	}

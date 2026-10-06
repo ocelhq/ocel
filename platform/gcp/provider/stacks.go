@@ -149,7 +149,11 @@ func (p *Provider) RemoveFunctions(ctx context.Context, ref provider.StackRef, f
 	if err := p.tearDownAll(ctx, functionRevisions(functions), progress); err != nil {
 		return err
 	}
-	return p.forgetAppAccountIfUnused(ctx, ref, progress)
+	c, err := p.openClients(ctx)
+	if err != nil {
+		return err
+	}
+	return revokeUnusedAppAccount(ctx, c, p.KeyValues(), ref, progress)
 }
 
 func (p *Provider) NameFunctions(ctx context.Context, spec provider.StackSpec) ([]provider.Function, error) {
@@ -263,7 +267,11 @@ func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, 
 	if err := p.tearDownAll(ctx, containerRevisions(containers), progress); err != nil {
 		return err
 	}
-	return p.forgetAppAccountIfUnused(ctx, ref, progress)
+	c, err := p.openClients(ctx)
+	if err != nil {
+		return err
+	}
+	return revokeUnusedAppAccount(ctx, c, p.KeyValues(), ref, progress)
 }
 
 func (p *Provider) NameContainers(ctx context.Context, spec provider.StackSpec) ([]provider.AppContainer, error) {

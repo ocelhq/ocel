@@ -279,7 +279,7 @@ func boundAccountMember(bindings []*iam.Binding, role, member string, granting b
 	return append(bindings, &iam.Binding{Role: role, Members: []string{member}}), true
 }
 
-func boundWithout(bindings []*cloudresourcemanager.Binding, member string, roles []string) (kept, removed []*cloudresourcemanager.Binding) {
+func removeMemberFromRoles(bindings []*cloudresourcemanager.Binding, member string, roles []string) (kept, removed []*cloudresourcemanager.Binding) {
 	kept = make([]*cloudresourcemanager.Binding, 0, len(bindings))
 	for _, binding := range bindings {
 		if slices.Contains(roles, binding.Role) && slices.Contains(binding.Members, member) {
@@ -308,7 +308,7 @@ func (c *clients) unbindProjectMember(ctx context.Context, member string) ([]*cl
 		if err != nil {
 			return nil, err
 		}
-		bindings, removed := boundWithout(policy.Bindings, member, appGrantedRoles)
+		bindings, removed := removeMemberFromRoles(policy.Bindings, member, appGrantedRoles)
 		if len(removed) == 0 {
 			return nil, nil
 		}
