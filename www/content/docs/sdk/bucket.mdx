@@ -215,7 +215,7 @@ const write = await uploads.signedUpload("reports/q4.pdf", {
 breaks the signature. Both are minted against the store's public address, so both need a domain
 bound to the project.
 
-A store that signs no POST policy refuses a `signedUpload` that asks for `maxSize`. That covers an
+A store that signs no POST policy refuses a `signedUpload` that asks for a maximum size with `maxSize`. That covers an
 S3-compatible store bound with an endpoint, such as R2, and the store `ocel dev` runs. Sign the
 upload without `maxSize` and check the object's size once it lands.
 
@@ -298,7 +298,7 @@ four in flight, and completed as one object. You do not ask for that, and nothin
 the last part lands.
 
 A browser upload is a single request, so it is bounded by what the store accepts in one, which on
-S3 is 5 GB. Cap it lower with `maxFileSize` on the uploader or `maxSize` on a signed upload.
+S3 is 5 GB. Cap it lower with `maxFileSize` on the uploader, or with `maxSize` on a signed upload where the store signs POST policies (see [Signed urls](#signed-urls)).
 
 One listing page returns at most 1000 objects, and user metadata is capped at 2 KB per object.
 
