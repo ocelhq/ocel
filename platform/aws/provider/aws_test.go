@@ -383,6 +383,15 @@ func TestAWSDeclaresTheDirectoryItsFunctionsLoadNextRuntimeFilesFrom(t *testing.
 	}
 }
 
+func TestLambdaDeclaresItsNextFunctionsRefreshInTheBackground(t *testing.T) {
+	t.Parallel()
+
+	p := NewProvider(Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
+	if p.Facts().NextRefreshesByRequest {
+		t.Error("Facts().NextRefreshesByRequest = true, want false: a Lambda function keeps running work Next starts after its response")
+	}
+}
+
 func TestLambdaDeclaresA200MiBFunctionSizeBudget(t *testing.T) {
 	t.Parallel()
 

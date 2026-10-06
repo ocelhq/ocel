@@ -27,10 +27,11 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 func factsProto(p provider.Provider) *contractv1.ProviderFacts {
 	facts := p.Facts()
 	return &contractv1.ProviderFacts{
-		PricesDeploys:    p.Hooks().Cost != nil,
-		Computes:         provider.ComputeNames(facts.Computes),
-		WorkerCeilings:   provider.WorkerCeilingMessages(facts.WorkerCeilings),
-		NextRuntimeDir:   facts.NextRuntimeDir,
-		MaxFunctionBytes: facts.MaxFunctionBytes,
+		PricesDeploys:          p.Hooks().Cost != nil,
+		Computes:               provider.ComputeNames(facts.Computes),
+		WorkerCeilings:         provider.WorkerCeilingMessages(facts.WorkerCeilings),
+		NextRuntimeDir:         facts.NextRuntimeDir,
+		MaxFunctionBytes:       facts.MaxFunctionBytes,
+		NextRefreshesByRequest: facts.NextRefreshesByRequest,
 	}
 }

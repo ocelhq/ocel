@@ -45,6 +45,10 @@ Each tier's bootstrap also creates a Firestore database of its own, `<namespace>
 that holds the revalidated tags of the tier's Next apps. It has no standing charge, only the
 reads, writes and storage its records use.
 
+A Next app on Cloud Run cannot turn on `experimental.partialFallbacks` (`partialPrefetching` from
+Next 16.3). Next renders those shells after the response ends, and Cloud Run stops the work then, so
+the deploy is refused and names the setting.
+
 ## Edge
 
 Leave `edge` out and a deployment has no edge in front of it: each service is answered on

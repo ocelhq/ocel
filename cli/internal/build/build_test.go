@@ -200,6 +200,24 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
+	t.Run("hands each next app whether its host refreshes by request", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
+
+		var got nodeBuildRequest
+		builder := nodeOnly{node: requestOf(&got), host: Host{NextRuntimeDir: "/var/host/next", NextRefreshesByRequest: true}}
+		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+
+		if len(got.Apps) != 1 || !got.Apps[0].NextRefreshesByRequest {
+			t.Errorf("request apps = %+v, want web told its host refreshes by request", got.Apps)
+		}
+	})
+
 	t.Run("refuses a next app its host names no Next runtime directory for", func(t *testing.T) {
 		t.Parallel()
 

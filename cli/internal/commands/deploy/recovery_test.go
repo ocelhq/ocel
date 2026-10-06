@@ -1734,6 +1734,7 @@ func TestDeployBuildsForTheFunctionHostItsProviderDeclares(t *testing.T) {
 	fixture.Provider.WithFacts(func(facts *provider.Facts) {
 		facts.NextRuntimeDir = "/var/host/next"
 		facts.MaxFunctionBytes = 200 << 20
+		facts.NextRefreshesByRequest = true
 	})
 	addAppToFixtureConfig(t, fixture.Root)
 	dependencies := newTestDependencies()
@@ -1751,6 +1752,9 @@ func TestDeployBuildsForTheFunctionHostItsProviderDeclares(t *testing.T) {
 	if handed.MaxFunctionBytes != 200<<20 {
 		t.Errorf("the build was handed a size budget of %d bytes, want the one the provider declares", handed.MaxFunctionBytes)
 	}
+	if !handed.NextRefreshesByRequest {
+		t.Error("the build was not told its host refreshes by request, which the provider declares")
+	}
 }
 
 func TestPreviewUpBuildsForTheFunctionHostItsProviderDeclares(t *testing.T) {
@@ -1758,6 +1762,7 @@ func TestPreviewUpBuildsForTheFunctionHostItsProviderDeclares(t *testing.T) {
 	fixture.Provider.WithFacts(func(facts *provider.Facts) {
 		facts.NextRuntimeDir = "/var/host/next"
 		facts.MaxFunctionBytes = 200 << 20
+		facts.NextRefreshesByRequest = true
 	})
 	addAppToFixtureConfig(t, fixture.Root)
 	dependencies := newTestDependencies()
@@ -1771,5 +1776,8 @@ func TestPreviewUpBuildsForTheFunctionHostItsProviderDeclares(t *testing.T) {
 	}
 	if handed.MaxFunctionBytes != 200<<20 {
 		t.Errorf("the build was handed a size budget of %d bytes, want the one the provider declares", handed.MaxFunctionBytes)
+	}
+	if !handed.NextRefreshesByRequest {
+		t.Error("the build was not told its host refreshes by request, which the provider declares")
 	}
 }

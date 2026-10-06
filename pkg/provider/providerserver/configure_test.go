@@ -132,6 +132,27 @@ func TestConfigureNamesTheFunctionSizeBudgetTheProviderDeclares(t *testing.T) {
 	}
 }
 
+func TestConfigureSaysWhetherTheProvidersNextFunctionsRefreshByRequest(t *testing.T) {
+	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
+		Version: "test",
+		New: func(context.Context, provider.Settings) (provider.Provider, error) {
+			return fake.NewProvider(fake.Options{}).WithFacts(func(facts *provider.Facts) {
+				facts.NextRefreshesByRequest = true
+			}), nil
+		},
+	}))
+	t.Cleanup(server.Close)
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+
+	configured, err := client.Configure(context.Background(), configureInWorkingDir(t))
+	if err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+	if !configured.GetFacts().GetNextRefreshesByRequest() {
+		t.Error("Configure() facts say Next functions refresh in the background, want the refresh by request the provider declares")
+	}
+}
+
 func TestConfigureRefusesAProjectDirectoryThatIsNotAbsolute(t *testing.T) {
 	for name, dir := range map[string]string{"none": "", "relative": "shop"} {
 		t.Run(name, func(t *testing.T) {
