@@ -71,6 +71,8 @@ type cfMock struct {
 	deletedClientCertificates []string
 
 	mtlsCertificates         []map[string]any
+	listedMTLSCertificates   int
+	gotMTLSCertificates      []string
 	uploadedMTLSCertificates []map[string]any
 	deletedMTLSCertificates  []string
 	refuseMTLSDelete         bool
@@ -480,7 +482,25 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		writeResult(w, map[string]any{})
 	})
 
+	mux.HandleFunc("GET /accounts/acct/mtls_certificates/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		m.gotMTLSCertificates = append(m.gotMTLSCertificates, id)
+		for _, held := range m.mtlsCertificates {
+			if held["id"] == id {
+				writeResult(w, held)
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": false, "messages": []any{}, "result": nil,
+			"errors": []any{map[string]any{"code": 10000, "message": "not found"}},
+		})
+	})
+
 	mux.HandleFunc("GET /accounts/acct/mtls_certificates", func(w http.ResponseWriter, _ *http.Request) {
+		m.listedMTLSCertificates++
 		writeResult(w, append([]map[string]any{}, m.mtlsCertificates...))
 	})
 

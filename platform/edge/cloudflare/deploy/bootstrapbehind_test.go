@@ -250,8 +250,8 @@ func TestTheBootstrapRefusalNamesTheCallerAndWhatToRerun(t *testing.T) {
 	}
 }
 
-func refreshingCaller() bootstrapCaller {
-	return bootstrapCaller{worker: "the entry worker this deploy uploads", retry: "deploy again", refreshes: true}
+func refreshingCaller(certificateID string) bootstrapCaller {
+	return bootstrapCaller{worker: "the entry worker this deploy uploads", retry: "deploy again", refreshes: true, certificateID: certificateID}
 }
 
 func TestADeployThatRefreshesThroughTheQueueIsRefusedUntilTheQueueIsBootstrapped(t *testing.T) {
@@ -259,7 +259,7 @@ func TestADeployThatRefreshesThroughTheQueueIsRefusedUntilTheQueueIsBootstrapped
 	p := mutualTLSEdge(t, m)
 	installBootstrap(t, m, environment.TierProduction)
 
-	err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller())
+	err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller(""))
 
 	refused := refusedNotReady(t, err)
 	for _, want := range []string{`refresh queue "ocel-refresh" is missing`, `refresher worker "ocel-refresher" is missing`, "ocel bootstrap production"} {
@@ -275,14 +275,14 @@ func TestADeployThatRefreshesThroughTheQueueIsRefusedWhileItsRefresherIsBehind(t
 	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller()); err != nil {
+	if err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller("mtls-1")); err != nil {
 		t.Fatalf("refuseBootstrapBehind after a bootstrap = %v, want none", err)
 	}
 	prior := refresherBundle
 	refresherBundle = []byte("export default {rebuilt:1}")
 	t.Cleanup(func() { refresherBundle = prior })
 
-	err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller())
+	err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller("mtls-1"))
 
 	refused := refusedNotReady(t, err)
 	if !strings.Contains(refused.Message, `refresher worker "ocel-refresher" is behind this build`) {
@@ -298,7 +298,7 @@ func TestADeployThatRefreshesThroughTheQueueIsRefusedWithoutAConsumer(t *testing
 	}
 	m.queues[0]["consumers"] = []any{}
 
-	err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller())
+	err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller("mtls-1"))
 
 	refused := refusedNotReady(t, err)
 	if !strings.Contains(refused.Message, `has no consumer that drains it into "ocel-refresher"`) {
@@ -315,5 +315,22 @@ func TestADeployThatRefreshesElsewhereIsNotRefusedForTheRefreshQueue(t *testing.
 
 	if err != nil {
 		t.Errorf("refuseBootstrapBehind = %v, want a deploy that binds no refresh queue left alone", err)
+	}
+}
+
+func TestADeployThatRefreshesThroughTheQueueReadsItsOneClientCertificateAndListsNoneInTheAccount(t *testing.T) {
+	m := bootstrapMock(t, false)
+	p := mutualTLSEdge(t, m)
+	if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
+		t.Fatal(err)
+	}
+	m.listedMTLSCertificates, m.gotMTLSCertificates = 0, nil
+
+	if err := p.refuseBootstrapBehind(t.Context(), "acct", environment.TierProduction, refreshingCaller("mtls-1")); err != nil {
+		t.Fatalf("refuseBootstrapBehind = %v, want none", err)
+	}
+
+	if m.listedMTLSCertificates != 0 || !slices.Equal(m.gotMTLSCertificates, []string{"mtls-1"}) {
+		t.Errorf("listed the account's mTLS certificates %d times and got %v, want no listing and one get of the adopted certificate: a deploy's requests must not grow with the account", m.listedMTLSCertificates, m.gotMTLSCertificates)
 	}
 }
