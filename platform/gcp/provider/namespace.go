@@ -271,6 +271,8 @@ func (n Names) KeyRing() string { return ports.KeyRing(n.namespace) }
 const (
 	delayQueueSuffix = "-delays"
 	pushAccountName  = "push"
+
+	refreshAccountName = "refresh"
 )
 
 func (n Names) TaskDatabase(tier environment.Tier) string {
@@ -295,6 +297,19 @@ func (n Names) PushAccount(tier environment.Tier) string {
 
 func (n Names) PushAccountEmail(tier environment.Tier) string {
 	return n.PushAccount(tier) + "@" + n.project + accountDomain
+}
+
+func (n Names) RefreshAccount(tier environment.Tier) string {
+	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), refreshAccountName)
+}
+
+func (n Names) RefreshAccountEmail(tier environment.Tier) string {
+	return n.RefreshAccount(tier) + "@" + n.project + accountDomain
+}
+
+func (n Names) isHashedAccountID(id string) bool {
+	hash, found := strings.CutPrefix(id, string(n.namespace)+"-")
+	return found && len(hash) == accountHashLen && strings.Trim(hash, "0123456789abcdef") == ""
 }
 
 func (n Names) PassphraseSecret(tier environment.Tier) string {

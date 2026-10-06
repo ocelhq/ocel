@@ -180,11 +180,11 @@ gcloud services enable pubsub.googleapis.com cloudtasks.googleapis.com --project
 ocel bootstrap production --features tasks
 ```
 
-That is the tier's task database, its delay queue and its push account. None of it bills while
-idle. The bootstrap credential also needs `roles/cloudtasks.admin`. A deploy declaring a topic or
+That is the tier's task database, its delay queue, its push account, and the account Cloud Tasks
+signs a Next app's page refreshes as. None of it bills while idle. The bootstrap credential also needs `roles/cloudtasks.admin`. A deploy declaring a topic or
 task on a tier without it is refused, naming that command, and an ephemeral preview declaring one
 is refused. Dropping `tasks` from a bootstrap is refused while any project on the tier still
-declares a topic or task.
+declares a topic or task, or runs a Next app that refreshes its pages through it.
 
 What differs from `ocel dev`: lanes are recorded but not weighted, a batch consumer receives
 batches of one, a task's own `concurrency` is not enforced (its worker's is), and a batch trigger

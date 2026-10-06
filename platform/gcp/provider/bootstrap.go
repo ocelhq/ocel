@@ -579,6 +579,8 @@ func (b bootstrap) purposeOf(tier environment.Tier, name string) (accountPurpose
 		return b.syncPurpose(tier), nil
 	case b.clients.PushAccount(tier):
 		return b.pushPurpose(tier), nil
+	case b.clients.RefreshAccount(tier):
+		return b.refreshPurpose(tier), nil
 	case b.clients.RealtimeAccount(tier):
 		return b.realtimePurpose(tier), nil
 	}
