@@ -9,9 +9,11 @@ const maxBodyBytes = 16 * 1024;
 
 const staticDirVar = "OCEL_STATIC_DIR";
 
+const imageEndpointVar = "OCEL_IMAGE_ENDPOINT";
+
 export function newImageEndpointInvoke(next: Invoke, env: NodeJS.ProcessEnv): Invoke {
   const staticDir = env[staticDirVar];
-  if (!staticDir) return next;
+  if (!staticDir || env[imageEndpointVar] !== "1") return next;
   const optimize = newInProcessImageOrigin(
     newDiskObjectStore(staticDir, env.OCEL_ASSET_PREFIX ?? ""),
   );

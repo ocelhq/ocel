@@ -27,7 +27,11 @@ beforeAll(async () => {
   await mkdir(join(staticDir, "assets"), { recursive: true });
   await writeFile(join(staticDir, "assets", "logo.png"), await solid("png", 400, 200));
   await writeFile(join(staticDir, "image-config.json"), serialize(imageConfig()));
-  const env = { OCEL_STATIC_DIR: staticDir, OCEL_ASSET_PREFIX: assetPrefix };
+  const env = {
+    OCEL_STATIC_DIR: staticDir,
+    OCEL_ASSET_PREFIX: assetPrefix,
+    OCEL_IMAGE_ENDPOINT: "1",
+  };
 
   const next: Invoke = (req, res) => {
     handedToNext.push(`${req.method} ${req.url}`);
@@ -113,4 +117,12 @@ test("the GCP service installs no image path where it holds no assets", () => {
   const next: Invoke = () => {};
 
   expect(newImageEndpointInvoke(next, {})).toBe(next);
+});
+
+test("the GCP service installs no image path unless it is told an edge posts images to it", () => {
+  const next: Invoke = () => {};
+
+  expect(
+    newImageEndpointInvoke(next, { OCEL_STATIC_DIR: dir, OCEL_ASSET_PREFIX: assetPrefix }),
+  ).toBe(next);
 });
