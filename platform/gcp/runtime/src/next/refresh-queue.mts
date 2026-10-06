@@ -3,7 +3,7 @@ import type { Refresh, ScheduleRefresh } from "@framework/next-runtime/refresh";
 import { newMetadataToken } from "./metadata-token.mjs";
 import { refreshSignatureHeader, signRefreshTask } from "./refresh-signature.mjs";
 
-export interface TaskRefreshOptions {
+export interface RefreshQueueOptions {
   queue: string;
   account: string;
   url: string;
@@ -20,8 +20,8 @@ export interface TaskRefreshOptions {
 const attempts = 3;
 const attemptTimeoutMs = 2_000;
 const deadlineMs = 8_000;
-const queuedMemoryMs = 5 * 60_000;
-const queuedMemoryNames = 10_000;
+const queuedTaskTtlMs = 5 * 60_000;
+const maxQueuedTaskCount = 10_000;
 const dispatchDeadline = "60s";
 
 class Refused extends Error {}
@@ -39,7 +39,7 @@ function within<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, expiry]).finally(() => clearTimeout(timer));
 }
 
-export function newTaskRefresh(options: TaskRefreshOptions): ScheduleRefresh {
+export function newRefreshQueue(options: RefreshQueueOptions): ScheduleRefresh {
   const doFetch = options.fetch ?? globalThis.fetch;
   const now = options.now ?? Date.now;
   const random = options.random ?? Math.random;
@@ -131,8 +131,8 @@ export function newTaskRefresh(options: TaskRefreshOptions): ScheduleRefresh {
 
   function remember(id: string): void {
     queued.delete(id);
-    queued.set(id, now() + queuedMemoryMs);
-    if (queued.size > queuedMemoryNames) {
+    queued.set(id, now() + queuedTaskTtlMs);
+    if (queued.size > maxQueuedTaskCount) {
       const oldest = queued.keys().next().value;
       if (oldest !== undefined) queued.delete(oldest);
     }
