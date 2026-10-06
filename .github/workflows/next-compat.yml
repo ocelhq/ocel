@@ -11,15 +11,23 @@ on:
         description: "Record a new known-failure baseline instead of filtering against the committed one"
         default: false
         type: boolean
+      target:
+        description: "Where the harness deploys: aws-cloudflare, gcp-direct (production per test app), gcp-alb (previews behind the load balancer) or gcp-cloudflare (refused until Cloudflare runs code in front of gcp)"
+        default: aws-cloudflare
+        type: choice
+        options: [aws-cloudflare, gcp-direct, gcp-alb, gcp-cloudflare]
 
 concurrency:
-  group: real-aws
+  group: ${{ startsWith(inputs.target, 'gcp') && 'real-gcp' || 'real-aws' }}
   cancel-in-progress: false
 
 env:
-  OCEL_NAMESPACE: e2e-next-compat
+  OCEL_COMPAT_TARGET: ${{ inputs.target }}
+  OCEL_NAMESPACE: ${{ inputs.target == 'gcp-direct' && 'e2e-nc-direct' || inputs.target == 'gcp-alb' && 'e2e-nc-alb' || inputs.target == 'gcp-cloudflare' && 'e2e-nc-cf' || 'e2e-next-compat' }}
+  OCEL_GCP_PROJECT: ${{ vars.E2E_GCP_PROJECT }}
+  OCEL_GCP_REGION: ${{ vars.E2E_GCP_REGION }}
   BASELINE_MANIFEST: test/ocel-deploy-tests-manifest.json
-  ADAPTER_BASELINE: tests/next-compat/baseline-manifest.json
+  ADAPTER_BASELINE: ${{ startsWith(inputs.target, 'gcp') && format('tests/next-compat/baseline-manifest.{0}.json', inputs.target) || 'tests/next-compat/baseline-manifest.json' }}
   # FIXME: must match PinnedVersion in pkg/provider/pulumi/runtime.go —
   # nothing checks that it does, and a mismatch silently warms the wrong directory.
   PULUMI_VERSION: "3.146.0"
@@ -59,7 +67,24 @@ jobs:
         with:
           working-directory: adapter
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+
+      - name: Refuse a target the harness cannot run, or a filtered run with no baseline to filter against
+        working-directory: adapter
+        env:
+          RECORD: ${{ inputs.recordBaseline }}
+        run: |
+          set -euo pipefail
+          node --input-type=module -e 'import { readCompatTarget } from "./tests/next-compat/lib.mjs"; readCompatTarget();'
+          if [ "$RECORD" != true ] && [ ! -f "$ADAPTER_BASELINE" ]; then
+            echo "::error::no baseline for $OCEL_COMPAT_TARGET: dispatch with recordBaseline first and commit $ADAPTER_BASELINE"
+            exit 1
+          fi
+
       - uses: ./adapter/.github/actions/real-aws-session
+        if: ${{ !startsWith(inputs.target, 'gcp') }}
         with:
           node-version: ${{ steps.versions.outputs.node }}
           pnpm-version: ${{ steps.versions.outputs.pnpm }}
@@ -69,6 +94,18 @@ jobs:
           role-session-name: ocel-e2e-build-${{ github.run_id }}
           guard-script: adapter/tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - uses: ./adapter/.github/actions/real-gcp-session
+        if: ${{ startsWith(inputs.target, 'gcp') }}
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
+          project: ${{ vars.E2E_GCP_PROJECT }}
+          workload-identity-provider: ${{ vars.E2E_GCP_WIF_PROVIDER }}
+          service-account: ${{ vars.E2E_GCP_SERVICE_ACCOUNT }}
+          guard-script: adapter/tests/next-compat/guard-cloudflare.sh
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Setup Go
@@ -155,6 +192,7 @@ jobs:
           working-directory: adapter
 
       - uses: ./adapter/.github/actions/real-aws-session
+        if: ${{ !startsWith(inputs.target, 'gcp') }}
         with:
           node-version: ${{ steps.versions.outputs.node }}
           pnpm-version: ${{ steps.versions.outputs.pnpm }}
@@ -164,6 +202,18 @@ jobs:
           role-session-name: ocel-e2e-sweep-${{ github.run_id }}
           guard-script: adapter/tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - uses: ./adapter/.github/actions/real-gcp-session
+        if: ${{ startsWith(inputs.target, 'gcp') }}
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
+          project: ${{ vars.E2E_GCP_PROJECT }}
+          workload-identity-provider: ${{ vars.E2E_GCP_WIF_PROVIDER }}
+          service-account: ${{ vars.E2E_GCP_SERVICE_ACCOUNT }}
+          guard-script: adapter/tests/next-compat/guard-cloudflare.sh
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Reclaim every e2e project that is not this run's
@@ -208,6 +258,7 @@ jobs:
           working-directory: adapter
 
       - uses: ./adapter/.github/actions/real-aws-session
+        if: ${{ !startsWith(inputs.target, 'gcp') }}
         with:
           node-version: ${{ steps.versions.outputs.node }}
           pnpm-version: ${{ steps.versions.outputs.pnpm }}
@@ -217,6 +268,18 @@ jobs:
           role-session-name: ocel-e2e-smoke-${{ github.run_id }}
           guard-script: adapter/tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - uses: ./adapter/.github/actions/real-gcp-session
+        if: ${{ startsWith(inputs.target, 'gcp') }}
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
+          project: ${{ vars.E2E_GCP_PROJECT }}
+          workload-identity-provider: ${{ vars.E2E_GCP_WIF_PROVIDER }}
+          service-account: ${{ vars.E2E_GCP_SERVICE_ACCOUNT }}
+          guard-script: adapter/tests/next-compat/guard-cloudflare.sh
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Warm the Pulumi runtime the provider installs on first deploy
@@ -361,6 +424,7 @@ jobs:
           working-directory: adapter
 
       - uses: ./adapter/.github/actions/real-aws-session
+        if: ${{ !startsWith(inputs.target, 'gcp') }}
         with:
           node-version: ${{ steps.versions.outputs.node }}
           pnpm-version: ${{ steps.versions.outputs.pnpm }}
@@ -371,6 +435,18 @@ jobs:
           role-duration-seconds: "21600"
           guard-script: adapter/tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - uses: ./adapter/.github/actions/real-gcp-session
+        if: ${{ startsWith(inputs.target, 'gcp') }}
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
+          project: ${{ vars.E2E_GCP_PROJECT }}
+          workload-identity-provider: ${{ vars.E2E_GCP_WIF_PROVIDER }}
+          service-account: ${{ vars.E2E_GCP_SERVICE_ACCOUNT }}
+          guard-script: adapter/tests/next-compat/guard-cloudflare.sh
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Ensure Playwright browser
@@ -438,7 +514,7 @@ jobs:
   tiers:
     name: tier (${{ matrix.tier }})
     needs: [smoke, test]
-    if: ${{ !cancelled() && needs.smoke.result == 'success' }}
+    if: ${{ !cancelled() && needs.smoke.result == 'success' && !startsWith(inputs.target, 'gcp') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -576,8 +652,8 @@ jobs:
 
   destroy:
     name: destroy
-    needs: [smoke, test, tiers]
-    if: always()
+    needs: [build, smoke, test, tiers]
+    if: ${{ always() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -609,6 +685,7 @@ jobs:
           working-directory: adapter
 
       - uses: ./adapter/.github/actions/real-aws-session
+        if: ${{ !startsWith(inputs.target, 'gcp') }}
         with:
           node-version: ${{ steps.versions.outputs.node }}
           pnpm-version: ${{ steps.versions.outputs.pnpm }}
@@ -618,6 +695,18 @@ jobs:
           role-session-name: ocel-e2e-destroy-${{ github.run_id }}
           guard-script: adapter/tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - uses: ./adapter/.github/actions/real-gcp-session
+        if: ${{ startsWith(inputs.target, 'gcp') }}
+        with:
+          node-version: ${{ steps.versions.outputs.node }}
+          pnpm-version: ${{ steps.versions.outputs.pnpm }}
+          bun-version: ${{ steps.versions.outputs.bun }}
+          project: ${{ vars.E2E_GCP_PROJECT }}
+          workload-identity-provider: ${{ vars.E2E_GCP_WIF_PROVIDER }}
+          service-account: ${{ vars.E2E_GCP_SERVICE_ACCOUNT }}
+          guard-script: adapter/tests/next-compat/guard-cloudflare.sh
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Destroy the project this run deployed into
@@ -669,10 +758,12 @@ jobs:
       - name: Merge every group's fragment
         run: |
           set -euo pipefail
-          node adapter/tests/next-compat/merge-baseline.mjs merge baseline-manifest.json fragments/*.json
+          file=$(basename "$ADAPTER_BASELINE")
+          node adapter/tests/next-compat/merge-baseline.mjs merge "$file" fragments/*.json
+          echo "BASELINE_FILE=$file" >> "$GITHUB_ENV"
 
       - name: Upload the merged baseline for review
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: baseline-manifest
-          path: baseline-manifest.json
+          name: baseline-manifest-${{ inputs.target }}
+          path: ${{ env.BASELINE_FILE }}
