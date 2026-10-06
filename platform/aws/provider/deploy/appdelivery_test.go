@@ -9,6 +9,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
@@ -55,7 +56,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if result.Envelope != "an-envelope" {
 		t.Errorf("Envelope = %q, want the one sealed beside the bundle", result.Envelope)
 	}
-	if result.ISRWriteSecret != isrWriteSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix) {
+	if result.ISRWriteSecret != cloudflare.DeriveISRWriteSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix) {
 		t.Errorf("ISRWriteSecret = %q, want the secret the revalidation writer demands", result.ISRWriteSecret)
 	}
 }
@@ -95,7 +96,7 @@ func TestAReleaseNamesEverySecretItsProgramsCarrySoTheEngineCanMaskThem(t *testi
 	cfg.ISRWriterSeed = "a-seed"
 
 	got := releasing(t, cfg).Secrets(spec)
-	for _, want := range []string{"origin-now", "origin-before", "a-seed", isrWriteSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix)} {
+	for _, want := range []string{"origin-now", "origin-before", "a-seed", cloudflare.DeriveISRWriteSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix)} {
 		if !slices.Contains(got, want) {
 			t.Errorf("the release names %d secrets and not %q, want every secret its programs carry", len(got), want)
 		}

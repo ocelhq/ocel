@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 type appWork struct {
@@ -283,7 +284,7 @@ func (r *release) isrCache(spec provider.StackSpec) *isrConfig {
 	if isrEntriesAdopted(r.cfg.objectStores()) {
 		cache.CacheStoreBucket = r.cfg.CacheStoreBucket
 		cache.WriterURL = r.cfg.ISRWriterEndpoint + "/" + isr.Prefix + "/entry"
-		cache.WriterSecret = isrWriteSecret(r.cfg.ISRWriterSeed, isr.Prefix)
+		cache.WriterSecret = cloudflare.DeriveISRWriteSecret(r.cfg.ISRWriterSeed, isr.Prefix)
 	}
 	return cache
 }
