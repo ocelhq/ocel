@@ -224,3 +224,21 @@ func TestContainersAreOrderedByTheAppTheyServe(t *testing.T) {
 		t.Errorf("containers ordered %v, want them ordered by app so the same project builds the same manifest twice", order)
 	}
 }
+
+func TestAContainerNextAppIsSentAsNext(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := assembleOn("container", "proj-1", project.Domains{}, []app{
+		{Name: "web", Framework: buildoutput.FrameworkNext, Compute: "container", Image: "ocel/web@" + fakeDigest},
+	}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+
+	if got := manifest.GetApps()[0].GetFramework().GetName(); got != "next" {
+		t.Errorf("framework = %q, want next", got)
+	}
+	if container := containerOf(t, manifest, "web"); container.GetImage() != "ocel/web@"+fakeDigest {
+		t.Errorf("container image = %q, want the container artifact", container.GetImage())
+	}
+}

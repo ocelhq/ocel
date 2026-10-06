@@ -1287,6 +1287,9 @@ func (r *deployRun) functionSpecs(entry provider.AppEntry) []provider.FunctionSp
 func frameworksOf(manifest *contractv1.Manifest) []string {
 	var frameworks []string
 	for _, app := range manifest.GetApps() {
+		if app.GetContainer() != nil {
+			continue
+		}
 		if name := app.GetFramework().GetName(); name != "" && !slices.Contains(frameworks, name) {
 			frameworks = append(frameworks, name)
 		}
