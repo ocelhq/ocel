@@ -18,6 +18,7 @@ const unknownKeyRefetchIntervalMs = 60_000;
 const issuedAtSkewMs = 60_000;
 const attempts = 3;
 const attemptTimeoutMs = 2_500;
+const failureMemoryMs = 10_000;
 const issuers = new Set(["https://accounts.google.com", "accounts.google.com"]);
 
 interface KeySet {
@@ -102,6 +103,7 @@ export function newGoogleIdTokenCheck(options: IdTokenOptions): IdTokenCheck {
   let cached: KeySet | undefined;
   let inflight: Promise<KeySet> | undefined;
   let lastUnknownKidRefetch: number | undefined;
+  let lastFailure: { error: Error; until: number } | undefined;
 
   async function attempt(): Promise<{ retry: boolean; failure: string } | KeySet> {
     let res: Response;
@@ -130,16 +132,20 @@ export function newGoogleIdTokenCheck(options: IdTokenOptions): IdTokenCheck {
       const result = await attempt();
       if ("keys" in result) {
         cached = result;
+        lastFailure = undefined;
         return result;
       }
       failure = result.failure;
       if (!result.retry || n === attempts) break;
       await sleep(random() * Math.min(1_000, 100 * 2 ** (n - 1)));
     }
-    throw new Error(`ocel: could not read Google's token signing keys: ${failure}`);
+    const error = new Error(`ocel: could not read Google's token signing keys: ${failure}`);
+    lastFailure = { error, until: now() + failureMemoryMs };
+    throw error;
   }
 
   function loadKeys(): Promise<KeySet> {
+    if (lastFailure && now() < lastFailure.until) return Promise.reject(lastFailure.error);
     inflight ??= fetchKeys().finally(() => {
       inflight = undefined;
     });
