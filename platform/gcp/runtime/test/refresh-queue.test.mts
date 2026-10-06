@@ -108,6 +108,17 @@ test("the task posts the refresh to the service's refresh url signed as the tier
   expect(isRefreshTaskSignedBy("s1", payload, signature)).toBe(true);
 });
 
+test("a revision with a tag url is sent its refresh there, with the service url as the token's audience", async () => {
+  const r = rig(ok);
+  const target = "https://r0000000a---web-abc.a.run.app/_ocel/refresh";
+
+  await schedule(r, { target })(refresh);
+
+  const task = bodyOf(r.tasks[0]!);
+  expect(task.httpRequest.url).toBe(target);
+  expect(task.httpRequest.oidcToken.audience).toBe(url);
+});
+
 test("a revision with another secret names the same refresh differently", async () => {
   const r = rig(ok);
 

@@ -147,7 +147,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			served = fillNextServingDefaults(served)
 			var addressed *nextRefresh
 			if refresh != nil {
-				addressed = refresh.addressedTo(service)
+				addressed = refresh.addressedTo(service, served.tag)
 			}
 			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, nextCache{
 				bucket:      names.Bucket(spec.Ref.Tier),

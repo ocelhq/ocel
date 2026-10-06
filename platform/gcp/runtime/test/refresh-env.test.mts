@@ -22,6 +22,17 @@ test("a service told every refresh setting reads them", () => {
   });
 });
 
+test("a refresh target is read beside the refresh url", () => {
+  const target = "https://r0000000a---web-1.a.run.app/_ocel/refresh";
+
+  expect(readRefreshEnv({ ...named, OCEL_REFRESH_TARGET: target }, "s1")?.target).toBe(target);
+});
+
+test("no refresh target leaves the target unset", () => {
+  expect(readRefreshEnv(named, "s1")?.target).toBeUndefined();
+  expect(readRefreshEnv({ ...named, OCEL_REFRESH_TARGET: "" }, "s1")?.target).toBeUndefined();
+});
+
 test.each(["OCEL_REFRESH_QUEUE", "OCEL_REFRESH_ACCOUNT", "OCEL_ISR_PREFIX"])(
   "a service told a refresh url but not %s refuses to start",
   (name) => {

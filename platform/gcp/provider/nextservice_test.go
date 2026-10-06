@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"path"
 	"strconv"
+	"strings"
 	"testing"
 
 	run "google.golang.org/api/run/v2"
@@ -320,7 +321,7 @@ func TestAnAppWithoutISRIsToldNoTagsDatabase(t *testing.T) {
 	}
 }
 
-var refreshEnvVars = []string{refreshURLEnvVar, refreshQueueEnvVar, refreshAccountEnvVar, refreshSecretEnvVar, tasksEndpointEnvVar}
+var refreshEnvVars = []string{refreshURLEnvVar, refreshQueueEnvVar, refreshAccountEnvVar, refreshSecretEnvVar, tasksEndpointEnvVar, refreshTargetEnvVar}
 
 func TestANextServiceBilledPerRequestIsToldTheQueueItsRefreshesWaitInAndTheAccountTheyAreSignedAs(t *testing.T) {
 	env := envOf(releasedNext(t, routedNextSpec()))
@@ -436,5 +437,54 @@ func TestANextServiceOnContainerComputeIsToldNoRefreshQueue(t *testing.T) {
 func TestANextServiceBilledPerRequestMakesTheRefreshURLOfItsServiceProjectNumberAndRegion(t *testing.T) {
 	if got, want := refreshURLOf("ocel-shop-prod-web", 123456789, "europe-west1"), "https://ocel-shop-prod-web-123456789.europe-west1.run.app/_ocel/refresh"; got != want {
 		t.Errorf("refreshURLOf() = %q, want %q", got, want)
+	}
+}
+
+func TestANextServiceBehindTheLoadBalancerIsToldToSendRefreshesToItsRevisionTag(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	spec := routedNextSpec()
+	spec.Ref.Name = naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewRelease("d1", "f1"))
+	spec = behindTheLoadBalancer(t, p, spec)
+	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+	env := envOf(server.created[0].Template.Containers[0])
+
+	service := path.Base(server.service.Name)
+	want := "https://" + spec.Ref.Name.Release.String() + "---" + service + "-123456789.europe-west1.run.app/_ocel/refresh"
+	if got := env[refreshTargetEnvVar]; got != want {
+		t.Errorf("the Next service reads %s=%q, want %q", refreshTargetEnvVar, got, want)
+	}
+	if got, want := env[refreshURLEnvVar], "https://"+service+"-123456789.europe-west1.run.app/_ocel/refresh"; got != want {
+		t.Errorf("the Next service reads %s=%q, want the untagged service url %q: the token's audience stays the service url", refreshURLEnvVar, got, want)
+	}
+}
+
+func TestANextServiceWithNoEdgeInFrontIsToldNoRefreshTarget(t *testing.T) {
+	env := envOf(releasedNext(t, routedNextSpec()))
+
+	if got, told := env[refreshTargetEnvVar]; told {
+		t.Errorf("a Next service with no edge in front reads %s=%q", refreshTargetEnvVar, got)
+	}
+	if env[refreshURLEnvVar] == "" {
+		t.Errorf("the Next service reads no %s", refreshURLEnvVar)
+	}
+}
+
+func TestARefreshTagURLPutsTheTagBeforeTheServiceProjectNumberAndRegion(t *testing.T) {
+	if got, want := refreshTagURLOf("r0000000a", "ocel-shop-prod-web", 123456789, "europe-west1"), "https://r0000000a---ocel-shop-prod-web-123456789.europe-west1.run.app/_ocel/refresh"; got != want {
+		t.Errorf("refreshTagURLOf() = %q, want %q", got, want)
+	}
+}
+
+func TestARevisionTagTooLongForTheRunAppLabelGivesNoRefreshTagURL(t *testing.T) {
+	const tag = "r0000000a"
+	fitting := strings.Repeat("s", 63-len(tag+"---"+"-123456789"))
+	if got := refreshTagURLOf(tag, fitting, 123456789, "europe-west1"); got == "" {
+		t.Errorf("refreshTagURLOf() of a 63-character label = %q, want a url", got)
+	}
+	if got := refreshTagURLOf(tag, fitting+"s", 123456789, "europe-west1"); got != "" {
+		t.Errorf("refreshTagURLOf() of a 64-character label = %q, want none", got)
 	}
 }
