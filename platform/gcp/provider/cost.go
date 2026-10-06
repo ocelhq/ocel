@@ -90,12 +90,16 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 
 	for _, app := range req.Deploy.Apps {
 		scope := tree.Scope(environment, pricing.ScopeApp, app.App)
+		memory := revisionMemory
+		if app.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext {
+			memory = strconv.Itoa(nextMemoryMB) + "Mi"
+		}
 		if app.Compute() == provider.ComputeContainer {
 			service, err := names.Service(req.Deploy.Slug, req.Deploy.Env, app.App, app.App)
 			if err != nil {
 				return nil, err
 			}
-			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(false, app.Instances.Min, ingress))
+			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(false, app.Instances.Min, memory, ingress))
 		} else {
 			specs := req.Functions[app.App]
 			if len(specs) == 0 {
@@ -106,13 +110,13 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 				if err != nil {
 					return nil, err
 				}
-				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(!gated || app.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext, 0, ingress))
+				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(!gated || app.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext, 0, memory, ingress))
 			}
 		}
 		tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
 		for _, worker := range app.Workers {
 			service := names.WorkerService(req.Deploy.Slug, req.Deploy.Env, app.App, worker.Name)
-			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(true, 0, ingressInternal))
+			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(true, 0, revisionMemory, ingressInternal))
 		}
 	}
 	if err := shapeStores(tree, names, req, region, shared, environment); err != nil {
@@ -248,7 +252,7 @@ func itemProperties(item item, region string) map[string]any {
 	return map[string]any{}
 }
 
-func serviceProperties(billsPerRequest bool, minInstances int, ingress string) map[string]any {
+func serviceProperties(billsPerRequest bool, minInstances int, memory, ingress string) map[string]any {
 	return map[string]any{
 		"ingress": ingress,
 		"template": map[string]any{
@@ -256,7 +260,7 @@ func serviceProperties(billsPerRequest bool, minInstances int, ingress string) m
 			"containers": []any{map[string]any{
 				"resources": map[string]any{
 					"cpu_idle": billsPerRequest,
-					"limits":   map[string]any{"cpu": revisionCPU, "memory": revisionMemory},
+					"limits":   map[string]any{"cpu": revisionCPU, "memory": memory},
 				},
 			}},
 		},
