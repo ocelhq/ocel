@@ -61,6 +61,8 @@ const OCEL_PATHS = [
 const STAMP = "/etc/ocel/production/stamp.json";
 const BOX_READ_SECONDS = 30;
 const RESOURCE_LOG_LINES = 200;
+
+const BOX_DIAGNOSIS_SECONDS = 90;
 const BOX_LOG = "box.log";
 const ENV_FILES = "sudo find /var/lib/ocel -maxdepth 2 -type f -name '*.env'";
 const DECOY = "ocel-journey-decoy";
@@ -148,7 +150,14 @@ export function projectLeftovers(slug: string): string {
   ].join("; ");
 }
 
+export const maskedAuthorization = `sed -E 's/(Authorization: ).*/\\1${REDACTED}/'`;
+
 export function boxDiagnosis(slug: string): string {
+  const script = Buffer.from(boxDiagnosisScript(slug)).toString("base64");
+  return `echo ${script} | base64 -d | timeout -k 5 ${BOX_DIAGNOSIS_SECONDS} sh`;
+}
+
+export function boxDiagnosisScript(slug: string): string {
   const docker = `sudo timeout ${BOX_READ_SECONDS} docker`;
   const resources = `--filter label=ocel.project=${slug} --filter label=ocel.resource --format '{{.Names}}'`;
   return [
@@ -160,7 +169,7 @@ export function boxDiagnosis(slug: string): string {
     `${docker} logs --timestamps --tail ${RESOURCE_LOG_LINES} "$name" 2>&1`,
     "done",
     "echo '## processes'",
-    "ps -eo pid,ppid,etime,stat,args --forest",
+    `ps -eo pid,ppid,etime,stat,args --forest | ${maskedAuthorization}`,
     "true",
   ].join("\n");
 }
