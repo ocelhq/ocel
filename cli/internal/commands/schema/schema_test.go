@@ -3,6 +3,7 @@ package schema_test
 import (
 	"bytes"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -11,12 +12,15 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/commands/schema"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 )
 
 func newRootWith(subcommands ...*cobra.Command) *cobra.Command {
 	root := &cobra.Command{Use: "ocel", SilenceUsage: true, SilenceErrors: true}
 	root.AddCommand(subcommands...)
-	root.AddCommand(schema.NewCommand(commands.Invocation{}))
+	root.AddCommand(schema.NewCommand(commands.Invocation{
+		Presentation: func(io.Writer) terminal.Presentation { return terminal.Presentation{} },
+	}))
 	return root
 }
 
