@@ -646,6 +646,9 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 			for _, host := range r.configured {
 				if r.state.Ready(host.Hostname, r.front.Kind(), r.readConfiguredRouter(host.App)) {
 					hostState := r.state.Host(host.Hostname)
+					if err := attaching.releasePreviousRouter(ctx, host.Hostname, &hostState, r.readConfiguredRouter(host.App), progress); err != nil {
+						return err
+					}
 					if _, err := attaching.refreshOriginClaim(ctx, host, &hostState, progress); err != nil {
 						return err
 					}

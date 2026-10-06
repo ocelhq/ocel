@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -394,5 +395,140 @@ func TestAServedHostnameWhoseRenewalBindIsRefusedRecordsTheSuccessorTheRouterHol
 	}
 	if disclaimed := relay.Disclaimed(); len(disclaimed) != 0 {
 		t.Errorf("the router gave back %v, want nothing: the hostname is still served", disclaimed)
+	}
+}
+
+func movedOffTheOriginBackedRouter(t *testing.T) (client contractv1connect.ProviderServiceClient, vendor *fake.Provider, relay *fake.Edge, req *contractv1.DeployRequest) {
+	t.Helper()
+	builtProject(t)
+	client, vendor = deployServed(t)
+	relay = vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	relay.IssuesOriginCertificates()
+	req = deployRequest()
+	req.Edge = writtenBy("shop.example")
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	host := readStack(t, vendor, environment.TierProduction, "shop").Host("shop.example")
+	if host.Router != fake.RouterRelay || host.OriginCertificateID != "origin-certificate-1" {
+		t.Fatalf("shop.example is recorded on %q with origin certificate %q, want the origin-backed %q and origin-certificate-1", host.Router, host.OriginCertificateID, fake.RouterRelay)
+	}
+	vendor.Edges().(*fake.Edges).PairAppsWithStoreRouter(fake.KindRelay)
+	return client, vendor, relay, req
+}
+
+func TestAHostnameMovedOffAnOriginBackedRouterIsDisclaimedThere(t *testing.T) {
+	client, vendor, relay, req := movedOffTheOriginBackedRouter(t)
+
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	if disclaimed := relay.Disclaimed(); !slices.Equal(disclaimed, []string{"shop.example"}) {
+		t.Errorf("the router gave back %v, want shop.example: the hostname answers through %s now, and the router it left would hold its claim forever", disclaimed, fake.RouterRelayStore)
+	}
+	host := readStack(t, vendor, environment.TierProduction, "shop").Host("shop.example")
+	if host.Router != fake.RouterRelayStore || host.PreviousRouter != "" {
+		t.Errorf("shop.example records router %q and previous router %q, want %q and none", host.Router, host.PreviousRouter, fake.RouterRelayStore)
+	}
+}
+
+func TestAHostnameMovedOffAnOriginBackedRouterRevokesItsOriginCertificate(t *testing.T) {
+	client, vendor, relay, req := movedOffTheOriginBackedRouter(t)
+
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	if revoked := relay.RevokedOriginCertificates(); !slices.Equal(revoked, []string{"origin-certificate-1"}) {
+		t.Errorf("the edge revoked %v, want origin-certificate-1: nothing answers with it once the claim is given back", revoked)
+	}
+	host := readStack(t, vendor, environment.TierProduction, "shop").Host("shop.example")
+	if host.OriginCertificateID != "" || !host.OriginCertificateExpiresAt.IsZero() || len(host.ClientCADigests) != 0 {
+		t.Errorf("shop.example still records origin certificate %q expiring %v and client CAs %v, want none", host.OriginCertificateID, host.OriginCertificateExpiresAt, host.ClientCADigests)
+	}
+}
+
+func TestAFailedDisclaimAfterAMoveLeavesTheHostnameServingAndSaysSo(t *testing.T) {
+	client, vendor, relay, req := movedOffTheOriginBackedRouter(t)
+	relay.RefusesDisclaims(errors.New("the load balancer is busy"))
+
+	result, events := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the deploy to succeed: the hostname already answers through the new router", result.GetError())
+	}
+
+	warnings := hostnameSpanOf(t, events).warnings
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "shop.example") || !strings.Contains(warnings[0], string(fake.RouterRelay)) {
+		t.Errorf("the span warned %q, want one warning naming shop.example and %s", warnings, fake.RouterRelay)
+	}
+	if revoked := relay.RevokedOriginCertificates(); len(revoked) != 0 {
+		t.Errorf("the edge revoked %v, want nothing: the old router still holds the claim that certificate answers", revoked)
+	}
+	host := readStack(t, vendor, environment.TierProduction, "shop").Host("shop.example")
+	if host.Router != fake.RouterRelayStore || host.PreviousRouter != fake.RouterRelay {
+		t.Errorf("shop.example records router %q and previous router %q, want %q and %q", host.Router, host.PreviousRouter, fake.RouterRelayStore, fake.RouterRelay)
+	}
+}
+
+func TestAClaimLeftOnThePreviousRouterIsGivenBackByTheNextDeploy(t *testing.T) {
+	client, vendor, relay, req := movedOffTheOriginBackedRouter(t)
+	relay.RefusesDisclaims(errors.New("the load balancer is busy"))
+	deploy(t, client, req)
+
+	relay.RefusesDisclaims(nil)
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	if disclaimed := relay.Disclaimed(); !slices.Equal(disclaimed, []string{"shop.example"}) {
+		t.Errorf("the router gave back %v, want shop.example once the refusal lifted", disclaimed)
+	}
+	if revoked := relay.RevokedOriginCertificates(); !slices.Equal(revoked, []string{"origin-certificate-1"}) {
+		t.Errorf("the edge revoked %v, want origin-certificate-1 once the claim was given back", revoked)
+	}
+	if host := readStack(t, vendor, environment.TierProduction, "shop").Host("shop.example"); host.PreviousRouter != "" || host.OriginCertificateID != "" {
+		t.Errorf("shop.example records previous router %q and origin certificate %q, want neither", host.PreviousRouter, host.OriginCertificateID)
+	}
+}
+
+func TestRemovingAHostnameGivesBackTheClaimItsPreviousRouterStillHolds(t *testing.T) {
+	client, _, relay, req := movedOffTheOriginBackedRouter(t)
+	relay.RefusesDisclaims(errors.New("the load balancer is busy"))
+	deploy(t, client, req)
+	relay.RefusesDisclaims(nil)
+
+	remove, err := client.RemoveHostname(context.Background(), &contractv1.HostnameRequest{Slug: "shop", Host: "shop.example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(remove); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveHostname() = %q, %v", result.GetError(), err)
+	}
+
+	if disclaimed := relay.Disclaimed(); !slices.Equal(disclaimed, []string{"shop.example"}) {
+		t.Errorf("the router gave back %v, want shop.example: removing the hostname must not leave the claim on the router it left", disclaimed)
+	}
+}
+
+func TestAHostnameWhoseRouterDidNotChangeIsNotDisclaimed(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	relay.ProxiesRecords()
+	relay.IssuesOriginCertificates()
+	req := deployRequest()
+	deploy(t, client, req)
+
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	if disclaimed := relay.Disclaimed(); len(disclaimed) != 0 {
+		t.Errorf("the router gave back %v, want nothing: the hostname still answers through it", disclaimed)
+	}
+	if revoked := relay.RevokedOriginCertificates(); len(revoked) != 0 {
+		t.Errorf("the edge revoked %v, want nothing", revoked)
 	}
 }

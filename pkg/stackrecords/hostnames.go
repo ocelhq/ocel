@@ -40,15 +40,16 @@ func (s *EdgeState) Pair(kind router.Kind, state router.StackState, apps []strin
 }
 
 type HostnameState struct {
-	Edge        edge.Kind              `json:"edge,omitempty"`
-	Router      router.Kind            `json:"router,omitempty"`
-	App         string                 `json:"app,omitempty"`
-	Pointer     string                 `json:"pointer,omitempty"`
-	Certificate provider.Certificate   `json:"certificate,omitzero"`
-	Superseded  []provider.Certificate `json:"superseded,omitempty"`
-	Written     []edge.Record          `json:"written,omitempty"`
-	Manual      []edge.Record          `json:"owed,omitempty"`
-	Probe       ServeProbe             `json:"probe,omitzero"`
+	Edge           edge.Kind              `json:"edge,omitempty"`
+	Router         router.Kind            `json:"router,omitempty"`
+	PreviousRouter router.Kind            `json:"previousRouter,omitempty"`
+	App            string                 `json:"app,omitempty"`
+	Pointer        string                 `json:"pointer,omitempty"`
+	Certificate    provider.Certificate   `json:"certificate,omitzero"`
+	Superseded     []provider.Certificate `json:"superseded,omitempty"`
+	Written        []edge.Record          `json:"written,omitempty"`
+	Manual         []edge.Record          `json:"owed,omitempty"`
+	Probe          ServeProbe             `json:"probe,omitzero"`
 
 	ClientCADigests            []string  `json:"clientCADigests,omitempty"`
 	OriginCertificateID        string    `json:"originCertificateId,omitempty"`

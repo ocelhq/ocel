@@ -20,6 +20,7 @@ import (
 const moveAttempts = 8
 
 type Routers struct {
+	mu     sync.Mutex
 	edges  *Edges
 	planes map[router.Kind]*DataPlane
 }
@@ -36,6 +37,9 @@ func (e *Edges) pairings() []provider.Pairing {
 	kinds := e.kinds()
 	pairings := make([]provider.Pairing, 0, len(kinds))
 	for _, kind := range kinds {
+		if front := e.Edge(kind); front.pairsStoreRouter() {
+			pairings = append(pairings, provider.Pairing{Edge: kind, Router: front.storeRouter(), Computes: provider.Computes()})
+		}
 		pairings = append(pairings, provider.Pairing{Edge: kind, Router: e.Edge(kind).routedBy, Computes: provider.Computes()})
 	}
 	return pairings
@@ -44,17 +48,25 @@ func (e *Edges) pairings() []provider.Pairing {
 func (r *Routers) Open(kind router.Kind) (router.Router, error) {
 	var shared *Edge
 	for _, front := range r.edges.kinds() {
-		if paired := r.edges.Edge(front); paired.routedBy == kind {
+		paired := r.edges.Edge(front)
+		if paired.routedBy == kind || (paired.pairsStoreRouter() && paired.storeRouter() == kind) {
 			shared = paired
 		}
 	}
 	if shared == nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid, "the reference provider has nothing named %q", kind)
 	}
-	return Router{edge: shared, plane: r.planes[kind]}, nil
+	return Router{edge: shared, plane: r.DataPlane(kind), kind: kind}, nil
 }
 
-func (r *Routers) DataPlane(kind router.Kind) *DataPlane { return r.planes[kind] }
+func (r *Routers) DataPlane(kind router.Kind) *DataPlane {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.planes[kind] == nil {
+		r.planes[kind] = &DataPlane{served: map[projectPointer]map[string]string{}, writes: map[projectPointer]int{}, hosts: map[string]projectPointer{}}
+	}
+	return r.planes[kind]
+}
 
 type DataPlane struct {
 	mu         sync.Mutex
@@ -200,9 +212,10 @@ func (d *DataPlane) remove(at projectPointer, hosts []edge.PreviewHost) error {
 type Router struct {
 	edge  *Edge
 	plane *DataPlane
+	kind  router.Kind
 }
 
-func (r Router) Kind() router.Kind { return r.edge.routedBy }
+func (r Router) Kind() router.Kind { return r.kind }
 
 func (r Router) Facts() router.Facts {
 	facts := r.edge.routerFacts()
@@ -213,6 +226,9 @@ func (r Router) Facts() router.Facts {
 }
 
 func (r Router) Hooks() router.Hooks {
+	if r.kind != r.edge.routedBy {
+		return router.Hooks{}
+	}
 	return router.Hooks{Origin: &router.OriginHooks{
 		PlanProjectRemoval:      r.planProjectRemoval,
 		ClaimPreviewEntry:       r.claimPreviewEntry,
@@ -313,8 +329,7 @@ func (s *RouterStack) Claim(_ context.Context, claim router.Claim) (edge.Origin,
 }
 
 func (s *RouterStack) Disclaim(_ context.Context, hostname string) error {
-	s.stack.front.recordDisclaim(hostname)
-	return nil
+	return s.stack.front.recordDisclaim(hostname)
 }
 
 func (s *RouterStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
