@@ -663,7 +663,7 @@ describe("tag reads", () => {
     expect(((await res.json()) as TagSnapshot).records.posts?.expired).toBe(123);
   });
 
-  it("reads a weak etag and an etag list as If-None-Match forms", async () => {
+  it("answers not modified to a weak etag, an etag list holding the current etag, and a star", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
     await seedGenesis(prefix, 10);
@@ -675,11 +675,14 @@ describe("tag reads", () => {
     const weak = await readReq(prefix, "write-secret", { "if-none-match": `W/${etag}` });
     expect(weak.status).toBe(304);
 
-    for (const condition of ["*", `"a", "b"`]) {
+    for (const condition of ["*", `"a", ${etag}`, `"a", W/${etag} , "b"`]) {
       const res = await readReq(prefix, "write-secret", { "if-none-match": condition });
-      expect(res.status).toBe(200);
-      expect(((await res.json()) as TagSnapshot).records.posts?.expired).toBe(123);
+      expect(res.status).toBe(304);
     }
+
+    const other = await readReq(prefix, "write-secret", { "if-none-match": `"a", "b"` });
+    expect(other.status).toBe(200);
+    expect(((await other.json()) as TagSnapshot).records.posts?.expired).toBe(123);
   });
 
   it("answers a miss before any tag was raised", async () => {
