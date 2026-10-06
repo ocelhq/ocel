@@ -51,6 +51,7 @@ type Routes interface {
 	Unroute(ctx context.Context, urlMap, hostname string) error
 
 	InvalidateTags(ctx context.Context, urlMap string, tags []string) error
+	InvalidateHostnames(ctx context.Context, urlMap string, hostnames []string) error
 }
 
 type Entries interface {

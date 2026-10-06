@@ -36,9 +36,10 @@ type world struct {
 	breaks   map[string]error
 	pinning  error
 
-	invalidatedTags [][]string
-	invalidating    error
-	onUp            func()
+	invalidatedTags  [][]string
+	invalidatedHosts []string
+	invalidating     error
+	onUp             func()
 }
 
 func newWorld() *world {

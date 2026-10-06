@@ -35,12 +35,28 @@ func releaseTagged(record router.DeploymentRecord) bool {
 
 func servedKey(pointer, app string) string { return pointer + "/" + app }
 
+func (s *stack) servedHostnames(move router.PointerMove, app string, record router.DeploymentRecord) []string {
+	var hostnames []string
+	for hostname, host := range s.recorded.Hosts {
+		if _, pinned := record.Revisions[host.Service]; host.App == app && host.Service != "" && pinned {
+			hostnames = append(hostnames, hostname)
+		}
+	}
+	for _, alias := range move.Hosts {
+		if alias.App == app {
+			hostnames = append(hostnames, alias.Hostname)
+		}
+	}
+	slices.Sort(hostnames)
+	return slices.Compact(hostnames)
+}
+
 func (s *stack) purgeReplaced(ctx context.Context, move router.PointerMove, progress progress.Log) {
 	if _, _, deployment := router.ParseDeploymentPointer(move.Pointer); deployment {
 		return
 	}
 	pointer := router.ResolvePointer(move.Pointer)
-	var tags []string
+	var tags, hostnames []string
 	for _, app := range slices.Sorted(maps.Keys(move.Records)) {
 		record := move.Records[app]
 		release := releaseTag(record)
@@ -49,6 +65,10 @@ func (s *stack) purgeReplaced(ctx context.Context, move router.PointerMove, prog
 		prior, known := s.recorded.Served[key]
 		if known && prior.Tagged && prior.Release != now.Release {
 			tags = append(tags, prior.Release)
+		}
+		sameRelease := known && prior.Release == now.Release && now.Release != ""
+		if !sameRelease && (!known || !prior.Tagged || !now.Tagged) {
+			hostnames = append(hostnames, s.servedHostnames(move, app, record)...)
 		}
 		switch {
 		case release == "":
@@ -61,7 +81,16 @@ func (s *stack) purgeReplaced(ctx context.Context, move router.PointerMove, prog
 	}
 	s.keep()
 	urlMap := s.recorded.LoadBalancer.URLMap
-	if len(tags) == 0 || urlMap == "" || progress == nil {
+	if urlMap == "" || progress == nil {
+		return
+	}
+	s.purgeTags(ctx, urlMap, tags, progress)
+	slices.Sort(hostnames)
+	s.purgeHostnames(ctx, urlMap, slices.Compact(hostnames), progress)
+}
+
+func (s *stack) purgeTags(ctx context.Context, urlMap string, tags []string, progress progress.Log) {
+	if len(tags) == 0 {
 		return
 	}
 	cleared := strings.Join(tags, ", ")
@@ -72,6 +101,23 @@ func (s *stack) purgeReplaced(ctx context.Context, move router.PointerMove, prog
 		return
 	}
 	progress.Say("Cleared release " + cleared + " from Cloud CDN")
+}
+
+func (s *stack) purgeHostnames(ctx context.Context, urlMap string, hostnames []string, progress progress.Log) {
+	if len(hostnames) == 0 {
+		return
+	}
+	err := s.e.deps.Routes.InvalidateHostnames(ctx, urlMap, hostnames)
+	if err == nil {
+		progress.Say("Cleared " + strings.Join(hostnames, ", ") + " from Cloud CDN")
+		return
+	}
+	commands := make([]string, len(hostnames))
+	for i, hostname := range hostnames {
+		commands[i] = fmt.Sprintf("gcloud compute url-maps invalidate-cdn-cache %s --host %s --path \"/*\" --async", urlMap, hostname)
+	}
+	progress.Warn(fmt.Sprintf("Could not clear %s from Cloud CDN, so they serve the replaced release's cached responses until they expire: %v. Clear them with: %s",
+		strings.Join(hostnames, ", "), err, strings.Join(commands, "; ")))
 }
 
 func (s *stack) forgetPointer(pointer string) {
