@@ -53,22 +53,22 @@ func WrapContainer(base v1.Image, runtime []byte, next *NextServerRuntime) (v1.I
 			return nil, err
 		}
 	}
-	packed, err := runtimeLayer(runtime)
+	packed, err := packRuntimeLayer(runtime)
 	if err != nil {
 		return nil, err
 	}
 	addenda := []mutate.Addendum{}
-	layer, err := bytesLayer(packed)
+	layer, err := newBytesLayer(packed)
 	if err != nil {
 		return nil, err
 	}
 	addenda = append(addenda, mutate.Addendum{Layer: layer})
 	if next != nil {
-		nextPacked, err := nextServerLayer(next)
+		nextPacked, err := packNextServerLayer(next)
 		if err != nil {
 			return nil, err
 		}
-		nextLayer, err := bytesLayer(nextPacked)
+		nextLayer, err := newBytesLayer(nextPacked)
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +84,7 @@ func WrapContainer(base v1.Image, runtime []byte, next *NextServerRuntime) (v1.I
 	return mutate.Config(appended, config)
 }
 
-func bytesLayer(packed []byte) (v1.Layer, error) {
+func newBytesLayer(packed []byte) (v1.Layer, error) {
 	return tarball.LayerFromOpener(func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(packed)), nil
 	})
@@ -118,7 +118,7 @@ func sortedNames(files map[string][]byte) []string {
 	return names
 }
 
-func nextServerLayer(next *NextServerRuntime) ([]byte, error) {
+func packNextServerLayer(next *NextServerRuntime) ([]byte, error) {
 	var packed bytes.Buffer
 	archive := tar.NewWriter(&packed)
 	if err := archive.WriteHeader(&tar.Header{
@@ -139,7 +139,7 @@ func nextServerLayer(next *NextServerRuntime) ([]byte, error) {
 	return packed.Bytes(), nil
 }
 
-func runtimeLayer(runtime []byte) ([]byte, error) {
+func packRuntimeLayer(runtime []byte) ([]byte, error) {
 	var packed bytes.Buffer
 	archive := tar.NewWriter(&packed)
 	if err := archive.WriteHeader(&tar.Header{
