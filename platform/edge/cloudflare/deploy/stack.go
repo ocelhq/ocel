@@ -139,6 +139,11 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	if program == nil {
 		return nil, fmt.Errorf("the Cloudflare edge runs the entry worker; stack %q has no program", spec.Slug)
 	}
+	if !spec.PruneOnly {
+		if err := p.refuseBootstrapBehind(ctx, accountID, spec.Tier); err != nil {
+			return nil, err
+		}
+	}
 
 	slug := spec.Slug
 	endpoint := program.StoreEndpoint

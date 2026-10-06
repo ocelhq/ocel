@@ -10,6 +10,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const previewEntryScript = "ocel-preview-entry"
@@ -26,6 +27,9 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 
 	if spec.Program == nil {
 		return "", errors.New("the Cloudflare edge runs the preview entry worker; this wildcard has no program")
+	}
+	if err := p.refuseBootstrapBehind(ctx, accountID, environment.TierPreview); err != nil {
+		return "", err
 	}
 	up := upload{
 		accountID:  accountID,
