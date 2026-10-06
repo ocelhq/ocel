@@ -198,3 +198,23 @@ func TestANextServiceBehindTheWorkerOnATierWithNoOriginWildcardSeedsNoPrerenders
 		t.Errorf("seeded %v before refusing, want nothing written to the edge's store", puts)
 	}
 }
+
+func TestOnlyANextServiceBehindTheWorkerIsToldToAnswerImageRequestsOnItsOriginPath(t *testing.T) {
+	behind := behindTheWorkerWithItsWriter(t)
+	if _, err := behind.p.ProvisionFunctions(context.Background(), behind.spec, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := envOf(behind.server.created[0].Template.Containers[0])["OCEL_IMAGE_ENDPOINT"]; got != "1" {
+		t.Errorf("OCEL_IMAGE_ENDPOINT = %q behind the worker, want 1: the worker posts images to the origin", got)
+	}
+
+	server := &runServer{}
+	spec := routedNextSpec()
+	spec.Edge = codeRunningFront{kind: "alb", shields: true}
+	if _, err := server.open(t).ProvisionFunctions(context.Background(), spec, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, told := envOf(server.created[0].Template.Containers[0])["OCEL_IMAGE_ENDPOINT"]; told {
+		t.Errorf("OCEL_IMAGE_ENDPOINT = %q behind the load balancer, want none: nothing posts images there, and the path would answer anyone", got)
+	}
+}

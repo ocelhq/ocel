@@ -38,6 +38,7 @@ const (
 	isrWriterSecretEnvVar   = "OCEL_ISR_WRITER_SECRET"
 	firestoreEndpointEnvVar = "OCEL_FIRESTORE_ENDPOINT"
 	staticDirEnvVar         = "OCEL_STATIC_DIR"
+	imageEndpointEnvVar     = "OCEL_IMAGE_ENDPOINT"
 	refreshURLEnvVar        = "OCEL_REFRESH_URL"
 	refreshQueueEnvVar      = "OCEL_REFRESH_QUEUE"
 	refreshAccountEnvVar    = "OCEL_REFRESH_ACCOUNT"
@@ -144,7 +145,9 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 		env[finishBeforeResponseEnvVar] = strconv.FormatInt(finishBeforeResponseCap.Milliseconds(), 10)
 	}
 	if routing := app.Routing; routing != nil && resolveRouteID(fn) == routing.Entry {
-		if !factsOf(spec.Edge).RunsCode {
+		if factsOf(spec.Edge).RunsCode {
+			env[imageEndpointEnvVar] = "1"
+		} else {
 			env[edge.OriginDispatchVar] = "1"
 			env[edge.OriginSignedVar] = "1"
 			if refresh != nil {
