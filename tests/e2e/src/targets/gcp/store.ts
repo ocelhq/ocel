@@ -1,5 +1,12 @@
 import { HARNESS_PREFIX } from "../../identity";
-import { labelValue, NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
+import {
+  APP_LABEL,
+  ENVIRONMENT_LABEL,
+  labelValue,
+  NAMESPACE_LABEL,
+  PRODUCTION_ENVIRONMENT,
+  PROJECT_LABEL,
+} from "./names";
 
 export type Service = { name: string; uri: string; labels: Record<string, string> };
 
@@ -15,28 +22,45 @@ export function servicesIn(body: unknown): Service[] {
   }));
 }
 
-export function servedBy(services: Service[], names: string[]): string {
-  const serving = names
-    .map((name) => services.find((service) => service.name === name))
-    .find((service) => service !== undefined);
-  if (!serving) {
+export function findAppService(
+  services: Service[],
+  namespace: string,
+  project: string,
+  app: string,
+): Service {
+  const serving = servicesOf(services, namespace, project).filter(
+    (service) =>
+      service.labels[ENVIRONMENT_LABEL] === labelValue(PRODUCTION_ENVIRONMENT) &&
+      service.labels[APP_LABEL] === labelValue(app),
+  );
+  const [only] = serving;
+  if (!only) {
+    const held = servicesOf(services, namespace, project).map((service) => service.name);
     throw new Error(
-      `no Cloud Run service is named ${names.join(" or ")}, so nothing says where the app is served ` +
-        `(${services.map((service) => service.name).join(", ") || "the project has none"})`,
+      `no Cloud Run service is labelled ${APP_LABEL}=${labelValue(app)} in project ${project}, so nothing ` +
+        `says where ${app} is served (${held.join(", ") || "the project has none"})`,
     );
   }
-  if (serving.uri === "") {
-    throw new Error(`${serving.name} answers on no url of its own`);
+  if (serving.length > 1) {
+    throw new Error(
+      `${serving.map((service) => service.name).join(" and ")} are all labelled ` +
+        `${APP_LABEL}=${labelValue(app)} in project ${project}, so nothing says which one serves ${app}`,
+    );
   }
-  return serving.uri;
+  if (only.uri === "") {
+    throw new Error(`${only.name} answers on no url of its own`);
+  }
+  return only;
 }
 
-export function exposedServices(body: unknown, names: string[]): string {
-  const raw = (body as { services?: Array<{ name?: string }> }).services ?? [];
-  const named = raw.filter((service) =>
-    names.includes((service.name ?? "").split("/").pop() ?? ""),
+export function exposedServices(body: unknown, namespace: string, project: string): string {
+  const raw = (body as { services?: Array<{ labels?: Record<string, string> }> }).services ?? [];
+  const held = raw.filter(
+    (service) =>
+      service.labels?.[NAMESPACE_LABEL] === labelValue(namespace) &&
+      service.labels?.[PROJECT_LABEL] === labelValue(project),
   );
-  return JSON.stringify(named);
+  return JSON.stringify(held);
 }
 
 function inNamespace(service: Service, namespace: string): boolean {

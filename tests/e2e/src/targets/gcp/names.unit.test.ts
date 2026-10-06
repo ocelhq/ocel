@@ -3,12 +3,14 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { repoRoot } from "../../paths";
 import {
+  APP_LABEL,
+  ENVIRONMENT_LABEL,
   fittedSlug,
   NAMESPACE_LABEL,
   namespaceOf,
+  PRODUCTION_ENVIRONMENT,
   PROJECT_LABEL,
   roomForSlug,
-  serviceNames,
 } from "./names";
 
 describe("roomForSlug", () => {
@@ -55,33 +57,6 @@ describe("namespaceOf", () => {
   });
 });
 
-describe("serviceNames", () => {
-  it("are the names the provider gives the app's own service and its index function", () => {
-    expect(serviceNames("ocel", "j-37323939460-d-1ab282", "web")).toEqual([
-      expect.stringMatching(/^ocel-j-37323939460-d-prod-web-[0-9a-f]{6}$/),
-      "ocel-j-37323939-prod-web-index-00714e",
-    ]);
-  });
-
-  it("sanitize the app as the provider does, so an app whose name is not a slug still finds its services", () => {
-    expect(serviceNames("ocel", "j-1-deploy-node", "My App")).toEqual([
-      "ocel-j-1-deploy-no-prod-my-app-a3d786",
-      "ocel-j-1-dep-prod-my-app-index-99f89b",
-    ]);
-  });
-
-  it("fit the 37 characters a service a release tags keeps, cutting the project before the app", () => {
-    for (const name of serviceNames(
-      "ocel-nightly",
-      "j-37323939460-deploy-node-a1b2c3",
-      "express",
-    )) {
-      expect(name.length).toBeLessThanOrEqual(37);
-      expect(name).toContain("-express-");
-    }
-  });
-});
-
 describe("the labels a service is found by", () => {
   it("are the keys the provider labels every service of a project with", async () => {
     const go = await readFile(
@@ -90,5 +65,15 @@ describe("the labels a service is found by", () => {
     );
     expect(go).toMatch(new RegExp(`namespaceLabel\\s*=\\s*"${NAMESPACE_LABEL}"`));
     expect(go).toMatch(new RegExp(`projectLabel\\s*=\\s*"${PROJECT_LABEL}"`));
+    expect(go).toMatch(new RegExp(`appLabel\\s*=\\s*"${APP_LABEL}"`));
+    expect(go).toMatch(new RegExp(`environmentLabel\\s*=\\s*"${ENVIRONMENT_LABEL}"`));
+  });
+
+  it("finds the production environment by the name the provider gives it", async () => {
+    const go = await readFile(
+      path.join(repoRoot, "pkg", "stackrecords", "environments.go"),
+      "utf8",
+    );
+    expect(go).toContain(`ProductionEnv = "${PRODUCTION_ENVIRONMENT}"`);
   });
 });
