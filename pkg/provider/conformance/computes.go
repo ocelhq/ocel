@@ -37,6 +37,12 @@ func namesTheComputesItRuns(t *testing.T, suite Suite, facts *contractv1.Provide
 func readDeclaredFacts(t *testing.T, suite Suite) provider.Facts {
 	t.Helper()
 
+	return readDeclaredProvider(t, suite).Facts()
+}
+
+func readDeclaredProvider(t *testing.T, suite Suite) provider.Provider {
+	t.Helper()
+
 	if suite.Server.New == nil {
 		t.Fatal("the suite has no Spec.New, so nothing can read Facts() back off the provider the RPC server is serving")
 	}
@@ -44,5 +50,5 @@ func readDeclaredFacts(t *testing.T, suite Suite) provider.Facts {
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider to read Facts() from", err)
 	}
-	return p.Facts()
+	return p
 }

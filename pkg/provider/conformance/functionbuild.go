@@ -32,6 +32,9 @@ func answersTheFunctionBuildFacts(t *testing.T, suite Suite, configured *contrac
 	t.Helper()
 
 	declared := readDeclaredFacts(t, suite)
+	if got, want := configured.GetShipsNextServerRuntime(), readDeclaredProvider(t, suite).Hooks().ReadNextServerRuntime != nil; got != want {
+		t.Errorf("ConfigureResponse.facts.ships_next_server_runtime = %v, want %v — the RPC answers whether Hooks().ReadNextServerRuntime is set", got, want)
+	}
 	if got, want := configured.GetNextRuntimeDir(), declared.NextRuntimeDir; got != want {
 		t.Errorf("ConfigureResponse.facts.next_runtime_dir = %q, want %q — the RPC answers what Facts().NextRuntimeDir declares", got, want)
 	}
