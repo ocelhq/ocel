@@ -72,6 +72,7 @@ test("the GCP host keeps a fetch entry in the bucket and under the object prefix
       OCEL_ISR_BUCKET: "b",
       OCEL_ISR_OBJECT_PREFIX: "cache/shop/web/prod/r1/isr",
       OCEL_STORAGE_ENDPOINT: `http://127.0.0.1:${port}`,
+      OCEL_TAG_DATABASE: "projects/p/databases/d",
     };
     const host = newGcpNextHost(env);
     const store = await host.newCacheStore!();
@@ -86,6 +87,78 @@ test("the GCP host keeps a fetch entry in the bucket and under the object prefix
       "cache/shop/web/prod/r1/isr/fetch-cache/abc.cache.json",
     );
     expect(refuseIncompleteHost(host, env)).toBeUndefined();
+  } finally {
+    server.close();
+  }
+});
+
+async function listen(
+  onRequest: (req: http.IncomingMessage, body: string) => void,
+): Promise<{ server: http.Server; origin: string }> {
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      onRequest(req, body);
+      res.setHeader("Content-Type", "application/json");
+      res.end(
+        JSON.stringify({
+          commitTime: new Date().toISOString(),
+          writeResults: [{ transformResults: [{ timestampValue: new Date().toISOString() }] }],
+        }),
+      );
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return { server, origin: `http://127.0.0.1:${(server.address() as { port: number }).port}` };
+}
+
+const tagEnv = {
+  PORT: "8080",
+  OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
+  OCEL_ISR_BUCKET: "b",
+  OCEL_ISR_OBJECT_PREFIX: "cache/shop/web/prod/r1/isr",
+  OCEL_TAG_DATABASE: "projects/p/databases/d",
+};
+
+test("the GCP host records tags in the tags database its service is told", async () => {
+  const requests: { method?: string; url?: string }[] = [];
+  const { server, origin } = await listen((req) => {
+    requests.push({ method: req.method, url: req.url });
+  });
+  try {
+    const host = newGcpNextHost({ ...tagEnv, OCEL_FIRESTORE_ENDPOINT: origin });
+    const store = await host.newCacheStore!();
+
+    await store.writeTags(["cart"], { expired: 5 });
+
+    expect(requests).toEqual([
+      { method: "POST", url: "/v1/projects/p/databases/d/documents:commit" },
+    ]);
+  } finally {
+    server.close();
+  }
+});
+
+test("the GCP host's cache store and use-cache store record tags through one writer", async () => {
+  const bodies: string[] = [];
+  const { server, origin } = await listen((_req, body) => {
+    bodies.push(body);
+  });
+  try {
+    const host = newGcpNextHost({ ...tagEnv, OCEL_FIRESTORE_ENDPOINT: origin });
+    const pages = await host.newCacheStore!();
+    const useCache = await host.newUseCacheStore!();
+
+    await Promise.all([
+      pages.writeTags(["a"], { expired: 5 }),
+      useCache.writeTag("b", { expired: 6, writtenAt: 1 }),
+    ]);
+
+    expect(bodies).toHaveLength(1);
+    expect(JSON.parse(bodies[0]!).writes).toHaveLength(2);
   } finally {
     server.close();
   }

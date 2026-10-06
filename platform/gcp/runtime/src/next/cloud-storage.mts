@@ -1,3 +1,5 @@
+import { newMetadataToken } from "./metadata-token.mjs";
+
 export interface CloudStorageOptions {
   bucket: string;
   endpoint?: string;
@@ -26,49 +28,27 @@ export interface CloudStorage {
 }
 
 const attempts = 4;
-const tokenRefreshMarginMs = 60_000;
 
 export function newCloudStorage(options: CloudStorageOptions): CloudStorage {
   const { bucket } = options;
   const origin = (options.endpoint ?? "https://storage.googleapis.com").replace(/\/$/, "");
   const doFetch = options.fetch ?? globalThis.fetch;
-  const metadataOrigin = options.metadataOrigin ?? "http://metadata.google.internal";
-  const now = options.now ?? Date.now;
   const sleep =
     options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const random = options.random ?? Math.random;
   const requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
 
-  let cached: { value: string; refreshAt: number } | undefined;
-  let inflight: Promise<string> | undefined;
-
-  async function fetchToken(): Promise<string> {
-    const res = await doFetch(
-      `${metadataOrigin}/computeMetadata/v1/instance/service-accounts/default/token`,
-      { headers: { "Metadata-Flavor": "Google" } },
-    );
-    if (!res.ok) {
-      throw new Error(`ocel: the metadata server gave no Cloud Storage token: ${res.status}`);
-    }
-    const body = (await res.json()) as { access_token: string; expires_in: number };
-    cached = {
-      value: body.access_token,
-      refreshAt: now() + body.expires_in * 1000 - tokenRefreshMarginMs,
-    };
-    return body.access_token;
-  }
-
-  function token(): Promise<string> {
-    if (cached && now() < cached.refreshAt) return Promise.resolve(cached.value);
-    inflight ??= fetchToken().finally(() => {
-      inflight = undefined;
-    });
-    return inflight;
-  }
+  const metadataToken = newMetadataToken({
+    service: "Cloud Storage",
+    fetch: doFetch,
+    metadataOrigin: options.metadataOrigin,
+    now: options.now,
+  });
 
   async function send(url: string, init: RequestInit): Promise<Response> {
     const headers = new Headers(init.headers);
-    if (options.endpoint === undefined) headers.set("Authorization", `Bearer ${await token()}`);
+    if (options.endpoint === undefined)
+      headers.set("Authorization", `Bearer ${await metadataToken.token()}`);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
     try {
@@ -98,7 +78,7 @@ export function newCloudStorage(options: CloudStorageOptions): CloudStorage {
         res = await send(url, init);
         if (res.status === 401 && !refreshed && options.endpoint === undefined) {
           refreshed = true;
-          cached = undefined;
+          metadataToken.forget();
           res = await send(url, init);
         }
       } catch (error) {

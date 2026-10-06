@@ -1,8 +1,6 @@
-import { newTagPublisher } from "@framework/next-cache";
 import { expect, test, vi } from "vitest";
 import { newGcpCacheStore } from "../src/next/cache-store.mjs";
 import { newCloudStorage } from "../src/next/cloud-storage.mjs";
-import { newCloudStorageTagSnapshotStore } from "../src/next/tag-snapshot-store.mjs";
 import { newCloudStorageBucket } from "./cloud-storage-bucket.mjs";
 
 const prefix = "cache/shop/web/prod/r1/isr";
@@ -73,20 +71,12 @@ test("a tag record with neither stale nor expired publishes nothing", async () =
   expect(publish).not.toHaveBeenCalled();
 });
 
-test("a published tag reaches the snapshot file", async () => {
-  const { bucket, storage } = open();
-  const clock = `${prefix}/tag-clock.json`;
-  bucket.objects.set(clock, {
-    body: JSON.stringify({ version: 1, deployedAt: 1, generatedAt: 1, records: {} }),
-    generation: "1",
-  });
-  const store = newGcpCacheStore(
-    storage,
-    prefix,
-    newTagPublisher(newCloudStorageTagSnapshotStore(storage, prefix)),
-  );
+test("a published tag is handed to the tag records", async () => {
+  const { storage } = open();
+  const publish = vi.fn(async () => {});
+  const store = newGcpCacheStore(storage, prefix, publish);
 
   await store.writeTags(["cart"], { expired: 5 });
 
-  expect(JSON.parse(bucket.objects.get(clock)!.body).records.cart).toEqual({ expired: 5 });
+  expect(publish).toHaveBeenCalledWith("cart", { expired: 5 });
 });
