@@ -154,6 +154,7 @@ func TestABootstrapChecksEveryPermissionItsFirestoreAdminCallsNeed(t *testing.T)
 		"datastore.databases.getMetadata": "reading a Firestore database",
 		"datastore.databases.update":      "protecting a Firestore database",
 		"datastore.databases.delete":      "deleting a Firestore database",
+		"datastore.locations.list":        "asking which locations Firestore serves the project from",
 		"datastore.operations.get":        "polling a Firestore operation",
 		"datastore.schemas.create":        "creating a Firestore index",
 		"datastore.schemas.list":          "listing Firestore indexes",
