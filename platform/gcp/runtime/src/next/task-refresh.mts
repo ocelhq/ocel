@@ -19,11 +19,25 @@ export interface TaskRefreshOptions {
 
 const attempts = 3;
 const attemptTimeoutMs = 2_000;
+const deadlineMs = 8_000;
 const queuedMemoryMs = 5 * 60_000;
 const queuedMemoryNames = 10_000;
 const dispatchDeadline = "60s";
 
 class Refused extends Error {}
+
+function within<T>(promise: Promise<T>, ms: number): Promise<T> {
+  if (ms >= attemptTimeoutMs) return promise;
+  let timer: NodeJS.Timeout | undefined;
+  const expiry = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(new Error(`ocel: the metadata server gave no Cloud Tasks token within ${ms} ms`)),
+      Math.max(ms, 0),
+    );
+  });
+  return Promise.race([promise, expiry]).finally(() => clearTimeout(timer));
+}
 
 export function newTaskRefresh(options: TaskRefreshOptions): ScheduleRefresh {
   const doFetch = options.fetch ?? globalThis.fetch;
@@ -66,18 +80,27 @@ export function newTaskRefresh(options: TaskRefreshOptions): ScheduleRefresh {
         },
       },
     });
+    const deadline = now() + deadlineMs;
     let renewed = false;
     let cause = "";
     for (let attempt = 1; attempt <= attempts; attempt++) {
       if (attempt > 1) await sleep(random() * Math.min(400, 100 * 2 ** (attempt - 1)));
+      if (now() >= deadline) break;
+      let timer: NodeJS.Timeout | undefined;
       try {
         const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (metadata) headers.Authorization = `Bearer ${await metadata.token()}`;
+        if (metadata) {
+          headers.Authorization = `Bearer ${await within(metadata.token(), deadline - now())}`;
+        }
+        const left = deadline - now();
+        if (left <= 0) break;
+        const controller = new AbortController();
+        timer = setTimeout(() => controller.abort(), Math.min(attemptTimeoutMs, left));
         const res = await doFetch(`${origin}/v2/${options.queue}/tasks`, {
           method: "POST",
           headers,
           body,
-          signal: AbortSignal.timeout(attemptTimeoutMs),
+          signal: controller.signal,
         });
         if (res.ok) return;
         cause = String(res.status);
@@ -99,6 +122,8 @@ export function newTaskRefresh(options: TaskRefreshOptions): ScheduleRefresh {
       } catch (error) {
         if (error instanceof Refused) throw error;
         cause = error instanceof Error ? error.message : "failed";
+      } finally {
+        clearTimeout(timer);
       }
     }
     throw failure(refresh, cause);

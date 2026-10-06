@@ -246,3 +246,36 @@ test("a token that never comes fails each attempt after two seconds and names th
     vi.useRealTimers();
   }
 });
+
+test("a queue that answers slowly is given up on once eight seconds have passed", async () => {
+  vi.useFakeTimers();
+  try {
+    const tasks: string[] = [];
+    const slow = ((input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).includes("computeMetadata")) {
+        return new Promise<Response>((resolve) => {
+          setTimeout(() => resolve(Response.json({ access_token: "t1", expires_in: 0 })), 1_500);
+        });
+      }
+      tasks.push(String(input));
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      });
+    }) as typeof fetch;
+    const started = Date.now();
+
+    const failed = schedule(
+      rig(() => new Response("{}")),
+      { fetch: slow },
+    )(refresh).catch((error: Error) => error);
+    await vi.advanceTimersByTimeAsync(8_000);
+
+    expect(((await failed) as Error).message).toMatch(
+      /did not queue the refresh of \/blog\?page=2/,
+    );
+    expect(Date.now() - started).toBeLessThanOrEqual(8_000);
+    expect(tasks).toHaveLength(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
