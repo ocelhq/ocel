@@ -336,6 +336,96 @@ describe("a queued refresh that stays stale", () => {
   });
 });
 
+describe("a queued refresh's deadline", () => {
+  it("holds when the colo sees the entry less often than the marker's retry window", async () => {
+    const sender = queue(true);
+    const clock = { ms: 0 };
+    const stored = new Map<string, { expires: number; response: Response }>();
+    const cache = {
+      match: async (request: Request) => {
+        const hit = stored.get(request.url);
+        if (!hit || hit.expires <= clock.ms) return undefined;
+        return hit.response.clone();
+      },
+      put: async (request: Request, response: Response) => {
+        const seconds = deltaSeconds(response.headers.get("cache-control"), "max-age") ?? 0;
+        stored.set(request.url, { expires: clock.ms + seconds * 1_000, response });
+      },
+      delete: async (request: Request) => stored.delete(request.url),
+    } as unknown as Cache;
+    const deps = { ...testDeps(clock, cache, { enqueueRevalidation: sender.enqueueRevalidation }) };
+    let direct = 0;
+    const render = async () => {
+      direct++;
+      return "landed" as const;
+    };
+
+    await refreshThroughQueue(deps, "build:/rare", revalidation, 0, render);
+    clock.ms += 400_000;
+    const outcome = await refreshThroughQueue(deps, "build:/rare", revalidation, 0, render);
+
+    expect(outcome).toBe("landed");
+    expect(direct).toBe(1);
+    expect(sender.sent).toHaveLength(1);
+  });
+
+  it("renders once per colo when several isolates find it overdue at the same time", async () => {
+    const sender = queue(true);
+    const key = "https://cache.ocel/enqueue/overdue-race";
+    const shared = await caches.open("overdue-race");
+    const clock = { ms: 0 };
+    let readers = 0;
+    let release!: () => void;
+    const allRead = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const isolate = (arrival = 0) =>
+      testDeps(
+        clock,
+        {
+          match: async (request: Request) => {
+            if (new URL(request.url).host === "queued.refresh.ocel" && clock.ms > 5_000) {
+              if (++readers === 3) release();
+              await allRead;
+            }
+            if (new URL(request.url).host === "refresh.ocel") {
+              await new Promise((done) => setTimeout(done, arrival));
+            }
+            return shared.match(request);
+          },
+          put: (request: Request, response: Response) => shared.put(request, response),
+          delete: (request: Request) => shared.delete(request),
+        } as unknown as Cache,
+        { enqueueRevalidation: sender.enqueueRevalidation },
+      );
+    const target: CacheTarget = {
+      key,
+      revalidate: 1,
+      expiration: 100_000,
+      revalidation,
+    };
+    const request = new Request("https://app.example/overdue-race");
+    const blocking = countingOrigin();
+    const first = isolate();
+    await serveCached(request, target, first, countingOrigin(), blocking);
+    await first.flush();
+    clock.ms = 5_000;
+    await serveCached(request, target, first, countingOrigin(), blocking);
+    await first.flush();
+    expect(sender.sent).toHaveLength(1);
+
+    clock.ms += queuedRefreshDeadlineMs;
+    const isolates = [isolate(0), isolate(25), isolate(50)];
+    readers = 0;
+    await Promise.all(
+      isolates.map((deps) => serveCached(request, target, deps, countingOrigin(), blocking)),
+    );
+    await Promise.all(isolates.map((deps) => deps.flush()));
+
+    expect(blocking.calls).toBe(1);
+  });
+});
+
 function noAssets(): RouteDeps["assetStore"] {
   return {
     assetPrefix: "",
