@@ -117,13 +117,24 @@ func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.Bootst
 		}
 	}
 	deleted := 0
+	readProjects := map[string][]stackrecords.NamedStack{}
 	for _, candidate := range candidates {
-		stacks, err := stackrecords.List(ctx, b.records, candidate.tier, candidate.project)
-		if err != nil {
-			failures = append(failures, fmt.Errorf("check whether app %s of %s still runs: %w", candidate.app, candidate.project, err))
-			continue
+		stacks, read := readProjects[candidate.project]
+		if !read {
+			var err error
+			if stacks, err = stackrecords.List(ctx, b.records, candidate.tier, candidate.project); err != nil {
+				failures = append(failures, fmt.Errorf("check whether app %s of %s still runs: %w", candidate.app, candidate.project, err))
+				continue
+			}
+			readProjects[candidate.project] = stacks
 		}
 		if isAppRecorded(stacks, candidate.app) {
+			continue
+		}
+		if stacks, err := stackrecords.List(ctx, b.records, candidate.tier, candidate.project); err != nil {
+			failures = append(failures, fmt.Errorf("check whether app %s of %s still runs: %w", candidate.app, candidate.project, err))
+			continue
+		} else if isAppRecorded(stacks, candidate.app) {
 			continue
 		}
 		removed, err := b.deleteAccount(ctx, candidate.id)
