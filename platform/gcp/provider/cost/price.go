@@ -71,6 +71,7 @@ var formulas = pricing.Table{
 	"google_kms_key_ring":                                   free,
 	"google_kms_crypto_key":                                 cryptoKey,
 	"google_service_account":                                free,
+	"google_project_iam_custom_role":                        free,
 	"google_artifact_registry_repository":                   artifactRepository,
 	"google_secret_manager_secret":                          secret,
 	"google_compute_global_address":                         free,

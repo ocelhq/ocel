@@ -99,6 +99,15 @@
       "properties": {}
     },
     {
+      "id": "project:shop/shared:preview/google_project_iam_custom_role:ocel_app_accounts",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_project_iam_custom_role",
+      "name": "ocel_app_accounts",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/shared:preview/google_service_account:ocel-preview",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",

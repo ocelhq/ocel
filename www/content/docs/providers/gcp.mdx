@@ -237,8 +237,24 @@ gcloud services enable firestore.googleapis.com storage.googleapis.com \
 A deploy needs `roles/datastore.user`, `roles/storage.objectAdmin`,
 `roles/cloudkms.cryptoKeyEncrypterDecrypter`, `roles/secretmanager.secretAccessor`,
 `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`, `roles/run.admin`,
-`roles/memorystore.admin`, `roles/pubsub.admin`, `roles/cloudscheduler.admin` and
-`roles/iam.serviceAccountCreator`.
+`roles/memorystore.admin`, `roles/pubsub.admin` and `roles/cloudscheduler.admin`, and the
+custom role `ocel bootstrap` keeps for it.
+
+The custom role lets a deploy create the service accounts its apps run as and set who may act as
+them, and nothing else: it holds `iam.serviceAccounts.create`, `.get`, `.getIamPolicy` and
+`.setIamPolicy`, and no permission to delete, disable, update or key an account.
+`ocel bootstrap` creates it as `projects/<project>/roles/<namespace with _ for ->_app_accounts`, so you
+grant it to the deploy credential after the first bootstrap:
+
+```bash
+gcloud projects add-iam-policy-binding my-project \
+  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --role=projects/my-project/roles/ocel_app_accounts
+```
+
+A bootstrap never deletes the role, because Google holds a deleted custom role's id for up to 44
+days and nothing could make it again in that time. A role deleted by hand is undeleted within
+Google's first 7 days, and one whose permissions drifted is put back.
 
 Each app runs as a service account of its own, which a deploy creates the first time the app
 ships to a tier and grants only what the app's runtime reads: the namespace's database, the
@@ -275,6 +291,6 @@ what a deploy may create; it narrows every read, write and deletion of a secret 
 A bootstrap needs those, with `roles/secretmanager.admin` unconditioned in place of the
 realtime grant, plus `roles/datastore.owner`, `roles/storage.admin`,
 `roles/cloudkms.admin`, `roles/artifactregistry.admin`,
-`roles/iam.serviceAccountAdmin`, `roles/resourcemanager.projectIamAdmin` and
+`roles/iam.serviceAccountAdmin`, `roles/iam.roleAdmin`, `roles/resourcemanager.projectIamAdmin` and
 `roles/cloudscheduler.admin`. Anything missing is named back to you before anything is
 created.

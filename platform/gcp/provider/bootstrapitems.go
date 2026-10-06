@@ -19,6 +19,7 @@ const (
 	KindSecret         Kind = "secretmanager:secret"
 	KindRepository     Kind = "artifactregistry:repository"
 	KindServiceAccount Kind = "iam:serviceaccount"
+	KindRole           Kind = "iam:role"
 	KindService        Kind = "run:service"
 	KindSchedule       Kind = "cloudscheduler:job"
 )
@@ -55,11 +56,14 @@ var kindNouns = map[Kind]string{
 	KindSecret:         "secret",
 	KindRepository:     "Artifact Registry repository",
 	KindServiceAccount: "service account",
+	KindRole:           "custom role",
 }
 
 func (i item) phrase() string { return kindNouns[i.Kind] + " " + i.Name }
 
-func provisioned(kind Kind, emulated bool) bool { return !emulated || kind != KindRepository }
+func provisioned(kind Kind, emulated bool) bool {
+	return !emulated || (kind != KindRepository && kind != KindRole)
+}
 
 func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 	items := []item{
@@ -86,6 +90,10 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 		{
 			Kind: KindKey, Name: string(tier),
 			Note: "the key every value this tier stores is sealed under",
+		},
+		{
+			Kind: KindRole, Name: names.AppAccountsRole(), Shared: true,
+			Note: "the role a deploy credential is granted to create the service accounts its apps run as and to set who may act as them, and no more",
 		},
 		{
 			Kind: KindServiceAccount, Name: names.DelayAccount(tier),

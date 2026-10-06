@@ -3,7 +3,9 @@ package gcp
 import (
 	"context"
 	"errors"
+	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -296,5 +298,32 @@ func TestAQueueGrantRacedByAnotherDeployIsReadAgainAndWritten(t *testing.T) {
 
 	if server.queueWrites != 1 {
 		t.Errorf("%d queue policies were written, want the one that took after two aborted", server.queueWrites)
+	}
+}
+
+func TestADeployCredentialWithoutTheAppAccountsRoleIsToldWhichRoleItLacks(t *testing.T) {
+	t.Parallel()
+	for name, deniedAt := range map[string]string{"reading": http.MethodGet, "creating": http.MethodPost} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := (&iamServer{}).serve(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == deniedAt || r.Method == http.MethodGet {
+					status := http.StatusNotFound
+					if r.Method == deniedAt {
+						status = http.StatusForbidden
+					}
+					w.WriteHeader(status)
+					w.Write([]byte(`{"error":{"code":` + strconv.Itoa(status) + `,"message":"denied"}}`))
+					return
+				}
+				t.Errorf("unexpected %s %s", r.Method, r.URL)
+			})
+
+			err := c.createAppAccount(context.Background(), environment.TierProduction, "shop", "api")
+
+			if err == nil || !strings.Contains(err.Error(), "projects/acme-prod/roles/ocel_app_accounts") {
+				t.Errorf("createAppAccount() = %v, want an error naming projects/acme-prod/roles/ocel_app_accounts", err)
+			}
+		})
 	}
 }

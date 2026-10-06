@@ -185,6 +185,8 @@ func (b bootstrap) presenceOf(ctx context.Context, tier environment.Tier, target
 		return presenceFrom(b.secretExists(ctx, target.Name))
 	case KindRepository:
 		return b.repositoryPresence(ctx, target.Name)
+	case KindRole:
+		return b.rolePresence(ctx, target.Name)
 	case KindServiceAccount:
 		return b.accountPresence(ctx, tier, target.Name)
 	case KindService:
