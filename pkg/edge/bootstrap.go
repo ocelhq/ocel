@@ -13,6 +13,11 @@ type Adoption struct {
 	Offers []OfferKind
 }
 
+type BootstrapPart struct {
+	Name    string
+	Current bool
+}
+
 type PlanGroup struct {
 	Kind    string
 	Name    string

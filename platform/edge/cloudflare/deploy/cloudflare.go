@@ -122,6 +122,7 @@ func (p *cloudflare) Hooks() edge.Hooks {
 		PlanBootstrap:                 p.planBootstrap,
 		PlanRemoveBootstrap:           p.planRemoveBootstrap,
 		PlanAdoption:                  p.adoption,
+		DescribeBootstrap:             p.describeBootstrap,
 		VerifyCredentials:             p.verifyCredentials,
 		CheckCodeEntitlement:          p.codeEntitlement,
 		DescribeCredentialPermissions: credentialPermissions,

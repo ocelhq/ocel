@@ -40,6 +40,7 @@ func NewGap(status *contractv1.BootstrapStatus) Gap {
 		}
 	}
 	slices.Sort(gap.Features)
+	gap.Features = slices.Compact(gap.Features)
 	return gap
 }
 

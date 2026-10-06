@@ -90,6 +90,11 @@ func (b Bootstrap) Describe(ctx context.Context, tier environment.Tier) (provide
 		return provider.BootstrapDescription{}, err
 	}
 	description := described(tier, read.Deployed)
+	edgeStacks, err := b.edgeBootstrapStacks(ctx, tier, read.Deployed)
+	if err != nil {
+		return provider.BootstrapDescription{}, err
+	}
+	description.Stacks = append(description.Stacks, edgeStacks...)
 	description.VendorState = read
 	return description, nil
 }
