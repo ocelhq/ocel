@@ -129,6 +129,9 @@ func TestStart(t *testing.T) {
 		if !strings.Contains(err.Error(), "nothing-was-built") {
 			t.Errorf("error = %v, want it to name the command", err)
 		}
+		if strings.Contains(err.Error(), "--serve") {
+			t.Errorf("error = %v, want the program alone: an argument can carry a secret into the logs", err)
+		}
 	})
 }
 
@@ -175,8 +178,12 @@ func TestExited(t *testing.T) {
 		if proc.PID() <= 0 {
 			t.Errorf("PID() = %d, want the pid signals are addressed to", proc.PID())
 		}
-		if !strings.HasSuffix(proc.Command(), " -test.run=^TestChildHelper$") {
-			t.Errorf("Command() = %q, want the command line it ran, so an app that exits says what was run", proc.Command())
+		binary, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if proc.Program() != binary {
+			t.Errorf("Program() = %q, want %q alone: an app that exits says what ran, and an argument can carry a secret into the logs", proc.Program(), binary)
 		}
 		waitExit(t, proc)
 	})
