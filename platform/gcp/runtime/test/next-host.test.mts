@@ -11,6 +11,10 @@ test("the GCP host refuses to start where nothing names a port", () => {
   expect(() => newGcpNextHost({})).toThrow(/PORT/);
 });
 
+test("the GCP host shapes at most forty-nine tags, leaving room for the release tag", () => {
+  expect(newGcpNextHost({ PORT: "8080" }).cacheTagsPerObject).toBe(49);
+});
+
 const MB = 1024 * 1024;
 
 function fits(

@@ -191,3 +191,28 @@ test("a static flight response reaches Cloud CDN without the router state tree i
     await new Promise<void>((resolve) => edge.close(() => resolve()));
   }
 });
+
+test("a page the GCP dispatch serves carries its release tag when its edge purges by tag", async () => {
+  const invoke = newGcpDispatchInvoke(
+    localOrigin,
+    {
+      OCEL_ROUTING_MANIFEST: join(dir, "routing.json"),
+      OCEL_CACHE_TAG_PURGE: "1",
+      OCEL_ISR_PREFIX: "production/shop/web/r1a2b3c4d/isr",
+    },
+    undefined,
+  );
+  const edge = http.createServer((req, res) =>
+    invoke(req, res, { waitUntil: () => {}, holdEnd: () => {} }),
+  );
+  await new Promise<void>((resolve) => edge.listen({ host: "127.0.0.1", port: 0 }, resolve));
+  try {
+    const { port } = edge.address() as { port: number };
+    const response = await fetch(`http://127.0.0.1:${port}/home`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-tag")?.split(",")[0]).toBe("r1a2b3c4d");
+  } finally {
+    await new Promise<void>((resolve) => edge.close(() => resolve()));
+  }
+});
