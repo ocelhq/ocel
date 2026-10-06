@@ -11,8 +11,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
@@ -177,5 +179,22 @@ func TestASeedThatIsNoCacheEntryTheWriterCanAddressIsRefused(t *testing.T) {
 	_, err := w.p.ProvisionFunctions(context.Background(), w.spec, nil)
 	if err == nil || !strings.Contains(err.Error(), "not a cache entry the isr-writer can address") {
 		t.Errorf("ProvisionFunctions() = %v, want a refusal naming the seed", err)
+	}
+}
+
+func TestANextServiceBehindTheWorkerOnATierWithNoOriginWildcardSeedsNoPrerenders(t *testing.T) {
+	w := behindTheWorkerWithItsWriter(t)
+	plantPrerenders(t, w.p, map[string]string{"cache/blog/post.cache.json": "{}"})
+	if err := keyvalue.Forget(context.Background(), w.p.records, originWildcardKey(environment.TierProduction)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := w.p.ProvisionFunctions(context.Background(), w.spec, nil)
+
+	if refusalCode(err) != refusal.CodeInvalid {
+		t.Errorf("ProvisionFunctions = %v, want the refusal for a tier with no origin domain", err)
+	}
+	if puts := w.writer.puts(); len(puts) != 0 {
+		t.Errorf("seeded %v before refusing, want nothing written to the edge's store", puts)
 	}
 }
