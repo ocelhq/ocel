@@ -309,4 +309,69 @@ export default {
 			t.Fatalf("Apps[0] = %+v, want a container shape and no framework: a container runs the image it is given", cfg.Apps[0])
 		}
 	})
+
+	t.Run("a container app whose directory is a Next app is read as next", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  apps: [{ name: "web", path: "services/web", compute: "container" }],
+};
+`)
+		writeFile(t, filepath.Join(root, "services", "web", "package.json"), `{"dependencies":{"next":"15.0.0"}}`)
+
+		cfg, err := Load(context.Background(), root, "")
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Apps[0]; got.Serverless != nil || got.Framework() != "next" || got.Container.Framework != "next" {
+			t.Fatalf("Apps[0] = %+v, want a container that keeps next", got)
+		}
+	})
+
+	t.Run("a container app declaring next is read as next", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  apps: [{ name: "web", path: "services/web", compute: "container", framework: "next" }],
+};
+`)
+		writeFile(t, filepath.Join(root, "services", "web", "Dockerfile"), "FROM scratch\n")
+
+		cfg, err := Load(context.Background(), root, "")
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Apps[0]; got.Serverless != nil || got.Framework() != "next" {
+			t.Fatalf("Apps[0] = %+v, want a container that keeps next", got)
+		}
+	})
+
+	t.Run("a container app declaring another framework is refused naming container compute", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  apps: [{ name: "web", path: "services/web", compute: "container", framework: "node" }],
+};
+`)
+		writeFile(t, filepath.Join(root, "services", "web", "package.json"), `{}`)
+
+		_, err := Load(context.Background(), root, "")
+		if err == nil {
+			t.Fatal("Load = nil error, want the refusal")
+		}
+		for _, want := range []string{`"web"`, "`framework`", "serverless", `"container"`, `"next"`} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, missing %q", err, want)
+			}
+		}
+	})
 }
