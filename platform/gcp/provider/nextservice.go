@@ -87,10 +87,11 @@ func refuseGuardWithoutShieldingEdge(spec provider.StackSpec) error {
 }
 
 type nextCache struct {
-	bucket      string
-	tagDatabase string
-	endpoint    string
-	edgeStore   *edgeISRStore
+	bucket          string
+	tagDatabase     string
+	storageEndpoint string
+	tagEndpoint     string
+	edgeStore       *edgeISRStore
 }
 
 type edgeISRStore struct {
@@ -191,11 +192,11 @@ func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 	} else {
 		env[tagDatabaseEnvVar] = cache.tagDatabase
 	}
-	if cache.endpoint != "" {
-		env[storageEndpointEnvVar] = cache.endpoint
-		if cache.edgeStore == nil {
-			env[firestoreEndpointEnvVar] = cache.endpoint
-		}
+	if cache.storageEndpoint != "" {
+		env[storageEndpointEnvVar] = cache.storageEndpoint
+	}
+	if cache.tagEndpoint != "" && cache.edgeStore == nil {
+		env[firestoreEndpointEnvVar] = cache.tagEndpoint
 	}
 	return env
 }
@@ -214,12 +215,13 @@ func fillNextContainerDefaults(s serving) serving {
 	return s
 }
 
-func newNextCache(names Names, tier environment.Tier, endpoint string, edgeStore *edgeISRStore) nextCache {
+func newNextCache(names Names, tier environment.Tier, storageEndpoint, tagEndpoint string, edgeStore *edgeISRStore) nextCache {
 	return nextCache{
-		edgeStore:   edgeStore,
-		bucket:      names.Bucket(tier),
-		tagDatabase: "projects/" + names.project + "/databases/" + names.TagDatabase(tier),
-		endpoint:    endpoint,
+		edgeStore:       edgeStore,
+		bucket:          names.Bucket(tier),
+		tagDatabase:     "projects/" + names.project + "/databases/" + names.TagDatabase(tier),
+		storageEndpoint: storageEndpoint,
+		tagEndpoint:     tagEndpoint,
 	}
 }
 

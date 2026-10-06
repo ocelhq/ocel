@@ -11,6 +11,7 @@ import (
 	"cloud.google.com/go/firestore/apiv1/firestorepb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -26,11 +27,18 @@ type taggedFirestore struct {
 	queries []*firestorepb.StructuredQuery
 	deleted []string
 	absent  bool
+
+	authorizations []string
+}
+
+func (f *taggedFirestore) noteAuthorization(ctx context.Context) {
+	f.authorizations = append(f.authorizations, metadata.ValueFromIncomingContext(ctx, "authorization")...)
 }
 
 func (f *taggedFirestore) RunQuery(request *firestorepb.RunQueryRequest, stream firestorepb.Firestore_RunQueryServer) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.noteAuthorization(stream.Context())
 	f.queries = append(f.queries, request.GetStructuredQuery())
 	if f.absent {
 		return status.Error(codes.NotFound, "The database (projects/acme-prod/databases/ocel-production-tags) does not exist for project acme-prod")
@@ -46,9 +54,10 @@ func (f *taggedFirestore) RunQuery(request *firestorepb.RunQueryRequest, stream 
 	return nil
 }
 
-func (f *taggedFirestore) BatchWrite(_ context.Context, request *firestorepb.BatchWriteRequest) (*firestorepb.BatchWriteResponse, error) {
+func (f *taggedFirestore) BatchWrite(ctx context.Context, request *firestorepb.BatchWriteRequest) (*firestorepb.BatchWriteResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.noteAuthorization(ctx)
 	response := &firestorepb.BatchWriteResponse{}
 	for _, write := range request.GetWrites() {
 		f.deleted = append(f.deleted, write.GetDelete())
@@ -58,7 +67,7 @@ func (f *taggedFirestore) BatchWrite(_ context.Context, request *firestorepb.Bat
 	return response, nil
 }
 
-func tagRecordsServedBy(t *testing.T, fake *taggedFirestore) *Provider {
+func tagRecordsServedAt(t *testing.T, fake *taggedFirestore) string {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -68,7 +77,12 @@ func tagRecordsServedBy(t *testing.T, fake *taggedFirestore) *Provider {
 	firestorepb.RegisterFirestoreServer(server, fake)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
-	return pushing(t, "http://"+listener.Addr().String())
+	return "http://" + listener.Addr().String()
+}
+
+func tagRecordsServedBy(t *testing.T, fake *taggedFirestore) *Provider {
+	t.Helper()
+	return pushing(t, tagRecordsServedAt(t, fake))
 }
 
 func tagDocument(id string) string {
@@ -95,6 +109,29 @@ func prefixBounds(t *testing.T, query *firestorepb.StructuredQuery) map[string]s
 	return bounds
 }
 
+func TestPruningOnALaneWithATagEmulatorDeletesTheTagRecordsThere(t *testing.T) {
+	fake := &taggedFirestore{listed: []string{tagDocument("aaa"), tagDocument("bbb")}}
+	p := pushing(t, "http://127.0.0.1:1")
+	p.tagEndpoint = tagRecordsServedAt(t, fake)
+	p.resolved.tagEndpoint = p.tagEndpoint
+	log := &sayings{Log: progress.Discard()}
+
+	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierProduction, "prod/shop/web/r1a2b3c4d/isr/", log); err != nil {
+		t.Fatalf("removeTagRecords() = %v", err)
+	}
+
+	if len(fake.queries) != 1 {
+		t.Errorf("the tag emulator served %d queries, want one", len(fake.queries))
+	}
+	if len(fake.authorizations) < 2 || slices.ContainsFunc(fake.authorizations, func(sent string) bool { return sent != "Bearer owner" }) {
+		t.Errorf("the tag emulator was sent authorization %q, want the admin credentials Google's emulator takes for batch writes on every call", fake.authorizations)
+	}
+	slices.Sort(fake.deleted)
+	if want := []string{tagDocument("aaa"), tagDocument("bbb")}; !slices.Equal(fake.deleted, want) {
+		t.Errorf("the tag emulator deleted %q, want %q", fake.deleted, want)
+	}
+}
+
 func TestPruningAReleaseDeletesTheTagRecordsOfItsISRPrefixAndNoOther(t *testing.T) {
 	fake := &taggedFirestore{listed: []string{tagDocument("aaa"), tagDocument("bbb")}}
 	p := tagRecordsServedBy(t, fake)
@@ -117,6 +154,9 @@ func TestPruningAReleaseDeletesTheTagRecordsOfItsISRPrefixAndNoOther(t *testing.
 	slices.Sort(fake.deleted)
 	if want := []string{tagDocument("aaa"), tagDocument("bbb")}; !slices.Equal(fake.deleted, want) {
 		t.Errorf("the prune deleted %q, want %q", fake.deleted, want)
+	}
+	if len(fake.authorizations) != 0 {
+		t.Errorf("the prune sent authorization %q to floci, want none: admin credentials go only to the tag emulator", fake.authorizations)
 	}
 	if want := []string{"Removed 2 tag records under prod/shop/web/r1a2b3c4d/isr/ from Firestore database ocel-production-tags"}; !slices.Equal(log.said, want) {
 		t.Errorf("the prune said %q, want %q", log.said, want)

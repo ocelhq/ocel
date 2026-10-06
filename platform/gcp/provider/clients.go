@@ -48,8 +48,9 @@ func (m *memo[T]) get(open func() (T, error)) (T, error) {
 
 type clients struct {
 	Names
-	region   string
-	endpoint string
+	region      string
+	endpoint    string
+	tagEndpoint string
 
 	workload      memo[*ports.Clients]
 	storage       memo[*storage.Client]
@@ -277,10 +278,11 @@ func (c *clients) backendLink(backend string) string {
 func (c *clients) Workload() *ports.Clients {
 	workload, _ := c.workload.get(func() (*ports.Clients, error) {
 		return &ports.Clients{
-			Namespace: c.namespace,
-			Project:   c.project,
-			Region:    c.region,
-			Endpoint:  c.endpoint,
+			Namespace:   c.namespace,
+			Project:     c.project,
+			Region:      c.region,
+			Endpoint:    c.endpoint,
+			TagEndpoint: c.tagEndpoint,
 		}, nil
 	})
 	return workload

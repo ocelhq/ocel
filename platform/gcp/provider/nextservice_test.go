@@ -315,6 +315,41 @@ func TestANextAppIsToldTheTagsDatabaseItsRecordsLiveIn(t *testing.T) {
 	}
 }
 
+func tagEmulatorEnv(t *testing.T, p *Provider, env map[string]string) {
+	t.Helper()
+	tags, err := url.Parse(env["OCEL_FIRESTORE_ENDPOINT"])
+	if err != nil || tags.Hostname() != "host.docker.internal" || tags.Port() != "8085" {
+		t.Errorf("the Next service reads OCEL_FIRESTORE_ENDPOINT=%q, want host.docker.internal:8085", env["OCEL_FIRESTORE_ENDPOINT"])
+	}
+	storage, err := url.Parse(env["OCEL_STORAGE_ENDPOINT"])
+	floci, _ := url.Parse(p.endpoint)
+	if err != nil || storage.Hostname() != "host.docker.internal" || storage.Port() != floci.Port() {
+		t.Errorf("the Next service reads OCEL_STORAGE_ENDPOINT=%q, want host.docker.internal:%s", env["OCEL_STORAGE_ENDPOINT"], floci.Port())
+	}
+}
+
+func TestANextServiceReadsItsTagsFromTheFirestoreEmulatorWhenTheLaneRunsOne(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	p.tagEndpoint = "http://127.0.0.1:8085"
+	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+
+	tagEmulatorEnv(t, p, envOf(server.created[0].Template.Containers[0]))
+}
+
+func TestANextContainerReadsItsTagsFromTheFirestoreEmulatorWhenTheLaneRunsOne(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	p.tagEndpoint = "http://127.0.0.1:8085"
+	if _, err := p.ProvisionContainers(context.Background(), nextContainerSpec(), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+
+	tagEmulatorEnv(t, p, envOf(server.created[0].Template.Containers[0]))
+}
+
 func TestAnAppWithoutISRIsToldNoTagsDatabase(t *testing.T) {
 	env := envOf(releasedNext(t, nextSpec()))
 

@@ -130,6 +130,7 @@ func TestTheEmulatorEndpointIsReadOnceWhenTheProviderIsMade(t *testing.T) {
 
 func TestWithoutTheEmulatorEveryClientAddressesGoogle(t *testing.T) {
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "")
+	t.Setenv("OCEL_FLOCI_FIRESTORE_ENDPOINT", "")
 
 	credentials, own := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Credentials().(gcp.Credentials)
 	if !own {
@@ -169,5 +170,48 @@ func TestAnEmulatorEndpointOnLoopbackIsAddressed(t *testing.T) {
 				t.Errorf("the provider reaches %q, want %q", credentials.Endpoint, endpoint)
 			}
 		})
+	}
+}
+
+func TestATagEmulatorEndpointBeyondLoopbackIsRefused(t *testing.T) {
+	for _, endpoint := range []string{"http://10.0.0.5:8085", "http://firestore.googleapis.com", "http://127.0.0.1.evil.example:8085"} {
+		t.Run(endpoint, func(t *testing.T) {
+			t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "http://127.0.0.1:4588")
+			t.Setenv("OCEL_FLOCI_FIRESTORE_ENDPOINT", endpoint)
+
+			var refused refusal.Refusal
+			_, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+				t.Fatalf("NewProvider() with OCEL_FLOCI_FIRESTORE_ENDPOINT naming %q = %v, want an %s refusal", endpoint, err, refusal.CodeInvalid)
+			}
+			if !strings.Contains(refused.Error(), "OCEL_FLOCI_FIRESTORE_ENDPOINT") {
+				t.Errorf("the refusal reads %q, want it to name OCEL_FLOCI_FIRESTORE_ENDPOINT", refused.Error())
+			}
+		})
+	}
+}
+
+func TestATagEmulatorEndpointWithoutTheFlociEmulatorIsRefused(t *testing.T) {
+	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "")
+	t.Setenv("OCEL_FLOCI_FIRESTORE_ENDPOINT", "http://127.0.0.1:8085")
+
+	var refused refusal.Refusal
+	_, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("NewProvider() = %v, want an %s refusal", err, refusal.CodeInvalid)
+	}
+	for _, name := range []string{"OCEL_FLOCI_GCP_ENDPOINT", "OCEL_FLOCI_FIRESTORE_ENDPOINT"} {
+		if !strings.Contains(refused.Error(), name) {
+			t.Errorf("the refusal reads %q, want it to name %s", refused.Error(), name)
+		}
+	}
+}
+
+func TestATagEmulatorEndpointOnLoopbackBesideTheFlociEmulatorIsAccepted(t *testing.T) {
+	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "http://127.0.0.1:4588")
+	t.Setenv("OCEL_FLOCI_FIRESTORE_ENDPOINT", "http://127.0.0.1:8085")
+
+	if _, err := gcp.NewProvider(gcp.Options{Project: "floci-local", Region: "europe-west1"}); err != nil {
+		t.Fatalf("NewProvider() = %v, want the tag emulator addressed", err)
 	}
 }
