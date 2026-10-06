@@ -217,7 +217,59 @@
         }
       },
       "title": "Run Event",
-      "type": "object"
+      "type": "object",
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "waiting"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "resumed"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "summary"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "identity"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "required": [
+                "waiting"
+              ]
+            },
+            {
+              "required": [
+                "resumed"
+              ]
+            },
+            {
+              "required": [
+                "summary"
+              ]
+            },
+            {
+              "required": [
+                "identity"
+              ]
+            }
+          ]
+        }
+      ]
     },
     "cli.stream.v1.RunSummary.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -855,7 +907,97 @@
         }
       },
       "title": "Operation Event",
-      "type": "object"
+      "type": "object",
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "started"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "ended"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "output"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "plan"
+                    ]
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "dnsManualRecords"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "dns_manual_records"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "required": [
+                      "result"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "required": [
+                "started"
+              ]
+            },
+            {
+              "required": [
+                "ended"
+              ]
+            },
+            {
+              "required": [
+                "output"
+              ]
+            },
+            {
+              "required": [
+                "plan"
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "required": [
+                    "dnsManualRecords"
+                  ]
+                },
+                {
+                  "required": [
+                    "dns_manual_records"
+                  ]
+                }
+              ]
+            },
+            {
+              "required": [
+                "result"
+              ]
+            }
+          ]
+        }
+      ]
     },
     "common.progress.v1.OperationResult.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

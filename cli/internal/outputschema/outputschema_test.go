@@ -137,6 +137,34 @@ func TestTheRunEventSchemaAcceptsARunEventAndRejectsAMisspelledField(t *testing.
 	}
 }
 
+func TestTheRunEventSchemaAcceptsOneMemberOfEachOneofAndRejectsTwo(t *testing.T) {
+	schema, err := outputschema.ReadRunEvent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiled := outputschematest.Compile(t, schema)
+
+	for _, event := range []string{
+		`{}`,
+		`{"summary":{"headline":"done"}}`,
+		`{"operation":{"message":"building"},"waiting":{}}`,
+		`{"operation":{"dns_manual_records":{}}}`,
+	} {
+		if err := outputschematest.Validate(compiled, []byte(event)); err != nil {
+			t.Errorf("the schema rejects %s: %v", event, err)
+		}
+	}
+	for _, event := range []string{
+		`{"waiting":{},"summary":{"headline":"done"}}`,
+		`{"operation":{"started":{},"ended":{}}}`,
+		`{"operation":{"started":{},"dns_manual_records":{}}}`,
+	} {
+		if err := outputschematest.Validate(compiled, []byte(event)); err == nil {
+			t.Errorf("the schema accepts %s, which sets two members of one oneof", event)
+		}
+	}
+}
+
 func TestTheRunEventSchemaAcceptsEveryLineTheNDJSONStreamPrints(t *testing.T) {
 	compiled := func() *jsonschema.Schema {
 		schema, err := outputschema.ReadRunEvent()

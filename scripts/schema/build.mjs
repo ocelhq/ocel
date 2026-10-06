@@ -17,6 +17,7 @@ const MESSAGE_SCHEMAS_OUT = join(root, "www", "public", "schema", VERSION, "cli"
 const EMBEDDED_SCHEMAS_OUT = join(root, "cli", "internal", "outputschema", "schemas");
 const MESSAGE_SCHEMA_ORIGIN = `https://ocel.dev/schema/${VERSION}/cli`;
 const BUNDLE_SUFFIX = ".jsonschema.bundle.json";
+const DEFINITION_SUFFIX = ".jsonschema.json";
 
 const SCHEMA_URL = `https://ocel.dev/schema/${VERSION}/ocel.schema.json`;
 
@@ -335,6 +336,7 @@ function generateMessageSchemas() {
       ["exec", "buf", "generate", "--template", "proto/buf.gen.schema.yaml", "--output", scratch],
       { cwd: root, stdio: "inherit" },
     );
+    const oneofs = readOneofs(scratch);
     return readdirSync(scratch)
       .filter((file) => file.endsWith(BUNDLE_SUFFIX))
       .sort()
@@ -342,6 +344,7 @@ function generateMessageSchemas() {
         const name = file.slice(0, -BUNDLE_SUFFIX.length);
         const bundle = read(join(scratch, file));
         refuseNonECMAScriptPatterns(name, bundle);
+        constrainOneofs(name, bundle, oneofs);
         return {
           file: `${name}.schema.json`,
           schema: { ...bundle, $id: `${MESSAGE_SCHEMA_ORIGIN}/${name}.schema.json` },
@@ -350,6 +353,50 @@ function generateMessageSchemas() {
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
+}
+
+function readOneofs(scratch) {
+  const image = join(scratch, "image.json");
+  execFileSync("pnpm", ["exec", "buf", "build", "proto", "--output", image], {
+    cwd: root,
+    stdio: "inherit",
+  });
+  const oneofs = new Map();
+  const walk = (scope, message) => {
+    const name = `${scope}.${message.name}`;
+    const members = (message.oneofDecl ?? []).map(() => []);
+    for (const field of message.field ?? []) {
+      if (field.oneofIndex !== undefined && !field.proto3Optional) {
+        members[field.oneofIndex].push(field);
+      }
+    }
+    const declared = members.filter((fields) => fields.length > 0);
+    if (declared.length > 0) oneofs.set(name, declared);
+    for (const nested of message.nestedType ?? []) walk(name, nested);
+  };
+  for (const file of read(image).file) {
+    for (const message of file.messageType ?? []) walk(file.package, message);
+  }
+  return oneofs;
+}
+
+function constrainOneofs(name, bundle, oneofs) {
+  for (const [key, definition] of Object.entries(bundle.$defs ?? {})) {
+    const groups = oneofs.get(key.slice(0, -DEFINITION_SUFFIX.length));
+    if (!groups || !definition.properties) continue;
+    if (definition.allOf) {
+      throw new Error(`${name}: ${key} already has an allOf to hold its oneofs`);
+    }
+    definition.allOf = groups.map((fields) => ({
+      oneOf: [{ not: { anyOf: fields.map(present) } }, ...fields.map(present)],
+    }));
+  }
+}
+
+function present(field) {
+  const spellings = [...new Set([field.jsonName, field.name])];
+  if (spellings.length === 1) return { required: spellings };
+  return { anyOf: spellings.map((spelling) => ({ required: [spelling] })) };
 }
 
 function refuseNonECMAScriptPatterns(name, node) {
