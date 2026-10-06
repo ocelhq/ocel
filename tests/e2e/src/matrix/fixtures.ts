@@ -120,6 +120,7 @@ export const deploy = {
       vps: [defaults],
       gcp: [defaults, container, alb, cloudflareOnGoogleCloud],
     },
+    previews: { gcp: [defaults, alb] },
   }),
   workspace: fixture("deploy/workspace", {
     apps: ["next", "express"],

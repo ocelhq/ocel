@@ -12,6 +12,10 @@ export const PROJECT_LABEL = "ocel-project";
 
 export const APP_LABEL = "ocel-app";
 
+export const TIER_LABEL = "ocel-tier";
+
+export const PRODUCTION_TIER = "production";
+
 export const ENVIRONMENT_LABEL = "ocel-environment";
 
 export const PRODUCTION_ENVIRONMENT = "prod";

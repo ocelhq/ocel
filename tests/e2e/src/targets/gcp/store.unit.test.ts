@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { repoRoot } from "../../paths";
-import { APP_LABEL, ENVIRONMENT_LABEL, labelValue, NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
+import {
+  APP_LABEL,
+  ENVIRONMENT_LABEL,
+  labelValue,
+  NAMESPACE_LABEL,
+  PROJECT_LABEL,
+  TIER_LABEL,
+} from "./names";
 import {
   ALB_FEATURE,
   accessToken,
@@ -132,10 +139,11 @@ describe("servicesIn", () => {
 });
 
 describe("findAppService", () => {
-  const l = (project: string, app?: string, environment = "prod") => ({
+  const l = (project: string, app?: string, environment = "prod", tier = "production") => ({
     [NAMESPACE_LABEL]: "ocel-nightly",
     [PROJECT_LABEL]: project,
     [ENVIRONMENT_LABEL]: environment,
+    [TIER_LABEL]: tier,
     ...(app ? { [APP_LABEL]: app } : {}),
   });
   const service = (name: string, labels: Record<string, string>, uri = `https://${name}`) => ({
@@ -182,6 +190,12 @@ describe("findAppService", () => {
 
   it("never answers a preview's service for the production deploy", () => {
     expect(() => find([service("p", l("j-1-deploy-node", "web", "pr-3"))])).toThrow(
+      /no Cloud Run service is labelled ocel-app=web/,
+    );
+  });
+
+  it("never answers a preview's service of the same app", () => {
+    expect(() => find([service("p", l("j-1-deploy-node", "web", "prod", "preview"))])).toThrow(
       /no Cloud Run service is labelled ocel-app=web/,
     );
   });

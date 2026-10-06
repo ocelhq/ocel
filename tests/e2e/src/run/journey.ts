@@ -64,11 +64,11 @@ async function runSuite(target: Target, files: string[], workers: number, progre
   });
 }
 
-async function recordLanePreparation(target: Target, runId: string): Promise<void> {
+async function recordLanePreparation(target: Target, runId: string, planned: Plan): Promise<void> {
   const began = Date.now();
   let failures: PrepareFailures = {};
   try {
-    failures = await target.prepareLane();
+    failures = await target.prepareLane(planned);
   } catch (error) {
     failures = { lane: error instanceof Error ? error.message : String(error) };
   }
@@ -116,7 +116,7 @@ export async function runJourney(target: Target, filter: RunFilter): Promise<num
 
   const idle = files.length === 0;
   if (!idle) {
-    await recordLanePreparation(target, runId);
+    await recordLanePreparation(target, runId, planned);
   }
   const runStart = Date.now();
   const exit: SuiteExit = idle

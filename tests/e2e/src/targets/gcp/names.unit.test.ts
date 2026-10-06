@@ -9,8 +9,10 @@ import {
   NAMESPACE_LABEL,
   namespaceOf,
   PRODUCTION_ENVIRONMENT,
+  PRODUCTION_TIER,
   PROJECT_LABEL,
   roomForSlug,
+  TIER_LABEL,
 } from "./names";
 
 describe("roomForSlug", () => {
@@ -67,6 +69,12 @@ describe("the labels a service is found by", () => {
     expect(go).toMatch(new RegExp(`projectLabel\\s*=\\s*"${PROJECT_LABEL}"`));
     expect(go).toMatch(new RegExp(`appLabel\\s*=\\s*"${APP_LABEL}"`));
     expect(go).toMatch(new RegExp(`environmentLabel\\s*=\\s*"${ENVIRONMENT_LABEL}"`));
+    expect(go).toMatch(new RegExp(`tierLabel\\s*=\\s*"${TIER_LABEL}"`));
+  });
+
+  it("finds the production tier by the name the provider gives it", async () => {
+    const go = await readFile(path.join(repoRoot, "pkg", "environment", "tier.go"), "utf8");
+    expect(go).toMatch(new RegExp(`TierProduction\\s+Tier\\s*=\\s*"${PRODUCTION_TIER}"`));
   });
 
   it("finds the production environment by the name the provider gives it", async () => {
