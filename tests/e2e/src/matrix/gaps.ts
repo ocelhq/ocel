@@ -27,6 +27,7 @@ import {
   realtimeSubscriptionLimitCheck,
   realtimeWildcardCheck,
   rewrittenQueryCheck,
+  runtimeStampCheck,
   sseCheck,
   sseSilenceCheck,
   streamCheck,
@@ -112,6 +113,16 @@ export const gaps: Gap[] = [
       {
         on: ["gcp.floci"],
         fixtures: RUNTIME_NEUTRAL_DEPLOYS,
+        fails: [
+          check(TIMED_STREAMS),
+          check(malformedQueryCheck),
+          check(corsCheck),
+          check(publicOriginCheck),
+        ],
+      },
+      {
+        on: ["gcp.floci"],
+        fixtures: DEPLOY_NEXT_BEARING,
         fails: [
           check(TIMED_STREAMS),
           check(malformedQueryCheck),
@@ -221,6 +232,12 @@ export const gaps: Gap[] = [
         fails: [step.deploy],
         skipsCell: true,
       },
+      {
+        on: ["gcp"],
+        fixtures: [lifecycle.next, ...SDK_NEXT_BEARING],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
     ],
   },
   {
@@ -296,20 +313,6 @@ export const gaps: Gap[] = [
       {
         on: ["aws.floci"],
         fixtures: Object.values(realtime),
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-    ],
-  },
-  {
-    id: "next-on-cloud-run",
-    reason:
-      "gcp phase 3 serves node, go, python and rust; a Next app has no router in front of it there",
-    issue: 1097,
-    where: [
-      {
-        on: ["gcp", "gcp.floci"],
-        fixtures: DEPLOY_NEXT_BEARING,
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -421,6 +424,18 @@ export const gaps: Gap[] = [
     ],
   },
   {
+    id: "google-cloud-origins-serve-no-edge-runtime",
+    reason:
+      "a Google Cloud origin serves no edge runtime, so a route that declares it runs on node and stamps itself nodejs",
+    where: [
+      {
+        on: ["gcp", "gcp.floci"],
+        fixtures: [deploy.next, lifecycle.next, sdk.next],
+        fails: [check(runtimeStampCheck)],
+      },
+    ],
+  },
+  {
     id: "cloudflare-on-gcp-runs-no-worker",
     reason:
       "Cloudflare in front of a Google Cloud origin is a proxy that runs no worker, so the routing and cache a worker serves are absent, and the lane bootstraps no shielded load balancer for it to forward to",
@@ -436,6 +451,19 @@ export const gaps: Gap[] = [
       {
         on: ["gcp.floci"],
         fixtures: [kv.node],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+    ],
+  },
+  {
+    id: "floci-serves-no-cloud-sql",
+    reason:
+      "floci serves no Cloud SQL, and the floci lane's bootstrap installs no private network, so the gcp provider refuses a deploy that declares a postgres at preflight",
+    where: [
+      {
+        on: ["gcp.floci"],
+        fixtures: [lifecycle.next, ...SDK_NEXT_BEARING],
         fails: [step.deploy],
         skipsCell: true,
       },

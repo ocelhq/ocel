@@ -162,6 +162,139 @@ describe("Cloudflare in front of gcp", () => {
   });
 });
 
+describe("the needs a Google Cloud origin does not serve", () => {
+  const WAIVED = {
+    "deploy/next": ["edge-runtime", "edge-cache"],
+    "lifecycle/next": ["edge-runtime", "edge-cache"],
+    "sdk/next": ["edge-runtime", "edge-cache"],
+    "deploy/workspace": ["edge-cache"],
+    "sdk/workspace": ["edge-cache"],
+  };
+
+  it("waives the needs each Next fixture's gcp config deploys degraded, since the origin serves them on node", () => {
+    for (const [name, needs] of Object.entries(WAIVED)) {
+      const config = JSON.parse(
+        stripJsonComments(readFileSync(path.join(fixtureDir(name), GCP_BASE), "utf8")),
+      ) as { allowDegraded?: string[] };
+      expect([...(config.allowDegraded ?? [])].sort()).toEqual([...needs].sort());
+    }
+  });
+
+  it("expects the edge runtime's stamp red on every Next deploy on gcp and floci-gcp, where edge routes run on node", () => {
+    for (const lane of ["gcp", "gcp.floci"] as const) {
+      const listed = planOn(lane).expectedFailures["deploy/next/web"] ?? {};
+      const stamp = Object.entries(listed).filter(([title]) =>
+        title.includes("stamp themselves apart"),
+      );
+
+      expect(stamp).not.toEqual([]);
+      for (const [, gapsListed] of stamp) {
+        expect(gapsListed.map((gap) => gap.id)).toContain(
+          "google-cloud-origins-serve-no-edge-runtime",
+        );
+      }
+    }
+  });
+});
+
+describe("Next on gcp", () => {
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+  const NEXT_DEPLOYS = [
+    "deploy/next",
+    "deploy/next-container",
+    "deploy/workspace",
+    "deploy/workspace-container",
+  ];
+  const POSTGRES_NEXT = ["lifecycle/next", "lifecycle/next-container", "sdk/next", "sdk/workspace"];
+  const ids = (planned: ReturnType<typeof planOn>, cell: string) =>
+    (planned.skipped[cell] ?? []).map((gap) => gap.id).sort();
+
+  it("plans deploy/next and deploy/workspace on gcp and floci-gcp in either compute, with no gap left about Next on Cloud Run", () => {
+    for (const lane of ["gcp", "gcp.floci"] as const) {
+      const names = planOn(lane).cells.map((cell) => cell.name);
+      for (const cell of NEXT_DEPLOYS) {
+        expect(names).toContain(cell);
+      }
+    }
+    expect(gaps.find((gap) => gap.id === "next-on-cloud-run")).toBeUndefined();
+  });
+
+  it("expects only floci's buffering and rewriting red on the Next deploys on floci-gcp", () => {
+    const planned = planOn("gcp.floci");
+    const apps = { "deploy/workspace": ["next", "express"] } as Record<string, string[]>;
+    for (const cell of NEXT_DEPLOYS) {
+      for (const app of apps[cell.replace(/-container$/, "")] ?? ["web"]) {
+        const listed = Object.fromEntries(
+          Object.entries(planned.expectedFailures[`${cell}/${app}`] ?? {}).filter(
+            ([title]) => !title.includes("stamp themselves apart"),
+          ),
+        );
+        expect(Object.keys(listed)).toHaveLength(6);
+        for (const gapsListed of Object.values(listed)) {
+          expect(gapsListed.map((gap) => gap.id)).toEqual(["floci-cloud-run-buffers-and-rewrites"]);
+        }
+      }
+    }
+  });
+
+  it("holds a serverless Next app on gcp to the cache in front of the Next server", () => {
+    const edgeTitles = [...nextCacheChecks, ...nextDataCacheChecks].map((one) => one.title);
+    const originTitles = [...nextOriginCacheChecks, ...nextOriginDataCacheChecks].map(
+      (one) => one.title,
+    );
+    const planned = planOn("gcp", {}, EVERY_CELL);
+    for (const cell of ["deploy/next", "lifecycle/next"]) {
+      const titles =
+        planned.cells.find((one) => one.name === cell)?.steps.map((one) => one.title) ?? [];
+      expect(
+        titles.filter((title) => edgeTitles.some((cache) => title.endsWith(cache))),
+      ).not.toEqual([]);
+      expect(titles.filter((title) => originTitles.some((cache) => title.endsWith(cache)))).toEqual(
+        [],
+      );
+    }
+  });
+
+  it("skips the Next fixtures that declare a postgres on floci-gcp, which serves no Cloud SQL", () => {
+    const planned = planOn("gcp.floci");
+    for (const cell of POSTGRES_NEXT) {
+      expect(ids(planned, cell)).toEqual(["floci-serves-no-cloud-sql"]);
+    }
+  });
+
+  it("skips the Next fixtures that declare a postgres on gcp under #849", () => {
+    const planned = planOn("gcp");
+    for (const cell of POSTGRES_NEXT) {
+      expect((planned.skipped[cell] ?? []).map((gap) => gap.issue)).toEqual([849]);
+    }
+  });
+
+  it("skips deploy/next behind Cloudflare on gcp, whose cloudflare edge runs no worker, whether or not the run names a zone", () => {
+    const zoned = {
+      OCEL_E2E_ZONE: "journeys.example.com",
+      CLOUDFLARE_API_TOKEN: "token",
+      CLOUDFLARE_ACCOUNT_ID: "account",
+    };
+    for (const env of [{}, zoned]) {
+      expect(ids(planOn("gcp", env), "deploy/next-cloudflare")).toContain(
+        "cloudflare-on-gcp-runs-no-worker",
+      );
+    }
+    expect(ids(planOn("gcp", zoned), "deploy/next-cloudflare")).toEqual([
+      "cloudflare-on-gcp-runs-no-worker",
+    ]);
+  });
+
+  it("deploys deploy/next behind the load balancer on gcp when the run names a zone", () => {
+    const zoned = {
+      OCEL_E2E_ZONE: "journeys.example.com",
+      CLOUDFLARE_API_TOKEN: "token",
+      CLOUDFLARE_ACCOUNT_ID: "account",
+    };
+    expect(planOn("gcp", zoned).cells.map((cell) => cell.name)).toContain("deploy/next-alb");
+  });
+});
+
 describe("the Next cache a cell is held to", () => {
   const EDGE_TITLES = [...nextCacheChecks, ...nextDataCacheChecks].map((one) => one.title);
   const ORIGIN_TITLES = [...nextOriginCacheChecks, ...nextOriginDataCacheChecks].map(
@@ -221,7 +354,7 @@ describe("the Next cache a cell is held to", () => {
   it("holds a Next app in a container on aws or gcp to the Next server's own cache", () => {
     const containers = {
       aws: ["deploy/next-container", "lifecycle/next-container", "sdk/next-container"],
-      gcp: ["deploy/next-container"],
+      gcp: ["deploy/next-container", "lifecycle/next-container"],
     } as const;
     for (const [lane, cells] of Object.entries(containers) as [Lane, readonly string[]][]) {
       const planned = planOn(lane, {}, EVERY_CELL);

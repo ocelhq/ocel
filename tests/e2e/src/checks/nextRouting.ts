@@ -29,6 +29,18 @@ async function submit(
   return ctx.fetch(target.toString(), { method: "POST", body, redirect: "manual" });
 }
 
+export const runtimeStampCheck: Check = {
+  title: "the edge and the node runtime stamp themselves apart",
+  run: async (ctx) => {
+    const node = stamp(await pageHtml(ctx, "/runtime/node"), "runtime");
+    const edge = stamp(await pageHtml(ctx, "/runtime/edge"), "runtime");
+    assert.equal(node.cached, "nodejs");
+    assert.equal(edge.cached, "edge");
+    assert.notEqual(node.cached, edge.cached);
+    assert.ok(node.live.length > 0 && edge.live.length > 0);
+  },
+};
+
 export const nextRoutingChecks: Check[] = [
   {
     title: "the next handler answers every method with the body it was sent",
@@ -272,17 +284,7 @@ export const nextRoutingChecks: Check[] = [
       );
     },
   },
-  {
-    title: "the edge and the node runtime stamp themselves apart",
-    run: async (ctx) => {
-      const node = stamp(await pageHtml(ctx, "/runtime/node"), "runtime");
-      const edge = stamp(await pageHtml(ctx, "/runtime/edge"), "runtime");
-      assert.equal(node.cached, "nodejs");
-      assert.equal(edge.cached, "edge");
-      assert.notEqual(node.cached, edge.cached);
-      assert.ok(node.live.length > 0 && edge.live.length > 0);
-    },
-  },
+  runtimeStampCheck,
 ];
 
 export const nextStateChecks: Check[] = [
