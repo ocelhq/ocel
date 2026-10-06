@@ -8,6 +8,7 @@ export interface NextHost {
   newCacheStore?: () => Promise<CacheStore>;
   newUseCacheStore?: () => Promise<UseCacheStore>;
   newDispatchInvoke?: (localOrigin: string) => Promise<Invoke>;
+  newOriginInvoke?: (next: Invoke) => Promise<Invoke>;
   cacheTagsPerObject?: number;
   functionDir?: string;
   instanceCache?: InstanceCache;

@@ -88,10 +88,10 @@ async function boot(): Promise<void> {
     );
   };
 
-  const { bind } = getNextHost();
+  const { bind, newOriginInvoke } = getNextHost();
   if (!dispatchesAtOrigin(process.env)) {
     await serveInvoke(
-      invoke,
+      newOriginInvoke ? await newOriginInvoke(invoke) : invoke,
       (port) => {
         process.env.__NEXT_PRIVATE_ORIGIN = `http://127.0.0.1:${port}`;
       },

@@ -163,3 +163,74 @@ describe("resolveRouteDeps", () => {
     expect((deps as Response).status).toBe(503);
   });
 });
+
+describe("the image origin of a routed deployment", () => {
+  const entryUrl = "https://r1-x.o.example.com";
+
+  function imageRecord(): DeploymentRecord {
+    const record = makeRecord({ functionUrls: { "bundle-0": entryUrl } });
+    return { ...record, routingManifest: { ...record.routingManifest!, entry: "bundle-0" } };
+  }
+
+  const payload = {
+    assetPrefix: "build-1",
+    url: "/a.png",
+    w: 640,
+    q: 75,
+    accept: "image/webp",
+    mimeType: "image/webp",
+    configHash: "deadbeef",
+  };
+
+  function reached(fetched: string[]): typeof fetch {
+    return (async (input: RequestInfo | URL) => {
+      fetched.push(String(input));
+      return new Response("bytes", { status: 200, headers: { "content-type": "image/webp" } });
+    }) as typeof fetch;
+  }
+
+  async function depsWith(base: Partial<Parameters<typeof resolveRouteDeps>[1]>) {
+    const deps = await resolveRouteDeps(
+      { binding: bindingReturning("deploy-1", imageRecord()), app: "web" },
+      { assetStore, ...base },
+    );
+    return deps as RouteDeps;
+  }
+
+  it("asks the deployment's own service for an image when no optimizer is bound", async () => {
+    const fetched: string[] = [];
+    const deps = await depsWith({ imagesAtDeployment: true, originFetch: reached(fetched) });
+
+    const response = await deps.imageOrigin!(payload);
+
+    expect(response.status).toBe(200);
+    expect(fetched).toEqual(["https://r1-x.o.example.com/_ocel/image"]);
+  });
+
+  it("keeps the AWS optimizer when one is bound", async () => {
+    const optimizer = async () => new Response("optimizer", { status: 200 });
+    const deps = await depsWith({ imagesAtDeployment: false, imageOrigin: optimizer });
+
+    expect(deps.imageOrigin).toBe(optimizer);
+  });
+
+  it("leaves an origin reached with AWS keys without a deployment image origin", async () => {
+    const deps = await depsWith({ originFetch: reached([]) });
+
+    expect(deps.imageOrigin).toBeUndefined();
+  });
+
+  it("answers unprovisioned when the deployment's service cannot be reached", async () => {
+    const deps = await depsWith({
+      imagesAtDeployment: true,
+      originFetch: (async () => {
+        throw new Error("unreachable");
+      }) as typeof fetch,
+    });
+
+    const response = await deps.imageOrigin!(payload);
+
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain("No image optimizer is provisioned");
+  });
+});

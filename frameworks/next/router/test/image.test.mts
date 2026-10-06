@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import fixtures from "../fixtures/image-conformance.json" with { type: "json" };
 import {
+  deploymentImageOrigin,
   getSupportedMimeType,
   type ImageConfig,
   type ImageOriginRequest,
@@ -365,5 +366,56 @@ describe("serveImage", () => {
       "/docs",
     );
     expect(unprefixed.ok && unprefixed.params.isStatic).toBe(false);
+  });
+});
+
+describe("deploymentImageOrigin", () => {
+  const payload: ImageOriginRequest = {
+    assetPrefix: ASSET_PREFIX,
+    url: "/a.png",
+    w: 640,
+    q: 75,
+    accept: "image/webp",
+    mimeType: "image/webp",
+    configHash: "deadbeef",
+  };
+
+  it("asks the deployment's own service for an image at its origin path", async () => {
+    const send = vi.fn(
+      async () => new Response("bytes", { status: 200, headers: { "content-type": "image/webp" } }),
+    );
+    const origin = deploymentImageOrigin(
+      "https://r1-x.o.example.com",
+      send as unknown as typeof fetch,
+    )!;
+
+    const response = await origin(payload);
+
+    expect(response.status).toBe(200);
+    expect(send).toHaveBeenCalledTimes(1);
+    const [url, init] = send.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://r1-x.o.example.com/_ocel/image");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual(payload);
+  });
+
+  it("keeps the origin path off the entry url's own path", async () => {
+    const send = vi.fn(
+      async () => new Response("bytes", { headers: { "content-type": "image/png" } }),
+    );
+    await deploymentImageOrigin(
+      "https://r1-x.o.example.com/docs/page?x=1",
+      send as unknown as typeof fetch,
+    )!(payload);
+
+    expect((send.mock.calls[0] as unknown as [string])[0]).toBe(
+      "https://r1-x.o.example.com/_ocel/image",
+    );
+  });
+
+  it("has no deployment image origin for a record without an entry url", () => {
+    expect(deploymentImageOrigin(undefined, fetch)).toBeUndefined();
+    expect(deploymentImageOrigin("", fetch)).toBeUndefined();
+    expect(deploymentImageOrigin("not a url", fetch)).toBeUndefined();
   });
 });

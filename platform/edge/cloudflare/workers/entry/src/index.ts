@@ -6,7 +6,7 @@ import {
   type RouteResult,
 } from "@framework/next-router";
 import type { AssetStoreDeps } from "@framework/next-router/assets";
-import { functionUrlImageOrigin } from "@framework/next-router/image";
+import { deploymentImageOrigin, functionUrlImageOrigin } from "@framework/next-router/image";
 import { type CacheDeps, deploymentScope } from "./cache";
 import { withClientAddress } from "./client-address";
 import { type DeploymentRecord, type DeploymentsDeps, resolveDeployment } from "./deployments";
@@ -95,6 +95,7 @@ export type ResolveBase = Omit<
 > & {
   interception?: Omit<InterceptionTier, "config">;
   assetStore: Omit<AssetStoreDeps, "assetPrefix">;
+  imagesAtDeployment?: boolean;
   edgeRuntime?: {
     loader: WorkerLoader;
     store: EdgeObjectStore;
@@ -171,7 +172,7 @@ function routedDeps(
   deployments: DeploymentsDeps,
   base: ResolveBase,
 ): RouteDeps {
-  const { edgeRuntime, ...rest } = base;
+  const { edgeRuntime, imagesAtDeployment, ...rest } = base;
   const { edgeWorkers } = record;
   const manifest = record.routingManifest;
   if (!manifest) {
@@ -185,6 +186,14 @@ function routedDeps(
   }
   return {
     ...rest,
+    imageOrigin:
+      rest.imageOrigin ??
+      (imagesAtDeployment
+        ? deploymentImageOrigin(
+            record.functionUrls[manifest.entry],
+            rest.originFetch ?? rest.fetch ?? fetch,
+          )
+        : undefined),
     slug: deployments.slug,
     app,
     deploymentId: record.deploymentId,
@@ -291,6 +300,8 @@ export default {
       fetch,
       originFetch,
       imageOrigin: functionUrlImageOrigin(env.OCEL_IMAGE_OPTIMIZER_URL, originFetch ?? fetch),
+      imagesAtDeployment:
+        !env.OCEL_IMAGE_OPTIMIZER_URL && env.OCEL_ORIGIN_CLIENT_CERTIFICATE !== undefined,
       imageStore: store,
       assetStore: {
         store,
