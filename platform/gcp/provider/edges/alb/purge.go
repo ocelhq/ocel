@@ -30,7 +30,7 @@ func readReleaseTag(record router.DeploymentRecord) string {
 }
 
 func isReleaseTagged(record router.DeploymentRecord) bool {
-	return record.Framework == buildoutput.FrameworkNext
+	return record.Framework == buildoutput.FrameworkNext && record.Physical == ""
 }
 
 func newServedKey(pointer, app string) string { return pointer + "/" + app }
