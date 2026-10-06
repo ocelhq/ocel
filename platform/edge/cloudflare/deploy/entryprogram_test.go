@@ -300,3 +300,40 @@ func TestAnEntryWorkerWithNoOriginClientCertificateCarriesNone(t *testing.T) {
 		t.Errorf("ClientCertificates = %v, want nil", built.Spec.Worker.ClientCertificates)
 	}
 }
+
+func TestAnEntryWorkerThatRefreshesThroughTheQueueBindsItsTiersRefreshQueue(t *testing.T) {
+	for name, tc := range map[string]struct {
+		slug string
+		tier environment.Tier
+		want string
+	}{
+		"a production project": {"shop", environment.TierProduction, "ocel-refresh"},
+		"a preview project":    {"shop", environment.TierPreview, "ocel-refresh-preview"},
+		"the shared preview":   {"", environment.TierPreview, "ocel-refresh-preview"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			program := programmed(tc.slug, tc.tier)
+			program.Origin = OriginBindings{ClientCertificate: "c1", RefreshesThroughQueue: true}
+
+			built, err := program.Build()
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			if want := map[string]string{refreshQueueBinding: tc.want}; !maps.Equal(built.Spec.Worker.Queues, want) {
+				t.Errorf("Queues = %v, want %v", built.Spec.Worker.Queues, want)
+			}
+		})
+	}
+}
+
+func TestAnEntryWorkerOfAnOriginWithItsOwnQueueBindsNoRefreshQueue(t *testing.T) {
+	program := programmed("shop", environment.TierProduction)
+
+	built, err := program.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if built.Spec.Worker.Queues != nil {
+		t.Errorf("Queues = %v, want nil", built.Spec.Worker.Queues)
+	}
+}

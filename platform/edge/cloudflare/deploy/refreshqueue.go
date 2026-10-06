@@ -19,6 +19,8 @@ const (
 	kindQueue         = "Cloudflare::Queue"
 	kindQueueConsumer = "Cloudflare::QueueConsumer"
 
+	refreshQueueBinding = "OCEL_REFRESH_QUEUE"
+
 	reasonRefresherCertificate = "binds the tier's new worker client certificate"
 	reasonConsumerSettings     = "its settings differ from this build's"
 	reasonForeignConsumer      = "another consumer drains the queue; it is replaced"

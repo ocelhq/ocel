@@ -28,7 +28,7 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if spec.Program == nil {
 		return "", errors.New("the Cloudflare edge runs the preview entry worker; this wildcard has no program")
 	}
-	if err := p.refuseBootstrapBehind(ctx, accountID, environment.TierPreview, bootstrapCaller{worker: "the shared preview entry worker", retry: "run this again"}); err != nil {
+	if err := p.refuseBootstrapBehind(ctx, accountID, environment.TierPreview, bootstrapCaller{worker: "the shared preview entry worker", retry: "run this again", refreshes: spec.Program.Worker.Queues[refreshQueueBinding] != ""}); err != nil {
 		return "", err
 	}
 	up := upload{

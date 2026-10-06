@@ -109,3 +109,27 @@ func TestTheProviderHandsTheEntryWorkerProgramToItsHooks(t *testing.T) {
 		t.Error("Hooks().ProgramEdge is unset, so no edge that runs code gets a program")
 	}
 }
+
+func TestAGCPEntryWorkerSendsRefreshesToItsTiersQueue(t *testing.T) {
+	t.Parallel()
+	h := newOffersHarness(t)
+	if err := h.adopt(fullOffers("c1", "c2"), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.adoptIn(environment.TierPreview, fullOffers("c1", "c2"), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	for tier, want := range map[environment.Tier]string{environment.TierProduction: "ocel-refresh", environment.TierPreview: "ocel-refresh-preview"} {
+		program, err := programming(h).ProgramEdge(t.Context(), entryRequest(tier, "shop"))
+		if err != nil {
+			t.Fatalf("ProgramEdge(%s) = %v", tier, err)
+		}
+		if got := program.Spec.Worker.Queues["OCEL_REFRESH_QUEUE"]; got != want {
+			t.Errorf("%s queue binding = %q, want %q", tier, got, want)
+		}
+		if program.Spec.Worker.ClientCertificates[edge.OriginClientCertificateBinding] == "" {
+			t.Errorf("%s worker binds no client certificate", tier)
+		}
+	}
+}

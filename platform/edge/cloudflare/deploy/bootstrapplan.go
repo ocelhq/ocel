@@ -351,6 +351,8 @@ func comparableBinding(kind string, declared map[string]any) (binding, bool) {
 		ref.value = fmt.Sprint(declared["text"])
 	case "mtls_certificate":
 		ref.value = fmt.Sprint(declared["certificate_id"])
+	case "queue":
+		ref.value = fmt.Sprint(declared["queue_name"])
 	case "worker_loader":
 	default:
 		return binding{}, false
@@ -371,6 +373,8 @@ func deployedBindings(settings *workers.ScriptScriptAndVersionSettingGetResponse
 			ref.value = deployed.Text
 		case "mtls_certificate":
 			ref.value = deployed.CertificateID
+		case "queue":
+			ref.value = deployed.QueueName
 		case durableObjectBindingType:
 			ref.value = deployed.ClassName
 		case "worker_loader":

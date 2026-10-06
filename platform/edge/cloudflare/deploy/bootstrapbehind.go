@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -11,8 +12,9 @@ import (
 )
 
 type bootstrapCaller struct {
-	worker string
-	retry  string
+	worker    string
+	retry     string
+	refreshes bool
 }
 
 func (p *cloudflare) refuseBootstrapBehind(ctx context.Context, accountID string, tier environment.Tier, caller bootstrapCaller) error {
@@ -33,6 +35,13 @@ func (p *cloudflare) refuseBootstrapBehind(ctx context.Context, accountID string
 			phrases = append(phrases, fmt.Sprintf("the %s %q is behind this build", worker.what, worker.scriptName))
 		}
 	}
+	if caller.refreshes {
+		refreshPhrases, err := p.refreshQueueBehind(ctx, accountID, tier)
+		if err != nil {
+			return err
+		}
+		phrases = append(phrases, refreshPhrases...)
+	}
 	if len(phrases) == 0 {
 		return nil
 	}
@@ -44,4 +53,29 @@ func (p *cloudflare) refuseBootstrapBehind(ctx context.Context, accountID string
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s%s, and %s calls %s, so serving it would fail every request it routes.\nRe-run `%s` to install this build's, then %s",
 		strings.ToUpper(joined[:1]), joined[1:], caller.worker, calls, provider.BootstrapCommand(tier), caller.retry)
+}
+
+func (p *cloudflare) refreshQueueBehind(ctx context.Context, accountID string, tier environment.Tier) ([]string, error) {
+	certificates, err := p.workerClientCertificates().read(ctx, accountID, tier, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	state, err := p.readRefreshQueue(ctx, accountID, tier, certificates.keptID())
+	if err != nil {
+		return nil, err
+	}
+	var phrases []string
+	if !state.queuePresent {
+		phrases = append(phrases, fmt.Sprintf("the refresh queue %q is missing", state.name))
+	}
+	switch {
+	case !state.refresher.present:
+		phrases = append(phrases, fmt.Sprintf("the refresher worker %q is missing", state.refresher.scriptName))
+	case !state.refresher.upToDate():
+		phrases = append(phrases, fmt.Sprintf("the refresher worker %q is behind this build", state.refresher.scriptName))
+	}
+	if state.queuePresent && (!state.consumerPresent() || !state.consumerCurrent) {
+		phrases = append(phrases, fmt.Sprintf("the refresh queue %q has no consumer that drains it into %q", state.name, state.refresher.scriptName))
+	}
+	return phrases, nil
 }
