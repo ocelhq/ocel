@@ -91,7 +91,7 @@ func (c *clients) bindProjectRole(ctx context.Context, member, role string, cond
 		if refused == nil {
 			return nil
 		}
-		if !taken(refused) {
+		if !stale(refused) {
 			break
 		}
 	}
@@ -319,7 +319,7 @@ func (c *clients) unbindProjectMember(ctx context.Context, member string) ([]*cl
 		if refused == nil {
 			return removed, nil
 		}
-		if !taken(refused) {
+		if !stale(refused) {
 			break
 		}
 	}
