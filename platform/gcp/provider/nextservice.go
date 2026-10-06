@@ -39,6 +39,7 @@ const (
 	refreshQueueEnvVar      = "OCEL_REFRESH_QUEUE"
 	refreshAccountEnvVar    = "OCEL_REFRESH_ACCOUNT"
 	refreshSecretEnvVar     = "OCEL_REFRESH_SECRET"
+	refreshTargetEnvVar     = "OCEL_REFRESH_TARGET"
 	tasksEndpointEnvVar     = "OCEL_TASKS_ENDPOINT"
 
 	finishBeforeResponseEnvVar = "OCEL_FINISH_BEFORE_RESPONSE_MS"
@@ -87,6 +88,7 @@ type nextCache struct {
 
 type nextRefresh struct {
 	url           string
+	target        string
 	queue         string
 	account       string
 	secret        string
@@ -95,9 +97,22 @@ type nextRefresh struct {
 	region        string
 }
 
-func (r nextRefresh) addressedTo(service string) *nextRefresh {
+func (r nextRefresh) addressedTo(service, tag string) *nextRefresh {
 	r.url = refreshURLOf(service, r.projectNumber, r.region)
+	if tag != "" {
+		r.target = refreshTagURLOf(tag, service, r.projectNumber, r.region)
+	}
 	return &r
+}
+
+const maxRunAppLabelLength = 63
+
+func refreshTagURLOf(tag, service string, projectNumber int64, region string) string {
+	label := tag + "---" + service + "-" + strconv.FormatInt(projectNumber, 10)
+	if len(label) > maxRunAppLabelLength {
+		return ""
+	}
+	return "https://" + label + "." + region + ".run.app" + refreshPath
 }
 
 func refreshURLOf(service string, projectNumber int64, region string) string {
@@ -120,6 +135,9 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 			env[edge.OriginSignedVar] = "1"
 			if refresh != nil {
 				env[refreshURLEnvVar] = refresh.url
+				if refresh.target != "" {
+					env[refreshTargetEnvVar] = refresh.target
+				}
 				env[refreshQueueEnvVar] = refresh.queue
 				env[refreshAccountEnvVar] = refresh.account
 				env[refreshSecretEnvVar] = refresh.secret

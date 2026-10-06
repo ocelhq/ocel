@@ -7,6 +7,7 @@ export interface RefreshQueueOptions {
   queue: string;
   account: string;
   url: string;
+  target?: string;
   isrPrefix: string;
   secret: string;
   endpoint?: string;
@@ -69,7 +70,7 @@ export function newRefreshQueue(options: RefreshQueueOptions): ScheduleRefresh {
         name,
         dispatchDeadline,
         httpRequest: {
-          url: options.url,
+          url: options.target ?? options.url,
           httpMethod: "POST",
           headers: {
             "Content-Type": "application/json",

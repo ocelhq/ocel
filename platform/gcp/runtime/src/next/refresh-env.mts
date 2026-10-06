@@ -4,6 +4,7 @@ export interface RefreshEnv {
   account: string;
   isrPrefix: string;
   secret: string;
+  target?: string;
 }
 
 export function readRefreshEnv(
@@ -19,5 +20,5 @@ export function readRefreshEnv(
   const isrPrefix = env.OCEL_ISR_PREFIX;
   if (!isrPrefix) throw new Error("ocel: OCEL_REFRESH_URL is set but OCEL_ISR_PREFIX is not");
   if (!secret) throw new Error("ocel: OCEL_REFRESH_URL is set but OCEL_REFRESH_SECRET is not");
-  return { url, queue, account, isrPrefix, secret };
+  return { url, queue, account, isrPrefix, secret, target: env.OCEL_REFRESH_TARGET || undefined };
 }
