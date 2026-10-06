@@ -43,7 +43,7 @@ const (
 	reasonUngranted = "it exists, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
 	reasonUnpruned  = "it exists with cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
 
-	reasonUnprotected = "it exists with delete protection off, and one call would take every record both tiers store with it"
+	reasonUnprotected = "it exists with delete protection off, and one call would take every record it stores with it"
 
 	reasonUnlocked = "it is open to object ACLs or to allUsers, and what a deploy writes in it is reached by IAM alone"
 )
