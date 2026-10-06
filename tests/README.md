@@ -86,8 +86,10 @@ scripts/floci.sh --cloud gcp destroy ocel-e2e
 `pnpm --filter @ocel-tests/e2e e2e:gcp` runs every gcp cell instead of one. The
 project is `floci-local` and the region `europe-west1` under the emulator, and both are
 named by `OCEL_GCP_PROJECT` and `OCEL_GCP_REGION` against a real project. The apps are
-served on the url Cloud Run gives each service, not on a hostname, so the lane binds no
-domain and needs no zone. `python3` must have `pip` on it, as the aws and vps lanes need.
+served on the url Cloud Run gives each service, so a cell needs no hostname or zone, except
+the `alb` cells, which are answered on hostnames in the run's Cloudflare zone and need
+`OCEL_E2E_ZONE`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set; without all three
+they are skipped, and on floci they are always skipped. `python3` must have `pip` on it, as the aws and vps lanes need.
 
 For `vps` that is a box the run can reach over SSH, and on a laptop that is an incus VM:
 
@@ -149,8 +151,9 @@ every cell of every concern: on a release pull request, by workflow dispatch, or
 pull request that carries the `e2e:cloud` label, which comes off again as the run starts.
 From here only `scripts/ec2.sh` spends a real account.
 
-`gcp` is not one of them: the gcp target runs against the floci-gcp emulator, and nowhere
-real.
+`gcp` runs against a real project only when an E2E Tests (Cloud) dispatch names it in
+`targets`, and never on a release pull request or the `e2e:cloud` label. Every other gcp
+run is against the floci-gcp emulator.
 
 The `Nightly` workflow drives the `vps` lane against a box it brings up with
 `scripts/gce.sh`, every night and on dispatch, and releases the commit a pass drove.

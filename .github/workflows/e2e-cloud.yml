@@ -30,7 +30,7 @@ on:
   workflow_dispatch:
     inputs:
       targets:
-        description: "Targets to drive against their real accounts, space separated: aws, vps and next. gcp and dev are never driven for real."
+        description: "Targets to drive against their real accounts, space separated: aws, vps, next and gcp. gcp runs only when a dispatch names it; dev is never driven for real."
         default: "aws vps next"
         type: string
       variants:
@@ -127,4 +127,18 @@ jobs:
       variants: cloudflare
       coverage: every-cell
       skips: skip
+    secrets: inherit
+
+  gcp:
+    name: GCP
+    if: github.event_name == 'workflow_dispatch' && contains(format(' {0} ', inputs.targets), ' gcp ')
+    uses: ./.github/workflows/e2e-target.yml
+    with:
+      target: gcp
+      cloud: true
+      concern: ${{ inputs.concern }}
+      fixtures: ${{ inputs.fixtures }}
+      variants: ${{ inputs.variants }}
+      coverage: ${{ inputs.coverage || 'every-cell' }}
+      skips: ${{ inputs.skips || 'skip' }}
     secrets: inherit
