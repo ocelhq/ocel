@@ -103,6 +103,21 @@ func TestAPromotionClearsTheReleaseItReplacedFromCloudCDN(t *testing.T) {
 	}
 }
 
+func TestAPromotionWithoutALogStillClearsTheReleaseItReplaced(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	stagedRelease(t, stack, "web", "b1", 1, buildoutput.FrameworkNext)
+	stagedRelease(t, stack, "web", "b2", 2, buildoutput.FrameworkNext)
+	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
+	promoted(t, stack, nil, "p2", "", map[string]string{"web": "b2"})
+
+	want := [][]string{{"ocel-alb-production-routes", "r00000001"}}
+	if got := w.invalidations(); !slices.EqualFunc(got, want, slices.Equal) {
+		t.Errorf("the promotion invalidated %v, want %v", got, want)
+	}
+}
+
 func TestARollbackClearsTheReleaseItRolledBackFrom(t *testing.T) {
 	t.Parallel()
 
