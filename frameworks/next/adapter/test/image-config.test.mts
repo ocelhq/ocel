@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { compileImageConfig, imageConfigHash, serializeImageConfig } from "../src/image-config.mts";
 import { defaultImages } from "./fixtures.mts";
@@ -185,4 +188,24 @@ test.each([
   expect(warn).toHaveBeenCalledWith(expect.stringMatching(expected));
 
   warn.mockRestore();
+});
+
+test("compiles patterns with the picomatch of the Next installed in the app being built", async () => {
+  const appDir = await mkdtemp(join(tmpdir(), "ocel-next-app-"));
+  const picomatchDir = join(appDir, "node_modules/next/dist/compiled/picomatch");
+  await mkdir(picomatchDir, { recursive: true });
+  await writeFile(
+    join(picomatchDir, "index.js"),
+    'module.exports = { makeRe: () => new RegExp("app-picomatch") };',
+  );
+  const cwd = vi.spyOn(process, "cwd").mockReturnValue(appDir);
+
+  try {
+    expect(remotePattern({ hostname: "example.com" })).toMatchObject({
+      hostname: "app-picomatch",
+      pathname: "app-picomatch",
+    });
+  } finally {
+    cwd.mockRestore();
+  }
 });
