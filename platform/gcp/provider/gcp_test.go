@@ -13,3 +13,9 @@ func TestCloudRunDeclaresItsNextFunctionsRefreshByRequest(t *testing.T) {
 		t.Error("Facts().NextRefreshesByRequest = false, want true: a Cloud Run function billed per request stops its work when the response ends")
 	}
 }
+
+func TestCloudRunSaysItShipsANextServerRuntime(t *testing.T) {
+	if pushing(t, "").Hooks().ReadNextServerRuntime == nil {
+		t.Error("Hooks().ReadNextServerRuntime = nil, want the Next server runtime a Cloud Run Next container loads its cache handlers from")
+	}
+}

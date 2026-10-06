@@ -99,6 +99,13 @@ func collectBuildAndAssemble(ctx context.Context, dependencies Dependencies, a a
 
 func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps *buildSteps, clients []clientenv.App, workers build.HostedWorkers) (build.Output, error) {
 	cfg, span := a.cfg, a.span
+	standalone, err := build.FindStandaloneNextApps(cfg, a.host)
+	if err != nil {
+		return build.Output{}, err
+	}
+	for _, app := range standalone {
+		span.Warn(app.Warning())
+	}
 	if a.prebuilt {
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
 			return build.Output{}, err
@@ -121,7 +128,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	}
 	span.End(nil)
 	var built build.Output
-	err := steps.run(cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
+	err = steps.run(cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
 		built, err = dependencies.BuildApps(ctx, cfg, build.Env(clients), a.containerArchs, workers, a.host, steps.log())
 		if err != nil {
 			return err
