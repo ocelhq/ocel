@@ -174,14 +174,6 @@ type CredentialDocument struct {
 	Document string
 }
 
-type AppDeployment struct {
-	Name    string
-	Worker  Worker
-	Domains []string
-	Values  map[string]string
-	Warn    func(string)
-}
-
 type Worker struct {
 	Main          WorkerModule
 	Modules       []WorkerModule
@@ -212,8 +204,4 @@ type WorkerModule struct {
 type StaticAsset struct {
 	Path    string
 	Content []byte
-}
-
-type AppResult struct {
-	URL string
 }

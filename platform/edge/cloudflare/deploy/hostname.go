@@ -133,18 +133,6 @@ func coveredByUniversalSSL(host, zone string) bool {
 	return !strings.Contains(sub, ".")
 }
 
-func canonicalDomainURL(domains []string) string {
-	if len(domains) == 0 {
-		return ""
-	}
-	for _, host := range domains {
-		if !strings.HasPrefix(host, "*.") {
-			return "https://" + host
-		}
-	}
-	return "https://" + domains[0]
-}
-
 func nilSafeWarn(warn func(string)) func(string) {
 	if warn == nil {
 		return func(string) {}

@@ -471,15 +471,6 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 		})
 	}
 
-	t.Run("deploying an app without an account id is an error", func(t *testing.T) {
-		t.Setenv(envAccountID, "")
-		t.Setenv(envAPIToken, "")
-
-		if _, err := (&cloudflare{namespace: "ocel"}).deployApp(t.Context(), edge.AppDeployment{Name: "ocel-proj-prod"}); err == nil {
-			t.Fatal("expected an error when the environment names no credential")
-		}
-	})
-
 	t.Run("the edge checks its credentials and its plan", func(t *testing.T) {
 		hooks := New("ocel", Options{}).Hooks()
 		if hooks.VerifyCredentials == nil {
@@ -564,34 +555,4 @@ func TestCompatibility(t *testing.T) {
 			t.Errorf("Facts().Compatibility.Flags = %v, want %v", compatibility.Flags, compatFlags)
 		}
 	})
-}
-
-func TestAnAppIsFoundOnceDeployedAndNotBefore(t *testing.T) {
-	t.Setenv(envAccountID, "acct")
-	p := previewZoneMock().provider(t)
-	const name = "ocel-conformance-prod-web"
-
-	found, err := p.findApp(t.Context(), name)
-	if err != nil {
-		t.Fatalf("findApp before deploying: %v", err)
-	}
-	if found {
-		t.Fatalf("findApp(%q) = true before anything was deployed under it", name)
-	}
-
-	worker := edge.Worker{Main: mainModule()}
-	result, err := p.deployApp(t.Context(), edge.AppDeployment{Name: name, Worker: worker})
-	if err != nil {
-		t.Fatalf("deployApp: %v", err)
-	}
-	if result.URL == "" {
-		t.Error("deployApp returned no URL; an app deployed with no domains is reachable somewhere the edge must name")
-	}
-	found, err = p.findApp(t.Context(), name)
-	if err != nil {
-		t.Fatalf("findApp after deploying: %v", err)
-	}
-	if !found {
-		t.Errorf("findApp(%q) = false after deployApp succeeded", name)
-	}
 }

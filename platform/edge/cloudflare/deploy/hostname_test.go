@@ -1316,29 +1316,6 @@ func TestCoveredByUniversalSSL(t *testing.T) {
 	}
 }
 
-func TestCanonicalDomainURL(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name    string
-		domains []string
-		want    string
-	}{
-		{"no domain has no canonical URL", nil, ""},
-		{"a single plain hostname is the canonical URL", []string{"app.com"}, "https://app.com"},
-		{"the first non-wildcard wins", []string{"*.app.com", "app.com"}, "https://app.com"},
-		{"all wildcards falls back to the first", []string{"*.app.com"}, "https://*.app.com"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := canonicalDomainURL(tc.domains); got != tc.want {
-				t.Errorf("canonicalDomainURL(%v) = %q, want %q", tc.domains, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestRouteBaseDomain(t *testing.T) {
 	t.Parallel()
 
