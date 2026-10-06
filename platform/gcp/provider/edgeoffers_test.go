@@ -47,7 +47,11 @@ func newOffersHarness(t *testing.T) *offersHarness {
 }
 
 func (h *offersHarness) adopt(offers []edge.Offer, values map[string]string) error {
-	return adoptEdgeOffers(context.Background(), h.clients, h.records, environment.TierProduction, cloudflareKind,
+	return h.adoptIn(environment.TierProduction, offers, values)
+}
+
+func (h *offersHarness) adoptIn(tier environment.Tier, offers []edge.Offer, values map[string]string) error {
+	return adoptEdgeOffers(context.Background(), h.clients, h.records, tier, cloudflareKind,
 		edge.BootstrapOutput{Offers: offers, Values: values}, h.log)
 }
 

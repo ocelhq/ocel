@@ -111,6 +111,7 @@ func (p *Provider) Facts() provider.Facts {
 func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
 		PreflightDeploy:     p.PreflightDeploy,
+		ProgramEdge:         p.ProgramEdge,
 		EnsureImageRegistry: p.EnsureImageRegistry,
 		OpenDirectImages:    p.OpenDirectImages,
 		CheckBucket:         s3store.Check,
@@ -148,7 +149,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 }
 
 func (p *Provider) Stacks() provider.Stacks {
-	return resources.NewHookStacks(p.KeyValues(), p.Artifacts(), p.resourceHooks())
+	return stacks{Stacks: resources.NewHookStacks(p.KeyValues(), p.Artifacts(), p.resourceHooks()), p: p}
 }
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return artifacts{p: p} }
