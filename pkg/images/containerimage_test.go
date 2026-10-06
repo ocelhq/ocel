@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const wrappedDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -299,6 +301,26 @@ func TestWrapContainerRefusesANextServerRuntimeWithoutItsAdapter(t *testing.T) {
 	_, err := images.WrapContainer(base, []byte("a runtime"), nextServerRuntime(map[string][]byte{"cache-handler.cjs": []byte("x")}))
 	if err == nil || !strings.Contains(err.Error(), images.NextServerAdapterFile) {
 		t.Errorf("WrapContainer() = %v, want a refusal naming %s", err, images.NextServerAdapterFile)
+	}
+}
+
+func TestWrapContainerRefusesANextServerRuntimeWhoseDirectoryIsNotAbsolute(t *testing.T) {
+	t.Parallel()
+
+	for _, dir := range []string{"ocel/next", "./ocel/next", ""} {
+		t.Run(dir, func(t *testing.T) {
+			t.Parallel()
+
+			base := baseContainer(t, v1.Config{Cmd: []string{"next", "start"}})
+			_, err := images.WrapContainer(base, []byte("a runtime"), &images.NextServerRuntime{Dir: dir, Files: nextFiles()})
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+				t.Fatalf("WrapContainer() = %v, want an invalid refusal", err)
+			}
+			if !strings.Contains(err.Error(), fmt.Sprintf("%q", dir)) {
+				t.Errorf("WrapContainer() = %v, want it to name %q", err, dir)
+			}
+		})
 	}
 }
 
