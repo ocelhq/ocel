@@ -1,9 +1,13 @@
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterEach, expect, test, vi } from "vitest";
 import {
   cacheTagsForCloudCdn,
   cloudCdnRelease,
   forCloudCdn,
   trimVaryForCloudCdn,
+  withholdFromCloudCdn,
+  withholdResponsesFromCloudCdn,
 } from "../src/next/cloud-cdn.mjs";
 
 const release = "r1a2b3c4d";
@@ -193,4 +197,46 @@ test("a page whose tags all fit keeps its cache control", () => {
 
   expect(response.headers.get("cache-control")).toBe("s-maxage=60");
   expect(tagsOf(response)).toBe(`${release},${shapedTags(3)}`);
+});
+
+const uncacheable = "private, no-cache, no-store, max-age=0, must-revalidate";
+
+test("a response Cloud CDN would store under s-maxage is withheld from it, because nothing tags it for clearing", () => {
+  expect(withholdFromCloudCdn(null)).toBeNull();
+  expect(withholdFromCloudCdn("s-maxage=60, stale-while-revalidate=31535940")).toBe(uncacheable);
+  expect(withholdFromCloudCdn("S-MaxAge=31536000")).toBe(uncacheable);
+  expect(withholdFromCloudCdn("private, no-cache, no-store, max-age=0, must-revalidate")).toBe(
+    uncacheable,
+  );
+  expect(withholdFromCloudCdn("public, max-age=0")).toBe("public, max-age=0");
+});
+
+test("an immutable response stays storable by Cloud CDN, because a hashed file never needs clearing", () => {
+  expect(withholdFromCloudCdn("public, max-age=31536000, immutable")).toBe(
+    "public, max-age=31536000, immutable",
+  );
+  expect(withholdFromCloudCdn("public, s-maxage=60, immutable")).toBe(
+    "public, s-maxage=60, immutable",
+  );
+});
+
+test("a next start response that names s-maxage leaves the server private and unstorable", async () => {
+  class TestResponse extends http.ServerResponse {}
+  withholdResponsesFromCloudCdn(TestResponse.prototype);
+  const server = http.createServer({ ServerResponse: TestResponse }, (req, res) => {
+    if (req.url === "/static")
+      res.setHeader("cache-control", "public, max-age=31536000, immutable");
+    else res.setHeader("cache-control", "s-maxage=60");
+    res.end("x");
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    expect((await fetch(`${base}/page`)).headers.get("cache-control")).toBe(uncacheable);
+    expect((await fetch(`${base}/static`)).headers.get("cache-control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });

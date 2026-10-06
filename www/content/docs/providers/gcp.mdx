@@ -59,7 +59,9 @@ A Next app on `compute: "container"` runs `next start` in its image with 2 GiB o
 CPU always allocated, so it is billed per instance, and it keeps at least one instance running
 unless `minInstances` is 0. It shares the tier's Cloud Storage cache and Firestore tag records
 with a serverless Next app, so a revalidated tag reaches every instance, and it refreshes stale
-pages in the background. Do not build it with `output: "standalone"` and do not set
+pages in the background. Cloud CDN does not store its pages: ocel marks every response that
+names `s-maxage` private, so a revalidated page is never served stale; its hashed static files are
+still cached. Do not build it with `output: "standalone"` and do not set
 `adapterPath` in `next.config`: the deploy warns about both.
 
 Each prerendered page renders on its first request after a deploy and is then served from the
