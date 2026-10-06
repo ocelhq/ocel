@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -66,9 +65,6 @@ func TestEdgeUser(t *testing.T) {
 			stmts := user.Properties.Policies[0].PolicyDocument.Statement
 			var ddbTable, ddbIndex, sqsSend, invoke, invokeTagged, invokeTiered bool
 			for _, st := range stmts {
-				if hasS3Action(st.Action) {
-					t.Errorf("the edge user is granted an S3 action on %v", st.Resource)
-				}
 				if st.Resource == paramStateTableARN && boundToTagKeys(st.Condition) {
 					ddbTable = hasAction(st.Action, "dynamodb:BatchGetItem") && hasAction(st.Action, "dynamodb:UpdateItem")
 				}
@@ -169,20 +165,4 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, fronted, nil); err != nil {
 		t.Fatalf("a plain bootstrap straight after the drop: %v", err)
 	}
-}
-
-func hasS3Action(action any) bool {
-	var actions []any
-	switch a := action.(type) {
-	case string:
-		actions = []any{a}
-	case []any:
-		actions = a
-	}
-	for _, v := range actions {
-		if name, ok := v.(string); ok && strings.HasPrefix(name, "s3:") {
-			return true
-		}
-	}
-	return false
 }

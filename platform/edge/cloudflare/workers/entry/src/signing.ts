@@ -115,25 +115,22 @@ export function sqsFetch(
   return ((input, init) => client.fetch(input as RequestInfo, init)) as typeof fetch;
 }
 
-export type AwsService = "dynamodb";
+export type DynamoDbFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
-export type AwsServiceFetch = (
-  service: AwsService,
-  url: string,
-  init?: RequestInit,
-) => Promise<Response>;
+const dynamoDbRetries = 1;
 
-const serviceRetries = 1;
-
-export function awsServiceFetch(
+export function dynamoDbFetch(
   accessKeyId: string | undefined,
   secretAccessKey: string | undefined,
   region: string | undefined,
-): AwsServiceFetch | undefined {
+): DynamoDbFetch | undefined {
   if (!accessKeyId || !secretAccessKey || !region) return undefined;
-  const options = { accessKeyId, secretAccessKey, region, retries: serviceRetries };
-  const clients: Record<AwsService, AwsClient> = {
-    dynamodb: new AwsClient({ ...options, service: "dynamodb" }),
-  };
-  return (service, url, init) => clients[service].fetch(url, init);
+  const client = new AwsClient({
+    accessKeyId,
+    secretAccessKey,
+    region,
+    service: "dynamodb",
+    retries: dynamoDbRetries,
+  });
+  return (url, init) => client.fetch(url, init);
 }

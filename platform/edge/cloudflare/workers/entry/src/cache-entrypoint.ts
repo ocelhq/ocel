@@ -6,7 +6,7 @@ import {
   tagNamespace,
 } from "@framework/next-cache";
 import type { CacheEntrypointProps, Env, IsrWriterBinding } from "./env";
-import { type AwsServiceFetch, awsServiceFetch } from "./signing";
+import { type DynamoDbFetch, dynamoDbFetch } from "./signing";
 import { createTagClock, dropSnapshotMemo, type ObjectStoreReader, parseJson } from "./tag-clock";
 import { isGuardRejection, tagRecordUpdate } from "./tag-index";
 
@@ -24,7 +24,7 @@ export interface FetchEntryStore {
 export interface TagTable {
   region: string;
   table: string;
-  aws: AwsServiceFetch;
+  dynamo: DynamoDbFetch;
 }
 
 export interface EdgeCacheDeps {
@@ -129,18 +129,18 @@ function entryTags(entry: FetchCacheEntry, tags: string[]): string[] {
 }
 
 async function writeTagRecord(
-  deps: TagTable,
+  table: TagTable,
   namespace: string,
   tag: string,
   record: { stale?: number; expired?: number; writtenAt: number },
 ): Promise<void> {
-  const response = await deps.aws("dynamodb", `https://dynamodb.${deps.region}.amazonaws.com/`, {
+  const response = await table.dynamo(`https://dynamodb.${table.region}.amazonaws.com/`, {
     method: "POST",
     headers: {
       "content-type": "application/x-amz-json-1.0",
       "x-amz-target": "DynamoDB_20120810.UpdateItem",
     },
-    body: JSON.stringify(tagRecordUpdate(deps.table, namespace, tag, record)),
+    body: JSON.stringify(tagRecordUpdate(table.table, namespace, tag, record)),
   });
   if (response.ok) return;
 
@@ -186,7 +186,7 @@ export class CacheEntrypoint
     const scope = this.ctx.props?.scope;
     if (!OCEL_CACHE_STORE || !scope) return null;
 
-    const aws = awsServiceFetch(
+    const dynamo = dynamoDbFetch(
       this.env.OCEL_EDGE_ACCESS_KEY_ID,
       this.env.OCEL_EDGE_SECRET_KEY,
       OCEL_AWS_REGION,
@@ -195,8 +195,8 @@ export class CacheEntrypoint
       scope,
       entries: OCEL_CACHE_STORE,
       tagTable:
-        aws && OCEL_AWS_REGION && OCEL_STATE_TABLE
-          ? { region: OCEL_AWS_REGION, table: OCEL_STATE_TABLE, aws }
+        dynamo && OCEL_AWS_REGION && OCEL_STATE_TABLE
+          ? { region: OCEL_AWS_REGION, table: OCEL_STATE_TABLE, dynamo }
           : undefined,
       snapshots: OCEL_CACHE_STORE,
       raise: tagRaiser(this.env.ISR_WRITER, this.ctx.props?.isrWriteSecret),

@@ -390,7 +390,7 @@ func iamResourceMatches(pattern, arn string) bool {
 }
 
 func TestAssetBucketRevalidator(t *testing.T) {
-	t.Run("the edge key holds no S3 grant, so it cannot plant an origin record", func(t *testing.T) {
+	t.Run("the edge user is granted no S3 action", func(t *testing.T) {
 		for _, tc := range revalidatorTemplates() {
 			t.Run(tc.name, func(t *testing.T) {
 				user, ok := parseRevalidatorTemplate(t, tc.edgeTemplate).Resources["EdgeUser"]

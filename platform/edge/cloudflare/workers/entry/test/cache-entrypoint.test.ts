@@ -14,7 +14,6 @@ import {
   tagRaiser,
 } from "../src/cache-entrypoint";
 import type { Env } from "../src/index";
-import type { AwsService } from "../src/signing";
 import type { ObjectStoreReader } from "../src/tag-clock";
 
 declare module "cloudflare:test" {
@@ -44,7 +43,6 @@ function raiseRecorder(
 }
 
 interface Call {
-  service: AwsService;
   url: string;
   method: string;
   headers: Headers;
@@ -57,9 +55,8 @@ function awsRecorder(
   const calls: Call[] = [];
   return {
     calls,
-    send: async (service: AwsService, url: string, init?: RequestInit) => {
+    send: async (url: string, init?: RequestInit) => {
       const call: Call = {
-        service,
         url,
         method: init?.method ?? "GET",
         headers: new Headers(init?.headers),
@@ -136,7 +133,7 @@ function cacheWith(
   return createEdgeCache({
     scope: over.scope ?? scope,
     entries: over.entries ?? entryStore().store,
-    tagTable: over.aws ? { region, table, aws: over.aws.send } : undefined,
+    tagTable: over.aws ? { region, table, dynamo: over.aws.send } : undefined,
     snapshots: over.store ?? snapshotBucket(),
     raise: over.raise ?? raiseRecorder().raise,
     waitUntil: over.waitUntil ?? (() => {}),
@@ -259,7 +256,7 @@ it("records one tag update per tag, under the prefix's tag namespace", async () 
   const aws = awsRecorder(() => new Response("{}"));
   await cacheWith({ aws }).revalidateTags(scope, ["posts", "authors"]);
 
-  const updates = aws.calls.filter((call) => call.service === "dynamodb");
+  const updates = aws.calls;
   expect(updates).toHaveLength(2);
   expect(updates[0].url).toBe(`https://dynamodb.${region}.amazonaws.com/`);
   expect(updates[0].headers.get("x-amz-target")).toBe("DynamoDB_20120810.UpdateItem");
@@ -289,15 +286,14 @@ it("marks tags stale now and dead at the end of an expire window", async () => {
 
 it("treats a rejected guard as the ordinary outcome it is", async () => {
   const writer = raiseRecorder();
-  const aws = awsRecorder((call) =>
-    call.service === "dynamodb"
-      ? new Response(
-          JSON.stringify({
-            __type: "com.amazonaws.dynamodb.v20120810#ConditionalCheckFailedException",
-          }),
-          { status: 400 },
-        )
-      : new Response("{}"),
+  const aws = awsRecorder(
+    () =>
+      new Response(
+        JSON.stringify({
+          __type: "com.amazonaws.dynamodb.v20120810#ConditionalCheckFailedException",
+        }),
+        { status: 400 },
+      ),
   );
   await expect(
     cacheWith({ aws, raise: writer.raise }).revalidateTags(scope, ["posts"]),
@@ -355,7 +351,7 @@ it("does not fail the route when the writer refuses the raise", async () => {
     }).revalidateTags(scope, ["posts"]),
   ).resolves.toBeUndefined();
 
-  expect(aws.calls.filter((call) => call.service === "dynamodb")).toHaveLength(1);
+  expect(aws.calls).toHaveLength(1);
 });
 
 it("sees its own invalidation on the very next read", async () => {
