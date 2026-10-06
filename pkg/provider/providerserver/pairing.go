@@ -63,17 +63,21 @@ func (r *deployRun) isEdgeRouted(app string) bool {
 	return r.appRouters[app] == r.edgeKind
 }
 
-func (r *deployRun) listEdgeRoutedDomains() ([]string, map[string]string) {
-	owners := r.domainApps()
-	var domains []string
+func (r *deployRun) listEdgeRoutedDomains() (domains, servedElsewhere []string, owners map[string]string) {
+	owners = r.domainApps()
 	for _, host := range r.hostnames() {
-		if app := owners[strings.ToLower(host)]; app == "" || r.isEdgeRouted(app) {
-			domains = append(domains, host)
+		if app := owners[strings.ToLower(host)]; app != "" && !r.isEdgeRouted(app) {
+			continue
 		}
+		if bound, served := r.state.Host(host).ServedEdge(); served && bound != r.front.Kind() {
+			servedElsewhere = append(servedElsewhere, host)
+			continue
+		}
+		domains = append(domains, host)
 	}
 	maps.DeleteFunc(owners, func(_, app string) bool { return !r.isEdgeRouted(app) })
 	if len(owners) == 0 {
 		owners = nil
 	}
-	return domains, owners
+	return domains, servedElsewhere, owners
 }
