@@ -354,9 +354,11 @@ starts with the namespace and `_realtime-`, and IAM names a secret by the projec
 To let the people `previewViewers` names through to a preview, a deploy sets who the proxy
 admits to the Cloud Run services of its namespace and to nothing else the proxy guards:
 grant `roles/iap.admin` under a condition naming them. The proxy also admits the preview
-apps' service account, so a promotion can warm a preview: grant
-`roles/iam.serviceAccountTokenCreator` on that one account, and a deploy signs a short-lived
-token as it.
+account each preview app runs as, so a promotion can warm a preview. A deploy of a preview
+behind the proxy lets its own credential sign a short-lived token as that account, through
+the role that already lets the deploy set who may act as the accounts it creates, so
+promote with the credential that deployed: another credential gets a warning, and the
+promotion goes on without warming.
 
 ```bash
 NUMBER=$(gcloud projects describe my-project --format='value(projectNumber)')
@@ -368,9 +370,6 @@ gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=roles/iap.admin \
   --condition="title=ocel previews,expression=resource.type == 'iap.googleapis.com/WebService' && resource.name.startsWith('projects/$NUMBER/iap_web/cloud_run-europe-west1/services/ocel-')"
-gcloud iam service-accounts add-iam-policy-binding ocel-preview@my-project.iam.gserviceaccount.com \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-  --role=roles/iam.serviceAccountTokenCreator --project=my-project
 ```
 
 Secret Manager checks creating a secret against the project, so the condition cannot narrow
