@@ -88,14 +88,14 @@ func (s workerClientCertificateState) changes() []edge.PlanChange {
 		changes = append(changes, edge.PlanChange{Kind: kindMTLSCertificate, Name: s.base, Action: edge.PlanCreate})
 	case s.due(current):
 		changes = append(changes, edge.PlanChange{
-			Kind: kindMTLSCertificate, Name: current.name, Action: edge.PlanUpdate,
-			Reason: "expires " + current.expiresOn.UTC().Format(workerClientCertificateDay) + "; a new one is uploaded beside it",
+			Kind: kindMTLSCertificate, Name: s.base, Action: edge.PlanUpdate,
+			Reason: current.name + " expires " + current.expiresOn.UTC().Format(workerClientCertificateDay) + "; a new one is uploaded beside it",
 		})
 	default:
-		changes = append(changes, edge.PlanChange{Kind: kindMTLSCertificate, Name: current.name, Action: edge.PlanKeep, Reason: reasonCurrent})
+		changes = append(changes, edge.PlanChange{Kind: kindMTLSCertificate, Name: s.base, Action: edge.PlanKeep, Reason: current.name + " " + reasonCurrent})
 	}
 	for _, expired := range s.expired() {
-		changes = append(changes, edge.PlanChange{Kind: kindMTLSCertificate, Name: expired.name, Action: edge.PlanDelete, Reason: "expired"})
+		changes = append(changes, edge.PlanChange{Kind: kindMTLSCertificate, Name: s.base, Action: edge.PlanDelete, Reason: expired.name + " expired"})
 	}
 	return changes
 }
