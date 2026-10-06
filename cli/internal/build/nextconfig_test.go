@@ -260,3 +260,56 @@ func TestANextContainerThatNamesItsOwnAdapterIsNotRefusedAtBuild(t *testing.T) {
 		t.Errorf("RefuseNextFunctionsWithOwnAdapter() = %v, want nil", err)
 	}
 }
+
+func TestANextConfigSettingInsideAComment(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct{ name, body string }{
+		{"line comment adapter", "export default {\n  // adapterPath: \"./a.js\",\n}\n"},
+		{"trailing line comment adapter", "export default {} // adapterPath: \"./a.js\"\n"},
+		{"block comment adapter", "export default {\n  /* adapterPath: \"./a.js\", */\n}\n"},
+		{"multiline block comment adapter", "export default {\n  /*\n  adapterPath: \"./a.js\",\n  */\n}\n"},
+		{"line comment standalone", "export default {\n  // output: \"standalone\",\n}\n"},
+		{"block comment standalone", "export default { /* output: 'standalone' */ }"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			writeNextConfig(t, root, "web", "next.config.mjs", tt.body)
+			cfg := &project.Project{Dir: root, Apps: []project.App{nextContainerApp("web", "web"), nextApp("fn", "web")}}
+
+			found, err := FindNextConfigConflicts(cfg, Host{ShipsNextServerRuntime: true})
+			if err != nil {
+				t.Fatalf("FindNextConfigConflicts() error = %v", err)
+			}
+			if found != nil {
+				t.Errorf("FindNextConfigConflicts() = %+v, want none", found)
+			}
+			if err := RefuseNextFunctionsWithOwnAdapter(cfg); err != nil {
+				t.Errorf("RefuseNextFunctionsWithOwnAdapter() = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func TestANextConfigSettingBesideAStringHoldingCommentMarkersIsStillNamed(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeNextConfig(t, root, "web", "next.config.mjs", "export default { assetPrefix: \"https://cdn.example.com\", adapterPath: \"./a.js\", rewrites: '/* x', output: 'standalone' }")
+	cfg := &project.Project{Dir: root, Apps: []project.App{nextContainerApp("web", "web")}}
+
+	found, err := FindNextConfigConflicts(cfg, Host{ShipsNextServerRuntime: true})
+	if err != nil {
+		t.Fatalf("FindNextConfigConflicts() error = %v", err)
+	}
+	want := []NextConfigConflict{
+		{App: "web", ConfigFile: "next.config.mjs", Setting: StandaloneOutput},
+		{App: "web", ConfigFile: "next.config.mjs", Setting: OwnAdapter},
+	}
+	if !reflect.DeepEqual(found, want) {
+		t.Errorf("FindNextConfigConflicts() = %+v, want %+v", found, want)
+	}
+}

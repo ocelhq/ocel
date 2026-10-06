@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -87,8 +88,9 @@ func findAppNextConfigConflicts(cfg *project.Project, a project.App) ([]NextConf
 		return nil, err
 	}
 	var found []NextConfigConflict
+	code := stripJSComments(text)
 	for _, s := range nextConfigSettings {
-		if s.pattern.MatchString(text) {
+		if s.pattern.MatchString(code) {
 			found = append(found, NextConfigConflict{App: a.Name, ConfigFile: file, Setting: s.setting})
 		}
 	}
@@ -111,6 +113,42 @@ func readNextConfig(dir string) (file, text string, err error) {
 		return name, string(body), nil
 	}
 	return "", "", nil
+}
+
+func stripJSComments(src string) string {
+	var out strings.Builder
+	var quote byte
+	for i := 0; i < len(src); i++ {
+		c := src[i]
+		switch {
+		case quote != 0:
+			out.WriteByte(c)
+			if c == '\\' && i+1 < len(src) {
+				i++
+				out.WriteByte(src[i])
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'' || c == '`':
+			quote = c
+			out.WriteByte(c)
+		case c == '/' && i+1 < len(src) && src[i+1] == '/':
+			for i < len(src) && src[i] != '\n' {
+				i++
+			}
+			out.WriteByte('\n')
+		case c == '/' && i+1 < len(src) && src[i+1] == '*':
+			end := strings.Index(src[i+2:], "*/")
+			if end < 0 {
+				return out.String()
+			}
+			i += end + 3
+			out.WriteByte(' ')
+		default:
+			out.WriteByte(c)
+		}
+	}
+	return out.String()
 }
 
 func (c NextConfigConflict) Warning() string {
