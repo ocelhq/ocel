@@ -18,6 +18,7 @@ import {
   hasDraftCookie,
   hostScope,
   refreshOutcome,
+  refreshThroughQueue,
   SUPPRESS_SELF_REVALIDATION,
   serveCached,
   servedFromStore,
@@ -25,7 +26,7 @@ import {
 } from "./cache";
 import { type InterceptDeps, type InterceptionConfig, intercept } from "./interception";
 import { composePpr, resumeRequest } from "./ppr";
-import { enqueued, type RevalidationRoute } from "./revalidation";
+import type { RevalidationRoute } from "./revalidation";
 import { createTagClock, type TagClock } from "./tag-clock";
 
 const RSC_FORWARD_HEADERS = new Set([
@@ -227,14 +228,18 @@ async function prerender(ctx: PrerenderContext, deps: PrerenderTierDeps): Promis
             cacheDeps,
             refreshKey,
             hit.lastModified,
-            async () => {
-              if (await enqueued(cacheDeps.enqueueRevalidation, revalidation, hit.lastModified)) {
-                return "landed";
-              }
-              const response = await originBlocking(hit.lastModified);
-              response.body?.cancel();
-              return refreshOutcome(response);
-            },
+            () =>
+              refreshThroughQueue(
+                cacheDeps,
+                refreshKey,
+                revalidation,
+                hit.lastModified,
+                async () => {
+                  const response = await originBlocking(hit.lastModified);
+                  response.body?.cancel();
+                  return refreshOutcome(response);
+                },
+              ),
             hit.staleForMs,
           );
         }
@@ -253,15 +258,13 @@ async function prerender(ctx: PrerenderContext, deps: PrerenderTierDeps): Promis
           cacheDeps,
           refreshKey,
           hit.lastModified,
-          async () => {
-            if (await enqueued(cacheDeps.enqueueRevalidation, revalidation, hit.lastModified)) {
-              return "landed";
-            }
-            const response = await originBlocking(hit.lastModified);
-            const outcome = refreshOutcome(response);
-            await storeInColo(cacheTarget, cache, response);
-            return outcome;
-          },
+          () =>
+            refreshThroughQueue(cacheDeps, refreshKey, revalidation, hit.lastModified, async () => {
+              const response = await originBlocking(hit.lastModified);
+              const outcome = refreshOutcome(response);
+              await storeInColo(cacheTarget, cache, response);
+              return outcome;
+            }),
           hit.staleForMs,
         );
       }
