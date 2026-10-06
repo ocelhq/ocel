@@ -550,3 +550,31 @@ func TestRevokingAnAppsGrantsLeavesARoleAnOperatorAddedToItsAccount(t *testing.T
 		t.Errorf("the project binds %q, want exactly %q: only the roles ocel granted the account are taken back", got, want)
 	}
 }
+
+func TestAStackThatStillRecordsComputeAfterARemovalKeepsItsAppGrants(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	records := fake.NewKeyValues()
+	ref := provider.StackRef{Tier: environment.TierProduction, Project: "shop", Name: stackOf(stackrecords.ProductionEnv, "web", "r1")}
+	recorded := stackrecords.Stack{Kind: provider.StackApp, App: "web", Functions: []provider.Function{{Name: "web"}, {Name: "web-image"}}}
+	if err := stackrecords.Write(ctx, records, ref.Tier, ref.Project, ref.Name, recorded); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		going []string
+		want  bool
+	}{
+		{going: []string{"web-image"}, want: true},
+		{going: []string{"web"}, want: true},
+		{going: []string{"web", "web-image"}, want: false},
+	} {
+		kept, err := stackKeepsRunning(ctx, records, ref, test.going, nil)
+		if err != nil {
+			t.Fatalf("stackKeepsRunning(%v) = %v", test.going, err)
+		}
+		if kept != test.want {
+			t.Errorf("stackKeepsRunning(%v) = %v, want %v", test.going, kept, test.want)
+		}
+	}
+}

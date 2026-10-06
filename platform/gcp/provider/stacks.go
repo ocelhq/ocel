@@ -153,7 +153,7 @@ func (p *Provider) RemoveFunctions(ctx context.Context, ref provider.StackRef, f
 	if err != nil {
 		return err
 	}
-	return revokeUnusedAppAccount(ctx, c, p.KeyValues(), ref, progress)
+	return p.revokeAfterRemoval(ctx, c, ref, functionNames(functions), nil, progress)
 }
 
 func (p *Provider) NameFunctions(ctx context.Context, spec provider.StackSpec) ([]provider.Function, error) {
@@ -271,7 +271,31 @@ func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, 
 	if err != nil {
 		return err
 	}
+	return p.revokeAfterRemoval(ctx, c, ref, nil, containerNames(containers), progress)
+}
+
+func (p *Provider) revokeAfterRemoval(ctx context.Context, c *clients, ref provider.StackRef, goingFunctions, goingContainers []string, progress progress.Log) error {
+	keeps, err := stackKeepsRunning(ctx, p.KeyValues(), ref, goingFunctions, goingContainers)
+	if err != nil || keeps {
+		return err
+	}
 	return revokeUnusedAppAccount(ctx, c, p.KeyValues(), ref, progress)
+}
+
+func functionNames(functions []provider.Function) []string {
+	names := make([]string, 0, len(functions))
+	for _, function := range functions {
+		names = append(names, function.Name)
+	}
+	return names
+}
+
+func containerNames(containers []provider.AppContainer) []string {
+	names := make([]string, 0, len(containers))
+	for _, container := range containers {
+		names = append(names, container.Name)
+	}
+	return names
 }
 
 func (p *Provider) NameContainers(ctx context.Context, spec provider.StackSpec) ([]provider.AppContainer, error) {
