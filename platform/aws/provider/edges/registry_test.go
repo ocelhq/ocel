@@ -1,10 +1,12 @@
 package edges
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 
@@ -144,5 +146,18 @@ func TestCertificateRegion(t *testing.T) {
 		if got := CertificateRegion(tc.kind, tc.answering, "eu-west-2"); got != tc.want {
 			t.Errorf("%s: CertificateRegion = %q, want %q", name, got, tc.want)
 		}
+	}
+}
+
+func TestAWSRefusesACloudflareOriginDomain(t *testing.T) {
+	t.Parallel()
+
+	_, err := Registry{}.Open(cloudflare.Kind, provider.Options{"originDomain": "o.example.com"})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid || !strings.Contains(refused.Message, "edge.cloudflare.originDomain") {
+		t.Fatalf("Open(cloudflare, originDomain) = %v; want an invalid refusal naming the option", err)
+	}
+	if _, err := (Registry{}).Open(cloudflare.Kind, nil); err != nil {
+		t.Errorf("Open(cloudflare, nil) = %v; want it to open", err)
 	}
 }

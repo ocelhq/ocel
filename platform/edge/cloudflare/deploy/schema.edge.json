@@ -4,6 +4,10 @@
     "additionalProperties": false,
     "description": "Options for the Cloudflare edge. The token and account id are read from the environment.",
     "properties": {
+      "originDomain": {
+        "description": "A domain in a Cloudflare zone of this account. When Cloudflare runs its worker in front of Google Cloud, the worker reaches each deployment of a serverless app on its own DNS-only hostname under it: production under the domain itself, previews under preview.\u003cdomain\u003e. One wildcard certificate and one DNS-only record per tier are kept under it, so give it a domain nothing else uses. AWS refuses it.",
+        "type": "string"
+      },
       "tunnel": {
         "description": "Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one.",
         "type": "boolean"
