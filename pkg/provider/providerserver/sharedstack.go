@@ -220,7 +220,7 @@ func (s *sharedStack) promoteApps(ctx context.Context, req promoteRequest, route
 		if err != nil {
 			return nil, err
 		}
-		routers = append(routers, appRouter{stack: routed, apps: byRouter[kind], hosts: listAppHosts(req.hosts, byRouter[kind]), superseded: superseded[kind]})
+		routers = append(routers, appRouter{stack: routed, apps: byRouter[kind], hosts: listAppHosts(req.hosts, byRouter[kind]), previous: listAppHosts(req.previous, byRouter[kind]), superseded: superseded[kind]})
 	}
 	dropped, err := promote(ctx, s.ledger, req, routers, progress)
 	for i, kind := range kinds {
