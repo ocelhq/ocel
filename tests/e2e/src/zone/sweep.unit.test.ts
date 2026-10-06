@@ -3,10 +3,11 @@ import { fixtures } from "../matrix/fixtures";
 import type { HttpIo } from "../retry";
 import type { LookRun, Verdict } from "../targets/aws/runs";
 import { CloudflareApi, type DnsRecord, type OriginCertificate } from "./cloudflare";
-import { cloudflareCellsOn, journeySlugOf, sweepRunFromZone, sweepStaleFromZone } from "./sweep";
+import { journeySlugOf, sweepRunFromZone, sweepStaleFromZone, zoneCellsOn } from "./sweep";
 
 const ZONE = { id: "z1", name: "j.example" };
-const CELLS = cloudflareCellsOn(fixtures, "vps");
+const CELLS = zoneCellsOn(fixtures, "vps");
+const GCP_CELLS = zoneCellsOn(fixtures, "gcp");
 
 function host(run: string, cell = "deploy-node-cloudflare", app = "web"): string {
   return `${app}-j-${run}-${cell}.${ZONE.name}`;
@@ -68,6 +69,24 @@ const CERTIFICATES: OriginCertificate[] = [
   certificate("apex", [`www.${ZONE.name}`]),
   certificate("mine", [host("444")]),
   certificate("theirs", [host("111")], "origin-ecc", requestFrom("acme")),
+];
+
+const ALB = "deploy-node-alb";
+
+const ALB_RECORDS: DnsRecord[] = [
+  record("alb-host", host("111", ALB), { proxied: false, comment: owned("111", ALB) }),
+  record("alb-validation", `_acme-challenge.${host("111", ALB)}`, {
+    type: "CNAME",
+    proxied: false,
+    comment: owned("111", ALB),
+  }),
+  record("alb-proxied", host("111", ALB), { proxied: true, comment: owned("111", ALB) }),
+  record("alb-by-hand", host("111", ALB), { proxied: false, comment: "pointed here by hand" }),
+  record("cloudflare-validation", `_acme-challenge.${host("111")}`, {
+    type: "CNAME",
+    proxied: false,
+    comment: owned("111"),
+  }),
 ];
 
 type Asked = { method: string; url: URL; authorization: string | null };
@@ -139,6 +158,15 @@ describe("journeySlugOf", () => {
 
   it("reads no slug out of a hostname no Cloudflare cell of the target serves", () => {
     expect(journeySlugOf(host("111", "deploy-node-registry"), ZONE.name, CELLS)).toBeUndefined();
+  });
+});
+
+describe("journeySlugOf for an alb cell", () => {
+  it("reads the slug out of an alb hostname's certificate validation record", () => {
+    expect(journeySlugOf(`_acme-challenge.${host("111", ALB)}`, ZONE.name, GCP_CELLS)).toBe(
+      "j-111-deploy-node-alb",
+    );
+    expect(journeySlugOf(`_acme-challenge.${host("111")}`, ZONE.name, GCP_CELLS)).toBeUndefined();
   });
 });
 
@@ -214,6 +242,64 @@ describe("sweepStaleFromZone", () => {
   });
 });
 
+describe("sweepStaleFromZone on gcp", () => {
+  it("reclaims the DNS-only record and certificate validation ocel wrote for an alb cell of a finished run", async () => {
+    const { client, asked } = cloudflare({ records: ALB_RECORDS, certificates: [] });
+    await sweepStaleFromZone(client, ZONE, GCP_CELLS, "444", look);
+    expect(deleted(asked).sort()).toEqual([
+      "/zones/z1/dns_records/alb-host",
+      "/zones/z1/dns_records/alb-validation",
+    ]);
+  });
+
+  it("keeps a proxied record under an alb cell's hostname, and a certificate validation under a Cloudflare cell's", async () => {
+    const { client, asked } = cloudflare({ records: ALB_RECORDS, certificates: [] });
+    await sweepStaleFromZone(client, ZONE, GCP_CELLS, "444", look);
+    for (const kept of ["alb-proxied", "alb-by-hand", "cloudflare-validation"]) {
+      expect(deleted(asked)).not.toContain(`/zones/z1/dns_records/${kept}`);
+    }
+  });
+
+  it("lists an alb cell's records DNS-only and a Cloudflare cell's proxied", async () => {
+    const { client, asked } = cloudflare({ records: [], certificates: [] });
+    await sweepStaleFromZone(client, ZONE, GCP_CELLS, "444", look);
+    const listed = asked
+      .filter((one) => one.url.pathname.endsWith("/dns_records"))
+      .map(
+        (one) =>
+          `${one.url.searchParams.get("name.endswith")} ${one.url.searchParams.get("proxied")}`,
+      )
+      .sort();
+    expect(listed).toEqual([
+      "-deploy-next-alb.j.example false",
+      "-deploy-node-alb.j.example false",
+      "-deploy-node-cloudflare.j.example true",
+    ]);
+  });
+});
+
+describe("sweepRunFromZone on gcp", () => {
+  it("reaches an alb cell's certificate validation by its exact name when the run is named", async () => {
+    const { client, asked } = cloudflare({ records: ALB_RECORDS, certificates: [] });
+    await sweepRunFromZone(client, ZONE, GCP_CELLS, "111");
+    const listed = asked
+      .filter((one) => one.url.pathname.endsWith("/dns_records"))
+      .map(
+        (one) => `${one.url.searchParams.get("name.exact")} ${one.url.searchParams.get("proxied")}`,
+      );
+    expect(listed).toContain("_acme-challenge.web-j-111-deploy-node-alb.j.example false");
+    expect(listed).toContain("web-j-111-deploy-node-alb.j.example false");
+    expect(listed).toContain("web-j-111-deploy-node-cloudflare.j.example true");
+    expect(
+      listed.some((name) => name.startsWith("_acme-challenge.web-j-111-deploy-node-cloudflare")),
+    ).toBe(false);
+    expect(deleted(asked).sort()).toEqual([
+      "/zones/z1/dns_records/alb-host",
+      "/zones/z1/dns_records/alb-validation",
+    ]);
+  });
+});
+
 describe("sweepRunFromZone", () => {
   it("reaches each hostname of the run by its exact name, and asks GitHub nothing", async () => {
     const { client, asked } = cloudflare();
@@ -240,6 +326,13 @@ describe("sweepRunFromZone", () => {
 });
 
 describe("CloudflareApi", () => {
+  it("asks for the records ocel wrote with the proxying asked for", async () => {
+    const { client, asked } = cloudflare({ records: [], certificates: [] });
+    await client.listOcelRecords("z1", { exact: "a.j.example" }, false);
+    await client.listOcelRecords("z1", { exact: "a.j.example" }, true);
+    expect(asked.map((one) => one.url.searchParams.get("proxied"))).toEqual(["false", "true"]);
+  });
+
   it("reads the zone by its name inside the account", async () => {
     const { client, asked } = cloudflare();
     expect(await client.readZone("j.example", "acc0unt")).toEqual(ZONE);

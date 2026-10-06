@@ -3,7 +3,7 @@ import { runSweep } from "./sweepArgs";
 import { targetNamed } from "./targets";
 import { githubRuns } from "./targets/aws/runs";
 import { CloudflareApi } from "./zone/cloudflare";
-import { cloudflareCellsOn, sweepRunFromZone, sweepStaleFromZone } from "./zone/sweep";
+import { sweepRunFromZone, sweepStaleFromZone, zoneCellsOn } from "./zone/sweep";
 
 function required(name: string, use: string): string {
   const value = process.env[name]?.trim();
@@ -20,7 +20,7 @@ runSweep(async (args) => {
   const zoneName = required("OCEL_E2E_ZONE", "the zone the journey wrote its hostnames in");
   const api = new CloudflareApi(token);
   const zone = await api.readZone(zoneName, account);
-  const cells = cloudflareCellsOn(fixtures, target);
+  const cells = zoneCellsOn(fixtures, target);
   await (args.oneRun
     ? sweepRunFromZone(api, zone, cells, args.runId)
     : sweepStaleFromZone(api, zone, cells, args.runId, githubRuns(process.env)));

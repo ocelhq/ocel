@@ -1,3 +1,4 @@
+import { HOSTNAME_EDGES } from "../config";
 import { appHostname, HARNESS_PREFIX, projectSlug, slugPart } from "../identity";
 import type { Cell, Fixture, TargetName } from "../matrix/types";
 import { cellsOn, fixturesOn } from "../plan";
@@ -12,6 +13,7 @@ import {
   type Zone,
 } from "./cloudflare";
 
+const VALIDATION_LABEL = "_acme-challenge.";
 const OWNER_SEPARATOR = " for ";
 const OWNER_FIELD_SEPARATOR = "--";
 const OCEL_CERTIFICATE_TYPE = "origin-ecc";
@@ -24,18 +26,34 @@ type Leftovers = {
   certificates: { certificate: OriginCertificate; slug: string }[];
 };
 
-export function cloudflareCellsOn(fixtures: Fixture[], target: TargetName): Cell[] {
+export function zoneCellsOn(fixtures: Fixture[], target: TargetName): Cell[] {
   return fixturesOn(fixtures, target)
     .flatMap((fixture) => cellsOn(fixture, target))
-    .filter((cell) => cell.variant.config.edge === "cloudflare");
+    .filter((cell) => {
+      const { edge } = cell.variant.config;
+      return edge !== undefined && HOSTNAME_EDGES.includes(edge);
+    });
 }
 
-export function journeySlugOf(hostname: string, zone: string, cells: Cell[]): string | undefined {
+function isProxiedFor(cell: Cell): boolean {
+  return cell.variant.config.edge === "cloudflare";
+}
+
+export function journeyCellOf(
+  name: string,
+  zone: string,
+  cells: Cell[],
+): { cell: Cell; slug: string } | undefined {
+  const validation = name.startsWith(VALIDATION_LABEL);
+  const hostname = validation ? name.slice(VALIDATION_LABEL.length) : name;
   const label = hostname.endsWith(`.${zone}`) ? hostname.slice(0, -(zone.length + 1)) : "";
   if (label === "" || label.includes(".")) {
     return undefined;
   }
   for (const cell of cells) {
+    if (validation && cell.variant.config.edge !== "alb") {
+      continue;
+    }
     const tail = `-${slugPart(cell.name)}`;
     for (const app of cell.fixture.apps) {
       const head = `${app}-${HARNESS_PREFIX}`;
@@ -44,15 +62,19 @@ export function journeySlugOf(hostname: string, zone: string, cells: Cell[]): st
         label.endsWith(tail) &&
         label.length > head.length + tail.length
       ) {
-        return label.slice(app.length + 1);
+        return { cell, slug: label.slice(app.length + 1) };
       }
     }
   }
   return undefined;
 }
 
-function isWrittenFor(record: DnsRecord, slug: string): boolean {
-  if (!record.proxied || record.comment === null) {
+export function journeySlugOf(hostname: string, zone: string, cells: Cell[]): string | undefined {
+  return journeyCellOf(hostname, zone, cells)?.slug;
+}
+
+function isWrittenFor(record: DnsRecord, cell: Cell, slug: string): boolean {
+  if (record.proxied !== isProxiedFor(cell) || record.comment === null) {
     return false;
   }
   if (record.comment === OCEL_RECORD_COMMENT) {
@@ -86,9 +108,13 @@ function leftoversOf(
 ): Leftovers {
   const found: Leftovers = { records: [], certificates: [] };
   for (const record of records) {
-    const slug = journeySlugOf(record.name, zone.name, cells);
-    if (slug !== undefined && belongs(slug) && isWrittenFor(record, slug)) {
-      found.records.push({ record, slug });
+    const named = journeyCellOf(record.name, zone.name, cells);
+    if (
+      named !== undefined &&
+      belongs(named.slug) &&
+      isWrittenFor(record, named.cell, named.slug)
+    ) {
+      found.records.push({ record, slug: named.slug });
     }
   }
   for (const certificate of certificates) {
@@ -109,14 +135,16 @@ function leftoversOf(
   return found;
 }
 
+type Listing = { name: NameFilter; proxied: boolean };
+
 async function listRecordsNamed(
   api: CloudflareApi,
   zone: Zone,
-  names: NameFilter[],
+  listings: Listing[],
 ): Promise<DnsRecord[]> {
   const byId = new Map<string, DnsRecord>();
-  for (const name of names) {
-    for (const record of await api.listProxiedOcelRecords(zone.id, name)) {
+  for (const { name, proxied } of listings) {
+    for (const record of await api.listOcelRecords(zone.id, name, proxied)) {
       byId.set(record.id, record);
     }
   }
@@ -161,12 +189,15 @@ export async function sweepStaleFromZone(
   runId: string,
   look: LookRun,
 ): Promise<void> {
-  const parts = [...new Set(cells.map((cell) => slugPart(cell.name)))];
-  const records = await listRecordsNamed(
-    api,
-    zone,
-    parts.map((part) => ({ endsWith: `-${part}.${zone.name}` })),
-  );
+  const parts = new Map<string, Listing>();
+  for (const cell of cells) {
+    const proxied = isProxiedFor(cell);
+    parts.set(`${slugPart(cell.name)} ${proxied}`, {
+      name: { endsWith: `-${slugPart(cell.name)}.${zone.name}` },
+      proxied,
+    });
+  }
+  const records = await listRecordsNamed(api, zone, [...parts.values()]);
   const certificates = await api.listOriginCertificates(zone.id);
   const stale = (slug: string) => {
     const id = runIdOf(slug);
@@ -200,16 +231,21 @@ export async function sweepRunFromZone(
   runId: string,
 ): Promise<void> {
   const slugs = new Set(cells.map((cell) => projectSlug(cell.name, runId)));
-  const hostnames = cells.flatMap((cell) =>
-    cell.fixture.apps.flatMap(
-      (app) => appHostname(app, projectSlug(cell.name, runId), zone.name) ?? [],
-    ),
+  const listings = cells.flatMap((cell) =>
+    cell.fixture.apps.flatMap((app) => {
+      const hostname = appHostname(app, projectSlug(cell.name, runId), zone.name);
+      if (hostname === undefined) {
+        return [];
+      }
+      const proxied = isProxiedFor(cell);
+      const named = [
+        hostname,
+        ...(cell.variant.config.edge === "alb" ? [`${VALIDATION_LABEL}${hostname}`] : []),
+      ];
+      return named.map((exact) => ({ name: { exact }, proxied }));
+    }),
   );
-  const records = await listRecordsNamed(
-    api,
-    zone,
-    hostnames.map((exact) => ({ exact })),
-  );
+  const records = await listRecordsNamed(api, zone, listings);
   const certificates = await api.listOriginCertificates(zone.id);
   const complaints: string[] = [];
   await reclaim(

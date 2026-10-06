@@ -41,10 +41,10 @@ export class CloudflareApi {
     return { id: zone.id, name: zone.name };
   }
 
-  listProxiedOcelRecords(zoneId: string, name: NameFilter): Promise<DnsRecord[]> {
+  listOcelRecords(zoneId: string, name: NameFilter, proxied: boolean): Promise<DnsRecord[]> {
     return this.list<DnsRecord>(`/zones/${zoneId}/dns_records`, {
       ...("exact" in name ? { "name.exact": name.exact } : { "name.endswith": name.endsWith }),
-      proxied: "true",
+      proxied: String(proxied),
       "comment.startswith": OCEL_RECORD_COMMENT,
       match: "all",
       per_page: String(RECORDS_PER_PAGE),
