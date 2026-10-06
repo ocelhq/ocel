@@ -16,10 +16,10 @@ import type { CacheEntrypointProps, Env } from "./env";
 import { coloImageCache } from "./image";
 import type { ImageStore } from "./image-store";
 import { nodeOrigin } from "./node";
+import { originFetchFor } from "./origin-fetch";
 import { coloPrerender, type InterceptionTier } from "./prerender";
 import { findPreviewTarget } from "./preview";
 import { revalidationSender } from "./revalidation";
-import { edgeOriginFetch } from "./signing";
 import { invalidateSnapshot } from "./tag-clock";
 
 export { CacheEntrypoint } from "./cache-entrypoint";
@@ -267,7 +267,7 @@ function unavailableResponse(): Response {
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const store = env.OCEL_CACHE_STORE;
-    const originFetch = edgeOriginFetch(env.OCEL_EDGE_ACCESS_KEY_ID, env.OCEL_EDGE_SECRET_KEY);
+    const originFetch = originFetchFor(env);
 
     const host = new URL(request.url).host;
     let deployments: DeploymentsDeps = {
