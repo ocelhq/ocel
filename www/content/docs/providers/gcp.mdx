@@ -47,7 +47,7 @@ reads, writes and storage its records use.
 
 ## Next.js
 
-A serverless Next app runs as Cloud Run services billed per request, each with 2 GiB of memory.
+A serverless Next app runs as Cloud Run services billed per request (per instance in a preview behind Identity-Aware Proxy), each with 2 GiB of memory.
 
 A Next app deployed as functions (serverless compute, billed per request) cannot turn on
 `experimental.partialFallbacks` (`partialPrefetching` from Next 16.3). Next renders those shells after
