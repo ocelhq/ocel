@@ -10,7 +10,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
+
+var isrWriterTimeout = 30 * time.Second
 
 var isrWriterClient = &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()}
 
@@ -59,6 +62,9 @@ func (w ISRWriter) request(ctx context.Context, isrPrefix, operation string, bod
 		}
 		reader = bytes.NewReader(encoded)
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, isrWriterTimeout)
+	defer cancel()
 
 	url := w.Endpoint + "/" + isrPrefix + "/" + operation
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, reader)
