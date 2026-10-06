@@ -1341,6 +1341,7 @@ test("refuses partial fallbacks on a host that refreshes by request, naming the 
   );
 
   await expect(run()).rejects.toThrow(/experimental\.partialFallbacks/);
+  await expect(run()).rejects.toThrow(/"compute": "container"/);
   await expect(readFile(join(projectDir, ".ocel/cache-handler.cjs"), "utf8")).rejects.toThrow();
 });
 

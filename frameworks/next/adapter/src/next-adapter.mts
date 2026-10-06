@@ -89,7 +89,7 @@ function refusePartialFallbacks(
     return;
   }
   throw new Error(
-    `ocel: ${setting} has Next render a more specific fallback shell after the response ends, and this host stops a function's work when its response ends, so the shell would be lost and its page refreshed again and again. Turn ${setting} off in next.config to deploy here`,
+    `ocel: ${setting} has Next render a more specific fallback shell after the response ends, and this host stops a function's work when its response ends, so the shell would be lost and its page refreshed again and again. Turn ${setting} off in next.config, or set "compute": "container" on the app in ocel.json, where the CPU stays allocated between requests and the shell renders in the background`,
   );
 }
 
