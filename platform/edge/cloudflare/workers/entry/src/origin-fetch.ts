@@ -11,6 +11,10 @@ export type OriginEnv = Pick<
 export function clientCertificateOriginFetch(binding: Fetcher): typeof fetch {
   return (async (input, init) => {
     const request = new Request(input as RequestInfo, init);
+    const { protocol } = new URL(request.url);
+    if (protocol !== "https:") {
+      throw new Error(`ocel: refusing to present the client certificate over ${protocol}`);
+    }
     const headers = new Headers(request.headers);
     headers.delete(CLIENT_AUTHORIZATION_HEADER);
     const hasBody = request.method !== "GET" && request.method !== "HEAD";
