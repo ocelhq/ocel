@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -177,5 +178,25 @@ func TestANextDeployBehindAnEdgeItNeverAdoptedIsNotReadyAndDeploysNothing(t *tes
 	}
 	if len(order.steps) != 0 {
 		t.Errorf("steps = %v, want nothing deployed", order.steps)
+	}
+}
+
+func TestANextDeployBehindTheWorkerOnATierWithNoOriginWildcardRegistersNothingWithTheISRWriter(t *testing.T) {
+	t.Parallel()
+	h := newOffersHarness(t)
+	order := &orderLog{}
+	writer, endpoint := serveISRWriter(t, order)
+	adoptWriterAt(t, h, endpoint)
+	spec := isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{Prefix: isrPrefix})
+	spec.App.Functions = []provider.FunctionSpec{{Name: "web"}}
+	wrapped := stacks{Stacks: recordingStacks{order: order}, p: programming(h)}
+
+	_, err := wrapped.Provision(t.Context(), spec, nil)
+
+	if refusalCode(err) != refusal.CodeInvalid || !strings.Contains(err.Error(), "originDomain") {
+		t.Errorf("Provision = %v, want an invalid refusal naming originDomain", err)
+	}
+	if len(writer.requests) != 0 || len(order.steps) != 0 {
+		t.Errorf("writer requests %v and steps %v, want the refusal before the prefix is registered or anything provisioned", writer.requests, order.steps)
 	}
 }

@@ -67,6 +67,9 @@ type stacks struct {
 }
 
 func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgress progress.Log) (provider.StackResult, error) {
+	if _, err := s.p.readOriginBase(ctx, spec); err != nil {
+		return provider.StackResult{}, err
+	}
 	writer, err := s.p.readEdgeISRWriter(ctx, spec)
 	if err != nil {
 		return provider.StackResult{}, err

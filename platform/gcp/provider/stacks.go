@@ -60,6 +60,10 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			return nil, err
 		}
 	}
+	originBase, err := p.readOriginBase(ctx, spec)
+	if err != nil {
+		return nil, err
+	}
 	c, err := p.openClients(ctx)
 	if err != nil {
 		return nil, err
@@ -102,10 +106,6 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		if err := p.seedPrerenders(ctx, spec, writer, progress); err != nil {
 			return nil, err
 		}
-	}
-	originBase, err := p.readOriginBase(ctx, spec)
-	if err != nil {
-		return nil, err
 	}
 	deployed := make([]provider.Function, 0, len(app.Functions)+len(app.Workers))
 	var refresh *nextRefresh
