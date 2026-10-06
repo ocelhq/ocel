@@ -43,6 +43,7 @@ func (p *Provider) everyHook(hooks *provider.Hooks) {
 	hooks.PreflightDeploy = p.PreflightDeploy
 	hooks.EnsureImageRegistry = p.EnsureImageRegistry
 	hooks.ProveIdentity = p.ProveIdentity
+	hooks.ReadNextServerRuntime = p.ReadNextServerRuntime
 }
 
 func (p *Provider) ResourceHooks() resources.Hooks {
