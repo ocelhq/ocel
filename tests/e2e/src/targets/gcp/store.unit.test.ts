@@ -5,6 +5,7 @@ import { repoRoot } from "../../paths";
 import { APP_LABEL, ENVIRONMENT_LABEL, labelValue, NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
 import {
   ALB_FEATURE,
+  accessToken,
   BOOTSTRAP_APIS,
   exposedServices,
   findAppService,
@@ -42,6 +43,31 @@ describe("the apis a bootstrap wants on", () => {
     );
     const named = iap.match(/proxyAPI\s*=\s*"([^"]+)"/);
     expect(named?.[1] ? [named[1]] : []).toEqual(PREVIEW_APIS);
+  });
+});
+
+describe("accessToken", () => {
+  it("asks for a fresh token every time it reaches a real project, since a token outlives no long run", async () => {
+    let minted = 0;
+    const mint = async () => `token-${++minted}`;
+
+    const first = await accessToken(undefined, mint);
+    const second = await accessToken(undefined, mint);
+
+    expect(minted).toBe(2);
+    expect([first, second]).toEqual(["token-1", "token-2"]);
+  });
+
+  it("asks for no token on floci, which checks none", async () => {
+    let minted = 0;
+
+    const token = await accessToken("http://127.0.0.1:4588", async () => {
+      minted++;
+      return "token";
+    });
+
+    expect(token).toBeUndefined();
+    expect(minted).toBe(0);
   });
 });
 
