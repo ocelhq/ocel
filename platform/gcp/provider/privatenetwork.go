@@ -12,7 +12,6 @@ import (
 	"google.golang.org/api/networkconnectivity/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -226,7 +225,7 @@ func (b bootstrap) refuseNetworkInUse(ctx context.Context, tier environment.Tier
 }
 
 func (b bootstrap) listStoresOn(ctx context.Context, tier environment.Tier) ([]string, error) {
-	filter := fmt.Sprintf(`labels.ocel-namespace=%q AND labels.ocel-tier=%q`, naming.Sanitize(string(b.clients.namespace)), string(tier))
+	filter := storesFilter(b.clients.namespace, tier)
 	connected, next, err := b.stores.listInstances(ctx, b.clients.location(), filter, resourcesNamedOnNetwork, "")
 	for page := 1; err == nil && len(connected) == 0 && next != ""; page++ {
 		if page == storePagesRead {
@@ -271,6 +270,10 @@ func (b bootstrap) listDatabasesOn(ctx context.Context, tier environment.Tier) (
 		named = append(named, "and more")
 	}
 	return named, nil
+}
+
+func storesFilter(namespace provider.Namespace, tier environment.Tier) string {
+	return fmt.Sprintf("labels.%s=%q AND labels.%s=%q", namespaceLabel, labelValue(string(namespace)), tierLabel, labelValue(string(tier)))
 }
 
 func databasesFilter(namespace provider.Namespace, tier environment.Tier) string {
