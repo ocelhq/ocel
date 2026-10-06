@@ -34,9 +34,15 @@ const (
 	tagDatabaseEnvVar       = "OCEL_TAG_DATABASE"
 	firestoreEndpointEnvVar = "OCEL_FIRESTORE_ENDPOINT"
 	staticDirEnvVar         = "OCEL_STATIC_DIR"
+	refreshURLEnvVar        = "OCEL_REFRESH_URL"
+	refreshQueueEnvVar      = "OCEL_REFRESH_QUEUE"
+	refreshAccountEnvVar    = "OCEL_REFRESH_ACCOUNT"
+	tasksEndpointEnvVar     = "OCEL_TASKS_ENDPOINT"
 
 	finishBeforeResponseEnvVar = "OCEL_FINISH_BEFORE_RESPONSE_MS"
 )
+
+const refreshPath = "/_ocel/refresh"
 
 const finishBeforeResponseCap = 10 * time.Second
 
@@ -44,6 +50,15 @@ var routingManifestInImage = path.Join(images.FunctionImageRoot, edge.RoutingMan
 
 func servesNext(app *provider.AppSpec) bool {
 	return app.Framework == buildoutput.FrameworkNext
+}
+
+func refreshesByTask(spec provider.StackSpec) bool {
+	app := spec.App
+	return servesNext(app) && app.Compute == provider.ComputeServerless && app.Routing != nil && !factsOf(spec.Edge).RunsCode
+}
+
+func refreshesNextByTask(entry provider.AppEntry, front edge.Facts) bool {
+	return entry.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext && entry.Compute() == provider.ComputeServerless && !front.RunsCode
 }
 
 func fillNextServingDefaults(s serving) serving {
@@ -73,7 +88,18 @@ type nextCache struct {
 	endpoint    string
 }
 
-func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, cache nextCache) map[string]string {
+type nextRefresh struct {
+	url      string
+	queue    string
+	account  string
+	endpoint string
+}
+
+func refreshURLOf(service string, projectNumber int64, region string) string {
+	return "https://" + service + "-" + strconv.FormatInt(projectNumber, 10) + "." + region + ".run.app" + refreshPath
+}
+
+func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, cache nextCache, refresh *nextRefresh) map[string]string {
 	app := spec.App
 	env := map[string]string{memoryEnvVar: strconv.Itoa(s.memory)}
 	if app.Router != "" {
@@ -86,6 +112,14 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 		if !factsOf(spec.Edge).RunsCode {
 			env[edge.OriginDispatchVar] = "1"
 			env[edge.OriginSignedVar] = "1"
+			if refresh != nil {
+				env[refreshURLEnvVar] = refresh.url
+				env[refreshQueueEnvVar] = refresh.queue
+				env[refreshAccountEnvVar] = refresh.account
+				if refresh.endpoint != "" {
+					env[tasksEndpointEnvVar] = refresh.endpoint
+				}
+			}
 		}
 		env[routingManifestEnvVar] = routingManifestInImage
 		env[staticDirEnvVar] = images.StaticRoot

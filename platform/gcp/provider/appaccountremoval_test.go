@@ -39,11 +39,20 @@ func stackOf(env, app, release string) naming.StackName {
 
 func grantedAppAccount(t *testing.T, server *iamServer) (*clients, provider.StackSpec, string) {
 	t.Helper()
+	return grantedAccountOf(t, server, reachingTopics(routedNextSpec()), map[string]*provider.TopicSpec{"resize": {}})
+}
+
+func grantedRefreshOnlyAppAccount(t *testing.T, server *iamServer) (*clients, provider.StackSpec, string) {
+	t.Helper()
+	return grantedAccountOf(t, server, routedNextSpec(), nil)
+}
+
+func grantedAccountOf(t *testing.T, server *iamServer, spec provider.StackSpec, declared map[string]*provider.TopicSpec) (*clients, provider.StackSpec, string) {
+	t.Helper()
 	server.accountPolicies = map[string]*iam.Policy{}
 	p, c := ensuringAccounts(t, server)
-	spec := reachingTopics(routedNextSpec())
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
-	email, err := p.ensureAppAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
+	email, err := p.ensureAppAccount(context.Background(), c, spec, declared)
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
@@ -72,6 +81,12 @@ func holdings(server *iamServer, c *clients, member string) []string {
 			held = append(held, "own account "+binding.Role)
 		}
 	}
+	refresh := "/v1/projects/acme-prod/serviceAccounts/" + c.RefreshAccountEmail(environment.TierProduction)
+	for _, binding := range policyOrEmpty(server.accountPolicies[refresh]) {
+		if slices.Contains(binding.Members, member) {
+			held = append(held, "refresh account "+binding.Role)
+		}
+	}
 	return held
 }
 
@@ -79,8 +94,8 @@ func TestRemovingTheLastEnvironmentRunningAnAppRevokesEveryGrantItsAccountHeld(t
 	t.Parallel()
 	server := appAccountsOnly()
 	c, spec, member := grantedAppAccount(t, server)
-	if got := holdings(server, c, member); len(got) != 7 {
-		t.Fatalf("the account holds %q before removal, want the records, key, task database, tag database, cache, queue and own account grants", got)
+	if got := holdings(server, c, member); len(got) != 8 {
+		t.Fatalf("the account holds %q before removal, want the records, key, task database, tag database, cache, queue, own account and refresh account grants", got)
 	}
 	records := recordedStacks{names: []naming.StackName{spec.Ref.Name, naming.InfraStack("production"), stackOf("production", "api", "r1")}}
 
@@ -477,7 +492,7 @@ func TestGrantsADeployMadeBeforeTheRevocationLandedAreRestored(t *testing.T) {
 		t.Fatalf("revokeUnusedAppAccount() = %v", err)
 	}
 
-	if got := holdings(server, c, member); len(got) != 7 {
+	if got := holdings(server, c, member); len(got) != 8 {
 		t.Errorf("the account holds %q, want the 8 grants the deploy made while the revoke ran", got)
 	}
 	if !topicHeld(server, c, spec.Ref, member) {
@@ -612,5 +627,43 @@ func TestDestroyingAStackOfSeveralServicesRevokesItsAppsGrants(t *testing.T) {
 
 	if holding() {
 		t.Errorf("the project still binds %q after the app's only stack was destroyed", projectBindingsOf(server.identities()))
+	}
+}
+
+func TestRemovingTheLastEnvironmentRunningANextAppTakesItOffTheRefreshAccount(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c, spec, member := grantedRefreshOnlyAppAccount(t, server)
+	if got := holdings(server, c, member); !slices.Contains(got, "refresh account "+runAsRole) || !slices.Contains(got, "queue "+queueEnqueuerRole) {
+		t.Fatalf("the account holds %q before removal, want the refresh account and the enqueuer", got)
+	}
+	records := recordedStacks{names: []naming.StackName{spec.Ref.Name}}
+
+	if err := revokeUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
+	}
+
+	if got := holdings(server, c, member); len(got) != 0 {
+		t.Errorf("the account still holds %q after the last environment running its app was removed, want nothing", got)
+	}
+}
+
+func TestAnEnvironmentRecordedWhileANextAppsRefreshGrantsAreRevokedKeepsThem(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c, spec, member := grantedRefreshOnlyAppAccount(t, server)
+	before := holdings(server, c, member)
+	lists := 0
+	var backing keyvalue.Store
+	records, backing := racingRecords(t, spec, func() {
+		recordApp(t, backing, spec, stackOf("pr-8", "web", "r2"))
+	}, &lists)
+
+	if err := revokeUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
+		t.Fatalf("revokeUnusedAppAccount() = %v", err)
+	}
+
+	if got := holdings(server, c, member); !slices.Equal(got, before) {
+		t.Errorf("the account holds %q, want the %q it held before pr-8 started running the app", got, before)
 	}
 }

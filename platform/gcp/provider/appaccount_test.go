@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/api/iam/v1"
 	pubsub "google.golang.org/api/pubsub/v1"
@@ -392,5 +393,90 @@ func TestAnAppsOwnAccountItMayNotActAsNamesTheCustomRole(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "projects/acme-prod/roles/ocel_app_accounts") {
 		t.Errorf("ensureAppAccount() = %v, want an error naming projects/acme-prod/roles/ocel_app_accounts", err)
+	}
+}
+
+func queueRolesHeld(server *iamServer, c *clients, member string) []string {
+	var held []string
+	for _, binding := range server.queuePolicies[c.DelayQueuePath("europe-west1", environment.TierProduction)].GetBindings() {
+		if slices.Contains(binding.GetMembers(), member) {
+			held = append(held, binding.GetRole())
+		}
+	}
+	slices.Sort(held)
+	return held
+}
+
+func refreshAccountPolicyOf(c *clients) string {
+	return "/v1/projects/acme-prod/serviceAccounts/" + c.RefreshAccountEmail(environment.TierProduction)
+}
+
+func actingAsRefreshAccount(server *iamServer, c *clients, member string) bool {
+	for _, binding := range policyOrEmpty(server.accountPolicies[refreshAccountPolicyOf(c)]) {
+		if binding.Role == runAsRole && slices.Contains(binding.Members, member) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestANextAppBilledPerRequestMayQueueARefreshAndHaveItSignedAsTheRefreshAccount(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	server.accountPolicies = map[string]*iam.Policy{}
+	p, c := ensuringAccounts(t, server)
+
+	email, err := p.ensureAppAccount(context.Background(), c, routedNextSpec(), nil)
+	if err != nil {
+		t.Fatalf("ensureAppAccount() = %v", err)
+	}
+
+	member := "serviceAccount:" + email
+	if got := queueRolesHeld(server, c, member); !slices.Equal(got, []string{"roles/cloudtasks.enqueuer"}) {
+		t.Errorf("the app holds %v on the delay queue, want only the enqueuer", got)
+	}
+	if !actingAsRefreshAccount(server, c, member) {
+		t.Errorf("the refresh account may be acted as by %+v, want the app among them", server.accountPolicies)
+	}
+	if _, touched := server.accountPolicies["/v1/projects/acme-prod/serviceAccounts/"+email]; touched {
+		t.Errorf("the app's own account policy was written, and a refresh is signed as the refresh account")
+	}
+	if slices.ContainsFunc(projectBindingsOf(server), func(bound string) bool { return strings.HasPrefix(bound, "roles/datastore.user ") }) {
+		t.Errorf("the project binds %q, and a refresh-only app writes no task database", projectBindingsOf(server))
+	}
+}
+
+func TestANextAppOnContainerComputeIsGrantedNothingOnTheQueueOrTheRefreshAccount(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	server.accountPolicies = map[string]*iam.Policy{}
+	p, c := ensuringAccounts(t, server)
+	spec := routedNextSpec()
+	spec.App.Compute = provider.ComputeContainer
+
+	if _, err := p.ensureAppAccount(context.Background(), c, spec, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if server.queueWrites != 0 || server.accountWrites != 0 {
+		t.Errorf("a container Next app wrote %d queue and %d account policies, want none", server.queueWrites, server.accountWrites)
+	}
+}
+
+func TestANextAppOnATierBootstrappedBeforeItsRefreshAccountIsRefusedNamingTheBootstrap(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	server.tasksAbsent = true
+	p, c := ensuringAccounts(t, server)
+
+	started := time.Now()
+	_, err := p.ensureAppAccount(context.Background(), c, routedNextSpec(), nil)
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(err.Error(), "ocel bootstrap production --features tasks") {
+		t.Errorf("ensureAppAccount() = %v, want a %s refusal naming the bootstrap that installs the refresh account", err, refusal.CodeNotReady)
+	}
+	if time.Since(started) > 2*time.Second {
+		t.Errorf("ensureAppAccount() took %s to refuse, want it to refuse at once rather than wait for an account that will never appear", time.Since(started))
 	}
 }

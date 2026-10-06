@@ -10,10 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func withStamp(t *testing.T, written stamp) *Provider {
@@ -128,5 +131,61 @@ func TestWorkersRunOnCloudRunForAtMostThe600sAPushMayTake(t *testing.T) {
 	}
 	if bindings := pushing(t, "").Facts().Bindings; !slices.Contains(bindings, provider.BindingTopic) || !slices.Contains(bindings, provider.BindingTask) {
 		t.Errorf("Facts().Bindings = %v, want topics and tasks served", bindings)
+	}
+}
+
+func shippingNext(container bool) provider.DeployPreflight {
+	app := &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: buildoutput.FrameworkNext}}
+	if container {
+		app.Artifact = &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}
+	} else {
+		app.Artifact = &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}
+	}
+	return provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: environment.TierProduction, Apps: []provider.AppEntry{{App: "web", Manifest: app}}}}
+}
+
+func failingOnAnyCall(t *testing.T) *Provider {
+	t.Helper()
+	served := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		t.Errorf("preflight called %s %s, want no call", r.Method, r.URL.Path)
+	}))
+	t.Cleanup(served.Close)
+	return pushing(t, served.URL)
+}
+
+func TestADeployOfANextAppBilledPerRequestIsRefusedUntilTheTierHasItsTaskQueue(t *testing.T) {
+	for _, written := range []stamp{
+		{State: stateComplete},
+		{State: stateApplying, Features: []string{tasksFeature}},
+	} {
+		err := withStamp(t, written).PreflightDeploy(context.Background(), shippingNext(false))
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady ||
+			!strings.Contains(err.Error(), "ocel bootstrap production --features "+tasksFeature) ||
+			!strings.Contains(err.Error(), "Next app web") {
+			t.Errorf("PreflightDeploy() under stamp %+v = %v, want the Next app refused naming the bootstrap that installs the queue", written, err)
+		}
+	}
+}
+
+func TestADeployOfANextAppBilledPerRequestIsAdmittedOnceTheTierHasItsTaskQueue(t *testing.T) {
+	if err := withStamp(t, stamp{State: stateComplete, Features: []string{tasksFeature}}).PreflightDeploy(context.Background(), shippingNext(false)); err != nil {
+		t.Errorf("PreflightDeploy() = %v, want a Next app admitted on a tier whose queue is installed", err)
+	}
+}
+
+func TestANextAppOnContainerComputeIsAdmittedWithoutATaskQueue(t *testing.T) {
+	if err := failingOnAnyCall(t).PreflightDeploy(context.Background(), shippingNext(true)); err != nil {
+		t.Errorf("PreflightDeploy() = %v, want a container Next app admitted without reading the stamp", err)
+	}
+}
+
+func TestANextAppBehindAnEdgeThatRunsNoCodeIsRefusedUntilTheTierHasItsTaskQueue(t *testing.T) {
+	pre := shippingNext(false)
+	pre.Edge = cloudflare.Kind
+	err := withStamp(t, stamp{State: stateComplete}).PreflightDeploy(context.Background(), pre)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Errorf("PreflightDeploy() = %v, want a Next app that routes its own requests behind the Cloudflare proxy refused until the queue is installed", err)
 	}
 }

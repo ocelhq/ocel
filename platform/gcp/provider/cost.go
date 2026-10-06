@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"slices"
 	"strconv"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -113,7 +114,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	if err := shapeStores(tree, names, req, region, shared, environment); err != nil {
 		return nil, err
 	}
-	shapeTopics(tree, names, req, region, shared, environment)
+	shapeTopics(tree, names, req, factsOf(front), region, shared, environment)
 	shapeRealtime(tree, names, req, region, environment)
 	return tree.Set(provider.CostSource)
 }
@@ -145,7 +146,7 @@ func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 	return nil
 }
 
-func shapeTopics(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, shared, environment string) {
+func shapeTopics(tree *pricing.Tree, names Names, req provider.ShapeRequest, front edge.Facts, region, shared, environment string) {
 	scope := taskNames(names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
 	declared := false
 	for _, resource := range req.Resources {
@@ -164,13 +165,19 @@ func shapeTopics(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 			tree.Add(environment, string(Vendor), tfSchedulerJob, scope.ScheduleJob(topic.declared), region, map[string]any{"region": region, "schedule": topic.spec.Cron})
 		}
 	}
-	if !declared {
+	refreshes := slices.ContainsFunc(req.Deploy.Apps, func(entry provider.AppEntry) bool { return refreshesNextByTask(entry, front) })
+	if !declared && !refreshes {
 		return
 	}
 	tier := req.Deploy.Tier
-	tree.Add(shared, string(Vendor), tfFirestoreDatabase, names.TaskDatabase(tier), region, map[string]any{"location_id": region, "type": nativeFirestore})
+	if declared {
+		tree.Add(shared, string(Vendor), tfFirestoreDatabase, names.TaskDatabase(tier), region, map[string]any{"location_id": region, "type": nativeFirestore})
+		tree.Add(shared, string(Vendor), tfServiceAccount, names.PushAccount(tier), region, map[string]any{})
+	}
 	tree.Add(shared, string(Vendor), tfCloudTasksQueue, names.DelayQueue(tier), region, map[string]any{"location": region})
-	tree.Add(shared, string(Vendor), tfServiceAccount, names.PushAccount(tier), region, map[string]any{})
+	if refreshes {
+		tree.Add(shared, string(Vendor), tfServiceAccount, names.RefreshAccount(tier), region, map[string]any{})
+	}
 }
 
 func shapeRealtime(tree *pricing.Tree, names Names, req provider.ShapeRequest, region, environment string) {

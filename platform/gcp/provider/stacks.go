@@ -72,6 +72,12 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		}
 	}
 	deployed := make([]provider.Function, 0, len(app.Functions)+len(app.Workers))
+	var projectNumber int64
+	if refreshesByTask(spec) {
+		if projectNumber, err = c.ReadProjectNumber(ctx); err != nil {
+			return nil, err
+		}
+	}
 	for _, fn := range app.Functions {
 		if err := runsX8664(fn.Framework.Arch, "function "+fn.Name); err != nil {
 			return nil, err
@@ -103,11 +109,20 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		}
 		if servesNext(app) {
 			served = fillNextServingDefaults(served)
+			var refresh *nextRefresh
+			if refreshesByTask(spec) {
+				refresh = &nextRefresh{
+					url:      refreshURLOf(service, projectNumber, c.region),
+					queue:    names.DelayQueuePath(c.region, spec.Ref.Tier),
+					account:  names.RefreshAccountEmail(spec.Ref.Tier),
+					endpoint: p.containerEndpoint(),
+				}
+			}
 			if values, err = mergedValues(fn.Name, values, newNextEnv(spec, fn, served, nextCache{
 				bucket:      names.Bucket(spec.Ref.Tier),
 				tagDatabase: "projects/" + names.project + "/databases/" + names.TagDatabase(spec.Ref.Tier),
 				endpoint:    p.containerEndpoint(),
-			})); err != nil {
+			}, refresh)); err != nil {
 				return nil, err
 			}
 		}
