@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -187,5 +188,14 @@ func TestANextAppBehindAnEdgeThatRunsNoCodeIsRefusedUntilTheTierHasItsTaskQueue(
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Errorf("PreflightDeploy() = %v, want a Next app that routes its own requests behind the Cloudflare proxy refused until the queue is installed", err)
+	}
+}
+
+func TestADeployWithoutANextAppIsNotRefusedForAnEdgeThatCannotBeOpened(t *testing.T) {
+	pre := shippingNext(false)
+	pre.Deploy.Apps[0].Manifest.Framework = nil
+	pre.Edge = edge.Kind("unregistered")
+	if err := failingOnAnyCall(t).PreflightDeploy(context.Background(), pre); err != nil {
+		t.Errorf("PreflightDeploy() = %v, want an app that is not Next admitted whatever edge fronts it", err)
 	}
 }
