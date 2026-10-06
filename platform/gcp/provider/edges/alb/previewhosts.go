@@ -229,14 +229,21 @@ func (s *stack) refuseExhaustedLimits(ctx context.Context, hostnames, freeing []
 			freed++
 		}
 	}
-	if err := s.refuseFullURLMap(ctx, adding, freed); err != nil {
+	if err := s.e.refuseFullURLMap(ctx, s.recorded.LoadBalancer.URLMap, adding, freed, previewLimitAdvice); err != nil {
 		return err
 	}
-	return s.refuseExhaustedBackendServiceQuota(ctx, adding)
+	return s.e.refuseExhaustedBackendServiceQuota(ctx, adding, previewLimitAdvice)
 }
 
-func (s *stack) refuseExhaustedBackendServiceQuota(ctx context.Context, adding []string) error {
-	quota, found, err := s.e.deps.Routes.ReadBackendServiceQuota(ctx)
+type limitAdvice struct {
+	remove string
+	again  string
+}
+
+var previewLimitAdvice = limitAdvice{remove: "remove previews this tier no longer needs with `ocel destroy preview`", again: "promote again"}
+
+func (e *Edge) refuseExhaustedBackendServiceQuota(ctx context.Context, adding []string, advice limitAdvice) error {
+	quota, found, err := e.deps.Routes.ReadBackendServiceQuota(ctx)
 	if err != nil || !found {
 		return err
 	}
@@ -245,12 +252,12 @@ func (s *stack) refuseExhaustedBackendServiceQuota(ctx context.Context, adding [
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s would each take a backend service, and project %s has %.0f of the %.0f its GLOBAL_EXTERNAL_MANAGED_BACKEND_SERVICES quota allows: "+
-			"remove previews this tier no longer needs with `ocel destroy preview`, or ask Google Cloud to raise the quota, then promote again",
-		strings.Join(adding, ", "), s.e.deps.Project, quota.Usage, quota.Limit)
+			"%s, or ask Google Cloud to raise the quota, then %s",
+		strings.Join(adding, ", "), e.deps.Project, quota.Usage, quota.Limit, advice.remove, advice.again)
 }
 
-func (s *stack) refuseFullURLMap(ctx context.Context, adding []string, freed int) error {
-	ruled, err := s.e.deps.Routes.CountHostRules(ctx, s.recorded.LoadBalancer.URLMap)
+func (e *Edge) refuseFullURLMap(ctx context.Context, urlMap string, adding []string, freed int, advice limitAdvice) error {
+	ruled, err := e.deps.Routes.CountHostRules(ctx, urlMap)
 	if err != nil {
 		return err
 	}
@@ -259,8 +266,8 @@ func (s *stack) refuseFullURLMap(ctx context.Context, adding []string, freed int
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s would each take a host rule on the url map %s, which has %d of the %d Compute allows and cannot be raised: "+
-			"remove previews this tier no longer needs with `ocel destroy preview`, then promote again",
-		strings.Join(adding, ", "), s.recorded.LoadBalancer.URLMap, ruled, maxHostRules)
+			"%s, then %s",
+		strings.Join(adding, ", "), urlMap, ruled, maxHostRules, advice.remove, advice.again)
 }
 
 func (s *stack) withdrawPointer(ctx context.Context, removal router.PointerRemoval) error {

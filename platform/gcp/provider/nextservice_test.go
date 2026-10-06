@@ -246,12 +246,14 @@ func TestANextServiceBehindAnEdgeThatRunsNoCodeRoutesItsOwnRequests(t *testing.T
 func TestANextServiceBehindAnEdgeThatRunsCodeLeavesRoutingToIt(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
+	withOriginBase(t, p)
 	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	spec := routedNextSpec()
-	spec.Edge = front
+	spec.Edge = shieldingFront{front}
+	spec.Ref.Name.Release = naming.NewRelease("d1", "f1")
 
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
@@ -369,12 +371,14 @@ func TestANextServiceIsToldToReceiveRefreshesAtItsRunAppAddress(t *testing.T) {
 func TestANextServiceBehindAnEdgeThatRunsCodeIsToldNoRefreshQueue(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
+	withOriginBase(t, p)
 	front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	spec := routedNextSpec()
-	spec.Edge = front
+	spec.Edge = shieldingFront{front}
+	spec.Ref.Name.Release = naming.NewRelease("d1", "f1")
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}

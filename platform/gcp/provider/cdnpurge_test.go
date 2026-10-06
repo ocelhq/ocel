@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -64,12 +65,14 @@ func TestANextAppWithoutTheALBIsToldNoURLMap(t *testing.T) {
 			}
 			spec.Edge = front
 		},
-		"an edge that runs code": func(t *testing.T, _ *Provider, spec *provider.StackSpec) {
+		"an edge that runs code": func(t *testing.T, p *Provider, spec *provider.StackSpec) {
+			withOriginBase(t, p)
 			front, err := fake.NewEdges().Open(fake.KindRelay, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			spec.Edge = front
+			spec.Edge = shieldingFront{front}
+			spec.Ref.Name.Release = naming.NewRelease("d1", "f1")
 			spec.App.Guard = nil
 		},
 		"a node function": func(_ *testing.T, _ *Provider, spec *provider.StackSpec) {
