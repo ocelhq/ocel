@@ -20,7 +20,7 @@ beforeEach(() => {
 
 const adoptWriter = () =>
   Object.assign(process.env, {
-    OCEL_ISR_WRITER_URL: "https://writer.example/prod/proj/app/BID/entry",
+    OCEL_ISR_WRITER_URL: "https://writer.example",
     OCEL_ISR_WRITER_SECRET: "write-secret",
   });
 
@@ -137,6 +137,22 @@ test("refuses to run with an adopted store and no writer to write into it", asyn
   adoptStore();
 
   await expect(entryStore()).rejects.toThrow("OCEL_ISR_WRITER_URL");
+});
+
+test("a half-configured writer is a failure, not a fallback", async () => {
+  adoptStore();
+
+  await expect(entryStore()).rejects.toThrow("OCEL_ISR_WRITER_URL");
+
+  process.env.OCEL_ISR_WRITER_URL = "https://writer.example";
+  await expect(entryStore()).rejects.toThrow("OCEL_ISR_WRITER_SECRET");
+
+  delete process.env.OCEL_ISR_WRITER_URL;
+  process.env.OCEL_ISR_WRITER_SECRET = "write-secret";
+  await expect(entryStore()).rejects.toThrow("OCEL_ISR_WRITER_URL");
+
+  process.env.OCEL_ISR_WRITER_URL = "https://writer.example";
+  await expect(entryStore()).resolves.toBeDefined();
 });
 
 test("names an entry the same way on the read as on the write", async () => {
