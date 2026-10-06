@@ -24,10 +24,8 @@ export interface Env {
   OCEL_EDGE_SECRET_KEY?: string;
   OCEL_ORIGIN_CLIENT_CERTIFICATE?: Fetcher;
   OCEL_ENVELOPE_KEY?: string;
-  OCEL_AWS_REGION?: string;
   OCEL_REVALIDATE_QUEUE_URL?: string;
   OCEL_REFRESH_QUEUE?: Queue;
-  OCEL_STATE_TABLE?: string;
   OCEL_IMAGE_OPTIMIZER_URL?: string;
   LOADER?: WorkerLoader;
 }

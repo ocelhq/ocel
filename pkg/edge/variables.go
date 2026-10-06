@@ -8,8 +8,7 @@ const (
 )
 
 const (
-	AWSRegionVar  = "OCEL_AWS_REGION"
-	StateTableVar = "OCEL_STATE_TABLE"
+	AWSRegionVar = "OCEL_AWS_REGION"
 )
 
 const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
