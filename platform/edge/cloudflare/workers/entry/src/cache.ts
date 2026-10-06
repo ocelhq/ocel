@@ -368,6 +368,8 @@ async function recordRefreshOutcome(
   } catch {}
 }
 
+const queuedMarkerTtlSeconds = 86_400;
+
 const QUEUED_MODIFIED = "x-ocel-queued-modified";
 const QUEUED_AT = "x-ocel-queued-at";
 
@@ -416,7 +418,7 @@ export async function refreshThroughQueue(
         marker,
         new Response(null, {
           headers: {
-            "cache-control": `max-age=${(queuedRefreshDeadlineMs + revalidationRetryWindowMs) / 1000}`,
+            "cache-control": `max-age=${queuedMarkerTtlSeconds}`,
             [QUEUED_MODIFIED]: String(modified),
             [QUEUED_AT]: String(now()),
           },
@@ -493,18 +495,24 @@ async function serveOrAdmitRefresh(
     return policy.forServe(fromStorage(cached, false), "HIT");
   }
   if (state === "stale") {
+    const render = async (): Promise<RefreshOutcome> => {
+      const response = await originBlocking(modified);
+      const outcome = refreshOutcome(response);
+      await store(keyRequest, target, deps, policy, response);
+      return outcome;
+    };
     const refresh = () =>
       refreshThroughQueue(
         deps,
         target.refreshKey ?? target.key,
         target.revalidation,
         modified,
-        async () => {
-          const response = await originBlocking(modified);
-          const outcome = refreshOutcome(response);
-          await store(keyRequest, target, deps, policy, response);
-          return outcome;
-        },
+        target.refreshKey || !deps.enqueueRevalidation || !target.revalidation
+          ? render
+          : async () =>
+              (await claimSentinel(deps.cache, new Request(sentinelUrl(target.key))))
+                ? render()
+                : "refused",
       );
     if (target.refreshKey) {
       admitRefresh(deps, target.refreshKey, modified, refresh, staleWindowMs(meta, now()));
