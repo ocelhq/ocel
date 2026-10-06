@@ -76,6 +76,18 @@ func (w *promoteWorld) promotesReplacing(t *testing.T, ctx context.Context, repl
 	return err
 }
 
+func (w *promoteWorld) promotesServing(t *testing.T, id string, hosts, superseded, previous []edge.PreviewHost) error {
+	t.Helper()
+	routers := w.appRouters()
+	routers[0].hosts, routers[0].superseded, routers[0].previous = hosts, superseded, previous
+	_, err := promote(context.Background(), w.ledger, promoteRequest{replaces: w.active(t), promotion: w.staged(t, id), hosts: hosts, superseded: superseded, previous: previous}, routers, progress.Discard())
+	return err
+}
+
+func (w *promoteWorld) servedHostnames() []string {
+	return slices.Sorted(slices.Values(w.routers.DataPlane(fake.RouterRelay).ListServedHostnames()))
+}
+
 func (w *promoteWorld) serves(kind router.Kind, app string) string {
 	return w.routers.DataPlane(kind).Builds(promotedSlug, environment.TierProduction, router.DefaultPointer)[app]
 }
@@ -316,5 +328,51 @@ func TestAPromoteWhoseRecordAReclaimRemovedAsItLandedIsTakenBackAndMovesNothing(
 	}
 	if served := w.serves(fake.RouterRelay, "web"); served != "web-p1" {
 		t.Errorf("the relay router serves web %q, want web-p1", served)
+	}
+}
+
+func webHosts(hostnames ...string) []edge.PreviewHost {
+	hosts := make([]edge.PreviewHost, 0, len(hostnames))
+	for _, hostname := range hostnames {
+		hosts = append(hosts, edge.PreviewHost{Hostname: hostname, App: "web"})
+	}
+	return hosts
+}
+
+func TestAPromotionTakenBackRoutesTheAliasesItWithdrewAndWithdrawsTheOnesItAdded(t *testing.T) {
+	w := newPromoteWorld(t)
+	if err := w.promotesServing(t, "p1", webHosts("keep", "old"), nil, nil); err != nil {
+		t.Fatalf("promote(p1) = %v", err)
+	}
+	w.routers.DataPlane(fake.RouterDirect).FailNextPointerMove(errors.New("the direct router refused the move"))
+
+	if err := w.promotesServing(t, "p2", webHosts("keep", "new"), webHosts("old"), webHosts("keep", "old")); err == nil {
+		t.Fatal("promote(p2) with a failing direct router = nil, want it taken back")
+	}
+
+	if served, want := w.servedHostnames(), []string{"keep", "old"}; !slices.Equal(served, want) {
+		t.Errorf("the relay router serves %v after p2 was taken back, want %v", served, want)
+	}
+	if active := w.active(t); active != "p1" {
+		t.Errorf("the ledger names %q, want p1", active)
+	}
+	if served := w.serves(fake.RouterRelay, "web"); served != "web-p1" {
+		t.Errorf("the relay router serves web %q, want web-p1", served)
+	}
+}
+
+func TestAPromotionTakenBackKeepsServingAnAliasBothReleasesShare(t *testing.T) {
+	w := newPromoteWorld(t)
+	if err := w.promotesServing(t, "p1", webHosts("keep"), nil, nil); err != nil {
+		t.Fatalf("promote(p1) = %v", err)
+	}
+	w.routers.DataPlane(fake.RouterDirect).FailNextPointerMove(errors.New("the direct router refused the move"))
+
+	if err := w.promotesServing(t, "p2", webHosts("keep"), nil, webHosts("keep")); err == nil {
+		t.Fatal("promote(p2) with a failing direct router = nil, want it taken back")
+	}
+
+	if served, want := w.servedHostnames(), []string{"keep"}; !slices.Equal(served, want) {
+		t.Errorf("the relay router serves %v after p2 was taken back, want %v", served, want)
 	}
 }

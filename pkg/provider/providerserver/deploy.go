@@ -1550,7 +1550,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 				r.restoreInlineBindings(ctx, progress)
 				return err
 			}
-			dropped, err := r.promoteApps(ctx, promoteRequest{pointer: r.spec.Pointer, hosts: r.aliases, superseded: superseded, replaces: r.replaces, promotion: promotion}, r.readAppRouter, progress)
+			dropped, err := r.promoteApps(ctx, promoteRequest{pointer: r.spec.Pointer, hosts: r.aliases, superseded: superseded, previous: previous, replaces: r.replaces, promotion: promotion}, r.readAppRouter, progress)
 			if err != nil {
 				r.restoreInlineBindings(ctx, progress)
 				return errors.Join(err, r.restoreAliases(ctx, previous), r.reclaimDropped(ctx, r.spec.Pointer, dropped, progress))

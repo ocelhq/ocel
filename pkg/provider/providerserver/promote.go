@@ -24,6 +24,7 @@ type appRouter struct {
 	apps       []string
 	hosts      []edge.PreviewHost
 	superseded []edge.PreviewHost
+	previous   []edge.PreviewHost
 }
 
 type inactivePromotion struct{ refusal.Refusal }
@@ -34,6 +35,7 @@ type promoteRequest struct {
 	pointer     string
 	hosts       []edge.PreviewHost
 	superseded  []edge.PreviewHost
+	previous    []edge.PreviewHost
 	replaces    string
 	rollsBackTo string
 	promotion   router.Promotion
@@ -115,7 +117,8 @@ func restore(ctx context.Context, l projectLedger, pointer string, routed appRou
 			Pointer:     pointer,
 			Promotion:   active,
 			Records:     records,
-			Hosts:       routed.hosts,
+			Hosts:       routed.previous,
+			Superseded:  routed.hosts,
 			StillActive: newStillActive(l, pointer, active.PromotionID),
 		}, progress.Discard())
 		var inactive inactivePromotion
