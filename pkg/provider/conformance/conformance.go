@@ -5,7 +5,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
@@ -67,8 +67,8 @@ func runHooks(t *testing.T, suite Suite) {
 		if err != nil {
 			t.Fatalf("ReadNextServerRuntime() error = %v", err)
 		}
-		if _, ok := files[images.NextServerAdapterFile]; !ok {
-			t.Errorf("ReadNextServerRuntime() has no %s, which next start loads as its adapter", images.NextServerAdapterFile)
+		if _, ok := files[containerimage.NextServerAdapterFile]; !ok {
+			t.Errorf("ReadNextServerRuntime() has no %s, which next start loads as its adapter", containerimage.NextServerAdapterFile)
 		}
 	})
 }

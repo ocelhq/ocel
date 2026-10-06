@@ -200,8 +200,8 @@ func nextServerRuntime(files map[string][]byte) *images.NextServerRuntime {
 
 func nextFiles() map[string][]byte {
 	return map[string][]byte{
-		images.NextServerAdapterFile: []byte("an adapter"),
-		"cache-handler.cjs":          []byte("a cache handler"),
+		containerimage.NextServerAdapterFile: []byte("an adapter"),
+		"cache-handler.cjs":                  []byte("a cache handler"),
 	}
 }
 
@@ -250,7 +250,7 @@ func TestWrapContainerPointsNextsServerAtTheShippedAdapter(t *testing.T) {
 		t.Fatalf("WrapContainer() = %v", err)
 	}
 
-	want := []string{"PATH=/usr/bin", images.NextAdapterPathVar + "=/ocel/next/" + images.NextServerAdapterFile}
+	want := []string{"PATH=/usr/bin", containerimage.NextAdapterPathVar + "=/ocel/next/" + containerimage.NextServerAdapterFile}
 	if got := configOf(t, wrapped).Env; !slices.Equal(got, want) {
 		t.Errorf("the wrapped image has env %v, want %v", got, want)
 	}
@@ -299,8 +299,8 @@ func TestWrapContainerRefusesANextServerRuntimeWithoutItsAdapter(t *testing.T) {
 
 	base := baseContainer(t, v1.Config{Cmd: []string{"next", "start"}})
 	_, err := images.WrapContainer(base, []byte("a runtime"), nextServerRuntime(map[string][]byte{"cache-handler.cjs": []byte("x")}))
-	if err == nil || !strings.Contains(err.Error(), images.NextServerAdapterFile) {
-		t.Errorf("WrapContainer() = %v, want a refusal naming %s", err, images.NextServerAdapterFile)
+	if err == nil || !strings.Contains(err.Error(), containerimage.NextServerAdapterFile) {
+		t.Errorf("WrapContainer() = %v, want a refusal naming %s", err, containerimage.NextServerAdapterFile)
 	}
 }
 
