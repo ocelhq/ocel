@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/prerender"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func nextManifest() *contractv1.Manifest {
@@ -130,7 +131,7 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 		if isrEntriesAdopted(cfg.objectStores()) {
 			cache.CacheStoreBucket = cfg.CacheStoreBucket
 			cache.WriterURL = cfg.ISRWriterEndpoint + "/" + prefix + "/entry"
-			cache.WriterSecret = isrWriteSecret(cfg.ISRWriterSeed, prefix)
+			cache.WriterSecret = cloudflare.DeriveISRWriteSecret(cfg.ISRWriterSeed, prefix)
 		}
 		builds.caches[name] = cache
 	}

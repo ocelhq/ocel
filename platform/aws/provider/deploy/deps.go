@@ -1,6 +1,9 @@
 package deploy
 
-import "github.com/ocelhq/ocel/platform/aws/provider/payloads"
+import (
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+)
 
 type ObjectStores struct {
 	Objects           payloads.ObjectStore
@@ -8,12 +11,6 @@ type ObjectStores struct {
 	AssetBucket       string
 	CacheStoreBucket  string
 	CacheStoreObjects payloads.ObjectStore
-}
-
-type ISRWriterAccess struct {
-	Endpoint      string
-	BootstrapCred string
-	Seed          string
 }
 
 func (cfg Config) objectStores() ObjectStores {
@@ -26,8 +23,8 @@ func (cfg Config) objectStores() ObjectStores {
 	}
 }
 
-func (cfg Config) isrWriter() ISRWriterAccess {
-	return ISRWriterAccess{
+func (cfg Config) isrWriter() cloudflare.ISRWriter {
+	return cloudflare.ISRWriter{
 		Endpoint:      cfg.ISRWriterEndpoint,
 		BootstrapCred: cfg.ISRWriterBootstrapCred,
 		Seed:          cfg.ISRWriterSeed,
