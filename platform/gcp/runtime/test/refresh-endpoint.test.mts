@@ -1,4 +1,5 @@
 import http from "node:http";
+import type { CacheEntryFile } from "@framework/next-cache";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import {
   newRefreshEndpoint,
@@ -14,10 +15,15 @@ let rendered: { url: string; headers: http.IncomingHttpHeaders }[];
 let originStatus: number;
 let front: http.Server | undefined;
 let warn: ReturnType<typeof vi.spyOn>;
+let entries: Map<string, CacheEntryFile>;
+let storesOnRender: boolean;
+let readKeys: string[];
+let readEntry: (key: string) => Promise<CacheEntryFile | null>;
 
 beforeAll(async () => {
   origin = http.createServer((req, res) => {
     rendered.push({ url: String(req.url), headers: req.headers });
+    if (storesOnRender) entries.set("blog", { lastModified: Date.now(), value: {} });
     res.writeHead(originStatus);
     res.end("rendered");
   });
@@ -30,6 +36,13 @@ afterAll(() => new Promise<void>((resolve) => origin.close(() => resolve())));
 beforeEach(() => {
   rendered = [];
   originStatus = 200;
+  entries = new Map();
+  storesOnRender = true;
+  readKeys = [];
+  readEntry = async (key) => {
+    readKeys.push(key);
+    return entries.get(key) ?? null;
+  };
   warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
@@ -77,8 +90,15 @@ function post(base: string, body: string, token = "good") {
   });
 }
 
-const endpointFor = (check = accepting) =>
-  newRefreshEndpoint({ path: "/_ocel/refresh", isrPrefix, localOrigin: originUrl, check });
+const endpointFor = (check = accepting, extra: { readBackTimeoutMs?: number } = {}) =>
+  newRefreshEndpoint({
+    path: "/_ocel/refresh",
+    isrPrefix,
+    localOrigin: originUrl,
+    check,
+    readEntry: (key) => readEntry(key),
+    ...extra,
+  });
 
 test("a verified refresh re-renders its page at the local origin with the generation it renews", async () => {
   const base = await serve(endpointFor());
@@ -163,6 +183,79 @@ test("a refresh whose re-render fails answers so Cloud Tasks retries it", async 
   expect(await response.text()).not.toContain("good");
 });
 
+test("a refresh whose re-render stored a newer entry is done", async () => {
+  const base = await serve(endpointFor());
+
+  expect((await post(base, task())).status).toBe(204);
+});
+
+test("a refresh whose re-render answered but stored nothing newer fails, so Cloud Tasks retries it", async () => {
+  storesOnRender = false;
+  const base = await serve(endpointFor());
+
+  const response = await post(base, task());
+
+  expect(response.status).toBe(500);
+  expect(await response.text()).toBe("the re-render of /blog?page=2 left no entry newer than 1000");
+});
+
+test("a refresh is not done while the store still holds only the entry it was asked to renew", async () => {
+  storesOnRender = false;
+  entries.set("blog", { lastModified: 1_000, value: {} });
+  const base = await serve(endpointFor());
+
+  expect((await post(base, task())).status).toBe(500);
+});
+
+test("a refresh whose entry cannot be read back fails, so Cloud Tasks retries it", async () => {
+  readEntry = async () => {
+    throw new Error("storage down");
+  };
+  const base = await serve(endpointFor());
+
+  const response = await post(base, task());
+
+  expect(response.status).toBe(503);
+  expect(await response.text()).toBe("storage down");
+});
+
+test("a refresh whose read-back does not answer in time fails, so Cloud Tasks retries it", async () => {
+  readEntry = () => new Promise(() => {});
+  const base = await serve(endpointFor(accepting, { readBackTimeoutMs: 20 }));
+  const started = Date.now();
+
+  const response = await post(base, task());
+
+  expect(response.status).toBe(503);
+  expect(Date.now() - started).toBeLessThan(200);
+});
+
+test("a retried refresh finds the entry another attempt stored and is done", async () => {
+  storesOnRender = false;
+  entries.set("blog", { lastModified: 2_000, value: {} });
+  const base = await serve(endpointFor());
+
+  expect((await post(base, task())).status).toBe(204);
+});
+
+test("a refresh reads back the entry it names", async () => {
+  const base = await serve(endpointFor());
+
+  await post(base, task());
+
+  expect(readKeys).toEqual(["blog"]);
+});
+
+test("a refresh whose re-render failed reads nothing back", async () => {
+  originStatus = 500;
+  const base = await serve(endpointFor());
+
+  const response = await post(base, task());
+
+  expect(response.status).toBe(502);
+  expect(readKeys).toEqual([]);
+});
+
 test("a request for the refresh path other than a POST is refused and never reaches the app", async () => {
   const base = await serve(endpointFor());
 
@@ -181,7 +274,7 @@ test("a request to any other path is left to the app", async () => {
 });
 
 test("a service told no refresh url has no refresh endpoint", () => {
-  expect(readRefreshEndpoint({}, originUrl)).toBeUndefined();
+  expect(readRefreshEndpoint({}, originUrl, async () => null)).toBeUndefined();
 });
 
 test("a service told a refresh url but no account refuses to start", () => {
@@ -189,6 +282,7 @@ test("a service told a refresh url but no account refuses to start", () => {
     readRefreshEndpoint(
       { OCEL_REFRESH_URL: "https://web.run.app/_ocel/refresh", OCEL_ISR_PREFIX: isrPrefix },
       originUrl,
+      async () => null,
     ),
   ).toThrow(/OCEL_REFRESH_ACCOUNT/);
 });
@@ -201,6 +295,7 @@ test("the refresh endpoint answers at the path of the url the service is told", 
       OCEL_ISR_PREFIX: isrPrefix,
     },
     originUrl,
+    async () => null,
   )!;
   const base = await serve(endpoint);
 

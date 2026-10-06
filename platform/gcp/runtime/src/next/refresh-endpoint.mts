@@ -1,4 +1,5 @@
 import type http from "node:http";
+import type { CacheEntryFile } from "@framework/next-cache";
 import { type IdTokenCheck, newGoogleIdTokenCheck } from "./google-id-token.mjs";
 import { renderAtOrigin } from "./loopback-render.mjs";
 import { readRefreshTask } from "./refresh-task.mjs";
@@ -13,10 +14,13 @@ export interface RefreshEndpointOptions {
   isrPrefix: string;
   localOrigin: string;
   check: IdTokenCheck;
+  readEntry: (key: string) => Promise<CacheEntryFile | null>;
   renderTimeoutMs?: number;
+  readBackTimeoutMs?: number;
 }
 
 const defaultRenderTimeoutMs = 40_000;
+const defaultReadBackTimeoutMs = 10_000;
 const maxBodyBytes = 65_536;
 
 function answer(res: http.ServerResponse, status: number, headers: http.OutgoingHttpHeaders = {}) {
@@ -47,8 +51,30 @@ function readBody(req: http.IncomingMessage): Promise<string | undefined> {
   });
 }
 
+function readBack(
+  readEntry: RefreshEndpointOptions["readEntry"],
+  key: string,
+  url: string,
+  timeoutMs: number,
+): Promise<CacheEntryFile | null> {
+  let timer: NodeJS.Timeout | undefined;
+  const expiry = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`the read-back of ${url} did not answer within ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+  });
+  return Promise.race([readEntry(key), expiry]).finally(() => clearTimeout(timer));
+}
+
+function refuse(res: http.ServerResponse, status: number, message: string): void {
+  res.writeHead(status, { "content-type": "text/plain" });
+  res.end(message);
+}
+
 export function newRefreshEndpoint(options: RefreshEndpointOptions): RefreshEndpoint {
   const renderTimeoutMs = options.renderTimeoutMs ?? defaultRenderTimeoutMs;
+  const readBackTimeoutMs = options.readBackTimeoutMs ?? defaultReadBackTimeoutMs;
   return async (req, res) => {
     if (new URL(req.url ?? "/", "http://x").pathname !== options.path) return false;
     if (req.method !== "POST") {
@@ -99,8 +125,19 @@ export function newRefreshEndpoint(options: RefreshEndpointOptions): RefreshEndp
     try {
       await renderAtOrigin(options.localOrigin, task.refresh, renderTimeoutMs);
     } catch (err) {
-      res.writeHead(502, { "content-type": "text/plain" });
-      res.end(err instanceof Error ? err.message : "the re-render failed");
+      refuse(res, 502, err instanceof Error ? err.message : "the re-render failed");
+      return true;
+    }
+    const { url, key, lastModified } = task.refresh;
+    let entry: CacheEntryFile | null;
+    try {
+      entry = await readBack(options.readEntry, key, url, readBackTimeoutMs);
+    } catch (err) {
+      refuse(res, 503, err instanceof Error ? err.message : `the read-back of ${url} failed`);
+      return true;
+    }
+    if (!entry || entry.lastModified <= lastModified) {
+      refuse(res, 500, `the re-render of ${url} left no entry newer than ${lastModified}`);
       return true;
     }
     answer(res, 204);
@@ -111,6 +148,7 @@ export function newRefreshEndpoint(options: RefreshEndpointOptions): RefreshEndp
 export function readRefreshEndpoint(
   env: NodeJS.ProcessEnv,
   localOrigin: string,
+  readEntry: RefreshEndpointOptions["readEntry"],
 ): RefreshEndpoint | undefined {
   const url = env.OCEL_REFRESH_URL;
   if (!url) return undefined;
@@ -122,6 +160,7 @@ export function readRefreshEndpoint(
     path: new URL(url).pathname,
     isrPrefix,
     localOrigin,
+    readEntry,
     check: newGoogleIdTokenCheck({ audience: url, email: account }),
   });
 }

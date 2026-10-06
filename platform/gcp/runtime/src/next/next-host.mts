@@ -38,19 +38,26 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
           ),
         }
       : undefined;
+  const newCacheStore = async () =>
+    shared
+      ? newGcpCacheStore(shared.storage, shared.objectPrefix, shared.tags.publish)
+      : newInstanceCacheStore(cache);
   return {
     bind: readPortBind(env),
     instanceCache: cache,
-    newCacheStore: async () =>
-      shared
-        ? newGcpCacheStore(shared.storage, shared.objectPrefix, shared.tags.publish)
-        : newInstanceCacheStore(cache),
+    newCacheStore,
     newUseCacheStore: async () =>
       shared
         ? newGcpUseCacheStore(shared.storage, shared.objectPrefix, shared.tags)
         : newInstanceUseCacheStore(cache),
     newDispatchInvoke: async (localOrigin) =>
-      newGcpDispatchInvoke(localOrigin, env, readRefreshEndpoint(env, localOrigin)),
+      newGcpDispatchInvoke(
+        localOrigin,
+        env,
+        readRefreshEndpoint(env, localOrigin, async (key) =>
+          (await newCacheStore()).readEntry(key),
+        ),
+      ),
     scheduleRefresh: readTaskRefresh(env),
   };
 }
