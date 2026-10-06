@@ -373,7 +373,7 @@ const queuedMarkerTtlSeconds = 86_400;
 const QUEUED_MODIFIED = "x-ocel-queued-modified";
 const QUEUED_AT = "x-ocel-queued-at";
 
-function queuedMarkerUrl(key: string): string {
+function locateQueuedMarker(key: string): string {
   return `https://queued.refresh.ocel/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
 
@@ -402,17 +402,17 @@ export async function refreshThroughQueue(
 ): Promise<RefreshOutcome> {
   if (!deps.enqueueRevalidation || !route) return direct();
   const now = deps.now ?? Date.now;
-  const marker = new Request(queuedMarkerUrl(key));
+  const marker = new Request(locateQueuedMarker(key));
   const queued = await readQueuedMarker(deps.cache, marker);
-  const standing = queued?.modified === modified ? queued : undefined;
-  if (standing && now() - standing.at >= queuedRefreshDeadlineMs) {
+  const queuedForThisEntry = queued?.modified === modified ? queued : undefined;
+  if (queuedForThisEntry && now() - queuedForThisEntry.at >= queuedRefreshDeadlineMs) {
     try {
       await deps.cache.delete(marker);
     } catch {}
     return direct();
   }
   if (!(await enqueued(deps.enqueueRevalidation, route, modified))) return direct();
-  if (!standing) {
+  if (!queuedForThisEntry) {
     try {
       await deps.cache.put(
         marker,
