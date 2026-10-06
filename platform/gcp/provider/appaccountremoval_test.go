@@ -528,6 +528,29 @@ func TestRevokingWhileAnotherEnvironmentIsRecordedReadsTheRecordsOnce(t *testing
 	}
 }
 
+func TestRevokingAnAppsGrantsLeavesARoleAnOperatorAddedToItsAccount(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c, spec, member := grantedAppAccount(t, server)
+	conditioned := &cloudresourcemanager.Expr{Expression: `resource.name == "projects/acme-prod/datasets/sales"`}
+	server.project.Bindings = append(server.project.Bindings,
+		&cloudresourcemanager.Binding{Role: "roles/bigquery.dataViewer", Members: []string{member}},
+		&cloudresourcemanager.Binding{Role: "roles/bigquery.dataEditor", Condition: conditioned, Members: []string{member}},
+	)
+
+	if err := forgetUnusedAppAccount(context.Background(), c, recordedStacks{names: []naming.StackName{spec.Ref.Name}}, spec.Ref, nil); err != nil {
+		t.Fatalf("forgetUnusedAppAccount() = %v", err)
+	}
+
+	want := []string{
+		"roles/bigquery.dataEditor " + member + " " + conditioned.Expression,
+		"roles/bigquery.dataViewer " + member + " ",
+	}
+	if got := projectBindingsOf(server); !slices.Equal(got, want) {
+		t.Errorf("the project binds %q, want exactly %q: only the roles ocel granted the account are taken back", got, want)
+	}
+}
+
 func TestTakingAMemberOffTheProjectReportsEveryBindingItHeld(t *testing.T) {
 	t.Parallel()
 	member, other := "serviceAccount:app@x.iam.gserviceaccount.com", "serviceAccount:other@x.iam.gserviceaccount.com"
@@ -538,9 +561,10 @@ func TestTakingAMemberOffTheProjectReportsEveryBindingItHeld(t *testing.T) {
 		{Role: "roles/two", Condition: second, Members: []string{member, other}},
 		{Role: "roles/three", Members: []string{member}},
 		{Role: "roles/four", Members: []string{other}},
+		{Role: "roles/five", Members: []string{member}},
 	}
 
-	kept, removed := boundWithout(bindings, member)
+	kept, removed := boundWithout(bindings, member, []string{"roles/one", "roles/two", "roles/three"})
 
 	if len(removed) != 3 {
 		t.Fatalf("boundWithout() removed %+v, want three bindings", removed)
@@ -553,7 +577,7 @@ func TestTakingAMemberOffTheProjectReportsEveryBindingItHeld(t *testing.T) {
 			t.Errorf("removed[%d] = %+v, want %s with its condition and exactly the member", i, removed[i], want.role)
 		}
 	}
-	if len(kept) != 2 || !slices.Equal(kept[0].Members, []string{other}) || kept[0].Role != "roles/two" {
-		t.Errorf("boundWithout() kept %+v, want roles/two held by the other member and roles/four", kept)
+	if len(kept) != 3 || !slices.Equal(kept[0].Members, []string{other}) || kept[0].Role != "roles/two" || kept[2].Role != "roles/five" || !slices.Equal(kept[2].Members, []string{member}) {
+		t.Errorf("boundWithout() kept %+v, want roles/two held by the other member, roles/four and roles/five still held by the member", kept)
 	}
 }
