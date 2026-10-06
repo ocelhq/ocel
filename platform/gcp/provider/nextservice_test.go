@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -387,6 +388,100 @@ func TestANextServiceBehindAnEdgeThatRunsCodeIsToldNoRefreshQueue(t *testing.T) 
 	}
 }
 
+func nextContainerSpec() provider.StackSpec {
+	return provider.StackSpec{
+		Ref: provider.StackRef{
+			Project: "shop",
+			Tier:    environment.TierProduction,
+			Name:    naming.StackName{Env: stackrecords.ProductionEnv, App: "web"},
+		},
+		Kind: provider.StackApp,
+		App: &provider.AppSpec{
+			App:             "web",
+			Framework:       buildoutput.FrameworkNext,
+			Compute:         provider.ComputeContainer,
+			Image:           "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
+			HealthCheckPath: "/",
+			Instances:       provider.Instances{Min: 1, Max: 1},
+			ISR:             &provider.ISRSpec{Prefix: "prod/shop/web/r1/isr", TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"},
+		},
+	}
+}
+
+func releasedNextContainer(t *testing.T, spec provider.StackSpec) (*run.GoogleCloudRunV2Service, *runServer) {
+	t.Helper()
+	server := &runServer{}
+	p := server.open(t)
+	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	if len(server.created) == 0 {
+		t.Fatal("ProvisionContainers() released no service")
+	}
+	return server.created[0], server
+}
+
+func TestANextContainerKeepsItsCPUBetweenRequestsSoNextRefreshesInTheBackground(t *testing.T) {
+	service, _ := releasedNextContainer(t, nextContainerSpec())
+
+	if service.Template.Containers[0].Resources.CpuIdle {
+		t.Error("a Next container releases its CPU between requests, and Next revalidates stale pages in the background after the response")
+	}
+}
+
+func TestANextContainerKeepsAnInstanceRunningUnlessItsAppAsksForNone(t *testing.T) {
+	for min, want := range map[int]int64{1: 1, 0: 0} {
+		spec := nextContainerSpec()
+		spec.App.Instances = provider.Instances{Min: min, Max: 1}
+		service, _ := releasedNextContainer(t, spec)
+
+		if got := service.Template.Scaling.MinInstanceCount; got != want {
+			t.Errorf("an app asking for %d minimum instances runs %d, want %d", min, got, want)
+		}
+	}
+}
+
+func TestANextContainerAsksForTwoGibibytesOfMemory(t *testing.T) {
+	service, _ := releasedNextContainer(t, nextContainerSpec())
+
+	container := service.Template.Containers[0]
+	if got := container.Resources.Limits["memory"]; got != "2048Mi" {
+		t.Errorf("a Next container asks for %q of memory, want 2048Mi, as a serverless Next service does", got)
+	}
+	if got := container.Resources.Limits["cpu"]; got != revisionCPU {
+		t.Errorf("a Next container asks for %q CPU, want %q", got, revisionCPU)
+	}
+	if got := envOf(container)[memoryEnvVar]; got != "2048" {
+		t.Errorf("the Next runtime reads %s=%q, want 2048", memoryEnvVar, got)
+	}
+}
+
+func TestANextContainerIsToldTheCacheBucketObjectPrefixAndTagsDatabaseItsEntriesLiveIn(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	if _, err := p.ProvisionContainers(context.Background(), nextContainerSpec(), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	env := envOf(server.created[0].Template.Containers[0])
+
+	for name, want := range map[string]string{
+		"OCEL_ISR_BUCKET":        names(t, p).Bucket(environment.TierProduction),
+		"OCEL_ISR_OBJECT_PREFIX": "cache/shop/web/prod/r1/isr",
+		"OCEL_ISR_PREFIX":        "prod/shop/web/r1/isr",
+		"OCEL_ISR_TAG_NAMESPACE": "PROJECT#shop#STACK#prod--web--r1#TAG#",
+		"OCEL_TAG_DATABASE":      "projects/" + names(t, p).project + "/databases/" + names(t, p).TagDatabase(environment.TierProduction),
+	} {
+		if got := env[name]; got != want {
+			t.Errorf("a Next container reads %s=%q, want %q", name, got, want)
+		}
+	}
+	for _, name := range []string{"OCEL_STORAGE_ENDPOINT", "OCEL_FIRESTORE_ENDPOINT"} {
+		if env[name] == "" {
+			t.Errorf("an emulated Next container reads no %s", name)
+		}
+	}
+}
+
 func TestAnEmulatedNextServiceQueuesItsRefreshesThroughTheEmulator(t *testing.T) {
 	env := envOf(releasedNext(t, routedNextSpec()))
 
@@ -423,6 +518,20 @@ func TestANodeFunctionIsToldNoRefreshQueue(t *testing.T) {
 	}
 }
 
+func TestANextContainerIsToldNothingThatRefreshesByRequestOrRoutes(t *testing.T) {
+	service, _ := releasedNextContainer(t, nextContainerSpec())
+
+	env := envOf(service.Template.Containers[0])
+	for _, name := range []string{
+		finishBeforeResponseEnvVar, routingManifestEnvVar, routerKindEnvVar, staticDirEnvVar,
+		edge.OriginDispatchVar, edge.OriginSignedVar,
+	} {
+		if _, told := env[name]; told {
+			t.Errorf("a Next container is told %s, which only ocel's serverless entrypoint reads", name)
+		}
+	}
+}
+
 func TestANextServiceOnContainerComputeIsToldNoRefreshQueue(t *testing.T) {
 	spec := routedNextSpec()
 	env := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeContainer}, nextCache{}, nil)
@@ -430,6 +539,22 @@ func TestANextServiceOnContainerComputeIsToldNoRefreshQueue(t *testing.T) {
 	for _, name := range refreshEnvVars {
 		if got, told := env[name]; told {
 			t.Errorf("a Next service on container compute reads %s=%q", name, got)
+		}
+	}
+}
+
+func TestAContainerThatServesNoNextKeepsItsProfileAndIsToldNoCacheLocation(t *testing.T) {
+	spec := nextContainerSpec()
+	spec.App.Framework = ""
+	service, _ := releasedNextContainer(t, spec)
+
+	container := service.Template.Containers[0]
+	if got := container.Resources.Limits["memory"]; got != revisionMemory {
+		t.Errorf("a container that serves no Next asks for %q of memory, want the profile's %q", got, revisionMemory)
+	}
+	for name := range envOf(container) {
+		if strings.HasPrefix(name, "OCEL_ISR_") || name == tagDatabaseEnvVar || name == memoryEnvVar {
+			t.Errorf("a container that serves no Next is told %s", name)
 		}
 	}
 }
@@ -514,5 +639,26 @@ func TestANextServiceBilledPerInstanceIsToldNoResponseEndHoldAndNoRefreshQueue(t
 	billedPerRequest := newNextEnv(spec, spec.App.Functions[0], serving{compute: provider.ComputeServerless, instanceBilled: false}, nextCache{}, nil)
 	if _, told := billedPerRequest[finishBeforeResponseEnvVar]; !told {
 		t.Errorf("a Next service billed per request reads no %s, so billing is not what decides it", finishBeforeResponseEnvVar)
+	}
+}
+
+func TestAWorkerOfANextContainerIsToldNoCacheLocation(t *testing.T) {
+	spec := nextContainerSpec()
+	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
+	_, server := releasedNextContainer(t, spec)
+
+	workers := slices.Concat(server.created[1:], server.releases())
+	if len(workers) == 0 {
+		t.Fatal("the app's worker was never released")
+	}
+	for _, worker := range workers {
+		if worker.Template == nil {
+			continue
+		}
+		for name := range envOf(worker.Template.Containers[0]) {
+			if strings.HasPrefix(name, "OCEL_ISR_") || name == tagDatabaseEnvVar || name == memoryEnvVar {
+				t.Errorf("a worker of a Next container is told %s, which only the Next service reads", name)
+			}
+		}
 	}
 }

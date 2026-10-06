@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -153,18 +154,46 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 		env[appNameEnvVar] = app.App
 		env[deploymentIDEnvVar] = app.Deployment
 	}
-	if isr := app.ISR; isr != nil {
-		env[isrPrefixEnvVar] = isr.Prefix
-		env[isrTagNamespaceEnvVar] = isr.TagNamespace
-		env[isrBucketEnvVar] = cache.bucket
-		env[tagDatabaseEnvVar] = cache.tagDatabase
-		env[isrObjectPrefixEnvVar] = strings.TrimSuffix(cacheObjectName(isr.Prefix+"/"), "/")
-		if cache.endpoint != "" {
-			env[storageEndpointEnvVar] = cache.endpoint
-			env[firestoreEndpointEnvVar] = cache.endpoint
-		}
+	maps.Copy(env, nextCacheEnv(app.ISR, cache))
+	return env
+}
+
+func nextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
+	env := map[string]string{}
+	if isr == nil {
+		return env
+	}
+	env[isrPrefixEnvVar] = isr.Prefix
+	env[isrTagNamespaceEnvVar] = isr.TagNamespace
+	env[isrBucketEnvVar] = cache.bucket
+	env[tagDatabaseEnvVar] = cache.tagDatabase
+	env[isrObjectPrefixEnvVar] = strings.TrimSuffix(cacheObjectName(isr.Prefix+"/"), "/")
+	if cache.endpoint != "" {
+		env[storageEndpointEnvVar] = cache.endpoint
+		env[firestoreEndpointEnvVar] = cache.endpoint
 	}
 	return env
+}
+
+func newNextContainerEnv(spec provider.StackSpec, s serving, cache nextCache) map[string]string {
+	env := nextCacheEnv(spec.App.ISR, cache)
+	env[memoryEnvVar] = strconv.Itoa(s.memory)
+	return env
+}
+
+func fillNextContainerDefaults(s serving) serving {
+	if s.memory == 0 {
+		s.memory = nextMemoryMB
+	}
+	return s
+}
+
+func nextCacheOf(names Names, tier environment.Tier, endpoint string) nextCache {
+	return nextCache{
+		bucket:      names.Bucket(tier),
+		tagDatabase: "projects/" + names.project + "/databases/" + names.TagDatabase(tier),
+		endpoint:    endpoint,
+	}
 }
 
 func resolveRouteID(fn provider.FunctionSpec) string {

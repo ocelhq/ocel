@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
+	"cloud.google.com/go/firestore/apiv1/firestorepb"
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"google.golang.org/api/cloudresourcemanager/v1"
@@ -278,6 +279,7 @@ func (s *iamServer) serve(t *testing.T, rest http.HandlerFunc) *clients {
 	kmspb.RegisterKeyManagementServiceServer(grpcServer, s)
 	iampb.RegisterIAMPolicyServer(grpcServer, s)
 	cloudtaskspb.RegisterCloudTasksServer(grpcServer, delayQueues{server: s})
+	firestorepb.RegisterFirestoreServer(grpcServer, emptyFirestore{})
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			grpcServer.ServeHTTP(w, r)
@@ -337,4 +339,12 @@ func TestABootstrapChecksThePermissionsItsAccountGrantsNeed(t *testing.T) {
 	if !slices.Contains(rolesCovering(nil), "roles/resourcemanager.projectIamAdmin") {
 		t.Errorf("the refusal names %v, want roles/resourcemanager.projectIamAdmin among them: it is what covers a project policy write", rolesCovering(nil))
 	}
+}
+
+type emptyFirestore struct {
+	firestorepb.UnimplementedFirestoreServer
+}
+
+func (emptyFirestore) BatchGetDocuments(*firestorepb.BatchGetDocumentsRequest, firestorepb.Firestore_BatchGetDocumentsServer) error {
+	return status.Error(codes.NotFound, "no such document")
 }
