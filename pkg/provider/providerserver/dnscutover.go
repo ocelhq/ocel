@@ -165,8 +165,12 @@ func (s dnsCutover) resolves(ctx context.Context, rec edge.Record) bool {
 	case rec.Proxied:
 		return false
 	case rec.Type == edge.RecordTypeCNAME:
-		target, err := s.lookup.CNAME(ctx, rec.Name)
-		return err == nil && strings.EqualFold(strings.TrimSuffix(target, "."), strings.TrimSuffix(rec.Value, "."))
+		got, err := s.lookup.CNAME(ctx, rec.Name)
+		if err != nil {
+			return false
+		}
+		want, err := s.lookup.CNAME(ctx, rec.Value)
+		return err == nil && strings.EqualFold(strings.TrimSuffix(got, "."), strings.TrimSuffix(want, "."))
 	}
 	want, err := netip.ParseAddr(rec.Value)
 	if err != nil {
