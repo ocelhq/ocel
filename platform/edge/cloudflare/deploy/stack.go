@@ -24,8 +24,6 @@ const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
 
 const secretBytes = 32
 
-const longestAccountName = 63
-
 func storeScriptNameFor(namespace string, tier environment.Tier) (string, error) {
 	return accountNameFor("deployments store", namespace, tier, "deployments-store")
 }
@@ -47,8 +45,8 @@ func accountNameFor(what, namespace string, tier environment.Tier, stem string) 
 	default:
 		return "", fmt.Errorf("%s: unknown tier %q", what, tier)
 	}
-	if len(name) > longestAccountName {
-		return "", fmt.Errorf("%s: %q is %d characters, and a Cloudflare worker or bucket name allows at most %d; shorten the bootstrap namespace %q", what, name, len(name), longestAccountName, namespace)
+	if len(name) > maxWorkerNameLength {
+		return "", fmt.Errorf("%s: %q is %d characters, and a Cloudflare worker or bucket name allows at most %d; shorten the bootstrap namespace %q", what, name, len(name), maxWorkerNameLength, namespace)
 	}
 	return name, nil
 }
