@@ -75,6 +75,27 @@ func TestAnAWSBootstrapStatusListsTheEdgesBootstrapPartsUnderItsFeature(t *testi
 	}
 }
 
+func TestAnAWSBootstrapStatusReportsAnUndescribableEdgeAsStaleRatherThanFailing(t *testing.T) {
+	t.Parallel()
+
+	b := bootstrapperWithEdge(t, &describingEdge{err: errors.New("CLOUDFLARE_API_TOKEN is not set")})
+
+	described, err := b.Describe(context.Background(), environment.TierProduction)
+	if err != nil {
+		t.Fatalf("Describe = %v, want the status to survive an edge it cannot read", err)
+	}
+	want := provider.BootstrapStack{Name: "cloudflare/bootstrap", Feature: bootstrap.FeatureCloudflareEdge, Present: true, DigestCurrent: false}
+	var got []provider.BootstrapStack
+	for _, stack := range described.Stacks {
+		if strings.HasPrefix(stack.Name, string(cloudflareKind)+"/") {
+			got = append(got, stack)
+		}
+	}
+	if !reflect.DeepEqual(got, []provider.BootstrapStack{want}) {
+		t.Errorf("edge stacks = %+v, want [%+v]", got, want)
+	}
+}
+
 func TestAnAWSBootstrapPlanIsUnchangedByTheEdgesBootstrapParts(t *testing.T) {
 	t.Parallel()
 
@@ -114,15 +135,4 @@ func (e *planningDescribingEdge) Hooks() edge.Hooks {
 		return e.parts, nil
 	}
 	return hooks
-}
-
-func TestAnAWSBootstrapStatusFailsWhenItsEdgeCannotDescribeItsBootstrap(t *testing.T) {
-	t.Parallel()
-
-	b := bootstrapperWithEdge(t, &describingEdge{err: errors.New("CLOUDFLARE_API_TOKEN is not set")})
-
-	_, err := b.Describe(context.Background(), environment.TierProduction)
-	if err == nil || !strings.Contains(err.Error(), "describe the cloudflare edge's bootstrap") || !strings.Contains(err.Error(), "CLOUDFLARE_API_TOKEN") {
-		t.Fatalf("Describe error = %v, want the edge's own error wrapped with the edge named", err)
-	}
 }

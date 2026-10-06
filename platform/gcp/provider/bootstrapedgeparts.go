@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -17,7 +16,12 @@ func (b bootstrap) edgeBootstrapStacks(ctx context.Context, read survey) ([]prov
 		}
 		parts, err := describe(ctx, read.Tier)
 		if err != nil {
-			return fmt.Errorf("describe the %s edge's bootstrap: %w", front.Kind(), err)
+			stacks = append(stacks, provider.BootstrapStack{
+				Name:    string(front.Kind()) + "/bootstrap",
+				Feature: feature.Name,
+				Present: true,
+			})
+			return nil
 		}
 		for _, part := range parts {
 			stacks = append(stacks, provider.BootstrapStack{

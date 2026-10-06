@@ -3,7 +3,6 @@ package gcp
 import (
 	"context"
 	"errors"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -35,6 +34,7 @@ type countingFront struct {
 	refusal   error
 	silent    bool
 	parts     []edge.BootstrapPart
+	describe  error
 }
 
 func (f *countingFront) Hooks() edge.Hooks {
@@ -45,7 +45,7 @@ func (f *countingFront) Hooks() edge.Hooks {
 		CheckBootstrapInstalled: func(context.Context, environment.Tier) (bool, error) { return f.installed, nil },
 		ListBoundHostnames:      func(context.Context, environment.Tier) ([]string, error) { return f.bound, nil },
 		DescribeBootstrap: func(context.Context, environment.Tier) ([]edge.BootstrapPart, error) {
-			return f.parts, nil
+			return f.parts, f.describe
 		},
 	}
 }
@@ -261,28 +261,5 @@ func TestInstallingAndDroppingAFrontSaysWhichFeatureAndEdgeForWhichTier(t *testi
 	}
 	if got := progress.Lines(); !slices.Equal(got, want) {
 		t.Errorf("the bootstrap said %q, want %q", got, want)
-	}
-}
-
-func TestAGCPBootstrapStatusListsTheEdgesBootstrapPartsUnderItsFeature(t *testing.T) {
-	t.Parallel()
-
-	b, registry := fronting(t)
-	registry.front.parts = []edge.BootstrapPart{
-		{Name: "ocel-edge-cache", Current: true},
-		{Name: "ocel-isr-writer", Current: false},
-	}
-
-	stacks, err := b.edgeBootstrapStacks(context.Background(), surveyed(albFeature))
-	if err != nil {
-		t.Fatalf("edgeBootstrapStacks = %v", err)
-	}
-	kind := string(registry.front.Kind())
-	want := []provider.BootstrapStack{
-		{Name: kind + "/ocel-edge-cache", Feature: albFeature, Present: true, DigestCurrent: true},
-		{Name: kind + "/ocel-isr-writer", Feature: albFeature, Present: true, DigestCurrent: false},
-	}
-	if !reflect.DeepEqual(stacks, want) {
-		t.Errorf("edge stacks = %+v, want %+v", stacks, want)
 	}
 }

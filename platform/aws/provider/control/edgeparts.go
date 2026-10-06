@@ -2,7 +2,6 @@ package control
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -22,11 +21,16 @@ func (b Bootstrap) edgeBootstrapStacks(ctx context.Context, tier environment.Tie
 		if describe == nil {
 			continue
 		}
+		feature := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), kind)
 		parts, err := describe(ctx, tier)
 		if err != nil {
-			return nil, fmt.Errorf("describe the %s edge's bootstrap: %w", kind, err)
+			stacks = append(stacks, provider.BootstrapStack{
+				Name:    string(kind) + "/bootstrap",
+				Feature: feature,
+				Present: true,
+			})
+			continue
 		}
-		feature := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), kind)
 		for _, part := range parts {
 			stacks = append(stacks, edgePartStack(kind, feature, part))
 		}
