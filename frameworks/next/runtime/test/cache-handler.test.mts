@@ -95,7 +95,7 @@ function fakeSnapshot(records: Record<string, TagRecord> = {}) {
     async writeEntry() {},
     async readTagSnapshot() {
       reads.count++;
-      return { status: "fresh", records, etag: '"v1"' };
+      return { status: "fresh", records, cursor: '"v1"' };
     },
     async writeTag() {
       return true;

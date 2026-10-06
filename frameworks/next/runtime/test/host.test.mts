@@ -51,7 +51,7 @@ test("the tag clock syncs from the use-cache store its host installed", async ()
     },
     async writeEntry() {},
     async readTagSnapshot() {
-      return { status: "fresh", records: { products: { expired: 1 } }, etag: null };
+      return { status: "fresh", records: { products: { expired: 1 } }, cursor: null };
     },
     async writeTag() {
       return true;

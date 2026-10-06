@@ -227,7 +227,7 @@ export function newFirestoreTagRecords(
         }
         records[tag] = record;
       }
-      return { status: "fresh", records, etag: cursorFor(readTime) };
+      return { status: "fresh", records, cursor: cursorFor(readTime) };
     },
   };
 }

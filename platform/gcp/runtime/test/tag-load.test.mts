@@ -64,7 +64,7 @@ test("twenty instances revalidating twenty-five tags each at once land every tag
     setTimeout(function tick() {
       void instance.tags.read(instance.cursor).then((read) => {
         if (read.status !== "fresh") return;
-        instance.cursor = read.etag;
+        instance.cursor = read.cursor;
         for (const tag of Object.keys(read.records)) {
           if (!instance.seenAt.has(tag)) instance.seenAt.set(tag, Date.now() - started);
         }

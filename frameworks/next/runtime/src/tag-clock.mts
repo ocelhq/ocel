@@ -19,7 +19,7 @@ interface ClockState {
   fingerprint: string;
   records: Map<string, TagRecord>;
   store: Promise<UseCacheStore | null> | undefined;
-  etag: string | null;
+  cursor: string | null;
   hasSynced: boolean;
   lastAttemptAt: number;
   inflight: Promise<void> | null;
@@ -34,7 +34,7 @@ function initialState(fingerprint: string): ClockState {
     fingerprint,
     records: new Map(),
     store: undefined,
-    etag: null,
+    cursor: null,
     hasSynced: false,
     lastAttemptAt: -Infinity,
     inflight: null,
@@ -86,13 +86,13 @@ async function sync(): Promise<void> {
   if (!backend) return;
 
   try {
-    const read = await backend.readTagSnapshot(state.etag);
+    const read = await backend.readTagSnapshot(state.cursor);
 
     if (read.status === "unusable") return;
 
     if (read.status === "fresh") {
       for (const [tag, record] of Object.entries(read.records)) observe(tag, record);
-      state.etag = read.etag;
+      state.cursor = read.cursor;
     }
     state.hasSynced = true;
   } catch {}

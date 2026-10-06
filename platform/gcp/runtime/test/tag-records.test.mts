@@ -193,7 +193,7 @@ test("the first read returns every record of the ISR prefix and a cursor two sec
   expect(read).toEqual({
     status: "fresh",
     records: { posts: { stale: 10, expired: 20 }, cart: { expired: 30 } },
-    etag: "2026-01-01T00:00:58.000Z",
+    cursor: "2026-01-01T00:00:58.000Z",
   });
 });
 
@@ -215,7 +215,7 @@ test("a prefix nothing was revalidated under reads as fresh and empty, so the cl
   expect(await tags.read(null)).toEqual({
     status: "fresh",
     records: {},
-    etag: "2025-12-31T23:59:58.000Z",
+    cursor: "2025-12-31T23:59:58.000Z",
   });
 });
 

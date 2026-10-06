@@ -77,7 +77,7 @@ export function newAwsUseCacheStore(publish: PublishTag): UseCacheStore {
       }
       if (snapshot === null) return { status: "unusable" };
 
-      return { status: "fresh", records: snapshot.records, etag: out.ETag ?? null };
+      return { status: "fresh", records: snapshot.records, cursor: out.ETag ?? null };
     },
 
     async writeTag(tag, record) {

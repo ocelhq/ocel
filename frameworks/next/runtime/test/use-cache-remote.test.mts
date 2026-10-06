@@ -46,7 +46,7 @@ function fakeStore() {
     async readTagSnapshot(): Promise<TagSnapshotRead> {
       await Promise.resolve();
       if (snapshotFailure) throw snapshotFailure;
-      return { status: "fresh", records: publishedRecords(rows), etag: null };
+      return { status: "fresh", records: publishedRecords(rows), cursor: null };
     },
 
     async writeTag(tag, record) {

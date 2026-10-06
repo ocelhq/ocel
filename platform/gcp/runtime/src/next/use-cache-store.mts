@@ -18,7 +18,7 @@ export function newGcpUseCacheStore(
     async writeEntry(key, entry) {
       await storage.write(entryName(key), JSON.stringify(entry));
     },
-    readTagSnapshot: (etag) => tags.read(etag),
+    readTagSnapshot: (cursor) => tags.read(cursor),
     async writeTag(tag, record) {
       await tags.publish(tag, { stale: record.stale, expired: record.expired });
       return true;

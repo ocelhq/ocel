@@ -43,14 +43,14 @@ function fakeStore() {
       failure = null;
     },
 
-    async readTagSnapshot(etag): Promise<TagSnapshotRead> {
-      conditions.push(etag);
+    async readTagSnapshot(cursor): Promise<TagSnapshotRead> {
+      conditions.push(cursor);
       await Promise.resolve();
       if (failure) throw failure;
       if (!published) return { status: "unusable" };
-      if (etag === `"v${version}"`) return { status: "unchanged" };
+      if (cursor === `"v${version}"`) return { status: "unchanged" };
 
-      return { status: "fresh", records: publishedRecords(rows), etag: `"v${version}"` };
+      return { status: "fresh", records: publishedRecords(rows), cursor: `"v${version}"` };
     },
 
     async writeTag(tag, record) {
