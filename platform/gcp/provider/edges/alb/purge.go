@@ -87,7 +87,8 @@ func (s *stack) purgeReplaced(ctx context.Context, move router.PointerMove, log 
 	if log == nil {
 		log = progress.Discard()
 	}
-	s.purgeTags(ctx, urlMap, tags, log)
+	slices.Sort(tags)
+	s.purgeTags(ctx, urlMap, slices.Compact(tags), log)
 	slices.Sort(hostnames)
 	s.purgeHostnames(ctx, urlMap, slices.Compact(hostnames), log)
 }
