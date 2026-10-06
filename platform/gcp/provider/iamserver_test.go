@@ -39,6 +39,7 @@ type iamServer struct {
 	quotaThrottled bool
 
 	projectWrites   int
+	projectStale    int
 	projectAttempts int
 
 	accountPolicies     map[string]*iam.Policy
@@ -142,6 +143,12 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 				return
 			}
 			s.projectAttempts++
+			if s.projectStale > 0 {
+				s.projectStale--
+				w.WriteHeader(http.StatusPreconditionFailed)
+				w.Write([]byte(`{"error":{"code":412,"status":"FAILED_PRECONDITION","message":"etag mismatch"}}`))
+				return
+			}
 			if s.unseen > 0 {
 				s.unseen--
 				w.WriteHeader(http.StatusBadRequest)
