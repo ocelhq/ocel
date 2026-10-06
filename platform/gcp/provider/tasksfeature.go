@@ -143,7 +143,7 @@ func (b bootstrap) refuseRemovalWhileNextAppsRefresh(ctx context.Context, tier e
 	if err != nil {
 		return err
 	}
-	var emails []string
+	var held []string
 	for _, binding := range policy.Bindings {
 		if binding.Role != runAsRole {
 			continue
@@ -154,20 +154,44 @@ func (b bootstrap) refuseRemovalWhileNextAppsRefresh(ctx context.Context, tier e
 				continue
 			}
 			id, domain, found := strings.Cut(email, "@")
-			if found && domain == b.clients.project+accountDomain && b.clients.isHashedAccountID(id) {
-				emails = append(emails, email)
+			if !found || domain != b.clients.project+accountDomain || !b.clients.isHashedAccountID(id) {
+				continue
 			}
+			named, err := b.refreshingAppOf(ctx, id, email)
+			if err != nil {
+				return err
+			}
+			held = append(held, named)
 		}
 	}
-	slices.Sort(emails)
-	emails = slices.Compact(emails)
-	if len(emails) == 0 {
+	slices.Sort(held)
+	held = slices.Compact(held)
+	if len(held) == 0 {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"tier %s still runs the Next apps that run as %s, and taking feature %s down deletes the account Cloud Tasks signs their page refreshes as and purges the queue those refreshes wait in.\n"+
-			"Destroy the environments that run them (`gcloud iam service-accounts describe <email>` names each one's app and project), then remove feature %s again",
-		tier, strings.Join(emails, ", "), tasksFeature, tasksFeature)
+		"tier %s still runs the Next apps %s, and taking feature %s down deletes the account Cloud Tasks signs their page refreshes as and purges the queue those refreshes wait in.\n"+
+			"An app's account keeps that grant until the app's last environment is destroyed, so an app moved to container compute or put behind an edge that runs code blocks the removal until then.\n"+
+			"Destroy every environment that runs them, then remove feature %s again",
+		tier, strings.Join(held, ", "), tasksFeature, tasksFeature)
+}
+
+func (b bootstrap) refreshingAppOf(ctx context.Context, id, email string) (string, error) {
+	service, err := b.clients.Accounts()
+	if err != nil {
+		return "", err
+	}
+	account, err := attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(b.clients, id)).Context(ctx).Do)
+	if absent(err) {
+		return email, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read the %s service account: %w", id, err)
+	}
+	if app, ok := b.clients.readAppAccount(account); ok {
+		return app.app + " of project " + app.project, nil
+	}
+	return email, nil
 }
 
 func (b bootstrap) tearTasks(ctx context.Context, tier environment.Tier) error {
