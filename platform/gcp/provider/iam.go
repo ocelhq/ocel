@@ -329,7 +329,7 @@ func (c *clients) unbindProjectMember(ctx context.Context, member string) ([]*cl
 		if err != nil {
 			return nil, err
 		}
-		bindings, removed := removeMemberFromRoles(policy.Bindings, member, appGrantedRoles)
+		bindings, removed := removeMemberFromRoles(policy.Bindings, member, append(slices.Clone(appGrantedRoles), c.CDNPurgeRolePath()))
 		if len(removed) == 0 {
 			return nil, nil
 		}

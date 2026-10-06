@@ -46,3 +46,16 @@ func TestAHostnameTooLongToNameIsShortenedRatherThanRefusedByCompute(t *testing.
 		}
 	}
 }
+
+func TestTheURLMapPathNamesTheTiersLoadBalancerURLMap(t *testing.T) {
+	t.Parallel()
+
+	for tier, want := range map[environment.Tier]string{
+		environment.TierProduction: "projects/acme-prod/global/urlMaps/ocel-alb-production-routes",
+		environment.TierPreview:    "projects/acme-prod/global/urlMaps/ocel-alb-preview-routes",
+	} {
+		if got := URLMapPath("acme-prod", tier); got != want {
+			t.Errorf("URLMapPath(acme-prod, %s) = %q, want %q", tier, got, want)
+		}
+	}
+}

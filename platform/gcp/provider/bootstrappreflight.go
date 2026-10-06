@@ -125,9 +125,10 @@ const (
 	modifiedGrantsLimit = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', [])"
 )
 
-func appGrantsGrant() string {
-	quoted := make([]string, len(appGrantedRoles))
-	for i, role := range appGrantedRoles {
+func appGrantsGrant(names Names) string {
+	granted := append(slices.Clone(appGrantedRoles), names.CDNPurgeRolePath())
+	quoted := make([]string, len(granted))
+	for i, role := range granted {
 		quoted[i] = "'" + role + "'"
 	}
 	return fmt.Sprintf("%s, on the condition %s.hasOnly([%s])", appGrantsRole, modifiedGrantsLimit, strings.Join(quoted, ", "))

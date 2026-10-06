@@ -41,6 +41,8 @@ type iamServer struct {
 	projectWrites   int
 	projectStale    int
 	projectAttempts int
+	missingRole     string
+	missingRoleAsks int
 
 	accountPolicies     map[string]*iam.Policy
 	accountDescriptions map[string]string
@@ -154,6 +156,12 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 				return
 			}
 			s.projectAttempts++
+			if s.missingRole != "" && slices.ContainsFunc(asked.Policy.Bindings, func(b *cloudresourcemanager.Binding) bool { return b.Role == s.missingRole }) {
+				s.missingRoleAsks++
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"Role (` + s.missingRole + `) does not exist in the resource's hierarchy."}}`))
+				return
+			}
 			if s.projectStale > 0 {
 				s.projectStale--
 				w.WriteHeader(http.StatusPreconditionFailed)

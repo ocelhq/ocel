@@ -63,6 +63,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err := grantCache(ctx, c, spec, account); err != nil {
 		return nil, err
 	}
+	if err := grantCDNPurge(ctx, c, spec, account); err != nil {
+		return nil, err
+	}
 	own, err := p.runtimeEnv(names, spec, tasks)
 	if err != nil {
 		return nil, err
@@ -128,6 +131,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 				tagDatabase: "projects/" + names.project + "/databases/" + names.TagDatabase(spec.Ref.Tier),
 				endpoint:    p.containerEndpoint(),
 			}, addressed)); err != nil {
+				return nil, err
+			}
+			if values, err = mergedValues(fn.Name, values, cdnPurgeEnv(names, spec)); err != nil {
 				return nil, err
 			}
 		}

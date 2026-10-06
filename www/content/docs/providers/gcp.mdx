@@ -280,15 +280,17 @@ ships to a tier and grants only what the app's runtime reads: the namespace's da
 tier's key, for a Next app the tier's tags database, and for an app that reaches topics, tasks or
 workers the tier's task database, the delay queue and its topics, and for a Next app billed per
 request the delay queue. Granting those takes `roles/resourcemanager.projectIamAdmin`, and
-a deploy holds it under a condition that lets it grant and revoke the four roles an app needs
-and no others:
+a deploy holds it under a condition that lets it grant and revoke the four roles an app needs and
+the custom role that clears Cloud CDN, and no others:
 
 ```bash
 gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=roles/resourcemanager.projectIamAdmin \
-  --condition="title=ocel app grants,expression=api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser'])"
+  --condition="title=ocel app grants,expression=api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser', 'projects/my-project/roles/ocel_cdn_purge'])"
 ```
+
+A Next app behind the load balancer is also granted that role, which holds `compute.urlMaps.invalidateCache` and nothing else, so `revalidateTag` clears the tag from Cloud CDN. Google cannot scope the permission to one URL map, so the grant covers every URL map of the project.
 
 Google limits how many service accounts a project may hold, and every app takes one per tier:
 a deploy that reaches the limit is refused, naming the quota. A deploy never deletes an account:
