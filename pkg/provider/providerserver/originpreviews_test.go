@@ -61,7 +61,7 @@ func TestAContainerAppsPreviewBehindAnEdgeRunningCodeIsForwardedUnderItsOwnHostA
 	}
 }
 
-func TestAContainerAppsPreviewBehindAnEdgeRunningCodePublishesNoDeploymentURLTheEdgeDoesNotForward(t *testing.T) {
+func TestAForwardedPreviewDeploymentIsPublishedOnItsOwnHostname(t *testing.T) {
 	client, p := mixedServed(t)
 	previewBootstrapped(t, client)
 
@@ -69,17 +69,85 @@ func TestAContainerAppsPreviewBehindAnEdgeRunningCodePublishesNoDeploymentURLThe
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("preview Deploy() = %q", result.GetError())
 	}
-	if findDeploymentURL(result, "web") == "" {
-		t.Errorf("web, served by the edge's own router, published no deployment URL")
-	}
+
 	url := findDeploymentURL(result, "admin")
 	if url == "" {
-		return
+		t.Fatal("admin, forwarded through its router, published no deployment URL")
 	}
 	host := strings.TrimPrefix(url, "https://")
+	if alias := servedAppHost(t, result, "admin"); alias == host {
+		t.Fatalf("admin's deployment URL %s is its alias: each deployment answers on a hostname of its own", url)
+	}
 	relay := p.Edges().(*fake.Edges).Edge(fake.KindRelay)
 	if !slices.ContainsFunc(relay.Bindings(), func(binding edge.DomainBinding) bool { return binding.Hostname == host && binding.Origin != nil }) {
-		t.Errorf("admin's deployment URL is %s, which the edge does not forward to admin's origin: bindings %+v", url, relay.Bindings())
+		t.Errorf("the edge was bound with %+v, want %s forwarded to admin's origin", relay.Bindings(), host)
+	}
+	direct := p.Edges().(*fake.Edges).Edge(fake.KindDirect)
+	claim := lastClaimOf(direct.Claims(), host)
+	if want := router.FormatDeploymentPointer("pr-7", result.GetPromotionId()); claim.Pointer != want || claim.App != "admin" {
+		t.Errorf("%s was claimed as %+v, want admin on the deployment pointer %s", host, claim, want)
+	}
+}
+
+func TestASupersededForwardedDeploymentHostnameIsUnboundAndDisclaimed(t *testing.T) {
+	client, p := mixedServed(t)
+	previewBootstrapped(t, client)
+	var results []*progressv1.OperationResult
+	for range 3 {
+		result, _ := deploy(t, client, withContainerAdmin(previewRequest(), adminDeploymentID))
+		if result == nil || !result.GetSuccess() {
+			t.Fatalf("preview Deploy() = %q", result.GetError())
+		}
+		results = append(results, result)
+	}
+	hostOf := func(result *progressv1.OperationResult) string {
+		return strings.TrimPrefix(findDeploymentURL(result, "admin"), "https://")
+	}
+	first, last, alias := hostOf(results[0]), hostOf(results[2]), servedAppHost(t, results[2], "admin")
+
+	pruning, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
+		Slug: "shop", KeepN: 1, Environment: previewRequest().GetEnvironment(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pruned, err := drain(pruning); err != nil || !pruned.GetSuccess() {
+		t.Fatalf("RemoveStalePromotions() = %q, %v", pruned.GetError(), err)
+	}
+
+	state := readStack(t, p, environment.TierPreview, "shop")
+	if slices.Contains(state.Edge.Bound, first) {
+		t.Errorf("the edge still binds %s after its deployment was pruned: %v", first, state.Edge.Bound)
+	}
+	if _, kept := state.Hosts[first]; kept {
+		t.Errorf("the edge state still records %s after its deployment was pruned", first)
+	}
+	if !slices.Contains(p.Edges().(*fake.Edges).Edge(fake.KindDirect).Disclaimed(), first) {
+		t.Errorf("the router never disclaimed %s: its trust claim would outlive the deployment", first)
+	}
+	for _, kept := range []string{last, alias} {
+		if !slices.Contains(state.Edge.Bound, kept) {
+			t.Errorf("%s is no longer bound after the prune, want what the prune kept still forwarded: %v", kept, state.Edge.Bound)
+		}
+	}
+}
+
+func TestAnEdgeRoutedPreviewDeploymentIsPublishedAsBefore(t *testing.T) {
+	client, p := mixedServed(t)
+	previewBootstrapped(t, client)
+
+	result, _ := deploy(t, client, withContainerAdmin(previewRequest(), adminDeploymentID))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("preview Deploy() = %q", result.GetError())
+	}
+
+	url := findDeploymentURL(result, "web")
+	if url == "" {
+		t.Fatal("web, served by the edge's own router, published no deployment URL")
+	}
+	direct := p.Edges().(*fake.Edges).Edge(fake.KindDirect)
+	if claim := lastClaimOf(direct.Claims(), strings.TrimPrefix(url, "https://")); claim.Hostname != "" {
+		t.Errorf("web's deployment hostname was claimed on the forwarded router: %+v", claim)
 	}
 }
 
