@@ -442,6 +442,10 @@ message SchemaListResult {
   repeated ListedCommand commands = 1;
 }
 
+message SchemaResult {
+  google.protobuf.Struct schema = 1;
+}
+
 message ListedCommand {
   string path = 1;
 

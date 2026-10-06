@@ -1,0 +1,23 @@
+{
+  "$defs": {
+    "cli.result.v1.SchemaResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "$ref": "#/$defs/google.protobuf.Struct.jsonschema.json"
+        }
+      },
+      "title": "Schema Result",
+      "type": "object"
+    },
+    "google.protobuf.Struct.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Struct",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.SchemaResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.SchemaResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

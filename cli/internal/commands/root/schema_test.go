@@ -3,6 +3,7 @@ package root
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -169,6 +170,32 @@ func TestSchemaWithoutACommandUnderJSONListsThemAsOneResult(t *testing.T) {
 	listing := outputschematest.Compile(t, printSchemaOf(t, "schema"))
 	if err := outputschematest.Validate(listing, []byte(stdout)); err != nil {
 		t.Errorf("the schema printed for schema rejects what schema prints: %v", err)
+	}
+}
+
+func TestSchemaOfACommandUnderJSONPrintsItsSchemaAsTheDataOfOneResult(t *testing.T) {
+	stdout, _ := executeRoot(t, "--json", "schema", "env", "ls")
+
+	var document struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Schema any `json:"schema"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &document); err != nil || !document.OK {
+		t.Fatalf("stdout = %.200q, want one ok envelope: %v", stdout, err)
+	}
+	var want any
+	if err := json.Unmarshal(printSchemaOf(t, "env", "ls"), &want); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(document.Data.Schema, want) {
+		t.Errorf("the schema under --json differs from the one printed without it\n%.400s", stdout)
+	}
+
+	own := outputschematest.Compile(t, printSchemaOf(t, "schema"))
+	if err := outputschematest.Validate(own, []byte(stdout)); err != nil {
+		t.Errorf("the schema printed for schema rejects what schema env ls prints: %v", err)
 	}
 }
 

@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
@@ -23,15 +25,16 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 			"A command that returns data prints one result envelope under --json, and its schema " +
 			"covers both the result and the failure document. A command that runs prints the " +
 			"run-event stream, and its schema covers one line of it. Without a command, lists " +
-			"every command that has a schema.",
+			"every command that has a schema. Under --json, the schema is the data of this " +
+			"command's own result envelope.",
 		Example: "  $ ocel schema env ls\n  $ ocel schema deploy\n  $ ocel schema",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return listSchemas(invocation, cmd)
 			}
-			return printSchema(cmd, args)
+			return printSchema(invocation, cmd, args)
 		},
-	})), &resultv1.SchemaListResult{})
+	})), &resultv1.SchemaListResult{}, &resultv1.SchemaResult{})
 }
 
 func findOutput(cmd *cobra.Command) resultv1.CommandOutput {
@@ -105,7 +108,7 @@ func describeOutput(output resultv1.CommandOutput) string {
 	return "result"
 }
 
-func printSchema(cmd *cobra.Command, args []string) error {
+func printSchema(invocation commands.Invocation, cmd *cobra.Command, args []string) error {
 	path := strings.Join(args, " ")
 	target, rest, err := cmd.Root().Find(args)
 	if err != nil || len(rest) > 0 || isHidden(target) || target == cmd.Root() {
@@ -124,7 +127,15 @@ func printSchema(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", strings.TrimSpace(string(schema)))
+	stdout := cmd.OutOrStdout()
+	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
+		document := &structpb.Struct{}
+		if err := protojson.Unmarshal(schema, document); err != nil {
+			return err
+		}
+		return terminal.WriteResultJSON(stdout, &resultv1.SchemaResult{Schema: document})
+	}
+	_, err = fmt.Fprintf(stdout, "%s\n", strings.TrimSpace(string(schema)))
 	return err
 }
 
