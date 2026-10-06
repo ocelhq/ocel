@@ -103,7 +103,9 @@ func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview 
 		if err != nil {
 			return LoadBalancer{}, err
 		}
-		spec.Origin = origin
+		if !origin.Removing {
+			spec.Origin = origin
+		}
 		trusted, err := e.ensureTrusted(ctx, tier)
 		if err != nil {
 			return LoadBalancer{}, err
