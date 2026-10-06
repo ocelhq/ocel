@@ -7,7 +7,8 @@ import {
   readPortBind,
 } from "@framework/node-runtime/host";
 import { newGcpCacheStore } from "./cache-store.mjs";
-import { cloudCdnShapedTagsPerObject } from "./cloud-cdn.mjs";
+import { newCdnPurge, withCdnPurge } from "./cdn-purge.mjs";
+import { cloudCdnRelease, cloudCdnShapedTagsPerObject } from "./cloud-cdn.mjs";
 import { newCloudStorage } from "./cloud-storage.mjs";
 import { newGcpDispatchInvoke } from "./dispatch-host.mjs";
 import { newFirestore } from "./firestore.mjs";
@@ -32,15 +33,32 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
   const objectPrefix = env.OCEL_ISR_OBJECT_PREFIX;
   const isrPrefix = env.OCEL_ISR_PREFIX;
   const tagDatabase = env.OCEL_TAG_DATABASE;
-  const shared =
+  const urlMap = env.OCEL_CDN_URL_MAP;
+  const release = cloudCdnRelease(env);
+  if (urlMap && release === null) {
+    throw new Error(
+      "ocel: OCEL_CDN_URL_MAP names a url map to purge, and this service is told no release its responses are tagged with",
+    );
+  }
+  const records =
     bucket && objectPrefix && isrPrefix && tagDatabase
+      ? newFirestoreTagRecords(
+          newFirestore({ database: tagDatabase, endpoint: env.OCEL_FIRESTORE_ENDPOINT }),
+          isrPrefix,
+        )
+      : undefined;
+  const shared =
+    bucket && objectPrefix && records
       ? {
           objectPrefix,
           storage: newCloudStorage({ bucket, endpoint: env.OCEL_STORAGE_ENDPOINT }),
-          tags: newFirestoreTagRecords(
-            newFirestore({ database: tagDatabase, endpoint: env.OCEL_FIRESTORE_ENDPOINT }),
-            isrPrefix,
-          ),
+          tags:
+            urlMap && release !== null
+              ? {
+                  ...records,
+                  publish: withCdnPurge(records.publish, newCdnPurge({ urlMap, release })),
+                }
+              : records,
         }
       : undefined;
   const newCacheStore = async () =>
