@@ -1,12 +1,15 @@
 import { describe, expect, it } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { REDACTED } from "../checks/context";
 import {
   appOrigin,
   boxDiagnosis,
+  boxDiagnosisScript,
   boxLane,
   entryFile,
   heldProbe,
   hostnamesWithoutUrl,
+  maskedAuthorization,
   projectExposure,
   projectLeftovers,
   projectListing,
@@ -118,7 +121,7 @@ describe("projectLeftovers", () => {
 });
 
 describe("boxDiagnosis", () => {
-  const said = boxDiagnosis("j-kv");
+  const said = boxDiagnosisScript("j-kv");
 
   it("lists every container on the box, the project's or not", () => {
     expect(said).toContain("docker ps --all");
@@ -133,6 +136,28 @@ describe("boxDiagnosis", () => {
 
   it("lists the box's processes with how long each has run", () => {
     expect(said).toContain("ps -eo pid,ppid,etime,stat,args");
+  });
+
+  it("runs the whole read under one time limit, so many resource containers cannot add up past the step timeout", () => {
+    const command = boxDiagnosis("j-kv");
+    expect(command).toStartWith("echo ");
+    expect(command).toContain("| base64 -d | timeout -k 5 90 sh");
+    const encoded = command.slice("echo ".length, command.indexOf(" |"));
+    expect(Buffer.from(encoded, "base64").toString()).toBe(said);
+  });
+
+  it("masks a signed request's Authorization header in the process listing it keeps", () => {
+    const listed =
+      "4242 1 00:05 S docker exec --interactive store curl --header Authorization: AWS4-HMAC-SHA256 Credential=ocel/20261006/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-date, Signature=0f1e2d3c --header X-Amz-Date: 20261006T000000Z http://127.0.0.1:9000/b";
+    const masked = execFileSync("sh", ["-c", maskedAuthorization], {
+      input: `${listed}\n`,
+    }).toString();
+    expect(masked).not.toContain("Signature=");
+    expect(masked).not.toContain("0f1e2d3c");
+    expect(masked).toContain(
+      "4242 1 00:05 S docker exec --interactive store curl --header Authorization: ",
+    );
+    expect(said).toContain(`--forest | ${maskedAuthorization}`);
   });
 
   it("bounds every docker call, so a docker that stopped answering cannot hang the diagnosis too", () => {
