@@ -2,6 +2,7 @@ import type http from "node:http";
 import type { CacheEntryFile } from "@framework/next-cache";
 import { type IdTokenCheck, newGoogleIdTokenCheck } from "./google-id-token.mjs";
 import { renderAtOrigin } from "./loopback-render.mjs";
+import { isRefreshTaskSignedBy, refreshSignatureHeader } from "./refresh-signature.mjs";
 import { readRefreshTask } from "./refresh-task.mjs";
 
 export type RefreshEndpoint = (
@@ -12,6 +13,7 @@ export type RefreshEndpoint = (
 export interface RefreshEndpointOptions {
   path: string;
   isrPrefix: string;
+  secret: string;
   localOrigin: string;
   check: IdTokenCheck;
   readEntry: (key: string) => Promise<CacheEntryFile | null>;
@@ -33,7 +35,7 @@ function refuseOversize(req: http.IncomingMessage, res: http.ServerResponse): vo
   answer(res, 413, { connection: "close" });
 }
 
-function readBody(req: http.IncomingMessage): Promise<string | undefined> {
+function readBody(req: http.IncomingMessage): Promise<Buffer | undefined> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
@@ -46,7 +48,7 @@ function readBody(req: http.IncomingMessage): Promise<string | undefined> {
       }
       chunks.push(chunk);
     });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
 }
@@ -98,7 +100,7 @@ export function newRefreshEndpoint(options: RefreshEndpointOptions): RefreshEndp
       refuseOversize(req, res);
       return true;
     }
-    let body: string | undefined;
+    let body: Buffer | undefined;
     try {
       body = await readBody(req);
     } catch {
@@ -109,7 +111,12 @@ export function newRefreshEndpoint(options: RefreshEndpointOptions): RefreshEndp
       refuseOversize(req, res);
       return true;
     }
-    const task = readRefreshTask(body);
+    if (!isRefreshTaskSignedBy(options.secret, body, req.headers[refreshSignatureHeader])) {
+      console.warn("ocel: dropped a refresh task this revision did not sign");
+      answer(res, 204);
+      return true;
+    }
+    const task = readRefreshTask(body.toString("utf8"));
     if (!task) {
       console.warn("ocel: dropped a refresh task this runtime cannot read");
       answer(res, 204);
@@ -147,6 +154,7 @@ export function newRefreshEndpoint(options: RefreshEndpointOptions): RefreshEndp
 
 export function readRefreshEndpoint(
   env: NodeJS.ProcessEnv,
+  secret: string | undefined,
   localOrigin: string,
   readEntry: RefreshEndpointOptions["readEntry"],
 ): RefreshEndpoint | undefined {
@@ -156,9 +164,11 @@ export function readRefreshEndpoint(
   if (!account) throw new Error("ocel: OCEL_REFRESH_URL is set but OCEL_REFRESH_ACCOUNT is not");
   const isrPrefix = env.OCEL_ISR_PREFIX;
   if (!isrPrefix) throw new Error("ocel: OCEL_REFRESH_URL is set but OCEL_ISR_PREFIX is not");
+  if (!secret) throw new Error("ocel: OCEL_REFRESH_URL is set but OCEL_REFRESH_SECRET is not");
   return newRefreshEndpoint({
     path: new URL(url).pathname,
     isrPrefix,
+    secret,
     localOrigin,
     readEntry,
     check: newGoogleIdTokenCheck({ audience: url, email: account }),

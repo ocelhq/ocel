@@ -1,12 +1,14 @@
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import type { Refresh, ScheduleRefresh } from "@framework/next-runtime/refresh";
 import { newMetadataToken } from "./metadata-token.mjs";
+import { refreshSignatureHeader, signRefreshTask } from "./refresh-signature.mjs";
 
 export interface TaskRefreshOptions {
   queue: string;
   account: string;
   url: string;
   isrPrefix: string;
+  secret: string;
   endpoint?: string;
   fetch?: typeof fetch;
   metadataOrigin?: string;
@@ -47,6 +49,7 @@ export function newTaskRefresh(options: TaskRefreshOptions): ScheduleRefresh {
   }
 
   async function createTask(name: string, refresh: Refresh): Promise<void> {
+    const payload = Buffer.from(JSON.stringify({ isrPrefix: options.isrPrefix, refresh }));
     const body = JSON.stringify({
       task: {
         name,
@@ -54,10 +57,11 @@ export function newTaskRefresh(options: TaskRefreshOptions): ScheduleRefresh {
         httpRequest: {
           url: options.url,
           httpMethod: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: Buffer.from(JSON.stringify({ isrPrefix: options.isrPrefix, refresh })).toString(
-            "base64",
-          ),
+          headers: {
+            "Content-Type": "application/json",
+            [refreshSignatureHeader]: signRefreshTask(options.secret, payload),
+          },
+          body: payload.toString("base64"),
           oidcToken: { serviceAccountEmail: options.account, audience: options.url },
         },
       },
@@ -110,7 +114,7 @@ export function newTaskRefresh(options: TaskRefreshOptions): ScheduleRefresh {
   }
 
   return (refresh) => {
-    const id = createHash("sha256")
+    const id = createHmac("sha256", options.secret)
       .update(`${options.isrPrefix}\0${refresh.key}\0${String(refresh.lastModified)}`)
       .digest("hex");
     const until = queued.get(id);

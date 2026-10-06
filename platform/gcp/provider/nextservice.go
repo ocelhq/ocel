@@ -37,6 +37,7 @@ const (
 	refreshURLEnvVar        = "OCEL_REFRESH_URL"
 	refreshQueueEnvVar      = "OCEL_REFRESH_QUEUE"
 	refreshAccountEnvVar    = "OCEL_REFRESH_ACCOUNT"
+	refreshSecretEnvVar     = "OCEL_REFRESH_SECRET"
 	tasksEndpointEnvVar     = "OCEL_TASKS_ENDPOINT"
 
 	finishBeforeResponseEnvVar = "OCEL_FINISH_BEFORE_RESPONSE_MS"
@@ -92,6 +93,7 @@ type nextRefresh struct {
 	url      string
 	queue    string
 	account  string
+	secret   string
 	endpoint string
 }
 
@@ -116,6 +118,7 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 				env[refreshURLEnvVar] = refresh.url
 				env[refreshQueueEnvVar] = refresh.queue
 				env[refreshAccountEnvVar] = refresh.account
+				env[refreshSecretEnvVar] = refresh.secret
 				if refresh.endpoint != "" {
 					env[tasksEndpointEnvVar] = refresh.endpoint
 				}

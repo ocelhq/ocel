@@ -320,7 +320,7 @@ func TestAnAppWithoutISRIsToldNoTagsDatabase(t *testing.T) {
 	}
 }
 
-var refreshEnvVars = []string{refreshURLEnvVar, refreshQueueEnvVar, refreshAccountEnvVar, tasksEndpointEnvVar}
+var refreshEnvVars = []string{refreshURLEnvVar, refreshQueueEnvVar, refreshAccountEnvVar, refreshSecretEnvVar, tasksEndpointEnvVar}
 
 func TestANextServiceBilledPerRequestIsToldTheQueueItsRefreshesWaitInAndTheAccountTheyAreSignedAs(t *testing.T) {
 	env := envOf(releasedNext(t, routedNextSpec()))
@@ -331,6 +331,23 @@ func TestANextServiceBilledPerRequestIsToldTheQueueItsRefreshesWaitInAndTheAccou
 	}
 	if got, want := env["OCEL_REFRESH_ACCOUNT"], derived.RefreshAccountEmail(environment.TierProduction); got != want {
 		t.Errorf("the Next service reads OCEL_REFRESH_ACCOUNT=%q, want %q", got, want)
+	}
+}
+
+func TestANextServiceBilledPerRequestIsToldASecretToSignItsRefreshesWith(t *testing.T) {
+	env := envOf(releasedNext(t, routedNextSpec()))
+
+	if got := env[refreshSecretEnvVar]; len(got) < 26 {
+		t.Errorf("the Next service reads %s=%q, want a secret of at least 26 characters", refreshSecretEnvVar, got)
+	}
+}
+
+func TestEachReleaseOfANextServiceSignsItsRefreshesWithASecretOfItsOwn(t *testing.T) {
+	first := envOf(releasedNext(t, routedNextSpec()))[refreshSecretEnvVar]
+	second := envOf(releasedNext(t, routedNextSpec()))[refreshSecretEnvVar]
+
+	if first == "" || first == second {
+		t.Errorf("two releases read %s=%q and %q, want a secret apiece: a task one revision queued must not render on another", refreshSecretEnvVar, first, second)
 	}
 }
 
@@ -380,13 +397,16 @@ func TestAnEmulatedNextServiceQueuesItsRefreshesThroughTheEmulator(t *testing.T)
 
 func TestANextServiceOnGoogleCloudIsToldNoTasksEndpoint(t *testing.T) {
 	env := newNextEnv(routedNextSpec(), routedNextSpec().App.Functions[0], serving{compute: provider.ComputeServerless}, nextCache{},
-		&nextRefresh{url: "u", queue: "q", account: "a"})
+		&nextRefresh{url: "u", queue: "q", account: "a", secret: "s"})
 
 	if got, told := env[tasksEndpointEnvVar]; told {
 		t.Errorf("a Next service on Google Cloud reads %s=%q", tasksEndpointEnvVar, got)
 	}
 	if env[refreshQueueEnvVar] != "q" {
 		t.Errorf("the Next service reads %s=%q, want q", refreshQueueEnvVar, env[refreshQueueEnvVar])
+	}
+	if env[refreshSecretEnvVar] != "s" {
+		t.Errorf("the Next service reads %s=%q, want s", refreshSecretEnvVar, env[refreshSecretEnvVar])
 	}
 }
 

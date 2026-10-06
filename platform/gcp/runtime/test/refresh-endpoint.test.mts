@@ -6,8 +6,10 @@ import {
   type RefreshEndpoint,
   readRefreshEndpoint,
 } from "../src/next/refresh-endpoint.mjs";
+import { refreshSignatureHeader, signRefreshTask } from "../src/next/refresh-signature.mjs";
 
 const isrPrefix = "prod/shop/web/r1/isr";
+const secret = "s-this-revision";
 
 let origin: http.Server;
 let originUrl: string;
@@ -82,11 +84,15 @@ const task = (refresh: Record<string, unknown> = {}, override: Record<string, un
     ...override,
   });
 
-function post(base: string, body: string, token = "good") {
+function post(base: string, body: string, token = "good", signature?: string | null) {
+  const signed = signature === undefined ? signRefreshTask(secret, Buffer.from(body)) : signature;
   return fetch(`${base}/_ocel/refresh`, {
     method: "POST",
     body,
-    headers: { authorization: `Bearer ${token}` },
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...(signed === null ? {} : { [refreshSignatureHeader]: signed }),
+    },
   });
 }
 
@@ -94,6 +100,7 @@ const endpointFor = (check = accepting, extra: { readBackTimeoutMs?: number } = 
   newRefreshEndpoint({
     path: "/_ocel/refresh",
     isrPrefix,
+    secret,
     localOrigin: originUrl,
     check,
     readEntry: (key) => readEntry(key),
@@ -274,13 +281,14 @@ test("a request to any other path is left to the app", async () => {
 });
 
 test("a service told no refresh url has no refresh endpoint", () => {
-  expect(readRefreshEndpoint({}, originUrl, async () => null)).toBeUndefined();
+  expect(readRefreshEndpoint({}, undefined, originUrl, async () => null)).toBeUndefined();
 });
 
 test("a service told a refresh url but no account refuses to start", () => {
   expect(() =>
     readRefreshEndpoint(
       { OCEL_REFRESH_URL: "https://web.run.app/_ocel/refresh", OCEL_ISR_PREFIX: isrPrefix },
+      secret,
       originUrl,
       async () => null,
     ),
@@ -294,6 +302,7 @@ test("the refresh endpoint answers at the path of the url the service is told", 
       OCEL_REFRESH_ACCOUNT: "refresh@p.iam.gserviceaccount.com",
       OCEL_ISR_PREFIX: isrPrefix,
     },
+    secret,
     originUrl,
     async () => null,
   )!;
@@ -301,4 +310,76 @@ test("the refresh endpoint answers at the path of the url the service is told", 
 
   expect((await fetch(`${base}/_ocel/refresh`)).status).toBe(405);
   expect((await fetch(`${base}/`)).status).toBe(418);
+});
+
+test("a service told a refresh url but no refresh secret refuses to start", () => {
+  expect(() =>
+    readRefreshEndpoint(
+      {
+        OCEL_REFRESH_URL: "https://web.run.app/_ocel/refresh",
+        OCEL_REFRESH_ACCOUNT: "refresh@p.iam.gserviceaccount.com",
+        OCEL_ISR_PREFIX: isrPrefix,
+      },
+      undefined,
+      originUrl,
+      async () => null,
+    ),
+  ).toThrow(/OCEL_REFRESH_SECRET/);
+});
+
+test("a refresh task carrying another app's signature is refused", async () => {
+  const base = await serve(endpointFor());
+  const body = task();
+
+  const response = await post(
+    base,
+    body,
+    "good",
+    signRefreshTask("s-other-app", Buffer.from(body)),
+  );
+
+  expect(response.status).toBe(204);
+  expect(rendered).toEqual([]);
+  expect(readKeys).toEqual([]);
+  expect(warn).toHaveBeenCalledWith(expect.stringMatching(/did not sign/));
+});
+
+test("a refresh task with no signature renders nothing", async () => {
+  const base = await serve(endpointFor());
+
+  const response = await post(base, task(), "good", null);
+
+  expect(response.status).toBe(204);
+  expect(rendered).toEqual([]);
+  expect(warn).toHaveBeenCalledWith(expect.stringMatching(/did not sign/));
+});
+
+test("a refresh task changed after it was signed renders nothing", async () => {
+  const base = await serve(endpointFor());
+  const signature = signRefreshTask(secret, Buffer.from(task()));
+
+  const response = await post(base, task({ url: "/admin" }), "good", signature);
+
+  expect(response.status).toBe(204);
+  expect(rendered).toEqual([]);
+  expect(readKeys).toEqual([]);
+});
+
+test("a refresh's signature is checked before its body is read as a task", async () => {
+  const base = await serve(endpointFor());
+
+  const response = await post(base, "not json", "good", "0".repeat(64));
+
+  expect(response.status).toBe(204);
+  expect(warn).toHaveBeenCalledWith(expect.stringMatching(/did not sign/));
+  expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/cannot read/));
+});
+
+test("a refresh without a valid token is refused before its signature is examined", async () => {
+  const base = await serve(endpointFor());
+
+  const response = await post(base, task(), "bad");
+
+  expect(response.status).toBe(401);
+  expect(warn).not.toHaveBeenCalled();
 });

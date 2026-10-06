@@ -7,6 +7,7 @@ import { dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { newGcpDispatchInvoke, readGcpDispatchHost } from "../src/next/dispatch-host.mjs";
 import { newRefreshEndpoint } from "../src/next/refresh-endpoint.mjs";
+import { refreshSignatureHeader, signRefreshTask } from "../src/next/refresh-signature.mjs";
 
 const manifest: RoutingManifest = {
   entry: "bundle-0",
@@ -113,6 +114,7 @@ test("a refresh task reaches the endpoint before the router strips its control h
   const endpoint = newRefreshEndpoint({
     path: "/_ocel/refresh",
     isrPrefix: "prod/shop/web/r1/isr",
+    secret: "s1",
     localOrigin,
     check: async () => true,
     readEntry: async () => ({ lastModified: 10, value: {} }),
@@ -125,13 +127,17 @@ test("a refresh task reaches the endpoint before the router strips its control h
     ),
   );
   try {
+    const body = JSON.stringify({
+      isrPrefix: "prod/shop/web/r1/isr",
+      refresh: { url: "/home", key: "home", lastModified: 5, headers: { host: "shop.example" } },
+    });
     const response = await fetch(`${urlOf(server)}/_ocel/refresh`, {
       method: "POST",
-      headers: { authorization: "Bearer any" },
-      body: JSON.stringify({
-        isrPrefix: "prod/shop/web/r1/isr",
-        refresh: { url: "/home", key: "home", lastModified: 5, headers: { host: "shop.example" } },
-      }),
+      headers: {
+        authorization: "Bearer any",
+        [refreshSignatureHeader]: signRefreshTask("s1", Buffer.from(body)),
+      },
+      body,
     });
 
     expect(response.status).toBe(204);

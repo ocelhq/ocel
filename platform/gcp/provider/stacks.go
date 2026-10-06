@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"maps"
 	"slices"
@@ -73,7 +74,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	}
 	deployed := make([]provider.Function, 0, len(app.Functions)+len(app.Workers))
 	var projectNumber int64
+	var refreshSecret string
 	if refreshesByTask(spec) {
+		refreshSecret = rand.Text()
 		if projectNumber, err = c.ReadProjectNumber(ctx); err != nil {
 			return nil, err
 		}
@@ -115,6 +118,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 					url:      refreshURLOf(service, projectNumber, c.region),
 					queue:    names.DelayQueuePath(c.region, spec.Ref.Tier),
 					account:  names.RefreshAccountEmail(spec.Ref.Tier),
+					secret:   refreshSecret,
 					endpoint: p.containerEndpoint(),
 				}
 			}
