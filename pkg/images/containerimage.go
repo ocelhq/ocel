@@ -93,6 +93,10 @@ func bytesLayer(packed []byte) (v1.Layer, error) {
 }
 
 func checkNextServerRuntime(next *NextServerRuntime, env []string) error {
+	if !path.IsAbs(next.Dir) {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"the provider names %q as the directory of its Next server runtime, and NEXT_ADAPTER_PATH only finds the adapter at an absolute path", next.Dir)
+	}
 	if _, ok := next.Files[NextServerAdapterFile]; !ok {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the provider's Next server runtime holds no %s, so next start has no adapter to load", NextServerAdapterFile)
