@@ -281,7 +281,7 @@ func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, pr
 	if err != nil {
 		return storeIdentity{}, nil, err
 	}
-	adopted, err := p.initializeInstance(ctx, spec.Program.StoreEndpoint, spec.Slug, spec.Program.BootstrapCred, minted)
+	adopted, err := p.initializeInstance(ctx, spec.Program.StoreEndpoint, spec.Slug, spec.Program.BootstrapCredential, minted)
 	if err != nil {
 		return storeIdentity{}, nil, fmt.Errorf("initialize project store instance: %w", err)
 	}

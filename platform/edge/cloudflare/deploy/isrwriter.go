@@ -15,9 +15,9 @@ import (
 var isrWriterClient = &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()}
 
 type ISRWriter struct {
-	Endpoint      string
-	BootstrapCred string
-	Seed          string
+	Endpoint            string
+	BootstrapCredential string
+	Seed                string
 }
 
 func DeriveISRWriteSecret(seed, isrPrefix string) string {
@@ -43,15 +43,11 @@ func (w ISRWriter) Initialize(ctx context.Context, isrPrefix string) error {
 	return w.request(ctx, isrPrefix, "initialize", body)
 }
 
-func (w ISRWriter) Retire(ctx context.Context, isrPrefix string) error {
-	return w.request(ctx, isrPrefix, "destroy", nil)
-}
-
 func (w ISRWriter) isReachable() bool {
-	return w.Endpoint != "" && w.BootstrapCred != ""
+	return w.Endpoint != "" && w.BootstrapCredential != ""
 }
 
-func (w ISRWriter) request(ctx context.Context, isrPrefix, op string, body any) error {
+func (w ISRWriter) request(ctx context.Context, isrPrefix, operation string, body any) error {
 	if !w.isReachable() {
 		return nil
 	}
@@ -59,29 +55,29 @@ func (w ISRWriter) request(ctx context.Context, isrPrefix, op string, body any) 
 	if body != nil {
 		encoded, err := json.Marshal(body)
 		if err != nil {
-			return fmt.Errorf("marshal isr writer %s body: %w", op, err)
+			return fmt.Errorf("marshal isr writer %s body: %w", operation, err)
 		}
 		reader = bytes.NewReader(encoded)
 	}
 
-	url := w.Endpoint + "/" + isrPrefix + "/" + op
+	url := w.Endpoint + "/" + isrPrefix + "/" + operation
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, reader)
 	if err != nil {
-		return fmt.Errorf("build isr writer %s request: %w", op, err)
+		return fmt.Errorf("build isr writer %s request: %w", operation, err)
 	}
-	req.Header.Set("Authorization", "Bearer "+w.BootstrapCred)
+	req.Header.Set("Authorization", "Bearer "+w.BootstrapCredential)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
 	res, err := isrWriterClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("call isr writer %s for %s: %w", op, isrPrefix, err)
+		return fmt.Errorf("call isr writer %s for %s: %w", operation, isrPrefix, err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(res.Body)
-		return fmt.Errorf("isr writer %s for %s: status %d: %s", op, isrPrefix, res.StatusCode, string(respBody))
+		return fmt.Errorf("isr writer %s for %s: status %d: %s", operation, isrPrefix, res.StatusCode, string(respBody))
 	}
 	return nil
 }

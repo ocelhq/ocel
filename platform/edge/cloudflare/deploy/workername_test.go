@@ -155,8 +155,8 @@ func TestWorkerScriptName(t *testing.T) {
 		long := workerScriptName(defaultNamespace, slug, "pr-71", "web")
 
 		for _, name := range []string{short, long} {
-			if len(name) > maxWorkerNameLen {
-				t.Errorf("%q is %d chars, over the %d-char limit", name, len(name), maxWorkerNameLen)
+			if len(name) > maxWorkerNameLength {
+				t.Errorf("%q is %d chars, over the %d-char limit", name, len(name), maxWorkerNameLength)
 			}
 			if !truncationMarker.MatchString(name) {
 				t.Errorf("%q was truncated without saying so", name)

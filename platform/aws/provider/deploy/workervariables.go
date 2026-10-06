@@ -5,7 +5,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-type WorkerFacts struct {
+type WorkerValues struct {
 	Region             string
 	StateTable         string
 	ImageOptimizerURL  string
@@ -14,7 +14,7 @@ type WorkerFacts struct {
 	EdgeSecretKey      string
 }
 
-func (f WorkerFacts) Bindings() cloudflare.OriginBindings {
+func (f WorkerValues) Bindings() cloudflare.OriginBindings {
 	bindings := cloudflare.OriginBindings{Variables: map[string]string{}}
 	for name, value := range map[string]string{
 		edge.AWSRegionVar:          f.Region,

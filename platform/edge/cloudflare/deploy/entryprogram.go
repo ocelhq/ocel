@@ -32,24 +32,24 @@ type EntryProgram struct {
 	Origin            OriginBindings
 	Values            map[string]string
 
-	StoreScriptName     string
-	StoreEndpoint       string
-	StoreBootstrapCred  string
-	ISRWriterScriptName string
+	StoreScriptName          string
+	StoreEndpoint            string
+	StoreBootstrapCredential string
+	ISRWriterScriptName      string
 }
 
 func (p EntryProgram) Build() (provider.EdgeProgram, error) {
 	if p.Slug != "" && p.Namespace == "" {
 		return provider.EdgeProgram{}, fmt.Errorf("an edge worker is named for the namespace that installed its bootstrap, and this program names none; a name without it reaches whatever another namespace deployed for %s", p.Slug)
 	}
-	generic, err := newEntryWorker(p.Entry, p.Origin)
+	worker, err := newEntryWorker(p.Entry, p.Origin)
 	if err != nil {
 		return provider.EdgeProgram{}, err
 	}
 	spec := &edge.ProgramSpec{
 		StoreScriptName:     p.StoreScriptName,
 		StoreEndpoint:       p.StoreEndpoint,
-		BootstrapCred:       p.StoreBootstrapCred,
+		BootstrapCredential: p.StoreBootstrapCredential,
 		ISRWriterScriptName: p.ISRWriterScriptName,
 	}
 	if p.Slug == "" {
@@ -58,11 +58,11 @@ func (p EntryProgram) Build() (provider.EdgeProgram, error) {
 				"no deployments-store worker found for the preview bootstrap, and the shared preview entry reads every deployment through it; re-run `%s` to provision it",
 				provider.BootstrapCommand(environment.TierPreview))
 		}
-		generic = withService(generic, genericStoreBinding, p.StoreScriptName)
-		generic = withVar(generic, envPreview, "1")
-		generic = withVar(generic, envPreviewGlobal, "1")
-		generic = withVar(generic, envPreviewBaseDomain, p.PreviewBaseDomain)
-		if spec.Worker, err = p.addPreviewKey(generic); err != nil {
+		worker = withService(worker, genericStoreBinding, p.StoreScriptName)
+		worker = withVar(worker, envPreview, "1")
+		worker = withVar(worker, envPreviewGlobal, "1")
+		worker = withVar(worker, envPreviewBaseDomain, p.PreviewBaseDomain)
+		if spec.Worker, err = p.addPreviewKey(worker); err != nil {
 			return provider.EdgeProgram{}, err
 		}
 		return provider.EdgeProgram{Spec: spec, Values: p.Values}, nil
@@ -70,13 +70,13 @@ func (p EntryProgram) Build() (provider.EdgeProgram, error) {
 	if p.Tier == environment.TierPreview {
 		spec.Name = previewWorkerName(p.Namespace, p.Slug)
 		spec.PruneWorkerStem = previewWorkerStem(p.Namespace, p.Slug)
-		if spec.Worker, err = p.addPreviewKey(addPreviewVariables(generic, p.PreviewBaseDomain)); err != nil {
+		if spec.Worker, err = p.addPreviewKey(addPreviewVariables(worker, p.PreviewBaseDomain)); err != nil {
 			return provider.EdgeProgram{}, err
 		}
 		return provider.EdgeProgram{Spec: spec, Values: p.Values}, nil
 	}
 	spec.Name = rootWorkerName(p.Namespace, p.Slug, p.Env)
-	spec.Worker = generic
+	spec.Worker = worker
 	return provider.EdgeProgram{Spec: spec, Values: p.Values}, nil
 }
 

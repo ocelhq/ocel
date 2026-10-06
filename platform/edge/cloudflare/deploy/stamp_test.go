@@ -34,7 +34,7 @@ func TestSpecStampShape(t *testing.T) {
 		{
 			typ: reflect.TypeFor[edge.ProgramSpec](),
 			want: []string{
-				"BootstrapCred", "ISRWriterScriptName", "Name", "PruneWorkerStem", "RequiredRecord",
+				"BootstrapCredential", "ISRWriterScriptName", "Name", "PruneWorkerStem", "RequiredRecord",
 				"StoreEndpoint", "StoreScriptName", "Worker",
 			},
 		},
@@ -70,7 +70,7 @@ func TestSpecStampShape(t *testing.T) {
 			if slices.Equal(got, tc.want) {
 				return
 			}
-			t.Errorf("%s fields = %v, want %v: specStamp hashes this shape by hand, so a field the hash never reaches leaves upToDate true over a stale deploy — fold the new field into stampedSpec, or leave it out on purpose the way Warn and BootstrapCred are left out, then bring this list back in line",
+			t.Errorf("%s fields = %v, want %v: specStamp hashes this shape by hand, so a field the hash never reaches leaves upToDate true over a stale deploy — fold the new field into stampedSpec, or leave it out on purpose the way Warn and BootstrapCredential are left out, then bring this list back in line",
 				tc.typ.Name(), got, tc.want)
 		})
 	}

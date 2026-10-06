@@ -40,7 +40,7 @@ type ProgramSpec struct {
 	StoreScriptName     string
 	ISRWriterScriptName string
 	StoreEndpoint       string
-	BootstrapCred       string
+	BootstrapCredential string
 	PruneWorkerStem     string
 	RequiredRecord      string
 }

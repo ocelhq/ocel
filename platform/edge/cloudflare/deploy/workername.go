@@ -12,7 +12,7 @@ const (
 	fieldSeparator = "--"
 	wordSeparator  = "-"
 
-	maxWorkerNameLen    = 63
+	maxWorkerNameLength = 63
 	rootWorkerApp       = "root"
 	productionWorkerEnv = "prod"
 	previewWorkerEnv    = "preview"
@@ -45,7 +45,7 @@ func conventionWorkerNames(namespace, slug string, tier environment.Tier, apps [
 }
 
 func workerScriptName(namespace, slug, env, app string) string {
-	return naming.Fit(maxWorkerNameLen, naming.FieldSeparator,
+	return naming.Fit(maxWorkerNameLength, naming.FieldSeparator,
 		naming.Fixed(naming.NamespaceField(namespace)),
 		naming.Fixed(slug),
 		naming.Fixed(env),

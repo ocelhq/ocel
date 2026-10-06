@@ -13,8 +13,8 @@ import (
 
 const previewKey edge.PreviewKey = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
 
-func awsWorkerFacts() WorkerFacts {
-	return WorkerFacts{
+func awsWorkerValues() WorkerValues {
+	return WorkerValues{
 		Region:             "eu-west-1",
 		StateTable:         "ocel-state",
 		ImageOptimizerURL:  "https://optimizer.example",
@@ -26,17 +26,17 @@ func awsWorkerFacts() WorkerFacts {
 
 func programmed(slug string, tier environment.Tier) cloudflare.EntryProgram {
 	return cloudflare.EntryProgram{
-		Tier:                tier,
-		Entry:               edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
-		Namespace:           defaultNamespace,
-		Slug:                slug,
-		Env:                 "prod",
-		Origin:              awsWorkerFacts().Bindings(),
-		Values:              map[string]string{"cacheBucket": "ocel-edge-cache-preview"},
-		StoreScriptName:     "ocel-deployments-store-preview",
-		StoreEndpoint:       "https://store.example",
-		StoreBootstrapCred:  "store-cred",
-		ISRWriterScriptName: "ocel-isr-writer-preview",
+		Tier:                     tier,
+		Entry:                    edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
+		Namespace:                defaultNamespace,
+		Slug:                     slug,
+		Env:                      "prod",
+		Origin:                   awsWorkerValues().Bindings(),
+		Values:                   map[string]string{"cacheBucket": "ocel-edge-cache-preview"},
+		StoreScriptName:          "ocel-deployments-store-preview",
+		StoreEndpoint:            "https://store.example",
+		StoreBootstrapCredential: "store-cred",
+		ISRWriterScriptName:      "ocel-isr-writer-preview",
 	}
 }
 
@@ -75,7 +75,7 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 			Worker:              edge.Worker{Main: entry, Variables: with(nil), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "secret"}},
 			StoreScriptName:     "ocel-deployments-store-preview",
 			StoreEndpoint:       "https://store.example",
-			BootstrapCred:       "store-cred",
+			BootstrapCredential: "store-cred",
 			ISRWriterScriptName: "ocel-isr-writer-preview",
 		}}},
 		"a preview project": {previewProject, provider.EdgeProgram{Values: values, Spec: &edge.ProgramSpec{
@@ -84,7 +84,7 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 			Worker:              edge.Worker{Main: entry, Variables: with(map[string]string{"OCEL_PREVIEW": "1", "OCEL_PREVIEW_BASE_DOMAIN": "preview.acme.com"}), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "secret", "OCEL_PREVIEW_KEY": key}},
 			StoreScriptName:     "ocel-deployments-store-preview",
 			StoreEndpoint:       "https://store.example",
-			BootstrapCred:       "store-cred",
+			BootstrapCredential: "store-cred",
 			ISRWriterScriptName: "ocel-isr-writer-preview",
 		}}},
 		"the shared preview entry": {sharedEntry, provider.EdgeProgram{Values: values, Spec: &edge.ProgramSpec{
@@ -96,7 +96,7 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 			},
 			StoreScriptName:     "ocel-deployments-store-preview",
 			StoreEndpoint:       "https://store.example",
-			BootstrapCred:       "store-cred",
+			BootstrapCredential: "store-cred",
 			ISRWriterScriptName: "ocel-isr-writer-preview",
 		}}},
 	} {
@@ -112,8 +112,8 @@ func TestTheAWSEntryWorkerKeepsItsNamesVariablesSecretsAndBindings(t *testing.T)
 	}
 }
 
-func TestWorkerFactsBindEveryValueTheEntryWorkerReads(t *testing.T) {
-	got := awsWorkerFacts().Bindings()
+func TestWorkerValuesBindEveryValueTheEntryWorkerReads(t *testing.T) {
+	got := awsWorkerValues().Bindings()
 
 	wantVariables := map[string]string{
 		edge.AWSRegionVar:          "eu-west-1",
@@ -130,13 +130,13 @@ func TestWorkerFactsBindEveryValueTheEntryWorkerReads(t *testing.T) {
 	}
 }
 
-func TestWorkerFactsBindNoEdgeKeyWithoutBothHalves(t *testing.T) {
-	for name, mutate := range map[string]func(*WorkerFacts){
-		"a key id with no secret": func(f *WorkerFacts) { f.EdgeSecretKey = "" },
-		"a secret with no key id": func(f *WorkerFacts) { f.EdgeAccessKeyID = "" },
+func TestWorkerValuesBindNoEdgeKeyWithoutBothHalves(t *testing.T) {
+	for name, mutate := range map[string]func(*WorkerValues){
+		"a key id with no secret": func(f *WorkerValues) { f.EdgeSecretKey = "" },
+		"a secret with no key id": func(f *WorkerValues) { f.EdgeAccessKeyID = "" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			facts := awsWorkerFacts()
+			facts := awsWorkerValues()
 			mutate(&facts)
 
 			got := facts.Bindings()
@@ -150,8 +150,8 @@ func TestWorkerFactsBindNoEdgeKeyWithoutBothHalves(t *testing.T) {
 	}
 }
 
-func TestWorkerFactsLeaveOutValuesTheBootstrapDidNotRecord(t *testing.T) {
-	facts := awsWorkerFacts()
+func TestWorkerValuesLeaveOutValuesTheBootstrapDidNotRecord(t *testing.T) {
+	facts := awsWorkerValues()
 	facts.ImageOptimizerURL = ""
 
 	got := facts.Bindings()

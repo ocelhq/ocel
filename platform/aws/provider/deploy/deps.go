@@ -25,8 +25,8 @@ func (cfg Config) objectStores() ObjectStores {
 
 func (cfg Config) isrWriter() cloudflare.ISRWriter {
 	return cloudflare.ISRWriter{
-		Endpoint:      cfg.ISRWriterEndpoint,
-		BootstrapCred: cfg.ISRWriterBootstrapCred,
-		Seed:          cfg.ISRWriterSeed,
+		Endpoint:            cfg.ISRWriterEndpoint,
+		BootstrapCredential: cfg.ISRWriterBootstrapCred,
+		Seed:                cfg.ISRWriterSeed,
 	}
 }

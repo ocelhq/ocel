@@ -17,7 +17,7 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 	if err != nil {
 		return provider.EdgeProgram{}, err
 	}
-	facts := deploy.WorkerFacts{
+	facts := deploy.WorkerValues{
 		Region:             p.aws.Region,
 		StateTable:         deployed.StateTable,
 		ImageOptimizerURL:  deployed.ImageOptimizerURL,
@@ -28,18 +28,18 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		facts.EdgeSecretKey = params.EdgeCredentials.SecretAccessKey
 	}
 	program := cloudflare.EntryProgram{
-		Tier:                req.Tier,
-		Entry:               req.Entry,
-		Namespace:           string(p.namespace),
-		Slug:                req.Slug,
-		Env:                 req.Env,
-		PreviewBaseDomain:   req.PreviewBaseDomain,
-		PreviewKey:          req.PreviewKey,
-		Origin:              facts.Bindings(),
-		StoreScriptName:     params.DeploymentsStore.ScriptName,
-		StoreEndpoint:       params.DeploymentsStore.Endpoint,
-		StoreBootstrapCred:  params.DeploymentsStore.BootstrapCred,
-		ISRWriterScriptName: params.ISRWriter.ScriptName,
+		Tier:                     req.Tier,
+		Entry:                    req.Entry,
+		Namespace:                string(p.namespace),
+		Slug:                     req.Slug,
+		Env:                      req.Env,
+		PreviewBaseDomain:        req.PreviewBaseDomain,
+		PreviewKey:               req.PreviewKey,
+		Origin:                   facts.Bindings(),
+		StoreScriptName:          params.DeploymentsStore.ScriptName,
+		StoreEndpoint:            params.DeploymentsStore.Endpoint,
+		StoreBootstrapCredential: params.DeploymentsStore.BootstrapCred,
+		ISRWriterScriptName:      params.ISRWriter.ScriptName,
 	}
 	if params.EdgeValuesErr == nil {
 		program.Values = params.EdgeValues
