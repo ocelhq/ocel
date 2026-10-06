@@ -27,6 +27,10 @@ const (
 	appAccountVisibleAttempts = 20
 	maxDisplayNameBytes       = 100
 	accountQuotaMessage       = "Maximum number of service accounts"
+
+	appDescriptionPrefix = "the identity app "
+	appDescriptionRuns   = " runs as in the "
+	appDescriptionSuffix = " tier"
 )
 
 var appGrantedRoles = []string{appRecordsRole, taskRecordsRole, appOpeningRole, appObjectsRole}
@@ -105,7 +109,7 @@ func (c *clients) createAppAccount(ctx context.Context, tier environment.Tier, p
 		AccountId: account,
 		ServiceAccount: &iam.ServiceAccount{
 			DisplayName: clipped("ocel "+project+"/"+app+" ("+string(tier)+")", maxDisplayNameBytes),
-			Description: "the identity app " + app + " of project " + project + " runs as in the " + string(tier) + " tier",
+			Description: appAccountDescription(tier, project, app),
 		},
 	}).Context(ctx).Do)
 	switch {
@@ -117,6 +121,10 @@ func (c *clients) createAppAccount(ctx context.Context, tier environment.Tier, p
 				"Delete accounts nothing uses or raise the quota in the console, then deploy again", c.project)
 	}
 	return lacking(fmt.Errorf("create the %s service account: %w", account, err), c.AppAccountsRolePath())
+}
+
+func appAccountDescription(tier environment.Tier, project, app string) string {
+	return appDescriptionPrefix + app + " of project " + project + appDescriptionRuns + string(tier) + appDescriptionSuffix
 }
 
 func clipped(text string, maxBytes int) string {
