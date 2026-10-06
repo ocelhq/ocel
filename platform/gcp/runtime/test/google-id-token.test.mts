@@ -225,6 +225,7 @@ test("Google's keys that cannot be parsed fail the check and are not cached", as
   ]);
   const jwt = bearer(token(goodPayload()));
   await expect(s.check(jwt)).rejects.toThrow(/could not read Google's token signing keys/);
+  s.clock.now += 10_000;
   expect(await s.check(jwt)).toBe(true);
 });
 
@@ -238,4 +239,31 @@ test("Google's keys staying unreadable fail the check without naming the token",
   expect(failure?.message).toMatch(/could not read Google's token signing keys: 503/);
   expect(failure?.message).not.toContain(jwt);
   expect(s.calls()).toBe(3);
+});
+
+test("Google's keys that just failed are not read again for ten seconds", async () => {
+  const s = setup([() => new Response("down", { status: 503 })]);
+  const jwt = bearer(token(goodPayload()));
+  const first = await s.check(jwt).catch((e: Error) => e);
+
+  s.clock.now += 9_999;
+  const second = await s.check(jwt).catch((e: Error) => e);
+
+  expect(second).toEqual(first);
+  expect(s.calls()).toBe(3);
+});
+
+test("Google's keys that failed are read again once ten seconds have passed", async () => {
+  const s = setup([
+    () => new Response("down", { status: 503 }),
+    () => new Response("down", { status: 503 }),
+    () => new Response("down", { status: 503 }),
+    () => Response.json({ keys: [k1.jwk] }, { headers: { "cache-control": "max-age=3600" } }),
+  ]);
+  const jwt = bearer(token(goodPayload()));
+  await expect(s.check(jwt)).rejects.toThrow(/503/);
+
+  s.clock.now += 10_000;
+
+  expect(await s.check(jwt)).toBe(true);
 });
