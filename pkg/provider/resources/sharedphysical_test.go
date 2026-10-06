@@ -62,6 +62,7 @@ type serviceEveryReleaseRevises struct {
 	provisioned      []string
 	removed          []string
 	removedRevisions []string
+	functionRemovals [][]string
 }
 
 func (s *serviceEveryReleaseRevises) provision(spec provider.StackSpec) (string, error) {
@@ -131,9 +132,14 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 				return functions, nil
 			},
 			Remove: func(_ context.Context, _ provider.StackRef, functions []provider.Function, _ progress.Log) error {
+				var call []string
 				for _, function := range functions {
 					s.remove(function.Physical)
+					call = append(call, function.Physical)
 				}
+				s.mu.Lock()
+				s.functionRemovals = append(s.functionRemovals, call)
+				s.mu.Unlock()
 				return nil
 			},
 			Shared: &resources.SharedHooks[provider.Function]{
@@ -527,5 +533,27 @@ func TestAHolderWhoseStackRecordIsGoneIsRecordedAgainSoATeardownReachesIt(t *tes
 	}
 	if left := sharedEntries(t, store); len(left) != 0 {
 		t.Errorf("the teardown left %v behind", left)
+	}
+}
+
+func TestDestroyOfAStackOfSeveralFunctionsTakesThemDownInOneRemoveCall(t *testing.T) {
+	t.Parallel()
+
+	service := &serviceEveryReleaseRevises{revision: "shop-prod-web-00001"}
+	released := newReleases(t, fake.NewKeyValues(), service.hooks())
+	ref := releaseRef("d1")
+	released.provision(ref, &provider.AppSpec{
+		App: "web", Compute: provider.ComputeServerless,
+		Functions: []provider.FunctionSpec{{Name: "api"}, {Name: "worker"}},
+	})
+
+	released.destroy(ref)
+
+	service.mu.Lock()
+	calls := slices.Clone(service.functionRemovals)
+	service.mu.Unlock()
+	want := [][]string{{"shop-prod-web-api", "shop-prod-web-worker"}}
+	if len(calls) != 1 || !slices.Equal(calls[0], want[0]) {
+		t.Errorf("Destroy() called the remove hook with %v, want one call naming every function the stack recorded: %v", calls, want)
 	}
 }

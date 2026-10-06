@@ -173,30 +173,38 @@ func removeCompute[T any](ctx context.Context, f *hookStacks, ref provider.Stack
 	if c.shared == nil {
 		return removeAll(ctx, ref, going, c.remove, progress)
 	}
+	var batch []T
+	var whole []heldItem
+	var failed error
 	for _, each := range going {
 		held := c.held(each)
 		if held.physical == "" {
-			if err := removeAll(ctx, ref, []T{each}, c.remove, progress); err != nil {
-				return err
-			}
+			batch = append(batch, each)
 			continue
 		}
-		whole, retry, err := f.release(ctx, ref, c.kind, held)
+		released, retry, err := f.release(ctx, ref, c.kind, held)
 		if err != nil {
-			return err
+			failed = err
+			break
 		}
-		if whole {
-			removed := removeAll(ctx, ref, []T{each}, c.remove, progress)
-			if err := errors.Join(removed, f.finishRemoval(ctx, ref, held, removed == nil)); err != nil {
-				return err
-			}
+		if released {
+			batch = append(batch, each)
+			whole = append(whole, held)
 			continue
 		}
 		if err := removeRevisions(ctx, f, ref, c, held.physical, retry, progress); err != nil {
-			return err
+			failed = err
+			break
 		}
 	}
-	return nil
+	if len(batch) > 0 {
+		removed := removeAll(ctx, ref, batch, c.remove, progress)
+		failed = errors.Join(failed, removed)
+		for _, held := range whole {
+			failed = errors.Join(failed, f.finishRemoval(ctx, ref, held, removed == nil))
+		}
+	}
+	return failed
 }
 
 func removeRevisions[T any](ctx context.Context, f *hookStacks, ref provider.StackRef, c compute[T], physical string, revisions []heldItem, progress progress.Log) error {
