@@ -56,17 +56,16 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),
 		}
 	}
-	routing, err := routingFor(q, desc, present)
-	if err != nil {
-		return AppServing{}, err
-	}
-	if q.Compute == provider.ComputeContainer {
-		routing = nil
-	}
-	if q.EdgeRunsCode {
-		facts.EdgeDispatch = routing
-	} else {
-		facts.OriginDispatch = routing
+	if q.Compute != provider.ComputeContainer {
+		routing, err := routingFor(q, desc, present)
+		if err != nil {
+			return AppServing{}, err
+		}
+		if q.EdgeRunsCode {
+			facts.EdgeDispatch = routing
+		} else {
+			facts.OriginDispatch = routing
+		}
 	}
 	facts.Guard = guardFor(q, desc, present)
 	return facts, nil
