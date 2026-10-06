@@ -379,8 +379,19 @@ describe("a queued refresh's deadline", () => {
     const allRead = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const isolate = (arrival = 0) =>
-      testDeps(
+    const turns: (() => void)[] = [];
+    const turnGates = [0, 1, 2].map(
+      (n) =>
+        new Promise<void>((resolve) => {
+          turns[n] = resolve;
+        }),
+    );
+    let claims = 0;
+    const isolate = (turn?: number) => {
+      const passTurn = () => {
+        if (turn !== undefined) turns[turn + 1]?.();
+      };
+      return testDeps(
         clock,
         {
           match: async (request: Request) => {
@@ -388,16 +399,24 @@ describe("a queued refresh's deadline", () => {
               if (++readers === 3) release();
               await allRead;
             }
-            if (new URL(request.url).host === "refresh.ocel") {
-              await new Promise((done) => setTimeout(done, arrival));
+            if (turn === undefined || new URL(request.url).host !== "refresh.ocel") {
+              return shared.match(request);
             }
-            return shared.match(request);
+            await turnGates[turn];
+            claims++;
+            const found = await shared.match(request);
+            if (found) passTurn();
+            return found;
           },
-          put: (request: Request, response: Response) => shared.put(request, response),
+          put: async (request: Request, response: Response) => {
+            await shared.put(request, response);
+            if (turn !== undefined && new URL(request.url).host === "refresh.ocel") passTurn();
+          },
           delete: (request: Request) => shared.delete(request),
         } as unknown as Cache,
         { enqueueRevalidation: sender.enqueueRevalidation },
       );
+    };
     const target: CacheTarget = {
       key,
       revalidate: 1,
@@ -415,13 +434,15 @@ describe("a queued refresh's deadline", () => {
     expect(sender.sent).toHaveLength(1);
 
     clock.ms += queuedRefreshDeadlineMs;
-    const isolates = [isolate(0), isolate(25), isolate(50)];
+    const isolates = [isolate(0), isolate(1), isolate(2)];
     readers = 0;
+    turns[0]();
     await Promise.all(
       isolates.map((deps) => serveCached(request, target, deps, countingOrigin(), blocking)),
     );
     await Promise.all(isolates.map((deps) => deps.flush()));
 
+    expect(claims).toBe(3);
     expect(blocking.calls).toBe(1);
   });
 });
