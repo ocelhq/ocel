@@ -51,7 +51,7 @@ func (s *stack) servedHostnames(move router.PointerMove, app string, record rout
 	return slices.Compact(hostnames)
 }
 
-func (s *stack) purgeReplaced(ctx context.Context, move router.PointerMove, progress progress.Log) {
+func (s *stack) purgeReplaced(ctx context.Context, move router.PointerMove, log progress.Log) {
 	if _, _, deployment := router.ParseDeploymentPointer(move.Pointer); deployment {
 		return
 	}
@@ -81,12 +81,15 @@ func (s *stack) purgeReplaced(ctx context.Context, move router.PointerMove, prog
 	}
 	s.keep()
 	urlMap := s.recorded.LoadBalancer.URLMap
-	if urlMap == "" || progress == nil {
+	if urlMap == "" {
 		return
 	}
-	s.purgeTags(ctx, urlMap, tags, progress)
+	if log == nil {
+		log = progress.Discard()
+	}
+	s.purgeTags(ctx, urlMap, tags, log)
 	slices.Sort(hostnames)
-	s.purgeHostnames(ctx, urlMap, slices.Compact(hostnames), progress)
+	s.purgeHostnames(ctx, urlMap, slices.Compact(hostnames), log)
 }
 
 func (s *stack) purgeTags(ctx context.Context, urlMap string, tags []string, progress progress.Log) {
