@@ -18,7 +18,7 @@ type servedRelease struct {
 	Tagged  bool   `json:"tagged,omitempty"`
 }
 
-func releaseTag(record router.DeploymentRecord) string {
+func readReleaseTag(record router.DeploymentRecord) string {
 	segments := strings.Split(record.IsrPrefix, "/")
 	if len(segments) != 5 || segments[4] != "isr" {
 		return ""
@@ -29,11 +29,11 @@ func releaseTag(record router.DeploymentRecord) string {
 	return segments[3]
 }
 
-func releaseTagged(record router.DeploymentRecord) bool {
+func isReleaseTagged(record router.DeploymentRecord) bool {
 	return record.Framework == buildoutput.FrameworkNext
 }
 
-func servedKey(pointer, app string) string { return pointer + "/" + app }
+func newServedKey(pointer, app string) string { return pointer + "/" + app }
 
 func (s *stack) servedHostnames(move router.PointerMove, app string, record router.DeploymentRecord) []string {
 	var hostnames []string
@@ -59,9 +59,9 @@ func (s *stack) purgeReplaced(ctx context.Context, move router.PointerMove, log 
 	var tags, hostnames []string
 	for _, app := range slices.Sorted(maps.Keys(move.Records)) {
 		record := move.Records[app]
-		release := releaseTag(record)
-		now := servedRelease{Release: release, Tagged: releaseTagged(record) && release != ""}
-		key := servedKey(pointer, app)
+		release := readReleaseTag(record)
+		now := servedRelease{Release: release, Tagged: isReleaseTagged(record) && release != ""}
+		key := newServedKey(pointer, app)
 		prior, known := s.recorded.Served[key]
 		if known && prior.Tagged && prior.Release != now.Release {
 			tags = append(tags, prior.Release)

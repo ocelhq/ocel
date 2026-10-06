@@ -288,8 +288,8 @@ func TestAReleaseTagIsTheReleaseTokenOfTheISRPrefix(t *testing.T) {
 		"production/shop/web/rXYZ/isr":        "",
 		"":                                    "",
 	} {
-		if got := releaseTag(router.DeploymentRecord{IsrPrefix: prefix}); got != want {
-			t.Errorf("releaseTag(%q) = %q, want %q", prefix, got, want)
+		if got := readReleaseTag(router.DeploymentRecord{IsrPrefix: prefix}); got != want {
+			t.Errorf("readReleaseTag(%q) = %q, want %q", prefix, got, want)
 		}
 	}
 }

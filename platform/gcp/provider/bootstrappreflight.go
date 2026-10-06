@@ -126,7 +126,7 @@ const (
 )
 
 func appGrantsGrant(names Names) string {
-	granted := append(slices.Clone(appGrantedRoles), names.CDNPurgeRolePath())
+	granted := listGrantedRoles(names)
 	quoted := make([]string, len(granted))
 	for i, role := range granted {
 		quoted[i] = "'" + role + "'"

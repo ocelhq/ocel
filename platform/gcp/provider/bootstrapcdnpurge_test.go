@@ -29,7 +29,7 @@ func TestTheCDNPurgeRoleHoldsOnlyThePermissionToClearCloudCDN(t *testing.T) {
 
 	names := Names{namespace: "ocel", project: "acme-prod"}
 
-	role := cdnPurgeRole(names)
+	role := newCDNPurgeRole(names)
 
 	if want := []string{"compute.urlMaps.invalidateCache"}; !slices.Equal(role.permissions, want) {
 		t.Errorf("cdnPurgeRole permissions = %v, want %v: a Next app holding more could rewrite the url map it only clears", role.permissions, want)
@@ -103,11 +103,11 @@ func TestACDNPurgeRoleWithOtherPermissionsIsPutBackToClearingCloudCDN(t *testing
 	target := item{Kind: KindRole, Name: "ocel_cdn_purge"}
 
 	found, err := b.presenceOf(t.Context(), environment.TierProduction, target)
-	want := cdnPurgeRole(b.clients.Names).drifted
+	want := newCDNPurgeRole(b.clients.Names).driftReason
 	if err != nil || !found.present || found.mends != want {
 		t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, want)
 	}
-	if err := b.makeRole(t.Context(), cdnPurgeRole(b.clients.Names)); err != nil {
+	if err := b.makeRole(t.Context(), newCDNPurgeRole(b.clients.Names)); err != nil {
 		t.Fatalf("makeRole() = %v", err)
 	}
 	if !slices.Equal(server.writes, []string{"patch"}) || !slices.Equal(server.patched.IncludedPermissions, []string{"compute.urlMaps.invalidateCache"}) {

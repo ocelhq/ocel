@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -34,6 +35,10 @@ const (
 )
 
 var appGrantedRoles = []string{appRecordsRole, taskRecordsRole, appOpeningRole, appObjectsRole}
+
+func listGrantedRoles(names Names) []string {
+	return append(slices.Clone(appGrantedRoles), names.CDNPurgeRolePath())
+}
 
 func keyCondition(c *clients, tier environment.Tier) *cloudresourcemanager.Expr {
 	return &cloudresourcemanager.Expr{
