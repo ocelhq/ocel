@@ -205,3 +205,50 @@ func TestTheStagedRecordIncludesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 		t.Errorf("edgeWorkers = %+v, want none: the edge runs no code, so nothing loads the bundle the build left", staged[0].EdgeWorkers)
 	}
 }
+
+func TestAServerlessAppBehindAnEdgeThatRunsCodeRecordsItsEntryFunctionAsOrigin(t *testing.T) {
+	builtProject(t)
+	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "bundle-0", BuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+	webFunctions(req).Functions[0].RouteId = "bundle-0"
+	result, _ := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	var functions []provider.Function
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		functions = append(functions, fake.ProvisionedFunctions(spec)...)
+	}
+	staged := stager.records()
+	if len(staged) != 1 || len(functions) != 1 {
+		t.Fatalf("the deploy staged %d records and provisioned %d functions, want one of each", len(staged), len(functions))
+	}
+	if staged[0].Origin != functions[0].URL || staged[0].Origin == "" {
+		t.Errorf("origin = %q, want the entry function's URL %q: the edge that runs code reaches the deployment there", staged[0].Origin, functions[0].URL)
+	}
+}
+
+func TestAServerlessAppBehindAnEdgeThatRunsNoCodeRecordsNoOrigin(t *testing.T) {
+	builtProject(t)
+	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "bundle-0", BuildID: "b1"}, []byte(`{"routes":[{"id":"bundle-0"}]}`))
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+	webFunctions(req).Functions[0].RouteId = "bundle-0"
+	result, _ := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	staged := stager.records()
+	if len(staged) != 1 || staged[0].Origin != "" {
+		t.Errorf("records %+v, want one with no origin: a function origin reads as a container to the edges that reach an origin by URL", staged)
+	}
+}

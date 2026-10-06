@@ -1434,8 +1434,12 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 	}
 	coordinate := appCoordinate(r.spec, entry.App, entry.Build.Release())
 	var routing any
+	origin := originOf(result.Containers, entry.App)
 	if facts.EdgeDispatch != nil {
 		routing = json.RawMessage(facts.EdgeDispatch.Manifest)
+		if origin == "" {
+			origin = urlByLogical[entryLogicalName(entry.Manifest, facts.Entry)]
+		}
 	}
 	record := router.DeploymentRecord{
 		RoutingManifest:      routing,
@@ -1448,7 +1452,7 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 		Image:                images.ImageRef(entry.App),
 		Physical:             physicalOf(result.Containers, entry.App),
 		Revisions:            revisionsOf(result, entry.App, logical),
-		Origin:               originOf(result.Containers, entry.App),
+		Origin:               origin,
 		HealthPath:           healthPathOf(entry, result.Containers),
 		HealthPathDiscovered: entry.HealthCheckPath == "" && discoveredHealthPathOf(result.Containers, entry.App) != "",
 		FunctionURLs:         urls,
