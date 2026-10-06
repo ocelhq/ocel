@@ -1,0 +1,39 @@
+{
+  "name": "connectors-upsert",
+  "request": {
+    "method": "PUT",
+    "path": "/api/connectors",
+    "headers": {
+      "Authorization": "Bearer {{session.token}}",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "target": "vps/sha256:abc/ocel",
+      "vendor": "vps",
+      "reach": "dial"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "0199b5c4-0000-7000-8000-00000000beef",
+      "organizationId": "{{organization.id}}",
+      "target": "vps/sha256:abc/ocel",
+      "vendor": "vps",
+      "compute": null,
+      "reach": "dial",
+      "url": null,
+      "publicKey": null,
+      "tlsPin": null,
+      "version": null,
+      "capabilities": [],
+      "connectedAt": null,
+      "lastSeenAt": null,
+      "lastDenied": null,
+      "online": false
+    }
+  },
+  "dynamic": [
+    "$.id"
+  ]
+}

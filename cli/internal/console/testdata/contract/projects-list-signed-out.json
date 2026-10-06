@@ -1,0 +1,15 @@
+{
+  "name": "projects-list-signed-out",
+  "request": {
+    "method": "GET",
+    "path": "/api/projects",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "error": "Unauthorized"
+    }
+  }
+}

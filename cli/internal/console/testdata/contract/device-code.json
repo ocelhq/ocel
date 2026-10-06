@@ -1,0 +1,30 @@
+{
+  "name": "device-code",
+  "request": {
+    "method": "POST",
+    "path": "/api/auth/device/code",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "client_id": "ocel-cli"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "device_code": "Gx3uYw9VbKqL2mPz7RtN4sHd",
+      "user_code": "WDJBMJHT",
+      "verification_uri": "https://console.ocel.dev/device",
+      "verification_uri_complete": "https://console.ocel.dev/device?user_code=WDJBMJHT",
+      "expires_in": 1800,
+      "interval": 5
+    }
+  },
+  "dynamic": [
+    "$.device_code",
+    "$.user_code",
+    "$.verification_uri",
+    "$.verification_uri_complete"
+  ]
+}

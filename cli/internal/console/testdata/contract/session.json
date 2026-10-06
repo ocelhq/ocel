@@ -1,0 +1,26 @@
+{
+  "name": "session",
+  "request": {
+    "method": "GET",
+    "path": "/api/auth/get-session",
+    "headers": {
+      "Authorization": "Bearer {{session.token}}"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "session": {
+        "expiresAt": "2026-02-01T03:04:05.678Z"
+      },
+      "user": {
+        "email": "{{user.email}}",
+        "name": "Test User"
+      }
+    }
+  },
+  "dynamic": [
+    "$.session.expiresAt"
+  ]
+}

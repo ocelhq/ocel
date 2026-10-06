@@ -1,0 +1,23 @@
+{
+  "name": "projects-list",
+  "request": {
+    "method": "GET",
+    "path": "/api/projects",
+    "headers": {
+      "Authorization": "Bearer {{session.token}}"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": [
+      {
+        "id": "{{project.id}}",
+        "organizationId": "{{organization.id}}",
+        "name": "Shop",
+        "slug": "shop",
+        "description": null
+      }
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "connectors-remove",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/connectors/{{connector.id}}",
+    "headers": {
+      "Authorization": "Bearer {{session.token}}"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "body": null
+  }
+}
