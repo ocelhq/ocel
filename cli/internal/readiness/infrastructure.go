@@ -70,5 +70,5 @@ func requiredFeatures(status *contractv1.BootstrapStatus) []string {
 		}
 	}
 	slices.Sort(features)
-	return features
+	return slices.Compact(features)
 }

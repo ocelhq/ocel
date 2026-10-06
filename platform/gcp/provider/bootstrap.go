@@ -145,7 +145,16 @@ func (b bootstrap) Describe(ctx context.Context, tier environment.Tier) (provide
 	if err != nil {
 		return provider.BootstrapDescription{}, err
 	}
-	return b.described(ctx, read)
+	description, err := b.described(ctx, read)
+	if err != nil {
+		return provider.BootstrapDescription{}, err
+	}
+	edgeStacks, err := b.edgeBootstrapStacks(ctx, read)
+	if err != nil {
+		return provider.BootstrapDescription{}, err
+	}
+	description.Stacks = append(description.Stacks, edgeStacks...)
+	return description, nil
 }
 
 func (b bootstrap) described(ctx context.Context, read survey) (provider.BootstrapDescription, error) {
