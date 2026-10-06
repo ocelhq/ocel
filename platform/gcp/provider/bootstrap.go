@@ -354,6 +354,8 @@ func (b bootstrap) make(ctx context.Context, read survey, target item) error {
 		return b.makeSecret(ctx, target.Name)
 	case KindRepository:
 		return b.makeRepository(ctx, target.Name)
+	case KindRole:
+		return b.makeRole(ctx, target.Name)
 	case KindServiceAccount:
 		return b.makeAccount(ctx, read, target.Name)
 	case KindService:
@@ -866,7 +868,7 @@ func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 }
 
 var removalOrder = []Kind{
-	KindSecret, KindSchedule, KindService, KindKey, KindKeyRing, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
+	KindSecret, KindSchedule, KindService, KindKey, KindKeyRing, KindRole, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
 }
 
 func removals(read survey) []removal {
@@ -891,6 +893,8 @@ func removing(read survey, target item) removal {
 	switch {
 	case target.Kind == KindKeyRing:
 		taking.action, taking.reason = provider.ActionKeep, reasonRingKept
+	case target.Kind == KindRole:
+		taking.action, taking.reason = provider.ActionKeep, reasonRoleKept
 	case target.Kind == KindDatabase && target.Shared && read.sibling:
 		taking.action, taking.reason = provider.ActionKeep, fmt.Sprintf(reasonSharedDB, read.Tier.Sibling())
 	case target.Shared && read.sibling:

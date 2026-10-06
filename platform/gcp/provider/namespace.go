@@ -70,7 +70,20 @@ func (n Names) DelayAccountEmail(tier environment.Tier) string {
 	return n.DelayAccount(tier) + "@" + n.project + accountDomain
 }
 
-const appAccountInfix = "app"
+const (
+	appAccountInfix   = "app"
+	appAccountsSuffix = "app_accounts"
+)
+
+func customRoleID(ns provider.Namespace, suffix string) string {
+	return strings.ReplaceAll(string(ns), "-", "_") + "_" + suffix
+}
+
+func (n Names) AppAccountsRole() string { return customRoleID(n.namespace, appAccountsSuffix) }
+
+func (n Names) AppAccountsRolePath() string {
+	return "projects/" + n.project + "/roles/" + n.AppAccountsRole()
+}
 
 func (n Names) AppAccount(tier environment.Tier, project, app string) string {
 	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), project, app, appAccountInfix)

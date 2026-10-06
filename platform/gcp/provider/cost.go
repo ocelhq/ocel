@@ -22,6 +22,7 @@ const (
 	tfKMSKeyRing          = "google_kms_key_ring"
 	tfKMSCryptoKey        = "google_kms_crypto_key"
 	tfServiceAccount      = "google_service_account"
+	tfProjectCustomRole   = "google_project_iam_custom_role"
 	tfArtifactRepository  = "google_artifact_registry_repository"
 	tfSecretManagerSecret = "google_secret_manager_secret"
 	tfSchedulerJob        = "google_cloud_scheduler_job"
@@ -40,6 +41,7 @@ var itemTypes = map[Kind]string{
 	KindKeyRing:        tfKMSKeyRing,
 	KindKey:            tfKMSCryptoKey,
 	KindServiceAccount: tfServiceAccount,
+	KindRole:           tfProjectCustomRole,
 	KindRepository:     tfArtifactRepository,
 	KindSecret:         tfSecretManagerSecret,
 	KindService:        tfCloudRunService,

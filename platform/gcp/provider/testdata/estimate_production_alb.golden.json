@@ -186,6 +186,10 @@
       "monthlyUsage": "0.03"
     },
     {
+      "resource": "project:shop/shared:production/google_project_iam_custom_role:ocel_app_accounts",
+      "status": "STATUS_FREE"
+    },
+    {
       "resource": "project:shop/shared:production/google_service_account:ocel-production",
       "status": "STATUS_FREE"
     },
@@ -457,7 +461,7 @@
   ],
   "coverage": {
     "supported": 13,
-    "free": 11,
+    "free": 12,
     "supportedTypes": [
       "google_artifact_registry_repository",
       "google_certificate_manager_certificate_map",
@@ -473,6 +477,7 @@
       "google_firestore_database",
       "google_kms_crypto_key",
       "google_kms_key_ring",
+      "google_project_iam_custom_role",
       "google_secret_manager_secret",
       "google_service_account",
       "google_storage_bucket"

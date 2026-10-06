@@ -312,7 +312,7 @@ func TestADeployMayCreateAccountsAndGrantThemOnlyTheRolesAnAppRuns(t *testing.T)
 	}
 	lines := strings.Split(document.Document, "\n")
 	for _, want := range []string{
-		"roles/iam.serviceAccountCreator",
+		"projects/acme-prod/roles/ocel_app_accounts",
 		"roles/resourcemanager.projectIamAdmin, on the condition api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', [])." +
 			"hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser'])",
 		"roles/iam.serviceAccountAdmin on the service account ocel-production@acme-prod.iam.gserviceaccount.com",
@@ -323,6 +323,9 @@ func TestADeployMayCreateAccountsAndGrantThemOnlyTheRolesAnAppRuns(t *testing.T)
 		if !slices.Contains(lines, want) {
 			t.Errorf("Permissions(deploy) =\n%s\nwant the line %s", document.Document, want)
 		}
+	}
+	if slices.Contains(lines, "roles/iam.serviceAccountCreator") {
+		t.Errorf("Permissions(deploy) names roles/iam.serviceAccountCreator, and the custom role replaces it:\n%s", document.Document)
 	}
 	if slices.Contains(lines, "roles/resourcemanager.projectIamAdmin") {
 		t.Errorf("Permissions(deploy) names roles/resourcemanager.projectIamAdmin with no condition, and a deploy could then grant any role to anyone:\n%s", document.Document)

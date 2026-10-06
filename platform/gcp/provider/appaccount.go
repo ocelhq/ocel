@@ -91,7 +91,7 @@ func (c *clients) createAppAccount(ctx context.Context, tier environment.Tier, p
 		return nil
 	}
 	if !absent(err) {
-		return fmt.Errorf("read the %s service account: %w", account, err)
+		return lacking(fmt.Errorf("read the %s service account: %w", account, err), c.AppAccountsRolePath())
 	}
 	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+c.project, &iam.CreateServiceAccountRequest{
 		AccountId: account,
@@ -108,7 +108,7 @@ func (c *clients) createAppAccount(ctx context.Context, tier environment.Tier, p
 			"project %s has as many service accounts as its Service Account Count quota allows, and every app ocel deploys runs as one of its own.\n"+
 				"Delete accounts nothing uses or raise the quota in the console, then deploy again", c.project)
 	}
-	return fmt.Errorf("create the %s service account: %w", account, err)
+	return lacking(fmt.Errorf("create the %s service account: %w", account, err), c.AppAccountsRolePath())
 }
 
 func clipped(text string, maxBytes int) string {
