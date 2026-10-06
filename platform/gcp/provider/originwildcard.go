@@ -23,7 +23,7 @@ import (
 
 const originWildcardRecord = "origin-wildcard"
 
-const claimAttempts = 8
+const recordAttempts = 8
 
 type originWildcard struct {
 	BaseDomain  string               `json:"baseDomain"`
@@ -75,7 +75,7 @@ func (w originWildcards) write(ctx context.Context, tier environment.Tier, entry
 }
 
 func (w originWildcards) update(ctx context.Context, tier environment.Tier, change func(*originWildcard) error) (originWildcard, error) {
-	for range claimAttempts {
+	for range recordAttempts {
 		entry, recorded, err := w.read(ctx, tier)
 		if err != nil {
 			return originWildcard{}, err
@@ -98,7 +98,7 @@ func (w originWildcards) update(ctx context.Context, tier environment.Tier, chan
 		}
 		return changed, nil
 	}
-	return originWildcard{}, fmt.Errorf("record which origin domain tier %s reaches its deployments under: it changed under every one of %d attempts", tier, claimAttempts)
+	return originWildcard{}, fmt.Errorf("record which origin domain tier %s reaches its deployments under: it changed under every one of %d attempts", tier, recordAttempts)
 }
 
 func (w originWildcards) ensure(ctx context.Context, tier environment.Tier, base string, warn func(string)) error {
@@ -274,7 +274,7 @@ func (p *Provider) readWorkerCAs(ctx context.Context, tier environment.Tier) ([]
 	if err != nil {
 		return nil, err
 	}
-	adopted, _, err := readAdoptedEdge(ctx, c, p.KeyValues(), tier, cloudflare.Kind)
+	adopted, _, err := requireAdoptedEdge(ctx, c, p.KeyValues(), tier, cloudflare.Kind)
 	if err != nil {
 		return nil, err
 	}

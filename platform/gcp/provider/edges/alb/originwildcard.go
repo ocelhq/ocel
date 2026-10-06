@@ -38,7 +38,7 @@ func (e *Edge) originWildcardKey(tier environment.Tier) keyvalue.Key {
 	return stackrecords.EdgeStacksPartition(tier).Key(string(Kind), "origin-wildcard")
 }
 
-func (e *Edge) recordedOriginWildcard(ctx context.Context, tier environment.Tier) (originWildcardEntry, error) {
+func (e *Edge) readOriginWildcard(ctx context.Context, tier environment.Tier) (originWildcardEntry, error) {
 	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.originWildcardKey(tier))
 	if err != nil {
 		return originWildcardEntry{}, fmt.Errorf("read which origin wildcard the %s load balancer of tier %s serves: %w", Kind, tier, err)
@@ -53,7 +53,7 @@ func (e *Edge) recordedOriginWildcard(ctx context.Context, tier environment.Tier
 	return recorded, nil
 }
 
-func (e *Edge) rememberOriginWildcard(ctx context.Context, tier environment.Tier, recorded originWildcardEntry) error {
+func (e *Edge) writeOriginWildcard(ctx context.Context, tier environment.Tier, recorded originWildcardEntry) error {
 	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.originWildcardKey(tier))
 	if err != nil {
 		return fmt.Errorf("read which origin wildcard the %s load balancer of tier %s serves: %w", Kind, tier, err)
@@ -77,7 +77,7 @@ func (e *Edge) ReconcileOriginWildcard(ctx context.Context, spec OriginWildcardS
 			"the %s load balancer answers an origin wildcard on its own certificate for the worker's client CA, and this reconcile names a base domain %q, a certificate %q and %d client CAs",
 			Kind, spec.BaseDomain, spec.Certificate, len(spec.ClientCAs))
 	}
-	recorded, err := e.recordedOriginWildcard(ctx, spec.Tier)
+	recorded, err := e.readOriginWildcard(ctx, spec.Tier)
 	if err != nil {
 		return "", err
 	}
@@ -89,7 +89,7 @@ func (e *Edge) ReconcileOriginWildcard(ctx context.Context, spec OriginWildcardS
 	entry := originWildcardEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate}
 	isNew := recorded != (originWildcardEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate, Raised: true})
 	if isNew {
-		if err := e.rememberOriginWildcard(ctx, spec.Tier, entry); err != nil {
+		if err := e.writeOriginWildcard(ctx, spec.Tier, entry); err != nil {
 			return "", err
 		}
 	}
@@ -117,7 +117,7 @@ func (e *Edge) ReconcileOriginWildcard(ctx context.Context, spec OriginWildcardS
 	}
 	if isNew {
 		entry.Raised = true
-		if err := e.rememberOriginWildcard(ctx, spec.Tier, entry); err != nil {
+		if err := e.writeOriginWildcard(ctx, spec.Tier, entry); err != nil {
 			return "", err
 		}
 	}
@@ -143,13 +143,13 @@ func stillValidCAs(held, current []string, now time.Time) ([]string, error) {
 }
 
 func (e *Edge) DestroyOriginWildcard(ctx context.Context, tier environment.Tier) error {
-	recorded, err := e.recordedOriginWildcard(ctx, tier)
+	recorded, err := e.readOriginWildcard(ctx, tier)
 	if err != nil || recorded.BaseDomain == "" {
 		return err
 	}
 	if !recorded.Removing {
 		recorded.Removing = true
-		if err := e.rememberOriginWildcard(ctx, tier, recorded); err != nil {
+		if err := e.writeOriginWildcard(ctx, tier, recorded); err != nil {
 			return err
 		}
 	}

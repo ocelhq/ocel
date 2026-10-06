@@ -279,9 +279,9 @@ func TestReadingTheAdoptedEdgeBeforeBootstrapIsNotReady(t *testing.T) {
 	h := newOffersHarness(t)
 	ctx := context.Background()
 
-	_, _, err := readAdoptedEdge(ctx, h.clients, h.records, environment.TierProduction, cloudflareKind)
+	_, _, err := requireAdoptedEdge(ctx, h.clients, h.records, environment.TierProduction, cloudflareKind)
 	if refusalCode(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "ocel bootstrap production") {
-		t.Errorf("readAdoptedEdge = %v, want a not-ready refusal naming ocel bootstrap production", err)
+		t.Errorf("requireAdoptedEdge = %v, want a not-ready refusal naming ocel bootstrap production", err)
 	}
 	if _, err = readISRWriterSeed(ctx, h.clients, environment.TierProduction, cloudflareKind); refusalCode(err) != refusal.CodeNotReady {
 		t.Errorf("readISRWriterSeed = %v, want a not-ready refusal", err)
@@ -290,9 +290,9 @@ func TestReadingTheAdoptedEdgeBeforeBootstrapIsNotReady(t *testing.T) {
 	if err := h.adopt(fullOffers("c1", "c2"), nil); err != nil {
 		t.Fatal(err)
 	}
-	adopted, creds, err := readAdoptedEdge(ctx, h.clients, h.records, environment.TierProduction, cloudflareKind)
+	adopted, creds, err := requireAdoptedEdge(ctx, h.clients, h.records, environment.TierProduction, cloudflareKind)
 	if err != nil || adopted.ISRWriter.ScriptName != "ocel-isr-writer" || creds.DeploymentsStore != "c1" || creds.ISRWriter != "c2" {
-		t.Errorf("readAdoptedEdge after bootstrap = %+v %+v %v", adopted, creds, err)
+		t.Errorf("requireAdoptedEdge after bootstrap = %+v %+v %v", adopted, creds, err)
 	}
 	if seed, err := readISRWriterSeed(ctx, h.clients, environment.TierProduction, cloudflareKind); err != nil || len(seed) != 64 {
 		t.Errorf("readISRWriterSeed after bootstrap = %q %v", seed, err)

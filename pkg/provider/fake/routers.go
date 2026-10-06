@@ -38,7 +38,7 @@ func (e *Edges) pairings() []provider.Pairing {
 	pairings := make([]provider.Pairing, 0, len(kinds))
 	for _, kind := range kinds {
 		if front := e.Edge(kind); front.pairsStoreRouter() {
-			pairings = append(pairings, provider.Pairing{Edge: kind, Router: front.storeRouter(), Computes: provider.Computes()})
+			pairings = append(pairings, provider.Pairing{Edge: kind, Router: front.readStoreRouter(), Computes: provider.Computes()})
 		}
 		pairings = append(pairings, provider.Pairing{Edge: kind, Router: e.Edge(kind).routedBy, Computes: provider.Computes()})
 	}
@@ -49,7 +49,7 @@ func (r *Routers) Open(kind router.Kind) (router.Router, error) {
 	var shared *Edge
 	for _, front := range r.edges.kinds() {
 		paired := r.edges.Edge(front)
-		if paired.routedBy == kind || (paired.pairsStoreRouter() && paired.storeRouter() == kind) {
+		if paired.routedBy == kind || (paired.pairsStoreRouter() && paired.readStoreRouter() == kind) {
 			shared = paired
 		}
 	}
