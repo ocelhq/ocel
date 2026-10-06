@@ -26,7 +26,7 @@ const dispatchDeadline = "60s";
 
 class Refused extends Error {}
 
-function within<T>(promise: Promise<T>, ms: number): Promise<T> {
+function rejectAfter<T>(promise: Promise<T>, ms: number): Promise<T> {
   if (ms >= attemptTimeoutMs) return promise;
   let timer: NodeJS.Timeout | undefined;
   const expiry = new Promise<never>((_, reject) => {
@@ -90,7 +90,7 @@ export function newRefreshQueue(options: RefreshQueueOptions): ScheduleRefresh {
       try {
         const headers: Record<string, string> = { "Content-Type": "application/json" };
         if (metadata) {
-          headers.Authorization = `Bearer ${await within(metadata.token(), deadline - now())}`;
+          headers.Authorization = `Bearer ${await rejectAfter(metadata.token(), deadline - now())}`;
         }
         const left = deadline - now();
         if (left <= 0) break;
