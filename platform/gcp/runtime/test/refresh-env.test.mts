@@ -48,3 +48,33 @@ test("a service told a refresh url but no refresh secret refuses to start", () =
     "OCEL_REFRESH_URL is set but OCEL_REFRESH_SECRET is not",
   );
 });
+
+const tasksEmulator = "http://host.docker.internal:7001";
+const emulatorKeys = `${tasksEmulator}/oauth2/v3/certs`;
+
+test("a service told no token keys checks refresh tokens against Google's", () => {
+  expect(readRefreshEnv(named, "s1")?.certsUrl).toBeUndefined();
+});
+
+test("a service on the floci lane checks refresh tokens against the keys its tasks emulator serves", () => {
+  const env = {
+    ...named,
+    OCEL_TASKS_ENDPOINT: tasksEmulator,
+    OCEL_ID_TOKEN_CERTS_URL: emulatorKeys,
+  };
+
+  expect(readRefreshEnv(env, "s1")?.certsUrl).toBe(emulatorKeys);
+});
+
+test.each([
+  ["https://evil.example/oauth2/v3/certs", tasksEmulator],
+  ["https://www.googleapis.com/oauth2/v3/certs", tasksEmulator],
+  [emulatorKeys, undefined],
+  ["http://host.docker.internal:7002/oauth2/v3/certs", tasksEmulator],
+  ["not a url", tasksEmulator],
+])("a service told token keys at %s refuses to start", (certs, tasks) => {
+  const env: NodeJS.ProcessEnv = { ...named, OCEL_ID_TOKEN_CERTS_URL: certs };
+  if (tasks !== undefined) env.OCEL_TASKS_ENDPOINT = tasks;
+
+  expect(() => readRefreshEnv(env, "s1")).toThrow("OCEL_ID_TOKEN_CERTS_URL");
+});

@@ -47,6 +47,7 @@ const (
 	refreshSecretEnvVar     = "OCEL_REFRESH_SECRET"
 	refreshTargetEnvVar     = "OCEL_REFRESH_TARGET"
 	tasksEndpointEnvVar     = "OCEL_TASKS_ENDPOINT"
+	idTokenCertsURLEnvVar   = "OCEL_ID_TOKEN_CERTS_URL"
 
 	finishBeforeResponseEnvVar = "OCEL_FINISH_BEFORE_RESPONSE_MS"
 )
@@ -111,6 +112,7 @@ type nextRefresh struct {
 	account       string
 	secret        string
 	endpoint      string
+	certsURL      string
 	projectNumber int64
 	region        string
 }
@@ -163,6 +165,9 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, ca
 				env[refreshSecretEnvVar] = refresh.secret
 				if refresh.endpoint != "" {
 					env[tasksEndpointEnvVar] = refresh.endpoint
+				}
+				if refresh.certsURL != "" {
+					env[idTokenCertsURLEnvVar] = refresh.certsURL
 				}
 			}
 		}
