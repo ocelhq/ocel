@@ -91,6 +91,15 @@ describe("originFetchFor", () => {
     expect(await response.text()).toBe("");
   });
 
+  it("refuses to send a request over the client certificate to a non-https origin", async () => {
+    const { binding, sent } = fakeBinding();
+    const originFetch = originFetchFor({ OCEL_ORIGIN_CLIENT_CERTIFICATE: binding })!;
+    await expect(originFetch(new Request("http://d-abc.origin.example.com/x"))).rejects.toThrow(
+      "ocel: refusing to present the client certificate over http:",
+    );
+    expect(sent).toHaveLength(0);
+  });
+
   it("signs with SigV4 when the worker holds AWS keys", async () => {
     let sent: Request | undefined;
     const stub = (async (input: RequestInfo | URL, init?: RequestInit) => {
