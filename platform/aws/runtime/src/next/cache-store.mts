@@ -18,7 +18,7 @@ interface EntryStore {
   write(key: string, entry: CacheEntryFile): Promise<void>;
 }
 
-function adoptedEntryStore(isrPrefix: string): EntryStore {
+function openAdoptedEntryStore(isrPrefix: string): EntryStore {
   const endpoint = process.env.OCEL_ISR_WRITER_URL;
   const secret = process.env.OCEL_ISR_WRITER_SECRET;
   if (!endpoint || !secret) {
@@ -77,7 +77,7 @@ export function newAwsCacheStore(publish: PublishTag): CacheStore {
   }
 
   const entries: EntryStore = entriesAdopted()
-    ? adoptedEntryStore(prefix)
+    ? openAdoptedEntryStore(prefix)
     : {
         read: async (key) => read(provider, objectKey(key)),
         write: async (key, entry) => write(provider, objectKey(key), entry),
