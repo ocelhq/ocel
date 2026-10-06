@@ -132,10 +132,10 @@ func (b bootstrap) tasksFree(ctx context.Context, tier environment.Tier, feature
 				"Remove those topics and tasks from their projects and deploy them, or destroy their environments, then remove feature %s again",
 			tier, strings.Join(held, ", "), tasksFeature, tasksFeature)
 	}
-	return b.refreshersFree(ctx, tier)
+	return b.refuseRemovalWhileNextAppsRefresh(ctx, tier)
 }
 
-func (b bootstrap) refreshersFree(ctx context.Context, tier environment.Tier) error {
+func (b bootstrap) refuseRemovalWhileNextAppsRefresh(ctx context.Context, tier environment.Tier) error {
 	policy, err := b.accountPolicy(ctx, b.clients.RefreshAccount(tier))
 	if absent(err) {
 		return nil

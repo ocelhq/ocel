@@ -114,7 +114,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	if err := shapeStores(tree, names, req, region, shared, environment); err != nil {
 		return nil, err
 	}
-	shapeTopics(tree, names, req, factsOf(front), region, shared, environment)
+	shapeTopicsAndRefreshes(tree, names, req, factsOf(front), region, shared, environment)
 	shapeRealtime(tree, names, req, region, environment)
 	return tree.Set(provider.CostSource)
 }
@@ -146,7 +146,7 @@ func shapeStores(tree *pricing.Tree, names Names, req provider.ShapeRequest, reg
 	return nil
 }
 
-func shapeTopics(tree *pricing.Tree, names Names, req provider.ShapeRequest, front edge.Facts, region, shared, environment string) {
+func shapeTopicsAndRefreshes(tree *pricing.Tree, names Names, req provider.ShapeRequest, front edge.Facts, region, shared, environment string) {
 	scope := taskNames(names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
 	declared := false
 	for _, resource := range req.Resources {
