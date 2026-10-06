@@ -386,7 +386,7 @@ func (h *Host) handResource(ctx context.Context, spec ResourceContainer, secret 
 	}
 	delivery := handoff{path: EnvFile(spec.Tier, spec.Name)}
 	_, err = h.owning(ctx, "write what "+spec.Resource+" is handed",
-		"install -m 0600 /dev/stdin "+quoted(delivery.path), rendered)
+		writtenFromStdin(delivery.path, false), rendered)
 	return delivery, err
 }
 

@@ -92,7 +92,7 @@ func TestAWorkerIsHandedItsNameAndTheAppsValuesButNeverTheEdgesSecret(t *testing
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	ledger, _ := recordedWorker(t, store, "ledger")
-	handed := machine.fedTo("install -m 0600 /dev/stdin '" + host.EnvFile(environment.TierProduction, ledger.Container) + "'")
+	handed := machine.fedTo("cat >'" + host.EnvFile(environment.TierProduction, ledger.Container) + "'")
 	for _, want := range []string{"OCEL_WORKER=ledger", "GREETING=hello", live.EnvVar + "="} {
 		if !strings.Contains(handed, want) {
 			t.Errorf("ledger is handed %q, want %s in it", handed, want)
@@ -244,7 +244,7 @@ func TestAWorkerAdmitsOnlyDeliveriesSignedWithItsEnvironmentsDeliverySecret(t *t
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	ledger, _ := recordedWorker(t, store, "ledger")
-	handed := machine.fedTo("install -m 0600 /dev/stdin '" + host.EnvFile(environment.TierProduction, ledger.Container) + "'")
+	handed := machine.fedTo("cat >'" + host.EnvFile(environment.TierProduction, ledger.Container) + "'")
 	if !strings.Contains(handed, originguard.OriginSecretVar+"="+string(secret)) {
 		t.Errorf("ledger is handed %q, want %s set to the queue's delivery secret, so its front refuses a POST the engine did not send", handed, originguard.OriginSecretVar)
 	}

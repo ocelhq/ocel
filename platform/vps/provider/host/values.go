@@ -85,7 +85,7 @@ func (h *Host) note(ctx context.Context, spec Container) error {
 		return err
 	}
 	_, err = h.ran(ctx, "note the names "+spec.App+" is handed",
-		"install -D -m 0600 /dev/stdin "+quoted(HandedNote(spec.Tier, spec.Name)), bytes.NewReader(rendered), acting)
+		writtenFromStdin(HandedNote(spec.Tier, spec.Name), true), bytes.NewReader(rendered), acting)
 	return err
 }
 
@@ -186,7 +186,7 @@ func (h *Host) hand(ctx context.Context, delivery handoff, spec Container) error
 		return err
 	}
 	_, err = h.ran(ctx, "write the values "+spec.App+" is handed",
-		"install -m 0600 /dev/stdin "+quoted(delivery.path), bytes.NewReader(rendered), acting)
+		writtenFromStdin(delivery.path, false), bytes.NewReader(rendered), acting)
 	return err
 }
 

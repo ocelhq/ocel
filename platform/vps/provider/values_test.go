@@ -45,7 +45,7 @@ func envFileWritten(t *testing.T, machine *box, tier environment.Tier, physical 
 	machine.mu.Lock()
 	defer machine.mu.Unlock()
 	for at, command := range machine.ran {
-		if strings.Contains(command, "install") && strings.Contains(command, path) {
+		if strings.Contains(command, "cat >") && strings.Contains(command, path) {
 			return machine.fed[at]
 		}
 	}

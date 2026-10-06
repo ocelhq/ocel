@@ -53,7 +53,7 @@ func gatewayEnv(t *testing.T, machine *box) map[string]string {
 	t.Helper()
 	var written string
 	for at, command := range machine.commands() {
-		if strings.Contains(command, "install -m 0600 /dev/stdin") && strings.Contains(command, realtimeGateway) {
+		if strings.Contains(command, "umask 077 && cat >") && strings.Contains(command, realtimeGateway) {
 			written = machine.feeds()[at]
 		}
 	}
@@ -174,7 +174,7 @@ func TestASigningKeyReachesTheBoxOnlySealedAndNeverOnACommandLine(t *testing.T) 
 		if strings.Contains(command, signing) || strings.Contains(machine.feeds()[at], signing) && strings.Contains(command, "/kept/") {
 			t.Fatalf("the signing key reached the box unsealed:\n%s", command)
 		}
-		if strings.Contains(command, "install -m 0600 /dev/stdin") && strings.Contains(machine.feeds()[at], signing) {
+		if strings.Contains(command, "umask 077 && cat >") && strings.Contains(machine.feeds()[at], signing) {
 			t.Fatalf("the gateway was handed the signing key, and it verifies with the public key alone:\n%s", command)
 		}
 	}

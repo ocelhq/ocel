@@ -31,8 +31,8 @@ func TestADeployNotesTheNamesItHandedBeforeTheRunAndATakeDownForgetsThem(t *test
 	spec := valued()
 	box := runningWith(t, spec)
 	note := HandedNote(spec.Tier, spec.Name)
-	wrote := box.at("install -D -m 0600 /dev/stdin " + quoted(note))
-	handed := box.at("install -m 0600 /dev/stdin " + quoted(EnvFile(spec.Tier, spec.Name)))
+	wrote := box.at("cat >" + quoted(note))
+	handed := box.at("cat >" + quoted(EnvFile(spec.Tier, spec.Name)))
 	ran := box.at(quoted("run") + " " + quoted("--detach"))
 	if wrote < 0 || handed < 0 || ran < 0 || wrote < handed || wrote > ran {
 		t.Fatalf("the note was written at %d, the values at %d and the container run at %d: the note is what a later promotion reads once the container is gone, so it is written before there is a container to lose", wrote, handed, ran)
@@ -110,7 +110,7 @@ func TestAPromotionOfALiveOnlyAppWhoseContainerIsGoneRunsItAgainWithTheManifestI
 	if !strings.Contains(file, "OCEL_LIVE_MANIFEST="+manifest) || !strings.Contains(file, "OCEL_HEALTH_PATH=/healthz") {
 		t.Errorf("the re-created container is handed %q, want the manifest its deploy noted and the health path the record names", file)
 	}
-	if box.at("install -D -m 0600") >= 0 {
+	if box.at("cat >"+quoted(HandedNote(spec.Tier, spec.Name))) >= 0 {
 		t.Errorf("a promotion re-wrote the note its own deploy left: %v", box.commands())
 	}
 }

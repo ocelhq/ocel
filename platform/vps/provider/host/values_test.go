@@ -48,7 +48,7 @@ func wrote(t *testing.T, rig *bench, path string) string {
 	rig.mu.Lock()
 	defer rig.mu.Unlock()
 	for at, command := range rig.ran {
-		if strings.Contains(command, "install") && strings.Contains(command, quoted(path)) {
+		if strings.Contains(command, "cat >"+quoted(path)) {
 			return rig.fed[at]
 		}
 	}

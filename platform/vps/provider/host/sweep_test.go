@@ -16,7 +16,7 @@ func TestWhatAnInterruptedDeployLeftIsSweptBeforeAValueIsWritten(t *testing.T) {
 	spec := valued()
 	rig := runningWith(t, spec)
 	swept := rig.at(sweepCommand())
-	wrote := rig.at("install -m 0600 /dev/stdin " + quoted(EnvFile(spec.Tier, spec.Name)))
+	wrote := rig.at("cat >" + quoted(EnvFile(spec.Tier, spec.Name)))
 	if swept < 0 || wrote < 0 || swept > wrote {
 		t.Fatalf("the sweep ran at %d and the env file was written at %d: a sweep after the write is a sweep of nothing, and a SIGKILL between the write and the forget leaves plaintext nothing but the next deploy's sweep takes", swept, wrote)
 	}
