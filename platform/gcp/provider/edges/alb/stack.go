@@ -275,6 +275,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		}
 	}
 	s.recorded.Hosts = nil
+	s.recorded.Served = nil
 	s.keep()
 	for _, hostname := range s.state.Bound {
 		s.state.PublishAddress(hostname, "")
