@@ -209,7 +209,7 @@ func (d *hostnames) releasePreviousRouter(ctx context.Context, host string, host
 			d.state.SetHost(host, *hostState)
 			return d.checkpoint(ctx)
 		}
-		if origin, _ := d.findRouterOrigin(answering); origin == nil && hostState.OriginCertificateID != "" {
+		if origin, err := d.findRouterOrigin(answering); err == nil && origin == nil && hostState.OriginCertificateID != "" {
 			revokeOriginCertificate(ctx, d.front, hostState.OriginCertificateID, progress)
 			hostState.OriginCertificateID, hostState.OriginCertificateExpiresAt, hostState.ClientCADigests = "", time.Time{}, nil
 		}
