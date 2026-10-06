@@ -240,3 +240,75 @@ test("a next start response that names s-maxage leaves the server private and un
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+async function cacheControlSeenFor(
+  respond: (res: http.ServerResponse) => void,
+): Promise<{ cacheControl: string | null; other: string | null }> {
+  class TestResponse extends http.ServerResponse {}
+  withholdResponsesFromCloudCdn(TestResponse.prototype);
+  const server = http.createServer({ ServerResponse: TestResponse }, (_req, res) => {
+    respond(res);
+    res.end("x");
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`);
+    return {
+      cacheControl: response.headers.get("cache-control"),
+      other: response.headers.get("x-other"),
+    };
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+test("a Cache-Control passed to writeHead as an object is withheld whatever its key's case", async () => {
+  for (const key of ["Cache-Control", "cache-control", "CACHE-CONTROL"]) {
+    const seen = await cacheControlSeenFor((res) =>
+      res.writeHead(200, { [key]: "s-maxage=60", "x-other": "kept" }),
+    );
+    expect(seen).toEqual({ cacheControl: uncacheable, other: "kept" });
+  }
+});
+
+test("a Cache-Control passed to writeHead after a status message is withheld", async () => {
+  const seen = await cacheControlSeenFor((res) =>
+    res.writeHead(200, "Fine", { "Cache-Control": "s-maxage=60", "x-other": "kept" }),
+  );
+  expect(seen).toEqual({ cacheControl: uncacheable, other: "kept" });
+});
+
+test("a Cache-Control passed to writeHead as a flat raw array is withheld", async () => {
+  const seen = await cacheControlSeenFor((res) =>
+    res.writeHead(200, ["x-other", "kept", "Cache-Control", "s-maxage=60"]),
+  );
+  expect(seen).toEqual({ cacheControl: uncacheable, other: "kept" });
+  const afterMessage = await cacheControlSeenFor((res) =>
+    res.writeHead(200, "Fine", ["Cache-Control", "s-maxage=60", "x-other", "kept"]),
+  );
+  expect(afterMessage).toEqual({ cacheControl: uncacheable, other: "kept" });
+});
+
+test("an immutable or unstorable Cache-Control passed to writeHead is left as it is", async () => {
+  const immutable = "public, max-age=31536000, immutable";
+  const asObject = await cacheControlSeenFor((res) =>
+    res.writeHead(200, { "cache-control": immutable }),
+  );
+  expect(asObject.cacheControl).toBe(immutable);
+  const asArray = await cacheControlSeenFor((res) =>
+    res.writeHead(200, ["cache-control", immutable]),
+  );
+  expect(asArray.cacheControl).toBe(immutable);
+  const unstorable = await cacheControlSeenFor((res) =>
+    res.writeHead(200, { "cache-control": "public, max-age=0" }),
+  );
+  expect(unstorable.cacheControl).toBe("public, max-age=0");
+});
+
+test("a Cache-Control staged with setHeader is still withheld when writeHead carries other headers", async () => {
+  const seen = await cacheControlSeenFor((res) => {
+    res.setHeader("cache-control", "s-maxage=60");
+    res.writeHead(200, { "x-other": "kept" });
+  });
+  expect(seen).toEqual({ cacheControl: uncacheable, other: "kept" });
+});
