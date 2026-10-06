@@ -5,6 +5,7 @@ package vps_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -317,7 +318,7 @@ func TestLiveASecondProjectDeclaringAServedHostnameIsNamedAsAClaimAtPreflight(t 
 		t.Fatalf("AddHostname() = %v, want the hostname bound", result.GetError())
 	}
 
-	other, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	other, err := preflight(t, client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "intruder",
 		Domains:      []string{hostname, "nobody.example.invalid"},
@@ -342,7 +343,7 @@ func TestLiveASecondProjectDeclaringAServedHostnameIsNamedAsAClaimAtPreflight(t 
 		t.Errorf("a hostname nothing on this box serves reads as %+v, want it unclaimed", claims[1])
 	}
 
-	mine, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+	mine, err := preflight(t, client, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         domainSlug,
 		Domains:      []string{hostname},
@@ -363,4 +364,22 @@ func configuredHosts(named ...string) []*contractv1.ConfiguredHostname {
 		wired = append(wired, &contractv1.ConfiguredHostname{Hostname: host})
 	}
 	return wired
+}
+
+func preflight(t *testing.T, client contractv1connect.ProviderServiceClient, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
+	t.Helper()
+	stream, err := client.Preflight(context.Background(), req)
+	if err != nil {
+		return nil, err
+	}
+	defer stream.Close()
+	for stream.Receive() {
+		if resp := stream.Msg().GetResponse(); resp != nil {
+			return resp, nil
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return nil, err
+	}
+	return nil, errors.New("the Preflight stream closed without a response")
 }

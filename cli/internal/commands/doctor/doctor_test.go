@@ -309,7 +309,7 @@ export default {
 		}
 	}
 	if asked != 2 {
-		t.Errorf("doctor named api as a container in %d of its preflights %v, want one per tier: api runs the container its provider resolves it to, as a deploy asks about", asked, sent)
+		t.Errorf("doctor named api as a container in %d of its %d preflights, want one per tier: api runs the container its provider resolves it to, as a deploy asks about", asked, len(sent))
 	}
 }
 
