@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -200,6 +201,63 @@ func TestOnlyTheShieldedLoadBalancerServesAnOriginWildcard(t *testing.T) {
 		if _, err := balancer.Shielded().ReconcileOriginWildcard(context.Background(), spec); refusalCodeOf(err) != refusal.CodeInvalid {
 			t.Errorf("%s: ReconcileOriginWildcard = %v, want an invalid refusal", name, err)
 		}
+	}
+}
+
+func TestAnOriginWildcardWhoseLoadBalancerFailedToRaiseIsRaisedOnTheNextReconcile(t *testing.T) {
+	t.Parallel()
+	balancer, w := shielding(t)
+	shielded := balancer.Shielded()
+	ctx := context.Background()
+	if _, err := shielded.ReconcileOriginWildcard(ctx, originWildcardSpec(zonePull)); err != nil {
+		t.Fatal(err)
+	}
+	if err := keyvalue.Forget(ctx, shielded.deps.KeyValues, shielded.originWildcardKey(environment.TierProduction)); err != nil {
+		t.Fatal(err)
+	}
+	stack := ShieldedLoadBalancerStack(environment.TierProduction)
+	w.breakUp(stack, errors.New("compute quota exceeded"))
+	if _, err := shielded.ReconcileOriginWildcard(ctx, originWildcardSpec(zonePull)); err == nil {
+		t.Fatal("ReconcileOriginWildcard succeeded, want the failed raise")
+	}
+	w.breakUp(stack, nil)
+	raised := shieldedRaises(w)
+
+	if _, err := shielded.ReconcileOriginWildcard(ctx, originWildcardSpec(zonePull)); err != nil {
+		t.Fatalf("the retry = %v", err)
+	}
+
+	if shieldedRaises(w) != raised+1 {
+		t.Errorf("the retry raised the load balancer %d times, want once: an origin wildcard whose raise failed is never served otherwise", shieldedRaises(w)-raised)
+	}
+}
+
+func TestADestroyOfTheOriginWildcardThatFailedToRaiseTheLoadBalancerFinishesOnTheNextDestroy(t *testing.T) {
+	t.Parallel()
+	balancer, w := shielding(t)
+	shielded := balancer.Shielded()
+	ctx := context.Background()
+	if _, err := shielded.ReconcileOriginWildcard(ctx, originWildcardSpec(zonePull)); err != nil {
+		t.Fatal(err)
+	}
+	stack := ShieldedLoadBalancerStack(environment.TierProduction)
+	w.breakUp(stack, errors.New("compute quota exceeded"))
+	if err := shielded.DestroyOriginWildcard(ctx, environment.TierProduction); err == nil {
+		t.Fatal("DestroyOriginWildcard succeeded, want the failed raise")
+	}
+	w.breakUp(stack, nil)
+
+	if err := shielded.DestroyOriginWildcard(ctx, environment.TierProduction); err != nil {
+		t.Fatalf("the second destroy = %v", err)
+	}
+
+	if _, left := w.declarations(stack)[originEntryName(environment.TierProduction, originBase)]; left {
+		t.Error("the shielded program still enters the origin wildcard after the retried destroy")
+	}
+	if _, record, err := shielded.readTrust(ctx, environment.TierProduction); err != nil {
+		t.Fatal(err)
+	} else if _, claimed := record.Hostnames["*."+originBase]; claimed {
+		t.Error("the trust record still holds a claim for the origin wildcard after the retried destroy")
 	}
 }
 

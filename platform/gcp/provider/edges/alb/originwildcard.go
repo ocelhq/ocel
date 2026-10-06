@@ -23,6 +23,8 @@ import (
 type originWildcardEntry struct {
 	BaseDomain  string `json:"baseDomain"`
 	Certificate string `json:"certificate"`
+	Raised      bool   `json:"raised,omitempty"`
+	Removing    bool   `json:"removing,omitempty"`
 }
 
 type OriginWildcardSpec struct {
@@ -85,7 +87,7 @@ func (e *Edge) ReconcileOriginWildcard(ctx context.Context, spec OriginWildcardS
 			Kind, spec.Tier, recorded.BaseDomain, spec.BaseDomain)
 	}
 	entry := originWildcardEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate}
-	isNew := recorded != entry
+	isNew := recorded != (originWildcardEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate, Raised: true})
 	if isNew {
 		if err := e.rememberOriginWildcard(ctx, spec.Tier, entry); err != nil {
 			return "", err
@@ -110,6 +112,12 @@ func (e *Edge) ReconcileOriginWildcard(ctx context.Context, spec OriginWildcardS
 	}
 	if isNew && fingerprintTrusted(before.listTrusted()) == fingerprintTrusted(after.listTrusted()) {
 		if balancer, err = e.raise(ctx, spec.Tier, progress.Discard()); err != nil {
+			return "", err
+		}
+	}
+	if isNew {
+		entry.Raised = true
+		if err := e.rememberOriginWildcard(ctx, spec.Tier, entry); err != nil {
 			return "", err
 		}
 	}
@@ -139,8 +147,11 @@ func (e *Edge) DestroyOriginWildcard(ctx context.Context, tier environment.Tier)
 	if err != nil || recorded.BaseDomain == "" {
 		return err
 	}
-	if err := keyvalue.Forget(ctx, e.deps.KeyValues, e.originWildcardKey(tier)); err != nil {
-		return fmt.Errorf("release which origin wildcard the %s load balancer of tier %s served: %w", Kind, tier, err)
+	if !recorded.Removing {
+		recorded.Removing = true
+		if err := e.rememberOriginWildcard(ctx, tier, recorded); err != nil {
+			return err
+		}
 	}
 	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(tier))
 	if err != nil {
@@ -151,7 +162,13 @@ func (e *Edge) DestroyOriginWildcard(ctx context.Context, tier environment.Tier)
 			return err
 		}
 	}
-	return e.withdrawClaims(ctx, tier, "*."+recorded.BaseDomain)
+	if err := e.withdrawClaims(ctx, tier, "*."+recorded.BaseDomain); err != nil {
+		return err
+	}
+	if err := keyvalue.Forget(ctx, e.deps.KeyValues, e.originWildcardKey(tier)); err != nil {
+		return fmt.Errorf("release which origin wildcard the %s load balancer of tier %s served: %w", Kind, tier, err)
+	}
+	return nil
 }
 
 func originEntryName(tier environment.Tier, baseDomain string) string {
