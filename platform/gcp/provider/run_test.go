@@ -29,7 +29,7 @@ func TestAServerlessRevisionScalesToNothingAndIsBilledPerRequest(t *testing.T) {
 	desired := desiredOf(t, serving{
 		service: "ocel-shop-prod-web",
 		image:   "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
-		account: "ocel-production@acme.iam.gserviceaccount.com",
+		account: "ocel-1a2b3c4d5e@acme.iam.gserviceaccount.com",
 		compute: provider.ComputeServerless,
 	})
 
@@ -51,8 +51,8 @@ func TestAServerlessRevisionScalesToNothingAndIsBilledPerRequest(t *testing.T) {
 		t.Errorf("a revision listens on %v, want %d, which is the port every image ocel builds binds",
 			container.Ports, containerimage.Port)
 	}
-	if template.ServiceAccount != "ocel-production@acme.iam.gserviceaccount.com" {
-		t.Errorf("a revision runs as %q, want the tier's own runtime account", template.ServiceAccount)
+	if template.ServiceAccount != "ocel-1a2b3c4d5e@acme.iam.gserviceaccount.com" {
+		t.Errorf("a revision runs as %q, want the app's own account it was handed", template.ServiceAccount)
 	}
 }
 
