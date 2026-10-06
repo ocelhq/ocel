@@ -93,7 +93,7 @@ func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreRaisedWith(t *testin
 	if slices.Contains(apisFor(nil), "pubsub.googleapis.com") {
 		t.Errorf("a bootstrap with no feature checks %v, and a project that runs no topic needs no Pub/Sub switched on", apisFor(nil))
 	}
-	for _, permission := range []string{"cloudtasks.queues.create", "cloudtasks.queues.setIamPolicy", "datastore.indexes.create", "resourcemanager.projects.get"} {
+	for _, permission := range []string{"cloudtasks.queues.create", "cloudtasks.queues.setIamPolicy", "datastore.schemas.create", "resourcemanager.projects.get"} {
 		if !slices.Contains(permissionsFor([]string{tasksFeature}), permission) {
 			t.Errorf("a %q bootstrap checks %v, want %s among them", tasksFeature, permissionsFor([]string{tasksFeature}), permission)
 		}
@@ -167,12 +167,36 @@ func TestOnlyCloudTasksMayActAsTheDelayAccount(t *testing.T) {
 	}
 }
 
-func TestABootstrapChecksItMayIndexTheTagsDatabase(t *testing.T) {
+func TestABootstrapChecksEveryPermissionItsFirestoreAdminCallsNeed(t *testing.T) {
 	t.Parallel()
 
-	for _, permission := range []string{"datastore.indexes.create", "datastore.indexes.get", "datastore.indexes.list", "datastore.indexes.update"} {
-		if !slices.Contains(permissionsFor(nil), permission) {
-			t.Errorf("a bootstrap with no feature checks %v, want %s among them", permissionsFor(nil), permission)
+	needs := map[string]string{
+		"datastore.databases.create":      "creating a Firestore database",
+		"datastore.databases.getMetadata": "reading a Firestore database",
+		"datastore.databases.update":      "protecting a Firestore database",
+		"datastore.databases.delete":      "deleting a Firestore database",
+		"datastore.operations.get":        "polling a Firestore operation",
+		"datastore.schemas.create":        "creating a Firestore index",
+		"datastore.schemas.list":          "listing Firestore indexes",
+		"datastore.schemas.update":        "exempting a Firestore field from indexing",
+	}
+	for _, features := range [][]string{nil, {tasksFeature}} {
+		for permission, call := range needs {
+			if !slices.Contains(permissionsFor(features), permission) {
+				t.Errorf("a bootstrap with features %v checks %v, want %s among them: %s would fail mid-apply", features, permissionsFor(features), permission, call)
+			}
+		}
+	}
+}
+
+func TestABootstrapChecksFirestoreIndexPermissionsByTheirCurrentNames(t *testing.T) {
+	t.Parallel()
+
+	for _, features := range [][]string{nil, {tasksFeature}} {
+		for _, permission := range permissionsFor(features) {
+			if strings.HasPrefix(permission, "datastore.indexes.") {
+				t.Errorf("a bootstrap with features %v checks %s, want datastore.schemas.*: Google's role reference lists only the schemas names", features, permission)
+			}
 		}
 	}
 }
