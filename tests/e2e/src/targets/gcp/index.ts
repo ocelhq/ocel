@@ -10,7 +10,13 @@ import {
   setsJourneyNonce,
   UNCAPPED_BODY_BYTES,
 } from "../../checks/context";
-import { GCP_BASE, journeyConfigIn, type Overlay, writeJourneyConfig } from "../../config";
+import {
+  GCP_BASE,
+  journeyConfigIn,
+  type Overlay,
+  overlayFor,
+  writeJourneyConfig,
+} from "../../config";
 import { currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
 import type { Cell, Lane, Phase } from "../../matrix/types";
@@ -22,7 +28,7 @@ import type { PrepareFailures } from "../../prepare";
 import type { CellUnderTest } from "../../run/cellRun";
 import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
-import { cloudflareUrls } from "../cloudflare";
+import { hostnameUrls } from "../hostnames";
 import type { Deployment, Exposure, ReleaseCycle, Restart, Sweeper, Target } from "../types";
 import { appBucketPrefix, deleteAppBucket, listAppBuckets, strayBuckets } from "./buckets";
 import { databaseFilter, deleteDatabase, listDatabases, strayDatabases } from "./cloudsql";
@@ -38,6 +44,7 @@ import {
 } from "./memorystore";
 import { gcpSlug, namespaceOf } from "./names";
 import {
+  ALB_FEATURE,
   deleteService,
   exposedServices,
   findAppService,
@@ -132,11 +139,21 @@ async function cellTree(cell: CellUnderTest): Promise<string> {
 }
 
 export function gcpSweepOverlay(cell: Cell, slug: string, env: NodeJS.ProcessEnv): Overlay {
-  return {
-    base: GCP_BASE,
-    slug: gcpSlug({ slug, fixture: cell.fixture }, env),
-    ...cell.variant.config,
-  };
+  return overlayFor(
+    { name: cell.name, slug, fixture: cell.fixture, variant: cell.variant },
+    "gcp",
+    env,
+  );
+}
+
+export function laneFeatures(env: NodeJS.ProcessEnv, emulated: boolean): string[] {
+  if (emulated) {
+    return [TASKS_FEATURE];
+  }
+  const zoned = ["OCEL_E2E_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"].every((name) =>
+    env[name]?.trim(),
+  );
+  return [NETWORK_FEATURE, TASKS_FEATURE, ...(zoned ? [ALB_FEATURE] : [])];
 }
 
 export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
@@ -197,7 +214,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
         base: GCP_BASE,
         slug: projectSlug(path.posix.basename(first.name), runId),
       });
-      const features = emulator ? [TASKS_FEATURE] : [NETWORK_FEATURE, TASKS_FEATURE];
+      const features = laneFeatures(process.env, emulator !== undefined);
       await ocel(
         dir,
         ["bootstrap", "production", "--yes", "--features", features.join(",")],
@@ -392,7 +409,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
   private async deployment(cell: CellUnderTest, phase: Phase): Promise<Deployment> {
     const found = await this.services();
     const urls =
-      cloudflareUrls(cell, process.env.OCEL_E2E_ZONE?.trim() || undefined) ??
+      hostnameUrls(cell, process.env.OCEL_E2E_ZONE?.trim() || undefined) ??
       new Map(
         cell.fixture.apps.map((app) => [
           app,

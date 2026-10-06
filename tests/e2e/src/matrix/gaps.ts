@@ -38,6 +38,7 @@ import { check, step } from "../steps";
 import { deploy, iac, kv, lifecycle, realtime, sdk, tasks } from "./fixtures";
 import type { Gap } from "./types";
 import {
+  alb,
   apiGateway,
   cloudflare,
   cloudflareInFrontOfContainers,
@@ -356,7 +357,7 @@ export const gaps: Gap[] = [
       },
       {
         on: ["gcp.floci"],
-        variants: [cloudflareOnGoogleCloud],
+        variants: [cloudflareOnGoogleCloud, alb],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -387,11 +388,18 @@ export const gaps: Gap[] = [
   {
     id: "no-cloudflare-zone",
     reason:
-      "a cell Cloudflare fronts is answered on a hostname in a zone the run's Cloudflare token can write, and only a run that names both deploys it",
+      "a cell Cloudflare fronts, or whose hostnames' records and certificate validation ocel writes in Cloudflare, is answered on a hostname in a zone the run's Cloudflare token can write, and only a run that names both deploys it",
     where: [
       {
         on: ["vps", "gcp"],
         variants: [cloudflareOnABox, cloudflareOnGoogleCloud],
+        whileUnset: ["OCEL_E2E_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+      {
+        on: ["gcp"],
+        variants: [alb],
         whileUnset: ["OCEL_E2E_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
         fails: [step.deploy],
         skipsCell: true,
@@ -410,6 +418,14 @@ export const gaps: Gap[] = [
         fails: [step.deploy],
         skipsCell: true,
       },
+    ],
+  },
+  {
+    id: "cloudflare-on-gcp-runs-no-worker",
+    reason:
+      "Cloudflare in front of a Google Cloud origin is a proxy that runs no worker, so the routing and cache a worker serves are absent, and the lane bootstraps no shielded load balancer for it to forward to",
+    where: [
+      { on: ["gcp"], variants: [cloudflareOnGoogleCloud], fails: [step.deploy], skipsCell: true },
     ],
   },
   {

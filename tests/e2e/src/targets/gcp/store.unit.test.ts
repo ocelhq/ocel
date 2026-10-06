@@ -4,6 +4,7 @@ import path from "node:path";
 import { repoRoot } from "../../paths";
 import { APP_LABEL, ENVIRONMENT_LABEL, labelValue, NAMESPACE_LABEL, PROJECT_LABEL } from "./names";
 import {
+  ALB_FEATURE,
   BOOTSTRAP_APIS,
   exposedServices,
   findAppService,
@@ -41,6 +42,17 @@ describe("the apis a bootstrap wants on", () => {
     );
     const named = iap.match(/proxyAPI\s*=\s*"([^"]+)"/);
     expect(named?.[1] ? [named[1]] : []).toEqual(PREVIEW_APIS);
+  });
+});
+
+describe("the load balancer feature", () => {
+  it("bootstraps the load balancer under the feature name the provider catalogues for the alb edge", async () => {
+    const go = await readFile(
+      path.join(repoRoot, "platform", "gcp", "provider", "bootstrapfeatures.go"),
+      "utf8",
+    );
+
+    expect(go).toMatch(new RegExp(`albFeature\\s*=\\s*"${ALB_FEATURE}"`));
   });
 });
 

@@ -54,6 +54,8 @@ export const cloudflareOnGoogleCloud = variant("cloudflare", {
   checks: SHIELDED_ORIGIN_CHECKS,
 });
 
+export const alb = variant("alb", { offeredOn: ["gcp"], config: { edge: "alb" } });
+
 export const registry = variant("registry", {
   offeredOn: ["vps"],
   config: { registry: { server: JOURNEY_REGISTRY, password: `\${${REGISTRY_TOKEN_ENV}}` } },

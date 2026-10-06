@@ -21,6 +21,7 @@ import { evidence } from "./evidence";
 import { deploy, sdk } from "./matrix/fixtures";
 import type { Fixture, Variant } from "./matrix/types";
 import {
+  alb,
   cloudflare,
   cloudflareInFrontOfContainers,
   cloudflareInFrontOfMixedComputes,
@@ -236,6 +237,43 @@ describe("overlayFor", () => {
     expect(
       overlayFor(cell(deploy.node, cloudflareOnABox), "vps", { OCEL_E2E_ZONE: "j.example" }),
     ).toMatchObject({ edge: "cloudflare", dns: "cloudflare" });
+  });
+
+  it("renders the alb edge from the gcp edge module", () => {
+    const rendered = renderConfig(
+      overlayFor(cell(deploy.node, alb), "gcp", { OCEL_E2E_ZONE: "j.example" }),
+    );
+
+    expect(rendered).toContain('import { alb } from "ocel/providers/gcp/edge";');
+    expect(rendered).toContain("  edge: alb(),");
+    expect(rendered).toContain("  dns: cloudflareDns(),");
+  });
+
+  it("writes the alb edge into a JSON config by its name", () => {
+    const written = JSON.parse(
+      renderJsonConfig("{}", overlayFor(cell(deploy.node, alb), "gcp", {})),
+    );
+
+    expect(written.edge).toBe("alb");
+  });
+
+  it("names hostnames and Cloudflare DNS for an alb cell when a zone is set", () => {
+    expect(overlayFor(cell(deploy.node, alb), "gcp", { OCEL_E2E_ZONE: "j.example" })).toMatchObject(
+      {
+        base: GCP_BASE,
+        edge: "alb",
+        dns: "cloudflare",
+        hostnames: { web: expect.stringMatching(/\.j\.example$/) },
+      },
+    );
+  });
+
+  it("names no hostname for an alb cell without a zone", () => {
+    const overlay = overlayFor(cell(deploy.node, alb), "gcp", {});
+
+    expect(overlay.edge).toBe("alb");
+    expect(overlay.dns).toBeUndefined();
+    expect(overlay.hostnames).toBeUndefined();
   });
 
   it("writes a gcp cloudflare cell's records through Cloudflare, since the edge only forwards a record that exists", () => {
