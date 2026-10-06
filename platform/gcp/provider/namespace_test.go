@@ -35,6 +35,7 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 				"task database":     names.TaskDatabase(environment.TierProduction),
 				"delay queue":       names.DelayQueue(environment.TierProduction),
 				"push account":      names.PushAccount(environment.TierProduction),
+				"refresh account":   names.RefreshAccount(environment.TierProduction),
 			} {
 				if !strings.HasPrefix(got, tc.stem) {
 					t.Errorf("the %s is %q, want it derived from namespace %q", what, got, tc.stem)
@@ -64,6 +65,10 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 			if got := names.PushAccountEmail(environment.TierProduction); !strings.HasPrefix(got, names.PushAccount(environment.TierProduction)+"@acme-prod.iam.gserviceaccount.com") ||
 				names.PushAccount(environment.TierProduction) == names.PushAccount(environment.TierPreview) || len(names.PushAccount(environment.TierProduction)) > 30 {
 				t.Errorf("PushAccount() = %q (%q), want an account of the tier's own, in 30 characters", names.PushAccount(environment.TierProduction), got)
+			}
+			if got := names.RefreshAccountEmail(environment.TierProduction); !strings.HasPrefix(got, names.RefreshAccount(environment.TierProduction)+"@acme-prod.iam.gserviceaccount.com") ||
+				names.RefreshAccount(environment.TierProduction) == names.RefreshAccount(environment.TierPreview) || len(names.RefreshAccount(environment.TierProduction)) > 30 {
+				t.Errorf("RefreshAccount() = %q (%q), want an account of the tier's own, in 30 characters", names.RefreshAccount(environment.TierProduction), got)
 			}
 			if names.Database() != tc.stem || names.KeyRing() != tc.stem {
 				t.Errorf("Database() = %q and KeyRing() = %q, want both %q", names.Database(), names.KeyRing(), tc.stem)
@@ -262,11 +267,35 @@ func TestAnAppsAccountIsNamedForItsNamespaceAndAHashOfItsTierProjectAndApp(t *te
 		"another app":         names.AppAccount(environment.TierProduction, "shop", "api"),
 		"the realtime":        names.RealtimeAccount(environment.TierProduction),
 		"the push":            names.PushAccount(environment.TierProduction),
+		"the refresh":         names.RefreshAccount(environment.TierProduction),
 		"the env source sync": names.EnvSourceSyncAccount(environment.TierProduction),
 	}
 	for what, other := range others {
 		if other == account {
 			t.Errorf("an app's account is %q, the same as %s", account, what)
+		}
+	}
+}
+
+func TestEachTierSignsNextRefreshesAsAnAccountOfItsOwn(t *testing.T) {
+	names := longNames(t)
+
+	production, preview := names.RefreshAccount(environment.TierProduction), names.RefreshAccount(environment.TierPreview)
+	for tier, account := range map[string]string{"production": production, "preview": preview} {
+		if !accountID.MatchString(account) {
+			t.Errorf("the %s refresh account %q is not an account ID IAM takes", tier, account)
+		}
+	}
+	if production == preview {
+		t.Errorf("both tiers sign refreshes as %q, want one account each", production)
+	}
+	for what, other := range map[string]string{
+		"the push":            names.PushAccount(environment.TierProduction),
+		"the realtime":        names.RealtimeAccount(environment.TierProduction),
+		"the env source sync": names.EnvSourceSyncAccount(environment.TierProduction),
+	} {
+		if production == other {
+			t.Errorf("the refresh account is %q, the same as %s", production, what)
 		}
 	}
 }

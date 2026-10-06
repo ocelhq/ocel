@@ -216,7 +216,7 @@ func TestABootstrapKeepsEveryTierAccountWhateverItsDescriptionSays(t *testing.T)
 	forged := appAccountDescription(environment.TierPreview, "shop", "web")
 	var accounts []listedAccount
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
-		for _, id := range []string{names.PushAccount(tier), names.RealtimeAccount(tier), names.EnvSourceSyncAccount(tier)} {
+		for _, id := range []string{names.PushAccount(tier), names.RefreshAccount(tier), names.RealtimeAccount(tier), names.EnvSourceSyncAccount(tier)} {
 			purpose, err := held.purposeOf(tier, id)
 			if err != nil {
 				t.Fatalf("purposeOf(%s, %s) = %v", tier, id, err)

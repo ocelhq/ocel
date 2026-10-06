@@ -53,7 +53,7 @@ func (n Names) readAppAccount(account *iam.ServiceAccount) (appAccount, bool) {
 		return appAccount{}, false
 	}
 	for _, each := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
-		if id == n.PushAccount(each) || id == n.RealtimeAccount(each) || id == n.EnvSourceSyncAccount(each) {
+		if id == n.PushAccount(each) || id == n.RefreshAccount(each) || id == n.RealtimeAccount(each) || id == n.EnvSourceSyncAccount(each) {
 			return appAccount{}, false
 		}
 	}

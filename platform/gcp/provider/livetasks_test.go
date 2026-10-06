@@ -78,7 +78,7 @@ func projectGrants(t *testing.T, role, member, database string) bool {
 	})
 }
 
-func TestLiveTheTasksFeatureGivesTheTierADelayQueueAPushAccountAndTheGrantsTheyNeed(t *testing.T) {
+func TestLiveTheTasksFeatureGivesTheTierADelayQueuePushAndRefreshAccountsAndTheGrantsTheyNeed(t *testing.T) {
 	p := live(t)
 	tier := environment.TierProduction
 	bootstrap := bootstrapped(t, p, tier, gcp.TasksFeature)
@@ -117,6 +117,9 @@ func TestLiveTheTasksFeatureGivesTheTierADelayQueueAPushAccountAndTheGrantsTheyN
 	if !accountGrants(t, names.PushAccountEmail(tier), "roles/iam.serviceAccountTokenCreator", agentOf(t, "@gcp-sa-pubsub.iam.gserviceaccount.com")) {
 		t.Error("Pub/Sub may not sign a push as the push account, so no push would reach a worker")
 	}
+	if !accountGrants(t, names.RefreshAccountEmail(tier), "roles/iam.serviceAccountUser", agentOf(t, "@gcp-sa-cloudtasks.iam.gserviceaccount.com")) {
+		t.Error("Cloud Tasks may not sign a Next refresh as the refresh account, so no stale page would be refreshed")
+	}
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, Remove: []string{gcp.TasksFeature}, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() removing %s = %v", gcp.TasksFeature, err)
 	}
@@ -126,6 +129,9 @@ func TestLiveTheTasksFeatureGivesTheTierADelayQueueAPushAccountAndTheGrantsTheyN
 	}
 	if _, err := accounts.Projects.ServiceAccounts.Get("projects/" + liveProject() + "/serviceAccounts/" + names.PushAccountEmail(tier)).Context(ctx).Do(); err == nil {
 		t.Error("the push account outlived the feature that made it")
+	}
+	if _, err := accounts.Projects.ServiceAccounts.Get("projects/" + liveProject() + "/serviceAccounts/" + names.RefreshAccountEmail(tier)).Context(ctx).Do(); err == nil {
+		t.Error("the refresh account outlived the feature that made it")
 	}
 	if _, err := tasksClient.GetQueue(ctx, &cloudtaskspb.GetQueueRequest{Name: queue}); status.Code(err) == codes.NotFound {
 		t.Error("the delay queue was deleted, and Cloud Tasks holds a deleted queue's name for 7 days: a feature added again within them could not make it")

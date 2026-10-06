@@ -162,7 +162,7 @@ func (b bootstrap) dropFeatures(ctx context.Context, read survey, req provider.B
 		return err
 	}
 	if slices.Contains(droppedFeatures(read.Stamp.Features, req), tasksFeature) {
-		ensureProgress(progress).Say("Taking down the " + string(req.Tier) + " task database, push account and grants, and purging its delay queue: this bootstrap no longer requests feature " + tasksFeature)
+		ensureProgress(progress).Say("Taking down the " + string(req.Tier) + " task database, push and refresh accounts and their grants, and purging its delay queue: this bootstrap no longer requests feature " + tasksFeature)
 		if err := b.tearTasks(ctx, req.Tier); err != nil {
 			return err
 		}

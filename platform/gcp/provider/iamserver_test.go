@@ -56,6 +56,8 @@ type iamServer struct {
 	queueAborts   int
 
 	tasksAbsent bool
+
+	deletedAccounts []string
 }
 
 type delayQueues struct {
@@ -65,6 +67,14 @@ type delayQueues struct {
 
 func (q delayQueues) CreateQueue(_ context.Context, req *cloudtaskspb.CreateQueueRequest) (*cloudtaskspb.Queue, error) {
 	return req.GetQueue(), nil
+}
+
+func (q delayQueues) GetQueue(_ context.Context, req *cloudtaskspb.GetQueueRequest) (*cloudtaskspb.Queue, error) {
+	return &cloudtaskspb.Queue{Name: req.GetName()}, nil
+}
+
+func (q delayQueues) PurgeQueue(_ context.Context, req *cloudtaskspb.PurgeQueueRequest) (*cloudtaskspb.Queue, error) {
+	return &cloudtaskspb.Queue{Name: req.GetName()}, nil
 }
 
 func (q delayQueues) GetIamPolicy(_ context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
@@ -230,6 +240,7 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 				w.Write([]byte(`{"error":{"code":409,"message":"already exists"}}`))
 			}
 		case r.Method == http.MethodDelete && strings.Contains(path, "/serviceAccounts/"):
+			s.deletedAccounts = append(s.deletedAccounts, path)
 			w.Write([]byte(`{}`))
 		case s.accounts != nil && r.Method == http.MethodGet && strings.Contains(path, "/serviceAccounts/") &&
 			!s.accounts[strings.TrimSuffix(path[strings.LastIndex(path, "/")+1:], "@acme-prod.iam.gserviceaccount.com")]:
