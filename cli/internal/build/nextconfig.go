@@ -44,17 +44,50 @@ func FindNextConfigConflicts(cfg *project.Project, host Host) ([]NextConfigConfl
 		if a.Framework() != buildoutput.FrameworkNext {
 			continue
 		}
-		file, text, err := readNextConfig(filepath.Join(cfg.Dir, a.Path))
+		conflicts, err := findAppNextConfigConflicts(cfg, a)
 		if err != nil {
 			return nil, err
 		}
-		for _, s := range nextConfigSettings {
-			if s.pattern.MatchString(text) {
-				found = append(found, NextConfigConflict{App: a.Name, ConfigFile: file, Setting: s.setting})
+		found = append(found, conflicts...)
+	}
+	return found, nil
+}
+
+func RefuseNextFunctionsWithOwnAdapter(cfg *project.Project) error {
+	var refusals []error
+	for _, a := range FunctionApps(cfg.Apps) {
+		if a.Framework() != buildoutput.FrameworkNext {
+			continue
+		}
+		conflicts, err := findAppNextConfigConflicts(cfg, a)
+		if err != nil {
+			return err
+		}
+		for _, c := range conflicts {
+			if c.Setting == OwnAdapter {
+				refusals = append(refusals, c.functionRefusal())
 			}
 		}
 	}
+	return errors.Join(refusals...)
+}
+
+func findAppNextConfigConflicts(cfg *project.Project, a project.App) ([]NextConfigConflict, error) {
+	file, text, err := readNextConfig(filepath.Join(cfg.Dir, a.Path))
+	if err != nil {
+		return nil, err
+	}
+	var found []NextConfigConflict
+	for _, s := range nextConfigSettings {
+		if s.pattern.MatchString(text) {
+			found = append(found, NextConfigConflict{App: a.Name, ConfigFile: file, Setting: s.setting})
+		}
+	}
 	return found, nil
+}
+
+func (c NextConfigConflict) functionRefusal() error {
+	return fmt.Errorf(`app %q sets adapterPath in %[2]s, and next build then runs that adapter in place of ocel's, which writes the output ocel deploys: delete adapterPath from %[2]s`, c.App, c.ConfigFile)
 }
 
 func readNextConfig(dir string) (file, text string, err error) {

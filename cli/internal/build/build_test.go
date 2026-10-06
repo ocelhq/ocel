@@ -370,6 +370,27 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses a serverless next app that names its own adapter before next build runs", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		writeNextConfig(t, root, "web", "next.config.mjs", `export default { adapterPath: "./a.mjs" }`)
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "web")}}
+		ran := false
+
+		err := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
+			ran = true
+			return nil
+		}}.Build(context.Background(), cfg, nil, Log{})
+		if err == nil || !strings.Contains(err.Error(), "sets adapterPath in next.config.mjs") {
+			t.Errorf("Build() = %v, want a refusal naming adapterPath in next.config.mjs", err)
+		}
+		if ran {
+			t.Error("Build() ran the node build for an app whose adapter ocel cannot run")
+		}
+	})
+
 	t.Run("names the missing build script when none was materialized", func(t *testing.T) {
 		t.Parallel()
 
