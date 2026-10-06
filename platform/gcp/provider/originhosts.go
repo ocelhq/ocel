@@ -3,8 +3,7 @@ package gcp
 import (
 	"context"
 	"errors"
-	"net/url"
-	"strings"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -18,7 +17,7 @@ const maxDNSLabel = 63
 
 type originRouting interface {
 	RouteOriginHost(ctx context.Context, host alb.OriginHost) error
-	UnrouteOriginHost(ctx context.Context, tier environment.Tier, hostname string) error
+	UnrouteOriginHosts(ctx context.Context, tier environment.Tier, service, revision string) error
 }
 
 func (p *Provider) originRouting() originRouting {
@@ -59,13 +58,13 @@ func (p *Provider) readOriginBase(ctx context.Context, spec provider.StackSpec) 
 func (p *Provider) routeOriginHost(
 	ctx context.Context,
 	spec provider.StackSpec,
-	base, service, tag string,
+	base, service, tag, revision string,
 	runProgress progress.Log,
 ) (string, error) {
 	hostname := originHostname(spec.Ref.Name.Release.String(), service, base)
 	ensureProgress(runProgress).Say("Routing " + hostname + " to revision tag " + tag + " of Cloud Run service " + service)
 	err := p.originRouting().RouteOriginHost(ctx, alb.OriginHost{
-		Tier: spec.Ref.Tier, Slug: spec.Ref.Project, Hostname: hostname, Service: service, Tag: tag,
+		Tier: spec.Ref.Tier, Slug: spec.Ref.Project, Hostname: hostname, Service: service, Tag: tag, Revision: revision,
 	})
 	if err != nil {
 		return "", err
@@ -73,14 +72,31 @@ func (p *Provider) routeOriginHost(
 	return "https://" + hostname, nil
 }
 
-func (p *Provider) unrouteOriginHosts(ctx context.Context, tier environment.Tier, functions []provider.Function) error {
+func (p *Provider) unrouteServiceOriginHosts(ctx context.Context, tier environment.Tier, functions []provider.Function) error {
 	var errs []error
-	for _, function := range functions {
-		parsed, err := url.Parse(function.URL)
-		if err != nil || parsed.Hostname() == "" || strings.HasSuffix(parsed.Hostname(), ".run.app") {
-			continue
-		}
-		errs = append(errs, p.originRouting().UnrouteOriginHost(ctx, tier, parsed.Hostname()))
+	for _, service := range slices.Compact(slices.Sorted(slices.Values(functionServices(functions)))) {
+		errs = append(errs, p.originRouting().UnrouteOriginHosts(ctx, tier, service, ""))
 	}
 	return errors.Join(errs...)
+}
+
+func (p *Provider) unrouteRevisionOriginHosts(ctx context.Context, tier environment.Tier, functions []provider.Function) error {
+	var errs []error
+	for _, function := range functions {
+		if function.Physical == "" || function.Revision == "" {
+			continue
+		}
+		errs = append(errs, p.originRouting().UnrouteOriginHosts(ctx, tier, function.Physical, function.Revision))
+	}
+	return errors.Join(errs...)
+}
+
+func functionServices(functions []provider.Function) []string {
+	services := make([]string, 0, len(functions))
+	for _, function := range functions {
+		if function.Physical != "" {
+			services = append(services, function.Physical)
+		}
+	}
+	return services
 }
