@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { newMetadataToken } from "../src/next/metadata-token.mjs";
 
 const path = "/computeMetadata/v1/instance/service-accounts/default/token";
@@ -68,7 +68,9 @@ test("a metadata server that never answers fails the token after its timeout", a
     })) as typeof fetch;
   const source = newMetadataToken({ fetch: hang, service: "Firestore", timeoutMs: 20 });
 
-  await expect(source.token()).rejects.toThrow("aborted");
+  await expect(source.token()).rejects.toThrow(
+    "ocel: the metadata server gave no Firestore token within 20 ms",
+  );
 });
 
 test("a body that stalls after the metadata server answered fails the token after its timeout", async () => {
@@ -81,5 +83,61 @@ test("a body that stalls after the metadata server answered fails the token afte
   })) as unknown as typeof fetch;
   const source = newMetadataToken({ fetch: stalled, service: "Firestore", timeoutMs: 20 });
 
-  await expect(source.token()).rejects.toThrow("aborted");
+  await expect(source.token()).rejects.toThrow(
+    "ocel: the metadata server gave no Firestore token within 20 ms",
+  );
+});
+
+test("a metadata server that never answers fails the token after five seconds when no timeout is given", async () => {
+  vi.useFakeTimers();
+  try {
+    const hang = ((_input: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      })) as typeof fetch;
+    const source = newMetadataToken({ fetch: hang, service: "Firestore" });
+    let settled = false;
+    const failed = expect(source.token()).rejects.toThrow("within 5000 ms");
+    failed.finally(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await failed;
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a metadata server that cannot be reached is named in the failure", async () => {
+  const source = newMetadataToken({
+    fetch: (async () => {
+      throw new TypeError("fetch failed");
+    }) as typeof fetch,
+    service: "Firestore",
+  });
+
+  await expect(source.token()).rejects.toThrow(
+    "ocel: the metadata server could not be reached for a Firestore token: fetch failed",
+  );
+});
+
+test("a token body that cannot be read fails without quoting the body", async () => {
+  const unreadable = "ocel: the metadata server answered with no Firestore token it could read";
+  for (const body of [new Response("ya29.secret", { status: 200 }), Response.json({})]) {
+    const source = newMetadataToken({
+      fetch: (async () => body) as typeof fetch,
+      service: "Firestore",
+    });
+
+    const error = await source.token().then(
+      () => undefined,
+      (e: unknown) => e as Error,
+    );
+
+    expect(error?.message).toBe(unreadable);
+    expect(error?.message).not.toContain("ya29");
+  }
 });

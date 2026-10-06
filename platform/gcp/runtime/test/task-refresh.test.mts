@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import type { Refresh } from "@framework/next-runtime/refresh";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import {
   isRefreshTaskSignedBy,
   refreshSignatureHeader,
@@ -222,4 +222,27 @@ test("a refresh that cannot be queued names neither the token nor the secret", a
   expect(error).toBeInstanceOf(Error);
   expect((error as Error).message).not.toContain("t1");
   expect((error as Error).message).not.toContain("s1");
+});
+
+test("a token that never comes fails each attempt after two seconds and names the metadata server", async () => {
+  vi.useFakeTimers();
+  try {
+    const r = rig(() => new Response("{}"));
+    const hanging = ((input: string | URL | Request, init?: RequestInit) =>
+      String(input).includes("computeMetadata")
+        ? new Promise<Response>((_, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+          })
+        : r.fetch(input, init)) as typeof fetch;
+
+    const failed = expect(schedule(r, { fetch: hanging })(refresh)).rejects.toThrow(
+      /did not queue the refresh of \/blog\?page=2: ocel: the metadata server gave no Cloud Tasks token within 2000 ms/,
+    );
+    await vi.advanceTimersByTimeAsync(3 * 2_000);
+
+    await failed;
+    expect(r.tasks).toHaveLength(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });

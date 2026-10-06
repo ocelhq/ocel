@@ -36,8 +36,8 @@ export function newTaskRefresh(options: TaskRefreshOptions): ScheduleRefresh {
     ? undefined
     : newMetadataToken({
         service: "Cloud Tasks",
-        fetch: (input, init) =>
-          doFetch(input, { ...init, signal: AbortSignal.timeout(attemptTimeoutMs) }),
+        fetch: doFetch,
+        timeoutMs: attemptTimeoutMs,
         metadataOrigin: options.metadataOrigin,
         now,
       });
@@ -98,7 +98,7 @@ export function newTaskRefresh(options: TaskRefreshOptions): ScheduleRefresh {
         throw new Refused(failure(refresh, cause).message);
       } catch (error) {
         if (error instanceof Refused) throw error;
-        cause = error instanceof Error ? error.name : "failed";
+        cause = error instanceof Error ? error.message : "failed";
       }
     }
     throw failure(refresh, cause);
