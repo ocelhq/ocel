@@ -9,7 +9,7 @@ import { writeNextProjectFixture } from "../test-support/next-project-fixture.mj
 
 const launcherModule = `module.exports = {
   async handler(req, res) {
-    req.headers[Symbol.for("ocel.next.stale-entry.v1")] = 1000;
+    req.headers[Symbol.for("ocel.next.stale-entry.v2")] = { key: "blog", lastModified: 1000 };
     res.end(String(req.headers.purpose));
   },
 };
@@ -74,7 +74,7 @@ test("a host that refreshes by request has a stale hit served as it is and refre
   const res = await fetch(`http://127.0.0.1:${port}/blog`);
 
   expect(await res.text()).toBe("prefetch");
-  expect(scheduled.map(({ url, lastModified }) => ({ url, lastModified }))).toEqual([
-    { url: "/blog", lastModified: 1000 },
+  expect(scheduled.map(({ url, key, lastModified }) => ({ url, key, lastModified }))).toEqual([
+    { url: "/blog", key: "blog", lastModified: 1000 },
   ]);
 });

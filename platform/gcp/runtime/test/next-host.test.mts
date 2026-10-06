@@ -209,7 +209,7 @@ test("the GCP host's refresh gives up on a re-render once the time the service h
 
   try {
     await expect(
-      host.scheduleRefresh!({ url: "/blog", lastModified: 1, headers: {} }),
+      host.scheduleRefresh!({ url: "/blog", key: "blog", lastModified: 1, headers: {} }),
     ).rejects.toThrow(/did not answer within 50ms/);
     expect(Date.now() - started).toBeLessThan(250);
   } finally {

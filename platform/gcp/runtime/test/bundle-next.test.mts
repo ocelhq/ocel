@@ -110,7 +110,7 @@ module.exports = {
       res.end("fresh");
       return;
     }
-    req.headers[Symbol.for("ocel.next.stale-entry.v1")] = 1000;
+    req.headers[Symbol.for("ocel.next.stale-entry.v2")] = { key: "blog", lastModified: 1000 };
     res.setHeader("x-nextjs-cache", "STALE");
     res.end("stale");
   },

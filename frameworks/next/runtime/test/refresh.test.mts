@@ -105,9 +105,9 @@ async function serving(
   return seen;
 }
 
-function staleHit(lastModified: number) {
+function staleHit(lastModified: number, key = "blog") {
   return (req: http.IncomingMessage, res: http.ServerResponse) => {
-    noteStaleEntry(req.headers as Record<string | symbol, any>, lastModified);
+    noteStaleEntry(req.headers as Record<string | symbol, any>, { key, lastModified });
     res.end("stale page");
   };
 }
@@ -124,10 +124,42 @@ test("schedules a refresh of the stale entry it served, through the host", async
   expect(seen.scheduled).toEqual([
     {
       url: "/blog?page=2",
+      key: "blog",
       lastModified: 1_000,
       headers: { host: "shop.example", [refreshHeader]: "1000" },
     },
   ]);
+});
+
+test("a stale hit schedules a refresh naming the entry it served", async () => {
+  const seen = await serving(staleHit(1_000, "blog/page-2"));
+
+  expect(seen.scheduled[0]?.key).toBe("blog/page-2");
+});
+
+test("a request that read two stale entries refreshes the newer one", async () => {
+  const seen = await serving((req, res) => {
+    const headers = req.headers as Record<string | symbol, any>;
+    noteStaleEntry(headers, { key: "a", lastModified: 2_000 });
+    noteStaleEntry(headers, { key: "b", lastModified: 1_000 });
+    res.end("stale page");
+  });
+
+  expect(seen.scheduled).toHaveLength(1);
+  expect(seen.scheduled[0]).toMatchObject({
+    key: "a",
+    lastModified: 2_000,
+    headers: { [refreshHeader]: "2000" },
+  });
+});
+
+test("a stale-entry note of another shape schedules nothing", async () => {
+  const seen = await serving((req, res) => {
+    (req.headers as Record<string | symbol, any>)[Symbol.for("ocel.next.stale-entry.v2")] = 1000;
+    res.end("stale page");
+  });
+
+  expect(seen.scheduled).toEqual([]);
 });
 
 test("serves the whole stale page when the host's refresh throws as it is asked for", async () => {
