@@ -577,16 +577,8 @@ func (b bootstrap) purposeOf(tier environment.Tier, name string) accountPurpose 
 		return b.syncPurpose(tier)
 	case b.clients.PushAccount(tier):
 		return b.pushPurpose(tier)
-	case b.clients.RealtimeAccount(tier):
-		return b.realtimePurpose(tier)
 	}
-	return accountPurpose{
-		displayName: "ocel " + string(tier) + " delayed messages",
-		description: "the identity a delayed message of the " + string(tier) + " tier is published to its topic as",
-		grant:       func(context.Context, environment.Tier) error { return nil },
-		forget:      func(context.Context, environment.Tier) error { return nil },
-		granted:     func(context.Context, environment.Tier) (bool, error) { return true, nil },
-	}
+	return b.realtimePurpose(tier)
 }
 
 func (b bootstrap) makeAccount(ctx context.Context, read survey, name string) error {

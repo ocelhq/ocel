@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -78,6 +79,21 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 	for _, topic := range []string{names.Topic("orders"), names.DeadLetterTopic("orders", "ship"), names.DeadLetterTopic("orders", "bill")} {
 		if !topicExists(t, topic) {
 			t.Errorf("the Pub/Sub topic %s is missing after ProvisionTopic()", topic)
+		}
+	}
+
+	pubsubService, err := workloadClients(t).PubSub()
+	if err != nil {
+		t.Fatal(err)
+	}
+	topicPolicy, err := pubsubService.Projects.Topics.GetIamPolicy("projects/" + liveProject() + "/topics/" + names.Topic("orders")).Context(ctx).Do()
+	if err != nil {
+		t.Fatalf("GetIamPolicy(%s) = %v", names.Topic("orders"), err)
+	}
+	tierAccount := "serviceAccount:ocel-" + string(ref.Tier) + "@" + liveProject() + ".iam.gserviceaccount.com"
+	for _, bound := range topicPolicy.Bindings {
+		if slices.Contains(bound.Members, tierAccount) {
+			t.Errorf("topic %s grants %s to %s, and no account of the tier's own publishes: a delayed message is published as the app that sent it", names.Topic("orders"), bound.Role, tierAccount)
 		}
 	}
 

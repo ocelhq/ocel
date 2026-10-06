@@ -35,8 +35,6 @@ const (
 	accountHashLen       = 10
 )
 
-const longestTier = environment.TierProduction
-
 var uuidLike = regexp.MustCompile(`[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}`)
 
 type Names struct {
@@ -60,14 +58,6 @@ func (n Names) Repository(tier environment.Tier) string { return n.Bucket(tier) 
 
 func (n Names) RepositoryPath(region string, tier environment.Tier) string {
 	return region + dockerRegistryHost + "/" + n.project + "/" + n.Repository(tier)
-}
-
-func (n Names) DelayAccount(tier environment.Tier) string {
-	return string(n.namespace) + "-" + string(tier)
-}
-
-func (n Names) DelayAccountEmail(tier environment.Tier) string {
-	return n.DelayAccount(tier) + "@" + n.project + accountDomain
 }
 
 const (
@@ -335,12 +325,12 @@ func (n Names) fit() error {
 				"Name a namespace in %s that does not",
 			n.Database(), provider.NamespaceEnvVar)
 	}
-	if account := n.DelayAccount(longestTier); len(account) > maxAccountID {
+	if length := len(n.namespace) + len("-") + accountHashLen; length > maxAccountID {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"the %s service account this bootstrap names is %d characters and Google takes %d: "+
-				"a delayed message of the %s tier is published as it, so the tier is part of its name.\n"+
+			"the service accounts this bootstrap names are %d characters and Google takes %d: "+
+				"every tier and app account is the namespace, a dash and %d characters.\n"+
 				"Name a shorter namespace in %s",
-			account, len(account), maxAccountID, longestTier, provider.NamespaceEnvVar)
+			length, maxAccountID, accountHashLen, provider.NamespaceEnvVar)
 	}
 	return nil
 }

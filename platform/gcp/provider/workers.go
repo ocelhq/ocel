@@ -47,17 +47,17 @@ func publishURL(c *clients) string {
 	return topics.PublishURL
 }
 
-func tasksManifest(c *clients, ref provider.StackRef, declared map[string]*provider.TopicSpec) *live.Tasks {
+func tasksManifest(c *clients, ref provider.StackRef, app string, declared map[string]*provider.TopicSpec) *live.Tasks {
 	pinned := make(map[string]provider.TopicSpec, len(declared))
 	for name, spec := range declared {
 		pinned[name] = *spec
 	}
 	return &live.Tasks{
-		Environment:  ref.Name.Env,
-		Topics:       pinned,
-		DelayQueue:   c.DelayQueuePath(c.region, ref.Tier),
-		DelayAccount: c.DelayAccountEmail(ref.Tier),
-		PublishURL:   publishURL(c),
+		Environment: ref.Name.Env,
+		Topics:      pinned,
+		DelayQueue:  c.DelayQueuePath(c.region, ref.Tier),
+		Account:     c.AppAccountEmail(ref.Tier, ref.Project, app),
+		PublishURL:  publishURL(c),
 	}
 }
 
@@ -97,7 +97,7 @@ func (p *Provider) tasksFor(ctx context.Context, c *clients, spec provider.Stack
 	if err != nil {
 		return nil, nil, err
 	}
-	return tasksManifest(c, spec.Ref, declared), declared, nil
+	return tasksManifest(c, spec.Ref, spec.App.App, declared), declared, nil
 }
 
 type deployedWorker struct {

@@ -108,15 +108,6 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_service_account:ocel-preview",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_service_account",
-      "name": "ocel-preview",
-      "region": "europe-west1",
-      "properties": {}
-    },
-    {
       "id": "project:shop/shared:preview/google_service_account:ocel-345a57cc3f",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",

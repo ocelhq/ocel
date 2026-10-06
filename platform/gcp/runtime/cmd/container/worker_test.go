@@ -47,9 +47,9 @@ func pinned(t *testing.T, endpoint string) (variables.Manifest, topics.Store) {
 				Name: "resize", Worker: "worker", Exclusive: true,
 				Retry: provider.RetryPolicy{MaxAttempts: 3, MinDelay: time.Second, MaxDelay: time.Minute},
 			}}}},
-			DelayQueue:   "projects/floci-local/locations/europe-west1/queues/ocel-preview-delays",
-			DelayAccount: "ocel-preview@floci-local.iam.gserviceaccount.com",
-			PublishURL:   endpoint,
+			DelayQueue: "projects/floci-local/locations/europe-west1/queues/ocel-preview-delays",
+			Account:    "ocel-preview@floci-local.iam.gserviceaccount.com",
+			PublishURL: endpoint,
 		},
 	}
 	clients := &ports.Clients{Namespace: "ocel", Project: manifest.Project, Region: manifest.Region, Endpoint: endpoint}

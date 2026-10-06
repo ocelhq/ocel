@@ -86,9 +86,6 @@ func (b bootstrap) raiseTasks(ctx context.Context, tier environment.Tier, progre
 	if err := b.makeAccount(ctx, survey{Tier: tier}, b.clients.PushAccount(tier)); err != nil {
 		return err
 	}
-	if err := b.grantTaskWrites(ctx, tier); err != nil {
-		return err
-	}
 	ensureProgress(progress).Debug("The " + string(tier) + " tier keeps its runs in " + b.clients.TaskDatabase(tier) + " and delays messages in " + b.clients.DelayQueue(tier))
 	return nil
 }
@@ -134,7 +131,6 @@ func (b bootstrap) tasksFree(ctx context.Context, tier environment.Tier, feature
 
 func (b bootstrap) tearTasks(ctx context.Context, tier environment.Tier) error {
 	steps := []func() error{
-		func() error { return b.forgetTaskWrites(ctx, tier) },
 		func() error { return b.takeAccount(ctx, tier, b.clients.PushAccount(tier)) },
 		func() error { return b.purgeDelayQueue(ctx, tier) },
 	}
@@ -195,26 +191,6 @@ func (b bootstrap) pushSigningGranted(ctx context.Context, tier environment.Tier
 		return false, err
 	}
 	return b.clients.accountRoleGranted(ctx, b.clients.PushAccount(tier), tokenCreatorRole, agent)
-}
-
-func (b bootstrap) grantTaskWrites(ctx context.Context, tier environment.Tier) error {
-	return b.bindTaskWrites(ctx, tier, true)
-}
-
-func (b bootstrap) forgetTaskWrites(ctx context.Context, tier environment.Tier) error {
-	return b.bindTaskWrites(ctx, tier, false)
-}
-
-func (b bootstrap) bindTaskWrites(ctx context.Context, tier environment.Tier, granting bool) error {
-	agent, err := b.clients.ReadServiceAgent(ctx, cloudTasksAgentDomain)
-	if err != nil {
-		return err
-	}
-	return b.clients.bindAccountRole(ctx, b.clients.DelayAccount(tier), runAsRole, agent, granting)
-}
-
-func delayMember(c *clients, tier environment.Tier) string {
-	return "serviceAccount:" + c.DelayAccountEmail(tier)
 }
 
 func (b bootstrap) delayQueuePath(tier environment.Tier) string {

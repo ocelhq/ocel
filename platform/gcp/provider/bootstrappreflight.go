@@ -135,14 +135,10 @@ func queueAdminGrant(queue string) string {
 	return "roles/cloudtasks.queueAdmin on the queue " + queue
 }
 
-func accountAdminGrant(email string) string {
-	return "roles/iam.serviceAccountAdmin on the service account " + email
-}
-
-func delayGrants(names Names, region string) []string {
+func queueGrants(names Names, region string) []string {
 	var grants []string
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		grants = append(grants, accountAdminGrant(names.DelayAccountEmail(tier)), queueAdminGrant(names.DelayQueuePath(region, tier)))
+		grants = append(grants, queueAdminGrant(names.DelayQueuePath(region, tier)))
 	}
 	return grants
 }

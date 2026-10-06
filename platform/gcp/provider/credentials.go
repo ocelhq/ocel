@@ -163,7 +163,7 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose) (edge.Credentia
 		if purpose == edge.PurposeDeploy {
 			names := Names{namespace: c.Namespace, project: project}
 			roles = append(roles, realtimeSecretsGrant(names), appGrantsGrant(), names.AppAccountsRolePath())
-			roles = append(roles, delayGrants(names, c.Region)...)
+			roles = append(roles, queueGrants(names, c.Region)...)
 			heading += fmt.Sprintf(", where %s is the number `gcloud projects describe %s --format='value(projectNumber)'` prints", projectNumberHole, project)
 		}
 		return edge.CredentialDocument{

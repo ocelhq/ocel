@@ -173,7 +173,6 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 	rows := map[string]string{
 		"firestore:database/" + liveNames(t).Database():                 provider.StackGroupKind,
 		"firestore:database/" + liveNames(t).TagDatabase(tier):          provider.StackGroupKind,
-		"iam:serviceaccount/" + liveNames(t).DelayAccount(tier):         provider.StackGroupKind,
 		"storage:bucket/" + liveNames(t).Bucket(tier):                   provider.StackGroupKind,
 		"storage:bucket/" + liveNames(t).StateBucket(tier):              provider.StackGroupKind,
 		"kms:keyring/" + liveNames(t).KeyRing():                         provider.StackGroupKind,
@@ -866,54 +865,6 @@ func accounts(t *testing.T) *iam.Service {
 		t.Fatalf("reach the IAM API: %v", err)
 	}
 	return service
-}
-
-func TestLiveTheDelayAccountExistsWithTheGrantADeployNeeds(t *testing.T) {
-	p := live(t)
-	tier := environment.TierProduction
-	bootstrapped(t, p, tier)
-
-	ctx := context.Background()
-	service := accounts(t)
-	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).DelayAccountEmail(tier)
-	if _, err := service.Projects.ServiceAccounts.Get(path).Context(ctx).Do(); err != nil {
-		t.Fatalf("Get(%s) after a bootstrap = %v, want the account a delayed message of the tier is published as", path, err)
-	}
-
-	policy, err := service.Projects.ServiceAccounts.GetIamPolicy(path).Context(ctx).Do()
-	if err != nil {
-		t.Fatalf("GetIamPolicy(%s) = %v", path, err)
-	}
-	granted := false
-	for _, binding := range policy.Bindings {
-		if binding.Role == "roles/iam.serviceAccountUser" && len(binding.Members) > 0 {
-			granted = true
-		}
-	}
-	if !granted {
-		t.Errorf("the policy on %s is %+v, want the bootstrapping principal bound to roles/iam.serviceAccountUser: without it no deploy may hand a delayed message to Cloud Tasks to publish as this account",
-			path, policy.Bindings)
-	}
-}
-
-func TestLiveRemovingABootstrapTakesTheDelayAccountWithIt(t *testing.T) {
-	p := live(t)
-	servicesEnabled(t)
-	tier := environment.TierPreview
-
-	ctx := context.Background()
-	bootstrap := bootstrapOf(t, p)
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
-		t.Fatalf("Apply(%s) = %v", tier, err)
-	}
-	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
-		t.Fatalf("Remove(%s) = %v", tier, err)
-	}
-
-	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).DelayAccountEmail(tier)
-	if _, err := accounts(t).Projects.ServiceAccounts.Get(path).Context(ctx).Do(); err == nil {
-		t.Errorf("%s still exists after the bootstrap that named it was removed, and an identity nothing runs as is one more thing to explain", path)
-	}
 }
 
 func TestLiveRemovingATierBesideItsSiblingForgetsEveryRecordItKeptAndNoneOfTheSiblings(t *testing.T) {

@@ -19,10 +19,10 @@ import (
 var bothTiers = []environment.Tier{environment.TierProduction, environment.TierPreview}
 
 func longestNames() Names {
-	return Names{namespace: provider.Namespace(strings.Repeat("a", maxAccountID-len("-"+string(longestTier)))), project: "acme-prod"}
+	return Names{namespace: provider.Namespace(strings.Repeat("a", maxAccountID-len("-")-accountHashLen)), project: "acme-prod"}
 }
 
-func TestTheSyncAccountFitsTheLongestNamespaceTheDelayAccountLeavesRoomFor(t *testing.T) {
+func TestTheSyncAccountFitsTheLongestNamespaceAnAccountLeavesRoomFor(t *testing.T) {
 	t.Parallel()
 	names := longestNames()
 	if err := names.fit(); err != nil {
@@ -54,8 +54,8 @@ func TestEachTierSyncsAsAnAccountOfItsOwnThatEveryReadNamesTheSame(t *testing.T)
 		t.Errorf("the production sync account is %s once and %s again, and a survey could not find the account an apply made", production, again)
 	}
 	for _, tier := range bothTiers {
-		if names.EnvSourceSyncAccount(tier) == names.DelayAccount(tier) {
-			t.Errorf("the %s sync runs as the account every app runs as, and an app would then write every value", tier)
+		if names.EnvSourceSyncAccount(tier) == names.AppAccount(tier, "shop", "api") {
+			t.Errorf("the %s sync runs as an app's account, and an app would then write every value", tier)
 		}
 	}
 	if got, want := names.EnvSourceSync(environment.TierPreview), "ocel-preview-envsourcesync"; got != want {
@@ -97,7 +97,7 @@ func TestTheSyncAccountMayWriteThisDatabaseAndSealAndOpenUnderItsTierKeyAlone(t 
 		}
 	}
 	if readers, _ := server.projectMembers(appRecordsRole); slices.Contains(readers, member) {
-		t.Errorf("the sync account has the workload's %s too, and one grant is what it needs", appRecordsRole)
+		t.Errorf("the sync account has an app's %s too, and one grant is what it needs", appRecordsRole)
 	}
 
 	found, err := b.accountPresence(ctx, environment.TierProduction, name)
@@ -588,7 +588,6 @@ func TestRemovingATierStopsTheScheduleAndTheServiceBeforeTheKeyAndTheAccounts(t 
 	for _, later := range []item{
 		{Kind: KindKey, Name: string(tier)},
 		{Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(tier)},
-		{Kind: KindServiceAccount, Name: names.DelayAccount(tier)},
 		{Kind: KindRepository, Name: names.Repository(tier)},
 	} {
 		if schedule < 0 || service < 0 || schedule > service || service > at(later) {

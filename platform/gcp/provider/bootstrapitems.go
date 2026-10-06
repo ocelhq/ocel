@@ -96,10 +96,6 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 			Note: "the role a deploy credential is granted to create the service accounts its apps run as and to set who may act as them, and no more",
 		},
 		{
-			Kind: KindServiceAccount, Name: names.DelayAccount(tier),
-			Note: "the identity every app in this tier runs as, and the one the deploy hands Cloud Run",
-		},
-		{
 			Kind: KindServiceAccount, Name: names.RealtimeAccount(tier),
 			Note: "the identity this tier's realtime gateways run as, which may read this tier's realtime keys and no other secret",
 		},

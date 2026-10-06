@@ -72,7 +72,15 @@ func (c *clients) taskGrants(ctx context.Context, spec provider.StackSpec, membe
 			return lacking(c.bindQueueRoles(ctx, tier, member, queueRoles), queueAdminGrant(c.DelayQueuePath(c.region, tier)))
 		},
 		func() error {
-			return lacking(c.bindAccountRole(ctx, c.DelayAccount(tier), runAsRole, member, true), accountAdminGrant(c.DelayAccountEmail(tier)))
+			own := c.AppAccount(tier, spec.Ref.Project, spec.App.App)
+			if err := c.bindAccountRole(ctx, own, runAsRole, member, true); err != nil {
+				return unseenOrLacking(err, c.AppAccountsRolePath())
+			}
+			agent, err := c.ReadServiceAgent(ctx, cloudTasksAgentDomain)
+			if err != nil {
+				return err
+			}
+			return unseenOrLacking(c.bindAccountRole(ctx, own, runAsRole, agent, true), c.AppAccountsRolePath())
 		},
 		func() error {
 			return topics.Topology{Names: taskNames(c.Names, spec.Ref), Topics: declared, Publisher: member}.GrantPublisher(ctx, c.Workload())
@@ -132,7 +140,19 @@ func untilVisible(ctx context.Context, grant func() error) error {
 	return err
 }
 
+var errUnseenAccount = errors.New("the service account is not readable yet")
+
+func unseenOrLacking(err error, grant string) error {
+	if absent(err) {
+		return fmt.Errorf("%w: %w", errUnseenAccount, err)
+	}
+	return lacking(err, grant)
+}
+
 func isUnseenAccount(err error) bool {
+	if errors.Is(err, errUnseenAccount) {
+		return true
+	}
 	if err == nil || !strings.Contains(err.Error(), "does not exist") {
 		return false
 	}
