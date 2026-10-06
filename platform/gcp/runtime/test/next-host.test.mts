@@ -457,6 +457,7 @@ test("the GCP host refuses an isr-writer url without its secret", () => {
   const { OCEL_ISR_WRITER_SECRET: _, ...env } = writerEnv;
 
   expect(() => newGcpNextHost(env)).toThrow(/OCEL_ISR_WRITER_URL and OCEL_ISR_WRITER_SECRET/);
+  expect(() => newGcpNextHost(env)).not.toThrow(/bootstrap production/);
   expect(() =>
     newGcpNextHost({ ...env, OCEL_ISR_WRITER_SECRET: "s", OCEL_ISR_WRITER_URL: "" }),
   ).toThrow(/OCEL_ISR_WRITER_URL and OCEL_ISR_WRITER_SECRET/);
