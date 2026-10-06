@@ -388,6 +388,16 @@ export function functionUrlImageOrigin(
   };
 }
 
+export const originImagePath = "/_ocel/image";
+
+export function deploymentImageOrigin(
+  entryUrl: string | undefined,
+  doFetch: typeof fetch,
+): ImageOrigin | undefined {
+  if (!entryUrl || !parseAbsolute(entryUrl)) return undefined;
+  return functionUrlImageOrigin(new URL(originImagePath, entryUrl).href, doFetch);
+}
+
 const OPTIMIZER_STATUSES = new Set([400, 500, 502]);
 
 function relayed(response: Response): Response {
