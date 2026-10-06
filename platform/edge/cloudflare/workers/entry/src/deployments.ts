@@ -75,7 +75,7 @@ function cacheKey(deps: DeploymentsDeps): string {
   return deps.host;
 }
 
-function deployScope(deps: DeploymentsDeps): string {
+function describeDeployScope(deps: DeploymentsDeps): string {
   if (deps.label !== undefined) return `${deps.slug}/${deps.label}`;
   if (deps.app) return `${deps.slug}/${deps.app}`;
   return deps.slug;
@@ -100,7 +100,7 @@ export async function resolveDeployment(deps: DeploymentsDeps): Promise<Deployme
         ? await deps.binding.readPointerRecord({ slug: deps.slug, app: deps.app, knownIdentity })
         : await deps.binding.readLabelRecord({ slug: deps.slug, label: deps.label, knownIdentity });
   } catch (error) {
-    const scope = deployScope(deps);
+    const scope = describeDeployScope(deps);
     if (cached) {
       const ageSeconds = Math.round((now - cached.at) / 1000);
       console.error(
