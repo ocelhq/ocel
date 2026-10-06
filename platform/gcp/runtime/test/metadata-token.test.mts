@@ -60,3 +60,26 @@ test("a metadata server that gives no token names the service", async () => {
     "ocel: the metadata server gave no Firestore token: 503",
   );
 });
+
+test("a metadata server that never answers fails the token after its timeout", async () => {
+  const hang = ((_input: string | URL | Request, init?: RequestInit) =>
+    new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+    })) as typeof fetch;
+  const source = newMetadataToken({ fetch: hang, service: "Firestore", timeoutMs: 20 });
+
+  await expect(source.token()).rejects.toThrow("aborted");
+});
+
+test("a body that stalls after the metadata server answered fails the token after its timeout", async () => {
+  const stalled = (async (_input: string | URL | Request, init?: RequestInit) => ({
+    ok: true,
+    json: () =>
+      new Promise<never>((_, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      }),
+  })) as unknown as typeof fetch;
+  const source = newMetadataToken({ fetch: stalled, service: "Firestore", timeoutMs: 20 });
+
+  await expect(source.token()).rejects.toThrow("aborted");
+});
