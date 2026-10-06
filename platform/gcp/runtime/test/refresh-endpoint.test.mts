@@ -1,3 +1,4 @@
+import { generateKeyPairSync, sign } from "node:crypto";
 import http from "node:http";
 import net from "node:net";
 import type { CacheEntryFile } from "@framework/next-cache";
@@ -401,4 +402,68 @@ test("a refresh without a valid token is refused before its signature is examine
 
   expect(response.status).toBe(401);
   expect(warn).not.toHaveBeenCalled();
+});
+
+function newSigningKey(kid: string) {
+  const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const jwk = { ...publicKey.export({ format: "jwk" }), kid, alg: "RS256", use: "sig" };
+  return { jwk, privateKey };
+}
+
+function idToken(audience: string, account: string, key: ReturnType<typeof newSigningKey>): string {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const now = Math.floor(Date.now() / 1000);
+  const head = encode({ alg: "RS256", kid: key.jwk.kid, typ: "JWT" });
+  const body = encode({
+    iss: "https://accounts.google.com",
+    aud: audience,
+    email: account,
+    email_verified: true,
+    iat: now,
+    exp: now + 3600,
+    sub: "1137",
+  });
+  const signature = sign("RSA-SHA256", Buffer.from(`${head}.${body}`), key.privateKey);
+  return `${head}.${body}.${signature.toString("base64url")}`;
+}
+
+test("a refresh endpoint told token keys accepts a task whose token those keys signed", async () => {
+  const trusted = newSigningKey("trusted");
+  const other = newSigningKey("other");
+  const keys = http.createServer((req, res) => {
+    if (req.url !== "/oauth2/v3/certs") {
+      res.writeHead(404).end();
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ keys: [trusted.jwk] }));
+  });
+  await new Promise<void>((resolve) => keys.listen({ host: "127.0.0.1", port: 0 }, resolve));
+  try {
+    const url = "https://web-1.europe-west1.run.app/_ocel/refresh";
+    const account = "refresh@p.iam.gserviceaccount.com";
+    const endpoint = readRefreshEndpoint(
+      {
+        url,
+        queue: "projects/p/locations/r/queues/q",
+        account,
+        isrPrefix,
+        secret,
+        certsUrl: `http://127.0.0.1:${(keys.address() as { port: number }).port}/oauth2/v3/certs`,
+      },
+      originUrl,
+      (key) => readEntry(key),
+    )!;
+    const base = await serve(endpoint);
+
+    const accepted = await post(base, task(), idToken(url, account, trusted));
+    const refused = await post(base, task(), idToken(url, account, other));
+
+    expect(accepted.status).toBe(204);
+    expect(rendered).toHaveLength(1);
+    expect(refused.status).toBe(401);
+    expect(rendered).toHaveLength(1);
+  } finally {
+    await new Promise<void>((resolve) => keys.close(() => resolve()));
+  }
 });

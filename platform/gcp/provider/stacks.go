@@ -118,7 +118,8 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			queue:         names.DelayQueuePath(c.region, spec.Ref.Tier),
 			account:       names.RefreshAccountEmail(spec.Ref.Tier),
 			secret:        rand.Text(),
-			endpoint:      p.containerEndpoint(),
+			endpoint:      p.containerTasksEndpoint(),
+			certsURL:      p.containerTokenCertsURL(),
 			projectNumber: projectNumber,
 			region:        c.region,
 		}

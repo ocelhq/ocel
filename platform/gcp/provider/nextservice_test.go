@@ -360,7 +360,7 @@ func TestAnAppWithoutISRIsToldNoTagsDatabase(t *testing.T) {
 	}
 }
 
-var refreshEnvVars = []string{refreshURLEnvVar, refreshQueueEnvVar, refreshAccountEnvVar, refreshSecretEnvVar, tasksEndpointEnvVar, refreshTargetEnvVar}
+var refreshEnvVars = []string{refreshURLEnvVar, refreshQueueEnvVar, refreshAccountEnvVar, refreshSecretEnvVar, tasksEndpointEnvVar, refreshTargetEnvVar, idTokenCertsURLEnvVar}
 
 func TestANextServiceBilledPerRequestIsToldTheQueueItsRefreshesWaitInAndTheAccountTheyAreSignedAs(t *testing.T) {
 	env := envOf(releasedNext(t, routedNextSpec()))
@@ -531,12 +531,68 @@ func TestAnEmulatedNextServiceQueuesItsRefreshesThroughTheEmulator(t *testing.T)
 	}
 }
 
+func TestTheTasksEmulatorEndpointIsReadWhenTheProviderIsMade(t *testing.T) {
+	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "http://127.0.0.1:4588")
+	t.Setenv("OCEL_FLOCI_TASKS_ENDPOINT", "http://127.0.0.1:7001")
+
+	p, err := NewProvider(Options{Project: "acme-prod", Region: "europe-west1"})
+	if err != nil {
+		t.Fatalf("NewProvider() = %v", err)
+	}
+
+	if p.tasksEndpoint != "http://127.0.0.1:7001" {
+		t.Errorf("the provider addresses tasks at %q, want http://127.0.0.1:7001", p.tasksEndpoint)
+	}
+}
+
+func TestANextServiceOnTheFlociLaneQueuesRefreshesAtTheTasksEmulatorAndChecksTokensWithItsKeys(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	p.tasksEndpoint = "http://127.0.0.1:7001"
+	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+	env := envOf(server.created[0].Template.Containers[0])
+
+	if got, want := env[tasksEndpointEnvVar], "http://host.docker.internal:7001"; got != want {
+		t.Errorf("the Next service reads %s=%q, want %q", tasksEndpointEnvVar, got, want)
+	}
+	if got, want := env[idTokenCertsURLEnvVar], "http://host.docker.internal:7001/oauth2/v3/certs"; got != want {
+		t.Errorf("the Next service reads %s=%q, want %q", idTokenCertsURLEnvVar, got, want)
+	}
+	if got := env[refreshURLEnvVar]; !strings.HasPrefix(got, "https://") || !strings.HasSuffix(got, "-123456789.europe-west1.run.app/_ocel/refresh") {
+		t.Errorf("the Next service reads %s=%q, want the service's run.app url, which is the audience production signs for", refreshURLEnvVar, got)
+	}
+	if len(env[refreshSecretEnvVar]) < 26 {
+		t.Errorf("the Next service reads a %d-character %s, want a per-deploy secret", len(env[refreshSecretEnvVar]), refreshSecretEnvVar)
+	}
+}
+
+func TestAnEmulatedNextServiceWithNoTasksEmulatorIsToldNoTokenKeys(t *testing.T) {
+	env := envOf(releasedNext(t, routedNextSpec()))
+
+	if got, told := env[idTokenCertsURLEnvVar]; told {
+		t.Errorf("a Next service on the floci lane with no tasks emulator reads %s=%q", idTokenCertsURLEnvVar, got)
+	}
+}
+
+func TestAProviderAddressingGoogleNamesNoTokenKeysWhateverTasksEmulatorItHolds(t *testing.T) {
+	p := &Provider{tasksEndpoint: "http://127.0.0.1:7001"}
+
+	if got := p.containerTokenCertsURL(); got != "" {
+		t.Errorf("a provider addressing Google names token keys at %q", got)
+	}
+}
+
 func TestANextServiceOnGoogleCloudIsToldNoTasksEndpoint(t *testing.T) {
 	env := newNextEnv(routedNextSpec(), routedNextSpec().App.Functions[0], serving{compute: provider.ComputeServerless}, nextCache{},
 		&nextRefresh{url: "u", queue: "q", account: "a", secret: "s"})
 
 	if got, told := env[tasksEndpointEnvVar]; told {
 		t.Errorf("a Next service on Google Cloud reads %s=%q", tasksEndpointEnvVar, got)
+	}
+	if got, told := env[idTokenCertsURLEnvVar]; told {
+		t.Errorf("a Next service on Google Cloud reads %s=%q", idTokenCertsURLEnvVar, got)
 	}
 	if env[refreshQueueEnvVar] != "q" {
 		t.Errorf("the Next service reads %s=%q, want q", refreshQueueEnvVar, env[refreshQueueEnvVar])

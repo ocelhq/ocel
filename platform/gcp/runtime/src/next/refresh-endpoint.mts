@@ -165,6 +165,10 @@ export function readRefreshEndpoint(
     secret: refresh.secret,
     localOrigin,
     readEntry,
-    check: newGoogleIdTokenCheck({ audience: refresh.url, email: refresh.account }),
+    check: newGoogleIdTokenCheck({
+      audience: refresh.url,
+      email: refresh.account,
+      certsUrl: refresh.certsUrl,
+    }),
   });
 }
