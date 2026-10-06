@@ -19,19 +19,21 @@ const (
 )
 
 const (
-	memoryEnvVar          = "OCEL_FUNCTION_MEMORY_MB"
-	routerKindEnvVar      = "OCEL_ROUTER_KIND"
-	routingManifestEnvVar = "OCEL_ROUTING_MANIFEST"
-	assetPrefixEnvVar     = "OCEL_ASSET_PREFIX"
-	slugEnvVar            = "OCEL_SLUG"
-	appNameEnvVar         = "OCEL_APP"
-	deploymentIDEnvVar    = "OCEL_DEPLOYMENT_ID"
-	isrPrefixEnvVar       = "OCEL_ISR_PREFIX"
-	isrTagNamespaceEnvVar = "OCEL_ISR_TAG_NAMESPACE"
-	isrBucketEnvVar       = "OCEL_ISR_BUCKET"
-	isrObjectPrefixEnvVar = "OCEL_ISR_OBJECT_PREFIX"
-	storageEndpointEnvVar = "OCEL_STORAGE_ENDPOINT"
-	staticDirEnvVar       = "OCEL_STATIC_DIR"
+	memoryEnvVar            = "OCEL_FUNCTION_MEMORY_MB"
+	routerKindEnvVar        = "OCEL_ROUTER_KIND"
+	routingManifestEnvVar   = "OCEL_ROUTING_MANIFEST"
+	assetPrefixEnvVar       = "OCEL_ASSET_PREFIX"
+	slugEnvVar              = "OCEL_SLUG"
+	appNameEnvVar           = "OCEL_APP"
+	deploymentIDEnvVar      = "OCEL_DEPLOYMENT_ID"
+	isrPrefixEnvVar         = "OCEL_ISR_PREFIX"
+	isrTagNamespaceEnvVar   = "OCEL_ISR_TAG_NAMESPACE"
+	isrBucketEnvVar         = "OCEL_ISR_BUCKET"
+	isrObjectPrefixEnvVar   = "OCEL_ISR_OBJECT_PREFIX"
+	storageEndpointEnvVar   = "OCEL_STORAGE_ENDPOINT"
+	tagDatabaseEnvVar       = "OCEL_TAG_DATABASE"
+	firestoreEndpointEnvVar = "OCEL_FIRESTORE_ENDPOINT"
+	staticDirEnvVar         = "OCEL_STATIC_DIR"
 
 	finishBeforeResponseEnvVar = "OCEL_FINISH_BEFORE_RESPONSE_MS"
 )
@@ -65,7 +67,13 @@ func refuseGuardWithoutShieldingEdge(spec provider.StackSpec) error {
 		app.App, spec.Edge.Kind())
 }
 
-func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, bucket, storageEndpoint string) map[string]string {
+type nextCache struct {
+	bucket      string
+	tagDatabase string
+	endpoint    string
+}
+
+func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, cache nextCache) map[string]string {
 	app := spec.App
 	env := map[string]string{memoryEnvVar: strconv.Itoa(s.memory)}
 	if app.Router != "" {
@@ -89,10 +97,12 @@ func newNextEnv(spec provider.StackSpec, fn provider.FunctionSpec, s serving, bu
 	if isr := app.ISR; isr != nil {
 		env[isrPrefixEnvVar] = isr.Prefix
 		env[isrTagNamespaceEnvVar] = isr.TagNamespace
-		env[isrBucketEnvVar] = bucket
+		env[isrBucketEnvVar] = cache.bucket
+		env[tagDatabaseEnvVar] = cache.tagDatabase
 		env[isrObjectPrefixEnvVar] = strings.TrimSuffix(cacheObjectName(isr.Prefix+"/"), "/")
-		if storageEndpoint != "" {
-			env[storageEndpointEnvVar] = storageEndpoint
+		if cache.endpoint != "" {
+			env[storageEndpointEnvVar] = cache.endpoint
+			env[firestoreEndpointEnvVar] = cache.endpoint
 		}
 	}
 	return env

@@ -274,6 +274,10 @@ func (n Names) TaskDatabase(tier environment.Tier) string {
 	return ports.TaskDatabase(n.namespace, tier)
 }
 
+func (n Names) TagDatabase(tier environment.Tier) string {
+	return ports.TagDatabase(n.namespace, tier)
+}
+
 func (n Names) DelayQueue(tier environment.Tier) string {
 	return string(n.namespace) + "-" + string(tier) + delayQueueSuffix
 }

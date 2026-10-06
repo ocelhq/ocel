@@ -166,3 +166,13 @@ func TestOnlyCloudTasksMayActAsTheDelayAccount(t *testing.T) {
 		t.Errorf("%d queue policies were written, want none: apps are granted the queue as they deploy", server.queueWrites)
 	}
 }
+
+func TestABootstrapChecksItMayIndexTheTagsDatabase(t *testing.T) {
+	t.Parallel()
+
+	for _, permission := range []string{"datastore.indexes.create", "datastore.indexes.get", "datastore.indexes.list", "datastore.indexes.update"} {
+		if !slices.Contains(permissionsFor(nil), permission) {
+			t.Errorf("a bootstrap with no feature checks %v, want %s among them", permissionsFor(nil), permission)
+		}
+	}
+}

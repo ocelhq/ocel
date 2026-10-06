@@ -42,6 +42,44 @@
       "monthlyUsage": "0.54"
     },
     {
+      "resource": "project:shop/shared:production/google_firestore_database:ocel-production-tags",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Document reads",
+          "unit": "reads",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0.0000003",
+          "monthlyCost": "0.30",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 reads",
+          "rateRef": "gcp/firestore/reads"
+        },
+        {
+          "name": "Document writes",
+          "unit": "writes",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000009",
+          "monthlyCost": "0.09",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 writes",
+          "rateRef": "gcp/firestore/writes"
+        },
+        {
+          "name": "Storage",
+          "unit": "GiB-month",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.15",
+          "monthlyCost": "0.15",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GiB-month",
+          "rateRef": "gcp/firestore/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.54"
+    },
+    {
       "resource": "project:shop/shared:production/google_storage_bucket:ocel-acme-prod-production",
       "status": "STATUS_PRICED",
       "components": [
@@ -394,12 +432,12 @@
     {
       "scope": "project:shop",
       "monthlyFixed": "68.46",
-      "monthlyUsage": "7.93"
+      "monthlyUsage": "8.47"
     },
     {
       "scope": "project:shop/shared:production",
       "monthlyFixed": "18.53",
-      "monthlyUsage": "1.68"
+      "monthlyUsage": "2.22"
     },
     {
       "scope": "project:shop/environment:prod",
@@ -418,7 +456,7 @@
     }
   ],
   "coverage": {
-    "supported": 12,
+    "supported": 13,
     "free": 11,
     "supportedTypes": [
       "google_artifact_registry_repository",
@@ -448,5 +486,5 @@
     "a realtime gateway is priced at Cloud Run's request-based rate for every hour a socket is open, an upper bound on what an instance holding sockets bills"
   ],
   "monthlyFixed": "68.46",
-  "monthlyUsage": "7.93"
+  "monthlyUsage": "8.47"
 }

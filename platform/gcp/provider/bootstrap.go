@@ -318,7 +318,13 @@ func (b bootstrap) provision(ctx context.Context, read survey, target item, prog
 func (b bootstrap) mend(ctx context.Context, read survey, target item) error {
 	switch target.Kind {
 	case KindDatabase:
-		return b.protectDatabase(ctx, b.clients.Database())
+		if target.Shared {
+			return b.protectDatabase(ctx, target.Name)
+		}
+		if err := b.protectDatabase(ctx, target.Name); err != nil {
+			return err
+		}
+		return b.ensureTagIndexes(ctx, read.Tier)
 	case KindRepository:
 		return b.pruneRepository(ctx, target.Name)
 	case KindBucket:
@@ -331,7 +337,13 @@ func (b bootstrap) mend(ctx context.Context, read survey, target item) error {
 func (b bootstrap) make(ctx context.Context, read survey, target item) error {
 	switch target.Kind {
 	case KindDatabase:
-		return b.makeDatabase(ctx, read, b.clients.Database())
+		if err := b.makeDatabase(ctx, read, target.Name); err != nil {
+			return err
+		}
+		if target.Shared {
+			return nil
+		}
+		return b.ensureTagIndexes(ctx, read.Tier)
 	case KindBucket:
 		return b.makeBucket(ctx, read, target)
 	case KindKeyRing:
@@ -879,7 +891,7 @@ func removing(read survey, target item) removal {
 	switch {
 	case target.Kind == KindKeyRing:
 		taking.action, taking.reason = provider.ActionKeep, reasonRingKept
-	case target.Kind == KindDatabase && read.sibling:
+	case target.Kind == KindDatabase && target.Shared && read.sibling:
 		taking.action, taking.reason = provider.ActionKeep, fmt.Sprintf(reasonSharedDB, read.Tier.Sibling())
 	case target.Shared && read.sibling:
 		taking.action, taking.reason = provider.ActionKeep, sharedWith(read.Tier)
@@ -923,7 +935,7 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 		return err
 	}
 	for _, taking := range removals(read) {
-		if taking.action == provider.ActionKeep && taking.item.Kind == KindDatabase {
+		if taking.action == provider.ActionKeep && taking.item.Kind == KindDatabase && taking.item.Shared {
 			if err := b.takeKeyValues(ctx, tier); err != nil {
 				return err
 			}
@@ -969,7 +981,7 @@ func (b bootstrap) take(ctx context.Context, read survey, target item) (destroyA
 	case KindKey:
 		return b.takeKey(ctx, target.Name)
 	case KindDatabase:
-		return 0, b.takeDatabase(ctx, b.clients.Database())
+		return 0, b.takeDatabase(ctx, target.Name)
 	case KindBucket:
 		return 0, b.takeBucket(ctx, target.Name)
 	case KindRepository:

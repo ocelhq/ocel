@@ -15,8 +15,14 @@ func grantCache(ctx context.Context, c *clients, spec provider.StackSpec, accoun
 	if spec.App.ISR == nil {
 		return nil
 	}
+	member := "serviceAccount:" + account
+	if err := untilVisible(ctx, func() error {
+		return c.ensureCacheGrant(ctx, spec.Ref.Tier, member, spec.App.ISR.Prefix)
+	}); err != nil {
+		return err
+	}
 	return untilVisible(ctx, func() error {
-		return c.ensureCacheGrant(ctx, spec.Ref.Tier, "serviceAccount:"+account, spec.App.ISR.Prefix)
+		return c.bindProjectRole(ctx, member, tagRecordsRole, tagDatabaseCondition(c, spec.Ref.Tier), true)
 	})
 }
 

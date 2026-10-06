@@ -291,3 +291,30 @@ func TestAGuardedNextServiceIsReleasedWhereItsIngressKeepsClientsOffIt(t *testin
 		})
 	}
 }
+
+func TestANextAppIsToldTheTagsDatabaseItsRecordsLiveIn(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+	env := envOf(server.created[0].Template.Containers[0])
+
+	if got, want := env["OCEL_TAG_DATABASE"], "projects/"+names(t, p).project+"/databases/"+names(t, p).TagDatabase(environment.TierProduction); got != want {
+		t.Errorf("the Next service reads OCEL_TAG_DATABASE=%q, want %q", got, want)
+	}
+	endpoint, err := url.Parse(env["OCEL_FIRESTORE_ENDPOINT"])
+	if err != nil || endpoint.Hostname() != "host.docker.internal" {
+		t.Errorf("the Next service reads OCEL_FIRESTORE_ENDPOINT=%q, want an address on host.docker.internal", env["OCEL_FIRESTORE_ENDPOINT"])
+	}
+}
+
+func TestAnAppWithoutISRIsToldNoTagsDatabase(t *testing.T) {
+	env := envOf(releasedNext(t, nextSpec()))
+
+	for _, name := range []string{"OCEL_TAG_DATABASE", "OCEL_FIRESTORE_ENDPOINT"} {
+		if got, told := env[name]; told {
+			t.Errorf("a Next service with no incremental cache reads %s=%q", name, got)
+		}
+	}
+}

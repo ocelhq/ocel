@@ -11,6 +11,7 @@ import (
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/artifactregistry/v1"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -242,5 +243,29 @@ func TestABootstrapResourceAlreadyCurrentIsNotedOnlyAtDebug(t *testing.T) {
 	want := []string{"DEBUG The Artifact Registry repository ocel-acme-prod-production is already current"}
 	if got := progress.Lines(); !slices.Equal(got, want) {
 		t.Errorf("provision() said %q, want %q", got, want)
+	}
+}
+
+func TestRemovingATierTakesItsTagsDatabaseAndKeepsTheDatabaseItsSiblingShares(t *testing.T) {
+	t.Parallel()
+
+	names := Names{namespace: "ocel", project: "acme-prod"}
+	tier := environment.TierProduction
+	read := survey{Tier: tier, Names: names, present: map[string]bool{}, sibling: true}
+	for _, each := range bootstrapItems(names, tier, false) {
+		read.present[each.ID()] = true
+	}
+
+	actions := map[string]provider.ChangeAction{}
+	for _, taking := range removals(read) {
+		if taking.item.Kind == KindDatabase {
+			actions[taking.item.Name] = taking.action
+		}
+	}
+	if got := actions[names.Database()]; got != provider.ActionKeep {
+		t.Errorf("removing a tier whose sibling is installed does %s to the shared database, want keep", got)
+	}
+	if got := actions[names.TagDatabase(tier)]; got != provider.ActionDisableThenDelete {
+		t.Errorf("removing a tier whose sibling is installed does %s to its tags database, want %s", got, provider.ActionDisableThenDelete)
 	}
 }

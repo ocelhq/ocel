@@ -277,3 +277,14 @@ func TestAnAppsAccountIsNamedForItsNamespaceAndAHashOfItsTierProjectAndApp(t *te
 		}
 	}
 }
+
+func TestEachTiersTagsDatabaseIsNamedForTheNamespaceAndTheTier(t *testing.T) {
+	names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+
+	if got, want := names.TagDatabase(environment.TierProduction), "ocel-production-tags"; got != want {
+		t.Errorf("TagDatabase(production) = %q, want %q", got, want)
+	}
+	if got, want := names.TagDatabase(environment.TierPreview), "ocel-preview-tags"; got != want {
+		t.Errorf("TagDatabase(preview) = %q, want %q", got, want)
+	}
+}
