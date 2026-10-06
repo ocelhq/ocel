@@ -1,5 +1,5 @@
-import http from "node:http";
 import type { Refresh, ScheduleRefresh } from "@framework/next-runtime/refresh";
+import { renderAtOrigin } from "./loopback-render.mjs";
 
 export function newInstanceRefresh(origin: () => string, timeoutMs: number): ScheduleRefresh {
   const inflight = new Map<string, Promise<void>>();
@@ -8,32 +8,9 @@ export function newInstanceRefresh(origin: () => string, timeoutMs: number): Sch
     const running = inflight.get(key);
     if (running) return running;
     const rendering = Promise.resolve()
-      .then(() => render(origin(), refresh, timeoutMs))
+      .then(() => renderAtOrigin(origin(), refresh, timeoutMs))
       .finally(() => inflight.delete(key));
     inflight.set(key, rendering);
     return rendering;
   };
-}
-
-function render(origin: string, refresh: Refresh, timeoutMs: number): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const settle = (done: () => void) => {
-      clearTimeout(timer);
-      done();
-    };
-    const request = http.get(new URL(refresh.url, origin), { headers: refresh.headers }, (res) => {
-      res.resume();
-      res.on("error", (err) => settle(() => reject(err)));
-      res.on("end", () => {
-        const status = res.statusCode ?? 0;
-        if (status >= 200 && status < 300) settle(resolve);
-        else settle(() => reject(new Error(`the re-render of ${refresh.url} answered ${status}`)));
-      });
-    });
-    const timer = setTimeout(() => {
-      reject(new Error(`the re-render of ${refresh.url} did not answer within ${timeoutMs}ms`));
-      request.destroy();
-    }, timeoutMs);
-    request.on("error", (err) => settle(() => reject(err)));
-  });
 }

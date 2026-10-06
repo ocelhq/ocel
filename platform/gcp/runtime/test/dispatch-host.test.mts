@@ -5,7 +5,8 @@ import { join } from "node:path";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
 import { dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { readGcpDispatchHost } from "../src/next/dispatch-host.mjs";
+import { newGcpDispatchInvoke, readGcpDispatchHost } from "../src/next/dispatch-host.mjs";
+import { newRefreshEndpoint } from "../src/next/refresh-endpoint.mjs";
 
 const manifest: RoutingManifest = {
   entry: "bundle-0",
@@ -31,6 +32,7 @@ let dir: string;
 let local: http.Server;
 let localOrigin: string;
 const served: string[] = [];
+const refreshed: string[] = [];
 
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "ocel-gcp-dispatch-"));
@@ -39,6 +41,7 @@ beforeAll(async () => {
   await writeFile(join(dir, "static", "assets", "logo.svg"), "<svg/>");
   local = http.createServer((req, res) => {
     served.push(String(req.headers["x-ocel-entry"]));
+    if (req.headers["x-ocel-refresh"] !== undefined) refreshed.push(String(req.url));
     res.end("rendered here");
   });
   await new Promise<void>((resolve) => local.listen({ host: "127.0.0.1", port: 0 }, resolve));
@@ -89,4 +92,67 @@ test("a static asset is served from the directory the service's image holds it i
   expect(response.status).toBe(200);
   expect(response.headers.get("content-type")).toBe("image/svg+xml");
   expect(await response.text()).toBe("<svg/>");
+});
+
+async function serveInvoke(invoke: ReturnType<typeof newGcpDispatchInvoke>): Promise<http.Server> {
+  const server = http.createServer((req, res) => {
+    Promise.resolve(invoke(req, res, { waitUntil() {}, holdEnd() {} })).catch(() => {
+      res.statusCode = 500;
+      res.end();
+    });
+  });
+  await new Promise<void>((resolve) => server.listen({ host: "127.0.0.1", port: 0 }, resolve));
+  return server;
+}
+
+function urlOf(server: http.Server): string {
+  return `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+}
+
+test("a refresh task reaches the endpoint before the router strips its control headers", async () => {
+  const endpoint = newRefreshEndpoint({
+    path: "/_ocel/refresh",
+    isrPrefix: "prod/shop/web/r1/isr",
+    localOrigin,
+    check: async () => true,
+  });
+  const server = await serveInvoke(
+    newGcpDispatchInvoke(
+      localOrigin,
+      { OCEL_ROUTING_MANIFEST: join(dir, "routing.json") },
+      endpoint,
+    ),
+  );
+  try {
+    const response = await fetch(`${urlOf(server)}/_ocel/refresh`, {
+      method: "POST",
+      headers: { authorization: "Bearer any" },
+      body: JSON.stringify({
+        isrPrefix: "prod/shop/web/r1/isr",
+        refresh: { url: "/home", key: "home", lastModified: 5, headers: { host: "shop.example" } },
+      }),
+    });
+
+    expect(response.status).toBe(204);
+    expect(refreshed).toEqual(["/home"]);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test("a service told no refresh url routes the refresh path like any other", async () => {
+  const server = await serveInvoke(
+    newGcpDispatchInvoke(
+      localOrigin,
+      { OCEL_ROUTING_MANIFEST: join(dir, "routing.json") },
+      undefined,
+    ),
+  );
+  try {
+    const response = await fetch(`${urlOf(server)}/_ocel/refresh`);
+
+    expect(response.status).not.toBe(405);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });

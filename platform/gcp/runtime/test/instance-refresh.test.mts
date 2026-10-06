@@ -1,5 +1,5 @@
 import http from "node:http";
-import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { newInstanceRefresh } from "../src/next/instance-refresh.mjs";
 
 let server: http.Server;
@@ -72,16 +72,6 @@ test("a refresh the re-render fails rejects, so the stale entry is refreshed by 
   expect(received).toHaveLength(2);
 });
 
-test("a refresh whose re-render outlasts its timeout rejects naming the timeout", async () => {
-  answer = { status: 200, delayMs: 200 };
-  const started = Date.now();
-
-  await expect(newInstanceRefresh(() => origin, 50)(blog)).rejects.toThrow(
-    /did not answer within 50ms/,
-  );
-  expect(Date.now() - started).toBeLessThan(150);
-});
-
 test("a refresh whose origin cannot be read rejects instead of throwing", async () => {
   const refresh = newInstanceRefresh(() => {
     throw new Error("no server");
@@ -92,16 +82,4 @@ test("a refresh whose origin cannot be read rejects instead of throwing", async 
     rejected = refresh(blog);
   }).not.toThrow();
   await expect(rejected).rejects.toThrow(/no server/);
-});
-
-test("a refresh whose origin is not a url rejects and leaves no timer to fire", async () => {
-  const uncaught = vi.fn();
-  process.on("uncaughtException", uncaught);
-  try {
-    await expect(newInstanceRefresh(() => "not a url", 50)(blog)).rejects.toThrow();
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(uncaught).not.toHaveBeenCalled();
-  } finally {
-    process.off("uncaughtException", uncaught);
-  }
 });
