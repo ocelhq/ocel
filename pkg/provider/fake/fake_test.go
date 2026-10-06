@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
@@ -52,6 +53,25 @@ func TestNewRefusesOptionsTheReferenceProviderDoesNotAccept(t *testing.T) {
 	}
 	if _, err := fake.New(context.Background(), provider.Settings{Options: provider.Options{"region": "nowhere"}}); err != nil {
 		t.Fatalf("New() error = %v", err)
+	}
+}
+
+func TestAFakeProviderForAProjectShipsANextServerRuntimeWithItsAdapter(t *testing.T) {
+	t.Parallel()
+
+	read := fake.NewForProject(fake.Options{}, "").Hooks().ReadNextServerRuntime
+	if read == nil {
+		t.Fatal("a fake provider for a project has no Next server runtime")
+	}
+	files, err := read(context.Background())
+	if err != nil {
+		t.Fatalf("ReadNextServerRuntime() error = %v", err)
+	}
+	if got := string(files[images.NextServerAdapterFile]); got != fake.NextServerAdapter {
+		t.Errorf("ReadNextServerRuntime()[%s] = %q, want %q", images.NextServerAdapterFile, got, fake.NextServerAdapter)
+	}
+	if fake.NewProvider(fake.Options{}).Hooks().ReadNextServerRuntime != nil {
+		t.Error("a bare fake provider ships a Next server runtime")
 	}
 }
 
