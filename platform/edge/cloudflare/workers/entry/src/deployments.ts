@@ -75,6 +75,12 @@ function cacheKey(deps: DeploymentsDeps): string {
   return deps.host;
 }
 
+function deployScope(deps: DeploymentsDeps): string {
+  if (deps.label !== undefined) return `${deps.slug}/${deps.label}`;
+  if (deps.app) return `${deps.slug}/${deps.app}`;
+  return deps.slug;
+}
+
 export async function resolveDeployment(deps: DeploymentsDeps): Promise<DeploymentResolution> {
   const now = (deps.now ?? Date.now)();
   const cache = cacheMap(deps.binding);
@@ -93,8 +99,17 @@ export async function resolveDeployment(deps: DeploymentsDeps): Promise<Deployme
       deps.label === undefined
         ? await deps.binding.readPointerRecord({ slug: deps.slug, app: deps.app, knownIdentity })
         : await deps.binding.readLabelRecord({ slug: deps.slug, label: deps.label, knownIdentity });
-  } catch {
-    if (cached) return { kind: "found", record: cached.record };
+  } catch (error) {
+    const scope = deployScope(deps);
+    if (cached) {
+      const ageSeconds = Math.round((now - cached.at) / 1000);
+      console.error(
+        `ocel: the deployments store did not answer for ${scope}; serving the record cached ${ageSeconds}s ago`,
+        error,
+      );
+      return { kind: "found", record: cached.record };
+    }
+    console.error(`ocel: the deployments store did not answer for ${scope}; answering 503`, error);
     return { kind: "unavailable" };
   }
 

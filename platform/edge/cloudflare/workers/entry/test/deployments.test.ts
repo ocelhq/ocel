@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   type DeploymentRecord,
@@ -194,6 +194,58 @@ describe("resolveDeployment", () => {
     const resolution = await resolveDeployment(deps(binding, clock));
 
     expect(resolution).toEqual({ kind: "unavailable" });
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("logs a store read that failed before answering unavailable", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const binding = createCountingBinding({ pointerIdentity: {}, records: {} });
+    binding.down = true;
+    const clock = { ms: 0 };
+
+    const resolution = await resolveDeployment(deps(binding, clock));
+
+    expect(resolution).toEqual({ kind: "unavailable" });
+    expect(errors).toHaveBeenCalledTimes(1);
+    expect(errors.mock.calls[0]?.[0]).toContain("acme-web/web");
+    expect(errors.mock.calls[0]?.[0]).toContain("answering 503");
+    expect(errors.mock.calls[0]?.[1]).toEqual(new Error("store unreachable"));
+  });
+
+  it("logs a store read that failed before serving the record it cached", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const binding = createCountingBinding({
+      pointerIdentity: { "web/": "deploy-1" },
+      records: { "web/deploy-1": makeRecord() },
+    });
+    const clock = { ms: 0 };
+    const d = deps(binding, clock);
+    await resolveDeployment(d);
+
+    clock.ms = 5_001;
+    binding.down = true;
+    const resolution = await resolveDeployment(d);
+
+    expect(resolution).toEqual({ kind: "found", record: makeRecord() });
+    expect(errors).toHaveBeenCalledTimes(1);
+    expect(errors.mock.calls[0]?.[0]).toContain("acme-web/web");
+    expect(errors.mock.calls[0]?.[0]).toContain("cached 5s ago");
+  });
+
+  it("logs nothing when the store answers", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const binding = createCountingBinding({
+      pointerIdentity: { "web/": "deploy-1" },
+      records: { "web/deploy-1": makeRecord() },
+    });
+    const clock = { ms: 0 };
+    const d = deps(binding, clock);
+    await resolveDeployment(d);
+    clock.ms = 5_001;
+    await resolveDeployment(d);
+
+    expect(errors).not.toHaveBeenCalled();
   });
 
   it("returns unavailable when the pointer names a build with no record", async () => {
