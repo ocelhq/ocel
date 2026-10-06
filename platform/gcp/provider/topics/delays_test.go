@@ -177,7 +177,8 @@ func TestLiveADelayTaskARescheduleSupersededDoesNotRunTheRun(t *testing.T) {
 	if len(superseded) != 1 {
 		t.Fatalf("the delay queue holds %d tasks, want 1", len(superseded))
 	}
-	if _, err := p.deployment.Tasks().RescheduleRun(context.Background(), &taskv1.RescheduleRunRequest{Id: id, DueAt: timestamppb.New(time.Now().Add(2 * time.Hour))}); err != nil {
+	later := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Millisecond)
+	if _, err := p.deployment.Tasks().RescheduleRun(context.Background(), &taskv1.RescheduleRunRequest{Id: id, DueAt: timestamppb.New(later)}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -192,7 +193,12 @@ func TestLiveADelayTaskARescheduleSupersededDoesNotRunTheRun(t *testing.T) {
 		t.Errorf("the run is %s after its superseded task fired, want it still delayed", run.GetStatus())
 	}
 
-	p.dispatch(p.delayTasks()[0])
+	tasks := p.delayTasks()
+	current := slices.IndexFunc(tasks, func(task *cloudtaskspb.Task) bool { return task.GetScheduleTime().AsTime().Equal(later) })
+	if current < 0 {
+		t.Fatalf("the delay queue holds no task scheduled for %v", later)
+	}
+	p.dispatch(tasks[current])
 	p.deliverPulled(worker, "resize", "resize")
 	if run := p.retrieve(id); run.GetStatus() != taskv1.RunStatus_RUN_STATUS_COMPLETED {
 		t.Errorf("the run is %s after its current task fired, want completed", run.GetStatus())
