@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -16,7 +17,10 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
-const uploadConcurrency = 64
+const (
+	uploadConcurrency = 64
+	appsDirName       = "apps"
+)
 
 var uploadSlots = make(chan struct{}, uploadConcurrency)
 
@@ -110,4 +114,8 @@ func isNotFound(err error) bool {
 type artifactRef struct {
 	Bucket string
 	Key    string
+}
+
+func appArtifactRoot(artifactRoot, app string) string {
+	return filepath.Join(artifactRoot, appsDirName, app)
 }

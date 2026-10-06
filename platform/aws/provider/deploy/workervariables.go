@@ -1,9 +1,8 @@
 package deploy
 
 import (
-	"fmt"
-
 	"github.com/ocelhq/ocel/pkg/edge"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 type WorkerFacts struct {
@@ -16,20 +15,8 @@ type WorkerFacts struct {
 	EdgeSecretKey      string
 }
 
-const (
-	envPreview           = "OCEL_PREVIEW"
-	envPreviewGlobal     = "OCEL_PREVIEW_GLOBAL"
-	envPreviewBaseDomain = "OCEL_PREVIEW_BASE_DOMAIN"
-
-	storeServiceBinding = "DEPLOYMENTS"
-)
-
-func sharedWorker(kind edge.Kind, entry edge.WorkerModule, f WorkerFacts) (edge.Worker, error) {
-	if len(entry.Content) == 0 {
-		return edge.Worker{}, fmt.Errorf("the %s edge names no entry module for its worker to run", kind)
-	}
-	worker := edge.Worker{Main: entry}
-	variables := map[string]string{}
+func (f WorkerFacts) Bindings() cloudflare.OriginBindings {
+	bindings := cloudflare.OriginBindings{Variables: map[string]string{}}
 	for name, value := range map[string]string{
 		edge.AWSRegionVar:          f.Region,
 		edge.StateTableVar:         f.StateTable,
@@ -38,51 +25,12 @@ func sharedWorker(kind edge.Kind, entry edge.WorkerModule, f WorkerFacts) (edge.
 		edge.RevalidateQueueURLVar: f.RevalidateQueueURL,
 	} {
 		if value != "" {
-			variables[name] = value
+			bindings.Variables[name] = value
 		}
 	}
 	if f.EdgeAccessKeyID != "" && f.EdgeSecretKey != "" {
-		variables[edge.EdgeAccessKeyIDVar] = f.EdgeAccessKeyID
-		worker.Secrets = map[string]string{edge.EdgeSecretKeyVar: f.EdgeSecretKey}
+		bindings.Variables[edge.EdgeAccessKeyIDVar] = f.EdgeAccessKeyID
+		bindings.Secrets = map[string]string{edge.EdgeSecretKeyVar: f.EdgeSecretKey}
 	}
-	worker.Variables = variables
-	return worker, nil
-}
-
-func addPreviewVariables(worker edge.Worker, baseDomain string) edge.Worker {
-	worker = withVar(worker, envPreview, "1")
-	if baseDomain != "" {
-		worker = withVar(worker, envPreviewBaseDomain, baseDomain)
-	}
-	return worker
-}
-
-func addSecret(worker edge.Worker, name, value string) edge.Worker {
-	secrets := make(map[string]string, len(worker.Secrets)+1)
-	for k, v := range worker.Secrets {
-		secrets[k] = v
-	}
-	secrets[name] = value
-	worker.Secrets = secrets
-	return worker
-}
-
-func withVar(worker edge.Worker, name, value string) edge.Worker {
-	variables := make(map[string]string, len(worker.Variables)+1)
-	for k, v := range worker.Variables {
-		variables[k] = v
-	}
-	variables[name] = value
-	worker.Variables = variables
-	return worker
-}
-
-func withService(worker edge.Worker, name, service string) edge.Worker {
-	services := make(map[string]string, len(worker.Services)+1)
-	for k, v := range worker.Services {
-		services[k] = v
-	}
-	services[name] = service
-	worker.Services = services
-	return worker
+	return bindings
 }

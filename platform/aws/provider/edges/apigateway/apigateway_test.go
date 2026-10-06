@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/router/routerconformance"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 const (
@@ -671,7 +671,7 @@ func TestAPINamesCannotCollideAcrossSlugsAndPointers(t *testing.T) {
 	if got := apiName(defaultNamespace, "shop", environment.TierProduction, ""); got != "ocel--shop--production" {
 		t.Errorf("apiName = %q, want the project stem the rest of the deploy path matches on", got)
 	}
-	if name := defaultNamespace.EdgeNotFoundAPIName(environment.TierProduction); deploy.ProjectOwnsWorker(string(defaultNamespace), "not", name) || strings.Contains(name, "--") {
+	if name := defaultNamespace.EdgeNotFoundAPIName(environment.TierProduction); cloudflare.ProjectOwnsWorker(string(defaultNamespace), "not", name) || strings.Contains(name, "--") {
 		t.Errorf("the not-found API is named %q, which a project could claim as its own", name)
 	}
 }
@@ -694,10 +694,10 @@ func TestDomainOwnerNamesTheProjectThatOwnsTheHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	if !deploy.ProjectOwnsWorker(string(defaultNamespace), conformanceSlug, owner) {
+	if !cloudflare.ProjectOwnsWorker(string(defaultNamespace), conformanceSlug, owner) {
 		t.Errorf("DomainOwner = %q, which %q is not recognised as owning; preflight would report the project's own host as claimed by someone else", owner, conformanceSlug)
 	}
-	if deploy.ProjectOwnsWorker(string(defaultNamespace), "other", owner) {
+	if cloudflare.ProjectOwnsWorker(string(defaultNamespace), "other", owner) {
 		t.Errorf("DomainOwner = %q, which another project is recognised as owning", owner)
 	}
 }

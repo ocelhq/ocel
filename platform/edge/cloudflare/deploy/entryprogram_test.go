@@ -1,31 +1,25 @@
-package deploy
+package cloudflare
 
 import (
+	"maps"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-func programmed(slug string, tier environment.Tier) EdgeProgram {
-	return EdgeProgram{
+func programmed(slug string, tier environment.Tier) EntryProgram {
+	return EntryProgram{
 		Tier:      tier,
-		Kind:      cloudflare.Kind,
 		Entry:     edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
 		Namespace: defaultNamespace,
 		Slug:      slug,
 		Env:       "prod",
-		Worker: WorkerFacts{
-			Region:             "eu-west-1",
-			StateTable:         "ocel-state",
-			AssetBucket:        "ocel-assets",
-			ImageOptimizerURL:  "https://optimizer.example",
-			RevalidateQueueURL: "https://queue.example",
-			EdgeAccessKeyID:    "AKIA",
-			EdgeSecretKey:      "secret",
+		Origin: OriginBindings{
+			Variables: map[string]string{"OCEL_ORIGIN_ONLY": "v"},
+			Secrets:   map[string]string{"OCEL_ORIGIN_KEY": "s"},
 		},
 		Values:              map[string]string{"cacheBucket": "ocel-edge-cache-preview"},
 		StoreScriptName:     "ocel-deployments-store-preview",
@@ -37,7 +31,7 @@ func programmed(slug string, tier environment.Tier) EdgeProgram {
 
 const previewKey edge.PreviewKey = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
 
-func TestEdgeProgramForTheSharedPreviewEntry(t *testing.T) {
+func TestEntryProgramForTheSharedPreviewEntry(t *testing.T) {
 	entry := programmed("", environment.TierPreview)
 	entry.PreviewBaseDomain = "preview.acme.com"
 	entry.PreviewKey = previewKey
@@ -50,26 +44,21 @@ func TestEdgeProgramForTheSharedPreviewEntry(t *testing.T) {
 	if string(worker.Main.Content) != "export default {}" {
 		t.Errorf("Main = %q, want the generic bundle for the edge", worker.Main.Content)
 	}
-	if worker.Services[storeServiceBinding] != entry.StoreScriptName {
+	if worker.Services[genericStoreBinding] != entry.StoreScriptName {
 		t.Errorf("Services = %v, want the preview store bound", worker.Services)
 	}
 	for name, want := range map[string]string{
-		envPreview:                 "1",
-		envPreviewGlobal:           "1",
-		envPreviewBaseDomain:       "preview.acme.com",
-		edge.AWSRegionVar:          "eu-west-1",
-		edge.StateTableVar:         "ocel-state",
-		edge.AssetBucketVar:        "ocel-assets",
-		edge.ImageOptimizerURLVar:  "https://optimizer.example",
-		edge.RevalidateQueueURLVar: "https://queue.example",
-		edge.EdgeAccessKeyIDVar:    "AKIA",
+		envPreview:           "1",
+		envPreviewGlobal:     "1",
+		envPreviewBaseDomain: "preview.acme.com",
+		"OCEL_ORIGIN_ONLY":   "v",
 	} {
 		if worker.Variables[name] != want {
 			t.Errorf("Variables[%s] = %q, want %q", name, worker.Variables[name], want)
 		}
 	}
-	if worker.Secrets[edge.EdgeSecretKeyVar] != "secret" {
-		t.Errorf("Secrets[%s] missing, want the edge credential delivered as a secret", edge.EdgeSecretKeyVar)
+	if worker.Secrets["OCEL_ORIGIN_KEY"] != "s" {
+		t.Errorf("Secrets[OCEL_ORIGIN_KEY] missing, want the origin's secret delivered as a secret")
 	}
 	if worker.Secrets[edge.PreviewKeyVar] != string(previewKey) {
 		t.Errorf("Secrets[%s] missing, want the key that signs preview hostnames delivered as a secret", edge.PreviewKeyVar)
@@ -85,7 +74,7 @@ func TestEdgeProgramForTheSharedPreviewEntry(t *testing.T) {
 	}
 }
 
-func TestEdgeProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
+func TestEntryProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
 	entry := programmed("", environment.TierPreview)
 	entry.PreviewBaseDomain = "preview.acme.com"
 	entry.PreviewKey = previewKey
@@ -100,8 +89,8 @@ func TestEdgeProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
 	}
 }
 
-func TestEdgeProgramRefusesAWorkerThatVerifiesPreviewLabelsWithNoKey(t *testing.T) {
-	for name, program := range map[string]EdgeProgram{
+func TestEntryProgramRefusesAWorkerThatVerifiesPreviewLabelsWithNoKey(t *testing.T) {
+	for name, program := range map[string]EntryProgram{
 		"the shared preview entry":            programmed("", environment.TierPreview),
 		"a project on its own preview domain": programmed("proj", environment.TierPreview),
 	} {
@@ -114,7 +103,7 @@ func TestEdgeProgramRefusesAWorkerThatVerifiesPreviewLabelsWithNoKey(t *testing.
 	}
 }
 
-func TestEdgeProgramForAPreviewProject(t *testing.T) {
+func TestEntryProgramForAPreviewProject(t *testing.T) {
 	project := programmed("proj", environment.TierPreview)
 	project.PreviewBaseDomain = "preview.acme.com"
 	project.PreviewKey = previewKey
@@ -141,14 +130,14 @@ func TestEdgeProgramForAPreviewProject(t *testing.T) {
 		}
 	}
 	for name, want := range map[string]string{
-		edge.PreviewKeyVar:    string(previewKey),
-		edge.EdgeSecretKeyVar: "secret",
+		edge.PreviewKeyVar: string(previewKey),
+		"OCEL_ORIGIN_KEY":  "s",
 	} {
 		if built.Spec.Worker.Secrets[name] != want {
 			t.Errorf("Secrets[%s] = %q, want %q", name, built.Spec.Worker.Secrets[name], want)
 		}
 	}
-	if _, bound := built.Spec.Worker.Services[storeServiceBinding]; bound {
+	if _, bound := built.Spec.Worker.Services[genericStoreBinding]; bound {
 		t.Errorf("Services = %v, want no store binding: a project worker reads the store over its endpoint", built.Spec.Worker.Services)
 	}
 	if built.Spec.StoreEndpoint != project.StoreEndpoint || built.Spec.BootstrapCred != project.StoreBootstrapCred {
@@ -157,7 +146,7 @@ func TestEdgeProgramForAPreviewProject(t *testing.T) {
 	}
 }
 
-func TestEdgeProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
+func TestEntryProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
 	project := programmed("proj", environment.TierPreview)
 
 	built, err := project.Build()
@@ -177,7 +166,7 @@ func TestEdgeProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
 	}
 }
 
-func TestEdgeProgramForAProductionProject(t *testing.T) {
+func TestEntryProgramForAProductionProject(t *testing.T) {
 	built, err := programmed("proj", environment.TierProduction).Build()
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -198,7 +187,7 @@ func TestEdgeProgramForAProductionProject(t *testing.T) {
 	}
 }
 
-func TestEdgeProgramRunsTheEntryModuleTheEdgeNames(t *testing.T) {
+func TestEntryProgramRunsTheEntryModuleTheEdgeNames(t *testing.T) {
 	program := programmed("shop", environment.TierProduction)
 
 	built, err := program.Build()
@@ -210,11 +199,64 @@ func TestEdgeProgramRunsTheEntryModuleTheEdgeNames(t *testing.T) {
 	}
 }
 
-func TestEdgeProgramRefusesAnEdgeThatNamesNoEntryModule(t *testing.T) {
+func TestEntryProgramRefusesAnEdgeThatNamesNoEntryModule(t *testing.T) {
 	program := programmed("shop", environment.TierProduction)
 	program.Entry = edge.WorkerModule{}
 
-	if _, err := program.Build(); err == nil || !strings.Contains(err.Error(), string(cloudflare.Kind)) {
+	if _, err := program.Build(); err == nil || !strings.Contains(err.Error(), string(Kind)) {
 		t.Fatalf("Build() = %v, want a refusal naming the edge", err)
+	}
+}
+
+func TestEntryProgramPassesTheOriginsBindingsThroughUnchanged(t *testing.T) {
+	program := programmed("shop", environment.TierProduction)
+	program.Origin = OriginBindings{
+		Variables: map[string]string{"A": "1", "B": "2"},
+		Secrets:   map[string]string{"S": "x", "T": "y"},
+	}
+
+	built, err := program.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !maps.Equal(built.Spec.Worker.Variables, program.Origin.Variables) {
+		t.Errorf("Variables = %v, want %v", built.Spec.Worker.Variables, program.Origin.Variables)
+	}
+	if !maps.Equal(built.Spec.Worker.Secrets, program.Origin.Secrets) {
+		t.Errorf("Secrets = %v, want %v", built.Spec.Worker.Secrets, program.Origin.Secrets)
+	}
+}
+
+func TestEntryProgramLeavesTheCallersBindingsUntouched(t *testing.T) {
+	program := programmed("", environment.TierPreview)
+	program.PreviewBaseDomain = "preview.acme.com"
+	program.PreviewKey = previewKey
+	variables := maps.Clone(program.Origin.Variables)
+	secrets := maps.Clone(program.Origin.Secrets)
+
+	if _, err := program.Build(); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !maps.Equal(program.Origin.Variables, variables) {
+		t.Errorf("Origin.Variables = %v, want %v", program.Origin.Variables, variables)
+	}
+	if !maps.Equal(program.Origin.Secrets, secrets) {
+		t.Errorf("Origin.Secrets = %v, want %v", program.Origin.Secrets, secrets)
+	}
+}
+
+func TestEntryProgramWithNoOriginSecretsCarriesNoSecrets(t *testing.T) {
+	program := programmed("shop", environment.TierProduction)
+	program.Origin = OriginBindings{}
+
+	built, err := program.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if built.Spec.Worker.Secrets != nil {
+		t.Errorf("Secrets = %v, want nil", built.Spec.Worker.Secrets)
+	}
+	if built.Spec.Worker.Variables == nil || len(built.Spec.Worker.Variables) != 0 {
+		t.Errorf("Variables = %#v, want non-nil and empty", built.Spec.Worker.Variables)
 	}
 }

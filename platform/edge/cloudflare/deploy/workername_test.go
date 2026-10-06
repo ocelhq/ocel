@@ -1,12 +1,17 @@
 package cloudflare
 
 import (
+	"regexp"
+	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const defaultNamespace = "ocel"
+
+var truncationMarker = regexp.MustCompile(`-x[0-9a-f]{8}$`)
 
 func TestConventionWorkerNames(t *testing.T) {
 	t.Parallel()
@@ -101,5 +106,83 @@ func TestProjectOwnsScriptReadsOnlyThisNamespacesWorkers(t *testing.T) {
 	}
 	if !projectOwnsScript(other, "shop")(theirs[0]) {
 		t.Errorf("%q does not read as %s's own worker", theirs[0], other)
+	}
+}
+
+func TestProjectOwnsWorkerAgreesWithProjectOwnsScript(t *testing.T) {
+	t.Parallel()
+
+	for script, want := range map[string]bool{
+		"ocel--shop--prod--web":    true,
+		"ocel--shopfoo--prod--web": false,
+		"my-worker":                false,
+	} {
+		if got := ProjectOwnsWorker(defaultNamespace, "shop", script); got != want {
+			t.Errorf("ProjectOwnsWorker(shop, %q) = %v, want %v", script, got, want)
+		}
+		if got := projectOwnsScript(defaultNamespace, "shop")(script); got != want {
+			t.Errorf("projectOwnsScript(shop)(%q) = %v, want %v", script, got, want)
+		}
+	}
+	for _, args := range [][3]string{{"", "shop", "ocel--shop--prod--web"}, {defaultNamespace, "", "ocel--shop--prod--web"}, {defaultNamespace, "shop", ""}} {
+		if ProjectOwnsWorker(args[0], args[1], args[2]) {
+			t.Errorf("ProjectOwnsWorker(%q, %q, %q) = true, want false for an empty argument", args[0], args[1], args[2])
+		}
+	}
+}
+
+func TestWorkerScriptName(t *testing.T) {
+	t.Run("every boundary is one field separator", func(t *testing.T) {
+		t.Parallel()
+		if got, want := workerScriptName(defaultNamespace, "shop", "prod", "web"), "ocel--shop--prod--web"; got != want {
+			t.Errorf("workerScriptName = %q, want %q", got, want)
+		}
+		if got, want := rootWorkerName(defaultNamespace, "shop", "prod"), "ocel--shop--prod--root"; got != want {
+			t.Errorf("rootWorkerName = %q, want %q", got, want)
+		}
+		if got, want := previewWorkerName(defaultNamespace, "shop"), "ocel--shop--preview--root"; got != want {
+			t.Errorf("previewWorkerName = %q, want %q", got, want)
+		}
+		if got := workerScriptName(defaultNamespace, "shop", "prod", "web"); truncationMarker.MatchString(got) {
+			t.Errorf("%q is marked truncated but fits", got)
+		}
+	})
+
+	t.Run("environments that differ past the truncation point keep distinct names", func(t *testing.T) {
+		t.Parallel()
+		slug := strings.Repeat("verylongproject", 5)
+		short := workerScriptName(defaultNamespace, slug, "pr-7", "web")
+		long := workerScriptName(defaultNamespace, slug, "pr-71", "web")
+
+		for _, name := range []string{short, long} {
+			if len(name) > maxWorkerNameLen {
+				t.Errorf("%q is %d chars, over the %d-char limit", name, len(name), maxWorkerNameLen)
+			}
+			if !truncationMarker.MatchString(name) {
+				t.Errorf("%q was truncated without saying so", name)
+			}
+		}
+		if short == long {
+			t.Fatalf("pr-7 and pr-71 deploy over one another as %q", short)
+		}
+	})
+
+	t.Run("apps in one environment keep distinct names", func(t *testing.T) {
+		t.Parallel()
+		slug := strings.Repeat("verylongproject", 5)
+		if web, docs := workerScriptName(defaultNamespace, slug, "prod", "web"), workerScriptName(defaultNamespace, slug, "prod", "docs"); web == docs {
+			t.Fatalf("two apps collided on one script name: %q", web)
+		}
+	})
+}
+
+func TestThePreviewWorkerFamilySitsUnderItsOwnStem(t *testing.T) {
+	t.Parallel()
+	stem := previewWorkerStem(defaultNamespace, "shop")
+	if !edge.NameUnderStem(stem, previewWorkerName(defaultNamespace, "shop")) {
+		t.Errorf("%q is not under the preview stem %q", previewWorkerName(defaultNamespace, "shop"), stem)
+	}
+	if edge.NameUnderStem(stem, rootWorkerName(defaultNamespace, "shop", "prod")) {
+		t.Errorf("the production root worker sits under the preview stem %q", stem)
 	}
 }
