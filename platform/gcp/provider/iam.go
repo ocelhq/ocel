@@ -11,6 +11,7 @@ import (
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -170,13 +171,19 @@ func (c *clients) bindKeyRoles(ctx context.Context, tier environment.Tier, membe
 
 func boundMember(bindings []*cloudresourcemanager.Binding, role, member string,
 	condition *cloudresourcemanager.Expr, granting bool) ([]*cloudresourcemanager.Binding, bool) {
-	for _, binding := range bindings {
+	for i, binding := range bindings {
 		if binding.Role != role || !sameCondition(binding.Condition, condition) {
 			continue
 		}
 		members, changed := boundMembers(binding.Members, member, granting)
-		binding.Members = members
-		return bindings, changed
+		if !changed {
+			return bindings, false
+		}
+		bound := slices.Clone(bindings)
+		narrowed := *binding
+		narrowed.Members = members
+		bound[i] = &narrowed
+		return bound, true
 	}
 	if !granting {
 		return bindings, false
@@ -199,13 +206,19 @@ func boundKeyRoles(bindings []*iampb.Binding, member string, roles, wanted []str
 }
 
 func boundKeyMember(bindings []*iampb.Binding, role, member string, granting bool) ([]*iampb.Binding, bool) {
-	for _, binding := range bindings {
+	for i, binding := range bindings {
 		if binding.GetRole() != role {
 			continue
 		}
 		members, changed := boundMembers(binding.GetMembers(), member, granting)
-		binding.Members = members
-		return bindings, changed
+		if !changed {
+			return bindings, false
+		}
+		bound := slices.Clone(bindings)
+		replaced := proto.Clone(binding).(*iampb.Binding)
+		replaced.Members = members
+		bound[i] = replaced
+		return bound, true
 	}
 	if !granting {
 		return bindings, false
@@ -265,13 +278,19 @@ func (c *clients) bindAccountRole(ctx context.Context, account, role, member str
 }
 
 func boundAccountMember(bindings []*iam.Binding, role, member string, granting bool) ([]*iam.Binding, bool) {
-	for _, binding := range bindings {
+	for i, binding := range bindings {
 		if binding.Role != role || binding.Condition != nil {
 			continue
 		}
 		members, changed := boundMembers(binding.Members, member, granting)
-		binding.Members = members
-		return bindings, changed
+		if !changed {
+			return bindings, false
+		}
+		bound := slices.Clone(bindings)
+		narrowed := *binding
+		narrowed.Members = members
+		bound[i] = &narrowed
+		return bound, true
 	}
 	if !granting {
 		return bindings, false
@@ -284,10 +303,12 @@ func removeMemberFromRoles(bindings []*cloudresourcemanager.Binding, member stri
 	for _, binding := range bindings {
 		if slices.Contains(roles, binding.Role) && slices.Contains(binding.Members, member) {
 			removed = append(removed, &cloudresourcemanager.Binding{Role: binding.Role, Condition: binding.Condition, Members: []string{member}})
-			binding.Members = slices.DeleteFunc(slices.Clone(binding.Members), func(held string) bool { return held == member })
-			if len(binding.Members) == 0 {
+			narrowed := *binding
+			narrowed.Members = slices.DeleteFunc(slices.Clone(binding.Members), func(held string) bool { return held == member })
+			if len(narrowed.Members) == 0 {
 				continue
 			}
+			binding = &narrowed
 		}
 		kept = append(kept, binding)
 	}
