@@ -285,8 +285,10 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		return err
 	}
 	written.State = stateComplete
-	_, err = b.stampWith(ctx, read, written, generation)
-	return err
+	if _, err := b.stampWith(ctx, read, written, generation); err != nil {
+		return err
+	}
+	return b.deleteUnusedAccounts(ctx, req, progress)
 }
 
 func stampItem(items []item, stampBucket item) item {
@@ -944,7 +946,7 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 		}
 		taking.report(progress)
 	}
-	return nil
+	return b.deleteRetiredDelayAccount(ctx, tier, progress)
 }
 
 func (r removal) report(progress progress.Log) {

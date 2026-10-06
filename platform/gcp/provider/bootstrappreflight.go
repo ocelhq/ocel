@@ -54,6 +54,7 @@ var bootstrapPermissions = []string{
 	"artifactregistry.repositories.delete",
 	"iam.serviceAccounts.create",
 	"iam.serviceAccounts.get",
+	"iam.serviceAccounts.list",
 	"iam.serviceAccounts.delete",
 	"iam.serviceAccounts.getIamPolicy",
 	"iam.serviceAccounts.setIamPolicy",

@@ -270,7 +270,9 @@ gcloud projects add-iam-policy-binding my-project \
 ```
 
 Google limits how many service accounts a project may hold, and every app takes one per tier:
-a deploy that reaches the limit is refused, naming the quota.
+a deploy that reaches the limit is refused, naming the quota. A deploy never deletes an account:
+`ocel bootstrap <tier>` deletes the accounts of apps no environment of that tier runs, and the
+delay account an earlier version of ocel created for a tier bootstrapped before.
 
 A deploy also keeps the realtime secrets of its namespace, and nothing else: grant
 `roles/secretmanager.editor` under a condition naming them. Every realtime secret's id
