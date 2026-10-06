@@ -95,7 +95,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		scope := tree.Scope(environment, pricing.ScopeApp, app.App)
 		memory := revisionMemory
 		if app.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext {
-			memory = strconv.Itoa(nextMemoryMB) + "Mi"
+			memory = memoryLimit(nextMemoryMB)
 		}
 		if app.Compute() == provider.ComputeContainer {
 			service, err := names.Service(req.Deploy.Slug, req.Deploy.Env, app.App, app.App)
