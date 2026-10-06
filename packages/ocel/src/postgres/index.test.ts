@@ -173,6 +173,17 @@ describe("postgres()", () => {
     expect(() => pool.query).toThrow(UnprovisionedResourceError);
   });
 
+  it("lets next build import a module that declares it, and refuses every read there", () => {
+    vi.stubEnv("NEXT_PHASE", "phase-production-build");
+
+    const pool = postgres("orders");
+
+    expect(() => pool.query).toThrow(
+      "'postgres(\"orders\")' cannot be used while the app is being built: tried to access 'query'",
+    );
+    expect(() => pool.query).toThrow(UnprovisionedResourceError);
+  });
+
   it("percent-encodes credentials in the connection string it exposes", () => {
     const url = new URL(connectionStringFor("h", 5432, "d", "u:s", "p/w"));
 
