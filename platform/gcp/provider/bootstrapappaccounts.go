@@ -109,7 +109,7 @@ func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.Bootst
 
 	var failures []error
 	for _, id := range retired {
-		deleted, err := b.retireWorkloadAccount(ctx, id)
+		deleted, err := b.retireWorkloadAccount(ctx, req.Tier, id)
 		if err != nil {
 			failures = append(failures, err)
 		} else if deleted {
@@ -159,9 +159,16 @@ func retiredWorkloadDeleted(id string, tier environment.Tier) string {
 	return "Deleted the " + id + " service account: every app of the " + string(tier) + " tier runs as an account of its own"
 }
 
-func (b bootstrap) retireWorkloadAccount(ctx context.Context, id string) (bool, error) {
-	if _, err := b.clients.unbindProjectMember(ctx, "serviceAccount:"+id+"@"+b.clients.project+accountDomain); err != nil {
+func (b bootstrap) retireWorkloadAccount(ctx context.Context, tier environment.Tier, id string) (bool, error) {
+	member := "serviceAccount:" + id + "@" + b.clients.project + accountDomain
+	if _, err := b.clients.unbindProjectMember(ctx, member); err != nil {
 		return false, err
+	}
+	if _, err := b.clients.bindKeyRoles(ctx, tier, member, []string{appOpeningRole}, nil); err != nil {
+		return false, fmt.Errorf("take back what the %s service account may do with the %s key: %w", id, tier, err)
+	}
+	if err := ignoreAbsent(b.clients.bindQueueRoles(ctx, tier, member, nil)); err != nil {
+		return false, fmt.Errorf("take back what the %s service account may do on the %s delay queue: %w", id, tier, err)
 	}
 	return b.deleteAccount(ctx, id)
 }
@@ -196,7 +203,7 @@ func (b bootstrap) deleteRetiredWorkloadAccount(ctx context.Context, tier enviro
 	if !b.clients.isRetiredWorkloadAccount(account, tier) {
 		return nil
 	}
-	deleted, err := b.retireWorkloadAccount(ctx, id)
+	deleted, err := b.retireWorkloadAccount(ctx, tier, id)
 	if deleted {
 		ensureProgress(progress).Say(retiredWorkloadDeleted(id, tier))
 	}

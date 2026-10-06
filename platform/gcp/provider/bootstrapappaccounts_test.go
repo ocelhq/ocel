@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"cloud.google.com/go/iam/apiv1/iampb"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iam/v1"
 
@@ -44,6 +45,7 @@ type serviceAccountListing struct {
 	listed   int
 	policy   *cloudresourcemanager.Policy
 	events   []string
+	onDelete func()
 }
 
 func listing(accounts ...listedAccount) *serviceAccountListing {
@@ -102,6 +104,9 @@ func (s *serviceAccountListing) handler(t *testing.T) http.HandlerFunc {
 				w.Write([]byte(`{"error":{"code":` + strconv.Itoa(code) + `,"message":"refused"}}`))
 				return
 			}
+			if s.onDelete != nil {
+				s.onDelete()
+			}
 			s.deleted = append(s.deleted, id)
 			s.events = append(s.events, "delete "+id)
 			w.Write([]byte(`{}`))
@@ -126,13 +131,18 @@ type recordedApp struct {
 
 func sweepingFor(t *testing.T, s *serviceAccountListing, stacks ...recordedApp) (bootstrap, *fake.Log) {
 	t.Helper()
+	return sweepingWith(t, s, &iamServer{}, stacks...)
+}
+
+func sweepingWith(t *testing.T, s *serviceAccountListing, server *iamServer, stacks ...recordedApp) (bootstrap, *fake.Log) {
+	t.Helper()
 	records := fake.NewKeyValues()
 	for _, recorded := range stacks {
 		if err := stackrecords.Write(context.Background(), records, recorded.tier, recorded.project, recorded.stack, stackrecords.Stack{}); err != nil {
 			t.Fatalf("record %s: %v", recorded.stack, err)
 		}
 	}
-	return bootstrap{clients: (&iamServer{}).serve(t, s.handler(t)), records: records}, &fake.Log{}
+	return bootstrap{clients: server.serve(t, s.handler(t)), records: records}, &fake.Log{}
 }
 
 func appAccountOf(c *clients, tier environment.Tier, project, app string) listedAccount {
@@ -376,6 +386,90 @@ func TestABootstrapRevokesThenDeletesItsTiersRetiredWorkloadAccount(t *testing.T
 	assertWorkloadRevoked(t, retiring.policy)
 	if !slices.Contains(log.Lines(), "INFO Deleted the ocel-preview service account: every app of the preview tier runs as an account of its own") {
 		t.Errorf("progress = %q, want the retired account said", log.Lines())
+	}
+}
+
+func holdsMember(policy *iampb.Policy, role, member string) bool {
+	return slices.ContainsFunc(policy.GetBindings(), func(binding *iampb.Binding) bool {
+		return binding.GetRole() == role && slices.Contains(binding.GetMembers(), member)
+	})
+}
+
+func TestABootstrapRevokesTheRetiredTierAccountsKeyAndDelayQueueGrantsBeforeDeletingIt(t *testing.T) {
+	t.Parallel()
+	const member = "serviceAccount:ocel-preview@acme-prod.iam.gserviceaccount.com"
+	const other = "serviceAccount:other@acme-prod.iam.gserviceaccount.com"
+	names := &clients{Names: sweepNames(), region: "europe-west1"}
+	key := keyPath(names, string(environment.TierPreview))
+	queue := names.DelayQueuePath("europe-west1", environment.TierPreview)
+	retired := listedAccount{id: "ocel-preview", description: workloadDescriptionOnMain}
+
+	granted := &iamServer{
+		keys: map[string]bool{key: true},
+		keyPolicy: map[string]*iampb.Policy{key: {Etag: []byte("BwXhoLA="), Bindings: []*iampb.Binding{
+			{Role: "roles/cloudkms.cryptoKeyDecrypter", Members: []string{member, other}},
+		}}},
+		queuePolicies: map[string]*iampb.Policy{queue: {Etag: []byte("BwXhoLA="), Bindings: []*iampb.Binding{
+			{Role: "roles/cloudtasks.enqueuer", Members: []string{member, other}},
+			{Role: "roles/cloudtasks.taskDeleter", Members: []string{member}},
+		}}},
+	}
+	server := listing(retired)
+	server.policy = workloadPolicy()
+	var heldAtDelete []bool
+	server.onDelete = func() {
+		granted.mu.Lock()
+		defer granted.mu.Unlock()
+		heldAtDelete = append(heldAtDelete,
+			holdsMember(granted.keyPolicy[key], "roles/cloudkms.cryptoKeyDecrypter", member),
+			holdsMember(granted.queuePolicies[queue], "roles/cloudtasks.enqueuer", member),
+			holdsMember(granted.queuePolicies[queue], "roles/cloudtasks.taskDeleter", member))
+	}
+	b, log := sweepingWith(t, server, granted)
+	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log); err != nil {
+		t.Fatalf("deleteUnusedAccounts() = %v", err)
+	}
+	if got := server.deletes(); !slices.Equal(got, []string{"ocel-preview"}) {
+		t.Fatalf("deleted %v, want ocel-preview", got)
+	}
+	if want := []bool{false, false, false}; !slices.Equal(heldAtDelete, want) {
+		t.Errorf("grants held when the account was deleted = %v (key, enqueuer, taskDeleter), want %v", heldAtDelete, want)
+	}
+	if !holdsMember(granted.keyPolicy[key], "roles/cloudkms.cryptoKeyDecrypter", other) ||
+		!holdsMember(granted.queuePolicies[queue], "roles/cloudtasks.enqueuer", other) {
+		t.Errorf("the other account lost a grant: key %v, queue %v", granted.keyPolicy[key], granted.queuePolicies[queue])
+	}
+}
+
+func TestABootstrapDeletesTheRetiredTierAccountOfATierWithoutADelayQueue(t *testing.T) {
+	t.Parallel()
+	server := listing(listedAccount{id: "ocel-preview", description: workloadDescriptionOnMain})
+	server.policy = workloadPolicy()
+	b, log := sweepingWith(t, server, &iamServer{tasksAbsent: true})
+	if err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log); err != nil {
+		t.Fatalf("deleteUnusedAccounts() = %v", err)
+	}
+	if got := server.deletes(); !slices.Equal(got, []string{"ocel-preview"}) {
+		t.Errorf("deleted %v, want ocel-preview", got)
+	}
+}
+
+func TestABootstrapKeepsTheRetiredTierAccountWhenItCannotTakeBackItsDelayQueueGrants(t *testing.T) {
+	t.Parallel()
+	names := sweepNamed()
+	queue := names.DelayQueuePath("europe-west1", environment.TierPreview)
+	granted := &iamServer{queuePolicies: map[string]*iampb.Policy{queue: {Etag: []byte("BwXhoLA="), Bindings: []*iampb.Binding{
+		{Role: "roles/cloudtasks.enqueuer", Members: []string{"serviceAccount:ocel-preview@acme-prod.iam.gserviceaccount.com"}},
+	}}}, queueAborts: 100}
+	server := listing(listedAccount{id: "ocel-preview", description: workloadDescriptionOnMain})
+	server.policy = workloadPolicy()
+	b, log := sweepingWith(t, server, granted)
+	err := b.deleteUnusedAccounts(context.Background(), sweepRequest(environment.TierPreview), log)
+	if err == nil || !strings.Contains(err.Error(), "ocel-preview") {
+		t.Errorf("deleteUnusedAccounts() = %v, want an error naming ocel-preview", err)
+	}
+	if got := server.deletes(); len(got) != 0 {
+		t.Errorf("deleted %v, want nothing while its grants stand", got)
 	}
 }
 
