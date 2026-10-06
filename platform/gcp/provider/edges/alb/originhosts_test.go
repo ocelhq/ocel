@@ -2,6 +2,7 @@ package alb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -112,6 +113,29 @@ func TestUnroutingAnOriginHostnameTakesItsRuleBackendAndRecordAway(t *testing.T)
 	}
 	if err := shielded.RouteOriginHost(ctx, originHost()); err != nil {
 		t.Errorf("routing it again = %v, want the record forgotten so it routes afresh", err)
+	}
+}
+
+func TestAnOriginHostnameWhoseRouteFailedIsStillUnroutedAfterwards(t *testing.T) {
+	t.Parallel()
+	balancer, w := shielding(t)
+	shielded := balancer.Shielded()
+	ctx := context.Background()
+	w.failRoute(originHostname, errors.New("url map busy"))
+	if err := shielded.RouteOriginHost(ctx, originHost()); err == nil {
+		t.Fatal("RouteOriginHost succeeded, want the route failure")
+	}
+
+	if err := shielded.UnrouteOriginHost(ctx, environment.TierProduction, originHostname); err != nil {
+		t.Fatalf("UnrouteOriginHost = %v", err)
+	}
+
+	destroyed := false
+	for _, name := range w.torn() {
+		destroyed = destroyed || name == originStack()
+	}
+	if !destroyed {
+		t.Errorf("the origin host's stack the failed route raised was not destroyed: %v", w.torn())
 	}
 }
 
