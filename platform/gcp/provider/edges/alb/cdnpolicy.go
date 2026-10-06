@@ -9,15 +9,18 @@ var cacheKeyHeaders = []string{"RSC", "Next-Router-Prefetch", "Next-Router-Segme
 
 const draftModeCookie = "__prerender_bypass"
 
-func newCDNPolicy() *compute.BackendServiceCdnPolicyArgs {
+func newCDNPolicy(shielded bool) *compute.BackendServiceCdnPolicyArgs {
+	key := &compute.BackendServiceCdnPolicyCacheKeyPolicyArgs{
+		IncludeHost:        pulumi.Bool(true),
+		IncludeProtocol:    pulumi.Bool(true),
+		IncludeQueryString: pulumi.Bool(true),
+	}
+	if !shielded {
+		key.IncludeHttpHeaders = pulumi.ToStringArray(cacheKeyHeaders)
+		key.IncludeNamedCookies = pulumi.StringArray{pulumi.String(draftModeCookie)}
+	}
 	return &compute.BackendServiceCdnPolicyArgs{
-		CacheMode: pulumi.String(cacheOnOrigin),
-		CacheKeyPolicy: &compute.BackendServiceCdnPolicyCacheKeyPolicyArgs{
-			IncludeHost:         pulumi.Bool(true),
-			IncludeProtocol:     pulumi.Bool(true),
-			IncludeQueryString:  pulumi.Bool(true),
-			IncludeHttpHeaders:  pulumi.ToStringArray(cacheKeyHeaders),
-			IncludeNamedCookies: pulumi.StringArray{pulumi.String(draftModeCookie)},
-		},
+		CacheMode:      pulumi.String(cacheOnOrigin),
+		CacheKeyPolicy: key,
 	}
 }

@@ -70,6 +70,10 @@ revalidated pages from Cloud CDN, and nothing else. It costs nothing, and a boot
 deletes it, because Google holds a deleted custom role's id for up to 44 days. A role deleted by
 hand is undeleted within Google's first 7 days, and one whose permissions drifted is put back.
 
+Cloud CDN passes the `Cache-Tag` response header through to clients, so the tag names a Next app
+stamps on its pages, including the release, are visible to visitors: never put a user or tenant id
+in a tag.
+
 ```json title="ocel.json"
 {
   "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",

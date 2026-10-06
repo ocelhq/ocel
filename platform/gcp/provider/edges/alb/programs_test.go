@@ -7,7 +7,12 @@ import (
 )
 
 func binding(hosts map[string]Host) Program {
+	return shieldedBinding(hosts, false)
+}
+
+func shieldedBinding(hosts map[string]Host, shielded bool) Program {
 	return bindingProgram(bindingSpec{
+		Shielded:       shielded,
 		Region:         "europe-west1",
 		Slug:           "shop",
 		Tier:           environment.TierProduction,
