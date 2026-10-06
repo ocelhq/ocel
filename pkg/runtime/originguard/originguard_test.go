@@ -335,6 +335,87 @@ func TestAStreamTheAppFlushesReachesTheClientEventByEvent(t *testing.T) {
 	}
 }
 
+func TestAClientsH2cUpgradeIsAnsweredOverHTTP1WithoutReachingTheApp(t *testing.T) {
+	var heard http.Header
+	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Upgrade") != "" {
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				conn.Close()
+			}
+			return
+		}
+		heard = r.Header.Clone()
+		io.WriteString(w, "served by the app")
+	}))
+	t.Cleanup(app.Close)
+	target, err := url.Parse(app.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	front := httptest.NewServer(Handler(Options{Upstream: target}))
+	t.Cleanup(front.Close)
+
+	req, err := http.NewRequest(http.MethodGet, front.URL+"/health", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Connection", "Upgrade, HTTP2-Settings")
+	req.Header.Set("Upgrade", "h2c")
+	req.Header.Set("HTTP2-Settings", "AAMAAABkAAQAoAAAAAIAAAAA")
+	resp, err := front.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK || string(body) != "served by the app" {
+		t.Fatalf("the client got %d %q, want the app's 200", resp.StatusCode, body)
+	}
+	for _, name := range []string{"Upgrade", "Connection", "Http2-Settings"} {
+		if got := heard.Get(name); got != "" {
+			t.Errorf("the app was handed %s: %q", name, got)
+		}
+	}
+}
+
+func TestAWebsocketUpgradeStillReachesTheApp(t *testing.T) {
+	var upgrade string
+	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrade = r.Header.Get("Upgrade")
+		w.Header().Set("Connection", "Upgrade")
+		w.Header().Set("Upgrade", "websocket")
+		w.WriteHeader(http.StatusSwitchingProtocols)
+	}))
+	t.Cleanup(app.Close)
+	target, err := url.Parse(app.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	front := httptest.NewServer(Handler(Options{Upstream: target}))
+	t.Cleanup(front.Close)
+
+	req, err := http.NewRequest(http.MethodGet, front.URL+"/socket", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	resp, err := front.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Errorf("the client got %d, want 101", resp.StatusCode)
+	}
+	if upgrade != "websocket" {
+		t.Errorf("the app heard Upgrade %q, want websocket", upgrade)
+	}
+}
+
 func TestGuardFromEnv(t *testing.T) {
 	t.Run("takes the secret out of the environment the app is handed", func(t *testing.T) {
 		guard, kept := GuardFromEnv([]string{
