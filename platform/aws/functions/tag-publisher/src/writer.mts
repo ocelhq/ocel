@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 
 import type { TagRecord } from "@framework/next-cache";
+import { newIsrWriterClient } from "@platform/edge-contract/isr-writer";
 
 export function isrWriteSecret(seed: string, isrPrefix: string): string {
   return createHmac("sha256", seed).update(isrPrefix).digest("hex");
@@ -13,20 +14,10 @@ export async function raise(
   isrPrefix: string,
   records: Map<string, TagRecord>,
 ): Promise<void> {
-  if (!endpoint.startsWith("https://")) {
-    throw new Error(
-      `raise ${isrPrefix}: the ISR writer endpoint ${endpoint} is not https, and the write secret travels in the clear over anything else`,
-    );
-  }
-  const response = await fetchImpl(`${endpoint}/${isrPrefix}/tags`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${isrWriteSecret(seed, isrPrefix)}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ records: Object.fromEntries(records) }),
-  });
-  if (response.status !== 204) {
-    throw new Error(`raise ${isrPrefix}: writer answered ${response.status}`);
-  }
+  await newIsrWriterClient({
+    endpoint,
+    isrPrefix,
+    secret: isrWriteSecret(seed, isrPrefix),
+    fetch: fetchImpl,
+  }).raiseTags(Object.fromEntries(records));
 }

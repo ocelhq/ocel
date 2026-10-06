@@ -785,6 +785,9 @@ importers:
       '@platform/aws-runtime':
         specifier: workspace:*
         version: link:../../runtime
+      '@platform/edge-contract':
+        specifier: workspace:*
+        version: link:../../../edge/contract
     devDependencies:
       '@types/aws-lambda':
         specifier: ^8.10.160
@@ -981,6 +984,10 @@ importers:
         version: 4.110.0
 
   platform/edge/contract:
+    dependencies:
+      '@framework/next-cache':
+        specifier: workspace:*
+        version: link:../../../frameworks/next/cache
     devDependencies:
       '@types/node':
         specifier: ^24

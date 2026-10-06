@@ -19,13 +19,7 @@ const handlers = {
 
 const bundledModules = ["cache-store", "dispatch-host", "tag-snapshot-store", "use-cache-store"];
 
-const bundledInternals = [
-  "dispatch-assets",
-  "dispatch-signing",
-  "isr-writer",
-  "object-store",
-  "tag-index",
-];
+const bundledInternals = ["dispatch-assets", "dispatch-signing", "object-store", "tag-index"];
 
 const cjsInterop = [
   'import { createRequire as ocelCreateRequire } from "node:module";',

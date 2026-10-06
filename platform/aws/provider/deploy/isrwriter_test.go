@@ -87,8 +87,11 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		admin := release.isrCache(isrSpec("admin", "prod/proj/admin/r1/isr"))
 		again := releasing(t, cfg).isrCache(isrSpec("web", "prod/proj/web/r1/isr"))
 
-		if want := "https://writer.example/prod/proj/web/r1/isr/entry"; web.WriterURL != want {
+		if want := "https://writer.example"; web.WriterURL != want {
 			t.Errorf("web WriterURL = %q, want %q", web.WriterURL, want)
+		}
+		if want := "prod/proj/web/r1/isr"; web.Prefix != want {
+			t.Errorf("web Prefix = %q, want %q", web.Prefix, want)
 		}
 		if web.WriterSecret == admin.WriterSecret {
 			t.Error("two apps in one deploy must not share a write secret")
@@ -126,10 +129,10 @@ func TestISRWriterEnv(t *testing.T) {
 		t.Parallel()
 		with := isrConfig{
 			Prefix:       testPrefix,
-			WriterURL:    "https://writer.example/" + testPrefix + "/entry",
+			WriterURL:    "https://writer.example",
 			WriterSecret: "write-secret",
 		}.env()
-		if with["OCEL_ISR_WRITER_URL"] != "https://writer.example/"+testPrefix+"/entry" {
+		if with["OCEL_ISR_WRITER_URL"] != "https://writer.example" {
 			t.Errorf("OCEL_ISR_WRITER_URL = %q", with["OCEL_ISR_WRITER_URL"])
 		}
 		if with["OCEL_ISR_WRITER_SECRET"] != "write-secret" {
@@ -138,7 +141,7 @@ func TestISRWriterEnv(t *testing.T) {
 
 		for _, cfg := range []isrConfig{
 			{Prefix: testPrefix},
-			{Prefix: testPrefix, WriterURL: "https://writer.example/x/entry"},
+			{Prefix: testPrefix, WriterURL: "https://writer.example"},
 			{Prefix: testPrefix, WriterSecret: "write-secret"},
 		} {
 			env := cfg.env()

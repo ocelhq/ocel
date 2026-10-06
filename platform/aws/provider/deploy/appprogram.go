@@ -283,7 +283,7 @@ func (r *release) isrCache(spec provider.StackSpec) *isrConfig {
 	}
 	if isrEntriesAdopted(r.cfg.objectStores()) {
 		cache.CacheStoreBucket = r.cfg.CacheStoreBucket
-		cache.WriterURL = r.cfg.ISRWriterEndpoint + "/" + isr.Prefix + "/entry"
+		cache.WriterURL = r.cfg.ISRWriterEndpoint
 		cache.WriterSecret = cloudflare.DeriveISRWriteSecret(r.cfg.ISRWriterSeed, isr.Prefix)
 	}
 	return cache
