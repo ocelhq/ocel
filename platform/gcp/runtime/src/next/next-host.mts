@@ -103,7 +103,7 @@ function openIsrWriter(
   if (!endpoint || !secret) {
     throw new Error(
       "ocel: OCEL_ISR_WRITER_URL and OCEL_ISR_WRITER_SECRET must both be set when this service keeps its pages and tags in the edge's store; " +
-        "re-run `ocel bootstrap production` and redeploy",
+        "re-run `ocel bootstrap` for the tier this service runs in, and redeploy",
     );
   }
   if (tagDatabase) {
