@@ -1,1 +1,0 @@
-DROP TABLE "project_env_value" CASCADE;
