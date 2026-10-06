@@ -37,14 +37,16 @@ func TestChildHelper(t *testing.T) {
 	}
 
 	var ln net.Listener
+	report := "1"
 	term := make(chan os.Signal, 1)
 	switch role {
 	case "listen":
-		opened, err := net.Listen("tcp", "127.0.0.1:"+os.Getenv("PORT"))
+		opened, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			os.Exit(97)
 		}
 		ln = opened
+		report = ln.Addr().String()
 	case "deaf":
 		signal.Ignore(syscall.SIGTERM, syscall.SIGINT)
 	case "obeys":
@@ -53,7 +55,11 @@ func TestChildHelper(t *testing.T) {
 		os.Exit(96)
 	}
 
-	if err := os.WriteFile(os.Getenv(readyVar), []byte("1"), 0o600); err != nil {
+	ready := os.Getenv(readyVar)
+	if err := os.WriteFile(ready+".partial", []byte(report), 0o600); err != nil {
+		os.Exit(95)
+	}
+	if err := os.Rename(ready+".partial", ready); err != nil {
 		os.Exit(95)
 	}
 
@@ -73,7 +79,13 @@ func TestChildHelper(t *testing.T) {
 	}
 }
 
-func start(t *testing.T, role string, env ...string) *Process {
+func start(t *testing.T, role string) *Process {
+	t.Helper()
+	proc, _ := startReporting(t, role)
+	return proc
+}
+
+func startReporting(t *testing.T, role string) (*Process, string) {
 	t.Helper()
 	binary, err := os.Executable()
 	if err != nil {
@@ -82,7 +94,7 @@ func start(t *testing.T, role string, env ...string) *Process {
 	ready := filepath.Join(t.TempDir(), "ready")
 	proc, err := Start(Options{
 		Command: []string{binary, "-test.run=^TestChildHelper$"},
-		Env:     append([]string{roleVar + "=" + role, readyVar + "=" + ready}, env...),
+		Env:     []string{roleVar + "=" + role, readyVar + "=" + ready},
 		Stdout:  io.Discard,
 		Stderr:  io.Discard,
 	})
@@ -90,17 +102,21 @@ func start(t *testing.T, role string, env ...string) *Process {
 		t.Fatalf("Start: %v", err)
 	}
 	if strings.HasPrefix(role, "exit:") {
-		return proc
+		return proc, ""
 	}
-	deadline := time.Now().Add(20 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(ready); err == nil {
-			return proc
+	deadline := time.After(20 * time.Second)
+	for {
+		if report, err := os.ReadFile(ready); err == nil {
+			return proc, string(report)
 		}
-		time.Sleep(5 * time.Millisecond)
+		select {
+		case exit := <-proc.Exited():
+			t.Fatalf("the helper child exited before it came up: %v", exit)
+		case <-deadline:
+			t.Fatal("the helper child never came up")
+		case <-time.After(5 * time.Millisecond):
+		}
 	}
-	t.Fatal("the helper child never came up")
-	return nil
 }
 
 func waitExit(t *testing.T, proc *Process) Exit {
@@ -207,15 +223,11 @@ func TestStop(t *testing.T) {
 
 func TestWatchListening(t *testing.T) {
 	t.Run("resolves once the app has the port open", func(t *testing.T) {
-		port, err := FreePort()
-		if err != nil {
-			t.Fatal(err)
-		}
-		proc := start(t, "listen", "PORT="+strconv.Itoa(port))
+		proc, address := startReporting(t, "listen")
 		t.Cleanup(func() { proc.Stop(5 * time.Second) })
 
 		select {
-		case err := <-WatchListening("127.0.0.1:"+strconv.Itoa(port), proc.Exited()):
+		case err := <-WatchListening(address, proc.Exited()):
 			if err != nil {
 				t.Fatalf("WatchListening = %v, want the app served once it listened", err)
 			}
@@ -225,10 +237,7 @@ func TestWatchListening(t *testing.T) {
 	})
 
 	t.Run("reports an app that exited before it ever listened", func(t *testing.T) {
-		port, err := FreePort()
-		if err != nil {
-			t.Fatal(err)
-		}
+		port := bindPortWithoutListening(t)
 		proc := start(t, "exit:3")
 
 		select {
@@ -245,6 +254,23 @@ func TestWatchListening(t *testing.T) {
 			t.Fatal("WatchListening waited on an app that was never going to listen")
 		}
 	})
+}
+
+func bindPortWithoutListening(t *testing.T) int {
+	t.Helper()
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { syscall.Close(fd) })
+	if err := syscall.Bind(fd, &syscall.SockaddrInet4{Addr: [4]byte{127, 0, 0, 1}}); err != nil {
+		t.Fatal(err)
+	}
+	bound, err := syscall.Getsockname(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bound.(*syscall.SockaddrInet4).Port
 }
 
 func TestFreePort(t *testing.T) {
