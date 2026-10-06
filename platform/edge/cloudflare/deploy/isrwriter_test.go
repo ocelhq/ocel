@@ -301,3 +301,93 @@ func TestPuttingAnEntryTheWriterRejectedNamesTheKeyAndNotTheSecret(t *testing.T)
 		t.Errorf("error %q holds the write secret", err)
 	}
 }
+
+func scriptedWriter(t *testing.T, statuses ...int) (*httptest.Server, *[]writerCall) {
+	t.Helper()
+	var calls []writerCall
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, writerCall{method: r.Method, path: r.URL.Path, auth: r.Header.Get("Authorization")})
+		status := statuses[min(len(calls), len(statuses))-1]
+		if status == http.StatusServiceUnavailable {
+			w.Header().Set("Retry-After", "0")
+		}
+		w.WriteHeader(status)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &calls
+}
+
+func TestDestroyingAnISRPrefixCallsTheWriterUntilItAnswersEmptied(t *testing.T) {
+	srv, calls := scriptedWriter(t, http.StatusAccepted, http.StatusAccepted, http.StatusNoContent)
+
+	if err := writerAccess(srv.URL).Destroy(context.Background(), "/"+testPrefix+"/"); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+
+	if len(*calls) != 3 {
+		t.Fatalf("calls = %d, want 3: 202 means objects remain", len(*calls))
+	}
+	for _, call := range *calls {
+		if call.method != http.MethodPost || call.path != "/"+testPrefix+"/destroy" || call.auth != "Bearer cred-1" {
+			t.Errorf("call = %+v, want POST /%s/destroy under the bootstrap credential", call, testPrefix)
+		}
+	}
+}
+
+func TestISRWriterDestroyRetriesAWriterThatRanOutOfBudget(t *testing.T) {
+	srv, calls := scriptedWriter(t, http.StatusServiceUnavailable, http.StatusNoContent)
+
+	if err := writerAccess(srv.URL).Destroy(context.Background(), testPrefix); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+	if len(*calls) != 2 {
+		t.Errorf("calls = %d, want the failed one retried once", len(*calls))
+	}
+}
+
+func TestDestroyingAnISRPrefixNeedsNoSeed(t *testing.T) {
+	srv, calls := scriptedWriter(t, http.StatusNoContent)
+	w := ISRWriter{Endpoint: srv.URL, BootstrapCredential: "cred-1"}
+
+	if err := w.Destroy(context.Background(), testPrefix); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+	if len(*calls) != 1 {
+		t.Errorf("calls = %d, want the destroy to go out without a seed", len(*calls))
+	}
+}
+
+func TestDestroyingAnISRPrefixWithoutAWriterSendsNothing(t *testing.T) {
+	srv, calls := scriptedWriter(t, http.StatusNoContent)
+	for _, w := range []ISRWriter{{}, {Endpoint: srv.URL}, {BootstrapCredential: "cred-1"}} {
+		if err := w.Destroy(context.Background(), testPrefix); err != nil {
+			t.Errorf("Destroy(%+v) = %v, want nothing to do", w, err)
+		}
+	}
+	if len(*calls) != 0 {
+		t.Errorf("calls = %+v, want none", *calls)
+	}
+}
+
+func TestAnISRWriterThatRefusesADestroyIsAnError(t *testing.T) {
+	srv, _ := scriptedWriter(t, http.StatusUnauthorized)
+
+	err := writerAccess(srv.URL).Destroy(context.Background(), testPrefix)
+
+	if err == nil || !strings.Contains(err.Error(), testPrefix) || !strings.Contains(err.Error(), "401") {
+		t.Errorf("Destroy = %v, want an error naming the prefix and the status", err)
+	}
+}
+
+func TestAnISRWriterThatNeverEmptiesAPrefixIsAnError(t *testing.T) {
+	previous := isrWriterDestroyCalls
+	isrWriterDestroyCalls = 3
+	t.Cleanup(func() { isrWriterDestroyCalls = previous })
+	srv, calls := scriptedWriter(t, http.StatusAccepted)
+
+	err := writerAccess(srv.URL).Destroy(context.Background(), testPrefix)
+
+	if err == nil || !strings.Contains(err.Error(), "prune again") || len(*calls) != 3 {
+		t.Errorf("Destroy = %v after %d calls, want an error telling the caller to prune again after 3", err, len(*calls))
+	}
+}

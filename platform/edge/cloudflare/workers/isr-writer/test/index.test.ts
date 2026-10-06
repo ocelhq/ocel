@@ -271,6 +271,39 @@ describe("destroy", () => {
     );
     expect(res.status).toBe(401);
   });
+
+  it("destroying a deployment deletes every object under its prefix and nothing else", async () => {
+    const prefix = freshPrefix();
+    const release = prefix.slice(0, -"/isr".length);
+    const sibling = `${prefix}2`;
+    const kept = [
+      `${sibling}/cache/x.cache.json`,
+      `${release.slice(0, -1)}9/isr/cache/y.cache.json`,
+    ];
+    const gone = [
+      `${prefix}/cache/a.cache.json`,
+      `${prefix}/fetch-cache/b.cache.json`,
+      `${prefix}/tag-clock.json`,
+    ];
+    for (const key of [...gone, ...kept]) await env.OCEL_CACHE_STORE.put(key, "{}");
+    await initialize(prefix, "write-secret");
+
+    const res = await SELF.fetch(bearerReq(`/${prefix}/destroy`, BOOTSTRAP, { method: "POST" }));
+
+    expect(res.status).toBe(204);
+    for (const key of gone) expect(await env.OCEL_CACHE_STORE.head(key), key).toBeNull();
+    for (const key of kept) expect(await env.OCEL_CACHE_STORE.head(key), key).not.toBeNull();
+  });
+
+  it("destroying a deployment twice succeeds", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+
+    const first = await SELF.fetch(bearerReq(`/${prefix}/destroy`, BOOTSTRAP, { method: "POST" }));
+    const second = await SELF.fetch(bearerReq(`/${prefix}/destroy`, BOOTSTRAP, { method: "POST" }));
+
+    expect([first.status, second.status]).toEqual([204, 204]);
+  });
 });
 
 describe("routing", () => {

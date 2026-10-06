@@ -12,10 +12,13 @@ import (
 	"math/rand/v2"
 	"net/http"
 	neturl "net/url"
+	"strings"
 	"time"
 )
 
 var isrWriterTimeout = 30 * time.Second
+
+var isrWriterDestroyCalls = 400
 
 var isrWriterBackoff = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}
 
@@ -134,4 +137,57 @@ func (w ISRWriter) putEntryOnce(ctx context.Context, url, isrPrefix string, body
 	defer res.Body.Close()
 	_, _ = io.Copy(io.Discard, res.Body)
 	return res.StatusCode, nil
+}
+
+func (w ISRWriter) Destroy(ctx context.Context, isrPrefix string) error {
+	if !w.isReachable() {
+		return nil
+	}
+	prefix := strings.Trim(isrPrefix, "/")
+	url := w.Endpoint + "/" + prefix + "/destroy"
+	for range isrWriterDestroyCalls {
+		status, body, err := w.destroyOnce(ctx, url)
+		if err != nil {
+			return fmt.Errorf("isr writer destroy for %s: %w", prefix, err)
+		}
+		switch {
+		case status == http.StatusAccepted:
+			continue
+		case status >= 200 && status < 300:
+			return nil
+		}
+		return fmt.Errorf("isr writer destroy for %s: status %d: %s", prefix, status, body)
+	}
+	return fmt.Errorf("the isr writer still holds objects under %s after %d calls; prune again to finish", prefix, isrWriterDestroyCalls)
+}
+
+func (w ISRWriter) destroyOnce(ctx context.Context, url string) (int, string, error) {
+	for attempt := 0; ; attempt++ {
+		status, header, body, err := w.destroyAttempt(ctx, url)
+		retryable := status == http.StatusTooManyRequests || status >= http.StatusInternalServerError || err != nil
+		if !retryable || attempt >= storeMaxAttempts-1 {
+			return status, body, err
+		}
+		delay := storeRetryDelay(&http.Response{StatusCode: status, Header: header}, attempt, retryJitter())
+		if err := waitBeforeRetry(ctx, delay); err != nil {
+			return 0, "", err
+		}
+	}
+}
+
+func (w ISRWriter) destroyAttempt(ctx context.Context, url string) (int, http.Header, string, error) {
+	ctx, cancel := context.WithTimeout(ctx, isrWriterTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return 0, nil, "", fmt.Errorf("build the request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+w.BootstrapCredential)
+	res, err := isrWriterClient.Do(req)
+	if err != nil {
+		return 0, nil, "", err
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(res.Body, 1<<10))
+	return res.StatusCode, res.Header, string(body), nil
 }
