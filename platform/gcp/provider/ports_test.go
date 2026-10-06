@@ -314,7 +314,7 @@ func TestADeployMayCreateAccountsAndGrantThemOnlyTheRolesAnAppRuns(t *testing.T)
 	for _, want := range []string{
 		"projects/acme-prod/roles/ocel_app_accounts",
 		"roles/resourcemanager.projectIamAdmin, on the condition api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', [])." +
-			"hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser'])",
+			"hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser', 'projects/acme-prod/roles/ocel_cdn_purge'])",
 		"roles/cloudtasks.queueAdmin on the queue projects/acme-prod/locations/europe-west1/queues/ocel-production-delays",
 		"roles/cloudtasks.queueAdmin on the queue projects/acme-prod/locations/europe-west1/queues/ocel-preview-delays",
 	} {
@@ -329,6 +329,23 @@ func TestADeployMayCreateAccountsAndGrantThemOnlyTheRolesAnAppRuns(t *testing.T)
 	}
 	if slices.Contains(lines, "roles/resourcemanager.projectIamAdmin") {
 		t.Errorf("Permissions(deploy) names roles/resourcemanager.projectIamAdmin with no condition, and a deploy could then grant any role to anyone:\n%s", document.Document)
+	}
+}
+
+func TestADeployMayGrantTheCachePurgeRoleAndNoRoleItCouldChange(t *testing.T) {
+	t.Parallel()
+
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
+	if err != nil {
+		t.Fatalf("Permissions(deploy) = %v", err)
+	}
+	if !strings.Contains(document.Document, "'projects/acme-prod/roles/ocel_cdn_purge'") {
+		t.Errorf("Permissions(deploy) =\n%s\nwant the cache purge role among the roles it may grant", document.Document)
+	}
+	for _, line := range strings.Split(document.Document, "\n") {
+		if line == "roles/iam.roleAdmin" || line == "roles/iam.organizationRoleAdmin" || strings.Contains(line, "iam.roles.") {
+			t.Errorf("Permissions(deploy) names %q, and a deploy that could change a custom role could widen what the grant it holds hands out:\n%s", line, document.Document)
+		}
 	}
 }
 
