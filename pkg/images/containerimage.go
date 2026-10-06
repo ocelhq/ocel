@@ -24,9 +24,7 @@ import (
 )
 
 const (
-	runtimeTagHexLen      = 12
-	NextServerAdapterFile = "server-adapter.mjs"
-	NextAdapterPathVar    = "NEXT_ADAPTER_PATH"
+	runtimeTagHexLen = 12
 )
 
 type NextServerRuntime struct {
@@ -75,7 +73,7 @@ func WrapContainer(base v1.Image, runtime []byte, next *NextServerRuntime) (v1.I
 			return nil, err
 		}
 		addenda = append(addenda, mutate.Addendum{Layer: nextLayer})
-		config.Env = append(append([]string{}, config.Env...), NextAdapterPathVar+"="+path.Join(next.Dir, NextServerAdapterFile))
+		config.Env = append(append([]string{}, config.Env...), containerimage.NextAdapterPathVar+"="+path.Join(next.Dir, containerimage.NextServerAdapterFile))
 	}
 	appended, err := mutate.Append(base, addenda...)
 	if err != nil {
@@ -97,15 +95,15 @@ func checkNextServerRuntime(next *NextServerRuntime, env []string) error {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the provider names %q as the directory of its Next server runtime, and NEXT_ADAPTER_PATH only finds the adapter at an absolute path", next.Dir)
 	}
-	if _, ok := next.Files[NextServerAdapterFile]; !ok {
+	if _, ok := next.Files[containerimage.NextServerAdapterFile]; !ok {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"the provider's Next server runtime holds no %s, so next start has no adapter to load", NextServerAdapterFile)
+			"the provider's Next server runtime holds no %s, so next start has no adapter to load", containerimage.NextServerAdapterFile)
 	}
 	for _, entry := range env {
-		if name, value, _ := strings.Cut(entry, "="); name == NextAdapterPathVar {
+		if name, value, _ := strings.Cut(entry, "="); name == containerimage.NextAdapterPathVar {
 			return refusal.Refuse(refusal.CodeInvalid,
 				"the image sets %s=%s and ocel sets it to load the cache handlers its provider ships: remove it from the image",
-				NextAdapterPathVar, value)
+				containerimage.NextAdapterPathVar, value)
 		}
 	}
 	return nil

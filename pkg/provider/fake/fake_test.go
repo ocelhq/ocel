@@ -6,8 +6,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
@@ -67,8 +67,8 @@ func TestAFakeProviderForAProjectShipsANextServerRuntimeWithItsAdapter(t *testin
 	if err != nil {
 		t.Fatalf("ReadNextServerRuntime() error = %v", err)
 	}
-	if got := string(files[images.NextServerAdapterFile]); got != fake.NextServerAdapter {
-		t.Errorf("ReadNextServerRuntime()[%s] = %q, want %q", images.NextServerAdapterFile, got, fake.NextServerAdapter)
+	if got := string(files[containerimage.NextServerAdapterFile]); got != fake.NextServerAdapter {
+		t.Errorf("ReadNextServerRuntime()[%s] = %q, want %q", containerimage.NextServerAdapterFile, got, fake.NextServerAdapter)
 	}
 	if fake.NewProvider(fake.Options{}).Hooks().ReadNextServerRuntime != nil {
 		t.Error("a bare fake provider ships a Next server runtime")

@@ -4,6 +4,8 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+
+	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 //go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/gcp-payloads
@@ -21,7 +23,7 @@ var (
 	nextServerRuntime = loadNextServerRuntime()
 )
 
-var nextServerRuntimeFiles = []string{"server-adapter.mjs", "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"}
+var nextServerRuntimeFiles = []string{containerimage.NextServerAdapterFile, "cache-handler.cjs", "use-cache-default.cjs", "use-cache-remote.cjs"}
 
 func NodeRuntime() []byte { return nodeRuntime }
 
