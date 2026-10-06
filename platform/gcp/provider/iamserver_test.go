@@ -49,6 +49,8 @@ type iamServer struct {
 	queuePolicies map[string]*iampb.Policy
 	queueWrites   int
 	queueAborts   int
+
+	tasksAbsent bool
 }
 
 type delayQueues struct {
@@ -63,6 +65,9 @@ func (q delayQueues) CreateQueue(_ context.Context, req *cloudtaskspb.CreateQueu
 func (q delayQueues) GetIamPolicy(_ context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
 	q.server.mu.Lock()
 	defer q.server.mu.Unlock()
+	if q.server.tasksAbsent {
+		return nil, status.Error(codes.NotFound, req.GetResource())
+	}
 	if policy := q.server.queuePolicies[req.GetResource()]; policy != nil {
 		return policy, nil
 	}
@@ -157,6 +162,9 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 			s.topicPolicies[strings.TrimSuffix(path, ":setIamPolicy")] = asked.Policy
 			s.topicWrites++
 			_ = json.NewEncoder(w).Encode(asked.Policy)
+		case s.tasksAbsent && strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":getIamPolicy"):
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"service account not found"}}`))
 		case s.accountPolicies != nil && strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":getIamPolicy"):
 			policy := s.accountPolicies[strings.TrimSuffix(path, ":getIamPolicy")]
 			if policy == nil {

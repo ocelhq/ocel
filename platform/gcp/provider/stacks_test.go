@@ -198,6 +198,7 @@ type releasedStacks struct {
 
 func newReleasedStacks(p *Provider) releasedStacks {
 	store := fake.NewKeyValues()
+	p.records = store
 	return releasedStacks{stacks: resources.NewHookStacks(store, resources.NoArtifacts{}, p.resourceHooks()), store: store}
 }
 

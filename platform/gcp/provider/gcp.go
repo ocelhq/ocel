@@ -33,6 +33,8 @@ type Provider struct {
 
 	projectDir string
 
+	records keyvalue.Store
+
 	mu       sync.Mutex
 	resolved *clients
 
@@ -148,7 +150,12 @@ func (p *Provider) Stacks() provider.Stacks {
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return artifacts{p: p} }
 
-func (p *Provider) KeyValues() keyvalue.Store { return keyValues{p: p} }
+func (p *Provider) KeyValues() keyvalue.Store {
+	if p.records != nil {
+		return p.records
+	}
+	return keyValues{p: p}
+}
 
 func (p *Provider) Cipher() seal.Cipher { return cipher{p: p} }
 
