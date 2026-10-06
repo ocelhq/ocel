@@ -3,6 +3,7 @@ set -euo pipefail
 
 AWS_IMAGE="${OCEL_FLOCI_IMAGE:-ghcr.io/ocelhq/floci:2.1.0-ocel.1}"
 GCP_IMAGE="${OCEL_FLOCI_GCP_IMAGE:-floci/floci-gcp:0.8.0}"
+FIRESTORE_IMAGE="${OCEL_FLOCI_FIRESTORE_IMAGE:-gcr.io/google.com/cloudsdktool/google-cloud-cli:587.0.0-emulators}"
 DOCKER_SOCK="${OCEL_FLOCI_DOCKER_SOCK:-/var/run/docker.sock}"
 READY_WAIT_SECS="${OCEL_FLOCI_READY_WAIT:-180}"
 
@@ -23,7 +24,9 @@ The aws emulator answers on 4566 and exports OCEL_FLOCI_ENDPOINT; the gcp one
 answers on 4588 and exports OCEL_FLOCI_GCP_ENDPOINT. They are separate images
 and a run of one is invisible to the other. The aws emulator also publishes
 6379-6399 on the host, where its ElastiCache caches answer, so only one aws
-emulator runs on a host at a time.
+emulator runs on a host at a time. The gcp emulator also runs Google's Firestore
+emulator in <name>-firestore, which keeps the Next tag records floci-gcp cannot
+serve over REST, and exports OCEL_FLOCI_FIRESTORE_ENDPOINT.
 EOF
     exit 2
 }
@@ -51,10 +54,13 @@ aws)
         READY_BODIES+=("\"$service\": *\"running\"")
     done
     EXTRA_ARGS=(-p "127.0.0.1:6379-6399:6379-6399" -e FLOCI_HOSTNAME=localhost.localstack.cloud)
+    FIRESTORE_PORT=
     ;;
 gcp)
     IMAGE=$GCP_IMAGE
     PORT=4588
+    FIRESTORE_PORT=8080
+    FIRESTORE_VAR=OCEL_FLOCI_FIRESTORE_ENDPOINT
     ENDPOINT_VAR=OCEL_FLOCI_GCP_ENDPOINT
     MOUNTS_DOCKER=yes
     READY_PATH="/storage/v1/b?project=$GCP_PROJECT"
@@ -66,11 +72,13 @@ esac
 
 endpoint_of() {
     local mapped
-    mapped=$(docker port "$1" "$PORT/tcp" 2>/dev/null) || return 1
+    mapped=$(docker port "$1" "$2/tcp" 2>/dev/null) || return 1
     mapped=${mapped%%$'\n'*}
     [ -n "$mapped" ] || return 1
     printf 'http://127.0.0.1:%s\n' "${mapped##*:}"
 }
+
+sidecar_of() { printf '%s-firestore\n' "$1"; }
 
 answering() {
     local body
@@ -88,7 +96,7 @@ wait_ready() {
             diagnose_dead "$name" >&2
             die "$name: the container stopped before it answered"
         fi
-        if endpoint=$(endpoint_of "$name") && answering "$endpoint"; then
+        if endpoint=$(endpoint_of "$name" "$PORT") && answering "$endpoint"; then
             echo "floci.sh: $name answered after $((SECONDS - began))s" >&2
             echo "$endpoint"
             return 0
@@ -99,6 +107,24 @@ wait_ready() {
     die "$name: nothing answered on $PORT after ${READY_WAIT_SECS}s"
 }
 
+wait_firestore_ready() {
+    local name=$1 endpoint began=$SECONDS deadline=$((SECONDS + READY_WAIT_SECS))
+    while [ "$SECONDS" -lt "$deadline" ]; do
+        if [ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" != true ]; then
+            diagnose_dead "$name" >&2
+            die "$name: the container stopped before it answered"
+        fi
+        if endpoint=$(endpoint_of "$name" "$FIRESTORE_PORT") && [ "$(curl -sf --max-time 5 "$endpoint/")" = Ok ]; then
+            echo "floci.sh: $name answered after $((SECONDS - began))s" >&2
+            echo "$endpoint"
+            return 0
+        fi
+        sleep 1
+    done
+    diagnose_dead "$name" >&2
+    die "$name: nothing answered on $FIRESTORE_PORT after ${READY_WAIT_SECS}s"
+}
+
 diagnose_dead() {
     echo "floci.sh: the emulator's last words:"
     docker logs --tail 40 "$1" 2>&1 | sed 's/^/    /' || true
@@ -107,17 +133,20 @@ diagnose_dead() {
 print_info() {
     printf 'OCEL_FLOCI_NAME=%s\n' "$1"
     printf '%s=%s\n' "$ENDPOINT_VAR" "$2"
+    if [ -n "${3:-}" ]; then
+        printf '%s=%s\n' "$FIRESTORE_VAR" "$3"
+    fi
 }
 
 published_to_containers() {
-    local gateway port
+    local gateway port container=$1
     gateway=$(docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true)
     if [ -z "$gateway" ]; then
-        echo "-p 127.0.0.1::$PORT"
+        echo "-p 127.0.0.1::$container"
         return
     fi
     port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
-    echo "-p 127.0.0.1:$port:$PORT -p $gateway:$port:$PORT"
+    echo "-p 127.0.0.1:$port:$container -p $gateway:$port:$container"
 }
 
 cmd_create() {
@@ -131,13 +160,20 @@ cmd_create() {
     fi
     local published=(-p "127.0.0.1::$PORT")
     if [ "$CLOUD" = gcp ]; then
-        read -ra published <<<"$(published_to_containers)"
+        read -ra published <<<"$(published_to_containers "$PORT")"
+        local sidecar_published
+        read -ra sidecar_published <<<"$(published_to_containers "$FIRESTORE_PORT")"
+        docker run -d --name "$(sidecar_of "$name")" "${sidecar_published[@]}" "$FIRESTORE_IMAGE" \
+            gcloud emulators firestore start --host-port=0.0.0.0:8080 >/dev/null
     fi
     docker run -d --name "$name" "${published[@]}" "${EXTRA_ARGS[@]}" "${mounts[@]}" "$IMAGE" >/dev/null
-    local endpoint
+    local endpoint firestore_endpoint=
     endpoint=$(wait_ready "$name")
+    if [ -n "$FIRESTORE_PORT" ]; then
+        firestore_endpoint=$(wait_firestore_ready "$(sidecar_of "$name")")
+    fi
     trap - EXIT
-    print_info "$name" "$endpoint"
+    print_info "$name" "$endpoint" "$firestore_endpoint"
 }
 
 discard_half_made() {
@@ -149,21 +185,28 @@ discard_half_made() {
         return 0
     fi
     echo "floci.sh: removing half-made $name (OCEL_FLOCI_KEEP=1 keeps it)" >&2
-    docker rm -f "$name" >/dev/null 2>&1 || true
+    docker rm -f "$name" "$(sidecar_of "$name")" >/dev/null 2>&1 || true
     return 0
 }
 
 cmd_status() {
-    local name=$1 endpoint
-    endpoint=$(endpoint_of "$name") || die "$name: no published port (is it running?)"
-    print_info "$name" "$endpoint"
+    local name=$1 endpoint firestore_endpoint=
+    endpoint=$(endpoint_of "$name" "$PORT") || die "$name: no published port (is it running?)"
+    if [ -n "$FIRESTORE_PORT" ]; then
+        firestore_endpoint=$(endpoint_of "$(sidecar_of "$name")" "$FIRESTORE_PORT") ||
+            die "$(sidecar_of "$name"): no published port (is it running?)"
+    fi
+    print_info "$name" "$endpoint" "$firestore_endpoint"
 }
 
 cmd_destroy() {
     local name=$1
-    if docker inspect "$name" >/dev/null 2>&1; then
-        docker rm -f "$name" >/dev/null
-    fi
+    local container
+    for container in "$name" "$(sidecar_of "$name")"; do
+        if docker inspect "$container" >/dev/null 2>&1; then
+            docker rm -f "$container" >/dev/null
+        fi
+    done
 }
 
 cmd_run() {
@@ -172,13 +215,16 @@ cmd_run() {
     [ "${1:-}" = "--" ] || usage
     shift
     [ $# -gt 0 ] || usage
-    trap 'docker rm -f "'"$name"'" >/dev/null 2>&1 || true' EXIT
+    trap 'cmd_destroy "'"$name"'" >/dev/null 2>&1 || true' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
-    local endpoint
-    endpoint=$(cmd_create "$name" | sed -n "s/^$ENDPOINT_VAR=//p")
-    [ -n "$endpoint" ] || die "$name: created without an endpoint, so there is nothing to hand the command"
-    env "$ENDPOINT_VAR=$endpoint" "$@"
+    local info
+    info=$(cmd_create "$name")
+    grep -q "^$ENDPOINT_VAR=." <<<"$info" || die "$name: created without an endpoint, so there is nothing to hand the command"
+    if [ -n "$FIRESTORE_PORT" ]; then
+        grep -q "^$FIRESTORE_VAR=." <<<"$info" || die "$name: created without a Firestore endpoint, so there is nothing to hand the command"
+    fi
+    env $(grep -v '^OCEL_FLOCI_NAME=' <<<"$info") "$@"
 }
 
 [ $# -ge 2 ] || usage

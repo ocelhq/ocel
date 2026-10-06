@@ -11,6 +11,7 @@ permissions:
 env:
   OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.1.0-ocel.1
   OCEL_FLOCI_GCP_IMAGE: floci/floci-gcp:0.8.0
+  OCEL_FLOCI_FIRESTORE_IMAGE: gcr.io/google.com/cloudsdktool/google-cloud-cli:587.0.0-emulators
   OCEL_VPS_OFFICIAL_IMAGES_MIRROR: mirror.gcr.io/library
   VPS_SHARDS: 8
   VPS_RUNNERS: 2
@@ -149,9 +150,9 @@ jobs:
           go build -o "$RUNNER_TEMP/provider-gcp" ./platform/gcp/provider/cmd/deploy
           echo "OCEL_GCP_PROVIDER_BINARY=$RUNNER_TEMP/provider-gcp" >> "$GITHUB_ENV"
 
-      - name: Pull the emulator
+      - name: Pull the emulators
         if: steps.gate.outputs.green != 'true'
-        run: docker pull "$OCEL_FLOCI_GCP_IMAGE"
+        run: docker pull "$OCEL_FLOCI_GCP_IMAGE" && docker pull "$OCEL_FLOCI_FIRESTORE_IMAGE"
 
       - name: Run every integration test on the emulator
         if: steps.gate.outputs.green != 'true'
