@@ -24,6 +24,7 @@ var bootstrapPermissions = []string{
 	"datastore.databases.delete",
 	"datastore.databases.getMetadata",
 	"datastore.operations.get",
+	"datastore.locations.list",
 	"datastore.schemas.create",
 	"datastore.schemas.list",
 	"datastore.schemas.update",
