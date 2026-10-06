@@ -154,9 +154,9 @@ jobs:
         if: steps.gate.outputs.green != 'true'
         run: docker pull "$OCEL_FLOCI_GCP_IMAGE" && docker pull "$OCEL_FLOCI_FIRESTORE_IMAGE"
 
-      - name: Run every integration test on the emulator
+      - name: Run every integration test and the runtime's live tests on the emulators
         if: steps.gate.outputs.green != 'true'
-        run: scripts/floci.sh --cloud gcp run "$EMULATOR" -- go test -race -count=1 -timeout 30m -tags integration ./platform/gcp/provider/... ./platform/gcp/runtime/... ./scripts/flocidispatch/...
+        run: scripts/floci.sh --cloud gcp run "$EMULATOR" -- bash -c 'go test -race -count=1 -timeout 30m -tags integration ./platform/gcp/provider/... ./platform/gcp/runtime/... ./scripts/flocidispatch/... && pnpm --filter @platform/gcp-runtime live'
 
       - name: Record that what the gcp live suite reads has passed
         if: steps.gate.outputs.green != 'true'
