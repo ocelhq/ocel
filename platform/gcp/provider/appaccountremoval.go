@@ -32,6 +32,18 @@ func findOtherRunningStack(recorded []stackrecords.NamedStack, ref provider.Stac
 	return naming.StackName{}, false
 }
 
+func stackKeepsRunning(ctx context.Context, records keyvalue.Store, ref provider.StackRef, goingFunctions, goingContainers []string) (bool, error) {
+	recorded, found, err := stackrecords.Read(ctx, records, ref.Tier, ref.Project, ref.Name)
+	if err != nil || !found {
+		return false, err
+	}
+	return slices.ContainsFunc(recorded.Functions, func(function provider.Function) bool {
+		return !slices.Contains(goingFunctions, function.Name)
+	}) || slices.ContainsFunc(recorded.Containers, func(container provider.AppContainer) bool {
+		return !slices.Contains(goingContainers, container.Name)
+	}), nil
+}
+
 func revokeUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.Store, ref provider.StackRef, progress progress.Log) error {
 	if ref.Name.IsInfra() {
 		return nil
