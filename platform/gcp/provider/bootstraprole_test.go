@@ -86,6 +86,9 @@ func (s *roleServer) handler(t *testing.T) http.HandlerFunc {
 		case r.Method == http.MethodDelete && r.URL.Path == endpoint:
 			s.writes = append(s.writes, "delete")
 			w.WriteHeader(http.StatusNotFound)
+		case r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/secrets/"):
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"error":{"code":404,"message":"secret not found"}}`))
 		default:
 			t.Errorf("the bootstrap called %s %s, which nothing here serves", r.Method, r.URL)
 			w.WriteHeader(http.StatusNotFound)

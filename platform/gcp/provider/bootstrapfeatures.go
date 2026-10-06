@@ -123,8 +123,11 @@ func (b bootstrap) summaryOf(name string) string {
 func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	return b.eachFront(req.Features, func(feature provider.Feature, front edge.Edge) error {
 		ensureProgress(progress).Say("Installing feature " + feature.Name + " for " + string(req.Tier) + ": " + feature.Summary)
-		_, err := front.Bootstrap(ctx, req.Tier)
-		return err
+		out, err := front.Bootstrap(ctx, req.Tier)
+		if err != nil {
+			return err
+		}
+		return adoptEdgeOffers(ctx, b.clients, b.records, req.Tier, front.Kind(), out, progress)
 	})
 }
 
@@ -151,7 +154,10 @@ func (b bootstrap) dropFronts(
 	return b.eachFront(dropping, func(feature provider.Feature, front edge.Edge) error {
 		ensureProgress(progress).Say("Taking down the " + string(front.Kind()) + " edge's front for " + string(req.Tier) +
 			": this bootstrap no longer requests feature " + feature.Name)
-		return front.Teardown(ctx, req.Tier)
+		if err := front.Teardown(ctx, req.Tier); err != nil {
+			return err
+		}
+		return forgetEdgeOffers(ctx, b.clients, b.records, req.Tier, front.Kind())
 	})
 }
 
@@ -208,7 +214,10 @@ func (b bootstrap) featureInstalled(ctx context.Context, tier environment.Tier, 
 
 func (b bootstrap) tearFronts(ctx context.Context, tier environment.Tier, features []string) error {
 	return b.eachFront(features, func(_ provider.Feature, front edge.Edge) error {
-		return front.Teardown(ctx, tier)
+		if err := front.Teardown(ctx, tier); err != nil {
+			return err
+		}
+		return forgetEdgeOffers(ctx, b.clients, b.records, tier, front.Kind())
 	})
 }
 

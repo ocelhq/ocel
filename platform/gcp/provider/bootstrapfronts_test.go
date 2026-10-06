@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -34,6 +36,7 @@ type countingFront struct {
 	refusal   error
 	silent    bool
 	parts     []edge.BootstrapPart
+	out       edge.BootstrapOutput
 	describe  error
 }
 
@@ -52,7 +55,7 @@ func (f *countingFront) Hooks() edge.Hooks {
 
 func (f *countingFront) Bootstrap(_ context.Context, tier environment.Tier) (edge.BootstrapOutput, error) {
 	f.raised = append(f.raised, tier)
-	return edge.BootstrapOutput{}, nil
+	return f.out, nil
 }
 
 func (f *countingFront) Teardown(_ context.Context, tier environment.Tier) error {
@@ -65,8 +68,15 @@ func (f *countingFront) Teardown(_ context.Context, tier environment.Tier) error
 
 func fronting(t *testing.T) (bootstrap, *frontRegistry) {
 	t.Helper()
+	b, registry, _ := frontingWithSecrets(t)
+	return b, registry
+}
+
+func frontingWithSecrets(t *testing.T) (bootstrap, *frontRegistry, *offersHarness) {
+	t.Helper()
 	registry := &frontRegistry{front: &countingFront{}}
-	return bootstrap{fronts: registry}, registry
+	h := newOffersHarness(t)
+	return bootstrap{fronts: registry, clients: h.clients, records: h.records}, registry, h
 }
 
 func surveyed(features ...string) survey {
@@ -262,4 +272,80 @@ func TestInstallingAndDroppingAFrontSaysWhichFeatureAndEdgeForWhichTier(t *testi
 	if got := progress.Lines(); !slices.Equal(got, want) {
 		t.Errorf("the bootstrap said %q, want %q", got, want)
 	}
+}
+
+func TestDroppingTheEdgeFeatureForgetsWhatItsBootstrapAdopted(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		take func(b bootstrap) error
+	}{
+		{"dropFronts", func(b bootstrap) error {
+			req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{albFeature}}
+			return b.dropFronts(context.Background(), surveyed(albFeature), req, nil)
+		}},
+		{"tearFronts", func(b bootstrap) error {
+			return b.tearFronts(context.Background(), environment.TierProduction, []string{albFeature})
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			b, registry, h := frontingWithSecrets(t)
+			registry.front.out = edge.BootstrapOutput{Offers: fullOffers("c1", "c2"), Values: map[string]string{"cacheBucket": "b"}}
+			raising := provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albFeature}}
+			if err := b.raiseFronts(context.Background(), raising, nil); err != nil {
+				t.Fatalf("raiseFronts = %v", err)
+			}
+			kind := registry.front.Kind()
+			credentials := h.clients.EdgeCredentialsSecret(environment.TierProduction, kind)
+			seed := h.clients.ISRWriterSeedSecret(environment.TierProduction, kind)
+			if _, found := adoptedAs(t, h, kind); !found || !h.secrets.has(credentials) || !h.secrets.has(seed) {
+				t.Fatal("the raise adopted nothing")
+			}
+
+			if err := tc.take(b); err != nil {
+				t.Fatalf("%s = %v", tc.name, err)
+			}
+			if _, found := adoptedAs(t, h, kind); found {
+				t.Error("the edge's record outlived its teardown")
+			}
+			if h.secrets.has(credentials) || h.secrets.has(seed) {
+				t.Error("a secret of the edge outlived its teardown")
+			}
+		})
+	}
+}
+
+func TestAFrontThatRefusedToComeDownKeepsWhatItsBootstrapAdopted(t *testing.T) {
+	t.Parallel()
+
+	b, registry, h := frontingWithSecrets(t)
+	registry.front.out = edge.BootstrapOutput{Offers: fullOffers("c1", "c2")}
+	if err := b.raiseFronts(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction, Features: []string{albFeature}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	registry.front.refusal = refusal.Refuse(refusal.CodeInvalid, "still bound")
+	if err := b.tearFronts(context.Background(), environment.TierProduction, []string{albFeature}); err == nil {
+		t.Fatal("tearFronts = nil though the front refused")
+	}
+	if !h.secrets.has(h.clients.ISRWriterSeedSecret(environment.TierProduction, registry.front.Kind())) {
+		t.Error("the seed went before the edge did, though its workers still run")
+	}
+}
+
+func adoptedAs(t *testing.T, h *offersHarness, kind edge.Kind) (adoptedEdge, bool) {
+	t.Helper()
+	entry, err := h.records.Read(context.Background(), adoptedEdgeKey(environment.TierProduction, kind))
+	if errors.Is(err, keyvalue.ErrNotFound) {
+		return adoptedEdge{}, false
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	var adopted adoptedEdge
+	if err := json.Unmarshal(entry.Value, &adopted); err != nil {
+		t.Fatal(err)
+	}
+	return adopted, true
 }

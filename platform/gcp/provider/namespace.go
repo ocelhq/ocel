@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -15,8 +16,10 @@ import (
 )
 
 const (
-	stateBucketSuffix = "-state"
-	passphraseSuffix  = "-pulumi-passphrase"
+	stateBucketSuffix     = "-state"
+	passphraseSuffix      = "-pulumi-passphrase"
+	edgeCredentialsSuffix = "-edge-credentials"
+	isrWriterSeedSuffix   = "-isr-writer-seed"
 )
 
 const (
@@ -308,6 +311,14 @@ func (n Names) isHashedAccountID(id string) bool {
 
 func (n Names) PassphraseSecret(tier environment.Tier) string {
 	return string(n.namespace) + "-" + string(tier) + passphraseSuffix
+}
+
+func (n Names) EdgeCredentialsSecret(tier environment.Tier, kind edge.Kind) string {
+	return string(n.namespace) + "-" + string(tier) + "-" + string(kind) + edgeCredentialsSuffix
+}
+
+func (n Names) ISRWriterSeedSecret(tier environment.Tier, kind edge.Kind) string {
+	return string(n.namespace) + "-" + string(tier) + "-" + string(kind) + isrWriterSeedSuffix
 }
 
 func (n Names) fit() error {

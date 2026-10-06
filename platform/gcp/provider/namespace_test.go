@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -49,6 +50,22 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 			}
 			if got, want := names.PassphraseSecret(environment.TierProduction), tc.stem+"-production-pulumi-passphrase"; got != want {
 				t.Errorf("PassphraseSecret() = %q, want %q", got, want)
+			}
+			for tier, want := range map[environment.Tier]string{
+				environment.TierProduction: tc.stem + "-production-cloudflare-edge-credentials",
+				environment.TierPreview:    tc.stem + "-preview-cloudflare-edge-credentials",
+			} {
+				if got := names.EdgeCredentialsSecret(tier, edge.Kind("cloudflare")); got != want {
+					t.Errorf("EdgeCredentialsSecret(%s) = %q, want %q", tier, got, want)
+				}
+			}
+			for tier, want := range map[environment.Tier]string{
+				environment.TierProduction: tc.stem + "-production-cloudflare-isr-writer-seed",
+				environment.TierPreview:    tc.stem + "-preview-cloudflare-isr-writer-seed",
+			} {
+				if got := names.ISRWriterSeedSecret(tier, edge.Kind("cloudflare")); got != want {
+					t.Errorf("ISRWriterSeedSecret(%s) = %q, want %q", tier, got, want)
+				}
 			}
 			if got, want := names.Repository(environment.TierPreview), tc.stem+"-acme-prod-preview"; got != want {
 				t.Errorf("Repository() = %q, want %q", got, want)
