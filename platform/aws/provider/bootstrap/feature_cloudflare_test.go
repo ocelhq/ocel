@@ -124,9 +124,9 @@ func (e *mintingEdge) Bootstrap(_ context.Context, tier environment.Tier) (edge.
 	return edge.BootstrapOutput{Offers: []edge.Offer{{
 		Kind: edge.OfferDeploymentsStore,
 		Values: map[string]string{
-			edge.OfferKeyStoreEndpoint:      "https://deployments.example",
-			edge.OfferKeyStoreScriptName:    "ocel-deployments",
-			edge.OfferKeyStoreBootstrapCred: cred,
+			edge.OfferKeyStoreEndpoint:            "https://deployments.example",
+			edge.OfferKeyStoreScriptName:          "ocel-deployments",
+			edge.OfferKeyStoreBootstrapCredential: cred,
 		},
 	}}}, nil
 }

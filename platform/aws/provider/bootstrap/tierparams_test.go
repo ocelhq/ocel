@@ -379,7 +379,7 @@ func TestReadTeardownParamsBatches(t *testing.T) {
 	if got.CacheStore.Bucket != "cache-1" || got.CacheStore.SecretAccessKey != "sec-2" {
 		t.Errorf("CacheStore = %+v", got.CacheStore)
 	}
-	if got.ISRWriter.Endpoint != "https://isr" || got.ISRWriter.BootstrapCred != "isr-cred" {
+	if got.ISRWriter.Endpoint != "https://isr" || got.ISRWriter.BootstrapCredential != "isr-cred" {
 		t.Errorf("ISRWriter = %+v", got.ISRWriter)
 	}
 }

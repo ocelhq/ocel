@@ -136,10 +136,10 @@ func TestWorkerValuesBindNoEdgeKeyWithoutBothHalves(t *testing.T) {
 		"a secret with no key id": func(f *WorkerValues) { f.EdgeAccessKeyID = "" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			facts := awsWorkerValues()
-			mutate(&facts)
+			values := awsWorkerValues()
+			mutate(&values)
 
-			got := facts.Bindings()
+			got := values.Bindings()
 			if _, set := got.Variables[edge.EdgeAccessKeyIDVar]; set {
 				t.Errorf("Variables has %s, want it left out without both halves", edge.EdgeAccessKeyIDVar)
 			}
@@ -151,10 +151,10 @@ func TestWorkerValuesBindNoEdgeKeyWithoutBothHalves(t *testing.T) {
 }
 
 func TestWorkerValuesLeaveOutValuesTheBootstrapDidNotRecord(t *testing.T) {
-	facts := awsWorkerValues()
-	facts.ImageOptimizerURL = ""
+	values := awsWorkerValues()
+	values.ImageOptimizerURL = ""
 
-	got := facts.Bindings()
+	got := values.Bindings()
 	if _, set := got.Variables[edge.ImageOptimizerURLVar]; set {
 		t.Errorf("Variables has %s = %q, want none", edge.ImageOptimizerURLVar, got.Variables[edge.ImageOptimizerURLVar])
 	}

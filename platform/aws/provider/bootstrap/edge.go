@@ -353,9 +353,9 @@ type CacheStore struct {
 }
 
 type DeploymentsStore struct {
-	Endpoint      string `json:"endpoint"`
-	ScriptName    string `json:"scriptName"`
-	BootstrapCred string `json:"bootstrapCred"`
+	Endpoint            string `json:"endpoint"`
+	ScriptName          string `json:"scriptName"`
+	BootstrapCredential string `json:"bootstrapCred"`
 }
 
 func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, values map[string]string) error {
@@ -364,16 +364,16 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, 
 		return err
 	}
 	store := DeploymentsStore{
-		Endpoint:      values[edge.OfferKeyStoreEndpoint],
-		ScriptName:    values[edge.OfferKeyStoreScriptName],
-		BootstrapCred: values[edge.OfferKeyStoreBootstrapCred],
+		Endpoint:            values[edge.OfferKeyStoreEndpoint],
+		ScriptName:          values[edge.OfferKeyStoreScriptName],
+		BootstrapCredential: values[edge.OfferKeyStoreBootstrapCredential],
 	}
 	stored, err := ReadDeploymentsStoreFor(ctx, ssmClient, ns, tier, kind)
 	if err != nil {
 		return err
 	}
-	if store.BootstrapCred == "" {
-		if store.BootstrapCred = stored.BootstrapCred; store.BootstrapCred == "" {
+	if store.BootstrapCredential == "" {
+		if store.BootstrapCredential = stored.BootstrapCredential; store.BootstrapCredential == "" {
 			return edgeCredUnrecorded(kind, "deployments store", store.ScriptName, paramName)
 		}
 	}
@@ -428,9 +428,9 @@ func ReadDeploymentsStoreFor(ctx context.Context, ssmClient SSMAPI, ns Namespace
 }
 
 type ISRWriter struct {
-	Endpoint      string `json:"endpoint"`
-	ScriptName    string `json:"scriptName"`
-	BootstrapCred string `json:"bootstrapCred"`
+	Endpoint            string `json:"endpoint"`
+	ScriptName          string `json:"scriptName"`
+	BootstrapCredential string `json:"bootstrapCred"`
 }
 
 func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, values map[string]string) error {
@@ -439,16 +439,16 @@ func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier en
 		return err
 	}
 	writer := ISRWriter{
-		Endpoint:      values[edge.OfferKeyISRWriterEndpoint],
-		ScriptName:    values[edge.OfferKeyISRWriterScriptName],
-		BootstrapCred: values[edge.OfferKeyISRWriterBootstrapCred],
+		Endpoint:            values[edge.OfferKeyISRWriterEndpoint],
+		ScriptName:          values[edge.OfferKeyISRWriterScriptName],
+		BootstrapCredential: values[edge.OfferKeyISRWriterBootstrapCredential],
 	}
 	stored, err := ReadISRWriterFor(ctx, ssmClient, ns, tier, kind)
 	if err != nil {
 		return err
 	}
-	if writer.BootstrapCred == "" {
-		if writer.BootstrapCred = stored.BootstrapCred; writer.BootstrapCred == "" {
+	if writer.BootstrapCredential == "" {
+		if writer.BootstrapCredential = stored.BootstrapCredential; writer.BootstrapCredential == "" {
 			return edgeCredUnrecorded(kind, "ISR writer", writer.ScriptName, paramName)
 		}
 	}

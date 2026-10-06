@@ -89,15 +89,15 @@ const OfferDeploymentsStore OfferKind = "deployments-store"
 const OfferISRWriter OfferKind = "isr-writer"
 
 const (
-	OfferKeyISRWriterEndpoint      = "endpoint"
-	OfferKeyISRWriterScriptName    = "scriptName"
-	OfferKeyISRWriterBootstrapCred = "bootstrapCred"
+	OfferKeyISRWriterEndpoint            = "endpoint"
+	OfferKeyISRWriterScriptName          = "scriptName"
+	OfferKeyISRWriterBootstrapCredential = "bootstrapCred"
 )
 
 const (
-	OfferKeyStoreEndpoint      = "endpoint"
-	OfferKeyStoreScriptName    = "scriptName"
-	OfferKeyStoreBootstrapCred = "bootstrapCred"
+	OfferKeyStoreEndpoint            = "endpoint"
+	OfferKeyStoreScriptName          = "scriptName"
+	OfferKeyStoreBootstrapCredential = "bootstrapCred"
 )
 
 const (

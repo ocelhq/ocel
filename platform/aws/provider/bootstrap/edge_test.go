@@ -583,9 +583,9 @@ func TestReadCacheStore(t *testing.T) {
 
 func offeredDeploymentsStore() map[string]string {
 	return map[string]string{
-		edge.OfferKeyStoreEndpoint:      "https://ocel-deployments-store.acct.workers.dev",
-		edge.OfferKeyStoreScriptName:    "ocel-deployments-store",
-		edge.OfferKeyStoreBootstrapCred: "cred-prod",
+		edge.OfferKeyStoreEndpoint:            "https://ocel-deployments-store.acct.workers.dev",
+		edge.OfferKeyStoreScriptName:          "ocel-deployments-store",
+		edge.OfferKeyStoreBootstrapCredential: "cred-prod",
 	}
 }
 
@@ -619,7 +619,7 @@ func TestAdoptDeploymentsStore(t *testing.T) {
 		preview := offeredDeploymentsStore()
 		preview[edge.OfferKeyStoreEndpoint] = "https://ocel-deployments-store-preview.acct.workers.dev"
 		preview[edge.OfferKeyStoreScriptName] = "ocel-deployments-store-preview"
-		preview[edge.OfferKeyStoreBootstrapCred] = "cred-preview"
+		preview[edge.OfferKeyStoreBootstrapCredential] = "cred-preview"
 
 		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredDeploymentsStore()); err != nil {
 			t.Fatalf("production adopt: %v", err)
@@ -636,8 +636,8 @@ func TestAdoptDeploymentsStore(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadDeploymentsStoreFor(preview): %v", err)
 		}
-		wantProd := DeploymentsStore{Endpoint: "https://ocel-deployments-store.acct.workers.dev", ScriptName: "ocel-deployments-store", BootstrapCred: "cred-prod"}
-		wantPrev := DeploymentsStore{Endpoint: "https://ocel-deployments-store-preview.acct.workers.dev", ScriptName: "ocel-deployments-store-preview", BootstrapCred: "cred-preview"}
+		wantProd := DeploymentsStore{Endpoint: "https://ocel-deployments-store.acct.workers.dev", ScriptName: "ocel-deployments-store", BootstrapCredential: "cred-prod"}
+		wantPrev := DeploymentsStore{Endpoint: "https://ocel-deployments-store-preview.acct.workers.dev", ScriptName: "ocel-deployments-store-preview", BootstrapCredential: "cred-preview"}
 		if prod != wantProd {
 			t.Errorf("production store = %+v, want %+v", prod, wantProd)
 		}
@@ -655,7 +655,7 @@ func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 		}
 
 		reoffer := offeredDeploymentsStore()
-		delete(reoffer, edge.OfferKeyStoreBootstrapCred)
+		delete(reoffer, edge.OfferKeyStoreBootstrapCredential)
 		reoffer[edge.OfferKeyStoreEndpoint] = "https://ocel-deployments-store.acct.workers.dev/v2"
 		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", reoffer); err != nil {
 			t.Fatalf("second adopt: %v", err)
@@ -665,8 +665,8 @@ func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadDeploymentsStoreFor: %v", err)
 		}
-		if got.BootstrapCred != "cred-prod" {
-			t.Errorf("credential = %q, want the stored one kept where the edge offered none", got.BootstrapCred)
+		if got.BootstrapCredential != "cred-prod" {
+			t.Errorf("credential = %q, want the stored one kept where the edge offered none", got.BootstrapCredential)
 		}
 		if got.Endpoint != "https://ocel-deployments-store.acct.workers.dev/v2" {
 			t.Errorf("endpoint = %q, want the reoffered coordinate", got.Endpoint)
@@ -676,7 +676,7 @@ func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 	t.Run("nothing on either side is a refusal, not an empty credential", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		offer := offeredDeploymentsStore()
-		delete(offer, edge.OfferKeyStoreBootstrapCred)
+		delete(offer, edge.OfferKeyStoreBootstrapCredential)
 
 		err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
 		if err == nil {
@@ -705,8 +705,8 @@ func TestAdoptISRWriterBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadISRWriterFor: %v", err)
 		}
-		if got.BootstrapCred != "cred-prod" {
-			t.Errorf("credential = %q, want the stored one kept where the edge offered none", got.BootstrapCred)
+		if got.BootstrapCredential != "cred-prod" {
+			t.Errorf("credential = %q, want the stored one kept where the edge offered none", got.BootstrapCredential)
 		}
 	})
 
@@ -742,9 +742,9 @@ func TestReadDeploymentsStore(t *testing.T) {
 
 func offeredISRWriter(suffix, cred string) map[string]string {
 	return map[string]string{
-		edge.OfferKeyISRWriterEndpoint:      "https://ocel-isr-writer" + suffix + ".acct.workers.dev",
-		edge.OfferKeyISRWriterScriptName:    "ocel-isr-writer" + suffix,
-		edge.OfferKeyISRWriterBootstrapCred: cred,
+		edge.OfferKeyISRWriterEndpoint:            "https://ocel-isr-writer" + suffix + ".acct.workers.dev",
+		edge.OfferKeyISRWriterScriptName:          "ocel-isr-writer" + suffix,
+		edge.OfferKeyISRWriterBootstrapCredential: cred,
 	}
 }
 
@@ -790,8 +790,8 @@ func TestAdoptISRWriter(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadISRWriterFor(preview): %v", err)
 		}
-		wantProd := ISRWriter{Endpoint: "https://ocel-isr-writer.acct.workers.dev", ScriptName: "ocel-isr-writer", BootstrapCred: "cred-prod"}
-		wantPrev := ISRWriter{Endpoint: "https://ocel-isr-writer-preview.acct.workers.dev", ScriptName: "ocel-isr-writer-preview", BootstrapCred: "cred-preview"}
+		wantProd := ISRWriter{Endpoint: "https://ocel-isr-writer.acct.workers.dev", ScriptName: "ocel-isr-writer", BootstrapCredential: "cred-prod"}
+		wantPrev := ISRWriter{Endpoint: "https://ocel-isr-writer-preview.acct.workers.dev", ScriptName: "ocel-isr-writer-preview", BootstrapCredential: "cred-preview"}
 		if prod != wantProd {
 			t.Errorf("production writer = %+v, want %+v", prod, wantProd)
 		}
@@ -907,7 +907,7 @@ func adoptions() []adoption {
 	}
 	return []adoption{
 		{"the cache store", cacheStore(offeredStore()), cacheStore(without(offeredStore(), edge.OfferKeySecretAccessKey))},
-		{"the deployments store", deploymentsStore(offeredDeploymentsStore()), deploymentsStore(without(offeredDeploymentsStore(), edge.OfferKeyStoreBootstrapCred))},
+		{"the deployments store", deploymentsStore(offeredDeploymentsStore()), deploymentsStore(without(offeredDeploymentsStore(), edge.OfferKeyStoreBootstrapCredential))},
 		{"the ISR writer", isrWriter(offeredISRWriter("", "cred-prod")), isrWriter(offeredISRWriter("", ""))},
 		{"the edge values", edgeValues, edgeValues},
 	}

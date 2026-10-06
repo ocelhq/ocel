@@ -17,15 +17,15 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 	if err != nil {
 		return provider.EdgeProgram{}, err
 	}
-	facts := deploy.WorkerValues{
+	values := deploy.WorkerValues{
 		Region:             p.aws.Region,
 		StateTable:         deployed.StateTable,
 		ImageOptimizerURL:  deployed.ImageOptimizerURL,
 		RevalidateQueueURL: deployed.RevalidateQueueURL,
 	}
 	if params.EdgeCredentialsErr == nil {
-		facts.EdgeAccessKeyID = params.EdgeCredentials.AccessKeyID
-		facts.EdgeSecretKey = params.EdgeCredentials.SecretAccessKey
+		values.EdgeAccessKeyID = params.EdgeCredentials.AccessKeyID
+		values.EdgeSecretKey = params.EdgeCredentials.SecretAccessKey
 	}
 	program := cloudflare.EntryProgram{
 		Tier:                     req.Tier,
@@ -35,10 +35,10 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		Env:                      req.Env,
 		PreviewBaseDomain:        req.PreviewBaseDomain,
 		PreviewKey:               req.PreviewKey,
-		Origin:                   facts.Bindings(),
+		Origin:                   values.Bindings(),
 		StoreScriptName:          params.DeploymentsStore.ScriptName,
 		StoreEndpoint:            params.DeploymentsStore.Endpoint,
-		StoreBootstrapCredential: params.DeploymentsStore.BootstrapCred,
+		StoreBootstrapCredential: params.DeploymentsStore.BootstrapCredential,
 		ISRWriterScriptName:      params.ISRWriter.ScriptName,
 	}
 	if params.EdgeValuesErr == nil {

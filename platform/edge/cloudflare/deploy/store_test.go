@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	storeBootstrapCred = "bootstrap-cred"
-	storeOwnerToken    = "owner-token"
+	storeBootstrapCredential = "bootstrap-cred"
+	storeOwnerToken          = "owner-token"
 )
 
 type labelTarget struct{ pointer, app string }
@@ -114,7 +114,7 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 	mux.HandleFunc("POST /{slug}/initialize", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		if r.Header.Get("Authorization") != "Bearer "+storeBootstrapCred {
+		if r.Header.Get("Authorization") != "Bearer "+storeBootstrapCredential {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}

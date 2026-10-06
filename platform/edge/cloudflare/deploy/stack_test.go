@@ -195,7 +195,7 @@ func testSpec(endpoint, version string) edge.StackSpec {
 		Version: version,
 		Program: &edge.ProgramSpec{
 			StoreEndpoint:       endpoint,
-			BootstrapCredential: storeBootstrapCred,
+			BootstrapCredential: storeBootstrapCredential,
 		},
 	}
 }
