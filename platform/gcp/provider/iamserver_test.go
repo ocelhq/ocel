@@ -43,6 +43,7 @@ type iamServer struct {
 	projectAttempts int
 
 	accountPolicies     map[string]*iam.Policy
+	accountDescriptions map[string]string
 	accountWrites       int
 	accountPolicyUnseen int
 	accountPolicyDenied bool
@@ -246,6 +247,9 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 			!s.accounts[strings.TrimSuffix(path[strings.LastIndex(path, "/")+1:], "@acme-prod.iam.gserviceaccount.com")]:
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"service account not found"}}`))
+		case r.Method == http.MethodGet && s.accountDescriptions[path[strings.LastIndex(path, "/")+1:]] != "":
+			id := strings.TrimSuffix(path[strings.LastIndex(path, "/")+1:], "@acme-prod.iam.gserviceaccount.com")
+			_ = json.NewEncoder(w).Encode(&iam.ServiceAccount{Email: id + "@acme-prod.iam.gserviceaccount.com", Description: s.accountDescriptions[path[strings.LastIndex(path, "/")+1:]]})
 		case r.Method == http.MethodGet && strings.Contains(path, "/serviceAccounts/"):
 			w.Write([]byte(`{"email":"ocel-production@acme-prod.iam.gserviceaccount.com"}`))
 		default:

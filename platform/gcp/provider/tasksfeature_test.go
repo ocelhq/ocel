@@ -189,6 +189,7 @@ func TestRemovingTasksIsRefusedWhileANextAppRefreshesThroughThem(t *testing.T) {
 	b := bootstrap{clients: server.open(t), records: recordingTopics(t, environment.TierProduction)}
 	tier := environment.TierProduction
 	app := b.clients.AppAccountEmail(tier, "shop", "web")
+	server.accountDescriptions = map[string]string{app: appAccountDescription(tier, "shop", "web")}
 	server.accountPolicies[accountPolicyPath(b.clients.RefreshAccountEmail(tier))] = runAsPolicy(
 		"user:emulator", cloudTasksAgent, "serviceAccount:"+app,
 		"deleted:serviceAccount:ocel-0123456789@acme-prod.iam.gserviceaccount.com?uid=1")
@@ -199,8 +200,13 @@ func TestRemovingTasksIsRefusedWhileANextAppRefreshesThroughThem(t *testing.T) {
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("tasksFree() = %v, want an invalid refusal", err)
 	}
-	if !strings.Contains(refused.Message, app) || !strings.Contains(refused.Message, "`gcloud iam service-accounts describe") {
-		t.Errorf("the refusal is %q, want it naming %s and how to find its app", refused.Message, app)
+	for _, want := range []string{"web of project shop", "last environment", "container compute"} {
+		if !strings.Contains(refused.Message, want) {
+			t.Errorf("the refusal is %q, want it to say %q", refused.Message, want)
+		}
+	}
+	if strings.Contains(refused.Message, app) {
+		t.Errorf("the refusal is %q, want the app named rather than its account %s", refused.Message, app)
 	}
 	for _, leaked := range []string{"gcp-sa-cloudtasks", "emulator", "uid=1"} {
 		if strings.Contains(refused.Message, leaked) {
