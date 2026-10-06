@@ -121,14 +121,14 @@ func factsOf(front edge.Edge) edge.Facts {
 	return front.Facts()
 }
 
-func memoryLimit(mb int) string {
+func formatMemoryLimit(mb int) string {
 	return strconv.Itoa(mb) + "Mi"
 }
 
 func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	memory := revisionMemory
 	if s.memory > 0 {
-		memory = memoryLimit(s.memory)
+		memory = formatMemoryLimit(s.memory)
 	}
 	cpu := revisionCPU
 	if s.cpu != "" {
