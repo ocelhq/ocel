@@ -1,0 +1,91 @@
+name: Real GCP session
+description: >-
+  Node, pnpm and Bun, and a Google Cloud identity guarded to the expected project
+  and Cloudflare account — the preamble every job that reaches the disposable
+  real-gcp project needs.
+
+inputs:
+  node-version:
+    description: Node version to install.
+    required: true
+  pnpm-version:
+    description: pnpm version to install.
+    required: true
+  bun-version:
+    description: Bun version to install.
+    required: true
+  project:
+    description: The only Google Cloud project this workflow may deploy into.
+    required: true
+  workload-identity-provider:
+    description: Full name of the Workload Identity Federation provider the run authenticates through.
+    required: true
+  service-account:
+    description: Email of the service account the run acts as.
+    required: true
+  guard-script:
+    description: >-
+      Path, from the workspace, to the Cloudflare account guard this run's
+      checkout layout puts the script at.
+    required: true
+  expected-cloudflare-account-id:
+    description: The only Cloudflare account this workflow may deploy into.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Name the project this run may spend
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        WORKLOAD_IDENTITY_PROVIDER: ${{ inputs.workload-identity-provider }}
+        SERVICE_ACCOUNT: ${{ inputs.service-account }}
+      run: |
+        set -euo pipefail
+        for named in PROJECT WORKLOAD_IDENTITY_PROVIDER SERVICE_ACCOUNT; do
+          if [ -z "${!named}" ]; then
+            echo "::error::$named is empty, so this run names no Google Cloud project it may spend" >&2
+            exit 1
+          fi
+        done
+
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      with:
+        version: ${{ inputs.pnpm-version }}
+
+    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      with:
+        bun-version: ${{ inputs.bun-version }}
+
+    - name: Take the identity this run acts as
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+      with:
+        project_id: ${{ inputs.project }}
+        workload_identity_provider: ${{ inputs.workload-identity-provider }}
+        service_account: ${{ inputs.service-account }}
+
+    - name: The gcloud the guards and the sweeps read the project with
+      uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
+
+    - name: Guard the target project
+      shell: bash
+      env:
+        EXPECTED_GCP_PROJECT: ${{ inputs.project }}
+      run: |
+        set -euo pipefail
+        resolved=$(gcloud projects describe "$EXPECTED_GCP_PROJECT" --format='value(projectId)')
+        if [ "$resolved" != "$EXPECTED_GCP_PROJECT" ]; then
+          echo "::error::the credentials do not reach project $EXPECTED_GCP_PROJECT (got '$resolved') — refusing to deploy" >&2
+          exit 1
+        fi
+
+    - name: Guard the Cloudflare account
+      shell: bash
+      env:
+        EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ inputs.expected-cloudflare-account-id }}
+      run: ${{ inputs.guard-script }}

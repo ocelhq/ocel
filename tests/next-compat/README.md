@@ -6,12 +6,14 @@ infrastructure hundreds of times per run.
 
 `.github/workflows/next-compat.yml` drives it and is the source of truth for
 what runs. **Manual dispatch only.** Inputs: `nextjsRef` (must match the `next`
-version the adapter pins) and `recordBaseline`.
+version the adapter pins), `recordBaseline` and `target`.
 
 Read the scripts for what they do. This file covers only what you cannot get by
 running them.
 
 ## One-time setup (out of band, by a human)
+
+### aws-cloudflare
 
 Use a **disposable AWS account and Cloudflare account** that contain nothing else.
 
@@ -42,6 +44,37 @@ prepared:
    mid-run strands deployed apps.
 4. Mint a Cloudflare API token scoped to that account, and an Ocel access token.
 
+### gcp-direct and gcp-alb
+
+1. A disposable Google Cloud project, reached through a Workload Identity
+   Federation provider that trusts this repository and a service account that
+   may run `ocel bootstrap` and deploy in it. Bootstrap enables the APIs it
+   uses. Cloud Run in it must accept `allUsers` as an invoker (no
+   domain-restricted-sharing constraint): gcp-direct serves each test app's
+   production publicly.
+   Trust only dispatched runs of the two workflows that drive it, with this
+   attribute condition on the provider (`job_workflow_ref` names the workflow a
+   job runs, which for a reusable workflow is the called one, so
+   `e2e-target.yml` covers every caller of it):
+   ```
+   assertion.repository=='ocelhq/ocel' && assertion.event_name=='workflow_dispatch' && (assertion.job_workflow_ref.startsWith('ocelhq/ocel/.github/workflows/e2e-target.yml@') || assertion.job_workflow_ref.startsWith('ocelhq/ocel/.github/workflows/next-compat.yml@'))
+   ```
+2. Each gcp target runs in its own namespace, which the workflow sets:
+   `e2e-nc-direct` and `e2e-nc-alb`. From a scratch directory whose
+   `ocel.config.ts` declares `gcpProvider({ project, region })`:
+   ```bash
+   OCEL_NAMESPACE=e2e-nc-direct ocel bootstrap production --features tasks
+   ```
+   Add `edge: alb()` and `dns: cloudflareDns()` to that config, then:
+   ```bash
+   OCEL_NAMESPACE=e2e-nc-alb ocel bootstrap preview --features tasks,alb-edge
+   OCEL_NAMESPACE=e2e-nc-alb ocel domain use '*.<gcp wildcard>' --preview
+   ```
+   with a wildcard of its own, not `E2E_PREVIEW_DOMAIN`'s: that one belongs to
+   the AWS entry worker.
+3. gcp-cloudflare is offered in the dispatch and refused by the harness until
+   Cloudflare runs code in front of a gcp origin. It will run in `e2e-nc-cf`.
+
 ### Secrets
 
 | name                                 | what                                                          |
@@ -61,7 +94,13 @@ prepared:
 | `E2E_OCEL_API_URL`        | Ocel API base URL                                          |
 | `E2E_AWS_REGION`          | region to deploy into                                      |
 | `E2E_PREVIEW_DOMAIN`      | the preview wildcard, e.g. `*.ocel.site`; each run reinstalls the shared entry worker on it |
+| `E2E_GCP_PROJECT`         | the Google Cloud project the gcp targets deploy into, shared with E2E Tests (Cloud) |
+| `E2E_GCP_REGION`          | the region they deploy into                                |
+| `E2E_GCP_WIF_PROVIDER`    | the Workload Identity Federation provider the jobs authenticate through |
+| `E2E_GCP_SERVICE_ACCOUNT` | the service account they act as                            |
 | `TURBO_TEAM`              | Vercel team slug for the remote cache (optional)           |
+
+`E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID` guards the gcp targets too.
 
 The expected account ids are deliberately duplicated: the guard compares the
 identity the credentials actually resolve to against them and hard-fails on a
@@ -85,6 +124,11 @@ because `NEXT_EXTERNAL_TESTS_FILTERS` resolves against the harness's own cwd.
 2. Download the `baseline-manifest` artifact and commit it over
    `baseline-manifest.json`.
 3. Dispatch normally from then on.
+
+Each gcp target keeps `baseline-manifest.<target>.json` beside the aws one, since
+direct, alb and Cloudflare fail differently. The artifact is
+`baseline-manifest-<target>`, and a filtered run of a target with no committed
+baseline fails in `build`.
 
 A recording run is expensive and may hit AWS Lambda code-storage or Cloudflare
 worker-script limits mid-flight; re-dispatch and merge again if it does.
@@ -162,6 +206,16 @@ stranded run no longer blocks another from deploying previews.
 ADAPTER_DIR=… OCEL_E2E_SIDECAR_DIR=… \
   node tests/next-compat/project-teardown.mjs e2e-<run id>
 ```
+
+On gcp name the target and its project as well:
+
+```bash
+OCEL_COMPAT_TARGET=gcp-alb OCEL_NAMESPACE=e2e-nc-alb OCEL_GCP_PROJECT=… OCEL_GCP_REGION=… \
+  ADAPTER_DIR=… OCEL_E2E_SIDECAR_DIR=… \
+  node tests/next-compat/project-teardown.mjs e2e-<run id>
+```
+
+With no slug, gcp-direct takes every per-app project of the run.
 
 ## Debugging a failing suite
 
