@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 const (
@@ -281,4 +282,15 @@ func forgetEdgeOffers(ctx context.Context, c *clients, records keyvalue.Store, t
 		}
 	}
 	return nil
+}
+
+func readAdoptedISRWriter(ctx context.Context, c *clients, records keyvalue.Store, tier environment.Tier, kind edge.Kind) (cloudflare.ISRWriter, bool, error) {
+	adopted, credentials, err := loadAdoptedEdge(ctx, c, records, tier, kind)
+	if err != nil || adopted.ISRWriter.Endpoint == "" {
+		return cloudflare.ISRWriter{}, false, err
+	}
+	if credentials.ISRWriter == "" {
+		return cloudflare.ISRWriter{}, false, notBootstrapped(tier, kind, "no isr-writer credential")
+	}
+	return cloudflare.ISRWriter{Endpoint: adopted.ISRWriter.Endpoint, BootstrapCredential: credentials.ISRWriter}, true, nil
 }

@@ -13,9 +13,11 @@ import (
 	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -165,6 +167,9 @@ func (a artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, pref
 		return err
 	}
 	var errs []error
+	if err := a.retireISRWriter(ctx, tier, prefix); err != nil {
+		errs = append(errs, err)
+	}
 	for _, store := range artifactStores {
 		list, keeps := store+"/"+prefix, func(string) bool { return true }
 		if store == provider.StoreCache {
@@ -220,4 +225,23 @@ func (a artifacts) storeless(ctx context.Context, tier environment.Tier, err err
 			names.Bucket(tier), tier, provider.BootstrapCommand(tier))
 	}
 	return err
+}
+
+func (a artifacts) retireISRWriter(ctx context.Context, tier environment.Tier, prefix string) error {
+	isrPrefix, covers := naming.ISRPrefixUnder(prefix)
+	if !covers {
+		return nil
+	}
+	c, err := a.p.openClients(ctx)
+	if err != nil {
+		return err
+	}
+	writer, adopted, err := readAdoptedISRWriter(ctx, c, a.p.KeyValues(), tier, cloudflare.Kind)
+	if err != nil || !adopted {
+		return err
+	}
+	if err := writer.Destroy(ctx, isrPrefix); err != nil {
+		return fmt.Errorf("retire the isr writer's record of %s: %w", isrPrefix, err)
+	}
+	return nil
 }
