@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
+import { join } from "node:path";
 import type {
   ImageConfigComplete,
   LocalPattern,
@@ -7,9 +8,12 @@ import type {
 } from "next/dist/shared/lib/image-config.js";
 import { stableStringify } from "./stable-json.mjs";
 
-const { makeRe } = createRequire(import.meta.url)("next/dist/compiled/picomatch") as {
-  makeRe: (glob: string, options?: { dot?: boolean }) => RegExp;
-};
+type MakeRe = (glob: string, options?: { dot?: boolean }) => RegExp;
+
+function appMakeRe(): MakeRe {
+  const appRequire = createRequire(join(process.cwd(), "package.json"));
+  return (appRequire("next/dist/compiled/picomatch") as { makeRe: MakeRe }).makeRe;
+}
 
 export interface CompiledRemotePattern {
   protocol?: string;
@@ -42,7 +46,7 @@ export interface CompiledImageConfig {
   localPatterns?: CompiledLocalPattern[];
 }
 
-function compilePathname(glob: string | undefined): string {
+function compilePathname(makeRe: MakeRe, glob: string | undefined): string {
   return makeRe(glob ?? "**", { dot: true }).source;
 }
 
@@ -83,6 +87,7 @@ export function compileImageConfig(
     return undefined;
   }
 
+  const makeRe = appMakeRe();
   return {
     path: images.path,
     deviceSizes: images.deviceSizes,
@@ -103,12 +108,12 @@ export function compileImageConfig(
       }),
       hostname: makeRe(p.hostname).source,
       ...(p.port !== undefined && { port: p.port }),
-      pathname: compilePathname(p.pathname),
+      pathname: compilePathname(makeRe, p.pathname),
       ...(p.search !== undefined && { search: p.search }),
     })),
     ...(images.localPatterns && {
       localPatterns: images.localPatterns.map((p: LocalPattern) => ({
-        pathname: compilePathname(p.pathname),
+        pathname: compilePathname(makeRe, p.pathname),
         ...(p.search !== undefined && { search: p.search }),
       })),
     }),
