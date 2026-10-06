@@ -69,7 +69,9 @@ func loadBalancerNames(tier environment.Tier, shielded bool) names {
 type loadBalancerSpec struct {
 	Region    string
 	Names     names
+	Tier      environment.Tier
 	Preview   previewEntry
+	Origin    originWildcardEntry
 	ClientCAs []string
 }
 
@@ -295,6 +297,9 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 			}
 		}
 		if err := previewWildcardResources(ctx, spec, project); err != nil {
+			return err
+		}
+		if err := originWildcardResources(ctx, spec, project); err != nil {
 			return err
 		}
 		ctx.Export(outputAddress, address.Address)
