@@ -85,7 +85,7 @@ func revokeUnusedAppAccount(ctx context.Context, c *clients, records keyvalue.St
 	if revoked.topics, err = c.revokeTopicPublisher(ctx, recorded, ref, member); err != nil {
 		return err
 	}
-	if revoked.buckets, err = c.revokeBucketAccess(ctx, recorded, member); err != nil {
+	if revoked.buckets, err = c.revokeBucketAccess(ctx, recorded, member, nil); err != nil {
 		return err
 	}
 	recordedNow, err := stackrecords.List(ctx, records, ref.Tier, ref.Project)
