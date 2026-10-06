@@ -44,6 +44,7 @@ import {
 import { gcpSlug, namespaceOf } from "./names";
 import {
   ALB_FEATURE,
+  accessToken,
   deleteService,
   exposedServices,
   findAppService,
@@ -82,6 +83,11 @@ export function refuseFlociWithoutFirestore(env: NodeJS.ProcessEnv): Error | und
 }
 
 const ran = promisify(execFile);
+
+async function gcloudAccessToken(): Promise<string> {
+  const { stdout } = await ran("gcloud", ["auth", "print-access-token"]);
+  return stdout.trim();
+}
 
 function endpoint(): string | undefined {
   return process.env[ENDPOINT_ENV]?.trim() || undefined;
@@ -160,8 +166,6 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
   readonly workers = 2;
   readonly maxRequestBodyBytes = UNCAPPED_BODY_BYTES;
   readonly stepTimeoutMs = 900_000;
-
-  private minted: Promise<string | undefined> | undefined;
 
   private dispatching: ChildProcess | undefined;
 
@@ -378,23 +382,12 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure {
     return recordOutput(this.outputFor(cell), runOcel(cell, dir, phase, name, args, env));
   }
 
-  private token(): Promise<string | undefined> {
-    this.minted ??= (async () => {
-      if (endpoint()) {
-        return undefined;
-      }
-      const { stdout } = await ran("gcloud", ["auth", "print-access-token"]);
-      return stdout.trim();
-    })();
-    return this.minted;
-  }
-
   private async where(): Promise<Where> {
     return {
       endpoint: endpoint(),
       project: project(),
       region: region(),
-      token: await this.token(),
+      token: await accessToken(endpoint(), gcloudAccessToken),
     };
   }
 

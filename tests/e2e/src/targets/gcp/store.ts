@@ -147,6 +147,13 @@ export function bearer(where: Where): Record<string, string> {
   return where.token ? { authorization: `Bearer ${where.token}` } : {};
 }
 
+export function accessToken(
+  endpoint: string | undefined,
+  mint: () => Promise<string>,
+): Promise<string | undefined> {
+  return endpoint ? Promise.resolve(undefined) : mint();
+}
+
 export async function readServices(where: Where): Promise<unknown> {
   const services: unknown[] = [];
   let pageToken = "";
