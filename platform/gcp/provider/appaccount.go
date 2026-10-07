@@ -127,17 +127,29 @@ func (c *clients) createAppAccount(ctx context.Context, tier environment.Tier, p
 		clipped("ocel "+project+"/"+app+" ("+string(tier)+")", maxDisplayNameBytes), appAccountDescription(tier, project, app))
 }
 
+func (c *clients) accountExists(ctx context.Context, account string) (bool, error) {
+	service, err := c.Accounts()
+	if err != nil {
+		return false, err
+	}
+	_, err = attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(c, account)).Context(ctx).Do)
+	if absent(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read the %s service account: %w", account, err)
+	}
+	return true, nil
+}
+
 func (c *clients) createAccount(ctx context.Context, account, displayName, description string) error {
+	found, err := c.accountExists(ctx, account)
+	if found || err != nil {
+		return explainMissingGrant(err, c.AppAccountsRolePath())
+	}
 	service, err := c.Accounts()
 	if err != nil {
 		return err
-	}
-	_, err = attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(c, account)).Context(ctx).Do)
-	if err == nil {
-		return nil
-	}
-	if !absent(err) {
-		return explainMissingGrant(fmt.Errorf("read the %s service account: %w", account, err), c.AppAccountsRolePath())
 	}
 	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+c.project, &iam.CreateServiceAccountRequest{
 		AccountId:      account,

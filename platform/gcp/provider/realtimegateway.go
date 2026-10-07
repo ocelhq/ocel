@@ -2,13 +2,10 @@ package gcp
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"slices"
 	"strconv"
-	"sync"
 
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
@@ -32,17 +29,11 @@ const (
 	realtimeKeysDir    = "/var/run/ocel/realtime"
 	realtimeKeysFile   = "keys.json"
 
-	realtimeImageName   = "ocel-realtime"
-	realtimeImagePath   = "/realtime-gateway"
-	realtimeImageTagLen = 32
+	realtimeImageName = "ocel-realtime"
+	realtimeImagePath = "/realtime-gateway"
 )
 
-var realtimeImageTag = sync.OnceValue(func() string {
-	sum := sha256.New()
-	sum.Write([]byte(staticImage + "\x00"))
-	sum.Write(payloads.RealtimeGateway())
-	return hex.EncodeToString(sum.Sum(nil))[:realtimeImageTagLen]
-})
+var realtimeImageTag = binaryImageTag(payloads.RealtimeGateway)
 
 func realtimeGatewayServing(names Names, ref provider.StackRef, host, image, inlineKeys string) serving {
 	gateway := serving{
@@ -131,7 +122,7 @@ func (r realtimeEnvironment) serveGateway(ctx context.Context, keys map[string]s
 		if err != nil {
 			return "", err
 		}
-		if current != nil && sameGateway(current, wanted) && servesLatest(current) {
+		if current != nil && sameServing(current, wanted) && servesLatest(current) {
 			return host, nil
 		}
 		ran, err := r.deployAndRoute(ctx, desired, progress)
@@ -181,7 +172,7 @@ func imageOf(service *run.GoogleCloudRunV2Service) string {
 	return service.Template.Containers[0].Image
 }
 
-func sameGateway(current, desired *run.GoogleCloudRunV2Service) bool {
+func sameServing(current, desired *run.GoogleCloudRunV2Service) bool {
 	if current.Template == nil || len(current.Template.Containers) != 1 || current.Template.Containers[0].Resources == nil {
 		return false
 	}

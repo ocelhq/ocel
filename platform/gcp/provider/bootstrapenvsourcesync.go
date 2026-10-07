@@ -2,14 +2,11 @@ package gcp
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"maps"
 	"math/big"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"google.golang.org/api/cloudscheduler/v1"
@@ -26,7 +23,6 @@ import (
 const (
 	syncImageName   = "ocel-envsourcesync"
 	syncImagePath   = "/envsourcesync"
-	syncImageTagLen = 32
 	syncCPU         = "0.08"
 	syncMemoryMiB   = 128
 	syncGeneration  = "EXECUTION_ENVIRONMENT_GEN1"
@@ -59,12 +55,7 @@ const (
 
 var syncKeyRoles = []string{syncSealingRole, syncOpeningRole}
 
-var syncImageTag = sync.OnceValue(func() string {
-	sum := sha256.New()
-	sum.Write([]byte(staticImage + "\x00"))
-	sum.Write(payloads.EnvSourceSync())
-	return hex.EncodeToString(sum.Sum(nil))[:syncImageTagLen]
-})
+var syncImageTag = binaryImageTag(payloads.EnvSourceSync)
 
 func syncImageRef(c *clients, tier environment.Tier) string {
 	return c.RepositoryPath(c.region, tier) + "/" + syncImageName + ":" + syncImageTag()

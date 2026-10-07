@@ -44,8 +44,8 @@ func TestRemovingATierTakesItsBastionDown(t *testing.T) {
 	h.forward(t, target)
 	b := bootstrap{clients: h.b.clients, tearDown: h.b.tearDown}
 
-	if err := b.takeBastion(context.Background(), environment.TierProduction, nil); err != nil {
-		t.Fatalf("takeBastion() = %v", err)
+	if err := b.removeBastion(context.Background(), environment.TierProduction, nil); err != nil {
+		t.Fatalf("removeBastion() = %v", err)
 	}
 
 	if h.run.serving() != nil {

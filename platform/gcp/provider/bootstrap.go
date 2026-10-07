@@ -960,7 +960,7 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 	if err := b.tearFeatures(ctx, tier, read.Stamp.Features); err != nil {
 		return err
 	}
-	if err := b.takeBastion(ctx, tier, progress); err != nil {
+	if err := b.removeBastion(ctx, tier, progress); err != nil {
 		return err
 	}
 	for _, taking := range removals(read) {

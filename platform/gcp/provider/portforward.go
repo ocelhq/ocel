@@ -36,7 +36,7 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	if err != nil {
 		return nil, err
 	}
-	opened, err := p.openBastion(c).forwardPorts(ctx, req.Tier, targets, progress)
+	opened, err := p.newBastion(c).forwardPorts(ctx, req.Tier, targets, progress)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	return forwards, nil
 }
 
-func (p *Provider) openBastion(c *clients) bastion {
+func (p *Provider) newBastion(c *clients) bastion {
 	return bastion{
 		clients:        c,
 		deployAndRoute: p.deployAndRoute,
@@ -62,7 +62,7 @@ func (p *Provider) openBastion(c *clients) bastion {
 
 func (b bastion) forwardPorts(ctx context.Context, tier environment.Tier, targets []string, progress progress.Log) ([]*relay.Forward, error) {
 	tokens := &identityTokens{prove: b.prove, audience: b.clients.Bastion(tier), now: time.Now}
-	if _, err := tokens.mint(ctx); err != nil {
+	if _, err := tokens.mintOrReuse(ctx); err != nil {
 		return nil, err
 	}
 	url, err := b.provision(ctx, tier, progress)
@@ -71,7 +71,7 @@ func (b bastion) forwardPorts(ctx context.Context, tier environment.Tier, target
 	}
 	forwards := make([]*relay.Forward, 0, len(targets))
 	for _, target := range targets {
-		forward, err := b.openForward(ctx, relay.Link{URL: url, Target: target, Token: tokens.mint, Warn: ensureProgress(progress).Warn})
+		forward, err := b.openForward(ctx, relay.Link{URL: url, Target: target, Token: tokens.mintOrReuse, Warn: ensureProgress(progress).Warn})
 		if err != nil {
 			for _, opened := range forwards {
 				opened.Close()
@@ -108,7 +108,7 @@ type identityTokens struct {
 	minted time.Time
 }
 
-func (t *identityTokens) mint(ctx context.Context) (string, error) {
+func (t *identityTokens) mintOrReuse(ctx context.Context) (string, error) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if t.token != "" && t.now().Sub(t.minted) < identityTokenLife {

@@ -135,7 +135,7 @@ func newBastionHarness(t *testing.T, relayAllows ...string) *bastionHarness {
 	p := h.run.open(t)
 	h.relay = httptest.NewServer(relay.NewHandler(destinationsOf(t, relayAllows...)))
 	t.Cleanup(h.relay.Close)
-	h.b = p.openBastion(p.resolved)
+	h.b = p.newBastion(p.resolved)
 	h.b.pushBinary = func(_ context.Context, _ environment.Tier, _, ref string, binary []byte, _ string) error {
 		if len(binary) == 0 {
 			t.Error("the bastion image was pushed with no binary in it")
@@ -197,6 +197,14 @@ func TestTheFirstForwardCreatesTheBastionItsAccountAndTheInvokerGrantAndLaterOne
 	}
 	if got := len(h.run.created); got != 1 {
 		t.Errorf("the bastion was created %d times, want once", got)
+	}
+	h.mu.Lock()
+	proved := slices.Clone(h.proved)
+	h.mu.Unlock()
+	for _, audience := range proved {
+		if !slices.Contains(service.CustomAudiences, audience) {
+			t.Errorf("an identity token was minted for %q, which the bastion's audiences %v do not name, so Cloud Run would refuse it", audience, service.CustomAudiences)
+		}
 	}
 	if got := len(h.run.releases()) - before; got != 0 {
 		t.Errorf("the second forward released the bastion %d times, want it reused as it is", got)

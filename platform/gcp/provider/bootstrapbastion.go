@@ -20,7 +20,7 @@ func (b bootstrap) bastionRemovals(ctx context.Context, tier environment.Tier) (
 	if service != nil {
 		changes = append(changes, provider.Change{Kind: string(KindService), Name: b.clients.Bastion(tier), Action: provider.ActionDelete, Reason: reasonBastionOnDemand})
 	}
-	account, err := at.accountExists(ctx, tier)
+	account, err := b.clients.accountExists(ctx, b.clients.BastionAccount(tier))
 	if err != nil {
 		return nil, err
 	}
@@ -30,6 +30,6 @@ func (b bootstrap) bastionRemovals(ctx context.Context, tier environment.Tier) (
 	return changes, nil
 }
 
-func (b bootstrap) takeBastion(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+func (b bootstrap) removeBastion(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	return bastion{clients: b.clients, tearDown: b.tearDown}.remove(ctx, tier, progress)
 }
