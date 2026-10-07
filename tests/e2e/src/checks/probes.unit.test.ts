@@ -24,6 +24,7 @@ function context(fetch: Fetch, baseUrl = BASE): CheckContext {
     fetch,
     reach: async (url) => url,
     readExposed: async () => "",
+    runInEnvironment: async () => "",
     journeyNonce: "journey-nonce",
     projectDir: "/nowhere",
     tempDir: "/nowhere",

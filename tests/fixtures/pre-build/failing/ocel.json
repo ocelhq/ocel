@@ -1,0 +1,14 @@
+{
+  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "slug": "pre-build-failing",
+  "provider": "aws",
+  "apps": [
+    {
+      "name": "web",
+      "path": "."
+    }
+  ],
+  "lifecycle": {
+    "preBuild": "echo 'migration refused: the schema is behind' >&2; exit 3"
+  }
+}

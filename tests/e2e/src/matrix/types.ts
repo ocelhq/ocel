@@ -40,6 +40,7 @@ export type Concern =
   | "sdk"
   | "build-variables"
   | "prerender"
+  | "pre-build"
   | "kv"
   | "tasks"
   | "realtime"
@@ -51,6 +52,7 @@ export const CONCERNS: Concern[] = [
   "sdk",
   "build-variables",
   "prerender",
+  "pre-build",
   "kv",
   "tasks",
   "realtime",

@@ -27,6 +27,7 @@ export type CheckContext = {
   fetch: Fetch;
   reach: (url: string) => Promise<string>;
   readExposed: () => Promise<string>;
+  runInEnvironment: (command: string[]) => Promise<string>;
   journeyNonce: string;
   projectDir: string;
   tempDir: string;

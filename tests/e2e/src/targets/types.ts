@@ -64,6 +64,14 @@ export function previewsOn(target: object, lane: Lane): boolean {
   return hasPreviews(target) && target.previewLanes.includes(lane);
 }
 
+export interface Commands {
+  runInEnvironment(cell: CellUnderTest, command: string[]): Promise<string>;
+}
+
+export function hasCommands<T extends object>(target: T): target is T & Commands {
+  return typeof (target as Partial<Commands>).runInEnvironment === "function";
+}
+
 export interface Exposure {
   readExposed(cell: CellUnderTest): Promise<string>;
 }

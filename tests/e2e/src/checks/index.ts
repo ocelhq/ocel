@@ -5,6 +5,7 @@ export * from "./health";
 export * from "./kv";
 export * from "./nextCache";
 export * from "./nextRouting";
+export * from "./preBuild";
 export * from "./prerender";
 export * from "./probes";
 export * from "./product";
