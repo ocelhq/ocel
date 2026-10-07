@@ -204,21 +204,33 @@ func (b bastion) remove(ctx context.Context, tier environment.Tier, progress pro
 			return err
 		}
 	}
-	return b.removeAccount(ctx, tier)
+	return b.removeAccount(ctx, tier, progress)
 }
 
-func (b bastion) removeAccount(ctx context.Context, tier environment.Tier) error {
-	accounts, err := b.clients.Accounts()
-	if err != nil {
+func (b bastion) removeAccount(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+	found, err := b.accountExists(ctx, tier)
+	if err != nil || !found {
 		return err
 	}
-	account := b.clients.BastionAccount(tier)
-	if _, err := attempted(ctx, accounts.Projects.ServiceAccounts.Get(accountPath(b.clients, account)).Context(ctx).Do); err != nil {
-		if absent(err) {
-			return nil
-		}
-		return fmt.Errorf("read the %s service account: %w", account, err)
+	deleted, err := b.clients.deleteAccount(ctx, b.clients.BastionAccount(tier))
+	if deleted {
+		ensureProgress(progress).Say("Deleted the " + b.clients.BastionAccount(tier) + " service account the bastion ran as")
 	}
-	_, err = b.clients.deleteAccount(ctx, account)
 	return err
+}
+
+func (b bastion) accountExists(ctx context.Context, tier environment.Tier) (bool, error) {
+	accounts, err := b.clients.Accounts()
+	if err != nil {
+		return false, err
+	}
+	account := b.clients.BastionAccount(tier)
+	_, err = attempted(ctx, accounts.Projects.ServiceAccounts.Get(accountPath(b.clients, account)).Context(ctx).Do)
+	if absent(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read the %s service account: %w", account, err)
+	}
+	return true, nil
 }

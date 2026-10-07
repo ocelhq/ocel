@@ -860,6 +860,11 @@ func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 		Name:   provider.ParameterGroupKind,
 		Action: provider.ActionDelete,
 	}
+	bastions, err := b.bastionRemovals(ctx, tier)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	stack.Changes = bastions
 	for _, taking := range removals(read) {
 		change := provider.Change{
 			Kind:   string(taking.item.Kind),
@@ -953,6 +958,9 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 		}
 	}
 	if err := b.tearFeatures(ctx, tier, read.Stamp.Features); err != nil {
+		return err
+	}
+	if err := b.takeBastion(ctx, tier, progress); err != nil {
 		return err
 	}
 	for _, taking := range removals(read) {
