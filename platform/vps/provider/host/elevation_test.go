@@ -19,8 +19,8 @@ type sudoless struct {
 	recorded string
 }
 
-func (c *sudoless) ForwardPort(context.Context, string) (string, error) {
-	return "", errors.New("a sudoless session forwards no port")
+func (c *sudoless) ForwardPort(context.Context, string) (string, func(), error) {
+	return "", nil, errors.New("a sudoless session forwards no port")
 }
 
 func (c *sudoless) Preflight(context.Context) (session.Facts, error) {

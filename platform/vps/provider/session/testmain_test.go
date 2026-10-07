@@ -9,7 +9,10 @@ import (
 	"testing"
 )
 
-const standInEnv = "OCEL_SSH_STAND_IN"
+const (
+	standInEnv    = "OCEL_SSH_STAND_IN"
+	standInLogEnv = "OCEL_SSH_STAND_IN_LOG"
+)
 
 func TestMain(m *testing.M) {
 	if os.Getenv(standInEnv) != "" {
@@ -20,6 +23,14 @@ func TestMain(m *testing.M) {
 
 func standInForSSH(args []string) int {
 	if slices.Contains(args, "-O") {
+		if log := os.Getenv(standInLogEnv); log != "" {
+			said, err := os.OpenFile(log, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+			if err != nil {
+				return 1
+			}
+			defer said.Close()
+			_, _ = said.WriteString(strings.Join(args, " ") + "\n")
+		}
 		return 0
 	}
 	spec := args[slices.Index(args, "-L")+1]

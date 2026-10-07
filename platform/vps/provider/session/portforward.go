@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -18,15 +19,15 @@ const (
 	forwardLongWait  = time.Second
 )
 
-func (s *Session) ForwardPort(ctx context.Context, remote string) (string, error) {
+func (s *Session) ForwardPort(ctx context.Context, remote string) (string, func(), error) {
 	local, err := freeLoopbackAddress()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	spec := local + ":" + remote
-	input, held, err := os.Pipe()
+	input, stdinWriter, err := os.Pipe()
 	if err != nil {
-		return "", refusal.Refuse(refusal.CodeNotReady, "open the input that holds a forward open: %s", err)
+		return "", nil, refusal.Refuse(refusal.CodeNotReady, "open the input that holds a forward open: %s", err)
 	}
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "ssh", append(s.args(),
@@ -37,27 +38,33 @@ func (s *Session) ForwardPort(ctx context.Context, remote string) (string, error
 	err = cmd.Start()
 	_ = input.Close()
 	if err != nil {
-		_ = held.Close()
-		return "", s.refuseUnreached(ctx, err, "")
+		_ = stdinWriter.Close()
+		return "", nil, s.refuseUnreached(ctx, err, "")
 	}
 	var waitErr error
 	exited := make(chan struct{})
 	go func() {
 		waitErr = cmd.Wait()
 		close(exited)
-		_ = held.Close()
-		s.cancelForward(spec)
+		_ = stdinWriter.Close()
 	}()
+	var once sync.Once
+	stop := func() {
+		once.Do(func() {
+			_ = cmd.Process.Kill()
+			<-exited
+			s.cancelForward(spec)
+		})
+	}
 	if err := awaitListening(ctx, local, exited, &waitErr); err != nil {
-		_ = cmd.Process.Kill()
-		<-exited
+		stop()
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", nil, ctx.Err()
 		}
-		return "", refusal.Refuse(refusal.CodeNotReady,
+		return "", nil, refusal.Refuse(refusal.CodeNotReady,
 			"%s over ssh: forwarding %s to %s: %s", s.dest.Principal(), local, remote, terse(failure{err: err, stderr: strings.TrimSpace(stderr.String())}))
 	}
-	return local, nil
+	return local, stop, nil
 }
 
 func (s *Session) cancelForward(spec string) {

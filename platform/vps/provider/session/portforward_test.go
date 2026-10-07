@@ -42,7 +42,7 @@ func TestAForwardedPortListensOnLoopbackAndReachesTheRemoteAddressUntilItsContex
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	local, err := session.ForwardPort(ctx, "172.18.0.5:5432")
+	local, _, err := session.ForwardPort(ctx, "172.18.0.5:5432")
 	if err != nil {
 		t.Fatalf("ForwardPort() error = %v", err)
 	}
@@ -70,8 +70,29 @@ func TestAForwardSshCannotOpenIsRefusedWithWhatSshSaid(t *testing.T) {
 	session := sshStandingIn(t)
 	t.Setenv(standInEnv, "refuse")
 
-	_, err := session.ForwardPort(context.Background(), "172.18.0.5:5432")
+	_, _, err := session.ForwardPort(context.Background(), "172.18.0.5:5432")
 	if err == nil || !strings.Contains(err.Error(), "Address already in use") {
 		t.Errorf("ForwardPort() over a port already taken = %v, want a refusal saying what ssh said", err)
+	}
+}
+
+func TestStoppingAForwardReturnsOnceSshHasExitedAndTheMasterHasDroppedIt(t *testing.T) {
+	session := sshStandingIn(t)
+	session.control = filepath.Join(t.TempDir(), "control")
+	log := filepath.Join(t.TempDir(), "said")
+	t.Setenv(standInLogEnv, log)
+
+	local, stop, err := session.ForwardPort(context.Background(), "172.18.0.5:5432")
+	if err != nil {
+		t.Fatalf("ForwardPort() error = %v", err)
+	}
+	stop()
+
+	if _, err := readForwarded(t, local); err == nil {
+		t.Error("the forward still answered once stopped, want it gone before stop returns")
+	}
+	said, _ := os.ReadFile(log)
+	if !strings.Contains(string(said), "-O cancel -L "+local+":172.18.0.5:5432") {
+		t.Errorf("the master was told %q before stop returned, want the forward cancelled there: a forward the master keeps outlives the call that asked for it", said)
 	}
 }

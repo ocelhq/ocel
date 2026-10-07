@@ -28,11 +28,12 @@ func TestForwardPortsHandsBackThePublishedBindingPointedAtItsForwardAndHoldsItUn
 	provisionedInfra(t, client, infraRequest(deployRequest()))
 	var asked provider.PortForwardRequest
 	held := make(chan context.Context, 1)
+	closed := make(chan struct{})
 	vendor.WithHooks(func(h *provider.Hooks) {
 		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
 			asked = req
 			held <- ctx
-			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234"}}, nil
+			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { close(closed) }}}, nil
 		}
 	})
 
@@ -74,9 +75,9 @@ func TestForwardPortsHandsBackThePublishedBindingPointedAtItsForwardAndHoldsItUn
 	}
 	leave()
 	select {
-	case <-hookCtx.Done():
+	case <-closed:
 	case <-time.After(5 * time.Second):
-		t.Fatal("the forwards stayed open after the caller left")
+		t.Fatal("the forwards stayed open after the caller left, want each one closed before the call returns")
 	}
 }
 

@@ -8,14 +8,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func (h *Host) ForwardToContainer(ctx context.Context, name, port string) (string, error) {
+func (h *Host) ForwardToContainer(ctx context.Context, name, port string) (string, func(), error) {
 	address, err := h.ReadContainerAddress(ctx, name)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	live, err := h.dial(ctx)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	return live.ForwardPort(ctx, net.JoinHostPort(address, port))
 }
