@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
@@ -54,6 +55,15 @@ func runHooks(t *testing.T, suite Suite) {
 			t.Skip("this provider sets no Cost hooks, so no deploy of it is priced")
 		}
 		runCost(t, suite)
+	})
+	t.Run("ForwardPorts", func(t *testing.T) {
+		if hooks.ForwardPorts == nil {
+			t.Skip("this provider forwards no ports, so a build gets no bindings to its private resources")
+		}
+		forwards, err := hooks.ForwardPorts(context.Background(), provider.PortForwardRequest{Tier: environment.TierProduction, Slug: "conformance", Env: "production"})
+		if err != nil || len(forwards) != 0 {
+			t.Errorf("ForwardPorts() of no binding = %v, %v, want nothing forwarded and nothing reached", forwards, err)
+		}
 	})
 	t.Run("NextServerRuntime", func(t *testing.T) {
 		if hooks.ReadNextServerRuntime == nil {

@@ -80,6 +80,8 @@ service ProviderService {
     rpc Confirm(ConfirmRequest) returns (ConfirmResponse);
 
     rpc ReadLogs(ReadLogsRequest) returns (stream ReadLogsResponse);
+
+    rpc ForwardPorts(ForwardPortsRequest) returns (stream ForwardPortsResponse);
 }
 
 message ProviderConfig {
@@ -952,4 +954,18 @@ message LogNotice {
   string message = 2;
 
   uint64 omitted = 3;
+}
+
+message ForwardPortsRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Environment environment = 2;
+
+  repeated string bindings = 3 [(buf.validate.field).repeated = {min_items: 1, unique: true}];
+}
+
+message ForwardPortsResponse {
+  repeated common.bindings.v1.Binding bindings = 1 [debug_redact = true];
+
+  repeated string unforwarded = 2;
 }
