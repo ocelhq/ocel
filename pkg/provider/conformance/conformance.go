@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
@@ -59,7 +60,7 @@ func runHooks(t *testing.T, suite Suite) {
 		if hooks.ForwardPorts == nil {
 			t.Skip("this provider forwards no ports, so a build gets no bindings to its private resources")
 		}
-		forwards, err := hooks.ForwardPorts(context.Background(), provider.PortForwardRequest{})
+		forwards, err := hooks.ForwardPorts(context.Background(), provider.PortForwardRequest{}, progress.Discard())
 		if err != nil || len(forwards) != 0 {
 			t.Errorf("ForwardPorts() of no binding = %v, %v, want nothing forwarded and nothing reached", forwards, err)
 		}

@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -18,7 +19,7 @@ func TestAnAWSTargetForwardsPortsAndForwardsNothingWhenNoBindingAsksWithoutReach
 		t.Fatal("the aws provider sets no ForwardPorts hook, so a build never gets the bindings of a private Aurora or Valkey")
 	}
 
-	forwards, err := forward(context.Background(), provider.PortForwardRequest{Tier: environment.TierProduction})
+	forwards, err := forward(context.Background(), provider.PortForwardRequest{Tier: environment.TierProduction}, progress.Discard())
 
 	if err != nil || len(forwards) != 0 {
 		t.Errorf("ForwardPorts() of no binding = %v, %v, want nothing forwarded and no call to AWS", forwards, err)

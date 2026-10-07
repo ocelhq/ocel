@@ -29,7 +29,7 @@ type Hooks struct {
 	CheckHost             func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
 	ProveIdentity         func(ctx context.Context, audience string) (envsource.IdentityProof, error)
 	OpenTaskStore         func(ctx context.Context) (TaskStore, error)
-	ForwardPorts          func(ctx context.Context, req PortForwardRequest) ([]PortForward, error)
+	ForwardPorts          func(ctx context.Context, req PortForwardRequest, progress progress.Log) ([]PortForward, error)
 	Cost                  *CostHooks
 	FunctionImages        *FunctionImageHooks
 }

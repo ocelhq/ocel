@@ -4,12 +4,13 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/kvstore"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
-func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 	if len(req.Bindings) == 0 {
 		return nil, nil
 	}

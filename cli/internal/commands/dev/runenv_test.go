@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -43,7 +44,7 @@ func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwards {
 	t.Helper()
 	seen := &forwards{}
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 			seen.mutex.Lock()
 			defer seen.mutex.Unlock()
 			var out []provider.PortForward
@@ -223,9 +224,9 @@ func TestRunInADeployedEnvironmentAsksForTheForwardsOfThatEnvironmentsTier(t *te
 	asked := make(chan provider.PortForwardRequest, 1)
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
 		forward := h.ForwardPorts
-		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest, said progress.Log) ([]provider.PortForward, error) {
 			asked <- req
-			return forward(ctx, req)
+			return forward(ctx, req, said)
 		}
 	})
 
@@ -246,8 +247,8 @@ func TestRunInADeployedEnvironmentWhoseForwardFailsWhileTheCommandRunsFailsAndSa
 	deployProject(t, fixture, clitest.NewInvocation())
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
 		forward := h.ForwardPorts
-		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
-			forwards, err := forward(ctx, req)
+		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest, said progress.Log) ([]provider.PortForward, error) {
+			forwards, err := forward(ctx, req, said)
 			req.ReportFailure(errors.New("the bastion task stopped: Essential container in task exited"))
 			return forwards, err
 		}

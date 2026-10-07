@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
 )
 
@@ -206,6 +207,36 @@ func TestTheFirstForwardCreatesTheBastionItsAccountAndTheInvokerGrantAndLaterOne
 	created := h.run.identities().created
 	if len(created) != 1 || created[0].AccountId != bastionNames().BastionAccount(environment.TierProduction) {
 		t.Errorf("service accounts created = %+v, want the production bastion's alone", created)
+	}
+}
+
+func TestTheFirstForwardSaysItMakesTheBastionAndLaterOnesSayNothing(t *testing.T) {
+	t.Parallel()
+	target := echoTarget(t)
+	h := newBastionHarness(t, target)
+	first, later := &fake.Log{}, &fake.Log{}
+
+	for _, said := range []*fake.Log{first, later} {
+		forwards, err := h.b.forwardPorts(context.Background(), environment.TierProduction, []string{target}, said)
+		if err != nil {
+			t.Fatalf("forwardPorts() = %v", err)
+		}
+		for _, forward := range forwards {
+			forward.Close()
+		}
+	}
+
+	names := bastionNames()
+	want := []string{
+		"INFO Making the bastion " + names.Bastion(environment.TierProduction) + " that forwards ports into the production tier's network",
+		"INFO Pushing the bastion image " + h.b.imageRef(environment.TierProduction),
+		"INFO Creating Cloud Run service " + names.Bastion(environment.TierProduction) + " in europe-west1",
+	}
+	if got := first.Lines(); !slices.Equal(got, want) {
+		t.Errorf("the first forward said %q, want %q", got, want)
+	}
+	if got := later.Lines(); len(got) != 0 {
+		t.Errorf("a forward through a bastion already made said %q, want nothing", got)
 	}
 }
 

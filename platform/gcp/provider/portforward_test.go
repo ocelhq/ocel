@@ -27,7 +27,7 @@ func TestAGCPProviderForwardsPorts(t *testing.T) {
 func TestForwardingNoBindingTouchesNoCloud(t *testing.T) {
 	t.Parallel()
 
-	forwards, err := (&Provider{}).ForwardPorts(context.Background(), provider.PortForwardRequest{})
+	forwards, err := (&Provider{}).ForwardPorts(context.Background(), provider.PortForwardRequest{}, nil)
 
 	if err != nil || len(forwards) != 0 {
 		t.Errorf("ForwardPorts() of no binding = %v, %v, want nothing forwarded and nothing reached", forwards, err)
@@ -42,7 +42,7 @@ func TestABindingThatNamesNoHostAndPortIsRefusedBeforeAnyBastionIsMade(t *testin
 	forwards, err := p.ForwardPorts(context.Background(), provider.PortForwardRequest{
 		Tier:     "production",
 		Bindings: []provider.Binding{{Type: provider.BindingPostgres, Name: "orders", Properties: map[string]string{provider.PropertyHost: "10.240.0.5"}}},
-	})
+	}, nil)
 
 	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid || len(forwards) != 0 {
 		t.Fatalf("ForwardPorts() = %v, %v, want an invalid refusal naming the binding", forwards, err)

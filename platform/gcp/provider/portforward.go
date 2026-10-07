@@ -20,7 +20,7 @@ const (
 	identityTokenLife   = 30 * time.Minute
 )
 
-func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
 	if len(req.Bindings) == 0 {
 		return nil, nil
 	}
@@ -36,7 +36,7 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	if err != nil {
 		return nil, err
 	}
-	opened, err := p.openBastion(c).forwardPorts(ctx, req.Tier, targets, nil)
+	opened, err := p.openBastion(c).forwardPorts(ctx, req.Tier, targets, progress)
 	if err != nil {
 		return nil, err
 	}

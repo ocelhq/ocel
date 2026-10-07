@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -256,7 +257,7 @@ func TestAPreBuildWhoseForwardIsRefusedStopsTheDeployBeforeItRunsAndNamesTheReso
 	p := setUpPreBuildProject(t, `"true"`)
 	writeConfigWithLifecycle(t, p.fixture.Root, fmt.Sprintf(`"touch %s"`, p.marker))
 	p.fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(context.Context, provider.PortForwardRequest) ([]provider.PortForward, error) {
+		h.ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
 			return nil, refusal.Refuse(refusal.CodeNotReady, "container db holds no address on any network, so it is not running")
 		}
 	})
@@ -296,8 +297,8 @@ func TestAPreBuildWhoseForwardFailsWhileItRunsStopsTheDeployBeforeAnythingIsProm
 	p := setUpPreBuildProject(t, `"sleep 1"`)
 	p.fixture.Provider.WithHooks(func(h *provider.Hooks) {
 		forward := h.ForwardPorts
-		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
-			forwards, err := forward(ctx, req)
+		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest, said progress.Log) ([]provider.PortForward, error) {
+			forwards, err := forward(ctx, req, said)
 			req.ReportFailure(errors.New("the bastion task stopped: Essential container in task exited"))
 			return forwards, err
 		}

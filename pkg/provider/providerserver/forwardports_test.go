@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -33,7 +34,7 @@ func TestForwardPortsHandsBackThePublishedBindingPointedAtItsForwardAndHoldsItUn
 	held := make(chan context.Context, 1)
 	closed := make(chan struct{})
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+		h.ForwardPorts = func(ctx context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 			asked = req
 			held <- ctx
 			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { close(closed) }}}, nil
@@ -49,7 +50,7 @@ func TestForwardPortsHandsBackThePublishedBindingPointedAtItsForwardAndHoldsItUn
 	if !stream.Receive() {
 		t.Fatalf("ForwardPorts() sent nothing: %v", stream.Err())
 	}
-	forwarded := stream.Msg()
+	forwarded := stream.Msg().GetResponse()
 
 	if asked.Tier != environment.TierProduction {
 		t.Errorf("the hook was asked for tier %q, want production: a provider that forwards through infrastructure of its own keeps one per tier", asked.Tier)
@@ -94,7 +95,7 @@ func TestForwardPortsEndsTheStreamWithTheFailureTheProviderReportsAndClosesTheFo
 	fail := make(chan func(error), 1)
 	closed := make(chan struct{})
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 			fail <- req.ReportFailure
 			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { close(closed) }}}, nil
 		}
@@ -110,7 +111,7 @@ func TestForwardPortsEndsTheStreamWithTheFailureTheProviderReportsAndClosesTheFo
 	(<-fail)(errors.New("the bastion task stopped: Task stopped by user"))
 
 	for stream.Receive() {
-		t.Errorf("ForwardPorts() sent a second response, %d bindings and unforwarded %v, after the forwards failed", len(stream.Msg().GetBindings()), stream.Msg().GetUnforwarded())
+		t.Errorf("ForwardPorts() sent a second response, %d bindings and unforwarded %v, after the forwards failed", len(stream.Msg().GetResponse().GetBindings()), stream.Msg().GetResponse().GetUnforwarded())
 	}
 	if err := stream.Err(); err == nil || !strings.Contains(err.Error(), "the bastion task stopped") {
 		t.Errorf("ForwardPorts() stream ended with %v, want the failure the provider reported", err)
@@ -131,7 +132,7 @@ func TestForwardPortsEndsTheStreamWithAFailureBeforeItsForwardsFinishClosingAndH
 	releaseForwards := func() { released.Do(func() { close(release) }) }
 	defer releaseForwards()
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 			req.ReportFailure(errors.New("the bastion task stopped: Task stopped by user"))
 			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { <-release }}}, nil
 		}
@@ -191,7 +192,7 @@ func TestForwardPortsOnAProviderThatCannotForwardHandsEveryBindingBackUnforwarde
 	}
 	var responses []*contractv1.ForwardPortsResponse
 	for stream.Receive() {
-		responses = append(responses, stream.Msg())
+		responses = append(responses, stream.Msg().GetResponse())
 	}
 	if err := stream.Err(); err != nil {
 		t.Fatalf("ForwardPorts() stream error = %v", err)
@@ -211,7 +212,7 @@ func TestForwardPortsRefusesABindingNothingPublished(t *testing.T) {
 		t.Fatalf("ForwardPorts() error = %v", err)
 	}
 	for stream.Receive() {
-		t.Errorf("ForwardPorts() forwarded %d bindings and left %v unforwarded, want a refusal", len(stream.Msg().GetBindings()), stream.Msg().GetUnforwarded())
+		t.Errorf("ForwardPorts() forwarded %d bindings and left %v unforwarded, want a refusal", len(stream.Msg().GetResponse().GetBindings()), stream.Msg().GetResponse().GetUnforwarded())
 	}
 	if err := stream.Err(); err == nil || !strings.Contains(err.Error(), "missing") {
 		t.Errorf("ForwardPorts() error = %v, want a refusal naming missing", err)
@@ -226,7 +227,7 @@ func TestForwardPortsLeavesAPostgresBindingAddressedByAURLUnforwarded(t *testing
 	}
 	var asked []provider.Binding
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 			asked = req.Bindings
 			forwards := make([]provider.PortForward, 0, len(req.Bindings))
 			for _, binding := range req.Bindings {
@@ -242,7 +243,7 @@ func TestForwardPortsLeavesAPostgresBindingAddressedByAURLUnforwarded(t *testing
 	}
 	var responses []*contractv1.ForwardPortsResponse
 	for stream.Receive() {
-		responses = append(responses, stream.Msg())
+		responses = append(responses, stream.Msg().GetResponse())
 	}
 	if err := stream.Err(); err != nil {
 		t.Fatalf("ForwardPorts() stream error = %v", err)
@@ -264,7 +265,7 @@ func TestADeployAfterForwardsBeginsOnlyOnceTheProviderHasClosedThem(t *testing.T
 	releaseForwards := func() { released.Do(func() { close(release) }) }
 	defer releaseForwards()
 	vendor.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(context.Context, provider.PortForwardRequest) ([]provider.PortForward, error) {
+		h.ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
 			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { <-release }}}, nil
 		}
 	})
@@ -301,5 +302,46 @@ func TestADeployAfterForwardsBeginsOnlyOnceTheProviderHasClosedThem(t *testing.T
 	case <-deployed:
 	case <-time.After(30 * time.Second):
 		t.Fatal("the deploy never ran once the forwards were closed")
+	}
+}
+
+func TestWhatTheProviderSaysWhileOpeningForwardsAndWhileTheyAreHeldReachesTheCaller(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	opened := make(chan progress.Log, 1)
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ForwardPorts = func(_ context.Context, _ provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
+			progress.Say("Creating the bastion")
+			opened <- progress
+			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234"}}, nil
+		}
+	})
+
+	ctx, leave := context.WithCancel(context.Background())
+	defer leave()
+	stream, err := client.ForwardPorts(ctx, forwardPortsRequest("orders"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	var said []string
+	for stream.Receive() {
+		if event := stream.Msg().GetProgress(); event != nil {
+			said = append(said, event.GetLevel().String()+" "+event.GetMessage())
+			continue
+		}
+		if stream.Msg().GetResponse() == nil {
+			t.Fatal("ForwardPorts() sent an event that is neither progress nor the forwards")
+		}
+		(<-opened).Warn("A connection to orders failed")
+		if !stream.Receive() || stream.Msg().GetProgress() == nil {
+			t.Fatalf("ForwardPorts() sent nothing once the forwards were open: %v", stream.Err())
+		}
+		said = append(said, stream.Msg().GetProgress().GetLevel().String()+" "+stream.Msg().GetProgress().GetMessage())
+		break
+	}
+
+	if want := []string{"LEVEL_INFO Creating the bastion", "LEVEL_WARN A connection to orders failed"}; !slices.Equal(said, want) {
+		t.Errorf("the caller heard %q, want %q", said, want)
 	}
 }

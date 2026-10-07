@@ -103,7 +103,7 @@ func forwardDeployed(ctx context.Context, dependencies Dependencies, p commands.
 	}
 	declared := portforward.ListDeclared(uses)
 	step := p.Check.Child(cfg.Slug, progress.Forwarding.Title("ports to "+english.And(declared)))
-	forwards, err := portforward.Open(ctx, p.Provider, cfg.Slug, env, uses)
+	forwards, err := portforward.Open(ctx, p.Provider, cfg.Slug, env, uses, p.Check)
 	if err != nil {
 		err = portforward.RefuseUnforwarded("the command", declared, err)
 	}

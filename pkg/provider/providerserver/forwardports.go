@@ -9,9 +9,13 @@ import (
 	"net"
 	"slices"
 	"sync"
+	"time"
 
 	connect "connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/ocelhq/ocel/pkg/progress"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -57,7 +61,48 @@ func (o *openForwards) awaitClosed(ctx context.Context) error {
 	}
 }
 
-func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPortsRequest, stream *connect.ServerStream[contractv1.ForwardPortsResponse]) error {
+type streamLog struct {
+	mutex  sync.Mutex
+	stream *connect.ServerStream[contractv1.ForwardPortsEvent]
+}
+
+func (l *streamLog) send(event *contractv1.ForwardPortsEvent) error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	return l.stream.Send(event)
+}
+
+func (l *streamLog) say(event *progressv1.OperationEvent) {
+	event.Time = timestamppb.Now()
+	if event.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
+		event.Level = progressv1.Level_LEVEL_INFO
+	}
+	_ = l.send(&contractv1.ForwardPortsEvent{Body: &contractv1.ForwardPortsEvent_Progress{Progress: event}})
+}
+
+func (l *streamLog) Say(message string) {
+	l.say(&progressv1.OperationEvent{Message: progress.SanitizeMessage(message)})
+}
+
+func (l *streamLog) Warn(message string) {
+	l.say(&progressv1.OperationEvent{Level: progressv1.Level_LEVEL_WARN, Message: progress.SanitizeMessage(message)})
+}
+
+func (l *streamLog) Error(message string) {
+	l.say(&progressv1.OperationEvent{Level: progressv1.Level_LEVEL_ERROR, Message: progress.SanitizeMessage(message)})
+}
+
+func (l *streamLog) Detail(message string) {
+	l.say(outputEvent(progressv1.Level_LEVEL_INFO, progress.SanitizeMessage(message)))
+}
+
+func (l *streamLog) Debug(line string) {
+	l.say(outputEvent(progressv1.Level_LEVEL_DEBUG, progress.SanitizeMessage(line)))
+}
+
+func (l *streamLog) Span(string, time.Time, time.Time, error, ...progress.Attr) {}
+
+func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPortsRequest, stream *connect.ServerStream[contractv1.ForwardPortsEvent]) error {
 	release := h.forwards.hold()
 	var forwards []provider.PortForward
 	closeInBackground := false
@@ -93,6 +138,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	reachable := slices.DeleteFunc(slices.Clone(bindings), func(binding provider.Binding) bool {
 		return forward == nil || !isReachableByPort(binding)
 	})
+	said := &streamLog{stream: stream}
 	failed := make(chan error, 1)
 	reportFailure := func(err error) {
 		select {
@@ -101,7 +147,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 		}
 	}
 	if len(reachable) > 0 {
-		forwards, err = forward(ctx, provider.PortForwardRequest{Tier: tier, Bindings: reachable, ReportFailure: reportFailure})
+		forwards, err = forward(ctx, provider.PortForwardRequest{Tier: tier, Bindings: reachable, ReportFailure: reportFailure}, said)
 		if err != nil {
 			return provider.RefusalError(err)
 		}
@@ -110,7 +156,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	if err != nil {
 		return provider.RefusalError(err)
 	}
-	if err := stream.Send(resp); err != nil {
+	if err := said.send(&contractv1.ForwardPortsEvent{Body: &contractv1.ForwardPortsEvent_Response{Response: resp}}); err != nil {
 		return err
 	}
 	if len(forwards) == 0 {
