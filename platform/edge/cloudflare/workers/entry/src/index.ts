@@ -18,7 +18,7 @@ import { nodeOrigin } from "./node";
 import { originFetchFor } from "./origin-fetch";
 import { coloPrerender, type InterceptionTier } from "./prerender";
 import { findPreviewTarget } from "./preview";
-import { type ReleaseRecord, type ReleasesDeps, resolveRelease } from "./releases";
+import { type ReleaseLookup, type ReleaseRecord, resolveRelease } from "./releases";
 import { revalidationSender } from "./revalidation";
 import { invalidateSnapshot } from "./tag-clock";
 
@@ -107,8 +107,8 @@ export type ResolveBase = Omit<
 export type ServeFetch = (request: Request) => Promise<Response>;
 
 interface ServeRuntime {
-  serve: (record: ReleaseRecord, releases: ReleasesDeps, base: ResolveBase) => ServeFetch;
-  routeDeps?: (record: ReleaseRecord, releases: ReleasesDeps, base: ResolveBase) => RouteDeps;
+  serve: (record: ReleaseRecord, releases: ReleaseLookup, base: ResolveBase) => ServeFetch;
+  routeDeps?: (record: ReleaseRecord, releases: ReleaseLookup, base: ResolveBase) => RouteDeps;
 }
 
 const routedRuntime: ServeRuntime = {
@@ -132,7 +132,7 @@ function runtimeFor(record: ReleaseRecord): ServeRuntime {
   return record.routingManifest ? routedRuntime : originRuntime;
 }
 
-async function resolveRecord(releases: ReleasesDeps): Promise<ReleaseRecord | Response> {
+async function resolveRecord(releases: ReleaseLookup): Promise<ReleaseRecord | Response> {
   const resolution = await resolveRelease(releases);
   if (resolution.kind === "not-found") return deploymentNotFoundResponse();
   if (resolution.kind === "unavailable") return unavailableResponse();
@@ -140,7 +140,7 @@ async function resolveRecord(releases: ReleasesDeps): Promise<ReleaseRecord | Re
 }
 
 export async function resolveServe(
-  releases: ReleasesDeps,
+  releases: ReleaseLookup,
   base: ResolveBase,
 ): Promise<ServeFetch | Response> {
   const record = await resolveRecord(releases);
@@ -151,7 +151,7 @@ export async function resolveServe(
 }
 
 export async function resolveRouteDeps(
-  releases: ReleasesDeps,
+  releases: ReleaseLookup,
   base: ResolveBase,
 ): Promise<RouteDeps | Response> {
   const record = await resolveRecord(releases);
@@ -163,7 +163,7 @@ export async function resolveRouteDeps(
   return runtime.routeDeps(record, releases, base);
 }
 
-function routedDeps(record: ReleaseRecord, releases: ReleasesDeps, base: ResolveBase): RouteDeps {
+function routedDeps(record: ReleaseRecord, releases: ReleaseLookup, base: ResolveBase): RouteDeps {
   const { edgeRuntime, imagesAtDeployment, ...rest } = base;
   const { edgeWorkers } = record;
   const manifest = record.routingManifest;
@@ -271,7 +271,7 @@ export default {
     const originFetch = originFetchFor(env);
 
     const host = new URL(request.url).host;
-    let releases: ReleasesDeps = {
+    let releases: ReleaseLookup = {
       binding: env.RELEASES,
       slug: env.OCEL_SLUG,
       host,

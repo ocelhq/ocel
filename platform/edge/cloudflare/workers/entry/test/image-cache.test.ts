@@ -360,7 +360,7 @@ describe("the image cache key", () => {
     expect(origin.calls).toBe(2);
   });
 
-  it("falls back to a deployment-scoped identity for a path the build never hashed", async () => {
+  it("falls back to a build-scoped identity for a path the build never hashed", async () => {
     const clock = { ms: 0 };
     const cache = testDeps(clock);
     const origin = optimizer("optimized", {
@@ -371,8 +371,8 @@ describe("the image cache key", () => {
     await cache.flush();
 
     clock.ms = 1_000;
-    const sameDeployment = await get(deps({ slug: "nohash", cache, origin, appBuildId: "d1" }));
-    expect(sameDeployment.headers.get("x-ocel-cache")).toBe("HIT");
+    const sameBuild = await get(deps({ slug: "nohash", cache, origin, appBuildId: "d1" }));
+    expect(sameBuild.headers.get("x-ocel-cache")).toBe("HIT");
 
     const redeployed = await get(deps({ slug: "nohash", cache, origin, appBuildId: "d2" }));
     expect(redeployed.headers.get("x-ocel-cache")).toBe("MISS");
