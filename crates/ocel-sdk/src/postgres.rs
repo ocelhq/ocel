@@ -11,13 +11,7 @@ pub(crate) const KIND: &str = "postgres";
 pub struct Postgres {
     name: String,
     #[cfg(feature = "postgres")]
-    pool: std::sync::Arc<tokio::sync::OnceCell<Pooled>>,
-}
-
-#[cfg(feature = "postgres")]
-struct Pooled {
-    pool: sqlx::PgPool,
-    _relay: Option<Relay>,
+    pool: std::sync::Arc<tokio::sync::OnceCell<sqlx::PgPool>>,
 }
 
 impl Postgres {
@@ -58,18 +52,12 @@ impl Postgres {
         if is_discovering() {
             return Err(self.refuse_unprovisioned("pool"));
         }
-        let pooled = self
-            .pool
+        self.pool
             .get_or_try_init(|| async {
                 let (options, relay) = connect_options(&self.read_properties("pool")?)?;
-                let pool = sqlx::PgPool::connect_with(options).await?;
-                Ok::<_, Error>(Pooled {
-                    pool,
-                    _relay: relay,
-                })
+                Ok::<_, Error>(pool_options(relay).connect_with(options).await?)
             })
-            .await?;
-        Ok(&pooled.pool)
+            .await
     }
 
     fn read_properties(&self, access: &str) -> Result<PostgresProperties, Error> {
@@ -116,6 +104,14 @@ fn build_connect_options(
         return Ok(options);
     }
     Ok(options.ssl_root_cert_from_pem(properties.tls_ca.clone().into_bytes()))
+}
+
+#[cfg(feature = "postgres")]
+fn pool_options(relay: Option<Relay>) -> sqlx::postgres::PgPoolOptions {
+    sqlx::postgres::PgPoolOptions::new().after_connect(move |_, _| {
+        let _ = &relay;
+        Box::pin(async { Ok(()) })
+    })
 }
 
 #[cfg(feature = "postgres")]
@@ -329,6 +325,32 @@ mod tests {
         assert!(
             !socket.exists(),
             "the relay's directory {socket:?} outlived it"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_relay_lives_until_the_last_clone_of_its_pool_is_dropped() {
+        let forward = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = forward.local_addr().unwrap().port();
+        let (options, relay) = connect_options(&forwarded_properties(port)).expect("options");
+        let socket = options
+            .get_socket()
+            .expect("the relay the driver connects through")
+            .clone();
+        let pool = pool_options(relay).connect_lazy_with(options);
+        let cloned = pool.clone();
+
+        drop(pool);
+        assert!(
+            socket.exists(),
+            "the relay's directory {socket:?} was removed while a clone of its pool lived"
+        );
+
+        drop(cloned);
+        assert!(
+            !socket.exists(),
+            "the relay's directory {socket:?} outlived every clone of its pool"
         );
     }
 
