@@ -35,8 +35,12 @@
           },
           "build": {
             "additionalProperties": false,
-            "description": "How a container app's image is built.",
+            "description": "How the app is built.",
             "properties": {
+              "bindings": {
+                "description": "Whether ocel deploy hands the build the bindings of the postgres databases and kv stores the app uses, over local port forwards to them, so a page prerendered at build time can read them. Left off, true. Set false to build as if no resource were provisioned.",
+                "type": "boolean"
+              },
               "command": {
                 "description": "The command that builds the app inside the image. Left off, the app's own build script runs.",
                 "type": "string"
