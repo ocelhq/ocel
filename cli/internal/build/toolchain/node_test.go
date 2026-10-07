@@ -140,8 +140,8 @@ func TestBundle(t *testing.T) {
 		if descriptor.Framework != "node" {
 			t.Errorf("%s runtime = %q, want node", edge.ServeDescriptorFile, descriptor.Framework)
 		}
-		if len(descriptor.ServeBuildID) != buildIDLength {
-			t.Errorf("%s serveBuildId = %q, want %d hex characters", edge.ServeDescriptorFile, descriptor.ServeBuildID, buildIDLength)
+		if len(descriptor.FrameworkBuildID) != buildIDLength {
+			t.Errorf("%s frameworkBuildId = %q, want %d hex characters", edge.ServeDescriptorFile, descriptor.FrameworkBuildID, buildIDLength)
 		}
 		if descriptor.Needs == nil {
 			t.Errorf("%s = %s, want needs stated as an empty object, not null", edge.ServeDescriptorFile, readFile(t, descriptorPath))
@@ -348,7 +348,7 @@ func TestBundle(t *testing.T) {
 			if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.appDir, edge.ServeDescriptorFile))), &descriptor); err != nil {
 				t.Fatal(err)
 			}
-			return descriptor.ServeBuildID
+			return descriptor.FrameworkBuildID
 		}
 
 		first, again := build(t, ""), build(t, "")

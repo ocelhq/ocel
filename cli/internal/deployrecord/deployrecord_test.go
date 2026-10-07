@@ -29,7 +29,7 @@ func TestWriteLeavesTheDocumentedRecordInTheProjectStateDir(t *testing.T) {
 			Provider:    Provider{Name: "fake"},
 			PromotionID: "dep_abc",
 			Tag:         "v1",
-			Apps:        []App{{Name: "web", BuildID: "3f7c1b9a5e2d4c8f", ServeBuildID: "bld_1", StoragePrefix: "preview-e2e-42/proj-123/web/r3f7c1b9a/", URLs: []string{"https://app.example.com"}}},
+			Apps:        []App{{Name: "web", BuildID: "3f7c1b9a5e2d4c8f", FrameworkBuildID: "bld_1", StoragePrefix: "preview-e2e-42/proj-123/web/r3f7c1b9a/", URLs: []string{"https://app.example.com"}}},
 			DeployedAt:  time.Date(2026, 7, 25, 10, 30, 0, 0, time.UTC),
 		})
 		if err != nil {

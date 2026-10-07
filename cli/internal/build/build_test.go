@@ -534,8 +534,8 @@ func TestBuild(t *testing.T) {
 		assertFunctions(t, "ReadFunctions", fns, []Function{
 			{Route: "index", Framework: buildoutput.Framework{Name: "node", Arch: arch.X8664}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
-		if got, err := ServeBuildID(root, "api"); err != nil || len(got) != 16 {
-			t.Errorf("ServeBuildID = %q, %v, want the artifact hash the bundle wrote", got, err)
+		if got, err := FrameworkBuildID(root, "api"); err != nil || len(got) != 16 {
+			t.Errorf("FrameworkBuildID = %q, %v, want the artifact hash the bundle wrote", got, err)
 		}
 	})
 
@@ -662,7 +662,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		if err != nil || !found {
 			t.Fatalf("ReadServeDescriptor = %v, %v", found, err)
 		}
-		if desc.Framework != "node" || len(desc.ServeBuildID) != 16 || desc.Entry != "/" || desc.Needs == nil || desc.EdgeRouting {
+		if desc.Framework != "node" || len(desc.FrameworkBuildID) != 16 || desc.Entry != "/" || desc.Needs == nil || desc.EdgeRouting {
 			t.Errorf("serve descriptor = %+v, want a node app's descriptor", desc)
 		}
 		if _, err := os.Stat(filepath.Join(functionDir, edge.ServeDescriptorFile)); err == nil {
@@ -741,8 +741,8 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 				t.Errorf("traced artifact lacks %s: %v", rel, err)
 			}
 		}
-		if got, err := ServeBuildID(fixtureRoot, "api"); err != nil || len(got) != 16 {
-			t.Errorf("ServeBuildID = %q, %v, want the artifact hash", got, err)
+		if got, err := FrameworkBuildID(fixtureRoot, "api"); err != nil || len(got) != 16 {
+			t.Errorf("FrameworkBuildID = %q, %v, want the artifact hash", got, err)
 		}
 	})
 }

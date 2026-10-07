@@ -9,7 +9,7 @@ import (
 func TestServeDescriptorRoundTripsNeeds(t *testing.T) {
 	t.Parallel()
 
-	raw := `{"framework":"next","serveBuildId":"b1","edgeRouting":true,"needs":{` +
+	raw := `{"framework":"next","frameworkBuildId":"b1","edgeRouting":true,"needs":{` +
 		`"edge-middleware":{"count":1,"matchers":["^/dashboard(?:/(.*))?$"]},` +
 		`"edge-runtime":{"count":2,"routes":["/edgy","/api/stream"]},` +
 		`"ppr-resume":{"count":1,"routes":["/"]},` +
@@ -22,9 +22,9 @@ func TestServeDescriptorRoundTripsNeeds(t *testing.T) {
 	}
 
 	want := ServeDescriptor{
-		Framework:    "next",
-		ServeBuildID: "b1",
-		EdgeRouting:  true,
+		Framework:        "next",
+		FrameworkBuildID: "b1",
+		EdgeRouting:      true,
 		Needs: map[Need]NeedDetail{
 			NeedEdgeMiddleware: {Count: 1, Matchers: []string{"^/dashboard(?:/(.*))?$"}},
 			NeedEdgeRuntime:    {Count: 2, Routes: []string{"/edgy", "/api/stream"}},

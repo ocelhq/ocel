@@ -24,7 +24,7 @@ const appDir = process.cwd();
 const state = readJSON(join(appDir, STATE_FILE)) ?? {};
 const result = readJSON(join(appDir, DEPLOY_RESULT_FILE)) ?? {};
 
-for (const line of markerLines({ buildId: readServeBuildID(), deploymentId: readBuildID() })) {
+for (const line of markerLines({ buildId: readFrameworkBuildID(), deploymentId: readBuildID() })) {
   console.log(line);
 }
 
@@ -32,12 +32,12 @@ replay(BUILD_LOG_FILE, join(appDir, BUILD_LOG_FILE));
 replay("ocel.log", join(appDir, ".ocel", "logs", "ocel.log"));
 printLambdaLogs();
 
-function readServeBuildID() {
+function readFrameworkBuildID() {
   const path = join(appDir, ".next", "BUILD_ID");
   if (existsSync(path)) {
     return readFileSync(path, "utf8").trim();
   }
-  return result.apps?.[0]?.serveBuildId;
+  return result.apps?.[0]?.frameworkBuildId;
 }
 
 function readBuildID() {

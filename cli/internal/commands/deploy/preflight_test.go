@@ -633,7 +633,7 @@ func TestDeployWithoutATerminalRefusesTheBootstrapItCannotOffer(t *testing.T) {
 func writeAppNeeds(t *testing.T, root, app, framework, needs string) {
 	t.Helper()
 	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.ServeDescriptorFile),
-		`{"framework":"`+framework+`","serveBuildId":"b1","needs":`+needs+`}`)
+		`{"framework":"`+framework+`","frameworkBuildId":"b1","needs":`+needs+`}`)
 }
 
 const middlewareNeeds = `{"edge-middleware":{"count":2,"routes":["/dashboard","/admin"]}}`
