@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
@@ -78,6 +79,12 @@ const (
 	vpcOriginLinkedRoleARN  = "arn:aws:iam::*:role/aws-service-role/vpcorigin.cloudfront.amazonaws.com/*"
 	ecsLinkedRoleARN        = "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*"
 	ecsScalingLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/*"
+
+	bastionClusterARN         = "arn:aws:ecs:*:*:cluster/" + bastion.Prefix + "-*"
+	bastionTaskARN            = "arn:aws:ecs:*:*:task/" + bastion.Prefix + "-*/*"
+	bastionTaskDefinitionARN  = "arn:aws:ecs:*:*:task-definition/" + bastion.Prefix + "-*:*"
+	portForwardingDocumentARN = "arn:aws:ssm:*:*:document/" + bastion.PortForwardingDocument
+	ownSessionARN             = "arn:aws:ssm:*:*:session/${aws:userid}-*"
 
 	scalableTargetARN = "arn:aws:application-autoscaling:*:*:scalable-target/*"
 	scalingAlarmARN   = "arn:aws:cloudwatch:*:*:alarm:TargetTracking-service/ocel-*"
@@ -555,12 +562,37 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Condition: taggedByOcel(),
 		},
 		{
+			Actions:   []string{"ecs:RunTask"},
+			Resources: []string{bastionTaskDefinitionARN},
+			Condition: map[string]any{"ArnEquals": map[string]any{"ecs:cluster": bastionClusterARN}},
+		},
+		{
+			Actions:   []string{"ecs:DescribeTasks", "ecs:ExecuteCommand", "ecs:StopTask"},
+			Resources: []string{bastionTaskARN},
+		},
+		{
+			Actions:   []string{"ecs:ExecuteCommand", "ecs:ListTasks"},
+			Resources: []string{bastionClusterARN},
+		},
+		{
+			Actions:   []string{"ecs:DeleteTaskDefinitions"},
+			Resources: []string{bastionTaskDefinitionARN},
+		},
+		{
+			Actions:   []string{"ssm:StartSession"},
+			Resources: []string{bastionTaskARN, portForwardingDocumentARN},
+		},
+		{
+			Actions:   []string{"ssm:TerminateSession"},
+			Resources: []string{ownSessionARN},
+		},
+		{
 			Actions:   []string{"ecs:RegisterTaskDefinition"},
 			Resources: []string{appTaskDefinitionARN},
 			Condition: taggedOnCreate(),
 		},
 		{
-			Actions:   []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition"},
+			Actions:   []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition", "ecs:ListTaskDefinitions"},
 			Resources: []string{UnscopedResource},
 		},
 		{
