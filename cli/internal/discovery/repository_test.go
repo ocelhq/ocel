@@ -166,6 +166,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		"tests/fixtures/kv/node",
 		"tests/fixtures/kv/node-overlap",
 		"tests/fixtures/lifecycle/next",
+		"tests/fixtures/prerender/next",
 		"tests/fixtures/realtime/go",
 		"tests/fixtures/realtime/node",
 		"tests/fixtures/realtime/python",
