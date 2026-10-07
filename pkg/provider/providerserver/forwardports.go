@@ -46,6 +46,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 		if err != nil {
 			return provider.RefusalError(err)
 		}
+		defer closeForwards(forwards)
 	}
 	resp, err := forwardedResponse(bindings, forwards)
 	if err != nil {
@@ -59,6 +60,14 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	}
 	<-ctx.Done()
 	return nil
+}
+
+func closeForwards(forwards []provider.PortForward) {
+	for _, forward := range forwards {
+		if forward.Close != nil {
+			forward.Close()
+		}
+	}
 }
 
 func readPublishedBindings(ctx context.Context, p provider.Provider, spec provider.DeploySpec, names []string) ([]provider.Binding, error) {

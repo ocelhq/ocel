@@ -52,13 +52,24 @@ type box struct {
 	refuses    func(command string) (session.Result, bool)
 	follows    func(ctx context.Context, command string, each func(session.Line) error) error
 	forwarded  []string
+	stopped    []string
 }
 
-func (b *box) ForwardPort(_ context.Context, remote string) (string, error) {
+func (b *box) ForwardPort(_ context.Context, remote string) (string, func(), error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.forwarded = append(b.forwarded, remote)
-	return fmt.Sprintf("127.0.0.1:%d", 41000+len(b.forwarded)), nil
+	return fmt.Sprintf("127.0.0.1:%d", 41000+len(b.forwarded)), func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		b.stopped = append(b.stopped, remote)
+	}, nil
+}
+
+func (b *box) stoppedForwards() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return slices.Clone(b.stopped)
 }
 
 func (b *box) forwardedTo() []string {

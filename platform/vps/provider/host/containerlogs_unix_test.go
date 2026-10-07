@@ -86,8 +86,8 @@ func (l localShell) Run(ctx context.Context, command string) (string, error) {
 
 func (l localShell) Preflight(context.Context) (session.Facts, error) { return session.Facts{}, nil }
 
-func (l localShell) ForwardPort(context.Context, string) (string, error) {
-	return "", errors.New("a local shell forwards no port")
+func (l localShell) ForwardPort(context.Context, string) (string, func(), error) {
+	return "", nil, errors.New("a local shell forwards no port")
 }
 
 func (l localShell) Destination() session.Destination { return session.Destination{} }

@@ -209,7 +209,7 @@ func TestLiveAForwardedPortReachesAServiceOnlyTheHostListensOnAndClosesWithItsCo
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	local, err := session.ForwardPort(ctx, "127.0.0.1:22")
+	local, stop, err := session.ForwardPort(ctx, "127.0.0.1:22")
 	if err != nil {
 		t.Fatalf("ForwardPort() = %v", err)
 	}
@@ -225,16 +225,9 @@ func TestLiveAForwardedPortReachesAServiceOnlyTheHostListensOnAndClosesWithItsCo
 	}
 
 	cancel()
-	deadline := time.Now().Add(15 * time.Second)
-	for {
-		conn, err := net.DialTimeout("tcp", local, time.Second)
-		if err != nil {
-			return
-		}
+	stop()
+	if conn, err := net.DialTimeout("tcp", local, time.Second); err == nil {
 		conn.Close()
-		if time.Now().After(deadline) {
-			t.Fatal("the forward still listened after its context ended")
-		}
-		time.Sleep(100 * time.Millisecond)
+		t.Fatal("the forward still listened once stopped")
 	}
 }
