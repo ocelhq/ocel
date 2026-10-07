@@ -90,19 +90,7 @@ func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []decl
 		uses = append(uses, portforward.Use{App: usage.App, Resource: usage.Type, Declared: usage.Name, Bound: bound})
 	}
 	if wholeProject {
-		uses = append(uses, provisionedUses(infra)...)
+		uses = append(uses, portforward.ProjectUses(infra)...)
 	}
 	return uses, nil
-}
-
-func provisionedUses(infra *contractv1.Manifest) []portforward.Use {
-	var uses []portforward.Use
-	for _, resource := range infra.GetResources() {
-		declared := resource.GetResource()
-		if _, bindable := naming.BindableAs(declared.GetType()); !bindable || resource.GetBinding() != "" {
-			continue
-		}
-		uses = append(uses, portforward.Use{App: portforward.Project, Resource: declared.GetType(), Declared: declared.GetName(), Bound: resource.GetLogicalName()})
-	}
-	return uses
 }

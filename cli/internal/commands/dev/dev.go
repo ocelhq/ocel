@@ -9,13 +9,20 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/dev"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 )
 
 type Dependencies struct {
 	commands.Invocation
 	OpenDocker docker.OpenFunc
+
+	CollectDeclarations func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
+	ReadGitBranch       func(dir string) (string, error)
+	DiscoverPRNumber    func() string
 }
 
 func NewCommand(dependencies Dependencies) *cobra.Command {
