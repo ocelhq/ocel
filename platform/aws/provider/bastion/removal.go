@@ -34,28 +34,14 @@ func Remove(ctx context.Context, c Clients, tier environment.Tier) error {
 
 func removeCluster(ctx context.Context, c Clients, tier environment.Tier) error {
 	name := NameFor(tier)
-	described, err := c.ECS.DescribeClusters(ctx, &ecs.DescribeClustersInput{
-		Clusters: []string{name},
-		Include:  []ecstypes.ClusterField{ecstypes.ClusterFieldTags},
-	})
-	if err != nil {
-		return fmt.Errorf("look up cluster %s: %w", name, err)
+	found, err := c.findCluster(ctx, name)
+	if err != nil || !found {
+		return err
 	}
-	for _, cluster := range described.Clusters {
-		if aws.ToString(cluster.Status) != "ACTIVE" {
-			continue
-		}
-		if !ecsTaggedByOcel(cluster.Tags) {
-			return fmt.Errorf("cluster %s is not tagged %s=%s, so Ocel will not delete it", name, managedByTagKey, managedByTagValue)
-		}
-		if err := c.stopTasks(ctx, name); err != nil {
-			return err
-		}
-		if err := c.deleteCluster(ctx, name); err != nil {
-			return err
-		}
+	if err := c.stopTasks(ctx, name); err != nil {
+		return err
 	}
-	return nil
+	return c.deleteCluster(ctx, name)
 }
 
 func (c Clients) deleteCluster(ctx context.Context, name string) error {
@@ -70,7 +56,7 @@ func (c Clients) deleteCluster(ctx context.Context, name string) error {
 			}
 			return nil
 		}
-		if err := c.pause(ctx, attempt); err != nil {
+		if err := pause(ctx, attempt); err != nil {
 			return fmt.Errorf("wait for the stopped tasks of cluster %s to stop: %w", name, err)
 		}
 	}
@@ -92,7 +78,7 @@ func (c Clients) stopTasks(ctx context.Context, cluster string) error {
 				return fmt.Errorf("stop task %s: %w", arn, err)
 			}
 		}
-		if err := c.pause(ctx, attempt); err != nil {
+		if err := pause(ctx, attempt); err != nil {
 			return fmt.Errorf("wait for the tasks of cluster %s to stop: %w", cluster, err)
 		}
 	}
@@ -115,7 +101,7 @@ func removeSecurityGroup(ctx context.Context, c Clients, tier environment.Tier) 
 		if !errors.As(err, &api) || api.ErrorCode() != "DependencyViolation" {
 			return fmt.Errorf("delete security group %s: %w", name, err)
 		}
-		if err := c.pause(ctx, attempt); err != nil {
+		if err := pause(ctx, attempt); err != nil {
 			return fmt.Errorf("wait for the network interfaces of security group %s to go: %w", name, err)
 		}
 	}

@@ -167,6 +167,8 @@ func (b *teardownS3) DeleteObjects(_ context.Context, in *s3.DeleteObjectsInput,
 
 var testAppBoundaryARN = "arn:aws:iam::123456789012:policy/" + defaultNamespace.AppBoundaryNameFor(environment.TierProduction)
 
+func removeNoBastion(context.Context, environment.Tier) error { return nil }
+
 func teardownFakes(t *testing.T) (TeardownAPIs, *teardownCFN, *fakeSSM, *teardownS3) {
 	t.Helper()
 
@@ -193,10 +195,11 @@ func teardownFakes(t *testing.T) (TeardownAPIs, *teardownCFN, *fakeSSM, *teardow
 		t.Fatalf("EdgeUserNameFor: %v", err)
 	}
 	apis := TeardownAPIs{
-		CFN:     stacks,
-		SSM:     ssmc,
-		IAM:     &teardownIAM{keys: map[string][]string{user: {"AKIAOLD"}}},
-		Buckets: buckets,
+		RemoveBastion: removeNoBastion,
+		CFN:           stacks,
+		SSM:           ssmc,
+		IAM:           &teardownIAM{keys: map[string][]string{user: {"AKIAOLD"}}},
+		Buckets:       buckets,
 	}
 	return apis, stacks, ssmc, buckets
 }
@@ -429,10 +432,11 @@ func TestTeardownReclaimsTheTierOriginSecret(t *testing.T) {
 				t.Fatalf("EdgeUserNameFor: %v", err)
 			}
 			apis := TeardownAPIs{
-				CFN:     stacks,
-				SSM:     ssmc,
-				IAM:     &teardownIAM{keys: map[string][]string{user: {"AKIAOLD"}}},
-				Buckets: &teardownS3{pages: map[string][]objectPage{}},
+				RemoveBastion: removeNoBastion,
+				CFN:           stacks,
+				SSM:           ssmc,
+				IAM:           &teardownIAM{keys: map[string][]string{user: {"AKIAOLD"}}},
+				Buckets:       &teardownS3{pages: map[string][]objectPage{}},
 			}
 
 			if err := Teardown(context.Background(), apis, defaultNamespace, tc.tier, nil); err != nil {
@@ -472,10 +476,11 @@ func TestTeardownRemovesEachFeatureStackBeforeCore(t *testing.T) {
 	}
 	cfnc := &teardownCFN{stacks: stacks}
 	apis := TeardownAPIs{
-		CFN:     cfnc,
-		SSM:     newFakeSSM(),
-		IAM:     &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
-		Buckets: &teardownS3{pages: map[string][]objectPage{}},
+		RemoveBastion: removeNoBastion,
+		CFN:           cfnc,
+		SSM:           newFakeSSM(),
+		IAM:           &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
+		Buckets:       &teardownS3{pages: map[string][]objectPage{}},
 	}
 
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
@@ -503,10 +508,11 @@ func TestTeardownLeavesAFeatureStackThatWasNeverThere(t *testing.T) {
 		defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction): {},
 	}}
 	apis := TeardownAPIs{
-		CFN:     stacks,
-		SSM:     newFakeSSM(),
-		IAM:     &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
-		Buckets: &teardownS3{pages: map[string][]objectPage{}},
+		RemoveBastion: removeNoBastion,
+		CFN:           stacks,
+		SSM:           newFakeSSM(),
+		IAM:           &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
+		Buckets:       &teardownS3{pages: map[string][]objectPage{}},
 	}
 
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
@@ -526,10 +532,11 @@ func TestTeardownRemovesAWedgedFeatureStack(t *testing.T) {
 		defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction): {status: cfntypes.StackStatusRollbackComplete},
 	}}
 	apis := TeardownAPIs{
-		CFN:     stacks,
-		SSM:     newFakeSSM(),
-		IAM:     &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
-		Buckets: &teardownS3{pages: map[string][]objectPage{}},
+		RemoveBastion: removeNoBastion,
+		CFN:           stacks,
+		SSM:           newFakeSSM(),
+		IAM:           &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
+		Buckets:       &teardownS3{pages: map[string][]objectPage{}},
 	}
 
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
@@ -553,10 +560,11 @@ func TestTeardownWalksEverythingBesideACoreStackThatRolledBack(t *testing.T) {
 	}}
 	iamc := &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}}
 	apis := TeardownAPIs{
-		CFN:     stacks,
-		SSM:     newFakeSSM(),
-		IAM:     iamc,
-		Buckets: &teardownS3{pages: map[string][]objectPage{}},
+		RemoveBastion: removeNoBastion,
+		CFN:           stacks,
+		SSM:           newFakeSSM(),
+		IAM:           iamc,
+		Buckets:       &teardownS3{pages: map[string][]objectPage{}},
 	}
 
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
@@ -577,10 +585,11 @@ func TestTeardownWalksEverythingBesideACoreStackThatIsGone(t *testing.T) {
 	feature := defaultNamespace.FeatureStackName(FeatureISR, environment.TierProduction)
 	stacks := &teardownCFN{stacks: map[string]teardownStack{feature: {}}}
 	apis := TeardownAPIs{
-		CFN:     stacks,
-		SSM:     newFakeSSM(),
-		IAM:     &teardownIAM{keys: map[string][]string{}},
-		Buckets: &teardownS3{pages: map[string][]objectPage{}},
+		RemoveBastion: removeNoBastion,
+		CFN:           stacks,
+		SSM:           newFakeSSM(),
+		IAM:           &teardownIAM{keys: map[string][]string{}},
+		Buckets:       &teardownS3{pages: map[string][]objectPage{}},
 	}
 
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {

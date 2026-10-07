@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -22,11 +21,10 @@ type network struct {
 	subnets []string
 }
 
-func Ensure(ctx context.Context, c Clients, spec Spec) (Bastion, error) {
+func Reconcile(ctx context.Context, c Clients, spec Spec) (Bastion, error) {
 	if spec.Boundary == "" {
 		return Bastion{}, errors.New("the bastion's task role needs the app boundary of its tier, and none is named")
 	}
-	ports := slices.Compact(slices.Sorted(slices.Values(spec.Ports)))
 	net, err := c.findDefaultNetwork(ctx)
 	if err != nil {
 		return Bastion{}, err
@@ -35,14 +33,14 @@ func Ensure(ctx context.Context, c Clients, spec Spec) (Bastion, error) {
 	if err != nil {
 		return Bastion{}, err
 	}
-	group, err := c.ensureSecurityGroup(ctx, spec.Tier, net, ports)
+	group, err := c.reconcileSecurityGroup(ctx, spec.Tier, net, spec.Ports)
 	if err != nil {
 		return Bastion{}, err
 	}
 	if err := c.ensureCluster(ctx, spec.Tier); err != nil {
 		return Bastion{}, err
 	}
-	definition, err := c.ensureTaskDefinition(ctx, spec.Tier, roleARN)
+	definition, err := c.reconcileTaskDefinition(ctx, spec.Tier, roleARN)
 	if err != nil {
 		return Bastion{}, err
 	}
@@ -52,7 +50,7 @@ func Ensure(ctx context.Context, c Clients, spec Spec) (Bastion, error) {
 		TaskDefinition: definition,
 		SecurityGroup:  group,
 		Subnets:        net.subnets,
-		Ports:          ports,
+		Ports:          spec.Ports,
 	}, nil
 }
 
@@ -88,29 +86,37 @@ func (c Clients) findDefaultNetwork(ctx context.Context) (network, error) {
 
 func (c Clients) ensureCluster(ctx context.Context, tier environment.Tier) error {
 	name := NameFor(tier)
-	described, err := c.ECS.DescribeClusters(ctx, &ecs.DescribeClustersInput{
-		Clusters: []string{name},
-		Include:  []ecstypes.ClusterField{ecstypes.ClusterFieldTags},
-	})
-	if err != nil {
-		return fmt.Errorf("look up cluster %s: %w", name, err)
+	found, err := c.findCluster(ctx, name)
+	if err != nil || found {
+		return err
 	}
-	for _, cluster := range described.Clusters {
-		if aws.ToString(cluster.Status) != "ACTIVE" {
-			continue
-		}
-		if !ecsTaggedByOcel(cluster.Tags) {
-			return fmt.Errorf("cluster %s exists and is not tagged %s=%s, so Ocel will not run a bastion in it", name, managedByTagKey, managedByTagValue)
-		}
-		return nil
-	}
-	if _, err := c.ECS.CreateCluster(ctx, &ecs.CreateClusterInput{ClusterName: aws.String(name), Tags: ecsTags(tags(tier))}); err != nil {
+	if _, err := c.ECS.CreateCluster(ctx, &ecs.CreateClusterInput{ClusterName: aws.String(name), Tags: ecsTagsFor(tier)}); err != nil {
 		return fmt.Errorf("create cluster %s: %w", name, err)
 	}
 	return nil
 }
 
-func (c Clients) ensureTaskDefinition(ctx context.Context, tier environment.Tier, roleARN string) (string, error) {
+func (c Clients) findCluster(ctx context.Context, name string) (bool, error) {
+	described, err := c.ECS.DescribeClusters(ctx, &ecs.DescribeClustersInput{
+		Clusters: []string{name},
+		Include:  []ecstypes.ClusterField{ecstypes.ClusterFieldTags},
+	})
+	if err != nil {
+		return false, fmt.Errorf("look up cluster %s: %w", name, err)
+	}
+	for _, cluster := range described.Clusters {
+		if aws.ToString(cluster.Status) != "ACTIVE" {
+			continue
+		}
+		if !isManagedByOcel(cluster.Tags, func(tag ecstypes.Tag) (*string, *string) { return tag.Key, tag.Value }) {
+			return false, refuseUnowned("cluster", name)
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func (c Clients) reconcileTaskDefinition(ctx context.Context, tier environment.Tier, roleARN string) (string, error) {
 	family := NameFor(tier)
 	described, err := c.ECS.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(family)})
 	var missing *ecstypes.ClientException
@@ -136,7 +142,7 @@ func (c Clients) ensureTaskDefinition(ctx context.Context, tier environment.Tier
 			LinuxParameters:  &ecstypes.LinuxParameters{InitProcessEnabled: aws.Bool(true)},
 			WorkingDirectory: aws.String("/"),
 		}},
-		Tags: ecsTags(tags(tier)),
+		Tags: ecsTagsFor(tier),
 	})
 	if err != nil {
 		return "", fmt.Errorf("register task definition %s: %w", family, err)
@@ -151,18 +157,4 @@ func runsTheBastion(definition *ecstypes.TaskDefinition, roleARN string) bool {
 	container := definition.ContainerDefinitions[0]
 	return aws.ToString(container.Name) == containerName && aws.ToString(container.Image) == image &&
 		slices.Equal(container.Command, []string{"sh", "-c", "sleep " + taskLifetimeSeconds})
-}
-
-func ecsTags(tags map[string]string) []ecstypes.Tag {
-	var out []ecstypes.Tag
-	for _, key := range slices.Sorted(maps.Keys(tags)) {
-		out = append(out, ecstypes.Tag{Key: aws.String(key), Value: aws.String(tags[key])})
-	}
-	return out
-}
-
-func ecsTaggedByOcel(tags []ecstypes.Tag) bool {
-	return slices.ContainsFunc(tags, func(tag ecstypes.Tag) bool {
-		return aws.ToString(tag.Key) == managedByTagKey && aws.ToString(tag.Value) == managedByTagValue
-	})
 }

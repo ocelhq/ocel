@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
@@ -46,11 +45,8 @@ func (c Clients) findTaskRole(ctx context.Context, name string) (string, error) 
 	if err != nil {
 		return "", fmt.Errorf("look up role %s: %w", name, err)
 	}
-	owned := slices.ContainsFunc(got.Role.Tags, func(tag iamtypes.Tag) bool {
-		return aws.ToString(tag.Key) == managedByTagKey && aws.ToString(tag.Value) == managedByTagValue
-	})
-	if !owned {
-		return "", fmt.Errorf("role %s exists and is not tagged %s=%s, so Ocel will not run a task as it", name, managedByTagKey, managedByTagValue)
+	if !isManagedByOcel(got.Role.Tags, func(tag iamtypes.Tag) (*string, *string) { return tag.Key, tag.Value }) {
+		return "", refuseUnowned("role", name)
 	}
 	return aws.ToString(got.Role.Arn), nil
 }
@@ -75,16 +71,12 @@ func (c Clients) createTaskRole(ctx context.Context, spec Spec, name string) (st
 	if err != nil {
 		return "", err
 	}
-	var roleTags []iamtypes.Tag
-	for _, tag := range ecsTags(tags(spec.Tier)) {
-		roleTags = append(roleTags, iamtypes.Tag{Key: tag.Key, Value: tag.Value})
-	}
 	created, err := c.IAM.CreateRole(ctx, &iam.CreateRoleInput{
 		RoleName:                 aws.String(name),
 		Description:              aws.String("Ocel: the role a bastion task opens its Session Manager channels as, for the " + string(spec.Tier) + " tier"),
 		AssumeRolePolicyDocument: aws.String(string(trust)),
 		PermissionsBoundary:      aws.String(spec.Boundary),
-		Tags:                     roleTags,
+		Tags:                     iamTagsFor(spec.Tier),
 	})
 	var exists *iamtypes.EntityAlreadyExistsException
 	if errors.As(err, &exists) {
