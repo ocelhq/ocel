@@ -47,6 +47,7 @@ type forwarding struct {
 
 	mu        sync.Mutex
 	remaining int
+	closing   bool
 	handlers  sync.WaitGroup
 }
 
@@ -132,11 +133,24 @@ func (b Bastion) Forward(ctx context.Context, c Clients, open OpenSessionFunc, r
 }
 
 func (g *forwarding) finish() {
+	g.mu.Lock()
+	g.closing = true
+	g.mu.Unlock()
 	g.cancel()
 	g.handlers.Wait()
 	if err := g.task.Stop(); err != nil {
 		g.report(err)
 	}
+}
+
+func (g *forwarding) admit() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closing {
+		return false
+	}
+	g.handlers.Add(1)
+	return true
 }
 
 func (l *portListener) close() {
@@ -177,7 +191,11 @@ func (l *portListener) accept() {
 			_ = conn.Close()
 			return
 		}
-		l.group.handlers.Add(1)
+		if !l.group.admit() {
+			<-l.group.slots
+			_ = conn.Close()
+			return
+		}
 		go func() {
 			defer l.group.handlers.Done()
 			defer func() { <-l.group.slots }()
