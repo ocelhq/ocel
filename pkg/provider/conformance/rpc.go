@@ -151,7 +151,25 @@ func enforcesTheSessionRules(t *testing.T, providerClient contractv1connect.Prov
 		t.Errorf("an RPC after Configure: %v, want the session to be past its precondition", err)
 	}
 	refusesAppsToProvisionInfra(t, providerClient)
+	refusesToForwardNoPort(t, providerClient)
 	return configured.GetFacts()
+}
+
+func refusesToForwardNoPort(t *testing.T, client contractv1connect.ProviderServiceClient) {
+	t.Helper()
+	stream, err := client.ForwardPorts(context.Background(), &contractv1.ForwardPortsRequest{
+		Slug:        "conformance",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	defer stream.Close()
+	for stream.Receive() {
+	}
+	if got := connect.CodeOf(stream.Err()); got != connect.CodeInvalidArgument {
+		t.Errorf("ForwardPorts() naming no binding: %v, want it refused as invalid: there is nothing to forward", stream.Err())
+	}
 }
 
 func refusesAppsToProvisionInfra(t *testing.T, client contractv1connect.ProviderServiceClient) {

@@ -129,6 +129,9 @@ const (
 	// ProviderServiceReadLogsProcedure is the fully-qualified name of the ProviderService's ReadLogs
 	// RPC.
 	ProviderServiceReadLogsProcedure = "/provider.contract.v1.ProviderService/ReadLogs"
+	// ProviderServiceForwardPortsProcedure is the fully-qualified name of the ProviderService's
+	// ForwardPorts RPC.
+	ProviderServiceForwardPortsProcedure = "/provider.contract.v1.ProviderService/ForwardPorts"
 )
 
 // ProviderServiceClient is a client for the provider.contract.v1.ProviderService service.
@@ -165,6 +168,7 @@ type ProviderServiceClient interface {
 	Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error)
 	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
 	ReadLogs(context.Context, *v1.ReadLogsRequest) (*connect.ServerStreamForClient[v1.ReadLogsResponse], error)
+	ForwardPorts(context.Context, *v1.ForwardPortsRequest) (*connect.ServerStreamForClient[v1.ForwardPortsResponse], error)
 }
 
 // NewProviderServiceClient constructs a client for the provider.contract.v1.ProviderService
@@ -370,6 +374,12 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("ReadLogs")),
 			connect.WithClientOptions(opts...),
 		),
+		forwardPorts: connect.NewClient[v1.ForwardPortsRequest, v1.ForwardPortsResponse](
+			httpClient,
+			baseURL+ProviderServiceForwardPortsProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("ForwardPorts")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -407,6 +417,7 @@ type providerServiceClient struct {
 	shape                     *connect.Client[v1.ShapeRequest, v13.ResourceSet]
 	confirm                   *connect.Client[v1.ConfirmRequest, v1.ConfirmResponse]
 	readLogs                  *connect.Client[v1.ReadLogsRequest, v1.ReadLogsResponse]
+	forwardPorts              *connect.Client[v1.ForwardPortsRequest, v1.ForwardPortsResponse]
 }
 
 // Configure calls provider.contract.v1.ProviderService.Configure.
@@ -637,6 +648,11 @@ func (c *providerServiceClient) ReadLogs(ctx context.Context, req *v1.ReadLogsRe
 	return c.readLogs.CallServerStream(ctx, connect.NewRequest(req))
 }
 
+// ForwardPorts calls provider.contract.v1.ProviderService.ForwardPorts.
+func (c *providerServiceClient) ForwardPorts(ctx context.Context, req *v1.ForwardPortsRequest) (*connect.ServerStreamForClient[v1.ForwardPortsResponse], error) {
+	return c.forwardPorts.CallServerStream(ctx, connect.NewRequest(req))
+}
+
 // ProviderServiceHandler is an implementation of the provider.contract.v1.ProviderService service.
 type ProviderServiceHandler interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
@@ -671,6 +687,7 @@ type ProviderServiceHandler interface {
 	Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error)
 	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
 	ReadLogs(context.Context, *v1.ReadLogsRequest, *connect.ServerStream[v1.ReadLogsResponse]) error
+	ForwardPorts(context.Context, *v1.ForwardPortsRequest, *connect.ServerStream[v1.ForwardPortsResponse]) error
 }
 
 // NewProviderServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -872,6 +889,12 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("ReadLogs")),
 		connect.WithHandlerOptions(opts...),
 	)
+	providerServiceForwardPortsHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceForwardPortsProcedure,
+		svc.ForwardPorts,
+		connect.WithSchema(providerServiceMethods.ByName("ForwardPorts")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/provider.contract.v1.ProviderService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProviderServiceConfigureProcedure:
@@ -938,6 +961,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceConfirmHandler.ServeHTTP(w, r)
 		case ProviderServiceReadLogsProcedure:
 			providerServiceReadLogsHandler.ServeHTTP(w, r)
+		case ProviderServiceForwardPortsProcedure:
+			providerServiceForwardPortsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1073,4 +1098,8 @@ func (UnimplementedProviderServiceHandler) Confirm(context.Context, *v1.ConfirmR
 
 func (UnimplementedProviderServiceHandler) ReadLogs(context.Context, *v1.ReadLogsRequest, *connect.ServerStream[v1.ReadLogsResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ReadLogs is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) ForwardPorts(context.Context, *v1.ForwardPortsRequest, *connect.ServerStream[v1.ForwardPortsResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ForwardPorts is not implemented"))
 }

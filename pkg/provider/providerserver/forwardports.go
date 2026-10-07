@@ -1,0 +1,125 @@
+package providerserver
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"maps"
+	"net"
+	"net/url"
+	"slices"
+
+	connect "connectrpc.com/connect"
+
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/variablestore"
+)
+
+func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPortsRequest, stream *connect.ServerStream[contractv1.ForwardPortsResponse]) error {
+	p, err := h.session.use()
+	if err != nil {
+		return err
+	}
+	tier, err := decodeTier(req.GetEnvironment().GetTier())
+	if err != nil {
+		return err
+	}
+	env, err := envName(req.GetEnvironment())
+	if err != nil {
+		return provider.RefusalError(err)
+	}
+	spec := provider.DeploySpec{Slug: req.GetSlug(), Tier: tier, Env: env}
+	bindings, err := readPublishedBindings(ctx, p, spec, req.GetBindings())
+	if err != nil {
+		return provider.RefusalError(err)
+	}
+	forward := p.Hooks().ForwardPorts
+	reachable := slices.DeleteFunc(slices.Clone(bindings), func(binding provider.Binding) bool {
+		return forward == nil || (binding.Type != provider.BindingPostgres && binding.Type != provider.BindingKV)
+	})
+	var forwards []provider.PortForward
+	if len(reachable) > 0 {
+		forwards, err = forward(ctx, provider.PortForwardRequest{Tier: tier, Slug: spec.Slug, Env: env, Bindings: reachable})
+		if err != nil {
+			return provider.RefusalError(err)
+		}
+	}
+	resp, err := forwardedResponse(bindings, forwards)
+	if err != nil {
+		return provider.RefusalError(err)
+	}
+	if err := stream.Send(resp); err != nil {
+		return err
+	}
+	if len(forwards) == 0 {
+		return nil
+	}
+	<-ctx.Done()
+	return nil
+}
+
+func readPublishedBindings(ctx context.Context, p provider.Provider, spec provider.DeploySpec, names []string) ([]provider.Binding, error) {
+	store := variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
+	scope := variablestore.Scope{Project: spec.Slug, Tier: spec.Tier}
+	bindings := make([]provider.Binding, 0, len(names))
+	for _, name := range names {
+		published, err := store.ResolveBinding(ctx, scope, bindingEnvironment(spec), name)
+		if errors.Is(err, variablestore.ErrNotPublished) {
+			return nil, refusal.Refuse(refusal.CodeNotReady,
+				"%s publishes no binding %s, so there is nothing to forward a port to: deploy it, and its infra is provisioned before the build", spec.Slug, name)
+		}
+		if err != nil {
+			return nil, err
+		}
+		binding, err := bindingPublished(name, published)
+		if err != nil {
+			return nil, err
+		}
+		bindings = append(bindings, binding)
+	}
+	return bindings, nil
+}
+
+func forwardedResponse(bindings []provider.Binding, forwards []provider.PortForward) (*contractv1.ForwardPortsResponse, error) {
+	resp := &contractv1.ForwardPortsResponse{}
+	for _, binding := range bindings {
+		at := slices.IndexFunc(forwards, func(forward provider.PortForward) bool { return forward.Binding == binding.Name })
+		if at < 0 {
+			resp.Unforwarded = append(resp.Unforwarded, binding.Name)
+			continue
+		}
+		forwarded, err := forwardedBinding(binding, forwards[at].LocalAddress)
+		if err != nil {
+			return nil, err
+		}
+		message, err := provider.BindingMessage(forwarded)
+		if err != nil {
+			return nil, err
+		}
+		resp.Bindings = append(resp.Bindings, message)
+	}
+	return resp, nil
+}
+
+func forwardedBinding(binding provider.Binding, localAddress string) (provider.Binding, error) {
+	host, port, err := net.SplitHostPort(localAddress)
+	if err != nil {
+		return provider.Binding{}, fmt.Errorf("the forward of %s listens on %q, which is no host and port: %w", binding.Name, localAddress, err)
+	}
+	properties := maps.Clone(binding.Properties)
+	properties[provider.PropertyTLSServerName] = cmp.Or(properties[provider.PropertyTLSServerName], properties[provider.PropertyHost])
+	properties[provider.PropertyHost], properties[provider.PropertyPort] = host, port
+	if raw := properties[provider.PropertyURL]; raw != "" && binding.Type == provider.BindingPostgres {
+		parsed, err := url.Parse(raw)
+		if err != nil {
+			return provider.Binding{}, fmt.Errorf("the url of %s does not parse, so it cannot be pointed at its forward", binding.Name)
+		}
+		parsed.Host = localAddress
+		properties[provider.PropertyURL] = parsed.String()
+	}
+	binding.Properties = properties
+	return binding, nil
+}
