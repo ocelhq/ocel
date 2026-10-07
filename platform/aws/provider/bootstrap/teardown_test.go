@@ -229,6 +229,50 @@ func TestTeardownReleasesTheAppBoundaryBeforeTheCoreStackGoes(t *testing.T) {
 	}
 }
 
+func TestTeardownRemovesTheTiersBastionBeforeItReleasesTheAppBoundaryItsRoleIsUnder(t *testing.T) {
+	t.Parallel()
+
+	apis, _, _, _ := teardownFakes(t)
+	iamc := apis.IAM.(*teardownIAM)
+	iamc.bounded = map[string][]string{testAppBoundaryARN: {"app-role-a"}}
+	var removed []environment.Tier
+	var boundaryListedFirst bool
+	apis.RemoveBastion = func(_ context.Context, tier environment.Tier) error {
+		removed = append(removed, tier)
+		return nil
+	}
+	iamc.onList = func() { boundaryListedFirst = boundaryListedFirst || len(removed) == 0 }
+
+	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+
+	if !slices.Equal(removed, []environment.Tier{environment.TierProduction}) {
+		t.Errorf("the bastion was removed for %v, want the production tier once", removed)
+	}
+	if boundaryListedFirst {
+		t.Error("the app boundary was released before the bastion's role left it, so the role would outlive the tier under no boundary")
+	}
+}
+
+func TestTeardownStopsWhenTheBastionCannotBeRemovedSoNothingIsLeftBehindUnreachable(t *testing.T) {
+	t.Parallel()
+
+	apis, stacks, _, _ := teardownFakes(t)
+	apis.RemoveBastion = func(context.Context, environment.Tier) error {
+		return errors.New("cluster ocel-bastion-production is not tagged")
+	}
+
+	err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil)
+
+	if err == nil || !strings.Contains(err.Error(), "ocel-bastion-production") {
+		t.Fatalf("Teardown() = %v, want the bastion's failure", err)
+	}
+	if slices.Contains(stacks.deleted, coreStackName) {
+		t.Error("the core stack was deleted though the bastion could not be removed")
+	}
+}
+
 func TestTeardownTakesAnAppBoundaryNoRoleUses(t *testing.T) {
 	t.Parallel()
 

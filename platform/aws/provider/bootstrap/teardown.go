@@ -37,6 +37,8 @@ type TeardownAPIs struct {
 	SSM     SSMAPI
 	IAM     IAMTeardownAPI
 	Buckets cfn.BucketEmptierAPI
+
+	RemoveBastion func(ctx context.Context, tier environment.Tier) error
 }
 
 func TierParamNames(ns Namespace, tier environment.Tier) ([]string, error) {
@@ -170,6 +172,13 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 	progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", ns.runtimeStackName(tier)))
 	if err := deleteRuntimeLayerStack(ctx, apis.CFN, ns, tier, progress); err != nil {
 		return err
+	}
+
+	if apis.RemoveBastion != nil {
+		progress.Say(fmt.Sprintf("Removing the %s tier's bastion (ECS, IAM, EC2)", tier))
+		if err := apis.RemoveBastion(ctx, tier); err != nil {
+			return err
+		}
 	}
 
 	if deployed.AppBoundaryARN != "" {

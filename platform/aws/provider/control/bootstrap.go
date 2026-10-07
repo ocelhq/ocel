@@ -7,6 +7,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -18,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
@@ -41,6 +44,7 @@ type Bootstrap struct {
 	KMS          bootstrap.KeyAPI
 	Store        bootstrap.ObjectStore
 	Buckets      cfn.BucketEmptierAPI
+	Bastion      bastion.Clients
 	Edge         edge.Edge
 	Edges        provider.Edges
 	Kinds        []edge.Kind
@@ -58,6 +62,7 @@ func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kind
 		KMS:          kms.NewFromConfig(cfg),
 		Store:        s3.NewFromConfig(cfg),
 		Buckets:      s3.NewFromConfig(cfg),
+		Bastion:      bastion.Clients{ECS: ecs.NewFromConfig(cfg), IAM: iam.NewFromConfig(cfg), EC2: ec2.NewFromConfig(cfg)},
 		Edge:         front,
 		Edges:        registry,
 		Kinds:        kinds,
@@ -316,7 +321,16 @@ func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 		SSM:     b.SSM,
 		IAM:     b.IAM,
 		Buckets: b.Buckets,
+
+		RemoveBastion: b.removeBastion,
 	}, b.Namespace, tier, progress)
+}
+
+func (b Bootstrap) removeBastion(ctx context.Context, tier environment.Tier) error {
+	if b.Bastion.ECS == nil {
+		return nil
+	}
+	return bastion.Remove(ctx, b.Bastion, tier)
 }
 
 func (b Bootstrap) apis() bootstrap.APIs {
