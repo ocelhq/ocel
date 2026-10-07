@@ -110,7 +110,7 @@ func (l Link) refused(resp *http.Response) error {
 	switch resp.StatusCode {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return refusal.Refuse(refusal.CodeNotReady,
-			"the bastion at %s refused the connection to %s (HTTP %d): it admits only an identity holding roles/run.invoker on it, and forwards to this environment's databases and caches alone",
+			"the bastion at %s refused the connection to %s (HTTP %d): it admits only an identity holding roles/run.invoker on it, and forwards to the tier's databases and caches alone",
 			l.URL, l.Target, resp.StatusCode)
 	}
 	return refusal.Refuse(refusal.CodeNotReady, "the bastion at %s could not forward to %s (HTTP %d)", l.URL, l.Target, resp.StatusCode)

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/netip"
 	"slices"
 	"sync"
 
@@ -27,7 +28,6 @@ const (
 
 	bastionConcurrency  = 250
 	bastionMaxInstances = 2
-	bastionAllowedCap   = 256
 	bastionCreateTries  = 2
 )
 
@@ -53,7 +53,12 @@ func (b bastion) imageRef(tier environment.Tier) string {
 	return b.clients.RepositoryPath(b.clients.region, tier) + "/" + bastionImageName + ":" + bastionImageTag()
 }
 
-func (b bastion) serving(tier environment.Tier, image string, allowed []string) serving {
+func bastionDestinations() []relay.Destination {
+	network := netip.MustParsePrefix(networkSubnetRange)
+	return []relay.Destination{{Network: network, Port: postgresPort}, {Network: network, Port: defaultValkeyPort}}
+}
+
+func (b bastion) serving(tier environment.Tier, image string) serving {
 	return serving{
 		service:     b.clients.Bastion(tier),
 		image:       image,
@@ -65,18 +70,8 @@ func (b bastion) serving(tier environment.Tier, image string, allowed []string) 
 		timeout:     maxRequestTimeout,
 		egress:      &privateEgress{network: b.clients.NetworkPath(tier), subnetwork: b.clients.SubnetworkPath(b.clients.region, tier)},
 		audiences:   []string{b.clients.Bastion(tier)},
-		env:         map[string]string{relay.AllowedEnv: relay.FormatAllowed(allowed)},
+		env:         map[string]string{relay.AllowedEnv: relay.FormatDestinations(bastionDestinations())},
 	}
-}
-
-func widenedAllowlist(held, asked []string) []string {
-	widened := slices.Clone(held)
-	for _, target := range asked {
-		if !slices.Contains(widened, target) {
-			widened = append(widened, target)
-		}
-	}
-	return widened[max(0, len(widened)-bastionAllowedCap):]
 }
 
 func (b bastion) read(ctx context.Context, tier environment.Tier) (*run.GoogleCloudRunV2Service, error) {
@@ -97,11 +92,11 @@ func (b bastion) read(ctx context.Context, tier environment.Tier) (*run.GoogleCl
 	return found, nil
 }
 
-func (b bastion) ensure(ctx context.Context, tier environment.Tier, targets []string, progress progress.Log) (string, error) {
+func (b bastion) provision(ctx context.Context, tier environment.Tier, progress progress.Log) (string, error) {
 	var url string
 	var err error
 	for range bastionCreateTries {
-		if url, err = b.ensureService(ctx, tier, targets, progress); !taken(err) {
+		if url, err = b.provisionService(ctx, tier, progress); !taken(err) {
 			break
 		}
 	}
@@ -121,17 +116,13 @@ func (b bastion) ensure(ctx context.Context, tier environment.Tier, targets []st
 	return url, nil
 }
 
-func (b bastion) ensureService(ctx context.Context, tier environment.Tier, targets []string, progress progress.Log) (string, error) {
+func (b bastion) provisionService(ctx context.Context, tier environment.Tier, progress progress.Log) (string, error) {
 	current, err := b.read(ctx, tier)
 	if err != nil {
 		return "", err
 	}
-	var held []string
-	if current != nil && current.Template != nil && len(current.Template.Containers) == 1 {
-		held = relay.ParseAllowed(allowedBy(current.Template.Containers[0]))
-	}
 	image := b.imageRef(tier)
-	desired := b.serving(tier, image, widenedAllowlist(held, targets))
+	desired := b.serving(tier, image)
 	wanted, err := serviceOf(desired)
 	if err != nil {
 		return "", err
@@ -166,15 +157,6 @@ func (b bastion) ensureAccount(ctx context.Context, tier environment.Tier) error
 	return untilVisible(ctx, func() error {
 		return wrapAccountGrantError(b.clients.bindAccountRole(ctx, account, runAsRole, memberOf(principal), true), b.clients.AppAccountsRolePath())
 	})
-}
-
-func allowedBy(container *run.GoogleCloudRunV2Container) string {
-	for _, entry := range container.Env {
-		if entry.Name == relay.AllowedEnv {
-			return entry.Value
-		}
-	}
-	return ""
 }
 
 func sameBastion(current, desired *run.GoogleCloudRunV2Service) bool {

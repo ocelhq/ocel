@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -40,9 +41,22 @@ func echoing(t *testing.T) string {
 
 func relayAllowing(t *testing.T, allowed ...string) *httptest.Server {
 	t.Helper()
-	server := httptest.NewServer(relay.NewHandler(allowed))
+	server := httptest.NewServer(relay.NewHandler(destinationsOf(t, allowed...)))
 	t.Cleanup(server.Close)
 	return server
+}
+
+func destinationsOf(t *testing.T, targets ...string) []relay.Destination {
+	t.Helper()
+	destinations := make([]relay.Destination, len(targets))
+	for i, target := range targets {
+		address, err := netip.ParseAddrPort(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		destinations[i] = relay.Destination{Network: netip.PrefixFrom(address.Addr(), address.Addr().BitLen()), Port: address.Port()}
+	}
+	return destinations
 }
 
 func tokenOf(value string) func(context.Context) (string, error) {
@@ -110,7 +124,7 @@ func TestAForwardPresentsAFreshIdentityTokenOnEveryConnectionItTunnels(t *testin
 		mutex.Lock()
 		presented = append(presented, r.Header.Get("Authorization"))
 		mutex.Unlock()
-		relay.NewHandler([]string{target}).ServeHTTP(w, r)
+		relay.NewHandler(destinationsOf(t, target)).ServeHTTP(w, r)
 	}))
 	t.Cleanup(front.Close)
 	var minted int

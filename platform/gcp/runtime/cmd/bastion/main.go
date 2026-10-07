@@ -61,9 +61,12 @@ func listenAddress(getenv func(string) string) string {
 }
 
 func newHandler(getenv func(string) string) (http.Handler, error) {
-	allowed := relay.ParseAllowed(getenv(relay.AllowedEnv))
+	allowed, err := relay.ParseDestinations(getenv(relay.AllowedEnv))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", relay.AllowedEnv, err)
+	}
 	if len(allowed) == 0 {
-		return nil, fmt.Errorf("%s names no target, and a bastion forwards to the targets it names alone", relay.AllowedEnv)
+		return nil, fmt.Errorf("%s names no destination, and a bastion forwards to the destinations it names alone", relay.AllowedEnv)
 	}
 	return relay.NewHandler(allowed), nil
 }
