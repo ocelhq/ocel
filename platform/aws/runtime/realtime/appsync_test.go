@@ -68,12 +68,15 @@ func (a *appSync) taken() []received {
 	return append([]received(nil), a.received...)
 }
 
-type toServer struct{ server *url.URL }
+type toServer struct {
+	server    *url.URL
+	transport http.RoundTripper
+}
 
 func (s toServer) RoundTrip(r *http.Request) (*http.Response, error) {
 	redirected := r.Clone(r.Context())
 	redirected.URL.Scheme, redirected.URL.Host = s.server.Scheme, s.server.Host
-	return http.DefaultTransport.RoundTrip(redirected)
+	return s.transport.RoundTrip(redirected)
 }
 
 func serveAppSync(t *testing.T, answers ...func(http.ResponseWriter)) (*appSync, realtime.Config) {
@@ -83,7 +86,7 @@ func serveAppSync(t *testing.T, answers ...func(http.ResponseWriter)) (*appSync,
 	t.Cleanup(server.Close)
 	address, _ := url.Parse(server.URL)
 	return endpoint, realtime.Config{
-		Client:      &http.Client{Transport: toServer{server: address}},
+		Client:      &http.Client{Transport: toServer{server: address, transport: server.Client().Transport}},
 		Credentials: staticCredentials,
 		Retryer:     retry.NewStandard(func(o *retry.StandardOptions) { o.Backoff = noBackoff{} }),
 	}
