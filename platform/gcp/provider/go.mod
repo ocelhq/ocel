@@ -11,6 +11,7 @@ require (
 	cloud.google.com/go/logging v1.19.0
 	cloud.google.com/go/storage v1.64.0
 	connectrpc.com/connect v1.20.0
+	github.com/coder/websocket v1.8.15
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/uuid v1.6.0
 	github.com/ocelhq/ocel/pkg v0.0.0
