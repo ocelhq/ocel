@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 const placeholder = "[secret]"
@@ -20,10 +21,7 @@ type Values struct {
 func NewValues(values []string) Values {
 	var forms []string
 	for _, value := range values {
-		forms = append(forms, value)
-		if encoded, err := json.Marshal(value); err == nil {
-			forms = append(forms, string(encoded[1:len(encoded)-1]))
-		}
+		forms = append(forms, value, jsonForm(value, true), jsonForm(value, false), javaScriptForm(value))
 		if strings.Contains(value, "\n") {
 			for line := range strings.SplitSeq(value, "\n") {
 				forms = append(forms, strings.TrimSpace(line))
@@ -39,6 +37,33 @@ func NewValues(values []string) Values {
 		v.starts[form[0]] = true
 	}
 	return v
+}
+
+func jsonForm(value string, escapeHTML bool) string {
+	var encoded bytes.Buffer
+	encoder := json.NewEncoder(&encoded)
+	encoder.SetEscapeHTML(escapeHTML)
+	if err := encoder.Encode(value); err != nil {
+		return ""
+	}
+	quoted := strings.TrimSuffix(encoded.String(), "\n")
+	return quoted[1 : len(quoted)-1]
+}
+
+func javaScriptForm(value string) string {
+	var form strings.Builder
+	for len(value) > 0 {
+		cut := strings.IndexAny(value, "\u2028\u2029")
+		if cut < 0 {
+			form.WriteString(jsonForm(value, false))
+			break
+		}
+		_, width := utf8.DecodeRuneInString(value[cut:])
+		form.WriteString(jsonForm(value[:cut], false))
+		form.WriteString(value[cut : cut+width])
+		value = value[cut+width:]
+	}
+	return form.String()
 }
 
 func (v Values) Hide(text string) string {

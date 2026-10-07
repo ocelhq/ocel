@@ -39,6 +39,20 @@ func TestHideReplacesEachLineOfAMultilineValueAndItsJSONForm(t *testing.T) {
 	}
 }
 
+func TestHideReplacesAValueAsGoAndJavaScriptEachWriteItInJSON(t *testing.T) {
+	values := NewValues([]string{"pa<ss\"wo&rd x"})
+
+	for writer, said := range map[string]string{
+		"go's json.Marshal":                  `{"key":"pa<ss\"wo&rd x"}`,
+		"go's json.Encoder without escaping": `{"key":"pa<ss\"wo&rd x"}`,
+		"javascript's JSON.stringify":        "{\"key\":\"pa<ss\\\"wo&rd x\"}",
+	} {
+		if got := values.Hide(said); got != `{"key":"[secret]"}` {
+			t.Errorf("Hide of the value as %s writes it = %q, want it hidden", writer, got)
+		}
+	}
+}
+
 func TestHideLeavesTextAloneWhenThereIsNothingToHide(t *testing.T) {
 	if got := (Values{}).Hide("plain build output"); got != "plain build output" {
 		t.Errorf("Hide = %q, want the text unchanged", got)
