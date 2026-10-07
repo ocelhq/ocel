@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -120,7 +121,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 		span.End(nil)
 		return built, nil
 	}
-	for _, warning := range findImagesWithoutEncryptedValues(cfg, clients) {
+	for _, warning := range findImageAppsBuiltWithoutValues(cfg, clients) {
 		span.Warn(warning)
 	}
 	secrets, err := revealSecrets(ctx, a.declarations, cfg)
@@ -303,7 +304,7 @@ func resolveVariables(ctx context.Context, declarations *variables.Declarations,
 	return values, nil
 }
 
-func findImagesWithoutEncryptedValues(cfg *project.Project, clients []clientenv.App) []string {
+func findImageAppsBuiltWithoutValues(cfg *project.Project, clients []clientenv.App) []string {
 	variablesOf := make(map[string][]variables.Variable, len(clients))
 	for _, client := range clients {
 		variablesOf[client.Name] = client.Variables
@@ -312,7 +313,7 @@ func findImagesWithoutEncryptedValues(cfg *project.Project, clients []clientenv.
 	for _, app := range build.ImageApps(cfg.Apps) {
 		var keys []string
 		for _, v := range variablesOf[app.Name] {
-			if v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE || v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
+			if !processenv.IsInjected(true, v.Key) {
 				keys = append(keys, v.Key)
 			}
 		}
@@ -320,7 +321,7 @@ func findImagesWithoutEncryptedValues(cfg *project.Project, clients []clientenv.
 			continue
 		}
 		slices.Sort(keys)
-		warnings = append(warnings, fmt.Sprintf("app %q builds as an image, and an image build gets none of its sensitive or secret values yet: %s. Code that reads one at module scope fails the build", app.Name, strings.Join(keys, ", ")))
+		warnings = append(warnings, fmt.Sprintf("app %q builds as an image, and an image build gets none of its values yet: %s. Code that reads one while the app builds sees it unset", app.Name, strings.Join(slices.Compact(keys), ", ")))
 	}
 	return warnings
 }
