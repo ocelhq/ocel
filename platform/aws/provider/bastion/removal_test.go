@@ -74,6 +74,25 @@ func TestRemoveWaitsOutTheNetworkInterfacesAStoppedTaskStillHoldsOnItsSecurityGr
 	}
 }
 
+func TestRemoveDeletesTheClusterOnceTheTasksItStoppedHaveStopped(t *testing.T) {
+	t.Parallel()
+
+	account := newAccount()
+	clients, ensured := readyBastion(t, account)
+	if _, err := ensured.Run(context.Background(), clients); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+	account.stopLag = 3
+
+	if err := bastion.Remove(context.Background(), clients, environment.TierProduction); err != nil {
+		t.Fatalf("Remove() while its task is still stopping = %v, want it to wait the task out", err)
+	}
+
+	if len(account.clusters) != 0 {
+		t.Errorf("Remove() left clusters %v", account.clusters)
+	}
+}
+
 func TestRemoveLeavesAClusterOcelDidNotTagAlone(t *testing.T) {
 	t.Parallel()
 
