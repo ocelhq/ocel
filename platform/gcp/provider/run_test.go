@@ -513,6 +513,26 @@ func TestARunSaysWhichCloudRunServiceItCreatesReleasesAndDeletesAndInWhichRegion
 	}
 }
 
+func TestAServiceNoPromotionPinsServesEachRevisionItsReleaseMakes(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	ctx := context.Background()
+	first, again := serves("ocel-connector"), serves("ocel-connector")
+	again.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+
+	if _, err := p.deployAndRoute(ctx, first, nil); err != nil {
+		t.Fatalf("deployAndRoute() = %v", err)
+	}
+	ran, err := p.deployAndRoute(ctx, again, nil)
+	if err != nil {
+		t.Fatalf("deployAndRoute() again = %v", err)
+	}
+
+	if served := servedRevision(server.serving()); served != ran.revision || served == "" {
+		t.Errorf("the service serves %q, want %q, the revision the second release made", served, ran.revision)
+	}
+}
+
 func TestAPolicyWriteRefusedAsConflictingPreconditionFailedOrAbortedIsStale(t *testing.T) {
 	for name, err := range map[string]error{
 		"http 409":          &googleapi.Error{Code: http.StatusConflict},

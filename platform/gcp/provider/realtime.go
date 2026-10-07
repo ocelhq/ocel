@@ -27,13 +27,13 @@ type realtimeNamespace struct {
 }
 
 type realtimeEnvironment struct {
-	clients       *clients
-	records       keyvalue.Store
-	ref           provider.StackRef
-	keysInEnv     bool
-	pushBinary    func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
-	deployService func(ctx context.Context, s serving, progress progress.Log) (release, error)
-	tearDown      func(ctx context.Context, service string, progress progress.Log) error
+	clients        *clients
+	records        keyvalue.Store
+	ref            provider.StackRef
+	keysInEnv      bool
+	pushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
+	deployAndRoute func(ctx context.Context, s serving, progress progress.Log) (release, error)
+	tearDown       func(ctx context.Context, service string, progress progress.Log) error
 }
 
 func (p *Provider) openRealtime(ctx context.Context, ref provider.StackRef) (realtimeEnvironment, error) {
@@ -46,10 +46,10 @@ func (p *Provider) openRealtime(ctx context.Context, ref provider.StackRef) (rea
 		records: p.KeyValues(),
 		ref:     ref,
 		// HACK: floci-gcp runs no secret volume, so an emulated gateway takes its keys from its environment and a change of keys rolls a revision; drop keysInEnv once floci-gcp mounts secret volumes (#1605).
-		keysInEnv:     p.emulated(),
-		pushBinary:    p.pushBinary,
-		deployService: p.deployService,
-		tearDown:      p.tearDown,
+		keysInEnv:      p.emulated(),
+		pushBinary:     p.pushBinary,
+		deployAndRoute: p.deployAndRoute,
+		tearDown:       p.tearDown,
 	}, nil
 }
 

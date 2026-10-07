@@ -166,3 +166,35 @@ func TestAGatewayCloudRunServesOnAnotherHostEachReleaseIsRefused(t *testing.T) {
 		t.Errorf("provision() = %v, want a busy refusal: no host the binding names would be the one browsers reach", err)
 	}
 }
+
+func TestAGatewayReleasedAgainServesTheRevisionThatReleaseMade(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.provision(t, "app")
+	h.run.mu.Lock()
+	h.run.service.Template.Containers[0].Image += "-older"
+	h.run.mu.Unlock()
+	h.provision(t, "app")
+
+	service := h.run.serving()
+	if served, latest := servedRevision(service), revisionName(service.LatestReadyRevision); served != latest {
+		t.Errorf("the gateway serves %q, want %q, the revision its release made: an upgraded gateway otherwise never takes a socket", served, latest)
+	}
+}
+
+func TestAGatewayWhoseLatestRevisionServesNoTrafficIsRoutedToItOnTheNextDeploy(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.provision(t, "app")
+	h.run.mu.Lock()
+	h.run.service.Traffic = []*run.GoogleCloudRunV2TrafficTarget{{Type: trafficByRevision, Revision: "an-older-revision", Percent: 100}}
+	h.run.mu.Unlock()
+	h.provision(t, "app")
+
+	service := h.run.serving()
+	if served, latest := servedRevision(service), revisionName(service.LatestReadyRevision); served != latest {
+		t.Errorf("the gateway serves %q, want %q: a release that came ready and was never routed is routed once the gateway is next deployed", served, latest)
+	}
+}

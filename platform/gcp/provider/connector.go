@@ -119,7 +119,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 		return provider.ConnectorAddress{}, err
 	}
 
-	released, err := p.deployService(ctx, serving{
+	released, err := p.deployAndRoute(ctx, serving{
 		service:   names.Connector(),
 		image:     image,
 		account:   names.ConnectorAccountEmail(),

@@ -312,6 +312,22 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress progre
 	return release{url: deployed.Uri, deploymentURL: taggedAddress(tagged, s.tag), revision: revision}, nil
 }
 
+func (p *Provider) deployAndRoute(ctx context.Context, s serving, progress progress.Log) (release, error) {
+	ran, err := p.deployService(ctx, s, progress)
+	if err != nil {
+		return release{}, err
+	}
+	if _, err := p.pin(ctx, s.service, ran.revision, nil, false); err != nil {
+		return release{}, err
+	}
+	return ran, nil
+}
+
+func servesLatest(current *run.GoogleCloudRunV2Service) bool {
+	latest := revisionName(current.LatestReadyRevision)
+	return latest != "" && servedRevision(current) == latest
+}
+
 func taggedAddress(current *run.GoogleCloudRunV2Service, tag string) string {
 	for _, status := range current.TrafficStatuses {
 		if status.Tag == tag {

@@ -62,9 +62,9 @@ func (s *syncServer) open(t *testing.T) bootstrap {
 	p := pushing(t, c.endpoint)
 	p.resolved = c
 	return bootstrap{
-		clients:       c,
-		deployService: p.deployService,
-		tearDown:      p.tearDown,
+		clients:        c,
+		deployAndRoute: p.deployAndRoute,
+		tearDown:       p.tearDown,
 		pushBinary: func(_ context.Context, _ environment.Tier, _, ref string, _ []byte, _ string) error {
 			s.mu.Lock()
 			defer s.mu.Unlock()
