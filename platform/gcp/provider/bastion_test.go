@@ -223,6 +223,7 @@ func TestTheFirstForwardCreatesTheBastionItsAccountAndTheInvokerGrantAndLaterOne
 	h := newBastionHarness(t, target)
 
 	h.forward(t, target)
+	before := len(h.run.releases())
 	h.forward(t, target)
 
 	service := h.run.serving()
@@ -232,7 +233,7 @@ func TestTheFirstForwardCreatesTheBastionItsAccountAndTheInvokerGrantAndLaterOne
 	if got := len(h.run.created); got != 1 {
 		t.Errorf("the bastion was created %d times, want once", got)
 	}
-	if got := len(h.run.releases()); got != 0 {
+	if got := len(h.run.releases()) - before; got != 0 {
 		t.Errorf("the second forward released the bastion %d times, want it reused as it is", got)
 	}
 	if got := h.pushes(); len(got) != 1 {
@@ -281,6 +282,43 @@ func TestAForwardToATargetTheBastionDoesNotAllowYetWidensTheAllowlistWithoutPush
 	}
 	if got := h.pushes(); len(got) != 1 {
 		t.Errorf("the image was pushed %d times, want once: widening the allowlist changes the service, not the image", len(got))
+	}
+}
+
+func TestABastionRunningAnOlderRelayIsReleasedAgainAndServesTheNewRevision(t *testing.T) {
+	t.Parallel()
+	target := echoTarget(t)
+	h := newBastionHarness(t, target)
+	h.forward(t, target)
+	h.run.mu.Lock()
+	h.run.service.Template.Containers[0].Image += "-older"
+	h.run.mu.Unlock()
+
+	h.forward(t, target)
+
+	service := h.run.serving()
+	if served, latest := servedRevision(service), revisionName(service.LatestReadyRevision); served != latest {
+		t.Errorf("the bastion serves %q, want %q, the revision its release made: an upgraded relay otherwise never carries a byte", served, latest)
+	}
+	if got := h.pushes(); len(got) != 2 {
+		t.Errorf("the bastion image was pushed %d times, want twice: the service ran another relay", len(got))
+	}
+}
+
+func TestABastionWhoseLatestRevisionServesNoTrafficIsRoutedToItOnTheNextForward(t *testing.T) {
+	t.Parallel()
+	target := echoTarget(t)
+	h := newBastionHarness(t, target)
+	h.forward(t, target)
+	h.run.mu.Lock()
+	h.run.service.Traffic = []*run.GoogleCloudRunV2TrafficTarget{{Type: trafficByRevision, Revision: "an-older-revision", Percent: 100}}
+	h.run.mu.Unlock()
+
+	h.forward(t, target)
+
+	service := h.run.serving()
+	if served, latest := servedRevision(service), revisionName(service.LatestReadyRevision); served != latest {
+		t.Errorf("the bastion serves %q, want %q: a release that came ready and was never routed is routed on the next forward", served, latest)
 	}
 }
 
