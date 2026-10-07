@@ -110,7 +110,7 @@ func TestForwardPortsEndsTheStreamWithTheFailureTheProviderReportsAndClosesTheFo
 	(<-fail)(errors.New("the bastion task stopped: Task stopped by user"))
 
 	for stream.Receive() {
-		t.Errorf("ForwardPorts() sent a second response %v after the forwards failed", stream.Msg())
+		t.Errorf("ForwardPorts() sent a second response, %d bindings and unforwarded %v, after the forwards failed", len(stream.Msg().GetBindings()), stream.Msg().GetUnforwarded())
 	}
 	if err := stream.Err(); err == nil || !strings.Contains(err.Error(), "the bastion task stopped") {
 		t.Errorf("ForwardPorts() stream ended with %v, want the failure the provider reported", err)
