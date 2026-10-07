@@ -22,12 +22,3 @@ export function unprovisioned(what: string, access: string): UnprovisionedResour
     `'${what}' cannot be used during discovery: tried to access '${access}' before the resource was provisioned`,
   );
 }
-
-/** A stand-in for the resource `what` that throws {@link UnprovisionedResourceError} on any property access. */
-export function unprovisionedProxy<T extends object>(what: string): T {
-  return new Proxy({} as T, {
-    get(_target, prop) {
-      throw unprovisioned(what, String(prop));
-    },
-  });
-}

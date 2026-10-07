@@ -1,4 +1,4 @@
-import { Client } from "pg";
+import { Client, Pool } from "pg";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../runtime/rpc", () => ({
@@ -151,13 +151,49 @@ describe("postgres()", () => {
     expect(postgres("orders").options).not.toHaveProperty("ssl");
   });
 
-  it("fails cold start naming both types when the record is of another type", () => {
+  it("declares a database with no binding delivered, and refuses its first use naming why", () => {
+    const pool = postgres("orders");
+
+    expect(() => pool.query).toThrow(
+      "OCEL_RESOURCE_POSTGRES_orders is not delivered to this process: `ocel dev` delivers it locally and `ocel deploy` to the deployed app, but a build gets no bindings, so code that runs while building, such as prerendering a page, cannot use the resource",
+    );
+    expect(() => pool.connectionString).toThrow("OCEL_RESOURCE_POSTGRES_orders");
+  });
+
+  it("resolves as itself when awaited with no binding delivered, since a pool is no thenable", async () => {
+    const pool = postgres("orders");
+
+    await expect(Promise.resolve(pool)).resolves.toBe(pool);
+  });
+
+  it("is a pg pool whose methods run on the one pool it opens", async () => {
+    vi.stubEnv(
+      "OCEL_RESOURCE_POSTGRES_orders",
+      JSON.stringify({
+        name: "orders",
+        postgres: { host: "db", port: 5432, database: "d", username: "u", password: "p" },
+      }),
+    );
+
+    const pool = postgres("orders");
+
+    expect(pool).toBeInstanceOf(Pool);
+    expect(pool.totalCount).toBe(0);
+    expect(pool.on("error", () => {})).toBe(pool);
+    expect(pool.query).toBe(pool.query);
+    await pool.end();
+    expect(pool.ended).toBe(true);
+  });
+
+  it("refuses the first use naming both types when the record is of another type", () => {
     vi.stubEnv(
       "OCEL_RESOURCE_POSTGRES_orders",
       JSON.stringify({ name: "orders", bucket: { bucket: "orders" } }),
     );
 
-    expect(() => postgres("orders")).toThrow(
+    const pool = postgres("orders");
+
+    expect(() => pool.query).toThrow(
       "OCEL_RESOURCE_POSTGRES_orders contains a BUCKET binding, and this app reads it as a POSTGRES",
     );
   });
