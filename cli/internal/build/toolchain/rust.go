@@ -51,7 +51,6 @@ func (c Compilation) compileRust(ctx context.Context) error {
 
 	cmd := exec.CommandContext(ctx, "cargo", "build", "--release",
 		"--manifest-path", crate.ManifestPath, "--bin", bins[0].Name, "--target", target)
-	childprocess.KillGroupOnCancel(cmd)
 	cmd.Dir = workspace.Root
 	cmd.Env = c.environ("CARGO_PROFILE_RELEASE_STRIP=symbols")
 	linker := "CARGO_TARGET_" + strings.ToUpper(strings.ReplaceAll(target, "-", "_")) + "_LINKER"
@@ -61,7 +60,7 @@ func (c Compilation) compileRust(ctx context.Context) error {
 	var said bytes.Buffer
 	cmd.Stdout = &said
 	cmd.Stderr = &said
-	if err := cmd.Run(); err != nil {
+	if err := childprocess.RunGroup(cmd); err != nil {
 		return fmt.Errorf("compile app %q in %s for %s (%w):\n%s", c.App, source, target, err, said.String())
 	}
 	c.report("compiling", said.String())
