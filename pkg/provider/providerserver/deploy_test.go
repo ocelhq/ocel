@@ -229,6 +229,24 @@ func TestADeployReportsTheStoragePrefixItWroteEachAppUnder(t *testing.T) {
 	}
 }
 
+func TestADeployReportsTheReleaseItMadeLiveForEachApp(t *testing.T) {
+	builtProject(t)
+	client, p := deployServed(t)
+
+	result, _ := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	release := result.GetApps()[0].GetRelease()
+	parsed, err := provider.ParseRelease(release)
+	if err != nil {
+		t.Fatalf("the result reports release %q for web, want a release: %v", release, err)
+	}
+	if got := p.FakeStacks().Provisioned()[1].App.BuildID; parsed.BuildID() != got {
+		t.Errorf("web's reported release is of build %q, want the build %q the app stack served", parsed.BuildID(), got)
+	}
+}
+
 func TestDeployRefusesToPublishABlanketGrantWithoutAskingTheProvider(t *testing.T) {
 	builtProject(t)
 	client, p := deployServed(t)
