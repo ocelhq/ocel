@@ -142,3 +142,24 @@ func TestTheAppBoundaryStillAdmitsWhatADeployGrantsARole(t *testing.T) {
 		})
 	}
 }
+
+func TestTheAppBoundaryAdmitsTheChannelsABastionTaskOpensToSSM(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
+			var admitted []string
+			for _, st := range boundaryStatements(t, tier, "") {
+				admitted = append(admitted, yamlStrings(st.Action)...)
+			}
+			for _, action := range []string{
+				"ssmmessages:CreateControlChannel",
+				"ssmmessages:CreateDataChannel",
+				"ssmmessages:OpenControlChannel",
+				"ssmmessages:OpenDataChannel",
+			} {
+				if !slices.Contains(admitted, action) {
+					t.Errorf("the boundary does not admit %s, so the ECS Exec agent of a bastion task cannot reach Session Manager", action)
+				}
+			}
+		})
+	}
+}

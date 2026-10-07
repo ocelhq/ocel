@@ -372,7 +372,7 @@ func TestEveryCredentialListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) 
 }
 
 func TestEveryCredentialScopesTaskDefinitionsToWhatAWSEvaluates(t *testing.T) {
-	unscopable := []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition"}
+	unscopable := []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition", "ecs:ListTaskDefinitions"}
 	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
 		if !grants[grant{action: "ecs:RegisterTaskDefinition", resource: appTaskDefinitionARN, condition: conditionJSON(t, taggedOnCreate())}] {
@@ -827,6 +827,42 @@ func conditionAdmits(operator, pattern, value string) bool {
 		return regexp.MustCompile("^" + quoted + "$").MatchString(value)
 	}
 	return false
+}
+
+func TestEveryCredentialRunsAndReachesOnlyTheTasksOfABastionCluster(t *testing.T) {
+	onBastion := conditionJSON(t, map[string]any{"ArnEquals": map[string]any{"ecs:cluster": bastionClusterARN}})
+	want := []grant{
+		{action: "ecs:RunTask", resource: bastionTaskDefinitionARN, condition: onBastion},
+		{action: "ecs:DescribeTasks", resource: bastionTaskARN, condition: "null"},
+		{action: "ecs:StopTask", resource: bastionTaskARN, condition: "null"},
+		{action: "ecs:ExecuteCommand", resource: bastionClusterARN, condition: "null"},
+		{action: "ecs:ExecuteCommand", resource: bastionTaskARN, condition: "null"},
+		{action: "ecs:ListTasks", resource: bastionClusterARN, condition: "null"},
+		{action: "ecs:DeleteTaskDefinitions", resource: bastionTaskDefinitionARN, condition: "null"},
+		{action: "ssm:StartSession", resource: bastionTaskARN, condition: "null"},
+		{action: "ssm:StartSession", resource: portForwardingDocumentARN, condition: "null"},
+		{action: "ssm:TerminateSession", resource: ownSessionARN, condition: "null"},
+	}
+	for purpose, document := range bothCredentials(t) {
+		grants := grantsOf(t, document)
+		for _, wanted := range want {
+			if !grants[wanted] {
+				t.Errorf("the %s credential does not grant %s on %s under %s: the bastion a build forwards ports through cannot be run and reached without it", purpose, wanted.action, wanted.resource, wanted.condition)
+			}
+		}
+	}
+}
+
+func TestNoCredentialRunsOrReachesAnythingBeyondTheBastionScopes(t *testing.T) {
+	reachable := []string{"ecs:RunTask", "ecs:StopTask", "ecs:ExecuteCommand", "ssm:StartSession", "ssm:TerminateSession"}
+	scopes := []string{bastionClusterARN, bastionTaskARN, bastionTaskDefinitionARN, portForwardingDocumentARN, ownSessionARN}
+	for purpose, document := range bothCredentials(t) {
+		for g := range grantsOf(t, document) {
+			if slices.Contains(reachable, g.action) && !slices.Contains(scopes, g.resource) {
+				t.Errorf("the %s credential grants %s on %s, which reaches past the bastion cluster's tasks and the one port forwarding document", purpose, g.action, g.resource)
+			}
+		}
+	}
 }
 
 func TestEveryManagedByConditionAdmitsTheTagOcelWrites(t *testing.T) {
