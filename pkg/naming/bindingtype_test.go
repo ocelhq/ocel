@@ -116,7 +116,7 @@ func TestBindingProperties(t *testing.T) {
 	binding := &bindingsv1.Binding{Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 		Host: "h", Port: 5433, TlsMode: bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL,
 	}}}
-	if got := BindingPropertyNames(binding); !slices.Equal(got, []string{"database", "host", "password", "port", "tlsCa", "tlsMode", "url", "username"}) {
+	if got := BindingPropertyNames(binding); !slices.Equal(got, []string{"database", "host", "password", "port", "tlsCa", "tlsMode", "tlsServerName", "url", "username"}) {
 		t.Errorf("BindingPropertyNames = %v", got)
 	}
 	if got, ok := BindingProperty(binding, "port"); !ok || got != float64(5433) {

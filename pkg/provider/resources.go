@@ -62,6 +62,7 @@ const (
 	PropertyTLS           = "tls"
 	PropertyTLSMode       = "tlsMode"
 	PropertyTLSCA         = "tlsCa"
+	PropertyTLSServerName = "tlsServerName"
 	PropertyCAPEM         = "caPem"
 	PropertyTransport     = "transport"
 	PropertyURL           = "url"
@@ -145,6 +146,8 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 			Url:      binding.Properties[PropertyURL],
 			TlsMode:  mode,
 			TlsCa:    binding.Properties[PropertyTLSCA],
+
+			TlsServerName: binding.Properties[PropertyTLSServerName],
 		}}
 	case BindingBucket:
 		message.Properties = &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{
@@ -161,6 +164,8 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 			Password: binding.Properties[PropertyPassword],
 			Tls:      binding.Properties[PropertyTLS] == "true",
 			CaPem:    binding.Properties[PropertyCAPEM],
+
+			TlsServerName: binding.Properties[PropertyTLSServerName],
 		}}
 	case BindingRealtime:
 		message.Properties = &bindingsv1.Binding_Realtime{Realtime: realtimeProperties(binding)}
