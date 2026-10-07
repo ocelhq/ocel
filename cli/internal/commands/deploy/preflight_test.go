@@ -543,7 +543,7 @@ func TestAnUnbootstrappedProductionFailsTheCheckPhaseWithTheCommandThatBootstrap
 	}
 }
 
-func TestDeploysEventsAreInTheCheckPhaseThenBuildThenTheProvidersDeployPhases(t *testing.T) {
+func TestDeploysEventsAreInTheCheckPhaseThenBuildWithInfraProvisionedBeforeTheAppsThenTheProvidersDeployPhases(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
 	useJSONFormat(t, &dependencies)
@@ -560,10 +560,11 @@ func TestDeploysEventsAreInTheCheckPhaseThenBuildThenTheProvidersDeployPhases(t 
 		order = append(order, phase)
 	}
 	deploying := []progressv1.Phase{progressv1.Phase_PHASE_PROVISION, progressv1.Phase_PHASE_DEPLOY, progressv1.Phase_PHASE_PROMOTE}
-	if len(order) < 3 || order[0] != progressv1.Phase_PHASE_CHECK || order[1] != progressv1.Phase_PHASE_BUILD {
-		t.Fatalf("phases in order %v, want check, then build, then the provider's deploy phases", order)
+	want := []progressv1.Phase{progressv1.Phase_PHASE_CHECK, progressv1.Phase_PHASE_BUILD, progressv1.Phase_PHASE_PROVISION, progressv1.Phase_PHASE_BUILD}
+	if len(order) < len(want)+1 || !slices.Equal(order[:len(want)], want) {
+		t.Fatalf("phases in order %v, want check, then the resources collected, the infra provisioned and the apps built, then the provider's deploy phases", order)
 	}
-	for _, phase := range order[2:] {
+	for _, phase := range order[len(want):] {
 		if !slices.Contains(deploying, phase) {
 			t.Errorf("phases in order %v: %s after the build, want only the provider's deploy phases %v", order, phase, deploying)
 		}

@@ -56,7 +56,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		Use:   "deploy",
 		Short: "Deploy this project to your own infrastructure",
 		Long: "Deploy this project to your own infrastructure.\n\n" +
-			"Builds the apps, provisions the resources they declare, and releases the result " +
+			"Provisions the resources the project declares, builds the apps, and releases the result " +
 			"into your provider account. Every deploy is kept: list them with `ocel deployments`, " +
 			"return to one with `ocel rollback`.\n\n" +
 			"--dry builds, then prints every change the deploy would make to your account and stops.",
@@ -111,6 +111,11 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			return nil
 		}
 		cfg = facts.project
+		env := &environmentv1.Environment{
+			Tier:      environmentv1.Tier_TIER_PRODUCTION,
+			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
+		}
+		infra := newInfraProvisioning(provider, cfg, env, facts.workerCeilings, opts.dry, opts.prebuilt)
 
 		browser := dependencies.IsBrowserReachable(stdin)
 		scope := variablescope.Of(cfg, environmentv1.Tier_TIER_PRODUCTION, "")
@@ -134,6 +139,7 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			workerCeilings: facts.workerCeilings,
 			host:           build.ReadHost(provider.Facts()),
 			urls:           facts.urls,
+			infra:          infra,
 			dry:            opts.dry,
 			enabled:        !opts.dry && browser,
 		}
@@ -149,10 +155,6 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			return nil
 		}
 
-		env := &environmentv1.Environment{
-			Tier:      environmentv1.Tier_TIER_PRODUCTION,
-			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
-		}
 		registry, err := readiness.ProjectRegistry(cfg)
 		if err != nil {
 			return err
@@ -165,8 +167,9 @@ func runDeploy(ctx context.Context, dependencies Dependencies, cwd string, opts 
 			Edge:        cfg.EdgeSelection(),
 			Dry:         opts.dry,
 
-			ProjectRegistry: registry,
-			InlineBindings:  inline,
+			ProjectRegistry:  registry,
+			InlineBindings:   inline,
+			InfraProvisioned: infra.isProvisioned(),
 		}
 
 		if opts.dry {

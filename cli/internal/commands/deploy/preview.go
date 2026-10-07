@@ -247,6 +247,7 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			workerCeilings: facts.workerCeilings,
 			host:           build.ReadHost(provider.Facts()),
 			urls:           facts.urls,
+			infra:          newInfraProvisioning(provider, cfg, env, facts.workerCeilings, opts.dry, opts.prebuilt),
 			dry:            opts.dry,
 			enabled:        !opts.dry && browser,
 		}
@@ -273,9 +274,10 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 			Edge:        cfg.EdgeSelection(),
 			Dry:         opts.dry,
 
-			ProjectRegistry: registry,
-			InlineBindings:  inline,
-			AliasToken:      facts.builtAlias,
+			ProjectRegistry:  registry,
+			InlineBindings:   inline,
+			AliasToken:       facts.builtAlias,
+			InfraProvisioned: recovery.infra.isProvisioned(),
 		}
 
 		if opts.dry {
