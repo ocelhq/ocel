@@ -3,6 +3,7 @@ package session
 import (
 	"bufio"
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -94,5 +95,35 @@ func TestStoppingAForwardReturnsOnceSshHasExitedAndTheMasterHasDroppedIt(t *test
 	said, _ := os.ReadFile(log)
 	if !strings.Contains(string(said), "-O cancel -L "+local+":172.18.0.5:5432") {
 		t.Errorf("the master was told %q before stop returned, want the forward cancelled there: a forward the master keeps outlives the call that asked for it", said)
+	}
+}
+
+func TestAForwardWhoseLoopbackPortWasTakenFirstTriesAnother(t *testing.T) {
+	session := sshStandingIn(t)
+	t.Setenv(standInEnv, "refuse-first")
+	t.Setenv(standInLogEnv, filepath.Join(t.TempDir(), "refused"))
+
+	local, stop, err := session.ForwardPort(context.Background(), "172.18.0.5:5432")
+	if err != nil {
+		t.Fatalf("ForwardPort() after its first port was taken = %v, want it forwarded from another", err)
+	}
+	defer stop()
+	if reached, err := readForwarded(t, local); err != nil || reached != "172.18.0.5:5432" {
+		t.Errorf("a connection to %s reached %q, %v, want the remote address 172.18.0.5:5432", local, reached, err)
+	}
+}
+
+func TestSomethingElseAnsweringOnAForwardsPortIsNotTakenForTheForward(t *testing.T) {
+	squatter, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer squatter.Close()
+	exited := make(chan struct{})
+	close(exited)
+	waitErr := errors.New("exit status 255")
+
+	if err := awaitListening(context.Background(), squatter.Addr().String(), exited, &waitErr); err == nil {
+		t.Error("awaitListening() trusted a port another process answered on after ssh exited, want it refused: the build would hand that process the database's password")
 	}
 }

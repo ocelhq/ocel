@@ -17,17 +17,27 @@ import (
 const (
 	forwardFirstWait = 20 * time.Millisecond
 	forwardLongWait  = time.Second
+	forwardAttempts  = 3
 )
 
 func (s *Session) ForwardPort(ctx context.Context, remote string) (string, func(), error) {
+	for attempt := 1; ; attempt++ {
+		local, stop, portTaken, err := s.forwardFromFreePort(ctx, remote)
+		if !portTaken || attempt == forwardAttempts {
+			return local, stop, err
+		}
+	}
+}
+
+func (s *Session) forwardFromFreePort(ctx context.Context, remote string) (string, func(), bool, error) {
 	local, err := freeLoopbackAddress()
 	if err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
 	spec := local + ":" + remote
 	input, stdinWriter, err := os.Pipe()
 	if err != nil {
-		return "", nil, refusal.Refuse(refusal.CodeNotReady, "open the input that holds a forward open: %s", err)
+		return "", nil, false, refusal.Refuse(refusal.CodeNotReady, "open the input that holds a forward open: %s", err)
 	}
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "ssh", append(s.args(),
@@ -39,7 +49,7 @@ func (s *Session) ForwardPort(ctx context.Context, remote string) (string, func(
 	_ = input.Close()
 	if err != nil {
 		_ = stdinWriter.Close()
-		return "", nil, s.refuseUnreached(ctx, err, "")
+		return "", nil, false, s.refuseUnreached(ctx, err, "")
 	}
 	var waitErr error
 	exited := make(chan struct{})
@@ -59,12 +69,14 @@ func (s *Session) ForwardPort(ctx context.Context, remote string) (string, func(
 	if err := awaitListening(ctx, local, exited, &waitErr); err != nil {
 		stop()
 		if ctx.Err() != nil {
-			return "", nil, ctx.Err()
+			return "", nil, false, ctx.Err()
 		}
-		return "", nil, refusal.Refuse(refusal.CodeNotReady,
-			"%s over ssh: forwarding %s to %s: %s", s.dest.Principal(), local, remote, terse(failure{err: err, stderr: strings.TrimSpace(stderr.String())}))
+		said := strings.TrimSpace(stderr.String())
+		refused := refusal.Refuse(refusal.CodeNotReady,
+			"%s over ssh: forwarding %s to %s: %s", s.dest.Principal(), local, remote, terse(failure{err: err, stderr: said}))
+		return "", nil, strings.Contains(said, "Address already in use"), refused
 	}
-	return local, stop, nil
+	return local, stop, false, nil
 }
 
 func (s *Session) cancelForward(spec string) {
@@ -82,7 +94,12 @@ func awaitListening(ctx context.Context, local string, exited <-chan struct{}, w
 	for {
 		if conn, err := net.DialTimeout("tcp", local, wait); err == nil {
 			_ = conn.Close()
-			return nil
+			select {
+			case <-exited:
+				return errors.New("ssh exited, and another process answers on the port it was to forward from")
+			default:
+				return nil
+			}
 		}
 		if time.Now().After(deadline) {
 			return errors.New("the forward never started listening")
