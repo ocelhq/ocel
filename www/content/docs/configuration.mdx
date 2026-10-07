@@ -370,8 +370,10 @@ Written as an object, it takes four fields:
 The command reads your resources the way your code does. Every binding of the project is in
 `OCEL_LIVE_DIR`, forwarded to the deployed resource, so `postgres("main").connectionString` in
 `drizzle.config.ts` is the deployed database, exactly as it is under `ocel run`. A provider that
-forwards no port runs the command without bindings and the deploy says so. Its output streams into
-the deploy.
+forwards no port runs the command without bindings and the deploy says so, as it does for a
+resource no port reaches, such as a bucket. When the provider refuses a forward, because the
+database is not running or nothing is deployed yet, the deploy stops before the command runs and
+says why. Its output streams into the deploy.
 
 A command that exits non-zero, or runs past its `timeout`, stops the deploy before anything is built.
 The infrastructure stays as provisioned, nothing is promoted, and the release that was serving keeps
