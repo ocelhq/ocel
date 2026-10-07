@@ -23,5 +23,5 @@ type PruneResult struct {
 	UnnamedRecordKeys          []string         `json:"unnamedRecordKeys"`
 	SurvivingRecordKeys        []string         `json:"survivingRecordKeys"`
 	SurvivingPointerRecordKeys []string         `json:"survivingPointerRecordKeys"`
-	ReleaseRemovals            []PointerRemoval `json:"releaseRemovals,omitempty"`
+	DeploymentRemovals         []PointerRemoval `json:"deploymentRemovals,omitempty"`
 }

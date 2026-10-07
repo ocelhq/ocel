@@ -228,7 +228,7 @@ func errNoDeploy(tier environment.Tier) error {
 		Message: "this project has no production deploys yet; run `ocel deploy` first"}}
 }
 
-func (s *edgeSession) removeReleases(ctx context.Context, deployments []router.PointerRemoval, runProgress progress.Log) error {
+func (s *edgeSession) removeDeployments(ctx context.Context, deployments []router.PointerRemoval, runProgress progress.Log) error {
 	released := false
 	for _, deployment := range deployments {
 		if len(s.state.PointerHostnames(deployment.Pointer)) == 0 {
@@ -244,5 +244,5 @@ func (s *edgeSession) removeReleases(ctx context.Context, deployments []router.P
 			return err
 		}
 	}
-	return s.sharedStack.removeReleases(ctx, deployments, runProgress)
+	return s.sharedStack.removeDeployments(ctx, deployments, runProgress)
 }

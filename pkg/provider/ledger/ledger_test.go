@@ -527,8 +527,8 @@ func TestPruneNamesTheDeploymentPointerAndHostsOfEachPromotionItDropped(t *testi
 		t.Fatal(err)
 	}
 	want := []router.PointerRemoval{{Pointer: "pr-7@p1", Hosts: []edge.PreviewHost{{Hostname: "pr-7-p1.preview.acme.com", App: "web"}}}}
-	if !reflect.DeepEqual(result.ReleaseRemovals, want) {
-		t.Errorf("removals = %+v, want %+v: a pruned deployment stops serving on its own hostnames", result.ReleaseRemovals, want)
+	if !reflect.DeepEqual(result.DeploymentRemovals, want) {
+		t.Errorf("removals = %+v, want %+v: a pruned deployment stops serving on its own hostnames", result.DeploymentRemovals, want)
 	}
 
 	removed, err := l.RemovePointer(ctx, "pr-7")
@@ -536,7 +536,7 @@ func TestPruneNamesTheDeploymentPointerAndHostsOfEachPromotionItDropped(t *testi
 		t.Fatal(err)
 	}
 	var got []string
-	for _, removal := range removed.ReleaseRemovals {
+	for _, removal := range removed.DeploymentRemovals {
 		got = append(got, removal.Pointer)
 	}
 	if want := []string{"pr-7@p3", "pr-7@p2", "pr-7@p1"}; !slices.Equal(got, want) {
@@ -569,7 +569,7 @@ func TestADroppedDeploymentIsNamedByEveryPruneUntilItsWithdrawalIsForgotten(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := pointers(again.ReleaseRemovals), []string{"pr-7@p2", "pr-7@p1"}; !slices.Equal(got, want) {
+	if got, want := pointers(again.DeploymentRemovals), []string{"pr-7@p2", "pr-7@p1"}; !slices.Equal(got, want) {
 		t.Errorf("removals = %v, want %v: p1's withdrawal was never confirmed, so it is retried", got, want)
 	}
 
@@ -580,7 +580,7 @@ func TestADroppedDeploymentIsNamedByEveryPruneUntilItsWithdrawalIsForgotten(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := pointers(read.ListReleaseRemovals()); !slices.Equal(got, []string{"pr-7@p4", "pr-7@p3"}) {
+	if got := pointers(read.ListDeploymentRemovals()); !slices.Equal(got, []string{"pr-7@p4", "pr-7@p3"}) {
 		t.Errorf("removals = %v, want only the kept p4 and p3 once the withdrawals are forgotten", got)
 	}
 }

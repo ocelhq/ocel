@@ -331,11 +331,11 @@ func (l *Ledger) ReadUnnamedRecords(ctx context.Context, pointer string, dropped
 		UnnamedRecordKeys:          unnamed,
 		SurvivingRecordKeys:        slices.DeleteFunc(recorded, func(key string) bool { return slices.Contains(unnamed, key) }),
 		SurvivingPointerRecordKeys: collectRecordKeys(kept.Promotions),
-		ReleaseRemovals:            collectReleaseRemovals(name, reclaimable),
+		DeploymentRemovals:         collectDeploymentRemovals(name, reclaimable),
 	}, nil
 }
 
-func collectReleaseRemovals(pointer string, promotions []RecordedPromotion) []router.PointerRemoval {
+func collectDeploymentRemovals(pointer string, promotions []RecordedPromotion) []router.PointerRemoval {
 	var deployments []router.PointerRemoval
 	for _, promotion := range promotions {
 		if len(promotion.Hosts) == 0 {

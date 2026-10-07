@@ -320,7 +320,7 @@ func (s *sharedStack) serveDeploymentOn(ctx context.Context, kind router.Kind, d
 	return errors.Join(moved, s.adopt(kind, routed))
 }
 
-func (s *sharedStack) removeReleases(ctx context.Context, deployments []router.PointerRemoval, progress progress.Log) error {
+func (s *sharedStack) removeDeployments(ctx context.Context, deployments []router.PointerRemoval, progress progress.Log) error {
 	if len(deployments) == 0 {
 		return nil
 	}
@@ -338,7 +338,7 @@ func (s *sharedStack) removeReleases(ctx context.Context, deployments []router.P
 	return errors.Join(errs...)
 }
 
-func (s *sharedStack) forgetRemovedReleases(ctx context.Context, pointer string, deployments []router.PointerRemoval) error {
+func (s *sharedStack) forgetRemovedDeployments(ctx context.Context, pointer string, deployments []router.PointerRemoval) error {
 	removed := make([]string, 0, len(deployments))
 	for _, deployment := range deployments {
 		removed = append(removed, deployment.Pointer)
@@ -363,7 +363,7 @@ func (s *sharedStack) removePointer(ctx context.Context, removal router.PointerR
 			return router.PruneResult{}, err
 		}
 	}
-	if err := s.removeReleases(ctx, recorded.ListReleaseRemovals(), progress); err != nil {
+	if err := s.removeDeployments(ctx, recorded.ListDeploymentRemovals(), progress); err != nil {
 		return router.PruneResult{}, err
 	}
 	return s.ledger.RemovePointer(ctx, removal.Pointer)

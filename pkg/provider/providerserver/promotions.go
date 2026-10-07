@@ -138,7 +138,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err != nil {
 			return err
 		}
-		if err := session.removeReleases(ctx, pruned.ReleaseRemovals, progress); err != nil {
+		if err := session.removeDeployments(ctx, pruned.DeploymentRemovals, progress); err != nil {
 			return err
 		}
 		if err := session.checkpoint(ctx); err != nil {
@@ -147,7 +147,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err := reclaimUnnamed(ctx, session.provider, session.ledger, pointer, pruned, progress); err != nil {
 			return err
 		}
-		if err := session.forgetRemovedReleases(ctx, pointer, pruned.ReleaseRemovals); err != nil {
+		if err := session.forgetRemovedDeployments(ctx, pointer, pruned.DeploymentRemovals); err != nil {
 			return err
 		}
 		for _, line := range pruneLines(pruned) {
