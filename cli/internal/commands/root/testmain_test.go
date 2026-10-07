@@ -32,6 +32,9 @@ func TestMain(m *testing.M) {
 	if os.Getenv(procTreeModeEnvVar) != "" {
 		os.Exit(runProcessTreeSubprocess())
 	}
+	if parent := os.Getenv(hardExitParentEnvVar); parent != "" {
+		os.Exit(runHardExitTeardown(parent))
+	}
 	if args, ok := os.LookupEnv(rootArgsEnvVar); ok {
 		os.Exit(runRootSubprocess(strings.Split(args, " ")))
 	}

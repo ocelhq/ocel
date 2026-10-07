@@ -11,10 +11,19 @@ import (
 	"sync"
 )
 
-var written = struct {
-	mu   sync.Mutex
-	dirs map[string]bool
-}{dirs: map[string]bool{}}
+type writtenDirs struct {
+	mu      sync.Mutex
+	dirs    map[string]bool
+	removed bool
+}
+
+func newWrittenDirs() *writtenDirs {
+	return &writtenDirs{dirs: map[string]bool{}}
+}
+
+var written = newWrittenDirs()
+
+var errRemoved = errors.New("the process removed its live dirs and creates no more")
 
 func RefuseUnnamableKeys(values map[string]string) error {
 	for _, key := range slices.Sorted(maps.Keys(values)) {
@@ -42,11 +51,17 @@ func Write(parent, pattern string, values map[string]string) (string, error) {
 }
 
 func Create(parent, pattern string) (string, error) {
+	recorded := written
+	recorded.mu.Lock()
+	defer recorded.mu.Unlock()
+	if recorded.removed {
+		return "", fmt.Errorf("create a live dir: %w", errRemoved)
+	}
 	dir, err := os.MkdirTemp(parent, pattern)
 	if err != nil {
 		return "", fmt.Errorf("create a live dir: %w", err)
 	}
-	record(dir)
+	recorded.dirs[dir] = true
 	return dir, nil
 }
 
@@ -54,27 +69,24 @@ func Remove(dir string) error {
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("remove the live dir %s: %w", dir, err)
 	}
-	written.mu.Lock()
-	defer written.mu.Unlock()
-	for recorded := range written.dirs {
-		if within, err := filepath.Rel(dir, recorded); err == nil && filepath.IsLocal(within) {
-			delete(written.dirs, recorded)
+	recorded := written
+	recorded.mu.Lock()
+	defer recorded.mu.Unlock()
+	for kept := range recorded.dirs {
+		if within, err := filepath.Rel(dir, kept); err == nil && filepath.IsLocal(within) {
+			delete(recorded.dirs, kept)
 		}
 	}
 	return nil
 }
 
 func RemoveRecorded() {
-	written.mu.Lock()
-	dirs := slices.Collect(maps.Keys(written.dirs))
-	written.mu.Unlock()
+	recorded := written
+	recorded.mu.Lock()
+	recorded.removed = true
+	dirs := slices.Collect(maps.Keys(recorded.dirs))
+	recorded.mu.Unlock()
 	for _, dir := range dirs {
 		_ = Remove(dir)
 	}
-}
-
-func record(dir string) {
-	written.mu.Lock()
-	defer written.mu.Unlock()
-	written.dirs[dir] = true
 }
