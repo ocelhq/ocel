@@ -81,6 +81,7 @@ func TestAWriteThatFailsPartWayLeavesNoValueOnDisk(t *testing.T) {
 }
 
 func TestRemoveRecordedRemovesEveryDirWrittenAndNotYetRemoved(t *testing.T) {
+	recordFresh(t)
 	parent := t.TempDir()
 	kept, err := Write(parent, "ocel-live-", map[string]string{"KEY": "value"})
 	if err != nil {
@@ -98,9 +99,48 @@ func TestRemoveRecordedRemovesEveryDirWrittenAndNotYetRemoved(t *testing.T) {
 
 	for _, dir := range []string{kept, removed} {
 		if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("stat %s after RemoveAll: err = %v, want it gone", dir, err)
+			t.Errorf("stat %s after RemoveRecorded: err = %v, want it gone", dir, err)
 		}
 	}
+}
+
+func TestAWriteOnceTheRecordedDirsAreRemovedCreatesNothing(t *testing.T) {
+	recordFresh(t)
+	parent := t.TempDir()
+
+	RemoveRecorded()
+	_, err := Write(parent, "ocel-live-", map[string]string{"KEY": "value"})
+
+	if err == nil {
+		t.Error("Write err = nil, want a refusal once the process removed its live dirs")
+	}
+	if entries, _ := os.ReadDir(parent); len(entries) > 0 {
+		t.Errorf("Write left %d entries under %s, want nothing created after the removal", len(entries), parent)
+	}
+}
+
+func TestRemoveRecordedRemovesADirWrittenWhileItRuns(t *testing.T) {
+	recordFresh(t)
+	parent := t.TempDir()
+
+	written := make(chan string)
+	go func() {
+		dir, _ := Write(parent, "ocel-live-", map[string]string{"KEY": "value"})
+		written <- dir
+	}()
+	RemoveRecorded()
+	<-written
+
+	if entries, _ := os.ReadDir(parent); len(entries) > 0 {
+		t.Errorf("%d entries are left under %s after a write raced the removal, want none", len(entries), parent)
+	}
+}
+
+func recordFresh(t *testing.T) {
+	t.Helper()
+	kept := written
+	written = newWrittenDirs()
+	t.Cleanup(func() { written = kept })
 }
 
 func TestRemovingADirRemovesTheDirsWrittenInsideIt(t *testing.T) {
