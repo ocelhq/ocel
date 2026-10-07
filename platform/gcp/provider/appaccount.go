@@ -123,11 +123,15 @@ func (c *clients) refreshGrants(ctx context.Context, tier environment.Tier, memb
 }
 
 func (c *clients) createAppAccount(ctx context.Context, tier environment.Tier, project, app string) error {
+	return c.createAccount(ctx, c.AppAccount(tier, project, app),
+		clipped("ocel "+project+"/"+app+" ("+string(tier)+")", maxDisplayNameBytes), appAccountDescription(tier, project, app))
+}
+
+func (c *clients) createAccount(ctx context.Context, account, displayName, description string) error {
 	service, err := c.Accounts()
 	if err != nil {
 		return err
 	}
-	account := c.AppAccount(tier, project, app)
 	_, err = attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(c, account)).Context(ctx).Do)
 	if err == nil {
 		return nil
@@ -136,11 +140,8 @@ func (c *clients) createAppAccount(ctx context.Context, tier environment.Tier, p
 		return explainMissingGrant(fmt.Errorf("read the %s service account: %w", account, err), c.AppAccountsRolePath())
 	}
 	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+c.project, &iam.CreateServiceAccountRequest{
-		AccountId: account,
-		ServiceAccount: &iam.ServiceAccount{
-			DisplayName: clipped("ocel "+project+"/"+app+" ("+string(tier)+")", maxDisplayNameBytes),
-			Description: appAccountDescription(tier, project, app),
-		},
+		AccountId:      account,
+		ServiceAccount: &iam.ServiceAccount{DisplayName: displayName, Description: description},
 	}).Context(ctx).Do)
 	switch {
 	case err == nil, taken(err):
@@ -151,6 +152,20 @@ func (c *clients) createAppAccount(ctx context.Context, tier environment.Tier, p
 				"Delete accounts nothing uses or raise the quota in the console, then deploy again", c.project)
 	}
 	return explainMissingGrant(fmt.Errorf("create the %s service account: %w", account, err), c.AppAccountsRolePath())
+}
+
+func (c *clients) deleteAccount(ctx context.Context, id string) (bool, error) {
+	service, err := c.Accounts()
+	if err != nil {
+		return false, err
+	}
+	if _, err := attempted(ctx, service.Projects.ServiceAccounts.Delete(accountPath(c, id)).Context(ctx).Do); err != nil {
+		if absent(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("delete the %s service account: %w", id, err)
+	}
+	return true, nil
 }
 
 func appAccountDescription(tier environment.Tier, project, app string) string {

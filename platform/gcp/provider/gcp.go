@@ -131,6 +131,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		OpenDirectImages:      p.OpenDirectImages,
 		CheckBucket:           s3store.Check,
 		ProveIdentity:         ports.ProveIdentity,
+		ForwardPorts:          p.ForwardPorts,
 		Cost:                  &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 		FunctionImages:        &provider.FunctionImageHooks{ResolveBase: p.ResolveFunctionBase, ReadRuntime: p.ReadFunctionRuntime},
 		ReadNextServerRuntime: p.ReadNextServerRuntime,

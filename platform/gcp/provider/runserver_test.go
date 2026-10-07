@@ -182,6 +182,7 @@ func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
 		InvokerIamDisabled: desired.InvokerIamDisabled,
 		IapEnabled:         desired.IapEnabled,
 		Labels:             desired.Labels,
+		CustomAudiences:    desired.CustomAudiences,
 		Uri:                "https://" + name + ".run.app",
 	}
 	if failed := s.untagUnderRelease(desired.Template); failed != nil {
@@ -246,6 +247,7 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 	s.service.InvokerIamDisabled = desired.InvokerIamDisabled
 	s.service.IapEnabled = desired.IapEnabled
 	s.service.Labels = desired.Labels
+	s.service.CustomAudiences = desired.CustomAudiences
 	s.service.Annotations = desired.Annotations
 	s.writes++
 	s.service.Etag = "etag-" + strconv.Itoa(s.writes)

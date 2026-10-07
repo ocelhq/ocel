@@ -264,6 +264,20 @@ func (n Names) EnvSourceSyncAccountEmail(tier environment.Tier) string {
 	return n.EnvSourceSyncAccount(tier) + "@" + n.project + accountDomain
 }
 
+const bastionName = "bastion"
+
+func (n Names) Bastion(tier environment.Tier) string {
+	return string(n.namespace) + "-" + string(tier) + "-" + bastionName
+}
+
+func (n Names) BastionAccount(tier environment.Tier) string {
+	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), bastionName)
+}
+
+func (n Names) BastionAccountEmail(tier environment.Tier) string {
+	return n.BastionAccount(tier) + "@" + n.project + accountDomain
+}
+
 const connectorSuffix = "-connector"
 
 func (n Names) Connector() string { return string(n.namespace) + connectorSuffix }

@@ -67,6 +67,7 @@ type serving struct {
 	iap            bool
 	instanceBilled bool
 	labels         map[string]string
+	audiences      []string
 
 	opensOnPromotion bool
 }
@@ -190,6 +191,7 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 		IapEnabled:         s.iap && !s.opensOnPromotion,
 		ForceSendFields:    []string{"InvokerIamDisabled", "IapEnabled"},
 		Labels:             maps.Clone(s.labels),
+		CustomAudiences:    slices.Clone(s.audiences),
 	}
 	opening := ""
 	switch {
