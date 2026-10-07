@@ -40,8 +40,9 @@ type MissingBindingError struct {
 func (e *MissingBindingError) Error() string {
 	return fmt.Sprintf(
 		"%s is not delivered to this process: `ocel dev` delivers it locally and `ocel deploy` "+
-			"to the deployed app, but a build gets no bindings, so code that runs while building, "+
-			"such as prerendering a page, cannot use the resource",
+			"to the deployed app, and a build gets it only from an `ocel deploy` whose provider forwards "+
+			"a port to the resource, so code that runs while building, such as prerendering a page, "+
+			"cannot use it under `ocel build`",
 		e.Key,
 	)
 }

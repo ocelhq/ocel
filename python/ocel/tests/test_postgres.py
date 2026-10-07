@@ -71,9 +71,10 @@ def test_a_database_with_no_binding_delivered_names_the_commands_that_deliver_on
         _ = postgres("main").connection_string
     assert str(raised.value) == (
         "OCEL_RESOURCE_POSTGRES_main is not delivered to this process: "
-        "`ocel dev` delivers it locally and `ocel deploy` to the deployed app, but a build "
-        "gets no bindings, so code that runs while building, such as prerendering a page, "
-        "cannot use the resource"
+        "`ocel dev` delivers it locally and `ocel deploy` to the deployed app, and a build "
+        "gets it only from an `ocel deploy` whose provider forwards a port to the resource, "
+        "so code that runs while building, such as prerendering a page, cannot use it under "
+        "`ocel build`"
     )
 
 
