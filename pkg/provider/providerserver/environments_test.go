@@ -433,7 +433,7 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	client, vendor := contractServed(t, "1.0.0")
 	deployed(t, vendor, environment.TierPreview, "shop")
 	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1", "p2")
-	outlived := naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7)))
+	outlived := naming.AppStack("pr-7", "web", releaseOf(t, releaseFor(7)))
 	seedEnvironment(t, vendor, "shop", outlived, naming.InfraStack("pr-7"))
 	recordLabelledEnvironment(t, vendor, "pr-7", "pr-123", stackrecords.LifecyclePersistent)
 
@@ -468,7 +468,7 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 		t.Errorf("reading %s after the removal = %v, want it forgotten with the environment it described", name, err)
 	}
 
-	release := releaseOf(t, buildIdentity(1))
+	release := releaseOf(t, releaseFor(1))
 	inOrder(t, vendor.Journal(),
 		"destroy "+naming.AppStack("pr-7", "web", release).String(),
 		"remove-prefix "+(naming.Coordinate{Project: "shop", Env: "pr-7", App: "web", Release: release}).StoragePrefix(),
@@ -529,11 +529,11 @@ func inOrder(t *testing.T, journal []string, want ...string) {
 func releaseOf(t *testing.T, identity string) naming.ReleaseToken {
 	t.Helper()
 
-	build, err := provider.ParseBuild(identity)
+	build, err := provider.ParseRelease(identity)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return build.Release()
+	return build.Token()
 }
 
 type sweeper struct {
@@ -580,14 +580,14 @@ func (s *sweeper) swept() []string {
 func seedContainerStack(t *testing.T, p *fake.Provider, slug, pointer, app, image string) naming.StackName {
 	t.Helper()
 
-	release := releaseOf(t, buildIdentity(1))
+	release := releaseOf(t, releaseFor(1))
 	name := naming.AppStack(pointer, app, release)
 	if err := stackrecords.Write(context.Background(), p.KeyValues(), environment.TierPreview, slug, name, stackrecords.Stack{
-		Kind:       provider.StackApp,
-		App:        app,
-		Release:    release.String(),
-		Build:      buildIdentity(1),
-		Containers: []provider.AppContainer{{Name: app, Physical: name.String() + "-" + app, Image: image}},
+		Kind:         provider.StackApp,
+		App:          app,
+		ReleaseToken: release.String(),
+		Release:      releaseFor(1),
+		Containers:   []provider.AppContainer{{Name: app, Physical: name.String() + "-" + app, Image: image}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -650,7 +650,7 @@ func TestAStackRecordThatWillNotBeForgottenStillHasItsArtifactsReclaimed(t *test
 		t.Fatal("a teardown whose stack record would not be forgotten reported success")
 	}
 
-	prefix := (naming.Coordinate{Project: "shop", Env: "pr-7", App: "web", Release: releaseOf(t, buildIdentity(1))}).StoragePrefix()
+	prefix := (naming.Coordinate{Project: "shop", Env: "pr-7", App: "web", Release: releaseOf(t, releaseFor(1))}).StoragePrefix()
 	journal := vendor.Journal()
 	if len(journal) == 0 {
 		t.Fatal("the teardown reached the provider not at all, so the reclaim below is asserted over an empty run")
@@ -729,7 +729,7 @@ func TestRemovingAPreviewSaysWhichPointerAndStacksItRemovesAndHowFarAlongItIs(t 
 	client, vendor := contractServed(t, "1.0.0")
 	deployed(t, vendor, environment.TierPreview, "shop")
 	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1", "p2")
-	seedEnvironment(t, vendor, "shop", naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7))), naming.InfraStack("pr-7"))
+	seedEnvironment(t, vendor, "shop", naming.AppStack("pr-7", "web", releaseOf(t, releaseFor(7))), naming.InfraStack("pr-7"))
 
 	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
 		Slug:        "shop",
@@ -748,13 +748,13 @@ func TestRemovingAPreviewSaysWhichPointerAndStacksItRemovesAndHowFarAlongItIs(t 
 		"Removing the routing pointer of preview pr-7",
 		"Destroying stack " + naming.InfraStack("pr-7").String() + " (2 of 2)",
 		"Reclaimed promotions p2 and p1",
-		"Destroying the stack of web build 00000000000000000000000000000001~000000000001 (1 of 2)",
+		"Destroying the stack of web release 00000000000000000000000000000001~000000000001 (1 of 2)",
 	} {
 		if !slices.Contains(said, want) {
 			t.Errorf("the removal said %q, want %q among it", said, want)
 		}
 	}
-	web := "Destroying stack " + naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7))).String() + " (1 of 2)"
+	web := "Destroying stack " + naming.AppStack("pr-7", "web", releaseOf(t, releaseFor(7))).String() + " (1 of 2)"
 	if !slices.Contains(said, web) {
 		t.Errorf("the removal said %q, want %q among it", said, web)
 	}

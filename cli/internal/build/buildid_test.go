@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
-func TestAFreshBuildSupersedesTheDeploymentIDTheLastOneRecorded(t *testing.T) {
+func TestAFreshBuildSupersedesTheBuildIDTheLastOneRecorded(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -22,23 +22,23 @@ func TestAFreshBuildSupersedesTheDeploymentIDTheLastOneRecorded(t *testing.T) {
 	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	first, err := DeploymentID(root, "web")
+	first, err := BuildID(root, "web")
 	if err != nil {
-		t.Fatalf("DeploymentID: %v", err)
+		t.Fatalf("BuildID: %v", err)
 	}
 	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	second, err := DeploymentID(root, "web")
+	second, err := BuildID(root, "web")
 	if err != nil {
-		t.Fatalf("DeploymentID: %v", err)
+		t.Fatalf("BuildID: %v", err)
 	}
 	if first == second {
 		t.Errorf("both builds recorded %q, want each build its own id", first)
 	}
 }
 
-func TestDeploymentID(t *testing.T) {
+func TestBuildID(t *testing.T) {
 	t.Parallel()
 
 	t.Run("an app with no id points at ocel build", func(t *testing.T) {
@@ -48,15 +48,15 @@ func TestDeploymentID(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(root, statedir.Name, "output", "apps", "web"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := writeDeploymentID(root, "web", "d1a2b3c4d5e6f708192a3b4c5d6e7f80"); err != nil {
+		if err := writeBuildID(root, "web", "d1a2b3c4d5e6f708192a3b4c5d6e7f80"); err != nil {
 			t.Fatal(err)
 		}
-		_, err := DeploymentID(root, "admin")
+		_, err := BuildID(root, "admin")
 		if err == nil || !strings.Contains(err.Error(), "ocel build") {
-			t.Errorf("DeploymentID err = %v, want it to point at `ocel build`", err)
+			t.Errorf("BuildID err = %v, want it to point at `ocel build`", err)
 		}
 		if err == nil || !strings.Contains(err.Error(), "admin") {
-			t.Errorf("DeploymentID err = %v, want it to name the app", err)
+			t.Errorf("BuildID err = %v, want it to name the app", err)
 		}
 	})
 
@@ -74,12 +74,12 @@ func TestDeploymentID(t *testing.T) {
 			"d1a2b3c4d5e6f708192a3b4c5d6e7f80 extra",
 		} {
 			root := t.TempDir()
-			if err := writeDeploymentID(root, "web", recorded); err != nil {
+			if err := writeBuildID(root, "web", recorded); err != nil {
 				t.Fatal(err)
 			}
-			_, err := DeploymentID(root, "web")
+			_, err := BuildID(root, "web")
 			if err == nil || !strings.Contains(err.Error(), "ocel build") {
-				t.Errorf("DeploymentID with %q recorded: err = %v, want it to point at `ocel build`", recorded, err)
+				t.Errorf("BuildID with %q recorded: err = %v, want it to point at `ocel build`", recorded, err)
 			}
 		}
 	})
@@ -88,19 +88,19 @@ func TestDeploymentID(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		minted, err := mintDeploymentID()
+		minted, err := mintBuildID()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := writeDeploymentID(root, "web", minted); err != nil {
+		if err := writeBuildID(root, "web", minted); err != nil {
 			t.Fatal(err)
 		}
-		got, err := DeploymentID(root, "web")
+		got, err := BuildID(root, "web")
 		if err != nil {
-			t.Fatalf("DeploymentID: %v", err)
+			t.Fatalf("BuildID: %v", err)
 		}
 		if got != minted {
-			t.Errorf("DeploymentID = %q, want %q", got, minted)
+			t.Errorf("BuildID = %q, want %q", got, minted)
 		}
 	})
 }

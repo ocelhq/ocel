@@ -136,7 +136,7 @@ func TestANewReleaseTakesDownTheWorkersItReplacesAndTheOnesNoLongerDeclared(t *t
 	retired, _ := recordedWorker(t, store, "ledger")
 
 	next := aWorkerApp()
-	next.Deployment = "fedcba9876543210fedcba9876543210"
+	next.BuildID = "fedcba9876543210fedcba9876543210"
 	next.Workers = next.Workers[:1]
 	before := len(machine.commands())
 	if _, err := p.ProvisionContainers(context.Background(), aStack(t, next), nil); err != nil {
@@ -167,9 +167,9 @@ func TestRemovingARetiredReleaseLeavesTheWorkersANewerOneRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	next := aWorkerApp()
-	next.Deployment = "fedcba9876543210fedcba9876543210"
+	next.BuildID = "fedcba9876543210fedcba9876543210"
 	second := aStack(t, next)
-	second.Ref.Name.Release = naming.NewReleaseToken(next.Deployment, "")
+	second.Ref.Name.Release = naming.NewReleaseToken(next.BuildID, "")
 	if _, err := p.ProvisionContainers(context.Background(), second, nil); err != nil {
 		t.Fatal(err)
 	}

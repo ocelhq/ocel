@@ -38,7 +38,7 @@ export interface EdgeVariables {
   env?: Record<string, string>;
   envelope?: string;
   envelopeKey?: string;
-  buildFingerprint?: string;
+  releaseFingerprint?: string;
 }
 
 const BUNDLE_FILE = "bundle.json";
@@ -132,7 +132,7 @@ export function createEdgeInvoker(
     `edge:${JSON.stringify([
       workers.id,
       cache?.scope ?? null,
-      variables?.buildFingerprint ?? null,
+      variables?.releaseFingerprint ?? null,
       kind,
     ])}`;
 

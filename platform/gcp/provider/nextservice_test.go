@@ -34,12 +34,12 @@ func nextSpec() provider.StackSpec {
 		},
 		Kind: provider.StackApp,
 		App: &provider.AppSpec{
-			App:        "web",
-			Framework:  buildoutput.FrameworkNext,
-			Entry:      "bundle-0",
-			Deployment: "dpl_7",
-			Compute:    provider.ComputeServerless,
-			Router:     "cloudrun",
+			App:       "web",
+			Framework: buildoutput.FrameworkNext,
+			Entry:     "bundle-0",
+			BuildID:   "dpl_7",
+			Compute:   provider.ComputeServerless,
+			Router:    "cloudrun",
 			Functions: []provider.FunctionSpec{{
 				Name:      "bundle-0",
 				Route:     "bundle-0",
@@ -134,7 +134,7 @@ func TestANextServiceThatRoutesItsOwnRequestsIsToldWhatItRoutesBy(t *testing.T) 
 		"OCEL_ASSET_PREFIX":     "prod/shop/web/r1/assets",
 		"OCEL_SLUG":             "shop",
 		"OCEL_APP":              "web",
-		"OCEL_DEPLOYMENT_ID":    "dpl_7",
+		"OCEL_BUILD_ID":         "dpl_7",
 		"OCEL_ROUTER_KIND":      "cloudrun",
 		"OCEL_STATIC_DIR":       images.StaticRoot,
 	} {

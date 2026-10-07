@@ -22,21 +22,21 @@ func edgeAppTree(t *testing.T) string {
 	})
 }
 
-func edgeBundleKeyFor(app, deploymentID string) string {
-	return storagePrefixFor("prod", "proj", app, deploymentID) + "edge/bundle.json"
+func edgeBundleKeyFor(app, buildID string) string {
+	return storagePrefixFor("prod", "proj", app, buildID) + "edge/bundle.json"
 }
 
 func TestAppEdgeBundleKey(t *testing.T) {
-	coord := storageCoordinate("prod", "proj", "web", deployedAs(testDeploymentID).Release())
+	coord := storageCoordinate("prod", "proj", "web", deployedAs(testBuildID).Token())
 	got := appEdgeBundleKey(coord)
-	want := edgeBundleKeyFor("web", testDeploymentID)
+	want := edgeBundleKeyFor("web", testBuildID)
 	if got != want {
 		t.Errorf("appEdgeBundleKey = %q, want %q", got, want)
 	}
 	if !strings.HasPrefix(got, appEdgePrefix(coord)+"/") {
 		t.Errorf("key %q must live under the release's own prune-able prefix", got)
 	}
-	if other := appEdgeBundleKey(storageCoordinate("prod", "proj", "web", deployedAs("d2").Release())); other == got {
+	if other := appEdgeBundleKey(storageCoordinate("prod", "proj", "web", deployedAs("d2").Token())); other == got {
 		t.Error("two releases of one app must not share a bundle key")
 	}
 }
@@ -57,7 +57,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 
 		got := append([]string(nil), store.puts...)
 		slices.Sort(got)
-		want := []string{edgeBundleKeyFor("web", testDeploymentID)}
+		want := []string{edgeBundleKeyFor("web", testBuildID)}
 		if len(got) != len(want) || got[0] != want[0] {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
 		}
@@ -76,7 +76,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 
 	t.Run("replaces the object already under the key", func(t *testing.T) {
 		t.Parallel()
-		key := edgeBundleKeyFor("web", testDeploymentID)
+		key := edgeBundleKeyFor("web", testBuildID)
 		store := &fakeArtifactStore{exists: map[string]bool{key: true}}
 		cfg := Config{
 			ArtifactRoot: writeTree(t, map[string]string{
@@ -123,10 +123,10 @@ func TestUploadEdgeBundles(t *testing.T) {
 		for _, key := range store.puts {
 			distinct[key] = true
 		}
-		if len(store.puts) != 2 || len(distinct) != 1 || !distinct[edgeBundleKeyFor("web", testDeploymentID)] {
-			t.Fatalf("uploaded keys = %v, want the same %q twice", store.puts, edgeBundleKeyFor("web", testDeploymentID))
+		if len(store.puts) != 2 || len(distinct) != 1 || !distinct[edgeBundleKeyFor("web", testBuildID)] {
+			t.Fatalf("uploaded keys = %v, want the same %q twice", store.puts, edgeBundleKeyFor("web", testBuildID))
 		}
-		if body := store.putBodies[edgeBundleKeyFor("web", testDeploymentID)]; body != `{"version":1,"mainModule":"main.js"}` {
+		if body := store.putBodies[edgeBundleKeyFor("web", testBuildID)]; body != `{"version":1,"mainModule":"main.js"}` {
 			t.Errorf("object after the rotation = %q, want the build's bundle unchanged", body)
 		}
 	})
@@ -197,8 +197,8 @@ func edgeBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBuil
 	return builds
 }
 
-func edgeSealedKeyFor(app, deploymentID string) string {
-	return storagePrefixFor("prod", "proj", app, deploymentID) + "edge/sealed.bin"
+func edgeSealedKeyFor(app, buildID string) string {
+	return storagePrefixFor("prod", "proj", app, buildID) + "edge/sealed.bin"
 }
 
 func edgeStoreConfig(t *testing.T, store *fakeArtifactStore) Config {
@@ -227,12 +227,12 @@ func TestUploadEdgeSeal(t *testing.T) {
 
 		got := append([]string(nil), store.puts...)
 		slices.Sort(got)
-		want := []string{edgeBundleKeyFor("web", testDeploymentID), edgeSealedKeyFor("web", testDeploymentID)}
+		want := []string{edgeBundleKeyFor("web", testBuildID), edgeSealedKeyFor("web", testBuildID)}
 		slices.Sort(want)
 		if !slices.Equal(got, want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
 		}
-		sealed := edgeSealedKeyFor("web", testDeploymentID)
+		sealed := edgeSealedKeyFor("web", testBuildID)
 		if ct := store.contentTypes[sealed]; ct != "application/octet-stream" {
 			t.Errorf("content-type = %q, want application/octet-stream", ct)
 		}
@@ -244,7 +244,7 @@ func TestUploadEdgeSeal(t *testing.T) {
 				t.Errorf("object at %q discloses a sensitive value", key)
 			}
 		}
-		if body := store.putBodies[edgeBundleKeyFor("web", testDeploymentID)]; body != `{"version":1,"mainModule":"main.js"}` {
+		if body := store.putBodies[edgeBundleKeyFor("web", testBuildID)]; body != `{"version":1,"mainModule":"main.js"}` {
 			t.Errorf("bundle body = %q, want the automation's output verbatim", body)
 		}
 	})
@@ -258,7 +258,7 @@ func TestUploadEdgeSeal(t *testing.T) {
 		if err := uploadEdgeBundles(context.Background(), cfg, manifest, edgeBuilds(t, cfg, manifest)); err != nil {
 			t.Fatalf("uploadEdgeBundles: %v", err)
 		}
-		want := edgeBundleKeyFor("web", testDeploymentID)
+		want := edgeBundleKeyFor("web", testBuildID)
 		if len(store.puts) != 1 || store.puts[0] != want {
 			t.Fatalf("uploaded keys = %v, want the bundle alone at %q", store.puts, want)
 		}

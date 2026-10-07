@@ -15,12 +15,12 @@ import (
 )
 
 type Stack struct {
-	Kind      provider.StackKind  `json:"kind"`
-	App       string              `json:"app,omitempty"`
-	Release   string              `json:"release,omitempty"`
-	Build     string              `json:"identity,omitempty"`
-	Bindings  []provider.Binding  `json:"bindings,omitempty"`
-	Functions []provider.Function `json:"functions,omitempty"`
+	Kind         provider.StackKind  `json:"kind"`
+	App          string              `json:"app,omitempty"`
+	ReleaseToken string              `json:"releaseToken,omitempty"`
+	Release      string              `json:"release,omitempty"`
+	Bindings     []provider.Binding  `json:"bindings,omitempty"`
+	Functions    []provider.Function `json:"functions,omitempty"`
 
 	Containers []provider.AppContainer `json:"containers,omitempty"`
 

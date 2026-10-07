@@ -581,63 +581,63 @@ func TestReadCacheStore(t *testing.T) {
 	})
 }
 
-func offeredDeploymentsStore() map[string]string {
+func offeredReleasesStore() map[string]string {
 	return map[string]string{
-		edge.OfferKeyStoreEndpoint:            "https://ocel-deployments-store.acct.workers.dev",
-		edge.OfferKeyStoreScriptName:          "ocel-deployments-store",
+		edge.OfferKeyStoreEndpoint:            "https://ocel-releases-store.acct.workers.dev",
+		edge.OfferKeyStoreScriptName:          "ocel-releases-store",
 		edge.OfferKeyStoreBootstrapCredential: "cred-prod",
 	}
 }
 
-func TestDeploymentsStoreParamFor(t *testing.T) {
+func TestReleasesStoreParamFor(t *testing.T) {
 	for _, tc := range []struct {
 		tier environment.Tier
 		want string
 	}{
-		{environment.TierProduction, "/ocel/edge/fake/deployments-store"},
-		{environment.TierPreview, "/ocel/edge/fake-preview/deployments-store"},
+		{environment.TierProduction, "/ocel/edge/fake/releases-store"},
+		{environment.TierPreview, "/ocel/edge/fake-preview/releases-store"},
 	} {
-		got, err := DeploymentsStoreParamFor(defaultNamespace, tc.tier, "fake")
+		got, err := ReleasesStoreParamFor(defaultNamespace, tc.tier, "fake")
 		if err != nil {
-			t.Fatalf("DeploymentsStoreParamFor(defaultNamespace, %q): %v", tc.tier, err)
+			t.Fatalf("ReleasesStoreParamFor(defaultNamespace, %q): %v", tc.tier, err)
 		}
 		if got != tc.want {
-			t.Errorf("DeploymentsStoreParamFor(defaultNamespace, %q) = %q, want %q", tc.tier, got, tc.want)
+			t.Errorf("ReleasesStoreParamFor(defaultNamespace, %q) = %q, want %q", tc.tier, got, tc.want)
 		}
 	}
-	if _, err := DeploymentsStoreParamFor(defaultNamespace, "nonsense", "fake"); err == nil {
-		t.Error("DeploymentsStoreParamFor(defaultNamespace, unknown tier) = nil error, want an error")
+	if _, err := ReleasesStoreParamFor(defaultNamespace, "nonsense", "fake"); err == nil {
+		t.Error("ReleasesStoreParamFor(defaultNamespace, unknown tier) = nil error, want an error")
 	}
-	if _, err := DeploymentsStoreParamFor(defaultNamespace, environment.TierProduction, ""); err == nil {
-		t.Error("DeploymentsStoreParamFor(defaultNamespace, no kind) = nil error, want an error: every edge parameter is namespaced by the kind that owns it")
+	if _, err := ReleasesStoreParamFor(defaultNamespace, environment.TierProduction, ""); err == nil {
+		t.Error("ReleasesStoreParamFor(defaultNamespace, no kind) = nil error, want an error: every edge parameter is namespaced by the kind that owns it")
 	}
 }
 
-func TestAdoptDeploymentsStore(t *testing.T) {
+func TestAdoptReleasesStore(t *testing.T) {
 	t.Run("preview stores separately", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		preview := offeredDeploymentsStore()
-		preview[edge.OfferKeyStoreEndpoint] = "https://ocel-deployments-store-preview.acct.workers.dev"
-		preview[edge.OfferKeyStoreScriptName] = "ocel-deployments-store-preview"
+		preview := offeredReleasesStore()
+		preview[edge.OfferKeyStoreEndpoint] = "https://ocel-releases-store-preview.acct.workers.dev"
+		preview[edge.OfferKeyStoreScriptName] = "ocel-releases-store-preview"
 		preview[edge.OfferKeyStoreBootstrapCredential] = "cred-preview"
 
-		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredDeploymentsStore()); err != nil {
+		if err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredReleasesStore()); err != nil {
 			t.Fatalf("production adopt: %v", err)
 		}
-		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake", preview); err != nil {
+		if err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake", preview); err != nil {
 			t.Fatalf("preview adopt: %v", err)
 		}
 
-		prod, err := ReadDeploymentsStoreFor(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
+		prod, err := ReadReleasesStoreFor(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
-			t.Fatalf("ReadDeploymentsStoreFor(production): %v", err)
+			t.Fatalf("ReadReleasesStoreFor(production): %v", err)
 		}
-		prev, err := ReadDeploymentsStoreFor(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake")
+		prev, err := ReadReleasesStoreFor(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake")
 		if err != nil {
-			t.Fatalf("ReadDeploymentsStoreFor(preview): %v", err)
+			t.Fatalf("ReadReleasesStoreFor(preview): %v", err)
 		}
-		wantProd := DeploymentsStore{Endpoint: "https://ocel-deployments-store.acct.workers.dev", ScriptName: "ocel-deployments-store", BootstrapCredential: "cred-prod"}
-		wantPrev := DeploymentsStore{Endpoint: "https://ocel-deployments-store-preview.acct.workers.dev", ScriptName: "ocel-deployments-store-preview", BootstrapCredential: "cred-preview"}
+		wantProd := ReleasesStore{Endpoint: "https://ocel-releases-store.acct.workers.dev", ScriptName: "ocel-releases-store", BootstrapCredential: "cred-prod"}
+		wantPrev := ReleasesStore{Endpoint: "https://ocel-releases-store-preview.acct.workers.dev", ScriptName: "ocel-releases-store-preview", BootstrapCredential: "cred-preview"}
 		if prod != wantProd {
 			t.Errorf("production store = %+v, want %+v", prod, wantProd)
 		}
@@ -647,45 +647,45 @@ func TestAdoptDeploymentsStore(t *testing.T) {
 	})
 }
 
-func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
+func TestAdoptReleasesStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 	t.Run("a stored credential survives a re-offer without one", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredDeploymentsStore()); err != nil {
+		if err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredReleasesStore()); err != nil {
 			t.Fatalf("first adopt: %v", err)
 		}
 
-		reoffer := offeredDeploymentsStore()
+		reoffer := offeredReleasesStore()
 		delete(reoffer, edge.OfferKeyStoreBootstrapCredential)
-		reoffer[edge.OfferKeyStoreEndpoint] = "https://ocel-deployments-store.acct.workers.dev/v2"
-		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", reoffer); err != nil {
+		reoffer[edge.OfferKeyStoreEndpoint] = "https://ocel-releases-store.acct.workers.dev/v2"
+		if err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", reoffer); err != nil {
 			t.Fatalf("second adopt: %v", err)
 		}
 
-		got, err := ReadDeploymentsStoreFor(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
+		got, err := ReadReleasesStoreFor(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
-			t.Fatalf("ReadDeploymentsStoreFor: %v", err)
+			t.Fatalf("ReadReleasesStoreFor: %v", err)
 		}
 		if got.BootstrapCredential != "cred-prod" {
 			t.Errorf("credential = %q, want the stored one kept where the edge offered none", got.BootstrapCredential)
 		}
-		if got.Endpoint != "https://ocel-deployments-store.acct.workers.dev/v2" {
+		if got.Endpoint != "https://ocel-releases-store.acct.workers.dev/v2" {
 			t.Errorf("endpoint = %q, want the reoffered coordinate", got.Endpoint)
 		}
 	})
 
 	t.Run("nothing on either side is a refusal, not an empty credential", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		offer := offeredDeploymentsStore()
+		offer := offeredReleasesStore()
 		delete(offer, edge.OfferKeyStoreBootstrapCredential)
 
-		err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
+		err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
 		if err == nil {
-			t.Fatal("adoptDeploymentsStore stored a credential-less store rather than refusing")
+			t.Fatal("adoptReleasesStore stored a credential-less store rather than refusing")
 		}
-		if !strings.Contains(err.Error(), "ocel-deployments-store") || !strings.Contains(err.Error(), namesFor(environment.TierProduction, "fake").deploymentsStoreParam) {
+		if !strings.Contains(err.Error(), "ocel-releases-store") || !strings.Contains(err.Error(), namesFor(environment.TierProduction, "fake").releasesStoreParam) {
 			t.Errorf("error = %v, want it to name the worker and the parameter that stores nothing", err)
 		}
-		if _, stored := ssmc.params[namesFor(environment.TierProduction, "fake").deploymentsStoreParam]; stored {
+		if _, stored := ssmc.params[namesFor(environment.TierProduction, "fake").releasesStoreParam]; stored {
 			t.Error("a credential-less store was written despite the refusal")
 		}
 	})
@@ -726,15 +726,15 @@ func TestAdoptISRWriterBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 	})
 }
 
-func TestReadDeploymentsStore(t *testing.T) {
+func TestReadReleasesStore(t *testing.T) {
 	t.Run("absent is not an error", func(t *testing.T) {
 		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-			got, err := ReadDeploymentsStoreFor(context.Background(), newFakeSSM(), defaultNamespace, tier, "fake")
+			got, err := ReadReleasesStoreFor(context.Background(), newFakeSSM(), defaultNamespace, tier, "fake")
 			if err != nil {
-				t.Fatalf("ReadDeploymentsStoreFor(%q) on an absent parameter: %v", tier, err)
+				t.Fatalf("ReadReleasesStoreFor(%q) on an absent parameter: %v", tier, err)
 			}
-			if got != (DeploymentsStore{}) {
-				t.Errorf("ReadDeploymentsStoreFor(%q) = %+v, want the zero store", tier, got)
+			if got != (ReleasesStore{}) {
+				t.Errorf("ReadReleasesStoreFor(%q) = %+v, want the zero store", tier, got)
 			}
 		}
 	})
@@ -892,9 +892,9 @@ func adoptions() []adoption {
 			return adoptCacheStore(ctx, ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
 		}
 	}
-	deploymentsStore := func(offer map[string]string) func(context.Context, SSMAPI) error {
+	releasesStore := func(offer map[string]string) func(context.Context, SSMAPI) error {
 		return func(ctx context.Context, ssmc SSMAPI) error {
-			return adoptDeploymentsStore(ctx, ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
+			return adoptReleasesStore(ctx, ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
 		}
 	}
 	isrWriter := func(offer map[string]string) func(context.Context, SSMAPI) error {
@@ -907,7 +907,7 @@ func adoptions() []adoption {
 	}
 	return []adoption{
 		{"the cache store", cacheStore(offeredStore()), cacheStore(without(offeredStore(), edge.OfferKeySecretAccessKey))},
-		{"the deployments store", deploymentsStore(offeredDeploymentsStore()), deploymentsStore(without(offeredDeploymentsStore(), edge.OfferKeyStoreBootstrapCredential))},
+		{"the releases store", releasesStore(offeredReleasesStore()), releasesStore(without(offeredReleasesStore(), edge.OfferKeyStoreBootstrapCredential))},
 		{"the ISR writer", isrWriter(offeredISRWriter("", "cred-prod")), isrWriter(offeredISRWriter("", ""))},
 		{"the edge values", edgeValues, edgeValues},
 	}

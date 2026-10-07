@@ -185,7 +185,7 @@ func newCommand() *command {
 		BuildApps:               build.Apps,
 		RefuseUnbuildableImages: build.RefuseUnbuildableImages,
 		ReadPrebuilt:            build.ReadPrebuilt,
-		DeploymentID:            build.DeploymentID,
+		BuildID:                 build.BuildID,
 		CollectDeclarations:     declaration.Collect,
 		OpenBrowser:             browser.OpenURL,
 		ServeVariableEditor:     env.ServeVariableEditor,

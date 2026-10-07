@@ -188,13 +188,13 @@ func assembleManifest(dependencies Dependencies, a assembly, resources []declara
 		return nil, err
 	}
 	return manifest.Assemble(manifest.Input{
-		Project:      cfg,
-		Tier:         a.declarations.Scope().Tier,
-		Resources:    resources,
-		Variables:    values,
-		Built:        built,
-		Usages:       usages,
-		DeploymentID: dependencies.DeploymentID,
+		Project:   cfg,
+		Tier:      a.declarations.Scope().Tier,
+		Resources: resources,
+		Variables: values,
+		Built:     built,
+		Usages:    usages,
+		BuildID:   dependencies.BuildID,
 
 		WorkerCeilings: a.workerCeilings,
 	})

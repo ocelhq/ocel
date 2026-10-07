@@ -29,7 +29,7 @@ export interface DispatchHost {
   functionUrls: Record<string, string>;
   slug: string;
   app: string;
-  deploymentId: string;
+  appBuildId: string;
   assetPrefix: string;
   assetBucket?: AssetBucket;
   imageOptimizerUrl?: string;
@@ -49,7 +49,7 @@ function newRouteDeps(
     },
     slug: host.slug,
     app: host.app,
-    deploymentId: host.deploymentId,
+    appBuildId: host.appBuildId,
     originFetch: host.originFetch,
     keepCacheTags: host.keepCacheTags,
     imageOrigin:
@@ -125,7 +125,7 @@ export function readDispatchHost(
     functionUrls: siblingFunctionUrls(env[functionUrlsVar]),
     slug: env.OCEL_SLUG ?? "",
     app: env.OCEL_APP ?? manifest.appName ?? "",
-    deploymentId: env.OCEL_DEPLOYMENT_ID ?? "",
+    appBuildId: env.OCEL_BUILD_ID ?? "",
     assetPrefix: env.OCEL_ASSET_PREFIX ?? "",
     ...(access.assetBucket ? { assetBucket: access.assetBucket } : {}),
     ...(env.OCEL_IMAGE_OPTIMIZER_URL ? { imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL } : {}),

@@ -309,7 +309,7 @@ describe("a cell run", () => {
         app: "web",
         urls: [`https://alias.${id}.test`],
         deploymentUrl: `https://${id}.test`,
-        deploymentId: id,
+        buildId: id,
       },
     ];
 

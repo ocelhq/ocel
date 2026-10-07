@@ -106,8 +106,8 @@ func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host e
 	service := pin.ResolveService(record)
 	if service == "" {
 		return Host{}, nil, refusal.Refuse(refusal.CodeInvalid,
-			"build %s of %s recorded no Cloud Run service it answers on, so %s has nothing to route to: re-deploy %s so its release records one",
-			record.Build, record.App, host.Hostname, record.App)
+			"release %s of %s recorded no Cloud Run service it answers on, so %s has nothing to route to: re-deploy %s so its release records one",
+			record.Release, record.App, host.Hostname, record.App)
 	}
 	served := Host{
 		App:     record.App,
@@ -126,7 +126,7 @@ func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host e
 	return served, tags, nil
 }
 
-func recordOf(records map[string]router.DeploymentRecord, app string) (router.DeploymentRecord, bool) {
+func recordOf(records map[string]router.ReleaseRecord, app string) (router.ReleaseRecord, bool) {
 	if app == "" && len(records) == 1 {
 		for _, record := range records {
 			return record, true
@@ -137,7 +137,7 @@ func recordOf(records map[string]router.DeploymentRecord, app string) (router.De
 			return records[name], true
 		}
 	}
-	return router.DeploymentRecord{}, false
+	return router.ReleaseRecord{}, false
 }
 
 func (s *stack) restoreRecordedRoutes(ctx context.Context, took, withdrawn []string) error {

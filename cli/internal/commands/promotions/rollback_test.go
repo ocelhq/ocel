@@ -50,7 +50,7 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 		if err != nil {
 			t.Fatal(err)
 		}
-		if active.PromotionID == "promo-2" || active.Builds["web"] != "build-1~fp1" {
+		if active.PromotionID == "promo-2" || active.Releases["web"] != "build-1~fp1" {
 			t.Errorf("production serves %+v after the rollback, want a new promotion of promo-1's builds", active)
 		}
 	})
@@ -385,7 +385,7 @@ func TestARollbackShowsTheWarningsTheProviderReturned(t *testing.T) {
 	project := clitest.SetUpProject(t)
 	kept := make([]router.Promotion, fake.KeptPromotions)
 	for i := range kept {
-		kept[i] = router.Promotion{PromotionID: fmt.Sprintf("p%02d", i), Ts: int64(i + 1), Builds: map[string]string{"web": fmt.Sprintf("build-%02d~fp%02d", i, i)}}
+		kept[i] = router.Promotion{PromotionID: fmt.Sprintf("p%02d", i), Ts: int64(i + 1), Releases: map[string]string{"web": fmt.Sprintf("build-%02d~fp%02d", i, i)}}
 	}
 	recordPromotions(t, project, kept...)
 	const warned = "the stack of an old build is still provisioned"

@@ -149,7 +149,7 @@ func TestAnAppWhoseComputeNoRouterOfItsEdgePairsWithIsRefusedBeforeAnythingIsDep
 	if result.GetSuccess() || !strings.Contains(message, "app web runs as serverless") {
 		t.Fatalf("Deploy() of a serverless app on a provider that pairs its edge for containers only = %q, want it refused naming web: no router of the edge moves its pointer", message)
 	}
-	if routed := p.Routers().(*fake.Routers).DataPlane(fake.RouterRelay).Builds("shop", environment.TierProduction, router.DefaultPointer); len(routed) != 0 {
+	if routed := p.Routers().(*fake.Routers).DataPlane(fake.RouterRelay).Releases("shop", environment.TierProduction, router.DefaultPointer); len(routed) != 0 {
 		t.Errorf("the relay edge routes %v after the refused deploy, want nothing", routed)
 	}
 }
@@ -178,12 +178,12 @@ func mixedServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.P
 	return client, p
 }
 
-func withContainerAdmin(req *contractv1.DeployRequest, deploymentID string) *contractv1.DeployRequest {
+func withContainerAdmin(req *contractv1.DeployRequest, buildID string) *contractv1.DeployRequest {
 	req = namingARegistry(req)
 	admin := &contractv1.ManifestApp{
-		Name:         "admin",
-		Framework:    &contractv1.Framework{Name: "next"},
-		DeploymentId: deploymentID,
+		Name:      "admin",
+		Framework: &contractv1.Framework{Name: "next"},
+		BuildId:   buildID,
 		Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
 			Image:           containerTestImage,
 			HealthCheckPath: "/",
@@ -199,7 +199,7 @@ func withContainerAdmin(req *contractv1.DeployRequest, deploymentID string) *con
 }
 
 func mixedRequest() *contractv1.DeployRequest {
-	return withContainerAdmin(deployRequest(), adminDeploymentID)
+	return withContainerAdmin(deployRequest(), adminBuildID)
 }
 
 func TestAProjectMixingServerlessAndContainerAppsPromotesEachThroughTheRouterItsComputePairsWith(t *testing.T) {
@@ -210,8 +210,8 @@ func TestAProjectMixingServerlessAndContainerAppsPromotesEachThroughTheRouterIts
 		t.Fatalf("Deploy() of a project mixing serverless and container apps = %q, want it served through one edge", first.GetError())
 	}
 	planes := p.Routers().(*fake.Routers)
-	relayed := planes.DataPlane(fake.RouterRelay).Builds("shop", environment.TierProduction, router.DefaultPointer)
-	direct := planes.DataPlane(fake.RouterDirect).Builds("shop", environment.TierProduction, router.DefaultPointer)
+	relayed := planes.DataPlane(fake.RouterRelay).Releases("shop", environment.TierProduction, router.DefaultPointer)
+	direct := planes.DataPlane(fake.RouterDirect).Releases("shop", environment.TierProduction, router.DefaultPointer)
 	if relayed["web"] == "" || relayed["admin"] != "" {
 		t.Errorf("the %s router serves %v, want web alone: admin runs as a container, which its edge pairs with %s", fake.RouterRelay, relayed, fake.RouterDirect)
 	}
@@ -231,11 +231,11 @@ func TestAProjectMixingServerlessAndContainerAppsPromotesEachThroughTheRouterIts
 	if second == nil || !second.GetSuccess() {
 		t.Fatalf("the second Deploy() = %q", second.GetError())
 	}
-	moved := planes.DataPlane(fake.RouterDirect).Builds("shop", environment.TierProduction, router.DefaultPointer)
+	moved := planes.DataPlane(fake.RouterDirect).Releases("shop", environment.TierProduction, router.DefaultPointer)
 	if moved["admin"] == direct["admin"] {
 		t.Errorf("the %s router still serves admin's build %q after a promote of a new one: a promote flips every router its apps pair with", fake.RouterDirect, moved["admin"])
 	}
-	if planes.DataPlane(fake.RouterRelay).Builds("shop", environment.TierProduction, router.DefaultPointer)["web"] == "" {
+	if planes.DataPlane(fake.RouterRelay).Releases("shop", environment.TierProduction, router.DefaultPointer)["web"] == "" {
 		t.Errorf("the %s router serves no build of web after the second promote", fake.RouterRelay)
 	}
 }
@@ -280,11 +280,11 @@ func TestADeployThatMovesAContainerAppsHostnameToAnotherContainerAppClaimsItForT
 	moved := mixedRequest()
 	admin := moved.Manifest.Apps[len(moved.Manifest.Apps)-1]
 	moved.Manifest.Apps = append(moved.Manifest.Apps, &contractv1.ManifestApp{
-		Name:         "ops",
-		Framework:    admin.Framework,
-		DeploymentId: "0123456789abcdef0123456789abcdef",
-		Artifact:     admin.Artifact,
-		Domains:      admin.Domains,
+		Name:      "ops",
+		Framework: admin.Framework,
+		BuildId:   "0123456789abcdef0123456789abcdef",
+		Artifact:  admin.Artifact,
+		Domains:   admin.Domains,
 	})
 	admin.Domains = nil
 	second, _ := deploy(t, client, moved)

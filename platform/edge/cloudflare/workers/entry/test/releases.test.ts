@@ -1,22 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  type DeploymentRecord,
-  type DeploymentsBinding,
-  type DeploymentsDeps,
   type PointerRecordResult,
   RECORD_CACHE_MAX,
-  resolveDeployment,
-} from "../src/deployments";
+  type ReleaseRecord,
+  type ReleasesBinding,
+  type ReleasesDeps,
+  resolveRelease,
+} from "../src/releases";
 import { answerEveryRecordWith } from "./origin-deps";
 
-function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
+function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
   return {
     app: "web",
     framework: "next",
-    identity: "deploy-1",
-    deploymentId: "deploy-1",
-    buildId: "build-1",
+    release: "deploy-1",
+    buildId: "deploy-1",
     routingManifest: { pathnames: [] },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
@@ -26,7 +25,7 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   };
 }
 
-type CountingBinding = DeploymentsBinding & {
+type CountingBinding = ReleasesBinding & {
   pointerRecordCalls: number;
   labelRecordCalls: number;
   lastReturnedRecord: boolean;
@@ -34,24 +33,24 @@ type CountingBinding = DeploymentsBinding & {
 };
 
 function createCountingBinding(opts: {
-  pointerIdentity: Record<string, string | undefined>;
-  records: Record<string, DeploymentRecord>;
+  pointerRelease: Record<string, string | undefined>;
+  records: Record<string, ReleaseRecord>;
 }): CountingBinding {
   const answer = (
     binding: CountingBinding,
     key: string,
     app: string,
-    knownIdentity?: string,
+    knownRelease?: string,
   ): PointerRecordResult => {
     if (binding.down) throw new Error("store unreachable");
-    const identity = opts.pointerIdentity[key];
+    const release = opts.pointerRelease[key];
     binding.lastReturnedRecord = false;
-    if (!identity) return { kind: "no-pointer" };
-    if (identity === knownIdentity) return { kind: "unchanged", identity };
-    const record = opts.records[`${app}/${identity}`];
-    if (!record) return { kind: "dangling", identity };
+    if (!release) return { kind: "no-pointer" };
+    if (release === knownRelease) return { kind: "unchanged", release };
+    const record = opts.records[`${app}/${release}`];
+    if (!record) return { kind: "dangling", release };
     binding.lastReturnedRecord = true;
-    return { kind: "record", identity, record };
+    return { kind: "record", release, record };
   };
   const binding: CountingBinding = {
     pointerRecordCalls: 0,
@@ -60,138 +59,138 @@ function createCountingBinding(opts: {
     down: false,
     async readPointerRecord(args) {
       binding.pointerRecordCalls++;
-      return answer(binding, `${args.app}/`, args.app ?? "", args.knownIdentity);
+      return answer(binding, `${args.app}/`, args.app ?? "", args.knownRelease);
     },
     async readLabelRecord(args) {
       binding.labelRecordCalls++;
-      return answer(binding, args.label, "web", args.knownIdentity);
+      return answer(binding, args.label, "web", args.knownRelease);
     },
   };
   return binding;
 }
 
 function deps(
-  binding: DeploymentsBinding,
+  binding: ReleasesBinding,
   clock: { ms: number },
   app = "web",
   host = `${app}.acme.com`,
-): DeploymentsDeps {
+): ReleasesDeps {
   return { binding, slug: "acme-web", host, app, now: () => clock.ms };
 }
 
-describe("resolveDeployment", () => {
+describe("resolveRelease", () => {
   it("resolves and returns the active Deployment record", async () => {
     const binding = createCountingBinding({
-      pointerIdentity: { "web/": "deploy-1" },
+      pointerRelease: { "web/": "deploy-1" },
       records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
 
-    const resolution = await resolveDeployment(deps(binding, clock));
+    const resolution = await resolveRelease(deps(binding, clock));
 
     expect(resolution).toEqual({ kind: "found", record: makeRecord() });
   });
 
   it("returns not-found when no active pointer exists for the app", async () => {
-    const binding = createCountingBinding({ pointerIdentity: {}, records: {} });
+    const binding = createCountingBinding({ pointerRelease: {}, records: {} });
     const clock = { ms: 0 };
 
-    const resolution = await resolveDeployment(deps(binding, clock));
+    const resolution = await resolveRelease(deps(binding, clock));
 
     expect(resolution).toEqual({ kind: "not-found" });
   });
 
   it("reports unavailable when the store says unchanged but nothing is cached", async () => {
     const binding = answerEveryRecordWith(async () => {
-      return { kind: "unchanged", identity: "deploy-1" };
+      return { kind: "unchanged", release: "deploy-1" };
     });
 
-    expect(await resolveDeployment(deps(binding, { ms: 0 }))).toEqual({ kind: "unavailable" });
+    expect(await resolveRelease(deps(binding, { ms: 0 }))).toEqual({ kind: "unavailable" });
   });
 
   it("serves the cached record within the TTL without calling the store", async () => {
     const binding = createCountingBinding({
-      pointerIdentity: { "web/": "deploy-1" },
+      pointerRelease: { "web/": "deploy-1" },
       records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
     const d = deps(binding, clock);
 
-    await resolveDeployment(d);
-    await resolveDeployment(d);
+    await resolveRelease(d);
+    await resolveRelease(d);
 
     expect(binding.pointerRecordCalls).toBe(1);
   });
 
   it("revalidates after the TTL without re-transferring an unchanged record", async () => {
     const binding = createCountingBinding({
-      pointerIdentity: { "web/": "deploy-1" },
+      pointerRelease: { "web/": "deploy-1" },
       records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
     const d = deps(binding, clock);
 
-    await resolveDeployment(d);
+    await resolveRelease(d);
     clock.ms = 4_000; // still within the 5s TTL
-    await resolveDeployment(d);
+    await resolveRelease(d);
     expect(binding.pointerRecordCalls).toBe(1);
 
     clock.ms = 5_001; // TTL elapsed
-    const resolution = await resolveDeployment(d);
+    const resolution = await resolveRelease(d);
     expect(binding.pointerRecordCalls).toBe(2);
     expect(binding.lastReturnedRecord).toBe(false);
     expect(resolution).toEqual({ kind: "found", record: makeRecord() });
   });
 
   it("re-reads the record when the build moves (promotion/rollback)", async () => {
-    const pointerIdentity: Record<string, string> = { "web/": "deploy-1" };
+    const pointerRelease: Record<string, string> = { "web/": "deploy-1" };
     const binding = createCountingBinding({
-      pointerIdentity,
+      pointerRelease,
       records: {
         "web/deploy-1": makeRecord(),
-        "web/deploy-2": makeRecord({ identity: "deploy-2" }),
+        "web/deploy-2": makeRecord({ release: "deploy-2" }),
       },
     });
     const clock = { ms: 0 };
     const d = deps(binding, clock);
 
-    const first = await resolveDeployment(d);
+    const first = await resolveRelease(d);
     expect(first).toEqual({ kind: "found", record: makeRecord() });
 
-    pointerIdentity["web/"] = "deploy-2";
+    pointerRelease["web/"] = "deploy-2";
     clock.ms = 5_001;
-    const second = await resolveDeployment(d);
+    const second = await resolveRelease(d);
 
     expect(second).toEqual({
       kind: "found",
-      record: makeRecord({ identity: "deploy-2" }),
+      record: makeRecord({ release: "deploy-2" }),
     });
     expect(binding.lastReturnedRecord).toBe(true);
   });
 
   it("serves the cached record during a transient store outage", async () => {
     const binding = createCountingBinding({
-      pointerIdentity: { "web/": "deploy-1" },
+      pointerRelease: { "web/": "deploy-1" },
       records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
     const d = deps(binding, clock);
 
-    await resolveDeployment(d); // warms the record cache
+    await resolveRelease(d); // warms the record cache
 
     clock.ms = 5_001; // TTL elapsed, so the next call revalidates
     binding.down = true;
-    const resolution = await resolveDeployment(d);
+    const resolution = await resolveRelease(d);
 
     expect(resolution).toEqual({ kind: "found", record: makeRecord() });
   });
 
   it("returns unavailable on a cold isolate when the store is unreachable", async () => {
-    const binding = createCountingBinding({ pointerIdentity: {}, records: {} });
+    const binding = createCountingBinding({ pointerRelease: {}, records: {} });
     binding.down = true;
     const clock = { ms: 0 };
 
-    const resolution = await resolveDeployment(deps(binding, clock));
+    const resolution = await resolveRelease(deps(binding, clock));
 
     expect(resolution).toEqual({ kind: "unavailable" });
   });
@@ -200,11 +199,11 @@ describe("resolveDeployment", () => {
 
   it("logs a store read that failed before answering unavailable", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    const binding = createCountingBinding({ pointerIdentity: {}, records: {} });
+    const binding = createCountingBinding({ pointerRelease: {}, records: {} });
     binding.down = true;
     const clock = { ms: 0 };
 
-    const resolution = await resolveDeployment(deps(binding, clock));
+    const resolution = await resolveRelease(deps(binding, clock));
 
     expect(resolution).toEqual({ kind: "unavailable" });
     expect(errors).toHaveBeenCalledTimes(1);
@@ -216,16 +215,16 @@ describe("resolveDeployment", () => {
   it("logs a store read that failed before serving the record it cached", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const binding = createCountingBinding({
-      pointerIdentity: { "web/": "deploy-1" },
+      pointerRelease: { "web/": "deploy-1" },
       records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
     const d = deps(binding, clock);
-    await resolveDeployment(d);
+    await resolveRelease(d);
 
     clock.ms = 5_001;
     binding.down = true;
-    const resolution = await resolveDeployment(d);
+    const resolution = await resolveRelease(d);
 
     expect(resolution).toEqual({ kind: "found", record: makeRecord() });
     expect(errors).toHaveBeenCalledTimes(1);
@@ -236,54 +235,54 @@ describe("resolveDeployment", () => {
   it("logs nothing when the store answers", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const binding = createCountingBinding({
-      pointerIdentity: { "web/": "deploy-1" },
+      pointerRelease: { "web/": "deploy-1" },
       records: { "web/deploy-1": makeRecord() },
     });
     const clock = { ms: 0 };
     const d = deps(binding, clock);
-    await resolveDeployment(d);
+    await resolveRelease(d);
     clock.ms = 5_001;
-    await resolveDeployment(d);
+    await resolveRelease(d);
 
     expect(errors).not.toHaveBeenCalled();
   });
 
   it("returns unavailable when the pointer names a build with no record", async () => {
     const binding = createCountingBinding({
-      pointerIdentity: { "web/": "deploy-1" },
+      pointerRelease: { "web/": "deploy-1" },
       records: {},
     });
     const clock = { ms: 0 };
 
-    const resolution = await resolveDeployment(deps(binding, clock));
+    const resolution = await resolveRelease(deps(binding, clock));
 
     expect(resolution).toEqual({ kind: "unavailable" });
   });
 
   it("keeps caches independent across apps", async () => {
     const binding = createCountingBinding({
-      pointerIdentity: { "web/": "deploy-1", "admin/": "deploy-9" },
+      pointerRelease: { "web/": "deploy-1", "admin/": "deploy-9" },
       records: {
         "web/deploy-1": makeRecord(),
-        "admin/deploy-9": makeRecord({ app: "admin", identity: "deploy-9" }),
+        "admin/deploy-9": makeRecord({ app: "admin", release: "deploy-9" }),
       },
     });
     const clock = { ms: 0 };
 
-    const web = await resolveDeployment(deps(binding, clock, "web"));
-    const admin = await resolveDeployment(deps(binding, clock, "admin"));
+    const web = await resolveRelease(deps(binding, clock, "web"));
+    const admin = await resolveRelease(deps(binding, clock, "admin"));
 
     expect(web).toEqual({ kind: "found", record: makeRecord() });
     expect(admin).toEqual({
       kind: "found",
-      record: makeRecord({ app: "admin", identity: "deploy-9" }),
+      record: makeRecord({ app: "admin", release: "deploy-9" }),
     });
   });
 
   it("resolves a preview by its full label, independently of production", async () => {
-    const previewRecord = makeRecord({ identity: "preview-deploy" });
+    const previewRecord = makeRecord({ release: "preview-deploy" });
     const binding = createCountingBinding({
-      pointerIdentity: {
+      pointerRelease: {
         "web/": "deploy-1",
         "pr-12-web-abcdefghijklmnopp3347l26": "preview-deploy",
       },
@@ -294,8 +293,8 @@ describe("resolveDeployment", () => {
     });
     const clock = { ms: 0 };
 
-    const production = await resolveDeployment(deps(binding, clock));
-    const preview = await resolveDeployment({
+    const production = await resolveRelease(deps(binding, clock));
+    const preview = await resolveRelease({
       binding,
       slug: "acme-web",
       host: "pr-12-web-abcdefghijklmnopp3347l26.acme.com",
@@ -310,25 +309,25 @@ describe("resolveDeployment", () => {
   });
 
   it("keeps caches independent across projects sharing one binding", async () => {
-    const records: Record<string, DeploymentRecord> = {
+    const records: Record<string, ReleaseRecord> = {
       acme: makeRecord({ isrPrefix: "prev/acme/web/build-1" }),
       globex: makeRecord({ isrPrefix: "prev/globex/web/build-1" }),
     };
     const binding = answerEveryRecordWith(async (args) => {
       const record = records[args.slug];
       if (!record) return { kind: "no-pointer" };
-      return { kind: "record", identity: record.identity, record };
+      return { kind: "record", release: record.release, record };
     });
     const clock = { ms: 0 };
 
-    const acme = await resolveDeployment({
+    const acme = await resolveRelease({
       binding,
       slug: "acme",
       host: "acme-abcdefghijklmnopaaaaaaaa.preview.ocel.app",
       label: "acme-abcdefghijklmnopaaaaaaaa",
       now: () => clock.ms,
     });
-    const globex = await resolveDeployment({
+    const globex = await resolveRelease({
       binding,
       slug: "globex",
       host: "globex-abcdefghijklmnopaaaaaaaa.preview.ocel.app",
@@ -344,18 +343,18 @@ describe("resolveDeployment", () => {
     let calls = 0;
     const binding = answerEveryRecordWith(async () => {
       calls++;
-      return { kind: "record", identity: "deploy-1", record: makeRecord() };
+      return { kind: "record", release: "deploy-1", record: makeRecord() };
     });
     const clock = { ms: 0 };
-    const d: DeploymentsDeps = {
+    const d: ReleasesDeps = {
       binding,
       slug: "acme",
       host: "acme.example.com",
       now: () => clock.ms,
     };
 
-    await resolveDeployment(d);
-    await resolveDeployment(d);
+    await resolveRelease(d);
+    await resolveRelease(d);
 
     expect(calls).toBe(1);
   });
@@ -364,11 +363,11 @@ describe("resolveDeployment", () => {
     const calls: Record<string, number> = {};
     const binding = answerEveryRecordWith(async (args) => {
       calls[args.slug] = (calls[args.slug] ?? 0) + 1;
-      return { kind: "record", identity: args.slug, record: makeRecord() };
+      return { kind: "record", release: args.slug, record: makeRecord() };
     });
     const clock = { ms: 0 };
     const resolve = (n: number) =>
-      resolveDeployment({
+      resolveRelease({
         binding,
         slug: `p${n}`,
         host: `p${n}.preview.ocel.app`,
@@ -388,11 +387,11 @@ describe("resolveDeployment", () => {
     const calls: Record<string, number> = {};
     const binding = answerEveryRecordWith(async (args) => {
       calls[args.slug] = (calls[args.slug] ?? 0) + 1;
-      return { kind: "record", identity: args.slug, record: makeRecord() };
+      return { kind: "record", release: args.slug, record: makeRecord() };
     });
     const clock = { ms: 0 };
     const resolve = (n: number) =>
-      resolveDeployment({
+      resolveRelease({
         binding,
         slug: `q${n}`,
         host: `q${n}.preview.ocel.app`,
@@ -421,7 +420,7 @@ describe("resolveDeployment", () => {
     });
     const clock = { ms: 0 };
 
-    const resolution = await resolveDeployment({
+    const resolution = await resolveRelease({
       binding,
       slug: "acme",
       host: "acme.example.com",

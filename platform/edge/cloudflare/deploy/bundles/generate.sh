@@ -7,6 +7,6 @@ dist="$bundles_dir/dist"
 
 rm -rf "$dist"
 mkdir -p "$dist"
-for worker in entry deployments-store isr-writer refresher; do
+for worker in entry releases-store isr-writer refresher; do
   cp "$workers/$worker/dist/index.js" "$dist/$worker.js"
 done

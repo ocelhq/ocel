@@ -13,7 +13,7 @@ type StillActive func(ctx context.Context) error
 type PointerMove struct {
 	Pointer     string
 	Promotion   Promotion
-	Records     map[string]DeploymentRecord
+	Records     map[string]ReleaseRecord
 	Hosts       []edge.PreviewHost
 	Superseded  []edge.PreviewHost
 	StillActive StillActive

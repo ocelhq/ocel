@@ -3,17 +3,17 @@ import { previewReleasesIn } from "./previewResult";
 
 const summary = (apps: unknown[]) => JSON.stringify({ summary: { success: true, apps } });
 
-const record = JSON.stringify({ apps: [{ name: "web", deploymentId: "abc" }] });
+const record = JSON.stringify({ apps: [{ name: "web", buildId: "abc" }] });
 
 describe("previewReleasesIn", () => {
-  it("reads each app's urls, deployment url and deployment id from the run's summary and record", () => {
+  it("reads each app's urls, deployment url and build id from the run's summary and record", () => {
     const stream = [
       JSON.stringify({ operation: { name: "preview" } }),
       summary([{ app: "web", urls: ["https://a"], deploymentUrl: "https://t---a" }]),
     ].join("\n");
 
     expect(previewReleasesIn(stream, record, "ocel preview up journey")).toEqual([
-      { app: "web", urls: ["https://a"], deploymentUrl: "https://t---a", deploymentId: "abc" },
+      { app: "web", urls: ["https://a"], deploymentUrl: "https://t---a", buildId: "abc" },
     ]);
   });
 
@@ -25,7 +25,7 @@ describe("previewReleasesIn", () => {
     ].join("\n");
 
     expect(previewReleasesIn(stream, record, "ocel preview up journey")).toEqual([
-      { app: "web", urls: [], deploymentUrl: "https://t---a", deploymentId: "abc" },
+      { app: "web", urls: [], deploymentUrl: "https://t---a", buildId: "abc" },
     ]);
   });
 
@@ -48,7 +48,7 @@ describe("previewReleasesIn", () => {
     ).toThrow(/`ocel preview up j` published no deployment url for web/);
   });
 
-  it("refuses an app the record holds no deployment id for", () => {
+  it("refuses an app the record holds no build id for", () => {
     expect(() =>
       previewReleasesIn(
         summary([{ app: "web", deploymentUrl: "https://t" }]),

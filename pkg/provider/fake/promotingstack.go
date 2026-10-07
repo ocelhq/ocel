@@ -17,14 +17,14 @@ type PromotingStack struct {
 }
 
 func (s PromotingStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
-	move.Records = map[string]router.DeploymentRecord{}
-	for app, build := range move.Promotion.Builds {
-		record, staged, err := s.Ledger.Record(ctx, app, build)
+	move.Records = map[string]router.ReleaseRecord{}
+	for app, release := range move.Promotion.Releases {
+		record, staged, err := s.Ledger.Record(ctx, app, release)
 		if err != nil {
 			return err
 		}
 		if !staged {
-			return fmt.Errorf("promote %s: the ledger staged no record for %s/%s", move.Promotion.PromotionID, app, build)
+			return fmt.Errorf("promote %s: the ledger staged no record for %s/%s", move.Promotion.PromotionID, app, release)
 		}
 		move.Records[app] = record
 	}

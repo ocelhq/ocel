@@ -406,7 +406,7 @@ func TestARemovalRefusesWorkTheConsentedProjectPlanNeverShowed(t *testing.T) {
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
 
-	admin := naming.AppStack(stackrecords.ProductionEnv, "admin", naming.NewReleaseToken(adminDeploymentID, "1"))
+	admin := naming.AppStack(stackrecords.ProductionEnv, "admin", naming.NewReleaseToken(adminBuildID, "1"))
 	if err := stackrecords.Write(ctx, vendor.KeyValues(), environment.TierProduction, "shop", admin, stackrecords.Stack{App: "admin"}); err != nil {
 		t.Fatalf("stackrecords.Write() error = %v", err)
 	}

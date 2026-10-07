@@ -80,9 +80,9 @@ func queuedAppRequest(apps []string) *contractv1.DeployRequest {
 	manifest.Usages = nil
 	for slot, app := range apps {
 		manifest.Apps = append(manifest.Apps, &contractv1.ManifestApp{
-			Name:         app,
-			Framework:    &contractv1.Framework{Name: "next"},
-			DeploymentId: fmt.Sprintf("%032x", slot+1),
+			Name:      app,
+			Framework: &contractv1.Framework{Name: "next"},
+			BuildId:   fmt.Sprintf("%032x", slot+1),
 			Artifact: serverless(&contractv1.ManifestFunction{
 				LogicalName:  app + "-server",
 				Framework:    &contractv1.Framework{Name: "next"},

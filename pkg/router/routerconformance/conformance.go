@@ -39,7 +39,7 @@ type Suite struct {
 	Pointer     string
 	Hostname    string
 	PreviewBase string
-	Record      func(app, build string) router.DeploymentRecord
+	Record      func(app, release string) router.ReleaseRecord
 	Tunnel      edge.Kind
 }
 
@@ -421,7 +421,7 @@ func listPreviewHosts(fixture Fixture, base, token string) []edge.PreviewHost {
 	return edge.NewSharedPreviewSite(fixture.Spec.Slug, base, conformancePreviewKey).ListHosts("conformance-preview", token, []string{App})
 }
 
-func runPreviews(t *testing.T, suite Suite, record func(app, build string) router.DeploymentRecord) {
+func runPreviews(t *testing.T, suite Suite, record func(app, release string) router.ReleaseRecord) {
 	t.Run("a preview pointer leaves nothing served when it is removed", func(t *testing.T) {
 		if suite.Previews == nil {
 			t.Skip("this router cannot be served on a preview wildcard from the conformance suite alone")
@@ -476,7 +476,7 @@ func runPreviews(t *testing.T, suite Suite, record func(app, build string) route
 	})
 }
 
-func movePreview(t *testing.T, stack router.Stack, pointer, promotionID string, hosts []edge.PreviewHost, records ...router.DeploymentRecord) {
+func movePreview(t *testing.T, stack router.Stack, pointer, promotionID string, hosts []edge.PreviewHost, records ...router.ReleaseRecord) {
 	t.Helper()
 	move := newPointerMove(promotionID, records...)
 	move.Pointer, move.Hosts = pointer, hosts
@@ -492,7 +492,7 @@ func removePreview(t *testing.T, stack router.Stack, removal router.PointerRemov
 	}
 }
 
-func racesAfterCheck(t *testing.T, fixture Fixture, pointer string, record func(app, build string) router.DeploymentRecord, check int) bool {
+func racesAfterCheck(t *testing.T, fixture Fixture, pointer string, record func(app, release string) router.ReleaseRecord, check int) bool {
 	t.Helper()
 	ctx := context.Background()
 	stack := reconciled(t, fixture)
@@ -527,23 +527,23 @@ func racesAfterCheck(t *testing.T, fixture Fixture, pointer string, record func(
 		}
 		t.Skipf("MovePointer asked StillActive %d times, so no promote races it after call %d", checks, check)
 	}
-	builds := map[string]string{"conformance-b1": "b1", "conformance-b2": "b2", "conformance-b3": "b3"}
-	if served, named := fixture.Serving(pointer), builds[ledger.active]; served != named {
+	releases := map[string]string{"conformance-b1": "b1", "conformance-b2": "b2", "conformance-b3": "b3"}
+	if served, named := fixture.Serving(pointer), releases[ledger.active]; served != named {
 		t.Errorf("%s serves %q while the ledger names %s (%s): a promote whose StillActive answered before another promoted and moved must not land over it (the pointer move it raced returned %v, its own pointer move %v)",
 			pointer, served, ledger.active, named, raced, moved)
 	}
 	return true
 }
 
-func functionRecord(app, build string) router.DeploymentRecord {
+func functionRecord(app, release string) router.ReleaseRecord {
 	entry := "conformance-prod-" + app + "-r0a1b2c3d"
-	return router.DeploymentRecord{
+	return router.ReleaseRecord{
 		App:           app,
-		Build:         build,
+		Release:       release,
 		Entry:         "/",
 		EntryFunction: entry,
 		FunctionURLs:  map[string]string{"/": "https://conformance-" + app + ".example.com/"},
-		Revisions:     map[string]string{entry: entry + "-" + build},
+		Revisions:     map[string]string{entry: entry + "-" + release},
 	}
 }
 
@@ -556,19 +556,19 @@ func reconciled(t *testing.T, fixture Fixture) router.Stack {
 	return stack
 }
 
-func newPointerMove(promotionID string, records ...router.DeploymentRecord) router.PointerMove {
+func newPointerMove(promotionID string, records ...router.ReleaseRecord) router.PointerMove {
 	move := router.PointerMove{
-		Promotion: router.Promotion{PromotionID: promotionID, Ts: 1, Builds: map[string]string{}},
-		Records:   map[string]router.DeploymentRecord{},
+		Promotion: router.Promotion{PromotionID: promotionID, Ts: 1, Releases: map[string]string{}},
+		Records:   map[string]router.ReleaseRecord{},
 	}
 	for _, record := range records {
-		move.Promotion.Builds[record.App] = record.Build
+		move.Promotion.Releases[record.App] = record.Release
 		move.Records[record.App] = record
 	}
 	return move
 }
 
-func movePointer(t *testing.T, stack router.Stack, pointer, promotionID string, records ...router.DeploymentRecord) {
+func movePointer(t *testing.T, stack router.Stack, pointer, promotionID string, records ...router.ReleaseRecord) {
 	t.Helper()
 	move := newPointerMove(promotionID, records...)
 	move.Pointer = pointer

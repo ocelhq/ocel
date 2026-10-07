@@ -44,14 +44,14 @@ func (f *fakeBatchSSM) GetParameters(_ context.Context, in *ssm.GetParametersInp
 func fullProductionParams() map[string]string {
 	names := cloudflareNames(environment.TierProduction)
 	return map[string]string{
-		passphraseParam:             "pass-1",
-		names.credentialsParam:      `{"accessKeyId":"AKIA1","secretAccessKey":"sec-1"}`,
-		names.valuesParam:           `{"bucketName":"edge-cache-7f3"}`,
-		names.cacheStoreParam:       `{"bucket":"cache-1","endpoint":"https://r2","region":"auto","accessKeyId":"AKIA2","secretAccessKey":"sec-2"}`,
-		names.deploymentsStoreParam: `{"endpoint":"https://store","scriptName":"store","bootstrapCred":"cred"}`,
-		names.isrWriterParam:        `{"endpoint":"https://isr","scriptName":"isr","bootstrapCred":"isr-cred"}`,
-		names.isrWriterSeedParam:    "seed-1",
-		names.originSecretParam:     `{"current":"origin-1","createdAt":"2026-01-01T00:00:00Z"}`,
+		passphraseParam:          "pass-1",
+		names.credentialsParam:   `{"accessKeyId":"AKIA1","secretAccessKey":"sec-1"}`,
+		names.valuesParam:        `{"bucketName":"edge-cache-7f3"}`,
+		names.cacheStoreParam:    `{"bucket":"cache-1","endpoint":"https://r2","region":"auto","accessKeyId":"AKIA2","secretAccessKey":"sec-2"}`,
+		names.releasesStoreParam: `{"endpoint":"https://store","scriptName":"store","bootstrapCred":"cred"}`,
+		names.isrWriterParam:     `{"endpoint":"https://isr","scriptName":"isr","bootstrapCred":"isr-cred"}`,
+		names.isrWriterSeedParam: "seed-1",
+		names.originSecretParam:  `{"current":"origin-1","createdAt":"2026-01-01T00:00:00Z"}`,
 	}
 }
 
@@ -71,7 +71,7 @@ func TestReadTierParamsBatches(t *testing.T) {
 		names.credentialsParam,
 		names.valuesParam,
 		names.cacheStoreParam,
-		names.deploymentsStoreParam,
+		names.releasesStoreParam,
 		names.isrWriterParam,
 		names.isrWriterSeedParam,
 		names.originSecretParam,
@@ -103,8 +103,8 @@ func TestReadTierParamsBatches(t *testing.T) {
 	if got.CacheStore.Bucket != "cache-1" || got.CacheStore.SecretAccessKey != "sec-2" {
 		t.Errorf("CacheStore = %+v", got.CacheStore)
 	}
-	if got.DeploymentsStore.ScriptName != "store" {
-		t.Errorf("DeploymentsStore = %+v", got.DeploymentsStore)
+	if got.ReleasesStore.ScriptName != "store" {
+		t.Errorf("ReleasesStore = %+v", got.ReleasesStore)
 	}
 	if got.ISRWriter.Endpoint != "https://isr" {
 		t.Errorf("ISRWriter = %+v", got.ISRWriter)
@@ -285,8 +285,8 @@ func TestReadTierParamsAbsentOptional(t *testing.T) {
 	if got.CacheStore != (CacheStore{}) {
 		t.Errorf("CacheStore = %+v, want the zero store", got.CacheStore)
 	}
-	if got.DeploymentsStore != (DeploymentsStore{}) {
-		t.Errorf("DeploymentsStore = %+v, want the zero store", got.DeploymentsStore)
+	if got.ReleasesStore != (ReleasesStore{}) {
+		t.Errorf("ReleasesStore = %+v, want the zero store", got.ReleasesStore)
 	}
 	if got.ISRWriter != (ISRWriter{}) {
 		t.Errorf("ISRWriter = %+v, want the zero writer", got.ISRWriter)
@@ -300,7 +300,7 @@ func TestReadTierParamsUnparsableStores(t *testing.T) {
 	names := cloudflareNames(environment.TierProduction)
 	for _, name := range []string{
 		names.cacheStoreParam,
-		names.deploymentsStoreParam,
+		names.releasesStoreParam,
 		names.isrWriterParam,
 	} {
 		t.Run(name, func(t *testing.T) {

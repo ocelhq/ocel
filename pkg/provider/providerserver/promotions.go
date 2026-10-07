@@ -63,7 +63,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 	promoted := router.Promotion{
 		PromotionID: promotionID,
 		Ts:          time.Now().Unix(),
-		Builds:      target.Builds,
+		Releases:    target.Releases,
 		Propagation: &propagation,
 	}
 	dropped, err := session.promoteApps(ctx, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted}, session.readAppRouter, progress.Discard())
@@ -138,7 +138,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err != nil {
 			return err
 		}
-		if err := session.removeDeployments(ctx, pruned.DeploymentRemovals, progress); err != nil {
+		if err := session.removeReleases(ctx, pruned.ReleaseRemovals, progress); err != nil {
 			return err
 		}
 		if err := session.checkpoint(ctx); err != nil {
@@ -147,7 +147,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err := reclaimUnnamed(ctx, session.provider, session.ledger, pointer, pruned, progress); err != nil {
 			return err
 		}
-		if err := session.forgetRemovedDeployments(ctx, pointer, pruned.DeploymentRemovals); err != nil {
+		if err := session.forgetRemovedReleases(ctx, pointer, pruned.ReleaseRemovals); err != nil {
 			return err
 		}
 		for _, line := range pruneLines(pruned) {
@@ -203,7 +203,7 @@ func promotionProto(promotion router.Promotion) *contractv1.Promotion {
 	return &contractv1.Promotion{
 		PromotionId: promotion.PromotionID,
 		Ts:          promotion.Ts,
-		Builds:      promotion.Builds,
+		Releases:    promotion.Releases,
 		Tag:         promotion.Tag,
 		Propagation: propagationProto(promotion.Propagation),
 	}

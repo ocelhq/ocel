@@ -25,7 +25,7 @@ const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
 const secretBytes = 32
 
 func storeScriptNameFor(namespace string, tier environment.Tier) (string, error) {
-	return accountNameFor("deployments store", namespace, tier, "deployments-store")
+	return accountNameFor("releases store", namespace, tier, "releases-store")
 }
 
 func isrWriterScriptNameFor(namespace string, tier environment.Tier) (string, error) {
@@ -71,12 +71,12 @@ type durableObjectWorker struct {
 }
 
 var (
-	deploymentsStoreWorker = durableObjectWorker{
+	releasesStoreWorker = durableObjectWorker{
 		classes: []durableObjectClass{
-			{binding: "DEPLOYMENTS_DO", className: "DeploymentsStore"},
+			{binding: "RELEASES_DO", className: "ReleasesStore"},
 		},
 		migrations: []migrationStep{
-			{tag: "v1", sqliteClasses: []string{"DeploymentsStore"}},
+			{tag: "v1", sqliteClasses: []string{"ReleasesStore"}},
 		},
 	}
 	isrWriterWorker = durableObjectWorker{
@@ -91,7 +91,7 @@ var (
 	}
 )
 
-const genericStoreBinding = "DEPLOYMENTS"
+const genericStoreBinding = "RELEASES"
 
 const genericISRWriterBinding = "ISR_WRITER"
 
@@ -314,7 +314,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return errors.Join(append(errs, err)...)
 	}
 	if err := s.p.destroyInstance(ctx, s.state); err != nil {
-		errs = append(errs, fmt.Errorf("destroy deployments-store instance: %w", err))
+		errs = append(errs, fmt.Errorf("destroy releases-store instance: %w", err))
 	}
 	return errors.Join(errs...)
 }
@@ -326,7 +326,7 @@ func (p *cloudflare) stackWorkers(ctx context.Context, state edge.StackState) ([
 		stamped, res, err := p.getVersionStamp(ctx, state.Endpoint, state.Slug, secret)
 		if err != nil {
 			if isUnauthorized(res) {
-				return nil, fmt.Errorf("read stack version stamp: the deployments store rejected project %q's secret, so the workers it deployed cannot be named: %w", state.Slug, err)
+				return nil, fmt.Errorf("read stack version stamp: the releases store rejected project %q's secret, so the workers it deployed cannot be named: %w", state.Slug, err)
 			}
 			return nil, fmt.Errorf("read stack version stamp: %w", err)
 		}
@@ -335,7 +335,7 @@ func (p *cloudflare) stackWorkers(ctx context.Context, state edge.StackState) ([
 		}
 		deployed, err := p.readServedApps(ctx, state)
 		if err != nil {
-			return nil, fmt.Errorf("read the apps the deployments store served, which names the workers they ran on: %w", err)
+			return nil, fmt.Errorf("read the apps the releases store served, which names the workers they ran on: %w", err)
 		}
 		apps = deployed
 	}

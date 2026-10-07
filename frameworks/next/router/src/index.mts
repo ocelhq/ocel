@@ -159,7 +159,7 @@ export interface RouteDeps {
   functionUrls: Record<string, string>;
   slug: string;
   app: string;
-  deploymentId: string;
+  appBuildId: string;
   assetStore: AssetStoreDeps;
   fetch?: typeof fetch;
 
@@ -192,7 +192,7 @@ function imageResponse(request: Request, deps: RouteDeps): Promise<Response> | u
     assetPrefix: deps.assetStore.assetPrefix,
     slug: deps.slug,
     app: deps.app,
-    deploymentId: deps.deploymentId,
+    appBuildId: deps.appBuildId,
     origin: deps.imageOrigin ?? unprovisionedImageOrigin,
     assetHashes: manifest.assetHashes,
     imageCache: deps.imageCache,

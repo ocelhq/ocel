@@ -235,7 +235,7 @@ func TestAContainerNameIsDerivableAndDiffersBetweenReleases(t *testing.T) {
 		t.Errorf("two releases share the container name %q, and the drain's per-address count then attributes one release's requests to the other", second)
 	}
 	if unbuilt := ContainerName("shop-prod", "web", "", appImage); unbuilt == first || unbuilt == "" {
-		t.Errorf("a release with no deployment id names its container %q", unbuilt)
+		t.Errorf("a release with no build id names its container %q", unbuilt)
 	}
 }
 

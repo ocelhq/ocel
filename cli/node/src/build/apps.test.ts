@@ -21,7 +21,7 @@ const next: AppBuild = {
   name: "web",
   cwd: "/p/web",
   outputDir: "/p/.ocel/output/apps/web",
-  deploymentId: "0123456789abcdef0123456789abcdef",
+  buildId: "0123456789abcdef0123456789abcdef",
 };
 
 const node: AppBuild = {

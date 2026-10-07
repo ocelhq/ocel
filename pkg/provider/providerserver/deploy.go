@@ -1120,7 +1120,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					App:                       entry.App,
 					Framework:                 entry.Manifest.GetFramework().GetName(),
 					Entry:                     entryLogicalName(entry.Manifest, facts.Entry),
-					Deployment:                entry.Build.DeploymentID(),
+					BuildID:                   entry.Release.BuildID(),
 					Compute:                   entry.Compute(),
 					Router:                    r.appRouters[entry.App],
 					Functions:                 r.functionSpecs(entry),
@@ -1147,7 +1147,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				if err != nil {
 					return err
 				}
-				r.dryRunPlan.apps[slot] = withReleaseMintedAtDeploy(planned, entry.Build.Release())
+				r.dryRunPlan.apps[slot] = withReleaseMintedAtDeploy(planned, entry.Release.Token())
 				return nil
 			}
 			r.recordProvisioning(entry.App)
@@ -1170,20 +1170,20 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err := r.embedBytecodeCaches(ctx, entry, result.Functions, progress); err != nil {
 				return err
 			}
-			return r.recordStagedDeployment(ctx, entry, facts, images, values, result)
+			return r.recordStagedRelease(ctx, entry, facts, images, values, result)
 		})
 	})
 }
 
 func (r *deployRun) recordAppStack(ctx context.Context, entry provider.AppEntry, result provider.StackResult) error {
 	return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, entry.Stack, stackrecords.Stack{
-		Kind:       provider.StackApp,
-		App:        entry.App,
-		Release:    entry.Build.Release().String(),
-		Build:      entry.Build.String(),
-		Functions:  result.Functions,
-		Containers: result.Containers,
-		WrittenBy:  provider.WrittenByVersion(""),
+		Kind:         provider.StackApp,
+		App:          entry.App,
+		ReleaseToken: entry.Release.Token().String(),
+		Release:      entry.Release.String(),
+		Functions:    result.Functions,
+		Containers:   result.Containers,
+		WrittenBy:    provider.WrittenByVersion(""),
 	})
 }
 
@@ -1217,7 +1217,7 @@ func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
 		Framework:         entry.Manifest.GetFramework().GetName(),
 		Compute:           entry.Compute(),
 		Stack:             entry.Stack,
-		Coordinate:        appCoordinate(r.spec, entry.App, entry.Build.Release()),
+		Coordinate:        appCoordinate(r.spec, entry.App, entry.Release.Token()),
 		EdgeRunsCode:      r.front.Facts().RunsCode,
 		EdgeSignsForwards: r.readPairedRouter(entry.App).Facts().SignsOriginForwards,
 	})
@@ -1479,7 +1479,7 @@ func declaredVariables(clientBundle bool, values provider.AppValues) []router.Va
 	return declared
 }
 
-func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.AppEntry, facts AppServing, images provider.ImagePushes, values provider.AppValues, result provider.StackResult) error {
+func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppEntry, facts AppServing, images provider.ImagePushes, values provider.AppValues, result provider.StackResult) error {
 	urlByLogical := make(map[string]string, len(result.Functions))
 	physicalByLogical := make(map[string]string, len(result.Functions))
 	for _, fn := range result.Functions {
@@ -1494,7 +1494,7 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 			urls[resolveRouteID(fn)] = url
 		}
 	}
-	coordinate := appCoordinate(r.spec, entry.App, entry.Build.Release())
+	coordinate := appCoordinate(r.spec, entry.App, entry.Release.Token())
 	var routing any
 	origin := originOf(result.Containers, entry.App)
 	if facts.EdgeDispatch != nil {
@@ -1503,12 +1503,12 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 			origin = urlByLogical[entryLogicalName(entry.Manifest, facts.Entry)]
 		}
 	}
-	record := router.DeploymentRecord{
+	record := router.ReleaseRecord{
 		RoutingManifest:      routing,
 		App:                  entry.App,
 		Framework:            entry.Manifest.GetFramework().GetName(),
-		Build:                r.spec.Builds[entry.App],
-		DeploymentID:         entry.Build.DeploymentID(),
+		Release:              r.spec.Releases[entry.App],
+		BuildID:              entry.Release.BuildID(),
 		Entry:                facts.Entry,
 		EntryFunction:        physicalByLogical[entryLogicalName(entry.Manifest, facts.Entry)],
 		Image:                images.ImageRef(entry.App),
@@ -1522,7 +1522,7 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 		IsrPrefix:            withoutSlash(coordinate.ISRPrefix()),
 		IsrWriteSecret:       result.ISRWriteSecret,
 		CreatedAt:            time.Now().Unix(),
-		BuildFingerprint:     entry.Build.Fingerprint(),
+		ReleaseFingerprint:   entry.Release.Fingerprint(),
 		Variables:            declaredVariables(entry.Manifest.GetClientBundle(), values),
 		Needs:                r.needs[entry.App].Needs,
 		SupportInEffect:      r.needs[entry.App].InEffect,
@@ -1597,7 +1597,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 	promotion := router.Promotion{
 		PromotionID: r.spec.PromotionID,
 		Ts:          time.Now().Unix(),
-		Builds:      r.spec.Builds,
+		Releases:    r.spec.Releases,
 		Tag:         r.spec.Tag,
 		Propagation: &propagation,
 		Hosts:       r.listDeploymentHosts(),
@@ -1900,11 +1900,11 @@ func (r *deployRun) readDiscoveredHealthPath(ctx context.Context, entry provider
 	if err != nil || !active {
 		return "", err
 	}
-	build, promoted := promotion.Builds[entry.App]
+	release, promoted := promotion.Releases[entry.App]
 	if !promoted {
 		return "", nil
 	}
-	record, staged, err := r.ledger.Record(ctx, entry.App, build)
+	record, staged, err := r.ledger.Record(ctx, entry.App, release)
 	if err != nil || !staged || !record.HealthPathDiscovered {
 		return "", err
 	}

@@ -7,7 +7,7 @@
     "generate": "sh ./generate.sh"
   },
   "devDependencies": {
-    "@platform/cf-deployments-store": "workspace:*",
+    "@platform/cf-releases-store": "workspace:*",
     "@platform/cf-entry": "workspace:*",
     "@platform/cf-isr-writer": "workspace:*",
     "@platform/cf-refresher": "workspace:*"

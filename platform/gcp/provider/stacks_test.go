@@ -132,12 +132,12 @@ func TestASpecThatNamesWhatTheDeployDeliveredIsRefused(t *testing.T) {
 	}
 }
 
-func functionRelease(deploymentID, image string) provider.StackSpec {
+func functionRelease(buildID, image string) provider.StackSpec {
 	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
 			Tier:    environment.TierProduction,
-			Name:    naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewReleaseToken(deploymentID, "f1")),
+			Name:    naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewReleaseToken(buildID, "f1")),
 		},
 		Kind: provider.StackApp,
 		App: &provider.AppSpec{

@@ -18,11 +18,11 @@ import { coloDeps } from "./cache-deps";
 declare module "cloudflare:test" {
   interface ProvidedEnv {
     LOADER: WorkerLoader;
-    DEPLOYMENTS: Fetcher;
+    RELEASES: Fetcher;
   }
 }
 
-const remoteStub = () => env.DEPLOYMENTS as unknown as EdgeCacheStub;
+const remoteStub = () => env.RELEASES as unknown as EdgeCacheStub;
 
 interface EdgeEntry {
   chunks: string[];
@@ -259,7 +259,7 @@ function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
     },
     functionUrls: {},
     slug: "p1",
-    deploymentId: "d1",
+    appBuildId: "d1",
     app: "web",
     assetStore: assetStoreServing({}),
     ...overrides,
@@ -1783,12 +1783,12 @@ describe("the variables a deployment declares", () => {
   });
 
   it("reloads the isolate when only the build changed", async () => {
-    const deployment = (buildFingerprint: string) =>
+    const deployment = (releaseFingerprint: string) =>
       variablesInvoker({
         handler: COUNTER,
         id: "shared-bundle-variables",
         cache: { rpc: remoteStub(), scope: "prod/p/app/b1" },
-        variables: { buildFingerprint },
+        variables: { releaseFingerprint },
       }).edge;
     const served = async (edge: EdgeInvoker) => (await edge("e", new Request("https://x/"))).text();
 

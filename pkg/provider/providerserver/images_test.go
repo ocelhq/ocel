@@ -516,16 +516,16 @@ type stagedLedger struct {
 	keyValues keyvalue.Store
 }
 
-func (l stagedLedger) records() []router.DeploymentRecord {
+func (l stagedLedger) records() []router.ReleaseRecord {
 	l.t.Helper()
-	var staged []router.DeploymentRecord
+	var staged []router.ReleaseRecord
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		entries, err := l.keyValues.List(context.Background(), ledger.Partition(tier, "shop"), "records")
 		if err != nil {
 			l.t.Fatalf("list the records the ledger staged in %s: %v", tier, err)
 		}
 		for _, entry := range entries {
-			var record router.DeploymentRecord
+			var record router.ReleaseRecord
 			if err := json.Unmarshal(entry.Value, &record); err != nil {
 				l.t.Fatalf("decode the record %s: %v", entry.Key, err)
 			}
@@ -649,7 +649,7 @@ func TestAnAppThatNamesNoHealthPathIsHandedThePathItsLiveReleaseDiscovered(t *te
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 	next := namingARegistry(containerDeployRequest(""))
-	next.Manifest.Apps[0].DeploymentId = "fedcba9876543210fedcba9876543210"
+	next.Manifest.Apps[0].BuildId = "fedcba9876543210fedcba9876543210"
 	if result, _ := deploy(t, client, next); result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
@@ -674,7 +674,7 @@ func TestAnAppThatNamesAHealthPathIsHandedNoDiscoveredOne(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 	next := namingARegistry(containerDeployRequest("/ready"))
-	next.Manifest.Apps[0].DeploymentId = "fedcba9876543210fedcba9876543210"
+	next.Manifest.Apps[0].BuildId = "fedcba9876543210fedcba9876543210"
 	if result, _ := deploy(t, client, next); result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}

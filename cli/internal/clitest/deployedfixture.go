@@ -65,11 +65,11 @@ func RecordPromotions(t *testing.T, project FakeProject, promotionIDs ...string)
 	releases := project.Provider.Releases(environment.TierProduction, FixtureSlug)
 	replaces := ""
 	for i, id := range promotionIDs {
-		build := fmt.Sprintf("%032x~%012x", i+1, i+1)
-		if err := releases.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: build}); err != nil {
-			t.Fatalf("stage %s: %v", build, err)
+		release := fmt.Sprintf("%032x~%012x", i+1, i+1)
+		if err := releases.PutStaged(ctx, router.ReleaseRecord{App: "web", Release: release}); err != nil {
+			t.Fatalf("stage %s: %v", release, err)
 		}
-		promotion := router.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": build}}
+		promotion := router.Promotion{PromotionID: id, Ts: int64(i + 1), Releases: map[string]string{"web": release}}
 		if _, err := releases.Promote(ctx, promotion, "", replaces); err != nil {
 			t.Fatalf("promote %s: %v", id, err)
 		}

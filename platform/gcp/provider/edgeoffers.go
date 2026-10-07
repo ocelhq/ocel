@@ -25,7 +25,7 @@ const (
 )
 
 type adoptedEdge struct {
-	DeploymentsStore  adoptedWorker            `json:"deploymentsStore"`
+	ReleasesStore     adoptedWorker            `json:"releasesStore"`
 	ISRWriter         adoptedWorker            `json:"isrWriter"`
 	ClientCertificate adoptedClientCertificate `json:"clientCertificate"`
 	Values            map[string]string        `json:"values,omitempty"`
@@ -42,8 +42,8 @@ type adoptedClientCertificate struct {
 }
 
 type edgeCredentials struct {
-	DeploymentsStore string `json:"deploymentsStore"`
-	ISRWriter        string `json:"isrWriter"`
+	ReleasesStore string `json:"releasesStore"`
+	ISRWriter     string `json:"isrWriter"`
 }
 
 func adoptedEdgeKey(tier environment.Tier, kind edge.Kind) keyvalue.Key {
@@ -71,17 +71,17 @@ func adoptEdgeOffers(
 	sawISRWriter := false
 	for _, offer := range out.Offers {
 		switch offer.Kind {
-		case edge.OfferDeploymentsStore:
-			say.Say(fmt.Sprintf("Adopting the %s edge's deployments-store worker (Secret Manager)", kind))
-			adopted.DeploymentsStore = adoptedWorker{
+		case edge.OfferReleasesStore:
+			say.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker (Secret Manager)", kind))
+			adopted.ReleasesStore = adoptedWorker{
 				Endpoint:   offer.Values[edge.OfferKeyStoreEndpoint],
 				ScriptName: offer.Values[edge.OfferKeyStoreScriptName],
 			}
 			if offered := offer.Values[edge.OfferKeyStoreBootstrapCredential]; offered != "" {
-				credentials.DeploymentsStore = offered
+				credentials.ReleasesStore = offered
 			}
-			if credentials.DeploymentsStore == "" {
-				return edgeCredentialUnrecorded(c, tier, kind, "deployments store", adopted.DeploymentsStore.ScriptName)
+			if credentials.ReleasesStore == "" {
+				return edgeCredentialUnrecorded(c, tier, kind, "releases store", adopted.ReleasesStore.ScriptName)
 			}
 		case edge.OfferISRWriter:
 			say.Say(fmt.Sprintf("Adopting the %s edge's isr-writer worker (Secret Manager)", kind))
@@ -239,9 +239,9 @@ func requireAdoptedEdge(ctx context.Context, c *clients, records keyvalue.Store,
 		what string
 		got  string
 	}{
-		{"no deployments-store endpoint", adopted.DeploymentsStore.Endpoint},
-		{"no deployments-store script name", adopted.DeploymentsStore.ScriptName},
-		{"no deployments-store credential", credentials.DeploymentsStore},
+		{"no releases-store endpoint", adopted.ReleasesStore.Endpoint},
+		{"no releases-store script name", adopted.ReleasesStore.ScriptName},
+		{"no releases-store credential", credentials.ReleasesStore},
 		{"no isr-writer endpoint", adopted.ISRWriter.Endpoint},
 		{"no isr-writer script name", adopted.ISRWriter.ScriptName},
 		{"no isr-writer credential", credentials.ISRWriter},

@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	sharedStoreScriptName  = "ocel-deployments-store"
-	previewStoreScriptName = "ocel-deployments-store-preview"
+	sharedStoreScriptName  = "ocel-releases-store"
+	previewStoreScriptName = "ocel-releases-store-preview"
 
 	isrWriterScriptName        = "ocel-isr-writer"
 	previewISRWriterScriptName = "ocel-isr-writer-preview"
@@ -34,7 +34,7 @@ func TestAccountNames(t *testing.T) {
 		nameFor       func(string, environment.Tier) (string, error)
 		prod, preview string
 	}{
-		{"the deployments store", storeScriptNameFor, sharedStoreScriptName, previewStoreScriptName},
+		{"the releases store", storeScriptNameFor, sharedStoreScriptName, previewStoreScriptName},
 		{"the isr writer", isrWriterScriptNameFor, isrWriterScriptName, previewISRWriterScriptName},
 		{"the edge cache store", cacheStoreNameFor, cacheStoreBucketName, previewCacheStoreBucketName},
 	}
@@ -43,7 +43,7 @@ func TestAccountNames(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			t.Run("the default namespace keeps the names it always had", func(t *testing.T) {
+			t.Run("the default namespace names the account-wide workers and buckets plainly", func(t *testing.T) {
 				t.Parallel()
 
 				prod, err := tc.nameFor("ocel", environment.TierProduction)
@@ -105,11 +105,11 @@ func TestAccountNames(t *testing.T) {
 		})
 	}
 
-	t.Run("the isr writer and the deployments store never share a name", func(t *testing.T) {
+	t.Run("the isr writer and the releases store never share a name", func(t *testing.T) {
 		t.Parallel()
 
 		if isrWriterScriptName == sharedStoreScriptName || previewISRWriterScriptName == previewStoreScriptName {
-			t.Error("the isr-writer and deployments-store scripts must be distinct")
+			t.Error("the isr-writer and releases-store scripts must be distinct")
 		}
 	})
 }

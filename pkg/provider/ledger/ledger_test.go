@@ -121,10 +121,10 @@ func fixture() (*Ledger, *store) {
 
 func staged(t *testing.T, l *Ledger, id string) router.Promotion {
 	t.Helper()
-	if err := l.PutStaged(context.Background(), router.DeploymentRecord{App: "web", Build: "web-" + id}); err != nil {
+	if err := l.PutStaged(context.Background(), router.ReleaseRecord{App: "web", Release: "web-" + id}); err != nil {
 		t.Fatal(err)
 	}
-	return router.Promotion{PromotionID: id, Builds: map[string]string{"web": "web-" + id}}
+	return router.Promotion{PromotionID: id, Releases: map[string]string{"web": "web-" + id}}
 }
 
 func promoting(t *testing.T, l *Ledger, pointer string, promotionIDs ...string) {
@@ -302,7 +302,7 @@ func TestForgettingARecordAnotherPointerNamedSinceTheReclaimReadItKeepsIt(t *tes
 		t.Fatal(err)
 	}
 	store.beforeList = func() {
-		shared := router.Promotion{PromotionID: "s1", Builds: map[string]string{"web": "web-p00"}}
+		shared := router.Promotion{PromotionID: "s1", Releases: map[string]string{"web": "web-p00"}}
 		if _, err := l.Promote(ctx, shared, "staging", ""); err != nil {
 			t.Fatalf("the promote on staging = %v", err)
 		}
@@ -325,14 +325,14 @@ func TestAPromoteOfARecordRestagedWhileAReclaimRemovedItIsRefusedBusy(t *testing
 		t.Fatal(err)
 	}
 	store.beforeList = func() {
-		if err := l.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: "web-p00"}); err != nil {
+		if err := l.PutStaged(ctx, router.ReleaseRecord{App: "web", Release: "web-p00"}); err != nil {
 			t.Fatalf("restage web-p00 = %v", err)
 		}
 	}
 	if err := l.ForgetUnnamedRecords(ctx, unnamed.UnnamedRecordKeys); err != nil {
 		t.Fatal(err)
 	}
-	restaged := router.Promotion{PromotionID: "s1", Builds: map[string]string{"web": "web-p00"}}
+	restaged := router.Promotion{PromotionID: "s1", Releases: map[string]string{"web": "web-p00"}}
 	if _, err := l.Promote(ctx, restaged, "staging", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +354,7 @@ func TestARecordAPromoteRewroteAfterTheReclaimReadThePointersIsKept(t *testing.T
 		t.Fatal(err)
 	}
 	store.beforeRemove = func() {
-		shared := router.Promotion{PromotionID: "s1", Builds: map[string]string{"web": "web-p00"}}
+		shared := router.Promotion{PromotionID: "s1", Releases: map[string]string{"web": "web-p00"}}
 		if _, err := l.Promote(ctx, shared, "staging", ""); err != nil {
 			t.Fatalf("the promote on staging = %v", err)
 		}
@@ -375,7 +375,7 @@ func TestRewritingARecordAReclaimRemovedIsRefusedBusy(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 	promotion := staged(t, l, "p1")
-	if err := keyvalue.Forget(ctx, l.keyValues, l.deploymentKey("web", "web-p1")); err != nil {
+	if err := keyvalue.Forget(ctx, l.keyValues, l.releaseKey("web", "web-p1")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -391,7 +391,7 @@ func TestADroppedBuildAnotherPointerStillNamesIsNotUnnamed(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 	promoting(t, l, "staging", "p00")
-	shared := router.Promotion{PromotionID: "s1", Builds: map[string]string{"web": "web-p00"}}
+	shared := router.Promotion{PromotionID: "s1", Releases: map[string]string{"web": "web-p00"}}
 	if _, err := l.Promote(ctx, shared, "", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +418,7 @@ func TestRemovingAPointerKeepsTheRecordsAnotherPointerStillNames(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 	promoting(t, l, "pr-7", "p1")
-	shared := router.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "web-p1"}}
+	shared := router.Promotion{PromotionID: "p2", Releases: map[string]string{"web": "web-p1"}}
 	if _, err := l.Promote(ctx, shared, "pr-8", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -483,7 +483,7 @@ func TestReadActiveReadsThePromotionThePointerNamesAndNothingOnceItNamesNone(t *
 	promoting(t, l, "", "p1", "p2")
 
 	active, found, err := l.ReadActive(ctx, "")
-	if err != nil || !found || active.PromotionID != "p2" || active.Builds["web"] != "web-p2" {
+	if err != nil || !found || active.PromotionID != "p2" || active.Releases["web"] != "web-p2" {
 		t.Fatalf("ReadActive = %+v, %v, %v, want p2 and the build it promoted", active, found, err)
 	}
 	for _, id := range []string{"p2", "p1"} {
@@ -527,8 +527,8 @@ func TestPruneNamesTheDeploymentPointerAndHostsOfEachPromotionItDropped(t *testi
 		t.Fatal(err)
 	}
 	want := []router.PointerRemoval{{Pointer: "pr-7@p1", Hosts: []edge.PreviewHost{{Hostname: "pr-7-p1.preview.acme.com", App: "web"}}}}
-	if !reflect.DeepEqual(result.DeploymentRemovals, want) {
-		t.Errorf("deployments = %+v, want %+v: a pruned deployment stops serving on its own hostnames", result.DeploymentRemovals, want)
+	if !reflect.DeepEqual(result.ReleaseRemovals, want) {
+		t.Errorf("removals = %+v, want %+v: a pruned deployment stops serving on its own hostnames", result.ReleaseRemovals, want)
 	}
 
 	removed, err := l.RemovePointer(ctx, "pr-7")
@@ -536,11 +536,11 @@ func TestPruneNamesTheDeploymentPointerAndHostsOfEachPromotionItDropped(t *testi
 		t.Fatal(err)
 	}
 	var got []string
-	for _, removal := range removed.DeploymentRemovals {
+	for _, removal := range removed.ReleaseRemovals {
 		got = append(got, removal.Pointer)
 	}
 	if want := []string{"pr-7@p3", "pr-7@p2", "pr-7@p1"}; !slices.Equal(got, want) {
-		t.Errorf("deployments = %v, want %v: removing a preview removes every deployment it kept and every one whose withdrawal is still pending", got, want)
+		t.Errorf("removals = %v, want %v: removing a preview removes every deployment it kept and every one whose withdrawal is still pending", got, want)
 	}
 }
 
@@ -569,8 +569,8 @@ func TestADroppedDeploymentIsNamedByEveryPruneUntilItsWithdrawalIsForgotten(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := pointers(again.DeploymentRemovals), []string{"pr-7@p2", "pr-7@p1"}; !slices.Equal(got, want) {
-		t.Errorf("deployments = %v, want %v: p1's withdrawal was never confirmed, so it is retried", got, want)
+	if got, want := pointers(again.ReleaseRemovals), []string{"pr-7@p2", "pr-7@p1"}; !slices.Equal(got, want) {
+		t.Errorf("removals = %v, want %v: p1's withdrawal was never confirmed, so it is retried", got, want)
 	}
 
 	if err := l.ForgetPendingRemovals(ctx, "pr-7", []string{"pr-7@p1", "pr-7@p2"}); err != nil {
@@ -580,8 +580,8 @@ func TestADroppedDeploymentIsNamedByEveryPruneUntilItsWithdrawalIsForgotten(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := pointers(read.ListDeploymentRemovals()); !slices.Equal(got, []string{"pr-7@p4", "pr-7@p3"}) {
-		t.Errorf("deployments = %v, want only the kept p4 and p3 once the withdrawals are forgotten", got)
+	if got := pointers(read.ListReleaseRemovals()); !slices.Equal(got, []string{"pr-7@p4", "pr-7@p3"}) {
+		t.Errorf("removals = %v, want only the kept p4 and p3 once the withdrawals are forgotten", got)
 	}
 }
 
@@ -619,7 +619,7 @@ func TestPruneKeepsARecordAKeptPromotionStillNames(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 	promoting(t, l, "", "p1")
-	again := router.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "web-p1"}}
+	again := router.Promotion{PromotionID: "p2", Releases: map[string]string{"web": "web-p1"}}
 	if _, err := l.Promote(ctx, again, "", "p1"); err != nil {
 		t.Fatal(err)
 	}
@@ -696,7 +696,7 @@ func TestThePointerDocumentIsJSONACustomerCanRead(t *testing.T) {
 func TestRestagingABuildWithTheRecordItHoldsSucceeds(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
-	record := router.DeploymentRecord{App: "web", Build: "b1", Origin: "https://first.invalid", RoutingManifest: json.RawMessage(`{ "routes": [] }`)}
+	record := router.ReleaseRecord{App: "web", Release: "b1", Origin: "https://first.invalid", RoutingManifest: json.RawMessage(`{ "routes": [] }`)}
 	if err := l.PutStaged(ctx, record); err != nil {
 		t.Fatal(err)
 	}
@@ -709,11 +709,11 @@ func TestRestagingABuildWithTheRecordItHoldsSucceeds(t *testing.T) {
 func TestRestagingABuildWithAnotherRecordIsRefusedAndKeepsTheFirst(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
-	if err := l.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: "b1", Origin: "https://first.invalid"}); err != nil {
+	if err := l.PutStaged(ctx, router.ReleaseRecord{App: "web", Release: "b1", Origin: "https://first.invalid"}); err != nil {
 		t.Fatal(err)
 	}
 
-	err := l.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: "b1", Origin: "https://second.invalid"})
+	err := l.PutStaged(ctx, router.ReleaseRecord{App: "web", Release: "b1", Origin: "https://second.invalid"})
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "b1") {
@@ -728,12 +728,12 @@ func TestAStageThatLosesTheCreateToAnotherRecordIsRefused(t *testing.T) {
 	l, store := fixture()
 	ctx := context.Background()
 	store.beforeWrite = func(string) {
-		if err := l.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: "b1", Origin: "https://first.invalid"}); err != nil {
+		if err := l.PutStaged(ctx, router.ReleaseRecord{App: "web", Release: "b1", Origin: "https://first.invalid"}); err != nil {
 			t.Fatalf("the stage that won = %v", err)
 		}
 	}
 
-	err := l.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: "b1", Origin: "https://second.invalid"})
+	err := l.PutStaged(ctx, router.ReleaseRecord{App: "web", Release: "b1", Origin: "https://second.invalid"})
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
@@ -747,7 +747,7 @@ func TestAStageThatLosesTheCreateToAnotherRecordIsRefused(t *testing.T) {
 func TestAStageThatLosesTheCreateToTheSameRecordSucceeds(t *testing.T) {
 	l, store := fixture()
 	ctx := context.Background()
-	record := router.DeploymentRecord{App: "web", Build: "b1", Origin: "https://first.invalid"}
+	record := router.ReleaseRecord{App: "web", Release: "b1", Origin: "https://first.invalid"}
 	store.beforeWrite = func(string) {
 		if err := l.PutStaged(ctx, record); err != nil {
 			t.Fatalf("the stage that won = %v", err)
@@ -766,14 +766,45 @@ func TestStagedRecordsRoundTrip(t *testing.T) {
 	if _, found, err := l.Record(ctx, "web", "abc"); err != nil || found {
 		t.Fatalf("Record() before staging = %v, %v, want nothing found", found, err)
 	}
-	if err := l.PutStaged(ctx, router.DeploymentRecord{App: "web", Build: "abc"}); err != nil {
+	if err := l.PutStaged(ctx, router.ReleaseRecord{App: "web", Release: "abc"}); err != nil {
 		t.Fatal(err)
 	}
 	got, found, err := l.Record(ctx, "web", "abc")
-	if err != nil || !found || got.App != "web" || got.Build != "abc" {
+	if err != nil || !found || got.App != "web" || got.Release != "abc" {
 		t.Fatalf("Record() = %+v, %v, %v", got, found, err)
 	}
-	if err := l.PutStaged(ctx, router.DeploymentRecord{App: "web"}); err == nil {
-		t.Fatal("PutStaged() with no build succeeded, want it refused")
+	if err := l.PutStaged(ctx, router.ReleaseRecord{App: "web"}); err == nil {
+		t.Fatal("PutStaged() with no release succeeded, want it refused")
+	}
+}
+
+func TestStateRecordedUnderTheOldBuildsAndIdentityKeysIsNotReadBack(t *testing.T) {
+	l, store := fixture()
+	ctx := context.Background()
+
+	store.rows[l.pointerKey("@production").String()] = keyvalue.Entry{
+		Key:      l.pointerKey("@production"),
+		Value:    []byte(`{"name":"@production","active":"p1","sequence":1,"promotions":[{"promotionId":"p1","ts":1,"builds":{"web":"abc~fp"},"sequence":1}]}`),
+		Revision: "1",
+	}
+	store.rows[l.releaseKey("web", "abc~fp").String()] = keyvalue.Entry{
+		Key:      l.releaseKey("web", "abc~fp"),
+		Value:    []byte(`{"app":"web","identity":"abc~fp","deploymentId":"abc"}`),
+		Revision: "2",
+	}
+
+	pointer, err := l.Read(ctx, "")
+	if err != nil {
+		t.Fatalf("Read() = %v", err)
+	}
+	if len(pointer.Promotions) != 1 || len(pointer.Promotions[0].Releases) != 0 {
+		t.Errorf("Read() = %+v, want the promotion the old shape recorded to name no release: the old key is not read back", pointer.Promotions)
+	}
+	record, found, err := l.Record(ctx, "web", "abc~fp")
+	if err != nil || !found {
+		t.Fatalf("Record() = %v, %v, want the row found", found, err)
+	}
+	if record.Release != "" || record.BuildID != "" {
+		t.Errorf("Record() = %+v, want no release or build id from the old identity and deploymentId keys", record)
 	}
 }

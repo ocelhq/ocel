@@ -1678,7 +1678,7 @@ export default {
 }
 
 func stubAppBuildRecorder(dependencies *Dependencies, built *bool) {
-	stubRecordedDeploymentIDs(dependencies)
+	stubRecordedBuildIDs(dependencies)
 	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 		*built = true
 		return functionsOnDisk(cfg)
@@ -1686,7 +1686,7 @@ func stubAppBuildRecorder(dependencies *Dependencies, built *bool) {
 }
 
 func captureBuildVariables(dependencies *Dependencies) *map[string]build.AppVariables {
-	stubRecordedDeploymentIDs(dependencies)
+	stubRecordedBuildIDs(dependencies)
 	var got map[string]build.AppVariables
 	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, variables map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
 		got = variables

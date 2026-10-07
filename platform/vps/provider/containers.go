@@ -26,7 +26,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image", app.App)
 	}
-	physical := host.ContainerName(spec.Ref.Name.String(), app.App, app.Deployment, app.Image)
+	physical := host.ContainerName(spec.Ref.Name.String(), app.App, app.BuildID, app.Image)
 	store, err := p.storeSection(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("pin the store %s writes through: %w", app.App, err)

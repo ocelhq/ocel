@@ -33,10 +33,10 @@ func seedPromotions(t *testing.T, provider *fake.Provider, tier environment.Tier
 	releases := ledger.New(provider.KeyValues(), tier, slug)
 	replaces := ""
 	for i, id := range ids {
-		if err := releases.PutStaged(context.Background(), router.DeploymentRecord{App: "web", Build: buildIdentity(i)}); err != nil {
+		if err := releases.PutStaged(context.Background(), router.ReleaseRecord{App: "web", Release: releaseFor(i)}); err != nil {
 			t.Fatal(err)
 		}
-		promotion := router.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": buildIdentity(i)}}
+		promotion := router.Promotion{PromotionID: id, Ts: int64(i + 1), Releases: map[string]string{"web": releaseFor(i)}}
 		if _, err := releases.Promote(context.Background(), promotion, pointer, replaces); err != nil {
 			t.Fatal(err)
 		}
@@ -45,7 +45,7 @@ func seedPromotions(t *testing.T, provider *fake.Provider, tier environment.Tier
 	return releases
 }
 
-func buildIdentity(seq int) string {
+func releaseFor(seq int) string {
 	return fmt.Sprintf("%032x~%012x", seq+1, seq+1)
 }
 
@@ -94,8 +94,8 @@ func TestRollbackPromotesTheBuildsOfTheEarlierPromotionAsANewOne(t *testing.T) {
 	if id := promoted.GetPromotionId(); id == "p1" || id == "p2" {
 		t.Errorf("Rollback() promoted %q, want a new promotion rather than one the history already records", id)
 	}
-	if build := promoted.GetBuilds()["web"]; build != buildIdentity(0) {
-		t.Errorf("Rollback() promoted web build %q, want %q, the build p1 promoted", build, buildIdentity(0))
+	if build := promoted.GetReleases()["web"]; build != releaseFor(0) {
+		t.Errorf("Rollback() promoted web build %q, want %q, the build p1 promoted", build, releaseFor(0))
 	}
 	if promoted.GetPropagation() == nil {
 		t.Error("Rollback() reported no propagation, so nothing tells the user how long the pointer move takes")
@@ -168,14 +168,14 @@ func TestADeployAnotherPromoteOvertookWhileItBuiltIsRefusedBusyAndMovesNothing(t
 	var overtook sync.Once
 	vendor.FakeStacks().Entering(func(provider.StackSpec) error {
 		overtook.Do(func() {
-			promotion := router.Promotion{PromotionID: "p2", Builds: map[string]string{"web": buildIdentity(0)}}
+			promotion := router.Promotion{PromotionID: "p2", Releases: map[string]string{"web": releaseFor(0)}}
 			if _, err := releases.Promote(context.Background(), promotion, "", "p1"); err != nil {
 				t.Errorf("the promote that overtook the deploy = %v", err)
 			}
 		})
 		return nil
 	})
-	servedBefore := relayPlane(vendor).Builds("shop", environment.TierProduction, router.DefaultPointer)
+	servedBefore := relayPlane(vendor).Releases("shop", environment.TierProduction, router.DefaultPointer)
 
 	result, _ := deploy(t, client, deployRequest())
 
@@ -190,7 +190,7 @@ func TestADeployAnotherPromoteOvertookWhileItBuiltIsRefusedBusyAndMovesNothing(t
 	if active, err := releases.ActivePromotionID(context.Background(), ""); err != nil || active != "p2" {
 		t.Errorf("the pointer names %q, %v, want p2, the promote that overtook the deploy", active, err)
 	}
-	if moved := relayPlane(vendor).Builds("shop", environment.TierProduction, router.DefaultPointer); !maps.Equal(moved, servedBefore) {
+	if moved := relayPlane(vendor).Releases("shop", environment.TierProduction, router.DefaultPointer); !maps.Equal(moved, servedBefore) {
 		t.Errorf("the router serves %v after the refused deploy, want %v: a refused deploy moves nothing", moved, servedBefore)
 	}
 }
@@ -200,7 +200,7 @@ func overtakenWhileItBuilds(t *testing.T, vendor *fake.Provider, releases *ledge
 	var overtook sync.Once
 	vendor.FakeStacks().Entering(func(provider.StackSpec) error {
 		overtook.Do(func() {
-			promotion := router.Promotion{PromotionID: "p2", Builds: map[string]string{"web": buildIdentity(0)}}
+			promotion := router.Promotion{PromotionID: "p2", Releases: map[string]string{"web": releaseFor(0)}}
 			if _, err := releases.Promote(context.Background(), promotion, "", "p1"); err != nil {
 				t.Errorf("the promote that overtook the deploy = %v", err)
 			}
@@ -258,7 +258,7 @@ func TestADeployRefusedBusyAfterItProvisionedReclaimsWhatItProvisioned(t *testin
 	if left := appStacksRecorded(t, vendor); len(left) != 0 {
 		t.Errorf("the refused deploy left stack records %v, want none", left)
 	}
-	if want := []string{ledger.RecordKey("web", buildIdentity(0))}; !slices.Equal(stagedRecordKeys(t, vendor), want) {
+	if want := []string{ledger.RecordKey("web", releaseFor(0))}; !slices.Equal(stagedRecordKeys(t, vendor), want) {
 		t.Errorf("the ledger holds records %v after the refused deploy, want only %v: the record it staged names a build no promotion does", stagedRecordKeys(t, vendor), want)
 	}
 }
@@ -466,11 +466,11 @@ func seedTakenBack(t *testing.T, provider *fake.Provider) {
 	t.Helper()
 	releases := seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1")
 	for i, id := range []string{"p2", "p3"} {
-		build := buildIdentity(i + 1)
-		if err := releases.PutStaged(context.Background(), router.DeploymentRecord{App: "web", Build: build}); err != nil {
+		build := releaseFor(i + 1)
+		if err := releases.PutStaged(context.Background(), router.ReleaseRecord{App: "web", Release: build}); err != nil {
 			t.Fatal(err)
 		}
-		promotion := router.Promotion{PromotionID: id, Ts: int64(i + 2), Builds: map[string]string{"web": build}}
+		promotion := router.Promotion{PromotionID: id, Ts: int64(i + 2), Releases: map[string]string{"web": build}}
 		if _, err := releases.Promote(context.Background(), promotion, "", "p1"); err != nil {
 			t.Fatal(err)
 		}
@@ -509,8 +509,8 @@ func TestRollbackPassesOverAPromotionTakenBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
-	if build := rolled.GetPromoted().GetBuilds()["web"]; build != buildIdentity(0) {
-		t.Errorf("Rollback() promoted web build %q, want %q, the build p1 served: p2 was taken back and never served", build, buildIdentity(0))
+	if build := rolled.GetPromoted().GetReleases()["web"]; build != releaseFor(0) {
+		t.Errorf("Rollback() promoted web build %q, want %q, the build p1 served: p2 was taken back and never served", build, releaseFor(0))
 	}
 }
 
@@ -653,7 +653,7 @@ func TestAPruneSaysWhichPromotionsItReclaimedAndHowManyItKept(t *testing.T) {
 					said = append(said, line)
 				}
 			}
-			if !slices.Contains(said, tc.wants) || (tc.name == "past the newest two" && !slices.Contains(said, "Destroying the stack of web build 00000000000000000000000000000001~000000000001 (1 of 1)")) {
+			if !slices.Contains(said, tc.wants) || (tc.name == "past the newest two" && !slices.Contains(said, "Destroying the stack of web release 00000000000000000000000000000001~000000000001 (1 of 1)")) {
 				t.Errorf("the prune said %q, want %q", said, tc.wants)
 			}
 		})
@@ -711,7 +711,7 @@ func TestAPruneTakesOnlyTheDroppedReleasesRevisionFromTheServiceTheKeptReleasesS
 		ref := provider.StackRef{
 			Project: "shop",
 			Tier:    environment.TierProduction,
-			Name:    naming.AppStack(stackrecords.ProductionEnv, "web", releaseOf(t, buildIdentity(i))),
+			Name:    naming.AppStack(stackrecords.ProductionEnv, "web", releaseOf(t, releaseFor(i))),
 		}
 		result, err := vendor.Stacks().Provision(context.Background(), provider.StackSpec{
 			Ref:  ref,
@@ -724,7 +724,7 @@ func TestAPruneTakesOnlyTheDroppedReleasesRevisionFromTheServiceTheKeptReleasesS
 		if err := stackrecords.Write(context.Background(), vendor.KeyValues(), ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 			Kind:      provider.StackApp,
 			App:       "web",
-			Build:     buildIdentity(i),
+			Release:   releaseFor(i),
 			Functions: result.Functions,
 		}); err != nil {
 			t.Fatal(err)
@@ -761,7 +761,7 @@ func TestARollbackPastTheRetainedPromotionsReclaimsTheBuildItDropped(t *testing.
 		t.Fatalf("Rollback() error = %v", err)
 	}
 
-	if _, found, err := releases.Record(context.Background(), "web", buildIdentity(0)); err != nil || found {
+	if _, found, err := releases.Record(context.Background(), "web", releaseFor(0)); err != nil || found {
 		t.Errorf("the record of p00's build = found %v, %v, want it removed once no promotion names it", found, err)
 	}
 	var destroyed []string
@@ -785,10 +785,10 @@ func TestADeployPastTheRetainedPromotionsReclaimsTheBuildItDropped(t *testing.T)
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	if _, found, err := releases.Record(context.Background(), "web", buildIdentity(0)); err != nil || found {
+	if _, found, err := releases.Record(context.Background(), "web", releaseFor(0)); err != nil || found {
 		t.Errorf("the record of p00's build = found %v, %v, want it removed once no promotion names it", found, err)
 	}
-	want := fmt.Sprintf("Destroying the stack of web build %s (1 of 1)", buildIdentity(0))
+	want := fmt.Sprintf("Destroying the stack of web release %s (1 of 1)", releaseFor(0))
 	var said []string
 	for _, event := range events {
 		if line := saidLine(event); line != "" {
@@ -836,7 +836,7 @@ func TestADeployWhoseDroppedBuildCannotBeReclaimedServesAndWarnsWithTheReason(t 
 			t.Errorf("the deploy warned %q, want it to name %q", warned, want)
 		}
 	}
-	if _, found, err := releases.Record(context.Background(), "web", buildIdentity(0)); err != nil || !found {
+	if _, found, err := releases.Record(context.Background(), "web", releaseFor(0)); err != nil || !found {
 		t.Errorf("the record of p00's build = found %v, %v, want it kept: its stack was not destroyed", found, err)
 	}
 }
@@ -845,7 +845,7 @@ func TestADeployWhoseDroppedRecordCannotBeRemovedStillServesItsPromotion(t *test
 	builtProject(t)
 	client, vendor := deployServed(t)
 	releases := seedKept(t, vendor)
-	record := ledger.Partition(environment.TierProduction, "shop").Key("records", "web", buildIdentity(0))
+	record := ledger.Partition(environment.TierProduction, "shop").Key("records", "web", releaseFor(0))
 	vendor.KeyValues().(*fake.KeyValues).SetRemovalError(record, errors.New("the table refused the delete"))
 
 	result, events := deploy(t, client, deployRequest())
@@ -857,8 +857,8 @@ func TestADeployWhoseDroppedRecordCannotBeRemovedStillServesItsPromotion(t *test
 	if err != nil || !found || active.PromotionID != result.GetPromotionId() {
 		t.Fatalf("the ledger names %+v, %v, %v, want %s", active, found, err, result.GetPromotionId())
 	}
-	if served := relayPlane(vendor).Builds("shop", environment.TierProduction, router.DefaultPointer)["web"]; served != active.Builds["web"] {
-		t.Errorf("the router serves web %q, want %q, the build the ledger names", served, active.Builds["web"])
+	if served := relayPlane(vendor).Releases("shop", environment.TierProduction, router.DefaultPointer)["web"]; served != active.Releases["web"] {
+		t.Errorf("the router serves web %q, want %q, the build the ledger names", served, active.Releases["web"])
 	}
 	if !strings.Contains(strings.Join(warnings(events), "\n"), "the table refused the delete") {
 		t.Errorf("the deploy warned %q, want the removal that failed named", warnings(events))
@@ -876,7 +876,7 @@ func TestADeployARouterLeftUnservedStillReclaimsTheBuildItsPromoteDropped(t *tes
 	if result.GetSuccess() {
 		t.Fatal("Deploy() with a router that refused its pointer move = success, want it to fail")
 	}
-	if _, found, err := releases.Record(context.Background(), "web", buildIdentity(0)); err != nil || found {
+	if _, found, err := releases.Record(context.Background(), "web", releaseFor(0)); err != nil || found {
 		t.Errorf("the record of p00's build = found %v, %v, want it reclaimed: the promote dropped p00 whether or not it served", found, err)
 	}
 	if !slices.ContainsFunc(vendor.Journal(), func(entry string) bool { return strings.HasPrefix(entry, "destroy ") }) {
@@ -908,16 +908,16 @@ func TestARollbackReclaimsTheDroppedBuildsBesideARecordNamingNoBuildAndWarnsOfIt
 	ctx := context.Background()
 	replaces := ""
 	for i := range ledger.KeptPromotions {
-		builds := map[string]string{"web": buildIdentity(i)}
+		builds := map[string]string{"web": releaseFor(i)}
 		if i == 0 {
 			builds["api"] = "garbage"
 		}
 		for app, build := range builds {
-			if err := releases.PutStaged(ctx, router.DeploymentRecord{App: app, Build: build}); err != nil {
+			if err := releases.PutStaged(ctx, router.ReleaseRecord{App: app, Release: build}); err != nil {
 				t.Fatal(err)
 			}
 		}
-		promotion := router.Promotion{PromotionID: fmt.Sprintf("p%02d", i), Ts: int64(i + 1), Builds: builds}
+		promotion := router.Promotion{PromotionID: fmt.Sprintf("p%02d", i), Ts: int64(i + 1), Releases: builds}
 		if _, err := releases.Promote(ctx, promotion, "", replaces); err != nil {
 			t.Fatal(err)
 		}
@@ -929,7 +929,7 @@ func TestARollbackReclaimsTheDroppedBuildsBesideARecordNamingNoBuildAndWarnsOfIt
 		t.Fatalf("Rollback() error = %v", err)
 	}
 
-	if _, found, err := releases.Record(ctx, "web", buildIdentity(0)); err != nil || found {
+	if _, found, err := releases.Record(ctx, "web", releaseFor(0)); err != nil || found {
 		t.Errorf("the record of p00's web build = found %v, %v, want it reclaimed beside the record it could not read", found, err)
 	}
 	if _, found, err := releases.Record(ctx, "api", "garbage"); err != nil || !found {
@@ -946,11 +946,11 @@ func seedKeptContainers(t *testing.T, vendor *fake.Provider) *ledger.Ledger {
 	ctx := context.Background()
 	replaces := ""
 	for i := range ledger.KeptPromotions {
-		record := router.DeploymentRecord{App: "web", Build: buildIdentity(i), Image: containerTestImage, Physical: fmt.Sprintf("web-%02d", i)}
+		record := router.ReleaseRecord{App: "web", Release: releaseFor(i), Image: containerTestImage, Physical: fmt.Sprintf("web-%02d", i)}
 		if err := releases.PutStaged(ctx, record); err != nil {
 			t.Fatal(err)
 		}
-		promotion := router.Promotion{PromotionID: fmt.Sprintf("p%02d", i), Ts: int64(i + 1), Builds: map[string]string{"web": record.Build}}
+		promotion := router.Promotion{PromotionID: fmt.Sprintf("p%02d", i), Ts: int64(i + 1), Releases: map[string]string{"web": record.Release}}
 		if _, err := releases.Promote(ctx, promotion, "", replaces); err != nil {
 			t.Fatal(err)
 		}
@@ -980,11 +980,11 @@ func TestARollbackPastTheRetainedPromotionsReclaimsTheContainerBuildItDropped(t 
 		t.Fatalf("Rollback() error = %v", err)
 	}
 
-	want := naming.AppStack(stackrecords.ProductionEnv, "web", releaseOf(t, buildIdentity(0))).String()
+	want := naming.AppStack(stackrecords.ProductionEnv, "web", releaseOf(t, releaseFor(0))).String()
 	if destroyed := destroyedStacks(vendor); !slices.Contains(destroyed, want) {
 		t.Errorf("the rollback destroyed %v, want %s: a container release this provider keeps no window of is reclaimed like any other", destroyed, want)
 	}
-	if _, found, err := releases.Record(ctx, "web", buildIdentity(0)); err != nil || found {
+	if _, found, err := releases.Record(ctx, "web", releaseFor(0)); err != nil || found {
 		t.Errorf("the record of p00's container build = found %v, %v, want it removed once its stack is", found, err)
 	}
 }
@@ -1004,7 +1004,7 @@ func TestARollbackPastTheRetainedPromotionsLeavesTheContainerBuildItDroppedToAPr
 	if destroyed := destroyedStacks(vendor); len(destroyed) != 0 {
 		t.Errorf("the rollback destroyed %v, want the container build it dropped left to the provider that keeps its own window of them", destroyed)
 	}
-	if _, found, err := releases.Record(ctx, "web", buildIdentity(0)); err != nil || found {
+	if _, found, err := releases.Record(ctx, "web", releaseFor(0)); err != nil || found {
 		t.Errorf("the record of p00's container build = found %v, %v, want it removed once no promotion names it", found, err)
 	}
 }
@@ -1022,11 +1022,11 @@ func TestRollingBackToAnEarlierDeployOfTheSameImageServesTheOriginThatDeployProv
 		if err != nil || !found {
 			t.Fatalf("ReadActive() = %v, %v, want a promotion", found, err)
 		}
-		record, staged, err := releases.Record(ctx, "web", active.Builds["web"])
+		record, staged, err := releases.Record(ctx, "web", active.Releases["web"])
 		if err != nil || !staged {
-			t.Fatalf("the record of web build %s = %v, %v, want it staged", active.Builds["web"], staged, err)
+			t.Fatalf("the record of web build %s = %v, %v, want it staged", active.Releases["web"], staged, err)
 		}
-		return active.Builds["web"], record.Origin
+		return active.Releases["web"], record.Origin
 	}
 	var builds, origins []string
 	for version := range int64(2) {

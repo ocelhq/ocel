@@ -11,15 +11,15 @@ import (
 var embedded embed.FS
 
 var (
-	entry            = load("dist/entry.js")
-	deploymentsStore = load("dist/deployments-store.js")
-	isrWriter        = load("dist/isr-writer.js")
-	refresher        = load("dist/refresher.js")
+	entry         = load("dist/entry.js")
+	releasesStore = load("dist/releases-store.js")
+	isrWriter     = load("dist/isr-writer.js")
+	refresher     = load("dist/refresher.js")
 )
 
 func Entry() []byte { return entry }
 
-func DeploymentsStore() []byte { return deploymentsStore }
+func ReleasesStore() []byte { return releasesStore }
 
 func ISRWriter() []byte { return isrWriter }
 

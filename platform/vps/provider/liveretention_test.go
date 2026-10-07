@@ -55,7 +55,7 @@ func sweepSpec(t *testing.T, tag string) provider.StackSpec {
 		App: &provider.AppSpec{
 			App:             sweepApp,
 			Compute:         provider.ComputeContainer,
-			Deployment:      hex.EncodeToString(sum[:])[:32],
+			BuildID:         hex.EncodeToString(sum[:])[:32],
 			Image:           sweepAt(tag),
 			HealthCheckPath: healthPath,
 		},

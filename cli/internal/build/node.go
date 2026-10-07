@@ -25,7 +25,7 @@ type nodeAppBuild struct {
 	Name          string            `json:"name"`
 	Cwd           string            `json:"cwd"`
 	OutputDir     string            `json:"outputDir,omitempty"`
-	DeploymentID  string            `json:"deploymentId,omitempty"`
+	BuildID       string            `json:"buildId,omitempty"`
 	Folder        string            `json:"folder,omitempty"`
 	Env           map[string]string `json:"env,omitempty"`
 	Unset         []string          `json:"unset,omitempty"`

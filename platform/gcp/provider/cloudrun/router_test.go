@@ -229,8 +229,8 @@ func TestTheCloudRunRouterBehavesAsEveryRouterMust(t *testing.T) {
 			}
 		},
 		Hostname: "shop.example.com",
-		Record: func(app, build string) router.DeploymentRecord {
-			return router.DeploymentRecord{App: app, Build: build, Physical: webService, Revisions: map[string]string{webService: "rev-" + build}}
+		Record: func(app, build string) router.ReleaseRecord {
+			return router.ReleaseRecord{App: app, Release: build, Physical: webService, Revisions: map[string]string{webService: "rev-" + build}}
 		},
 	})
 }
@@ -258,9 +258,9 @@ func deploymentMove(pointer, promotionID, revision string) router.PointerMove {
 func deploymentMoveOf(pointer, promotionID, revision string, revisions map[string]string) router.PointerMove {
 	return router.PointerMove{
 		Pointer:   router.FormatDeploymentPointer(pointer, promotionID),
-		Promotion: router.Promotion{PromotionID: promotionID, Builds: map[string]string{"web": "b-" + revision}},
-		Records: map[string]router.DeploymentRecord{"web": {
-			App: "web", Build: "b-" + revision, Physical: webService, Revisions: revisions,
+		Promotion: router.Promotion{PromotionID: promotionID, Releases: map[string]string{"web": "b-" + revision}},
+		Records: map[string]router.ReleaseRecord{"web": {
+			App: "web", Release: "b-" + revision, Physical: webService, Revisions: revisions,
 		}},
 	}
 }
@@ -345,9 +345,9 @@ func fronting(t *testing.T, pins *pinRecorder) fake.PromotingStack {
 
 func staged(t *testing.T, stack fake.PromotingStack, identity, revision string) {
 	t.Helper()
-	err := stack.Ledger.PutStaged(context.Background(), router.DeploymentRecord{
+	err := stack.Ledger.PutStaged(context.Background(), router.ReleaseRecord{
 		App:       "web",
-		Build:     identity,
+		Release:   identity,
 		Physical:  webService,
 		Revisions: map[string]string{webService: revision},
 	})
@@ -360,7 +360,7 @@ func promoted(t *testing.T, stack fake.PromotingStack, id, identity string) erro
 	t.Helper()
 	return stack.MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{
 		PromotionID: id,
-		Builds:      map[string]string{"web": identity},
+		Releases:    map[string]string{"web": identity},
 	}}, progress.Discard())
 }
 
@@ -391,7 +391,7 @@ func TestAPromotionSaysWhichRevisionItPinsEachAppsTrafficTo(t *testing.T) {
 	staged(t, stack, "b1", "web-00001-abc")
 	progress := &fake.Log{}
 
-	promotion := router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}
+	promotion := router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b1"}}
 	if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: promotion}, progress); err != nil {
 		t.Fatalf("Promote(p1) = %v", err)
 	}
@@ -406,8 +406,8 @@ func TestAPromotionWhoseRecordNamesNoRevisionIsRefusedRatherThanLeftUnpinned(t *
 
 	pins := &pinRecorder{}
 	stack := fronting(t, pins)
-	if err := stack.Ledger.PutStaged(context.Background(), router.DeploymentRecord{
-		App: "web", Build: "b1", Physical: webService,
+	if err := stack.Ledger.PutStaged(context.Background(), router.ReleaseRecord{
+		App: "web", Release: "b1", Physical: webService,
 	}); err != nil {
 		t.Fatalf("PutStaged(b1) = %v", err)
 	}

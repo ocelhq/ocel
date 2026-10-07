@@ -116,7 +116,7 @@ func (e *mintingEdge) Bootstrap(_ context.Context, tier environment.Tier) (edge.
 		cred, e.hasCred = "bootstrap-secret", true
 	}
 	return edge.BootstrapOutput{Offers: []edge.Offer{{
-		Kind: edge.OfferDeploymentsStore,
+		Kind: edge.OfferReleasesStore,
 		Values: map[string]string{
 			edge.OfferKeyStoreEndpoint:            "https://deployments.example",
 			edge.OfferKeyStoreScriptName:          "ocel-deployments",
@@ -152,8 +152,8 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	if front.bootstraps != 1 {
 		t.Errorf("the edge was bootstrapped %d times, want once: a drop re-adopting what it is about to sever leaves the two disagreeing", front.bootstraps)
 	}
-	if _, present := ssmc.params[cloudflareNames(environment.TierProduction).deploymentsStoreParam]; present {
-		t.Error("the deployments store parameter outlived the drop, so the next bootstrap reads a store for an edge that is no longer installed")
+	if _, present := ssmc.params[cloudflareNames(environment.TierProduction).releasesStoreParam]; present {
+		t.Error("the releases store parameter outlived the drop, so the next bootstrap reads a store for an edge that is no longer installed")
 	}
 
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, fronted, nil); err != nil {

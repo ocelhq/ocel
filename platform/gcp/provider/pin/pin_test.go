@@ -94,13 +94,13 @@ func (s *services) Untag(context.Context, string, string) error { return nil }
 
 func promotion(builds map[string]string) router.PointerMove {
 	move := router.PointerMove{
-		Promotion: router.Promotion{PromotionID: "p2", Builds: map[string]string{}},
-		Records:   map[string]router.DeploymentRecord{},
+		Promotion: router.Promotion{PromotionID: "p2", Releases: map[string]string{}},
+		Records:   map[string]router.ReleaseRecord{},
 	}
 	for app, revision := range builds {
 		service := "ocel-shop-prod-" + app
-		move.Promotion.Builds[app] = "b2"
-		move.Records[app] = router.DeploymentRecord{App: app, Build: "b2", Physical: service, Revisions: map[string]string{service: revision}}
+		move.Promotion.Releases[app] = "b2"
+		move.Records[app] = router.ReleaseRecord{App: app, Release: "b2", Physical: service, Revisions: map[string]string{service: revision}}
 	}
 	return move
 }
@@ -643,7 +643,7 @@ func TestAPromotionThatClosedAServiceAndIsRepinnedWhilePuttingItBackRecordsARoll
 func TestAFunctionAppAnswersOnItsEntryFunctionsService(t *testing.T) {
 	t.Parallel()
 
-	if got := pin.ResolveService(router.DeploymentRecord{EntryFunction: "fn-svc"}); got != "fn-svc" {
+	if got := pin.ResolveService(router.ReleaseRecord{EntryFunction: "fn-svc"}); got != "fn-svc" {
 		t.Errorf("ResolveService = %q, want fn-svc", got)
 	}
 }
@@ -651,7 +651,7 @@ func TestAFunctionAppAnswersOnItsEntryFunctionsService(t *testing.T) {
 func TestAContainerAppAnswersOnItsContainersService(t *testing.T) {
 	t.Parallel()
 
-	if got := pin.ResolveService(router.DeploymentRecord{Physical: "ctr", EntryFunction: "fn"}); got != "ctr" {
+	if got := pin.ResolveService(router.ReleaseRecord{Physical: "ctr", EntryFunction: "fn"}); got != "ctr" {
 		t.Errorf("ResolveService = %q, want ctr", got)
 	}
 }
@@ -659,8 +659,8 @@ func TestAContainerAppAnswersOnItsContainersService(t *testing.T) {
 func TestTheTagsOfAFunctionAppsDeploymentAreReadWithoutRefusal(t *testing.T) {
 	t.Parallel()
 
-	tags, err := pin.ReadTags(context.Background(), &services{}, router.DeploymentRecord{
-		App: "web", Build: "b1", EntryFunction: "fn-svc", Revisions: map[string]string{"fn-svc": "fn-svc-b1"},
+	tags, err := pin.ReadTags(context.Background(), &services{}, router.ReleaseRecord{
+		App: "web", Release: "b1", EntryFunction: "fn-svc", Revisions: map[string]string{"fn-svc": "fn-svc-b1"},
 	})
 	if err != nil {
 		t.Fatalf("ReadTags = %v", err)

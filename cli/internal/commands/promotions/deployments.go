@@ -97,7 +97,7 @@ func deploymentListResult(promotions []*contractv1.PromotionHistoryEntry) *resul
 			PromotionId: p.GetPromotionId(),
 			Tag:         p.GetTag(),
 			CreatedAt:   terminal.EpochRFC3339(p.GetTs()),
-			Builds:      p.GetBuilds(),
+			Builds:      p.GetReleases(),
 			State:       deploymentState(entry),
 		})
 	}
@@ -191,7 +191,7 @@ func renderPromotions(stdout io.Writer, promotions []*contractv1.PromotionHistor
 		case entry.GetUnpromoted():
 			status = "unpromoted"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, terminal.EpochDateTime(p.GetTs()), deployedIdentities(p.GetBuilds()), status)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, terminal.EpochDateTime(p.GetTs()), deployedReleases(p.GetReleases()), status)
 	}
 	_ = tw.Flush()
 }

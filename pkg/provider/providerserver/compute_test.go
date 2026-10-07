@@ -194,13 +194,13 @@ func TestTheLedgerRecordAContainerDeployStagesIsTheOneItsPromotionLooksUp(t *tes
 	if err != nil || !promoted {
 		t.Fatalf("ReadActive() = %v, %v, want the promotion the deploy made", promoted, err)
 	}
-	build := active.Builds["web"]
+	build := active.Releases["web"]
 	record, found, err := releases.Record(context.Background(), "web", build)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !found {
-		t.Fatalf("the deployments ledger has no record under %q, which is what the promotion names for the container app: every rollback and every re-point would refuse by name", build)
+		t.Fatalf("the ledger has no record under %q, which is what the promotion names for the container app: every rollback and every re-point would refuse by name", build)
 	}
 	if record.Image != pushedCoordinate {
 		t.Errorf("the record under %q names image %q, want %q, the image a promotion reading it puts in front of the app", build, record.Image, pushedCoordinate)
@@ -228,14 +228,14 @@ func TestAContainerARouterAddressesItselfIsReportedAtItsOwnURLWhenNoDomainIsDecl
 	}
 }
 
-func activeRecord(t *testing.T, vendor *fake.Provider, app string) router.DeploymentRecord {
+func activeRecord(t *testing.T, vendor *fake.Provider, app string) router.ReleaseRecord {
 	t.Helper()
 	releases := ledger.New(vendor.KeyValues(), environment.TierProduction, "shop")
 	active, promoted, err := releases.ReadActive(context.Background(), "")
 	if err != nil || !promoted {
 		t.Fatalf("ReadActive() = %v, %v, want the promotion the deploy made", promoted, err)
 	}
-	record, found, err := releases.Record(context.Background(), app, active.Builds[app])
+	record, found, err := releases.Record(context.Background(), app, active.Releases[app])
 	if err != nil || !found {
 		t.Fatalf("Record(%q) = %v, %v, want the record the promotion names", app, found, err)
 	}

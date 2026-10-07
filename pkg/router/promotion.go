@@ -5,7 +5,7 @@ import "github.com/ocelhq/ocel/pkg/edge"
 type Promotion struct {
 	PromotionID string             `json:"promotionId"`
 	Ts          int64              `json:"ts"`
-	Builds      map[string]string  `json:"builds"`
+	Releases    map[string]string  `json:"releases"`
 	Tag         string             `json:"tag,omitempty"`
 	Propagation *Propagation       `json:"propagation,omitempty"`
 	Hosts       []edge.PreviewHost `json:"hosts,omitempty"`
@@ -23,5 +23,5 @@ type PruneResult struct {
 	UnnamedRecordKeys          []string         `json:"unnamedRecordKeys"`
 	SurvivingRecordKeys        []string         `json:"survivingRecordKeys"`
 	SurvivingPointerRecordKeys []string         `json:"survivingPointerRecordKeys"`
-	DeploymentRemovals         []PointerRemoval `json:"deploymentRemovals,omitempty"`
+	ReleaseRemovals            []PointerRemoval `json:"releaseRemovals,omitempty"`
 }

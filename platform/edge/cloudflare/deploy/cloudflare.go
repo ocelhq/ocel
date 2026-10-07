@@ -297,7 +297,7 @@ func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorke
 	if err != nil {
 		return nil, err
 	}
-	storeWorker := edge.Worker{Main: workerModule(deploymentsStoreBundle)}
+	storeWorker := edge.Worker{Main: workerModule(releasesStoreBundle)}
 	writerScript, err := isrWriterScriptNameFor(namespace, tier)
 	if err != nil {
 		return nil, err
@@ -313,9 +313,9 @@ func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorke
 		{
 			scriptName: storeScript,
 			worker:     storeWorker,
-			do:         deploymentsStoreWorker,
-			what:       "deployments-store worker",
-			offer:      edge.OfferDeploymentsStore,
+			do:         releasesStoreWorker,
+			what:       "releases-store worker",
+			offer:      edge.OfferReleasesStore,
 			keys: offerKeys{
 				endpoint:   edge.OfferKeyStoreEndpoint,
 				scriptName: edge.OfferKeyStoreScriptName,
@@ -397,10 +397,10 @@ func (p *cloudflare) ensureSubdomain(ctx context.Context, up upload, on bool, wh
 }
 
 var (
-	entryBundle            = bundles.Entry()
-	deploymentsStoreBundle = bundles.DeploymentsStore()
-	isrWriterBundle        = bundles.ISRWriter()
-	refresherBundle        = bundles.Refresher()
+	entryBundle         = bundles.Entry()
+	releasesStoreBundle = bundles.ReleasesStore()
+	isrWriterBundle     = bundles.ISRWriter()
+	refresherBundle     = bundles.Refresher()
 )
 
 func workerModule(content []byte) edge.WorkerModule {

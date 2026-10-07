@@ -19,7 +19,7 @@ func TestAContainerAppsPreviewBehindAnEdgeRunningCodeIsForwardedUnderItsOwnHostA
 	client, p := mixedServed(t)
 	previewBootstrapped(t, client)
 
-	result, _ := deploy(t, client, withContainerAdmin(previewRequest(), adminDeploymentID))
+	result, _ := deploy(t, client, withContainerAdmin(previewRequest(), adminBuildID))
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("preview Deploy() = %q", result.GetError())
 	}
@@ -34,7 +34,7 @@ func TestAContainerAppsPreviewBehindAnEdgeRunningCodeIsForwardedUnderItsOwnHostA
 	if bound < 0 || relay.Bindings()[bound].Origin == nil {
 		t.Fatalf("the edge was bound with %+v, want %s forwarded to its router's origin", relay.Bindings(), host)
 	}
-	served := p.Routers().(*fake.Routers).DataPlane(fake.RouterDirect).Builds("shop", environment.TierPreview, "pr-7")
+	served := p.Routers().(*fake.Routers).DataPlane(fake.RouterDirect).Releases("shop", environment.TierPreview, "pr-7")
 	if served["admin"] == "" {
 		t.Errorf("the %s router serves %v on pr-7, want admin's build", fake.RouterDirect, served)
 	}
@@ -56,7 +56,7 @@ func TestAContainerAppsPreviewBehindAnEdgeRunningCodeIsForwardedUnderItsOwnHostA
 	if _, kept := state.Hosts[host]; kept {
 		t.Errorf("the edge state still records %s after pr-7 was removed", host)
 	}
-	if left := p.Routers().(*fake.Routers).DataPlane(fake.RouterDirect).Builds("shop", environment.TierPreview, "pr-7"); len(left) != 0 {
+	if left := p.Routers().(*fake.Routers).DataPlane(fake.RouterDirect).Releases("shop", environment.TierPreview, "pr-7"); len(left) != 0 {
 		t.Errorf("the %s router still serves %v on pr-7 after it was removed", fake.RouterDirect, left)
 	}
 }
@@ -65,7 +65,7 @@ func TestAForwardedPreviewDeploymentIsPublishedOnItsOwnHostname(t *testing.T) {
 	client, p := mixedServed(t)
 	previewBootstrapped(t, client)
 
-	result, _ := deploy(t, client, withContainerAdmin(previewRequest(), adminDeploymentID))
+	result, _ := deploy(t, client, withContainerAdmin(previewRequest(), adminBuildID))
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("preview Deploy() = %q", result.GetError())
 	}
@@ -94,7 +94,7 @@ func TestASupersededForwardedDeploymentHostnameIsUnboundAndDisclaimed(t *testing
 	previewBootstrapped(t, client)
 	var results []*progressv1.OperationResult
 	for range 3 {
-		result, _ := deploy(t, client, withContainerAdmin(previewRequest(), adminDeploymentID))
+		result, _ := deploy(t, client, withContainerAdmin(previewRequest(), adminBuildID))
 		if result == nil || !result.GetSuccess() {
 			t.Fatalf("preview Deploy() = %q", result.GetError())
 		}
@@ -136,7 +136,7 @@ func TestAnEdgeRoutedPreviewDeploymentIsPublishedAsBefore(t *testing.T) {
 	client, p := mixedServed(t)
 	previewBootstrapped(t, client)
 
-	result, _ := deploy(t, client, withContainerAdmin(previewRequest(), adminDeploymentID))
+	result, _ := deploy(t, client, withContainerAdmin(previewRequest(), adminBuildID))
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("preview Deploy() = %q", result.GetError())
 	}
@@ -156,7 +156,7 @@ func TestAContainerAppsPreviewIsClaimedAgainWithTheWildcardsRenewedCertificateBe
 	previewBootstrapped(t, client)
 	p.RequireValidationRecords(edge.Record{Name: "_acme.preview.example", Type: edge.RecordTypeCNAME, Value: "validation.fake.invalid"})
 	previewed := func() *contractv1.DeployRequest {
-		req := withContainerAdmin(previewRequest(), adminDeploymentID)
+		req := withContainerAdmin(previewRequest(), adminBuildID)
 		req.Edge = zoned("preview.example")
 		return req
 	}

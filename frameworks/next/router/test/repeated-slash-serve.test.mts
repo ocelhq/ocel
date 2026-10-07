@@ -39,7 +39,7 @@ function deps(basePath = ""): RouteDeps {
     },
     functionUrls: {},
     slug: "p1",
-    deploymentId: "d1",
+    appBuildId: "d1",
     app: "web",
     assetStore: assetStoreServing({ "/a.html": "<h1>a</h1>", "/404.html": "not found" }),
   };

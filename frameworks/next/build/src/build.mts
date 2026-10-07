@@ -8,7 +8,7 @@ export interface NextBuild {
   name: string;
   cwd: string;
   outputDir: string;
-  deploymentId: string;
+  buildId: string;
   folder?: string;
   env?: Record<string, string>;
   unset?: string[];
@@ -61,7 +61,7 @@ export async function buildNext(app: NextBuild, adapterPath: string): Promise<vo
     OCEL_MAX_FUNCTION_BYTES: app.maxFunctionBytes ? String(app.maxFunctionBytes) : "",
     OCEL_NEXT_REFRESHES_BY_REQUEST: app.nextRefreshesByRequest ? "1" : "",
     [ADAPTER_PATH_ENV]: adapterPath,
-    [DEPLOYMENT_ID_ENV]: app.deploymentId,
+    [DEPLOYMENT_ID_ENV]: app.buildId,
   };
   for (const name of Object.keys(owned)) {
     if (app.env && name in app.env) {

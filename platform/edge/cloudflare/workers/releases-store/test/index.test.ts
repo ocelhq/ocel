@@ -1,7 +1,7 @@
 import { createExecutionContext, env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import type { DeploymentRecord } from "../src/store";
+import type { ReleaseRecord } from "../src/store";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv extends Env {}
@@ -35,12 +35,12 @@ function authedReq(path: string, init: RequestInit = {}) {
   return bearerReq(`/${SLUG}${path}`, SECRET, init);
 }
 
-function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
+function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
   return {
     app: "web",
     framework: "next",
-    identity: "deploy-1",
-    deploymentId: "deploy-1",
+    release: "deploy-1",
+    buildId: "deploy-1",
     routingManifest: { pathnames: [] },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
@@ -249,20 +249,20 @@ describe("authenticated endpoints", () => {
 
 describe("service-binding read path", () => {
   it("needs no secret to resolve the served record", async () => {
-    const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
+    const store = env.RELEASES_DO.get(env.RELEASES_DO.idFromName(SLUG));
     await store.movePointer({ promotionId: "promo-1", records: [makeRecord()] });
 
     const entry = new (await import("../src/index")).default(createExecutionContext(), env);
     expect(await entry.readPointerRecord({ slug: SLUG, app: "web" })).toEqual({
       kind: "record",
-      identity: "deploy-1",
+      release: "deploy-1",
       record: makeRecord(),
     });
     expect(
-      await entry.readPointerRecord({ slug: SLUG, app: "web", knownIdentity: "deploy-1" }),
+      await entry.readPointerRecord({ slug: SLUG, app: "web", knownRelease: "deploy-1" }),
     ).toEqual({
       kind: "unchanged",
-      identity: "deploy-1",
+      release: "deploy-1",
     });
   });
 
@@ -271,7 +271,7 @@ describe("service-binding read path", () => {
     const moveRes = await movePointer({
       promotionId: "prev-1",
       pointer: "flaky-web-2626",
-      records: [makeRecord({ identity: "preview-deploy" })],
+      records: [makeRecord({ release: "preview-deploy" })],
       labels: [{ label: "flaky-web-aaaa", app: "web" }],
     });
     expect(moveRes.status).toBe(204);
@@ -279,8 +279,8 @@ describe("service-binding read path", () => {
     const entry = new (await import("../src/index")).default(createExecutionContext(), env);
     expect(await entry.readLabelRecord({ slug: SLUG, label: "flaky-web-aaaa" })).toEqual({
       kind: "record",
-      identity: "preview-deploy",
-      record: makeRecord({ identity: "preview-deploy" }),
+      release: "preview-deploy",
+      record: makeRecord({ release: "preview-deploy" }),
     });
     expect(await entry.readPointerRecord({ slug: SLUG, app: "web" })).toEqual({
       kind: "no-pointer",
@@ -288,22 +288,22 @@ describe("service-binding read path", () => {
   });
 
   it("resolves the app the pointer serves when the caller omits it", async () => {
-    const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
+    const store = env.RELEASES_DO.get(env.RELEASES_DO.idFromName(SLUG));
     await store.movePointer({ promotionId: "promo-1", records: [makeRecord()] });
 
     const entry = new (await import("../src/index")).default(createExecutionContext(), env);
     expect(await entry.readPointerRecord({ slug: SLUG })).toEqual({
       kind: "record",
-      identity: "deploy-1",
+      release: "deploy-1",
       record: makeRecord(),
     });
   });
 
   it("reports an ambiguous app when the pointer serves several", async () => {
-    const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
+    const store = env.RELEASES_DO.get(env.RELEASES_DO.idFromName(SLUG));
     await store.movePointer({
       promotionId: "promo-1",
-      records: [makeRecord(), makeRecord({ app: "admin", identity: "deploy-9" })],
+      records: [makeRecord(), makeRecord({ app: "admin", release: "deploy-9" })],
     });
 
     const entry = new (await import("../src/index")).default(createExecutionContext(), env);
@@ -317,7 +317,7 @@ describe("service-binding read path", () => {
     const moveRes = await movePointer({
       promotionId: "prev-1",
       pointer: "pr-42",
-      records: [makeRecord({ identity: "preview-deploy" })],
+      records: [makeRecord({ release: "preview-deploy" })],
       labels: [{ label: "pr-42-abcdefghijklmnopp3347l26", app: "web" }],
     });
     expect(moveRes.status).toBe(204);
@@ -327,16 +327,16 @@ describe("service-binding read path", () => {
       await entry.readLabelRecord({ slug: SLUG, label: "pr-42-abcdefghijklmnopp3347l26" }),
     ).toEqual({
       kind: "record",
-      identity: "preview-deploy",
-      record: makeRecord({ identity: "preview-deploy" }),
+      release: "preview-deploy",
+      record: makeRecord({ release: "preview-deploy" }),
     });
     expect(
       await entry.readLabelRecord({
         slug: SLUG,
         label: "pr-42-abcdefghijklmnopp3347l26",
-        knownIdentity: "preview-deploy",
+        knownRelease: "preview-deploy",
       }),
-    ).toEqual({ kind: "unchanged", identity: "preview-deploy" });
+    ).toEqual({ kind: "unchanged", release: "preview-deploy" });
     expect(await entry.readLabelRecord({ slug: SLUG, label: "pr-42-zzzz" })).toEqual({
       kind: "no-pointer",
     });

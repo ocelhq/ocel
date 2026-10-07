@@ -187,11 +187,11 @@ func (s *serviceEveryReleaseRevises) hooks() resources.Hooks {
 	}
 }
 
-func releaseRef(deploymentID string) provider.StackRef {
+func releaseRef(buildID string) provider.StackRef {
 	return provider.StackRef{
 		Project: "shop",
 		Tier:    environment.TierProduction,
-		Name:    naming.AppStack("prod", "web", naming.NewReleaseToken(deploymentID, "f1")),
+		Name:    naming.AppStack("prod", "web", naming.NewReleaseToken(buildID, "f1")),
 	}
 }
 

@@ -157,7 +157,7 @@ func movePointerOnto(t *testing.T, stack boxStack, pointer, promotionID string, 
 	t.Helper()
 
 	if err := stack.MovePointer(context.Background(), router.PointerMove{Pointer: pointer, Hosts: hosts, Promotion: router.Promotion{
-		PromotionID: promotionID, Ts: 1, Builds: builds,
+		PromotionID: promotionID, Ts: 1, Releases: builds,
 	}}, progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(%s onto %s): %v", promotionID, pointer, err)
 	}
@@ -417,7 +417,7 @@ func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 	pointed := stackOn(front, pointedEdge)
 	staged(t, pointed, "web", "b2", "shop-web-2222")
 	if err := pointed.MovePointer(context.Background(), router.PointerMove{Pointer: "pr-7", Promotion: router.Promotion{
-		PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"},
+		PromotionID: "p2", Ts: 2, Releases: map[string]string{"web": "b2"},
 	}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote under a pointer: %v", err)
 	}

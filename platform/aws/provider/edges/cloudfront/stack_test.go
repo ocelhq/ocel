@@ -30,13 +30,13 @@ func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing
 	live := routeOn(t, w, stack, boundHost)
 	wrote := w.store.count("kvs.UpdateKeys")
 
-	next := router.DeploymentRecord{App: "web", Build: "d2.f2", Entry: "/", EntryFunction: entryFunction, FunctionURLs: map[string]string{"/": fakeEntryURL}}
+	next := router.ReleaseRecord{App: "web", Release: "d2.f2", Entry: "/", EntryFunction: entryFunction, FunctionURLs: map[string]string{"/": fakeEntryURL}}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), next); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
 	preview := promotion()
 	preview.PromotionID = "p2"
-	preview.Builds = map[string]string{"web": next.Build}
+	preview.Releases = map[string]string{"web": next.Release}
 	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: "pr-7", Promotion: preview}, progress.Discard()); err != nil {
 		t.Fatalf("Promote onto a preview pointer: %v", err)
 	}

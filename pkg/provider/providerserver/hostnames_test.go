@@ -41,7 +41,7 @@ func edgeProvisioned(t *testing.T, vendor *fake.Provider, tier environment.Tier,
 
 func promoted(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug string) {
 	t.Helper()
-	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1"}}
+	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": "d1"}}
 	if _, err := ledger.New(vendor.KeyValues(), tier, slug).Promote(context.Background(), promotion, "", ""); err != nil {
 		t.Fatal(err)
 	}

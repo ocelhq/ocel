@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { DeploymentRecord, DeploymentsBinding } from "../src/deployments";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
+import type { ReleaseRecord, ReleasesBinding } from "../src/releases";
 import { edgeOriginFetch } from "../src/signing";
 import {
   answerEveryRecordWith,
@@ -10,9 +10,9 @@ import {
   withGlobalFetch,
 } from "./origin-deps";
 
-function bindingReturning(record: DeploymentRecord): DeploymentsBinding {
+function bindingReturning(record: ReleaseRecord): ReleasesBinding {
   return answerEveryRecordWith(async () => {
-    return { kind: "record", identity: record.identity, record };
+    return { kind: "record", release: record.release, record };
   });
 }
 
@@ -26,14 +26,14 @@ function base(over: Partial<ResolveBase> = {}): ResolveBase {
 }
 
 async function resolved(
-  record: DeploymentRecord,
+  record: ReleaseRecord,
   over: Partial<ResolveBase> = {},
 ): Promise<ServeFetch | Response> {
   return resolveServe(
     {
       binding: bindingReturning(record),
       slug: "p1",
-      deploymentId: "d1",
+      appBuildId: "d1",
       host: "api.example.com",
       app: record.app,
     },

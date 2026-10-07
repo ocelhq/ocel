@@ -58,11 +58,11 @@ func (w *promoteWorld) staged(t *testing.T, id string) router.Promotion {
 	t.Helper()
 	builds := map[string]string{"web": "web-" + id, "api": "api-" + id}
 	for app, build := range builds {
-		if err := w.ledger.PutStaged(context.Background(), router.DeploymentRecord{App: app, Build: build}); err != nil {
+		if err := w.ledger.PutStaged(context.Background(), router.ReleaseRecord{App: app, Release: build}); err != nil {
 			t.Fatalf("PutStaged(%s/%s): %v", app, build, err)
 		}
 	}
-	return router.Promotion{PromotionID: id, Ts: 1, Builds: builds}
+	return router.Promotion{PromotionID: id, Ts: 1, Releases: builds}
 }
 
 func (w *promoteWorld) promotes(t *testing.T, id string) error {
@@ -89,7 +89,7 @@ func (w *promoteWorld) servedHostnames() []string {
 }
 
 func (w *promoteWorld) serves(kind router.Kind, app string) string {
-	return w.routers.DataPlane(kind).Builds(promotedSlug, environment.TierProduction, router.DefaultPointer)[app]
+	return w.routers.DataPlane(kind).Releases(promotedSlug, environment.TierProduction, router.DefaultPointer)[app]
 }
 
 func (w *promoteWorld) active(t *testing.T) string {

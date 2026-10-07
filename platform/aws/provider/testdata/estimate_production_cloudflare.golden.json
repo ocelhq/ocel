@@ -876,7 +876,7 @@
       "monthlyUsage": "0.00"
     },
     {
-      "resource": "project:shop/shared:production/cloudflare_workers_script:ocel-deployments-store",
+      "resource": "project:shop/shared:production/cloudflare_workers_script:ocel-releases-store",
       "status": "STATUS_PRICED",
       "components": [
         {

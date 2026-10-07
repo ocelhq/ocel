@@ -127,7 +127,7 @@ function manifestFor(hosted: Hosted, middleware: unknown) {
 function depsFor(hosted: Hosted, overrides: TestRouteDeps): RouteDeps {
   return {
     slug: "p1",
-    deploymentId: "d1",
+    appBuildId: "d1",
     app: "web",
     assetStore: assetStoreServing({}),
     functionUrls: { [bundleOf(hosted)]: hosted.origin.origin },

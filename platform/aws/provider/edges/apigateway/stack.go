@@ -153,7 +153,7 @@ func variablePatch(variables map[string]string) []agtypes.PatchOperation {
 	return patch
 }
 
-func stagePatch(promotionID string, records map[string]router.DeploymentRecord) ([]agtypes.PatchOperation, error) {
+func stagePatch(promotionID string, records map[string]router.ReleaseRecord) ([]agtypes.PatchOperation, error) {
 	apps := slices.Sorted(maps.Keys(records))
 	switch {
 	case len(apps) == 0:
@@ -164,12 +164,12 @@ func stagePatch(promotionID string, records map[string]router.DeploymentRecord) 
 
 	app := apps[0]
 	record := records[app]
-	identity := record.Build
+	release := record.Release
 	if record.Origin != "" {
-		return nil, fmt.Errorf("promote %s: %s/%s runs as a container at %s, and the %q edge invokes a release's entry function rather than reaching a URL, so it cannot front it; name an edge that reaches an origin by URL in your config, such as `\"edge\": \"cloudfront\"`", promotionID, app, identity, record.Origin, Kind)
+		return nil, fmt.Errorf("promote %s: %s/%s runs as a container at %s, and the %q edge invokes a release's entry function rather than reaching a URL, so it cannot front it; name an edge that reaches an origin by URL in your config, such as `\"edge\": \"cloudfront\"`", promotionID, app, release, record.Origin, Kind)
 	}
 	if record.EntryFunction == "" {
-		return nil, fmt.Errorf("promote %s: the deployment record for %s/%s names no entry function, so the %s stage has nothing to invoke. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotionID, app, identity, stageName)
+		return nil, fmt.Errorf("promote %s: the release record for %s/%s names no entry function, so the %s stage has nothing to invoke. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotionID, app, release, stageName)
 	}
 
 	assets := record.AssetPrefix

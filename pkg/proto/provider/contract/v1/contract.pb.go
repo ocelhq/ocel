@@ -1606,7 +1606,7 @@ type ManifestApp struct {
 	Domains      []*TierDomains         `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty"`
 	Variables    []*ManifestVariable    `protobuf:"bytes,4,rep,name=variables,proto3" json:"variables,omitempty"`
 	Folder       string                 `protobuf:"bytes,5,opt,name=folder,proto3" json:"folder,omitempty"`
-	DeploymentId string                 `protobuf:"bytes,6,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	BuildId      string                 `protobuf:"bytes,6,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
 	ClientBundle bool                   `protobuf:"varint,8,opt,name=client_bundle,json=clientBundle,proto3" json:"client_bundle,omitempty"`
 	// Types that are valid to be assigned to Artifact:
 	//
@@ -1682,9 +1682,9 @@ func (x *ManifestApp) GetFolder() string {
 	return ""
 }
 
-func (x *ManifestApp) GetDeploymentId() string {
+func (x *ManifestApp) GetBuildId() string {
 	if x != nil {
-		return x.DeploymentId
+		return x.BuildId
 	}
 	return ""
 }
@@ -4826,7 +4826,7 @@ type Promotion struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PromotionId   string                 `protobuf:"bytes,1,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	Ts            int64                  `protobuf:"varint,2,opt,name=ts,proto3" json:"ts,omitempty"`
-	Builds        map[string]string      `protobuf:"bytes,3,rep,name=builds,proto3" json:"builds,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Releases      map[string]string      `protobuf:"bytes,3,rep,name=releases,proto3" json:"releases,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Tag           string                 `protobuf:"bytes,4,opt,name=tag,proto3" json:"tag,omitempty"`
 	Propagation   *v15.Propagation       `protobuf:"bytes,5,opt,name=propagation,proto3" json:"propagation,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -4877,9 +4877,9 @@ func (x *Promotion) GetTs() int64 {
 	return 0
 }
 
-func (x *Promotion) GetBuilds() map[string]string {
+func (x *Promotion) GetReleases() map[string]string {
 	if x != nil {
-		return x.Builds
+		return x.Releases
 	}
 	return nil
 }
@@ -6335,14 +6335,14 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\thostnames\x18\x02 \x03(\tR\thostnames\"q\n" +
 	"\tFramework\x127\n" +
 	"\x04name\x18\x01 \x01(\tB#\xbaH r\x1eR\x04nodeR\x04nextR\x02goR\x06pythonR\x04rustR\x04name\x12+\n" +
-	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\x8f\x04\n" +
+	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\x85\x04\n" +
 	"\vManifestApp\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12=\n" +
 	"\tframework\x18\x02 \x01(\v2\x1f.provider.contract.v1.FrameworkR\tframework\x12;\n" +
 	"\adomains\x18\x03 \x03(\v2!.provider.contract.v1.TierDomainsR\adomains\x12D\n" +
 	"\tvariables\x18\x04 \x03(\v2&.provider.contract.v1.ManifestVariableR\tvariables\x128\n" +
-	"\x06folder\x18\x05 \x01(\tB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$R\x06folder\x12#\n" +
-	"\rdeployment_id\x18\x06 \x01(\tR\fdeploymentId\x12#\n" +
+	"\x06folder\x18\x05 \x01(\tB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$R\x06folder\x12\x19\n" +
+	"\bbuild_id\x18\x06 \x01(\tR\abuildId\x12#\n" +
 	"\rclient_bundle\x18\b \x01(\bR\fclientBundle\x12J\n" +
 	"\n" +
 	"serverless\x18\t \x01(\v2(.provider.contract.v1.ServerlessArtifactH\x00R\n" +
@@ -6616,14 +6616,14 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x11CredentialProblem\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x12\n" +
-	"\x04hint\x18\x03 \x01(\tR\x04hint\"\x93\x02\n" +
+	"\x04hint\x18\x03 \x01(\tR\x04hint\"\x9b\x02\n" +
 	"\tPromotion\x12!\n" +
 	"\fpromotion_id\x18\x01 \x01(\tR\vpromotionId\x12\x0e\n" +
-	"\x02ts\x18\x02 \x01(\x03R\x02ts\x12C\n" +
-	"\x06builds\x18\x03 \x03(\v2+.provider.contract.v1.Promotion.BuildsEntryR\x06builds\x12\x10\n" +
+	"\x02ts\x18\x02 \x01(\x03R\x02ts\x12I\n" +
+	"\breleases\x18\x03 \x03(\v2-.provider.contract.v1.Promotion.ReleasesEntryR\breleases\x12\x10\n" +
 	"\x03tag\x18\x04 \x01(\tR\x03tag\x12A\n" +
-	"\vpropagation\x18\x05 \x01(\v2\x1f.common.progress.v1.PropagationR\vpropagation\x1a9\n" +
-	"\vBuildsEntry\x12\x10\n" +
+	"\vpropagation\x18\x05 \x01(\v2\x1f.common.progress.v1.PropagationR\vpropagation\x1a;\n" +
+	"\rReleasesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8e\x01\n" +
 	"\x15PromotionHistoryEntry\x12=\n" +
@@ -6890,7 +6890,7 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(*ForwardPortsResponse)(nil),            // 91: provider.contract.v1.ForwardPortsResponse
 	nil,                                     // 92: provider.contract.v1.EnsurePreviewAliasResponse.HostnamesEntry
 	nil,                                     // 93: provider.contract.v1.PreflightResponse.ContainerArchsEntry
-	nil,                                     // 94: provider.contract.v1.Promotion.BuildsEntry
+	nil,                                     // 94: provider.contract.v1.Promotion.ReleasesEntry
 	(*structpb.Struct)(nil),                 // 95: google.protobuf.Struct
 	(v1.Tier)(0),                            // 96: common.environment.v1.Tier
 	(v11.VariableClass)(0),                  // 97: app.resources.v1.VariableClass
@@ -7013,7 +7013,7 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	3,   // 97: provider.contract.v1.HostCheck.verdict:type_name -> provider.contract.v1.HostCheck.Verdict
 	4,   // 98: provider.contract.v1.DomainClaim.status:type_name -> provider.contract.v1.DomainClaim.Status
 	67,  // 99: provider.contract.v1.Identity.details:type_name -> provider.contract.v1.Detail
-	94,  // 100: provider.contract.v1.Promotion.builds:type_name -> provider.contract.v1.Promotion.BuildsEntry
+	94,  // 100: provider.contract.v1.Promotion.releases:type_name -> provider.contract.v1.Promotion.ReleasesEntry
 	112, // 101: provider.contract.v1.Promotion.propagation:type_name -> common.progress.v1.Propagation
 	69,  // 102: provider.contract.v1.PromotionHistoryEntry.promotion:type_name -> provider.contract.v1.Promotion
 	45,  // 103: provider.contract.v1.ListPromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection

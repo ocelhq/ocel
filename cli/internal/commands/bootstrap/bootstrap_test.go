@@ -210,7 +210,7 @@ func withRelayEdge(plan provider.Plan) provider.Plan {
 		Kind: edge.EdgeGroupKind, Name: edge.EdgeGroupName("relay"), Feature: featureRelayEdge, Action: provider.ActionCreate,
 		Changes: []provider.Change{
 			{Kind: "Fake::EdgeBucket", Name: "ocel-edge-cache", Action: provider.ActionCreate},
-			{Kind: "Fake::EdgeScript", Name: "ocel-deployments-store", Action: provider.ActionCreate},
+			{Kind: "Fake::EdgeScript", Name: "ocel-releases-store", Action: provider.ActionCreate},
 		},
 	})
 	return plan
@@ -539,8 +539,8 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		for _, want := range []string{
 			"Proposed changes to the production bootstrap, fronted by the relay edge:",
 			"+ relay/edge  [relay-edge]",
-			"    + ocel-edge-cache         Fake::EdgeBucket",
-			"    + ocel-deployments-store  Fake::EdgeScript",
+			"    + ocel-edge-cache      Fake::EdgeBucket",
+			"    + ocel-releases-store  Fake::EdgeScript",
 			"3 to create, 1 to update, 1 to replace, 1 to delete, 1 unchanged.",
 		} {
 			if !strings.Contains(out, want) {

@@ -14,7 +14,7 @@ func TestTheLedgerPartitionNamesTheProjectTheISRPrefixDoes(t *testing.T) {
 	t.Parallel()
 
 	for _, slug := range []string{"shop", "Shop Ltd", "shop_2", "SHOP--2"} {
-		coord := storageCoordinate("prod", slug, "web", deployedAs("BUILD1").Release())
+		coord := storageCoordinate("prod", slug, "web", deployedAs("BUILD1").Token())
 		project := strings.Split(isrPrefixOf(coord), naming.PathSeparator)[1]
 
 		if got := ledger.Partition(environment.TierProduction, slug).Path; !slices.Equal(got, []string{project}) {

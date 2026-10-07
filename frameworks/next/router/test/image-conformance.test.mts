@@ -66,7 +66,7 @@ for (const { variant, config, cases } of variants) {
           assetPrefix: "",
           slug: "fixture",
           app: "fixture",
-          deploymentId: "fixture",
+          appBuildId: "fixture",
           origin: unprovisionedImageOrigin,
         });
 

@@ -63,15 +63,15 @@ func listProvisionedResources(spec provider.DeploySpec, manifest *contractv1.Man
 }
 
 const (
-	scanDeploymentID = "00000000000000000000000000000000"
-	scanPromotionID  = "shape"
+	scanBuildID     = "00000000000000000000000000000000"
+	scanPromotionID = "shape"
 )
 
 func unshipped(manifest *contractv1.Manifest) *contractv1.Manifest {
 	manifest = proto.Clone(manifest).(*contractv1.Manifest)
 	for _, app := range manifest.GetApps() {
-		if app.GetDeploymentId() == "" {
-			app.DeploymentId = scanDeploymentID
+		if app.GetBuildId() == "" {
+			app.BuildId = scanBuildID
 		}
 	}
 	return manifest

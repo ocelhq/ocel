@@ -83,7 +83,7 @@ func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 		App: &provider.AppSpec{
 			App:         app,
 			Framework:   runtime,
-			Deployment:  "d1",
+			BuildID:     "d1",
 			Routing:     serving.OriginDispatch,
 			Guard:       serving.Guard,
 			AssetPrefix: serving.AssetPrefix,
@@ -123,7 +123,7 @@ func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
 		assetPrefixEnv:            appAssetPrefix(coord),
 		slugEnv:                   "shop",
 		appNameEnv:                "web",
-		deploymentIDEnv:           "d1",
+		buildIDEnv:                "d1",
 		edge.ImageOptimizerURLVar: "https://optimizer.lambda-url.us-east-1.on.aws/",
 	}
 	for key, value := range want {

@@ -574,9 +574,9 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 			if err := adoptCacheStore(ctx, d.ssm, d.ns, d.tier, front.Kind(), offer.Values); err != nil {
 				return err
 			}
-		case edge.OfferDeploymentsStore:
-			d.progress.Say(fmt.Sprintf("Adopting the %s edge's deployments-store worker (SSM SecureString)", front.Kind()))
-			if err := adoptDeploymentsStore(ctx, d.ssm, d.ns, d.tier, front.Kind(), offer.Values); err != nil {
+		case edge.OfferReleasesStore:
+			d.progress.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker (SSM SecureString)", front.Kind()))
+			if err := adoptReleasesStore(ctx, d.ssm, d.ns, d.tier, front.Kind(), offer.Values); err != nil {
 				return err
 			}
 		case edge.OfferISRWriter:

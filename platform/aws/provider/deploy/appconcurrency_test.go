@@ -72,10 +72,10 @@ func siblingAppSpec(t *testing.T, app string) provider.StackSpec {
 		Kind: provider.StackApp,
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &provider.AppSpec{
-			App:        app,
-			Framework:  buildoutput.FrameworkNext,
-			Entry:      "fn--" + app + "--entry",
-			Deployment: "d1",
+			App:       app,
+			Framework: buildoutput.FrameworkNext,
+			Entry:     "fn--" + app + "--entry",
+			BuildID:   "d1",
 			Functions: []provider.FunctionSpec{
 				{Name: "fn--" + app + "--entry", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: app + "-entry.zip"}},
 			},

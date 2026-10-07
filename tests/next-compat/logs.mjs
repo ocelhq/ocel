@@ -37,11 +37,11 @@ function readBuildID() {
   if (existsSync(path)) {
     return readFileSync(path, "utf8").trim();
   }
-  return result.apps?.[0]?.buildId;
+  return result.apps?.[0]?.serveBuildId;
 }
 
 function readDeploymentID() {
-  return result.apps?.[0]?.deploymentId;
+  return result.apps?.[0]?.buildId;
 }
 
 function replay(label, path) {

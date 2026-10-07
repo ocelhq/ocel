@@ -4,7 +4,7 @@ type SummaryApp = { app?: string; urls?: string[]; deploymentUrl?: string };
 
 type Summary = { apps?: SummaryApp[] };
 
-type DeployResultRecord = { apps?: { name?: string; deploymentId?: string }[] };
+type DeployResultRecord = { apps?: { name?: string; buildId?: string }[] };
 
 function summaryIn(stream: string): Summary | undefined {
   let found: Summary | undefined;
@@ -36,10 +36,10 @@ export function previewReleasesIn(
         `\`${command}\` published no deployment url for ${app}, so its deployments cannot be told apart`,
       );
     }
-    const deploymentId = recorded.find((each) => each.name === app)?.deploymentId;
-    if (!deploymentId) {
-      throw new Error(`the record in .ocel/deploy-result.json holds no deployment id for ${app}`);
+    const buildId = recorded.find((each) => each.name === app)?.buildId;
+    if (!buildId) {
+      throw new Error(`the record in .ocel/deploy-result.json holds no build id for ${app}`);
     }
-    return { app, urls: one.urls ?? [], deploymentUrl: one.deploymentUrl, deploymentId };
+    return { app, urls: one.urls ?? [], deploymentUrl: one.deploymentUrl, buildId };
   });
 }

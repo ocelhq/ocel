@@ -880,9 +880,6 @@ importers:
 
   platform/edge/cloudflare/deploy/bundles:
     devDependencies:
-      '@platform/cf-deployments-store':
-        specifier: workspace:*
-        version: link:../../workers/deployments-store
       '@platform/cf-entry':
         specifier: workspace:*
         version: link:../../workers/entry
@@ -892,6 +889,9 @@ importers:
       '@platform/cf-refresher':
         specifier: workspace:*
         version: link:../../workers/refresher
+      '@platform/cf-releases-store':
+        specifier: workspace:*
+        version: link:../../workers/releases-store
 
   platform/edge/cloudflare/lib/auth:
     devDependencies:
@@ -904,28 +904,6 @@ importers:
       vitest:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
-
-  platform/edge/cloudflare/workers/deployments-store:
-    dependencies:
-      '@platform/cf-auth':
-        specifier: workspace:*
-        version: link:../../lib/auth
-    devDependencies:
-      '@cloudflare/vitest-pool-workers':
-        specifier: ^0.12.4
-        version: 0.12.21(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@3.2.7(@types/debug@4.1.13)(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0))
-      '@types/node':
-        specifier: ^26.1.1
-        version: 26.1.1
-      typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
-      vitest:
-        specifier: ~3.2.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
-      wrangler:
-        specifier: ^4.110.0
-        version: 4.110.0
 
   platform/edge/cloudflare/workers/entry:
     dependencies:
@@ -994,6 +972,28 @@ importers:
       '@platform/edge-contract':
         specifier: workspace:*
         version: link:../../../contract
+    devDependencies:
+      '@cloudflare/vitest-pool-workers':
+        specifier: ^0.12.4
+        version: 0.12.21(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@3.2.7(@types/debug@4.1.13)(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0))
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: ^5.5.2
+        version: 5.9.3
+      vitest:
+        specifier: ~3.2.0
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
+      wrangler:
+        specifier: ^4.110.0
+        version: 4.110.0
+
+  platform/edge/cloudflare/workers/releases-store:
+    dependencies:
+      '@platform/cf-auth':
+        specifier: workspace:*
+        version: link:../../lib/auth
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.12.4

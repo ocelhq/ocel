@@ -424,18 +424,18 @@ func RunLogTailRPC(t *testing.T, p provider.Provider, options provider.Options, 
 
 func recordLoggedApp(t *testing.T, p provider.Provider, physical string) provider.LogTarget {
 	t.Helper()
-	build, err := provider.ParseBuild(fmt.Sprintf("%032x~%012x", 1, 1))
+	release, err := provider.ParseRelease(fmt.Sprintf("%032x~%012x", 1, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
 	target := targetOn(p.Facts(), physical)
-	stack := stackrecords.Stack{Kind: provider.StackApp, App: target.App, Release: build.Release().String(), Build: build.String()}
+	stack := stackrecords.Stack{Kind: provider.StackApp, App: target.App, ReleaseToken: release.Token().String(), Release: release.String()}
 	if target.Function != nil {
 		stack.Functions = []provider.Function{*target.Function}
 	} else {
 		stack.Containers = []provider.AppContainer{*target.Container}
 	}
-	name := naming.AppStack(stackrecords.ProductionEnv, target.App, build.Release())
+	name := naming.AppStack(stackrecords.ProductionEnv, target.App, release.Token())
 	if err := stackrecords.Write(context.Background(), p.KeyValues(), environment.TierProduction, "conformance", name, stack); err != nil {
 		t.Fatalf("record the stack of %s: %v", target.App, err)
 	}

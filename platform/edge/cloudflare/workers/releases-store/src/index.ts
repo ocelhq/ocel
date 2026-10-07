@@ -3,14 +3,14 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { bearer } from "@platform/cf-auth";
 
 import { authorized } from "./auth";
-import { DeploymentsStore } from "./deployments-do";
 import type { Env } from "./env";
+import { ReleasesStore } from "./releases-do";
 import type { PointerMove, PointerRecordResult } from "./store";
 
-export { DeploymentsStore };
+export { ReleasesStore };
 
 function stub(env: Env, slug: string) {
-  return env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(slug));
+  return env.RELEASES_DO.get(env.RELEASES_DO.idFromName(slug));
 }
 
 async function readJson<T>(request: Request): Promise<T | undefined> {
@@ -109,16 +109,16 @@ export default class extends WorkerEntrypoint<Env> {
   async readPointerRecord(args: {
     slug: string;
     app?: string;
-    knownIdentity?: string;
+    knownRelease?: string;
   }): Promise<PointerRecordResult> {
-    return stub(this.env, args.slug).readPointerRecord(args.app, args.knownIdentity);
+    return stub(this.env, args.slug).readPointerRecord(args.app, args.knownRelease);
   }
 
   async readLabelRecord(args: {
     slug: string;
     label: string;
-    knownIdentity?: string;
+    knownRelease?: string;
   }): Promise<PointerRecordResult> {
-    return stub(this.env, args.slug).readLabelRecord(args.label, args.knownIdentity);
+    return stub(this.env, args.slug).readLabelRecord(args.label, args.knownRelease);
   }
 }

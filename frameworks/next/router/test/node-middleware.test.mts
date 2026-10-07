@@ -43,7 +43,7 @@ function deps(overrides: TestRouteDeps = {}): RouteDeps {
     },
     functionUrls: {},
     slug: "p1",
-    deploymentId: "d1",
+    appBuildId: "d1",
     app: "web",
     assetStore: assetStoreServing({}),
     ...overrides,

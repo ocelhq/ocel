@@ -1,12 +1,12 @@
 import { createExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import type { DeploymentRecord, DeploymentsBinding, PointerRecordResult } from "../src/deployments";
 import worker, { type Env } from "../src/index";
+import type { PointerRecordResult, ReleaseRecord, ReleasesBinding } from "../src/releases";
 import { capturing, FN_URL, makeRecord, withGlobalFetch } from "./origin-deps";
 
-type PointerArgs = Parameters<DeploymentsBinding["readPointerRecord"]>[0];
-type LabelArgs = Parameters<DeploymentsBinding["readLabelRecord"]>[0];
-type Recording = DeploymentsBinding & { calls: PointerArgs[]; labels: LabelArgs[] };
+type PointerArgs = Parameters<ReleasesBinding["readPointerRecord"]>[0];
+type LabelArgs = Parameters<ReleasesBinding["readLabelRecord"]>[0];
+type Recording = ReleasesBinding & { calls: PointerArgs[]; labels: LabelArgs[] };
 
 function createRecordingBinding(result: PointerRecordResult): Recording {
   const binding: Recording = {
@@ -24,13 +24,13 @@ function createRecordingBinding(result: PointerRecordResult): Recording {
   return binding;
 }
 
-function createRecordBinding(record: DeploymentRecord): Recording {
-  return createRecordingBinding({ kind: "record", identity: record.identity, record });
+function createRecordBinding(record: ReleaseRecord): Recording {
+  return createRecordingBinding({ kind: "record", release: record.release, record });
 }
 
-function makeEnv(binding: DeploymentsBinding, over: Partial<Env> = {}): Env {
+function makeEnv(binding: ReleasesBinding, over: Partial<Env> = {}): Env {
   return {
-    DEPLOYMENTS: binding,
+    RELEASES: binding,
     OCEL_SLUG: "p1",
     OCEL_EDGE_ACCESS_KEY_ID: "AKIAEXAMPLE",
     OCEL_EDGE_SECRET_KEY: "secretkey",
@@ -113,7 +113,7 @@ describe("preview host routing", () => {
     expect(response.status).toBe(200);
     expect(binding.calls).toHaveLength(0);
     expect(binding.labels).toEqual([
-      { slug: "p1", label: "pr-12-web-abcdefghijklmnopp3347l26", knownIdentity: undefined },
+      { slug: "p1", label: "pr-12-web-abcdefghijklmnopp3347l26", knownRelease: undefined },
     ]);
   });
 

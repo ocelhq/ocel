@@ -5,10 +5,10 @@ import {
   admissionDrawMs,
   admissionJitterMs,
   admitRefresh,
+  buildScope,
   type CacheDeps,
   type CacheTarget,
   cacheKey,
-  deploymentScope,
   type EntryMeta,
   evaluate,
   hasDraftCookie,
@@ -299,13 +299,13 @@ describe("variantPath", () => {
 
 describe("cacheKey", () => {
   const H = (init?: Record<string, string>) => new Headers(init);
-  const scope = deploymentScope({ slug: "p1", app: "web", deploymentId: "d1" });
+  const scope = buildScope({ slug: "p1", app: "web", appBuildId: "d1" });
 
   it("scopes the key by deployment so a redeploy misses", () => {
     const url = new URL("https://app.example/blog");
     const a = cacheKey(scope, "/blog", url, H(), "STATIC", []);
     const b = cacheKey(
-      deploymentScope({ slug: "p1", app: "web", deploymentId: "d2" }),
+      buildScope({ slug: "p1", app: "web", appBuildId: "d2" }),
       "/blog",
       url,
       H(),
@@ -342,7 +342,7 @@ describe("cacheKey", () => {
     const url = new URL("https://app.example/blog");
     const web = cacheKey(scope, "/blog", url, H(), "STATIC", []);
     const admin = cacheKey(
-      deploymentScope({ slug: "p1", app: "admin", deploymentId: "d1" }),
+      buildScope({ slug: "p1", app: "admin", appBuildId: "d1" }),
       "/blog",
       url,
       H(),
@@ -356,7 +356,7 @@ describe("cacheKey", () => {
     const url = new URL("https://app.example/blog");
     const one = cacheKey(scope, "/blog", url, H(), "STATIC", []);
     const two = cacheKey(
-      deploymentScope({ slug: "p2", app: "web", deploymentId: "d1" }),
+      buildScope({ slug: "p2", app: "web", appBuildId: "d1" }),
       "/blog",
       url,
       H(),

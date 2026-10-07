@@ -70,7 +70,7 @@ func containerStackSpec(t *testing.T) (Config, provider.StackSpec) {
 		Images: provider.ImagePushes{Pushes: []provider.ImagePush{{App: "web", ImageRef: containerImage}}},
 		App: &provider.AppSpec{
 			App:             "web",
-			Deployment:      "d1",
+			BuildID:         "d1",
 			Compute:         provider.ComputeContainer,
 			Image:           containerImage,
 			HealthCheckPath: "/healthz",

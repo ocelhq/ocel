@@ -1,6 +1,5 @@
 import type { AssetBucket } from "@framework/next-router/assets";
 import { describe, expect, it } from "vitest";
-import type { DeploymentRecord, DeploymentsBinding, PointerRecordResult } from "../src/deployments";
 import {
   type ResolveBase,
   type RouteDeps,
@@ -8,6 +7,7 @@ import {
   type ServeFetch,
   serve,
 } from "../src/index";
+import type { PointerRecordResult, ReleaseRecord, ReleasesBinding } from "../src/releases";
 import { answerEveryRecordWith } from "./origin-deps";
 
 function routedDeps(): RouteDeps {
@@ -36,7 +36,7 @@ function routedDeps(): RouteDeps {
     },
     functionUrls: {},
     slug: "p1",
-    deploymentId: "d1",
+    appBuildId: "d1",
     app: "web",
     assetStore: {
       store,
@@ -50,7 +50,7 @@ function routedDeps(): RouteDeps {
 
 const FN_URL = "https://abc123.lambda-url.eu-west-2.on.aws/";
 
-const originRecord: DeploymentRecord = {
+const originRecord: ReleaseRecord = {
   app: "api",
   framework: "node",
   buildId: "0123456789abcdef",
@@ -61,7 +61,7 @@ const originRecord: DeploymentRecord = {
   createdAt: 1_000,
 };
 
-function bindingReturning(result: PointerRecordResult): DeploymentsBinding {
+function bindingReturning(result: PointerRecordResult): ReleasesBinding {
   return answerEveryRecordWith(async () => {
     return result;
   });
@@ -74,7 +74,7 @@ const base: ResolveBase = {
   },
 };
 
-async function resolved(binding: DeploymentsBinding, host: string) {
+async function resolved(binding: ReleasesBinding, host: string) {
   return resolveServe(
     { binding, slug: "p1", host, app: "api" },
     { ...base, fetch: (async () => new Response("origin")) as typeof fetch },
@@ -95,7 +95,7 @@ describe("the Cloudflare router names itself on every response", () => {
 
   it("marks the response of a store that cannot answer", async () => {
     const served = await resolved(
-      bindingReturning({ kind: "dangling", identity: "b1" }),
+      bindingReturning({ kind: "dangling", release: "b1" }),
       "dangling.example.com",
     );
 
@@ -113,7 +113,7 @@ describe("the Cloudflare router names itself on every response", () => {
 
   it("marks what an origin-served deployment answers", async () => {
     const served = await resolved(
-      bindingReturning({ kind: "record", identity: "b1", record: originRecord }),
+      bindingReturning({ kind: "record", release: "b1", record: originRecord }),
       "origin.example.com",
     );
 

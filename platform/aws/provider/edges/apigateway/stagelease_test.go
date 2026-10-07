@@ -75,10 +75,10 @@ func leasesLeft(w *world) []string {
 
 func movePointerOnStage(t *testing.T, stack routerStack, id string) error {
 	t.Helper()
-	record := router.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: entryFunction, AssetPrefix: "assets/one"}
+	record := router.ReleaseRecord{App: "web", Release: "d1.f1", Entry: "/", EntryFunction: entryFunction, AssetPrefix: "assets/one"}
 	return stack.MovePointer(context.Background(), router.PointerMove{
-		Promotion: router.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": record.Build}},
-		Records:   map[string]router.DeploymentRecord{"web": record},
+		Promotion: router.Promotion{PromotionID: id, Ts: 1, Releases: map[string]string{"web": record.Release}},
+		Records:   map[string]router.ReleaseRecord{"web": record},
 	}, progress.Discard())
 }
 

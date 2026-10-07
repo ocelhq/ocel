@@ -1,13 +1,13 @@
-import type { DeploymentRecord, DeploymentsBinding, PointerRecordResult } from "../src/deployments";
+import type { PointerRecordResult, ReleaseRecord, ReleasesBinding } from "../src/releases";
 
 export const FN_URL = "https://abc123.lambda-url.eu-west-2.on.aws/";
 
-export function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
+export function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
   return {
     app: "api",
     framework: "node",
-    identity: "deploy-1",
-    deploymentId: "deploy-1",
+    release: "deploy-1",
+    buildId: "deploy-1",
     routingManifest: null,
     functionUrls: { api: FN_URL },
     assetPrefix: "",
@@ -19,7 +19,7 @@ export function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentReco
 
 export function answerEveryRecordWith(
   answer: (args: { slug: string; app?: string }) => Promise<PointerRecordResult>,
-): DeploymentsBinding {
+): ReleasesBinding {
   return { readPointerRecord: answer, readLabelRecord: answer };
 }
 

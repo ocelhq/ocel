@@ -87,11 +87,11 @@ func signLivePreviewHost(slug, base, pointer, app string) edge.PreviewHost {
 	return edge.NewSharedPreviewSite(slug, base, livePreviewKey).ListHosts(pointer, token, []string{app})[0]
 }
 
-func previewBuild(t *testing.T, pointer string) provider.Build {
+func previewRelease(t *testing.T, pointer string) provider.Release {
 	t.Helper()
 
 	sum := sha256.Sum256([]byte(pointer))
-	build, err := provider.NewBuild(hex.EncodeToString(sum[:])[:32], "p1", pointer, "")
+	build, err := provider.NewRelease(hex.EncodeToString(sum[:])[:32], "p1", pointer, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func previewStack(t *testing.T, slug, app, pointer string) provider.StackRef {
 	return provider.StackRef{
 		Project: slug,
 		Tier:    environment.TierPreview,
-		Name:    naming.AppStack(pointer, app, previewBuild(t, pointer).Release()),
+		Name:    naming.AppStack(pointer, app, previewRelease(t, pointer).Token()),
 	}
 }
 
@@ -129,14 +129,14 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	t.Helper()
 
 	ctx := context.Background()
-	build := previewBuild(t, pointer)
+	build := previewRelease(t, pointer)
 	spec := provider.StackSpec{
 		Ref:  previewStack(t, slug, app, pointer),
 		Kind: provider.StackApp,
 		App: &provider.AppSpec{
 			App:             app,
 			Compute:         provider.ComputeContainer,
-			Deployment:      build.DeploymentID(),
+			BuildID:         build.BuildID(),
 			Image:           image,
 			HealthCheckPath: healthPath,
 		},
@@ -149,24 +149,24 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 		t.Fatalf("Provision(%s) started %v", pointer, provisioned.Containers)
 	}
 	if err := stackrecords.Write(ctx, p.KeyValues(), environment.TierPreview, slug, spec.Ref.Name, stackrecords.Stack{
-		Kind:       provider.StackApp,
-		App:        app,
-		Release:    build.Release().String(),
-		Build:      build.String(),
-		Containers: provisioned.Containers,
-		WrittenBy:  provider.WrittenByVersion(""),
+		Kind:         provider.StackApp,
+		App:          app,
+		ReleaseToken: build.Token().String(),
+		Release:      build.String(),
+		Containers:   provisioned.Containers,
+		WrittenBy:    provider.WrittenByVersion(""),
 	}); err != nil {
 		t.Fatalf("stackrecords.Write(%s): %v", pointer, err)
 	}
-	record := router.DeploymentRecord{
+	record := router.ReleaseRecord{
 		App:        app,
-		Build:      build.String(),
+		Release:    build.String(),
 		Entry:      "/",
 		Image:      image,
 		Physical:   provisioned.Containers[0].Physical,
 		HealthPath: healthPath,
 	}
-	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: at, Builds: map[string]string{app: build.String()}}
+	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: at, Releases: map[string]string{app: build.String()}}
 	state := stack.State()
 	hosts := []edge.PreviewHost{signLivePreviewHost(slug, state.GlobalPreview, pointer, app)}
 	promoteRecord(t, p, stack, pointer, promotion, record, hosts...)

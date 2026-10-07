@@ -1,7 +1,7 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import type { DeploymentRecord, PointerMove } from "../src/store";
+import type { PointerMove, ReleaseRecord } from "../src/store";
 import { ensureSchema, SCHEMA_VERSION } from "../src/store";
 
 declare module "cloudflare:test" {
@@ -9,16 +9,16 @@ declare module "cloudflare:test" {
 }
 
 function storeStub() {
-  const id = env.DEPLOYMENTS_DO.idFromName("acme-web");
-  return env.DEPLOYMENTS_DO.get(id);
+  const id = env.RELEASES_DO.idFromName("acme-web");
+  return env.RELEASES_DO.get(id);
 }
 
-function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
+function makeRecord(over: Partial<ReleaseRecord> = {}): ReleaseRecord {
   return {
     app: "web",
     framework: "next",
-    identity: "deploy-1",
-    deploymentId: "deploy-1",
+    release: "deploy-1",
+    buildId: "deploy-1",
     routingManifest: { pathnames: [] },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
@@ -45,7 +45,7 @@ describe("movePointer", () => {
     expect(await store.readServedPromotion()).toBe("promo-1");
     expect(await store.readPointerRecord("web")).toEqual({
       kind: "record",
-      identity: "deploy-1",
+      release: "deploy-1",
       record: makeRecord(),
     });
   });
@@ -57,14 +57,14 @@ describe("movePointer", () => {
     const next = makePointerMove({
       promotionId: "promo-2",
       replaces: "promo-1",
-      records: [makeRecord({ identity: "deploy-2" })],
+      records: [makeRecord({ release: "deploy-2" })],
     });
     expect(await store.movePointer(next)).toBe("moved");
 
     expect(await store.readServedPromotion()).toBe("promo-2");
     expect(await store.readPointerRecord("web")).toMatchObject({
       kind: "record",
-      identity: "deploy-2",
+      release: "deploy-2",
     });
   });
 
@@ -75,21 +75,21 @@ describe("movePointer", () => {
       makePointerMove({
         promotionId: "promo-2",
         replaces: "promo-1",
-        records: [makeRecord({ identity: "deploy-2" })],
+        records: [makeRecord({ release: "deploy-2" })],
       }),
     );
 
     const stale = makePointerMove({
       promotionId: "promo-3",
       replaces: "promo-1",
-      records: [makeRecord({ identity: "deploy-3" })],
+      records: [makeRecord({ release: "deploy-3" })],
     });
     expect(await store.movePointer(stale)).toBe("stale");
 
     expect(await store.readServedPromotion()).toBe("promo-2");
     expect(await store.readPointerRecord("web")).toMatchObject({
       kind: "record",
-      identity: "deploy-2",
+      release: "deploy-2",
     });
   });
 
@@ -121,13 +121,13 @@ describe("movePointer", () => {
       makePointerMove({
         promotionId: "promo-preview",
         pointer: "pr-42",
-        records: [makeRecord({ identity: "preview-1" })],
+        records: [makeRecord({ release: "preview-1" })],
       }),
     );
 
     expect(await store.readServedPromotion()).toBe("promo-1");
     expect(await store.readServedPromotion("pr-42")).toBe("promo-preview");
-    expect(await store.readPointerRecord("web")).toMatchObject({ identity: "deploy-1" });
+    expect(await store.readPointerRecord("web")).toMatchObject({ release: "deploy-1" });
   });
 });
 
@@ -142,7 +142,7 @@ describe("readPointerRecord", () => {
 
     expect(await store.readPointerRecord("web", "deploy-1")).toEqual({
       kind: "unchanged",
-      identity: "deploy-1",
+      release: "deploy-1",
     });
   });
 
@@ -152,7 +152,7 @@ describe("readPointerRecord", () => {
 
     expect(await store.readPointerRecord("web", "deploy-0")).toEqual({
       kind: "record",
-      identity: "deploy-1",
+      release: "deploy-1",
       record: makeRecord(),
     });
   });
@@ -163,7 +163,7 @@ describe("readPointerRecord", () => {
 
     expect(await store.readPointerRecord()).toMatchObject({
       kind: "record",
-      identity: "deploy-1",
+      release: "deploy-1",
     });
   });
 
@@ -190,7 +190,7 @@ describe("readLabelRecord", () => {
     await store.movePointer(
       makePointerMove({
         pointer: "pr-42",
-        records: [makeRecord(), makeRecord({ app: "admin", identity: "admin-1" })],
+        records: [makeRecord(), makeRecord({ app: "admin", release: "admin-1" })],
         labels: [
           { label: "pr-42-web-aaaa", app: "web" },
           { label: "pr-42-admin-bbbb", app: "admin" },
@@ -200,12 +200,12 @@ describe("readLabelRecord", () => {
 
     expect(await store.readLabelRecord("pr-42-admin-bbbb")).toEqual({
       kind: "record",
-      identity: "admin-1",
-      record: makeRecord({ app: "admin", identity: "admin-1" }),
+      release: "admin-1",
+      record: makeRecord({ app: "admin", release: "admin-1" }),
     });
     expect(await store.readLabelRecord("pr-42-web-aaaa", "deploy-1")).toEqual({
       kind: "unchanged",
-      identity: "deploy-1",
+      release: "deploy-1",
     });
   });
 
@@ -217,7 +217,7 @@ describe("readLabelRecord", () => {
 
     expect(await store.readLabelRecord("pr-42-aaaa")).toMatchObject({
       kind: "record",
-      identity: "deploy-1",
+      release: "deploy-1",
     });
   });
 
@@ -239,13 +239,13 @@ describe("readLabelRecord", () => {
         pointer: "pr-42",
         promotionId: "promo-2",
         replaces: "promo-1",
-        records: [makeRecord({ identity: "deploy-2" })],
+        records: [makeRecord({ release: "deploy-2" })],
         labels: [{ label: "new-bbbb", app: "web" }],
       }),
     );
 
     expect(await store.readLabelRecord("old-aaaa")).toEqual({ kind: "no-pointer" });
-    expect(await store.readLabelRecord("new-bbbb")).toMatchObject({ identity: "deploy-2" });
+    expect(await store.readLabelRecord("new-bbbb")).toMatchObject({ release: "deploy-2" });
   });
 
   it("keeps serving a deployment pointer's label after the alias moves on", async () => {
@@ -264,13 +264,13 @@ describe("readLabelRecord", () => {
         pointer: "pr-42",
         promotionId: "promo-2",
         replaces: "promo-1",
-        records: [makeRecord({ identity: "deploy-2" })],
+        records: [makeRecord({ release: "deploy-2" })],
         labels: [{ label: "alias-aaaa", app: "web" }],
       }),
     );
 
-    expect(await store.readLabelRecord("alias-aaaa")).toMatchObject({ identity: "deploy-2" });
-    expect(await store.readLabelRecord("first-bbbb")).toMatchObject({ identity: "deploy-1" });
+    expect(await store.readLabelRecord("alias-aaaa")).toMatchObject({ release: "deploy-2" });
+    expect(await store.readLabelRecord("first-bbbb")).toMatchObject({ release: "deploy-1" });
   });
 });
 
@@ -386,7 +386,7 @@ describe("destroy", () => {
 
 describe("ensureSchema", () => {
   it("drops a superseded schema's tables and keeps the store's identity", async () => {
-    const stub = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName("legacy"));
+    const stub = env.RELEASES_DO.get(env.RELEASES_DO.idFromName("legacy"));
     await runInDurableObject(stub, (_instance, ctx) => {
       const storage = ctx.storage;
       for (const table of ["records", "promotions", "pointers", "served", "apps"]) {
@@ -458,6 +458,60 @@ describe("ensureSchema", () => {
     });
   });
 
+  it("drops the served rows of a store whose records named a release `identity`, and keeps the store's own identity", async () => {
+    const stub = env.RELEASES_DO.get(env.RELEASES_DO.idFromName("identity-named"));
+    await runInDurableObject(stub, (_instance, ctx) => {
+      const storage = ctx.storage;
+      for (const table of ["pointers", "served", "apps", "labels"]) {
+        storage.sql.exec(`DROP TABLE IF EXISTS ${table}`);
+      }
+      storage.sql.exec(
+        `CREATE TABLE pointers (name TEXT PRIMARY KEY, promotion_id TEXT NOT NULL);
+         CREATE TABLE served (
+           pointer TEXT NOT NULL,
+           app TEXT NOT NULL,
+           identity TEXT NOT NULL,
+           data TEXT NOT NULL,
+           PRIMARY KEY (pointer, app)
+         );`,
+      );
+      storage.sql.exec(
+        `INSERT INTO served (pointer, app, identity, data) VALUES (?, ?, ?, ?)`,
+        "@production",
+        "web",
+        "deploy-1",
+        JSON.stringify({ app: "web", identity: "deploy-1", buildId: "d1" }),
+      );
+      storage.sql.exec(
+        `INSERT INTO pointers (name, promotion_id) VALUES (?, ?)`,
+        "@production",
+        "promo-1",
+      );
+      storage.sql.exec(
+        `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+      );
+      storage.sql.exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('secret', 's3cret')`);
+      storage.sql.exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schemaVersion', '3')`);
+
+      ensureSchema(storage);
+
+      const columns = storage.sql
+        .exec<{ name: string }>(`SELECT name FROM pragma_table_info('served')`)
+        .toArray()
+        .map((c) => c.name);
+      expect(columns).toContain("release");
+      expect(columns).not.toContain("identity");
+      const count = (table: string) =>
+        storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).one().n;
+      expect(count("served")).toBe(0);
+      expect(count("pointers")).toBe(0);
+      const secret = storage.sql
+        .exec<{ value: string }>(`SELECT value FROM meta WHERE key = 'secret'`)
+        .one().value;
+      expect(secret).toBe("s3cret");
+    });
+  });
+
   it("adds the labels table to a store that predates it and keeps the pointers it serves", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
@@ -465,7 +519,9 @@ describe("ensureSchema", () => {
 
     await runInDurableObject(storeStub(), (_instance, ctx) => {
       ctx.storage.sql.exec(`DROP TABLE labels`);
-      ctx.storage.sql.exec(`UPDATE meta SET value = '3' WHERE key = 'schemaVersion'`);
+      ctx.storage.sql.exec(
+        `UPDATE meta SET value = '${SCHEMA_VERSION}' WHERE key = 'schemaVersion'`,
+      );
       ensureSchema(ctx.storage);
       const tables = ctx.storage.sql
         .exec<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`)
@@ -476,7 +532,7 @@ describe("ensureSchema", () => {
 
     expect(await store.readPointerRecord("web")).toMatchObject({
       kind: "record",
-      identity: "deploy-1",
+      release: "deploy-1",
     });
   });
 
@@ -491,7 +547,7 @@ describe("ensureSchema", () => {
 
     expect(await store.readPointerRecord("web")).toMatchObject({
       kind: "record",
-      identity: "deploy-1",
+      release: "deploy-1",
     });
     expect(await store.authorized("s3cret")).toBe(true);
   });

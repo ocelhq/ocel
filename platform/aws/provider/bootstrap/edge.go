@@ -55,14 +55,14 @@ type edgeKeyOutcome struct {
 }
 
 type edgeNames struct {
-	user                  string
-	credentialsParam      string
-	valuesParam           string
-	cacheStoreParam       string
-	deploymentsStoreParam string
-	isrWriterParam        string
-	isrWriterSeedParam    string
-	originSecretParam     string
+	user               string
+	credentialsParam   string
+	valuesParam        string
+	cacheStoreParam    string
+	releasesStoreParam string
+	isrWriterParam     string
+	isrWriterSeedParam string
+	originSecretParam  string
 }
 
 func (n edgeNames) edgeParams() []string {
@@ -70,7 +70,7 @@ func (n edgeNames) edgeParams() []string {
 		n.credentialsParam,
 		n.valuesParam,
 		n.cacheStoreParam,
-		n.deploymentsStoreParam,
+		n.releasesStoreParam,
 		n.isrWriterParam,
 		n.isrWriterSeedParam,
 	}
@@ -90,14 +90,14 @@ func edgeNamesFor(ns Namespace, tier environment.Tier, kind edge.Kind) (edgeName
 		return edgeNames{}, err
 	}
 	return edgeNames{
-		user:                  user,
-		credentialsParam:      prefix + "/credentials",
-		valuesParam:           prefix + "/values",
-		cacheStoreParam:       prefix + "/cache-store",
-		deploymentsStoreParam: prefix + "/deployments-store",
-		isrWriterParam:        prefix + "/isr-writer",
-		isrWriterSeedParam:    prefix + "/isr-writer-seed",
-		originSecretParam:     secret,
+		user:               user,
+		credentialsParam:   prefix + "/credentials",
+		valuesParam:        prefix + "/values",
+		cacheStoreParam:    prefix + "/cache-store",
+		releasesStoreParam: prefix + "/releases-store",
+		isrWriterParam:     prefix + "/isr-writer",
+		isrWriterSeedParam: prefix + "/isr-writer-seed",
+		originSecretParam:  secret,
 	}, nil
 }
 
@@ -115,12 +115,12 @@ func EdgeInstalled(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier env
 	return false, nil
 }
 
-func DeploymentsStoreParamFor(ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
+func ReleasesStoreParamFor(ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return "", err
 	}
-	return names.deploymentsStoreParam, nil
+	return names.releasesStoreParam, nil
 }
 
 func ISRWriterParamFor(ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
@@ -352,29 +352,29 @@ type CacheStore struct {
 	SecretAccessKey string `json:"secretAccessKey"`
 }
 
-type DeploymentsStore struct {
+type ReleasesStore struct {
 	Endpoint            string `json:"endpoint"`
 	ScriptName          string `json:"scriptName"`
 	BootstrapCredential string `json:"bootstrapCred"`
 }
 
-func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, values map[string]string) error {
-	paramName, err := DeploymentsStoreParamFor(ns, tier, kind)
+func adoptReleasesStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, values map[string]string) error {
+	paramName, err := ReleasesStoreParamFor(ns, tier, kind)
 	if err != nil {
 		return err
 	}
-	store := DeploymentsStore{
+	store := ReleasesStore{
 		Endpoint:            values[edge.OfferKeyStoreEndpoint],
 		ScriptName:          values[edge.OfferKeyStoreScriptName],
 		BootstrapCredential: values[edge.OfferKeyStoreBootstrapCredential],
 	}
-	stored, err := ReadDeploymentsStoreFor(ctx, ssmClient, ns, tier, kind)
+	stored, err := ReadReleasesStoreFor(ctx, ssmClient, ns, tier, kind)
 	if err != nil {
 		return err
 	}
 	if store.BootstrapCredential == "" {
 		if store.BootstrapCredential = stored.BootstrapCredential; store.BootstrapCredential == "" {
-			return edgeCredUnrecorded(kind, "deployments store", store.ScriptName, paramName)
+			return edgeCredUnrecorded(kind, "releases store", store.ScriptName, paramName)
 		}
 	}
 	if store == stored {
@@ -382,16 +382,16 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, 
 	}
 	payload, err := json.Marshal(store)
 	if err != nil {
-		return fmt.Errorf("marshal deployments store: %w", err)
+		return fmt.Errorf("marshal releases store: %w", err)
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:        aws.String(paramName),
-		Description: aws.String(fmt.Sprintf("Ocel: endpoint and bootstrap credential for the %s edge's deployments store, the worker that tells the edge which build a request belongs to. Every deploy publishes its routing through it.", tier)),
+		Description: aws.String(fmt.Sprintf("Ocel: endpoint and bootstrap credential for the %s edge's releases store, the worker that tells the edge which build a request belongs to. Every deploy publishes its routing through it.", tier)),
 		Value:       aws.String(string(payload)),
 		Type:        ssmtypes.ParameterTypeSecureString,
 		Overwrite:   aws.Bool(true),
 	}); err != nil {
-		return fmt.Errorf("write deployments store parameter: %w", err)
+		return fmt.Errorf("write releases store parameter: %w", err)
 	}
 	return nil
 }
@@ -404,10 +404,10 @@ func edgeCredUnrecorded(kind edge.Kind, surface, scriptName, paramName string) e
 		kind, surface, scriptName, paramName, scriptName, kind)
 }
 
-func ReadDeploymentsStoreFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (DeploymentsStore, error) {
-	paramName, err := DeploymentsStoreParamFor(ns, tier, kind)
+func ReadReleasesStoreFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (ReleasesStore, error) {
+	paramName, err := ReleasesStoreParamFor(ns, tier, kind)
 	if err != nil {
-		return DeploymentsStore{}, err
+		return ReleasesStore{}, err
 	}
 	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           aws.String(paramName),
@@ -416,13 +416,13 @@ func ReadDeploymentsStoreFor(ctx context.Context, ssmClient SSMAPI, ns Namespace
 	if err != nil {
 		var notFound *ssmtypes.ParameterNotFound
 		if errors.As(err, &notFound) {
-			return DeploymentsStore{}, nil
+			return ReleasesStore{}, nil
 		}
-		return DeploymentsStore{}, fmt.Errorf("read deployments store parameter: %w", err)
+		return ReleasesStore{}, fmt.Errorf("read releases store parameter: %w", err)
 	}
-	var store DeploymentsStore
+	var store ReleasesStore
 	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &store); err != nil {
-		return DeploymentsStore{}, fmt.Errorf("parse deployments store: %w", err)
+		return ReleasesStore{}, fmt.Errorf("parse releases store: %w", err)
 	}
 	return store, nil
 }

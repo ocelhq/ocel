@@ -50,7 +50,7 @@ func newTestDependencies() Dependencies {
 		BuildApps:               build.Apps,
 		RefuseUnbuildableImages: build.RefuseUnbuildableImages,
 		ReadPrebuilt:            build.ReadPrebuilt,
-		DeploymentID:            build.DeploymentID,
+		BuildID:                 build.BuildID,
 		CollectDeclarations:     declaration.Collect,
 		ServeVariableEditor:     env.ServeVariableEditor,
 		DiscoverPRNumber:        func() string { return os.Getenv(PRNumberEnvVar) },
@@ -144,7 +144,7 @@ func stubBuild(dependencies *Dependencies, functions []build.Function) {
 	dependencies.ReadPrebuilt = func(_ context.Context, cfg *project.Project, _ map[string]string) (build.Output, error) {
 		return build.Output{Functions: functions}, writeArtifacts(cfg.Dir, functions)
 	}
-	stubRecordedDeploymentIDs(dependencies)
+	stubRecordedBuildIDs(dependencies)
 }
 
 func writeArtifacts(projectDir string, functions []build.Function) error {
@@ -186,11 +186,11 @@ func stubAppImages(dependencies *Dependencies, apps ...string) {
 	}
 }
 
-func stubRecordedDeploymentIDs(dependencies *Dependencies) {
-	dependencies.DeploymentID = func(_, app string) (string, error) { return recordedDeploymentID(app), nil }
+func stubRecordedBuildIDs(dependencies *Dependencies) {
+	dependencies.BuildID = func(_, app string) (string, error) { return recordedBuildID(app), nil }
 }
 
-func recordedDeploymentID(app string) string {
+func recordedBuildID(app string) string {
 	sum := sha256.Sum256([]byte("ocel-test-deployment/" + app))
 	return hex.EncodeToString(sum[:])[:32]
 }

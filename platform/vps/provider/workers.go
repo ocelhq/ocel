@@ -75,7 +75,7 @@ func (p *Provider) runWorkers(ctx context.Context, spec provider.StackSpec, mani
 	declared := make([]string, 0, len(app.Workers))
 	for _, worker := range app.Workers {
 		declared = append(declared, worker.Name)
-		name := host.ContainerName(ref.Name.String(), app.App+"-"+worker.Name, app.Deployment, app.Image)
+		name := host.ContainerName(ref.Name.String(), app.App+"-"+worker.Name, app.BuildID, app.Image)
 		if progress != nil {
 			progress.Say("Starting worker " + worker.Name + " from " + app.App + "'s image as " + name)
 		}

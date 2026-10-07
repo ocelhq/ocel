@@ -101,14 +101,14 @@ export function variantPath(
   return renderingMode === "PARTIALLY_STATIC" ? null : `${base}.rsc`;
 }
 
-export interface DeploymentScope {
+export interface BuildScope {
   slug: string;
   app: string;
-  deploymentId: string;
+  appBuildId: string;
 }
 
-export function deploymentScope(deps: DeploymentScope): string {
-  return `${deps.slug}/${deps.app}/${deps.deploymentId}`;
+export function buildScope(deps: BuildScope): string {
+  return `${deps.slug}/${deps.app}/${deps.appBuildId}`;
 }
 
 export function hostScope(scope: string, host: string): string {

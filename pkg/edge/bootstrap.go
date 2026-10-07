@@ -89,7 +89,7 @@ type OfferKind string
 
 const OfferCacheStore OfferKind = "cache-store"
 
-const OfferDeploymentsStore OfferKind = "deployments-store"
+const OfferReleasesStore OfferKind = "releases-store"
 
 const OfferISRWriter OfferKind = "isr-writer"
 
