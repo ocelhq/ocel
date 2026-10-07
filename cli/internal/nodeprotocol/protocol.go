@@ -76,6 +76,7 @@ type Processor struct {
 	Span     *run.Span
 	Forward  io.Writer
 	AppBuild func(app string) (ended func(error))
+	Hide     func(text string) string
 
 	mu        sync.Mutex
 	spans     map[string]openSpan
@@ -108,7 +109,7 @@ func (p *Processor) Scan(ctx context.Context, r io.Reader) {
 		p.mu.Lock()
 		p.unread = fmt.Errorf("could not read the node builder's output: %w", err)
 		p.mu.Unlock()
-		_, _ = io.Copy(p.forwardWriter(), r)
+		_, _ = io.Copy(hidingWriter{p}, r)
 	}
 }
 
@@ -126,6 +127,13 @@ func splitLines(data []byte, atEOF bool) (advance int, token []byte, err error) 
 		return len(data), data, nil
 	}
 	return 0, nil, nil
+}
+
+func (p *Processor) hide(text string) string {
+	if p.Hide == nil {
+		return text
+	}
+	return p.Hide(text)
 }
 
 func (p *Processor) forwardWriter() io.Writer {
@@ -157,6 +165,7 @@ func (p *Processor) line(line string) {
 	if len(rec.App) > maxAppBytes {
 		rec.App = rec.App[:maxAppBytes]
 	}
+	rec.Message = p.hide(rec.Message)
 	p.apply(rec)
 }
 
@@ -169,7 +178,16 @@ func (p *Processor) forward(line string) {
 	if p.Forward == nil {
 		return
 	}
-	_, _ = io.WriteString(p.Forward, line+"\n")
+	_, _ = io.WriteString(p.Forward, p.hide(line)+"\n")
+}
+
+type hidingWriter struct{ p *Processor }
+
+func (h hidingWriter) Write(b []byte) (int, error) {
+	if _, err := io.WriteString(h.p.forwardWriter(), h.p.hide(string(b))); err != nil {
+		return 0, err
+	}
+	return len(b), nil
 }
 
 func (p *Processor) apply(rec record) {

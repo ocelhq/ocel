@@ -2,6 +2,7 @@ package build
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -264,6 +265,45 @@ fn main() {
     }
 }
 `
+
+func TestARustBuildThatPrintsASecretAndFailsSaysItNowhere(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("cargo"); err != nil {
+		t.Skip("cargo is not on PATH")
+	}
+	root := t.TempDir()
+	writeBuildScript(t, root)
+	dir := filepath.Join(root, "apps", "api")
+	for name, body := range map[string]string{
+		"Cargo.toml":  "[package]\nname = \"api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
+		"build.rs":    "fn main() {\n    let dir = std::env::var(\"OCEL_LIVE_DIR\").unwrap();\n    let secret = std::fs::read_to_string(std::path::Path::new(&dir).join(\"SESSION_SECRET\")).unwrap();\n    panic!(\"rejected {secret}\");\n}\n",
+		"src/main.rs": "fn main() {}\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := &project.Project{
+		Dir:  root,
+		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "rust"}}},
+	}
+	var ended error
+	log := Log{AppLog: func(string) (io.Writer, func(error)) { return io.Discard, func(err error) { ended = err } }}
+
+	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
+	err := builder.Build(context.Background(), cfg, map[string]AppVariables{"api": {Live: map[string]string{"SESSION_SECRET": "ss_live_secret"}}}, log)
+	if err == nil {
+		t.Fatal("Build err = nil, want the failed build.rs")
+	}
+	for name, said := range map[string]error{"error": err, "app's ended build": ended} {
+		if said == nil || strings.Contains(said.Error(), "ss_live_secret") || !strings.Contains(said.Error(), "rejected [secret]") {
+			t.Errorf("the %s = %v, want what cargo said with the secret hidden", name, said)
+		}
+	}
+}
 
 func TestARustAppsBuildScriptReadsEveryValueTheAppResolvesAndNoneTheDeployersShellHolds(t *testing.T) {
 	if _, err := exec.LookPath("cargo"); err != nil {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -175,6 +176,39 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		want := []string{"OCEL_VAR_POSTHOG_ID", "OCEL_VAR_SESSION_SECRET", "OCEL_VAR_STRIPE_API_KEY", "SESSION_SECRET", "STRIPE_API_KEY"}
 		if !slices.Equal(got.Apps[0].Unset, want) {
 			t.Errorf("Unset = %v, want %v", got.Apps[0].Unset, want)
+		}
+	})
+
+	t.Run("hides every encrypted value the build says, in its log and in its error", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
+
+		var shared, app bytes.Buffer
+		log := Log{Shared: &shared, AppLog: func(string) (io.Writer, func(error)) { return &app, func(error) {} }}
+		builder := nodeOnly{host: servingNext, node: func(_ context.Context, _ string, _ []byte, log Log) error {
+			appLog, ended := log.App("web")
+			_, _ = io.WriteString(log.Shared, "booting with sk_live_sensitive\n")
+			_, _ = io.WriteString(appLog, "signing with ss_live_secret\n")
+			ended(nil)
+			return errors.New("next build failed: ss_live_secret is not a valid key")
+		}}
+
+		err := builder.Build(context.Background(), cfg, values, log)
+		if err == nil {
+			t.Fatal("Build err = nil, want the node build's failure")
+		}
+		for name, said := range map[string]string{"shared log": shared.String(), "app log": app.String(), "error": err.Error()} {
+			for _, value := range []string{"sk_live_sensitive", "ss_live_secret"} {
+				if strings.Contains(said, value) {
+					t.Errorf("the %s holds %q: %s", name, value, said)
+				}
+			}
+			if !strings.Contains(said, "[secret]") {
+				t.Errorf("the %s = %q, want each value replaced where it was said", name, said)
+			}
 		}
 	})
 

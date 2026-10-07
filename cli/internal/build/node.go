@@ -119,7 +119,7 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 	}
 	cmd.Stdout, cmd.Stderr = writer, writer
 
-	proc := &nodeprotocol.Processor{Span: run.SpanFromContext(ctx), Forward: io.MultiWriter(routing, &captured), AppBuild: routing.begin}
+	proc := &nodeprotocol.Processor{Span: run.SpanFromContext(ctx), Forward: io.MultiWriter(routing, &captured), AppBuild: routing.begin, Hide: log.hidden.Hide}
 
 	startErr := cmd.Start()
 	_ = writer.Close()
