@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/cli/internal/appurl"
+	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
@@ -85,15 +86,19 @@ func collectBuildAndAssemble(ctx context.Context, dependencies Dependencies, a a
 	if err != nil {
 		return nil, nil, err
 	}
+	usages, err := manifest.FindUsages(ctx, cfg, resources)
+	if err != nil {
+		return nil, nil, err
+	}
 	steps := newBuildSteps(a.phase)
-	built, err := buildApps(ctx, dependencies, a, steps, clientenv.AppsOf(cfg, values), placement.HostedWorkers(), resources, inline)
+	built, err := buildApps(ctx, dependencies, a, steps, clientenv.AppsOf(cfg, values), placement.HostedWorkers(), resources, inline, usages)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	var assembled *contractv1.Manifest
 	if err := steps.run(cfg.Slug, progress.Assembling.Title("the deploy manifest of "+cfg.Slug), func() (err error) {
-		assembled, err = assembleManifest(ctx, dependencies, a, resources, values, built)
+		assembled, err = assembleManifest(dependencies, a, resources, values, built, usages)
 		return err
 	}); err != nil || assembled == nil {
 		return nil, nil, err
@@ -101,7 +106,7 @@ func collectBuildAndAssemble(ctx context.Context, dependencies Dependencies, a a
 	return assembled, inline, nil
 }
 
-func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps *buildSteps, clients []clientenv.App, workers build.HostedWorkers, resources []declaration.Resource, inline []*bindingsv1.Binding) (build.Output, error) {
+func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps *buildSteps, clients []clientenv.App, workers build.HostedWorkers, resources []declaration.Resource, inline []*bindingsv1.Binding, usages []attribution.Usage) (build.Output, error) {
 	cfg, span := a.cfg, a.span
 	conflicts, err := build.FindNextConfigConflicts(cfg, a.host)
 	if err != nil {
@@ -141,7 +146,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	if err := a.infra.provision(ctx, resources, inline); err != nil {
 		return build.Output{}, err
 	}
-	forwards, err := a.infra.forwardPorts(ctx, steps, cfg, resources)
+	forwards, err := a.infra.forwardPorts(ctx, steps, cfg, resources, usages)
 	if err != nil {
 		return build.Output{}, err
 	}
@@ -158,7 +163,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	return built, errors.Join(err, forwards.Close())
 }
 
-func assembleManifest(ctx context.Context, dependencies Dependencies, a assembly, resources []declaration.Resource, values map[string][]variables.Variable, built build.Output) (*contractv1.Manifest, error) {
+func assembleManifest(dependencies Dependencies, a assembly, resources []declaration.Resource, values map[string][]variables.Variable, built build.Output, usages []attribution.Usage) (*contractv1.Manifest, error) {
 	cfg := a.cfg
 	onEdge, err := build.EdgeApps(cfg.Dir)
 	if err != nil {
@@ -179,8 +184,7 @@ func assembleManifest(ctx context.Context, dependencies Dependencies, a assembly
 		a.phase.Say(fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", countOf(len(resources), "resource"), cfg.Slug))
 	}
 
-	usages, err := manifest.FindUsages(ctx, cfg, built, resources)
-	if err != nil {
+	if err := manifest.RefuseUnnamedApps(cfg, built); err != nil {
 		return nil, err
 	}
 	return manifest.Assemble(manifest.Input{
