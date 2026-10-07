@@ -78,8 +78,9 @@ def _find_properties(name: str, kind: str):
     raw = os.environ.get(key) or live_value(key)
     if not raw:
         return RuntimeError(
-            f"Value for {key} is not defined. Run `ocel dev` to resolve it locally, "
-            f"or `ocel deploy` to have it delivered from the resource this app binds."
+            f"{key} is not delivered to this process: `ocel dev` delivers it locally and "
+            "`ocel deploy` to the deployed app, but a build gets no bindings, so code that "
+            "runs while building, such as prerendering a page, cannot use the resource"
         )
     try:
         delivered = Binding.from_json(raw, ignore_unknown_fields=True)

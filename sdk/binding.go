@@ -39,8 +39,9 @@ type MissingBindingError struct {
 // Error names the key and the commands that deliver a binding into it.
 func (e *MissingBindingError) Error() string {
 	return fmt.Sprintf(
-		"Value for %s is not defined. Run `ocel dev` to resolve it locally, "+
-			"or `ocel deploy` to have it delivered from the resource this app binds.",
+		"%s is not delivered to this process: `ocel dev` delivers it locally and `ocel deploy` "+
+			"to the deployed app, but a build gets no bindings, so code that runs while building, "+
+			"such as prerendering a page, cannot use the resource",
 		e.Key,
 	)
 }

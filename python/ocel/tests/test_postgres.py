@@ -70,9 +70,10 @@ def test_a_database_with_no_binding_delivered_names_the_commands_that_deliver_on
     with pytest.raises(RuntimeError) as raised:
         _ = postgres("main").connection_string
     assert str(raised.value) == (
-        "Value for OCEL_RESOURCE_POSTGRES_main is not defined. "
-        "Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered "
-        "from the resource this app binds."
+        "OCEL_RESOURCE_POSTGRES_main is not delivered to this process: "
+        "`ocel dev` delivers it locally and `ocel deploy` to the deployed app, but a build "
+        "gets no bindings, so code that runs while building, such as prerendering a page, "
+        "cannot use the resource"
     )
 
 

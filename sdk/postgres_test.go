@@ -190,8 +190,9 @@ func TestABindingIsReadFromTheProjectedLiveDirectory(t *testing.T) {
 func TestAMissingBindingNamesTheCommandsThatDeliverIt(t *testing.T) {
 	_, err := ocel.Postgres("main").ConnectionString()
 
-	want := "Value for OCEL_RESOURCE_POSTGRES_main is not defined. " +
-		"Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered from the resource this app binds."
+	want := "OCEL_RESOURCE_POSTGRES_main is not delivered to this process: " +
+		"`ocel dev` delivers it locally and `ocel deploy` to the deployed app, but a build gets no bindings, " +
+		"so code that runs while building, such as prerendering a page, cannot use the resource"
 	if err == nil || err.Error() != want {
 		t.Errorf("ConnectionString() error = %v, want %q", err, want)
 	}

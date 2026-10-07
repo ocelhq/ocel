@@ -81,7 +81,7 @@ fn a_binding_that_was_never_delivered_names_the_commands_that_deliver_it() {
         .expect_err("no binding was delivered");
     assert_eq!(
         err.to_string(),
-        "Value for OCEL_RESOURCE_POSTGRES_absent is not defined. Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered from the resource this app binds."
+        "OCEL_RESOURCE_POSTGRES_absent is not delivered to this process: `ocel dev` delivers it locally and `ocel deploy` to the deployed app, but a build gets no bindings, so code that runs while building, such as prerendering a page, cannot use the resource"
     );
 }
 
