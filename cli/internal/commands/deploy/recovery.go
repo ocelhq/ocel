@@ -40,6 +40,7 @@ type variablesRecovery struct {
 	workerCeilings []provider.WorkerCeiling
 	host           build.Host
 	urls           map[string]string
+	infra          *infraProvisioning
 
 	dry     bool
 	enabled bool
@@ -158,7 +159,7 @@ func (r variablesRecovery) attempt(ctx context.Context, phase, child *run.Span, 
 	attempt := child.Trace(r.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
 	manifest, inline, err := collectBuildAndAssemble(run.ContextWithSpan(ctx, attempt), r.dependencies, assembly{
 		cfg: r.cfg, declarations: declarations, prebuilt: prebuilt, dry: r.dry, phase: phase, span: child,
-		containerArchs: r.containerArchs, workerCeilings: r.workerCeilings, host: r.host, urls: r.urls,
+		containerArchs: r.containerArchs, workerCeilings: r.workerCeilings, host: r.host, urls: r.urls, infra: r.infra,
 	})
 	attempt.End(err)
 	return manifest, inline, err
