@@ -208,7 +208,7 @@ func builtRoutingApp(t *testing.T, app string, desc edge.ServeDescriptor, manife
 func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
-	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", ServeBuildID: "b1"}, routing)
+	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, routing)
 
 	vendor := fake.NewProvider(fake.Options{})
 	client := servedBy(t, vendor)
@@ -243,7 +243,7 @@ func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 func TestTheStagedRecordIncludesTheManifestAnEdgeRunningCodeRoutesBy(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
-	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", ServeBuildID: "b1"}, routing)
+	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, routing)
 	client, vendor := deployServed(t)
 	stager := staging(t, vendor)
 

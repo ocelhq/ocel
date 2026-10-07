@@ -39,26 +39,26 @@ type Environment struct {
 }
 
 type App struct {
-	Name          string   `json:"name"`
-	BuildID       string   `json:"buildId,omitempty"`
-	ServeBuildID  string   `json:"serveBuildId,omitempty"`
-	StoragePrefix string   `json:"storagePrefix,omitempty"`
-	URLs          []string `json:"urls"`
+	Name             string   `json:"name"`
+	BuildID          string   `json:"buildId,omitempty"`
+	FrameworkBuildID string   `json:"frameworkBuildId,omitempty"`
+	StoragePrefix    string   `json:"storagePrefix,omitempty"`
+	URLs             []string `json:"urls"`
 }
 
 func New(cfg *project.Project, manifest *contractv1.Manifest, env *environmentv1.Environment, tag, promotionID string, results []*progressv1.AppResult) (Record, error) {
 	apps := make([]App, 0, len(manifest.GetApps()))
 	for _, a := range manifest.GetApps() {
-		serveBuildID, err := build.ServeBuildID(cfg.Dir, a.GetName())
+		frameworkBuildID, err := build.FrameworkBuildID(cfg.Dir, a.GetName())
 		if err != nil {
 			return Record{}, err
 		}
 		apps = append(apps, App{
-			Name:          a.GetName(),
-			BuildID:       a.GetBuildId(),
-			ServeBuildID:  serveBuildID,
-			StoragePrefix: findAppResult(results, a.GetName()).GetStoragePrefix(),
-			URLs:          findAppResult(results, a.GetName()).GetUrls(),
+			Name:             a.GetName(),
+			BuildID:          a.GetBuildId(),
+			FrameworkBuildID: frameworkBuildID,
+			StoragePrefix:    findAppResult(results, a.GetName()).GetStoragePrefix(),
+			URLs:             findAppResult(results, a.GetName()).GetUrls(),
 		})
 	}
 	return Record{

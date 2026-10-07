@@ -1793,12 +1793,12 @@ test("states the runtime and next's own build id in serve.json", async () => {
   const manifest = await readManifest(projectDir);
   expect(serve).toEqual({
     framework: "next",
-    serveBuildId: args.buildId,
+    frameworkBuildId: args.buildId,
     edgeRouting: true,
     entry: manifest.entry,
     needs: {},
   });
-  expect(serve.serveBuildId).toBe(manifest.buildId);
+  expect(serve.frameworkBuildId).toBe(manifest.buildId);
 });
 
 test("names the bundle serving the root route as the entry", async () => {

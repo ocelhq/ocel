@@ -193,7 +193,7 @@ func TestUploadArtifact(t *testing.T) {
 
 func serveDescriptor(t *testing.T, runtime, buildID string) string {
 	t.Helper()
-	raw, err := json.Marshal(edge.ServeDescriptor{Framework: runtime, ServeBuildID: buildID, Entry: "/"})
+	raw, err := json.Marshal(edge.ServeDescriptor{Framework: runtime, FrameworkBuildID: buildID, Entry: "/"})
 	if err != nil {
 		t.Fatal(err)
 	}

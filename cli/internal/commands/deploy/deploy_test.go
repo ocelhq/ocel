@@ -185,8 +185,8 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 		if got.Tag != "v9" {
 			t.Errorf("tag = %q, want %q", got.Tag, "v9")
 		}
-		if len(got.Apps) != 1 || got.Apps[0].Name != "api" || got.Apps[0].ServeBuildID != "bld_api_1" {
-			t.Errorf("apps = %+v, want one api app with serve build id bld_api_1", got.Apps)
+		if len(got.Apps) != 1 || got.Apps[0].Name != "api" || got.Apps[0].FrameworkBuildID != "bld_api_1" {
+			t.Errorf("apps = %+v, want one api app with framework build id bld_api_1", got.Apps)
 		}
 		if len(got.Apps) == 1 && !slices.Contains(got.Apps[0].URLs, "https://"+productionDomain) {
 			t.Errorf("apps = %+v, want api's URLs to include the hostname it serves on", got.Apps)
@@ -259,7 +259,7 @@ func readDeployRecord(t *testing.T, root string) deployrecord.Record {
 func writeServeDescriptor(t *testing.T, root, app, buildID string) {
 	t.Helper()
 	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, edge.ServeDescriptorFile),
-		`{"framework":"node","serveBuildId":"`+buildID+`"}`)
+		`{"framework":"node","frameworkBuildId":"`+buildID+`"}`)
 }
 
 func setUpProviderProject(t *testing.T, options string, transforms string) (clitest.FakeProject, Dependencies) {

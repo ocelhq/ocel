@@ -279,7 +279,7 @@ func TestANextFunctionsImageBootsTheNextRuntimeInTheDirectoryTheProviderNames(t 
 
 func TestTheEntryFunctionsImageCarriesTheAppsStaticAssetsAndNoOtherFunctionsDoes(t *testing.T) {
 	stagedProject(t, "web", "admin")
-	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", ServeBuildID: "b1"}, []byte(`{"entry":"index"}`))
+	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", FrameworkBuildID: "b1"}, []byte(`{"entry":"index"}`))
 	app := filepath.Join(workingOutputRoot(t), "apps", "web")
 	for rel, body := range map[string]string{
 		"static/_next/static/app.js": "chunk",

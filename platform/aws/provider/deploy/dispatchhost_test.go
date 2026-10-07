@@ -29,7 +29,7 @@ func routedArtifactRoot(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json": routedManifest,
-		"apps/web/serve.json":            `{"framework":"next","serveBuildId":"WEB1","edgeRouting":true,"entry":"/"}`,
+		"apps/web/serve.json":            `{"framework":"next","frameworkBuildId":"WEB1","edgeRouting":true,"entry":"/"}`,
 	})
 }
 

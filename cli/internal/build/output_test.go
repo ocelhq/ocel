@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
-func TestServeBuildID(t *testing.T) {
+func TestFrameworkBuildID(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -24,13 +24,13 @@ func TestServeBuildID(t *testing.T) {
 		{
 			name:     "reads the serve descriptor every framework writes",
 			app:      "api",
-			contents: map[string]string{"api/" + edge.ServeDescriptorFile: `{"framework":"node","serveBuildId":"0123456789abcdef"}`},
+			contents: map[string]string{"api/" + edge.ServeDescriptorFile: `{"framework":"node","frameworkBuildId":"0123456789abcdef"}`},
 			want:     "0123456789abcdef",
 		},
 		{
 			name:     "next states its own build id there too",
 			app:      "web",
-			contents: map[string]string{"web/" + edge.ServeDescriptorFile: `{"framework":"next","serveBuildId":"UxK1p2"}`},
+			contents: map[string]string{"web/" + edge.ServeDescriptorFile: `{"framework":"next","frameworkBuildId":"UxK1p2"}`},
 			want:     "UxK1p2",
 		},
 		{
@@ -53,25 +53,25 @@ func TestServeBuildID(t *testing.T) {
 			for rel, contents := range tt.contents {
 				writeAppFile(t, root, rel, []byte(contents))
 			}
-			got, err := ServeBuildID(root, tt.app)
+			got, err := FrameworkBuildID(root, tt.app)
 			if err != nil {
-				t.Fatalf("ServeBuildID(%q) = %v", tt.app, err)
+				t.Fatalf("FrameworkBuildID(%q) = %v", tt.app, err)
 			}
 			if got != tt.want {
-				t.Errorf("ServeBuildID(%q) = %q, want %q", tt.app, got, tt.want)
+				t.Errorf("FrameworkBuildID(%q) = %q, want %q", tt.app, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestAnUnreadableServeDescriptorFailsTheServeBuildIDRatherThanReadingAsNone(t *testing.T) {
+func TestAnUnreadableServeDescriptorFailsTheFrameworkBuildIDRatherThanReadingAsNone(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	writeAppFile(t, root, "api/"+edge.ServeDescriptorFile, []byte("not json"))
 
-	if got, err := ServeBuildID(root, "api"); err == nil {
-		t.Errorf("ServeBuildID = %q, nil over a descriptor that is not JSON, want the corruption reported rather than recorded as no build", got)
+	if got, err := FrameworkBuildID(root, "api"); err == nil {
+		t.Errorf("FrameworkBuildID = %q, nil over a descriptor that is not JSON, want the corruption reported rather than recorded as no build", got)
 	}
 	if apps, err := EdgeApps(root); err == nil {
 		t.Errorf("EdgeApps = %v, nil over a descriptor that is not JSON, want the corruption reported rather than read as no edge need", apps)

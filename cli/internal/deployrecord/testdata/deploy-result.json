@@ -13,7 +13,7 @@
     {
       "name": "web",
       "buildId": "3f7c1b9a5e2d4c8f",
-      "serveBuildId": "bld_1",
+      "frameworkBuildId": "bld_1",
       "storagePrefix": "preview-e2e-42/proj-123/web/r3f7c1b9a/",
       "urls": [
         "https://app.example.com"

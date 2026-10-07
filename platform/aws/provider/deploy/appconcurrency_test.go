@@ -23,7 +23,7 @@ func siblingAppRoot(t *testing.T, apps ...string) string {
 	files := map[string]string{}
 	for _, app := range apps {
 		files["apps/"+app+"/routing-manifest.json"] = routedManifest
-		files["apps/"+app+"/serve.json"] = `{"framework":"next","serveBuildId":"WEB1","edgeRouting":true,"entry":"/"}`
+		files["apps/"+app+"/serve.json"] = `{"framework":"next","frameworkBuildId":"WEB1","edgeRouting":true,"entry":"/"}`
 		files["apps/"+app+"/static/"+app+".txt"] = "an asset only " + app + " ships"
 	}
 	return writeTree(t, files)

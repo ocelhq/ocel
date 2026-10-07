@@ -71,13 +71,13 @@ func EdgeApps(projectDir string) ([]string, error) {
 	return apps, nil
 }
 
-func ServeBuildID(projectDir, app string) (string, error) {
+func FrameworkBuildID(projectDir, app string) (string, error) {
 	root, err := buildoutput.Root(projectDir)
 	if err != nil {
 		return "", err
 	}
 	desc, _, err := buildoutput.ReadServeDescriptor(root, app)
-	return desc.ServeBuildID, err
+	return desc.FrameworkBuildID, err
 }
 
 func builtApps(root string) ([]string, error) {
