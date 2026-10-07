@@ -43,7 +43,7 @@ func sayPrebuiltSkipsPreBuild(span *run.Span, command project.LifecycleCommand, 
 	span.Say(fmt.Sprintf("--prebuilt skips %s, which runs before a build and this deploy builds nothing; if its command %q must run first, run it yourself, for example with `ocel run --env %s -- <command>`", preBuildName, command.Command, readiness.TierName(tier)))
 }
 
-func runPreBuild(ctx context.Context, a assembly, command project.LifecycleCommand, forwards *portforward.Forwards, values map[string]build.AppVariables, resources int) error {
+func runPreBuild(ctx context.Context, a assembly, command project.LifecycleCommand, forwards *portforward.Forwards, values map[string]build.AppVariables, resourceCount int) error {
 	cfg := a.cfg
 	env := map[string]string{}
 	live := map[string]string{}
@@ -54,7 +54,7 @@ func runPreBuild(ctx context.Context, a assembly, command project.LifecycleComma
 	}
 
 	span := a.phase.Child(cfg.Slug, progress.Running.Title(preBuildName))
-	if forwards == nil && resources > 0 && !a.infra.providerProcess.Facts().GetForwardsPorts() {
+	if forwards == nil && resourceCount > 0 && !a.infra.providerProcess.Facts().GetForwardsPorts() {
 		span.Say(fmt.Sprintf("The provider forwards no port, so %s goes without the bindings of the resources %s declares", preBuildName, cfg.Slug))
 	}
 	hidden := redaction.NewValues(build.SecretValues(live))
