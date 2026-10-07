@@ -86,7 +86,7 @@ func TestRemovingAConnectorThatIsNotInstalledSaysThereIsNothingToRemove(t *testi
 	}
 }
 
-func TestAConnectorReleaseThatReplacesAResourceWarnsAndNamesIt(t *testing.T) {
+func TestAConnectorBundleThatReplacesAResourceWarnsAndNamesIt(t *testing.T) {
 	t.Parallel()
 
 	var progress fake.Log

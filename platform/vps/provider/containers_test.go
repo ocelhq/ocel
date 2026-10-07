@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-const deployment = "0123456789abcdef0123456789abcdef"
+const buildID = "0123456789abcdef0123456789abcdef"
 
 func aStack(t *testing.T, app provider.AppSpec) provider.StackSpec {
 	t.Helper()
@@ -34,7 +34,7 @@ func anApp() provider.AppSpec {
 	return provider.AppSpec{
 		App:             "web",
 		Compute:         provider.ComputeContainer,
-		BuildID:         deployment,
+		BuildID:         buildID,
 		Image:           loadedImageRef,
 		HealthCheckPath: "/healthz",
 	}

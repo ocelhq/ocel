@@ -945,7 +945,7 @@ func TestADeployAttributesEachFunctionToTheAppThatBuiltIt(t *testing.T) {
 			t.Errorf("api = %s on %v, want node with its own production domain, lower-cased", api.GetFramework().GetName(), productionHostnames(api))
 		}
 		if api.GetBuildId() != recordedBuildID("api") {
-			t.Errorf("api deployment = %q, want the id its build recorded", api.GetBuildId())
+			t.Errorf("api build id = %q, want the id its build recorded", api.GetBuildId())
 		}
 		if functions := api.GetServerless().GetFunctions(); len(functions) != 1 || functions[0].GetArtifactPath() != "output/api" {
 			t.Errorf("api functions = %v, want the api function attributed to it", functions)
@@ -995,7 +995,7 @@ export default {
 				t.Errorf("%s functions = %v, want its own function attributed to it", app, functions)
 			}
 			if a.GetBuildId() != recordedBuildID(app) {
-				t.Errorf("%s deployment = %q, want the id its own build recorded", app, a.GetBuildId())
+				t.Errorf("%s build id = %q, want the id its own build recorded", app, a.GetBuildId())
 			}
 		}
 		if recordedBuildID("web") == recordedBuildID("admin") {

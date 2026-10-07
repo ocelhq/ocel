@@ -196,7 +196,7 @@ func TestTwoDeploysOfOneBuiltOutputNeverShareABuild(t *testing.T) {
 	}
 }
 
-func TestAnAppsTagsNameItsBuildAndItsReleaseAndNoDeployment(t *testing.T) {
+func TestAnAppsTagsNameItsBuildAndItsRelease(t *testing.T) {
 	t.Parallel()
 
 	spec, err := buildDeploySpec(productionRequest(&contractv1.ManifestApp{Name: "web", BuildId: buildID}), "p1")
@@ -211,8 +211,5 @@ func TestAnAppsTagsNameItsBuildAndItsReleaseAndNoDeployment(t *testing.T) {
 	}
 	if tags["ocel:release"] != entry.Release.Token().String() {
 		t.Errorf("ocel:release = %q, want the release token %q", tags["ocel:release"], entry.Release.Token())
-	}
-	if _, ok := tags["ocel:deployment"]; ok {
-		t.Errorf("tags = %v, want no ocel:deployment: the build id is what the stack was built from", tags)
 	}
 }

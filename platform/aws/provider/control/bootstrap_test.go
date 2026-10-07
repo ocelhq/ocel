@@ -159,7 +159,7 @@ func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.
 	front := &planningEdge{planned: []edge.PlanChange{
 		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanKeep},
 		{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanUpdate},
-		{Kind: "Cloudflare::Worker", Name: "ocel-deployments", Action: edge.PlanCreate},
+		{Kind: "Cloudflare::Worker", Name: "ocel-releases-store", Action: edge.PlanCreate},
 	}}
 	b := planningBootstrapper(front)
 
@@ -187,7 +187,7 @@ func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.
 		if change.Action != provider.ActionDelete {
 			t.Errorf("the drop plan includes %+v, want every edge row a delete", change)
 		}
-		if change.Name == "ocel-deployments" {
+		if change.Name == "ocel-releases-store" {
 			t.Error("the drop plan names a worker that does not exist yet among what it deletes")
 		}
 	}

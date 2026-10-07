@@ -208,7 +208,7 @@ func TestTheISRWriterCallsNothingWithoutAdoptedCoordinates(t *testing.T) {
 	})
 }
 
-func TestPuttingAnEntrySendsItUnderTheDeploymentsWriteSecret(t *testing.T) {
+func TestPuttingAnEntrySendsItUnderTheReleasesWriteSecret(t *testing.T) {
 	var got struct {
 		method, path, key, auth, contentType, body string
 	}
@@ -228,7 +228,7 @@ func TestPuttingAnEntrySendsItUnderTheDeploymentsWriteSecret(t *testing.T) {
 		t.Errorf("request = %s %s?key=%s, want PUT /%s/entry?key=blog/a b", got.method, got.path, got.key, testPrefix)
 	}
 	if want := "Bearer " + DeriveISRWriteSecret("seed-1", testPrefix); got.auth != want {
-		t.Errorf("Authorization = %q, want the deployment's write secret, never the bootstrap credential", got.auth)
+		t.Errorf("Authorization = %q, want the release's write secret, never the bootstrap credential", got.auth)
 	}
 	if got.contentType != "application/json" || got.body != `{"lastModified":1}` {
 		t.Errorf("content type %q and body %q, want the entry as JSON", got.contentType, got.body)

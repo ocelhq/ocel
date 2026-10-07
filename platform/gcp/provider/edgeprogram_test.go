@@ -67,7 +67,7 @@ func TestTheEntryWorkerProgramReachesGCPThroughItsClientCertificateAndHoldsNoAWS
 	}
 }
 
-func TestTheSharedPreviewEntryProgramReadsEveryDeploymentThroughTheAdoptedStore(t *testing.T) {
+func TestTheSharedPreviewEntryProgramReadsEveryReleaseRecordThroughTheAdoptedStore(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
 	if err := h.adoptIn(environment.TierPreview, fullOffers("c1", "c2"), nil); err != nil {
