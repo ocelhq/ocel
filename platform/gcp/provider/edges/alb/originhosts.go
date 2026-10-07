@@ -16,7 +16,7 @@ import (
 )
 
 var originLimitAdvice = limitAdvice{
-	remove: "remove deployments this tier no longer needs with `ocel deployments prune`",
+	remove: "remove promotions this tier no longer needs with `ocel promotions prune`",
 	again:  "deploy again",
 }
 

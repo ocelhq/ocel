@@ -95,11 +95,11 @@ message CostScanResult {
   repeated string assumptions = 3;
 }
 
-message DeploymentListResult {
-  repeated DeploymentSummary deployments = 1;
+message PromotionListResult {
+  repeated PromotionSummary promotions = 1;
 }
 
-message DeploymentSummary {
+message PromotionSummary {
   string promotion_id = 1;
 
   string tag = 2;
@@ -108,14 +108,14 @@ message DeploymentSummary {
 
   map<string, string> builds = 4;
 
-  DeploymentState state = 5;
+  PromotionState state = 5;
 }
 
-enum DeploymentState {
-  DEPLOYMENT_STATE_UNSPECIFIED = 0;
-  DEPLOYMENT_STATE_ACTIVE = 1;
-  DEPLOYMENT_STATE_UNPROMOTED = 2;
-  DEPLOYMENT_STATE_SUPERSEDED = 3;
+enum PromotionState {
+  PROMOTION_STATE_UNSPECIFIED = 0;
+  PROMOTION_STATE_ACTIVE = 1;
+  PROMOTION_STATE_UNPROMOTED = 2;
+  PROMOTION_STATE_SUPERSEDED = 3;
 }
 
 message PreviewListResult {

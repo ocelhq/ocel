@@ -77,14 +77,14 @@ func TestACommandThatSucceedsRecordsOneCommandCompletedEvent(t *testing.T) {
 	inADeployedProject(t)
 	debugTelemetry(t)
 
-	code, _, stderr := executeAndReportRoot(t, "deployments", "prune", "--yes")
+	code, _, stderr := executeAndReportRoot(t, "promotions", "prune", "--yes")
 
 	event := theOnlyEvent(t, stderr)
 	if code != 0 || event.Name != "command_completed" {
 		t.Fatalf("code = %d, event = %q, want 0 and command_completed", code, event.Name)
 	}
 	want := map[string]any{
-		"command":                 "deployments prune",
+		"command":                 "promotions prune",
 		"exit_code":               float64(0),
 		"error_code":              "",
 		"json":                    false,
@@ -112,8 +112,8 @@ func TestTheEventIsIdentifiedByTheInstallIDAndStampedInRFC3339(t *testing.T) {
 	debugTelemetry(t)
 	before := time.Now().Add(-time.Second)
 
-	_, _, first := executeAndReportRoot(t, "deployments", "prune", "--yes")
-	_, _, second := executeAndReportRoot(t, "deployments", "prune", "--yes")
+	_, _, first := executeAndReportRoot(t, "promotions", "prune", "--yes")
+	_, _, second := executeAndReportRoot(t, "promotions", "prune", "--yes")
 
 	one, two := theOnlyEvent(t, first), theOnlyEvent(t, second)
 	if one.DistinctID == "" || one.DistinctID != two.DistinctID {
@@ -153,7 +153,7 @@ func TestTheFlagsRecordedAreTheNamesTheUserSetSortedAndNeverTheirValues(t *testi
 	debugTelemetry(t)
 	secret := "sk-live-s3cr3t-/home/victor/acme-prod"
 
-	_, stdout, stderr := executeAndReportRoot(t, "--verbose", "deployments", "prune", "--config", secret, "--json")
+	_, stdout, stderr := executeAndReportRoot(t, "--verbose", "promotions", "prune", "--config", secret, "--json")
 
 	event := theOnlyEvent(t, stderr)
 	if got := flagsOf(t, event); !slices.Equal(got, []string{"config", "json", "verbose"}) {
@@ -186,7 +186,7 @@ func TestAFailingCommandRecordsItsCodedErrorCodeAndNoMessageText(t *testing.T) {
 	debugTelemetry(t)
 	t.Chdir(t.TempDir())
 
-	code, _, stderr := executeAndReportRoot(t, "deployments", "prune", "--yes")
+	code, _, stderr := executeAndReportRoot(t, "promotions", "prune", "--yes")
 
 	event := theOnlyEvent(t, stderr)
 	if code == 0 || event.Properties["exit_code"] != float64(code) {
@@ -333,7 +333,7 @@ func TestNothingIsPrintedWhenTelemetryIsDisabled(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			set()
 
-			_, stdout, stderr := executeAndReportRoot(t, "deployments", "prune", "--yes")
+			_, stdout, stderr := executeAndReportRoot(t, "promotions", "prune", "--yes")
 
 			if strings.Contains(stdout+stderr, telemetry.DebugPrefix) {
 				t.Errorf("stdout = %q, stderr = %q, want no event", stdout, stderr)

@@ -11,7 +11,7 @@
     "build",
     "deploy",
     "preview",
-    "deployments",
+    "promotions",
     "rollback",
     "logs",
     "destroy",

@@ -68,7 +68,7 @@ own account, and find the reference they need without having to search for it.
 **Ships today** (the repo is the source of truth):
 
 - CLI commands documented under `content/docs/cli/`: init, dev, build, deploy,
-  deployments, rollback, destroy, doctor, domain, env, generate, bindings, link, login, logout, run.
+  promotions, rollback, destroy, doctor, domain, env, generate, bindings, link, login, logout, run.
 - SDKs: TypeScript (`packages/ocel`) and Go (`sdk/`).
 - SDK resources: postgres and bucket.
 - Providers: AWS (`platform/aws`), VPS over SSH (`platform/vps`), Cloudflare as an

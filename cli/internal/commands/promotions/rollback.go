@@ -155,11 +155,11 @@ func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string)
 				continue
 			}
 			if entry.GetUnpromoted() {
-				return nil, fmt.Errorf("promotion %s was taken back when a router could not serve it, so it never served and there is nothing of it to roll back to: `ocel deployments ls` marks it unpromoted", to)
+				return nil, fmt.Errorf("promotion %s was taken back when a router could not serve it, so it never served and there is nothing of it to roll back to: `ocel promotions ls` marks it unpromoted", to)
 			}
 			return entry.GetPromotion(), nil
 		}
-		return nil, fmt.Errorf("no promotion %q in this project's production history, which contains %s: `ocel deployments ls` lists them all", to, promotionIDs(history))
+		return nil, fmt.Errorf("no promotion %q in this project's production history, which contains %s: `ocel promotions ls` lists them all", to, promotionIDs(history))
 	case tag != "":
 		var matched []*contractv1.Promotion
 		for _, entry := range history {

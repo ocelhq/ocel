@@ -57,7 +57,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		Short: "Deploy this project to your own infrastructure",
 		Long: "Deploy this project to your own infrastructure.\n\n" +
 			"Provisions the resources the project declares, builds the apps, and releases the result " +
-			"into your provider account. Every deploy is kept: list them with `ocel deployments`, " +
+			"into your provider account. Every deploy is kept: list them with `ocel promotions ls`, " +
 			"return to one with `ocel rollback`.\n\n" +
 			"--dry builds, then prints every change the deploy would make to your account and stops.",
 		Example: "  $ ocel deploy\n" +
