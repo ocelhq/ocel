@@ -1793,7 +1793,7 @@ func TestADeployThatCannotRevealASecretStopsBeforeItProvisionsAnything(t *testin
 	}
 }
 
-func TestADeployWarnsThatAnImageBuildGetsNoneOfItsSensitiveOrSecretValues(t *testing.T) {
+func TestADeployWarnsThatAnImageBuildGetsNoneOfTheValuesItsAppDeclares(t *testing.T) {
 	fixture := setUpVariablesProject(t, `[
   {"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true},
   {"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},
@@ -1817,12 +1817,32 @@ func TestADeployWarnsThatAnImageBuildGetsNoneOfItsSensitiveOrSecretValues(t *tes
 		t.Fatalf("runDeploy err = %v; output=%s", err, out)
 	}
 	for _, app := range []string{"web", "api"} {
-		want := `app "` + app + `" builds as an image, and an image build gets none of its sensitive or secret values yet: SESSION_SECRET, STRIPE_API_KEY`
+		want := `app "` + app + `" builds as an image, and an image build gets none of its values yet: PAGE_ID, SESSION_SECRET, STRIPE_API_KEY.`
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "PAGE_ID,") || strings.Contains(out, "STRIPE_API_KEY, PAGE_ID") {
-		t.Errorf("the warning names a plaintext value, want only the encrypted classes:\n%s", out)
+}
+
+func TestADeployWarnsThatAnImageBuildGetsNoneOfItsValuesWhenEveryOneIsPlaintext(t *testing.T) {
+	fixture := setUpVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), "{}\n")
+	writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api", compute: "container" }`)
+	envSet(t, fixture, "PAGE_ID", "page-123", envOptions{})
+
+	dependencies := newTestDependencies()
+	captureBuildVariables(&dependencies)
+	stubAppImages(&dependencies, "api")
+	clitest.ServeImageDaemon(t, "amd64")
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; output=%s", err, out)
+	}
+	if want := `app "api" builds as an image, and an image build gets none of its values yet: PAGE_ID.`; !strings.Contains(out, want) {
+		t.Errorf("output lacks %q:\n%s", want, out)
+	}
+	if strings.Contains(out, processenv.AppURLEnvVar+",") || strings.Contains(out, ", "+processenv.AppURLEnvVar) {
+		t.Errorf("the warning names %s, which ocel sets and the app never declares:\n%s", processenv.AppURLEnvVar, out)
 	}
 }
