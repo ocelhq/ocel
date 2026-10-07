@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -39,17 +40,43 @@ func run(getenv func(string) string) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
-	server := &http.Server{Handler: handler, ReadHeaderTimeout: readHeaderTimeout}
+	return serve(ctx, listener, handler, stopGrace)
+}
+
+func serve(ctx context.Context, listener net.Listener, handler http.Handler, grace time.Duration) int {
+	var relaying sync.WaitGroup
+	server := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			relaying.Add(1)
+			defer relaying.Done()
+			handler.ServeHTTP(w, r)
+		}),
+		ReadHeaderTimeout: readHeaderTimeout,
+	}
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		<-ctx.Done()
-		grace, cancel := context.WithTimeout(context.Background(), stopGrace)
+		bounded, cancel := context.WithTimeout(context.Background(), grace)
 		defer cancel()
-		_ = server.Shutdown(grace)
+		if server.Shutdown(bounded) != nil {
+			return
+		}
+		drained := make(chan struct{})
+		go func() {
+			relaying.Wait()
+			close(drained)
+		}()
+		select {
+		case <-drained:
+		case <-bounded.Done():
+		}
 	}()
 	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	<-stopped
 	return 0
 }
 

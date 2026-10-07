@@ -1,17 +1,136 @@
 package main
 
 import (
+	"context"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
 )
 
 func env(values map[string]string) func(string) string {
 	return func(key string) string { return values[key] }
+}
+
+func echoing(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				_, _ = io.Copy(conn, conn)
+			}()
+		}
+	}()
+	return listener.Addr().String()
+}
+
+func TestAStoppingBastionWaitsForTheConnectionsItIsRelayingWithinItsGrace(t *testing.T) {
+	t.Parallel()
+	target := echoing(t)
+	handler, err := newHandler(env(map[string]string{relay.AllowedEnv: strings.Replace(target, ":", "/32:", 1)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	served := make(chan int, 1)
+	go func() { served <- serve(ctx, listener, handler, time.Minute) }()
+	forward, err := relay.OpenForward(context.Background(), relay.Link{URL: "http://" + listener.Addr().String(), Target: target,
+		Token: func(context.Context) (string, error) { return "id-token", nil }})
+	if err != nil {
+		t.Fatalf("OpenForward() = %v", err)
+	}
+	conn, err := net.Dial("tcp", forward.Address())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err := conn.Write([]byte("ping")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadFull(conn, make([]byte, 4)); err != nil {
+		t.Fatal(err)
+	}
+
+	stop()
+	select {
+	case <-served:
+		t.Fatal("the bastion stopped while a connection was still relayed through it")
+	case <-time.After(200 * time.Millisecond):
+	}
+	_ = conn.Close()
+	forward.Close()
+
+	select {
+	case code := <-served:
+		if code != 0 {
+			t.Errorf("serve() = %d, want 0", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the bastion never stopped once its last relayed connection ended")
+	}
+}
+
+func TestAStoppingBastionStopsOnceItsGraceRunsOutWhateverItStillRelays(t *testing.T) {
+	t.Parallel()
+	target := echoing(t)
+	handler, err := newHandler(env(map[string]string{relay.AllowedEnv: strings.Replace(target, ":", "/32:", 1)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	served := make(chan int, 1)
+	go func() { served <- serve(ctx, listener, handler, 100*time.Millisecond) }()
+	forward, err := relay.OpenForward(context.Background(), relay.Link{URL: "http://" + listener.Addr().String(), Target: target,
+		Token: func(context.Context) (string, error) { return "id-token", nil }})
+	if err != nil {
+		t.Fatalf("OpenForward() = %v", err)
+	}
+	t.Cleanup(forward.Close)
+	conn, err := net.Dial("tcp", forward.Address())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err := conn.Write([]byte("ping")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadFull(conn, make([]byte, 4)); err != nil {
+		t.Fatal(err)
+	}
+
+	stop()
+
+	select {
+	case <-served:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the bastion outlived its grace waiting on a connection")
+	}
 }
 
 func TestTheBastionRefusesToStartWithNoDestinationOrOneItCannotRead(t *testing.T) {
