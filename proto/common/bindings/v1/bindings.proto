@@ -49,6 +49,7 @@ message PostgresProperties {
   string url = 6 [debug_redact = true];
   PostgresTlsMode tls_mode = 7;
   string tls_ca = 8;
+  string tls_server_name = 9;
 }
 
 message BucketProperties {
@@ -77,6 +78,7 @@ message KvProperties {
   string password = 4 [debug_redact = true];
   bool tls = 5;
   string ca_pem = 6;
+  string tls_server_name = 7;
 }
 
 enum RealtimeTransport {

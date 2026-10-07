@@ -380,6 +380,7 @@ type PostgresProperties struct {
 	Url           string                 `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
 	TlsMode       PostgresTlsMode        `protobuf:"varint,7,opt,name=tls_mode,json=tlsMode,proto3,enum=common.bindings.v1.PostgresTlsMode" json:"tls_mode,omitempty"`
 	TlsCa         string                 `protobuf:"bytes,8,opt,name=tls_ca,json=tlsCa,proto3" json:"tls_ca,omitempty"`
+	TlsServerName string                 `protobuf:"bytes,9,opt,name=tls_server_name,json=tlsServerName,proto3" json:"tls_server_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -466,6 +467,13 @@ func (x *PostgresProperties) GetTlsMode() PostgresTlsMode {
 func (x *PostgresProperties) GetTlsCa() string {
 	if x != nil {
 		return x.TlsCa
+	}
+	return ""
+}
+
+func (x *PostgresProperties) GetTlsServerName() string {
+	if x != nil {
+		return x.TlsServerName
 	}
 	return ""
 }
@@ -658,6 +666,7 @@ type KvProperties struct {
 	Password      string                 `protobuf:"bytes,4,opt,name=password,proto3" json:"password,omitempty"`
 	Tls           bool                   `protobuf:"varint,5,opt,name=tls,proto3" json:"tls,omitempty"`
 	CaPem         string                 `protobuf:"bytes,6,opt,name=ca_pem,json=caPem,proto3" json:"ca_pem,omitempty"`
+	TlsServerName string                 `protobuf:"bytes,7,opt,name=tls_server_name,json=tlsServerName,proto3" json:"tls_server_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -730,6 +739,13 @@ func (x *KvProperties) GetTls() bool {
 func (x *KvProperties) GetCaPem() string {
 	if x != nil {
 		return x.CaPem
+	}
+	return ""
+}
+
+func (x *KvProperties) GetTlsServerName() string {
+	if x != nil {
+		return x.TlsServerName
 	}
 	return ""
 }
@@ -956,7 +972,7 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\x06grants\x18\x04 \x03(\v2\x19.common.bindings.v1.GrantR\x06grants\x12\x16\n" +
 	"\x06source\x18\x05 \x01(\tR\x06sourceB\f\n" +
 	"\n" +
-	"properties\"\x83\x02\n" +
+	"properties\"\xab\x02\n" +
 	"\x12PostgresProperties\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
@@ -965,7 +981,8 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\x12\x15\n" +
 	"\x03url\x18\x06 \x01(\tB\x03\x80\x01\x01R\x03url\x12>\n" +
 	"\btls_mode\x18\a \x01(\x0e2#.common.bindings.v1.PostgresTlsModeR\atlsMode\x12\x15\n" +
-	"\x06tls_ca\x18\b \x01(\tR\x05tlsCa\"\xaa\x02\n" +
+	"\x06tls_ca\x18\b \x01(\tR\x05tlsCa\x12&\n" +
+	"\x0ftls_server_name\x18\t \x01(\tR\rtlsServerName\"\xaa\x02\n" +
 	"\x10BucketProperties\x12\x16\n" +
 	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12&\n" +
 	"\x0fpublic_base_url\x18\x02 \x01(\tR\rpublicBaseUrl\x12\x16\n" +
@@ -978,14 +995,15 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\raccess_key_id\x18\b \x01(\tR\vaccessKeyId\x12/\n" +
 	"\x11secret_access_key\x18\t \x01(\tB\x03\x80\x01\x01R\x0fsecretAccessKey\"\x11\n" +
 	"\x0fTopicProperties\"\x10\n" +
-	"\x0eTaskProperties\"\x9c\x01\n" +
+	"\x0eTaskProperties\"\xc4\x01\n" +
 	"\fKvProperties\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
 	"\busername\x18\x03 \x01(\tR\busername\x12\x1f\n" +
 	"\bpassword\x18\x04 \x01(\tB\x03\x80\x01\x01R\bpassword\x12\x10\n" +
 	"\x03tls\x18\x05 \x01(\bR\x03tls\x12\x15\n" +
-	"\x06ca_pem\x18\x06 \x01(\tR\x05caPem\"\xc4\x01\n" +
+	"\x06ca_pem\x18\x06 \x01(\tR\x05caPem\x12&\n" +
+	"\x0ftls_server_name\x18\a \x01(\tR\rtlsServerName\"\xc4\x01\n" +
 	"\x12RealtimeProperties\x12C\n" +
 	"\ttransport\x18\x01 \x01(\x0e2%.common.bindings.v1.RealtimeTransportR\ttransport\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x12\n" +

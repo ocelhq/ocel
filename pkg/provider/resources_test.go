@@ -55,8 +55,8 @@ func TestAKVBindingReadBackFromItsRecordIsTheSameRecord(t *testing.T) {
 	t.Parallel()
 
 	record := &bindingsv1.Binding{Name: "kv--cache", Properties: &bindingsv1.Binding_Kv{Kv: &bindingsv1.KvProperties{
-		Host: "cache.internal", Port: 6380, Username: "app", Password: "fixture-password", Tls: true,
-		CaPem: "-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n",
+		Host: "127.0.0.1", Port: 6380, Username: "app", Password: "fixture-password", Tls: true,
+		CaPem: "-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n", TlsServerName: "cache.internal",
 	}}}
 	binding := provider.BindingOf(record)
 	if binding.Type != provider.BindingKV {
@@ -80,6 +80,10 @@ func TestAPostgresBindingReadBackFromItsRecordKeepsHowItIsReached(t *testing.T) 
 		{Name: "orders", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 			Host: "10.240.0.9", Port: 5432, Database: "ocel", Username: "ocel", Password: "fixture-password",
 			TlsMode: bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_REQUIRE,
+		}}},
+		{Name: "forwarded", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
+			Host: "127.0.0.1", Port: 41234, Database: "ocel", Username: "ocel", Password: "fixture-password",
+			TlsMode: bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL, TlsServerName: "orders.cluster.internal",
 		}}},
 		{Name: "ledger", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 			Host: "db.example.com", Port: 5432, Database: "ledger", Username: "app", Password: "fixture-password",
