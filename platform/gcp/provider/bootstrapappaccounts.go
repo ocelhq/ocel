@@ -137,7 +137,7 @@ func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.Bootst
 		} else if isAppRecorded(stacks, candidate.app) {
 			continue
 		}
-		removed, err := b.deleteAccount(ctx, candidate.id)
+		removed, err := b.clients.deleteAccount(ctx, candidate.id)
 		if err != nil {
 			failures = append(failures, err)
 			continue
@@ -170,21 +170,7 @@ func (b bootstrap) retireWorkloadAccount(ctx context.Context, tier environment.T
 	if err := ignoreAbsent(b.clients.bindQueueRoles(ctx, tier, member, retiredTierQueueRoles, nil)); err != nil {
 		return false, fmt.Errorf("take back what the %s service account may do on the %s delay queue: %w", id, tier, err)
 	}
-	return b.deleteAccount(ctx, id)
-}
-
-func (b bootstrap) deleteAccount(ctx context.Context, id string) (bool, error) {
-	service, err := b.clients.Accounts()
-	if err != nil {
-		return false, err
-	}
-	if _, err := attempted(ctx, service.Projects.ServiceAccounts.Delete(accountPath(b.clients, id)).Context(ctx).Do); err != nil {
-		if absent(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("delete the %s service account: %w", id, err)
-	}
-	return true, nil
+	return b.clients.deleteAccount(ctx, id)
 }
 
 func (b bootstrap) deleteRetiredWorkloadAccount(ctx context.Context, tier environment.Tier, progress progress.Log) error {

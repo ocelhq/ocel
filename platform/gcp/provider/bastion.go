@@ -1,0 +1,224 @@
+package gcp
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"slices"
+	"sync"
+
+	"google.golang.org/api/googleapi"
+	run "google.golang.org/api/run/v2"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
+	"github.com/ocelhq/ocel/platform/gcp/provider/relay"
+)
+
+const (
+	bastionImageName   = "ocel-bastion"
+	bastionImagePath   = "/bastion"
+	bastionImageTagLen = 32
+
+	bastionConcurrency  = 250
+	bastionMaxInstances = 2
+	bastionAllowedCap   = 256
+	bastionCreateTries  = 2
+)
+
+var bastionImageTag = sync.OnceValue(func() string {
+	sum := sha256.New()
+	sum.Write([]byte(staticImage + "\x00"))
+	sum.Write(payloads.Bastion())
+	return hex.EncodeToString(sum.Sum(nil))[:bastionImageTagLen]
+})
+
+type bastion struct {
+	clients       *clients
+	deployService func(ctx context.Context, s serving, progress progress.Log) (release, error)
+	pushBinary    func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
+	tearDown      func(ctx context.Context, service string, progress progress.Log) error
+	grantInvoker  func(ctx context.Context, c *clients, service, member string) error
+	prove         func(ctx context.Context, audience string) (envsource.IdentityProof, error)
+	open          func(ctx context.Context, link relay.Link) (*relay.Forward, error)
+	waited        func(ctx context.Context, attempt int) bool
+}
+
+func (b bastion) imageRef(tier environment.Tier) string {
+	return b.clients.RepositoryPath(b.clients.region, tier) + "/" + bastionImageName + ":" + bastionImageTag()
+}
+
+func (b bastion) serving(tier environment.Tier, image string, allowed []string) serving {
+	return serving{
+		service:     b.clients.Bastion(tier),
+		image:       image,
+		account:     b.clients.BastionAccountEmail(tier),
+		compute:     provider.ComputeServerless,
+		ingress:     ingressEverywhere,
+		concurrency: bastionConcurrency,
+		instances:   provider.Instances{Max: bastionMaxInstances},
+		timeout:     maxRequestTimeout,
+		egress:      &privateEgress{network: b.clients.NetworkPath(tier), subnetwork: b.clients.SubnetworkPath(b.clients.region, tier)},
+		audiences:   []string{b.clients.Bastion(tier)},
+		env:         map[string]string{relay.AllowedEnv: relay.FormatAllowed(allowed)},
+	}
+}
+
+func widenedAllowlist(held, asked []string) []string {
+	widened := slices.Clone(held)
+	for _, target := range asked {
+		if !slices.Contains(widened, target) {
+			widened = append(widened, target)
+		}
+	}
+	return widened[max(0, len(widened)-bastionAllowedCap):]
+}
+
+func (b bastion) read(ctx context.Context, tier environment.Tier) (*run.GoogleCloudRunV2Service, error) {
+	services, err := b.clients.Run()
+	if err != nil {
+		return nil, err
+	}
+	name := b.clients.Bastion(tier)
+	found, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+		return services.Projects.Locations.Services.Get(b.clients.servicePath(name)).Context(ctx).Do(call...)
+	})
+	if absent(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read the bastion %s: %w", name, err)
+	}
+	return found, nil
+}
+
+func (b bastion) ensure(ctx context.Context, tier environment.Tier, targets []string, progress progress.Log) (string, error) {
+	var url string
+	var err error
+	for range bastionCreateTries {
+		if url, err = b.ensureService(ctx, tier, targets, progress); !taken(err) {
+			break
+		}
+	}
+	if err != nil {
+		return "", err
+	}
+	principal, err := b.clients.Principal(ctx)
+	if err != nil {
+		return "", err
+	}
+	if err := b.grantInvoker(ctx, b.clients, b.clients.Bastion(tier), memberOf(principal)); err != nil {
+		return "", err
+	}
+	if url == "" {
+		return "", refusal.Refuse(refusal.CodeNotReady, "Cloud Run gave the bastion %s no URL, and a port forward connects to it", b.clients.Bastion(tier))
+	}
+	return url, nil
+}
+
+func (b bastion) ensureService(ctx context.Context, tier environment.Tier, targets []string, progress progress.Log) (string, error) {
+	current, err := b.read(ctx, tier)
+	if err != nil {
+		return "", err
+	}
+	var held []string
+	if current != nil && current.Template != nil && len(current.Template.Containers) == 1 {
+		held = relay.ParseAllowed(allowedBy(current.Template.Containers[0]))
+	}
+	image := b.imageRef(tier)
+	desired := b.serving(tier, image, widenedAllowlist(held, targets))
+	wanted, err := serviceOf(desired)
+	if err != nil {
+		return "", err
+	}
+	if current != nil && sameBastion(current, wanted) {
+		return current.Uri, nil
+	}
+	if err := b.ensureAccount(ctx, tier); err != nil {
+		return "", err
+	}
+	if current == nil || imageOf(current) != image {
+		if err := b.pushBinary(ctx, tier, bastionImageName, image, payloads.Bastion(), bastionImagePath); err != nil {
+			return "", err
+		}
+	}
+	ran, err := b.deployService(ctx, desired, progress)
+	return ran.url, err
+}
+
+func (b bastion) ensureAccount(ctx context.Context, tier environment.Tier) error {
+	account := b.clients.BastionAccount(tier)
+	err := b.clients.createAccount(ctx, account,
+		clipped("ocel bastion ("+b.clients.Namespace().String()+", "+string(tier)+")", maxDisplayNameBytes),
+		"the identity the ocel bastion of the "+string(tier)+" tier runs as, which holds no role")
+	if err != nil {
+		return err
+	}
+	principal, err := b.clients.Principal(ctx)
+	if err != nil {
+		return err
+	}
+	return untilVisible(ctx, func() error {
+		return wrapAccountGrantError(b.clients.bindAccountRole(ctx, account, runAsRole, memberOf(principal), true), b.clients.AppAccountsRolePath())
+	})
+}
+
+func allowedBy(container *run.GoogleCloudRunV2Container) string {
+	for _, entry := range container.Env {
+		if entry.Name == relay.AllowedEnv {
+			return entry.Value
+		}
+	}
+	return ""
+}
+
+func sameBastion(current, desired *run.GoogleCloudRunV2Service) bool {
+	return sameGateway(current, desired) &&
+		current.IapEnabled == desired.IapEnabled &&
+		slices.Equal(current.CustomAudiences, desired.CustomAudiences) &&
+		sameVPCAccess(current.Template.VpcAccess, desired.Template.VpcAccess)
+}
+
+func sameVPCAccess(current, desired *run.GoogleCloudRunV2VpcAccess) bool {
+	if current == nil || desired == nil {
+		return current == desired
+	}
+	return current.Egress == desired.Egress &&
+		slices.EqualFunc(current.NetworkInterfaces, desired.NetworkInterfaces, func(a, b *run.GoogleCloudRunV2NetworkInterface) bool {
+			return revisionName(a.Network) == revisionName(b.Network) && revisionName(a.Subnetwork) == revisionName(b.Subnetwork)
+		})
+}
+
+func (b bastion) remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+	current, err := b.read(ctx, tier)
+	if err != nil {
+		return err
+	}
+	if current != nil {
+		if err := b.tearDown(ctx, b.clients.Bastion(tier), progress); err != nil {
+			return err
+		}
+	}
+	return b.removeAccount(ctx, tier)
+}
+
+func (b bastion) removeAccount(ctx context.Context, tier environment.Tier) error {
+	accounts, err := b.clients.Accounts()
+	if err != nil {
+		return err
+	}
+	account := b.clients.BastionAccount(tier)
+	if _, err := attempted(ctx, accounts.Projects.ServiceAccounts.Get(accountPath(b.clients, account)).Context(ctx).Do); err != nil {
+		if absent(err) {
+			return nil
+		}
+		return fmt.Errorf("read the %s service account: %w", account, err)
+	}
+	_, err = b.clients.deleteAccount(ctx, account)
+	return err
+}
