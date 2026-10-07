@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
 func runStatus(ctx context.Context, dependencies Dependencies, cfg *project.Project, _ *console.Link,
@@ -31,7 +33,7 @@ func runStatus(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 		if err != nil {
 			return err
 		}
-		registered = slices.DeleteFunc(registered, func(row console.Connector) bool { return row.Target != fingerprint })
+		registered = slices.DeleteFunc(registered, func(row *consolev1.Connector) bool { return row.GetTarget() != fingerprint })
 		if len(registered) == 0 && !asJSON {
 			fmt.Fprintf(stdout, "The console has no connector registered for %s. Run `ocel connector add` to put one there.\n", terminal.PaletteFor(stdout).Bold(fingerprint))
 			return nil
@@ -42,14 +44,8 @@ func runStatus(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 		return nil
 	}
 
-	slices.SortFunc(registered, func(a, b console.Connector) int {
-		if a.Target < b.Target {
-			return -1
-		}
-		if a.Target > b.Target {
-			return 1
-		}
-		return 0
+	slices.SortFunc(registered, func(a, b *consolev1.Connector) int {
+		return strings.Compare(a.GetTarget(), b.GetTarget())
 	})
 	if asJSON {
 		return terminal.WriteResultJSON(stdout, connectorStatusResult(registered))
@@ -58,26 +54,26 @@ func runStatus(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 		if at > 0 {
 			fmt.Fprintln(stdout)
 		}
-		printConnector(stdout, row, row.Liveness())
+		printConnector(stdout, row, console.LivenessOf(row))
 	}
 	return nil
 }
 
-func connectorStatusResult(registered []console.Connector) *resultv1.ConnectorStatusResult {
+func connectorStatusResult(registered []*consolev1.Connector) *resultv1.ConnectorStatusResult {
 	result := &resultv1.ConnectorStatusResult{Connectors: make([]*resultv1.ConnectorStatus, 0, len(registered))}
 	for _, row := range registered {
 		result.Connectors = append(result.Connectors, &resultv1.ConnectorStatus{
-			Target:       row.Target,
-			Vendor:       row.Vendor,
-			Compute:      stringOrEmpty(row.Compute),
-			Reach:        row.Reach,
-			Url:          stringOrEmpty(row.URL),
-			Version:      stringOrEmpty(row.Version),
-			Capabilities: sortedCapabilities(row.Capabilities),
-			Liveness:     connectorLiveness(row.Liveness()),
-			ConnectedAt:  terminal.FormatRFC3339(row.ConnectedAt),
-			LastSeenAt:   terminal.FormatRFC3339(row.LastSeenAt),
-			LastDenied:   connectorDenial(row.LastDenied),
+			Target:       row.GetTarget(),
+			Vendor:       row.GetVendor(),
+			Compute:      console.ComputeNameOf(row.GetCompute()),
+			Reach:        reachName(row.GetReach()),
+			Url:          row.GetUrl(),
+			Version:      row.GetVersion(),
+			Capabilities: sortedCapabilities(row.GetCapabilities()),
+			Liveness:     connectorLiveness(console.LivenessOf(row)),
+			ConnectedAt:  terminal.FormatRFC3339(timeOf(row.GetConnectedAt())),
+			LastSeenAt:   terminal.FormatRFC3339(timeOf(row.GetLastSeenAt())),
+			LastDenied:   connectorDenial(row.GetLastDenied()),
 		})
 	}
 	return result
@@ -96,24 +92,17 @@ func connectorLiveness(live console.Liveness) resultv1.ConnectorLiveness {
 	}
 }
 
-func connectorDenial(denied *console.Denial) *resultv1.ConnectorDenial {
+func connectorDenial(denied *consolev1.ConnectorDenial) *resultv1.ConnectorDenial {
 	if denied == nil {
 		return nil
 	}
-	return &resultv1.ConnectorDenial{Verb: denied.Verb, At: terminal.NormalizeRFC3339(denied.At), Message: denied.Message}
+	return &resultv1.ConnectorDenial{Verb: denied.GetVerb(), At: terminal.FormatRFC3339(timeOf(denied.GetAt())), Message: denied.GetMessage()}
 }
 
 func sortedCapabilities(values []string) []string {
 	sorted := slices.Clone(values)
 	slices.Sort(sorted)
 	return sorted
-}
-
-func stringOrEmpty(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }
 
 func readFingerprint(ctx context.Context, dependencies Dependencies, cfg *project.Project) (fingerprint string, err error) {

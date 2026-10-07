@@ -2,36 +2,33 @@ package console
 
 import (
 	"context"
-	"net/http"
+
+	"connectrpc.com/connect"
+
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
 )
 
-type Project struct {
-	ID             string  `json:"id"`
-	OrganizationID string  `json:"organizationId"`
-	Name           string  `json:"name"`
-	Slug           string  `json:"slug"`
-	Description    *string `json:"description"`
+func (c *Client) projects(accessToken string) consolev1connect.ProjectServiceClient {
+	return consolev1connect.NewProjectServiceClient(c.http, c.baseURL+connectRoute, c.session(accessToken))
 }
-
-const projectsRoute = "/api/projects"
 
 func IsConflict(err error) bool {
-	return hasStatus(err, http.StatusConflict)
+	return connect.CodeOf(err) == connect.CodeAlreadyExists
 }
 
-func (c *Client) ListProjects(ctx context.Context, accessToken string) ([]Project, error) {
-	var projects []Project
-	if err := c.send(ctx, http.MethodGet, projectsRoute, accessToken, nil, &projects); err != nil {
+func (c *Client) ListProjects(ctx context.Context, accessToken string) ([]*consolev1.Project, error) {
+	listed, err := c.projects(accessToken).List(ctx, &consolev1.ListProjectsRequest{})
+	if err != nil {
 		return nil, err
 	}
-	return projects, nil
+	return listed.GetProjects(), nil
 }
 
-func (c *Client) CreateProject(ctx context.Context, accessToken, name, slug string) (*Project, error) {
-	var project Project
-	body := map[string]string{"name": name, "slug": slug}
-	if err := c.send(ctx, http.MethodPost, projectsRoute, accessToken, body, &project); err != nil {
+func (c *Client) CreateProject(ctx context.Context, accessToken, name, slug string) (*consolev1.Project, error) {
+	created, err := c.projects(accessToken).Create(ctx, &consolev1.CreateProjectRequest{Name: name, Slug: slug})
+	if err != nil {
 		return nil, err
 	}
-	return &project, nil
+	return created.GetProject(), nil
 }

@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
+	connectvalidate "connectrpc.com/validate"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
@@ -26,58 +28,59 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
 )
 
 type cloudServer struct {
 	*httptest.Server
+	consolev1connect.UnimplementedProjectServiceHandler
 	orgs           []map[string]string
-	projects       []map[string]string
-	created        []map[string]string
+	projects       []*consolev1.Project
+	created        []*consolev1.CreateProjectRequest
 	setActive      int
 	createConflict bool
 	slow           time.Duration
 }
 
-func newCloudServer(t *testing.T, projects ...map[string]string) *cloudServer {
+func newCloudServer(t *testing.T, projects ...*consolev1.Project) *cloudServer {
 	t.Helper()
 	c := &cloudServer{
 		orgs:     []map[string]string{{"id": "org_1", "name": "Acme Inc", "slug": "acme-inc"}},
 		projects: projects,
 	}
-	c.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/api/auth/organization/list":
-			time.Sleep(c.slow)
-			json.NewEncoder(w).Encode(c.orgs)
-		case r.URL.Path == "/api/auth/organization/set-active":
-			c.setActive++
-			w.Write([]byte("{}"))
-		case r.URL.Path == "/api/projects" && r.Method == http.MethodGet:
-			json.NewEncoder(w).Encode(c.projects)
-		case r.URL.Path == "/api/projects" && r.Method == http.MethodPost:
-			if c.createConflict {
-				w.WriteHeader(http.StatusConflict)
-				json.NewEncoder(w).Encode(map[string]string{"error": "taken"})
-				return
-			}
-			var body map[string]string
-			json.NewDecoder(r.Body).Decode(&body)
-			c.created = append(c.created, body)
-			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]string{
-				"id": "proj_new", "organizationId": "org_1",
-				"name": body["name"], "slug": body["slug"],
-			})
-		default:
-			http.NotFound(w, r)
-		}
-	}))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/auth/organization/list", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(c.slow)
+		json.NewEncoder(w).Encode(c.orgs)
+	})
+	mux.HandleFunc("/api/auth/organization/set-active", func(w http.ResponseWriter, r *http.Request) {
+		c.setActive++
+		w.Write([]byte("{}"))
+	})
+	path, handler := consolev1connect.NewProjectServiceHandler(c, connect.WithInterceptors(connectvalidate.NewInterceptor()))
+	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
+	c.Server = httptest.NewServer(mux)
 	t.Cleanup(c.Close)
 	return c
 }
 
-func projectRow(id, name, slug string) map[string]string {
-	return map[string]string{"id": id, "organizationId": "org_1", "name": name, "slug": slug}
+func (c *cloudServer) List(context.Context, *consolev1.ListProjectsRequest) (*consolev1.ListProjectsResponse, error) {
+	return &consolev1.ListProjectsResponse{Projects: c.projects}, nil
+}
+
+func (c *cloudServer) Create(_ context.Context, req *consolev1.CreateProjectRequest) (*consolev1.CreateProjectResponse, error) {
+	if c.createConflict {
+		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("taken"))
+	}
+	c.created = append(c.created, req)
+	return &consolev1.CreateProjectResponse{Project: &consolev1.Project{
+		Id: "proj_new", OrganizationId: "org_1", Name: req.GetName(), Slug: req.GetSlug(),
+	}}, nil
+}
+
+func projectRow(id, name, slug string) *consolev1.Project {
+	return &consolev1.Project{Id: id, OrganizationId: "org_1", Name: name, Slug: slug}
 }
 
 func readLink(t *testing.T, dir, apiURL string) *console.Link {
@@ -188,7 +191,7 @@ func TestLinkSelectsOrCreatesAConsoleProjectForThisDirectory(t *testing.T) {
 			t.Fatalf("run err = %v", err)
 		}
 
-		if len(srv.created) != 1 || srv.created[0]["slug"] != "my-fresh-app" {
+		if len(srv.created) != 1 || srv.created[0].GetSlug() != "my-fresh-app" {
 			t.Fatalf("created = %v, want one project slugged after the directory", srv.created)
 		}
 		record := readLink(t, dir, srv.URL)
@@ -208,7 +211,7 @@ func TestLinkSelectsOrCreatesAConsoleProjectForThisDirectory(t *testing.T) {
 		if err := runLink(context.Background(), dependencies, t.TempDir(), "My Cool App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
-		if len(srv.created) != 1 || srv.created[0]["slug"] != "my-cool-app" || srv.created[0]["name"] != "My Cool App" {
+		if len(srv.created) != 1 || srv.created[0].GetSlug() != "my-cool-app" || srv.created[0].GetName() != "My Cool App" {
 			t.Fatalf("created = %v, want name/slug from the argument", srv.created)
 		}
 	})
@@ -262,10 +265,10 @@ func TestLinkSelectsOrCreatesAConsoleProjectForThisDirectory(t *testing.T) {
 
 	for _, tc := range []struct {
 		name     string
-		projects []map[string]string
+		projects []*consolev1.Project
 		hint     string
 	}{
-		{"an organization with projects", []map[string]string{projectRow("p1", "My App", "my-app")}, "ocel link <project>"},
+		{"an organization with projects", []*consolev1.Project{projectRow("p1", "My App", "my-app")}, "ocel link <project>"},
 		{"an organization with no projects", nil, "--create"},
 	} {
 		t.Run("no project chosen without a terminal in "+tc.name+" ends the JSON stream with input_required naming "+tc.hint, func(t *testing.T) {
@@ -290,13 +293,13 @@ func TestLinkSelectsOrCreatesAConsoleProjectForThisDirectory(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		orgs     int
-		projects []map[string]string
+		projects []*consolev1.Project
 		opts     options
 		hint     string
 		lists    []string
 	}{
 		{"several organizations", 2, nil, options{create: true}, "--org <slug>", []string{"acme-inc", "other-co"}},
-		{"an organization with projects", 1, []map[string]string{projectRow("p1", "My App", "my-app"), projectRow("p2", "Shop", "shop")}, options{}, "ocel link <project>", []string{"my-app", "shop"}},
+		{"an organization with projects", 1, []*consolev1.Project{projectRow("p1", "My App", "my-app"), projectRow("p2", "Shop", "shop")}, options{}, "ocel link <project>", []string{"my-app", "shop"}},
 		{"an organization with no projects", 1, nil, options{}, "--create", nil},
 	} {
 		t.Run("under --json a terminal is not asked about "+tc.name+" and input_required names "+tc.hint, func(t *testing.T) {

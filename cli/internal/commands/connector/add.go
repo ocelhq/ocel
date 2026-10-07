@@ -48,11 +48,7 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 	}
 	defer provider.Close()
 
-	registered, err := opts.console.UpsertConnector(ctx, access, console.ConnectorRegistration{
-		Target: described.GetTargetFingerprint(),
-		Vendor: vendor,
-		Reach:  reachDial,
-	})
+	registered, err := opts.console.UpsertConnector(ctx, access, described.GetTargetFingerprint(), vendor)
 	if err != nil {
 		return fmt.Errorf("record this target in the console: %w", err)
 	}
@@ -68,7 +64,7 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 	}
 	config, err := json.Marshal(connectorserver.Config{
 		Console:        opts.apiURL,
-		ConnectorID:    registered.ID,
+		ConnectorID:    registered.GetId(),
 		OrganizationID: link.OrganizationID,
 		Target:         described.GetTargetFingerprint(),
 		Grants:         opts.grants(),
@@ -92,7 +88,7 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 			"the provider installed the connector and named no address, so the console has nothing to dial"))
 	}
 
-	paired, err := opts.console.SetConnectorAddress(ctx, access, registered.ID, console.ConnectorAddress{
+	paired, err := opts.console.SetConnectorAddress(ctx, access, registered.GetId(), console.ConnectorAddress{
 		URL:       at.GetUrl(),
 		PublicKey: at.GetPublicKey(),
 		Compute:   at.GetCompute(),
@@ -104,7 +100,7 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 	granting := run.Phase(progressv1.Phase_PHASE_PROVISION)
 	granting.Say(grantsLine(opts.grants()))
 	granting.End(nil)
-	run.Succeed(fmt.Sprintf("Installed the connector on %s, which the console dials at %s", paired.Target, at.GetUrl()))
+	run.Succeed(fmt.Sprintf("Installed the connector on %s, which the console dials at %s", paired.GetTarget(), at.GetUrl()))
 	return nil
 }
 

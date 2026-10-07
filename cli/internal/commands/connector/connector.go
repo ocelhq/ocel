@@ -7,10 +7,12 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
@@ -21,11 +23,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
-
-const reachDial = "dial"
 
 type options struct {
 	compute string
@@ -180,21 +181,36 @@ func requireProviderID(cfg *project.Project) (string, error) {
 	return declared.ID, nil
 }
 
-func printConnector(out io.Writer, registered console.Connector, live console.Liveness) {
-	fmt.Fprintf(out, "%s\n", terminal.PaletteFor(out).Bold(registered.Target))
-	fmt.Fprintf(out, "  compute %s over %s, %s\n", formatOptional(registered.Compute, "unset"), registered.Reach, live)
-	fmt.Fprintf(out, "  url %s\n", formatOptional(registered.URL, "none"))
-	fmt.Fprintf(out, "  can %s\n", formatCapabilities(registered.Capabilities))
-	if registered.LastDenied != nil {
-		fmt.Fprintf(out, "  last refused %s at %s: %s\n", registered.LastDenied.Verb, registered.LastDenied.At, registered.LastDenied.Message)
+func printConnector(out io.Writer, registered *consolev1.Connector, live console.Liveness) {
+	fmt.Fprintf(out, "%s\n", terminal.PaletteFor(out).Bold(registered.GetTarget()))
+	fmt.Fprintf(out, "  compute %s over %s, %s\n", formatOptional(console.ComputeNameOf(registered.GetCompute()), "unset"), reachName(registered.GetReach()), live)
+	fmt.Fprintf(out, "  url %s\n", formatOptional(registered.GetUrl(), "none"))
+	fmt.Fprintf(out, "  can %s\n", formatCapabilities(registered.GetCapabilities()))
+	if denied := registered.GetLastDenied(); denied != nil {
+		fmt.Fprintf(out, "  last refused %s at %s: %s\n", denied.GetVerb(), terminal.FormatRFC3339(timeOf(denied.GetAt())), denied.GetMessage())
 	}
 }
 
-func formatOptional(value *string, absent string) string {
-	if value == nil || *value == "" {
+func reachName(reach consolev1.ConnectorReach) string {
+	if reach == consolev1.ConnectorReach_CONNECTOR_REACH_DIAL {
+		return "dial"
+	}
+	return "unknown"
+}
+
+func timeOf(at *timestamppb.Timestamp) *time.Time {
+	if at == nil {
+		return nil
+	}
+	moment := at.AsTime()
+	return &moment
+}
+
+func formatOptional(value, absent string) string {
+	if value == "" {
 		return absent
 	}
-	return *value
+	return value
 }
 
 func formatCapabilities(values []string) string {
