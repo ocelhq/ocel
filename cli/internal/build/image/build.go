@@ -99,11 +99,11 @@ func (r Recipe) solve(arch string, live LiveValues) (client.SolveOpt, func(), er
 	return opt, done, nil
 }
 
-func setFrontendAttr(opt *client.SolveOpt, key, value string) {
-	if opt.FrontendAttrs == nil {
-		opt.FrontendAttrs = map[string]string{}
+func setFrontendAttr(options *client.SolveOpt, key, value string) {
+	if options.FrontendAttrs == nil {
+		options.FrontendAttrs = map[string]string{}
 	}
-	opt.FrontendAttrs[key] = value
+	options.FrontendAttrs[key] = value
 }
 
 func (r Recipe) unpinned() (client.SolveOpt, func(), error) {
