@@ -186,7 +186,7 @@ func TestConfigureSaysTheProviderShipsANextServerRuntimeWhenItsHookIsSet(t *test
 }
 
 func TestConfigureSaysTheProviderForwardsPortsWhenItsHookIsSet(t *testing.T) {
-	for _, tc := range []struct {
+	for _, testCase := range []struct {
 		name string
 		set  func(*provider.Hooks)
 		want bool
@@ -196,11 +196,11 @@ func TestConfigureSaysTheProviderForwardsPortsWhenItsHookIsSet(t *testing.T) {
 		}, true},
 		{"hook absent", func(*provider.Hooks) {}, false},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
 				Version: "test",
 				New: func(context.Context, provider.Settings) (provider.Provider, error) {
-					return fake.NewProvider(fake.Options{}).WithHooks(tc.set), nil
+					return fake.NewProvider(fake.Options{}).WithHooks(testCase.set), nil
 				},
 			}))
 			t.Cleanup(server.Close)
@@ -210,8 +210,8 @@ func TestConfigureSaysTheProviderForwardsPortsWhenItsHookIsSet(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Configure() error = %v", err)
 			}
-			if got := configured.GetFacts().GetForwardsPorts(); got != tc.want {
-				t.Errorf("Configure() facts forward ports = %v, want %v", got, tc.want)
+			if got := configured.GetFacts().GetForwardsPorts(); got != testCase.want {
+				t.Errorf("Configure() facts forward ports = %v, want %v", got, testCase.want)
 			}
 		})
 	}

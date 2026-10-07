@@ -125,7 +125,7 @@ func (p *PostgresDB) Pool(ctx context.Context) (*pgxpool.Pool, error) {
 	if err := trustCA(config, properties.GetTlsCa()); err != nil {
 		return nil, err
 	}
-	verifyServerName(config, properties.GetTlsServerName())
+	setTLSServerName(config, properties.GetTlsServerName())
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, err
@@ -151,7 +151,7 @@ func trustCA(config *pgxpool.Config, ca string) error {
 	return nil
 }
 
-func verifyServerName(config *pgxpool.Config, name string) {
+func setTLSServerName(config *pgxpool.Config, name string) {
 	if name == "" {
 		return
 	}
