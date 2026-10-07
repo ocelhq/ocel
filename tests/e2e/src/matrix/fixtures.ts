@@ -14,6 +14,7 @@ import {
   nextStateChecks,
   nodeRuntimeChecks,
   overlapRefusal,
+  prerenderChecks,
   realtimeChecks,
   staticChecks,
   tasksChecks,
@@ -209,6 +210,14 @@ export const buildVariables = {
   }),
 };
 
+export const prerender = {
+  next: fixture("prerender/next", {
+    apps: ["web"],
+    checks: [...healthChecks, ...prerenderChecks],
+    on: { vps: [defaults] },
+  }),
+};
+
 export const kv = {
   node: fixture("kv/node", {
     apps: ["web"],
@@ -287,6 +296,7 @@ export const fixtures: Fixture[] = [
   ...Object.values(lifecycle),
   ...Object.values(sdk),
   ...Object.values(buildVariables),
+  ...Object.values(prerender),
   ...Object.values(kv),
   ...Object.values(tasks),
   ...Object.values(realtime),

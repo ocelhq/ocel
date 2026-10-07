@@ -39,6 +39,7 @@ export type Concern =
   | "lifecycle"
   | "sdk"
   | "build-variables"
+  | "prerender"
   | "kv"
   | "tasks"
   | "realtime"
@@ -49,6 +50,7 @@ export const CONCERNS: Concern[] = [
   "lifecycle",
   "sdk",
   "build-variables",
+  "prerender",
   "kv",
   "tasks",
   "realtime",
