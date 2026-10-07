@@ -22,7 +22,7 @@ const (
 	postgresMinCapacity          = 0.0
 	postgresMaxCapacity          = 2.0
 	postgresInstanceClass        = "db.serverless"
-	postgresPort                 = 5432
+	PostgresPort                 = 5432
 	postgresMasterUsername       = "ocel"
 	postgresDatabaseName         = "ocel"
 
@@ -60,7 +60,7 @@ func translatePostgres(spec *provider.PostgresSpec) postgresArgs {
 		MinCapacity:          postgresMinCapacity,
 		MaxCapacity:          postgresMaxCapacity,
 		InstanceClass:        postgresInstanceClass,
-		Port:                 postgresPort,
+		Port:                 PostgresPort,
 		MasterUsername:       postgresMasterUsername,
 		DatabaseName:         postgresDatabaseName,
 		ManageMasterPassword: true,

@@ -98,6 +98,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		EnsureImageRegistry: p.EnsureImageRegistry,
 		OpenRegistryImages:  p.OpenRegistryImages,
 		ProveIdentity:       p.ProveIdentity,
+		ForwardPorts:        p.ForwardPorts,
 		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 	}
 }
