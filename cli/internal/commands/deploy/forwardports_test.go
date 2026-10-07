@@ -1,7 +1,9 @@
 package deploy
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"maps"
 	"slices"
 	"strings"
@@ -126,5 +128,57 @@ func TestAnAppWhoseBuildTakesNoBindingsIsBuiltWithoutForwardingAPort(t *testing.
 	}
 	if sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure); len(sent) != 0 {
 		t.Errorf("the CLI forwarded ports for %v, want none for an app whose build takes no bindings", sent)
+	}
+}
+
+func deployedSaying(t *testing.T, dependencies Dependencies, fixture clitest.FakeProject, opts deployOptions) string {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	return stdout.String()
+}
+
+func TestTheForwardingStepNamesTheResourcesAsTheAppDeclaresThem(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextUsageProject(t, fixture.Root, "")
+	fixture.Provider.WithHooks(func(h *provider.Hooks) {
+		h.ForwardPorts = func(context.Context, provider.PortForwardRequest) ([]provider.PortForward, error) {
+			return nil, errors.New("the box is unreachable")
+		}
+	})
+	capturingBuild(t, &dependencies)
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+
+	if err == nil {
+		t.Fatal("runDeploy() = nil, want the failed forward to stop the deploy")
+	}
+	if said := stdout.String(); !strings.Contains(said, "ports to main ") || strings.Contains(said, "ports to db--main") {
+		t.Errorf("the deploy said %q, want the forwarding step to name main as the app declares it", said)
+	}
+}
+
+func TestAProviderThatForwardsNoPortIsNotAskedToAndOpensNoForwardingStep(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextUsageProject(t, fixture.Root, "")
+	built := capturingBuild(t, &dependencies)
+
+	said := deployedSaying(t, dependencies, fixture, deployOptions{yes: true})
+
+	if sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure); len(sent) != 0 {
+		t.Errorf("the CLI asked a provider that forwards no port to forward %v", sent)
+	}
+	if strings.Contains(said, "Forwarding ports") || strings.Contains(said, "forwards no port") {
+		t.Errorf("the deploy said %q, want no forwarding step on a provider that forwards no port", said)
+	}
+	if _, ok := built.Live[forwardedPostgresKey]; ok {
+		t.Errorf("the build was handed %s, want no bindings when nothing was forwarded", forwardedPostgresKey)
 	}
 }
