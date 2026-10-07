@@ -10,6 +10,7 @@ import (
 
 	"google.golang.org/protobuf/types/descriptorpb"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -49,6 +50,9 @@ func TestForwardPortsHandsBackThePublishedBindingPointedAtItsForwardAndHoldsItUn
 	}
 	forwarded := stream.Msg()
 
+	if asked.Tier != environment.TierProduction {
+		t.Errorf("the hook was asked for tier %q, want production: a provider that forwards through infrastructure of its own keeps one per tier", asked.Tier)
+	}
 	if len(asked.Bindings) != 1 || asked.Bindings[0].Properties[provider.PropertyHost] != "fake-host" {
 		t.Errorf("the hook was asked for %+v, want the published orders binding of shop", asked)
 	}
