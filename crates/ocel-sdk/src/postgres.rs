@@ -11,7 +11,13 @@ pub(crate) const KIND: &str = "postgres";
 pub struct Postgres {
     name: String,
     #[cfg(feature = "postgres")]
-    pool: std::sync::Arc<tokio::sync::OnceCell<sqlx::PgPool>>,
+    pool: std::sync::Arc<tokio::sync::OnceCell<Pooled>>,
+}
+
+#[cfg(feature = "postgres")]
+struct Pooled {
+    pool: sqlx::PgPool,
+    _relay: Option<Relay>,
 }
 
 impl Postgres {
@@ -52,12 +58,18 @@ impl Postgres {
         if is_discovering() {
             return Err(self.refuse_unprovisioned("pool"));
         }
-        self.pool
+        let pooled = self
+            .pool
             .get_or_try_init(|| async {
-                let options = connect_options(&self.read_properties("pool")?).await?;
-                Ok(sqlx::PgPool::connect_with(options).await?)
+                let (options, relay) = connect_options(&self.read_properties("pool")?)?;
+                let pool = sqlx::PgPool::connect_with(options).await?;
+                Ok::<_, Error>(Pooled {
+                    pool,
+                    _relay: relay,
+                })
             })
-            .await
+            .await?;
+        Ok(&pooled.pool)
     }
 
     fn read_properties(&self, access: &str) -> Result<PostgresProperties, Error> {
@@ -107,9 +119,9 @@ fn build_connect_options(
 }
 
 #[cfg(feature = "postgres")]
-async fn connect_options(
+fn connect_options(
     properties: &PostgresProperties,
-) -> Result<sqlx::postgres::PgConnectOptions, Error> {
+) -> Result<(sqlx::postgres::PgConnectOptions, Option<Relay>), Error> {
     let options = build_connect_options(properties)?;
     if properties.tls_server_name.is_empty()
         || !matches!(
@@ -117,45 +129,103 @@ async fn connect_options(
             sqlx::postgres::PgSslMode::VerifyFull
         )
     {
-        return Ok(options);
+        return Ok((options, None));
     }
-    relay_under_server_name(options, &properties.tls_server_name).await
+    let relay = Relay::start(
+        format!("{}:{}", options.get_host(), options.get_port()),
+        options.get_port(),
+        &properties.tls_server_name,
+    )?;
+    let options = options
+        .host(&properties.tls_server_name)
+        .socket(relay.dir.path.clone());
+    Ok((options, Some(relay)))
 }
 
 #[cfg(all(feature = "postgres", unix))]
-async fn relay_under_server_name(
-    options: sqlx::postgres::PgConnectOptions,
-    server_name: &str,
-) -> Result<sqlx::postgres::PgConnectOptions, Error> {
-    let target = format!("{}:{}", options.get_host(), options.get_port());
-    let relay = RelayDir::create().map_err(sqlx::Error::Io)?;
-    let listener =
-        tokio::net::UnixListener::bind(relay.path.join(format!(".s.PGSQL.{}", options.get_port())))
-            .map_err(sqlx::Error::Io)?;
-    let socket = relay.path.clone();
-    tokio::spawn(async move {
-        let _relay = relay;
-        while let Ok((mut accepted, _)) = listener.accept().await {
-            let target = target.clone();
-            tokio::spawn(async move {
-                if let Ok(mut forwarded) = tokio::net::TcpStream::connect(target).await {
-                    let _ = tokio::io::copy_bidirectional(&mut accepted, &mut forwarded).await;
+struct Relay {
+    dir: RelayDir,
+    socket: std::path::PathBuf,
+    stopped: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+#[cfg(all(feature = "postgres", unix))]
+impl Relay {
+    fn start(target: String, port: u16, _server_name: &str) -> Result<Self, Error> {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let dir = RelayDir::create().map_err(sqlx::Error::Io)?;
+        let socket = dir.path.join(format!(".s.PGSQL.{port}"));
+        let listener = std::os::unix::net::UnixListener::bind(&socket).map_err(sqlx::Error::Io)?;
+        let stopped = std::sync::Arc::new(AtomicBool::new(false));
+        let stopping = stopped.clone();
+        std::thread::Builder::new()
+            .name("ocel-postgres-relay".into())
+            .spawn(move || {
+                for accepted in listener.incoming() {
+                    if stopping.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    let Ok(accepted) = accepted else { return };
+                    let target = target.clone();
+                    std::thread::spawn(move || carry(accepted, &target));
                 }
-            });
-        }
+            })
+            .map_err(sqlx::Error::Io)?;
+        Ok(Self {
+            dir,
+            socket,
+            stopped,
+        })
+    }
+}
+
+#[cfg(all(feature = "postgres", unix))]
+impl Drop for Relay {
+    fn drop(&mut self) {
+        self.stopped
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let _ = std::os::unix::net::UnixStream::connect(&self.socket);
+    }
+}
+
+#[cfg(all(feature = "postgres", unix))]
+fn carry(accepted: std::os::unix::net::UnixStream, target: &str) {
+    use std::net::Shutdown;
+    let Ok(forwarded) = std::net::TcpStream::connect(target) else {
+        return;
+    };
+    let (Ok(mut from_driver), Ok(mut to_forward)) = (accepted.try_clone(), forwarded.try_clone())
+    else {
+        return;
+    };
+    let upstream = std::thread::spawn(move || {
+        let _ = std::io::copy(&mut from_driver, &mut to_forward);
+        let _ = to_forward.shutdown(Shutdown::Write);
     });
-    Ok(options.host(server_name).socket(socket))
+    let (mut from_forward, mut to_driver) = (forwarded, accepted);
+    let _ = std::io::copy(&mut from_forward, &mut to_driver);
+    let _ = to_driver.shutdown(Shutdown::Write);
+    let _ = upstream.join();
 }
 
 #[cfg(all(feature = "postgres", not(unix)))]
-async fn relay_under_server_name(
-    _options: sqlx::postgres::PgConnectOptions,
-    server_name: &str,
-) -> Result<sqlx::postgres::PgConnectOptions, Error> {
-    Err(sqlx::Error::Configuration(
-        format!("this binding verifies its server as {server_name} through a port forward, and sqlx verifies only the host it connects to, which on this platform is the forward").into(),
-    )
-    .into())
+struct Relay {
+    dir: RelayDir,
+}
+
+#[cfg(all(feature = "postgres", not(unix)))]
+struct RelayDir {
+    path: std::path::PathBuf,
+}
+
+#[cfg(all(feature = "postgres", not(unix)))]
+impl Relay {
+    fn start(_target: String, _port: u16, server_name: &str) -> Result<Self, Error> {
+        Err(sqlx::Error::Configuration(
+            format!("this binding verifies its server as {server_name} through a port forward, and sqlx verifies only the host it connects to, which on this platform is the forward").into(),
+        )
+        .into())
+    }
 }
 
 #[cfg(all(feature = "postgres", unix))]
@@ -230,13 +300,73 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn forwarded_properties(port: u16) -> PostgresProperties {
+        PostgresProperties {
+            host: "127.0.0.1".into(),
+            port: port.into(),
+            database: "d".into(),
+            username: "u".into(),
+            password: "p".into(),
+            tls_mode: PostgresTlsMode::POSTGRES_TLS_MODE_VERIFY_FULL.into(),
+            tls_server_name: "orders.cluster.internal".into(),
+            ..Default::default()
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_relay_stops_and_removes_its_socket_once_dropped() {
+        let forward = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = forward.local_addr().unwrap().port();
+        let (options, relay) = connect_options(&forwarded_properties(port)).expect("options");
+        let socket = options
+            .get_socket()
+            .expect("the relay the driver connects through")
+            .clone();
+
+        drop(relay);
+
+        assert!(
+            !socket.exists(),
+            "the relay's directory {socket:?} outlived it"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_relay_outlives_the_runtime_that_opened_it() {
+        use std::io::{Read, Write};
+
+        let forward = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = forward.local_addr().unwrap().port();
+        let opened = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(async { connect_options(&forwarded_properties(port)) });
+        let (options, _relay) = opened.expect("options");
+
+        let mut relayed = std::os::unix::net::UnixStream::connect(
+            options
+                .get_socket()
+                .unwrap()
+                .join(format!(".s.PGSQL.{port}")),
+        )
+        .unwrap();
+        relayed.write_all(b"startup").unwrap();
+        let (mut accepted, _) = forward.accept().unwrap();
+        let mut read = [0u8; 7];
+        accepted.read_exact(&mut read).unwrap();
+        assert_eq!(&read, b"startup");
+    }
+
+    #[cfg(unix)]
     #[tokio::test]
     async fn verify_full_through_a_forward_verifies_the_tls_server_name_and_reaches_the_forward() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         let forward = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = forward.local_addr().unwrap().port();
-        let options = connect_options(&PostgresProperties {
+        let (options, _relay) = connect_options(&PostgresProperties {
             host: "127.0.0.1".into(),
             port: port.into(),
             database: "d".into(),
@@ -246,7 +376,6 @@ mod tests {
             tls_server_name: "orders.cluster.internal".into(),
             ..Default::default()
         })
-        .await
         .expect("options");
 
         assert_eq!(options.get_host(), "orders.cluster.internal");
@@ -263,13 +392,12 @@ mod tests {
         assert_eq!(&read, b"startup");
     }
 
-    #[tokio::test]
-    async fn a_forward_under_require_is_reached_directly() {
-        let options = connect_options(&PostgresProperties {
+    #[test]
+    fn a_forward_under_require_is_reached_directly() {
+        let (options, _relay) = connect_options(&PostgresProperties {
             tls_server_name: "orders.cluster.internal".into(),
             ..new_properties(PostgresTlsMode::POSTGRES_TLS_MODE_REQUIRE, "")
         })
-        .await
         .expect("options");
 
         assert_eq!(options.get_host(), "db.example.com");
