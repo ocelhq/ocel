@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -118,6 +119,9 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 		span.Say("Using the prebuilt output in " + buildoutput.Dir + " instead of building")
 		span.End(nil)
 		return built, nil
+	}
+	for _, warning := range findNextImagesWithoutEncryptedValues(cfg, clients) {
+		span.Warn(warning)
 	}
 	if err := clientenv.Generate(cfg.Dir, clients); err != nil {
 		return build.Output{}, err
@@ -297,6 +301,31 @@ func resolveVariables(ctx context.Context, declarations *variables.Declarations,
 		values[app.Name] = appVariables(definitions, resolved)
 	}
 	return values, nil
+}
+
+func findNextImagesWithoutEncryptedValues(cfg *project.Project, clients []clientenv.App) []string {
+	variablesOf := make(map[string][]variables.Variable, len(clients))
+	for _, client := range clients {
+		variablesOf[client.Name] = client.Variables
+	}
+	var warnings []string
+	for _, app := range build.ImageApps(cfg.Apps) {
+		if app.Framework() != buildoutput.FrameworkNext {
+			continue
+		}
+		var keys []string
+		for _, v := range variablesOf[app.Name] {
+			if v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE || v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
+				keys = append(keys, v.Key)
+			}
+		}
+		if len(keys) == 0 {
+			continue
+		}
+		slices.Sort(keys)
+		warnings = append(warnings, fmt.Sprintf("app %q builds as an image, and an image build gets none of its sensitive or secret values yet: %s. Code that reads one at module scope fails the build", app.Name, strings.Join(keys, ", ")))
+	}
+	return warnings
 }
 
 func revealSecrets(ctx context.Context, declarations *variables.Declarations, cfg *project.Project) (map[string]map[string]string, error) {
