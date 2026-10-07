@@ -38,7 +38,7 @@ type nodeAppBuild struct {
 	NextRefreshesByRequest bool   `json:"nextRefreshesByRequest,omitempty"`
 }
 
-var buildOwnedNames = []string{processenv.AppFolderEnvVar, processenv.PhaseEnvVar, "PATH"}
+var buildOwnedNames = []string{processenv.AppFolderEnvVar, processenv.PhaseEnvVar, processenv.LiveDirEnvVar, "PATH"}
 
 func checkVariableNames(variables map[string]string) error {
 	for _, name := range buildOwnedNames {

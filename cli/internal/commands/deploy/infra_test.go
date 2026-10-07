@@ -38,7 +38,7 @@ func TestADeployProvisionsInfraBeforeItBuildsThenDeploysOverIt(t *testing.T) {
 	fixture := setUpDeployProject(t)
 	var provisionedBeforeBuild bool
 	built := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
 		provisionedBeforeBuild = slices.Contains(fixture.Requests.Procedures(), contractv1connect.ProviderServiceProvisionInfraProcedure)
 		return built(ctx, cfg, env, archs, workers, host, log)
 	}

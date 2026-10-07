@@ -5,16 +5,24 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-func Env(apps []clientenv.App) map[string]map[string]string {
-	byApp := make(map[string]map[string]string, len(apps))
+type AppVariables struct {
+	Env  map[string]string
+	Live map[string]string
+}
+
+func VariablesOf(apps []clientenv.App) map[string]AppVariables {
+	byApp := make(map[string]AppVariables, len(apps))
 	for _, app := range apps {
-		env := make(map[string]string)
+		values := AppVariables{Env: map[string]string{}, Live: map[string]string{}}
 		for _, v := range app.Variables {
-			if v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
-				env[v.Key] = v.Value
+			switch v.Class {
+			case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:
+				values.Env[v.Key] = v.Value
+			case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
+				values.Live[v.Key] = v.Value
 			}
 		}
-		byApp[app.Name] = env
+		byApp[app.Name] = values
 	}
 	return byApp
 }

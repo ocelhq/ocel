@@ -61,19 +61,19 @@ type tools struct {
 
 var installed = tools{node: runNode, image: image.Build, architecture: images.BuiltArchitecture, addFiles: image.AddFiles}
 
-func Apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers HostedWorkers, host Host, log Log) (Output, error) {
-	return installed.apps(ctx, cfg, env, archs, workers, host, log)
+func Apps(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, host Host, log Log) (Output, error) {
+	return installed.apps(ctx, cfg, variables, archs, workers, host, log)
 }
 
 func ReadPrebuilt(ctx context.Context, cfg *project.Project, archs map[string]string) (Output, error) {
 	return installed.readPrebuilt(ctx, cfg, archs)
 }
 
-func (t tools) apps(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers HostedWorkers, host Host, log Log) (Output, error) {
+func (t tools) apps(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, host Host, log Log) (Output, error) {
 	if unresolved := cfg.UnresolvedApps(); len(unresolved) > 0 {
 		return Output{}, fmt.Errorf("the build reached %s with no compute resolved, and an app is built for the compute it runs on", english.And(english.Quoted(unresolved)))
 	}
-	if err := t.functions(ctx, cfg, env, host, log); err != nil {
+	if err := t.functions(ctx, cfg, variables, host, log); err != nil {
 		return Output{}, err
 	}
 	images, err := t.images(ctx, cfg, archs, workers, log)
@@ -87,9 +87,12 @@ func (t tools) apps(ctx context.Context, cfg *project.Project, env map[string]ma
 	return Output{Functions: functions, Images: images}, nil
 }
 
-func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map[string]map[string]string, host Host, log Log) error {
-	for _, env := range envByApp {
-		if err := checkVariableNames(env); err != nil {
+func (t tools) functions(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, host Host, log Log) (err error) {
+	for _, values := range variables {
+		if err := checkVariableNames(values.Env); err != nil {
+			return err
+		}
+		if err := refuseLiveKeysOutsideTheDir(values.Live); err != nil {
 			return err
 		}
 	}
@@ -116,6 +119,15 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 		return err
 	}
 
+	var liveDirs []string
+	defer func() {
+		for _, dir := range liveDirs {
+			if removeErr := os.RemoveAll(dir); removeErr != nil && err == nil {
+				err = fmt.Errorf("remove the build's live dir: %w", removeErr)
+			}
+		}
+	}()
+
 	preferTracing := os.Getenv(toolchain.PreferTracingEnv) == "1"
 	var req nodeBuildRequest
 	var traced []toolchain.Target
@@ -131,6 +143,15 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 			}
 		case name == buildoutput.FrameworkNext:
 			nextApps = append(nextApps, a)
+			env := variables[a.Name].Env
+			if live := variables[a.Name].Live; len(live) > 0 {
+				dir, err := writeLiveDir(live)
+				if err != nil {
+					return err
+				}
+				liveDirs = append(liveDirs, dir)
+				env = withLiveDir(env, dir)
+			}
 			req.Apps = append(req.Apps, nodeAppBuild{
 				Framework:     buildoutput.FrameworkNext,
 				Name:          a.Name,
@@ -138,7 +159,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, envByApp map
 				OutputDir:     buildoutput.AppRoot(outputDir, a.Name),
 				DeploymentID:  deploymentIDs[a.Name],
 				Folder:        a.Folder,
-				Env:           envByApp[a.Name],
+				Env:           env,
 				EdgeKind:      string(cfg.EdgeKind()),
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
 

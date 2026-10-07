@@ -32,7 +32,7 @@ import (
 
 type Dependencies struct {
 	commands.Invocation
-	BuildApps           func(ctx context.Context, cfg *project.Project, env map[string]map[string]string, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error)
+	BuildApps           func(ctx context.Context, cfg *project.Project, variables map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error)
 	CollectDeclarations func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
 }
 
@@ -96,7 +96,7 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 		return err
 	}
 	clients := builtInClients(cfg, appurl.FormatProductionURLs(cfg))
-	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.Env(clients), declaredArchs(cfg), workers, host, appBuildLog(phase))
+	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.VariablesOf(clients), declaredArchs(cfg), workers, host, appBuildLog(phase))
 	if err != nil {
 		return err
 	}
