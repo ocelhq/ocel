@@ -32,7 +32,7 @@ func (h *connectorHost) Target(context.Context) (provider.ConnectorTarget, error
 		Hostname:    "box.example.com",
 		OS:          "linux",
 		Arch:        "arm64",
-		Installed:   &provider.ConnectorRelease{Version: "0.4.1", PublicKey: "ZmFrZQ==", Compute: provider.ComputeContainer},
+		Installed:   &provider.InstalledConnector{Version: "0.4.1", PublicKey: "ZmFrZQ==", Compute: provider.ComputeContainer},
 	}, nil
 }
 
