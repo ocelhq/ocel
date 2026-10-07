@@ -61,7 +61,7 @@ func TestRunStopsTheTaskAndSaysWhyWhenItStopsBeforeItsExecAgentRuns(t *testing.T
 	_, err := reconciled.Run(context.Background(), clients)
 
 	if err == nil || !strings.Contains(err.Error(), "stopped in the test") {
-		t.Fatalf("Run() = %v, want an error carrying the task's stopped reason", err)
+		t.Fatalf("Run() = %v, want an error that gives the task's stopped reason", err)
 	}
 	if running := account.runningTasks(); len(running) != 0 {
 		t.Errorf("tasks %v are still running", running)

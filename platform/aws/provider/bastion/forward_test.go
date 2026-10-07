@@ -130,7 +130,7 @@ func roundTrip(t *testing.T, address, message string) string {
 	return string(reply)
 }
 
-func TestForwardCarriesEachConnectionToItsTargetOverASessionOfItsOwnOnTheLoopback(t *testing.T) {
+func TestForwardSendsEachConnectionToItsEndpointOverASessionOfItsOwnFromTheLoopback(t *testing.T) {
 	t.Parallel()
 
 	account, sess := newAccount(), &sessions{}
@@ -275,7 +275,7 @@ func TestForwardClosesAConnectionItCannotOpenASessionForAndSaysWhy(t *testing.T)
 	defer conn.Close()
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	if _, err := conn.Read(make([]byte, 1)); err == nil {
-		t.Error("the connection stayed open though no session could carry it")
+		t.Error("the connection stayed open though no session could be opened for it")
 	}
 
 	select {
