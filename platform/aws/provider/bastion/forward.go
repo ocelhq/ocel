@@ -45,6 +45,9 @@ type forwarding struct {
 	cancel context.CancelFunc
 	slots  chan struct{}
 
+	listeners []*portListener
+	failed    sync.Once
+
 	mu        sync.Mutex
 	remaining int
 	closing   bool
@@ -122,6 +125,9 @@ func (b Bastion) Forward(ctx context.Context, c Clients, open OpenSessionFunc, r
 		forwarded := &portListener{group: group, target: target, listener: netListeners[i], active: map[*connection]struct{}{}}
 		listeners = append(listeners, forwarded)
 		forwards = append(forwards, Forward{Name: target.Name, Address: netListeners[i].Addr().String(), Close: forwarded.close})
+	}
+	group.listeners = listeners
+	for _, forwarded := range listeners {
 		go forwarded.accept()
 	}
 	context.AfterFunc(ctx, func() {
@@ -141,6 +147,17 @@ func (g *forwarding) finish() {
 	if err := g.task.Stop(); err != nil {
 		g.report(err)
 	}
+}
+
+func (g *forwarding) fail(err error) {
+	g.failed.Do(func() {
+		g.report(err)
+		go func() {
+			for _, forwarded := range g.listeners {
+				forwarded.close()
+			}
+		}()
+	})
 }
 
 func (g *forwarding) admit() bool {
@@ -207,8 +224,15 @@ func (l *portListener) accept() {
 func (l *portListener) carry(conn net.Conn) {
 	stream, err := l.group.open(l.group.ctx, l.group.task.Target, l.target.Host, l.target.Port)
 	if err != nil {
-		l.group.report(fmt.Errorf("open a session to %s at %s:%d: %w", l.target.Name, l.target.Host, l.target.Port, err))
 		_ = conn.Close()
+		if l.group.ctx.Err() != nil {
+			return
+		}
+		err = fmt.Errorf("open a session to %s at %s:%d: %w", l.target.Name, l.target.Host, l.target.Port, err)
+		if reason, stopped := l.group.task.stoppedReason(l.group.ctx); stopped {
+			err = fmt.Errorf("the bastion task stopped (%s), so every port forward through it has ended: %w", reason, err)
+		}
+		l.group.fail(err)
 		return
 	}
 	carried := &connection{conn: conn, stream: stream}

@@ -81,8 +81,15 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 		return forward == nil || !isReachableByPort(binding)
 	})
 	var forwards []provider.PortForward
+	failed := make(chan error, 1)
+	reportFailure := func(err error) {
+		select {
+		case failed <- err:
+		default:
+		}
+	}
 	if len(reachable) > 0 {
-		forwards, err = forward(ctx, provider.PortForwardRequest{Tier: tier, Bindings: reachable})
+		forwards, err = forward(ctx, provider.PortForwardRequest{Tier: tier, Bindings: reachable, ReportFailure: reportFailure})
 		if err != nil {
 			return provider.RefusalError(err)
 		}
@@ -98,8 +105,12 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	if len(forwards) == 0 {
 		return nil
 	}
-	<-ctx.Done()
-	return nil
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-failed:
+		return provider.RefusalError(err)
+	}
 }
 
 func isReachableByPort(binding provider.Binding) bool {

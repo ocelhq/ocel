@@ -3,8 +3,9 @@ package provider
 import "github.com/ocelhq/ocel/pkg/environment"
 
 type PortForwardRequest struct {
-	Tier     environment.Tier
-	Bindings []Binding
+	Tier          environment.Tier
+	Bindings      []Binding
+	ReportFailure func(error)
 }
 
 type PortForward struct {
