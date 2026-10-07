@@ -79,9 +79,16 @@ async function serveApp(answer: AppAnswer = () => undefined): Promise<App> {
   const requests: App["requests"] = [];
   const server: Server = createServer(async (req, res) => {
     const chunks: Buffer[] = [];
-    for await (const chunk of req) chunks.push(chunk as Buffer);
-    const body = Buffer.concat(chunks).toString("utf8");
-    const parsed: BatchBody = JSON.parse(body);
+    let parsed: BatchBody;
+    let body: string;
+    try {
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      body = Buffer.concat(chunks).toString("utf8");
+      parsed = JSON.parse(body);
+    } catch {
+      if (!res.destroyed) res.writeHead(400).end();
+      return;
+    }
     requests.push(parsed);
     const override = answer(parsed);
     if (override === "silent") return;
