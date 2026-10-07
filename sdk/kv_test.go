@@ -427,3 +427,18 @@ func TestClientIsRefusedWhenTheDeliveredAuthorityIsNoCertificate(t *testing.T) {
 		t.Errorf("Client() = %v, want it refused naming the binding's caPem", err)
 	}
 }
+
+func TestClientVerifiesTheTLSServerNameAForwardedBindingCarries(t *testing.T) {
+	t.Setenv("OCEL_RESOURCE_KV_forwarded", `{"name":"kv--forwarded","kv":{"host":"127.0.0.1","port":41234,"password":"pw","tls":true,"tlsServerName":"cache.internal"}}`)
+
+	client, err := ocel.KV("forwarded").Client(context.Background())
+	if err != nil {
+		t.Fatalf("Client() = %v", err)
+	}
+	if got := client.Options().TLSConfig.ServerName; got != "cache.internal" {
+		t.Errorf("Client() verifies server name %q, want cache.internal: through a port forward the store's certificate still names its own host", got)
+	}
+	if got := client.Options().Addr; got != "127.0.0.1:41234" {
+		t.Errorf("Client() connects to %q, want the forward at 127.0.0.1:41234", got)
+	}
+}

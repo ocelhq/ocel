@@ -208,6 +208,15 @@ describe("kv at runtime", () => {
     expect(kv("named").client.options.tls).toEqual({ servername: "cache.internal" });
   });
 
+  it("names the tls server name a forwarded binding carries, not the forward it connects to", () => {
+    deliver("forwarded", { tls: true, tlsServerName: "cache.internal" });
+
+    expect(kv("forwarded").client.options).toMatchObject({
+      host: "127.0.0.1",
+      tls: { servername: "cache.internal" },
+    });
+  });
+
   it("trusts only the certificate authority the binding delivers", () => {
     const ca = fixtureAuthority();
     deliver("private", { tls: true, caPem: ca });

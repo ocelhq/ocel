@@ -16,7 +16,9 @@ type PgReturn = Pool & { connectionString: string };
  * At deploy the database is provisioned in your account, or bound to the record
  * `bindings` names; the pool connects through the record's url when it has
  * one, reading its `sslmode` as libpq does, and otherwise through its host, port,
- * database, username and password, encrypted as its tls mode asks.
+ * database, username and password, encrypted as its tls mode asks and verified
+ * against its tls server name when it names one, as a record pointing at a port
+ * forward does.
  * `connectionString` is the same connection as a URL, for tools that take one.
  */
 export function postgres(id: string, config?: PostgresConfig): PgReturn {
@@ -75,14 +77,15 @@ function poolConfig(properties: PostgresProperties): PoolConfig {
   }
   const { host, port, database, username, password } = properties;
   const config: PoolConfig = { host, port, database, user: username, password };
+  const servername = properties.tlsServerName ? { servername: properties.tlsServerName } : {};
   switch (properties.tlsMode) {
     case PostgresTlsMode.REQUIRE:
-      config.ssl = { rejectUnauthorized: false };
+      config.ssl = { rejectUnauthorized: false, ...servername };
       break;
     case PostgresTlsMode.VERIFY_FULL:
       config.ssl = properties.tlsCa
-        ? { rejectUnauthorized: true, ca: properties.tlsCa }
-        : { rejectUnauthorized: true };
+        ? { rejectUnauthorized: true, ca: properties.tlsCa, ...servername }
+        : { rejectUnauthorized: true, ...servername };
       break;
   }
   return config;

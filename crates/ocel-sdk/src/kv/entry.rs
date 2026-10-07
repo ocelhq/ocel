@@ -15,10 +15,40 @@ use std::time::Duration;
 
 type ResultFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
+fn verified_host(properties: &KvProperties) -> &str {
+    if properties.tls && !properties.tls_server_name.is_empty() {
+        &properties.tls_server_name
+    } else {
+        &properties.host
+    }
+}
+
+struct Forward {
+    host: String,
+    port: u16,
+}
+
+impl redis::io::AsyncDNSResolver for Forward {
+    fn resolve<'a, 'b: 'a>(
+        &'a self,
+        _host: &'b str,
+        _port: u16,
+    ) -> redis::RedisFuture<'a, Box<dyn Iterator<Item = std::net::SocketAddr> + Send + 'a>> {
+        Box::pin(async move {
+            let addresses = tokio::net::lookup_host((self.host.as_str(), self.port)).await?;
+            Ok(Box::new(addresses.collect::<Vec<_>>().into_iter())
+                as Box<dyn Iterator<Item = std::net::SocketAddr> + Send>)
+        })
+    }
+}
+
 impl Kv {
     /// The redis-rs client for the store over the delivered binding, encrypted when the
     /// binding requires TLS, and trusting only the binding's certificate authority when it
-    /// delivers one. It is built on the first call and the same client is returned on every
+    /// delivers one. A binding that names a TLS server name, as one pointing at a port
+    /// forward does, gives a client addressed by that name, so its certificate is verified
+    /// against it; [`Kv::connection`] reaches such a store through the forward, while a
+    /// connection opened from this client resolves the name itself. It is built on the first call and the same client is returned on every
     /// one after. It fails when no binding was delivered for the name, when the delivered
     /// authority holds no PEM certificate, and during discovery.
     pub fn client(&self) -> Result<redis::Client, Error> {
@@ -33,7 +63,7 @@ impl Kv {
         let port = self.read_port(&properties)?;
         let address = if properties.tls {
             redis::ConnectionAddr::TcpTls {
-                host: properties.host.clone(),
+                host: verified_host(&properties).to_string(),
                 port,
                 insecure: false,
                 tls_params: None,
@@ -91,7 +121,19 @@ impl Kv {
             .connection
             .get_or_try_init(|| async {
                 let client = self.open_client(access)?;
-                Ok::<_, Error>(client.get_multiplexed_async_connection().await?)
+                let properties = self.read_properties(access)?;
+                let mut config = redis::AsyncConnectionConfig::new();
+                if verified_host(&properties) != properties.host {
+                    config = config.set_dns_resolver(Forward {
+                        host: properties.host.clone(),
+                        port: self.read_port(&properties)?,
+                    });
+                }
+                Ok::<_, Error>(
+                    client
+                        .get_multiplexed_async_connection_with_config(&config)
+                        .await?,
+                )
             })
             .await?;
         Ok(connection.clone())

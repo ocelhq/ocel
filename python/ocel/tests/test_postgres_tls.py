@@ -147,3 +147,37 @@ async def test_a_ca_under_require_leaves_the_certificate_unchecked(monkeypatch):
     ((dsn, options),) = opened
     assert parse_qs(urlparse(dsn).query)["sslmode"] == ["require"]
     assert options == {}
+
+
+@pytest.mark.asyncio
+async def test_a_forwarded_record_is_verified_under_its_tls_server_name(monkeypatch):
+    _record(
+        monkeypatch,
+        {
+            "host": "127.0.0.1",
+            "port": 41234,
+            "database": "d",
+            "username": "u",
+            "password": "p",
+            "tlsMode": "POSTGRES_TLS_MODE_VERIFY_FULL",
+            "tlsServerName": "orders.cluster.internal",
+        },
+    )
+    import asyncpg
+
+    opened = []
+
+    async def create_pool(dsn, **options):
+        opened.append((dsn, options))
+        return object()
+
+    monkeypatch.setattr(asyncpg, "create_pool", create_pool)
+
+    await postgres("main").pool()
+
+    ((dsn, options),) = opened
+    assert urlparse(dsn).hostname == "127.0.0.1"
+    context = options["ssl"]
+    assert context.check_hostname is True
+    verified = context.wrap_bio(ssl.MemoryBIO(), ssl.MemoryBIO(), server_hostname="127.0.0.1")
+    assert verified.server_hostname == "orders.cluster.internal"

@@ -266,16 +266,21 @@ class KV:
             options["password"] = properties.password
         if properties.tls and properties.ca_pem:
             options["ssl_authority"] = _trust_only(self.name, properties.ca_pem)
+        elif properties.tls and properties.tls_server_name:
+            options["ssl_authority"] = ssl.create_default_context()
         elif properties.tls:
             options.update(ssl=True, ssl_cert_reqs="required", ssl_check_hostname=True)
+        if "ssl_authority" in options and properties.tls_server_name:
+            options["ssl_server_name"] = properties.tls_server_name
         return options
 
     def client(self):
         """The ``redis.asyncio.Redis`` client connected to the store, opened on the first
         call and returned unchanged on every one after. Over TLS it trusts only the store's
-        own certificate authority when the provider names one, and raises ``ValueError`` when
-        the delivered authority holds no PEM certificate. redis-py is imported here, from the
-        ``ocel[kv]`` extra."""
+        own certificate authority when the provider names one, verifies the binding's TLS
+        server name when it names one, as a binding pointing at a port forward does, and
+        raises ``ValueError`` when the delivered authority holds no PEM certificate. redis-py
+        is imported here, from the ``ocel[kv]`` extra."""
         if self._client is None:
             options = self._client_options("client")
             _import_redis()
