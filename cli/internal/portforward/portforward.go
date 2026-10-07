@@ -13,10 +13,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -133,7 +135,7 @@ func readRefusalMessage(err error) string {
 	return err.Error()
 }
 
-func Open(ctx context.Context, p *providerprocess.Provider, slug string, env *environmentv1.Environment, uses []Use) (*Forwards, error) {
+func Open(ctx context.Context, p *providerprocess.Provider, slug string, env *environmentv1.Environment, uses []Use, said *run.Span) (*Forwards, error) {
 	req := &contractv1.ForwardPortsRequest{Slug: slug, Environment: env, Bindings: listBound(uses)}
 	streamCtx, stop := context.WithCancel(ctx)
 	answered := make(chan *contractv1.ForwardPortsResponse, 1)
@@ -144,7 +146,7 @@ func Open(ctx context.Context, p *providerprocess.Provider, slug string, env *en
 			case answered <- resp:
 			default:
 			}
-		})
+		}, func(event *progressv1.OperationEvent) { sayOn(said, event) })
 	}()
 	forwards := &Forwards{stop: stop, ended: ended}
 	resp, err := awaitAnswer(answered, ended)
@@ -159,6 +161,19 @@ func Open(ctx context.Context, p *providerprocess.Provider, slug string, env *en
 	}
 	forwards.bindings = byApp
 	return forwards, nil
+}
+
+func sayOn(span *run.Span, event *progressv1.OperationEvent) {
+	switch event.GetLevel() {
+	case progressv1.Level_LEVEL_WARN:
+		span.Warn(event.GetMessage())
+	case progressv1.Level_LEVEL_ERROR:
+		span.Error(event.GetMessage())
+	case progressv1.Level_LEVEL_DEBUG:
+		span.Debug(event.GetMessage())
+	default:
+		span.Say(event.GetMessage())
+	}
 }
 
 func declaredNames(uses []Use, bound []string) []string {

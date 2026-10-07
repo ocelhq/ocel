@@ -81,7 +81,7 @@ service ProviderService {
 
     rpc ReadLogs(ReadLogsRequest) returns (stream ReadLogsResponse);
 
-    rpc ForwardPorts(ForwardPortsRequest) returns (stream ForwardPortsResponse);
+    rpc ForwardPorts(ForwardPortsRequest) returns (stream ForwardPortsEvent);
 }
 
 message ProviderConfig {
@@ -964,6 +964,15 @@ message ForwardPortsRequest {
   common.environment.v1.Environment environment = 2;
 
   repeated string bindings = 3 [(buf.validate.field).repeated = {min_items: 1, unique: true}];
+}
+
+message ForwardPortsEvent {
+  oneof body {
+    option (buf.validate.oneof).required = true;
+
+    common.progress.v1.OperationEvent progress = 1;
+    ForwardPortsResponse response = 2;
+  }
 }
 
 message ForwardPortsResponse {

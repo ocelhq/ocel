@@ -130,10 +130,14 @@ func (b bastion) provisionService(ctx context.Context, tier environment.Tier, pr
 	if current != nil && sameBastion(current, wanted) && servesLatest(current) {
 		return current.Uri, nil
 	}
+	if current == nil {
+		ensureProgress(progress).Say("Making the bastion " + desired.service + " that forwards ports into the " + string(tier) + " tier's network")
+	}
 	if err := b.ensureAccount(ctx, tier); err != nil {
 		return "", err
 	}
 	if current == nil || imageOf(current) != image {
+		ensureProgress(progress).Say("Pushing the bastion image " + image)
 		if err := b.pushBinary(ctx, tier, bastionImageName, image, payloads.Bastion(), bastionImagePath); err != nil {
 			return "", err
 		}

@@ -47,7 +47,7 @@ func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps,
 	var forwards *portforward.Forwards
 	var notReady error
 	err = steps.run(cfg.Slug, progress.Forwarding.Title("ports to "+english.And(declared)), func() (err error) {
-		forwards, err = portforward.Open(ctx, i.providerProcess, cfg.Slug, i.env, uses)
+		forwards, err = portforward.Open(ctx, i.providerProcess, cfg.Slug, i.env, uses, steps.phase)
 		if err != nil && len(preBuildUses) > 0 {
 			return portforward.RefuseUnforwarded(preBuildName, declared, err)
 		}

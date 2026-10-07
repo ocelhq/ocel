@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -53,7 +54,7 @@ func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
 	t.Helper()
 	seen := &forwardsSeen{}
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
 			seen.mutex.Lock()
 			defer seen.mutex.Unlock()
 			seen.asked = append(seen.asked, req)
@@ -174,7 +175,7 @@ func TestTheForwardingStepNamesTheResourcesAsTheAppDeclaresThem(t *testing.T) {
 	fixture := setUpDeployProject(t)
 	writeNextUsageProject(t, fixture.Root, "")
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(context.Context, provider.PortForwardRequest) ([]provider.PortForward, error) {
+		h.ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
 			return nil, errors.New("the box is unreachable")
 		}
 	})
@@ -189,6 +190,32 @@ func TestTheForwardingStepNamesTheResourcesAsTheAppDeclaresThem(t *testing.T) {
 	}
 	if said := stdout.String(); !strings.Contains(said, "ports to main ") || strings.Contains(said, "ports to db--main") {
 		t.Errorf("the deploy said %q, want the forwarding step to name main as the app declares it", said)
+	}
+}
+
+func TestWhatTheProviderSaysWhileForwardingPortsIsShownInTheBuild(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextUsageProject(t, fixture.Root, "")
+	fixture.Provider.WithHooks(func(h *provider.Hooks) {
+		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
+			progress.Say("Creating Cloud Run service ocel-production-bastion")
+			progress.Warn("A connection to db--main failed")
+			forwards := make([]provider.PortForward, 0, len(req.Bindings))
+			for _, binding := range req.Bindings {
+				forwards = append(forwards, provider.PortForward{Binding: binding.Name, LocalAddress: "127.0.0.1:41234"})
+			}
+			return forwards, nil
+		}
+	})
+	capturingBuild(t, &dependencies)
+
+	said := deployedSaying(t, dependencies, fixture, deployOptions{yes: true})
+
+	for _, want := range []string{"Creating Cloud Run service ocel-production-bastion", "A connection to db--main failed"} {
+		if !strings.Contains(said, want) {
+			t.Errorf("the deploy said %q, want %q from the provider among it", said, want)
+		}
 	}
 }
 
@@ -363,7 +390,7 @@ func TestADeployWhoseForwardIsNotReadyBuildsWithoutThatBindingAndDeploysSayingWh
 	fixture := setUpDeployProject(t)
 	writeNextUsageProject(t, fixture.Root, "")
 	fixture.Provider.WithHooks(func(h *provider.Hooks) {
-		h.ForwardPorts = func(context.Context, provider.PortForwardRequest) ([]provider.PortForward, error) {
+		h.ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
 			return nil, refusal.Refuse(refusal.CodeNotReady, "container db holds no address on any network, so it is not running")
 		}
 	})

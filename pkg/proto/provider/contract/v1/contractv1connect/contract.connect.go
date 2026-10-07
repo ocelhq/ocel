@@ -168,7 +168,7 @@ type ProviderServiceClient interface {
 	Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error)
 	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
 	ReadLogs(context.Context, *v1.ReadLogsRequest) (*connect.ServerStreamForClient[v1.ReadLogsResponse], error)
-	ForwardPorts(context.Context, *v1.ForwardPortsRequest) (*connect.ServerStreamForClient[v1.ForwardPortsResponse], error)
+	ForwardPorts(context.Context, *v1.ForwardPortsRequest) (*connect.ServerStreamForClient[v1.ForwardPortsEvent], error)
 }
 
 // NewProviderServiceClient constructs a client for the provider.contract.v1.ProviderService
@@ -374,7 +374,7 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("ReadLogs")),
 			connect.WithClientOptions(opts...),
 		),
-		forwardPorts: connect.NewClient[v1.ForwardPortsRequest, v1.ForwardPortsResponse](
+		forwardPorts: connect.NewClient[v1.ForwardPortsRequest, v1.ForwardPortsEvent](
 			httpClient,
 			baseURL+ProviderServiceForwardPortsProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("ForwardPorts")),
@@ -417,7 +417,7 @@ type providerServiceClient struct {
 	shape                     *connect.Client[v1.ShapeRequest, v13.ResourceSet]
 	confirm                   *connect.Client[v1.ConfirmRequest, v1.ConfirmResponse]
 	readLogs                  *connect.Client[v1.ReadLogsRequest, v1.ReadLogsResponse]
-	forwardPorts              *connect.Client[v1.ForwardPortsRequest, v1.ForwardPortsResponse]
+	forwardPorts              *connect.Client[v1.ForwardPortsRequest, v1.ForwardPortsEvent]
 }
 
 // Configure calls provider.contract.v1.ProviderService.Configure.
@@ -649,7 +649,7 @@ func (c *providerServiceClient) ReadLogs(ctx context.Context, req *v1.ReadLogsRe
 }
 
 // ForwardPorts calls provider.contract.v1.ProviderService.ForwardPorts.
-func (c *providerServiceClient) ForwardPorts(ctx context.Context, req *v1.ForwardPortsRequest) (*connect.ServerStreamForClient[v1.ForwardPortsResponse], error) {
+func (c *providerServiceClient) ForwardPorts(ctx context.Context, req *v1.ForwardPortsRequest) (*connect.ServerStreamForClient[v1.ForwardPortsEvent], error) {
 	return c.forwardPorts.CallServerStream(ctx, connect.NewRequest(req))
 }
 
@@ -687,7 +687,7 @@ type ProviderServiceHandler interface {
 	Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error)
 	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
 	ReadLogs(context.Context, *v1.ReadLogsRequest, *connect.ServerStream[v1.ReadLogsResponse]) error
-	ForwardPorts(context.Context, *v1.ForwardPortsRequest, *connect.ServerStream[v1.ForwardPortsResponse]) error
+	ForwardPorts(context.Context, *v1.ForwardPortsRequest, *connect.ServerStream[v1.ForwardPortsEvent]) error
 }
 
 // NewProviderServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -1100,6 +1100,6 @@ func (UnimplementedProviderServiceHandler) ReadLogs(context.Context, *v1.ReadLog
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ReadLogs is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) ForwardPorts(context.Context, *v1.ForwardPortsRequest, *connect.ServerStream[v1.ForwardPortsResponse]) error {
+func (UnimplementedProviderServiceHandler) ForwardPorts(context.Context, *v1.ForwardPortsRequest, *connect.ServerStream[v1.ForwardPortsEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ForwardPorts is not implemented"))
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -28,7 +29,7 @@ func TestAPostgresOrKVBindingIsForwardedFromLoopbackToItsContainersAddressOnTheB
 			{Type: provider.BindingPostgres, Name: "orders", Properties: map[string]string{provider.PropertyHost: "shop-infra-orders-postgres", provider.PropertyPort: "5432"}},
 			{Type: provider.BindingKV, Name: "cache", Properties: map[string]string{provider.PropertyHost: "shop-infra-cache-kv", provider.PropertyPort: "6379"}},
 		},
-	})
+	}, progress.Discard())
 	if err != nil {
 		t.Fatalf("ForwardPorts() = %v", err)
 	}
@@ -66,7 +67,7 @@ func TestAForwardThatFailsPartWayStopsTheForwardsItAlreadyOpened(t *testing.T) {
 			{Type: provider.BindingPostgres, Name: "orders", Properties: map[string]string{provider.PropertyHost: "shop-infra-orders-postgres", provider.PropertyPort: "5432"}},
 			{Type: provider.BindingKV, Name: "cache", Properties: map[string]string{provider.PropertyHost: "shop-infra-cache-kv", provider.PropertyPort: "6379"}},
 		},
-	})
+	}, progress.Discard())
 	if err == nil {
 		t.Fatal("ForwardPorts() to a container holding no address = nil error, want it refused")
 	}

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -192,7 +193,9 @@ func TestConfigureSaysTheProviderForwardsPortsWhenItsHookIsSet(t *testing.T) {
 		want bool
 	}{
 		{"hook set", func(hooks *provider.Hooks) {
-			hooks.ForwardPorts = func(context.Context, provider.PortForwardRequest) ([]provider.PortForward, error) { return nil, nil }
+			hooks.ForwardPorts = func(context.Context, provider.PortForwardRequest, progress.Log) ([]provider.PortForward, error) {
+				return nil, nil
+			}
 		}, true},
 		{"hook absent", func(*provider.Hooks) {}, false},
 	} {
