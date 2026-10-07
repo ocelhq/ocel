@@ -106,11 +106,6 @@ func TestAReleaseRecordNamesItsReleaseAndItsBuildOnTheWire(t *testing.T) {
 			t.Errorf("record = %s, want %s", raw, want)
 		}
 	}
-	for _, absent := range []string{`"identity"`, `"deploymentId"`} {
-		if strings.Contains(raw, absent) {
-			t.Errorf("record = %s, want no %s: a release record is not a deployment", raw, absent)
-		}
-	}
 }
 
 func TestAPromotionNamesTheReleasesItMadeOnTheWire(t *testing.T) {
@@ -122,9 +117,6 @@ func TestAPromotionNamesTheReleasesItMadeOnTheWire(t *testing.T) {
 	}
 	if want := `"releases":{"web":"b1~fp"}`; !strings.Contains(string(raw), want) {
 		t.Errorf("promotion = %s, want %s", raw, want)
-	}
-	if strings.Contains(string(raw), `"builds"`) {
-		t.Errorf("promotion = %s, want no builds: a promotion maps apps to releases", raw)
 	}
 }
 

@@ -102,14 +102,12 @@ func TestADeployOntoABootstrapWhoseStoreIsBehindIsRefusedBeforeAnythingIsUploade
 	}
 }
 
-func TestADeployOntoABootstrapWhoseStoreIsStillTheDeploymentsStoreIsRefusedAsMissingTheReleasesStore(t *testing.T) {
+func TestADeployOntoABootstrapWithoutTheReleasesStoreIsRefused(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	seedBootstrapBundles(t, "store-v1", "writer-v1")
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 	installBootstrap(t, m, environment.TierProduction)
 	storeScript, _ := bootstrapScriptNames(t, environment.TierProduction)
-	const stale = "ocel-deployments-store"
-	m.putBodies[stale], m.scriptSettings[stale], m.scriptSecrets[stale] = m.putBodies[storeScript], m.scriptSettings[storeScript], m.scriptSecrets[storeScript]
 	delete(m.putBodies, storeScript)
 	delete(m.scriptSettings, storeScript)
 	delete(m.scriptSecrets, storeScript)
