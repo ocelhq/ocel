@@ -777,37 +777,3 @@ func TestStagedRecordsRoundTrip(t *testing.T) {
 		t.Fatal("PutStaged() with no release succeeded, want it refused")
 	}
 }
-
-func TestStateRecordedUnderTheOldBuildsAndIdentityKeysIsNotReadBack(t *testing.T) {
-	l, store := fixture()
-	ctx := context.Background()
-
-	store.rows[l.pointerKey("@production").String()] = keyvalue.Entry{
-		Key:      l.pointerKey("@production"),
-		Value:    []byte(`{"name":"@production","active":"p1","sequence":1,"promotions":[{"promotionId":"p1","ts":1,"builds":{"web":"abc~fp"},"sequence":1}]}`),
-		Revision: "1",
-	}
-	store.rows[l.releaseKey("web", "abc~fp").String()] = keyvalue.Entry{
-		Key:      l.releaseKey("web", "abc~fp"),
-		Value:    []byte(`{"app":"web","identity":"abc~fp","deploymentId":"abc"}`),
-		Revision: "2",
-	}
-
-	pointer, err := l.Read(ctx, "")
-	if err != nil {
-		t.Fatalf("Read() = %v", err)
-	}
-	if len(pointer.Promotions) != 1 || len(pointer.Promotions[0].Releases) != 0 {
-		t.Errorf("Read() = %+v, want the promotion the old shape recorded to name no release: the old key is not read back", pointer.Promotions)
-	}
-	if record, found, err := l.Record(ctx, "web", "abc~fp"); err != nil || found {
-		t.Errorf("Record() = %+v, %v, %v, want the old row read as absent: it names no release", record, found, err)
-	}
-	restaged := router.ReleaseRecord{App: "web", Release: "abc~fp", BuildID: "abc"}
-	if err := l.PutStaged(ctx, restaged); err != nil {
-		t.Fatalf("PutStaged() over the old row = %v, want the release staged: a redeploy of the same build and values lands on its key", err)
-	}
-	if record, found, err := l.Record(ctx, "web", "abc~fp"); err != nil || !found || record.BuildID != "abc" {
-		t.Errorf("Record() after the re-stage = %+v, %v, %v, want the staged record", record, found, err)
-	}
-}

@@ -70,12 +70,8 @@ func (l *Ledger) PutStaged(ctx context.Context, record router.ReleaseRecord) err
 		if err != nil {
 			return fmt.Errorf("read the release record for %s: %w", record.App, err)
 		}
-		held, found, err := decodeRecord(stored.Value)
-		if err != nil {
-			return fmt.Errorf("decode the release record %s/%s: %w", record.App, record.Release, err)
-		}
-		if found {
-			return refuseDifferentRecord(record, held, staging)
+		if len(stored.Value) > 0 {
+			return refuseDifferentRecord(record, stored.Value, staging)
 		}
 		stored.Value = staging
 		_, err = l.keyValues.Write(ctx, stored)
@@ -90,18 +86,11 @@ func (l *Ledger) PutStaged(ctx context.Context, record router.ReleaseRecord) err
 	return fmt.Errorf("stage the release record %s/%s: it moved under %d attempts", record.App, record.Release, casAttempts)
 }
 
-func decodeRecord(stored []byte) (router.ReleaseRecord, bool, error) {
-	if len(stored) == 0 {
-		return router.ReleaseRecord{}, false, nil
+func refuseDifferentRecord(record router.ReleaseRecord, stored, staging []byte) error {
+	var held router.ReleaseRecord
+	if err := json.Unmarshal(stored, &held); err != nil {
+		return fmt.Errorf("decode the release record %s/%s: %w", record.App, record.Release, err)
 	}
-	var record router.ReleaseRecord
-	if err := json.Unmarshal(stored, &record); err != nil {
-		return router.ReleaseRecord{}, false, err
-	}
-	return record, record.Release != "", nil
-}
-
-func refuseDifferentRecord(record, held router.ReleaseRecord, staging []byte) error {
 	canonical, err := canonicalRecord(held)
 	if err != nil {
 		return fmt.Errorf("encode the release record %s/%s: %w", record.App, record.Release, err)
@@ -131,11 +120,14 @@ func (l *Ledger) Record(ctx context.Context, app, release string) (router.Releas
 	if err != nil {
 		return router.ReleaseRecord{}, false, fmt.Errorf("read the release record for %s/%s: %w", app, release, err)
 	}
-	record, found, err := decodeRecord(stored.Value)
-	if err != nil {
+	if len(stored.Value) == 0 {
+		return router.ReleaseRecord{}, false, nil
+	}
+	var record router.ReleaseRecord
+	if err := json.Unmarshal(stored.Value, &record); err != nil {
 		return router.ReleaseRecord{}, false, fmt.Errorf("decode the release record for %s/%s: %w", app, release, err)
 	}
-	return record, found, nil
+	return record, true, nil
 }
 
 func (l *Ledger) ReadRecords(ctx context.Context, keys []string) ([]router.ReleaseRecord, error) {

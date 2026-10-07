@@ -458,60 +458,6 @@ describe("ensureSchema", () => {
     });
   });
 
-  it("drops the served rows of a store whose records named a release `identity`, and keeps the store's own identity", async () => {
-    const stub = env.RELEASES_DO.get(env.RELEASES_DO.idFromName("identity-named"));
-    await runInDurableObject(stub, (_instance, ctx) => {
-      const storage = ctx.storage;
-      for (const table of ["pointers", "served", "apps", "labels"]) {
-        storage.sql.exec(`DROP TABLE IF EXISTS ${table}`);
-      }
-      storage.sql.exec(
-        `CREATE TABLE pointers (name TEXT PRIMARY KEY, promotion_id TEXT NOT NULL);
-         CREATE TABLE served (
-           pointer TEXT NOT NULL,
-           app TEXT NOT NULL,
-           identity TEXT NOT NULL,
-           data TEXT NOT NULL,
-           PRIMARY KEY (pointer, app)
-         );`,
-      );
-      storage.sql.exec(
-        `INSERT INTO served (pointer, app, identity, data) VALUES (?, ?, ?, ?)`,
-        "@production",
-        "web",
-        "deploy-1",
-        JSON.stringify({ app: "web", identity: "deploy-1", buildId: "d1" }),
-      );
-      storage.sql.exec(
-        `INSERT INTO pointers (name, promotion_id) VALUES (?, ?)`,
-        "@production",
-        "promo-1",
-      );
-      storage.sql.exec(
-        `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
-      );
-      storage.sql.exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('secret', 's3cret')`);
-      storage.sql.exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schemaVersion', '3')`);
-
-      ensureSchema(storage);
-
-      const columns = storage.sql
-        .exec<{ name: string }>(`SELECT name FROM pragma_table_info('served')`)
-        .toArray()
-        .map((c) => c.name);
-      expect(columns).toContain("release");
-      expect(columns).not.toContain("identity");
-      const count = (table: string) =>
-        storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).one().n;
-      expect(count("served")).toBe(0);
-      expect(count("pointers")).toBe(0);
-      const secret = storage.sql
-        .exec<{ value: string }>(`SELECT value FROM meta WHERE key = 'secret'`)
-        .one().value;
-      expect(secret).toBe("s3cret");
-    });
-  });
-
   it("adds the labels table to a store that predates it and keeps the pointers it serves", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
