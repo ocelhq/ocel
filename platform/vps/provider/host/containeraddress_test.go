@@ -33,7 +33,10 @@ func TestAContainerWithNoAddressIsRefusedNamingIt(t *testing.T) {
 	}
 
 	_, err := rig.host().ReadContainerAddress(context.Background(), "shop-infra-orders-postgres")
-	if err == nil || !strings.Contains(err.Error(), "shop-infra-orders-postgres") {
-		t.Errorf("ReadContainerAddress() of a container on no network = %v, want a refusal naming it", err)
+	if err == nil || !strings.Contains(err.Error(), "shop-infra-orders-postgres") || !strings.Contains(err.Error(), "not running") {
+		t.Errorf("ReadContainerAddress() of a container on no network = %v, want a refusal naming it and saying it is not running", err)
+	}
+	if strings.Contains(err.Error(), "deploy again") {
+		t.Errorf("ReadContainerAddress() = %v, want no advice to deploy again: a build is forwarded to before its deploy, so every deploy would meet the same refusal", err)
 	}
 }

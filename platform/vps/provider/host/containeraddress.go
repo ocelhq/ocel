@@ -36,7 +36,7 @@ func (h *Host) ReadContainerAddress(ctx context.Context, name string) (string, e
 	addresses := strings.Fields(said)
 	if len(addresses) == 0 {
 		return "", refusal.Refuse(refusal.CodeNotReady,
-			"container %s on %s holds no address on any network, so no port can be forwarded to it: deploy again to start it", name, h.named())
+			"container %s on %s holds no address on any network, so it is not running and no port can be forwarded to it", name, h.named())
 	}
 	return addresses[0], nil
 }
