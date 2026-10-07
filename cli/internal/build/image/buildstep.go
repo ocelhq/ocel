@@ -28,12 +28,12 @@ func (g liveGateway) Solve(ctx context.Context, req client.SolveRequest) (*clien
 	return g.Client.Solve(ctx, req)
 }
 
-func isBuildStepCommand(op *pb.Op) bool {
-	exec := op.GetExec()
+func isBuildStepCommand(operation *pb.Op) bool {
+	exec := operation.GetExec()
 	if exec == nil {
 		return false
 	}
-	return slices.ContainsFunc(exec.Mounts, func(m *pb.Mount) bool { return m.Dest == railpackSecretsHashMount })
+	return slices.ContainsFunc(exec.Mounts, func(mount *pb.Mount) bool { return mount.Dest == railpackSecretsHashMount })
 }
 
 func hasLiveSecretEnv(exec *pb.ExecOp, keys []string) bool {
@@ -53,36 +53,36 @@ func giveLiveValues(exec *pb.ExecOp, keys []string) {
 	}
 }
 
-func mountLiveValues(def *pb.Definition, keys []string) (*pb.Definition, error) {
+func mountLiveValues(definition *pb.Definition, keys []string) (*pb.Definition, error) {
 	renamed := map[string]string{}
 	rewritten := &pb.Definition{
-		Def:      make([][]byte, len(def.Def)),
-		Metadata: make(map[string]*pb.OpMetadata, len(def.Metadata)),
-		Source:   def.Source,
+		Def:      make([][]byte, len(definition.Def)),
+		Metadata: make(map[string]*pb.OpMetadata, len(definition.Metadata)),
+		Source:   definition.Source,
 	}
 	changed := false
-	for i, raw := range def.Def {
-		var op pb.Op
-		if err := op.UnmarshalVT(raw); err != nil {
+	for i, raw := range definition.Def {
+		var operation pb.Op
+		if err := operation.UnmarshalVT(raw); err != nil {
 			return nil, err
 		}
 		touched := false
-		for _, input := range op.Inputs {
+		for _, input := range operation.Inputs {
 			if next, ok := renamed[input.Digest]; ok {
 				input.Digest = next
 				touched = true
 			}
 		}
-		if exec := op.GetExec(); exec != nil && hasLiveSecretEnv(exec, keys) {
+		if exec := operation.GetExec(); exec != nil && hasLiveSecretEnv(exec, keys) {
 			exec.Secretenv = slices.DeleteFunc(exec.Secretenv, func(env *pb.SecretEnv) bool { return slices.Contains(keys, env.ID) })
 			touched = true
 		}
-		if isBuildStepCommand(&op) {
-			giveLiveValues(op.GetExec(), keys)
+		if isBuildStepCommand(&operation) {
+			giveLiveValues(operation.GetExec(), keys)
 			touched = true
 		}
 		if touched {
-			remarshaled, err := op.MarshalVT()
+			remarshaled, err := operation.MarshalVT()
 			if err != nil {
 				return nil, err
 			}
@@ -93,17 +93,17 @@ func mountLiveValues(def *pb.Definition, keys []string) (*pb.Definition, error) 
 		rewritten.Def[i] = raw
 	}
 	if !changed {
-		return def, nil
+		return definition, nil
 	}
-	for old, metadata := range def.Metadata {
+	for old, metadata := range definition.Metadata {
 		if next, ok := renamed[old]; ok {
 			old = next
 		}
 		rewritten.Metadata[old] = metadata
 	}
-	if def.Source != nil {
-		source := &pb.Source{Infos: def.Source.Infos, Locations: map[string]*pb.Locations{}}
-		for old, locations := range def.Source.Locations {
+	if definition.Source != nil {
+		source := &pb.Source{Infos: definition.Source.Infos, Locations: map[string]*pb.Locations{}}
+		for old, locations := range definition.Source.Locations {
 			if next, ok := renamed[old]; ok {
 				old = next
 			}

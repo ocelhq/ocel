@@ -16,17 +16,17 @@ import (
 
 const hyphenatedKey = "OCEL_RESOURCE_POSTGRES_my-db"
 
-func decodeOps(t *testing.T, def *pb.Definition) map[string]*pb.Op {
+func decodeOperations(t *testing.T, definition *pb.Definition) map[string]*pb.Op {
 	t.Helper()
-	ops := map[string]*pb.Op{}
-	for _, raw := range def.Def {
-		var op pb.Op
-		if err := op.UnmarshalVT(raw); err != nil {
+	operations := map[string]*pb.Op{}
+	for _, raw := range definition.Def {
+		var operation pb.Op
+		if err := operation.UnmarshalVT(raw); err != nil {
 			t.Fatal(err)
 		}
-		ops[digest.FromBytes(raw).String()] = &op
+		operations[digest.FromBytes(raw).String()] = &operation
 	}
-	return ops
+	return operations
 }
 
 func defineRailpackBuild(t *testing.T, secretsHash string) (*pb.Definition, *railpackplan.BuildPlan) {
@@ -51,11 +51,11 @@ func defineRailpackBuildOf(t *testing.T, dir, secretsHash string) (*pb.Definitio
 	if err != nil {
 		t.Fatalf("ConvertPlanToLLB() = %v", err)
 	}
-	def, err := state.Marshal(context.Background())
+	definition, err := state.Marshal(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return def.ToPB(), &plan
+	return definition.ToPB(), &plan
 }
 
 func listCommands(plan *railpackplan.BuildPlan, step string) []string {
@@ -105,8 +105,8 @@ func TestOnlyTheBuildStepsCommandsReadTheLiveValuesAsFilesOnTheHostNetwork(t *te
 	}
 
 	built := 0
-	for _, op := range decodeOps(t, rewritten) {
-		exec := op.GetExec()
+	for _, operation := range decodeOperations(t, rewritten) {
+		exec := operation.GetExec()
 		if exec == nil {
 			continue
 		}
@@ -139,8 +139,8 @@ func TestOnlyTheBuildStepsCommandsReadTheLiveValuesAsFilesOnTheHostNetwork(t *te
 func TestEveryCommandRailpackPlannedRunsUnchanged(t *testing.T) {
 	original, _ := defineRailpackBuild(t, "a live hash")
 	var before []string
-	for _, op := range decodeOps(t, original) {
-		if exec := op.GetExec(); exec != nil {
+	for _, operation := range decodeOperations(t, original) {
+		if exec := operation.GetExec(); exec != nil {
 			before = append(before, joinArgs(exec))
 		}
 	}
@@ -151,8 +151,8 @@ func TestEveryCommandRailpackPlannedRunsUnchanged(t *testing.T) {
 	}
 
 	var after []string
-	for _, op := range decodeOps(t, rewritten) {
-		if exec := op.GetExec(); exec != nil {
+	for _, operation := range decodeOperations(t, rewritten) {
+		if exec := operation.GetExec(); exec != nil {
 			after = append(after, joinArgs(exec))
 		}
 	}
@@ -174,21 +174,21 @@ func TestTheRewrittenDefinitionStaysAGraphWhoseOpsPointAtOpsItHolds(t *testing.T
 		t.Fatalf("mountLiveValues() = %v", err)
 	}
 
-	ops := decodeOps(t, rewritten)
-	for held, op := range ops {
-		for _, input := range op.Inputs {
-			if _, ok := ops[input.Digest]; !ok {
-				t.Errorf("the op %s takes an input %s that the definition no longer holds, so the build cannot be solved", held, input.Digest)
+	operations := decodeOperations(t, rewritten)
+	for held, operation := range operations {
+		for _, input := range operation.Inputs {
+			if _, ok := operations[input.Digest]; !ok {
+				t.Errorf("the operation %s takes an input %s that the definition no longer holds, so the build cannot be solved", held, input.Digest)
 			}
 		}
 	}
 	for held := range rewritten.Metadata {
-		if _, ok := ops[held]; !ok {
-			t.Errorf("the definition keeps metadata for an op %s it no longer holds", held)
+		if _, ok := operations[held]; !ok {
+			t.Errorf("the definition keeps metadata for an operation %s it no longer holds", held)
 		}
 	}
 	if len(rewritten.Def) != len(original.Def) {
-		t.Errorf("the definition holds %d ops, want the %d it held", len(rewritten.Def), len(original.Def))
+		t.Errorf("the definition holds %d operations, want the %d it held", len(rewritten.Def), len(original.Def))
 	}
 }
 
@@ -217,8 +217,8 @@ func TestASecretTheAppsRailpackFileDeclaresUnderALiveKeyReachesNoCommandsEnviron
 	}
 
 	others := 0
-	for _, op := range decodeOps(t, rewritten) {
-		exec := op.GetExec()
+	for _, operation := range decodeOperations(t, rewritten) {
+		exec := operation.GetExec()
 		if exec == nil {
 			continue
 		}
