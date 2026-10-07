@@ -51,11 +51,29 @@ func removeCluster(ctx context.Context, c Clients, tier environment.Tier) error 
 		if err := c.stopTasks(ctx, name); err != nil {
 			return err
 		}
-		if _, err := c.ECS.DeleteCluster(ctx, &ecs.DeleteClusterInput{Cluster: aws.String(name)}); err != nil {
-			return fmt.Errorf("delete cluster %s: %w", name, err)
+		if err := c.deleteCluster(ctx, name); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func (c Clients) deleteCluster(ctx context.Context, name string) error {
+	ctx, cancel := context.WithTimeout(ctx, removalTimeout)
+	defer cancel()
+	for attempt := 0; ; attempt++ {
+		_, err := c.ECS.DeleteCluster(ctx, &ecs.DeleteClusterInput{Cluster: aws.String(name)})
+		var stopping *ecstypes.ClusterContainsTasksException
+		if !errors.As(err, &stopping) {
+			if err != nil {
+				return fmt.Errorf("delete cluster %s: %w", name, err)
+			}
+			return nil
+		}
+		if err := c.pause(ctx, attempt); err != nil {
+			return fmt.Errorf("wait for the stopped tasks of cluster %s to stop: %w", name, err)
+		}
+	}
 }
 
 func (c Clients) stopTasks(ctx context.Context, cluster string) error {

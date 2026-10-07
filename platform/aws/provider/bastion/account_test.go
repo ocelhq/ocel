@@ -52,6 +52,7 @@ type task struct {
 	status      string
 	agentStatus string
 	stopped     bool
+	stopping    int
 	subnets     []string
 	groups      []string
 	public      bool
@@ -74,6 +75,7 @@ type account struct {
 	onDescribe    func(*task)
 	groupBusy     int
 	nextID        int
+	stopLag       int
 
 	beforeAuthorize func(*securityGroup, []ec2types.IpPermission)
 }
@@ -187,8 +189,12 @@ func (a *account) DeleteCluster(_ context.Context, in *ecs.DeleteClusterInput, _
 	name := aws.ToString(in.Cluster)
 	a.record("DeleteCluster " + name)
 	for _, t := range a.tasks {
+		if t.cluster == name && t.stopping > 0 {
+			t.stopping--
+			t.stopped = t.stopping == 0
+		}
 		if t.cluster == name && !t.stopped {
-			return nil, &ecstypes.ClusterContainsTasksException{}
+			return nil, &ecstypes.ClusterContainsTasksException{Message: aws.String("The Cluster cannot be deleted while Tasks are active.")}
 		}
 	}
 	delete(a.clusters, name)
@@ -344,8 +350,9 @@ func (a *account) StopTask(_ context.Context, in *ecs.StopTaskInput, _ ...func(*
 	defer a.mu.Unlock()
 	arn := aws.ToString(in.Task)
 	a.record("StopTask " + arn)
-	if t, ok := a.tasks[arn]; ok {
-		t.stopped = true
+	if t, ok := a.tasks[arn]; ok && t.stopping == 0 && !t.stopped {
+		t.stopping = a.stopLag
+		t.stopped = a.stopLag == 0
 	}
 	return &ecs.StopTaskOutput{}, nil
 }
@@ -355,7 +362,7 @@ func (a *account) ListTasks(_ context.Context, in *ecs.ListTasksInput, _ ...func
 	defer a.mu.Unlock()
 	out := &ecs.ListTasksOutput{}
 	for arn, t := range a.tasks {
-		if t.cluster == aws.ToString(in.Cluster) && !t.stopped {
+		if t.cluster == aws.ToString(in.Cluster) && !t.stopped && t.stopping == 0 {
 			out.TaskArns = append(out.TaskArns, arn)
 		}
 	}
