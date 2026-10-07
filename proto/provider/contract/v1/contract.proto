@@ -19,6 +19,8 @@ import "provider/cost/v1/cost.proto";
 service ProviderService {
     rpc Configure(ConfigureRequest) returns (ConfigureResponse);
 
+    rpc ProvisionInfra(ProvisionInfraRequest) returns (stream common.progress.v1.OperationEvent);
+
     rpc Deploy(DeployRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc Bootstrap(BootstrapRequest) returns (stream common.progress.v1.OperationEvent);
@@ -368,6 +370,18 @@ message DeployRequest {
   repeated common.bindings.v1.Binding inline_bindings = 7;
 
   string alias_token = 8 [(buf.validate.field).string.pattern = "^([a-z2-7]{16})?$"];
+
+  bool infra_provisioned = 9;
+}
+
+message ProvisionInfraRequest {
+  Manifest manifest = 1 [(buf.validate.field).required = true];
+
+  common.environment.v1.Environment environment = 2;
+
+  EdgeSelection edge = 3;
+
+  repeated common.bindings.v1.Binding inline_bindings = 4;
 }
 
 message ShapeRequest {
