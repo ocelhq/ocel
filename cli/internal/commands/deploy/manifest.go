@@ -301,7 +301,10 @@ func resolveVariables(ctx context.Context, declarations *variables.Declarations,
 
 func revealSecrets(ctx context.Context, declarations *variables.Declarations, cfg *project.Project) (map[string]map[string]string, error) {
 	secrets := make(map[string]map[string]string, len(cfg.Apps))
-	for _, app := range variablescope.Apps(cfg) {
+	for _, app := range cfg.Apps {
+		if !build.IsNextFunction(app) {
+			continue
+		}
 		revealed, err := declarations.RevealSecrets(ctx, app.Name)
 		if err != nil {
 			return nil, err

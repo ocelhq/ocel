@@ -1709,6 +1709,7 @@ func TestADeployBuildsWithItsSensitiveAndSecretValuesOutsideTheBuildEnvironment(
   {"key":"SESSION_SECRET","class":"VARIABLE_CLASS_SECRET","required":true}
 ]`)
 	writeRootApp(t, fixture.Root)
+	writeAppsConfig(t, fixture.Root, `{ name: "web", path: ".", framework: "next" }`)
 	envSet(t, fixture, "PAGE_ID", "page-123", envOptions{})
 	envSet(t, fixture, "STRIPE_API_KEY", "sk_live_sensitive", envOptions{})
 	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})
@@ -1720,7 +1721,7 @@ func TestADeployBuildsWithItsSensitiveAndSecretValuesOutsideTheBuildEnvironment(
 		t.Fatalf("runDeploy err = %v; output=%s", err, out)
 	}
 
-	built := (*got)[clitest.FixtureSlug]
+	built := (*got)["web"]
 	if built.Env["PAGE_ID"] != "page-123" {
 		t.Errorf("build env = %v, want the plaintext PAGE_ID in it", built.Env)
 	}
@@ -1738,5 +1739,31 @@ func TestADeployBuildsWithItsSensitiveAndSecretValuesOutsideTheBuildEnvironment(
 	}
 	if bytes.Contains(sent, []byte("ss_live_secret")) {
 		t.Error("the deploy request holds the secret's plaintext, want a secret revealed for the build only")
+	}
+}
+
+func TestADeployRevealsSecretsOnlyForTheAppsWhoseBuildReadsThem(t *testing.T) {
+	fixture := setUpVariablesProject(t, `[
+  {"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},
+  {"key":"SESSION_SECRET","class":"VARIABLE_CLASS_SECRET","required":true}
+]`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "web", "package.json"), "{}\n")
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "package.json"), "{}\n")
+	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", framework: "next" }, { name: "api", path: "apps/api", framework: "node" }`)
+	envSet(t, fixture, "STRIPE_API_KEY", "sk_live_sensitive", envOptions{})
+	envSet(t, fixture, "SESSION_SECRET", "ss_live_secret", envOptions{})
+
+	dependencies := newTestDependencies()
+	got := captureBuildVariables(&dependencies)
+
+	if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
+		t.Fatalf("runDeploy err = %v; output=%s", err, out)
+	}
+
+	if (*got)["web"].Live["SESSION_SECRET"] != "ss_live_secret" {
+		t.Errorf("web's build live values = %v, want the secret a Next build reads", (*got)["web"].Live)
+	}
+	if secret, ok := (*got)["api"].Live["SESSION_SECRET"]; ok {
+		t.Errorf("api's build was handed SESSION_SECRET = %q, want a secret revealed only for a Next build that reads the live dir", secret)
 	}
 }
