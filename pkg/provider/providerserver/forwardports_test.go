@@ -2,6 +2,7 @@ package providerserver_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -83,6 +84,41 @@ func TestForwardPortsHandsBackThePublishedBindingPointedAtItsForwardAndHoldsItUn
 	case <-closed:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the forwards stayed open after the caller left, want each one closed before the call returns")
+	}
+}
+
+func TestForwardPortsEndsTheStreamWithTheFailureTheProviderReportsAndClosesTheForwards(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	fail := make(chan func(error), 1)
+	closed := make(chan struct{})
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ForwardPorts = func(_ context.Context, req provider.PortForwardRequest) ([]provider.PortForward, error) {
+			fail <- req.ReportFailure
+			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { close(closed) }}}, nil
+		}
+	})
+
+	stream, err := client.ForwardPorts(context.Background(), forwardPortsRequest("orders"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	if !stream.Receive() {
+		t.Fatalf("ForwardPorts() sent nothing: %v", stream.Err())
+	}
+	(<-fail)(errors.New("the bastion task stopped: Task stopped by user"))
+
+	for stream.Receive() {
+		t.Errorf("ForwardPorts() sent a second response %v after the forwards failed", stream.Msg())
+	}
+	if err := stream.Err(); err == nil || !strings.Contains(err.Error(), "the bastion task stopped") {
+		t.Errorf("ForwardPorts() stream ended with %v, want the failure the provider reported", err)
+	}
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the forwards stayed open after they failed")
 	}
 }
 

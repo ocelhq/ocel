@@ -2,8 +2,6 @@ package aws
 
 import (
 	"context"
-	"fmt"
-	"os"
 
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
@@ -35,9 +33,5 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	if err != nil {
 		return nil, err
 	}
-	return ensured.ForwardBindings(ctx, clients, bastion.OpenSession(p.aws), reportPortForwardProblem, req.Bindings)
-}
-
-func reportPortForwardProblem(err error) {
-	fmt.Fprintf(os.Stderr, "ocel: port forward: %v\n", err)
+	return ensured.ForwardBindings(ctx, clients, bastion.OpenSession(p.aws), req.ReportFailure, req.Bindings)
 }

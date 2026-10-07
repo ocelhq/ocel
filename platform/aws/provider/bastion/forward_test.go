@@ -283,6 +283,48 @@ func TestForwardClosesAConnectionItCannotOpenASessionForAndSaysWhy(t *testing.T)
 	}
 }
 
+func TestForwardEndsEveryForwardAndSaysTheTaskStoppedWhenASessionCannotReachTheTaskAnyMore(t *testing.T) {
+	t.Parallel()
+
+	account, sess := newAccount(), &sessions{failure: errors.New("TargetNotConnected")}
+	reported := make(chan error, 1)
+	forwards := forwarded(t, account, sess, func(err error) {
+		select {
+		case reported <- err:
+		default:
+		}
+	})
+	defer closeAll(forwards)
+	for _, arn := range account.runningTasks() {
+		account.mu.Lock()
+		account.tasks[arn].stopped = true
+		account.mu.Unlock()
+	}
+
+	conn, err := net.Dial("tcp", forwards[0].Address)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+
+	select {
+	case err := <-reported:
+		if !strings.Contains(err.Error(), "stopped in the test") {
+			t.Errorf("reported %q, want why the bastion task stopped", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the failure was not reported")
+	}
+	waitFor(t, "the cache forward to stop accepting", func() bool {
+		probe, err := net.DialTimeout("tcp", forwards[1].Address, time.Second)
+		if err != nil {
+			return true
+		}
+		_ = probe.Close()
+		return false
+	})
+}
+
 func TestForwardBindingsPointsEachBindingAtTheLoopbackPortOfItsHostAndPort(t *testing.T) {
 	t.Parallel()
 

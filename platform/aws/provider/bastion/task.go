@@ -139,3 +139,11 @@ func (t *Task) Stop() error {
 	})
 	return t.stopped
 }
+
+func (t *Task) stoppedReason(ctx context.Context) (string, bool) {
+	described, err := t.clients.ECS.DescribeTasks(ctx, &ecs.DescribeTasksInput{Cluster: aws.String(t.cluster), Tasks: []string{t.arn}})
+	if err != nil || len(described.Tasks) == 0 || aws.ToString(described.Tasks[0].LastStatus) != "STOPPED" {
+		return "", false
+	}
+	return aws.ToString(described.Tasks[0].StoppedReason), true
+}
