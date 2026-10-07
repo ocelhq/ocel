@@ -21,7 +21,7 @@ describe("reading a binding out of the projected live directory", () => {
   it("names the node it runs on when that node cannot hand out its own fs", () => {
     runningOn({ env: { OCEL_LIVE_DIR: "/live" }, versions: { node: "20.11.0" } });
 
-    expect(() => readLiveFile("OCEL_RESOURCE_BUCKET_storage")).toThrow(/node 22\.3/);
+    expect(() => readLiveFile("OCEL_RESOURCE_BUCKET_storage")).toThrow(/Node 20\.16\+ or 22\.3\+/);
     expect(() => readLiveFile("OCEL_RESOURCE_BUCKET_storage")).toThrow(/20\.11\.0/);
   });
 });
