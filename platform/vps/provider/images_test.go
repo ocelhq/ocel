@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -50,6 +51,20 @@ type box struct {
 	routingDoc string
 	refuses    func(command string) (session.Result, bool)
 	follows    func(ctx context.Context, command string, each func(session.Line) error) error
+	forwarded  []string
+}
+
+func (b *box) ForwardPort(_ context.Context, remote string) (string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.forwarded = append(b.forwarded, remote)
+	return fmt.Sprintf("127.0.0.1:%d", 41000+len(b.forwarded)), nil
+}
+
+func (b *box) forwardedTo() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return slices.Clone(b.forwarded)
 }
 
 func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {

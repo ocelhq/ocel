@@ -22,6 +22,7 @@ type Conn interface {
 	Run(ctx context.Context, command string) (string, error)
 	Preflight(ctx context.Context) (session.Facts, error)
 	Destination() session.Destination
+	ForwardPort(ctx context.Context, remote string) (string, error)
 }
 
 type Dial func(ctx context.Context) (Conn, error)

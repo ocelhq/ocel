@@ -153,6 +153,10 @@ func (w wire) Destination() session.Destination { return w.b.dest }
 
 func (w wire) Preflight(context.Context) (session.Facts, error) { return w.b.facts, w.b.floor }
 
+func (w wire) ForwardPort(context.Context, string) (string, error) {
+	return "", errors.New("the bench forwards no port")
+}
+
 func (w wire) Run(ctx context.Context, command string) (string, error) {
 	result, err := w.Stream(ctx, command, nil)
 	if err != nil {

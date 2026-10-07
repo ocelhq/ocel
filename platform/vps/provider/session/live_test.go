@@ -3,14 +3,17 @@
 package session
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -194,3 +197,44 @@ sudo usermod -p '*' ocel-lodger
 home=$(getent passwd ocel-lodger | cut -d: -f6)
 sudo install -d -m 0700 -o ocel-lodger -g ocel-lodger "$home/.ssh"
 sudo install -m 0600 -o ocel-lodger -g ocel-lodger "$HOME/.ssh/authorized_keys" "$home/.ssh/authorized_keys"`
+
+func TestLiveAForwardedPortReachesAServiceOnlyTheHostListensOnAndClosesWithItsContext(t *testing.T) {
+	h := live(t)
+	h.trust(t)
+	session, err := Open(context.Background(), h.target)
+	if err != nil {
+		t.Fatalf("Open() = %v", err)
+	}
+	defer session.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	local, err := session.ForwardPort(ctx, "127.0.0.1:22")
+	if err != nil {
+		t.Fatalf("ForwardPort() = %v", err)
+	}
+	conn, err := net.DialTimeout("tcp", local, 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial the forward at %s: %v", local, err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	banner, err := bufio.NewReader(conn).ReadString('\n')
+	conn.Close()
+	if err != nil || !strings.HasPrefix(banner, "SSH-") {
+		t.Fatalf("the forward to the host's own sshd said %q, %v, want its banner", banner, err)
+	}
+
+	cancel()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		conn, err := net.DialTimeout("tcp", local, time.Second)
+		if err != nil {
+			return
+		}
+		conn.Close()
+		if time.Now().After(deadline) {
+			t.Fatal("the forward still listened after its context ended")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
