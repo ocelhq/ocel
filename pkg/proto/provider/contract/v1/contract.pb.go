@@ -2341,6 +2341,7 @@ type ProvisionInfraRequest struct {
 	Environment    *v1.Environment        `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
 	Edge           *EdgeSelection         `protobuf:"bytes,3,opt,name=edge,proto3" json:"edge,omitempty"`
 	InlineBindings []*v13.Binding         `protobuf:"bytes,4,rep,name=inline_bindings,json=inlineBindings,proto3" json:"inline_bindings,omitempty"`
+	AliasToken     string                 `protobuf:"bytes,5,opt,name=alias_token,json=aliasToken,proto3" json:"alias_token,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2401,6 +2402,13 @@ func (x *ProvisionInfraRequest) GetInlineBindings() []*v13.Binding {
 		return x.InlineBindings
 	}
 	return nil
+}
+
+func (x *ProvisionInfraRequest) GetAliasToken() string {
+	if x != nil {
+		return x.AliasToken
+	}
+	return ""
 }
 
 type ShapeRequest struct {
@@ -6271,12 +6279,14 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0finline_bindings\x18\a \x03(\v2\x1b.common.bindings.v1.BindingR\x0einlineBindings\x129\n" +
 	"\valias_token\x18\b \x01(\tB\x18\xbaH\x15r\x132\x11^([a-z2-7]{16})?$R\n" +
 	"aliasToken\x12+\n" +
-	"\x11infra_provisioned\x18\t \x01(\bR\x10infraProvisioned\"\xa0\x02\n" +
+	"\x11infra_provisioned\x18\t \x01(\bR\x10infraProvisioned\"\xdb\x02\n" +
 	"\x15ProvisionInfraRequest\x12B\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x1e.provider.contract.v1.ManifestB\x06\xbaH\x03\xc8\x01\x01R\bmanifest\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x127\n" +
 	"\x04edge\x18\x03 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12D\n" +
-	"\x0finline_bindings\x18\x04 \x03(\v2\x1b.common.bindings.v1.BindingR\x0einlineBindings\"\xd1\x01\n" +
+	"\x0finline_bindings\x18\x04 \x03(\v2\x1b.common.bindings.v1.BindingR\x0einlineBindings\x129\n" +
+	"\valias_token\x18\x05 \x01(\tB\x18\xbaH\x15r\x132\x11^([a-z2-7]{16})?$R\n" +
+	"aliasToken\"\xd1\x01\n" +
 	"\fShapeRequest\x12B\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x1e.provider.contract.v1.ManifestB\x06\xbaH\x03\xc8\x01\x01R\bmanifest\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x127\n" +

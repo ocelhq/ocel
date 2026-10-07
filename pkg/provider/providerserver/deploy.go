@@ -1,7 +1,6 @@
 package providerserver
 
 import (
-	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -48,7 +47,11 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		if err := refuseInfraProvisionedDeploy(req); err != nil {
 			return nil, err
 		}
-		run, err := h.openDeploy(ctx, req, sender)
+		spec, err := newDeploySpec(req)
+		if err != nil {
+			return nil, err
+		}
+		run, err := h.openDeploy(ctx, req, spec, sender)
 		if err != nil {
 			return nil, err
 		}
@@ -101,7 +104,7 @@ func (r *deployRun) describeInfra() string {
 func (r *deployRun) manifestResourceNames() []string {
 	names := make([]string, 0, len(r.manifest.GetResources()))
 	for _, resource := range r.manifest.GetResources() {
-		names = append(names, cmp.Or(resource.GetLogicalName(), resource.GetResource().GetName()))
+		names = append(names, resourceName(resource))
 	}
 	return names
 }
@@ -185,7 +188,8 @@ type deployRun struct {
 
 	replaces string
 
-	infraProvisioned bool
+	infraProvisioned     bool
+	infraHoldsUndeclared bool
 
 	dry           bool
 	dryRunPlan    dryRunPlan
@@ -228,16 +232,16 @@ func (r *deployRun) isProvisioning(app string) bool {
 	return r.provisioning[app]
 }
 
-func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest, sender *eventStream) (*deployRun, error) {
-	p, gate, err := h.gate(req.GetEdge().GetKind())
-	if err != nil {
-		return nil, err
-	}
+func newDeploySpec(req *contractv1.DeployRequest) (provider.DeploySpec, error) {
 	promotionID, err := newPromotionID()
 	if err != nil {
-		return nil, err
+		return provider.DeploySpec{}, err
 	}
-	spec, err := buildDeploySpec(req, promotionID)
+	return buildDeploySpec(req, promotionID)
+}
+
+func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest, spec provider.DeploySpec, sender *eventStream) (*deployRun, error) {
+	p, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +347,7 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 }
 
 func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
-	if err := r.refuseUnprovisionedInfra(ctx); err != nil {
+	if err := r.readProvisionedInfra(ctx); err != nil {
 		return err
 	}
 	if err := r.refuseOtherLifecycle(ctx); err != nil {
@@ -855,6 +859,42 @@ func (r *deployRun) checkNeeds(ctx context.Context) error {
 }
 
 func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error {
+	if err := r.refuseUnsupportedDeclarations(ctx); err != nil {
+		return err
+	}
+	if err := r.refuseContainerValues(ctx); err != nil {
+		return err
+	}
+	preflightDeploy := r.provider.Hooks().PreflightDeploy
+	if preflightDeploy == nil {
+		return nil
+	}
+	resources, err := manifestResources(r.manifest)
+	if err != nil {
+		return err
+	}
+	grants, err := r.publishedBindings().Published(ctx)
+	if err != nil {
+		return err
+	}
+	apps, err := r.usage(resources, grants)
+	if err != nil {
+		return err
+	}
+	return preflightDeploy(ctx, provider.DeployPreflight{
+		Deploy:            r.spec,
+		PreviewBaseDomain: r.previewOn,
+		Edge:              r.front.Kind(),
+		Resources:         resources,
+		Grants:            grants,
+		Apps:              apps,
+		Progress:          progress,
+		WrittenBy:         r.gate.WrittenBy,
+		Dry:               r.dry,
+	})
+}
+
+func (r *deployRun) refuseUnsupportedDeclarations(ctx context.Context) error {
 	if err := RefuseUnsupportedTopicsTasksAndWorkers(r.provider.Facts(), r.manifest); err != nil {
 		return err
 	}
@@ -875,33 +915,10 @@ func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error 
 	if err := RefuseUnservedProxiedBindings(r.provider.Facts().Vendor, r.provider.Facts().Bindings, proxied, resources, grants); err != nil {
 		return refusal.Refuse(refusal.CodeInvalid, "%s", err)
 	}
-	if err := r.refuseContainerValues(ctx); err != nil {
-		return err
-	}
 	if facts := r.provider.Facts(); !facts.RendersTransforms {
-		if err := provider.RefuseTransforms(facts.Vendor, r.transforms); err != nil {
-			return err
-		}
+		return provider.RefuseTransforms(facts.Vendor, r.transforms)
 	}
-	preflightDeploy := r.provider.Hooks().PreflightDeploy
-	if preflightDeploy == nil {
-		return nil
-	}
-	apps, err := r.usage(resources, grants)
-	if err != nil {
-		return err
-	}
-	return preflightDeploy(ctx, provider.DeployPreflight{
-		Deploy:            r.spec,
-		PreviewBaseDomain: r.previewOn,
-		Edge:              r.front.Kind(),
-		Resources:         resources,
-		Grants:            grants,
-		Apps:              apps,
-		Progress:          progress,
-		WrittenBy:         r.gate.WrittenBy,
-		Dry:               r.dry,
-	})
+	return nil
 }
 
 func (r *deployRun) usage(resources []provider.Resource, published []provider.Binding) ([]provider.AppUsage, error) {
@@ -935,8 +952,8 @@ func boundName(resource provider.Resource) string {
 }
 
 func (r *deployRun) provision(ctx context.Context) error {
-	if !r.infraProvisioned {
-		if err := r.provisionInfra(ctx); err != nil {
+	if !r.infraProvisioned || r.infraHoldsUndeclared {
+		if err := r.provisionInfra(ctx, nil); err != nil {
 			return err
 		}
 	}
@@ -977,11 +994,26 @@ func appOutcome(app string, err error) *progressv1.AppResult {
 	return &progressv1.AppResult{App: app, Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED}
 }
 
-func (r *deployRun) provisionInfra(ctx context.Context) error {
+func (r *deployRun) provisionInfra(ctx context.Context, undeclared []*contractv1.ManifestResource) error {
 	if isEphemeralPreview(r.spec) {
 		return nil
 	}
 	resources, err := manifestResources(r.manifest)
+	if err != nil {
+		return err
+	}
+	for _, held := range undeclared {
+		resource, err := manifestResource(held)
+		if err != nil {
+			return err
+		}
+		resources = append(resources, resource)
+	}
+	declared, err := encodeResources(r.manifest.GetResources())
+	if err != nil {
+		return err
+	}
+	holds, err := encodeResources(append(slices.Clone(r.manifest.GetResources()), undeclared...))
 	if err != nil {
 		return err
 	}
@@ -1020,14 +1052,11 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 				return err
 			}
 			r.bindings = result.Bindings
-			digest, err := readResourceDigest(r.manifest)
-			if err != nil {
-				return err
-			}
 			return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra, stackrecords.Stack{
 				Kind:           provider.StackInfra,
 				Bindings:       result.Bindings,
-				ResourceDigest: digest,
+				Resources:      holds,
+				ResourceDigest: digestResources(declared),
 				WrittenBy:      provider.WrittenByVersion(""),
 			})
 		})

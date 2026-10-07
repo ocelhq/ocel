@@ -2,10 +2,13 @@ package providerserver_test
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -14,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -57,6 +61,15 @@ func provisionedInfra(t *testing.T, client contractv1connect.ProviderServiceClie
 	if !result.GetSuccess() {
 		t.Fatalf("ProvisionInfra() = %q, want it to succeed", result.GetError())
 	}
+}
+
+func infraRefusal(t *testing.T, client contractv1connect.ProviderServiceClient, req *contractv1.ProvisionInfraRequest) string {
+	t.Helper()
+	result, err := provisionInfraStream(t, client, req)
+	if err == nil && result.GetSuccess() {
+		t.Fatal("ProvisionInfra() succeeded, want it refused")
+	}
+	return result.GetError() + connectMessage(err)
 }
 
 func reconciledEdgeStacks(vendor *fake.Provider) int {
@@ -180,5 +193,201 @@ func TestProvisionInfraRefusesAManifestDeclaringApps(t *testing.T) {
 	}
 	if specs := vendor.FakeStacks().Provisioned(); len(specs) != 0 {
 		t.Errorf("the refused ProvisionInfra provisioned %d stacks, want none", len(specs))
+	}
+}
+
+func TestProvisionInfraProvisionsTheTopicsOfWorkersWhoseAppsAreNotBuiltYet(t *testing.T) {
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)).WithFacts(runningWorkers)
+	client := servedBy(t, vendor)
+
+	req := deployRequest()
+	req.Manifest.Resources = append(req.Manifest.Resources, topicResource(resourcesv1.ResourceType_RESOURCE_TYPE_TASK, "resize-image"))
+	req.Manifest.Workers = []*contractv1.ManifestWorker{{Name: "worker", App: "web", Compute: string(provider.ComputeServerless)}}
+	provisionedInfra(t, client, infraRequest(req))
+
+	specs := vendor.FakeStacks().Provisioned()
+	if len(specs) != 1 || len(specs[0].Resources) != 2 {
+		t.Fatalf("ProvisionInfra() provisioned %d stacks, want the infra stack with orders and resize-image", len(specs))
+	}
+}
+
+func TestProvisionInfraRefusesAConsumerOnAWorkerTheManifestDoesNotDeclare(t *testing.T) {
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).WithProjectDir(workingDir(t)).WithFacts(runningWorkers)
+	client := servedBy(t, vendor)
+
+	req := deployRequest()
+	req.Manifest.Resources = append(req.Manifest.Resources, topicResource(resourcesv1.ResourceType_RESOURCE_TYPE_TASK, "resize-image"))
+	_, err := provisionInfraStream(t, client, infraRequest(req))
+	if code, _ := provider.RefusedCode(err); code != refusal.CodeInvalid {
+		t.Fatalf("ProvisionInfra() = %v, want it refused as invalid: the task's consumer runs on no declared worker", err)
+	}
+	if specs := vendor.FakeStacks().Provisioned(); len(specs) != 0 {
+		t.Errorf("the refused ProvisionInfra provisioned %d stacks, want none", len(specs))
+	}
+}
+
+func legacyResource() *contractv1.ManifestResource {
+	return &contractv1.ManifestResource{
+		LogicalName: "legacy",
+		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "legacy"},
+	}
+}
+
+func lastInfraResources(vendor *fake.Provider) []string {
+	var names []string
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.Kind != provider.StackInfra {
+			continue
+		}
+		names = names[:0]
+		for _, resource := range spec.Resources {
+			names = append(names, resource.Name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+func TestProvisionInfraKeepsAResourceNoLongerDeclaredUntilTheDeployOverItRemovesIt(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	before := deployRequest()
+	before.Manifest.Resources = append(before.Manifest.Resources, legacyResource())
+	provisionedInfra(t, client, infraRequest(before))
+	before.InfraProvisioned = true
+	if result, _ := deploy(t, client, before); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	after := deployRequest()
+	provisionedInfra(t, client, infraRequest(after))
+
+	if held := lastInfraResources(vendor); !slices.Equal(held, []string{"legacy", "orders"}) {
+		t.Errorf("ProvisionInfra() left the infra stack holding %v, want legacy kept beside orders: a build that fails next leaves the live release reading legacy", held)
+	}
+	if _, published := storedBindings(t, vendor)["legacy"]; !published {
+		t.Error("ProvisionInfra() pruned legacy's binding, which the live release still reads until a deploy replaces it")
+	}
+
+	after.InfraProvisioned = true
+	if result, _ := deploy(t, client, after); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if held := lastInfraResources(vendor); !slices.Equal(held, []string{"orders"}) {
+		t.Errorf("the deploy over the infra left it holding %v, want only orders: the deploy that no longer declares legacy removes it", held)
+	}
+	if _, published := storedBindings(t, vendor)["legacy"]; published {
+		t.Error("the deploy that removed legacy left its binding published")
+	}
+}
+
+func TestADeployOverInfraHoldingOnlyWhatItDeclaresProvisionsNoInfra(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	req := deployRequest()
+	provisionedInfra(t, client, infraRequest(req))
+
+	req.InfraProvisioned = true
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	infra := 0
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.Kind == provider.StackInfra {
+			infra++
+		}
+	}
+	if infra != 1 {
+		t.Errorf("the infra stack was provisioned %d times, want once, by ProvisionInfra", infra)
+	}
+}
+
+func TestProvisionInfraRefusesAProductionProjectThatDeclaresNoHostname(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+
+	req := infraRequest(deployRequest())
+	req.Manifest.Domains = nil
+	if said := infraRefusal(t, client, req); !strings.Contains(said, "domains.production") {
+		t.Fatalf("ProvisionInfra() = %q, want it refused for the production domain the project does not declare", said)
+	}
+	if specs := vendor.FakeStacks().Provisioned(); len(specs) != 0 {
+		t.Errorf("the refused ProvisionInfra provisioned %d stacks, want none: the deploy it precedes is refused", len(specs))
+	}
+}
+
+func TestProvisionInfraRefusesATaskOnAProviderThatRunsNoWorker(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+
+	req := deployRequest()
+	req.Manifest.Resources = append(req.Manifest.Resources, topicResource(resourcesv1.ResourceType_RESOURCE_TYPE_TASK, "resize-image"))
+	req.Manifest.Workers = []*contractv1.ManifestWorker{{Name: "worker", App: "web", Compute: string(provider.ComputeServerless)}}
+	if said := infraRefusal(t, client, infraRequest(req)); !strings.Contains(said, "unsupported") {
+		t.Fatalf("ProvisionInfra() = %q, want it refused as unsupported", said)
+	}
+	if specs := vendor.FakeStacks().Provisioned(); len(specs) != 0 {
+		t.Errorf("the refused ProvisionInfra provisioned %d stacks, want none", len(specs))
+	}
+}
+
+func readProjectRecord(t *testing.T, vendor *fake.Provider) (stackrecords.Project, bool) {
+	t.Helper()
+	row, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.ProjectKey(environment.TierProduction, "shop"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(row.Value) == 0 {
+		return stackrecords.Project{}, false
+	}
+	var recorded stackrecords.Project
+	if err := json.Unmarshal(row.Value, &recorded); err != nil {
+		t.Fatal(err)
+	}
+	return recorded, true
+}
+
+func TestProvisionInfraRecordsAProjectNoDeployRecordedYet(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+
+	if _, recorded := readProjectRecord(t, vendor); !recorded {
+		t.Error("ProvisionInfra() recorded no project, so if the build then fails nothing finds the infra it left to tear down")
+	}
+}
+
+func TestProvisionInfraKeepsTheFeaturesADeployRecordedForTheProject(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	recordProject(t, vendor, "shop", fake.FeatureCache, fake.FeatureImages)
+
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+
+	recorded, _ := readProjectRecord(t, vendor)
+	if !slices.Equal(recorded.Features, []string{fake.FeatureCache, fake.FeatureImages}) {
+		t.Errorf("after ProvisionInfra() the project records features %v, want the ones its deploy recorded: it reads no app framework", recorded.Features)
+	}
+}
+
+func TestProvisionInfraRecordsAPersistentPreviewWithTheAliasItsBuildWasGiven(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	previewBootstrapped(t, client)
+
+	req := infraRequest(previewRequest())
+	req.AliasToken = "abcdefghijklmnop"
+	provisionedInfra(t, client, req)
+
+	meta, err := stackrecords.ReadEnvironmentMeta(context.Background(), vendor.KeyValues(), environment.TierPreview, "shop", "pr-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.Lifecycle != stackrecords.LifecyclePersistent || meta.AliasToken != "abcdefghijklmnop" {
+		t.Errorf("after ProvisionInfra() pr-7 records lifecycle %q and alias token %q, want persistent and abcdefghijklmnop: a preview whose build fails still has infra to reclaim",
+			meta.Lifecycle, meta.AliasToken)
 	}
 }

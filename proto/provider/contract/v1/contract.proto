@@ -382,6 +382,8 @@ message ProvisionInfraRequest {
   EdgeSelection edge = 3;
 
   repeated common.bindings.v1.Binding inline_bindings = 4;
+
+  string alias_token = 5 [(buf.validate.field).string.pattern = "^([a-z2-7]{16})?$"];
 }
 
 message ShapeRequest {
