@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -88,6 +89,18 @@ func Provisioned(infra *contractv1.Manifest, kind resourcesv1.ResourceType, name
 		}
 	}
 	return "", false
+}
+
+func ProjectUses(infra *contractv1.Manifest) []Use {
+	var uses []Use
+	for _, resource := range infra.GetResources() {
+		declared := resource.GetResource()
+		if _, bindable := naming.BindableAs(declared.GetType()); !bindable || resource.GetBinding() != "" {
+			continue
+		}
+		uses = append(uses, Use{App: Project, Resource: declared.GetType(), Declared: declared.GetName(), Bound: resource.GetLogicalName()})
+	}
+	return uses
 }
 
 func RefusalMessage(err error) string {

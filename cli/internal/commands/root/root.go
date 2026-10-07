@@ -147,7 +147,13 @@ func newCommand() *command {
 	rootCmd.PersistentFlags().StringVarP(&set.config, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
 	rootCmd.PersistentFlags().BoolVar(&set.json, "json", false, "Write the run's events as NDJSON instead of the human view (also $OCEL_JSON)")
 
-	devDependencies := dev.Dependencies{Invocation: invocation, OpenDocker: docker.Open}
+	devDependencies := dev.Dependencies{
+		Invocation:          invocation,
+		OpenDocker:          docker.Open,
+		CollectDeclarations: declaration.Collect,
+		ReadGitBranch:       deploy.ReadGitBranch,
+		DiscoverPRNumber:    deploy.DiscoverPRNumber,
+	}
 	devCmd, runCmd := dev.NewCommand(devDependencies), dev.NewRunCommand(devDependencies)
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		if err := errors.Join(cmd.ValidateRequiredFlags(), cmd.ValidateFlagGroups()); err != nil {

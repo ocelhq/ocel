@@ -73,12 +73,12 @@ func RunOnce(ctx context.Context, opts Options, cwd string) error {
 			return err
 		}
 		defer stream.Close()
-		return runProjected(ctx, opts, env)
+		return RunProjected(ctx, opts, env)
 	}
 	return runStandalone(ctx, opts, cwd)
 }
 
-func runProjected(ctx context.Context, opts Options, env map[string]string) error {
+func RunProjected(ctx context.Context, opts Options, env map[string]string) error {
 	live, err := newLiveDir()
 	if err != nil {
 		return err
@@ -316,5 +316,5 @@ func runStandalone(ctx context.Context, opts Options, cwd string) error {
 	}
 	startup.End(nil)
 
-	return runProjected(ctx, opts, resolved)
+	return RunProjected(ctx, opts, resolved)
 }
