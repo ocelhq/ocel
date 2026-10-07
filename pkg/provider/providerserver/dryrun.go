@@ -14,7 +14,7 @@ import (
 
 const (
 	promotionGroupKind = "promotion"
-	deploymentKind     = "deployment"
+	releaseKind        = "release"
 
 	valuesGroupName = "values"
 
@@ -103,7 +103,7 @@ func (r *deployRun) planPromotionGroup() provider.ChangeGroup {
 	changes := make([]provider.Change, 0, len(r.spec.Apps))
 	for _, entry := range r.spec.Apps {
 		changes = append(changes, provider.Change{
-			Kind:   deploymentKind,
+			Kind:   releaseKind,
 			Name:   entry.App,
 			Action: provider.ActionCreate,
 		})

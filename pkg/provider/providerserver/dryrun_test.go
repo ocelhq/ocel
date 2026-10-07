@@ -83,6 +83,23 @@ func TestADryDeployOrdersItsGroupsTheSameWayEveryRun(t *testing.T) {
 	}
 }
 
+func TestADryDeployPromotesOneReleasePerApp(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	req := twoAppRequest()
+	req.Dry = true
+	result, events := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	promotion := groupOfKind(lastPlan(events), "promotion")
+	if got, want := changeNames(promotion), []string{"release:web", "release:admin"}; !slices.Equal(got, want) {
+		t.Errorf("the promotion group shows %v, want %v: a promotion moves the pointer to one release of each app", got, want)
+	}
+}
+
 func TestADryDeployDrawsThePlanAndChangesNothing(t *testing.T) {
 	builtProject(t)
 	client, p := deployServed(t)
