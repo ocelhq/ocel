@@ -8,10 +8,10 @@ import { AWS_CLI_RETRY_ENV, functionLogGroup } from "./aws.mjs";
 import {
   BUILD_LOG_FILE,
   DEPLOY_RESULT_FILE,
-  envSegment,
   lambdaFunctionNames,
   markerLines,
   STATE_FILE,
+  storageCoordinate,
 } from "./lib.mjs";
 
 const DEFAULT_LOG_WINDOW_MS = 60 * 60 * 1000;
@@ -24,7 +24,7 @@ const appDir = process.cwd();
 const state = readJSON(join(appDir, STATE_FILE)) ?? {};
 const result = readJSON(join(appDir, DEPLOY_RESULT_FILE)) ?? {};
 
-for (const line of markerLines({ buildId: readBuildID(), deploymentId: readDeploymentID() })) {
+for (const line of markerLines({ buildId: readServeBuildID(), deploymentId: readBuildID() })) {
   console.log(line);
 }
 
@@ -32,7 +32,7 @@ replay(BUILD_LOG_FILE, join(appDir, BUILD_LOG_FILE));
 replay("ocel.log", join(appDir, ".ocel", "logs", "ocel.log"));
 printLambdaLogs();
 
-function readBuildID() {
+function readServeBuildID() {
   const path = join(appDir, ".next", "BUILD_ID");
   if (existsSync(path)) {
     return readFileSync(path, "utf8").trim();
@@ -40,7 +40,7 @@ function readBuildID() {
   return result.apps?.[0]?.serveBuildId;
 }
 
-function readDeploymentID() {
+function readBuildID() {
   return result.apps?.[0]?.buildId;
 }
 
@@ -60,7 +60,7 @@ function printLambdaLogs() {
     return;
   }
 
-  const env = result.environment ? envSegment(result.environment) : "";
+  const env = storageCoordinate(result.apps?.[0]?.storagePrefix)?.env ?? "";
   const filters = [
     `Key=ocel:project,Values=${state.slug}`,
     ...(env ? [`Key=ocel:env,Values=${env}`] : []),

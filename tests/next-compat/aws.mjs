@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-import { DEFAULT_NAMESPACE, envSegment, lambdaFunctionNames } from "./lib.mjs";
+import { DEFAULT_NAMESPACE, lambdaFunctionNames } from "./lib.mjs";
 
 export const POLL_INTERVAL_MS = 3_000;
 
@@ -119,17 +119,18 @@ export function describeFunction(functionName) {
   );
 }
 
-export function resolveFunctionName(slug, app, environment, fail) {
-  const env = envSegment(environment);
+export function resolveFunctionName({ project, app, env, release }, fail) {
+  const tags = `ocel:project=${project} ocel:app=${app} ocel:env=${env} ocel:release=${release}`;
   const names = lambdaFunctionNames(
     JSON.parse(
       aws([
         "resourcegroupstaggingapi",
         "get-resources",
         "--tag-filters",
-        `Key=ocel:project,Values=${slug}`,
+        `Key=ocel:project,Values=${project}`,
         `Key=ocel:app,Values=${app}`,
         `Key=ocel:env,Values=${env}`,
+        `Key=ocel:release,Values=${release}`,
         "--resource-type-filters",
         "lambda:function",
         "--output",
@@ -139,7 +140,7 @@ export function resolveFunctionName(slug, app, environment, fail) {
   );
   if (names.length !== 1) {
     fail(
-      `expected exactly one lambda function tagged ocel:project=${slug} ocel:app=${app} ocel:env=${env}, found ` +
+      `expected exactly one lambda function tagged ${tags}, found ` +
         `${names.length}${names.length ? `: ${names.join(", ")}` : ""}`,
     );
   }

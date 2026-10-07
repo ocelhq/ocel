@@ -212,6 +212,23 @@ func TestDeployProvisionsInfraThenAppsAndPromotes(t *testing.T) {
 	}
 }
 
+func TestADeployReportsTheStoragePrefixItWroteEachAppUnder(t *testing.T) {
+	builtProject(t)
+	client, p := deployServed(t)
+
+	result, _ := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	prefix := result.GetApps()[0].GetStoragePrefix()
+	if !regexp.MustCompile(`^prod/shop/web/r[0-9a-f]{8}/$`).MatchString(prefix) {
+		t.Fatalf("the result reports storage prefix %q for web, want prod/shop/web/<release token>/", prefix)
+	}
+	if key := p.FakeStacks().Provisioned()[1].App.Functions[0].Artifact.Key; !strings.HasPrefix(key, prefix) {
+		t.Errorf("web's function artifact is %q, want it under the reported prefix %q", key, prefix)
+	}
+}
+
 func TestDeployRefusesToPublishABlanketGrantWithoutAskingTheProvider(t *testing.T) {
 	builtProject(t)
 	client, p := deployServed(t)

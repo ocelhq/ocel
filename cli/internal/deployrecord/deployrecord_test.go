@@ -9,6 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/project"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
@@ -25,7 +29,7 @@ func TestWriteLeavesTheDocumentedRecordInTheProjectStateDir(t *testing.T) {
 			Provider:    Provider{Name: "fake"},
 			PromotionID: "dep_abc",
 			Tag:         "v1",
-			Apps:        []App{{Name: "web", BuildID: "3f7c1b9a5e2d4c8f", ServeBuildID: "bld_1", URLs: []string{"https://app.example.com"}}},
+			Apps:        []App{{Name: "web", BuildID: "3f7c1b9a5e2d4c8f", ServeBuildID: "bld_1", StoragePrefix: "preview-e2e-42/proj-123/web/r3f7c1b9a/", URLs: []string{"https://app.example.com"}}},
 			DeployedAt:  time.Date(2026, 7, 25, 10, 30, 0, 0, time.UTC),
 		})
 		if err != nil {
@@ -87,6 +91,22 @@ func TestWriteLeavesTheDocumentedRecordInTheProjectStateDir(t *testing.T) {
 			t.Errorf("tag = %q, want the earlier run's value gone", got.Tag)
 		}
 	})
+}
+
+func TestNewRecordsTheStoragePrefixTheDeployWroteEachAppUnder(t *testing.T) {
+	t.Parallel()
+
+	cfg := &project.Project{Dir: t.TempDir(), Slug: "shop"}
+	manifest := &contractv1.Manifest{Apps: []*contractv1.ManifestApp{{Name: "web"}}}
+	results := []*progressv1.AppResult{{App: "web", StoragePrefix: "prod/shop/web/r0123abcd/"}}
+
+	record, err := New(cfg, manifest, &environmentv1.Environment{}, "", "p1", results)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if got := record.Apps[0].StoragePrefix; got != "prod/shop/web/r0123abcd/" {
+		t.Errorf("web's storage prefix = %q, want the one the deploy reported", got)
+	}
 }
 
 func TestClearRemovesAStaleRecordAndToleratesNone(t *testing.T) {

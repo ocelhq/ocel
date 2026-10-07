@@ -19,12 +19,12 @@ import {
   sleep,
 } from "./aws.mjs";
 import {
-  appAssetPrefix,
   bytecodeCacheKeyName,
   bytecodeCacheKeyPrefix,
   bytecodeEmbedEnabled,
   bytecodeRehydrateOutcome,
   DEPLOY_RESULT_FILE,
+  storageCoordinate,
   strongestCoverage,
   summarizeOutcomes,
   TAG_PROBE_ROUTE,
@@ -53,9 +53,9 @@ if (!existsSync(resultPath)) {
   fail(`${resultPath} not found — run this from the deployed app's directory, after a deploy`);
 }
 const result = JSON.parse(readFileSync(resultPath, "utf8"));
-const app = result.apps?.[0];
-if (!result.slug || !app?.name || !app?.serveBuildId) {
-  fail(`${resultPath} is missing slug/app name/build id: ${JSON.stringify(result)}`);
+const coordinate = storageCoordinate(result.apps?.[0]?.storagePrefix);
+if (!coordinate) {
+  fail(`${resultPath} records no storage prefix for its app: ${JSON.stringify(result)}`);
 }
 const deployedAt = Date.parse(result.deployedAt ?? "");
 if (!Number.isFinite(deployedAt)) {
@@ -67,14 +67,8 @@ if (!Number.isFinite(deployedAt)) {
 const bucket =
   process.env.OCEL_ASSET_BUCKET ||
   resolveBootstrapBucket("AssetBucket", "$OCEL_ASSET_BUCKET", fail);
-const prefix = appAssetPrefix({
-  environment: result.environment,
-  slug: result.slug,
-  app: app.name,
-  buildId: app.serveBuildId,
-});
-const functionName = resolveFunctionName(result.slug, app.name, result.environment, fail);
-const keyPrefix = bytecodeCacheKeyPrefix({ prefix, functionName });
+const functionName = resolveFunctionName(coordinate, fail);
+const keyPrefix = bytecodeCacheKeyPrefix({ prefix: coordinate.prefix, functionName });
 log(`expecting one object under s3://${bucket}/${keyPrefix}`);
 
 let names = null;

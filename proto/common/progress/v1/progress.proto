@@ -133,6 +133,8 @@ message AppResult {
   repeated string urls = 4;
 
   string deployment_url = 5;
+
+  string storage_prefix = 6;
 }
 
 message OperationResult {
