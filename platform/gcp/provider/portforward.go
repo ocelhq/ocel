@@ -65,7 +65,7 @@ func (b bastion) forwardPorts(ctx context.Context, tier environment.Tier, target
 	if _, err := tokens.mint(ctx); err != nil {
 		return nil, err
 	}
-	url, err := b.ensure(ctx, tier, targets, progress)
+	url, err := b.provision(ctx, tier, progress)
 	if err != nil {
 		return nil, err
 	}
