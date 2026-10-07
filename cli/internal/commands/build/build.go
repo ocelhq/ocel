@@ -113,7 +113,7 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err e
 
 func hostedWorkers(ctx context.Context, dependencies Dependencies, cfg *project.Project, phase *run.Span) (build.HostedWorkers, error) {
 	said := phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
-	declarations := variables.NewDeclarations(noValues{}, variables.Scope{Apps: variablescope.Apps(cfg)})
+	declarations := variables.NewDeclarations(variables.NoValues{}, variables.Scope{Apps: variablescope.Apps(cfg)})
 	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, said, said)
 	if err != nil {
 		return nil, err
@@ -123,14 +123,6 @@ func hostedWorkers(ctx context.Context, dependencies Dependencies, cfg *project.
 		return nil, err
 	}
 	return placement.HostedWorkers(), nil
-}
-
-type noValues struct{}
-
-func (noValues) List(context.Context) ([]variables.ValueMetadata, error) { return nil, nil }
-
-func (noValues) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
-	return nil, nil
 }
 
 func resolveBuild(ctx context.Context, dependencies Dependencies, building *run.Run, declared *project.Project) (resolved *project.Project, host build.Host, err error) {

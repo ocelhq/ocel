@@ -59,7 +59,7 @@ func runGenerate(ctx context.Context, dependencies Dependencies, cwd string, std
 		return err
 	}
 
-	declarations := variables.NewDeclarations(noValues{}, variables.Scope{Apps: variablescope.Apps(cfg)})
+	declarations := variables.NewDeclarations(variables.NoValues{}, variables.Scope{Apps: variablescope.Apps(cfg)})
 	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, stderr, stderr)
 	if err != nil {
 		return err
@@ -97,12 +97,4 @@ func runGenerate(ctx context.Context, dependencies Dependencies, cwd string, std
 		fmt.Fprintf(stdout, "Generated the realtime channel types in %s\n", realtimetypes.FileName)
 	}
 	return nil
-}
-
-type noValues struct{}
-
-func (noValues) List(context.Context) ([]variables.ValueMetadata, error) { return nil, nil }
-
-func (noValues) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
-	return nil, nil
 }
