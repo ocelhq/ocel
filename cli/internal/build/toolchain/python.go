@@ -88,7 +88,7 @@ func (c Compilation) installRequirements(ctx context.Context, platform string) e
 
 func pipArgs(target, requirements, platform string) []string {
 	return []string{
-		"-m", "pip", "install",
+		"-I", "-m", "pip", "install",
 		"--disable-pip-version-check",
 		"--no-input",
 		"--target", target,

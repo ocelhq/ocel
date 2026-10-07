@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -211,6 +212,33 @@ func TestCompileVendorsWhatTheAppDeclaresIntoTheArtifact(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(functionDir, "six.py")); err != nil {
 		t.Errorf("the artifact contains no six.py: a declared dependency is shipped in the package, since a function has no installer to reach for one: %v", err)
+	}
+}
+
+func TestVendoringRunsTheInterpretersPipAndNeverAModuleOfTheApps(t *testing.T) {
+	t.Parallel()
+
+	if _, err := exec.LookPath(pythonRuntimeCommand); err != nil {
+		t.Skip("no python interpreter on PATH to vendor with")
+	}
+	marker := filepath.Join(t.TempDir(), "ran")
+	source := pythonApp(t, map[string]string{
+		"main.py":          "print('hi')\n",
+		"pip.py":           "open(" + strconv.Quote(marker) + ", 'w').write('the app ran')\n",
+		"requirements.txt": "six==1.17.0\n",
+	})
+	c := Compilation{
+		App:         "web",
+		Framework:   buildoutput.Framework{Name: "python", Arch: "x86_64"},
+		Source:      source,
+		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
+		AppDir:      t.TempDir(),
+	}
+
+	_ = c.installRequirements(context.Background(), "manylinux2014_x86_64")
+
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("vendoring ran the app's own pip.py, want the interpreter's pip whatever the app's directory holds")
 	}
 }
 
