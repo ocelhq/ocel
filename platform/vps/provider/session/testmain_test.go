@@ -36,7 +36,7 @@ func standInForSSH(args []string) int {
 	spec := args[slices.Index(args, "-L")+1]
 	parts := strings.Split(spec, ":")
 	listener, err := net.Listen("tcp", parts[0]+":"+parts[1])
-	if err != nil || os.Getenv(standInEnv) == "refuse" {
+	if err != nil || os.Getenv(standInEnv) == "refuse" || refusesFirst() {
 		os.Stderr.WriteString("bind [" + parts[0] + "]:" + parts[1] + ": Address already in use\n")
 		return 255
 	}
@@ -52,4 +52,16 @@ func standInForSSH(args []string) int {
 	}()
 	_, _ = bufio.NewReader(os.Stdin).ReadString(0)
 	return 0
+}
+
+func refusesFirst() bool {
+	if os.Getenv(standInEnv) != "refuse-first" {
+		return false
+	}
+	marker, err := os.OpenFile(os.Getenv(standInLogEnv), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return false
+	}
+	_ = marker.Close()
+	return true
 }
