@@ -206,8 +206,23 @@ jobs:
       - name: The module builds as buf push sends it
         run: buf build proto --error-format github-actions -o /dev/null
 
-      - name: No wire change the BSR module's consumers would break on
+      - name: A maintainer has not accepted a wire break with the proto:breaking label
+        id: accepted
         if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          labels=$(gh api "repos/$GH_REPO/issues/$PR/labels" --paginate --jq '.[].name')
+          if grep -qxF proto:breaking <<<"$labels"; then
+            echo "::notice::proto:breaking is set; buf breaking does not run"
+            echo "break=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: No wire change the BSR module's consumers would break on
+        if: github.event_name == 'pull_request' && steps.accepted.outputs.break != 'true'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: buf breaking proto --error-format github-actions --against ".git#ref=$BASE,subdir=proto"
