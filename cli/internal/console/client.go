@@ -12,8 +12,12 @@ import (
 	"strings"
 	"time"
 
+	"connectrpc.com/connect"
+
 	"github.com/ocelhq/ocel/cli/internal/invocation"
 )
+
+const connectRoute = "/api/connect"
 
 type Client struct {
 	baseURL   string
@@ -27,6 +31,16 @@ func New(baseURL string) *Client {
 		userAgent: composeUserAgent(os.Getenv),
 		http:      &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+func (c *Client) session(accessToken string) connect.ClientOption {
+	return connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			req.Header().Set("Authorization", "Bearer "+accessToken)
+			req.Header().Set("User-Agent", c.userAgent)
+			return next(ctx, req)
+		}
+	}))
 }
 
 func composeUserAgent(getenv func(string) string) string {
@@ -45,11 +59,6 @@ type Error struct {
 
 func (e *Error) Error() string {
 	return fmt.Sprintf("the console answered %d: %s", e.StatusCode, e.Message)
-}
-
-func hasStatus(err error, status int) bool {
-	var consoleErr *Error
-	return errors.As(err, &consoleErr) && consoleErr.StatusCode == status
 }
 
 func hasCode(err error, code string) bool {

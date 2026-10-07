@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
 func TestComposeUserAgentAddsTheAgentOnlyWhenOneIsDetected(t *testing.T) {
@@ -42,6 +44,20 @@ func TestNewSendsTheUserAgentComposedFromTheProcessEnvironment(t *testing.T) {
 		t.Fatalf("send: %v", err)
 	}
 	if want := "ocel-cli agent/ocel-test"; got != want {
+		t.Errorf("User-Agent = %q, want %q", got, want)
+	}
+}
+
+func TestNewSendsTheSameUserAgentOverConnect(t *testing.T) {
+	t.Setenv("AI_AGENT", "ocel-test_1")
+	service := &projectService{list: func(context.Context, *consolev1.ListProjectsRequest) (*consolev1.ListProjectsResponse, error) {
+		return &consolev1.ListProjectsResponse{}, nil
+	}}
+
+	if _, err := serveProjects(t, service).ListProjects(context.Background(), "tok"); err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if got, want := service.headers.Get("User-Agent"), "ocel-cli agent/ocel-test"; got != want {
 		t.Errorf("User-Agent = %q, want %q", got, want)
 	}
 }
