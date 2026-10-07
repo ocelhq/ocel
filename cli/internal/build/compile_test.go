@@ -203,24 +203,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 		t.Skip("cargo is not on PATH")
 	}
 
-	root := t.TempDir()
-	writeBuildScript(t, root)
-	dir := filepath.Join(root, "apps", "api")
-	for name, body := range map[string]string{
-		"Cargo.toml":  "[package]\nname = \"api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
-		"src/main.rs": "fn main() {}\n",
-	} {
-		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cfg := &project.Project{
-		Dir:  root,
-		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "rust"}}},
-	}
+	root, cfg := writeRustApp(t, "")
 
 	ran := false
 	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error {
@@ -253,6 +236,32 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	}
 }
 
+func writeRustApp(t *testing.T, buildScript string) (string, *project.Project) {
+	t.Helper()
+	root := t.TempDir()
+	writeBuildScript(t, root)
+	dir := filepath.Join(root, "apps", "api")
+	files := map[string]string{
+		"Cargo.toml":  "[package]\nname = \"api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
+		"src/main.rs": "fn main() {}\n",
+	}
+	if buildScript != "" {
+		files["build.rs"] = buildScript
+	}
+	for name, body := range files {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root, &project.Project{
+		Dir:  root,
+		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "rust"}}},
+	}
+}
+
 const buildScriptReadingEveryValue = `use std::{env, fs, path::Path};
 
 fn main() {
@@ -271,25 +280,7 @@ func TestARustBuildThatPrintsASecretAndFailsSaysItNowhere(t *testing.T) {
 	if _, err := exec.LookPath("cargo"); err != nil {
 		t.Skip("cargo is not on PATH")
 	}
-	root := t.TempDir()
-	writeBuildScript(t, root)
-	dir := filepath.Join(root, "apps", "api")
-	for name, body := range map[string]string{
-		"Cargo.toml":  "[package]\nname = \"api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
-		"build.rs":    "fn main() {\n    let dir = std::env::var(\"OCEL_LIVE_DIR\").unwrap();\n    let secret = std::fs::read_to_string(std::path::Path::new(&dir).join(\"SESSION_SECRET\")).unwrap();\n    panic!(\"rejected {secret}\");\n}\n",
-		"src/main.rs": "fn main() {}\n",
-	} {
-		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cfg := &project.Project{
-		Dir:  root,
-		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "rust"}}},
-	}
+	_, cfg := writeRustApp(t, "fn main() {\n    let dir = std::env::var(\"OCEL_LIVE_DIR\").unwrap();\n    let secret = std::fs::read_to_string(std::path::Path::new(&dir).join(\"SESSION_SECRET\")).unwrap();\n    panic!(\"rejected {secret}\");\n}\n")
 	var ended error
 	log := Log{AppLog: func(string) (io.Writer, func(error)) { return io.Discard, func(err error) { ended = err } }}
 
@@ -316,25 +307,7 @@ func TestARustAppsBuildScriptReadsEveryValueTheAppResolvesAndNoneTheDeployersShe
 	t.Setenv("OCEL_VAR_SESSION_SECRET", "stale-from-the-shell")
 	t.Setenv("OCEL_VAR_POSTHOG_ID", "stale-from-the-shell")
 
-	root := t.TempDir()
-	writeBuildScript(t, root)
-	dir := filepath.Join(root, "apps", "api")
-	for name, body := range map[string]string{
-		"Cargo.toml":  "[package]\nname = \"api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
-		"build.rs":    buildScriptReadingEveryValue,
-		"src/main.rs": "fn main() {}\n",
-	} {
-		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cfg := &project.Project{
-		Dir:  root,
-		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "rust"}}},
-	}
+	_, cfg := writeRustApp(t, buildScriptReadingEveryValue)
 	values := map[string]AppVariables{"api": {
 		Env:  map[string]string{"POSTHOG_ID": "ph-api"},
 		Live: map[string]string{"SESSION_SECRET": "ss_live", "STRIPE_API_KEY": "sk_live"},
