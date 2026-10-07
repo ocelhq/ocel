@@ -1,0 +1,176 @@
+package portforward
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"maps"
+	"slices"
+
+	connect "connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
+	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+)
+
+const Project = ""
+
+type Use struct {
+	App      string
+	Resource resourcesv1.ResourceType
+	Declared string
+	Bound    string
+}
+
+type Forwards struct {
+	bindings    map[string]map[string]string
+	unforwarded []string
+	stop        context.CancelFunc
+	ended       chan error
+}
+
+func (f *Forwards) Close() error {
+	if f == nil {
+		return nil
+	}
+	f.stop()
+	ended := <-f.ended
+	if providerprocess.IsCancelled(ended) {
+		ended = nil
+	}
+	return ended
+}
+
+func (f *Forwards) Bindings(app string) map[string]string {
+	if f == nil {
+		return nil
+	}
+	return f.bindings[app]
+}
+
+func (f *Forwards) Apps() []string {
+	if f == nil {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(f.bindings))
+}
+
+func (f *Forwards) Unforwarded() []string {
+	if f == nil {
+		return nil
+	}
+	return f.unforwarded
+}
+
+func Names(uses []Use) (bound, declared []string) {
+	for _, use := range uses {
+		if !slices.Contains(bound, use.Bound) {
+			bound = append(bound, use.Bound)
+		}
+		if !slices.Contains(declared, use.Declared) {
+			declared = append(declared, use.Declared)
+		}
+	}
+	slices.Sort(bound)
+	slices.Sort(declared)
+	return bound, declared
+}
+
+func Provisioned(infra *contractv1.Manifest, kind resourcesv1.ResourceType, name string) (string, bool) {
+	for _, resource := range infra.GetResources() {
+		declared := resource.GetResource()
+		if declared.GetType() == kind && declared.GetName() == name && resource.GetBinding() == "" {
+			return resource.GetLogicalName(), true
+		}
+	}
+	return "", false
+}
+
+func RefusalMessage(err error) string {
+	var rpcErr *connect.Error
+	if errors.As(err, &rpcErr) {
+		return rpcErr.Message()
+	}
+	return err.Error()
+}
+
+func Open(ctx context.Context, p *providerprocess.Provider, uses []Use, req *contractv1.ForwardPortsRequest) (*Forwards, error) {
+	streamCtx, stop := context.WithCancel(ctx)
+	answered := make(chan *contractv1.ForwardPortsResponse, 1)
+	ended := make(chan error, 1)
+	go func() {
+		ended <- providerprocess.ForwardPorts(streamCtx, p, req, func(resp *contractv1.ForwardPortsResponse) {
+			select {
+			case answered <- resp:
+			default:
+			}
+		})
+	}()
+	forwards := &Forwards{stop: stop, ended: ended}
+	resp, err := awaitAnswer(answered, ended)
+	if err != nil {
+		stop()
+		return nil, err
+	}
+	forwards.unforwarded = declaredNames(uses, resp.GetUnforwarded())
+	byApp, err := liveBindings(uses, resp.GetBindings())
+	if err != nil {
+		return nil, errors.Join(err, forwards.Close())
+	}
+	forwards.bindings = byApp
+	return forwards, nil
+}
+
+func declaredNames(uses []Use, bound []string) []string {
+	var declared []string
+	for _, use := range uses {
+		if slices.Contains(bound, use.Bound) && !slices.Contains(declared, use.Declared) {
+			declared = append(declared, use.Declared)
+		}
+	}
+	slices.Sort(declared)
+	return declared
+}
+
+func awaitAnswer(answered <-chan *contractv1.ForwardPortsResponse, ended chan error) (*contractv1.ForwardPortsResponse, error) {
+	select {
+	case resp := <-answered:
+		return resp, nil
+	case err := <-ended:
+		select {
+		case resp := <-answered:
+			ended <- err
+			return resp, nil
+		default:
+		}
+		if err == nil {
+			err = errors.New("provider: ForwardPorts ended without saying which ports it forwarded")
+		}
+		return nil, err
+	}
+}
+
+func liveBindings(uses []Use, forwarded []*bindingsv1.Binding) (map[string]map[string]string, error) {
+	byApp := map[string]map[string]string{}
+	for _, use := range uses {
+		at := slices.IndexFunc(forwarded, func(binding *bindingsv1.Binding) bool { return binding.GetName() == use.Bound })
+		if at < 0 {
+			continue
+		}
+		named := proto.Clone(forwarded[at]).(*bindingsv1.Binding)
+		named.Name = use.Declared
+		encoded, err := binding.Encode(use.Resource, named)
+		if err != nil {
+			return nil, fmt.Errorf("encode the binding of %s: %w", use.Declared, err)
+		}
+		if byApp[use.App] == nil {
+			byApp[use.App] = map[string]string{}
+		}
+		maps.Copy(byApp[use.App], encoded.Env)
+	}
+	return byApp, nil
+}
