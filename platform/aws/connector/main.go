@@ -77,11 +77,11 @@ func run(addr, region, config, keyParameter string) error {
 		return err
 	}
 
-	bootstraps := &deployments{
+	bootstraps := &bootstrapCache{
 		namespace: bootstrap.Namespace(ns),
 		stacks:    cloudformation.NewFromConfig(cfg),
 		now:       time.Now,
-		read:      map[environment.Tier]readDeployment{},
+		read:      map[environment.Tier]cachedBootstrap{},
 	}
 
 	spec := connectorserver.Spec{
@@ -110,7 +110,7 @@ func run(addr, region, config, keyParameter string) error {
 	return nil
 }
 
-func variableStore(cfg aws.Config, bootstraps *deployments) variablestoreserver.Backend {
+func variableStore(cfg aws.Config, bootstraps *bootstrapCache) variablestoreserver.Backend {
 	return variablestoreserver.Backend{
 		KeyValues:     awsports.KeyValues{Dynamo: dynamodb.NewFromConfig(cfg), Tables: bootstraps},
 		Cipher:        awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: bootstraps},
@@ -118,7 +118,7 @@ func variableStore(cfg aws.Config, bootstraps *deployments) variablestoreserver.
 	}
 }
 
-const deploymentsTTL = 5 * time.Minute
+const bootstrapTTL = 5 * time.Minute
 
 type keyReader interface {
 	GetParameter(ctx context.Context, in *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
@@ -167,25 +167,25 @@ func woken(raw []byte) bool {
 	return json.Unmarshal(raw, &wake) == nil && wake.Ocel == awsconnector.WakeHeartbeat
 }
 
-type deployments struct {
+type bootstrapCache struct {
 	namespace bootstrap.Namespace
 	stacks    cfn.StacksAPI
 	now       func() time.Time
 
 	mu   sync.Mutex
-	read map[environment.Tier]readDeployment
+	read map[environment.Tier]cachedBootstrap
 }
 
-type readDeployment struct {
+type cachedBootstrap struct {
 	deployed bootstrap.Deployed
 	at       time.Time
 }
 
-func (d *deployments) resolve(ctx context.Context, tier environment.Tier) (bootstrap.Deployed, error) {
+func (d *bootstrapCache) resolve(ctx context.Context, tier environment.Tier) (bootstrap.Deployed, error) {
 	d.mu.Lock()
 	memo, known := d.read[tier]
 	d.mu.Unlock()
-	if known && d.now().Sub(memo.at) < deploymentsTTL {
+	if known && d.now().Sub(memo.at) < bootstrapTTL {
 		return memo.deployed, nil
 	}
 	deployed, err := bootstrap.CheckDeployedFor(ctx, d.stacks, d.namespace, tier)
@@ -193,22 +193,22 @@ func (d *deployments) resolve(ctx context.Context, tier environment.Tier) (boots
 		return bootstrap.Deployed{}, err
 	}
 	d.mu.Lock()
-	d.read[tier] = readDeployment{deployed: deployed, at: d.now()}
+	d.read[tier] = cachedBootstrap{deployed: deployed, at: d.now()}
 	d.mu.Unlock()
 	return deployed, nil
 }
 
-func (d *deployments) Table(ctx context.Context, tier environment.Tier) (string, error) {
+func (d *bootstrapCache) Table(ctx context.Context, tier environment.Tier) (string, error) {
 	deployed, err := d.resolve(ctx, tier)
 	return deployed.StateTable, err
 }
 
-func (d *deployments) ValuesTable(ctx context.Context, tier environment.Tier) (string, error) {
+func (d *bootstrapCache) ValuesTable(ctx context.Context, tier environment.Tier) (string, error) {
 	deployed, err := d.resolve(ctx, tier)
 	return deployed.VariablesTable, err
 }
 
-func (d *deployments) Key(ctx context.Context, tier environment.Tier) (string, error) {
+func (d *bootstrapCache) Key(ctx context.Context, tier environment.Tier) (string, error) {
 	deployed, err := d.resolve(ctx, tier)
 	return deployed.VariablesKeyARN, err
 }

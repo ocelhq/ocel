@@ -65,7 +65,7 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 		return described, nil
 	}
 	described.Hostname = hostOf(deployed.Uri)
-	described.Installed = &provider.ConnectorRelease{
+	described.Installed = &provider.InstalledConnector{
 		Version:   connectorVersionOf(deployed),
 		PublicKey: connectorPublicKeyOf(deployed),
 		Compute:   connectorCompute,

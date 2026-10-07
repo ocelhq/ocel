@@ -16,10 +16,10 @@ type ConnectorTarget struct {
 	Hostname    string
 	OS          string
 	Arch        string
-	Installed   *ConnectorRelease
+	Installed   *InstalledConnector
 }
 
-type ConnectorRelease struct {
+type InstalledConnector struct {
 	Version   string
 	PublicKey string
 	Compute   Compute
