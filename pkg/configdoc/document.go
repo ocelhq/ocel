@@ -18,7 +18,40 @@ type Document struct {
 	Apps          []AppConfig          `json:"apps,omitempty" doc:"The apps this project deploys. Left off, ocel detects one at the project root."`
 	Domains       *ProjectDomainConfig `json:"domains,omitempty" doc:"The hostnames this project is served on."`
 	Registry      *RegistryConfig      `json:"registry,omitempty" doc:"Where this project's container images are pushed."`
+	Lifecycle     *LifecycleConfig     `json:"lifecycle,omitempty" doc:"Commands ocel runs on this machine at points of a deploy."`
 	EnvSource     *EnvSourceConfig     `json:"envSource,omitempty" doc:"Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev."`
+}
+
+type LifecycleConfig struct {
+	PreBuild *LifecycleCommand `json:"preBuild,omitempty" doc:"Runs once per deploy, after the project's infrastructure is provisioned and before any app is built, with the bindings of the deployed environment. A non-zero exit or a timeout stops the deploy before it builds anything, and nothing is promoted. Written as the command alone, or as an object."`
+}
+
+type LifecycleCommand struct {
+	Command  string `json:"command" doc:"The shell command to run, from the project directory, or from the app's directory when app is set."`
+	App      string `json:"app,omitempty" doc:"The app whose variables the command also receives, and whose directory it runs from. Left off, the command gets the bindings alone and runs from the project directory."`
+	Previews string `json:"previews,omitempty" doc:"Which previews run the command: persistent previews, which have infrastructure of their own, all previews, or none. Production always runs it. Left off, persistent: an ephemeral preview gets no infrastructure of its own and shares the preview tier's databases, so a migration there would change what every other ephemeral preview reads." enum:"persistent,all,none"`
+	Timeout  string `json:"timeout,omitempty" doc:"How long the command may run, as a duration such as 90s or 15m, before it is stopped and the deploy fails. Left off, 30m."`
+}
+
+func (LifecycleCommand) AlsoAString() {}
+
+func (c *LifecycleCommand) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) > 0 && trimmed[0] == '"' {
+		var command string
+		if err := json.Unmarshal(trimmed, &command); err != nil {
+			return err
+		}
+		*c = LifecycleCommand{Command: command}
+		return nil
+	}
+	type fields LifecycleCommand
+	var decoded fields
+	if err := json.Unmarshal(trimmed, &decoded); err != nil {
+		return err
+	}
+	*c = LifecycleCommand(decoded)
+	return nil
 }
 
 type DiscoveryConfig struct {

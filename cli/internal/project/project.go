@@ -42,6 +42,7 @@ type Project struct {
 	Bindings       []Binding
 	Domains        Domains
 	Registry       *Registry
+	Lifecycle      Lifecycle
 	EnvSource      envsource.Tiers
 	Dir            string
 	Path           string
@@ -131,6 +132,11 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 		return nil, newInvalidConfigError(fmt.Errorf("%s has an invalid \"registry\": %w", configPath, err), "registry")
 	}
 
+	lifecycle, err := normalizeLifecycle(doc.Lifecycle, apps)
+	if err != nil {
+		return nil, newInvalidConfigError(fmt.Errorf("%s has an invalid %w", configPath, err), "lifecycle")
+	}
+
 	var discoveryPaths []string
 	if doc.Discovery != nil {
 		discoveryPaths = doc.Discovery.Paths
@@ -148,6 +154,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 		Bindings:       bindings,
 		Domains:        domains,
 		Registry:       registry,
+		Lifecycle:      lifecycle,
 		EnvSource:      doc.EnvSource.Tiers(),
 		Dir:            filepath.Dir(configPath),
 		Path:           configPath,
