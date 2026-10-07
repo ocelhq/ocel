@@ -173,3 +173,37 @@ test("stops on SIGTERM with no control socket at the other end", async () => {
   expect(await stopped).toBe("SIGTERM");
   expect(output).toBe("");
 });
+
+test("keeps serving after the control socket's other end goes away", async () => {
+  const sockDir = await mkdtemp(join(tmpdir(), "ocel-ctrl-"));
+  dirs.push(sockDir);
+  const sockPath = join(sockDir, "control.sock");
+  const controlServer = net.createServer((conn) => conn.destroy());
+  await new Promise<void>((done) => controlServer.listen(sockPath, done));
+  const handler = await handlerFile(`export default (req, res) => res.end("ok");
+`);
+  const port = await freePort();
+  const child = spawn(process.execPath, [serveBundle], {
+    env: {
+      ...process.env,
+      OCEL_HANDLER: handler,
+      PORT: String(port),
+      OCEL_CONTROL_SOCKET: sockPath,
+    },
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+  children.push(child);
+  let exited = false;
+  child.once("exit", () => {
+    exited = true;
+  });
+
+  await reachable(port);
+  for (let i = 0; i < 5; i++) {
+    expect(await (await fetch(`http://127.0.0.1:${port}/`)).text()).toBe("ok");
+    await new Promise((wait) => setTimeout(wait, 50));
+  }
+
+  expect(exited).toBe(false);
+  await new Promise<void>((done) => controlServer.close(() => done()));
+});
