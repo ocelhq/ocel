@@ -2,12 +2,9 @@ package gcp
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"net/netip"
 	"slices"
-	"sync"
 
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
@@ -22,21 +19,15 @@ import (
 )
 
 const (
-	bastionImageName   = "ocel-bastion"
-	bastionImagePath   = "/bastion"
-	bastionImageTagLen = 32
+	bastionImageName = "ocel-bastion"
+	bastionImagePath = "/bastion"
 
 	bastionConcurrency  = 250
 	bastionMaxInstances = 2
 	bastionCreateTries  = 2
 )
 
-var bastionImageTag = sync.OnceValue(func() string {
-	sum := sha256.New()
-	sum.Write([]byte(staticImage + "\x00"))
-	sum.Write(payloads.Bastion())
-	return hex.EncodeToString(sum.Sum(nil))[:bastionImageTagLen]
-})
+var bastionImageTag = binaryImageTag(payloads.Bastion)
 
 type bastion struct {
 	clients        *clients
@@ -164,7 +155,7 @@ func (b bastion) ensureAccount(ctx context.Context, tier environment.Tier) error
 }
 
 func sameBastion(current, desired *run.GoogleCloudRunV2Service) bool {
-	return sameGateway(current, desired) &&
+	return sameServing(current, desired) &&
 		current.IapEnabled == desired.IapEnabled &&
 		slices.Equal(current.CustomAudiences, desired.CustomAudiences) &&
 		sameVPCAccess(current.Template.VpcAccess, desired.Template.VpcAccess)
@@ -194,7 +185,7 @@ func (b bastion) remove(ctx context.Context, tier environment.Tier, progress pro
 }
 
 func (b bastion) removeAccount(ctx context.Context, tier environment.Tier, progress progress.Log) error {
-	found, err := b.accountExists(ctx, tier)
+	found, err := b.clients.accountExists(ctx, b.clients.BastionAccount(tier))
 	if err != nil || !found {
 		return err
 	}
@@ -203,20 +194,4 @@ func (b bastion) removeAccount(ctx context.Context, tier environment.Tier, progr
 		ensureProgress(progress).Say("Deleted the " + b.clients.BastionAccount(tier) + " service account the bastion ran as")
 	}
 	return err
-}
-
-func (b bastion) accountExists(ctx context.Context, tier environment.Tier) (bool, error) {
-	accounts, err := b.clients.Accounts()
-	if err != nil {
-		return false, err
-	}
-	account := b.clients.BastionAccount(tier)
-	_, err = attempted(ctx, accounts.Projects.ServiceAccounts.Get(accountPath(b.clients, account)).Context(ctx).Do)
-	if absent(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("read the %s service account: %w", account, err)
-	}
-	return true, nil
 }

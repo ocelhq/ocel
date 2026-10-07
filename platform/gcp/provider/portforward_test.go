@@ -65,11 +65,11 @@ func TestOneIdentityTokenServesEveryConnectionOfABuildUntilItIsOldEnoughToRenew(
 		},
 	}
 
-	first, _ := tokens.mint(context.Background())
+	first, _ := tokens.mintOrReuse(context.Background())
 	now = now.Add(identityTokenLife - time.Minute)
-	again, _ := tokens.mint(context.Background())
+	again, _ := tokens.mintOrReuse(context.Background())
 	now = now.Add(2 * time.Minute)
-	renewed, _ := tokens.mint(context.Background())
+	renewed, _ := tokens.mintOrReuse(context.Background())
 
 	if first != "token-a" || again != "token-a" || renewed != "token-b" {
 		t.Errorf("tokens = %q, %q, %q, want one token reused until it is older than %s", first, again, renewed, identityTokenLife)

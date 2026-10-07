@@ -4,8 +4,11 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"sync"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
@@ -13,6 +16,17 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 )
+
+const binaryImageTagLen = 32
+
+func binaryImageTag(payload func() []byte) func() string {
+	return sync.OnceValue(func() string {
+		sum := sha256.New()
+		sum.Write([]byte(staticImage + "\x00"))
+		sum.Write(payload())
+		return hex.EncodeToString(sum.Sum(nil))[:binaryImageTagLen]
+	})
+}
 
 func (p *Provider) pushBinary(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error {
 	base, err := p.based(ctx, staticImage)
