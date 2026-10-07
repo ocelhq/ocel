@@ -60,11 +60,23 @@ type sessions struct {
 	opened  []opened
 	streams []*echoStream
 	failure error
+
+	afterStop       func() bool
+	afterStopOpened int
+}
+
+func (s *sessions) openedAfterStop() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.afterStopOpened
 }
 
 func (s *sessions) open(_ context.Context, target, host string, port int) (bastion.Stream, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.afterStop != nil && s.afterStop() {
+		s.afterStopOpened++
+	}
 	if s.failure != nil {
 		return nil, s.failure
 	}
@@ -318,6 +330,41 @@ func TestForwardBindingsRefusesABindingThatNamesNoHostOrNoNumericPort(t *testing
 	}
 	if calls := account.called("RunTask"); len(calls) != 0 {
 		t.Errorf("RunTask was called %d times for bindings that could never be forwarded", len(calls))
+	}
+}
+
+func TestForwardOpensNoSessionOnceItsTaskIsStoppedHoweverManyConnectionsArriveAsItCloses(t *testing.T) {
+	t.Parallel()
+
+	for range 20 {
+		account := newAccount()
+		sess := &sessions{}
+		var late sync.WaitGroup
+		forwards := forwarded(t, account, sess, nil)
+		sess.mu.Lock()
+		sess.afterStop = func() bool { return len(account.runningTasks()) == 0 }
+		sess.mu.Unlock()
+		dialing := make(chan struct{})
+		for range 48 {
+			late.Add(1)
+			go func() {
+				defer late.Done()
+				<-dialing
+				if conn, err := net.Dial("tcp", forwards[0].Address); err == nil {
+					_, _ = conn.Write([]byte("x"))
+					defer conn.Close()
+					time.Sleep(time.Millisecond)
+				}
+			}()
+		}
+		close(dialing)
+		closeAll(forwards)
+		late.Wait()
+		time.Sleep(5 * time.Millisecond)
+
+		if opened := sess.openedAfterStop(); opened > 0 {
+			t.Fatalf("%d sessions were opened after the forwards closed and their task stopped", opened)
+		}
 	}
 }
 
