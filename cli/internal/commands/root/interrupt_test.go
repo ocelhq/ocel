@@ -1,11 +1,14 @@
 package root
 
 import (
+	"errors"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
+	"github.com/ocelhq/ocel/cli/internal/livedir"
 )
 
 func TestAnInterruptedDevRunHasTimeToStopItsContainersBeforeTheHardExit(t *testing.T) {
@@ -17,5 +20,18 @@ func TestAnInterruptedDevRunHasTimeToStopItsContainersBeforeTheHardExit(t *testi
 	}
 	if devShutdownWindow != 14*time.Second {
 		t.Errorf("devShutdownWindow = %s, want 14s", devShutdownWindow)
+	}
+}
+
+func TestAHardExitLeavesNoLiveDirOnDisk(t *testing.T) {
+	dir, err := livedir.Write(t.TempDir(), "ocel-live-", map[string]string{"SESSION_SECRET": "ss_live"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	killChildrenAndRemoveLiveDirs()
+
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("stat %s after the hard exit's teardown: err = %v, want it removed", dir, err)
 	}
 }
