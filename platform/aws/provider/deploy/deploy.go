@@ -125,7 +125,7 @@ func collectPostgresBinding(ctx context.Context, secrets SecretsAPI, name string
 		return nil, err
 	}
 
-	port := postgresPort
+	port := PostgresPort
 	if p, ok := fields[outputKeyPort].(float64); ok {
 		port = int(p)
 	}
