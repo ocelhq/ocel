@@ -12,6 +12,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/ocelhq/ocel/cli/internal/cargo"
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/pkg/arch"
 )
 
@@ -50,6 +51,7 @@ func (c Compilation) compileRust(ctx context.Context) error {
 
 	cmd := exec.CommandContext(ctx, "cargo", "build", "--release",
 		"--manifest-path", crate.ManifestPath, "--bin", bins[0].Name, "--target", target)
+	childprocess.KillGroupOnCancel(cmd)
 	cmd.Dir = workspace.Root
 	cmd.Env = c.environ("CARGO_PROFILE_RELEASE_STRIP=symbols")
 	linker := "CARGO_TARGET_" + strings.ToUpper(strings.ReplaceAll(target, "-", "_")) + "_LINKER"

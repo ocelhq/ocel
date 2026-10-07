@@ -2,13 +2,17 @@ package build
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess/childprocesstest"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -325,6 +329,45 @@ func TestARustAppsBuildScriptReadsEveryValueTheAppResolvesAndNoneTheDeployersShe
 	for _, entry := range entries {
 		if strings.HasPrefix(entry.Name(), "ocel-live-") {
 			t.Errorf("%s is left in the temp dir after the build, want every live dir removed", entry.Name())
+		}
+	}
+}
+
+func TestACancelledRustBuildReturnsOnceEveryProcessCargoStartedIsGone(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("cargo"); err != nil {
+		t.Skip("cargo is not on PATH")
+	}
+	pidFile := filepath.Join(t.TempDir(), "build-script.pid")
+	_, cfg := writeRustApp(t, fmt.Sprintf(`fn main() {
+    std::fs::write(%q, std::process::id().to_string()).unwrap();
+    std::thread::sleep(std::time::Duration::from_secs(60));
+}
+`, pidFile))
+	ctx, cancel := context.WithCancel(context.Background())
+	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
+	done := make(chan error, 1)
+	go func() { done <- builder.Build(ctx, cfg, nil, Log{}) }()
+	var pid int
+	for deadline := time.Now().Add(60 * time.Second); pid == 0; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the build script never started")
+		}
+		if said, err := os.ReadFile(pidFile); err == nil {
+			pid, _ = strconv.Atoi(string(said))
+		}
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the build still waits 10s after the cancel")
+	}
+	for deadline := time.Now().Add(2 * time.Second); childprocesstest.IsAlive(pid); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the build script %d still runs after the cancelled build returned", pid)
 		}
 	}
 }
