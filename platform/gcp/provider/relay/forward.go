@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -19,6 +20,7 @@ type Link struct {
 	URL    string
 	Target string
 	Token  func(ctx context.Context) (string, error)
+	Warn   func(message string)
 }
 
 type Forward struct {
@@ -28,6 +30,7 @@ type Forward struct {
 	accepting   chan struct{}
 	connections sync.WaitGroup
 	once        sync.Once
+	warned      sync.Once
 }
 
 func OpenForward(ctx context.Context, link Link) (*Forward, error) {
@@ -74,6 +77,11 @@ func (f *Forward) carry(ctx context.Context, link Link, local net.Conn) {
 	defer local.Close()
 	remote, err := link.connect(ctx)
 	if err != nil {
+		if ctx.Err() == nil && link.Warn != nil {
+			f.warned.Do(func() {
+				link.Warn(fmt.Sprintf("A connection through the forward to %s failed, and the build saw it closed: %s", link.Target, err))
+			})
+		}
 		return
 	}
 	defer remote.Close()
@@ -97,15 +105,15 @@ func (l Link) connect(ctx context.Context) (net.Conn, error) {
 		HTTPHeader: http.Header{"Authorization": {"Bearer " + token}},
 	})
 	if err != nil {
-		return nil, l.refused(resp)
+		return nil, l.refused(resp, err)
 	}
 	socket.SetReadLimit(messageLimit)
 	return websocket.NetConn(context.WithoutCancel(ctx), socket, websocket.MessageBinary), nil
 }
 
-func (l Link) refused(resp *http.Response) error {
+func (l Link) refused(resp *http.Response, dialed error) error {
 	if resp == nil {
-		return refusal.Refuse(refusal.CodeNotReady, "the bastion at %s could not be reached to forward to %s", l.URL, l.Target)
+		return refusal.Refuse(refusal.CodeNotReady, "the bastion at %s could not be reached to forward to %s: %s", l.URL, l.Target, dialed)
 	}
 	switch resp.StatusCode {
 	case http.StatusUnauthorized, http.StatusForbidden:
