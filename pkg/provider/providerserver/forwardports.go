@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net"
 	"slices"
+	"sync"
 
 	connect "connectrpc.com/connect"
 
@@ -17,7 +18,47 @@ import (
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
+type openForwards struct {
+	mutex  sync.Mutex
+	open   int
+	closed chan struct{}
+}
+
+func (o *openForwards) hold() func() {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	if o.open == 0 {
+		o.closed = make(chan struct{})
+	}
+	o.open++
+	return func() {
+		o.mutex.Lock()
+		defer o.mutex.Unlock()
+		o.open--
+		if o.open == 0 {
+			close(o.closed)
+		}
+	}
+}
+
+func (o *openForwards) awaitClosed(ctx context.Context) error {
+	o.mutex.Lock()
+	if o.open == 0 {
+		o.mutex.Unlock()
+		return nil
+	}
+	closed := o.closed
+	o.mutex.Unlock()
+	select {
+	case <-closed:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPortsRequest, stream *connect.ServerStream[contractv1.ForwardPortsResponse]) error {
+	defer h.forwards.hold()()
 	p, err := h.session.use()
 	if err != nil {
 		return err
@@ -37,7 +78,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	}
 	forward := p.Hooks().ForwardPorts
 	reachable := slices.DeleteFunc(slices.Clone(bindings), func(binding provider.Binding) bool {
-		return forward == nil || !reachesByPort(binding)
+		return forward == nil || !isReachableByPort(binding)
 	})
 	var forwards []provider.PortForward
 	if len(reachable) > 0 {
@@ -61,7 +102,7 @@ func (h *handlers) ForwardPorts(ctx context.Context, req *contractv1.ForwardPort
 	return nil
 }
 
-func reachesByPort(binding provider.Binding) bool {
+func isReachableByPort(binding provider.Binding) bool {
 	switch binding.Type {
 	case provider.BindingKV:
 		return true
