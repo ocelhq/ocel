@@ -102,6 +102,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		OpenDirectImages:   p.OpenDirectImages,
 		CheckHost:          p.CheckHost,
 		CheckBucket:        s3store.Check,
+		ForwardPorts:       p.ForwardPorts,
 	}
 }
 

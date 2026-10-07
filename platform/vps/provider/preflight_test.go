@@ -2,6 +2,7 @@ package vps_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"slices"
 	"strings"
@@ -124,6 +125,10 @@ func (s *scripted) Run(ctx context.Context, command string) (string, error) {
 }
 
 func (s *scripted) RunLines(context.Context, string, func(session.Line) error) error { return nil }
+
+func (s *scripted) ForwardPort(context.Context, string) (string, error) {
+	return "", errors.New("a scripted session forwards no port")
+}
 
 func (s *scripted) Preflight(context.Context) (session.Facts, error) {
 	return session.Facts{Root: true, Systemd: true}, nil

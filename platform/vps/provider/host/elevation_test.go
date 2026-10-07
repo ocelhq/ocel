@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -16,6 +17,10 @@ type sudoless struct {
 	asked    []string
 	stamped  string
 	recorded string
+}
+
+func (c *sudoless) ForwardPort(context.Context, string) (string, error) {
+	return "", errors.New("a sudoless session forwards no port")
 }
 
 func (c *sudoless) Preflight(context.Context) (session.Facts, error) {
