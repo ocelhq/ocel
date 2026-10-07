@@ -21,7 +21,7 @@ func TestACommandReadsItsLiveValuesFromFilesUnderTheLiveDirAndNotFromItsEnvironm
 	var stdout bytes.Buffer
 
 	err := Run(context.Background(), Command{
-		Shell:  `cat "$OCEL_LIVE_DIR/OCEL_RESOURCE_POSTGRES_main" > "$SEEN"; echo >> "$SEEN"; echo "$GREETING" >> "$SEEN"; echo "[${OCEL_RESOURCE_POSTGRES_main:-unset}|${OCEL_RESOURCE_POSTGRES_inherited:-unset}]" >> "$SEEN"; echo "$OCEL_LIVE_DIR" >> "$SEEN"`,
+		Line:   `cat "$OCEL_LIVE_DIR/OCEL_RESOURCE_POSTGRES_main" > "$SEEN"; echo >> "$SEEN"; echo "$GREETING" >> "$SEEN"; echo "[${OCEL_RESOURCE_POSTGRES_main:-unset}|${OCEL_RESOURCE_POSTGRES_inherited:-unset}]" >> "$SEEN"; echo "$OCEL_LIVE_DIR" >> "$SEEN"`,
 		Dir:    t.TempDir(),
 		Env:    map[string]string{"GREETING": "hello", "SEEN": out},
 		Live:   map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main"}`},
@@ -45,9 +45,9 @@ func TestACommandWithNoLiveValuesIsHandedNoLiveDir(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "seen")
 
 	err := Run(context.Background(), Command{
-		Shell: `echo "[${OCEL_LIVE_DIR-unset}]" > "$SEEN"`,
-		Dir:   t.TempDir(),
-		Env:   map[string]string{"SEEN": out},
+		Line: `echo "[${OCEL_LIVE_DIR-unset}]" > "$SEEN"`,
+		Dir:  t.TempDir(),
+		Env:  map[string]string{"SEEN": out},
 	})
 	if err != nil {
 		t.Fatalf("Run err = %v", err)
@@ -61,7 +61,7 @@ func TestACommandRunsInTheDirectoryItIsGiven(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(t.TempDir(), "seen")
 
-	if err := Run(context.Background(), Command{Shell: `pwd -P > "$SEEN"`, Dir: dir, Env: map[string]string{"SEEN": out}}); err != nil {
+	if err := Run(context.Background(), Command{Line: `pwd -P > "$SEEN"`, Dir: dir, Env: map[string]string{"SEEN": out}}); err != nil {
 		t.Fatalf("Run err = %v", err)
 	}
 	resolved, err := filepath.EvalSymlinks(dir)
@@ -76,7 +76,7 @@ func TestACommandRunsInTheDirectoryItIsGiven(t *testing.T) {
 func TestACommandsOutputReachesTheWriterAsItIsPrinted(t *testing.T) {
 	var out bytes.Buffer
 
-	if err := Run(context.Background(), Command{Shell: `echo to-stdout; echo to-stderr >&2`, Dir: t.TempDir(), Stdout: &out, Stderr: &out}); err != nil {
+	if err := Run(context.Background(), Command{Line: `echo to-stdout; echo to-stderr >&2`, Dir: t.TempDir(), Stdout: &out, Stderr: &out}); err != nil {
 		t.Fatalf("Run err = %v", err)
 	}
 	if got := out.String(); !strings.Contains(got, "to-stdout") || !strings.Contains(got, "to-stderr") {
@@ -85,11 +85,11 @@ func TestACommandsOutputReachesTheWriterAsItIsPrinted(t *testing.T) {
 }
 
 func TestACommandThatExitsNonZeroFailsWithItsExitCode(t *testing.T) {
-	err := Run(context.Background(), Command{Shell: `exit 3`, Dir: t.TempDir()})
+	err := Run(context.Background(), Command{Line: `exit 3`, Dir: t.TempDir()})
 
-	var failed *FailedError
+	var failed *NonZeroExitError
 	if !errors.As(err, &failed) || failed.ExitCode != 3 {
-		t.Fatalf("Run err = %v, want a FailedError with exit code 3", err)
+		t.Fatalf("Run err = %v, want a NonZeroExitError with exit code 3", err)
 	}
 }
 
@@ -98,7 +98,7 @@ func TestACommandThatRunsPastItsTimeoutIsStoppedWithItsWholeProcessGroup(t *test
 	started := time.Now()
 
 	err := Run(context.Background(), Command{
-		Shell:   `(sleep 3; touch "$MARKER") & wait`,
+		Line:    `(sleep 3; touch "$MARKER") & wait`,
 		Dir:     t.TempDir(),
 		Env:     map[string]string{"MARKER": marker},
 		Timeout: 200 * time.Millisecond,
@@ -124,7 +124,7 @@ func TestACommandStoppedByItsCallerReportsTheCancellationAndNotATimeout(t *testi
 		cancel()
 	}()
 
-	err := Run(ctx, Command{Shell: `sleep 5`, Dir: t.TempDir(), Timeout: time.Minute})
+	err := Run(ctx, Command{Line: `sleep 5`, Dir: t.TempDir(), Timeout: time.Minute})
 
 	var timedOut *TimeoutError
 	if err == nil || errors.As(err, &timedOut) || !errors.Is(err, context.Canceled) {
@@ -137,10 +137,10 @@ func TestTheLiveDirNeverReachesTheProcessEnvironmentUnderTheReservedName(t *test
 	out := filepath.Join(t.TempDir(), "seen")
 
 	err := Run(context.Background(), Command{
-		Shell: `echo "$OCEL_LIVE_DIR" > "$SEEN"`,
-		Dir:   t.TempDir(),
-		Env:   map[string]string{"SEEN": out},
-		Live:  map[string]string{"KEY": "v"},
+		Line: `echo "$OCEL_LIVE_DIR" > "$SEEN"`,
+		Dir:  t.TempDir(),
+		Env:  map[string]string{"SEEN": out},
+		Live: map[string]string{"KEY": "v"},
 	})
 	if err != nil {
 		t.Fatalf("Run err = %v", err)

@@ -16,7 +16,7 @@ import (
 )
 
 type Command struct {
-	Shell   string
+	Line    string
 	Dir     string
 	Env     map[string]string
 	Live    map[string]string
@@ -25,22 +25,22 @@ type Command struct {
 	Stderr  io.Writer
 }
 
-type FailedError struct {
-	Command  string
+type NonZeroExitError struct {
+	Line     string
 	ExitCode int
 }
 
-func (e *FailedError) Error() string {
-	return fmt.Sprintf("%q exited with code %d", e.Command, e.ExitCode)
+func (e *NonZeroExitError) Error() string {
+	return fmt.Sprintf("%q exited with code %d", e.Line, e.ExitCode)
 }
 
 type TimeoutError struct {
-	Command string
-	After   time.Duration
+	Line  string
+	After time.Duration
 }
 
 func (e *TimeoutError) Error() string {
-	return fmt.Sprintf("%q ran past its timeout of %s and was stopped", e.Command, e.After)
+	return fmt.Sprintf("%q ran past its timeout of %s and was stopped", e.Line, e.After)
 }
 
 func Run(ctx context.Context, c Command) (err error) {
@@ -64,14 +64,14 @@ func Run(ctx context.Context, c Command) (err error) {
 		env[processenv.LiveDirEnvVar] = dir
 	}
 
-	cmd := newShellCommand(runCtx, c.Shell)
+	cmd := newShellCommand(runCtx, c.Line)
 	cmd.Dir = c.Dir
-	cmd.Env = environment(os.Environ(), env)
+	cmd.Env = mergeEnvironment(os.Environ(), env)
 	cmd.Stdout = c.Stdout
 	cmd.Stderr = c.Stderr
 	child, err := childprocess.Start(runCtx, cmd, nil, false)
 	if err != nil {
-		return fmt.Errorf("start %q: %w", c.Shell, err)
+		return fmt.Errorf("start %q: %w", c.Line, err)
 	}
 	waitErr := child.Wait()
 
@@ -79,18 +79,18 @@ func Run(ctx context.Context, c Command) (err error) {
 	case waitErr == nil:
 		return nil
 	case ctx.Err() != nil:
-		return fmt.Errorf("%q was stopped: %w", c.Shell, ctx.Err())
+		return fmt.Errorf("%q was stopped: %w", c.Line, ctx.Err())
 	case runCtx.Err() != nil:
-		return &TimeoutError{Command: c.Shell, After: c.Timeout}
+		return &TimeoutError{Line: c.Line, After: c.Timeout}
 	}
 	var exited *exec.ExitError
 	if errors.As(waitErr, &exited) {
-		return &FailedError{Command: c.Shell, ExitCode: childprocess.ExitCode(exited)}
+		return &NonZeroExitError{Line: c.Line, ExitCode: childprocess.ExitCode(exited)}
 	}
 	return waitErr
 }
 
-func environment(base []string, overrides map[string]string) []string {
+func mergeEnvironment(base []string, overrides map[string]string) []string {
 	merged := make([]string, 0, len(base)+len(overrides))
 	for _, kv := range base {
 		key, _, _ := strings.Cut(kv, "=")
