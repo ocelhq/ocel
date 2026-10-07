@@ -1,0 +1,11 @@
+{
+  "$schema": "https://ocel.dev/schema/0.0.1/ocel.schema.json",
+  "slug": "prerender-dockerfile",
+  "provider": "aws",
+  "apps": [
+    {
+      "name": "web",
+      "path": "."
+    }
+  ]
+}
