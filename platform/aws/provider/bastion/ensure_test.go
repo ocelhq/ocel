@@ -163,3 +163,22 @@ func TestEnsureRepairsARoleWhoseSessionPolicyWasNeverWritten(t *testing.T) {
 		t.Error("the task role holds no session policy after Ensure(), so the ECS Exec agent could never open its channels")
 	}
 }
+
+func TestEnsureOpensTheEgressAnotherForwardOfTheSameTierOpenedFirstWithoutFailing(t *testing.T) {
+	t.Parallel()
+
+	account := newAccount()
+	account.beforeAuthorize = func(group *securityGroup, opening []ec2types.IpPermission) {
+		group.egress = append(group.egress, opening[0])
+	}
+
+	if _, err := bastion.Ensure(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Ensure() racing another forward of the tier = %v, want the rules the other opened taken as opened", err)
+	}
+
+	for _, group := range account.groups {
+		if len(group.egress) != 3 {
+			t.Errorf("the security group egress = %v, want the three rules once each", group.egress)
+		}
+	}
+}
