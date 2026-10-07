@@ -79,8 +79,9 @@ def _find_properties(name: str, kind: str):
     if not raw:
         return RuntimeError(
             f"{key} is not delivered to this process: `ocel dev` delivers it locally and "
-            "`ocel deploy` to the deployed app, but a build gets no bindings, so code that "
-            "runs while building, such as prerendering a page, cannot use the resource"
+            "`ocel deploy` to the deployed app, and a build gets it only from an `ocel deploy` "
+            "whose provider forwards a port to the resource, so code that runs while building, "
+            "such as prerendering a page, cannot use it under `ocel build`"
         )
     try:
         delivered = Binding.from_json(raw, ignore_unknown_fields=True)

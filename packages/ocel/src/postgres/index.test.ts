@@ -181,7 +181,7 @@ describe("postgres()", () => {
     const pool = postgres("orders");
 
     expect(() => pool.query).toThrow(
-      "OCEL_RESOURCE_POSTGRES_orders is not delivered to this process: `ocel dev` delivers it locally and `ocel deploy` to the deployed app, but a build gets no bindings, so code that runs while building, such as prerendering a page, cannot use the resource",
+      "OCEL_RESOURCE_POSTGRES_orders is not delivered to this process: `ocel dev` delivers it locally and `ocel deploy` to the deployed app, and a build gets it only from an `ocel deploy` whose provider forwards a port to the resource, so code that runs while building, such as prerendering a page, cannot use it under `ocel build`",
     );
     expect(() => pool.connectionString).toThrow("OCEL_RESOURCE_POSTGRES_orders");
   });
