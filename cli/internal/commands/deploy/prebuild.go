@@ -60,7 +60,7 @@ func runPreBuild(ctx context.Context, a assembly, command project.LifecycleComma
 	hidden := redaction.NewValues(build.SecretValues(live))
 	out := hidden.Writer(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
 	err := lifecycle.Run(ctx, lifecycle.Command{
-		Shell:   command.Command,
+		Line:    command.Command,
 		Dir:     filepath.Join(cfg.Dir, command.Path),
 		Env:     env,
 		Live:    live,
