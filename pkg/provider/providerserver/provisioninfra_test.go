@@ -3,12 +3,15 @@ package providerserver_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -330,6 +333,44 @@ func TestProvisionInfraRefusesATaskOnAProviderThatRunsNoWorker(t *testing.T) {
 	}
 	if specs := vendor.FakeStacks().Provisioned(); len(specs) != 0 {
 		t.Errorf("the refused ProvisionInfra provisioned %d stacks, want none", len(specs))
+	}
+}
+
+type failingInfraStacks struct {
+	provider.Stacks
+	failing atomic.Bool
+}
+
+func (s *failingInfraStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
+	if spec.Kind == provider.StackInfra && s.failing.Load() {
+		result, err := s.Stacks.Provision(ctx, spec, progress)
+		if err != nil {
+			return result, err
+		}
+		return provider.StackResult{}, errors.New("the stack changed, then its outputs could not be read")
+	}
+	return s.Stacks.Provision(ctx, spec, progress)
+}
+
+func TestADeployOverInfraWhoseLastProvisioningFailedIsRefused(t *testing.T) {
+	builtProject(t)
+	base := fake.NewProvider(fake.Options{})
+	stacks := &failingInfraStacks{Stacks: base.Stacks()}
+	client := servedBy(t, refusingStacks{Provider: base, stacks: stacks})
+	earlier := deployRequest()
+	provisionedInfra(t, client, infraRequest(earlier))
+
+	stacks.failing.Store(true)
+	later := deployRequest()
+	later.Manifest.Resources = append(later.Manifest.Resources, legacyResource())
+	if result, err := provisionInfraStream(t, client, infraRequest(later)); err == nil && result.GetSuccess() {
+		t.Fatal("ProvisionInfra() succeeded, want the failed provisioning reported")
+	}
+
+	earlier.InfraProvisioned = true
+	result, _ := deploy(t, client, earlier)
+	if result.GetSuccess() {
+		t.Fatal("Deploy() succeeded over infra a failed provisioning changed after the earlier one, want it refused: the stack no longer holds what the apps were built against")
 	}
 }
 

@@ -1039,6 +1039,9 @@ func (r *deployRun) provisionInfra(ctx context.Context, undeclared []*contractv1
 				r.dryRunPlan.parameters, err = r.planValuesGroup(ctx)
 				return err
 			}
+			if err := r.forgetInfraDigest(ctx, holds); err != nil {
+				return err
+			}
 			result, err := r.provider.Stacks().Provision(ctx, stack, progress)
 			if err != nil {
 				return err
