@@ -718,22 +718,24 @@ func (x *Runtime) GetArch() string {
 }
 
 type App struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	Name          string                   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Folder        string                   `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
-	Runtime       *Runtime                 `protobuf:"bytes,3,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	Framework     string                   `protobuf:"bytes,4,opt,name=framework,proto3" json:"framework,omitempty"`
-	Compute       ComputeKind              `protobuf:"varint,5,opt,name=compute,proto3,enum=console.v1.ComputeKind" json:"compute,omitempty"`
-	BuildId       string                   `protobuf:"bytes,6,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
-	Release       string                   `protobuf:"bytes,7,opt,name=release,proto3" json:"release,omitempty"`
-	Urls          []string                 `protobuf:"bytes,8,rep,name=urls,proto3" json:"urls,omitempty"`
-	Hostnames     []string                 `protobuf:"bytes,9,rep,name=hostnames,proto3" json:"hostnames,omitempty"`
-	HealthPath    string                   `protobuf:"bytes,10,opt,name=health_path,json=healthPath,proto3" json:"health_path,omitempty"`
-	Outcome       AppOutcome               `protobuf:"varint,11,opt,name=outcome,proto3,enum=console.v1.AppOutcome" json:"outcome,omitempty"`
-	Error         string                   `protobuf:"bytes,12,opt,name=error,proto3" json:"error,omitempty"`
-	Variables     []*v1.VariableDefinition `protobuf:"bytes,13,rep,name=variables,proto3" json:"variables,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState   `protogen:"open.v1"`
+	Name             string                   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Folder           string                   `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
+	Runtime          *Runtime                 `protobuf:"bytes,3,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	Framework        string                   `protobuf:"bytes,4,opt,name=framework,proto3" json:"framework,omitempty"`
+	Compute          ComputeKind              `protobuf:"varint,5,opt,name=compute,proto3,enum=console.v1.ComputeKind" json:"compute,omitempty"`
+	BuildId          string                   `protobuf:"bytes,6,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
+	Release          string                   `protobuf:"bytes,7,opt,name=release,proto3" json:"release,omitempty"`
+	Urls             []string                 `protobuf:"bytes,8,rep,name=urls,proto3" json:"urls,omitempty"`
+	Hostnames        []string                 `protobuf:"bytes,9,rep,name=hostnames,proto3" json:"hostnames,omitempty"`
+	HealthPath       string                   `protobuf:"bytes,10,opt,name=health_path,json=healthPath,proto3" json:"health_path,omitempty"`
+	Outcome          AppOutcome               `protobuf:"varint,11,opt,name=outcome,proto3,enum=console.v1.AppOutcome" json:"outcome,omitempty"`
+	Error            string                   `protobuf:"bytes,12,opt,name=error,proto3" json:"error,omitempty"`
+	Variables        []*v1.VariableDefinition `protobuf:"bytes,13,rep,name=variables,proto3" json:"variables,omitempty"`
+	FrameworkBuildId string                   `protobuf:"bytes,14,opt,name=framework_build_id,json=frameworkBuildId,proto3" json:"framework_build_id,omitempty"`
+	StoragePrefix    string                   `protobuf:"bytes,15,opt,name=storage_prefix,json=storagePrefix,proto3" json:"storage_prefix,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *App) Reset() {
@@ -855,6 +857,20 @@ func (x *App) GetVariables() []*v1.VariableDefinition {
 		return x.Variables
 	}
 	return nil
+}
+
+func (x *App) GetFrameworkBuildId() string {
+	if x != nil {
+		return x.FrameworkBuildId
+	}
+	return ""
+}
+
+func (x *App) GetStoragePrefix() string {
+	if x != nil {
+		return x.StoragePrefix
+	}
+	return ""
 }
 
 type ResourceBinding struct {
@@ -1644,7 +1660,7 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"\x02pr\x18\x04 \x01(\rR\x02pr\"E\n" +
 	"\aRuntime\x12\x1d\n" +
 	"\x04name\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18 R\x04name\x12\x1b\n" +
-	"\x04arch\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x18 R\x04arch\"\xb0\a\n" +
+	"\x04arch\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x18 R\x04arch\"\x99\b\n" +
 	"\x03App\x12\x1d\n" +
 	"\x04name\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18?R\x04name\x12 \n" +
 	"\x06folder\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\x06folder\x12-\n" +
@@ -1662,7 +1678,9 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"\aoutcome\x18\v \x01(\x0e2\x16.console.v1.AppOutcomeB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\aoutcome\x12\x1e\n" +
 	"\x05error\x18\f \x01(\tB\b\xbaH\x05r\x03\x18\xa0\x1fR\x05error\x12M\n" +
-	"\tvariables\x18\r \x03(\v2$.app.resources.v1.VariableDefinitionB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\tvariables:\xbc\x02\xbaH\xb8\x02\x1a\x97\x01\n" +
+	"\tvariables\x18\r \x03(\v2$.app.resources.v1.VariableDefinitionB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\tvariables\x126\n" +
+	"\x12framework_build_id\x18\x0e \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x10frameworkBuildId\x12/\n" +
+	"\x0estorage_prefix\x18\x0f \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\rstoragePrefix:\xbc\x02\xbaH\xb8\x02\x1a\x97\x01\n" +
 	"\x14app.build_on_success\x12+a succeeded app names the build it deployed\x1aRthis.outcome != console.v1.AppOutcome.APP_OUTCOME_SUCCEEDED || this.build_id != ''\x1a\x9b\x01\n" +
 	"\x16app.release_on_success\x12.a succeeded app names the release it made live\x1aQthis.outcome != console.v1.AppOutcome.APP_OUTCOME_SUCCEEDED || this.release != ''\"\x8c\x01\n" +
 	"\x0fResourceBinding\x12\x1e\n" +

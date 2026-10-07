@@ -159,6 +159,10 @@ message App {
   string error = 12 [(buf.validate.field).string.max_len = 4000];
 
   repeated app.resources.v1.VariableDefinition variables = 13 [(buf.validate.field).repeated.max_items = 500];
+
+  string framework_build_id = 14 [(buf.validate.field).string.max_len = 256];
+
+  string storage_prefix = 15 [(buf.validate.field).string.max_len = 512];
 }
 
 message ResourceBinding {
