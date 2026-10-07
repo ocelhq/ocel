@@ -15,7 +15,7 @@ func (s *Session) ForwardPort(ctx context.Context, remote string) (string, func(
 		return "", nil, refusal.Refuse(refusal.CodeNotReady, "listen on a loopback port to forward to %s from: %s", remote, err)
 	}
 	relayCtx, cancel := context.WithCancel(ctx)
-	var carried sync.WaitGroup
+	var connections sync.WaitGroup
 	accepting := make(chan struct{})
 	go func() {
 		defer close(accepting)
@@ -24,7 +24,7 @@ func (s *Session) ForwardPort(ctx context.Context, remote string) (string, func(
 			if err != nil {
 				return
 			}
-			carried.Go(func() { s.carry(relayCtx, conn, remote) })
+			connections.Go(func() { s.forwardConnection(relayCtx, conn, remote) })
 		}
 	}()
 	go func() {
@@ -37,13 +37,13 @@ func (s *Session) ForwardPort(ctx context.Context, remote string) (string, func(
 			cancel()
 			_ = listener.Close()
 			<-accepting
-			carried.Wait()
+			connections.Wait()
 		})
 	}
 	return listener.Addr().String(), stop, nil
 }
 
-func (s *Session) carry(ctx context.Context, conn net.Conn, remote string) {
+func (s *Session) forwardConnection(ctx context.Context, conn net.Conn, remote string) {
 	defer conn.Close()
 	tcp, ok := conn.(*net.TCPConn)
 	if !ok {
