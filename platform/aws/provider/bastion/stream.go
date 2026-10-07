@@ -13,6 +13,14 @@ import (
 
 const receiveBufferBytes = 1 << 16
 
+type Stream interface {
+	Receive() ([]byte, error)
+	Send(payload []byte) error
+	Terminate() error
+}
+
+type OpenSessionFunc func(ctx context.Context, node, host string, port int) (Stream, error)
+
 type sessionStream struct {
 	channel   *datachannel.SsmDataChannel
 	buf       []byte
@@ -20,11 +28,11 @@ type sessionStream struct {
 }
 
 func OpenSession(cfg aws.Config) OpenSessionFunc {
-	return func(ctx context.Context, target, host string, port int) (Stream, error) {
+	return func(ctx context.Context, node, host string, port int) (Stream, error) {
 		channel := new(datachannel.SsmDataChannel)
 		err := channel.Open(cfg, &ssm.StartSessionInput{
 			DocumentName: aws.String(PortForwardingDocument),
-			Target:       aws.String(target),
+			Target:       aws.String(node),
 			Parameters: map[string][]string{
 				"host":            {host},
 				"portNumber":      {strconv.Itoa(port)},
@@ -32,13 +40,13 @@ func OpenSession(cfg aws.Config) OpenSessionFunc {
 			},
 		})
 		if err != nil {
-			return nil, fmt.Errorf("start a %s session on %s: %w", PortForwardingDocument, target, err)
+			return nil, fmt.Errorf("start a %s session on %s: %w", PortForwardingDocument, node, err)
 		}
 		stopWatching := context.AfterFunc(ctx, func() { _ = channel.Close() })
 		defer stopWatching()
 		if err := channel.WaitForHandshakeComplete(ctx); err != nil {
 			_ = channel.Close()
-			return nil, fmt.Errorf("handshake the session on %s: %w", target, err)
+			return nil, fmt.Errorf("handshake the session on %s: %w", node, err)
 		}
 		return &sessionStream{channel: channel, buf: make([]byte, receiveBufferBytes)}, nil
 	}

@@ -15,7 +15,7 @@ import (
 const roleNotAssumable = "unable to assume the role"
 
 type Task struct {
-	Target string
+	ManagedNode string
 
 	clients Clients
 	cluster string
@@ -30,11 +30,11 @@ func (b Bastion) Run(ctx context.Context, c Clients) (*Task, error) {
 		return nil, err
 	}
 	started := &Task{clients: c, cluster: b.Cluster, arn: arn}
-	target, err := started.awaitExecAgent(ctx)
+	node, err := started.awaitExecAgent(ctx)
 	if err != nil {
 		return nil, errors.Join(err, started.Stop())
 	}
-	started.Target = target
+	started.ManagedNode = node
 	return started, nil
 }
 
@@ -66,13 +66,11 @@ func (b Bastion) startTask(ctx context.Context, c Clients) (string, error) {
 		if !strings.Contains(refused.Error(), roleNotAssumable) || attempt >= maxRoleAttempts {
 			return "", fmt.Errorf("start a task of %s in cluster %s: %w", b.TaskDefinition, b.Cluster, refused)
 		}
-		if err := c.pause(ctx, attempt); err != nil {
+		if err := pause(ctx, attempt); err != nil {
 			return "", err
 		}
 	}
 }
-
-const maxRoleAttempts = 12
 
 func refusalOf(failures []ecstypes.Failure) error {
 	if len(failures) == 0 {
@@ -100,16 +98,16 @@ func (t *Task) awaitExecAgent(ctx context.Context) (string, error) {
 		if aws.ToString(current.LastStatus) == "STOPPED" {
 			return "", fmt.Errorf("task %s stopped before its ECS Exec agent ran: %s", t.arn, aws.ToString(current.StoppedReason))
 		}
-		if target, ready := execTarget(t.cluster, t.arn, current); ready {
-			return target, nil
+		if node, ready := managedNodeOf(t.cluster, t.arn, current); ready {
+			return node, nil
 		}
-		if err := t.clients.pause(ctx, attempt); err != nil {
+		if err := pause(ctx, attempt); err != nil {
 			return "", fmt.Errorf("wait for the ECS Exec agent of task %s: %w", t.arn, err)
 		}
 	}
 }
 
-func execTarget(cluster, arn string, task ecstypes.Task) (string, bool) {
+func managedNodeOf(cluster, arn string, task ecstypes.Task) (string, bool) {
 	for _, container := range task.Containers {
 		if aws.ToString(container.Name) != containerName || container.RuntimeId == nil {
 			continue

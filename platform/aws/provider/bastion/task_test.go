@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 )
@@ -12,12 +11,11 @@ import (
 func readyBastion(t *testing.T, account *account) (bastion.Clients, bastion.Bastion) {
 	t.Helper()
 	clients := account.clients()
-	clients.PollInterval = time.Millisecond
-	ensured, err := bastion.Ensure(context.Background(), clients, testSpec)
+	reconciled, err := bastion.Reconcile(context.Background(), clients, testSpec)
 	if err != nil {
-		t.Fatalf("Ensure() = %v", err)
+		t.Fatalf("Reconcile() = %v", err)
 	}
-	return clients, ensured
+	return clients, reconciled
 }
 
 func TestRunStartsATaskInAPublicSubnetBehindTheBastionsSecurityGroupAndWaitsForTheExecAgent(t *testing.T) {
@@ -25,9 +23,9 @@ func TestRunStartsATaskInAPublicSubnetBehindTheBastionsSecurityGroupAndWaitsForT
 
 	account := newAccount()
 	account.agentAfter = 2
-	clients, ensured := readyBastion(t, account)
+	clients, reconciled := readyBastion(t, account)
 
-	started, err := ensured.Run(context.Background(), clients)
+	started, err := reconciled.Run(context.Background(), clients)
 	if err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
@@ -37,15 +35,15 @@ func TestRunStartsATaskInAPublicSubnetBehindTheBastionsSecurityGroupAndWaitsForT
 		t.Fatalf("running tasks = %v, want exactly the one Run() started", running)
 	}
 	launched := account.tasks[running[0]]
-	if !launched.public || !launched.exec || len(launched.groups) != 1 || launched.groups[0] != ensured.SecurityGroup {
-		t.Errorf("the task = %+v, want a public IP for egress, ECS Exec on and only the bastion's security group %s", launched, ensured.SecurityGroup)
+	if !launched.public || !launched.exec || len(launched.groups) != 1 || launched.groups[0] != reconciled.SecurityGroup {
+		t.Errorf("the task = %+v, want a public IP for egress, ECS Exec on and only the bastion's security group %s", launched, reconciled.SecurityGroup)
 	}
-	if len(launched.subnets) != 2 || launched.definition != ensured.TaskDefinition {
+	if len(launched.subnets) != 2 || launched.definition != reconciled.TaskDefinition {
 		t.Errorf("the task runs %s in %v, want the bastion's task definition in the default subnets", launched.definition, launched.subnets)
 	}
 	id := running[0][strings.LastIndex(running[0], "/")+1:]
-	if want := "ecs:ocel-bastion-production_" + id + "_runtime-" + id; started.Target != want {
-		t.Errorf("Run().Target = %q, want %q, the ECS target Session Manager resolves", started.Target, want)
+	if want := "ecs:ocel-bastion-production_" + id + "_runtime-" + id; started.ManagedNode != want {
+		t.Errorf("Run().ManagedNode = %q, want %q, the ECS target Session Manager resolves", started.ManagedNode, want)
 	}
 	if account.describeCalls <= 2 {
 		t.Errorf("DescribeTasks was called %d times, want Run() to wait past the 2 polls before the agent runs", account.describeCalls)
@@ -58,9 +56,9 @@ func TestRunStopsTheTaskAndSaysWhyWhenItStopsBeforeItsExecAgentRuns(t *testing.T
 	account := newAccount()
 	account.agentAfter = 100
 	account.onDescribe = func(t *task) { t.stopped = true }
-	clients, ensured := readyBastion(t, account)
+	clients, reconciled := readyBastion(t, account)
 
-	_, err := ensured.Run(context.Background(), clients)
+	_, err := reconciled.Run(context.Background(), clients)
 
 	if err == nil || !strings.Contains(err.Error(), "stopped in the test") {
 		t.Fatalf("Run() = %v, want an error carrying the task's stopped reason", err)
@@ -75,11 +73,11 @@ func TestRunStopsTheTaskItStartedWhenItsContextEndsWhileWaiting(t *testing.T) {
 
 	account := newAccount()
 	account.agentAfter = 1_000_000
-	clients, ensured := readyBastion(t, account)
+	clients, reconciled := readyBastion(t, account)
 	ctx, cancel := context.WithCancel(context.Background())
 	account.onDescribe = func(*task) { cancel() }
 
-	_, err := ensured.Run(ctx, clients)
+	_, err := reconciled.Run(ctx, clients)
 
 	if err == nil {
 		t.Fatal("Run() with a cancelled context = nil error")
@@ -94,9 +92,9 @@ func TestRunStartsAgainWhenECSCannotAssumeARoleIAMHasJustCreated(t *testing.T) {
 
 	account := newAccount()
 	account.runFails = []string{"ECS was unable to assume the role 'arn:aws:iam::123456789012:role/ocel-bastion-production' that was provided for this task."}
-	clients, ensured := readyBastion(t, account)
+	clients, reconciled := readyBastion(t, account)
 
-	if _, err := ensured.Run(context.Background(), clients); err != nil {
+	if _, err := reconciled.Run(context.Background(), clients); err != nil {
 		t.Fatalf("Run() = %v, want it to wait out IAM's propagation", err)
 	}
 
@@ -110,9 +108,9 @@ func TestRunReportsATaskECSRefusesToStartForAnyOtherReason(t *testing.T) {
 
 	account := newAccount()
 	account.runFails = []string{"RESOURCE:FARGATE"}
-	clients, ensured := readyBastion(t, account)
+	clients, reconciled := readyBastion(t, account)
 
-	_, err := ensured.Run(context.Background(), clients)
+	_, err := reconciled.Run(context.Background(), clients)
 
 	if err == nil || !strings.Contains(err.Error(), "RESOURCE:FARGATE") {
 		t.Fatalf("Run() = %v, want the reason ECS gave", err)
@@ -126,8 +124,8 @@ func TestStopEndsTheTaskOnceHoweverOftenItIsCalled(t *testing.T) {
 	t.Parallel()
 
 	account := newAccount()
-	clients, ensured := readyBastion(t, account)
-	started, err := ensured.Run(context.Background(), clients)
+	clients, reconciled := readyBastion(t, account)
+	started, err := reconciled.Run(context.Background(), clients)
 	if err != nil {
 		t.Fatalf("Run() = %v", err)
 	}

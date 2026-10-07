@@ -6,10 +6,8 @@ import (
 	"context"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 
@@ -32,49 +30,49 @@ func flociClients(t *testing.T) bastion.Clients {
 	if err != nil {
 		t.Fatalf("sdkconfig.Control() against %s = %v", endpoint, err)
 	}
-	return bastion.Clients{ECS: ecs.NewFromConfig(cfg), IAM: iam.NewFromConfig(cfg), EC2: ec2.NewFromConfig(cfg), PollInterval: time.Second}
+	return bastion.NewClients(cfg)
 }
 
-func TestABastionIsEnsuredRunAndRemovedAgainstTheEmulator(t *testing.T) {
+func TestABastionIsReconciledRunAndRemovedAgainstTheEmulator(t *testing.T) {
 	ctx := context.Background()
 	clients := flociClients(t)
 	spec := bastion.Spec{Tier: environment.TierPreview, Boundary: "arn:aws:iam::000000000000:policy/ocel-app-boundary-preview", Ports: []int{5432, 6379}}
 	t.Cleanup(func() { _ = bastion.Remove(context.WithoutCancel(ctx), clients, spec.Tier) })
 
-	ensured, err := bastion.Ensure(ctx, clients, spec)
+	reconciled, err := bastion.Reconcile(ctx, clients, spec)
 	if err != nil {
-		t.Fatalf("Ensure() = %v", err)
+		t.Fatalf("Reconcile() = %v", err)
 	}
-	again, err := bastion.Ensure(ctx, clients, spec)
+	again, err := bastion.Reconcile(ctx, clients, spec)
 	if err != nil {
-		t.Fatalf("second Ensure() = %v", err)
+		t.Fatalf("second Reconcile() = %v", err)
 	}
-	if again.TaskDefinition != ensured.TaskDefinition || again.SecurityGroup != ensured.SecurityGroup {
-		t.Errorf("Ensure() = %+v then %+v, want the same bastion reused", ensured, again)
+	if again.TaskDefinition != reconciled.TaskDefinition || again.SecurityGroup != reconciled.SecurityGroup {
+		t.Errorf("Reconcile() = %+v then %+v, want the same bastion reused", reconciled, again)
 	}
 
-	started, err := ensured.Run(ctx, clients)
+	started, err := reconciled.Run(ctx, clients)
 	if err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
-	tasks, err := clients.ECS.ListTasks(ctx, &ecs.ListTasksInput{Cluster: aws.String(ensured.Cluster)})
+	tasks, err := clients.ECS.ListTasks(ctx, &ecs.ListTasksInput{Cluster: aws.String(reconciled.Cluster)})
 	if err != nil || len(tasks.TaskArns) != 1 {
 		t.Fatalf("ListTasks() = %v, %v, want the one task Run() started", tasks, err)
 	}
-	if started.Target == "" {
-		t.Error("Run().Target is empty")
+	if started.ManagedNode == "" {
+		t.Error("Run().ManagedNode is empty")
 	}
 
 	if err := bastion.Remove(ctx, clients, spec.Tier); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	described, err := clients.ECS.DescribeClusters(ctx, &ecs.DescribeClustersInput{Clusters: []string{ensured.Cluster}})
+	described, err := clients.ECS.DescribeClusters(ctx, &ecs.DescribeClustersInput{Clusters: []string{reconciled.Cluster}})
 	if err != nil {
 		t.Fatalf("DescribeClusters() = %v", err)
 	}
 	for _, cluster := range described.Clusters {
 		if aws.ToString(cluster.Status) == "ACTIVE" {
-			t.Errorf("cluster %s is still active after Remove()", ensured.Cluster)
+			t.Errorf("cluster %s is still active after Remove()", reconciled.Cluster)
 		}
 	}
 	if _, err := clients.IAM.GetRole(ctx, &iam.GetRoleInput{RoleName: aws.String(bastion.NameFor(spec.Tier))}); err == nil {

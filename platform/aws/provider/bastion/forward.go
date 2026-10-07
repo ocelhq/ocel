@@ -17,36 +17,21 @@ const (
 	chunkBytes  = 1024
 )
 
-type Stream interface {
-	Receive() ([]byte, error)
-	Send(payload []byte) error
-	Terminate() error
+type endpoint struct {
+	binding string
+	host    string
+	port    int
 }
 
-type OpenSessionFunc func(ctx context.Context, target, host string, port int) (Stream, error)
-
-type Target struct {
-	Name string
-	Host string
-	Port int
-}
-
-type Forward struct {
-	Name    string
-	Address string
-	Close   func()
-}
-
-type forwarding struct {
-	task   *Task
-	open   OpenSessionFunc
-	report func(error)
-	ctx    context.Context
-	cancel context.CancelFunc
-	slots  chan struct{}
-
-	listeners []*portListener
-	failed    sync.Once
+type forwardGroup struct {
+	task          *Task
+	open          OpenSessionFunc
+	reportFailure func(error)
+	ctx           context.Context
+	cancel        context.CancelFunc
+	slots         chan struct{}
+	listeners     []*portListener
+	failed        sync.Once
 
 	mu        sync.Mutex
 	remaining int
@@ -55,8 +40,8 @@ type forwarding struct {
 }
 
 type portListener struct {
-	group    *forwarding
-	target   Target
+	group    *forwardGroup
+	endpoint endpoint
 	listener net.Listener
 
 	mu     sync.Mutex
@@ -70,97 +55,71 @@ type connection struct {
 	end    func()
 }
 
-func (b Bastion) ForwardBindings(ctx context.Context, c Clients, open OpenSessionFunc, report func(error), bindings []provider.Binding) ([]provider.PortForward, error) {
-	targets := make([]Target, 0, len(bindings))
-	for _, binding := range bindings {
-		port, err := strconv.Atoi(binding.Properties[provider.PropertyPort])
-		if err != nil || binding.Properties[provider.PropertyHost] == "" {
-			return nil, fmt.Errorf("binding %s names host %q and port %q, which no port forward can reach", binding.Name, binding.Properties[provider.PropertyHost], binding.Properties[provider.PropertyPort])
-		}
-		targets = append(targets, Target{Name: binding.Name, Host: binding.Properties[provider.PropertyHost], Port: port})
-	}
-	forwards, err := b.Forward(ctx, c, open, report, targets)
-	if err != nil {
+func (b Bastion) Forward(ctx context.Context, c Clients, open OpenSessionFunc, reportFailure func(error), bindings []provider.Binding) ([]provider.PortForward, error) {
+	endpoints, err := b.endpointsOf(bindings)
+	if err != nil || len(endpoints) == 0 {
 		return nil, err
-	}
-	forwarded := make([]provider.PortForward, 0, len(forwards))
-	for _, forward := range forwards {
-		forwarded = append(forwarded, provider.PortForward{Binding: forward.Name, LocalAddress: forward.Address, Close: forward.Close})
-	}
-	return forwarded, nil
-}
-
-func (b Bastion) Forward(ctx context.Context, c Clients, open OpenSessionFunc, report func(error), targets []Target) ([]Forward, error) {
-	for _, target := range targets {
-		if !slices.Contains(b.Ports, target.Port) {
-			return nil, fmt.Errorf("the bastion's security group lets nothing out on port %d, so %s at %s:%d cannot be reached", target.Port, target.Name, target.Host, target.Port)
-		}
-	}
-	if len(targets) == 0 {
-		return nil, nil
-	}
-	if report == nil {
-		report = func(error) {}
 	}
 	task, err := b.Run(ctx, c)
 	if err != nil {
 		return nil, err
 	}
-	netListeners := make([]net.Listener, 0, len(targets))
-	for _, target := range targets {
+	netListeners := make([]net.Listener, 0, len(endpoints))
+	for _, reached := range endpoints {
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			for _, opened := range netListeners {
 				_ = opened.Close()
 			}
-			return nil, errors.Join(fmt.Errorf("listen on the loopback for %s: %w", target.Name, err), task.Stop())
+			return nil, errors.Join(fmt.Errorf("listen on the loopback for %s: %w", reached.binding, err), task.Stop())
 		}
 		netListeners = append(netListeners, listener)
 	}
 	groupCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	group := &forwarding{task: task, open: open, report: report, ctx: groupCtx, cancel: cancel, slots: make(chan struct{}, maxSessions), remaining: len(targets)}
-	listeners := make([]*portListener, 0, len(targets))
-	forwards := make([]Forward, 0, len(targets))
-	for i, target := range targets {
-		forwarded := &portListener{group: group, target: target, listener: netListeners[i], active: map[*connection]struct{}{}}
-		listeners = append(listeners, forwarded)
-		forwards = append(forwards, Forward{Name: target.Name, Address: netListeners[i].Addr().String(), Close: forwarded.close})
+	group := &forwardGroup{task: task, open: open, reportFailure: reportFailure, ctx: groupCtx, cancel: cancel, slots: make(chan struct{}, maxSessions), remaining: len(endpoints)}
+	forwards := make([]provider.PortForward, 0, len(endpoints))
+	for i, reached := range endpoints {
+		listening := &portListener{group: group, endpoint: reached, listener: netListeners[i], active: map[*connection]struct{}{}}
+		group.listeners = append(group.listeners, listening)
+		forwards = append(forwards, provider.PortForward{Binding: reached.binding, LocalAddress: netListeners[i].Addr().String(), Close: listening.close})
 	}
-	group.listeners = listeners
-	for _, forwarded := range listeners {
-		go forwarded.accept()
+	for _, listening := range group.listeners {
+		go listening.accept()
 	}
-	context.AfterFunc(ctx, func() {
-		for _, forwarded := range listeners {
-			forwarded.close()
-		}
-	})
+	context.AfterFunc(ctx, group.closeAll)
 	return forwards, nil
 }
 
-func (g *forwarding) finish() {
-	g.mu.Lock()
-	g.closing = true
-	g.mu.Unlock()
-	g.cancel()
-	g.handlers.Wait()
-	if err := g.task.Stop(); err != nil {
-		g.report(err)
+func (b Bastion) endpointsOf(bindings []provider.Binding) ([]endpoint, error) {
+	endpoints := make([]endpoint, 0, len(bindings))
+	for _, binding := range bindings {
+		host, port := binding.Properties[provider.PropertyHost], binding.Properties[provider.PropertyPort]
+		number, err := strconv.Atoi(port)
+		if err != nil || host == "" {
+			return nil, fmt.Errorf("binding %s names host %q and port %q, which no port forward can reach", binding.Name, host, port)
+		}
+		if !slices.Contains(b.Ports, number) {
+			return nil, fmt.Errorf("the bastion's security group lets nothing out on port %d, so %s at %s:%d cannot be reached", number, binding.Name, host, number)
+		}
+		endpoints = append(endpoints, endpoint{binding: binding.Name, host: host, port: number})
+	}
+	return endpoints, nil
+}
+
+func (g *forwardGroup) closeAll() {
+	for _, listening := range g.listeners {
+		listening.close()
 	}
 }
 
-func (g *forwarding) fail(err error) {
+func (g *forwardGroup) fail(err error) {
 	g.failed.Do(func() {
-		g.report(err)
-		go func() {
-			for _, forwarded := range g.listeners {
-				forwarded.close()
-			}
-		}()
+		g.reportFailure(err)
+		go g.closeAll()
 	})
 }
 
-func (g *forwarding) admit() bool {
+func (g *forwardGroup) admit() bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.closing {
@@ -168,6 +127,17 @@ func (g *forwarding) admit() bool {
 	}
 	g.handlers.Add(1)
 	return true
+}
+
+func (g *forwardGroup) finish() {
+	g.mu.Lock()
+	g.closing = true
+	g.mu.Unlock()
+	g.cancel()
+	g.handlers.Wait()
+	if err := g.task.Stop(); err != nil {
+		g.reportFailure(err)
+	}
 }
 
 func (l *portListener) close() {
@@ -216,72 +186,72 @@ func (l *portListener) accept() {
 		go func() {
 			defer l.group.handlers.Done()
 			defer func() { <-l.group.slots }()
-			l.carry(conn)
+			l.forwardConnection(conn)
 		}()
 	}
 }
 
-func (l *portListener) carry(conn net.Conn) {
-	stream, err := l.group.open(l.group.ctx, l.group.task.Target, l.target.Host, l.target.Port)
+func (l *portListener) forwardConnection(conn net.Conn) {
+	stream, err := l.group.open(l.group.ctx, l.group.task.ManagedNode, l.endpoint.host, l.endpoint.port)
 	if err != nil {
 		_ = conn.Close()
 		if l.group.ctx.Err() != nil {
 			return
 		}
-		err = fmt.Errorf("open a session to %s at %s:%d: %w", l.target.Name, l.target.Host, l.target.Port, err)
+		err = fmt.Errorf("open a session to %s at %s:%d: %w", l.endpoint.binding, l.endpoint.host, l.endpoint.port, err)
 		if reason, stopped := l.group.task.stoppedReason(l.group.ctx); stopped {
 			err = fmt.Errorf("the bastion task stopped (%s), so every port forward through it has ended: %w", reason, err)
 		}
 		l.group.fail(err)
 		return
 	}
-	carried := &connection{conn: conn, stream: stream}
-	carried.end = sync.OnceFunc(func() {
+	open := &connection{conn: conn, stream: stream}
+	open.end = sync.OnceFunc(func() {
 		_ = conn.Close()
 		_ = stream.Terminate()
 	})
 	l.mu.Lock()
 	if l.ended {
 		l.mu.Unlock()
-		carried.end()
+		open.end()
 		return
 	}
-	l.active[carried] = struct{}{}
+	l.active[open] = struct{}{}
 	l.mu.Unlock()
 	defer func() {
 		l.mu.Lock()
-		delete(l.active, carried)
+		delete(l.active, open)
 		l.mu.Unlock()
 	}()
 
 	received := make(chan struct{})
 	go func() {
 		defer close(received)
-		defer carried.end()
+		defer open.end()
 		for {
-			payload, err := stream.Receive()
+			payload, receiveErr := stream.Receive()
 			if len(payload) > 0 {
-				if _, werr := conn.Write(payload); werr != nil {
+				if _, writeErr := conn.Write(payload); writeErr != nil {
 					return
 				}
 			}
-			if err != nil {
+			if receiveErr != nil {
 				return
 			}
 		}
 	}()
 	buf := make([]byte, chunkBytes)
 	for {
-		n, err := conn.Read(buf)
+		n, readErr := conn.Read(buf)
 		if n > 0 {
-			if serr := stream.Send(buf[:n]); serr != nil {
+			if sendErr := stream.Send(buf[:n]); sendErr != nil {
 				break
 			}
 		}
-		if err != nil {
+		if readErr != nil {
 			break
 		}
 	}
-	carried.end()
+	open.end()
 	<-received
 }

@@ -92,15 +92,20 @@ func (s *sessions) count() int {
 	return len(s.opened)
 }
 
-var forwardTargets = []bastion.Target{
-	{Name: "orders", Host: "orders.cluster-abc.us-east-1.rds.amazonaws.com", Port: 5432},
-	{Name: "cache", Host: "master.cache.abc.use1.cache.amazonaws.com", Port: 6379},
+var forwardBindings = []provider.Binding{
+	{Type: provider.BindingPostgres, Name: "orders", Properties: map[string]string{provider.PropertyHost: "orders.cluster-abc.us-east-1.rds.amazonaws.com", provider.PropertyPort: "5432"}},
+	{Type: provider.BindingKV, Name: "cache", Properties: map[string]string{provider.PropertyHost: "master.cache.abc.use1.cache.amazonaws.com", provider.PropertyPort: "6379"}},
 }
 
-func forwarded(t *testing.T, account *account, sess *sessions, report func(error)) []bastion.Forward {
+func ignoreFailures(error) {}
+
+func forwarded(t *testing.T, account *account, sess *sessions, reportFailure func(error)) []provider.PortForward {
 	t.Helper()
-	clients, ensured := readyBastion(t, account)
-	forwards, err := ensured.Forward(context.Background(), clients, sess.open, report, forwardTargets)
+	if reportFailure == nil {
+		reportFailure = ignoreFailures
+	}
+	clients, reconciled := readyBastion(t, account)
+	forwards, err := reconciled.Forward(context.Background(), clients, sess.open, reportFailure, forwardBindings)
 	if err != nil {
 		t.Fatalf("Forward() = %v", err)
 	}
@@ -132,21 +137,21 @@ func TestForwardCarriesEachConnectionToItsTargetOverASessionOfItsOwnOnTheLoopbac
 	forwards := forwarded(t, account, sess, nil)
 	defer closeAll(forwards)
 
-	if len(forwards) != 2 || forwards[0].Name != "orders" || forwards[1].Name != "cache" {
+	if len(forwards) != 2 || forwards[0].Binding != "orders" || forwards[1].Binding != "cache" {
 		t.Fatalf("Forward() = %+v, want orders then cache", forwards)
 	}
 	for _, forward := range forwards {
-		if !strings.HasPrefix(forward.Address, "127.0.0.1:") {
-			t.Errorf("%s listens on %s, want a loopback port: anything wider would hand the database to the network", forward.Name, forward.Address)
+		if !strings.HasPrefix(forward.LocalAddress, "127.0.0.1:") {
+			t.Errorf("%s listens on %s, want a loopback port: anything wider would hand the database to the network", forward.Binding, forward.LocalAddress)
 		}
 	}
-	if got := roundTrip(t, forwards[0].Address, "select 1"); got != "echo:select 1" {
+	if got := roundTrip(t, forwards[0].LocalAddress, "select 1"); got != "echo:select 1" {
 		t.Errorf("a connection to orders got %q", got)
 	}
-	if got := roundTrip(t, forwards[0].Address, "select 2"); got != "echo:select 2" {
+	if got := roundTrip(t, forwards[0].LocalAddress, "select 2"); got != "echo:select 2" {
 		t.Errorf("a second connection to orders got %q", got)
 	}
-	if got := roundTrip(t, forwards[1].Address, "PING"); got != "echo:PING" {
+	if got := roundTrip(t, forwards[1].LocalAddress, "PING"); got != "echo:PING" {
 		t.Errorf("a connection to cache got %q", got)
 	}
 
@@ -163,7 +168,7 @@ func TestForwardCarriesEachConnectionToItsTargetOverASessionOfItsOwnOnTheLoopbac
 	for _, o := range sess.opened {
 		counts[o]++
 	}
-	if counts[opened{target, forwardTargets[0].Host, 5432}] != 2 || counts[opened{target, forwardTargets[1].Host, 6379}] != 1 {
+	if counts[opened{target, forwardBindings[0].Properties[provider.PropertyHost], 5432}] != 2 || counts[opened{target, forwardBindings[1].Properties[provider.PropertyHost], 6379}] != 1 {
 		t.Errorf("sessions opened = %+v, want two to orders on 5432 and one to cache on 6379", sess.opened)
 	}
 }
@@ -173,7 +178,7 @@ func TestForwardKeepsTheTaskUntilTheLastForwardClosesThenStopsItAndEndsTheOpenSe
 
 	account, sess := newAccount(), &sessions{}
 	forwards := forwarded(t, account, sess, nil)
-	conn, err := net.Dial("tcp", forwards[0].Address)
+	conn, err := net.Dial("tcp", forwards[0].LocalAddress)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -201,7 +206,7 @@ func TestForwardKeepsTheTaskUntilTheLastForwardClosesThenStopsItAndEndsTheOpenSe
 	if running := account.runningTasks(); len(running) != 0 {
 		t.Errorf("tasks %v still run after the last forward closed", running)
 	}
-	if _, err := net.DialTimeout("tcp", forwards[1].Address, time.Second); err == nil {
+	if _, err := net.DialTimeout("tcp", forwards[1].LocalAddress, time.Second); err == nil {
 		t.Error("the cache forward still accepts connections after Close()")
 	}
 }
@@ -210,9 +215,9 @@ func TestForwardStopsTheTaskWhenItsContextEnds(t *testing.T) {
 	t.Parallel()
 
 	account, sess := newAccount(), &sessions{}
-	clients, ensured := readyBastion(t, account)
+	clients, reconciled := readyBastion(t, account)
 	ctx, cancel := context.WithCancel(context.Background())
-	if _, err := ensured.Forward(ctx, clients, sess.open, nil, forwardTargets); err != nil {
+	if _, err := reconciled.Forward(ctx, clients, sess.open, ignoreFailures, forwardBindings); err != nil {
 		t.Fatalf("Forward() = %v", err)
 	}
 
@@ -225,9 +230,9 @@ func TestForwardRefusesAPortTheBastionsSecurityGroupDoesNotOpenBeforeStartingATa
 	t.Parallel()
 
 	account, sess := newAccount(), &sessions{}
-	clients, ensured := readyBastion(t, account)
+	clients, reconciled := readyBastion(t, account)
 
-	_, err := ensured.Forward(context.Background(), clients, sess.open, nil, []bastion.Target{{Name: "other", Host: "10.0.0.5", Port: 22}})
+	_, err := reconciled.Forward(context.Background(), clients, sess.open, ignoreFailures, []provider.Binding{{Type: provider.BindingKV, Name: "other", Properties: map[string]string{provider.PropertyHost: "10.0.0.5", provider.PropertyPort: "22"}}})
 
 	if err == nil {
 		t.Fatal("Forward() to port 22 = nil error, want it refused: the security group lets nothing out on it")
@@ -243,9 +248,9 @@ func TestForwardLeavesNoTaskBehindWhenTheTaskNeverGetsItsExecAgent(t *testing.T)
 	account, sess := newAccount(), &sessions{}
 	account.agentAfter = 100
 	account.onDescribe = func(t *task) { t.stopped = true }
-	clients, ensured := readyBastion(t, account)
+	clients, reconciled := readyBastion(t, account)
 
-	_, err := ensured.Forward(context.Background(), clients, sess.open, nil, forwardTargets)
+	_, err := reconciled.Forward(context.Background(), clients, sess.open, ignoreFailures, forwardBindings)
 
 	if err == nil {
 		t.Fatal("Forward() = nil error, want the task's failure")
@@ -263,7 +268,7 @@ func TestForwardClosesAConnectionItCannotOpenASessionForAndSaysWhy(t *testing.T)
 	forwards := forwarded(t, account, sess, func(err error) { reported <- err })
 	defer closeAll(forwards)
 
-	conn, err := net.Dial("tcp", forwards[0].Address)
+	conn, err := net.Dial("tcp", forwards[0].LocalAddress)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -301,7 +306,7 @@ func TestForwardEndsEveryForwardAndSaysTheTaskStoppedWhenASessionCannotReachTheT
 		account.mu.Unlock()
 	}
 
-	conn, err := net.Dial("tcp", forwards[0].Address)
+	conn, err := net.Dial("tcp", forwards[0].LocalAddress)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -316,7 +321,7 @@ func TestForwardEndsEveryForwardAndSaysTheTaskStoppedWhenASessionCannotReachTheT
 		t.Fatal("the failure was not reported")
 	}
 	waitFor(t, "the cache forward to stop accepting", func() bool {
-		probe, err := net.DialTimeout("tcp", forwards[1].Address, time.Second)
+		probe, err := net.DialTimeout("tcp", forwards[1].LocalAddress, time.Second)
 		if err != nil {
 			return true
 		}
@@ -325,18 +330,18 @@ func TestForwardEndsEveryForwardAndSaysTheTaskStoppedWhenASessionCannotReachTheT
 	})
 }
 
-func TestForwardBindingsPointsEachBindingAtTheLoopbackPortOfItsHostAndPort(t *testing.T) {
+func TestForwardPointsEachBindingAtTheLoopbackPortOfItsHostAndPort(t *testing.T) {
 	t.Parallel()
 
 	account, sess := newAccount(), &sessions{}
-	clients, ensured := readyBastion(t, account)
+	clients, reconciled := readyBastion(t, account)
 
-	forwards, err := ensured.ForwardBindings(context.Background(), clients, sess.open, nil, []provider.Binding{
+	forwards, err := reconciled.Forward(context.Background(), clients, sess.open, ignoreFailures, []provider.Binding{
 		{Type: provider.BindingPostgres, Name: "orders", Properties: map[string]string{provider.PropertyHost: "orders.rds.internal", provider.PropertyPort: "5432"}},
 		{Type: provider.BindingKV, Name: "cache", Properties: map[string]string{provider.PropertyHost: "cache.internal", provider.PropertyPort: "6379"}},
 	})
 	if err != nil {
-		t.Fatalf("ForwardBindings() = %v", err)
+		t.Fatalf("Forward() = %v", err)
 	}
 	defer func() {
 		for _, forward := range forwards {
@@ -345,7 +350,7 @@ func TestForwardBindingsPointsEachBindingAtTheLoopbackPortOfItsHostAndPort(t *te
 	}()
 
 	if len(forwards) != 2 || forwards[0].Binding != "orders" || forwards[1].Binding != "cache" || !strings.HasPrefix(forwards[0].LocalAddress, "127.0.0.1:") {
-		t.Fatalf("ForwardBindings() = %+v, want orders and cache each on a loopback port", forwards)
+		t.Fatalf("Forward() = %+v, want orders and cache each on a loopback port", forwards)
 	}
 	if got := roundTrip(t, forwards[1].LocalAddress, "PING"); got != "echo:PING" {
 		t.Errorf("a connection to cache got %q", got)
@@ -355,19 +360,19 @@ func TestForwardBindingsPointsEachBindingAtTheLoopbackPortOfItsHostAndPort(t *te
 	}
 }
 
-func TestForwardBindingsRefusesABindingThatNamesNoHostOrNoNumericPort(t *testing.T) {
+func TestForwardRefusesABindingThatNamesNoHostOrNoNumericPort(t *testing.T) {
 	t.Parallel()
 
 	account, sess := newAccount(), &sessions{}
-	clients, ensured := readyBastion(t, account)
+	clients, reconciled := readyBastion(t, account)
 	for name, properties := range map[string]map[string]string{
 		"no host":  {provider.PropertyPort: "5432"},
 		"no port":  {provider.PropertyHost: "orders.rds.internal"},
 		"bad port": {provider.PropertyHost: "orders.rds.internal", provider.PropertyPort: "five"},
 	} {
-		_, err := ensured.ForwardBindings(context.Background(), clients, sess.open, nil, []provider.Binding{{Type: provider.BindingPostgres, Name: "orders", Properties: properties}})
+		_, err := reconciled.Forward(context.Background(), clients, sess.open, ignoreFailures, []provider.Binding{{Type: provider.BindingPostgres, Name: "orders", Properties: properties}})
 		if err == nil {
-			t.Errorf("%s: ForwardBindings() = nil error, want it refused", name)
+			t.Errorf("%s: Forward() = nil error, want it refused", name)
 		}
 	}
 	if calls := account.called("RunTask"); len(calls) != 0 {
@@ -392,7 +397,7 @@ func TestForwardOpensNoSessionOnceItsTaskIsStoppedHoweverManyConnectionsArriveAs
 			go func() {
 				defer late.Done()
 				<-dialing
-				if conn, err := net.Dial("tcp", forwards[0].Address); err == nil {
+				if conn, err := net.Dial("tcp", forwards[0].LocalAddress); err == nil {
 					_, _ = conn.Write([]byte("x"))
 					defer conn.Close()
 					time.Sleep(time.Millisecond)
@@ -410,7 +415,7 @@ func TestForwardOpensNoSessionOnceItsTaskIsStoppedHoweverManyConnectionsArriveAs
 	}
 }
 
-func closeAll(forwards []bastion.Forward) {
+func closeAll(forwards []provider.PortForward) {
 	for _, forward := range forwards {
 		forward.Close()
 	}

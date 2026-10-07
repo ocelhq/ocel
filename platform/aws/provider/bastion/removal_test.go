@@ -13,11 +13,11 @@ func TestRemoveLeavesNothingOfATiersBastionBehindNotEvenARunningTask(t *testing.
 	t.Parallel()
 
 	account := newAccount()
-	clients, ensured := readyBastion(t, account)
-	if _, err := ensured.Run(context.Background(), clients); err != nil {
+	clients, reconciled := readyBastion(t, account)
+	if _, err := reconciled.Run(context.Background(), clients); err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
-	if _, err := ensured.Run(context.Background(), clients); err != nil {
+	if _, err := reconciled.Run(context.Background(), clients); err != nil {
 		t.Fatalf("second Run() = %v", err)
 	}
 
@@ -59,8 +59,8 @@ func TestRemoveWaitsOutTheNetworkInterfacesAStoppedTaskStillHoldsOnItsSecurityGr
 	t.Parallel()
 
 	account := newAccount()
-	clients, ensured := readyBastion(t, account)
-	if _, err := ensured.Run(context.Background(), clients); err != nil {
+	clients, reconciled := readyBastion(t, account)
+	if _, err := reconciled.Run(context.Background(), clients); err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
 	account.groupBusy = 2
@@ -78,8 +78,8 @@ func TestRemoveDeletesTheClusterOnceTheTasksItStoppedHaveStopped(t *testing.T) {
 	t.Parallel()
 
 	account := newAccount()
-	clients, ensured := readyBastion(t, account)
-	if _, err := ensured.Run(context.Background(), clients); err != nil {
+	clients, reconciled := readyBastion(t, account)
+	if _, err := reconciled.Run(context.Background(), clients); err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
 	account.stopLag = 3

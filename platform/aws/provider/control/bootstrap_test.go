@@ -11,6 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -24,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
@@ -62,12 +65,38 @@ func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 		SSM:     &teardownSSM{params: stored},
 		IAM:     &teardownIAM{keys: map[string][]string{userName: {"AKIAOLD"}}},
 		Buckets: &teardownBuckets{},
+		Bastion: bastion.Clients{ECS: &absentBastion{}, IAM: &absentBastion{}, EC2: &absentBastion{}},
 		Edge:    front,
 		Edges:   registryOf(front),
 		Kinds:   kindsOf(front),
 
 		Namespace: defaultNamespace,
 	}
+}
+
+type absentBastion struct {
+	bastion.ECSAPI
+	bastion.IAMAPI
+	bastion.EC2API
+
+	looked []string
+}
+
+func (a *absentBastion) DescribeClusters(_ context.Context, in *ecs.DescribeClustersInput, _ ...func(*ecs.Options)) (*ecs.DescribeClustersOutput, error) {
+	a.looked = append(a.looked, in.Clusters...)
+	return &ecs.DescribeClustersOutput{}, nil
+}
+
+func (a *absentBastion) ListTaskDefinitions(context.Context, *ecs.ListTaskDefinitionsInput, ...func(*ecs.Options)) (*ecs.ListTaskDefinitionsOutput, error) {
+	return &ecs.ListTaskDefinitionsOutput{}, nil
+}
+
+func (a *absentBastion) DescribeSecurityGroups(context.Context, *ec2.DescribeSecurityGroupsInput, ...func(*ec2.Options)) (*ec2.DescribeSecurityGroupsOutput, error) {
+	return &ec2.DescribeSecurityGroupsOutput{}, nil
+}
+
+func (a *absentBastion) GetRole(context.Context, *iam.GetRoleInput, ...func(*iam.Options)) (*iam.GetRoleOutput, error) {
+	return nil, &iamtypes.NoSuchEntityException{}
 }
 
 func registryOf(fronts ...edge.Edge) edgeRegistry {
@@ -357,6 +386,9 @@ func TestRemoveTearsTheEdgeDownForTheTierThenTheAWSBootstrap(t *testing.T) {
 		t.Fatalf("Remove: %v", err)
 	}
 
+	if looked := b.Bastion.ECS.(*absentBastion).looked; !slices.Equal(looked, []string{"ocel-bastion-production"}) {
+		t.Errorf("the bastion clusters looked up = %v, want the production tier's, so its bastion goes with it", looked)
+	}
 	if got := b.Edge.(*teardownEdge).torndown; !slices.Equal(got, []environment.Tier{environment.TierProduction}) {
 		t.Errorf("edge teardown tiers = %v, want [production]", got)
 	}

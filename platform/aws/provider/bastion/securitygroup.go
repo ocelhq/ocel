@@ -15,12 +15,21 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
+type peer int
+
+const (
+	ipv4Range peer = iota
+	ipv6Range
+	prefixList
+	securityGroup
+)
+
 type rule struct {
 	protocol string
 	from     int32
 	to       int32
-	kind     string
-	target   string
+	peer     peer
+	address  string
 }
 
 func (r rule) permission() ec2types.IpPermission {
@@ -28,48 +37,48 @@ func (r rule) permission() ec2types.IpPermission {
 	if r.protocol != "-1" {
 		permission.FromPort, permission.ToPort = aws.Int32(r.from), aws.Int32(r.to)
 	}
-	switch r.kind {
-	case "cidr":
-		permission.IpRanges = []ec2types.IpRange{{CidrIp: aws.String(r.target)}}
-	case "cidr6":
-		permission.Ipv6Ranges = []ec2types.Ipv6Range{{CidrIpv6: aws.String(r.target)}}
-	case "prefix-list":
-		permission.PrefixListIds = []ec2types.PrefixListId{{PrefixListId: aws.String(r.target)}}
-	case "group":
-		permission.UserIdGroupPairs = []ec2types.UserIdGroupPair{{GroupId: aws.String(r.target)}}
+	switch r.peer {
+	case ipv4Range:
+		permission.IpRanges = []ec2types.IpRange{{CidrIp: aws.String(r.address)}}
+	case ipv6Range:
+		permission.Ipv6Ranges = []ec2types.Ipv6Range{{CidrIpv6: aws.String(r.address)}}
+	case prefixList:
+		permission.PrefixListIds = []ec2types.PrefixListId{{PrefixListId: aws.String(r.address)}}
+	case securityGroup:
+		permission.UserIdGroupPairs = []ec2types.UserIdGroupPair{{GroupId: aws.String(r.address)}}
 	}
 	return permission
 }
 
 func rulesOf(permissions []ec2types.IpPermission) []rule {
 	var rules []rule
-	for _, p := range permissions {
-		base := rule{protocol: aws.ToString(p.IpProtocol), from: aws.ToInt32(p.FromPort), to: aws.ToInt32(p.ToPort)}
-		for _, r := range p.IpRanges {
-			rules = append(rules, rule{base.protocol, base.from, base.to, "cidr", aws.ToString(r.CidrIp)})
+	for _, permission := range permissions {
+		protocol, from, to := aws.ToString(permission.IpProtocol), aws.ToInt32(permission.FromPort), aws.ToInt32(permission.ToPort)
+		for _, ipRange := range permission.IpRanges {
+			rules = append(rules, rule{protocol, from, to, ipv4Range, aws.ToString(ipRange.CidrIp)})
 		}
-		for _, r := range p.Ipv6Ranges {
-			rules = append(rules, rule{base.protocol, base.from, base.to, "cidr6", aws.ToString(r.CidrIpv6)})
+		for _, ipRange := range permission.Ipv6Ranges {
+			rules = append(rules, rule{protocol, from, to, ipv6Range, aws.ToString(ipRange.CidrIpv6)})
 		}
-		for _, r := range p.PrefixListIds {
-			rules = append(rules, rule{base.protocol, base.from, base.to, "prefix-list", aws.ToString(r.PrefixListId)})
+		for _, list := range permission.PrefixListIds {
+			rules = append(rules, rule{protocol, from, to, prefixList, aws.ToString(list.PrefixListId)})
 		}
-		for _, r := range p.UserIdGroupPairs {
-			rules = append(rules, rule{base.protocol, base.from, base.to, "group", aws.ToString(r.GroupId)})
+		for _, pair := range permission.UserIdGroupPairs {
+			rules = append(rules, rule{protocol, from, to, securityGroup, aws.ToString(pair.GroupId)})
 		}
 	}
 	return rules
 }
 
 func egressRules(net network, ports []int) []rule {
-	rules := []rule{{protocol: "tcp", from: httpsPort, to: httpsPort, kind: "cidr", target: anywhere}}
+	rules := []rule{{protocol: "tcp", from: httpsPort, to: httpsPort, peer: ipv4Range, address: anywhere}}
 	for _, port := range ports {
-		rules = append(rules, rule{protocol: "tcp", from: int32(port), to: int32(port), kind: "cidr", target: net.cidr})
+		rules = append(rules, rule{protocol: "tcp", from: int32(port), to: int32(port), peer: ipv4Range, address: net.cidr})
 	}
 	return rules
 }
 
-func (c Clients) ensureSecurityGroup(ctx context.Context, tier environment.Tier, net network, ports []int) (string, error) {
+func (c Clients) reconcileSecurityGroup(ctx context.Context, tier environment.Tier, net network, ports []int) (string, error) {
 	name := NameFor(tier)
 	group, err := c.findSecurityGroup(ctx, name, net.vpc)
 	if err != nil {
@@ -100,25 +109,19 @@ func (c Clients) findSecurityGroup(ctx context.Context, name, vpc string) (*ec2t
 		return nil, nil
 	}
 	group := described.SecurityGroups[0]
-	if !slices.ContainsFunc(group.Tags, func(tag ec2types.Tag) bool {
-		return aws.ToString(tag.Key) == managedByTagKey && aws.ToString(tag.Value) == managedByTagValue
-	}) {
-		return nil, fmt.Errorf("security group %s exists and is not tagged %s=%s, so Ocel will not run a bastion behind it", name, managedByTagKey, managedByTagValue)
+	if !isManagedByOcel(group.Tags, func(tag ec2types.Tag) (*string, *string) { return tag.Key, tag.Value }) {
+		return nil, refuseUnowned("security group", name)
 	}
 	return &group, nil
 }
 
 func (c Clients) createSecurityGroup(ctx context.Context, tier environment.Tier, vpc string) (*ec2types.SecurityGroup, error) {
 	name := NameFor(tier)
-	var groupTags []ec2types.Tag
-	for _, tag := range ecsTags(tags(tier)) {
-		groupTags = append(groupTags, ec2types.Tag{Key: tag.Key, Value: tag.Value})
-	}
 	_, err := c.EC2.CreateSecurityGroup(ctx, &ec2.CreateSecurityGroupInput{
 		GroupName:         aws.String(name),
 		Description:       aws.String("Ocel: the " + string(tier) + " tier's bastion, which nothing reaches and which reaches only HTTPS and the ports of its databases and caches"),
 		VpcId:             aws.String(vpc),
-		TagSpecifications: []ec2types.TagSpecification{{ResourceType: ec2types.ResourceTypeSecurityGroup, Tags: groupTags}},
+		TagSpecifications: []ec2types.TagSpecification{{ResourceType: ec2types.ResourceTypeSecurityGroup, Tags: ec2TagsFor(tier)}},
 	})
 	var api smithy.APIError
 	duplicate := errors.As(err, &api) && api.ErrorCode() == "InvalidGroup.Duplicate"
@@ -137,8 +140,8 @@ func (c Clients) createSecurityGroup(ctx context.Context, tier environment.Tier,
 
 func (c Clients) closeIngress(ctx context.Context, id string, group *ec2types.SecurityGroup) error {
 	var open []ec2types.IpPermission
-	for _, r := range rulesOf(group.IpPermissions) {
-		open = append(open, r.permission())
+	for _, admitted := range rulesOf(group.IpPermissions) {
+		open = append(open, admitted.permission())
 	}
 	if len(open) == 0 {
 		return nil
@@ -152,14 +155,14 @@ func (c Clients) closeIngress(ctx context.Context, id string, group *ec2types.Se
 func (c Clients) limitEgress(ctx context.Context, id string, group *ec2types.SecurityGroup, want []rule) error {
 	have := rulesOf(group.IpPermissionsEgress)
 	var missing, extra []ec2types.IpPermission
-	for _, r := range want {
-		if !slices.Contains(have, r) {
-			missing = append(missing, r.permission())
+	for _, wanted := range want {
+		if !slices.Contains(have, wanted) {
+			missing = append(missing, wanted.permission())
 		}
 	}
-	for _, r := range have {
-		if !slices.Contains(want, r) {
-			extra = append(extra, r.permission())
+	for _, held := range have {
+		if !slices.Contains(want, held) {
+			extra = append(extra, held.permission())
 		}
 	}
 	if len(missing) > 0 {
@@ -199,8 +202,8 @@ func isDuplicateRule(err error) bool {
 
 func describeRules(permissions []ec2types.IpPermission) string {
 	var out []string
-	for _, r := range rulesOf(permissions) {
-		out = append(out, r.protocol+"/"+strconv.Itoa(int(r.from))+"-"+strconv.Itoa(int(r.to))+" "+r.target)
+	for _, described := range rulesOf(permissions) {
+		out = append(out, described.protocol+"/"+strconv.Itoa(int(described.from))+"-"+strconv.Itoa(int(described.to))+" "+described.address)
 	}
 	return fmt.Sprint(out)
 }

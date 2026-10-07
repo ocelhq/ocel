@@ -18,20 +18,20 @@ import (
 
 var testSpec = bastion.Spec{Tier: environment.TierProduction, Boundary: testBoundary, Ports: []int{5432, 6379}}
 
-func TestEnsureCreatesTheClusterTaskDefinitionRoleAndSecurityGroupOfATierTaggedAsOcels(t *testing.T) {
+func TestReconcileCreatesTheClusterTaskDefinitionRoleAndSecurityGroupOfATierTaggedAsOcels(t *testing.T) {
 	t.Parallel()
 
 	account := newAccount()
-	got, err := bastion.Ensure(context.Background(), account.clients(), testSpec)
+	got, err := bastion.Reconcile(context.Background(), account.clients(), testSpec)
 	if err != nil {
-		t.Fatalf("Ensure() = %v", err)
+		t.Fatalf("Reconcile() = %v", err)
 	}
 
 	if got.Cluster != "ocel-bastion-production" {
-		t.Errorf("Ensure().Cluster = %q, want ocel-bastion-production", got.Cluster)
+		t.Errorf("Reconcile().Cluster = %q, want ocel-bastion-production", got.Cluster)
 	}
 	if want := []string{"subnet-a", "subnet-b"}; !slices.Equal(got.Subnets, want) {
-		t.Errorf("Ensure().Subnets = %v, want the default VPC's subnets %v", got.Subnets, want)
+		t.Errorf("Reconcile().Subnets = %v, want the default VPC's subnets %v", got.Subnets, want)
 	}
 	if tags := account.clusters["ocel-bastion-production"]; tags["ocel:managed-by"] != "ocel" {
 		t.Errorf("the cluster is tagged %v, want ocel:managed-by=ocel so the deploy credential may delete it", tags)
@@ -55,12 +55,12 @@ func TestEnsureCreatesTheClusterTaskDefinitionRoleAndSecurityGroupOfATierTaggedA
 	}
 }
 
-func TestEnsureShapesTheSecurityGroupSoNothingReachesTheTaskAndItReachesOnlyHTTPSAndTheTargetPortsInTheVPC(t *testing.T) {
+func TestReconcileShapesTheSecurityGroupSoNothingReachesTheTaskAndItReachesOnlyHTTPSAndTheTargetPortsInTheVPC(t *testing.T) {
 	t.Parallel()
 
 	account := newAccount()
-	if _, err := bastion.Ensure(context.Background(), account.clients(), testSpec); err != nil {
-		t.Fatalf("Ensure() = %v", err)
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Reconcile() = %v", err)
 	}
 
 	var group *securityGroup
@@ -89,43 +89,43 @@ func TestEnsureShapesTheSecurityGroupSoNothingReachesTheTaskAndItReachesOnlyHTTP
 	}
 }
 
-func TestEnsureCreatesNothingTheSecondTimeASessionStarts(t *testing.T) {
+func TestReconcileCreatesNothingTheSecondTimeASessionStarts(t *testing.T) {
 	t.Parallel()
 
 	account := newAccount()
-	first, err := bastion.Ensure(context.Background(), account.clients(), testSpec)
+	first, err := bastion.Reconcile(context.Background(), account.clients(), testSpec)
 	if err != nil {
-		t.Fatalf("first Ensure() = %v", err)
+		t.Fatalf("first Reconcile() = %v", err)
 	}
 	made := len(account.created())
 
-	second, err := bastion.Ensure(context.Background(), account.clients(), testSpec)
+	second, err := bastion.Reconcile(context.Background(), account.clients(), testSpec)
 	if err != nil {
-		t.Fatalf("second Ensure() = %v", err)
+		t.Fatalf("second Reconcile() = %v", err)
 	}
 
 	if created := account.created(); len(created) != made {
-		t.Errorf("the second Ensure() made %v, want nothing: the bastion of a tier is created once and reused", created[made:])
+		t.Errorf("the second Reconcile() made %v, want nothing: the bastion of a tier is created once and reused", created[made:])
 	}
 	if first.TaskDefinition != second.TaskDefinition || first.SecurityGroup != second.SecurityGroup {
-		t.Errorf("Ensure() = %+v then %+v, want the same bastion", first, second)
+		t.Errorf("Reconcile() = %+v then %+v, want the same bastion", first, second)
 	}
 }
 
-func TestEnsureClosesAnIngressAndAnEgressRuleASecurityGroupHasGrownSinceItWasCreated(t *testing.T) {
+func TestReconcileClosesAnIngressAndAnEgressRuleASecurityGroupHasGrownSinceItWasCreated(t *testing.T) {
 	t.Parallel()
 
 	account := newAccount()
-	if _, err := bastion.Ensure(context.Background(), account.clients(), testSpec); err != nil {
-		t.Fatalf("Ensure() = %v", err)
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Reconcile() = %v", err)
 	}
 	for _, group := range account.groups {
 		group.ingress = append(group.ingress, ec2types.IpPermission{IpProtocol: aws.String("tcp"), FromPort: aws.Int32(22), ToPort: aws.Int32(22), IpRanges: []ec2types.IpRange{{CidrIp: aws.String("0.0.0.0/0")}}})
 		group.egress = append(group.egress, ec2types.IpPermission{IpProtocol: aws.String("-1"), IpRanges: []ec2types.IpRange{{CidrIp: aws.String("0.0.0.0/0")}}})
 	}
 
-	if _, err := bastion.Ensure(context.Background(), account.clients(), testSpec); err != nil {
-		t.Fatalf("Ensure() = %v", err)
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Reconcile() = %v", err)
 	}
 
 	for _, group := range account.groups {
@@ -135,12 +135,12 @@ func TestEnsureClosesAnIngressAndAnEgressRuleASecurityGroupHasGrownSinceItWasCre
 	}
 }
 
-func TestEnsureLetsOnlyTheECSTasksOfTheBoundarysAccountAssumeTheTaskRole(t *testing.T) {
+func TestReconcileLetsOnlyTheECSTasksOfTheBoundarysAccountAssumeTheTaskRole(t *testing.T) {
 	t.Parallel()
 
 	account := newAccount()
-	if _, err := bastion.Ensure(context.Background(), account.clients(), testSpec); err != nil {
-		t.Fatalf("Ensure() = %v", err)
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Reconcile() = %v", err)
 	}
 
 	var trust struct {
@@ -157,37 +157,37 @@ func TestEnsureLetsOnlyTheECSTasksOfTheBoundarysAccountAssumeTheTaskRole(t *test
 	}
 }
 
-func TestEnsureRefusesARoleOfTheBastionsNameThatOcelDoesNotOwn(t *testing.T) {
+func TestReconcileRefusesARoleOfTheBastionsNameThatOcelDoesNotOwn(t *testing.T) {
 	t.Parallel()
 
 	account := newAccount()
 	account.roles["ocel-bastion-production"] = &role{arn: "arn:aws:iam::123456789012:role/ocel-bastion-production", tags: map[string]string{}, policies: map[string]string{}}
 
-	_, err := bastion.Ensure(context.Background(), account.clients(), testSpec)
+	_, err := bastion.Reconcile(context.Background(), account.clients(), testSpec)
 	if err == nil {
-		t.Fatal("Ensure() over a role Ocel did not tag = nil error, want it refused: a task would run as a role nobody here vouches for")
+		t.Fatal("Reconcile() over a role Ocel did not tag = nil error, want it refused: a task would run as a role nobody here vouches for")
 	}
 }
 
-func TestEnsureRepairsARoleWhoseSessionPolicyWasNeverWritten(t *testing.T) {
+func TestReconcileRepairsARoleWhoseSessionPolicyWasNeverWritten(t *testing.T) {
 	t.Parallel()
 
 	account := newAccount()
-	if _, err := bastion.Ensure(context.Background(), account.clients(), testSpec); err != nil {
-		t.Fatalf("Ensure() = %v", err)
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Reconcile() = %v", err)
 	}
 	clear(account.roles["ocel-bastion-production"].policies)
 
-	if _, err := bastion.Ensure(context.Background(), account.clients(), testSpec); err != nil {
-		t.Fatalf("Ensure() = %v", err)
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Reconcile() = %v", err)
 	}
 
 	if decoded, _ := url.QueryUnescape(account.roles["ocel-bastion-production"].policies["session-channels"]); decoded == "" {
-		t.Error("the task role holds no session policy after Ensure(), so the ECS Exec agent could never open its channels")
+		t.Error("the task role holds no session policy after Reconcile(), so the ECS Exec agent could never open its channels")
 	}
 }
 
-func TestEnsureOpensTheEgressAnotherForwardOfTheSameTierOpenedFirstWithoutFailing(t *testing.T) {
+func TestReconcileOpensTheEgressAnotherForwardOfTheSameTierOpenedFirstWithoutFailing(t *testing.T) {
 	t.Parallel()
 
 	account := newAccount()
@@ -195,8 +195,8 @@ func TestEnsureOpensTheEgressAnotherForwardOfTheSameTierOpenedFirstWithoutFailin
 		group.egress = append(group.egress, opening[0])
 	}
 
-	if _, err := bastion.Ensure(context.Background(), account.clients(), testSpec); err != nil {
-		t.Fatalf("Ensure() racing another forward of the tier = %v, want the rules the other opened taken as opened", err)
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Reconcile() racing another forward of the tier = %v, want the rules the other opened taken as opened", err)
 	}
 
 	for _, group := range account.groups {

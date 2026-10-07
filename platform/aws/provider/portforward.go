@@ -3,10 +3,6 @@ package aws
 import (
 	"context"
 
-	"github.com/aws/aws-sdk-go-v2/service/ec2"
-	"github.com/aws/aws-sdk-go-v2/service/ecs"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
-
 	"github.com/ocelhq/ocel/pkg/kvstore"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
@@ -24,8 +20,8 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	if err := p.requireBootstrapped(deployed, req.Tier); err != nil {
 		return nil, err
 	}
-	clients := bastion.Clients{ECS: ecs.NewFromConfig(p.aws), IAM: iam.NewFromConfig(p.aws), EC2: ec2.NewFromConfig(p.aws)}
-	ensured, err := bastion.Ensure(ctx, clients, bastion.Spec{
+	clients := bastion.NewClients(p.aws)
+	reconciled, err := bastion.Reconcile(ctx, clients, bastion.Spec{
 		Tier:     req.Tier,
 		Boundary: deployed.AppBoundaryARN,
 		Ports:    []int{deploy.PostgresPort, kvstore.ValkeyPort},
@@ -33,5 +29,5 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	if err != nil {
 		return nil, err
 	}
-	return ensured.ForwardBindings(ctx, clients, bastion.OpenSession(p.aws), req.ReportFailure, req.Bindings)
+	return reconciled.Forward(ctx, clients, bastion.OpenSession(p.aws), req.ReportFailure, req.Bindings)
 }

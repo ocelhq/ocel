@@ -174,11 +174,9 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 		return err
 	}
 
-	if apis.RemoveBastion != nil {
-		progress.Say(fmt.Sprintf("Removing the %s tier's bastion (ECS, IAM, EC2)", tier))
-		if err := apis.RemoveBastion(ctx, tier); err != nil {
-			return err
-		}
+	progress.Say(fmt.Sprintf("Removing the %s tier's bastion (ECS, IAM, EC2)", tier))
+	if err := apis.RemoveBastion(ctx, tier); err != nil {
+		return err
 	}
 
 	if deployed.AppBoundaryARN != "" {
