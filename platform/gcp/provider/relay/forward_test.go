@@ -204,6 +204,70 @@ func TestATargetTheRelayCannotReachIsRefusedAsNotReady(t *testing.T) {
 	}
 }
 
+func TestABastionThatCannotBeReachedIsRefusedSayingWhy(t *testing.T) {
+	t.Parallel()
+	closed, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := closed.Addr().String()
+	_ = closed.Close()
+
+	_, err = relay.OpenForward(context.Background(), relay.Link{URL: "http://" + address, Target: "10.240.0.5:5432", Token: tokenOf("id-token")})
+
+	if err == nil || !strings.Contains(err.Error(), "refused") {
+		t.Errorf("OpenForward() through a bastion nothing listens at = %v, want the refusal to carry why the dial failed", err)
+	}
+}
+
+func TestAConnectionThroughAnOpenForwardThatFailsIsWarnedOfOnceAndNamesTheTarget(t *testing.T) {
+	t.Parallel()
+	target := echoing(t)
+	var mutex sync.Mutex
+	admitted := 1
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mutex.Lock()
+		admit := admitted > 0
+		admitted--
+		mutex.Unlock()
+		if !admit {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		relay.NewHandler(destinationsOf(t, target)).ServeHTTP(w, r)
+	}))
+	t.Cleanup(front.Close)
+	warned := make(chan string, 4)
+	forward, err := relay.OpenForward(context.Background(), relay.Link{URL: front.URL, Target: target, Token: tokenOf("id-token"),
+		Warn: func(message string) { warned <- message }})
+	if err != nil {
+		t.Fatalf("OpenForward() = %v", err)
+	}
+	defer forward.Close()
+
+	for range 2 {
+		conn, err := net.Dial("tcp", forward.Address())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		if _, err := conn.Read(make([]byte, 1)); err == nil {
+			t.Error("a connection the bastion refused still reads, want it closed")
+		}
+		_ = conn.Close()
+	}
+	forward.Close()
+
+	close(warned)
+	var said []string
+	for message := range warned {
+		said = append(said, message)
+	}
+	if len(said) != 1 || !strings.Contains(said[0], target) || !strings.Contains(said[0], "403") {
+		t.Errorf("the forward warned %q, want one warning naming %s and why the bastion refused", said, target)
+	}
+}
+
 func TestAnIdentityTokenNeverReachesARefusalMessage(t *testing.T) {
 	t.Parallel()
 	target := echoing(t)

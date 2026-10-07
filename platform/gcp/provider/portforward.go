@@ -71,7 +71,7 @@ func (b bastion) forwardPorts(ctx context.Context, tier environment.Tier, target
 	}
 	forwards := make([]*relay.Forward, 0, len(targets))
 	for _, target := range targets {
-		forward, err := b.openForward(ctx, relay.Link{URL: url, Target: target, Token: tokens.mint})
+		forward, err := b.openForward(ctx, relay.Link{URL: url, Target: target, Token: tokens.mint, Warn: ensureProgress(progress).Warn})
 		if err != nil {
 			for _, opened := range forwards {
 				opened.Close()
