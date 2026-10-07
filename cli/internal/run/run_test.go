@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -410,6 +411,34 @@ func TestARunInAProjectTracesItselfAndPointsItsResultAtItsLog(t *testing.T) {
 	spans, readErr := os.ReadFile(strings.TrimSuffix(logPath, ".ndjson") + ".otlp.json")
 	if readErr != nil || !strings.Contains(string(spans), "ocel deploy") {
 		t.Fatalf("trace file = %q (%v), want the run's root span", spans, readErr)
+	}
+}
+
+func TestARunInAProjectNamesItsTraceIDAndItsStartTime(t *testing.T) {
+	started := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	bus := run.NewBus(func() time.Time { return started })
+	bus.Attach(&recording{})
+	dir := t.TempDir()
+
+	_, traced, err := bus.Begin(context.Background(), "ocel deploy", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer traced.End(&err)
+
+	logName := strings.TrimSuffix(filepath.Base(runFile(t, dir, ".ndjson")), ".ndjson")
+	if traced.TraceID() != logName {
+		t.Errorf("TraceID() = %q, want %q: the id the trace's files are named by", traced.TraceID(), logName)
+	}
+	if !traced.StartedAt().Equal(started) {
+		t.Errorf("StartedAt() = %v, want %v", traced.StartedAt(), started)
+	}
+	_, untraced, err := bus.Begin(context.Background(), "ocel env ls", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if untraced.TraceID() != "" {
+		t.Errorf("TraceID() = %q for a run outside a project, want none", untraced.TraceID())
 	}
 }
 

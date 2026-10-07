@@ -71,6 +71,10 @@ func Open(projectDir, command string) (*Trace, error) {
 	return t, nil
 }
 
+func (t *Trace) ID() string {
+	return t.traceID.String()
+}
+
 func (t *Trace) LogPath() string {
 	return t.logPath
 }
