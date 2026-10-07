@@ -7,42 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 )
-
-const standInEnv = "OCEL_SSH_STAND_IN"
-
-func TestHelperSSHStandIn(t *testing.T) {
-	if os.Getenv(standInEnv) == "" {
-		return
-	}
-	args := os.Args[slices.Index(os.Args, "--")+1:]
-	if slices.Contains(args, "-O") {
-		os.Exit(0)
-	}
-	spec := args[slices.Index(args, "-L")+1]
-	parts := strings.Split(spec, ":")
-	listener, err := net.Listen("tcp", parts[0]+":"+parts[1])
-	if err != nil || os.Getenv(standInEnv) == "refuse" {
-		os.Stderr.WriteString("bind [" + parts[0] + "]:" + parts[1] + ": Address already in use\n")
-		os.Exit(255)
-	}
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				return
-			}
-			_, _ = conn.Write([]byte(parts[2] + ":" + parts[3] + "\n"))
-			_ = conn.Close()
-		}
-	}()
-	_, _ = bufio.NewReader(os.Stdin).ReadString(0)
-	os.Exit(0)
-}
 
 func sshStandingIn(t *testing.T) *Session {
 	t.Helper()
@@ -50,7 +18,7 @@ func sshStandingIn(t *testing.T) *Session {
 		t.Skip("the stand-in ssh is a posix shell script")
 	}
 	dir := t.TempDir()
-	script := "#!/bin/sh\n" + standInEnv + "=${" + standInEnv + ":-1} exec " + os.Args[0] + " -test.run='^TestHelperSSHStandIn$' -- \"$@\"\n"
+	script := "#!/bin/sh\n" + standInEnv + "=${" + standInEnv + ":-1} exec " + os.Args[0] + " \"$@\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "ssh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
