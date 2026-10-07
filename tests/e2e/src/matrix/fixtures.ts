@@ -216,6 +216,11 @@ export const prerender = {
     checks: [...healthChecks, ...prerenderChecks],
     on: { vps: [defaults] },
   }),
+  nextDockerfile: fixture("prerender/next-dockerfile", {
+    apps: ["web"],
+    checks: [...healthChecks, ...prerenderChecks],
+    on: { vps: [defaults] },
+  }),
 };
 
 export const kv = {

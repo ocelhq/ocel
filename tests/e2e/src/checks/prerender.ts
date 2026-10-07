@@ -1,5 +1,22 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { promisify } from "node:util";
 import type { Check } from "./context";
+
+const run = promisify(execFile);
+
+const IMAGE_REF = path.join(".ocel", "output", "apps", "web", "image-ref");
+const SHOWN_BINDINGS = [
+  /OCEL_RESOURCE_[A-Z]+_[\w-]+=/g,
+  /postgres(?:ql)?:\/\/[^\s/@:"]+:[^\s/@"]+@/g,
+  /\\?"password\\?"\s*:/g,
+];
+
+export function findBindingsShown(text: string): string[] {
+  return SHOWN_BINDINGS.flatMap((pattern) => [...text.matchAll(pattern)].map((found) => found[0]));
+}
 
 const DATABASE = /prerendered from database (?:<!-- -->)?([^<\s]+)/;
 const AT = /prerendered at (?:<!-- -->)?([^<]+)</;
@@ -49,7 +66,26 @@ export const staticParamsFromTheDatabaseCheck: Check = {
   },
 };
 
+export const imageShowsNoBindingCheck: Check = {
+  title: "the image next build ran in shows no binding in its history, config or labels",
+  run: async (ctx) => {
+    const ref = (await readFile(path.join(ctx.projectDir, IMAGE_REF), "utf8")).trim();
+    for (const args of [
+      ["image", "history", "--no-trunc", "--format", "{{.CreatedBy}}", ref],
+      ["image", "inspect", ref],
+    ]) {
+      const { stdout } = await run("docker", args, { maxBuffer: 16 * 1024 * 1024 });
+      assert.deepEqual(
+        findBindingsShown(stdout),
+        [],
+        `docker ${args.slice(0, 2).join(" ")} of ${ref} shows a binding the build read`,
+      );
+    }
+  },
+};
+
 export const prerenderChecks: Check[] = [
   prerenderedFromTheDatabaseCheck,
   staticParamsFromTheDatabaseCheck,
+  imageShowsNoBindingCheck,
 ];
