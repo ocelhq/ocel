@@ -1,5 +1,5 @@
 import { X509Certificate } from "node:crypto";
-import type { ConnectionOptions } from "node:tls";
+import { type ConnectionOptions, checkServerIdentity } from "node:tls";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { Redis } from "ioredis";
 import { bindingKey, getConfig } from "../binding/binding.js";
@@ -169,20 +169,31 @@ function clientOptions(store: string, properties: KvProperties) {
     port,
     username: username || undefined,
     password: password || undefined,
-    tls: tls ? tlsOptions(store, tlsServerName || host, caPem) : undefined,
+    tls: tls ? tlsOptions(store, host, tlsServerName, caPem) : undefined,
   };
 }
 
-function tlsOptions(store: string, host: string, caPem: string): ConnectionOptions {
+function tlsOptions(
+  store: string,
+  host: string,
+  tlsServerName: string,
+  caPem: string,
+): ConnectionOptions {
   if (caPem && !holdsCertificates(caPem)) {
     throw new Error(
       `${bindingKey(store, BindingType.KV)} delivers a caPem for its kv store that holds no PEM certificate`,
     );
   }
   return {
-    ...(isAddress(host) ? {} : { servername: host }),
+    ...serverIdentity(tlsServerName || host, tlsServerName !== ""),
     ...(caPem ? { ca: caPem } : {}),
   };
+}
+
+function serverIdentity(name: string, isForwarded: boolean): ConnectionOptions {
+  if (!isAddress(name)) return { servername: name };
+  if (!isForwarded) return {};
+  return { checkServerIdentity: (_, certificate) => checkServerIdentity(name, certificate) };
 }
 
 const pemBlock = /-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----/g;

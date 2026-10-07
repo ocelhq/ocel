@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { PeerCertificate } from "node:tls";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
@@ -215,6 +216,18 @@ describe("kv at runtime", () => {
       host: "127.0.0.1",
       tls: { servername: "cache.internal" },
     });
+  });
+
+  it("verifies the certificate against a forwarded binding's tls server name when that name is an address", () => {
+    deliver("forwardedByAddress", { tls: true, tlsServerName: "10.0.0.5" });
+
+    const verify = kv("forwardedByAddress").client.options.tls?.checkServerIdentity;
+    if (!verify)
+      throw new Error("the client verifies the certificate against the forward, 127.0.0.1");
+    const certificateFor = (address: string) =>
+      ({ subject: {}, subjectaltname: `IP Address:${address}` }) as PeerCertificate;
+    expect(verify("127.0.0.1", certificateFor("10.0.0.5"))).toBeUndefined();
+    expect(verify("127.0.0.1", certificateFor("127.0.0.1"))).toBeInstanceOf(Error);
   });
 
   it("trusts only the certificate authority the binding delivers", () => {
