@@ -21,7 +21,7 @@ pub enum Error {
     },
 
     /// No binding was delivered to the process for the declared name.
-    #[error("Value for {key} is not defined. Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered from the resource this app binds.")]
+    #[error("{key} is not delivered to this process: `ocel dev` delivers it locally and `ocel deploy` to the deployed app, but a build gets no bindings, so code that runs while building, such as prerendering a page, cannot use the resource")]
     MissingBinding {
         /// The environment variable the binding arrives in.
         key: String,
