@@ -66,7 +66,7 @@ func runPreBuild(ctx context.Context, a assembly, command project.LifecycleComma
 	dir := cfg.Dir
 	env := map[string]string{}
 	live := map[string]string{}
-	maps.Copy(live, forwards.Bindings(portforward.Project))
+	maps.Copy(live, forwards.Bindings(portforward.WholeProject))
 	if command.App != "" {
 		app, _ := findApp(cfg, command.App)
 		dir = filepath.Join(cfg.Dir, app.Path)
