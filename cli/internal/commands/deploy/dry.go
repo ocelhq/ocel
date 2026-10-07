@@ -13,15 +13,15 @@ import (
 
 const dryFlagUsage = "Build, then print every change this would make to your account and stop without applying any of it"
 
-func showDeployPlan(ctx context.Context, run *run.Run, provider *providerprocess.Provider, req *contractv1.DeployRequest, headline, slug, place, before string) error {
+func showDeployPlan(ctx context.Context, run *run.Run, provider *providerprocess.Provider, req *contractv1.DeployRequest, headline, slug, place, preBuildNote string) error {
 	plan, err := providerprocess.Plan(ctx, provider, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy)
 	if err != nil {
 		return err
 	}
 	if len(plan.GetGroups()) == 0 {
-		if before != "" {
+		if preBuildNote != "" {
 			span := run.Phase(progressv1.Phase_PHASE_PLAN)
-			span.Say(before)
+			span.Say(preBuildNote)
 			span.End(nil)
 		}
 		run.Succeed("Nothing to change in " + place)
@@ -29,8 +29,8 @@ func showDeployPlan(ctx context.Context, run *run.Run, provider *providerprocess
 	}
 	span := run.Phase(progressv1.Phase_PHASE_PLAN)
 	span.Plan(headline, plan)
-	if before != "" {
-		span.Say(before)
+	if preBuildNote != "" {
+		span.Say(preBuildNote)
 	}
 	span.Say("Run without --dry to apply.")
 	span.End(nil)

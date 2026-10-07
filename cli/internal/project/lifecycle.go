@@ -27,6 +27,7 @@ type Lifecycle struct {
 type LifecycleCommand struct {
 	Command  string
 	App      string
+	Path     string
 	Previews Previews
 	Timeout  time.Duration
 }
@@ -80,13 +81,18 @@ func normalizeLifecycleCommand(raw configdoc.LifecycleCommand, apps []App) (Life
 		timeout = parsed
 	}
 
-	if raw.App != "" && !slices.ContainsFunc(apps, func(a App) bool { return a.Name == raw.App }) {
-		names := make([]string, 0, len(apps))
-		for _, a := range apps {
-			names = append(names, a.Name)
+	var path string
+	if raw.App != "" {
+		at := slices.IndexFunc(apps, func(a App) bool { return a.Name == raw.App })
+		if at < 0 {
+			names := make([]string, 0, len(apps))
+			for _, a := range apps {
+				names = append(names, a.Name)
+			}
+			return LifecycleCommand{}, fmt.Errorf("app is %q, which is no app of this project; the apps are %s", raw.App, strings.Join(names, ", "))
 		}
-		return LifecycleCommand{}, fmt.Errorf("app is %q, which is no app of this project; the apps are %s", raw.App, strings.Join(names, ", "))
+		path = apps[at].Path
 	}
 
-	return LifecycleCommand{Command: command, App: raw.App, Previews: previews, Timeout: timeout}, nil
+	return LifecycleCommand{Command: command, App: raw.App, Path: path, Previews: previews, Timeout: timeout}, nil
 }

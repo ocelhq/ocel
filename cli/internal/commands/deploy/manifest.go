@@ -28,7 +28,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -46,7 +45,7 @@ type assembly struct {
 	host           build.Host
 	urls           map[string]string
 	infra          *infraProvisioning
-	env            *environmentv1.Environment
+	preBuild       *project.LifecycleCommand
 }
 
 func collectBuildAndAssemble(ctx context.Context, dependencies Dependencies, a assembly) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
@@ -117,12 +116,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	for _, conflict := range conflicts {
 		span.Warn(conflict.Warning())
 	}
-	preBuild := a.preBuild()
-	if preBuild != nil {
-		warnNpmPrebuildScripts(span, cfg)
-	}
 	if a.prebuilt {
-		sayPrebuiltSkipsPreBuild(span, cfg, a.env)
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
 			return build.Output{}, err
 		}
@@ -137,7 +131,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	for _, warning := range findImageAppsBuiltWithoutValues(cfg, clients) {
 		span.Warn(warning)
 	}
-	secrets, err := revealSecrets(ctx, a.declarations, cfg, preBuild)
+	secrets, err := revealSecrets(ctx, a.declarations, cfg, a.preBuild)
 	if err != nil {
 		return build.Output{}, err
 	}
@@ -153,7 +147,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	if err := a.infra.provision(ctx, resources, inline); err != nil {
 		return build.Output{}, err
 	}
-	runsPreBuild := preBuild != nil && !a.dry
+	runsPreBuild := a.preBuild != nil && !a.dry
 	forwards, err := a.infra.forwardPorts(ctx, steps, cfg, resources, usages, runsPreBuild)
 	if err != nil {
 		return build.Output{}, err
@@ -161,7 +155,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	values := build.SplitVariablesByClass(clients, secrets)
 	deliverForwards(forwards, values)
 	if runsPreBuild {
-		if err := runPreBuild(ctx, a, *preBuild, forwards, values, len(resources)); err != nil {
+		if err := runPreBuild(ctx, a, *a.preBuild, forwards, values, len(resources)); err != nil {
 			return build.Output{}, errors.Join(err, forwards.Close())
 		}
 	}
