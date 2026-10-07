@@ -1,5 +1,5 @@
 import { Pool, type PoolConfig } from "pg";
-import { unprovisionedPhase, unprovisionedProxy } from "../binding/unprovisioned.js";
+import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
 import {
   type PostgresProperties,
   PostgresTlsMode,
@@ -22,14 +22,51 @@ type PgReturn = Pool & { connectionString: string };
 export function postgres(id: string, config?: PostgresConfig): PgReturn {
   const pg = new Postgres(id, config);
 
-  if (unprovisionedPhase()) {
-    return unprovisionedProxy<PgReturn>(`postgres("${id}")`);
-  }
+  let pool: PgReturn | undefined;
+  const openPool = (access: string): PgReturn => {
+    if (unprovisionedPhase()) {
+      throw unprovisioned(`postgres("${id}")`, access);
+    }
+    if (!pool) {
+      const properties = pg.__config();
+      pool = Object.assign(new Pool(poolConfig(properties)), {
+        connectionString: connectionStringOf(properties),
+      });
+    }
+    return pool;
+  };
 
-  const properties = pg.__config();
-  const client = new Pool(poolConfig(properties));
-
-  return Object.assign(client, { connectionString: connectionStringOf(properties) });
+  const bound = new Map<PropertyKey, { method: unknown; bound: unknown }>();
+  const proxy: PgReturn = new Proxy(Object.create(Pool.prototype) as PgReturn, {
+    get(_target, prop) {
+      if (prop === "then") {
+        return undefined;
+      }
+      const opened = openPool(String(prop));
+      const value = Reflect.get(opened, prop, opened);
+      if (typeof value !== "function") {
+        return value;
+      }
+      const cached = bound.get(prop);
+      if (cached && cached.method === value) {
+        return cached.bound;
+      }
+      const method = (...args: unknown[]) => {
+        const result = value.apply(opened, args);
+        return result === opened ? proxy : result;
+      };
+      bound.set(prop, { method: value, bound: method });
+      return method;
+    },
+    set(_target, prop, value) {
+      const opened = openPool(String(prop));
+      return Reflect.set(opened, prop, value, opened);
+    },
+    has(_target, prop) {
+      return Reflect.has(openPool(String(prop)), prop);
+    },
+  });
+  return proxy;
 }
 
 function poolConfig(properties: PostgresProperties): PoolConfig {
