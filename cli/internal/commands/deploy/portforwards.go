@@ -42,8 +42,11 @@ func (f *portForwards) Close() error {
 		return nil
 	}
 	f.stop()
-	<-f.ended
-	return nil
+	ended := <-f.ended
+	if providerprocess.IsCancelled(ended) {
+		ended = nil
+	}
+	return ended
 }
 
 func (f *portForwards) deliver(values map[string]build.AppVariables) {
@@ -138,14 +141,9 @@ func (i *infraProvisioning) openPortForwards(ctx context.Context, steps *buildSt
 		})
 	}()
 	forwards := &portForwards{stop: stop, ended: ended}
-	var resp *contractv1.ForwardPortsResponse
-	select {
-	case resp = <-answered:
-	case err := <-ended:
+	resp, err := awaitForwardsAnswer(answered, ended)
+	if err != nil {
 		stop()
-		if err == nil {
-			err = errors.New("provider: ForwardPorts ended without saying which ports it forwarded")
-		}
 		return nil, err
 	}
 	if unforwarded := resp.GetUnforwarded(); len(unforwarded) > 0 {
@@ -157,6 +155,24 @@ func (i *infraProvisioning) openPortForwards(ctx context.Context, steps *buildSt
 	}
 	forwards.bindings = byApp
 	return forwards, nil
+}
+
+func awaitForwardsAnswer(answered <-chan *contractv1.ForwardPortsResponse, ended chan error) (*contractv1.ForwardPortsResponse, error) {
+	select {
+	case resp := <-answered:
+		return resp, nil
+	case err := <-ended:
+		select {
+		case resp := <-answered:
+			ended <- err
+			return resp, nil
+		default:
+		}
+		if err == nil {
+			err = errors.New("provider: ForwardPorts ended without saying which ports it forwarded")
+		}
+		return nil, err
+	}
 }
 
 func liveBindings(uses []boundUse, forwarded []*bindingsv1.Binding) (map[string]map[string]string, error) {
