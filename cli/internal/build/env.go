@@ -12,7 +12,7 @@ type AppVariables struct {
 	Live map[string]string
 }
 
-func VariablesOf(apps []clientenv.App, secrets map[string]map[string]string) map[string]AppVariables {
+func SplitVariablesByClass(apps []clientenv.App, secrets map[string]map[string]string) map[string]AppVariables {
 	byApp := make(map[string]AppVariables, len(apps))
 	for _, app := range apps {
 		values := AppVariables{Env: map[string]string{}, Live: map[string]string{}}

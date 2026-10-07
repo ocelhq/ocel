@@ -9,7 +9,7 @@ import (
 )
 
 func TestTheBuildEnvironmentHoldsEveryPlaintextValueUnderItsOwnNameAndNothingElse(t *testing.T) {
-	built := VariablesOf([]clientenv.App{{Name: "storefront", Variables: []variables.Variable{
+	built := SplitVariablesByClass([]clientenv.App{{Name: "storefront", Variables: []variables.Variable{
 		{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com", ClientAccessible: true},
 		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
 		{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
@@ -27,7 +27,7 @@ func TestTheBuildEnvironmentHoldsEveryPlaintextValueUnderItsOwnNameAndNothingEls
 }
 
 func TestABuildReadsASensitiveValueFromItsLiveDir(t *testing.T) {
-	built := VariablesOf([]clientenv.App{{Name: "storefront", Variables: []variables.Variable{
+	built := SplitVariablesByClass([]clientenv.App{{Name: "storefront", Variables: []variables.Variable{
 		{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
 		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
 	}}}, nil)["storefront"]
@@ -41,7 +41,7 @@ func TestABuildReadsASensitiveValueFromItsLiveDir(t *testing.T) {
 }
 
 func TestEachAppIsBuiltWithItsOwnValueForADivergedKey(t *testing.T) {
-	built := VariablesOf([]clientenv.App{
+	built := SplitVariablesByClass([]clientenv.App{
 		{Name: "storefront", Variables: []variables.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}}},
 		{Name: "admin", Variables: []variables.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}}},
 	}, nil)

@@ -173,8 +173,8 @@ func stubAppImages(dependencies *Dependencies, apps ...string) {
 		return nil
 	}
 	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
-		built, err := buildApps(ctx, cfg, env, archs, workers, host, log)
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, variables map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
+		built, err := buildApps(ctx, cfg, variables, archs, workers, host, log)
 		built.Images = refs
 		return built, err
 	}
