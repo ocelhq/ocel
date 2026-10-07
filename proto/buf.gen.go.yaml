@@ -4,7 +4,9 @@ inputs:
 plugins:
   - local: [go, tool, protoc-gen-go]
     out: pkg/proto
-    opt: paths=source_relative
+    opt:
+      - paths=source_relative
+      - Mopentelemetry/proto/trace/v1/trace.proto=go.opentelemetry.io/proto/otlp/trace/v1;v1
 
   - local: [go, tool, protoc-gen-connect-go]
     out: pkg/proto

@@ -4,6 +4,7 @@ modules:
     name: buf.build/ocelhq/ocel
 deps:
   - buf.build/bufbuild/protovalidate
+  - buf.build/opentelemetry/opentelemetry
 lint:
   use:
     - STANDARD
