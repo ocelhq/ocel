@@ -113,6 +113,24 @@ func TestAWriterHidesAValueSplitAcrossWrites(t *testing.T) {
 	}
 }
 
+func TestAWriterHidesAMultilineValueWhoseFirstLineEndsAWrite(t *testing.T) {
+	var out bytes.Buffer
+	w := NewValues([]string{"abcd\nmore-of-it"}).Writer(&out)
+
+	for _, chunk := range []string{"abcd\n", "more-of-it done"} {
+		if _, err := w.Write([]byte(chunk)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	if want := "[secret] done"; out.String() != want {
+		t.Errorf("wrote %q, want %q", out.String(), want)
+	}
+}
+
 func TestAWriterPassesEachFinishedLineOnAtOnce(t *testing.T) {
 	var out bytes.Buffer
 	w := NewValues([]string{"sk_live_123"}).Writer(&out)
