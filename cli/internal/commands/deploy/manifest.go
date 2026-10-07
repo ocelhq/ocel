@@ -151,7 +151,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 		return build.Output{}, err
 	}
 	values := build.SplitVariablesByClass(clients, secrets)
-	forwards.deliver(values)
+	deliverForwards(forwards, values)
 	var built build.Output
 	err = steps.run(cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
 		built, err = dependencies.BuildApps(ctx, cfg, values, a.containerArchs, workers, a.host, steps.log())
