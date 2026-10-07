@@ -111,9 +111,9 @@ func deletedKeys(entries []map[string]ddbtypes.AttributeValue) []string {
 	return keys
 }
 
-func release(t *testing.T, id string) naming.Release {
+func release(t *testing.T, id string) naming.ReleaseToken {
 	t.Helper()
-	return naming.NewRelease(id, "")
+	return naming.NewReleaseToken(id, "")
 }
 
 func TestSweepTakesEveryTagRowTheStackWrote(t *testing.T) {

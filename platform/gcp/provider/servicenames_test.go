@@ -89,7 +89,7 @@ func TestAFunctionIsNamedByItsRouteAndNotByTheCoordinateItNames(t *testing.T) {
 func TestAServiceNameTooLongToSpellOutIsCutToLeaveItsRevisionTagRoomInTheRunAppLabel(t *testing.T) {
 	names := serviceNames(t)
 	const longestRunAppLabel = 46
-	tag := naming.NewRelease("d1", "f1").String()
+	tag := naming.NewReleaseToken("d1", "f1").String()
 
 	long, err := names.Service(strings.Repeat("shopfront", 5), stackrecords.ProductionEnv, "web", "fn--web--checkout")
 	if err != nil {

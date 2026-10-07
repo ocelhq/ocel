@@ -195,7 +195,7 @@ func TestAnAppStackWhoseSpecHasNoAppIsRefusedRatherThanProvisionedEmpty(t *testi
 
 	release := releasing(t, Config{})
 	spec := provider.StackSpec{
-		Ref:  provider.StackRef{Project: "shop", Name: naming.AppStack("prod", "web", naming.NewRelease("d1", ""))},
+		Ref:  provider.StackRef{Project: "shop", Name: naming.AppStack("prod", "web", naming.NewReleaseToken("d1", ""))},
 		Kind: provider.StackApp,
 	}
 	err := pulumi.RunErr(func(pctx *pulumi.Context) error { return release.Run(pctx, spec) },

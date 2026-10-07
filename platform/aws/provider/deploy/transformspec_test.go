@@ -55,7 +55,7 @@ func specUnderTransform() provider.StackSpec {
 		Ref: provider.StackRef{
 			Project: "shop",
 			Tier:    environment.TierProduction,
-			Name:    naming.AppStack("production", "api", naming.NewRelease("dep1", "fp1")),
+			Name:    naming.AppStack("production", "api", naming.NewReleaseToken("dep1", "fp1")),
 		},
 		Kind: provider.StackApp,
 		Resources: []provider.Resource{

@@ -23,7 +23,7 @@ func readReleaseTag(record router.DeploymentRecord) string {
 	if len(segments) != 5 || segments[4] != "isr" {
 		return ""
 	}
-	if _, err := naming.ParseRelease(segments[3]); err != nil {
+	if _, err := naming.ParseReleaseToken(segments[3]); err != nil {
 		return ""
 	}
 	return segments[3]

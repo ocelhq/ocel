@@ -31,7 +31,7 @@ import (
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
-var liveRelease = naming.NewRelease("live", "wp4")
+var liveRelease = naming.NewReleaseToken("live", "wp4")
 
 var (
 	nodeRuntime   = buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: arch.X8664}

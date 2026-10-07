@@ -255,7 +255,7 @@ func TestANextServiceBehindAnEdgeThatRunsCodeLeavesRoutingToIt(t *testing.T) {
 	}
 	spec := routedNextSpec()
 	spec.Edge = shieldingFront{front}
-	spec.Ref.Name.Release = naming.NewRelease("d1", "f1")
+	spec.Ref.Name.Release = naming.NewReleaseToken("d1", "f1")
 
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
@@ -415,7 +415,7 @@ func TestANextServiceBehindAnEdgeThatRunsCodeIsToldNoRefreshQueue(t *testing.T) 
 	}
 	spec := routedNextSpec()
 	spec.Edge = shieldingFront{front}
-	spec.Ref.Name.Release = naming.NewRelease("d1", "f1")
+	spec.Ref.Name.Release = naming.NewReleaseToken("d1", "f1")
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
@@ -690,7 +690,7 @@ func TestANextServiceBehindTheLoadBalancerIsToldToSendRefreshesToItsRevisionTag(
 	server := &runServer{}
 	p := server.open(t)
 	spec := routedNextSpec()
-	spec.Ref.Name = naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewRelease("d1", "f1"))
+	spec.Ref.Name = naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewReleaseToken("d1", "f1"))
 	spec = behindTheLoadBalancer(t, p, spec)
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)

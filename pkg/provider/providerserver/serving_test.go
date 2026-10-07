@@ -48,8 +48,8 @@ func servingQuery(root, app, framework string) providerserver.AppServingInput {
 		Project:    "shop",
 		App:        app,
 		Framework:  framework,
-		Stack:      naming.AppStack("production", app, naming.NewRelease("dep1", "fp1")),
-		Coordinate: naming.Coordinate{Project: "shop", Env: "production", App: app, Release: naming.NewRelease("dep1", "fp1")},
+		Stack:      naming.AppStack("production", app, naming.NewReleaseToken("dep1", "fp1")),
+		Coordinate: naming.Coordinate{Project: "shop", Env: "production", App: app, Release: naming.NewReleaseToken("dep1", "fp1")},
 	}
 }
 

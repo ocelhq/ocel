@@ -341,7 +341,7 @@ func TestTheProxyAdmitsTheAccountThePreviewRunsAsBesideTheViewersSoAPromotionCan
 func TestAPreviewBehindIdentityAwareProxyTagsTheRevisionItsReleaseCreated(t *testing.T) {
 	p := pushing(t, "")
 	preview := previewSpec()
-	preview.Ref.Name.Release = naming.NewRelease("d1", "f1")
+	preview.Ref.Name.Release = naming.NewReleaseToken("d1", "f1")
 
 	if got, want := p.revisionTag(preview), preview.Ref.Name.Release.String(); got != want {
 		t.Errorf("revisionTag() = %q, want %q: each preview deployment is answered on its own revision's tag, behind the service's proxy", got, want)

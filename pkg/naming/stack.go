@@ -13,14 +13,14 @@ const (
 type StackName struct {
 	Env     string
 	App     string
-	Release Release
+	Release ReleaseToken
 }
 
 func InfraStack(env string) StackName {
 	return StackName{Env: env, App: InfraApp}
 }
 
-func AppStack(env, app string, release Release) StackName {
+func AppStack(env, app string, release ReleaseToken) StackName {
 	return StackName{Env: env, App: app, Release: release}
 }
 
@@ -53,7 +53,7 @@ func ParseStackName(value string) (StackName, error) {
 		if fields[1] == InfraApp {
 			return StackName{}, fmt.Errorf("stack name %q uses the reserved app name %q", value, InfraApp)
 		}
-		release, err := ParseRelease(fields[2])
+		release, err := ParseReleaseToken(fields[2])
 		if err != nil {
 			return StackName{}, fmt.Errorf("stack name %q: %w", value, err)
 		}

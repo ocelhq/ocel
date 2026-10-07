@@ -31,7 +31,7 @@ func (r recordedStacks) List(_ context.Context, in keyvalue.Partition, _ ...stri
 	return entries, nil
 }
 
-func releaseOf(id string) naming.Release { return naming.NewRelease(id, "fingerprint") }
+func releaseOf(id string) naming.ReleaseToken { return naming.NewReleaseToken(id, "fingerprint") }
 
 func stackOf(env, app, release string) naming.StackName {
 	return naming.AppStack(env, app, releaseOf(release))

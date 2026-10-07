@@ -64,7 +64,7 @@ func teardownRef() provider.StackRef {
 	return provider.StackRef{
 		Project: "shop",
 		Tier:    environment.TierProduction,
-		Name:    naming.AppStack("production", "web", naming.NewRelease("dep1", "fp1")),
+		Name:    naming.AppStack("production", "web", naming.NewReleaseToken("dep1", "fp1")),
 	}
 }
 

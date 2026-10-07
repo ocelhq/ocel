@@ -169,7 +169,7 @@ func TestRemovingARetiredReleaseLeavesTheWorkersANewerOneRuns(t *testing.T) {
 	next := aWorkerApp()
 	next.Deployment = "fedcba9876543210fedcba9876543210"
 	second := aStack(t, next)
-	second.Ref.Name.Release = naming.NewRelease(next.Deployment, "")
+	second.Ref.Name.Release = naming.NewReleaseToken(next.Deployment, "")
 	if _, err := p.ProvisionContainers(context.Background(), second, nil); err != nil {
 		t.Fatal(err)
 	}

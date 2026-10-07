@@ -60,7 +60,7 @@ func ISRPrefixUnder(prefix string) (string, bool) {
 	if slices.Contains(segments, "") {
 		return "", false
 	}
-	if _, err := ParseRelease(segments[3]); err != nil {
+	if _, err := ParseReleaseToken(segments[3]); err != nil {
 		return "", false
 	}
 	return strings.Join(append(segments, isrSegment), PathSeparator), true

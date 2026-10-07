@@ -45,7 +45,7 @@ func (d *dryRunPlan) plan() provider.Plan {
 	return plan
 }
 
-func withReleaseMintedAtDeploy(plan provider.Plan, release naming.Release) provider.Plan {
+func withReleaseMintedAtDeploy(plan provider.Plan, release naming.ReleaseToken) provider.Plan {
 	minted := func(name string) string { return strings.ReplaceAll(name, release.String(), releaseMintedAtDeploy) }
 	groups := make([]provider.ChangeGroup, len(plan.Groups))
 	for i, group := range plan.Groups {

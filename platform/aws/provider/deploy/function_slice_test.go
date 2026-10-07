@@ -810,7 +810,7 @@ func TestTagNamespace(t *testing.T) {
 		}
 
 		facts := contract.TagNamespace.Coordinate
-		release, err := naming.ParseRelease(facts.Release)
+		release, err := naming.ParseReleaseToken(facts.Release)
 		if err != nil {
 			t.Fatalf("ParseRelease(%q): %v", facts.Release, err)
 		}

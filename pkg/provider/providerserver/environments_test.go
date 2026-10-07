@@ -86,7 +86,7 @@ func seedEnvironment(t *testing.T, vendor *fake.Provider, slug string, stacks ..
 func TestListEnvironmentsNamesTheLifecycleEachPreviewWasCreatedWith(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	release := naming.NewRelease("b1", "")
+	release := naming.NewReleaseToken("b1", "")
 	seedEnvironment(t, vendor, "shop",
 		naming.AppStack(stackrecords.ProductionEnv, "web", release),
 		naming.AppStack("pr-7", "web", release),
@@ -111,7 +111,7 @@ func TestListEnvironmentsNamesTheLifecycleEachPreviewWasCreatedWith(t *testing.T
 func TestListEnvironmentsNamesNoLifecycleForAPreviewThatRecordedNone(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	release := naming.NewRelease("b1", "")
+	release := naming.NewReleaseToken("b1", "")
 	seedEnvironment(t, vendor, "shop",
 		naming.AppStack("staging", "web", release),
 		naming.InfraStack("staging"),
@@ -221,7 +221,7 @@ func listLifecycles(t *testing.T, client contractv1connect.ProviderServiceClient
 func TestListEnvironmentsReturnsWhatTheDeployRecordedAboutEachPreview(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	release := naming.NewRelease("b1", "")
+	release := naming.NewReleaseToken("b1", "")
 	seedEnvironment(t, vendor, "shop",
 		naming.AppStack("pr-7", "web", release),
 		naming.AppStack("staging", "web", release),
@@ -526,7 +526,7 @@ func inOrder(t *testing.T, journal []string, want ...string) {
 	}
 }
 
-func releaseOf(t *testing.T, identity string) naming.Release {
+func releaseOf(t *testing.T, identity string) naming.ReleaseToken {
 	t.Helper()
 
 	build, err := provider.ParseBuild(identity)
