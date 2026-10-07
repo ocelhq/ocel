@@ -3,6 +3,7 @@ package build
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -13,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/english"
+	"github.com/ocelhq/ocel/cli/internal/livedir"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -88,12 +90,15 @@ func (t tools) apps(ctx context.Context, cfg *project.Project, variables map[str
 }
 
 func (t tools) functions(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, host Host, log Log) (err error) {
-	for _, values := range variables {
-		if err := checkVariableNames(values.Env); err != nil {
+	for _, a := range cfg.Apps {
+		if !IsNextFunction(a) {
+			continue
+		}
+		if err := checkVariableNames(variables[a.Name].Env); err != nil {
 			return err
 		}
-		if err := refuseLiveKeysOutsideTheDir(values.Live); err != nil {
-			return err
+		if err := livedir.RefuseUnnamableKeys(variables[a.Name].Live); err != nil {
+			return fmt.Errorf("app %q: %w", a.Name, err)
 		}
 	}
 	if err := RefuseNextFunctionsWithoutRuntimeDir(cfg, host); err != nil {
@@ -122,9 +127,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	var liveDirs []string
 	defer func() {
 		for _, dir := range liveDirs {
-			if removeErr := os.RemoveAll(dir); removeErr != nil && err == nil {
-				err = fmt.Errorf("remove the build's live dir: %w", removeErr)
-			}
+			err = errors.Join(err, livedir.Remove(dir))
 		}
 	}()
 
@@ -145,7 +148,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			nextApps = append(nextApps, a)
 			var liveDir string
 			if live := variables[a.Name].Live; len(live) > 0 {
-				dir, err := writeLiveDir(live)
+				dir, err := livedir.Write("", "ocel-live-", live)
 				if err != nil {
 					return err
 				}

@@ -1,12 +1,10 @@
 package dev
 
 import (
-	"fmt"
 	"maps"
-	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/livedir"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
@@ -18,9 +16,9 @@ type liveDir struct {
 }
 
 func newLiveDir() (*liveDir, error) {
-	root, err := os.MkdirTemp("", "ocel-dev-live-")
+	root, err := livedir.Write("", "ocel-dev-live-", nil)
 	if err != nil {
-		return nil, fmt.Errorf("make the directory the app reads its bindings from: %w", err)
+		return nil, err
 	}
 	return &liveDir{root: root}, nil
 }
@@ -45,20 +43,9 @@ func (d *liveDir) project(env map[string]string) (map[string]string, error) {
 }
 
 func (d *liveDir) write(bindings map[string]string) error {
-	for key := range bindings {
-		if strings.ContainsAny(key, `/\`) || strings.HasPrefix(key, ".") {
-			return fmt.Errorf("binding %q cannot name a file under %s", key, d.root)
-		}
-	}
-	set, err := os.MkdirTemp(d.root, "bindings-")
+	set, err := livedir.Write(d.root, "bindings-", bindings)
 	if err != nil {
-		return fmt.Errorf("make a directory for the bindings under %s: %w", d.root, err)
-	}
-	for key, value := range bindings {
-		if err := os.WriteFile(filepath.Join(set, key), []byte(value), 0o600); err != nil {
-			_ = os.RemoveAll(set)
-			return fmt.Errorf("write binding %s to %s: %w", key, set, err)
-		}
+		return err
 	}
 	if d.current != "" {
 		d.retired = append(d.retired, d.current)
@@ -70,11 +57,11 @@ func (d *liveDir) write(bindings map[string]string) error {
 
 func (d *liveDir) retire() {
 	for _, set := range d.retired {
-		_ = os.RemoveAll(set)
+		_ = livedir.Remove(set)
 	}
 	d.retired = nil
 }
 
 func (d *liveDir) remove() {
-	_ = os.RemoveAll(d.root)
+	_ = livedir.Remove(d.root)
 }

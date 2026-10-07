@@ -158,4 +158,18 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 			t.Error("the node build script ran, want the refusal before anything is built")
 		}
 	})
+
+	t.Run("builds an app whose own build gets no live dir, whatever its keys", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web"), nextContainerApp("api", "apps/api")}}
+
+		builder := nodeOnly{host: servingNext, node: requestOf(&nodeBuildRequest{})}
+		err := builder.Build(context.Background(), cfg, map[string]AppVariables{"api": {Live: map[string]string{"a/b": "x"}}}, Log{})
+		if err != nil {
+			t.Errorf("Build err = %v, want the key of an app whose build reads no live dir left alone", err)
+		}
+	})
 }
