@@ -2,6 +2,8 @@ package build
 
 import (
 	"encoding/base64"
+	"maps"
+	"slices"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -9,6 +11,10 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
+
+func SecretValues(live map[string]string) []string {
+	return append(slices.Collect(maps.Values(live)), readBindingSecrets(live)...)
+}
 
 func readBindingSecrets(live map[string]string) []string {
 	var secrets []string

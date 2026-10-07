@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
@@ -75,8 +73,7 @@ func (l Log) hideLiveValues(apps []project.App, variables map[string]AppVariable
 		if err := livedir.RefuseUnnamableKeys(live); err != nil {
 			return l, fmt.Errorf("app %q: %w", a.Name, err)
 		}
-		readable = append(readable, slices.Collect(maps.Values(live))...)
-		readable = append(readable, readBindingSecrets(live)...)
+		readable = append(readable, SecretValues(live)...)
 	}
 	return l.hiding(redaction.NewValues(readable)), nil
 }
