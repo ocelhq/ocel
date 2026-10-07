@@ -78,7 +78,7 @@ func bootstrappedOnlyForPreview(t *testing.T, project clitest.FakeProject) {
 	clitest.Bootstrap(t, project.Provider, environment.TierPreview)
 }
 
-func TestDeploymentsListRendersPromotionsNewestFirstWithTheActiveOne(t *testing.T) {
+func TestPromotionsListRendersPromotionsNewestFirstWithTheActiveOne(t *testing.T) {
 	t.Run("it renders promotions newest first with the active marker", func(t *testing.T) {
 		project := promotedTwice(t)
 		invocation := clitest.NewInvocation()
@@ -152,7 +152,7 @@ func TestDeploymentsListRendersPromotionsNewestFirstWithTheActiveOne(t *testing.
 	})
 }
 
-func TestDeploymentsListAsJSONPrintsOneEnvelopeOfPromotionsNewestFirst(t *testing.T) {
+func TestPromotionsListAsJSONPrintsOneEnvelopeOfPromotionsNewestFirst(t *testing.T) {
 	project := promotedTwice(t)
 	invocation := clitest.NewInvocation()
 	invocation.Presentation = clitest.ResolveJSONPresentation
@@ -163,13 +163,13 @@ func TestDeploymentsListAsJSONPrintsOneEnvelopeOfPromotionsNewestFirst(t *testin
 		t.Fatalf("runPromotionsList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	var listed resultv1.DeploymentListResult
+	var listed resultv1.PromotionListResult
 	clitest.DecodeResultInto(t, stdout.String(), &listed)
-	if len(listed.GetDeployments()) != 2 {
-		t.Fatalf("deployments = %v, want two promotions", listed.GetDeployments())
+	if len(listed.GetPromotions()) != 2 {
+		t.Fatalf("promotions = %v, want two promotions", listed.GetPromotions())
 	}
-	newest, oldest := listed.GetDeployments()[0], listed.GetDeployments()[1]
-	if newest.GetPromotionId() != "promo-2" || newest.GetState() != resultv1.DeploymentState_DEPLOYMENT_STATE_ACTIVE {
+	newest, oldest := listed.GetPromotions()[0], listed.GetPromotions()[1]
+	if newest.GetPromotionId() != "promo-2" || newest.GetState() != resultv1.PromotionState_PROMOTION_STATE_ACTIVE {
 		t.Errorf("newest = %v, want promo-2 active", newest)
 	}
 	if got := newest.GetBuilds(); got["web"] != "build-2~fp2" || got["admin"] != "build-2~fp3" {
@@ -178,7 +178,7 @@ func TestDeploymentsListAsJSONPrintsOneEnvelopeOfPromotionsNewestFirst(t *testin
 	if newest.GetCreatedAt() != "1970-01-01T00:00:02Z" {
 		t.Errorf("newest createdAt = %q, want an RFC 3339 timestamp", newest.GetCreatedAt())
 	}
-	if oldest.GetPromotionId() != "promo-1" || oldest.GetTag() != "v1.0.0" || oldest.GetState() != resultv1.DeploymentState_DEPLOYMENT_STATE_SUPERSEDED {
+	if oldest.GetPromotionId() != "promo-1" || oldest.GetTag() != "v1.0.0" || oldest.GetState() != resultv1.PromotionState_PROMOTION_STATE_SUPERSEDED {
 		t.Errorf("oldest = %v, want promo-1 tagged v1.0.0 and superseded", oldest)
 	}
 	if evs := clitest.RunEvents(t, stderr.String()); len(evs) == 0 || !evs[len(evs)-1].GetSummary().GetSuccess() {
@@ -186,7 +186,7 @@ func TestDeploymentsListAsJSONPrintsOneEnvelopeOfPromotionsNewestFirst(t *testin
 	}
 }
 
-func TestDeploymentsListAsJSONPrintsAnEmptyListWhenNothingWasPromoted(t *testing.T) {
+func TestPromotionsListAsJSONPrintsAnEmptyListWhenNothingWasPromoted(t *testing.T) {
 	project := clitest.SetUpProject(t)
 	clitest.RecordEdgeStack(t, project, environment.TierProduction, fake.KindRelay)
 	invocation := clitest.NewInvocation()
@@ -198,12 +198,12 @@ func TestDeploymentsListAsJSONPrintsAnEmptyListWhenNothingWasPromoted(t *testing
 		t.Fatalf("runPromotionsList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	if data := clitest.DecodeResult(t, stdout.String()); !reflect.DeepEqual(data["deployments"], []any{}) {
-		t.Errorf("data = %v, want an empty deployments list", data)
+	if data := clitest.DecodeResult(t, stdout.String()); !reflect.DeepEqual(data["promotions"], []any{}) {
+		t.Errorf("data = %v, want an empty promotions list", data)
 	}
 }
 
-func TestDeploymentsListAsJSONKeepsATierMismatchOffStdout(t *testing.T) {
+func TestPromotionsListAsJSONKeepsATierMismatchOffStdout(t *testing.T) {
 	project := promotedTwice(t)
 	bootstrappedOnlyForPreview(t, project)
 	invocation := clitest.NewInvocation()
@@ -227,7 +227,7 @@ func runeIndex(line, substr string) int {
 	return len([]rune(line[:at]))
 }
 
-func TestDeploymentsPruneReclaimsOldPromotionsOnceConsented(t *testing.T) {
+func TestPromotionsPruneReclaimsOldPromotionsOnceConsented(t *testing.T) {
 	t.Run("it reports the reclaimed and the kept promotions", func(t *testing.T) {
 		project := promotedThrice(t)
 		invocation := clitest.NewInvocation()
@@ -313,7 +313,7 @@ func assertKeptEveryPromotion(t *testing.T, project clitest.FakeProject) {
 	}
 }
 
-func TestListingDeploymentsAsJSONSaysWhoItActsAsInTheCheckPhaseAndKeepsItsEnvelopeOffTheStream(t *testing.T) {
+func TestListingPromotionsAsJSONSaysWhoItActsAsInTheCheckPhaseAndKeepsItsEnvelopeOffTheStream(t *testing.T) {
 	project := promotedTwice(t)
 	invocation := clitest.NewInvocation()
 	invocation.Presentation = clitest.ResolveJSONPresentation
@@ -335,10 +335,10 @@ func TestListingDeploymentsAsJSONSaysWhoItActsAsInTheCheckPhaseAndKeepsItsEnvelo
 	if result := evs[len(evs)-1].GetSummary(); !result.GetSuccess() {
 		t.Errorf("result = %v, want the listing's run to succeed", result)
 	}
-	var listed resultv1.DeploymentListResult
+	var listed resultv1.PromotionListResult
 	clitest.DecodeResultInto(t, stdout.String(), &listed)
-	if len(listed.GetDeployments()) != 2 {
-		t.Errorf("deployments = %v, want both promotions in the envelope on stdout", listed.GetDeployments())
+	if len(listed.GetPromotions()) != 2 {
+		t.Errorf("promotions = %v, want both promotions in the envelope on stdout", listed.GetPromotions())
 	}
 	if strings.Contains(stream.String(), "promo-2") {
 		t.Errorf("stream = %q, want the listing only in the envelope on stdout", stream.String())
@@ -370,7 +370,7 @@ func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 	}
 }
 
-func TestTheDeploymentsListMarksAPromotionTakenBack(t *testing.T) {
+func TestThePromotionsListMarksAPromotionTakenBack(t *testing.T) {
 	var stdout bytes.Buffer
 	renderPromotions(&stdout, []*contractv1.PromotionHistoryEntry{
 		{Promotion: &contractv1.Promotion{PromotionId: "p2"}, Unpromoted: true},

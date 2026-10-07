@@ -113,7 +113,7 @@ func requireOnlyTheJSONSink(t *testing.T, stdout, stderr string) {
 func TestJSONFlagAttachesOnlyTheJSONSink(t *testing.T) {
 	inADeployedProject(t)
 
-	stdout, stderr := executeRoot(t, "--json", "deployments", "prune", "--yes")
+	stdout, stderr := executeRoot(t, "--json", "promotions", "prune", "--yes")
 
 	requireOnlyTheJSONSink(t, stdout, stderr)
 }
@@ -122,7 +122,7 @@ func TestOCELJSONAttachesOnlyTheJSONSink(t *testing.T) {
 	inADeployedProject(t)
 	t.Setenv("OCEL_JSON", "1")
 
-	stdout, stderr := executeRoot(t, "deployments", "prune", "--yes")
+	stdout, stderr := executeRoot(t, "promotions", "prune", "--yes")
 
 	requireOnlyTheJSONSink(t, stdout, stderr)
 }
@@ -133,7 +133,7 @@ func TestOCELJSONFalseyLeavesTheHumanView(t *testing.T) {
 			inADeployedProject(t)
 			t.Setenv("OCEL_JSON", value)
 
-			stdout, _ := executeRoot(t, "deployments", "prune", "--yes")
+			stdout, _ := executeRoot(t, "promotions", "prune", "--yes")
 
 			if !strings.Contains(stdout, "Pruned") {
 				t.Errorf("OCEL_JSON=%q: stdout = %q, want the human view", value, stdout)
@@ -146,7 +146,7 @@ func TestJSONFlagWinsOverAFalseyOCELJSON(t *testing.T) {
 	inADeployedProject(t)
 	t.Setenv("OCEL_JSON", "0")
 
-	stdout, stderr := executeRoot(t, "--json", "deployments", "prune", "--yes")
+	stdout, stderr := executeRoot(t, "--json", "promotions", "prune", "--yes")
 
 	requireOnlyTheJSONSink(t, stdout, stderr)
 }
@@ -155,7 +155,7 @@ func TestJSONFlagFalseWinsOverOCELJSON(t *testing.T) {
 	inADeployedProject(t)
 	t.Setenv("OCEL_JSON", "1")
 
-	stdout, _ := executeRoot(t, "--json=false", "deployments", "prune", "--yes")
+	stdout, _ := executeRoot(t, "--json=false", "promotions", "prune", "--yes")
 
 	if !strings.Contains(stdout, "Pruned") {
 		t.Errorf("stdout = %q, want --json=false to keep the human view", stdout)
@@ -176,7 +176,7 @@ func TestOCELJSONThatIsNotABooleanIsAnError(t *testing.T) {
 			inADeployedProject(t)
 			t.Setenv("OCEL_JSON", value)
 
-			err := executeRootErr("deployments", "prune", "--yes")
+			err := executeRootErr("promotions", "prune", "--yes")
 
 			if err == nil || !strings.Contains(err.Error(), "OCEL_JSON") || !strings.Contains(err.Error(), "true") || !strings.Contains(err.Error(), "false") {
 				t.Errorf("OCEL_JSON=%q: err = %v, want an error naming OCEL_JSON and its accepted values", value, err)
@@ -191,7 +191,7 @@ func TestAnExplicitJSONFlagLeavesOCELJSONUnread(t *testing.T) {
 			inADeployedProject(t)
 			t.Setenv("OCEL_JSON", "garbage")
 
-			if err := executeRootErr(flag, "deployments", "prune", "--yes"); err != nil {
+			if err := executeRootErr(flag, "promotions", "prune", "--yes"); err != nil {
 				t.Errorf("ocel %s with OCEL_JSON=garbage: err = %v, want the flag to win unread", flag, err)
 			}
 		})
@@ -199,7 +199,7 @@ func TestAnExplicitJSONFlagLeavesOCELJSONUnread(t *testing.T) {
 }
 
 func TestTheRemovedLogFormatFlagIsRejected(t *testing.T) {
-	err := executeRootErr("--log-format", "json", "deployments", "ls")
+	err := executeRootErr("--log-format", "json", "promotions", "ls")
 
 	if err == nil || !strings.Contains(err.Error(), "unknown flag: --log-format") {
 		t.Errorf("err = %v, want unknown flag: --log-format", err)
@@ -270,7 +270,7 @@ func TestARunFailingWithAnUncodedErrorEndsItsJSONStreamWithAnInternalErrorAndNoD
 func TestTheHumanViewAttachesOnlyTheGroupedSink(t *testing.T) {
 	inADeployedProject(t)
 
-	stdout, _ := executeRoot(t, "deployments", "prune", "--yes")
+	stdout, _ := executeRoot(t, "promotions", "prune", "--yes")
 
 	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
 		if json.Valid([]byte(line)) {
@@ -286,7 +286,7 @@ func TestATerminalFortyColumnsWideGetsTheLiveLineView(t *testing.T) {
 	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 40)
 
-	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
+	executeRootOn(t, tty, &bytes.Buffer{}, "promotions", "prune", "--yes")
 
 	if got := screen(); !strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
 		t.Errorf("the terminal shows %q, want the transcript drawn in live-line frames", got)
@@ -300,7 +300,7 @@ func TestOCELDebugFalseyKeepsTheLiveLineView(t *testing.T) {
 			t.Setenv("OCEL_DEBUG", value)
 			tty, screen := aTerminal(t, "xterm-256color", 80)
 
-			executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
+			executeRootOn(t, tty, &bytes.Buffer{}, "promotions", "prune", "--yes")
 
 			if got := screen(); !strings.Contains(got, liveFrame) {
 				t.Errorf("OCEL_DEBUG=%q: the terminal shows %q, want the live-line view debug leaves off", value, got)
@@ -314,7 +314,7 @@ func TestOCELDebugTrueStreamsTheFullLogs(t *testing.T) {
 	t.Setenv("OCEL_DEBUG", "1")
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 
-	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
+	executeRootOn(t, tty, &bytes.Buffer{}, "promotions", "prune", "--yes")
 
 	if got := screen(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
 		t.Errorf("the terminal shows %q, want the full logs with no live line", got)
@@ -325,7 +325,7 @@ func TestOCELDebugThatIsNotABooleanIsAnError(t *testing.T) {
 	inADeployedProject(t)
 	t.Setenv("OCEL_DEBUG", "yes")
 
-	err := executeRootErr("deployments", "prune", "--yes")
+	err := executeRootErr("promotions", "prune", "--yes")
 
 	if err == nil || !strings.Contains(err.Error(), "OCEL_DEBUG") {
 		t.Errorf("err = %v, want an error naming OCEL_DEBUG", err)
@@ -336,7 +336,7 @@ func TestADumbTerminalGetsTheGroupedView(t *testing.T) {
 	inADeployedProject(t)
 	tty, screen := aTerminal(t, "dumb", 80)
 
-	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
+	executeRootOn(t, tty, &bytes.Buffer{}, "promotions", "prune", "--yes")
 
 	if got := screen(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
 		t.Errorf("the terminal shows %q, want the grouped transcript with no live line", got)
@@ -347,7 +347,7 @@ func TestATerminalNarrowerThanFortyColumnsGetsTheGroupedView(t *testing.T) {
 	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 39)
 
-	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
+	executeRootOn(t, tty, &bytes.Buffer{}, "promotions", "prune", "--yes")
 
 	if got := screen(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
 		t.Errorf("the terminal shows %q, want the grouped transcript with no live line", got)
@@ -359,7 +359,7 @@ func TestATerminalThatReportsNoWidthGetsTheGroupedViewWhateverColumnsSays(t *tes
 	t.Setenv("COLUMNS", "120")
 	tty, screen := aTerminal(t, "xterm-256color", 0)
 
-	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune", "--yes")
+	executeRootOn(t, tty, &bytes.Buffer{}, "promotions", "prune", "--yes")
 
 	if got := screen(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
 		t.Errorf("the terminal shows %q, want the grouped transcript with no live line", got)
@@ -371,7 +371,7 @@ func TestAPipedStdoutGetsTheGroupedViewEvenWithATerminalOnStderr(t *testing.T) {
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 	var stdout bytes.Buffer
 
-	executeRootOn(t, &stdout, tty, "deployments", "prune", "--yes")
+	executeRootOn(t, &stdout, tty, "promotions", "prune", "--yes")
 
 	if got := stdout.String(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
 		t.Errorf("stdout = %q, want the grouped transcript with no live line", got)
@@ -386,7 +386,7 @@ func TestACommandWhoseStdoutIsItsDataDrawsTheLiveLineOnAStderrTerminal(t *testin
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 	var stdout bytes.Buffer
 
-	executeRootOn(t, &stdout, tty, "deployments", "ls")
+	executeRootOn(t, &stdout, tty, "promotions", "ls")
 
 	if got := stdout.String(); !strings.Contains(got, "promo-2") || strings.Contains(got, liveFrame) {
 		t.Errorf("stdout = %q, want the promotions table alone", got)
@@ -401,7 +401,7 @@ func TestACommandWhoseStdoutIsItsDataDrawsTheGroupedViewOnAPipedStderr(t *testin
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 	var stderr bytes.Buffer
 
-	executeRootOn(t, tty, &stderr, "deployments", "ls")
+	executeRootOn(t, tty, &stderr, "promotions", "ls")
 
 	if got := stderr.String(); got == "" || strings.Contains(got, liveFrame) {
 		t.Errorf("stderr = %q, want the grouped view of the run", got)
@@ -414,11 +414,11 @@ func TestACommandWhoseStdoutIsItsDataDrawsTheGroupedViewOnAPipedStderr(t *testin
 func TestACommandWhoseStdoutIsItsDataDrawsItsRunOnStderr(t *testing.T) {
 	inADeployedProject(t)
 
-	stdout, stderr := executeRoot(t, "--json", "deployments", "ls")
+	stdout, stderr := executeRoot(t, "--json", "promotions", "ls")
 
-	var listed resultv1.DeploymentListResult
+	var listed resultv1.PromotionListResult
 	clitest.DecodeResultInto(t, stdout, &listed)
-	if len(listed.GetDeployments()) == 0 || listed.GetDeployments()[0].GetPromotionId() != "promo-2" {
+	if len(listed.GetPromotions()) == 0 || listed.GetPromotions()[0].GetPromotionId() != "promo-2" {
 		t.Errorf("stdout = %q, want the promotions as one envelope", stdout)
 	}
 	if evs := clitest.RunEvents(t, stderr); len(evs) == 0 || !evs[len(evs)-1].GetSummary().GetSuccess() {
@@ -433,7 +433,7 @@ func TestEveryCommandWhoseStdoutIsItsDataIsMarkedToDrawItsRunOnStderr(t *testing
 		{"cost", "scan"},
 		{"domain", "ls"}, {"domain", "status"},
 		{"preview", "ls"},
-		{"deployments", "ls"},
+		{"promotions", "ls"},
 		{"permissions"},
 		{"connector", "status"},
 		{"doctor"},
@@ -453,7 +453,7 @@ func TestEveryCommandWhoseStdoutIsItsDataIsMarkedToDrawItsRunOnStderr(t *testing
 }
 
 func TestEveryCommandThatReportsThroughItsRunIsMarkedToDrawItOnStdout(t *testing.T) {
-	for _, path := range [][]string{{"deploy"}, {"domain", "use"}, {"domain", "add"}, {"connector", "add"}, {"connector", "rm"}, {"deployments", "prune"}} {
+	for _, path := range [][]string{{"deploy"}, {"domain", "use"}, {"domain", "add"}, {"connector", "add"}, {"connector", "rm"}, {"promotions", "prune"}} {
 		cmd, _, err := newCommand().root.Find(path)
 		if err != nil {
 			t.Fatalf("find %q: %v", path, err)
@@ -471,7 +471,7 @@ func TestACommandWhoseDataAndRunShareOneTerminalDrawsItsRunLiveAndItsDataOnRowsO
 	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 
-	executeRootOn(t, tty, tty, "deployments", "ls")
+	executeRootOn(t, tty, tty, "promotions", "ls")
 
 	got := screen()
 	if !strings.Contains(got, liveFrame) {
@@ -505,10 +505,10 @@ func TestTheLiveLineIsErasedWhenTheRunsResultIsDrawnNotWhenTheCommandExits(t *te
 	inADeployedProject(t)
 	tty, screen := aTerminal(t, "xterm-256color", 80)
 
-	executeRootOn(t, &bytes.Buffer{}, tty, "deployments", "ls")
+	executeRootOn(t, &bytes.Buffer{}, tty, "promotions", "ls")
 
 	got := screen()
-	_, afterResult, ok := strings.Cut(got, "✓ Deployments ls finished")
+	_, afterResult, ok := strings.Cut(got, "✓ Promotions ls finished")
 	if !ok {
 		t.Fatalf("the terminal shows %q, want the run's result", got)
 	}

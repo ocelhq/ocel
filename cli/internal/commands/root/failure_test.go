@@ -271,7 +271,7 @@ func TestAProjectThatFailsToLoadBeforeARunStartsPrintsOneErrorDocument(t *testin
 func TestAnOCELJSONThatIsNotABooleanStillAsksForTheFailureAsADocument(t *testing.T) {
 	t.Setenv("OCEL_JSON", "garbage")
 
-	code, stdout, stderr := executeAndReportRoot(t, "deployments", "ls")
+	code, stdout, stderr := executeAndReportRoot(t, "promotions", "ls")
 
 	failure := requireOneFailureDocument(t, stdout)
 	if message, _ := failure["message"].(string); !strings.HasPrefix(message, "OCEL_JSON") {
@@ -283,7 +283,7 @@ func TestAnOCELJSONThatIsNotABooleanStillAsksForTheFailureAsADocument(t *testing
 }
 
 func TestAJSONFlagThatIsNotABooleanStillAsksForTheUsageDocument(t *testing.T) {
-	code, stdout, stderr := executeAndReportRoot(t, "deployments", "ls", "--json=garbage")
+	code, stdout, stderr := executeAndReportRoot(t, "promotions", "ls", "--json=garbage")
 
 	failure := requireOneFailureDocument(t, stdout)
 	if failure["code"] != "usage" {

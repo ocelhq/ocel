@@ -242,8 +242,8 @@ func TestAnOriginHostnameIsRefusedWhenTheURLMapIsFull(t *testing.T) {
 
 	err := balancer.Shielded().RouteOriginHost(context.Background(), originHost())
 
-	if refusalCodeOf(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "ocel deployments prune") {
-		t.Errorf("RouteOriginHost = %v, want a not-ready refusal naming `ocel deployments prune`", err)
+	if refusalCodeOf(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "ocel promotions prune") {
+		t.Errorf("RouteOriginHost = %v, want a not-ready refusal naming `ocel promotions prune`", err)
 	}
 	if len(w.raised()) != 0 {
 		t.Error("a stack was raised for a host the url map has no room for")

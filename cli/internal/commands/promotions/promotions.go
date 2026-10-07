@@ -22,10 +22,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func NewDeploymentsCommand(invocation commands.Invocation) *cobra.Command {
+func NewPromotionsCommand(invocation commands.Invocation) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "deployments",
-		Short: "Manage production deployments",
+		Use:   "promotions",
+		Short: "Manage production promotions",
 	}
 	cmd.AddCommand(commands.ReserveStdout(newListCommand(invocation)), newPruneCommand(invocation))
 	return commands.DeclareReadOnly(cmd)
@@ -43,7 +43,7 @@ func newListCommand(invocation commands.Invocation) *cobra.Command {
 			}
 			return runPromotionsList(cmd.Context(), invocation, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
-	}), &resultv1.DeploymentListResult{})
+	}), &resultv1.PromotionListResult{})
 }
 
 const defaultPruneKeepN = 10
@@ -57,7 +57,7 @@ func newPruneCommand(invocation commands.Invocation) *cobra.Command {
 	var opts pruneOptions
 	cmd := &cobra.Command{
 		Use:   "prune",
-		Short: "Reclaim old production deployments",
+		Short: "Reclaim old production promotions",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
@@ -83,40 +83,40 @@ func runPromotionsList(ctx context.Context, invocation commands.Invocation, cwd 
 		return err
 	}
 	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
-		return terminal.WriteResultJSON(stdout, deploymentListResult(promotions))
+		return terminal.WriteResultJSON(stdout, promotionListResult(promotions))
 	}
 	renderPromotions(stdout, promotions)
 	return nil
 }
 
-func deploymentListResult(promotions []*contractv1.PromotionHistoryEntry) *resultv1.DeploymentListResult {
-	result := &resultv1.DeploymentListResult{Deployments: make([]*resultv1.DeploymentSummary, 0, len(promotions))}
+func promotionListResult(promotions []*contractv1.PromotionHistoryEntry) *resultv1.PromotionListResult {
+	result := &resultv1.PromotionListResult{Promotions: make([]*resultv1.PromotionSummary, 0, len(promotions))}
 	for _, entry := range promotions {
 		p := entry.GetPromotion()
-		result.Deployments = append(result.Deployments, &resultv1.DeploymentSummary{
+		result.Promotions = append(result.Promotions, &resultv1.PromotionSummary{
 			PromotionId: p.GetPromotionId(),
 			Tag:         p.GetTag(),
 			CreatedAt:   terminal.EpochRFC3339(p.GetTs()),
 			Builds:      p.GetReleases(),
-			State:       deploymentState(entry),
+			State:       promotionState(entry),
 		})
 	}
 	return result
 }
 
-func deploymentState(entry *contractv1.PromotionHistoryEntry) resultv1.DeploymentState {
+func promotionState(entry *contractv1.PromotionHistoryEntry) resultv1.PromotionState {
 	switch {
 	case entry.GetActive():
-		return resultv1.DeploymentState_DEPLOYMENT_STATE_ACTIVE
+		return resultv1.PromotionState_PROMOTION_STATE_ACTIVE
 	case entry.GetUnpromoted():
-		return resultv1.DeploymentState_DEPLOYMENT_STATE_UNPROMOTED
+		return resultv1.PromotionState_PROMOTION_STATE_UNPROMOTED
 	default:
-		return resultv1.DeploymentState_DEPLOYMENT_STATE_SUPERSEDED
+		return resultv1.PromotionState_PROMOTION_STATE_SUPERSEDED
 	}
 }
 
 func listPromotions(ctx context.Context, invocation commands.Invocation, cfg *project.Project) (promotions []*contractv1.PromotionHistoryEntry, err error) {
-	err = invocation.WithProvider(ctx, cfg, "ocel deployments ls", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = invocation.WithProvider(ctx, cfg, "ocel promotions ls", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Features}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		return p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 			listed, err := client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
@@ -136,7 +136,7 @@ func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd
 		return err
 	}
 
-	policy := consent.NewPlanPolicy("ocel deployments prune", opts.yes, invocation.CanAsk(stdin), stdout, stdin)
+	policy := consent.NewPlanPolicy("ocel promotions prune", opts.yes, invocation.CanAsk(stdin), stdout, stdin)
 	if err := policy.Refuse(); err != nil {
 		return err
 	}

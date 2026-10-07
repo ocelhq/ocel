@@ -1,6 +1,20 @@
 {
   "$defs": {
-    "cli.result.v1.DeploymentSummary.jsonschema.json": {
+    "cli.result.v1.PromotionListResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "promotions": {
+          "items": {
+            "$ref": "#/$defs/cli.result.v1.PromotionSummary.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Promotion List Result",
+      "type": "object"
+    },
+    "cli.result.v1.PromotionSummary.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "patternProperties": {
@@ -34,14 +48,14 @@
         "state": {
           "anyOf": [
             {
-              "pattern": "^DEPLOYMENT_STATE_UNSPECIFIED$",
+              "pattern": "^PROMOTION_STATE_UNSPECIFIED$",
               "type": "string"
             },
             {
               "enum": [
-                "DEPLOYMENT_STATE_ACTIVE",
-                "DEPLOYMENT_STATE_UNPROMOTED",
-                "DEPLOYMENT_STATE_SUPERSEDED"
+                "PROMOTION_STATE_ACTIVE",
+                "PROMOTION_STATE_UNPROMOTED",
+                "PROMOTION_STATE_SUPERSEDED"
               ],
               "type": "string"
             },
@@ -52,18 +66,18 @@
             }
           ],
           "default": 0,
-          "title": "Deployment State"
+          "title": "Promotion State"
         },
         "tag": {
           "default": "",
           "type": "string"
         }
       },
-      "title": "Deployment Summary",
+      "title": "Promotion Summary",
       "type": "object"
     }
   },
-  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.DeploymentSummary.schema.json",
-  "$ref": "#/$defs/cli.result.v1.DeploymentSummary.jsonschema.json",
+  "$id": "https://ocel.dev/schema/0.0.1/cli/cli.result.v1.PromotionListResult.schema.json",
+  "$ref": "#/$defs/cli.result.v1.PromotionListResult.jsonschema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema"
 }

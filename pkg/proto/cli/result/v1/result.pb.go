@@ -24,55 +24,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type DeploymentState int32
+type PromotionState int32
 
 const (
-	DeploymentState_DEPLOYMENT_STATE_UNSPECIFIED DeploymentState = 0
-	DeploymentState_DEPLOYMENT_STATE_ACTIVE      DeploymentState = 1
-	DeploymentState_DEPLOYMENT_STATE_UNPROMOTED  DeploymentState = 2
-	DeploymentState_DEPLOYMENT_STATE_SUPERSEDED  DeploymentState = 3
+	PromotionState_PROMOTION_STATE_UNSPECIFIED PromotionState = 0
+	PromotionState_PROMOTION_STATE_ACTIVE      PromotionState = 1
+	PromotionState_PROMOTION_STATE_UNPROMOTED  PromotionState = 2
+	PromotionState_PROMOTION_STATE_SUPERSEDED  PromotionState = 3
 )
 
-// Enum value maps for DeploymentState.
+// Enum value maps for PromotionState.
 var (
-	DeploymentState_name = map[int32]string{
-		0: "DEPLOYMENT_STATE_UNSPECIFIED",
-		1: "DEPLOYMENT_STATE_ACTIVE",
-		2: "DEPLOYMENT_STATE_UNPROMOTED",
-		3: "DEPLOYMENT_STATE_SUPERSEDED",
+	PromotionState_name = map[int32]string{
+		0: "PROMOTION_STATE_UNSPECIFIED",
+		1: "PROMOTION_STATE_ACTIVE",
+		2: "PROMOTION_STATE_UNPROMOTED",
+		3: "PROMOTION_STATE_SUPERSEDED",
 	}
-	DeploymentState_value = map[string]int32{
-		"DEPLOYMENT_STATE_UNSPECIFIED": 0,
-		"DEPLOYMENT_STATE_ACTIVE":      1,
-		"DEPLOYMENT_STATE_UNPROMOTED":  2,
-		"DEPLOYMENT_STATE_SUPERSEDED":  3,
+	PromotionState_value = map[string]int32{
+		"PROMOTION_STATE_UNSPECIFIED": 0,
+		"PROMOTION_STATE_ACTIVE":      1,
+		"PROMOTION_STATE_UNPROMOTED":  2,
+		"PROMOTION_STATE_SUPERSEDED":  3,
 	}
 )
 
-func (x DeploymentState) Enum() *DeploymentState {
-	p := new(DeploymentState)
+func (x PromotionState) Enum() *PromotionState {
+	p := new(PromotionState)
 	*p = x
 	return p
 }
 
-func (x DeploymentState) String() string {
+func (x PromotionState) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (DeploymentState) Descriptor() protoreflect.EnumDescriptor {
+func (PromotionState) Descriptor() protoreflect.EnumDescriptor {
 	return file_cli_result_v1_result_proto_enumTypes[0].Descriptor()
 }
 
-func (DeploymentState) Type() protoreflect.EnumType {
+func (PromotionState) Type() protoreflect.EnumType {
 	return &file_cli_result_v1_result_proto_enumTypes[0]
 }
 
-func (x DeploymentState) Number() protoreflect.EnumNumber {
+func (x PromotionState) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use DeploymentState.Descriptor instead.
-func (DeploymentState) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use PromotionState.Descriptor instead.
+func (PromotionState) EnumDescriptor() ([]byte, []int) {
 	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{0}
 }
 
@@ -888,27 +888,27 @@ func (x *CostScanResult) GetAssumptions() []string {
 	return nil
 }
 
-type DeploymentListResult struct {
+type PromotionListResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Deployments   []*DeploymentSummary   `protobuf:"bytes,1,rep,name=deployments,proto3" json:"deployments,omitempty"`
+	Promotions    []*PromotionSummary    `protobuf:"bytes,1,rep,name=promotions,proto3" json:"promotions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *DeploymentListResult) Reset() {
-	*x = DeploymentListResult{}
+func (x *PromotionListResult) Reset() {
+	*x = PromotionListResult{}
 	mi := &file_cli_result_v1_result_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DeploymentListResult) String() string {
+func (x *PromotionListResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DeploymentListResult) ProtoMessage() {}
+func (*PromotionListResult) ProtoMessage() {}
 
-func (x *DeploymentListResult) ProtoReflect() protoreflect.Message {
+func (x *PromotionListResult) ProtoReflect() protoreflect.Message {
 	mi := &file_cli_result_v1_result_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -920,43 +920,43 @@ func (x *DeploymentListResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeploymentListResult.ProtoReflect.Descriptor instead.
-func (*DeploymentListResult) Descriptor() ([]byte, []int) {
+// Deprecated: Use PromotionListResult.ProtoReflect.Descriptor instead.
+func (*PromotionListResult) Descriptor() ([]byte, []int) {
 	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *DeploymentListResult) GetDeployments() []*DeploymentSummary {
+func (x *PromotionListResult) GetPromotions() []*PromotionSummary {
 	if x != nil {
-		return x.Deployments
+		return x.Promotions
 	}
 	return nil
 }
 
-type DeploymentSummary struct {
+type PromotionSummary struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PromotionId   string                 `protobuf:"bytes,1,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	Tag           string                 `protobuf:"bytes,2,opt,name=tag,proto3" json:"tag,omitempty"`
 	CreatedAt     string                 `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	Builds        map[string]string      `protobuf:"bytes,4,rep,name=builds,proto3" json:"builds,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	State         DeploymentState        `protobuf:"varint,5,opt,name=state,proto3,enum=cli.result.v1.DeploymentState" json:"state,omitempty"`
+	State         PromotionState         `protobuf:"varint,5,opt,name=state,proto3,enum=cli.result.v1.PromotionState" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *DeploymentSummary) Reset() {
-	*x = DeploymentSummary{}
+func (x *PromotionSummary) Reset() {
+	*x = PromotionSummary{}
 	mi := &file_cli_result_v1_result_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DeploymentSummary) String() string {
+func (x *PromotionSummary) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DeploymentSummary) ProtoMessage() {}
+func (*PromotionSummary) ProtoMessage() {}
 
-func (x *DeploymentSummary) ProtoReflect() protoreflect.Message {
+func (x *PromotionSummary) ProtoReflect() protoreflect.Message {
 	mi := &file_cli_result_v1_result_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -968,44 +968,44 @@ func (x *DeploymentSummary) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeploymentSummary.ProtoReflect.Descriptor instead.
-func (*DeploymentSummary) Descriptor() ([]byte, []int) {
+// Deprecated: Use PromotionSummary.ProtoReflect.Descriptor instead.
+func (*PromotionSummary) Descriptor() ([]byte, []int) {
 	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *DeploymentSummary) GetPromotionId() string {
+func (x *PromotionSummary) GetPromotionId() string {
 	if x != nil {
 		return x.PromotionId
 	}
 	return ""
 }
 
-func (x *DeploymentSummary) GetTag() string {
+func (x *PromotionSummary) GetTag() string {
 	if x != nil {
 		return x.Tag
 	}
 	return ""
 }
 
-func (x *DeploymentSummary) GetCreatedAt() string {
+func (x *PromotionSummary) GetCreatedAt() string {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return ""
 }
 
-func (x *DeploymentSummary) GetBuilds() map[string]string {
+func (x *PromotionSummary) GetBuilds() map[string]string {
 	if x != nil {
 		return x.Builds
 	}
 	return nil
 }
 
-func (x *DeploymentSummary) GetState() DeploymentState {
+func (x *PromotionSummary) GetState() PromotionState {
 	if x != nil {
 		return x.State
 	}
-	return DeploymentState_DEPLOYMENT_STATE_UNSPECIFIED
+	return PromotionState_PROMOTION_STATE_UNSPECIFIED
 }
 
 type PreviewListResult struct {
@@ -3241,16 +3241,18 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x0eCostScanResult\x12;\n" +
 	"\tresources\x18\x01 \x01(\v2\x1d.provider.cost.v1.ResourceSetR\tresources\x126\n" +
 	"\bestimate\x18\x02 \x01(\v2\x1a.provider.cost.v1.EstimateR\bestimate\x12 \n" +
-	"\vassumptions\x18\x03 \x03(\tR\vassumptions\"Z\n" +
-	"\x14DeploymentListResult\x12B\n" +
-	"\vdeployments\x18\x01 \x03(\v2 .cli.result.v1.DeploymentSummaryR\vdeployments\"\x9e\x02\n" +
-	"\x11DeploymentSummary\x12!\n" +
+	"\vassumptions\x18\x03 \x03(\tR\vassumptions\"V\n" +
+	"\x13PromotionListResult\x12?\n" +
+	"\n" +
+	"promotions\x18\x01 \x03(\v2\x1f.cli.result.v1.PromotionSummaryR\n" +
+	"promotions\"\x9b\x02\n" +
+	"\x10PromotionSummary\x12!\n" +
 	"\fpromotion_id\x18\x01 \x01(\tR\vpromotionId\x12\x10\n" +
 	"\x03tag\x18\x02 \x01(\tR\x03tag\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x03 \x01(\tR\tcreatedAt\x12D\n" +
-	"\x06builds\x18\x04 \x03(\v2,.cli.result.v1.DeploymentSummary.BuildsEntryR\x06builds\x124\n" +
-	"\x05state\x18\x05 \x01(\x0e2\x1e.cli.result.v1.DeploymentStateR\x05state\x1a9\n" +
+	"created_at\x18\x03 \x01(\tR\tcreatedAt\x12C\n" +
+	"\x06builds\x18\x04 \x03(\v2+.cli.result.v1.PromotionSummary.BuildsEntryR\x06builds\x123\n" +
+	"\x05state\x18\x05 \x01(\x0e2\x1d.cli.result.v1.PromotionStateR\x05state\x1a9\n" +
 	"\vBuildsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"N\n" +
@@ -3454,12 +3456,12 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x06schema\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x06schema\"Y\n" +
 	"\rListedCommand\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x124\n" +
-	"\x06output\x18\x02 \x01(\x0e2\x1c.cli.result.v1.CommandOutputR\x06output*\x92\x01\n" +
-	"\x0fDeploymentState\x12 \n" +
-	"\x1cDEPLOYMENT_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
-	"\x17DEPLOYMENT_STATE_ACTIVE\x10\x01\x12\x1f\n" +
-	"\x1bDEPLOYMENT_STATE_UNPROMOTED\x10\x02\x12\x1f\n" +
-	"\x1bDEPLOYMENT_STATE_SUPERSEDED\x10\x03*\x9e\x01\n" +
+	"\x06output\x18\x02 \x01(\x0e2\x1c.cli.result.v1.CommandOutputR\x06output*\x8d\x01\n" +
+	"\x0ePromotionState\x12\x1f\n" +
+	"\x1bPROMOTION_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16PROMOTION_STATE_ACTIVE\x10\x01\x12\x1e\n" +
+	"\x1aPROMOTION_STATE_UNPROMOTED\x10\x02\x12\x1e\n" +
+	"\x1aPROMOTION_STATE_SUPERSEDED\x10\x03*\x9e\x01\n" +
 	"\x11ConnectorLiveness\x12\"\n" +
 	"\x1eCONNECTOR_LIVENESS_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19CONNECTOR_LIVENESS_ONLINE\x10\x01\x12\x1e\n" +
@@ -3496,7 +3498,7 @@ func file_cli_result_v1_result_proto_rawDescGZIP() []byte {
 var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
 var file_cli_result_v1_result_proto_goTypes = []any{
-	(DeploymentState)(0),          // 0: cli.result.v1.DeploymentState
+	(PromotionState)(0),           // 0: cli.result.v1.PromotionState
 	(ConnectorLiveness)(0),        // 1: cli.result.v1.ConnectorLiveness
 	(DoctorVerdict)(0),            // 2: cli.result.v1.DoctorVerdict
 	(ConfigFormat)(0),             // 3: cli.result.v1.ConfigFormat
@@ -3510,8 +3512,8 @@ var file_cli_result_v1_result_proto_goTypes = []any{
 	(*DomainHostStatus)(nil),      // 11: cli.result.v1.DomainHostStatus
 	(*Certificate)(nil),           // 12: cli.result.v1.Certificate
 	(*CostScanResult)(nil),        // 13: cli.result.v1.CostScanResult
-	(*DeploymentListResult)(nil),  // 14: cli.result.v1.DeploymentListResult
-	(*DeploymentSummary)(nil),     // 15: cli.result.v1.DeploymentSummary
+	(*PromotionListResult)(nil),   // 14: cli.result.v1.PromotionListResult
+	(*PromotionSummary)(nil),      // 15: cli.result.v1.PromotionSummary
 	(*PreviewListResult)(nil),     // 16: cli.result.v1.PreviewListResult
 	(*PreviewSummary)(nil),        // 17: cli.result.v1.PreviewSummary
 	(*DomainListResult)(nil),      // 18: cli.result.v1.DomainListResult
@@ -3546,7 +3548,7 @@ var file_cli_result_v1_result_proto_goTypes = []any{
 	(*SchemaListResult)(nil),      // 47: cli.result.v1.SchemaListResult
 	(*SchemaResult)(nil),          // 48: cli.result.v1.SchemaResult
 	(*ListedCommand)(nil),         // 49: cli.result.v1.ListedCommand
-	nil,                           // 50: cli.result.v1.DeploymentSummary.BuildsEntry
+	nil,                           // 50: cli.result.v1.PromotionSummary.BuildsEntry
 	nil,                           // 51: cli.result.v1.PinnedExecutable.DigestsEntry
 	(*v1.ResourceSet)(nil),        // 52: provider.cost.v1.ResourceSet
 	(*v1.Estimate)(nil),           // 53: provider.cost.v1.Estimate
@@ -3562,9 +3564,9 @@ var file_cli_result_v1_result_proto_depIdxs = []int32{
 	12, // 3: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
 	52, // 4: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
 	53, // 5: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
-	15, // 6: cli.result.v1.DeploymentListResult.deployments:type_name -> cli.result.v1.DeploymentSummary
-	50, // 7: cli.result.v1.DeploymentSummary.builds:type_name -> cli.result.v1.DeploymentSummary.BuildsEntry
-	0,  // 8: cli.result.v1.DeploymentSummary.state:type_name -> cli.result.v1.DeploymentState
+	15, // 6: cli.result.v1.PromotionListResult.promotions:type_name -> cli.result.v1.PromotionSummary
+	50, // 7: cli.result.v1.PromotionSummary.builds:type_name -> cli.result.v1.PromotionSummary.BuildsEntry
+	0,  // 8: cli.result.v1.PromotionSummary.state:type_name -> cli.result.v1.PromotionState
 	17, // 9: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
 	54, // 10: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
 	11, // 11: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus

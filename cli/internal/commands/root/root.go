@@ -196,7 +196,7 @@ func newCommand() *command {
 	rootCmd.AddCommand(deploy.NewPreviewCommand(deployDependencies))
 	rootCmd.AddCommand(env.NewCommand(env.Dependencies{Invocation: invocation, OpenBrowser: browser.OpenURL, ServeVariableEditor: env.ServeVariableEditor}))
 	rootCmd.AddCommand(promotions.NewRollbackCommand(invocation))
-	rootCmd.AddCommand(promotions.NewDeploymentsCommand(invocation))
+	rootCmd.AddCommand(promotions.NewPromotionsCommand(invocation))
 	rootCmd.AddCommand(logs.NewCommand(logs.Dependencies{Invocation: invocation, ReadGitBranch: deploy.ReadGitBranch, DiscoverPRNumber: deploy.DiscoverPRNumber, Now: time.Now}))
 	rootCmd.AddCommand(domain.NewCommand(invocation))
 	rootCmd.AddCommand(bindings.NewCommand(invocation))

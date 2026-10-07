@@ -22,8 +22,8 @@ func TestTheTelemetryBannerPrintsOnStderrOnceAcrossInvocations(t *testing.T) {
 	inADeployedProject(t)
 	withTelemetryBuild(t)
 
-	firstOut, firstErr := executeRoot(t, "deployments", "prune", "--yes")
-	secondOut, secondErr := executeRoot(t, "deployments", "prune", "--yes")
+	firstOut, firstErr := executeRoot(t, "promotions", "prune", "--yes")
+	secondOut, secondErr := executeRoot(t, "promotions", "prune", "--yes")
 
 	if !strings.Contains(firstErr, "OCEL_TELEMETRY=0") {
 		t.Errorf("first stderr = %q, want the telemetry banner", firstErr)
@@ -40,7 +40,7 @@ func TestTheTelemetryBannerLeavesJSONStdoutAlone(t *testing.T) {
 	inADeployedProject(t)
 	withTelemetryBuild(t)
 
-	stdout, stderr := executeRoot(t, "--json", "deployments", "prune", "--yes")
+	stdout, stderr := executeRoot(t, "--json", "promotions", "prune", "--yes")
 
 	if strings.Contains(stdout, "OCEL_TELEMETRY") {
 		t.Errorf("stdout = %q, want the banner kept off the JSON stream", stdout)
@@ -53,7 +53,7 @@ func TestTheTelemetryBannerLeavesJSONStdoutAlone(t *testing.T) {
 func TestNoTelemetryBannerWhenTheBuildCarriesNoKey(t *testing.T) {
 	inADeployedProject(t)
 
-	_, stderr := executeRoot(t, "deployments", "prune", "--yes")
+	_, stderr := executeRoot(t, "promotions", "prune", "--yes")
 
 	if strings.Contains(stderr, "OCEL_TELEMETRY") {
 		t.Errorf("stderr = %q, want no banner without a key", stderr)
@@ -65,7 +65,7 @@ func TestNoTelemetryBannerWhenOptedOut(t *testing.T) {
 	withTelemetryBuild(t)
 	t.Setenv("OCEL_TELEMETRY", "0")
 
-	_, stderr := executeRoot(t, "deployments", "prune", "--yes")
+	_, stderr := executeRoot(t, "promotions", "prune", "--yes")
 
 	if strings.Contains(stderr, "OCEL_TELEMETRY") {
 		t.Errorf("stderr = %q, want no banner when opted out", stderr)
@@ -104,7 +104,7 @@ func TestShellCompletionLeavesTheTelemetryBannerForTheNextCommand(t *testing.T) 
 			t.Errorf("ocel %s stderr = %q, want no banner where the shell discards it", completion, completionErr)
 		}
 	}
-	_, stderr := executeRoot(t, "deployments", "prune", "--yes")
+	_, stderr := executeRoot(t, "promotions", "prune", "--yes")
 
 	if !strings.Contains(stderr, "OCEL_TELEMETRY=0") {
 		t.Errorf("stderr = %q, want the banner on the first command after shell completion", stderr)
