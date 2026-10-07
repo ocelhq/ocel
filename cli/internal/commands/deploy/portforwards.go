@@ -102,7 +102,7 @@ func (i *infraProvisioning) findBoundUses(ctx context.Context, cfg *project.Proj
 	var uses []boundUse
 	for _, usage := range usages {
 		kind, bindable := naming.BindableAs(usage.Type)
-		if !built[usage.App] || !bindable || (kind != bindingsv1.BindingType_BINDING_TYPE_POSTGRES && kind != bindingsv1.BindingType_BINDING_TYPE_KV) {
+		if !built[usage.App] || !bindable {
 			continue
 		}
 		bound, provisioned := i.provisionedBinding(usage.Type, usage.Name)
