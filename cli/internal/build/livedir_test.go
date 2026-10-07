@@ -121,7 +121,7 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		}
 	})
 
-	t.Run("an app with no encrypted value is handed no live dir", func(t *testing.T) {
+	t.Run("an app with no encrypted value is handed an empty live dir name, so one inherited from the deployer reaches nothing", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
@@ -133,8 +133,8 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		if err := builder.Build(context.Background(), cfg, map[string]AppVariables{"web": {Env: map[string]string{"POSTHOG_ID": "ph-web"}}}, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
-		if dir, ok := got.Apps[0].Env[processenv.LiveDirEnvVar]; ok {
-			t.Errorf("web was handed %s=%q, want none for an app with nothing to put there", processenv.LiveDirEnvVar, dir)
+		if dir, ok := got.Apps[0].Env[processenv.LiveDirEnvVar]; !ok || dir != "" {
+			t.Errorf("web was handed %s=%q (set %v), want it set empty so the build owns the name", processenv.LiveDirEnvVar, dir, ok)
 		}
 	})
 

@@ -143,15 +143,16 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			}
 		case name == buildoutput.FrameworkNext:
 			nextApps = append(nextApps, a)
-			env := variables[a.Name].Env
+			var liveDir string
 			if live := variables[a.Name].Live; len(live) > 0 {
 				dir, err := writeLiveDir(live)
 				if err != nil {
 					return err
 				}
 				liveDirs = append(liveDirs, dir)
-				env = withLiveDir(env, dir)
+				liveDir = dir
 			}
+			env := withLiveDir(variables[a.Name].Env, liveDir)
 			req.Apps = append(req.Apps, nodeAppBuild{
 				Framework:     buildoutput.FrameworkNext,
 				Name:          a.Name,
