@@ -48,15 +48,6 @@ enum EnvironmentEventKind {
   ENVIRONMENT_EVENT_KIND_DESTROYED = 2;
 }
 
-message ReportedEnvironment {
-  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {
-    defined_only: true
-    not_in: [0]
-  }];
-
-  string identity = 2 [(buf.validate.field).string.max_len = 128];
-}
-
 message Provider {
   string name = 1 [(buf.validate.field).string = {min_len: 1, max_len: 64}];
 
@@ -85,7 +76,10 @@ message Trigger {
 }
 
 message Source {
-  string commit = 1 [(buf.validate.field).string = {min_len: 7, max_len: 64}];
+  string commit = 1 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {pattern: "^[0-9a-f]{7,64}$"}
+  }];
 
   string branch = 2 [(buf.validate.field).string.max_len = 256];
 
@@ -93,7 +87,7 @@ message Source {
 }
 
 message CI {
-  string provider = 1 [(buf.validate.field).string = {min_len: 1, max_len: 64}];
+  string name = 1 [(buf.validate.field).string = {min_len: 1, max_len: 64}];
 
   string repo = 2 [(buf.validate.field).string.max_len = 256];
 
@@ -111,36 +105,16 @@ message Runtime {
   string arch = 2 [(buf.validate.field).string.max_len = 32];
 }
 
-message Variable {
-  string key = 1 [(buf.validate.field).string = {min_len: 1, max_len: 256}];
-
-  app.resources.v1.VariableClass class = 2 [(buf.validate.field).enum = {
-    defined_only: true
-    not_in: [0]
-  }];
-
-  repeated string folders = 3 [(buf.validate.field).repeated = {
-    max_items: 100
-    items: {string: {max_len: 512}}
-  }];
-
-  string description = 4 [(buf.validate.field).string.max_len = 1000];
-
-  string group = 5 [(buf.validate.field).string.max_len = 256];
-
-  bool required = 6;
-}
-
 message App {
   option (buf.validate.message).cel = {
     id: "app.build_on_success"
     message: "a succeeded app names the build it deployed"
-    expression: "this.outcome != 1 || this.build_id != ''"
+    expression: "this.outcome != console.v1.AppOutcome.APP_OUTCOME_SUCCEEDED || this.build_id != ''"
   };
   option (buf.validate.message).cel = {
     id: "app.release_on_success"
     message: "a succeeded app names the release it made live"
-    expression: "this.outcome != 1 || this.release != ''"
+    expression: "this.outcome != console.v1.AppOutcome.APP_OUTCOME_SUCCEEDED || this.release != ''"
   };
 
   string name = 1 [(buf.validate.field).string = {min_len: 1, max_len: 63}];
@@ -149,9 +123,17 @@ message App {
 
   Runtime runtime = 3;
 
-  string framework = 4 [(buf.validate.field).string.max_len = 64];
+  string framework = 4 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {
+      in: ["node", "next", "go", "python", "rust"]
+    }
+  }];
 
-  ComputeKind compute = 5 [(buf.validate.field).enum.defined_only = true];
+  ComputeKind compute = 5 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
 
   string build_id = 6 [(buf.validate.field).string.max_len = 256];
 
@@ -176,7 +158,7 @@ message App {
 
   string error = 12 [(buf.validate.field).string.max_len = 4000];
 
-  repeated Variable variables = 13 [(buf.validate.field).repeated.max_items = 500];
+  repeated app.resources.v1.VariableDefinition variables = 13 [(buf.validate.field).repeated.max_items = 500];
 }
 
 message ResourceBinding {
@@ -193,13 +175,15 @@ message ResourceBinding {
 message Resource {
   string name = 1 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
 
-  string type = 2 [(buf.validate.field).string = {min_len: 1, max_len: 64}];
+  string type = 2 [(buf.validate.field).string = {
+    in: ["postgres", "bucket", "topic", "task", "kv", "realtime", "custom"]
+  }];
 
   ResourceBinding binding = 3;
 }
 
 message Grant {
-  string verb = 1 [(buf.validate.field).string.max_len = 64];
+  string label = 1 [(buf.validate.field).string.max_len = 64];
 
   repeated string actions = 2 [(buf.validate.field).repeated = {
     max_items: 100
@@ -229,18 +213,23 @@ message Usage {
 message Deployment {
   option (buf.validate.message).cel = {
     id: "deployment.promotion_on_success"
-    message: "a succeeded deployment names the promotion it made active"
-    expression: "this.outcome != 1 || has(this.promotion)"
+    message: "a succeeded deployment names the promotion it made live"
+    expression: "this.outcome != console.v1.DeploymentOutcome.DEPLOYMENT_OUTCOME_SUCCEEDED || has(this.promotion)"
   };
   option (buf.validate.message).cel = {
     id: "deployment.no_promotion_on_failure"
-    message: "a failed deployment made nothing active, so it names no promotion"
-    expression: "this.outcome != 2 || !has(this.promotion)"
+    message: "a failed deployment made nothing live, so it names no promotion"
+    expression: "this.outcome != console.v1.DeploymentOutcome.DEPLOYMENT_OUTCOME_FAILED || !has(this.promotion)"
+  };
+  option (buf.validate.message).cel = {
+    id: "deployment.environment_tier"
+    message: "the environment names its tier"
+    expression: "!has(this.environment) || this.environment.tier != common.environment.v1.Tier.TIER_UNSPECIFIED"
   };
   option (buf.validate.message).cel = {
     id: "deployment.preview_up_in_preview"
     message: "a preview up deploys to the preview tier"
-    expression: "this.kind != 2 || this.environment.tier == 1"
+    expression: "this.kind != console.v1.DeploymentKind.DEPLOYMENT_KIND_PREVIEW_UP || this.environment.tier == common.environment.v1.Tier.TIER_PREVIEW"
   };
   option (buf.validate.message).cel = {
     id: "deployment.finished_after_started"
@@ -299,7 +288,7 @@ message Deployment {
 
   string slug = 4 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
 
-  ReportedEnvironment environment = 5 [(buf.validate.field).required = true];
+  common.environment.v1.Environment environment = 5 [(buf.validate.field).required = true];
 
   Provider provider = 6 [(buf.validate.field).required = true];
 
@@ -344,12 +333,17 @@ message EnvironmentEvent {
   option (buf.validate.message).cel = {
     id: "environment_event.preview_removed_in_preview"
     message: "a removed preview is in the preview tier"
-    expression: "this.kind != 1 || this.environment.tier == 1"
+    expression: "this.kind != console.v1.EnvironmentEventKind.ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED || this.environment.tier == common.environment.v1.Tier.TIER_PREVIEW"
   };
   option (buf.validate.message).cel = {
     id: "environment_event.preview_removed_names_preview"
     message: "a removed preview names the preview"
-    expression: "this.kind != 1 || this.environment.identity != ''"
+    expression: "this.kind != console.v1.EnvironmentEventKind.ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED || this.environment.identity != ''"
+  };
+  option (buf.validate.message).cel = {
+    id: "environment_event.environment_tier"
+    message: "the environment names its tier"
+    expression: "!has(this.environment) || this.environment.tier != common.environment.v1.Tier.TIER_UNSPECIFIED"
   };
 
   EnvironmentEventKind kind = 1 [(buf.validate.field).enum = {
@@ -359,7 +353,7 @@ message EnvironmentEvent {
 
   string slug = 2 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
 
-  ReportedEnvironment environment = 3 [(buf.validate.field).required = true];
+  common.environment.v1.Environment environment = 3 [(buf.validate.field).required = true];
 
   google.protobuf.Timestamp at = 4 [(buf.validate.field).required = true];
 
