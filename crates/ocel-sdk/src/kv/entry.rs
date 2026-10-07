@@ -45,12 +45,12 @@ impl redis::io::AsyncDNSResolver for Forward {
 impl Kv {
     /// The redis-rs client for the store over the delivered binding, encrypted when the
     /// binding requires TLS, and trusting only the binding's certificate authority when it
-    /// delivers one. A binding that names a TLS server name, as one pointing at a port
-    /// forward does, gives a client addressed by that name, so its certificate is verified
-    /// against it; [`Kv::connection`] reaches such a store through the forward, while a
-    /// connection opened from this client resolves the name itself. It is built on the first call and the same client is returned on every
-    /// one after. It fails when no binding was delivered for the name, when the delivered
-    /// authority holds no PEM certificate, and during discovery.
+    /// delivers one. A binding that names a TLS server name gives a client addressed by that
+    /// name, which its certificate is verified against; only [`Kv::connection`] reaches
+    /// such a store through the binding's host. It is built on the first call and the same
+    /// client is returned on every one after. It fails when no binding was delivered for
+    /// the name, when the delivered authority holds no PEM certificate, and during
+    /// discovery.
     pub fn client(&self) -> Result<redis::Client, Error> {
         self.open_client("client")
     }
