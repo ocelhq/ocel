@@ -447,11 +447,29 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("refuses a resolved value the build environment owns", func(t *testing.T) {
+	t.Run("refuses a value under a name the build sets or, sensitive or secret, one its toolchain reads from its environment", func(t *testing.T) {
 		t.Parallel()
 
-		for _, name := range []string{"PATH", processenv.AppFolderEnvVar, processenv.PhaseEnvVar, processenv.LiveDirEnvVar} {
-			t.Run(name, func(t *testing.T) {
+		for _, tc := range []struct {
+			name   string
+			values AppVariables
+		}{
+			{"PATH", AppVariables{Env: map[string]string{"PATH": "hijacked"}}},
+			{processenv.AppFolderEnvVar, AppVariables{Env: map[string]string{processenv.AppFolderEnvVar: "hijacked"}}},
+			{processenv.PhaseEnvVar, AppVariables{Env: map[string]string{processenv.PhaseEnvVar: "hijacked"}}},
+			{processenv.LiveDirEnvVar, AppVariables{Env: map[string]string{processenv.LiveDirEnvVar: "hijacked"}}},
+			{"NODE_ENV", AppVariables{Env: map[string]string{"NODE_ENV": "development"}}},
+			{"OCEL_APP_NAME", AppVariables{Env: map[string]string{"OCEL_APP_NAME": "hijacked"}}},
+			{"NEXT_DEPLOYMENT_ID", AppVariables{Live: map[string]string{"NEXT_DEPLOYMENT_ID": "hijacked"}}},
+			{"NEXT_ADAPTER_PATH", AppVariables{Env: map[string]string{"NEXT_ADAPTER_PATH": "hijacked"}}},
+			{"HOME", AppVariables{Live: map[string]string{"HOME": "/secret/home"}}},
+			{"TMPDIR", AppVariables{Live: map[string]string{"TMPDIR": "/secret/tmp"}}},
+			{"NODE_OPTIONS", AppVariables{Live: map[string]string{"NODE_OPTIONS": "--require=x"}}},
+			{"CARGO_REGISTRY_TOKEN", AppVariables{Live: map[string]string{"CARGO_REGISTRY_TOKEN": "cio_secret"}}},
+			{"RUSTUP_HOME", AppVariables{Live: map[string]string{"RUSTUP_HOME": "/secret/rustup"}}},
+			{"npm_config__authToken", AppVariables{Live: map[string]string{"npm_config__authToken": "npm_secret"}}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
 
 				root := t.TempDir()
@@ -463,14 +481,30 @@ func TestBuild(t *testing.T) {
 				}}
 
 				cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
-				err := builder.Build(context.Background(), cfg, map[string]AppVariables{"web": {Env: map[string]string{name: "hijacked"}}}, Log{})
-				if err == nil || !strings.Contains(err.Error(), name) {
-					t.Errorf("Build err = %v, want a refusal naming %q", err, name)
+				err := builder.Build(context.Background(), cfg, map[string]AppVariables{"web": tc.values}, Log{})
+				if err == nil || !strings.Contains(err.Error(), tc.name) || !strings.Contains(err.Error(), `app "web"`) {
+					t.Errorf("Build err = %v, want a refusal naming app \"web\" and %q", err, tc.name)
 				}
 				if ran {
 					t.Error("the node build script ran, want the refusal before anything is built")
 				}
 			})
+		}
+	})
+
+	t.Run("builds with a plaintext value under a name its toolchain reads, which the build hands it in place of the shell's", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeBuildScript(t, root)
+		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
+		var got nodeBuildRequest
+		builder := nodeOnly{host: servingNext, node: requestOf(&got)}
+		if err := builder.Build(context.Background(), cfg, map[string]AppVariables{"web": {Env: map[string]string{"NODE_OPTIONS": "--max-old-space-size=4096"}}}, Log{}); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		if got.Apps[0].Env["NODE_OPTIONS"] != "--max-old-space-size=4096" {
+			t.Errorf("Env[NODE_OPTIONS] = %q, want the plaintext value", got.Apps[0].Env["NODE_OPTIONS"])
 		}
 	})
 

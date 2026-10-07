@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 type nodeBuildRequest struct {
@@ -38,17 +37,6 @@ type nodeAppBuild struct {
 	NextRuntimeDir         string `json:"nextRuntimeDir,omitempty"`
 	MaxFunctionBytes       int64  `json:"maxFunctionBytes,omitempty"`
 	NextRefreshesByRequest bool   `json:"nextRefreshesByRequest,omitempty"`
-}
-
-var buildOwnedNames = []string{processenv.AppFolderEnvVar, processenv.PhaseEnvVar, processenv.LiveDirEnvVar, "PATH"}
-
-func checkVariableNames(variables map[string]string) error {
-	for _, name := range buildOwnedNames {
-		if _, taken := variables[name]; taken {
-			return fmt.Errorf("a variable is declared as %s, which the build environment owns; rename it where it is declared", name)
-		}
-	}
-	return nil
 }
 
 const summaryLines = 2

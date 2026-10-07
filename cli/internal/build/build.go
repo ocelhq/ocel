@@ -122,10 +122,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			continue
 		}
 		readable = append(readable, slices.Collect(maps.Values(variables[a.Name].Live))...)
-		if err := checkVariableNames(variables[a.Name].Env); err != nil {
-			return err
-		}
-		if err := checkVariableNames(variables[a.Name].Live); err != nil {
+		if err := refuseReservedNames(a.Name, variables[a.Name]); err != nil {
 			return err
 		}
 		if err := livedir.RefuseUnnamableKeys(variables[a.Name].Live); err != nil {

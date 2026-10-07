@@ -25,10 +25,23 @@ const LIVE_DIR_ENV = "OCEL_LIVE_DIR";
 export const buildProcess = { spawn: spawnBuild };
 
 export async function buildNext(app: NextBuild, adapterPath: string): Promise<void> {
-  for (const owned of [ADAPTER_PATH_ENV, DEPLOYMENT_ID_ENV]) {
-    if (app.env && owned in app.env) {
+  const owned: Record<string, string> = {
+    NODE_ENV: "production",
+    OCEL_APP_NAME: app.name,
+    OCEL_OUTPUT_DIR: app.outputDir,
+    OCEL_APP_FOLDER: app.folder ?? "",
+    OCEL_EDGE_KIND: app.edgeKind ?? "",
+    OCEL_ALLOW_DEGRADED: (app.allowDegraded ?? []).join(","),
+    OCEL_NEXT_RUNTIME_DIR: app.nextRuntimeDir ?? "",
+    OCEL_MAX_FUNCTION_BYTES: app.maxFunctionBytes ? String(app.maxFunctionBytes) : "",
+    OCEL_NEXT_REFRESHES_BY_REQUEST: app.nextRefreshesByRequest ? "1" : "",
+    [ADAPTER_PATH_ENV]: adapterPath,
+    [DEPLOYMENT_ID_ENV]: app.deploymentId,
+  };
+  for (const name of Object.keys(owned)) {
+    if (app.env && name in app.env) {
       throw new Error(
-        `ocel: a variable is declared as ${owned}, which the build environment owns; rename it where it is declared`,
+        `ocel: app "${app.name}" declares ${name}, which the build sets itself; rename it where it is declared`,
       );
     }
   }
@@ -57,17 +70,7 @@ export async function buildNext(app: NextBuild, adapterPath: string): Promise<vo
   await buildProcess.spawn(cmd.command, cmd.args, app.cwd, {
     ...inherited,
     ...app.env,
-    NODE_ENV: "production",
-    OCEL_APP_NAME: app.name,
-    OCEL_OUTPUT_DIR: app.outputDir,
-    OCEL_APP_FOLDER: app.folder ?? "",
-    OCEL_EDGE_KIND: app.edgeKind ?? "",
-    OCEL_ALLOW_DEGRADED: (app.allowDegraded ?? []).join(","),
-    OCEL_NEXT_RUNTIME_DIR: app.nextRuntimeDir ?? "",
-    OCEL_MAX_FUNCTION_BYTES: app.maxFunctionBytes ? String(app.maxFunctionBytes) : "",
-    OCEL_NEXT_REFRESHES_BY_REQUEST: app.nextRefreshesByRequest ? "1" : "",
-    [ADAPTER_PATH_ENV]: adapterPath,
-    [DEPLOYMENT_ID_ENV]: app.deploymentId,
+    ...owned,
   });
   process.stderr.write(`ocel: Next app "${app.name}" built\n`);
 }
