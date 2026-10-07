@@ -1,0 +1,118 @@
+syntax = "proto3";
+package console.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1";
+
+import "buf/validate/validate.proto";
+import "console/v1/deployment.proto";
+import "google/protobuf/timestamp.proto";
+
+enum ConnectorReach {
+  CONNECTOR_REACH_UNSPECIFIED = 0;
+  CONNECTOR_REACH_DIAL = 1;
+}
+
+message ConnectorDenial {
+  string verb = 1;
+
+  google.protobuf.Timestamp at = 2;
+
+  string message = 3;
+}
+
+message Connector {
+  string id = 1;
+
+  string organization_id = 2;
+
+  string target = 3;
+
+  string vendor = 4;
+
+  ComputeKind compute = 5;
+
+  ConnectorReach reach = 6;
+
+  optional string url = 7;
+
+  optional string public_key = 8;
+
+  optional string tls_pin = 9;
+
+  optional string version = 10;
+
+  repeated string capabilities = 11;
+
+  google.protobuf.Timestamp connected_at = 12;
+
+  google.protobuf.Timestamp last_seen_at = 13;
+
+  ConnectorDenial last_denied = 14;
+
+  bool online = 15;
+}
+
+message UpsertConnectorRequest {
+  string target = 1 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^[a-z0-9._:-]+(?:/[a-z0-9._:-]+)+$"
+  }];
+
+  string vendor = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+    pattern: "^[a-z0-9._:-]+$"
+  }];
+
+  ConnectorReach reach = 3 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+message UpsertConnectorResponse {
+  Connector connector = 1;
+}
+
+message ListConnectorsRequest {
+}
+
+message ListConnectorsResponse {
+  repeated Connector connectors = 1;
+}
+
+message RemoveConnectorRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message RemoveConnectorResponse {
+}
+
+message SetConnectorAddressRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+
+  string url = 2 [(buf.validate.field).string = {
+    uri: true
+    max_len: 2048
+  }];
+
+  optional string public_key = 3 [(buf.validate.field).string = {min_len: 1, max_len: 256}];
+
+  optional string tls_pin = 4 [(buf.validate.field).string = {min_len: 1, max_len: 256}];
+
+  ComputeKind compute = 5 [(buf.validate.field).enum.defined_only = true];
+}
+
+message SetConnectorAddressResponse {
+  Connector connector = 1;
+}
+
+service ConnectorService {
+  rpc Upsert(UpsertConnectorRequest) returns (UpsertConnectorResponse);
+
+  rpc List(ListConnectorsRequest) returns (ListConnectorsResponse);
+
+  rpc Remove(RemoveConnectorRequest) returns (RemoveConnectorResponse);
+
+  rpc SetAddress(SetConnectorAddressRequest) returns (SetConnectorAddressResponse);
+}

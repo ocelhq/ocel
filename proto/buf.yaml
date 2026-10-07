@@ -13,6 +13,8 @@ lint:
     - RPC_REQUEST_RESPONSE_UNIQUE
   ignore_only:
     RPC_REQUEST_STANDARD_NAME:
+      - console/v1/connector.proto
+      - console/v1/project.proto
       - provider/contract/v1/contract.proto
 breaking:
   use:
