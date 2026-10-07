@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -257,5 +258,60 @@ func TestClosingTheForwardsIsNoFailureWhenTheirStreamEndedBecauseItWasClosed(t *
 
 	if err := forwards.Close(); err != nil {
 		t.Errorf("Close() = %v, want nil: closing the forwards is what ended their stream", err)
+	}
+}
+
+func TestAnEphemeralPreviewBuildsWithTheTiersPublishedBindingsPointedAtPortForwards(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubGit(&dependencies, "feature/login", "")
+	fixture := setUpPreviewProject(t)
+	writeNextUsageProject(t, fixture.Root, "")
+	forwardingPorts(t, fixture)
+	built := capturingBuild(t, &dependencies)
+
+	previewUp(t, fixture, dependencies, previewUpOptions{})
+
+	sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure)
+	if len(sent) != 1 || !slices.Equal(sent[0].GetBindings(), []string{"db--main"}) || sent[0].GetEnvironment().GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
+		t.Fatalf("the CLI asked to forward %v, want db--main for the ephemeral preview, which builds on the tier's published bindings", sent)
+	}
+	if _, ok := built.Live[forwardedPostgresKey]; !ok {
+		t.Error("the ephemeral preview was built without main's binding")
+	}
+}
+
+func TestADryDeployBuildsWithForwardedBindingsWhenEverythingItUsesIsAlreadyDeployed(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextUsageProject(t, fixture.Root, "")
+	forwardingPorts(t, fixture)
+	built := capturingBuild(t, &dependencies)
+	deployed(t, dependencies, fixture, deployOptions{yes: true})
+	*built = build.AppVariables{}
+
+	deployedSaying(t, dependencies, fixture, deployOptions{dry: true})
+
+	if sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure); len(sent) != 2 {
+		t.Fatalf("the CLI sent %d ForwardPorts requests over a deploy and a dry run, want one each", len(sent))
+	}
+	if _, ok := built.Live[forwardedPostgresKey]; !ok {
+		t.Error("the dry run was built without main's binding, which the earlier deploy published")
+	}
+}
+
+func TestADryDeployOfResourcesNotYetDeployedBuildsWithoutBindingsAndSaysSo(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextUsageProject(t, fixture.Root, "")
+	forwardingPorts(t, fixture)
+	built := capturingBuild(t, &dependencies)
+
+	said := deployedSaying(t, dependencies, fixture, deployOptions{dry: true})
+
+	if _, ok := built.Live[forwardedPostgresKey]; ok {
+		t.Errorf("the dry run was built with %s, want no bindings for resources nothing has deployed", forwardedPostgresKey)
+	}
+	if !strings.Contains(said, "The build goes without the bindings of main, since it is not deployed yet") {
+		t.Errorf("the dry run said %q, want it to say the build goes without main's binding", said)
 	}
 }

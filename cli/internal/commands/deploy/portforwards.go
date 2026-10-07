@@ -22,6 +22,8 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 type boundUse struct {
@@ -62,7 +64,7 @@ func (f *portForwards) deliver(values map[string]build.AppVariables) {
 }
 
 func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps, cfg *project.Project, resources []declaration.Resource) (*portForwards, error) {
-	if !i.isProvisioned() || !i.providerProcess.Facts().GetForwardsPorts() {
+	if i == nil || !i.providerProcess.Facts().GetForwardsPorts() {
 		return nil, nil
 	}
 	uses, err := i.findBoundUses(ctx, cfg, resources)
@@ -82,10 +84,22 @@ func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps,
 	slices.Sort(declared)
 
 	var forwards *portForwards
+	unpublished := false
 	err = steps.run(cfg.Slug, progress.Forwarding.Title("ports to "+english.And(declared)), func() (err error) {
 		forwards, err = i.openPortForwards(ctx, steps, uses, &contractv1.ForwardPortsRequest{Slug: cfg.Slug, Environment: i.env, Bindings: names})
+		if code, refused := provider.RefusedCode(err); i.dry && refused && code == refusal.CodeNotReady {
+			unpublished = true
+			return nil
+		}
 		return err
 	})
+	if unpublished {
+		why := "it is not deployed yet"
+		if len(declared) > 1 {
+			why = "they are not all deployed yet"
+		}
+		steps.phase.Say(fmt.Sprintf("The build goes without the bindings of %s, since %s", english.And(declared), why))
+	}
 	return forwards, err
 }
 
@@ -103,13 +117,19 @@ func (i *infraProvisioning) findBoundUses(ctx context.Context, cfg *project.Proj
 	if err != nil {
 		return nil, err
 	}
+	infra := i.sent.GetManifest()
+	if infra == nil {
+		if infra, err = i.assemble(resources); err != nil {
+			return nil, err
+		}
+	}
 	var uses []boundUse
 	for _, usage := range usages {
 		_, bindable := naming.BindableAs(usage.Type)
 		if !built[usage.App] || !bindable {
 			continue
 		}
-		bound, provisioned := i.provisionedBinding(usage.Type, usage.Name)
+		bound, provisioned := provisionedBinding(infra, usage.Type, usage.Name)
 		if !provisioned {
 			continue
 		}
@@ -118,8 +138,8 @@ func (i *infraProvisioning) findBoundUses(ctx context.Context, cfg *project.Proj
 	return uses, nil
 }
 
-func (i *infraProvisioning) provisionedBinding(kind resourcesv1.ResourceType, name string) (string, bool) {
-	for _, resource := range i.sent.GetManifest().GetResources() {
+func provisionedBinding(infra *contractv1.Manifest, kind resourcesv1.ResourceType, name string) (string, bool) {
+	for _, resource := range infra.GetResources() {
 		declared := resource.GetResource()
 		if declared.GetType() == kind && declared.GetName() == name && resource.GetBinding() == "" {
 			return resource.GetLogicalName(), true
