@@ -116,6 +116,8 @@ message ProviderFacts {
   bool next_refreshes_by_request = 6;
 
   bool ships_next_server_runtime = 7;
+
+  bool forwards_ports = 8;
 }
 
 message UsePreviewWildcardRequest {

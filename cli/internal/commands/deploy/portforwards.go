@@ -58,23 +58,27 @@ func (f *portForwards) deliver(values map[string]build.AppVariables) {
 }
 
 func (i *infraProvisioning) forwardPorts(ctx context.Context, steps *buildSteps, cfg *project.Project, resources []declaration.Resource) (*portForwards, error) {
-	if !i.isProvisioned() {
+	if !i.isProvisioned() || !i.providerProcess.Facts().GetForwardsPorts() {
 		return nil, nil
 	}
 	uses, err := i.findBoundUses(ctx, cfg, resources)
 	if err != nil || len(uses) == 0 {
 		return nil, err
 	}
-	var names []string
+	var names, declared []string
 	for _, use := range uses {
 		if !slices.Contains(names, use.bound) {
 			names = append(names, use.bound)
 		}
+		if !slices.Contains(declared, use.declared) {
+			declared = append(declared, use.declared)
+		}
 	}
 	slices.Sort(names)
+	slices.Sort(declared)
 
 	var forwards *portForwards
-	err = steps.run(cfg.Slug, progress.Forwarding.Title("ports to "+english.And(names)), func() (err error) {
+	err = steps.run(cfg.Slug, progress.Forwarding.Title("ports to "+english.And(declared)), func() (err error) {
 		forwards, err = i.openPortForwards(ctx, steps, uses, &contractv1.ForwardPortsRequest{Slug: cfg.Slug, Environment: i.env, Bindings: names})
 		return err
 	})
