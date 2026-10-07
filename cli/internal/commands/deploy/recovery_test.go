@@ -1722,9 +1722,9 @@ func storedValue(t *testing.T, fixture clitest.FakeProject, key string) variable
 func recordingHost(dependencies *Dependencies) *build.Host {
 	handed := &build.Host{}
 	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, variables map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
 		*handed = host
-		return buildApps(ctx, cfg, env, archs, workers, host, log)
+		return buildApps(ctx, cfg, variables, archs, workers, host, log)
 	}
 	return handed
 }

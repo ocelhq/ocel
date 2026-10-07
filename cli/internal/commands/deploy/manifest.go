@@ -141,7 +141,7 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	}
 	var built build.Output
 	err = steps.run(cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
-		built, err = dependencies.BuildApps(ctx, cfg, build.VariablesOf(clients, secrets), a.containerArchs, workers, a.host, steps.log())
+		built, err = dependencies.BuildApps(ctx, cfg, build.SplitVariablesByClass(clients, secrets), a.containerArchs, workers, a.host, steps.log())
 		if err != nil {
 			return err
 		}

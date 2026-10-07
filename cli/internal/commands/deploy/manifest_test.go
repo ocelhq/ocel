@@ -94,8 +94,8 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	stubRecordedDeploymentIDs(&dependencies)
 
 	var built map[string]build.AppVariables
-	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, env map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
-		built = env
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, variables map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		built = variables
 		return functionsOnDisk(cfg)
 	}
 
@@ -240,9 +240,9 @@ func TestADeployWarnsAboutAStandaloneNextContainerBeforeItBuilds(t *testing.T) {
 	s, out := newBuildSpan(t)
 	warned := false
 	buildApps := dependencies.BuildApps
-	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, env map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, variables map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error) {
 		warned = strings.Contains(out.String(), `app "web" sets output: "standalone" in next.config.mjs`)
-		return buildApps(ctx, cfg, env, archs, workers, host, log)
+		return buildApps(ctx, cfg, variables, archs, workers, host, log)
 	}
 	cfg := &project.Project{
 		Dir:  root,
