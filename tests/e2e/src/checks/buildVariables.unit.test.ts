@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -108,6 +108,29 @@ describe("the build-variables checks", () => {
     });
   });
 
+  describe("the app's .next", () => {
+    const check = () => checkTitled("no file under the app's .next");
+
+    it("passes when no file holds either value", async () => {
+      await mkdir(path.join(projectDir, ".next", "cache"), { recursive: true });
+      await writeFile(path.join(projectDir, ".next", "cache", "fetch"), "x");
+      await check().run(context());
+    });
+
+    it("fails naming the cached file that holds the sensitive value", async () => {
+      await mkdir(path.join(projectDir, ".next", "server", "app"), { recursive: true });
+      await writeFile(
+        path.join(projectDir, ".next", "server", "app", "values.body"),
+        BUILD_SENSITIVE_VALUE,
+      );
+      await expect(check().run(context())).rejects.toThrow(/server\/app\/values\.body/);
+    });
+
+    it("fails when next build left no .next to look through", async () => {
+      await expect(check().run(context())).rejects.toThrow(/\.next/);
+    });
+  });
+
   describe("the live dirs", () => {
     const check = () => checkTitled("no ocel-live-* dir");
 
@@ -124,6 +147,17 @@ describe("the build-variables checks", () => {
         BUILD_SENSITIVE_VALUE,
       );
       await expect(check().run(context())).rejects.toThrow(/ocel-live-123/);
+    });
+
+    it("fails when it cannot look inside a live dir", async () => {
+      const unreadable = path.join(tempDir, "ocel-live-456");
+      await mkdir(unreadable);
+      await chmod(unreadable, 0o000);
+      try {
+        await expect(check().run(context())).rejects.toThrow(/ocel-live-456/);
+      } finally {
+        await chmod(unreadable, 0o700);
+      }
     });
   });
 });

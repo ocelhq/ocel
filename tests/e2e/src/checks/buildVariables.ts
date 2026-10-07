@@ -14,6 +14,7 @@ export const BUILD_VARIABLES: Record<string, string> = {
 
 const LIVE_DIR_PREFIX = "ocel-live-";
 const OUTPUT_DIR = path.join(".ocel", "output");
+const NEXT_DIR = ".next";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -69,6 +70,21 @@ export const buildVariablesChecks: Check[] = [
     },
   },
   {
+    title: "no file under the app's .next holds the sensitive or secret value the build read",
+    run: async (ctx) => {
+      const next = path.join(ctx.projectDir, NEXT_DIR);
+      const files = await filesUnder(next).catch((error: unknown) =>
+        assert.fail(`next build left no ${NEXT_DIR} to look through: ${String(error)}`),
+      );
+      const holding = await filesHoldingAValue(files);
+      assert.deepEqual(
+        holding.map((file) => path.relative(next, file)),
+        [],
+        `these files under ${NEXT_DIR} hold a sensitive or secret value`,
+      );
+    },
+  },
+  {
     title: "no ocel-live-* dir in the temp dir still holds a value the build read",
     run: async (ctx) => {
       const liveDirs = (await readdir(ctx.tempDir, { withFileTypes: true }))
@@ -76,7 +92,9 @@ export const buildVariablesChecks: Check[] = [
         .map((entry) => path.join(ctx.tempDir, entry.name));
       const left: string[] = [];
       for (const dir of liveDirs) {
-        const files = await filesUnder(dir).catch(() => []);
+        const files = await filesUnder(dir).catch((error: unknown) =>
+          assert.fail(`cannot look inside ${path.basename(dir)}: ${String(error)}`),
+        );
         if ((await filesHoldingAValue(files)).length > 0) {
           left.push(path.basename(dir));
         }
