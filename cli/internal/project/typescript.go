@@ -1,6 +1,7 @@
 package project
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -70,18 +71,18 @@ try {
 
 	cmd := exec.CommandContext(ctx, "node", outfile)
 	cmd.Env = env.environ()
+	var stdout bytes.Buffer
 	var stderr strings.Builder
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	childprocess.KillGroupOnCancel(cmd)
-	stdout, err := cmd.Output()
-	if err != nil {
+	if err := childprocess.RunGroup(cmd); err != nil {
 		if stderr.Len() > 0 {
 			return nil, newInvalidConfigError(fmt.Errorf("%s failed to evaluate: node exited with error: %s", configPath, strings.TrimSpace(stderr.String())), "")
 		}
 		return nil, fmt.Errorf("%s failed to evaluate: run node: %w", configPath, err)
 	}
 
-	return stdout, nil
+	return stdout.Bytes(), nil
 }
 
 func bundleName(configPath string) string {

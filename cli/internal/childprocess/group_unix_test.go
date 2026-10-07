@@ -3,11 +3,17 @@
 package childprocess
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/cli/internal/childprocess/childprocesstest"
 )
 
 func TestSignallingAGroupThatIsAlreadyGone(t *testing.T) {
@@ -45,6 +51,38 @@ func TestSignallingAGroupThatIsAlreadyGone(t *testing.T) {
 				time.Sleep(5 * time.Millisecond)
 			}
 		})
+	}
+}
+
+func TestKillAllKillsEveryProcessOfAGroupStillRunning(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "sleep.pid")
+	group, err := StartGroup(exec.CommandContext(context.Background(), "sh", "-c", `sleep 60 & echo $! > "$0"; wait`, pidFile))
+	if err != nil {
+		t.Fatalf("StartGroup: %v", err)
+	}
+	var pid int
+	for deadline := time.Now().Add(5 * time.Second); pid == 0; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the group never started its sleep")
+		}
+		if said, err := os.ReadFile(pidFile); err == nil {
+			pid, _ = strconv.Atoi(strings.TrimSpace(string(said)))
+		}
+	}
+
+	KillAll()
+
+	waited := make(chan error, 1)
+	go func() { waited <- group.Wait() }()
+	select {
+	case <-waited:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the group still runs 5s after KillAll")
+	}
+	for deadline := time.Now().Add(2 * time.Second); childprocesstest.IsAlive(pid); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the group's sleep %d still runs after KillAll", pid)
+		}
 	}
 }
 

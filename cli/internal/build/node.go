@@ -112,7 +112,6 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 	var captured bytes.Buffer
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
-	childprocess.KillGroupOnCancel(cmd)
 	cmd.Stdin = bytes.NewReader(request)
 
 	reader, writer, err := os.Pipe()
@@ -123,7 +122,7 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 
 	proc := &nodeprotocol.Processor{Span: run.SpanFromContext(ctx), Forward: io.MultiWriter(routing, &captured), AppBuild: routing.begin, Hide: log.hidden}
 
-	startErr := cmd.Start()
+	group, startErr := childprocess.StartGroup(cmd)
 	_ = writer.Close()
 	if startErr != nil {
 		_ = reader.Close()
@@ -131,7 +130,7 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 	}
 	proc.Scan(ctx, reader)
 	_ = reader.Close()
-	runErr := cmd.Wait()
+	runErr := group.Wait()
 	unended := proc.Abort(ctx)
 
 	if runErr != nil {
