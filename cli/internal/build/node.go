@@ -11,6 +11,7 @@ import (
 	"sync"
 	"unicode"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -111,6 +112,7 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 	var captured bytes.Buffer
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
+	childprocess.KillGroupOnCancel(cmd)
 	cmd.Stdin = bytes.NewReader(request)
 
 	reader, writer, err := os.Pipe()

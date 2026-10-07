@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -259,6 +260,57 @@ emit({type:"span_end",id:"1",ok:true});
 			t.Errorf("trace = %s, want a build span attributed to app api", raw)
 		}
 	})
+}
+
+func TestACancelledNodeBuildReturnsOnceEveryProcessItStartedIsGone(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not on PATH")
+	}
+	path := filepath.Join(t.TempDir(), "builder.mjs")
+	script := `import { spawn } from "node:child_process";
+spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], { stdio: "inherit" });
+console.log("next build started");
+setTimeout(() => {}, 60000);
+`
+	if err := os.WriteFile(path, []byte(script), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	var out syncBuffer
+	done := make(chan error, 1)
+	go func() { done <- runNode(ctx, path, []byte(`{"apps":[]}`), Log{Shared: &out}) }()
+	for deadline := time.Now().Add(10 * time.Second); !strings.Contains(out.String(), "next build started"); {
+		if time.Now().After(deadline) {
+			t.Fatal("the builder never started")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("runNode still waits 10s after the cancel, held open by a process the builder started")
+	}
+}
+
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 func jsString(s string) string {
