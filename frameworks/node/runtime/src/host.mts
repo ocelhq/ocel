@@ -14,13 +14,19 @@ function control(): net.Socket | null {
   if (!hasControl()) return null;
   if (!controlSocket) {
     controlSocket = net.createConnection(process.env.OCEL_CONTROL_SOCKET!);
+    controlSocket.on("error", (err) => {
+      console.error(
+        `ocel runtime: the control socket failed, so the host hears no more from it: ${err.message}`,
+      );
+    });
     receive(controlSocket);
   }
   return controlSocket;
 }
 
 export function sendControl(type: string, payload: unknown): void {
-  control()?.write(`${JSON.stringify({ type, payload })}\n`);
+  const socket = control();
+  if (socket && !socket.destroyed) socket.write(`${JSON.stringify({ type, payload })}\n`);
 }
 
 export function onControlMessage(handler: (message: unknown) => void): void {
