@@ -25,7 +25,7 @@ s3://<OCEL_ASSET_BUCKET>/<isrPrefix>/origin.json
 ```
 
 That is the same `routeId → Function URL` map the deploy already hands the edge
-in its Cloudflare deployment record, written to the one place keyed by
+in its release record, written to the one place keyed by
 `isrPrefix` that the consumer's own account can read.
 
 Resolving rather than validating is what removes the *host* from the message.
@@ -122,7 +122,7 @@ moves.
 - **A deploy-side write** (`platform/aws/provider/deploy`), which does not exist yet: after
   the app stack's outputs are read, `PutObject` `<isrPrefix>/origin.json` into
   the asset bucket with the `{v, functionUrls}` document above. The map is the
-  one `buildDeploymentRecord` already computes via `appFunctionURLsByRoute`; the
+  one the release record already carries as `functionUrls`; the
   Function URL is only knowable after `up`, which is why bootstrap cannot render
   it and the deploy must write it.
 

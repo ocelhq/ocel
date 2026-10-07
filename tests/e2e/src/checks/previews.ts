@@ -87,7 +87,7 @@ async function requireServing(clock: Clock, base: string, id: string): Promise<v
   });
   if (!served) {
     throw new Error(
-      `${base}${DEPLOYMENT_PATH} never served deployment ${id} within ${HOSTNAME_DEADLINE_MS / 1000}s, and last answered ${last}`,
+      `${base}${DEPLOYMENT_PATH} never served build ${id} within ${HOSTNAME_DEADLINE_MS / 1000}s, and last answered ${last}`,
     );
   }
 }
@@ -99,7 +99,7 @@ export async function checkOwnReleases(
   second: PreviewRelease,
 ): Promise<void> {
   if (first.buildId === second.buildId) {
-    throw new Error(`${app}'s two preview deployments both carry the release ${first.buildId}`);
+    throw new Error(`${app}'s two preview deployments both carry the build ${first.buildId}`);
   }
   for (const each of [first, second]) {
     await requireServing(clock, each.deploymentUrl, each.buildId);
@@ -107,7 +107,7 @@ export async function checkOwnReleases(
     const again = await probeDeployment(clock, each.deploymentUrl, each.buildId);
     if (!again.served) {
       throw new Error(
-        `${each.deploymentUrl}${DEPLOYMENT_PATH} stopped serving deployment ${each.buildId} and answered ${again.said}`,
+        `${each.deploymentUrl}${DEPLOYMENT_PATH} stopped serving build ${each.buildId} and answered ${again.said}`,
       );
     }
   }
@@ -132,13 +132,13 @@ export async function checkPruned(
   });
   if (!stopped) {
     throw new Error(
-      `${pruned.deploymentUrl}${DEPLOYMENT_PATH} of ${app} still serves deployment ${pruned.buildId} ${PRUNE_DEADLINE_MS / 1000}s after the prune`,
+      `${pruned.deploymentUrl}${DEPLOYMENT_PATH} of ${app} still serves build ${pruned.buildId} ${PRUNE_DEADLINE_MS / 1000}s after the prune`,
     );
   }
   const stillThere = await probeDeployment(clock, kept.deploymentUrl, kept.buildId);
   if (!stillThere.served) {
     throw new Error(
-      `${kept.deploymentUrl}${DEPLOYMENT_PATH} of ${app} stopped serving the kept deployment ${kept.buildId} and answered ${stillThere.said}`,
+      `${kept.deploymentUrl}${DEPLOYMENT_PATH} of ${app} stopped serving the kept deployment's build ${kept.buildId} and answered ${stillThere.said}`,
     );
   }
   return last;

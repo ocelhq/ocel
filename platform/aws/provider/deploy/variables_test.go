@@ -408,7 +408,7 @@ func TestRenderBakedBundle(t *testing.T) {
 		}
 
 		if first.Envelope == second.Envelope {
-			t.Error("two renders share a data key; one deployment's key would open another's bundle")
+			t.Error("two renders share a data key; one release's key would open another's bundle")
 		}
 		if bytes.Equal(first.Ciphertext, second.Ciphertext) {
 			t.Error("two renders produce identical ciphertext; a rotation would reuse the old artifact")
@@ -462,7 +462,7 @@ func TestRenderBakedBundle(t *testing.T) {
 			t.Fatal("Fingerprint is empty for an app that bakes a value")
 		}
 		if first.Fingerprint != second.Fingerprint {
-			t.Errorf("Fingerprint = %q then %q for unchanged values; every deploy would mint a new Deployment", first.Fingerprint, second.Fingerprint)
+			t.Errorf("Fingerprint = %q then %q for unchanged values; every deploy would mint a new release", first.Fingerprint, second.Fingerprint)
 		}
 
 		app.Variables = []*contractv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live-2", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)}
@@ -471,7 +471,7 @@ func TestRenderBakedBundle(t *testing.T) {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
 		if rotated.Fingerprint == first.Fingerprint {
-			t.Error("a rotated value renders the same Fingerprint; the rotation would collide with the Deployment it replaces")
+			t.Error("a rotated value renders the same Fingerprint; the rotation would collide with the release it replaces")
 		}
 	})
 
@@ -522,7 +522,7 @@ func TestFingerprintValues(t *testing.T) {
 			{
 				"a rotated value",
 				map[string]string{"STRIPE_API_KEY": "sk-live-2", "SENTRY_DSN": "https://sentry"},
-				"a rotated value fingerprints the same; the rotation would reuse the prior Deployment identity",
+				"a rotated value fingerprints the same; the rotation would reuse the prior release",
 			},
 			{
 				"an added key",
