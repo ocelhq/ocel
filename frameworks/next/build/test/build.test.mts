@@ -77,7 +77,19 @@ describe("buildNext", () => {
     expect(env.NEXT_DEPLOYMENT_ID).toBe("fedcba9876543210fedcba9876543210");
   });
 
-  for (const owned of ["NEXT_ADAPTER_PATH", "NEXT_DEPLOYMENT_ID"]) {
+  for (const owned of [
+    "NEXT_ADAPTER_PATH",
+    "NEXT_DEPLOYMENT_ID",
+    "NODE_ENV",
+    "OCEL_APP_NAME",
+    "OCEL_OUTPUT_DIR",
+    "OCEL_APP_FOLDER",
+    "OCEL_EDGE_KIND",
+    "OCEL_ALLOW_DEGRADED",
+    "OCEL_NEXT_RUNTIME_DIR",
+    "OCEL_MAX_FUNCTION_BYTES",
+    "OCEL_NEXT_REFRESHES_BY_REQUEST",
+  ]) {
     it(`refuses a variable declared as ${owned} before anything runs`, async () => {
       let ran = false;
       buildProcess.spawn = async () => void (ran = true);
@@ -143,7 +155,12 @@ describe("buildNext", () => {
   });
 
   it("builds for production whatever NODE_ENV the shell sets", async () => {
-    expect((await envOf(app({ env: { NODE_ENV: "development" } }))).NODE_ENV).toBe("production");
+    process.env.NODE_ENV = "development";
+    try {
+      expect((await envOf(app())).NODE_ENV).toBe("production");
+    } finally {
+      delete process.env.NODE_ENV;
+    }
   });
 
   it("binds an app that declares no folder to the project root", async () => {

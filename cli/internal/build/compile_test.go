@@ -333,6 +333,21 @@ func TestARustAppsBuildScriptReadsEveryValueTheAppResolvesAndNoneTheDeployersShe
 	}
 }
 
+func TestARustBuildLinksWithTheLinkerAPlaintextValueNames(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("cargo"); err != nil {
+		t.Skip("cargo is not on PATH")
+	}
+	_, cfg := writeRustApp(t, "")
+	values := map[string]AppVariables{"api": {Env: map[string]string{"CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER": "/nonexistent/ocel-test-linker"}}}
+
+	builder := nodeOnly{host: servingNext, node: func(context.Context, string, []byte, Log) error { return nil }}
+	err := builder.Build(context.Background(), cfg, values, Log{})
+	if err == nil || !strings.Contains(err.Error(), "/nonexistent/ocel-test-linker") {
+		t.Errorf("Build err = %v, want cargo to have run the linker the value names", err)
+	}
+}
+
 func TestACancelledRustBuildReturnsOnceEveryProcessCargoStartedIsGone(t *testing.T) {
 	t.Parallel()
 	if _, err := exec.LookPath("cargo"); err != nil {
