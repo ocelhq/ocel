@@ -76,6 +76,17 @@ func (r *Run) End(errp *error) {
 	})
 }
 
+func (r *Run) TraceID() string {
+	if r.trace == nil {
+		return ""
+	}
+	return r.trace.ID()
+}
+
+func (r *Run) StartedAt() time.Time {
+	return r.start
+}
+
 func (r *Run) interrupt() {
 	err := context.Canceled
 	r.End(&err)
