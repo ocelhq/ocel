@@ -292,7 +292,8 @@ func TestNoValueAContainerBuildWasGivenReachesTheLogOrTheError(t *testing.T) {
 	const value = "postgres://u:hunter2@127.0.0.1:5432/db"
 	cfg := containerProject(t, "")
 	var logged strings.Builder
-	log := Log{AppLog: func(string) (io.Writer, func(error)) { return &logged, func(error) {} }}
+	var ended error
+	log := Log{AppLog: func(string) (io.Writer, func(error)) { return &logged, func(err error) { ended = err } }}
 
 	_, err := tools{
 		image: func(_ context.Context, _ image.App, _ string, _ image.LiveValues, progress io.Writer) (image.Image, error) {
@@ -309,6 +310,9 @@ func TestNoValueAContainerBuildWasGivenReachesTheLogOrTheError(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "hunter2") || strings.Contains(logged.String(), "hunter2") {
 		t.Errorf("a value the build was given reached its output:\nlog: %s\nerror: %v", logged.String(), err)
+	}
+	if ended == nil || strings.Contains(ended.Error(), "hunter2") {
+		t.Errorf("the app's log was ended with %v, want the failure with the value hidden, since the terminal prints it as the app ends", ended)
 	}
 }
 
