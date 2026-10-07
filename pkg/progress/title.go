@@ -38,6 +38,7 @@ var (
 	Reconciling  = Verb{Doing: "Reconciling", Done: "Reconciled"}
 	Releasing    = Verb{Doing: "Releasing", Done: "Released"}
 	Removing     = Verb{Doing: "Removing", Done: "Removed"}
+	Running      = Verb{Doing: "Running", Done: "Ran"}
 	Serving      = Verb{Doing: "Serving", Done: "Served"}
 	Switching    = Verb{Doing: "Switching", Done: "Switched"}
 	Updating     = Verb{Doing: "Updating", Done: "Updated"}
