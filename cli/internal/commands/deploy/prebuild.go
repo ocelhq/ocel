@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/lifecycle"
 	"github.com/ocelhq/ocel/cli/internal/portforward"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/redaction"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -23,7 +24,7 @@ import (
 
 const preBuildName = "lifecycle.preBuild"
 
-func preBuildFor(cfg *project.Project, env *environmentv1.Environment) *project.LifecycleCommand {
+func findPreBuild(cfg *project.Project, env *environmentv1.Environment) *project.LifecycleCommand {
 	command := cfg.Lifecycle.PreBuild
 	if command == nil || !command.RunsIn(env) {
 		return nil
@@ -31,45 +32,23 @@ func preBuildFor(cfg *project.Project, env *environmentv1.Environment) *project.
 	return command
 }
 
-func (a assembly) preBuild() *project.LifecycleCommand {
-	if a.prebuilt {
-		return nil
-	}
-	return preBuildFor(a.cfg, a.env)
-}
-
-func preBuildPlanNote(cfg *project.Project, env *environmentv1.Environment, prebuilt bool) string {
-	command := preBuildFor(cfg, env)
+func describePlannedPreBuild(command *project.LifecycleCommand, prebuilt bool) string {
 	if command == nil || prebuilt {
 		return ""
 	}
 	return fmt.Sprintf("Before it builds, this deploy would run %s: %s", preBuildName, command.Command)
 }
 
-func sayPrebuiltSkipsPreBuild(span *run.Span, cfg *project.Project, env *environmentv1.Environment) {
-	command := preBuildFor(cfg, env)
-	if command == nil {
-		return
-	}
-	span.Say(fmt.Sprintf("--prebuilt skips %s, which runs before a build and this deploy builds nothing; if its command %q must run first, run it yourself, for example with `ocel run --env %s -- <command>`", preBuildName, command.Command, tierName(env)))
-}
-
-func tierName(env *environmentv1.Environment) string {
-	if env.GetTier() == environmentv1.Tier_TIER_PREVIEW {
-		return "preview"
-	}
-	return "production"
+func sayPrebuiltSkipsPreBuild(span *run.Span, command project.LifecycleCommand, tier environmentv1.Tier) {
+	span.Say(fmt.Sprintf("--prebuilt skips %s, which runs before a build and this deploy builds nothing; if its command %q must run first, run it yourself, for example with `ocel run --env %s -- <command>`", preBuildName, command.Command, readiness.TierName(tier)))
 }
 
 func runPreBuild(ctx context.Context, a assembly, command project.LifecycleCommand, forwards *portforward.Forwards, values map[string]build.AppVariables, resources int) error {
 	cfg := a.cfg
-	dir := cfg.Dir
 	env := map[string]string{}
 	live := map[string]string{}
 	maps.Copy(live, forwards.Bindings(portforward.WholeProject))
 	if command.App != "" {
-		app, _ := findApp(cfg, command.App)
-		dir = filepath.Join(cfg.Dir, app.Path)
 		maps.Copy(env, values[command.App].Env)
 		maps.Copy(live, values[command.App].Live)
 	}
@@ -82,7 +61,7 @@ func runPreBuild(ctx context.Context, a assembly, command project.LifecycleComma
 	out := hidden.Writer(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
 	err := lifecycle.Run(ctx, lifecycle.Command{
 		Shell:   command.Command,
-		Dir:     dir,
+		Dir:     filepath.Join(cfg.Dir, command.Path),
 		Env:     env,
 		Live:    live,
 		Timeout: command.Timeout,
@@ -97,15 +76,6 @@ func runPreBuild(ctx context.Context, a assembly, command project.LifecycleComma
 	}
 	span.End(err)
 	return err
-}
-
-func findApp(cfg *project.Project, name string) (project.App, bool) {
-	for _, app := range cfg.Apps {
-		if app.Name == name {
-			return app, true
-		}
-	}
-	return project.App{}, false
 }
 
 func warnNpmPrebuildScripts(span *run.Span, cfg *project.Project) {

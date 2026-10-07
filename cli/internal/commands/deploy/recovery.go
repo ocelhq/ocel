@@ -41,7 +41,7 @@ type variablesRecovery struct {
 	host           build.Host
 	urls           map[string]string
 	infra          *infraProvisioning
-	env            *environmentv1.Environment
+	preBuild       *project.LifecycleCommand
 
 	dry     bool
 	enabled bool
@@ -49,6 +49,12 @@ type variablesRecovery struct {
 
 func (r variablesRecovery) buildManifest(ctx context.Context, phase *run.Span, prebuilt bool) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	child := phase.Child(r.cfg.Slug, buildTitle(r.cfg, prebuilt))
+	switch {
+	case r.preBuild != nil && prebuilt:
+		sayPrebuiltSkipsPreBuild(child, *r.preBuild, r.tier)
+	case r.preBuild != nil:
+		warnNpmPrebuildScripts(child, r.cfg)
+	}
 	manifest, inline, err := r.build(ctx, phase, child, prebuilt)
 	child.End(err)
 	return manifest, inline, err
@@ -160,10 +166,17 @@ func (r variablesRecovery) attempt(ctx context.Context, phase, child *run.Span, 
 	attempt := child.Trace(r.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
 	manifest, inline, err := collectBuildAndAssemble(run.ContextWithSpan(ctx, attempt), r.dependencies, assembly{
 		cfg: r.cfg, declarations: declarations, prebuilt: prebuilt, dry: r.dry, phase: phase, span: child,
-		containerArchs: r.containerArchs, workerCeilings: r.workerCeilings, host: r.host, urls: r.urls, infra: r.infra, env: r.env,
+		containerArchs: r.containerArchs, workerCeilings: r.workerCeilings, host: r.host, urls: r.urls, infra: r.infra, preBuild: r.runnablePreBuild(prebuilt),
 	})
 	attempt.End(err)
 	return manifest, inline, err
+}
+
+func (r variablesRecovery) runnablePreBuild(prebuilt bool) *project.LifecycleCommand {
+	if prebuilt {
+		return nil
+	}
+	return r.preBuild
 }
 
 func (r variablesRecovery) fill(ctx context.Context, span *run.Span, declarations *variables.Declarations, refusal *variables.MissingError) error {

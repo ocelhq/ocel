@@ -25,11 +25,11 @@ func TestALifecyclePointWrittenAsAStringIsACommandWithTheDefaults(t *testing.T) 
 func TestALifecyclePointWrittenAsAnObjectKeepsEachOfItsFields(t *testing.T) {
 	t.Parallel()
 
-	cfg := mustLoadJSON(t, `{"slug":"shop","apps":[{"name":"web","path":"web"}],"lifecycle":{"preBuild":{
+	cfg := mustLoadJSON(t, `{"slug":"shop","apps":[{"name":"web","path":"apps/web"}],"lifecycle":{"preBuild":{
 		"command":"pnpm migrate","app":"web","previews":"all","timeout":"90s"
 	}}}`)
 
-	want := LifecycleCommand{Command: "pnpm migrate", App: "web", Previews: PreviewsAll, Timeout: 90 * time.Second}
+	want := LifecycleCommand{Command: "pnpm migrate", App: "web", Path: "apps/web", Previews: PreviewsAll, Timeout: 90 * time.Second}
 	if got := cfg.Lifecycle.PreBuild; got == nil || *got != want {
 		t.Errorf("PreBuild = %+v, want %+v", got, want)
 	}
@@ -56,7 +56,7 @@ func TestALifecycleCommandThatCannotRunIsRefusedAtLoad(t *testing.T) {
 		"a timeout that is not a duration":            {`{"slug":"shop","lifecycle":{"preBuild":{"command":"x","timeout":"soon"}}}`, "timeout"},
 		"a timeout of zero":                           {`{"slug":"shop","lifecycle":{"preBuild":{"command":"x","timeout":"0s"}}}`, "timeout"},
 		"a negative timeout":                          {`{"slug":"shop","lifecycle":{"preBuild":{"command":"x","timeout":"-5m"}}}`, "timeout"},
-		"an app the project does not have":            {`{"slug":"shop","apps":[{"name":"web","path":"web"}],"lifecycle":{"preBuild":{"command":"x","app":"api"}}}`, `"api"`},
+		"an app the project does not have":            {`{"slug":"shop","apps":[{"name":"web","path":"apps/web"}],"lifecycle":{"preBuild":{"command":"x","app":"api"}}}`, `"api"`},
 		"a point the config does not have":            {`{"slug":"shop","lifecycle":{"postBuild":"x"}}`, "postBuild"},
 	}
 	for name, c := range cases {
