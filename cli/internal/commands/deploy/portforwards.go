@@ -7,10 +7,11 @@ import (
 	"maps"
 	"slices"
 
-	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -25,7 +26,7 @@ import (
 
 type boundUse struct {
 	app      string
-	kind     bindingsv1.BindingType
+	resource resourcesv1.ResourceType
 	declared string
 	bound    string
 }
@@ -101,7 +102,7 @@ func (i *infraProvisioning) findBoundUses(ctx context.Context, cfg *project.Proj
 	}
 	var uses []boundUse
 	for _, usage := range usages {
-		kind, bindable := naming.BindableAs(usage.Type)
+		_, bindable := naming.BindableAs(usage.Type)
 		if !built[usage.App] || !bindable {
 			continue
 		}
@@ -109,7 +110,7 @@ func (i *infraProvisioning) findBoundUses(ctx context.Context, cfg *project.Proj
 		if !provisioned {
 			continue
 		}
-		uses = append(uses, boundUse{app: usage.App, kind: kind, declared: usage.Name, bound: bound})
+		uses = append(uses, boundUse{app: usage.App, resource: usage.Type, declared: usage.Name, bound: bound})
 	}
 	return uses, nil
 }
@@ -165,14 +166,16 @@ func liveBindings(uses []boundUse, forwarded []*bindingsv1.Binding) (map[string]
 		if at < 0 {
 			continue
 		}
-		value, err := protojson.Marshal(forwarded[at])
+		named := proto.Clone(forwarded[at]).(*bindingsv1.Binding)
+		named.Name = use.declared
+		encoded, err := binding.Encode(use.resource, named)
 		if err != nil {
 			return nil, fmt.Errorf("encode the binding of %s for the build: %w", use.declared, err)
 		}
 		if byApp[use.app] == nil {
 			byApp[use.app] = map[string]string{}
 		}
-		byApp[use.app][naming.ResourceEnvName(use.kind, use.declared)] = string(value)
+		maps.Copy(byApp[use.app], encoded.Env)
 	}
 	return byApp, nil
 }
