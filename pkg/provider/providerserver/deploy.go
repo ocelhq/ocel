@@ -43,6 +43,9 @@ import (
 const stackVersion = "1"
 
 func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	if err := h.forwards.awaitClosed(ctx); err != nil {
+		return err
+	}
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		if err := refuseInfraProvisionedDeploy(req); err != nil {
 			return nil, err

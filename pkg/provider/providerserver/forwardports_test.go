@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -153,5 +154,54 @@ func TestForwardPortsLeavesAPostgresBindingAddressedByAURLUnforwarded(t *testing
 	}
 	if len(responses) != 1 || len(responses[0].GetBindings()) != 0 || !slices.Equal(responses[0].GetUnforwarded(), []string{inlineOrders}) {
 		t.Errorf("ForwardPorts() sent %d responses, want one leaving %s unforwarded", len(responses), inlineOrders)
+	}
+}
+
+func TestADeployAfterForwardsBeginsOnlyOnceTheProviderHasClosedThem(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	release := make(chan struct{})
+	var released sync.Once
+	releaseForwards := func() { released.Do(func() { close(release) }) }
+	defer releaseForwards()
+	vendor.WithHooks(func(h *provider.Hooks) {
+		h.ForwardPorts = func(context.Context, provider.PortForwardRequest) ([]provider.PortForward, error) {
+			return []provider.PortForward{{Binding: "orders", LocalAddress: "127.0.0.1:41234", Close: func() { <-release }}}, nil
+		}
+	})
+
+	ctx, leave := context.WithCancel(context.Background())
+	stream, err := client.ForwardPorts(ctx, forwardPortsRequest("orders"))
+	if err != nil {
+		t.Fatalf("ForwardPorts() error = %v", err)
+	}
+	if !stream.Receive() {
+		t.Fatalf("ForwardPorts() sent nothing: %v", stream.Err())
+	}
+	leave()
+	stream.Close()
+
+	deployed := make(chan struct{})
+	go func() {
+		defer close(deployed)
+		deploying, err := client.Deploy(context.Background(), deployRequest())
+		if err != nil {
+			return
+		}
+		for deploying.Receive() {
+		}
+		deploying.Close()
+	}()
+	select {
+	case <-deployed:
+		t.Fatal("the deploy ran while the provider was still closing the forwards, want it held until they are closed")
+	case <-time.After(time.Second):
+	}
+	releaseForwards()
+	select {
+	case <-deployed:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the deploy never ran once the forwards were closed")
 	}
 }

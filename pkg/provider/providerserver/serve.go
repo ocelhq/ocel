@@ -101,6 +101,7 @@ type handlers struct {
 
 	session   *session
 	questions *questions
+	forwards  openForwards
 }
 
 var (
