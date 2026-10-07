@@ -3,6 +3,7 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -140,15 +141,21 @@ func buildApps(ctx context.Context, dependencies Dependencies, a assembly, steps
 	if err := a.infra.provision(ctx, resources, inline); err != nil {
 		return build.Output{}, err
 	}
+	forwards, err := a.infra.forwardPorts(ctx, steps, cfg, resources)
+	if err != nil {
+		return build.Output{}, err
+	}
+	values := build.SplitVariablesByClass(clients, secrets)
+	forwards.deliver(values)
 	var built build.Output
 	err = steps.run(cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
-		built, err = dependencies.BuildApps(ctx, cfg, build.SplitVariablesByClass(clients, secrets), a.containerArchs, workers, a.host, steps.log())
+		built, err = dependencies.BuildApps(ctx, cfg, values, a.containerArchs, workers, a.host, steps.log())
 		if err != nil {
 			return err
 		}
 		return clientenv.Record(cfg.Dir, clients)
 	})
-	return built, err
+	return built, errors.Join(err, forwards.Close())
 }
 
 func assembleManifest(ctx context.Context, dependencies Dependencies, a assembly, resources []declaration.Resource, values map[string][]variables.Variable, built build.Output) (*contractv1.Manifest, error) {

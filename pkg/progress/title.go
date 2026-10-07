@@ -26,6 +26,7 @@ var (
 	Destroying   = Verb{Doing: "Destroying", Done: "Destroyed"}
 	Detaching    = Verb{Doing: "Detaching", Done: "Detached"}
 	Enumerating  = Verb{Doing: "Enumerating", Done: "Enumerated"}
+	Forwarding   = Verb{Doing: "Forwarding", Done: "Forwarded"}
 	Installing   = Verb{Doing: "Installing", Done: "Installed"}
 	Loading      = Verb{Doing: "Loading", Done: "Loaded"}
 	Planning     = Verb{Doing: "Planning", Done: "Planned"}
