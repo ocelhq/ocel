@@ -24,6 +24,7 @@ import type { StackCheck } from "../stacks";
 import { namespaceOfSlug } from "../targets/aws/namespace";
 import {
   type Deployment,
+  hasCommands,
   hasExposure,
   hasPreviews,
   hasReleaseCycle,
@@ -240,6 +241,7 @@ export class CellRun {
       fetch: guard.fetch,
       reach: this.deployment.reach ?? (async (url) => url),
       readExposed: () => this.readExposed(),
+      runInEnvironment: (command) => this.runInEnvironment(command),
       journeyNonce: this.journeyNonce,
       projectDir: configTree(this, this.target.name),
       tempDir: tmpdir(),
@@ -260,6 +262,15 @@ export class CellRun {
     if (failure) {
       throw failure.error;
     }
+  }
+
+  private async runInEnvironment(command: string[]): Promise<string> {
+    const target = this.target;
+    assert.ok(
+      hasCommands(target),
+      `${target.name} has no way to run a command against a deployed environment`,
+    );
+    return target.runInEnvironment(this, command);
   }
 
   private async readExposed(): Promise<string> {

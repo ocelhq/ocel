@@ -54,6 +54,7 @@ function context(fetch: Fetch = async () => new Response(null, { status: 404 }))
     fetch,
     reach: async (url) => url,
     readExposed: async () => "",
+    runInEnvironment: async () => "",
     journeyNonce: "journey-nonce",
     projectDir,
     tempDir,

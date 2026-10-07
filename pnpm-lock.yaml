@@ -1452,6 +1452,56 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  tests/fixtures/pre-build/failing:
+    dependencies:
+      express:
+        specifier: ~5.0.0
+        version: 5.0.1
+      ocel:
+        specifier: workspace:^
+        version: link:../../../../packages/ocel
+    devDependencies:
+      '@types/express':
+        specifier: ~5.0.0
+        version: 5.0.6
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.0
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
+  tests/fixtures/pre-build/node:
+    dependencies:
+      express:
+        specifier: ~5.0.0
+        version: 5.0.1
+      ocel:
+        specifier: workspace:^
+        version: link:../../../../packages/ocel
+      pg:
+        specifier: ^8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@types/express':
+        specifier: ~5.0.0
+        version: 5.0.6
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.0
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   tests/fixtures/prerender/next:
     dependencies:
       next:

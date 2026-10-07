@@ -551,6 +551,26 @@ describe("the build-variables concern", () => {
   });
 });
 
+describe("the pre-build concern", () => {
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+  const cellsOn = (lane: Lane) =>
+    planOn(lane, {}, EVERY_CELL)
+      .cells.map((cell) => cell.name)
+      .filter((name) => name.startsWith("pre-build/"));
+
+  it("migrates and refuses on either box, the only target that forwards a port", () => {
+    for (const lane of ["vps", "vps.incus"] as const) {
+      expect(cellsOn(lane)).toEqual(["pre-build/node", "pre-build/failing"]);
+    }
+  });
+
+  it("runs on no other lane", () => {
+    for (const lane of LANES.filter((one) => !one.startsWith("vps"))) {
+      expect(cellsOn(lane)).toEqual([]);
+    }
+  });
+});
+
 describe("the tasks concern", () => {
   const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
 

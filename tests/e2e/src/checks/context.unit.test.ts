@@ -21,6 +21,7 @@ function context(asked: string, answered: string): CheckContext {
     fetch: answering(answered),
     reach: async (url) => url,
     readExposed: async () => "",
+    runInEnvironment: async () => "",
     journeyNonce: "journey-nonce",
     projectDir: "/nowhere",
     tempDir: "/nowhere",

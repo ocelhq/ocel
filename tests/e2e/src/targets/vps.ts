@@ -36,7 +36,15 @@ import {
 import { type Gateway, openGateway, type Scheme } from "./gateway";
 import { hostnameUrls } from "./hostnames";
 import { plannedWrites } from "./planStream";
-import type { Deployment, Exposure, ReleaseCycle, Restart, Sweeper, Target } from "./types";
+import type {
+  Commands,
+  Deployment,
+  Exposure,
+  ReleaseCycle,
+  Restart,
+  Sweeper,
+  Target,
+} from "./types";
 
 const DEPLOY_LOGIN = "ocel-deploy";
 const INCUS_MARKER = "/dev/virtio-ports/org.linuxcontainers.incus";
@@ -303,7 +311,7 @@ export function stampRewritten(before: string, after: string): string | undefine
   return `the stamp a re-apply left at ${STAMP}: ${missed.join("; ")}`;
 }
 
-export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
+export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure, Commands {
   readonly name = "vps";
   readonly workers = 2;
   readonly maxRequestBodyBytes = UNCAPPED_BODY_BYTES;
@@ -570,6 +578,16 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure {
       );
     }
     return this.deployment(cell, session);
+  }
+
+  async runInEnvironment(cell: CellUnderTest, command: string[]): Promise<string> {
+    const session = await this.sessionFor(cell);
+    const ran = await this.driving(
+      cell,
+      session,
+      "verify",
+    )("run", ["run", "--env", "production", "--", ...command]);
+    return ran.stdout;
   }
 
   async readExposed(cell: CellUnderTest): Promise<string> {

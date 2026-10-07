@@ -2,6 +2,7 @@ import {
   bindingChecks,
   buildVariablesChecks,
   envChecks,
+  failingPreBuildRefusal,
   healthChecks,
   httpProbeChecks,
   kvChecks,
@@ -14,6 +15,7 @@ import {
   nextStateChecks,
   nodeRuntimeChecks,
   overlapRefusal,
+  preBuildChecks,
   prerenderChecks,
   realtimeChecks,
   staticChecks,
@@ -223,6 +225,20 @@ export const prerender = {
   }),
 };
 
+export const preBuild = {
+  node: fixture("pre-build/node", {
+    apps: ["web"],
+    checks: [...healthChecks, ...preBuildChecks],
+    on: { vps: [defaults] },
+  }),
+  failing: fixture("pre-build/failing", {
+    apps: ["web"],
+    checks: [],
+    refusal: failingPreBuildRefusal,
+    on: { vps: [defaults] },
+  }),
+};
+
 export const kv = {
   node: fixture("kv/node", {
     apps: ["web"],
@@ -302,6 +318,7 @@ export const fixtures: Fixture[] = [
   ...Object.values(sdk),
   ...Object.values(buildVariables),
   ...Object.values(prerender),
+  ...Object.values(preBuild),
   ...Object.values(kv),
   ...Object.values(tasks),
   ...Object.values(realtime),
