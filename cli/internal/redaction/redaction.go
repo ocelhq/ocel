@@ -120,6 +120,29 @@ func (v Values) formAt(text []byte) (string, bool) {
 	return "", false
 }
 
+func (v Values) settled(text []byte) int {
+	tail := max(len(text)-(v.longest-1), 0)
+	settled := max(tail, bytes.LastIndexByte(text, '\n')+1)
+	for i := tail; i < settled; i++ {
+		if v.beginsAForm(text[i:]) {
+			return i
+		}
+	}
+	return settled
+}
+
+func (v Values) beginsAForm(text []byte) bool {
+	if !v.starts[text[0]] {
+		return false
+	}
+	for _, form := range v.forms {
+		if len(form) > len(text) && form[:len(text)] == string(text) {
+			return true
+		}
+	}
+	return false
+}
+
 func (v Values) Writer(w io.Writer) *Writer {
 	return &Writer{w: w, values: v}
 }
@@ -146,7 +169,7 @@ func (h *Writer) Write(p []byte) (int, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	text := slices.Concat(h.pending, p)
-	settled := max(len(text)-(h.values.longest-1), bytes.LastIndexByte(text, '\n')+1)
+	settled := h.values.settled(text)
 	hidden, held := h.values.hide(text, settled)
 	h.pending = held
 	if _, err := h.w.Write(hidden); err != nil {
