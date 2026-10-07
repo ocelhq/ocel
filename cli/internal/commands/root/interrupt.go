@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/interrupt"
+	"github.com/ocelhq/ocel/cli/internal/livedir"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 )
@@ -19,14 +20,15 @@ const gracefulShutdownWindow = max(providerprocess.DefaultGracePeriod+providerpr
 const devShutdownWindow = childprocess.WaitDelay + docker.StopsWithin + shutdownSlack
 
 func installDevInterruptHandler(parent context.Context, stderr io.Writer, bus *run.Bus) (context.Context, context.CancelFunc) {
-	return interrupt.Handle(parent, stderr, devShutdownWindow, bus.Interrupt, forceKillEverything)
+	return interrupt.Handle(parent, stderr, devShutdownWindow, bus.Interrupt, killChildrenAndRemoveLiveDirs)
 }
 
 func installInterruptHandler(parent context.Context, stderr io.Writer, bus *run.Bus) (context.Context, context.CancelFunc) {
-	return interrupt.Handle(parent, stderr, gracefulShutdownWindow, bus.Interrupt, forceKillEverything)
+	return interrupt.Handle(parent, stderr, gracefulShutdownWindow, bus.Interrupt, killChildrenAndRemoveLiveDirs)
 }
 
-func forceKillEverything() {
+func killChildrenAndRemoveLiveDirs() {
 	providerprocess.KillAllLive()
 	childprocess.KillAll()
+	livedir.RemoveAll()
 }
