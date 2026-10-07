@@ -22,12 +22,14 @@ type infraProvisioning struct {
 	env             *environmentv1.Environment
 	aliasToken      string
 	workerCeilings  []provider.WorkerCeiling
+	provisions      bool
+	dry             bool
 
 	sent *contractv1.ProvisionInfraRequest
 }
 
 func newInfraProvisioning(providerProcess *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts, dry, prebuilt bool) *infraProvisioning {
-	if dry || prebuilt || env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL {
+	if prebuilt {
 		return nil
 	}
 	return &infraProvisioning{
@@ -36,19 +38,16 @@ func newInfraProvisioning(providerProcess *providerprocess.Provider, env *enviro
 		env:             env,
 		aliasToken:      facts.builtAlias,
 		workerCeilings:  facts.workerCeilings,
+		provisions:      !dry && env.GetLifecycle() != environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
+		dry:             dry,
 	}
 }
 
 func (i *infraProvisioning) provision(ctx context.Context, resources []declaration.Resource, inline []*bindingsv1.Binding) error {
-	if i == nil || len(resources) == 0 {
+	if i == nil || !i.provisions || len(resources) == 0 {
 		return nil
 	}
-	assembled, err := manifest.AssembleInfra(manifest.InfraInput{
-		Project:        i.cfg,
-		Tier:           i.env.GetTier(),
-		Resources:      resources,
-		WorkerCeilings: i.workerCeilings,
-	})
+	assembled, err := i.assemble(resources)
 	if err != nil {
 		return err
 	}
@@ -67,6 +66,15 @@ func (i *infraProvisioning) provision(ctx context.Context, resources []declarati
 	}
 	i.sent = req
 	return nil
+}
+
+func (i *infraProvisioning) assemble(resources []declaration.Resource) (*contractv1.Manifest, error) {
+	return manifest.AssembleInfra(manifest.InfraInput{
+		Project:        i.cfg,
+		Tier:           i.env.GetTier(),
+		Resources:      resources,
+		WorkerCeilings: i.workerCeilings,
+	})
 }
 
 func (i *infraProvisioning) isProvisioned() bool {
